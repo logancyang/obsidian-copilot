@@ -1,14 +1,18 @@
 import {
   appendBackendSection,
+  buildEffortOptionsByModelKey,
   buildEffortSibling,
   buildModelOnChange,
   buildPickerEntries,
   resolveActiveDisplayState,
+  synthesizeAgentEntry,
 } from "./agentModelPickerHelpers";
+import { getModelKeyFromModel } from "@/settings/model";
 import type { ModelSelectorEntry } from "@/components/ui/ModelSelector";
 import type {
   BackendDescriptor,
   BackendState,
+  EffortOption,
   EnabledModelEntry,
   ModelEntry,
   ModelState,
@@ -140,6 +144,7 @@ function makeUIState(opts: {
 
 function makeManager(opts: {
   cachedStateById?: Record<string, BackendState | null>;
+  effortCatalogById?: Record<string, Record<string, EffortOption[]>>;
   defaultSelectionById?: Record<string, { baseModelId: string; effort: string | null } | null>;
   setDefaultBackend?: jest.Mock;
   applySelection?: jest.Mock;
@@ -149,6 +154,7 @@ function makeManager(opts: {
 }): AgentSessionManager {
   return {
     getCachedBackendState: (id: string) => opts.cachedStateById?.[id] ?? null,
+    getEffortCatalog: (id: string) => opts.effortCatalogById?.[id] ?? null,
     getDefaultSelection: (id: string) => opts.defaultSelectionById?.[id] ?? null,
     setDefaultBackend: opts.setDefaultBackend ?? jest.fn(),
     applySelection: opts.applySelection ?? jest.fn().mockResolvedValue(undefined),
@@ -622,5 +628,75 @@ describe("buildModelOnChange", () => {
     onChange("no-backend|agent");
     expect(setDefaultBackend).not.toHaveBeenCalled();
     expect(applySelection).not.toHaveBeenCalled();
+  });
+});
+
+// ---- buildEffortOptionsByModelKey ----
+
+describe("buildEffortOptionsByModelKey", () => {
+  const ACTIVE = "github-copilot/gpt-5.4";
+  const OTHER = "opencode/nemotron-3-super-free";
+
+  function stateWithEffort(
+    currentBaseId: string,
+    available: { baseModelId: string; effortOptions: EffortOption[] }[]
+  ): BackendState {
+    return {
+      model: {
+        current: { baseModelId: currentBaseId, effort: null },
+        apply: { kind: "setConfigOption", configId: "model" },
+        availableModels: available.map((a) => ({
+          baseModelId: a.baseModelId,
+          name: a.baseModelId,
+          provider: null,
+          effortOptions: a.effortOptions,
+        })),
+      },
+      mode: null,
+    };
+  }
+
+  it("prefers live effort for the active model and falls back to the prefetch cache for others", () => {
+    const opencode = makeDescriptor("opencode");
+    const manager = makeManager({
+      cachedStateById: {
+        opencode: stateWithEffort(ACTIVE, [
+          { baseModelId: ACTIVE, effortOptions: [{ value: "high", label: "high" }] },
+          { baseModelId: OTHER, effortOptions: [] }, // not active → no live effort
+        ]),
+      },
+      effortCatalogById: {
+        opencode: {
+          [ACTIVE]: [{ value: "low", label: "low" }], // ignored — live wins
+          [OTHER]: [
+            { value: "minimal", label: "minimal" },
+            { value: "max", label: "max" },
+          ],
+        },
+      },
+    });
+    const entries = [
+      synthesizeAgentEntry(ACTIVE, ACTIVE, opencode),
+      synthesizeAgentEntry(OTHER, OTHER, opencode),
+    ];
+    const out = buildEffortOptionsByModelKey(manager, [opencode], entries);
+    expect(out[getModelKeyFromModel(entries[0])]).toEqual([{ value: "high", label: "high" }]);
+    expect(out[getModelKeyFromModel(entries[1])]).toEqual([
+      { value: "minimal", label: "minimal" },
+      { value: "max", label: "max" },
+    ]);
+  });
+
+  it("returns empty when neither live nor cached effort exists", () => {
+    const opencode = makeDescriptor("opencode");
+    const manager = makeManager({
+      cachedStateById: {
+        opencode: stateWithEffort(OTHER, [{ baseModelId: OTHER, effortOptions: [] }]),
+      },
+      effortCatalogById: { opencode: {} },
+    });
+    const entries = [synthesizeAgentEntry(OTHER, OTHER, opencode)];
+    const out = buildEffortOptionsByModelKey(manager, [opencode], entries);
+    expect(out[getModelKeyFromModel(entries[0])]).toEqual([]);
   });
 });

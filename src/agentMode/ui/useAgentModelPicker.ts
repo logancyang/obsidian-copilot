@@ -73,7 +73,9 @@ function useAgentModelSignal(
       parts.push(
         `${d.id}:${manager.getPreloadStatus(d.id)}:${modelStateSignature(
           manager.getCachedBackendState(d.id)
-        )}`
+        )}:${Object.keys(manager.getEffortCatalog(d.id) ?? {})
+          .sort()
+          .join(",")}`
       );
     }
     return parts.join("|");

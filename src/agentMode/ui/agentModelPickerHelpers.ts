@@ -447,7 +447,12 @@ export function buildEffortOptionsByModelKey(
     const catalog = catalogByBackendId.get(backendId);
     if (!catalog) continue;
     const found = catalog.find((m) => m.baseModelId === baseModelId);
-    out[getModelKeyFromModel(entry)] = found ? found.effortOptions : [];
+    // The reported catalog only carries effort for the *active* model (opencode
+    // surfaces it only for the current model); fall back to the preloader's
+    // prefetched effort catalog for every other row.
+    const live = found?.effortOptions ?? [];
+    out[getModelKeyFromModel(entry)] =
+      live.length > 0 ? live : (manager.getEffortCatalog(backendId)?.[baseModelId] ?? []);
   }
   return out;
 }

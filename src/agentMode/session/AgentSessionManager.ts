@@ -21,6 +21,7 @@ import type {
   BackendProcess,
   BackendState,
   CopilotMode,
+  EffortOption,
   ModeApplySpec,
   ModelSelection,
   PermissionDecision,
@@ -549,6 +550,15 @@ export class AgentSessionManager {
   /** Cached unified backend state for `backendId`, populated by the model preloader. */
   getCachedBackendState(backendId: BackendId): BackendState | null {
     return this.preloader.getCachedBackendState(backendId);
+  }
+
+  /**
+   * Per-model effort options (baseModelId → options) discovered by the
+   * preloader's post-catalog prefetch, or `null`. The picker reads this to show
+   * effort steppers for models that aren't currently active.
+   */
+  getEffortCatalog(backendId: BackendId): Record<string, EffortOption[]> | null {
+    return this.preloader.getEffortCatalog(backendId);
   }
 
   /**

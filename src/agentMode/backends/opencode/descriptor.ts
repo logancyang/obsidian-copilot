@@ -4,6 +4,7 @@ import { OpencodeInstallModal } from "@/agentMode/backends/opencode/OpencodeInst
 import OpencodeLogo from "@/agentMode/backends/opencode/logo.svg";
 import type CopilotPlugin from "@/main";
 import { OPENCODE_MIN_ACP_VERSION } from "@/constants";
+import { logWarn } from "@/logger";
 import {
   getSettings,
   subscribeToSettingsChange,
@@ -28,10 +29,13 @@ import { detectBinary } from "@/utils/detectBinary";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import { simpleBinaryBackendProcess } from "@/agentMode/backends/shared/simpleBinaryBackend";
 import type {
+  EffortOption,
   EnabledModelEntry,
   ModeMapping,
   ModelSelection,
+  ModelState,
   ModelWireCodec,
+  SessionId,
 } from "@/agentMode/session/types";
 import type {
   BackendDescriptor,
@@ -42,6 +46,9 @@ import type {
 
 /** Config option id OpenCode uses to switch the active agent at runtime. */
 const OPENCODE_MODE_CONFIG_OPTION_ID = "mode";
+
+/** Frozen empty effort catalog — referential stability for the "no effort" case. */
+const EMPTY_EFFORT_CATALOG: Record<string, EffortOption[]> = Object.freeze({});
 
 // Lazy-created singleton manager. The first plugin to ask for it wins; in a
 // running Obsidian instance there's exactly one CopilotPlugin so this is safe.
@@ -223,6 +230,63 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
       return;
     }
     await session.applyModelWireId(opencodeWire.encode(selection));
+  },
+
+  async prefetchEffortCatalog({
+    proc,
+    sessionId,
+    modelState,
+    enabledModels,
+    isAborted,
+  }: {
+    proc: BackendProcess;
+    sessionId: SessionId;
+    modelState: ModelState;
+    enabledModels: ReadonlyArray<EnabledModelEntry>;
+    isAborted: () => boolean;
+  }): Promise<Record<string, EffortOption[]>> {
+    // opencode ≥ 1.15.13 advertises its catalog via a `category:"model"` config
+    // option; effort is a sibling `category:"thought_level"` option opencode only
+    // surfaces for the active model. Switch to each enabled model in turn and read
+    // the effort options the refreshed state reports for it.
+    if (modelState.apply.kind !== "setConfigOption") return EMPTY_EFFORT_CATALOG;
+    const configId = modelState.apply.configId;
+    const originalWire = opencodeWire.encode({
+      baseModelId: modelState.current.baseModelId,
+      effort: null,
+    });
+    const out: Record<string, EffortOption[]> = {};
+    try {
+      for (const model of enabledModels) {
+        if (isAborted()) break;
+        // Skip models the agent can't serve — switching to them just errors.
+        if (model.credentialState !== "ok") continue;
+        try {
+          const next = await proc.setSessionConfigOption({
+            sessionId,
+            configId,
+            value: opencodeWire.encode({ baseModelId: model.baseModelId, effort: null }),
+          });
+          const entry = next.model?.availableModels.find(
+            (e) => e.baseModelId === model.baseModelId
+          );
+          if (entry && entry.effortOptions.length > 0) {
+            out[model.baseModelId] = entry.effortOptions;
+          }
+        } catch (e) {
+          logWarn(`[AgentMode] opencode effort prefetch for ${model.baseModelId} failed`, e);
+        }
+      }
+    } finally {
+      // Restore the probe session's model so the adopted session isn't left on
+      // the last probed model.
+      try {
+        await proc.setSessionConfigOption({ sessionId, configId, value: originalWire });
+      } catch (e) {
+        logWarn("[AgentMode] opencode effort prefetch: restore failed", e);
+      }
+    }
+    return Object.keys(out).length > 0 ? out : EMPTY_EFFORT_CATALOG;
   },
 
   createBackendProcess(args): BackendProcess {

@@ -7,11 +7,14 @@ import type {
   BackendConfigOption,
   BackendId,
   BackendProcess,
+  EffortOption,
   EnabledModelEntry,
   ModelSelection,
+  ModelState,
   ModelWireCodec,
   ModeMapping,
   RawModeState,
+  SessionId,
 } from "./types";
 
 /** UI-facing install/setup state for a backend. */
@@ -312,4 +315,23 @@ export interface BackendDescriptor {
    * `resumeSession` or `loadSession`. Only called by `AgentModelPreloader`.
    */
   persistProbeSessionId?(sessionId: string, plugin: CopilotPlugin): Promise<void>;
+
+  /**
+   * Optional: eagerly discover each enabled model's effort options right after
+   * the initial catalog probe. opencode only reports a model's effort as a
+   * `category:"thought_level"` config option once that model is the *active*
+   * model, so the catalog carries no per-model effort and the only way to learn
+   * a non-active model's effort is to switch to it. Runs on the existing probe
+   * `sessionId` (cheap: a switch is ~ms, a new session is ~1s) and MUST restore
+   * `modelState.current` before returning so the session the manager adopts is
+   * never left on a probed model. Returns baseModelId → effortOptions for models
+   * that expose effort. Best-effort; `AgentModelPreloader` swallows failures.
+   */
+  prefetchEffortCatalog?(args: {
+    proc: BackendProcess;
+    sessionId: SessionId;
+    modelState: ModelState;
+    enabledModels: ReadonlyArray<EnabledModelEntry>;
+    isAborted: () => boolean;
+  }): Promise<Record<string, EffortOption[]>>;
 }

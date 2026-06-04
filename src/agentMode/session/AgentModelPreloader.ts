@@ -9,6 +9,7 @@ import type {
   BackendId,
   BackendProcess,
   BackendState,
+  EffortOption,
   SessionId,
 } from "./types";
 
@@ -50,6 +51,11 @@ export class AgentModelPreloader {
   // consumed (or that pushed updates after consumption via `setCached`).
   // The active session's `attachModelCacheSync` writes here.
   private readonly cache = new Map<BackendId, BackendState>();
+  // Per-backend effort options keyed by baseModelId, discovered by probing each
+  // enabled model once after the catalog loads (opencode only advertises effort
+  // for the active model, so the catalog itself carries none). Read by the
+  // picker via `AgentSessionManager.getEffortCatalog`.
+  private readonly effortCatalog = new Map<BackendId, Record<string, EffortOption[]>>();
   private readonly inflight = new Map<BackendId, Promise<void>>();
   // Backends whose in-flight probe baked stale spawn config and must re-probe
   // once it settles. Set by `refresh`, drained by the probe chain. Coalesces
@@ -70,6 +76,11 @@ export class AgentModelPreloader {
 
   getCachedBackendState(backendId: BackendId): BackendState | null {
     return this.warm.get(backendId)?.state ?? this.cache.get(backendId) ?? null;
+  }
+
+  /** Per-model effort options discovered by the post-catalog prefetch, or null. */
+  getEffortCatalog(backendId: BackendId): Record<string, EffortOption[]> | null {
+    return this.effortCatalog.get(backendId) ?? null;
   }
 
   /**
@@ -93,6 +104,7 @@ export class AgentModelPreloader {
   clearCached(backendId: BackendId): void {
     if (this.disposed) return;
     let changed = this.cache.delete(backendId);
+    if (this.effortCatalog.delete(backendId)) changed = true;
     const warm = this.warm.get(backendId);
     if (warm) {
       this.warm.delete(backendId);
@@ -199,6 +211,7 @@ export class AgentModelPreloader {
   shutdown(): void {
     this.disposed = true;
     this.cache.clear();
+    this.effortCatalog.clear();
     this.inflight.clear();
     this.pendingRefresh.clear();
     this.listeners.clear();
@@ -263,6 +276,13 @@ export class AgentModelPreloader {
       return;
     }
 
+    // Discover each enabled model's effort options before exposing the warm
+    // entry. The probe loop switches the probe session's model and restores it,
+    // so doing it now (rather than after the manager adopts the session) keeps
+    // the adopted session on the original model. Cheap (~ms per switch) and
+    // best-effort — failures leave the picker without prefetched effort.
+    await this.runEffortPrefetch(backendId, descriptor, proc, probe.sessionId, probe.state);
+
     // Probe succeeded — retain the running subprocess as a warm entry so
     // the first chat-open can adopt it instead of paying another spawn +
     // initialize round-trip.
@@ -286,6 +306,37 @@ export class AgentModelPreloader {
     this.warmExitUnsubs.set(backendId, exitUnsub);
     logProbeResult(backendId, "session probe", probe.state);
     this.notify();
+  }
+
+  /**
+   * Probe each enabled model's effort options on the just-created probe session
+   * via the descriptor's optional `prefetchEffortCatalog`, caching the result so
+   * the picker can show effort steppers for every model before one is selected.
+   * Best-effort: no hook, no model state, or any error leaves the catalog empty.
+   */
+  private async runEffortPrefetch(
+    backendId: BackendId,
+    descriptor: BackendDescriptor,
+    proc: BackendProcess,
+    sessionId: SessionId,
+    state: BackendState
+  ): Promise<void> {
+    if (!descriptor.prefetchEffortCatalog || !state.model) return;
+    const enabledModels = descriptor.getEnabledModelEntries?.(getSettings());
+    if (!enabledModels || enabledModels.length === 0) return;
+    try {
+      const catalog = await descriptor.prefetchEffortCatalog({
+        proc,
+        sessionId,
+        modelState: state.model,
+        enabledModels,
+        isAborted: () => this.disposed,
+      });
+      if (this.disposed) return;
+      if (Object.keys(catalog).length > 0) this.effortCatalog.set(backendId, catalog);
+    } catch (e) {
+      logWarn(`[AgentMode] preload ${backendId}: effort prefetch failed`, e);
+    }
   }
 
   private async fetchInitialState(
