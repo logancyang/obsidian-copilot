@@ -796,13 +796,12 @@ export default class CopilotPlugin extends Plugin {
   }
 
   /**
-   * The "add … to chat context" commands write into a shared atom that both chat
-   * views render, so this only picks which chat to bring into focus:
-   *   - both chat views open → the one focused most recently
+   * Which chat view "add … to chat" actions should target:
+   *   - both chat views open → the one focused most recently (`lastActiveChatViewType`)
    *   - exactly one open      → that one
-   *   - none open             → the agent chat when available, else the legacy chat
+   *   - none open             → the agent chat when usable, else the legacy chat
    */
-  async activateChatViewForContext(): Promise<void> {
+  private pickContextChatViewType(): typeof CHAT_VIEWTYPE | typeof CHAT_AGENT_VIEWTYPE {
     const agentUsable = this.canUseAgentView();
     const agentOpen =
       agentUsable && this.app.workspace.getLeavesOfType(CHAT_AGENT_VIEWTYPE).length > 0;
@@ -816,8 +815,16 @@ export default class CopilotPlugin extends Plugin {
     } else {
       useAgent = agentUsable;
     }
+    return useAgent ? CHAT_AGENT_VIEWTYPE : CHAT_VIEWTYPE;
+  }
 
-    if (useAgent) {
+  /**
+   * The "add … to chat context" commands write into a shared atom that both chat
+   * views render, so this only picks which chat to bring into focus (see
+   * `pickContextChatViewType`).
+   */
+  async activateChatViewForContext(): Promise<void> {
+    if (this.pickContextChatViewType() === CHAT_AGENT_VIEWTYPE) {
       await this.activateAgentView();
     } else {
       await this.activateView();
@@ -852,28 +859,24 @@ export default class CopilotPlugin extends Plugin {
   }
 
   /**
-   * Insert text (a `[[wikilink]]` from the Relevant Notes pane) into whichever
-   * Copilot chat is currently open — agent view first, then the legacy chat —
-   * opening the platform default if none is open. Routes via the target view's
-   * `eventTarget`, the same seam `processText`/`emitChatIsVisible` use, so the
-   * standalone pane never needs the chat's Lexical editor directly.
+   * Insert text (a `[[wikilink]]` from the Relevant Notes pane) into the chat view
+   * the user last focused (see `pickContextChatViewType`), opening that view if none
+   * is open. Routes via the target view's `eventTarget`, the same seam
+   * `processText`/`emitChatIsVisible` use, so the standalone pane never needs the
+   * chat's Lexical editor directly.
    */
   async insertTextIntoActiveChat(text: string): Promise<void> {
-    const findChatLeaf = (): WorkspaceLeaf | null =>
-      this.app.workspace.getLeavesOfType(CHAT_AGENT_VIEWTYPE)[0] ??
-      this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0] ??
-      null;
-
-    let leaf = findChatLeaf();
+    const viewType = this.pickContextChatViewType();
+    let leaf = this.app.workspace.getLeavesOfType(viewType)[0] ?? null;
     if (!leaf) {
-      if (this.canUseAgentView()) {
+      if (viewType === CHAT_AGENT_VIEWTYPE) {
         await this.activateAgentView();
       } else {
         await this.activateView();
       }
       // Give the freshly-opened view a tick to mount its event listener.
       await new Promise((resolve) => window.setTimeout(resolve, 50));
-      leaf = findChatLeaf();
+      leaf = this.app.workspace.getLeavesOfType(viewType)[0] ?? null;
     }
     if (!leaf) return;
 
