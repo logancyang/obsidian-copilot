@@ -31,7 +31,7 @@ import {
   RESTRICTION_MESSAGES,
   USER_SENDER,
 } from "@/constants";
-import { AppContext, EventTargetContext } from "@/context";
+import { AppContext, ChatViewEventTarget, EventTargetContext } from "@/context";
 import { ChatInputProvider, useChatInput } from "@/context/ChatInputContext";
 import { useChatManager } from "@/hooks/useChatManager";
 import { useChatFileDrop } from "@/hooks/useChatFileDrop";
@@ -645,13 +645,18 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
   }, [eventTarget, chatInput]);
 
   // Insert text routed from outside the chat (e.g. the Relevant Notes pane's
-  // "Add to Chat") into this chat's input.
+  // "Add to Chat") into this chat's input. The bus latches text queued before
+  // this listener attaches, so a freshly-opened view still receives it on mount.
   useEffect(() => {
+    const bus = eventTarget instanceof ChatViewEventTarget ? eventTarget : null;
     const handleInsertText = (e: Event) => {
+      bus?.consumePendingInsertText();
       const text = (e as CustomEvent<{ text?: string }>).detail?.text;
       if (typeof text === "string") chatInput.insertTextWithPills(text, true);
     };
     eventTarget?.addEventListener(EVENT_NAMES.INSERT_TEXT_TO_CHAT, handleInsertText);
+    const pending = bus?.consumePendingInsertText();
+    if (typeof pending === "string") chatInput.insertTextWithPills(pending, true);
     return () => {
       eventTarget?.removeEventListener(EVENT_NAMES.INSERT_TEXT_TO_CHAT, handleInsertText);
     };

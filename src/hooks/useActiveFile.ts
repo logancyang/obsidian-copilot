@@ -5,7 +5,10 @@ import { useContext, useEffect, useState } from "react";
 
 export function useActiveFile() {
   const app = useApp();
-  const [activeFile, setActiveFile] = useState<TFile | null>(null);
+  // Seed from the current active file so a freshly-mounted consumer (e.g. the
+  // Relevant Notes pane) renders for the open note immediately, rather than
+  // waiting on an ACTIVE_LEAF_CHANGE event that only fires on later switches.
+  const [activeFile, setActiveFile] = useState<TFile | null>(() => app.workspace.getActiveFile());
   const eventTarget = useContext(EventTargetContext);
 
   useEffect(() => {

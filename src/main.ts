@@ -874,17 +874,16 @@ export default class CopilotPlugin extends Plugin {
       } else {
         await this.activateView();
       }
-      // Give the freshly-opened view a tick to mount its event listener.
-      await new Promise((resolve) => window.setTimeout(resolve, 50));
       leaf = this.app.workspace.getLeavesOfType(viewType)[0] ?? null;
     }
     if (!leaf) return;
 
     this.app.workspace.revealLeaf(leaf);
     const view = leaf.view as CopilotView | CopilotAgentView;
-    view.eventTarget.dispatchEvent(
-      new CustomEvent(EVENT_NAMES.INSERT_TEXT_TO_CHAT, { detail: { text } })
-    );
+    // The bus latches the text if the view's React tree hasn't mounted its
+    // listener yet, so a freshly-opened view drains it on mount — delivery no
+    // longer depends on guessing how long mounting takes.
+    view.eventTarget.queueInsertText(text);
   }
 
   async newAgentChat(): Promise<void> {

@@ -30,6 +30,13 @@ If your plugin does not need CSS, delete this file.
   border-top: 1px solid var(--background-modifier-border);
 }
 
+/* Relevance meter fill. Width and color are score-driven, so they arrive as
+   per-element CSS variables rather than static utilities. */
+.copilot-relevance-meter-fill {
+  width: var(--relevance-meter-fill, 0%);
+  background: var(--relevance-meter-color, var(--text-faint));
+}
+
 .button-container {
   display: flex;
   justify-content: space-between;

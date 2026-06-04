@@ -10,11 +10,11 @@ import { Root } from "react-dom/client";
 /**
  * Standalone pane for the Relevant Notes panel, isolated from the chat views.
  *
- * `RelevantNotes` reads the active file via `useActiveFile`, which is driven by
- * the `ACTIVE_LEAF_CHANGE` event on this view's own `eventTarget`. The plugin's
- * global handler dispatches that event only to the legacy chat view, so this
- * view feeds its own `eventTarget` (mirroring that handler's condition) and
- * fires once on open to populate for the currently-active note.
+ * `RelevantNotes` reads the active file via `useActiveFile`, which seeds from
+ * the current active file on mount and then updates on the `ACTIVE_LEAF_CHANGE`
+ * event on this view's own `eventTarget`. The plugin's global handler dispatches
+ * that event only to the legacy chat view, so this view feeds its own
+ * `eventTarget` (mirroring that handler's condition) on subsequent leaf changes.
  */
 export default class RelevantNotesView extends ItemView {
   private root: Root | null = null;
@@ -56,13 +56,6 @@ export default class RelevantNotesView extends ItemView {
         }
       })
     );
-
-    // Initialize with the currently-active note once the React listener has
-    // attached. Mirrors the 50ms `activateView → emitChatIsVisible` delay the
-    // plugin already uses to wait out a freshly-mounted view's effects.
-    window.setTimeout(() => {
-      this.eventTarget.dispatchEvent(new CustomEvent(EVENT_NAMES.ACTIVE_LEAF_CHANGE));
-    }, 50);
   }
 
   private renderView(): void {

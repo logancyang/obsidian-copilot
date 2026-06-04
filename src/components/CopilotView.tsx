@@ -2,7 +2,7 @@ import ChainManager from "@/LLMProviders/chainManager";
 import Chat from "@/components/Chat";
 import { ChatViewLayout } from "@/components/chat-components/ChatViewLayout";
 import { CHAT_VIEWTYPE } from "@/constants";
-import { EventTargetContext } from "@/context";
+import { ChatViewEventTarget, EventTargetContext } from "@/context";
 import CopilotPlugin from "@/main";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { createPluginRoot } from "@/utils/react/createPluginRoot";
@@ -24,7 +24,7 @@ export default class CopilotView extends ItemView {
   private layout: ChatViewLayout | null = null;
   private lastDrawerEl: HTMLElement | null = null;
   private windowMigrationDestroy: (() => void) | null = null;
-  eventTarget: EventTarget;
+  eventTarget: ChatViewEventTarget;
 
   constructor(
     leaf: WorkspaceLeaf,
@@ -33,7 +33,7 @@ export default class CopilotView extends ItemView {
     super(leaf);
     this.app = plugin.app;
     this.fileParserManager = plugin.fileParserManager;
-    this.eventTarget = new EventTarget();
+    this.eventTarget = new ChatViewEventTarget();
     this.plugin = plugin;
   }
 

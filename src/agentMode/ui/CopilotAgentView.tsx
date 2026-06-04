@@ -2,7 +2,7 @@ import { AgentModeChat } from "@/agentMode/ui/AgentModeChat";
 import { attachChatViewLayoutObservers } from "@/components/chat-components/attachChatViewLayoutObservers";
 import { ChatViewLayout } from "@/components/chat-components/ChatViewLayout";
 import { CHAT_AGENT_VIEWTYPE, COPILOT_AGENT_ICON_ID } from "@/constants";
-import { EventTargetContext } from "@/context";
+import { ChatViewEventTarget, EventTargetContext } from "@/context";
 import CopilotPlugin from "@/main";
 import { createPluginRoot } from "@/utils/react/createPluginRoot";
 import * as Tooltip from "@radix-ui/react-tooltip";
@@ -15,7 +15,7 @@ export default class CopilotAgentView extends ItemView {
   private handleSaveAsNote: (() => Promise<void>) | null = null;
   private layout: ChatViewLayout | null = null;
   private disposeLayoutObservers: (() => void) | null = null;
-  eventTarget: EventTarget;
+  eventTarget: ChatViewEventTarget;
 
   constructor(
     leaf: WorkspaceLeaf,
@@ -23,7 +23,7 @@ export default class CopilotAgentView extends ItemView {
   ) {
     super(leaf);
     this.app = plugin.app;
-    this.eventTarget = new EventTarget();
+    this.eventTarget = new ChatViewEventTarget();
     this.plugin = plugin;
   }
 

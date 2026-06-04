@@ -108,8 +108,13 @@ function RelevanceMeter({ score, className }: { score: number; className?: strin
       )}
     >
       <div
-        className="tw-h-full tw-rounded-full"
-        style={{ width: meterWidth(score), background: meterColor(score) }}
+        className={cn("copilot-relevance-meter-fill tw-h-full tw-rounded-full")}
+        style={
+          {
+            "--relevance-meter-fill": meterWidth(score),
+            "--relevance-meter-color": meterColor(score),
+          } as React.CSSProperties
+        }
       />
     </div>
   );
