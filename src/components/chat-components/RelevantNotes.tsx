@@ -11,8 +11,11 @@ import { logError, logWarn } from "@/logger";
 import { shouldUseMiyo } from "@/miyo/miyoUtils";
 import { findRelevantNotes, RelevantNoteEntry } from "@/search/findRelevantNotes";
 import { onIndexChanged } from "@/search/indexSignal";
+import { getMatchingPatterns, shouldIndexFile } from "@/search/searchUtils";
+import { useSettingsValue } from "@/settings/model";
 import {
   ArrowRight,
+  EyeOff,
   FileInput,
   FileOutput,
   FileText,
@@ -22,7 +25,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { TFile } from "obsidian";
-import React, { memo, useCallback, useEffect, useState } from "react";
+import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
 
 function useRelevantNotes(refresher: number) {
   const app = useApp();
@@ -84,13 +87,9 @@ function useHasIndex(notePath: string, refresher: number) {
   return hasIndex;
 }
 
-/**
- * Map a 0–1 similarity score to a meter fill width (clamped 8–100%) so even weak
- * matches stay visible.
- */
+/** Map a 0–1 similarity score directly to the meter fill width (70% → 70%). */
 function meterWidth(score: number): string {
-  const pct = score * 100;
-  return `${Math.max(8, Math.min(100, ((pct - 25) / 50) * 100))}%`;
+  return `${Math.max(0, Math.min(100, score * 100))}%`;
 }
 
 /** Color-grade the meter: stronger matches lean fully into the theme accent. */
@@ -113,6 +112,17 @@ function RelevanceMeter({ score, className }: { score: number; className?: strin
         style={{ width: meterWidth(score), background: meterColor(score) }}
       />
     </div>
+  );
+}
+
+function LinkBadge({ icon, label }: { icon: React.ReactNode; label: string }) {
+  return (
+    <span
+      title={label}
+      className="tw-flex tw-items-center tw-justify-center tw-rounded-sm tw-bg-modifier-hover tw-p-1 tw-text-faint"
+    >
+      {icon}
+    </span>
   );
 }
 
@@ -183,7 +193,7 @@ function RelevantNoteHoverCard({
         </div>
 
         {fileContent && (
-          <p className="tw-m-0 tw-line-clamp-4 tw-text-xs tw-leading-normal tw-text-muted">
+          <p className="tw-m-0 tw-line-clamp-4 tw-whitespace-pre-line tw-text-xs tw-leading-normal tw-text-muted">
             {fileContent}
           </p>
         )}
@@ -242,12 +252,10 @@ function RelevantNoteHoverCard({
 
 function RelevantNoteRow({
   note,
-  isTop,
   onAddToChat,
   onNavigateToNote,
 }: {
   note: RelevantNoteEntry;
-  isTop: boolean;
   onAddToChat: () => void;
   onNavigateToNote: (openInNewLeaf: boolean) => void;
 }) {
@@ -261,8 +269,8 @@ function RelevantNoteRow({
       onAddToChat={onAddToChat}
       onNavigateToNote={onNavigateToNote}
     >
-      <div className="tw-group tw-relative tw-rounded-md tw-px-2.5 tw-py-1.5 tw-transition-colors hover:tw-bg-modifier-hover">
-        <div className="tw-flex tw-items-center tw-gap-2">
+      <div className="tw-group tw-rounded-md tw-px-2.5 tw-py-1.5 tw-transition-colors hover:tw-bg-modifier-hover">
+        <div className="tw-flex tw-min-h-6 tw-items-center tw-gap-2">
           <a
             draggable
             onDragStart={(e) => {
@@ -287,19 +295,21 @@ function RelevantNoteRow({
             {note.note.title}
           </a>
 
-          {isTop && similarity != null && (
-            <span className="tw-shrink-0 tw-rounded-sm tw-px-1.5 tw-py-0.5 tw-text-smallest tw-font-bold tw-uppercase tw-tracking-wide tw-text-accent tw-bg-interactive-accent/20">
-              Best
-            </span>
-          )}
+          <div className="tw-flex tw-shrink-0 tw-items-center tw-gap-1.5 group-hover:tw-hidden">
+            {note.metadata.hasOutgoingLinks && (
+              <LinkBadge icon={<FileOutput className="tw-size-3" />} label="Outgoing link" />
+            )}
+            {note.metadata.hasBacklinks && (
+              <LinkBadge icon={<FileInput className="tw-size-3" />} label="Backlink" />
+            )}
+            {similarity != null && (
+              <span className="tw-text-xs tw-font-medium tw-tabular-nums tw-text-muted">
+                {Math.round(similarity * 100)}%
+              </span>
+            )}
+          </div>
 
-          {similarity != null && (
-            <span className="tw-shrink-0 tw-text-xs tw-font-medium tw-tabular-nums tw-text-muted tw-transition-opacity group-hover:tw-opacity-0">
-              {Math.round(similarity * 100)}%
-            </span>
-          )}
-
-          <div className="tw-absolute tw-right-2 tw-top-1/2 tw-flex -tw-translate-y-1/2 tw-gap-0.5 tw-opacity-0 tw-transition-opacity group-hover:tw-opacity-100">
+          <div className="tw-hidden tw-shrink-0 tw-items-center tw-gap-0.5 group-hover:tw-flex">
             <Button
               variant="ghost2"
               size="icon"
@@ -400,6 +410,20 @@ export const RelevantNotes = memo(
     const activeFile = useActiveFile();
     const hasIndex = useHasIndex(activeFile?.path ?? "", refresher);
     const [indexingState] = useIndexingProgress();
+    const settings = useSettingsValue();
+
+    // The active note itself is excluded from the index (by the QA
+    // inclusion/exclusion settings or an internal exclusion), so no relevant
+    // notes can ever be computed for it — surface that instead of a build
+    // prompt or a bare "none found".
+    const isActiveFileExcluded = useMemo(() => {
+      if (!activeFile) return false;
+      const { inclusions, exclusions } = getMatchingPatterns({
+        inclusions: settings.qaInclusions,
+        exclusions: settings.qaExclusions,
+      });
+      return !shouldIndexFile(app, activeFile, inclusions, exclusions);
+    }, [app, activeFile, settings.qaInclusions, settings.qaExclusions]);
     const navigateToNote = (notePath: string, openInNewLeaf = false) => {
       const file = app.vault.getAbstractFileByPath(notePath);
       if (file instanceof TFile) {
@@ -441,7 +465,26 @@ export const RelevantNotes = memo(
 
     return (
       <div className={cn("tw-flex tw-min-h-full tw-w-full tw-flex-1 tw-flex-col", className)}>
-        {!hasIndex && (
+        {isActiveFileExcluded && (
+          <div className="tw-flex tw-flex-1 tw-flex-col tw-items-center tw-justify-center tw-px-6">
+            <div className="tw-flex tw-w-full tw-max-w-xs tw-flex-col tw-items-center tw-gap-6 tw-text-center">
+              <div className="tw-flex tw-size-16 tw-items-center tw-justify-center tw-rounded-xl tw-border tw-border-solid tw-border-border tw-bg-secondary">
+                <EyeOff className="tw-size-7 tw-text-muted" />
+              </div>
+              <div className="tw-flex tw-flex-col tw-gap-1.5">
+                <span className="tw-text-lg tw-font-semibold tw-text-normal">
+                  This note is excluded
+                </span>
+                <span className="tw-text-sm tw-text-muted">
+                  It falls outside your semantic index settings, so related notes can&apos;t be
+                  shown here. Adjust inclusions or exclusions in Copilot settings to include it.
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {!isActiveFileExcluded && !hasIndex && (
           <div className="tw-flex tw-flex-1 tw-flex-col tw-items-center tw-justify-center tw-px-6">
             <div className="tw-flex tw-w-full tw-max-w-xs tw-flex-col tw-items-center tw-gap-6 tw-text-center">
               <div className="tw-flex tw-size-16 tw-items-center tw-justify-center tw-rounded-xl tw-border tw-border-solid tw-border-border tw-bg-secondary">
@@ -469,7 +512,7 @@ export const RelevantNotes = memo(
           </div>
         )}
 
-        {hasIndex && (
+        {!isActiveFileExcluded && hasIndex && (
           <>
             <RelevantNotesToolbar
               activeFileName={activeFile?.basename}
@@ -484,11 +527,10 @@ export const RelevantNotes = memo(
                   </div>
                 ) : (
                   <div className="tw-flex tw-flex-col tw-gap-0.5">
-                    {relevantNotes.map((note, i) => (
+                    {relevantNotes.map((note) => (
                       <RelevantNoteRow
                         key={note.note.path}
                         note={note}
-                        isTop={i === 0}
                         onAddToChat={() => addToChat(note.note.title)}
                         onNavigateToNote={(openInNewLeaf: boolean) =>
                           navigateToNote(note.note.path, openInNewLeaf)
