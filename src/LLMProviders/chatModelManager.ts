@@ -124,6 +124,8 @@ export function normalizeAzureUrl(raw: string | undefined): {
 export default class ChatModelManager {
   private static instance: ChatModelManager;
   private static chatModel: BaseChatModel | null;
+  private static activeModel: CustomModel | null = null;
+  private static activeModelSource: "legacy" | "bridged" | null = null;
   private static modelMap: Record<
     string,
     {
@@ -196,7 +198,10 @@ export default class ChatModelManager {
     return customModel.temperature ?? settings.temperature;
   }
 
-  private async getModelConfig(customModel: CustomModel): Promise<ModelConfig> {
+  private async getModelConfig(
+    customModel: CustomModel,
+    allowLegacyCredentialFallback: boolean = true
+  ): Promise<ModelConfig> {
     const settings = getSettings();
 
     const modelName = customModel.name;
@@ -223,7 +228,11 @@ export default class ChatModelManager {
     } = {
       [ChatModelProviders.OPENAI]: {
         modelName: modelName,
-        apiKey: await getDecryptedKey(customModel.apiKey || settings.openAIApiKey),
+        apiKey: await this.resolveApiKey(
+          customModel.apiKey,
+          settings.openAIApiKey,
+          allowLegacyCredentialFallback
+        ),
         configuration: {
           baseURL: customModel.baseUrl,
           fetch: customModel.enableCors ? safeFetch : undefined,
@@ -237,7 +246,11 @@ export default class ChatModelManager {
         ),
       },
       [ChatModelProviders.ANTHROPIC]: {
-        anthropicApiKey: await getDecryptedKey(customModel.apiKey || settings.anthropicApiKey),
+        anthropicApiKey: await this.resolveApiKey(
+          customModel.apiKey,
+          settings.anthropicApiKey,
+          allowLegacyCredentialFallback
+        ),
         model: modelName,
         anthropicApiUrl: customModel.baseUrl,
         clientOptions: {
@@ -265,7 +278,11 @@ export default class ChatModelManager {
           modelName: customModel.baseUrl
             ? modelName
             : customModel.azureOpenAIApiDeploymentName || settings.azureOpenAIApiDeploymentName,
-          apiKey: await getDecryptedKey(customModel.apiKey || settings.azureOpenAIApiKey),
+          apiKey: await this.resolveApiKey(
+            customModel.apiKey,
+            settings.azureOpenAIApiKey,
+            allowLegacyCredentialFallback
+          ),
           configuration: {
             baseURL:
               azureUrl.baseUrl ||
@@ -279,7 +296,11 @@ export default class ChatModelManager {
             },
             defaultHeaders: {
               "Content-Type": "application/json",
-              "api-key": await getDecryptedKey(customModel.apiKey || settings.azureOpenAIApiKey),
+              "api-key": await this.resolveApiKey(
+                customModel.apiKey,
+                settings.azureOpenAIApiKey,
+                allowLegacyCredentialFallback
+              ),
             },
             fetch: customModel.enableCors ? safeFetch : undefined,
           },
@@ -293,26 +314,42 @@ export default class ChatModelManager {
       })(),
       [ChatModelProviders.COHEREAI]: {
         modelName,
-        apiKey: await getDecryptedKey(customModel.apiKey || settings.cohereApiKey),
+        apiKey: await this.resolveApiKey(
+          customModel.apiKey,
+          settings.cohereApiKey,
+          allowLegacyCredentialFallback
+        ),
         configuration: {
           baseURL: customModel.baseUrl || ProviderInfo[ChatModelProviders.COHEREAI].host,
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
       },
       [ChatModelProviders.GOOGLE]: {
-        apiKey: await getDecryptedKey(customModel.apiKey || settings.googleApiKey),
+        apiKey: await this.resolveApiKey(
+          customModel.apiKey,
+          settings.googleApiKey,
+          allowLegacyCredentialFallback
+        ),
         model: modelName,
         safetySettings: GOOGLE_SAFETY_SETTINGS_BLOCK_NONE,
         baseUrl: customModel.baseUrl,
       },
       [ChatModelProviders.XAI]: {
-        apiKey: await getDecryptedKey(customModel.apiKey || settings.xaiApiKey),
+        apiKey: await this.resolveApiKey(
+          customModel.apiKey,
+          settings.xaiApiKey,
+          allowLegacyCredentialFallback
+        ),
         model: modelName,
         // This langchainjs XAI client does not support baseURL override
       },
       [ChatModelProviders.OPENROUTERAI]: {
         modelName: modelName,
-        apiKey: await getDecryptedKey(customModel.apiKey || settings.openRouterAiApiKey),
+        apiKey: await this.resolveApiKey(
+          customModel.apiKey,
+          settings.openRouterAiApiKey,
+          allowLegacyCredentialFallback
+        ),
         configuration: {
           baseURL: customModel.baseUrl || "https://openrouter.ai/api/v1",
           fetch: customModel.enableCors ? safeFetch : undefined,
@@ -333,8 +370,13 @@ export default class ChatModelManager {
         enablePromptCaching: customModel.enablePromptCaching ?? true,
       },
       [ChatModelProviders.GROQ]: {
-        apiKey: await getDecryptedKey(customModel.apiKey || settings.groqApiKey),
+        apiKey: await this.resolveApiKey(
+          customModel.apiKey,
+          settings.groqApiKey,
+          allowLegacyCredentialFallback
+        ),
         model: modelName,
+        baseUrl: customModel.baseUrl,
       },
       [ChatModelProviders.OLLAMA]: {
         // ChatOllama has `model` instead of `modelName`!!
@@ -373,7 +415,11 @@ export default class ChatModelManager {
       },
       [ChatModelProviders.OPENAI_FORMAT]: {
         modelName: modelName,
-        apiKey: await getDecryptedKey(customModel.apiKey || settings.openAIApiKey),
+        apiKey: await this.resolveApiKey(
+          customModel.apiKey,
+          settings.openAIApiKey,
+          allowLegacyCredentialFallback
+        ),
         streamUsage: customModel.streamUsage ?? false,
         configuration: {
           baseURL: customModel.baseUrl,
@@ -389,7 +435,11 @@ export default class ChatModelManager {
       },
       [ChatModelProviders.SILICONFLOW]: {
         modelName: modelName,
-        apiKey: await getDecryptedKey(customModel.apiKey || settings.siliconflowApiKey),
+        apiKey: await this.resolveApiKey(
+          customModel.apiKey,
+          settings.siliconflowApiKey,
+          allowLegacyCredentialFallback
+        ),
         configuration: {
           baseURL: customModel.baseUrl || ProviderInfo[ChatModelProviders.SILICONFLOW].host,
           fetch: customModel.enableCors ? safeFetch : undefined,
@@ -403,7 +453,11 @@ export default class ChatModelManager {
       },
       [ChatModelProviders.COPILOT_PLUS]: {
         modelName: modelName,
-        apiKey: await getDecryptedKey(settings.plusLicenseKey),
+        apiKey: await this.resolveApiKey(
+          customModel.apiKey,
+          settings.plusLicenseKey,
+          allowLegacyCredentialFallback
+        ),
         configuration: {
           baseURL: BREVILABS_MODELS_BASE_URL,
           fetch: safeFetch,
@@ -411,7 +465,11 @@ export default class ChatModelManager {
       },
       [ChatModelProviders.MISTRAL]: {
         modelName,
-        apiKey: await getDecryptedKey(customModel.apiKey || settings.mistralApiKey),
+        apiKey: await this.resolveApiKey(
+          customModel.apiKey,
+          settings.mistralApiKey,
+          allowLegacyCredentialFallback
+        ),
         configuration: {
           baseURL: customModel.baseUrl || ProviderInfo[ChatModelProviders.MISTRAL].host,
           fetch: customModel.enableCors ? safeFetch : undefined,
@@ -419,7 +477,11 @@ export default class ChatModelManager {
       },
       [ChatModelProviders.DEEPSEEK]: {
         modelName: modelName,
-        apiKey: await getDecryptedKey(customModel.apiKey || settings.deepseekApiKey),
+        apiKey: await this.resolveApiKey(
+          customModel.apiKey,
+          settings.deepseekApiKey,
+          allowLegacyCredentialFallback
+        ),
         configuration: {
           baseURL: customModel.baseUrl || ProviderInfo[ChatModelProviders.DEEPSEEK].host,
           fetch: customModel.enableCors ? safeFetch : undefined,
@@ -447,7 +509,8 @@ export default class ChatModelManager {
         modelName,
         settings,
         maxTokens,
-        resolvedTemperature
+        resolvedTemperature,
+        allowLegacyCredentialFallback
       );
     }
 
@@ -470,6 +533,14 @@ export default class ChatModelManager {
     };
 
     return finalConfig as ModelConfig;
+  }
+
+  private async resolveApiKey(
+    modelApiKey: string | undefined,
+    legacyApiKey: string,
+    allowLegacyCredentialFallback: boolean
+  ): Promise<string> {
+    return getDecryptedKey(modelApiKey || (allowLegacyCredentialFallback ? legacyApiKey : ""));
   }
 
   /**
@@ -537,9 +608,11 @@ export default class ChatModelManager {
     modelName: string,
     settings: CopilotSettings,
     maxTokens: number,
-    temperature: number | undefined
+    temperature: number | undefined,
+    allowLegacyCredentialFallback: boolean
   ): Promise<BedrockChatModelFields> {
-    const apiKeySource = customModel.apiKey || settings.amazonBedrockApiKey;
+    const apiKeySource =
+      customModel.apiKey || (allowLegacyCredentialFallback ? settings.amazonBedrockApiKey : "");
     if (!apiKeySource) {
       throw new Error(
         "Amazon Bedrock API key is not configured. Provide a key in Settings > Copilot > BYOK or the model definition."
@@ -643,7 +716,7 @@ export default class ChatModelManager {
 
     allModels.forEach((model) => {
       if (model.enabled) {
-        if (!Object.values(ChatModelProviders).contains(model.provider as ChatModelProviders)) {
+        if (!Object.values(ChatModelProviders).includes(model.provider as ChatModelProviders)) {
           console.warn(`Unknown provider: ${model.provider} for model: ${model.name}`);
           return;
         }
@@ -665,10 +738,14 @@ export default class ChatModelManager {
    * @param model - The custom model definition.
    * @returns True when the provider requirements are satisfied, otherwise false.
    */
-  private hasProviderCredentials(model: CustomModel): boolean {
+  private hasProviderCredentials(
+    model: CustomModel,
+    allowLegacyCredentialFallback: boolean = true
+  ): boolean {
     if ((model.provider as ChatModelProviders) === ChatModelProviders.AMAZON_BEDROCK) {
       const settings = getSettings();
-      const apiKey = model.apiKey || settings.amazonBedrockApiKey;
+      const apiKey =
+        model.apiKey || (allowLegacyCredentialFallback ? settings.amazonBedrockApiKey : "");
       // Region defaults to us-east-1 if not specified, so API key is the only requirement
       return Boolean(apiKey);
     }
@@ -678,7 +755,7 @@ export default class ChatModelManager {
       return Boolean(model.apiKey);
     }
 
-    return Boolean(model.apiKey || getDefaultApiKey());
+    return Boolean(model.apiKey || (allowLegacyCredentialFallback ? getDefaultApiKey() : ""));
   }
 
   getProviderConstructor(model: CustomModel): ChatConstructorType {
@@ -697,6 +774,10 @@ export default class ChatModelManager {
       throw new Error("No valid chat model available. Please check your API key settings.");
     }
     return ChatModelManager.chatModel;
+  }
+
+  getActiveModel(): CustomModel | null {
+    return ChatModelManager.activeModel;
   }
 
   /**
@@ -766,7 +847,7 @@ export default class ChatModelManager {
    * so we need to create a new model instance with the specified temperature.
    */
   async getChatModelWithTemperature(temperature: number): Promise<BaseChatModel> {
-    const modelConfig = this.resolveModelForTemperatureOverride();
+    const modelConfig = ChatModelManager.activeModel ?? this.resolveModelForTemperatureOverride();
 
     // Create a temporary model config with overridden temperature
     const modelWithTempOverride: CustomModel = {
@@ -774,13 +855,17 @@ export default class ChatModelManager {
       temperature,
     };
 
-    return await this.createModelInstance(modelWithTempOverride);
+    return ChatModelManager.activeModelSource === "bridged"
+      ? await this.createModelInstanceFromBridged(modelWithTempOverride)
+      : await this.createModelInstance(modelWithTempOverride);
   }
 
   async setChatModel(model: CustomModel): Promise<void> {
     try {
       const modelInstance = await this.createModelInstance(model);
       ChatModelManager.chatModel = modelInstance;
+      ChatModelManager.activeModel = model;
+      ChatModelManager.activeModelSource = "legacy";
 
       // Log if Responses API is enabled for GPT-5
       const modelInfo = getModelInfo(model.name);
@@ -805,6 +890,8 @@ export default class ChatModelManager {
   async setChatModelFromBridged(model: CustomModel): Promise<void> {
     try {
       ChatModelManager.chatModel = await this.createModelInstanceFromBridged(model);
+      ChatModelManager.activeModel = model;
+      ChatModelManager.activeModelSource = "bridged";
     } catch (error) {
       logError(error);
       throw error;
@@ -845,7 +932,7 @@ export default class ChatModelManager {
    * provider + key, so credentials are validated directly off the model here.
    */
   async createModelInstanceFromBridged(model: CustomModel): Promise<BaseChatModel> {
-    if (!this.hasProviderCredentials(model)) {
+    if (!this.hasProviderCredentials(model, false)) {
       if ((model.provider as ChatModelProviders) === ChatModelProviders.COPILOT_PLUS) {
         throw new MissingPlusLicenseError(
           "Copilot Plus license key is not configured. Please enter your license key in the Copilot Plus section at the top of Basic Settings."
@@ -857,7 +944,8 @@ export default class ChatModelManager {
     return this.instantiateChatModel(
       model,
       model.provider as ChatModelProviders,
-      this.getProviderConstructor(model)
+      this.getProviderConstructor(model),
+      false
     );
   }
 
@@ -870,9 +958,10 @@ export default class ChatModelManager {
   private async instantiateChatModel(
     model: CustomModel,
     vendor: ChatModelProviders,
-    AIConstructor: ChatConstructorType
+    AIConstructor: ChatConstructorType,
+    allowLegacyCredentialFallback: boolean = true
   ): Promise<BaseChatModel> {
-    const modelConfig = await this.getModelConfig(model);
+    const modelConfig = await this.getModelConfig(model, allowLegacyCredentialFallback);
     const modelInfo = getModelInfo(model.name);
 
     // For GPT-5 models, automatically use Responses API for proper verbosity support
@@ -944,6 +1033,8 @@ export default class ChatModelManager {
     if (selectedModel && !selectedModel.hasApiKey) {
       // Clear the current chat model
       ChatModelManager.chatModel = null;
+      ChatModelManager.activeModel = null;
+      ChatModelManager.activeModelSource = null;
       logInfo("Failed to reinitialize model due to missing API key");
     }
   }

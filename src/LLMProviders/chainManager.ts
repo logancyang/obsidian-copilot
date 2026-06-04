@@ -61,6 +61,16 @@ export default class ChainManager {
         logError("createChainWithNewModel failed", err)
       );
     });
+    modelManagement.providerRegistry.subscribe(() => {
+      void this.createChainWithNewModel().catch((err) =>
+        logError("createChainWithNewModel after provider change failed", err)
+      );
+    });
+    modelManagement.backendConfigRegistry.subscribe(() => {
+      void this.createChainWithNewModel().catch((err) =>
+        logError("createChainWithNewModel after chat backend change failed", err)
+      );
+    });
   }
 
   private async initialize() {

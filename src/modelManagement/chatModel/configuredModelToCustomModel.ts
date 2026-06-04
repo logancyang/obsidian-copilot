@@ -13,7 +13,7 @@
  */
 
 import { CustomModel } from "@/aiParams";
-import { ChatModelProviders, ModelCapability } from "@/constants";
+import { ChatModelProviders, ModelCapability, ProviderInfo } from "@/constants";
 import { logWarn } from "@/logger";
 import { providerRequiresApiKey } from "@/modelManagement/providers/providerRequiresApiKey";
 import type { ConfiguredModel, Provider } from "@/modelManagement/types/persisted";
@@ -38,6 +38,10 @@ const CATALOG_ID_TO_CHAT_PROVIDER: Record<string, ChatModelProviders> = {
   siliconflow: ChatModelProviders.SILICONFLOW,
 };
 
+function normalizeBaseUrl(value: string | undefined): string {
+  return (value ?? "").trim().replace(/\/+$/, "").toLowerCase();
+}
+
 /**
  * Pick the `ChatModelProviders` value `ChatModelManager` dispatches on. This is
  * the load-bearing decision — it selects the LangChain class. `providerType` is
@@ -46,6 +50,10 @@ const CATALOG_ID_TO_CHAT_PROVIDER: Record<string, ChatModelProviders> = {
  * when known.
  */
 export function mapProviderTypeToChatModelProvider(provider: Provider): ChatModelProviders {
+  if (provider.origin.kind === "copilot-plus") {
+    return ChatModelProviders.COPILOT_PLUS;
+  }
+
   switch (provider.providerType) {
     case "anthropic":
       return ChatModelProviders.ANTHROPIC;
@@ -58,6 +66,14 @@ export function mapProviderTypeToChatModelProvider(provider: Provider): ChatMode
     case "openai-compatible": {
       const catalogId =
         provider.origin.kind === "byok" ? provider.origin.catalogProviderId : undefined;
+      if (
+        catalogId === "xai" &&
+        provider.baseUrl &&
+        normalizeBaseUrl(provider.baseUrl) !==
+          normalizeBaseUrl(ProviderInfo[ChatModelProviders.XAI].host)
+      ) {
+        return ChatModelProviders.OPENAI_FORMAT;
+      }
       const mapped = catalogId ? CATALOG_ID_TO_CHAT_PROVIDER[catalogId] : undefined;
       return mapped ?? ChatModelProviders.OPENAI_FORMAT;
     }
@@ -104,7 +120,10 @@ export function configuredModelToCustomModel(params: {
   // path used the same "default-key" sentinel. When a key IS required but
   // missing, leave it undefined so credential validation fails loudly.
   const resolvedApiKey =
-    trimmedKey ?? (providerRequiresApiKey(provider) ? undefined : "default-key");
+    trimmedKey ??
+    (provider.origin.kind === "copilot-plus" || providerRequiresApiKey(provider)
+      ? undefined
+      : "default-key");
 
   const capabilities: ModelCapability[] = [];
   if (info.reasoning) capabilities.push(ModelCapability.REASONING);

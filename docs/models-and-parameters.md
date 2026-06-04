@@ -42,30 +42,27 @@ Models may show capability badges:
 
 ### Managing Models
 
-Go to **Settings → Copilot → Model** to see the full model list.
-
-- **Enable/disable** — Toggle individual models on or off to control what appears in the model selector
-- **Reorder** — Drag models to change their order in the dropdown
-- **Delete** — Remove custom models you've added
+Go to **Settings → Copilot → Models (BYOK)** to add or edit providers and choose the models
+available from each provider. Then go to **Settings → Copilot → Agents → Quick Chat models** to
+control which configured models appear in chat model selectors.
 
 ### Adding Custom Models
 
 If your provider offers a model that isn't in the built-in list, you can add it manually:
 
-1. Go to **Settings → Copilot → Model**
-2. Click **Add Model**
-3. Enter the model name exactly as the provider expects it (e.g., `gpt-4-turbo-preview`)
-4. Select the provider
-5. Optionally set a custom base URL (useful for proxies or alternate endpoints)
-6. Save
+1. Go to **Settings → Copilot → Models (BYOK)**
+2. Add a provider or custom OpenAI-compatible endpoint
+3. Enter the API key and base URL when required
+4. Select or enter the models exposed by that provider
+5. Save
 
 ### Importing Models from Provider
 
 You can automatically import the full list of available models from a provider:
 
-1. Go to **Settings → Copilot → Model**
-2. Find the **Import models** button for your provider
-3. Copilot will fetch the provider's model list and add new ones
+1. Go to **Settings → Copilot → Models (BYOK)**
+2. Add or edit a provider
+3. Copilot will fetch the provider's model list so you can select models to configure
 
 ---
 
@@ -168,7 +165,7 @@ Reduces the likelihood of the model repeating itself.
 Your **default model** is the one Copilot uses when you open a new chat. Set it in:
 **Settings → Copilot → Basic → Default Chat Model**
 
-The default is **OpenRouter Gemini 2.5 Flash** (requires OpenRouter API key).
+The dropdown contains models enabled under **Agents → Quick Chat models**.
 
 ---
 

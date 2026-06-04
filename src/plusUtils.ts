@@ -81,6 +81,13 @@ export function isSelfHostModeValid(): boolean {
 
 /** Check if the model key is a Copilot Plus model. */
 export function isPlusModel(modelKey: string): boolean {
+  const settings = getSettings();
+  const configuredModel = settings.configuredModels.find(
+    (model) => model.configuredModelId === modelKey
+  );
+  if (configuredModel) {
+    return settings.providers[configuredModel.providerId]?.origin.kind === "copilot-plus";
+  }
   return (
     (modelKey.split("|")[1] as EmbeddingModelProviders) === EmbeddingModelProviders.COPILOT_PLUS
   );
@@ -336,9 +343,20 @@ export async function refreshSelfHostModeValidation(): Promise<void> {
  * as the automatic detection doesn't work reliably in all scenarios.
  */
 export function applyPlusSettings(): void {
-  const defaultModelKey = DEFAULT_COPILOT_PLUS_CHAT_MODEL_KEY;
+  const settings = getSettings();
+  const plusProviderIds = new Set(
+    Object.values(settings.providers)
+      .filter((provider) => provider.origin.kind === "copilot-plus")
+      .map((provider) => provider.providerId)
+  );
+  const defaultModelKey =
+    settings.configuredModels.find(
+      (model) =>
+        plusProviderIds.has(model.providerId) &&
+        model.info.id === (DEFAULT_COPILOT_PLUS_CHAT_MODEL as string)
+    )?.configuredModelId ?? DEFAULT_COPILOT_PLUS_CHAT_MODEL_KEY;
   const embeddingModelKey = DEFAULT_COPILOT_PLUS_EMBEDDING_MODEL_KEY;
-  const previousEmbeddingModelKey = getSettings().embeddingModelKey;
+  const previousEmbeddingModelKey = settings.embeddingModelKey;
 
   logInfo("applyPlusSettings: Changing embedding model", {
     from: previousEmbeddingModelKey,

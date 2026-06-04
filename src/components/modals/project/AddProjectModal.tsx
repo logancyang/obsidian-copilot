@@ -17,14 +17,12 @@ import { UrlTagInput } from "@/components/ui/url-tag-input";
 import { SystemPromptSyntaxInstruction } from "@/components/SystemPromptSyntaxInstruction";
 import { DEFAULT_MODEL_SETTING } from "@/constants";
 import { ProjectContextBadgeList } from "@/components/project/ProjectContextBadgeList";
-import { settingsStore } from "@/settings/model";
 import { err2String, randomUUID } from "@/utils";
-import { backendPickerAtomFamily } from "@/modelManagement";
 import { Settings } from "lucide-react";
 import { type UrlItem, parseProjectUrls, serializeProjectUrls } from "@/utils/urlTagUtils";
 import type CopilotPlugin from "@/main";
 import { createPluginRoot } from "@/utils/react/createPluginRoot";
-import { useAtomValue } from "jotai";
+import { useChatBackendModelOptions } from "@/hooks/useChatBackendModelOptions";
 import { App, Modal, Notice } from "obsidian";
 import React, { useMemo, useState } from "react";
 import { Root } from "react-dom/client";
@@ -45,18 +43,7 @@ function AddProjectModalContent({
   const app = useApp();
   // Project model options come from the model-management "chat" backend
   // (same enabled set as Quick Chat), keyed by configuredModelId.
-  const chatEntries = useAtomValue(backendPickerAtomFamily("chat"), { store: settingsStore });
-  const chatModelOptions = useMemo(() => {
-    const options: { label: string; value: string }[] = [];
-    for (const entry of chatEntries) {
-      if (entry.state !== "ok") continue;
-      options.push({
-        label: entry.configuredModel.info.displayName || entry.configuredModel.info.id,
-        value: entry.configuredModelId,
-      });
-    }
-    return options;
-  }, [chatEntries]);
+  const { options: chatModelOptions, resolveSelectionId } = useChatBackendModelOptions();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [touched, setTouched] = useState({
     name: false,
@@ -65,27 +52,32 @@ function AddProjectModalContent({
     inclusions: false,
   });
 
-  const [formData, setFormData] = useState<ProjectConfig>(
-    () =>
-      initialProject || {
-        id: randomUUID(),
-        name: "",
-        description: "",
-        systemPrompt: "",
-        projectModelKey: "",
-        modelConfigs: {
-          temperature: DEFAULT_MODEL_SETTING.TEMPERATURE,
-          maxTokens: DEFAULT_MODEL_SETTING.MAX_TOKENS,
-        },
-        contextSource: {
-          inclusions: "",
-          exclusions: "",
-          webUrls: "",
-          youtubeUrls: "",
-        },
-        created: Date.now(),
-        UsageTimestamps: Date.now(),
-      }
+  const [formData, setFormData] = useState<ProjectConfig>(() =>
+    initialProject
+      ? {
+          ...initialProject,
+          projectModelKey:
+            resolveSelectionId(initialProject.projectModelKey) || initialProject.projectModelKey,
+        }
+      : {
+          id: randomUUID(),
+          name: "",
+          description: "",
+          systemPrompt: "",
+          projectModelKey: "",
+          modelConfigs: {
+            temperature: DEFAULT_MODEL_SETTING.TEMPERATURE,
+            maxTokens: DEFAULT_MODEL_SETTING.MAX_TOKENS,
+          },
+          contextSource: {
+            inclusions: "",
+            exclusions: "",
+            webUrls: "",
+            youtubeUrls: "",
+          },
+          created: Date.now(),
+          UsageTimestamps: Date.now(),
+        }
   );
 
   // URL items derived from formData for UrlTagInput

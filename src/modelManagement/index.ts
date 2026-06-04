@@ -41,6 +41,13 @@ export {
   configuredModelToCustomModel,
   mapProviderTypeToChatModelProvider,
 } from "./chatModel/configuredModelToCustomModel";
+export {
+  findChatBackendEntry,
+  getLegacyChatModelKey,
+  isChatModelSelectionForEntry,
+  resolveChatModelSelectionId,
+} from "./chatModel/chatModelSelection";
+export type { ResolvedChatBackendEntry } from "./chatModel/chatModelSelection";
 export { resolveChatBackendModel } from "./chatModel/resolveChatBackendModel";
 export type { ChatBackendResolution } from "./chatModel/resolveChatBackendModel";
 

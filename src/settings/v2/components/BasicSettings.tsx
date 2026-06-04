@@ -5,16 +5,15 @@ import { Input } from "@/components/ui/input";
 import { SettingItem } from "@/components/ui/setting-item";
 import { DEFAULT_OPEN_AREA, PLUS_UTM_MEDIUMS, SEND_SHORTCUT } from "@/constants";
 import { cn } from "@/lib/utils";
-import { backendPickerAtomFamily } from "@/modelManagement";
 import { createPlusPageUrl } from "@/plusUtils";
-import { settingsStore, updateSetting, useSettingsValue } from "@/settings/model";
+import { updateSetting, useSettingsValue } from "@/settings/model";
 import { PlusSettings } from "@/settings/v2/components/PlusSettings";
 import { formatDateTime } from "@/utils";
 import { isSortStrategy } from "@/utils/recentUsageManager";
-import { useAtomValue } from "jotai";
+import { useChatBackendModelOptions } from "@/hooks/useChatBackendModelOptions";
 import { Loader2 } from "lucide-react";
 import { Notice } from "obsidian";
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 
 const ChainType2Label: Record<ChainType, string> = {
   [ChainType.LLM_CHAIN]: "Chat",
@@ -82,19 +81,9 @@ export const BasicSettings: React.FC = () => {
 
   // Default chat model now comes from the model-management "chat" backend
   // (the Quick Chat list under Agents), keyed by configuredModelId.
-  const chatEntries = useAtomValue(backendPickerAtomFamily("chat"), { store: settingsStore });
-  const chatModelOptions = useMemo(() => {
-    const options: { label: string; value: string }[] = [];
-    for (const entry of chatEntries) {
-      if (entry.state !== "ok") continue;
-      options.push({
-        label: entry.configuredModel.info.displayName || entry.configuredModel.info.id,
-        value: entry.configuredModelId,
-      });
-    }
-    return options;
-  }, [chatEntries]);
-  const defaultModelActivated = chatModelOptions.some((o) => o.value === settings.defaultModelKey);
+  const { options: chatModelOptions, resolveSelectionId } = useChatBackendModelOptions();
+  const resolvedDefaultModelId = resolveSelectionId(settings.defaultModelKey);
+  const defaultModelActivated = resolvedDefaultModelId !== undefined;
 
   return (
     <div className="tw-space-y-4">
@@ -122,7 +111,7 @@ export const BasicSettings: React.FC = () => {
                 />
               </div>
             }
-            value={defaultModelActivated ? settings.defaultModelKey : "Select Model"}
+            value={resolvedDefaultModelId ?? "Select Model"}
             onChange={(value) => {
               if (value === "Select Model") return;
               updateSetting("defaultModelKey", value);

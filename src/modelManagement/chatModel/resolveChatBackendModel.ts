@@ -14,6 +14,7 @@ import { CustomModel } from "@/aiParams";
 import { logWarn } from "@/logger";
 import type { ModelManagementApi } from "@/modelManagement/createModelManagement";
 
+import { findChatBackendEntry, isChatModelSelectionForEntry } from "./chatModelSelection";
 import { configuredModelToCustomModel } from "./configuredModelToCustomModel";
 
 export type ChatBackendResolution =
@@ -25,22 +26,17 @@ export async function resolveChatBackendModel(
   preferredConfiguredModelId: string | undefined
 ): Promise<ChatBackendResolution> {
   const enabled = api.backendConfigRegistry.resolveEnabled("chat");
-  const okEntries = enabled.filter(
-    (entry): entry is Extract<typeof entry, { state: "ok" }> => entry.state === "ok"
-  );
-  if (okEntries.length === 0) return { ok: false, reason: "empty" };
+  const target = findChatBackendEntry(enabled, preferredConfiguredModelId);
+  if (!target) return { ok: false, reason: "empty" };
 
-  let target = preferredConfiguredModelId
-    ? okEntries.find((entry) => entry.configuredModelId === preferredConfiguredModelId)
-    : undefined;
-  if (!target) {
-    if (preferredConfiguredModelId) {
-      logWarn(
-        `[chatBridge] chat model "${preferredConfiguredModelId}" is not enabled; ` +
-          `falling back to the first enabled chat model`
-      );
-    }
-    target = okEntries[0];
+  if (
+    preferredConfiguredModelId &&
+    !isChatModelSelectionForEntry(target, preferredConfiguredModelId)
+  ) {
+    logWarn(
+      `[chatBridge] chat model "${preferredConfiguredModelId}" is not enabled; ` +
+        `falling back to configuredModelId="${target.configuredModelId}"`
+    );
   }
 
   const apiKey = await api.providerRegistry.getApiKey(target.provider.providerId);

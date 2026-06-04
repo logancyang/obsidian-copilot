@@ -4,6 +4,7 @@ import {
   getSelectedTextContexts,
   ProjectConfig,
   removeSelectedTextContext,
+  subscribeToProjectChange,
   useChainType,
   updateIndexingProgressState,
   useIndexingProgress,
@@ -53,7 +54,15 @@ import { arrayBufferToBase64 } from "@/utils/base64";
 import { appendUniqueFiles } from "@/utils/fileListUtils";
 import { Notice, TFile } from "obsidian";
 import { ContextManageModal } from "@/components/modals/project/context-manage-modal";
-import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { v4 as uuidv4 } from "uuid";
 import { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import { useActiveWebTabState } from "@/components/chat-components/hooks/useActiveWebTabState";
@@ -87,9 +96,13 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
   const { messages: chatHistory, addMessage: rawAddMessage } = useChatManager(chatUIState);
   const [currentModelKey, setCurrentModelKey] = useModelKey();
   const [currentChain] = useChainType();
+  const currentProject = useSyncExternalStore(subscribeToProjectChange, getCurrentProject);
   // Non-agent chat picker sourced from the model-management "chat" backend.
   const chatModelPicker = useChatModelPicker({
-    value: currentModelKey,
+    value:
+      currentChain === ChainType.PROJECT_CHAIN
+        ? currentProject?.projectModelKey || currentModelKey
+        : currentModelKey,
     onChange: setCurrentModelKey,
   });
   const [currentAiMessage, setCurrentAiMessage] = useState("");

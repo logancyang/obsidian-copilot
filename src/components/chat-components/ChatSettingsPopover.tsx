@@ -13,6 +13,7 @@ import { ModelParametersEditor } from "@/components/ui/ModelParametersEditor";
 import { CustomModel, getModelKey } from "@/aiParams";
 import { getSettings, updateSetting } from "@/settings/model";
 import { debounce } from "@/utils/debounce";
+import { useResolvedChatBackendModel } from "@/hooks/useResolvedChatBackendModel";
 import {
   getDefaultSystemPromptTitle,
   getDisableBuiltinSystemPrompt,
@@ -42,6 +43,8 @@ export function ChatSettingsPopover() {
   const originalModel = settings.activeModels.find(
     (model) => `${model.name}|${model.provider}` === modelKey
   );
+  const bridgedModel = useResolvedChatBackendModel(app, modelKey);
+  const canEditModelParameters = originalModel !== undefined;
 
   // Local editing state
   const [localModel, setLocalModel] = useState<CustomModel | undefined>(originalModel);
@@ -50,6 +53,7 @@ export function ChatSettingsPopover() {
     setPrevModelKey(modelKey);
     setLocalModel(originalModel);
   }
+  const displayModel = localModel ?? bridgedModel ?? undefined;
 
   // System prompt state (session-level, in-memory)
   const prompts = useSystemPrompts();
@@ -204,7 +208,7 @@ export function ChatSettingsPopover() {
     void app.workspace.openLinkText(filePath, "", true);
   };
 
-  if (!localModel) {
+  if (!displayModel) {
     return null;
   }
 
@@ -283,15 +287,18 @@ export function ChatSettingsPopover() {
               </div>
 
               {/* Model Parameters Editor */}
-              <ModelParametersEditor
-                model={localModel}
-                settings={settings}
-                onChange={handleParamChange}
-                onReset={handleParamReset}
-                showTokenLimit={true}
-              />
-
-              <Separator />
+              {canEditModelParameters && (
+                <>
+                  <ModelParametersEditor
+                    model={displayModel}
+                    settings={settings}
+                    onChange={handleParamChange}
+                    onReset={handleParamReset}
+                    showTokenLimit={true}
+                  />
+                  <Separator />
+                </>
+              )}
 
               {/* Disable Builtin System Prompt */}
               <div className="tw-space-y-3">
@@ -372,9 +379,13 @@ export function ChatSettingsPopover() {
             <div className="tw-flex tw-flex-row tw-flex-wrap">
               <span className="tw-text-xs tw-text-normal">
                 <span className=" tw-italic">System Prompt and Disable Builtin System Prompt</span>{" "}
-                <strong>apply to this chat session only</strong>;
-                <br />
-                other settings are <strong>bound to the current model</strong>.
+                <strong>apply to this chat session only</strong>
+                {canEditModelParameters && (
+                  <>
+                    ;<br />
+                    other settings are <strong>bound to the current model</strong>.
+                  </>
+                )}
               </span>
             </div>
           </div>

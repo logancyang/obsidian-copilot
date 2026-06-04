@@ -65,6 +65,16 @@ describe("resolveChatBackendModel", () => {
     if (result.ok) expect(result.configuredModelId).toBe("a");
   });
 
+  it("resolves a legacy name|provider selection", async () => {
+    const p = provider("p1");
+    const api = makeApi([okEntry("a", p)], { p1: "key" });
+
+    const result = await resolveChatBackendModel(api, "a-wire|anthropic");
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.configuredModelId).toBe("a");
+  });
+
   it("falls back to the first enabled model when no preference is given", async () => {
     const p = provider("p1");
     const api = makeApi([okEntry("a", p)], { p1: "key" });

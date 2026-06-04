@@ -6,10 +6,11 @@ Copilot includes 16 built-in AI providers, and you can add an unlimited number o
 
 ## How to Set API Keys
 
-1. Go to **Settings → Copilot → Basic**
-2. Click **Set Keys** to open the API key dialog
-3. Enter your key for the provider you want to use
+1. Go to **Settings → Copilot → Models (BYOK)**
+2. Add a provider
+3. Enter the provider API key and select the models you want to configure
 4. Click Save
+5. Enable models for chat under **Agents → Quick Chat models**
 
 You can configure multiple providers simultaneously and switch between them by changing the default model.
 

@@ -25,7 +25,11 @@ export const TokenLimitWarning: React.FC<TokenLimitWarningProps> = ({ message, a
     const model = settings.activeModels.find((m) => getModelKeyFromModel(m) === currentModelKey);
 
     if (!model) {
-      new Notice("Could not find the current model settings");
+      const setting = app as App & {
+        setting: { openTabById: (id: string) => { display: () => void } };
+      };
+      setting.setting.openTabById("copilot").display();
+      new Notice("Adjust the global token limit in Copilot settings.");
       return;
     }
 

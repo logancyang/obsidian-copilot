@@ -3,6 +3,7 @@ import {
   backendPickerAtomFamily,
   mapProviderTypeToChatModelProvider,
   providerRequiresApiKey,
+  resolveChatModelSelectionId,
 } from "@/modelManagement";
 import { getModelKeyFromModel, settingsStore } from "@/settings/model";
 import type { ModelSelectorEntry } from "@/components/ui/ModelSelector";
@@ -85,11 +86,12 @@ export function useChatModelPicker(params: {
   }, [entries]);
 
   const resolvedValue = React.useMemo(() => {
-    const current = value ? idToModelKey.get(value) : undefined;
+    const resolvedId = resolveChatModelSelectionId(entries, value);
+    const current = resolvedId ? idToModelKey.get(resolvedId) : undefined;
     if (current) return current;
     const first = models[0];
     return first ? getModelKeyFromModel(first) : "";
-  }, [value, idToModelKey, models]);
+  }, [entries, value, idToModelKey, models]);
 
   const handleChange = React.useCallback(
     (modelKey: string) => {

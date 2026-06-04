@@ -3,7 +3,11 @@ import { useMemo } from "react";
 import { useAtomValue } from "jotai";
 
 import type { CustomModel } from "@/aiParams";
-import { backendPickerAtomFamily, configuredModelToCustomModel } from "@/modelManagement";
+import {
+  backendPickerAtomFamily,
+  configuredModelToCustomModel,
+  findChatBackendEntry,
+} from "@/modelManagement";
 import { KeychainService } from "@/services/keychainService";
 import { settingsStore } from "@/settings/model";
 
@@ -21,14 +25,8 @@ export function useResolvedChatBackendModel(
 ): CustomModel | null {
   const entries = useAtomValue(backendPickerAtomFamily("chat"), { store: settingsStore });
   return useMemo(() => {
-    const ok = entries.filter(
-      (entry): entry is Extract<typeof entry, { state: "ok" }> => entry.state === "ok"
-    );
-    if (ok.length === 0) return null;
-    const target =
-      (configuredModelId
-        ? ok.find((entry) => entry.configuredModelId === configuredModelId)
-        : undefined) ?? ok[0];
+    const target = findChatBackendEntry(entries, configuredModelId);
+    if (!target) return null;
     const apiKey = target.provider.apiKeyKeychainId
       ? KeychainService.getInstance(app).getSecretById(target.provider.apiKeyKeychainId)
       : null;

@@ -18,6 +18,7 @@ In regular chat, all conversations share the same settings and model. Projects l
 - **Isolated chat history** — Conversations in one project don't mix with conversations in another
 
 **Example use cases:**
+
 - A "Research" project that always has your research notes as context
 - A "Client Work" project with a specific system prompt and access to client-related notes
 - A "Learning" project with YouTube video URLs for study materials
@@ -39,18 +40,24 @@ In regular chat, all conversations share the same settings and model. Projects l
 Each project has the following settings:
 
 ### Name
+
 A short name for the project. Appears in the project list.
 
 ### Description
+
 An optional description of what the project is for.
 
 ### Model
-Choose which AI model to use for this project. The available options depend on which models you have enabled.
+
+Choose which AI model to use for this project. The available options are the models enabled under
+**Settings → Copilot → Agents → Quick Chat models**.
 
 ### Model Settings
+
 Override the default temperature and max tokens specifically for this project.
 
 ### System Prompt
+
 Set a custom system prompt for this project. This replaces (or supplements) the global default. See [System Prompts](system-prompts.md) for details.
 
 ---
