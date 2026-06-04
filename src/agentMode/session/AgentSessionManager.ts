@@ -1313,14 +1313,21 @@ export class AgentSessionManager {
       }
       this.preloader.clearCached(backendId);
       new Notice(`${this.resolveDescriptor(backendId).displayName} refreshed.`);
-      if (shouldCreateReplacement && !this.disposed) {
-        await this.createSession(backendId);
-      } else if (!this.disposed && this.isBackendInstalled(backendId)) {
-        // No live session will repopulate the cache we just cleared (the
-        // active tab is on a different backend, or there are no tabs). Re-probe
-        // so the picker reflects the new spawn config instead of flagging
-        // freshly-enabled models as "not offered by agent" until a reload.
-        this.registerPreload(backendId, this.preloader.preload(backendId));
+      if (!this.disposed && this.isBackendInstalled(backendId)) {
+        // Spawn config (enabled models, keys, prompt, skills) is rebuilt on
+        // every restart, and the picker's catalog *and* per-model effort
+        // catalog both derive from it. A live session mirrors catalog state via
+        // attachModelCacheSync but NOT the effort catalog, so always re-probe —
+        // the prefetch repopulates effort for every enabled model. When a tab
+        // on this backend is active, await the probe and let the replacement
+        // adopt its warm proc: one spawn, and the per-model switch flicker
+        // stays on the throwaway probe session instead of the user's.
+        const probe = this.preloader.preload(backendId);
+        this.registerPreload(backendId, probe);
+        if (shouldCreateReplacement && !this.disposed) {
+          await probe;
+          await this.createSession(backendId);
+        }
       }
       this.notify();
     } finally {

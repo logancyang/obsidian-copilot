@@ -39,9 +39,7 @@ describe("builtin Copilot Plus skills", () => {
       // SKILL.md tells the agent to prefer sh, fall back to node, then prompt
       // for a Node install if neither runtime is available.
       expect(skill.skillMd).toContain(`sh "/absolute/path/to/this/skill/directory/${sh!.path}"`);
-      expect(skill.skillMd).toContain(
-        `node "/absolute/path/to/this/skill/directory/${mjs!.path}"`
-      );
+      expect(skill.skillMd).toContain(`node "/absolute/path/to/this/skill/directory/${mjs!.path}"`);
       expect(skill.skillMd).toContain("install Node.js");
     }
   });

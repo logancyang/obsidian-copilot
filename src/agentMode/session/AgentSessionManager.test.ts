@@ -659,6 +659,61 @@ describe("AgentSessionManager.restartBackend", () => {
     expect(mgr.getActiveSession()?.backendId).toBe("opencode");
   });
 
+  it("re-probes before creating the replacement so the effort catalog is rebuilt", async () => {
+    // The active tab is on this backend, so the restart creates a replacement
+    // session. `restartBackendNow` cleared the (now stale) effort catalog, and
+    // a live session's attachModelCacheSync mirrors catalog state but NOT the
+    // effort catalog — so the manager must re-probe before the replacement, or
+    // the picker loses every model's effort stepper until a reload.
+    const preload = jest.fn(async () => undefined);
+    const modelPreloader = {
+      getCachedBackendState: jest.fn(() => null),
+      preload,
+      refresh: jest.fn(() => null),
+      subscribe: jest.fn(() => () => {}),
+      shutdown: jest.fn(),
+      setCached: jest.fn(),
+      clearCached: jest.fn(),
+      takeWarm: jest.fn(() => null),
+    };
+    const descriptor = {
+      ...buildDescriptor(),
+      getInstallState: jest.fn(() => ({ kind: "ready" })),
+    } as unknown as BackendDescriptor;
+    const mgr = new AgentSessionManager(
+      buildApp(),
+      buildPlugin() as unknown as ConstructorParameters<typeof AgentSessionManager>[1],
+      {
+        permissionPrompter: jest.fn(),
+        resolveDescriptor: (id) => (id === descriptor.id ? descriptor : undefined),
+        modelPreloader: modelPreloader as unknown as ConstructorParameters<
+          typeof AgentSessionManager
+        >[2]["modelPreloader"],
+      }
+    );
+
+    const first = await mgr.createSession();
+    // Drop the initial-create probe/spawn bookkeeping so we assert only on the
+    // restart's re-probe + replacement ordering.
+    preload.mockClear();
+    sessionCreateSpy.mockClear();
+
+    await expect(mgr.restartBackend("opencode", "backend enabled models changed")).resolves.toBe(
+      true
+    );
+
+    // Re-probed once, and the probe ran before the replacement session spawned.
+    expect(preload).toHaveBeenCalledTimes(1);
+    expect(preload).toHaveBeenCalledWith("opencode");
+    expect(sessionCreateSpy).toHaveBeenCalledTimes(1);
+    expect(preload.mock.invocationCallOrder[0]).toBeLessThan(
+      sessionCreateSpy.mock.invocationCallOrder[0]
+    );
+    // The replacement still becomes the active session on this backend.
+    expect(mgr.getActiveSession()).not.toBe(first);
+    expect(mgr.getActiveSession()?.backendId).toBe("opencode");
+  });
+
   it("defers restart until an active turn leaves running", async () => {
     const mgr = buildManager();
     const first = await mgr.createSession();
@@ -1146,10 +1201,11 @@ describe("AgentSessionManager.onInstallStateChanged", () => {
 
     await mgr.onInstallStateChanged("opencode");
 
-    // The old proc is torn down (re-probe). No standalone preload — the restart
-    // path repopulates the cache itself.
+    // The old proc is torn down and the backend re-probed: a live session
+    // mirrors catalog state but not the derived effort catalog, so the restart
+    // re-probes (the replacement then adopts that warm proc).
     expect(mockBackendShutdown).toHaveBeenCalled();
-    expect(preloader.preload).not.toHaveBeenCalled();
+    expect(preloader.preload).toHaveBeenCalledWith("opencode");
   });
 
   it("tears down and drops the warm probe when the binary is no longer available", async () => {
