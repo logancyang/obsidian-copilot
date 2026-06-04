@@ -1,6 +1,5 @@
 import { BottomLoadingIndicator } from "@/components/chat-components/BottomLoadingIndicator";
 import ChatSingleMessage from "@/components/chat-components/ChatSingleMessage";
-import { RelevantNotes } from "@/components/chat-components/RelevantNotes";
 import { SuggestedPrompts } from "@/components/chat-components/SuggestedPrompts";
 import { USER_SENDER } from "@/constants";
 import { useChatScrolling } from "@/hooks/useChatScrolling";
@@ -48,9 +47,6 @@ const ChatMessages = memo(
     if (!chatHistory.filter((message) => message.isVisible).length && !currentAiMessage) {
       return (
         <div className="tw-flex tw-size-full tw-flex-col tw-gap-2 tw-overflow-y-auto">
-          {showHelperComponents && settings.showRelevantNotes && (
-            <RelevantNotes defaultOpen={true} key="relevant-notes-before-chat" />
-          )}
           {showHelperComponents && settings.showSuggestedPrompts && (
             <SuggestedPrompts onClick={onReplaceChat} />
           )}
@@ -61,9 +57,6 @@ const ChatMessages = memo(
 
     return (
       <div className="tw-flex tw-h-full tw-flex-1 tw-flex-col tw-overflow-hidden">
-        {showHelperComponents && settings.showRelevantNotes && (
-          <RelevantNotes className="tw-mb-4" defaultOpen={false} key="relevant-notes-in-chat" />
-        )}
         <div
           ref={scrollContainerCallbackRef}
           data-testid="chat-messages"

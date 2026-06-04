@@ -266,14 +266,6 @@ export const BasicSettings: React.FC = () => {
             checked={settings.showSuggestedPrompts}
             onCheckedChange={(checked) => updateSetting("showSuggestedPrompts", checked)}
           />
-
-          <SettingItem
-            type="switch"
-            title="Relevant Notes"
-            description="Show relevant notes in the chat view"
-            checked={settings.showRelevantNotes}
-            onCheckedChange={(checked) => updateSetting("showRelevantNotes", checked)}
-          />
         </div>
       </section>
 

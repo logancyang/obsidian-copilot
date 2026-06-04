@@ -13,8 +13,9 @@ import { useAgentModePicker } from "@/agentMode/ui/useAgentModePicker";
 import { useSessionBackendDescriptor } from "@/agentMode/ui/useBackendDescriptor";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
-import { AppContext } from "@/context";
-import { ChatInputProvider } from "@/context/ChatInputContext";
+import { EVENT_NAMES } from "@/constants";
+import { AppContext, EventTargetContext } from "@/context";
+import { ChatInputProvider, useChatInput } from "@/context/ChatInputContext";
 import { useChatFileDrop } from "@/hooks/useChatFileDrop";
 import { logError } from "@/logger";
 import type CopilotPlugin from "@/main";
@@ -56,6 +57,21 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   const appContext = useContext(AppContext);
   const app = plugin.app || appContext;
   const settings = useSettingsValue();
+  const eventTarget = useContext(EventTargetContext);
+  const chatInput = useChatInput();
+
+  // Insert text routed from outside the chat (e.g. the Relevant Notes pane's
+  // "Add to Chat") into the active session's composer.
+  useEffect(() => {
+    const handleInsertText = (e: Event) => {
+      const text = (e as CustomEvent<{ text?: string }>).detail?.text;
+      if (typeof text === "string") chatInput.insertTextWithPills(text, true);
+    };
+    eventTarget?.addEventListener(EVENT_NAMES.INSERT_TEXT_TO_CHAT, handleInsertText);
+    return () => {
+      eventTarget?.removeEventListener(EVENT_NAMES.INSERT_TEXT_TO_CHAT, handleInsertText);
+    };
+  }, [eventTarget, chatInput]);
 
   const {
     messages,

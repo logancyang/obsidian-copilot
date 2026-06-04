@@ -192,7 +192,7 @@ Type `/` to use Command Palette in chat window.
 
 #### **Relevant Notes: notes suggestions based on semantic similarity and links**
 
-Appears automatically when there's useful related content and links.
+Open it from the command palette (**Open Relevant Notes**) to get its own pane that surfaces related content and links for whatever note you're viewing.
 
 Use it to quickly reference past research, ideas, or decisions—no need to search or switch tabs.
 

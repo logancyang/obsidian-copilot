@@ -26,6 +26,7 @@ import {
 import { NoteSelectedTextContext, SelectedTextContext } from "@/types/message";
 import { registerCommands } from "@/commands";
 import CopilotView from "@/components/CopilotView";
+import RelevantNotesView from "@/components/RelevantNotesView";
 import { APPLY_VIEW_TYPE, ApplyView } from "@/components/composer/ApplyView";
 import { LoadChatHistoryModal } from "@/components/modals/LoadChatHistoryModal";
 
@@ -43,6 +44,7 @@ import {
   COPILOT_AGENT_ICON_SVG,
   DEFAULT_OPEN_AREA,
   EVENT_NAMES,
+  RELEVANT_NOTES_VIEWTYPE,
 } from "@/constants";
 import { ChatManager } from "@/core/ChatManager";
 import { MessageRepository } from "@/core/MessageRepository";
@@ -306,6 +308,10 @@ export default class CopilotPlugin extends Plugin {
 
     this.safeRegisterView(CHAT_VIEWTYPE, (leaf: WorkspaceLeaf) => new CopilotView(leaf, this));
     this.safeRegisterView(APPLY_VIEW_TYPE, (leaf: WorkspaceLeaf) => new ApplyView(leaf));
+    this.safeRegisterView(
+      RELEVANT_NOTES_VIEWTYPE,
+      (leaf: WorkspaceLeaf) => new RelevantNotesView(leaf, this)
+    );
     if (!Platform.isMobile) {
       this.safeRegisterView(
         CHAT_AGENT_VIEWTYPE,
@@ -839,6 +845,43 @@ export default class CopilotPlugin extends Plugin {
 
   async deactivateAgentView() {
     this.app.workspace.detachLeavesOfType(CHAT_AGENT_VIEWTYPE);
+  }
+
+  async activateRelevantNotesView(): Promise<WorkspaceLeaf | null> {
+    return this.openOrRevealView(RELEVANT_NOTES_VIEWTYPE);
+  }
+
+  /**
+   * Insert text (a `[[wikilink]]` from the Relevant Notes pane) into whichever
+   * Copilot chat is currently open — agent view first, then the legacy chat —
+   * opening the platform default if none is open. Routes via the target view's
+   * `eventTarget`, the same seam `processText`/`emitChatIsVisible` use, so the
+   * standalone pane never needs the chat's Lexical editor directly.
+   */
+  async insertTextIntoActiveChat(text: string): Promise<void> {
+    const findChatLeaf = (): WorkspaceLeaf | null =>
+      this.app.workspace.getLeavesOfType(CHAT_AGENT_VIEWTYPE)[0] ??
+      this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0] ??
+      null;
+
+    let leaf = findChatLeaf();
+    if (!leaf) {
+      if (this.canUseAgentView()) {
+        await this.activateAgentView();
+      } else {
+        await this.activateView();
+      }
+      // Give the freshly-opened view a tick to mount its event listener.
+      await new Promise((resolve) => window.setTimeout(resolve, 50));
+      leaf = findChatLeaf();
+    }
+    if (!leaf) return;
+
+    this.app.workspace.revealLeaf(leaf);
+    const view = leaf.view as CopilotView | CopilotAgentView;
+    view.eventTarget.dispatchEvent(
+      new CustomEvent(EVENT_NAMES.INSERT_TEXT_TO_CHAT, { detail: { text } })
+    );
   }
 
   async newAgentChat(): Promise<void> {

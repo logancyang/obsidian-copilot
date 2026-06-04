@@ -190,6 +190,26 @@ describe("findRelevantNotes", () => {
     expect(mockSearchRelated).not.toHaveBeenCalled();
   });
 
+  it("ranks by similarity only — a backlink does not boost a lower-similarity note above a higher one", async () => {
+    mockGetDocumentsByPath.mockResolvedValue([
+      { id: "chunk-1", path: "source.md", content: "chunk one", embedding: [0.1, 0.2] },
+    ]);
+    mockGetDb.mockResolvedValue({ db: "orama" });
+    // alpha (0.6) has no links; beta (0.58) is backlinked. The old merged-score
+    // ranking boosted beta above alpha despite its lower similarity.
+    mockGetDocsByEmbedding.mockResolvedValueOnce([
+      { score: 0.6, document: { path: "alpha.md" } },
+      { score: 0.58, document: { path: "beta.md" } },
+    ]);
+    mockedGetBacklinkedNotes.mockReturnValue([createMarkdownFile("beta.md")]);
+
+    const result = await findRelevantNotes({ app: window.app, filePath: "source.md" });
+
+    expect(result.map((entry) => entry.note.path)).toEqual(["alpha.md", "beta.md"]);
+    expect(result[0].metadata.similarityScore).toBe(0.6);
+    expect(result.find((entry) => entry.note.path === "beta.md")?.metadata.hasBacklinks).toBe(true);
+  });
+
   it("uses Miyo when shouldUseMiyoForRelevantNotes is true (enableMiyo=true and valid self-host)", async () => {
     mockedShouldUseMiyo.mockReturnValue(true);
     mockedGetSettings.mockReturnValue({

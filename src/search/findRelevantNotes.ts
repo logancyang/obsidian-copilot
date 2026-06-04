@@ -16,8 +16,6 @@ import { InternalTypedDocument, Orama, Result } from "@orama/orama";
 import { App, TFile } from "obsidian";
 
 const MAX_K = 20;
-const ORIGINAL_WEIGHT = 0.7;
-const LINKS_WEIGHT = 0.3;
 
 /**
  * Determine whether Miyo-backed relevant-note scoring should be used.
@@ -252,38 +250,6 @@ function getNoteLinks(app: App, file: TFile) {
   return resultMap;
 }
 
-/**
- * Merge semantic similarity scores with note link heuristics.
- *
- * @param similarityScoreMap - Semantic score map.
- * @param noteLinks - Outgoing/backlink flags map.
- * @returns Combined score map used for ranking.
- */
-function mergeScoreMaps(
-  similarityScoreMap: Map<string, number>,
-  noteLinks: Map<string, { links: boolean; backlinks: boolean }>
-) {
-  const mergedMap = new Map<string, number>();
-  const totalWeight = ORIGINAL_WEIGHT + LINKS_WEIGHT;
-  for (const [key, value] of similarityScoreMap) {
-    mergedMap.set(key, (value * ORIGINAL_WEIGHT) / totalWeight);
-  }
-  for (const [key, value] of noteLinks) {
-    let score = 0;
-    if (value.links && value.backlinks) {
-      score = LINKS_WEIGHT;
-    } else if (value.links) {
-      // If the note only has outgoing or incoming links, give it a 80% links
-      // weight.
-      score = LINKS_WEIGHT * 0.8;
-    } else if (value.backlinks) {
-      score = LINKS_WEIGHT * 0.8;
-    }
-    mergedMap.set(key, (mergedMap.get(key) ?? 0) + score);
-  }
-  return mergedMap;
-}
-
 export type RelevantNoteEntry = {
   note: {
     path: string;
@@ -319,48 +285,40 @@ export async function findRelevantNotes({
 
   const similarityScoreMap = await calculateSimilarityScore(app, filePath);
   const noteLinks = getNoteLinks(app, file);
-  const mergedScoreMap = mergeScoreMaps(similarityScoreMap, noteLinks);
-  const sortedHits = Array.from(mergedScoreMap.entries()).sort((a, b) => {
-    const aPath = a[0];
-    const bPath = b[0];
-    const aCategory = getSimilarityCategory(similarityScoreMap.get(aPath) ?? 0);
-    const bCategory = getSimilarityCategory(similarityScoreMap.get(bPath) ?? 0);
 
-    if (aCategory !== bCategory) {
-      return bCategory - aCategory;
-    }
-
-    return b[1] - a[1];
+  // Rank purely by semantic similarity so the displayed percentages stay
+  // monotonic down the list. Linked/backlinked notes still appear, but a link
+  // never boosts ranking: link-only notes have no similarity score and sort to
+  // the bottom (they render without a meter in the UI).
+  const candidatePaths = new Set<string>([...similarityScoreMap.keys(), ...noteLinks.keys()]);
+  candidatePaths.delete(filePath);
+  const sortedPaths = Array.from(candidatePaths).sort((aPath, bPath) => {
+    const aScore = similarityScoreMap.get(aPath);
+    const bScore = similarityScoreMap.get(bPath);
+    if (aScore == null && bScore == null) return 0;
+    if (aScore == null) return 1;
+    if (bScore == null) return -1;
+    return bScore - aScore;
   });
-  return sortedHits
-    .map(([path, score]) => {
+  return sortedPaths
+    .map((path) => {
       const file = app.vault.getAbstractFileByPath(path);
       if (!(file instanceof TFile) || file.extension !== "md") {
         return null;
       }
+      const similarityScore = similarityScoreMap.get(path);
       return {
         note: {
           path,
           title: file.basename,
         },
         metadata: {
-          score,
-          similarityScore: similarityScoreMap.get(path),
+          score: similarityScore ?? 0,
+          similarityScore,
           hasOutgoingLinks: noteLinks.get(path)?.links ?? false,
           hasBacklinks: noteLinks.get(path)?.backlinks ?? false,
         },
       };
     })
     .filter((entry) => entry !== null);
-}
-
-/**
- * Gets the similarity category for the given score.
- * @param score - The score to get the similarity category for.
- * @returns The similarity category. 1 is low, 2 is medium, 3 is high.
- */
-export function getSimilarityCategory(score: number): number {
-  if (score > 0.7) return 3;
-  if (score > 0.55) return 2;
-  return 1;
 }

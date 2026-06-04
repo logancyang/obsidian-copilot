@@ -118,6 +118,10 @@ export function registerCommands(plugin: CopilotPlugin) {
     await plugin.activateView();
   });
 
+  addCommand(plugin, COMMAND_IDS.OPEN_RELEVANT_NOTES_VIEW, async () => {
+    await plugin.activateRelevantNotesView();
+  });
+
   addCommand(plugin, COMMAND_IDS.NEW_CHAT, async () => {
     clearRecordedPromptPayload();
     await plugin.newChat();

@@ -20,7 +20,6 @@ import {
   CheckCircle,
   ChevronDown,
   Download,
-  FileText,
   History,
   LibraryBig,
   MessageCirclePlus,
@@ -394,19 +393,6 @@ export function ChatControls({
                 Suggested Prompt
               </div>
               <SettingSwitch checked={settings.showSuggestedPrompts} />
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              className="tw-flex tw-justify-between"
-              onSelect={(e) => {
-                e.preventDefault();
-                updateSetting("showRelevantNotes", !settings.showRelevantNotes);
-              }}
-            >
-              <div className="tw-flex tw-items-center tw-gap-2">
-                <FileText className="tw-size-4" />
-                Relevant Note
-              </div>
-              <SettingSwitch checked={settings.showRelevantNotes} />
             </DropdownMenuItem>
             <DropdownMenuItem
               className="tw-flex tw-justify-between"

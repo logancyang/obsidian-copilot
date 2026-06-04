@@ -121,7 +121,6 @@ export interface CopilotSettings {
   defaultSendShortcut: SEND_SHORTCUT;
   disableIndexOnMobile: boolean;
   showSuggestedPrompts: boolean;
-  showRelevantNotes: boolean;
   numPartitions: number;
   defaultConversationNoteName: string;
   // undefined means never checked

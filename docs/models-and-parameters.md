@@ -98,7 +98,7 @@ If you change embedding models, you must rebuild the vault index because the old
 
 - **Vault QA mode** — Uses embeddings to find relevant notes by meaning
 - **Semantic Search** — The "Enable Semantic Search" toggle in QA settings
-- **Relevant Notes** — Shows semantically similar notes in the sidebar
+- **Relevant Notes** — Shows semantically similar notes in its own pane (command palette: **Open Relevant Notes**)
 
 ---
 

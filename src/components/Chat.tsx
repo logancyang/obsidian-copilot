@@ -644,6 +644,19 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     };
   }, [eventTarget, chatInput]);
 
+  // Insert text routed from outside the chat (e.g. the Relevant Notes pane's
+  // "Add to Chat") into this chat's input.
+  useEffect(() => {
+    const handleInsertText = (e: Event) => {
+      const text = (e as CustomEvent<{ text?: string }>).detail?.text;
+      if (typeof text === "string") chatInput.insertTextWithPills(text, true);
+    };
+    eventTarget?.addEventListener(EVENT_NAMES.INSERT_TEXT_TO_CHAT, handleInsertText);
+    return () => {
+      eventTarget?.removeEventListener(EVENT_NAMES.INSERT_TEXT_TO_CHAT, handleInsertText);
+    };
+  }, [eventTarget, chatInput]);
+
   const handleDelete = useCallback(
     async (messageIndex: number) => {
       const messageToDelete = chatHistory[messageIndex];

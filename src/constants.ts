@@ -8,6 +8,7 @@ export const BREVILABS_API_BASE_URL = "https://api.brevilabs.com/v1";
 export const BREVILABS_MODELS_BASE_URL = "https://models.brevilabs.com/v1";
 export const CHAT_VIEWTYPE = "copilot-chat-view";
 export const CHAT_AGENT_VIEWTYPE = "copilot-agent-chat-view";
+export const RELEVANT_NOTES_VIEWTYPE = "copilot-relevant-notes-view";
 
 // Custom Obsidian icon for Agent Mode surfaces (view tab, ribbon, commands).
 // The v4 monochrome brand mark, normalized from its source viewBox "4 4 152 127"
@@ -805,6 +806,7 @@ export const COMMAND_IDS = {
   NEW_AGENT_CHAT: "new-agent-chat",
   OPEN_COPILOT_CHAT_WINDOW: "chat-open-window",
   OPEN_AGENT_CHAT_WINDOW: "agent-chat-open-window",
+  OPEN_RELEVANT_NOTES_VIEW: "open-relevant-notes-view",
   SEARCH_ORAMA_DB: "copilot-search-orama-db",
   TOGGLE_COPILOT_CHAT_WINDOW: "chat-toggle-window",
   TOGGLE_AGENT_CHAT_WINDOW: "agent-chat-toggle-window",
@@ -836,6 +838,7 @@ export const COMMAND_NAMES: Record<CommandId, string> = {
   [COMMAND_IDS.NEW_AGENT_CHAT]: "New Copilot Agent Chat",
   [COMMAND_IDS.OPEN_COPILOT_CHAT_WINDOW]: "Open Copilot Chat Window",
   [COMMAND_IDS.OPEN_AGENT_CHAT_WINDOW]: "Open Copilot Agent Chat Window",
+  [COMMAND_IDS.OPEN_RELEVANT_NOTES_VIEW]: "Open Relevant Notes",
   [COMMAND_IDS.SEARCH_ORAMA_DB]: "Search semantic index (debug)",
   [COMMAND_IDS.TOGGLE_COPILOT_CHAT_WINDOW]: "Toggle Copilot Chat Window",
   [COMMAND_IDS.TOGGLE_AGENT_CHAT_WINDOW]: "Toggle Copilot Agent Chat Window",
@@ -860,6 +863,7 @@ export const COMMAND_ICONS: Partial<Record<CommandId, string>> = {
   [COMMAND_IDS.NEW_AGENT_CHAT]: COPILOT_AGENT_ICON_ID,
   [COMMAND_IDS.OPEN_COPILOT_CHAT_WINDOW]: "message-square",
   [COMMAND_IDS.OPEN_AGENT_CHAT_WINDOW]: COPILOT_AGENT_ICON_ID,
+  [COMMAND_IDS.OPEN_RELEVANT_NOTES_VIEW]: "files",
   [COMMAND_IDS.TOGGLE_COPILOT_CHAT_WINDOW]: "message-square",
   [COMMAND_IDS.TOGGLE_AGENT_CHAT_WINDOW]: COPILOT_AGENT_ICON_ID,
   [COMMAND_IDS.LOAD_COPILOT_CHAT_CONVERSATION]: "history",
@@ -972,7 +976,6 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   embeddingBatchSize: 16,
   disableIndexOnMobile: true,
   showSuggestedPrompts: true,
-  showRelevantNotes: true,
   numPartitions: 1,
   lexicalSearchRamLimit: 100, // Default 100 MB
   promptUsageTimestamps: {},
@@ -1049,6 +1052,7 @@ export const EVENT_NAMES = {
   CHAT_IS_VISIBLE: "chat-is-visible",
   ACTIVE_LEAF_CHANGE: "active-leaf-change",
   ABORT_STREAM: "abort-stream",
+  INSERT_TEXT_TO_CHAT: "insert-text-to-chat",
 };
 
 export enum ABORT_REASON {
