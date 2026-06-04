@@ -157,8 +157,7 @@ function RelevantNoteHoverCard({
         }
       }
 
-      // Take first 1000 characters as preview
-      setFileContent(cleanContent.slice(0, 1000) + (cleanContent.length > 1000 ? "..." : ""));
+      setFileContent(cleanContent);
     }
   }, [app, fileContent, note.note.path]);
 
@@ -193,7 +192,7 @@ function RelevantNoteHoverCard({
         </div>
 
         {fileContent && (
-          <p className="tw-m-0 tw-line-clamp-4 tw-whitespace-pre-line tw-text-xs tw-leading-normal tw-text-muted">
+          <p className="tw-m-0 tw-max-h-64 tw-overflow-y-auto tw-whitespace-pre-line tw-text-xs tw-leading-normal tw-text-muted">
             {fileContent}
           </p>
         )}
