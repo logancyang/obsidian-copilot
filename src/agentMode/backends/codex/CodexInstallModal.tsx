@@ -2,7 +2,7 @@ import { BinaryPathSetting } from "@/agentMode/backends/shared/BinaryPathSetting
 import { ConfigDialogShell, ConfigSection } from "@/agentMode/backends/shared/ConfigDialogShell";
 import { InstallCommandRow } from "@/agentMode/backends/shared/InstallCommandRow";
 import { InstallStatusLine } from "@/agentMode/backends/shared/installStatus";
-import type { InstallState } from "@/agentMode/session/types";
+import { binaryPathInstallState } from "@/agentMode/backends/shared/simpleBinaryBackend";
 import { ReactModal } from "@/components/modals/ReactModal";
 import { useSettingsValue } from "@/settings/model";
 import { validateExecutableFile } from "@/utils/detectBinary";
@@ -24,9 +24,10 @@ import {
 const CodexConfigBody: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const settings = useSettingsValue();
   const binaryPath = settings.agentMode?.backends?.codex?.binaryPath ?? "";
-  const sessionState: InstallState = binaryPath
-    ? { kind: "ready", source: "custom" }
-    : { kind: "absent" };
+  // Existence-checked (same as descriptor.getInstallState): a synced-but-missing
+  // path reads "absent" here too, not a stale "Ready", so the dialog guides the
+  // user to re-detect or clear the dead path instead of looking configured.
+  const sessionState = binaryPathInstallState(binaryPath);
 
   const onSavePath = React.useCallback(async (path: string): Promise<string | null> => {
     const err = await validateExecutableFile(path);
