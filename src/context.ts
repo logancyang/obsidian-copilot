@@ -14,6 +14,7 @@ export const AppContext = React.createContext<App | undefined>(undefined);
  */
 export class ChatViewEventTarget extends EventTarget {
   private pendingInsertText: string | null = null;
+  private visiblePending = false;
 
   /** Queue text for the chat input and notify any already-attached listener. */
   queueInsertText(text: string): void {
@@ -26,6 +27,23 @@ export class ChatViewEventTarget extends EventTarget {
     const text = this.pendingInsertText;
     this.pendingInsertText = null;
     return text;
+  }
+
+  /**
+   * Queue a "view became visible" focus request and notify any already-attached
+   * listener. Latches like {@link queueInsertText} so a view opened while still
+   * mounting drains it on attach — no dependence on mount timing.
+   */
+  queueVisible(): void {
+    this.visiblePending = true;
+    this.dispatchEvent(new CustomEvent(EVENT_NAMES.CHAT_IS_VISIBLE));
+  }
+
+  /** Take and clear the latched visibility; returns false once consumed. */
+  consumePendingVisible(): boolean {
+    const pending = this.visiblePending;
+    this.visiblePending = false;
+    return pending;
   }
 }
 

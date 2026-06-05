@@ -44,6 +44,10 @@ export function ChatInputProvider({ children }: ChatInputProviderProps): JSX.Ele
   // the chat view is still opening). Held here and flushed once the editor
   // registers, so insertion never depends on mount timing.
   const pendingInsertRef = useRef<{ text: string; enableURLPills: boolean } | null>(null);
+  // Focus requested before the Lexical editor registered its focus handler (e.g.
+  // a freshly-opened view focusing on open). Latched here and flushed once the
+  // handler registers, so focus never depends on mount timing.
+  const pendingFocusRef = useRef(false);
 
   const registerEditor = useCallback((editorInstance: LexicalEditor) => {
     setEditor(editorInstance);
@@ -80,6 +84,16 @@ export function ChatInputProvider({ children }: ChatInputProviderProps): JSX.Ele
 
   const focusInput = useCallback(() => {
     if (focusHandler) {
+      focusHandler();
+    } else {
+      pendingFocusRef.current = true;
+    }
+  }, [focusHandler]);
+
+  // Flush a focus requested before the handler was ready.
+  useEffect(() => {
+    if (focusHandler && pendingFocusRef.current) {
+      pendingFocusRef.current = false;
       focusHandler();
     }
   }, [focusHandler]);

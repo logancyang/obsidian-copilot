@@ -545,14 +545,21 @@ export default class CopilotPlugin extends Plugin {
     void this.processText(editor, eventType, eventSubtype);
   }
 
-  emitChatIsVisible() {
-    const activeCopilotView = this.app.workspace
-      .getLeavesOfType(CHAT_VIEWTYPE)
-      .find((leaf) => leaf.view instanceof CopilotView)?.view as CopilotView;
+  emitChatIsVisible(viewType: typeof CHAT_VIEWTYPE | typeof CHAT_AGENT_VIEWTYPE = CHAT_VIEWTYPE) {
+    // Both chat views expose a `ChatViewEventTarget`; the React tree focuses the
+    // composer in response (CopilotView via Chat.tsx, CopilotAgentView via
+    // useChatInputAutoFocus). The instanceof guard skips deferred (unloaded)
+    // leaves, whose placeholder view has no eventTarget.
+    const view = this.app.workspace
+      .getLeavesOfType(viewType)
+      .map((leaf) => leaf.view)
+      .find(
+        (v): v is CopilotView | CopilotAgentView =>
+          v instanceof CopilotView || v instanceof CopilotAgentView
+      );
 
-    if (activeCopilotView) {
-      const event = new CustomEvent(EVENT_NAMES.CHAT_IS_VISIBLE);
-      activeCopilotView.eventTarget.dispatchEvent(event);
+    if (view) {
+      view.eventTarget.dispatchEvent(new CustomEvent(EVENT_NAMES.CHAT_IS_VISIBLE));
     }
   }
 
@@ -562,8 +569,9 @@ export default class CopilotPlugin extends Plugin {
         if (!leaf) {
           return;
         }
-        if (leaf.getViewState().type === CHAT_VIEWTYPE) {
-          this.emitChatIsVisible();
+        const activeViewType = leaf.getViewState().type;
+        if (activeViewType === CHAT_VIEWTYPE || activeViewType === CHAT_AGENT_VIEWTYPE) {
+          this.emitChatIsVisible(activeViewType);
         }
       })
     );
@@ -847,7 +855,17 @@ export default class CopilotPlugin extends Plugin {
 
   async activateAgentView(): Promise<WorkspaceLeaf | null> {
     if (!this.requireAgentView()) return null;
-    return this.openOrRevealView(CHAT_AGENT_VIEWTYPE);
+    const leaf = await this.openOrRevealView(CHAT_AGENT_VIEWTYPE);
+    // Focus the composer on open. Latching the request on the view's event bus
+    // (rather than a setTimeout) means a freshly-opened view drains it once its
+    // React tree mounts and an already-open view focuses immediately — no
+    // mount-timing guess. Also covers the already-open-and-active case, where
+    // revealLeaf fires no active-leaf-change to drive focus.
+    const view = leaf?.view;
+    if (view instanceof CopilotAgentView) {
+      view.eventTarget.queueVisible();
+    }
+    return leaf;
   }
 
   async deactivateAgentView() {

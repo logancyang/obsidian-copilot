@@ -8,6 +8,7 @@ import { ProjectPickerList } from "@/agentMode/ui/ProjectPickerList";
 import { useAgentChatRuntimeState } from "@/agentMode/ui/hooks/useAgentChatRuntimeState";
 import { useAgentHistoryControls } from "@/agentMode/ui/hooks/useAgentHistoryControls";
 import { useAgentInputDrafts } from "@/agentMode/ui/hooks/useAgentInputDrafts";
+import { useChatInputAutoFocus } from "@/agentMode/ui/hooks/useChatInputAutoFocus";
 import { useAgentModelPicker } from "@/agentMode/ui/useAgentModelPicker";
 import { useAgentModePicker } from "@/agentMode/ui/useAgentModePicker";
 import { useSessionBackendDescriptor } from "@/agentMode/ui/useBackendDescriptor";
@@ -59,6 +60,12 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   const settings = useSettingsValue();
   const eventTarget = useContext(EventTargetContext);
   const chatInput = useChatInput();
+
+  // Place the caret in the composer when the agent view opens so the user can
+  // type immediately. AgentHome only mounts once preload settles and a session
+  // exists, so this fires when the input actually appears (and again on
+  // close/reopen, which remounts this tree).
+  useChatInputAutoFocus();
 
   // Insert text routed from outside the chat (e.g. the Relevant Notes pane's
   // "Add to Chat") into the active session's composer. The bus latches text
