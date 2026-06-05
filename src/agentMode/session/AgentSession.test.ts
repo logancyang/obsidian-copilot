@@ -351,6 +351,100 @@ describe("AgentSession.sendPrompt", () => {
     await turn;
   });
 
+  it("appends a content chunk that trails past the prompt result (messageId race)", async () => {
+    const mock = makeMockBackend();
+    let resolvePrompt: ((v: { stopReason: "end_turn" }) => void) | null = null;
+    mock.prompt.mockImplementation(
+      () => new Promise((resolve) => (resolvePrompt = resolve as typeof resolvePrompt))
+    );
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+    });
+    const { turn } = session.sendPrompt("hi");
+
+    // Chunk delivered before the result.
+    mock.emit({
+      sessionId: "acp-1",
+      update: {
+        sessionUpdate: "agent_message_chunk",
+        messageId: "msg-1",
+        content: { type: "text", text: "Hello" },
+      },
+    });
+    // The backend flushes the result while the last chunk is still in flight.
+    resolvePrompt!({ stopReason: "end_turn" });
+    await turn;
+    // Trailing chunk for the same message arrives after the turn settled.
+    mock.emit({
+      sessionId: "acp-1",
+      update: {
+        sessionUpdate: "agent_message_chunk",
+        messageId: "msg-1",
+        content: { type: "text", text: ", world." },
+      },
+    });
+
+    const placeholder = session.store.getDisplayMessages().find((m) => m.sender === AI_SENDER);
+    expect(placeholder?.message).toBe("Hello, world.");
+  });
+
+  it("routes a trailing chunk to its own message, not a newer turn", async () => {
+    const mock = makeMockBackend();
+    let resolvePrompt: ((v: { stopReason: "end_turn" }) => void) | null = null;
+    mock.prompt.mockImplementation(
+      () => new Promise((resolve) => (resolvePrompt = resolve as typeof resolvePrompt))
+    );
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+    });
+
+    // Turn A streams under messageId msg-a, then the result is flushed early.
+    const { turn: turnA } = session.sendPrompt("first");
+    mock.emit({
+      sessionId: "acp-1",
+      update: {
+        sessionUpdate: "agent_message_chunk",
+        messageId: "msg-a",
+        content: { type: "text", text: "A-before" },
+      },
+    });
+    resolvePrompt!({ stopReason: "end_turn" });
+    await turnA;
+
+    // Turn B begins before A's trailing chunk lands.
+    const { turn: turnB } = session.sendPrompt("second");
+    mock.emit({
+      sessionId: "acp-1",
+      update: {
+        sessionUpdate: "agent_message_chunk",
+        messageId: "msg-b",
+        content: { type: "text", text: "B-text" },
+      },
+    });
+    // A's late chunk must follow msg-a to A's message, not append to B.
+    mock.emit({
+      sessionId: "acp-1",
+      update: {
+        sessionUpdate: "agent_message_chunk",
+        messageId: "msg-a",
+        content: { type: "text", text: "A-after" },
+      },
+    });
+
+    const ai = session.store.getDisplayMessages().filter((m) => m.sender === AI_SENDER);
+    expect(ai[0]?.message).toBe("A-beforeA-after");
+    expect(ai[1]?.message).toBe("B-text");
+
+    resolvePrompt!({ stopReason: "end_turn" });
+    await turnB;
+  });
+
   it("tool_call followed by tool_call_update merges into a single part", async () => {
     const mock = makeMockBackend();
     let resolvePrompt: ((v: { stopReason: "end_turn" }) => void) | null = null;

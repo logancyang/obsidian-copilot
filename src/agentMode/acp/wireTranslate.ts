@@ -279,11 +279,13 @@ function acpUpdateToSessionUpdate(update: SessionNotification["update"]): Sessio
       return {
         sessionUpdate: "agent_message_chunk",
         content: promptContentFromAcp(update.content) ?? { type: "text", text: "" },
+        messageId: update.messageId ?? undefined,
       };
     case "agent_thought_chunk":
       return {
         sessionUpdate: "agent_thought_chunk",
         content: promptContentFromAcp(update.content) ?? { type: "text", text: "" },
+        messageId: update.messageId ?? undefined,
       };
     case "tool_call":
       return {

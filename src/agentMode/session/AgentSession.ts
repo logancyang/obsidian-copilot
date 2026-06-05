@@ -213,6 +213,16 @@ export class AgentSession {
   // session sits idle between a failed turn and the next prompt.
   private lastTurnError = false;
   private placeholderId: string | null = null;
+  // ACP `messageId`s seen on this turn's content chunks. Used to re-route
+  // trailing chunks that a backend flushes *after* the `session/prompt` result
+  // (observed with opencode + fast DeepSeek models) to the right message.
+  private currentMessageIds = new Set<string>();
+  // The most-recently-completed turn's placeholder plus the `messageId`s it
+  // owned. A grace window: late content chunks naming one of these still land
+  // on the finished message instead of being dropped — or, worse, appended to
+  // a newer turn's placeholder. Replaced on the next completion, cleared on
+  // cancel/dispose.
+  private settledStream: { placeholderId: string; messageIds: Set<string> } | null = null;
   private abortController: AbortController | null = null;
   private listeners = new Set<AgentSessionListener>();
   private unregisterSessionHandler: (() => void) | null = null;
@@ -687,6 +697,7 @@ export class AgentSession {
       parts: [],
     };
     this.placeholderId = this.store.addMessage(placeholder);
+    this.currentMessageIds = new Set();
     this.notifyMessages();
 
     this.abortController = new AbortController();
@@ -732,6 +743,16 @@ export class AgentSession {
       ) {
         this.notifyMessages();
       }
+      // Some backends flush the prompt result before the turn's last content
+      // chunks (opencode + fast DeepSeek). Keep this placeholder reachable by
+      // `messageId` so those trailing chunks still land — except on an explicit
+      // cancel, where further output should stay suppressed.
+      if (placeholderId && resp.stopReason !== "cancelled") {
+        this.settledStream = { placeholderId, messageIds: this.currentMessageIds };
+      } else if (resp.stopReason === "cancelled") {
+        this.settledStream = null;
+      }
+      this.currentMessageIds = new Set();
       if (this.placeholderId === placeholderId) this.placeholderId = null;
       if (resp.stopReason === "end_turn") void this.pollSessionTitle();
       return resp.stopReason;
@@ -742,6 +763,7 @@ export class AgentSession {
         this.notifyMessages();
       }
       this.lastTurnError = true;
+      this.currentMessageIds = new Set();
       if (this.placeholderId === placeholderId) this.placeholderId = null;
       throw err;
     } finally {
@@ -794,6 +816,8 @@ export class AgentSession {
     this.flushQuestionResolvers();
     this.decidedPlanToolCallIds.clear();
     this.currentPlan = null;
+    this.settledStream = null;
+    this.currentMessageIds = new Set();
     // Fire the `"closed"` transition before clearing listeners so
     // subscribers still observe it. `disposed = true` above guarantees
     // `getStatus()` returns `"closed"` regardless of the other primitives.
@@ -1082,6 +1106,30 @@ export class AgentSession {
       return;
     }
 
+    // Content chunks can trail past the prompt result on some backends (the
+    // result is flushed before the turn's final chunks — opencode + fast
+    // DeepSeek). Route them by `messageId` so a late chunk still lands on its
+    // own message, even after the turn settled and `placeholderId` was cleared,
+    // and without leaking onto a newer turn's placeholder.
+    if (
+      update.sessionUpdate === "agent_message_chunk" ||
+      update.sessionUpdate === "agent_thought_chunk"
+    ) {
+      const text = extractText(update.content);
+      if (!text) return;
+      const target = this.resolveContentTarget(update.messageId);
+      if (!target) {
+        logWarn(`[AgentMode] dropping ${update.sessionUpdate} — no target for ${this.internalId}`);
+        return;
+      }
+      const appended =
+        update.sessionUpdate === "agent_message_chunk"
+          ? this.store.appendAgentText(target, text)
+          : this.store.appendAgentThought(target, text);
+      if (appended) this.scheduleNotifyMessages();
+      return;
+    }
+
     const placeholderId = this.placeholderId;
     if (!placeholderId) {
       logWarn(`[AgentMode] dropping session/update — no placeholder for ${this.internalId}`);
@@ -1089,22 +1137,6 @@ export class AgentSession {
     }
 
     switch (update.sessionUpdate) {
-      case "agent_message_chunk": {
-        const text = extractText(update.content);
-        if (!text) return;
-        if (this.store.appendAgentText(placeholderId, text)) {
-          this.scheduleNotifyMessages();
-        }
-        return;
-      }
-      case "agent_thought_chunk": {
-        const text = extractText(update.content);
-        if (!text) return;
-        if (this.store.appendAgentThought(placeholderId, text)) {
-          this.scheduleNotifyMessages();
-        }
-        return;
-      }
       case "tool_call": {
         const exitPlan = tryReadExitPlanModeCall({
           kind: update.kind,
@@ -1153,6 +1185,25 @@ export class AgentSession {
         );
         return;
     }
+  }
+
+  /**
+   * Pick the message a content chunk should append to. A chunk whose
+   * `messageId` belongs to the just-settled turn routes there — this covers
+   * backends that flush the `session/prompt` result before the turn's final
+   * chunks, so the tail isn't dropped. Otherwise the chunk belongs to the
+   * in-flight turn's placeholder, and we record its `messageId` so the same
+   * message's later chunks stay routable once the turn settles. Returns null
+   * when there's no message to append to (a genuinely stray update).
+   */
+  private resolveContentTarget(messageId: string | undefined): string | null {
+    if (messageId && this.settledStream?.messageIds.has(messageId)) {
+      return this.settledStream.placeholderId;
+    }
+    const placeholderId = this.placeholderId;
+    if (!placeholderId) return null;
+    if (messageId) this.currentMessageIds.add(messageId);
+    return placeholderId;
   }
 
   private findToolCallPart(messageId: string, toolCallId: string): AgentMessagePart | undefined {
