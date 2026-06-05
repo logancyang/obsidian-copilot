@@ -313,10 +313,9 @@ export function AgentHomeViewAll<TItem>({
           }}
         >
           {/* pl-8 aligns the trigger text under the inline rows' labels, which
-              sit past a size-6 leading tile + gap-2 (≈ 2rem). */}
-          <span className="tw-pl-8">
-            View all {label} ({total})
-          </span>
+              sit past a size-6 leading tile + gap-2 (≈ 2rem). The count is
+              omitted — the section header already shows it. */}
+          <span className="tw-pl-8">View all {label}</span>
           <ChevronRight className="tw-size-3 tw-shrink-0" />
         </div>
       </PopoverTrigger>

@@ -155,7 +155,7 @@ export const GlobalRecentChatsSection = memo(
                     }
                   }}
                 >
-                  <span className="tw-pl-6">View all chats ({total})</span>
+                  <span className="tw-pl-6">View all chats</span>
                   <ChevronRight className="tw-size-3 tw-shrink-0" />
                 </div>
               </ChatHistoryPopover>
