@@ -70,8 +70,8 @@ interface ProjectPickerListProps {
  *
  * DESIGN NOTE: sorts on the persisted `project.UsageTimestamps` only — it does
  * NOT blend in-memory touches via `RecentUsageManager.getEffectiveLastUsedAt`
- * the way the main chat-mode `ProjectList` does. The landing is read-only (PR1):
- * picking a project only fires a coming-soon Notice and this surface never
+ * the way the main chat-mode `ProjectList` does. This landing surface is
+ * read-only: picking a project only fires a coming-soon Notice and never
  * touches usage, so the two lists diverge only in a narrow cross-surface race —
  * use a project in chat mode, then open Agent Home before the persisted
  * timestamp / file-backed project list catches up. Parity would mean threading
