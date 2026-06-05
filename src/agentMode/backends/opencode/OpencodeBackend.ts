@@ -185,8 +185,22 @@ export async function buildOpencodeConfig(
     }
 
     if (!providerConfig.models) providerConfig.models = {};
-    providerConfig.models[entry.configuredModel.info.id] = {};
-    injected.push(`${mapping.id}/${entry.configuredModel.info.id}`);
+    // Carry the model's known modalities into the config. opencode resolves a
+    // model's capabilities as `injected ?? models.dev-catalog ?? default`, and
+    // `unsupportedParts` strips image/file parts whenever `input.image` is
+    // false. For catalog providers this stays in agreement with opencode's own
+    // catalog; for providers opencode has no catalog entry for (Copilot Plus,
+    // self-hosted OpenAI-compatible) the default is `false`, so a genuinely
+    // multimodal model would have its images silently stripped. Injecting the
+    // modalities we already know prevents that.
+    const { info } = entry.configuredModel;
+    const modelConfig: Record<string, unknown> = {};
+    if (info.modalities) {
+      modelConfig.modalities = info.modalities;
+      if (info.modalities.input?.includes("image")) modelConfig.attachment = true;
+    }
+    providerConfig.models[info.id] = modelConfig;
+    injected.push(`${mapping.id}/${info.id}`);
   }
 
   if (injected.length > 0) {

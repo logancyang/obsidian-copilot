@@ -201,6 +201,65 @@ describe("buildOpencodeConfig — provider/model injection", () => {
     });
   });
 
+  it("injects a vision model's modalities + attachment so opencode won't strip images", async () => {
+    // Copilot Plus / self-hosted providers have no models.dev catalog entry, so
+    // opencode defaults `input.image` to false and strips images. Carrying the
+    // model's own modalities tells opencode it's multimodal.
+    const provider = makeProvider("p-anthropic", {
+      kind: "byok",
+      catalogProviderId: "anthropic",
+    });
+    const model = makeModel("p-anthropic", "claude-sonnet-4-6");
+    model.info.modalities = { input: ["text", "image"], output: ["text"] };
+    const deps = makeDeps({
+      resolved: [okEntry(provider, model)],
+      keys: { "p-anthropic": "anth-123" },
+    });
+    const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
+      provider: Record<string, { models?: Record<string, unknown> }>;
+    };
+    expect(cfg.provider.anthropic.models).toEqual({
+      "claude-sonnet-4-6": {
+        modalities: { input: ["text", "image"], output: ["text"] },
+        attachment: true,
+      },
+    });
+  });
+
+  it("injects a text-only model's modalities without the attachment flag", async () => {
+    const provider = makeProvider("p-anthropic", {
+      kind: "byok",
+      catalogProviderId: "anthropic",
+    });
+    const model = makeModel("p-anthropic", "deepseek-v4-flash");
+    model.info.modalities = { input: ["text"], output: ["text"] };
+    const deps = makeDeps({
+      resolved: [okEntry(provider, model)],
+      keys: { "p-anthropic": "anth-123" },
+    });
+    const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
+      provider: Record<string, { models?: Record<string, unknown> }>;
+    };
+    expect(cfg.provider.anthropic.models).toEqual({
+      "deepseek-v4-flash": { modalities: { input: ["text"], output: ["text"] } },
+    });
+  });
+
+  it("injects an empty config for a model with no modalities metadata", async () => {
+    const provider = makeProvider("p-anthropic", {
+      kind: "byok",
+      catalogProviderId: "anthropic",
+    });
+    const deps = makeDeps({
+      resolved: [okEntry(provider, makeModel("p-anthropic", "hand-typed-model"))],
+      keys: { "p-anthropic": "anth-123" },
+    });
+    const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
+      provider: Record<string, { models?: Record<string, unknown> }>;
+    };
+    expect(cfg.provider.anthropic.models).toEqual({ "hand-typed-model": {} });
+  });
+
   it("registers two distinct providers", async () => {
     const anthropic = makeProvider("p-anthropic", {
       kind: "byok",
