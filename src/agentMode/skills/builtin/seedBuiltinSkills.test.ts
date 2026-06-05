@@ -1,4 +1,4 @@
-import { seedBuiltinSkills, type BuiltinSeedFs } from "./seedBuiltinSkills";
+import { removeSeededBuiltin, seedBuiltinSkills, type BuiltinSeedFs } from "./seedBuiltinSkills";
 import type { BuiltinSkill } from "./builtinSkills";
 
 jest.mock("@/logger", () => ({ logError: jest.fn(), logInfo: jest.fn() }));
@@ -24,6 +24,15 @@ function memFs(initialFiles: Record<string, string> = {}): BuiltinSeedFs & {
     },
     mkdir: async (p) => {
       dirs.add(p);
+    },
+    rmRecursive: async (p) => {
+      dirs.delete(p);
+      for (const key of [...files.keys()]) {
+        if (key === p || key.startsWith(`${p}/`)) files.delete(key);
+      }
+      for (const key of [...dirs]) {
+        if (key === p || key.startsWith(`${p}/`)) dirs.delete(key);
+      }
     },
   };
 }
@@ -142,5 +151,31 @@ describe("seedBuiltinSkills", () => {
     expect(written).toContain("copilot-enabled-agents: claude\n");
     expect(written).not.toContain("copilot-enabled-agents: claude, codex, opencode");
     expect(written).toContain("body v2"); // bundled body was updated
+  });
+});
+
+describe("removeSeededBuiltin", () => {
+  it("removes a seeded builtin folder and its files", async () => {
+    const fs = memFs({ [MD]: skill(1).skillMd, [SCRIPT]: "// script v1" });
+    const removed = await removeSeededBuiltin(FOLDER, "copilot-web-search", fs);
+
+    expect(removed).toBe(true);
+    expect(fs.files.has(MD)).toBe(false);
+    expect(fs.files.has(SCRIPT)).toBe(false);
+  });
+
+  it("is a no-op when the skill folder is absent", async () => {
+    const fs = memFs();
+    expect(await removeSeededBuiltin(FOLDER, "copilot-web-search", fs)).toBe(false);
+  });
+
+  it("refuses to remove a user-authored skill that lacks the builtin version marker", async () => {
+    const userContent =
+      "---\nname: copilot-web-search\ndescription: my custom search\n---\ncustom body";
+    const fs = memFs({ [MD]: userContent });
+    const removed = await removeSeededBuiltin(FOLDER, "copilot-web-search", fs);
+
+    expect(removed).toBe(false);
+    expect(fs.files.get(MD)).toBe(userContent);
   });
 });

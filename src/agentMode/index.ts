@@ -10,8 +10,14 @@ import type { BackendId } from "./session/types";
 import { AgentChatPersistenceManager } from "./session/AgentChatPersistenceManager";
 import { AgentModelPreloader } from "./session/AgentModelPreloader";
 import { AgentSessionManager } from "./session/AgentSessionManager";
+import { shouldUseMiyo } from "@/miyo/miyoUtils";
 import { SkillManager } from "./skills";
-import { seedBuiltinSkills } from "./skills/builtin/seedBuiltinSkills";
+import { managedBuiltinSkills, MIYO_SEARCH_SKILL } from "./skills/builtin/builtinSkills";
+import {
+  removeSeededBuiltin,
+  seedBuiltinSkills,
+  type BuiltinSeedFs,
+} from "./skills/builtin/seedBuiltinSkills";
 import {
   createDefaultAskUserQuestionPrompter,
   createDefaultPermissionPrompter,
@@ -214,6 +220,36 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     }
   };
   subscribeToSystemPromptChange(restartSystemPromptAffected);
+  // Seed the plugin-shipped builtin skills into the canonical folder, then run
+  // discovery so the pass picks them up and fans them out to the agent dirs.
+  // The Plus relay skills are always seeded; the Miyo vault-search skill is
+  // gated on Miyo being in use — seeded when on, and the seeded copy pruned
+  // when off — so it only surfaces while Miyo is available. Discovery runs even
+  // when seeding fails so existing skills still reconcile.
+  const seedManagedBuiltins = async (folder: string): Promise<void> => {
+    const adapter = app.vault.adapter;
+    const fs: BuiltinSeedFs = {
+      exists: (p) => adapter.exists(p),
+      read: (p) => adapter.read(p),
+      write: (p, c) => adapter.write(p, c),
+      mkdir: (p) => adapter.mkdir(p),
+      rmRecursive: (p) => adapter.rmdir(p, true),
+    };
+    const useMiyo = shouldUseMiyo(getSettings());
+    try {
+      await seedBuiltinSkills({
+        skillsFolderRelPath: folder,
+        fs,
+        skills: managedBuiltinSkills(useMiyo),
+      });
+      if (!useMiyo) {
+        await removeSeededBuiltin(folder, MIYO_SEARCH_SKILL.name, fs);
+      }
+    } catch (e) {
+      logError("[Skills] builtin skill seeding failed", e);
+    }
+    await skillManager.refresh();
+  };
   subscribeToSettingsChange((prev, next) => {
     if (
       prev.defaultSystemPromptTitle !== next.defaultSystemPromptTitle ||
@@ -234,24 +270,20 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
           );
       }
     }
-    // When the canonical skills folder changes, seed builtins into the new
-    // folder before discovery runs so the Plus tools appear immediately
-    // without a plugin reload.
+    // Re-seed builtins when the canonical skills folder changes (so the tools
+    // appear in the new folder without a reload) or when Miyo availability
+    // flips (so the gated Miyo skill is seeded/pruned to match). Both run the
+    // same gate-aware seed pass against the current folder.
     const prevFolder = prev.agentMode?.skills?.folder ?? DEFAULT_SKILLS_FOLDER;
     const nextFolder = next.agentMode?.skills?.folder ?? DEFAULT_SKILLS_FOLDER;
-    if (prevFolder !== nextFolder) {
-      const adapter = app.vault.adapter;
-      void seedBuiltinSkills({
-        skillsFolderRelPath: nextFolder,
-        fs: {
-          exists: (p) => adapter.exists(p),
-          read: (p) => adapter.read(p),
-          write: (p, c) => adapter.write(p, c),
-          mkdir: (p) => adapter.mkdir(p),
-        },
-      })
-        .then(() => skillManager.refresh())
-        .catch((e) => logError("[Skills] builtin skill seeding after folder change failed", e));
+    const miyoAvailabilityChanged =
+      prev.enableMiyo !== next.enableMiyo ||
+      prev.miyoServerUrl !== next.miyoServerUrl ||
+      prev.isPlusUser !== next.isPlusUser;
+    if (prevFolder !== nextFolder || miyoAvailabilityChanged) {
+      void seedManagedBuiltins(nextFolder).catch((e) =>
+        logError("[Skills] builtin skill re-seeding failed", e)
+      );
     }
   });
   // A backend's binary path (or a binary install/update) is resolved at spawn
@@ -268,28 +300,14 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
         );
     });
   }
-  // Seed plugin-shipped builtin skills (Copilot Plus relay tools) into the
-  // canonical folder, THEN run discovery so the first pass picks them up and
-  // fans them out to the agent dirs. Non-blocking for plugin load.
-  void (async () => {
-    try {
-      const adapter = app.vault.adapter;
-      await seedBuiltinSkills({
-        skillsFolderRelPath: getSettings().agentMode?.skills?.folder ?? DEFAULT_SKILLS_FOLDER,
-        fs: {
-          exists: (p) => adapter.exists(p),
-          read: (p) => adapter.read(p),
-          write: (p, c) => adapter.write(p, c),
-          mkdir: (p) => adapter.mkdir(p),
-        },
-      });
-    } catch (e) {
-      logError("[Skills] builtin skill seeding failed", e);
+  // Seed plugin-shipped builtin skills into the canonical folder, THEN run
+  // discovery so the first pass picks them up and fans them out to the agent
+  // dirs. Non-blocking for plugin load.
+  void seedManagedBuiltins(getSettings().agentMode?.skills?.folder ?? DEFAULT_SKILLS_FOLDER).catch(
+    (error) => {
+      logError("[Skills] Initial discovery pass failed", error);
     }
-    await skillManager.refresh();
-  })().catch((error) => {
-    logError("[Skills] Initial discovery pass failed", error);
-  });
+  );
   // Non-blocking — plugin load should not wait on disk reconcile.
   for (const descriptor of listBackendDescriptors()) {
     descriptor

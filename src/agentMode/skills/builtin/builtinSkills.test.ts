@@ -1,4 +1,4 @@
-import { BUILTIN_SKILLS, PLUS_ENV } from "./builtinSkills";
+import { BUILTIN_SKILLS, managedBuiltinSkills, MIYO_SEARCH_SKILL, PLUS_ENV } from "./builtinSkills";
 
 /** A script file shipped by a skill, matched by extension (".sh" or ".mjs"). */
 function scriptOf(name: string, ext: ".sh" | ".mjs" = ".sh"): string {
@@ -94,5 +94,67 @@ describe("builtin Copilot Plus skills", () => {
     expect(mjs).toContain('await relay("/pdf4llm"');
     expect(mjs).toContain('toString("base64")');
     expect(mjs).toContain("pdf: PDF, user_id: USER_ID");
+  });
+});
+
+describe("miyo-search builtin skill", () => {
+  it("is a separate, Miyo-gated skill — not one of the always-seeded Plus skills", () => {
+    expect(BUILTIN_SKILLS.map((s) => s.name)).not.toContain("miyo-search");
+    expect(MIYO_SEARCH_SKILL.name).toBe("miyo-search");
+    expect(MIYO_SEARCH_SKILL.enabledAgents).toEqual(["claude", "codex", "opencode"]);
+  });
+
+  it("ships no helper script — the miyo CLI is the runnable", () => {
+    expect(MIYO_SEARCH_SKILL.files).toEqual([]);
+  });
+
+  it("keeps the SKILL.md frontmatter version in sync with the numeric version", () => {
+    expect(MIYO_SEARCH_SKILL.skillMd).toContain(
+      `copilot-builtin-version: "${MIYO_SEARCH_SKILL.version}"`
+    );
+  });
+
+  it("embeds no Plus license env — Miyo is a local loopback CLI", () => {
+    expect(MIYO_SEARCH_SKILL.skillMd).not.toContain(PLUS_ENV.licenseKey);
+    expect(MIYO_SEARCH_SKILL.skillMd).not.toContain(PLUS_ENV.baseUrl);
+  });
+
+  it("documents the search + files subcommands with --json output", () => {
+    const md = MIYO_SEARCH_SKILL.skillMd;
+    expect(md).toContain("miyo search");
+    expect(md).toContain("miyo files");
+    expect(md).toContain("--json");
+  });
+
+  it("resolves the binary PATH-first with a per-OS absolute fallback", () => {
+    const md = MIYO_SEARCH_SKILL.skillMd;
+    // macOS / Linux symlink install location.
+    expect(md).toContain("~/.miyo/bin/miyo");
+    // Windows copied install location.
+    expect(md).toContain("\\Miyo\\bin\\miyo\\miyo.exe");
+  });
+
+  it("guides the agent through not-installed and service-down degradation", () => {
+    const md = MIYO_SEARCH_SKILL.skillMd;
+    expect(md).toContain("not installed");
+    expect(md).toContain("Is the Miyo app running?");
+  });
+});
+
+describe("managedBuiltinSkills", () => {
+  it("includes the Miyo skill only when Miyo is in use", () => {
+    expect(managedBuiltinSkills(true)).toContain(MIYO_SEARCH_SKILL);
+    expect(managedBuiltinSkills(false)).not.toContain(MIYO_SEARCH_SKILL);
+  });
+
+  it("appends Miyo after the Plus skills, preserving their order", () => {
+    expect(managedBuiltinSkills(true).map((s) => s.name)).toEqual([
+      ...BUILTIN_SKILLS.map((s) => s.name),
+      "miyo-search",
+    ]);
+  });
+
+  it("returns the stable BUILTIN_SKILLS reference when Miyo is off", () => {
+    expect(managedBuiltinSkills(false)).toBe(BUILTIN_SKILLS);
   });
 });

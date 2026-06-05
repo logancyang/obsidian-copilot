@@ -13,6 +13,8 @@ export interface BuiltinSeedFs {
   read(relPath: string): Promise<string>;
   write(relPath: string, content: string): Promise<void>;
   mkdir(relPath: string): Promise<void>;
+  /** Remove a directory and its contents. Used to prune a de-gated builtin. */
+  rmRecursive(relPath: string): Promise<void>;
 }
 
 export interface SeedBuiltinSkillsOptions {
@@ -144,4 +146,35 @@ export async function seedBuiltinSkills(
     logInfo(`[Skills] seeded builtin skills: ${seeded.join(", ")}`);
   }
   return { seeded };
+}
+
+/**
+ * Remove a previously-seeded builtin skill folder. Used to de-gate a
+ * conditionally-seeded builtin (e.g. the Miyo skill when the user turns Miyo
+ * off): once the canonical dir is gone, the next `SkillManager.refresh()`
+ * reverse-sweep prunes the agent-dir symlinks pointing at it.
+ *
+ * Guarded by the same `copilot-builtin-version` marker the seeder uses: a
+ * folder whose SKILL.md lacks the marker is user-authored and is left
+ * untouched, even if its name collides with a builtin. A missing folder is a
+ * no-op. Returns true iff a builtin copy was actually removed.
+ */
+export async function removeSeededBuiltin(
+  skillsFolderRelPath: string,
+  name: string,
+  fs: BuiltinSeedFs
+): Promise<boolean> {
+  const dir = joinPosix(skillsFolderRelPath, name);
+  const skillMdPath = joinPosix(dir, "SKILL.md");
+  try {
+    if (!(await fs.exists(skillMdPath))) return false;
+    // null marker = user-authored file → never delete.
+    if (seededVersion(await fs.read(skillMdPath)) === null) return false;
+    await fs.rmRecursive(dir);
+    logInfo(`[Skills] removed de-gated builtin skill: ${name}`);
+    return true;
+  } catch (e) {
+    logError(`[Skills] failed to remove de-gated builtin skill ${name}`, e);
+    return false;
+  }
 }

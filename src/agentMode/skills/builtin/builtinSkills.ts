@@ -370,10 +370,138 @@ const FETCH_X = relaySkill({
   scriptFile: "fetch-x.sh",
 });
 
-/** All plugin-shipped builtin skills, in display order. */
+/** All plugin-shipped Copilot Plus relay skills, in display order. */
 export const BUILTIN_SKILLS: readonly BuiltinSkill[] = [
   WEB_SEARCH,
   READ_PDF,
   YOUTUBE_TRANSCRIPT,
   FETCH_X,
 ];
+
+const MIYO_SEARCH_VERSION = 1;
+
+/**
+ * Vault semantic search via the local Miyo desktop app's `miyo` CLI.
+ *
+ * Unlike the Plus relay skills above, this ships **no helper script**: the
+ * `miyo` binary the Miyo app installs IS the runnable. The skill is a prose
+ * instruction that tells the agent to call `miyo search` / `miyo files`
+ * directly in its own shell, which works under both POSIX shells and Windows
+ * PowerShell with no bash dependency, no MCP server, and no key handed to the
+ * agent (the CLI talks to a loopback service it discovers itself).
+ *
+ * Gated on Miyo being in use: the host only seeds this skill when
+ * `shouldUseMiyo(...)` is true (see `seedManagedBuiltins` in `agentMode/index`),
+ * and prunes the seeded copy when Miyo is turned off — matching the issue's
+ * "surface only when Miyo is installed/running" intent.
+ *
+ * Binary resolution is documented PATH-first with an absolute-path fallback,
+ * because Obsidian-launched shells often inherit a reduced PATH that misses the
+ * `~/.miyo/bin` entry the Miyo installer adds. The absolute install locations
+ * mirror the Miyo desktop app's `cli-installer.ts`:
+ *   - macOS / Linux: `~/.miyo/bin/miyo`
+ *   - Windows:       `%LOCALAPPDATA%\\Miyo\\bin\\miyo\\miyo.exe`
+ */
+export const MIYO_SEARCH_SKILL: BuiltinSkill = {
+  name: "miyo-search",
+  version: MIYO_SEARCH_VERSION,
+  enabledAgents: ["claude", "codex", "opencode"],
+  skillMd: `---
+name: miyo-search
+description: Search the user's Obsidian vault with Miyo local semantic search. Use when the user wants to find notes, recall what they wrote about a topic, or ground an answer in their own vault — prefer this over reading files blindly for meaning-based recall. Needs the Miyo desktop app installed and running.
+metadata:
+  copilot-enabled-agents: claude, codex, opencode
+  copilot-builtin-version: "${MIYO_SEARCH_VERSION}"
+---
+
+# Miyo vault search
+
+Search the user's indexed Obsidian vault through Miyo, a local companion app
+that runs semantic search over their notes on their own machine. Use it to find
+relevant notes by meaning (not just filename) and to browse what Miyo has
+indexed. All calls are local — no network, no API key.
+
+## How to run
+
+Miyo ships a \`miyo\` command-line tool. Run it directly in your shell. First
+try it on the PATH:
+
+\`\`\`bash
+miyo search "<what to look for>" --json
+\`\`\`
+
+If the shell reports the command is not found (Obsidian-launched shells
+sometimes inherit a reduced PATH that misses Miyo's install dir), call the
+binary by its absolute install path instead:
+
+- macOS / Linux:
+
+  \`\`\`bash
+  ~/.miyo/bin/miyo search "<what to look for>" --json
+  \`\`\`
+
+- Windows (PowerShell):
+
+  \`\`\`powershell
+  & "$env:LOCALAPPDATA\\Miyo\\bin\\miyo\\miyo.exe" search "<what to look for>" --json
+  \`\`\`
+
+- Windows (cmd):
+
+  \`\`\`bat
+  "%LOCALAPPDATA%\\Miyo\\bin\\miyo\\miyo.exe" search "<what to look for>" --json
+  \`\`\`
+
+Always pass \`--json\` and read the JSON the command prints to stdout yourself.
+Do not pipe the output through other tools (no \`jq\`, no \`|\`) — those differ
+between shells.
+
+### Useful commands
+
+- Semantic search, capped at N results:
+
+  \`\`\`bash
+  miyo search "<query>" -n 10 --json
+  \`\`\`
+
+- Browse indexed files, with optional filters:
+
+  \`\`\`bash
+  miyo files --json
+  miyo files --title "<text>" --json
+  miyo files --path "<folder or path fragment>" --mtime-after 2024-01-01 --json
+  \`\`\`
+
+The CLI finds the running Miyo service on its own (loopback). Only pass
+\`--url <url>\` if the user explicitly tells you Miyo runs on another machine.
+
+## Reading the results
+
+\`miyo search --json\` prints \`{ "results": [ { "path": ..., "content": ... } ], "count": N }\`.
+\`miyo files --json\` prints \`{ "files": [ { "path": ..., "title": ..., "mtime": ... } ], "total": N }\`.
+Cite the \`path\` of any note you use so the user can open it.
+
+## If Miyo is not available
+
+- **Command not found / not recognized:** you already tried the absolute path
+  above and it is still missing — the Miyo desktop app is not installed on this
+  machine. Tell the user to install and open Miyo, then try again. Do not retry
+  in a loop.
+- **The command runs but reports it cannot reach the service** (for example
+  "Is the Miyo app running?"): the Miyo app is installed but not running. Tell
+  the user to open the Miyo app, then continue without vault search if they
+  can't. Do not retry repeatedly.
+`,
+  files: [],
+};
+
+/**
+ * The builtin skills the host should seed into the canonical folder. The Plus
+ * relay skills are always included; the Miyo skill is gated on Miyo being in
+ * use (the host passes \`includeMiyo = shouldUseMiyo(...)\`). Kept pure so the
+ * gating decision stays in the host layer (the skills layer must not import
+ * \`@/miyo\`), while the composition is unit-testable here.
+ */
+export function managedBuiltinSkills(includeMiyo: boolean): readonly BuiltinSkill[] {
+  return includeMiyo ? [...BUILTIN_SKILLS, MIYO_SEARCH_SKILL] : BUILTIN_SKILLS;
+}
