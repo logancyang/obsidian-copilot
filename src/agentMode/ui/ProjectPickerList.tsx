@@ -1,9 +1,4 @@
-import {
-  AgentHomeListRow,
-  AgentHomeSection,
-  AgentHomeViewAll,
-  INLINE_LIMIT,
-} from "@/agentMode/ui/AgentHomeSection";
+import { AgentHomeListRow, AgentHomeViewAll, INLINE_LIMIT } from "@/agentMode/ui/AgentHomeSection";
 import { ProjectConfig } from "@/aiParams";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -113,25 +108,23 @@ export const ProjectPickerList = memo(
     const hasOverflow = total > INLINE_LIMIT;
 
     return (
-      <AgentHomeSection
-        className={className}
-        collapsible
-        title="Projects"
-        count={total}
-        action={
-          onCreate ? (
+      <div className={className}>
+        {onCreate && (
+          // Top-right create affordance, sitting just under the panel's close
+          // button (right-aligned to line up beneath it).
+          <div className="tw-flex tw-justify-end">
             <Button
+              type="button"
               variant="ghost2"
-              size="icon"
-              className="tw-size-6 tw-text-muted hover:tw-bg-modifier-hover hover:tw-text-normal"
               onClick={onCreate}
               aria-label="New project"
+              className="tw-h-auto tw-gap-1 tw-rounded-md tw-px-2 tw-py-1 tw-text-ui-smaller tw-font-normal tw-text-muted hover:tw-bg-modifier-hover hover:tw-text-normal"
             >
-              <Plus className="tw-size-4" />
+              <Plus className="tw-size-3.5 tw-shrink-0" />
+              <span>New project</span>
             </Button>
-          ) : undefined
-        }
-      >
+          </div>
+        )}
         {total === 0 ? (
           <div className="tw-px-2 tw-py-1.5 tw-text-xs tw-text-muted">No projects available</div>
         ) : (
@@ -165,7 +158,7 @@ export const ProjectPickerList = memo(
             )}
           </div>
         )}
-      </AgentHomeSection>
+      </div>
     );
   }
 );

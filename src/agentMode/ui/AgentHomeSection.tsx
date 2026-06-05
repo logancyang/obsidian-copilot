@@ -3,12 +3,11 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { SearchBar } from "@/components/ui/SearchBar";
 import { cn } from "@/lib/utils";
 import { formatCompactRelativeTime } from "@/utils/formatRelativeTime";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import React, {
   memo,
   useCallback,
   useEffect,
-  useId,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -16,10 +15,12 @@ import React, {
 } from "react";
 
 /**
- * Shared building blocks for the Agent Home landing sections (Projects, Recent
- * Chats). Both render the same shape — a titled section, a few inline rows, and
- * a "View all" popover with search — so the structure lives here once and each
- * section supplies only its data and row click behavior.
+ * Shared building blocks for the Agent Home landing section bodies (Projects,
+ * Recent Chats): a few inline rows plus a "View all" popover with search. That
+ * structure lives here once so each section supplies only its data and row click
+ * behavior. The section title/count/collapse now live in the shelf chip above
+ * the panel (see {@link AgentHomeShelf}); this file is just the row and view-all
+ * primitives.
  */
 
 /** Rows shown inline before the rest collapse behind the "View all" popover. */
@@ -31,106 +32,6 @@ export const INLINE_LIMIT = 3;
  * so large lists (hundreds of chats) don't all render at once.
  */
 const VIEW_ALL_PAGE_SIZE = 50;
-
-interface AgentHomeSectionProps {
-  title: string;
-  count: number;
-  /** Optional trailing header control (e.g. a create button). */
-  action?: React.ReactNode;
-  /**
-   * When set, the whole header becomes a toggle that collapses the body, with a
-   * trailing chevron reflecting the state. Collapse state is local (resets on
-   * remount) — intentionally not persisted.
-   */
-  collapsible?: boolean;
-  children: React.ReactNode;
-  className?: string;
-}
-
-/** Titled section header (title + count + optional action) plus body. */
-export const AgentHomeSection = memo(function AgentHomeSection({
-  title,
-  count,
-  action,
-  collapsible = false,
-  children,
-  className,
-}: AgentHomeSectionProps): React.ReactElement {
-  const [collapsed, setCollapsed] = useState(false);
-  // Ties the disclosure control to the body it shows/hides for assistive tech.
-  const bodyId = useId();
-
-  // Uppercase title + count + (when collapsible) chevron — the part that
-  // toggles. No leading type icon: the rows below carry their own (project
-  // tiles / chat brand marks), so a section icon would only repeat them.
-  const headerLabel = (
-    <>
-      <span className="tw-text-xs tw-font-semibold tw-uppercase tw-tracking-wider tw-text-muted">
-        {title}
-      </span>
-      <span className="tw-text-xs tw-font-normal tw-text-faint">{count}</span>
-      {collapsible && (
-        <ChevronDown
-          className={cn(
-            "tw-size-4 tw-shrink-0 tw-text-muted tw-transition-transform tw-duration-200",
-            collapsed && "-tw-rotate-90"
-          )}
-        />
-      )}
-    </>
-  );
-
-  return (
-    <div className={cn("tw-flex tw-flex-col tw-gap-1", className)}>
-      {/* The disclosure control owns only the label group, never the action.
-          Nesting a real <button> action inside a button-role header is invalid
-          interactive nesting; keeping them siblings fixes the semantics (and
-          removes the need to stop event propagation). The label group takes the
-          free width (flex-1) so its hover/click surface still spans the row up
-          to the action, matching the row affordance below it. */}
-      <div className="tw-flex tw-items-center tw-gap-2">
-        {collapsible ? (
-          <div
-            role="button"
-            tabIndex={0}
-            aria-expanded={!collapsed}
-            aria-controls={bodyId}
-            className={cn(
-              "tw-flex tw-min-w-0 tw-flex-1 tw-cursor-pointer tw-items-center tw-gap-2",
-              // px-2 lines the hover surface up with the rows below (which carry
-              // their own px-2); rounded-md matches the row hover affordance.
-              "tw-rounded-md tw-px-2 tw-py-1 hover:tw-bg-modifier-hover"
-            )}
-            onClick={() => setCollapsed((c) => !c)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                setCollapsed((c) => !c);
-              }
-            }}
-          >
-            {headerLabel}
-          </div>
-        ) : (
-          <div className="tw-flex tw-min-w-0 tw-flex-1 tw-items-center tw-gap-2 tw-py-1">
-            {headerLabel}
-          </div>
-        )}
-        {action && <div className="tw-flex tw-shrink-0 tw-items-center">{action}</div>}
-      </div>
-      {/* Keep the controlled body element mounted (so `aria-controls` always
-          points at a real element) but unmount its children when collapsed.
-          Unmounting tears down any open "View all" popover — Radix portals its
-          content to the document body, so merely hiding the trigger via
-          `hidden` would leave an already-open popover floating against a
-          display:none anchor. `hidden` still drops the empty wrapper from layout
-          and the AT tree. */}
-      <div id={bodyId} hidden={collapsed}>
-        {!collapsed && children}
-      </div>
-    </div>
-  );
-});
 
 interface AgentHomeListRowProps {
   label: string;

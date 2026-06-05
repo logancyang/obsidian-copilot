@@ -1,4 +1,4 @@
-import { AgentHomeListRow, AgentHomeSection, INLINE_LIMIT } from "@/agentMode/ui/AgentHomeSection";
+import { AgentHomeListRow, INLINE_LIMIT } from "@/agentMode/ui/AgentHomeSection";
 import { backendRegistry } from "@/agentMode/backends/registry";
 import {
   ChatHistoryItem,
@@ -100,7 +100,7 @@ export const GlobalRecentChatsSection = memo(
     const hasOverflow = total > INLINE_LIMIT;
 
     return (
-      <AgentHomeSection className={className} collapsible title="Recent Chats" count={total}>
+      <div className={className}>
         {total === 0 ? (
           <div className="tw-px-2 tw-py-1.5 tw-text-xs tw-text-muted">No recent chats</div>
         ) : (
@@ -162,7 +162,7 @@ export const GlobalRecentChatsSection = memo(
             )}
           </div>
         )}
-      </AgentHomeSection>
+      </div>
     );
   }
 );

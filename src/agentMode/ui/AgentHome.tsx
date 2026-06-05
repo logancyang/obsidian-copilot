@@ -4,6 +4,7 @@ import { AgentChatInput } from "@/agentMode/ui/AgentChatInput";
 import { AgentModeStatus } from "@/agentMode/ui/AgentModeStatus";
 import { AgentTabStrip } from "@/agentMode/ui/AgentTabStrip";
 import { CopilotBrandIcon } from "@/agentMode/ui/CopilotBrandIcon";
+import { AgentHomeShelf, type AgentHomeShelfSection } from "@/agentMode/ui/AgentHomeShelf";
 import { GlobalRecentChatsSection } from "@/agentMode/ui/GlobalRecentChatsSection";
 import { ProjectPickerList } from "@/agentMode/ui/ProjectPickerList";
 import { useAgentChatRuntimeState } from "@/agentMode/ui/hooks/useAgentChatRuntimeState";
@@ -24,6 +25,7 @@ import { logError } from "@/logger";
 import type CopilotPlugin from "@/main";
 import { useProjects } from "@/projects/state";
 import { useSettingsValue } from "@/settings/model";
+import { Folder, MessageSquare } from "lucide-react";
 import { Notice } from "obsidian";
 import React, { useCallback, useContext, useEffect, useMemo, useRef } from "react";
 
@@ -232,6 +234,52 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     if (isGlobalLanding) void handleLoadChatHistory();
   }, [isGlobalLanding, handleLoadChatHistory]);
 
+  // Chip-shelf sections for the landing. Each body renders lazily (only the open
+  // section is mounted), so these render closures are cheap to recreate.
+  const landingSections = useMemo<AgentHomeShelfSection[]>(
+    () => [
+      {
+        id: "projects",
+        icon: <Folder className="tw-size-4" />,
+        title: "Projects",
+        count: projects.length,
+        renderBody: () => (
+          <ProjectPickerList
+            projects={projects}
+            onSelect={handleProjectComingSoon}
+            onCreate={handleProjectComingSoon}
+          />
+        ),
+      },
+      {
+        id: "chats",
+        icon: <MessageSquare className="tw-size-4" />,
+        title: "Recent Chats",
+        count: chatHistoryItems.length,
+        renderBody: () => (
+          <GlobalRecentChatsSection
+            items={chatHistoryItems}
+            onLoadChat={handleLoadChat}
+            onUpdateTitle={handleUpdateChatTitle}
+            onDeleteChat={handleDeleteChat}
+            onOpenSourceFile={handleOpenSourceFile}
+            onLoadHistory={handleLoadChatHistory}
+          />
+        ),
+      },
+    ],
+    [
+      projects,
+      chatHistoryItems,
+      handleProjectComingSoon,
+      handleLoadChat,
+      handleUpdateChatTitle,
+      handleDeleteChat,
+      handleOpenSourceFile,
+      handleLoadChatHistory,
+    ]
+  );
+
   return (
     <div className="tw-flex tw-size-full tw-flex-col tw-overflow-hidden">
       <AgentTabStrip manager={manager} />
@@ -327,29 +375,15 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                   />
                 </div>
                 {isGlobalLanding ? (
-                  /* Lower region (grow 3 vs the top spacer's 2) holds the
-                     read-only sections right below the composer and owns ~60% of
-                     the height. Expanding/collapsing or a long list grows and (only
-                     if it outgrows this region) scrolls here — the composer above
-                     never moves. The generous share means the inline sections
-                     (a few rows each) fit without a scrollbar on normal panes;
-                     overflow-y-auto only kicks in on genuinely short ones. No
-                     extra horizontal padding so section edges line up with the
-                     composer's border. */
-                  <div className="tw-flex tw-min-h-0 tw-flex-[3] tw-flex-col tw-gap-3 tw-overflow-y-auto tw-pt-6">
-                    <ProjectPickerList
-                      projects={projects}
-                      onSelect={handleProjectComingSoon}
-                      onCreate={handleProjectComingSoon}
-                    />
-                    <GlobalRecentChatsSection
-                      items={chatHistoryItems}
-                      onLoadChat={handleLoadChat}
-                      onUpdateTitle={handleUpdateChatTitle}
-                      onDeleteChat={handleDeleteChat}
-                      onOpenSourceFile={handleOpenSourceFile}
-                      onLoadHistory={handleLoadChatHistory}
-                    />
+                  /* Lower region below the composer holds the chip shelf
+                     (Projects / Recent Chats). Default collapsed — the two chips
+                     hug the composer; opening one expands its panel downward into
+                     this region's slack while the composer above stays put.
+                     overflow-y-auto only kicks in if an opened panel outgrows the
+                     region on a short pane. No extra horizontal padding so the
+                     chips/rows line up with the composer's border. */
+                  <div className="tw-flex tw-min-h-0 tw-flex-[3] tw-flex-col tw-overflow-y-auto tw-pt-6">
+                    <AgentHomeShelf sections={landingSections} />
                   </div>
                 ) : null}
               </div>
