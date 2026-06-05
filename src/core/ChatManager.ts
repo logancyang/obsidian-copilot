@@ -7,7 +7,7 @@ import {
 import { ChainType } from "@/chainType";
 import { getChainType, getCurrentProject } from "@/aiParams";
 import { logError, logInfo, logWarn } from "@/logger";
-import { ChatMessage, MessageContext, WebTabContext } from "@/types/message";
+import { ChatMessage, MessageContext } from "@/types/message";
 import { processPrompt, type ProcessedPromptResult } from "@/commands/customCommandUtils";
 import { FileParserManager } from "@/tools/FileParserManager";
 import ChainManager from "@/LLMProviders/chainManager";
@@ -20,12 +20,7 @@ import { ChatPersistenceManager } from "./ChatPersistenceManager";
 import { ACTIVE_WEB_TAB_MARKER, USER_SENDER } from "@/constants";
 import { MessageContent } from "@/imageProcessing/imageProcessor";
 import { TFile, Vault } from "obsidian";
-import { getWebViewerService } from "@/services/webViewerService/webViewerServiceSingleton";
-import {
-  normalizeUrlForMatching,
-  normalizeUrlString,
-  sanitizeWebTabContexts,
-} from "@/utils/urlNormalization";
+import { buildWebTabsWithActiveSnapshot } from "@/services/webViewerService/activeWebTabSnapshot";
 
 /**
  * ChatManager - Central business logic coordinator
@@ -321,94 +316,6 @@ export class ChatManager {
   }
 
   /**
-   * Build webTabs array with Active Web Tab snapshot injected.
-   *
-   * This implements snapshot semantics:
-   * - Active Web Tab URL is resolved at message creation time
-   * - The URL is stored in message.context.webTabs with isActive: true
-   * - Edit/reprocess will use the stored URL, not the current active tab
-   *
-   * @param existingWebTabs - Existing webTabs from context
-   * @param shouldIncludeActiveWebTab - Pre-computed flag for whether to include active web tab
-   * @returns Updated webTabs array with active tab snapshot
-   */
-  private buildWebTabsWithActiveSnapshot(
-    existingWebTabs: WebTabContext[],
-    shouldIncludeActiveWebTab: boolean
-  ): WebTabContext[] {
-    // Always sanitize existing webTabs (normalize URLs, dedupe, ensure single isActive)
-    const sanitizedTabs = sanitizeWebTabContexts(existingWebTabs);
-
-    if (!shouldIncludeActiveWebTab) {
-      return sanitizedTabs;
-    }
-
-    try {
-      // Get active web tab from WebViewerService
-      // Use activeWebTabForMentions to match UI behavior:
-      // - Preserved only when switching directly to chat panel
-      // - Cleared when switching to other views (e.g., note tab)
-      const service = getWebViewerService(this.plugin.app);
-      const state = service.getActiveWebTabState();
-      const activeTab = state.activeWebTabForMentions;
-
-      const activeUrl = normalizeUrlForMatching(activeTab?.url);
-      if (!activeUrl) {
-        // No active web tab available, return sanitized tabs unchanged
-        return sanitizedTabs;
-      }
-
-      // Clear any existing isActive flags to ensure only one active tab
-      const clearedTabs: WebTabContext[] = sanitizedTabs.map((tab) => {
-        if (tab.isActive) {
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          const { isActive: _unused, ...rest } = tab;
-          return rest;
-        }
-        return tab;
-      });
-
-      // Check if active URL already exists in the list (using normalized matching)
-      const existingIndex = clearedTabs.findIndex(
-        (tab) => normalizeUrlForMatching(tab.url) === activeUrl
-      );
-
-      if (existingIndex >= 0) {
-        // Merge metadata and mark as active
-        // Prefer activeTab.url to preserve hash fragments for SPA routing
-        // Use normalizeUrlString to trim whitespace while keeping hash/query intact
-        const existing = clearedTabs[existingIndex];
-        clearedTabs[existingIndex] = {
-          ...existing,
-          url: normalizeUrlString(activeTab?.url) ?? existing.url,
-          title: activeTab?.title ?? existing.title,
-          faviconUrl: activeTab?.faviconUrl ?? existing.faviconUrl,
-          isActive: true,
-        };
-        return clearedTabs;
-      }
-
-      // Add new active tab entry
-      // Store the raw URL to preserve hash fragments and query params for SPA routing
-      // Use normalizeUrlString to trim whitespace while keeping hash/query intact
-      // (activeUrl is only used for comparison/deduplication above)
-      return [
-        ...clearedTabs,
-        {
-          url: normalizeUrlString(activeTab?.url) ?? activeUrl,
-          title: activeTab?.title,
-          faviconUrl: activeTab?.faviconUrl,
-          isActive: true,
-        },
-      ];
-    } catch (error) {
-      // Web Viewer not available (e.g., mobile platform) - don't fail the message
-      logWarn("[ChatManager] Failed to resolve active web tab:", error);
-      return sanitizedTabs;
-    }
-  }
-
-  /**
    * Send a new message with context processing
    */
   async sendMessage(
@@ -442,7 +349,8 @@ export class ChatManager {
       const hasAnySelection = (updatedContext.selectedTextContexts || []).length > 0;
       const shouldIncludeActiveWebTab =
         !hasAnySelection && (includeActiveWebTab || displayText.includes(ACTIVE_WEB_TAB_MARKER));
-      updatedContext.webTabs = this.buildWebTabsWithActiveSnapshot(
+      updatedContext.webTabs = buildWebTabsWithActiveSnapshot(
+        this.plugin.app,
         updatedContext.webTabs || [],
         shouldIncludeActiveWebTab
       );

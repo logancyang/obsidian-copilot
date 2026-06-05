@@ -14,17 +14,20 @@ import {
 import { CustomCommandManager } from "@/commands/customCommandManager";
 import { getCachedCustomCommands } from "@/commands/state";
 import ChatInput, { type ChatInputProps } from "@/components/chat-components/ChatInput";
+import { useActiveWebTabState } from "@/components/chat-components/hooks/useActiveWebTabState";
 import { Button } from "@/components/ui/button";
-import { EVENT_NAMES } from "@/constants";
+import { ACTIVE_WEB_TAB_MARKER, EVENT_NAMES } from "@/constants";
 import { EventTargetContext } from "@/context";
 import { logError, logWarn } from "@/logger";
+import { buildWebTabsWithActiveSnapshot } from "@/services/webViewerService/activeWebTabSnapshot";
 import {
   isNoteSelectedTextContext,
-  isWebSelectedTextContext,
   type MessageContext,
   type SelectedTextContext,
+  type WebTabContext,
 } from "@/types/message";
 import { arrayBufferToBase64 } from "@/utils/base64";
+import { mergeWebTabContexts } from "@/utils/urlNormalization";
 import { Clock, X } from "lucide-react";
 import { App, Notice, TFile } from "obsidian";
 import React, { memo, useCallback, useContext, useEffect, useRef } from "react";
@@ -68,13 +71,15 @@ const dedupeBy = <T,>(items: Iterable<T>, key: (item: T) => string): T[] => {
 
 const buildMessageContext = (
   notes: TFile[],
-  selected: readonly SelectedTextContext[]
+  selected: readonly SelectedTextContext[],
+  webTabs: readonly WebTabContext[] = []
 ): MessageContext | undefined => {
-  if (notes.length === 0 && selected.length === 0) return undefined;
+  if (notes.length === 0 && selected.length === 0 && webTabs.length === 0) return undefined;
   return {
     notes,
     urls: [],
     selectedTextContexts: selected.length > 0 ? [...selected] : undefined,
+    webTabs: webTabs.length > 0 ? [...webTabs] : undefined,
   };
 };
 
@@ -83,6 +88,7 @@ const combineQueuedMessages = (items: QueuedAgentMessage[]): QueuedAgentMessage 
 
   const allNotes = items.flatMap((i) => i.context?.notes ?? []);
   const allSelected = items.flatMap((i) => i.context?.selectedTextContexts ?? []);
+  const allWebTabs = items.flatMap((i) => i.context?.webTabs ?? []);
   const allPromptContent = items.flatMap((i) => i.promptContent ?? []);
 
   return {
@@ -91,10 +97,10 @@ const combineQueuedMessages = (items: QueuedAgentMessage[]): QueuedAgentMessage 
     rawInput: items.map((i) => i.rawInput).join("\n\n"),
     context: buildMessageContext(
       dedupeBy(allNotes, (n) => n.path),
-      dedupeBy(allSelected, (s) => s.id)
+      dedupeBy(allSelected, (s) => s.id),
+      mergeWebTabContexts(allWebTabs)
     ),
     promptContent: allPromptContent.length > 0 ? allPromptContent : undefined,
-    hadUnsupportedAttachments: items.some((i) => i.hadUnsupportedAttachments),
   };
 };
 
@@ -135,6 +141,11 @@ export const AgentChatInput = memo(function AgentChatInput({
 }: AgentChatInputProps) {
   const eventTarget = useContext(EventTargetContext);
   const [selectedTextContexts] = useSelectedTextContexts();
+  // SSoT for the Active Web Tab; `activeWebTabForMentions` matches the send
+  // snapshot (preserved only when focusing the chat panel). Drives the
+  // ChatInput "Active Web Tab" affordance and is resolved into the outgoing
+  // webTabs at send time below.
+  const { activeWebTabForMentions } = useActiveWebTabState();
 
   const isMountedRef = useRef(false);
   const previousSessionIdRef = useRef(sessionId);
@@ -190,9 +201,6 @@ export const AgentChatInput = memo(function AgentChatInput({
 
   const runSend = useCallback(
     async (item: QueuedAgentMessage) => {
-      if (item.hadUnsupportedAttachments) {
-        new Notice("Web tab attachments aren't supported in Agent Mode yet.");
-      }
       setLoading(true);
       try {
         const { turn } = backend.sendMessage(item.text, item.context, item.promptContent);
@@ -208,91 +216,99 @@ export const AgentChatInput = memo(function AgentChatInput({
     [backend, setLoading, updateUserMessageHistory]
   );
 
-  const handleSendMessage = useCallback(async () => {
-    const text = inputMessage.trim();
-    if (!text) return;
-    const rawInput = inputMessage;
+  const handleSendMessage = useCallback(
+    async (webTabs?: WebTabContext[]) => {
+      const text = inputMessage.trim();
+      if (!text) return;
+      const rawInput = inputMessage;
 
-    // Web tab / web-excerpt attachments still aren't wired through.
-    // Images are handled below. PDFs stay in note context so the agent can
-    // inspect them with its built-in Read tool instead of blocking send.
-    const hasWebExcerpt = selectedTextContexts.some(isWebSelectedTextContext);
-    const hadUnsupportedAttachments = includeActiveWebTab || hasWebExcerpt;
+      const activeFile = app.workspace.getActiveFile();
 
-    const activeFile = app.workspace.getActiveFile();
+      const candidateNotes: TFile[] = [];
+      if (includeActiveNote && activeFile) {
+        candidateNotes.push(activeFile);
+      }
+      candidateNotes.push(...contextNotes);
+      const notes = dedupeBy(candidateNotes, (n) => n.path);
 
-    const candidateNotes: TFile[] = [];
-    if (includeActiveNote && activeFile) {
-      candidateNotes.push(activeFile);
-    }
-    candidateNotes.push(...contextNotes);
-    const notes = dedupeBy(candidateNotes, (n) => n.path);
+      // Slash-menu CustomCommands are inserted as literal `/<title>` text by
+      // SlashCommandPlugin. Skills are recognized by the backend via its
+      // command catalog, but CustomCommands aren't — expand the body here so
+      // the backend sees the real prompt. (Mirrors ChatManager's processPrompt
+      // call on the non-agent path.)
+      const noteSelection = selectedTextContexts.find(isNoteSelectedTextContext);
+      const expanded = await expandCustomCommandPrefix(
+        text,
+        getCachedCustomCommands(),
+        app,
+        noteSelection?.content ?? "",
+        activeFile
+      );
+      if (expanded.matched) {
+        void CustomCommandManager.getInstance().recordUsage(expanded.matched);
+      }
+      const resolvedText = resolveActiveNoteToken(expanded.text, activeFile);
 
-    // Slash-menu CustomCommands are inserted as literal `/<title>` text by
-    // SlashCommandPlugin. Skills are recognized by the backend via its
-    // command catalog, but CustomCommands aren't — expand the body here so
-    // the backend sees the real prompt. (Mirrors ChatManager's processPrompt
-    // call on the non-agent path.)
-    const noteSelection = selectedTextContexts.find(isNoteSelectedTextContext);
-    const expanded = await expandCustomCommandPrefix(
-      text,
-      getCachedCustomCommands(),
+      // Resolve the Active Web Tab into the outgoing webTabs (snapshot at send
+      // time). Mirrors ChatManager: any text selection suppresses the active
+      // tab to avoid redundant context.
+      const hasAnySelection = selectedTextContexts.length > 0;
+      const shouldIncludeActiveWebTab =
+        !hasAnySelection && (includeActiveWebTab || resolvedText.includes(ACTIVE_WEB_TAB_MARKER));
+      const resolvedWebTabs = buildWebTabsWithActiveSnapshot(
+        app,
+        webTabs ?? [],
+        shouldIncludeActiveWebTab
+      );
+
+      const content: PromptContent[] = [];
+
+      // Convert attached images to base64 image content blocks.
+      for (const image of selectedImages) {
+        const block = await fileToImageBlock(image);
+        if (block) content.push(block);
+      }
+
+      const item: QueuedAgentMessage = {
+        id: `queued-${uuidv4()}`,
+        text: resolvedText,
+        rawInput,
+        context: buildMessageContext(notes, selectedTextContexts, resolvedWebTabs),
+        promptContent: content.length > 0 ? content : undefined,
+      };
+
+      resetCompose();
+      // The message context was already snapshotted above from this render's
+      // captured `selectedTextContexts`, so clearing the global atom here is safe
+      // for this send. The narrow window where the awaits above let the user
+      // switch sessions and start a new selection before this clear fires is
+      // accepted as-is (carried over verbatim from the pre-split AgentChat, and a
+      // cleared selection is trivially recoverable). If a future review flags this
+      // again, point them here.
+      clearSelectedTextContexts();
+
+      if (loading || isStarting) {
+        setQueuedMessages((q) => [...q, item]);
+        return;
+      }
+
+      await runSend(item);
+    },
+    [
       app,
-      noteSelection?.content ?? "",
-      activeFile
-    );
-    if (expanded.matched) {
-      void CustomCommandManager.getInstance().recordUsage(expanded.matched);
-    }
-    const resolvedText = resolveActiveNoteToken(expanded.text, activeFile);
-
-    const content: PromptContent[] = [];
-
-    // Convert attached images to base64 image content blocks.
-    for (const image of selectedImages) {
-      const block = await fileToImageBlock(image);
-      if (block) content.push(block);
-    }
-
-    const item: QueuedAgentMessage = {
-      id: `queued-${uuidv4()}`,
-      text: resolvedText,
-      rawInput,
-      context: buildMessageContext(notes, selectedTextContexts),
-      promptContent: content.length > 0 ? content : undefined,
-      hadUnsupportedAttachments,
-    };
-
-    resetCompose();
-    // The message context was already snapshotted above from this render's
-    // captured `selectedTextContexts`, so clearing the global atom here is safe
-    // for this send. The narrow window where the awaits above let the user
-    // switch sessions and start a new selection before this clear fires is
-    // accepted as-is (carried over verbatim from the pre-split AgentChat, and a
-    // cleared selection is trivially recoverable). If a future review flags this
-    // again, point them here.
-    clearSelectedTextContexts();
-
-    if (loading || isStarting) {
-      setQueuedMessages((q) => [...q, item]);
-      return;
-    }
-
-    await runSend(item);
-  }, [
-    app,
-    inputMessage,
-    selectedImages,
-    contextNotes,
-    includeActiveNote,
-    includeActiveWebTab,
-    selectedTextContexts,
-    loading,
-    isStarting,
-    resetCompose,
-    runSend,
-    setQueuedMessages,
-  ]);
+      inputMessage,
+      selectedImages,
+      contextNotes,
+      includeActiveNote,
+      includeActiveWebTab,
+      selectedTextContexts,
+      loading,
+      isStarting,
+      resetCompose,
+      runSend,
+      setQueuedMessages,
+    ]
+  );
 
   // When a turn ends, flush the queue as one combined message. The
   // `loading` and `queuedMessages.length` guards prevent re-entry: the
@@ -364,7 +380,7 @@ export const AgentChatInput = memo(function AgentChatInput({
           isAgentMode
           inputMessage={inputMessage}
           setInputMessage={setInputMessage}
-          handleSendMessage={() => handleSendMessage()}
+          handleSendMessage={(meta) => handleSendMessage(meta?.webTabs)}
           isGenerating={loading}
           onStopGenerating={handleStopGenerating}
           onEscape={loading ? handleStopGenerating : undefined}
@@ -376,7 +392,7 @@ export const AgentChatInput = memo(function AgentChatInput({
           setIncludeActiveNote={setIncludeActiveNote}
           includeActiveWebTab={includeActiveWebTab}
           setIncludeActiveWebTab={setIncludeActiveWebTab}
-          activeWebTab={null}
+          activeWebTab={activeWebTabForMentions}
           selectedImages={selectedImages}
           onAddImage={addImages}
           setSelectedImages={setSelectedImages}

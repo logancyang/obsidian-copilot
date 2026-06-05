@@ -12,7 +12,6 @@ export interface QueuedAgentMessage {
   context?: MessageContext;
   /** Image blocks for the backend prompt. */
   promptContent?: PromptContent[];
-  hadUnsupportedAttachments: boolean;
 }
 
 /**

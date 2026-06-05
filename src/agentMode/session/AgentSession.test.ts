@@ -171,7 +171,7 @@ describe("buildPromptBlocks", () => {
     expect(blocks[2]).toEqual({ type: "image", mimeType: "image/jpeg", data: "ZmFrZQ==" });
   });
 
-  it("ignores web-source selected text excerpts", () => {
+  it("serializes web-source selected text excerpts as <web_selected_text>", () => {
     const blocks = buildPromptBlocks("explain", {
       notes: [],
       urls: [],
@@ -185,7 +185,55 @@ describe("buildPromptBlocks", () => {
         },
       ],
     });
-    expect(blocks).toEqual([{ type: "text", text: "explain" }]);
+    const text = (blocks[0] as { type: "text"; text: string }).text;
+    expect(text).toContain("<web_selected_text>");
+    expect(text).toContain("<title>Example</title>");
+    expect(text).toContain("<url>https://example.com</url>");
+    expect(text).toContain("web snippet");
+    expect(text).toContain("<user-message>\nexplain\n</user-message>");
+  });
+
+  it("weaves the web-tab block before the user message", () => {
+    const webTabBlock =
+      "<active_web_tab>\n<title>Docs</title>\n<url>https://x.dev</url>\n<content>\nhello\n</content>\n</active_web_tab>";
+    const blocks = buildPromptBlocks("read it", { notes: [], urls: [] }, undefined, webTabBlock);
+    expect(blocks).toHaveLength(1);
+    const text = (blocks[0] as { type: "text"; text: string }).text;
+    expect(text).toContain("<active_web_tab>");
+    expect(text).toContain("<url>https://x.dev</url>");
+    expect(text).toContain("<user-message>\nread it\n</user-message>");
+    // Context (web-tab content) precedes the user message.
+    expect(text.indexOf("<active_web_tab>")).toBeLessThan(text.indexOf("<user-message>"));
+  });
+
+  it("emits plain text when the web-tab block is empty/whitespace", () => {
+    const blocks = buildPromptBlocks("hi", undefined, undefined, "   ");
+    expect(blocks).toEqual([{ type: "text", text: "hi" }]);
+  });
+
+  it("orders the envelope, web selections, and web-tab block before the message", () => {
+    const webTabBlock = "<web_tab_context>\n<url>https://x.dev</url>\n</web_tab_context>";
+    const blocks = buildPromptBlocks(
+      "look",
+      {
+        notes: [makeFile("a.md")],
+        urls: [],
+        selectedTextContexts: [
+          { id: "w1", sourceType: "web", title: "W", url: "https://w.dev", content: "snip" },
+        ],
+      },
+      undefined,
+      webTabBlock
+    );
+    const text = (blocks[0] as { type: "text"; text: string }).text;
+    const envelopePos = text.indexOf("<copilot-context>");
+    const selectionPos = text.indexOf("<web_selected_text>");
+    const webTabPos = text.indexOf("<web_tab_context>");
+    const messagePos = text.indexOf("<user-message>");
+    expect(envelopePos).toBeGreaterThanOrEqual(0);
+    expect(envelopePos).toBeLessThan(selectionPos);
+    expect(selectionPos).toBeLessThan(webTabPos);
+    expect(webTabPos).toBeLessThan(messagePos);
   });
 });
 

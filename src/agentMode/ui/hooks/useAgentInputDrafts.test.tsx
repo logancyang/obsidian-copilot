@@ -11,7 +11,6 @@ const queued = (id: string): QueuedAgentMessage => ({
   id,
   text: id,
   rawInput: id,
-  hadUnsupportedAttachments: false,
 });
 
 interface Props {

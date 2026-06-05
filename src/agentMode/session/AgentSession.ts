@@ -1,4 +1,4 @@
-import { AI_SENDER, USER_SENDER } from "@/constants";
+import { AI_SENDER, USER_SENDER, WEB_SELECTED_TEXT_TAG } from "@/constants";
 import { logInfo, logWarn } from "@/logger";
 import { AgentMessageStore } from "@/agentMode/session/AgentMessageStore";
 import {
@@ -28,11 +28,17 @@ import {
   ToolCallDelta,
   ToolCallSnapshot,
 } from "@/agentMode/session/types";
-import { isNoteSelectedTextContext, MessageContext } from "@/types/message";
+import {
+  isNoteSelectedTextContext,
+  isWebSelectedTextContext,
+  MessageContext,
+} from "@/types/message";
 import { err2String, formatDateTime } from "@/utils";
 import { MethodUnsupportedError } from "@/agentMode/session/errors";
 import { resolveMcpServers } from "@/agentMode/session/mcpResolver";
 import { getSettings } from "@/settings/model";
+import { ContextProcessor } from "@/contextProcessor";
+import { escapeXml } from "@/LLMProviders/chainRunner/utils/xmlParsing";
 
 /**
  * Prefix opencode uses for placeholder titles before its title-summarizer
@@ -709,7 +715,11 @@ export class AgentSession {
     const sessionId = this.backendSessionId!;
     const turnStartedAt = Date.now();
     try {
-      const promptBlocks = buildPromptBlocks(displayText, context, promptContent);
+      // Extract live Web Viewer content (reader-mode markdown, YouTube
+      // transcripts) just before the prompt is built so it reflects the page
+      // at send/flush time, not at compose time.
+      const webTabBlock = await serializeWebTabContext(context);
+      const promptBlocks = buildPromptBlocks(displayText, context, promptContent, webTabBlock);
       const req: PromptInput = {
         sessionId,
         prompt: promptBlocks,
@@ -1353,15 +1363,57 @@ function findProviderErrorPayload(
 export function buildPromptBlocks(
   displayText: string,
   context?: MessageContext,
-  content?: PromptContent[]
+  content?: PromptContent[],
+  webTabBlock?: string
 ): PromptContent[] {
-  const envelope = buildContextEnvelope(context);
-  const headText = envelope
-    ? `${envelope}\n\n<user-message>\n${displayText}\n</user-message>`
+  // Context sections precede the user message: the vault envelope (notes +
+  // note excerpts), web-selection excerpts, then live web-tab content. Web
+  // tab/selection blocks reuse the legacy `<web_*>` tags so the model reads
+  // the same shapes it does in the non-agent chat.
+  const sections = [
+    buildContextEnvelope(context),
+    buildWebSelectionBlocks(context),
+    webTabBlock?.trim() || null,
+  ].filter((s): s is string => Boolean(s));
+  const head = sections.length > 0 ? sections.join("\n\n") : null;
+  const headText = head
+    ? `${head}\n\n<user-message>\n${displayText}\n</user-message>`
     : displayText;
   const extras = content ?? [];
   if (extras.length === 0) return [{ type: "text", text: headText }];
   return [{ type: "text", text: headText }, ...extras];
+}
+
+/**
+ * Extract live Web Viewer content for the attached web tabs, reusing the
+ * non-agent chat's processor (reader-mode markdown, YouTube transcripts,
+ * timeouts, dedup, availability handling). Returns "" when there are no tabs.
+ */
+async function serializeWebTabContext(context: MessageContext | undefined): Promise<string> {
+  const webTabs = context?.webTabs;
+  if (!webTabs || webTabs.length === 0) return "";
+  return (await ContextProcessor.getInstance().processContextWebTabs(webTabs)).trim();
+}
+
+/**
+ * Serialize web-page text selections as `<web_selected_text>` blocks. The
+ * content is already captured at selection time, so this is synchronous (no
+ * webview round-trip). Note excerpts are handled by {@link buildContextEnvelope}.
+ */
+function buildWebSelectionBlocks(context: MessageContext | undefined): string | null {
+  const selections = (context?.selectedTextContexts ?? []).filter(isWebSelectedTextContext);
+  if (selections.length === 0) return null;
+  return selections
+    .map((s) =>
+      [
+        `<${WEB_SELECTED_TEXT_TAG}>`,
+        `<title>${escapeXml(s.title)}</title>`,
+        `<url>${escapeXml(s.url)}</url>`,
+        `<content>\n${escapeXml(s.content)}\n</content>`,
+        `</${WEB_SELECTED_TEXT_TAG}>`,
+      ].join("\n")
+    )
+    .join("\n\n");
 }
 
 /**
