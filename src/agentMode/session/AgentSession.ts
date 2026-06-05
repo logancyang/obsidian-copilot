@@ -717,8 +717,11 @@ export class AgentSession {
     try {
       // Extract live Web Viewer content (reader-mode markdown, YouTube
       // transcripts) just before the prompt is built so it reflects the page
-      // at send/flush time, not at compose time.
-      const webTabBlock = await serializeWebTabContext(context);
+      // at send/flush time, not at compose time. Only take the async hop when
+      // there are web tabs — otherwise `backend.prompt` must be invoked
+      // synchronously within this turn (callers rely on that timing).
+      const hasWebTabs = (context?.webTabs?.length ?? 0) > 0;
+      const webTabBlock = hasWebTabs ? await serializeWebTabContext(context) : "";
       const promptBlocks = buildPromptBlocks(displayText, context, promptContent, webTabBlock);
       const req: PromptInput = {
         sessionId,
