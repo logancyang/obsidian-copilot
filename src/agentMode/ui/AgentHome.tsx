@@ -171,6 +171,19 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     new Notice("Projects are coming soon.");
   }, []);
 
+  // Landing "New chat": spin up a fresh session in a new tab, the same path the
+  // tab strip's "+" uses. Guard on getIsStarting() like handleNewChat above and
+  // AgentTabStrip's "+" — createSession() sets the starting flag synchronously
+  // (before its first await), so a second click while a create is in flight is
+  // a no-op instead of spawning a duplicate session/tab.
+  const handleCreateChat = useCallback(() => {
+    if (manager.getIsStarting()) return;
+    manager.createSession().catch((e) => {
+      logError("[AgentMode] createSession failed", e);
+      new Notice("Failed to start a new chat. Please try again.");
+    });
+  }, [manager]);
+
   const modelPickerOverride = useAgentModelPicker(manager);
   const modePickerOverride = useAgentModePicker(manager);
 
@@ -264,6 +277,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
             onDeleteChat={handleDeleteChat}
             onOpenSourceFile={handleOpenSourceFile}
             onLoadHistory={handleLoadChatHistory}
+            onCreate={handleCreateChat}
           />
         ),
       },
@@ -272,6 +286,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       projects,
       chatHistoryItems,
       handleProjectComingSoon,
+      handleCreateChat,
       handleLoadChat,
       handleUpdateChatTitle,
       handleDeleteChat,
@@ -321,16 +336,26 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                 <AgentModeStatus manager={manager} plugin={plugin} onInstallClick={handleInstall} />
                 {isGlobalLanding ? (
                   <>
-                    {/* Top spacer (grow 2) seats the composer ~40% down — fixed
-                        there regardless of what the sections below do. The lower
-                        sections region (grow 3) owns its slice of height, so
-                        expanding/collapsing happens entirely inside it and never
-                        moves the composer. min-h-0 lets this collapse on very
-                        short panes so the title/composer aren't pushed off-screen. */}
-                    <div className="tw-min-h-0 tw-flex-[2]" />
+                    {/* Top spacer at a FIXED fraction of the column height
+                        (h-1/4), not a flex grow. This top-anchors the composer:
+                        the spacer is a percentage of the (constant) column
+                        height, so it stays put when the composer's own height
+                        changes — e.g. removing the active-note context chip. A
+                        flex spacer would instead re-divide the freed space and
+                        push the greeting + composer down (the "top drops" we want
+                        to avoid). The lower shelf region (flex-1) absorbs the
+                        change instead, so the composer's lower half and the shelf
+                        collapse upward while the greeting stays fixed. */}
+                    <div className="tw-h-1/4 tw-shrink-0" />
                     <div className="tw-shrink-0 tw-pb-7">
                       <div className="tw-flex tw-items-center tw-justify-center tw-gap-3">
                         <CopilotBrandIcon className="tw-size-4 tw-text-normal" />
+                        {/* font-[330]: deliberate hero weight, a hair lighter than
+                            `font-normal` (400) for the airy greeting. The project's
+                            named weight tokens have no slot between light and normal,
+                            so this is an intentional one-off. (The "no arbitrary
+                            values" rule targets font sizes, not weights.) Promote to a
+                            named token if another weight like this appears. */}
                         <span className="tw-text-ui-title tw-font-[330] tw-text-normal">
                           {greeting}
                         </span>
@@ -375,14 +400,18 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                   />
                 </div>
                 {isGlobalLanding ? (
-                  /* Lower region below the composer holds the chip shelf
-                     (Projects / Recent Chats). Default collapsed — the two chips
-                     hug the composer; opening one expands its panel downward into
-                     this region's slack while the composer above stays put.
-                     overflow-y-auto only kicks in if an opened panel outgrows the
-                     region on a short pane. No extra horizontal padding so the
-                     chips/rows line up with the composer's border. */
-                  <div className="tw-flex tw-min-h-0 tw-flex-[3] tw-flex-col tw-overflow-y-auto tw-pt-6">
+                  /* Lower region below the composer holds the tabbed shelf
+                     (Projects / Recent Chats). flex-1 so it absorbs every change
+                     in the composer's height: when the composer shrinks (e.g. the
+                     context chip is removed) this region grows and its top-aligned
+                     card moves up — the composer above stays top-anchored. The
+                     shelf is a persistent card that sizes to its content and sits
+                     at the top of this region. This region owns no scroll of its
+                     own — on a pane too short to fit the card, the card caps to the
+                     region height (min-h-0 chain) and scrolls its list internally,
+                     keeping the tab bar in reach. No extra horizontal padding so
+                     the card lines up with the composer's border. */
+                  <div className="tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-pt-6">
                     <AgentHomeShelf sections={landingSections} />
                   </div>
                 ) : null}

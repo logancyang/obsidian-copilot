@@ -1,9 +1,10 @@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { SearchBar } from "@/components/ui/SearchBar";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { formatCompactRelativeTime } from "@/utils/formatRelativeTime";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Plus } from "lucide-react";
 import React, {
   memo,
   useCallback,
@@ -32,6 +33,37 @@ export const INLINE_LIMIT = 3;
  * so large lists (hundreds of chats) don't all render at once.
  */
 const VIEW_ALL_PAGE_SIZE = 50;
+
+interface AgentHomeCreateRowProps {
+  label: string;
+  onClick: () => void;
+}
+
+/**
+ * Leading "create" action shared by the section bodies (New project / New chat).
+ * An accent tile + accent label, shaped like the colored item tiles below so
+ * both panels open with a same-height first row (keeps the tabbed shelf from
+ * jumping when you switch between Projects and Recent Chats).
+ */
+export const AgentHomeCreateRow = memo(function AgentHomeCreateRow({
+  label,
+  onClick,
+}: AgentHomeCreateRowProps): React.ReactElement {
+  return (
+    <Button
+      type="button"
+      variant="ghost2"
+      onClick={onClick}
+      aria-label={label}
+      className="tw-h-auto tw-min-h-9 tw-w-full tw-justify-start tw-gap-2 tw-rounded-md tw-px-2 tw-py-1.5 hover:tw-bg-modifier-hover"
+    >
+      <span className="tw-flex tw-size-6 tw-shrink-0 tw-items-center tw-justify-center tw-rounded-md tw-bg-interactive-accent-hsl/10">
+        <Plus className="tw-size-4 tw-text-accent" />
+      </span>
+      <span className="tw-text-ui-small tw-font-medium tw-text-accent">{label}</span>
+    </Button>
+  );
+});
 
 interface AgentHomeListRowProps {
   label: string;
@@ -77,7 +109,7 @@ export const AgentHomeListRow = memo(function AgentHomeListRow({
       role="button"
       tabIndex={0}
       className={cn(
-        "tw-flex tw-w-full tw-cursor-pointer tw-items-center tw-gap-2 tw-rounded-md tw-px-2 tw-py-1.5",
+        "tw-flex tw-min-h-9 tw-w-full tw-cursor-pointer tw-items-center tw-gap-2 tw-rounded-md tw-px-2 tw-py-1.5",
         "tw-text-left tw-transition-colors hover:tw-bg-modifier-hover"
       )}
       onClick={onClick}
@@ -213,10 +245,9 @@ export function AgentHomeViewAll<TItem>({
             }
           }}
         >
-          {/* pl-8 aligns the trigger text under the inline rows' labels, which
-              sit past a size-6 leading tile + gap-2 (≈ 2rem). The count is
-              omitted — the section header already shows it. */}
-          <span className="tw-pl-8">View all {label}</span>
+          {/* Left-aligned to the leading-tile column (no indent), matching the
+              create row. The count is omitted — the tab already shows it. */}
+          <span>View all {label}</span>
           <ChevronRight className="tw-size-3 tw-shrink-0" />
         </div>
       </PopoverTrigger>

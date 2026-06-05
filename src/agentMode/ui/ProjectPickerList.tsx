@@ -1,10 +1,14 @@
-import { AgentHomeListRow, AgentHomeViewAll, INLINE_LIMIT } from "@/agentMode/ui/AgentHomeSection";
+import {
+  AgentHomeCreateRow,
+  AgentHomeListRow,
+  AgentHomeViewAll,
+  INLINE_LIMIT,
+} from "@/agentMode/ui/AgentHomeSection";
 import { ProjectConfig } from "@/aiParams";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { filterProjects } from "@/utils/projectUtils";
 import { sortByStrategy, type SortStrategy } from "@/utils/recentUsageManager";
-import { Folder, Plus } from "lucide-react";
+import { Folder } from "lucide-react";
 import React, { memo, useMemo, useState } from "react";
 
 // Reason: PR1 is strictly read-only — surface a fixed sort (most-recently-used first)
@@ -61,7 +65,23 @@ interface ProjectPickerListProps {
   className?: string;
 }
 
-/** Stable read-only ordering shared by the inline list and the View-all popover. */
+/**
+ * Stable read-only ordering shared by the inline list and the View-all popover.
+ *
+ * DESIGN NOTE: sorts on the persisted `project.UsageTimestamps` only — it does
+ * NOT blend in-memory touches via `RecentUsageManager.getEffectiveLastUsedAt`
+ * the way the main chat-mode `ProjectList` does. The landing is read-only (PR1):
+ * picking a project only fires a coming-soon Notice and this surface never
+ * touches usage, so the two lists diverge only in a narrow cross-surface race —
+ * use a project in chat mode, then open Agent Home before the persisted
+ * timestamp / file-backed project list catches up. Parity would mean threading
+ * the project usage manager + a
+ * `useSyncExternalStore` revision subscription into this deliberately minimal
+ * read-only component; that cost outweighs the low-probability stale recency.
+ * Accepted as consistency debt to resolve when the landing becomes interactive
+ * (projects can be entered/touched here) by extracting a shared recency hook. If
+ * a future review flags the divergence again, point them at this note.
+ */
 function useSortedProjects(projects: ProjectConfig[]): ProjectConfig[] {
   return useMemo(
     () =>
@@ -108,31 +128,15 @@ export const ProjectPickerList = memo(
     const hasOverflow = total > INLINE_LIMIT;
 
     return (
-      <div className={className}>
-        {onCreate && (
-          // Top-right create affordance, sitting just under the panel's close
-          // button (right-aligned to line up beneath it).
-          <div className="tw-flex tw-justify-end">
-            <Button
-              type="button"
-              variant="ghost2"
-              onClick={onCreate}
-              aria-label="New project"
-              className="tw-h-auto tw-gap-1 tw-rounded-md tw-px-2 tw-py-1 tw-text-ui-smaller tw-font-normal tw-text-muted hover:tw-bg-modifier-hover hover:tw-text-normal"
-            >
-              <Plus className="tw-size-3.5 tw-shrink-0" />
-              <span>New project</span>
-            </Button>
-          </div>
-        )}
+      <div className={cn("tw-flex tw-flex-col tw-divide-y tw-divide-border", className)}>
+        {onCreate && <AgentHomeCreateRow label="New project" onClick={onCreate} />}
         {total === 0 ? (
           <div className="tw-px-2 tw-py-1.5 tw-text-xs tw-text-muted">No projects available</div>
         ) : (
-          <div className="tw-flex tw-flex-col tw-gap-0.5">
+          <>
             {inlineProjects.map((project) => (
               <ProjectRow key={project.id} project={project} onSelect={onSelect} />
             ))}
-
             {hasOverflow && (
               <AgentHomeViewAll
                 items={sortedProjects}
@@ -156,7 +160,7 @@ export const ProjectPickerList = memo(
                 )}
               />
             )}
-          </div>
+          </>
         )}
       </div>
     );

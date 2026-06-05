@@ -1,5 +1,10 @@
-import { AgentHomeListRow, INLINE_LIMIT } from "@/agentMode/ui/AgentHomeSection";
+import {
+  AgentHomeCreateRow,
+  AgentHomeListRow,
+  INLINE_LIMIT,
+} from "@/agentMode/ui/AgentHomeSection";
 import { backendRegistry } from "@/agentMode/backends/registry";
+import { cn } from "@/lib/utils";
 import {
   ChatHistoryItem,
   ChatHistoryPopover,
@@ -25,6 +30,8 @@ interface GlobalRecentChatsSectionProps {
   onOpenSourceFile: (id: string) => Promise<void>;
   /** Refresh the items when the popover opens (mirrors the control-bar button). */
   onLoadHistory?: () => void;
+  /** Optional create action — renders a "New chat" row atop the list. */
+  onCreate?: () => void;
   className?: string;
 }
 
@@ -55,6 +62,23 @@ function sortChatsByRecent(items: ChatHistoryItem[]): ChatHistoryItem[] {
   });
 }
 
+/**
+ * Neutral tile holding the chat's backend brand glyph (or the generic fallback),
+ * sized to match the project tiles so both lists share one leading-slot width —
+ * their labels then line up when you switch tabs, and it matches the "New chat"
+ * create row's tile. Projects are color-coded by id; chats aren't, so this uses a
+ * single muted surface rather than a hued tint.
+ */
+const ChatIconTile = memo(({ Icon }: { Icon: React.ComponentType<{ className?: string }> }) => (
+  <span
+    aria-hidden="true"
+    className="tw-flex tw-size-6 tw-shrink-0 tw-items-center tw-justify-center tw-rounded-md tw-bg-secondary tw-text-muted"
+  >
+    <Icon className="tw-size-4" />
+  </span>
+));
+ChatIconTile.displayName = "ChatIconTile";
+
 interface RecentChatRowProps {
   item: ChatHistoryItem;
   /** Open by id; the row fires it and forgets (loads surface their own Notice). */
@@ -66,7 +90,7 @@ const RecentChatRow = memo(({ item, onOpen }: RecentChatRowProps) => (
     label={item.title}
     timeMs={item.lastAccessedAt.getTime()}
     onClick={() => void onOpen(item.id)}
-    icon={resolveChatIcon(item) ?? MessageCircle}
+    leading={<ChatIconTile Icon={resolveChatIcon(item) ?? MessageCircle} />}
   />
 ));
 RecentChatRow.displayName = "RecentChatRow";
@@ -90,6 +114,7 @@ export const GlobalRecentChatsSection = memo(
     onDeleteChat,
     onOpenSourceFile,
     onLoadHistory,
+    onCreate,
     className,
   }: GlobalRecentChatsSectionProps): React.ReactElement => {
     // Sort once for the inline preview; the popover re-sorts the full list by
@@ -100,15 +125,15 @@ export const GlobalRecentChatsSection = memo(
     const hasOverflow = total > INLINE_LIMIT;
 
     return (
-      <div className={className}>
+      <div className={cn("tw-flex tw-flex-col tw-divide-y tw-divide-border", className)}>
+        {onCreate && <AgentHomeCreateRow label="New chat" onClick={onCreate} />}
         {total === 0 ? (
           <div className="tw-px-2 tw-py-1.5 tw-text-xs tw-text-muted">No recent chats</div>
         ) : (
-          <div className="tw-flex tw-flex-col tw-gap-0.5">
+          <>
             {inlineItems.map((item) => (
               <RecentChatRow key={item.id} item={item} onOpen={onLoadChat} />
             ))}
-
             {hasOverflow && (
               <ChatHistoryPopover
                 chatHistory={items}
@@ -155,12 +180,12 @@ export const GlobalRecentChatsSection = memo(
                     }
                   }}
                 >
-                  <span className="tw-pl-6">View all chats</span>
+                  <span>View all chats</span>
                   <ChevronRight className="tw-size-3 tw-shrink-0" />
                 </div>
               </ChatHistoryPopover>
             )}
-          </div>
+          </>
         )}
       </div>
     );

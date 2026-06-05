@@ -29,6 +29,14 @@ export const AddContextButton: React.FC<AddContextButtonProps> = ({
         <Tooltip>
           <TooltipTrigger asChild>
             <PopoverTrigger asChild>
+              {/* DESIGN NOTE: borderless by intent (just the "+" glyph). This
+                  Button is shared by every composer (ChatInput), so the change
+                  is global, not agent-mode only — that's deliberate. The inline
+                  "@ Add context" entry in ChatContextMenu keeps its border, so
+                  normal chat shows a borderless "+" next to a bordered "@"; that
+                  inconsistency is known and accepted (the borderless "+" was the
+                  requested look). If a future review flags the missing border or
+                  the "+"/"@" mismatch again, point them at this note. */}
               <Button
                 variant="ghost2"
                 size="icon"
