@@ -3,6 +3,7 @@ import type { TFile } from "obsidian";
 import { AgentSession, buildPromptBlocks, tryReadExitPlanModeCall } from "./AgentSession";
 import { AuthRequiredError, MethodUnsupportedError } from "./errors";
 import type {
+  AgentToolCallOutput,
   BackendDescriptor,
   BackendProcess,
   BackendState,
@@ -400,7 +401,8 @@ describe("AgentSession.sendPrompt", () => {
     await turn;
   });
 
-  it("truncates large text tool outputs before storing them in UI state", async () => {
+  // Emit one completed tool call with `text` output and return the stored output.
+  const storedToolOutput = async (text: string): Promise<AgentToolCallOutput | undefined> => {
     const mock = makeMockBackend();
     let resolvePrompt: ((v: { stopReason: "end_turn" }) => void) | null = null;
     mock.prompt.mockImplementation(
@@ -413,36 +415,34 @@ describe("AgentSession.sendPrompt", () => {
       backendId: "codex",
     });
     const { turn } = session.sendPrompt("hi");
-    const hugeOutput = "x".repeat(20_000);
-
     mock.emit({
       sessionId: "acp-1",
       update: {
         sessionUpdate: "tool_call_update",
         toolCallId: "tc1",
         status: "completed",
-        content: [{ type: "content", content: { type: "text", text: hugeOutput } }],
+        content: [{ type: "content", content: { type: "text", text } }],
       },
     });
-
-    const placeholder = session.store.getDisplayMessages().find((m) => m.sender === AI_SENDER);
-    const part = placeholder?.parts?.[0];
-    expect(part).toMatchObject({ kind: "tool_call", id: "tc1" });
-    if (part?.kind !== "tool_call") throw new Error("expected tool_call part");
-    const output = part.output?.[0];
-    expect(output).toMatchObject({
-      type: "text",
-      truncated: true,
-      originalLength: hugeOutput.length,
-      omittedLength: 8_000,
-    });
-    expect(output?.type === "text" ? output.text.length : 0).toBeLessThan(13_000);
-    expect(output?.type === "text" ? output.text : "").toContain(
-      "Tool output truncated in Copilot UI"
-    );
-
+    const part = session.store.getDisplayMessages().find((m) => m.sender === AI_SENDER)?.parts?.[0];
     resolvePrompt!({ stopReason: "end_turn" });
     await turn;
+    if (part?.kind !== "tool_call") throw new Error("expected tool_call part");
+    return part.output?.[0];
+  };
+
+  it("stores a large (but under-cap) text tool output in full", async () => {
+    const text = "x".repeat(100_000);
+    // 100k is far below the 256k runaway backstop, so it's preserved verbatim.
+    expect(await storedToolOutput(text)).toEqual({ type: "text", text });
+  });
+
+  it("trims a runaway tool output above the backstop, noting the agent got it all", async () => {
+    const output = await storedToolOutput("y".repeat(300_000));
+    if (output?.type !== "text") throw new Error("expected text output");
+    expect(output.text.length).toBeLessThan(300_000);
+    expect(output.text).toContain("Display trimmed");
+    expect(output.text).toContain("The agent received the full output");
   });
 
   it("cancel() sends cancel and aborts local controller", async () => {

@@ -344,13 +344,7 @@ export type AgentToolStatus = "pending" | "in_progress" | "completed" | "failed"
  * Mirrors a subset of ACP's `ToolCallContent` we render inline.
  */
 export type AgentToolCallOutput =
-  | {
-      type: "text";
-      text: string;
-      truncated?: boolean;
-      originalLength?: number;
-      omittedLength?: number;
-    }
+  | { type: "text"; text: string }
   | { type: "diff"; path: string; oldText: string | null; newText: string };
 
 /**

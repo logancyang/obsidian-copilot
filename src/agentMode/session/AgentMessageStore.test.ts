@@ -138,17 +138,7 @@ describe("AgentMessageStore", () => {
       title: "Search",
       status: "completed",
       input: { query: "communication drill", nested: { text: "x".repeat(20_000) } },
-      output: [
-        {
-          type: "text",
-          text:
-            "a".repeat(12_000) +
-            "\n\n[Tool output truncated in Copilot UI: 8,000 characters omitted.]",
-          truncated: true,
-          originalLength: 20_000,
-          omittedLength: 8_000,
-        },
-      ],
+      output: [{ type: "text", text: "a".repeat(20_000) }],
     };
 
     expect(store.upsertAgentPart(id, part)).toBe(true);

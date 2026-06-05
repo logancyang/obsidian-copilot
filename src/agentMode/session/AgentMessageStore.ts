@@ -125,12 +125,7 @@ function toolOutputsEqual(
       );
     }
     if (output.type === "text" && other.type === "text") {
-      return (
-        output.truncated === other.truncated &&
-        output.originalLength === other.originalLength &&
-        output.omittedLength === other.omittedLength &&
-        textFingerprint(output.text) === textFingerprint(other.text)
-      );
+      return textFingerprint(output.text) === textFingerprint(other.text);
     }
     return false;
   });

@@ -40,7 +40,15 @@ import { getSettings } from "@/settings/model";
  * showing "New session - 2026-…" before the LLM-generated label arrives.
  */
 const DEFAULT_TITLE_PREFIX = "New session";
-const MAX_TOOL_OUTPUT_TEXT_CHARS = 12_000;
+/**
+ * Memory backstop for tool output kept in long-lived React state — NOT a
+ * display cap. At ~256KB it sits far above any realistic command/search/file
+ * result (the chat renders output collapsed in a scrollable box, so normal and
+ * large outputs show in full), and only a runaway multi-hundred-KB blob is
+ * trimmed to stop the message store from holding it for the whole session. The
+ * agent's own context always receives the full output regardless.
+ */
+const MAX_TOOL_OUTPUT_TEXT_CHARS = 256_000;
 // Shared sentinel so `getPendingToolPermissions()` returns a stable reference
 // when nothing is pending — preserves React `useState` setter bail-out
 // behavior on idle subscription ticks.
@@ -1459,7 +1467,7 @@ function extractToolCallOutputs(
   const outputs: AgentToolCallOutput[] = [];
   for (const item of content) {
     if (item.type === "content" && item.content.type === "text") {
-      outputs.push(truncateToolOutputText(item.content.text));
+      outputs.push(capToolOutputText(item.content.text));
     } else if (item.type === "diff") {
       outputs.push({
         type: "diff",
@@ -1473,24 +1481,19 @@ function extractToolCallOutputs(
 }
 
 /**
- * Keep large command/search results out of long-lived React state. The full
- * frame log still captures diagnostic summaries; the UI only needs enough
- * text to identify the result and avoid runaway memory growth.
+ * Pass tool-output text through untouched unless it exceeds the runaway
+ * backstop ({@link MAX_TOOL_OUTPUT_TEXT_CHARS}). The marker is explicit that
+ * only the *display* copy is trimmed and the agent still got everything, so a
+ * user never reads it as lost data.
  */
-function truncateToolOutputText(text: string): AgentToolCallOutput {
-  if (text.length <= MAX_TOOL_OUTPUT_TEXT_CHARS) {
-    return { type: "text", text };
-  }
-
-  const omittedLength = text.length - MAX_TOOL_OUTPUT_TEXT_CHARS;
+function capToolOutputText(text: string): AgentToolCallOutput {
+  if (text.length <= MAX_TOOL_OUTPUT_TEXT_CHARS) return { type: "text", text };
+  const omitted = text.length - MAX_TOOL_OUTPUT_TEXT_CHARS;
   return {
     type: "text",
     text:
       text.slice(0, MAX_TOOL_OUTPUT_TEXT_CHARS) +
-      `\n\n[Tool output truncated in Copilot UI: ${omittedLength.toLocaleString()} characters omitted.]`,
-    truncated: true,
-    originalLength: text.length,
-    omittedLength,
+      `\n\n[Display trimmed: ${omitted.toLocaleString()} more characters. The agent received the full output.]`,
   };
 }
 
