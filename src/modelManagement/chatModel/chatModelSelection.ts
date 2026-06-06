@@ -1,22 +1,12 @@
 import { ChatModelProviders } from "@/constants";
 import type { EnabledBackendEntry } from "@/modelManagement/types/runtime";
 
-import { mapProviderTypeToChatModelProvider } from "./configuredModelToCustomModel";
+import {
+  CATALOG_ID_TO_CHAT_PROVIDER,
+  mapProviderTypeToChatModelProvider,
+} from "./configuredModelToCustomModel";
 
 export type ResolvedChatBackendEntry = Extract<EnabledBackendEntry, { state: "ok" }>;
-
-const CATALOG_ID_TO_LEGACY_PROVIDER: Record<string, ChatModelProviders> = {
-  anthropic: ChatModelProviders.ANTHROPIC,
-  openai: ChatModelProviders.OPENAI,
-  google: ChatModelProviders.GOOGLE,
-  openrouter: ChatModelProviders.OPENROUTERAI,
-  xai: ChatModelProviders.XAI,
-  groq: ChatModelProviders.GROQ,
-  mistral: ChatModelProviders.MISTRAL,
-  deepseek: ChatModelProviders.DEEPSEEK,
-  cohere: ChatModelProviders.COHEREAI,
-  siliconflow: ChatModelProviders.SILICONFLOW,
-};
 
 const DISPLAY_NAME_TO_LEGACY_PROVIDER: Record<string, ChatModelProviders> = {
   ollama: ChatModelProviders.OLLAMA,
@@ -39,7 +29,7 @@ function getLegacyChatModelKeys(entry: ResolvedChatBackendEntry): readonly strin
     providers.add(ChatModelProviders.COPILOT_PLUS);
   }
   if (entry.provider.origin.kind === "byok" && entry.provider.origin.catalogProviderId) {
-    const catalogProvider = CATALOG_ID_TO_LEGACY_PROVIDER[entry.provider.origin.catalogProviderId];
+    const catalogProvider = CATALOG_ID_TO_CHAT_PROVIDER[entry.provider.origin.catalogProviderId];
     if (catalogProvider) providers.add(catalogProvider);
   }
   const displayProvider = DISPLAY_NAME_TO_LEGACY_PROVIDER[entry.provider.displayName.toLowerCase()];

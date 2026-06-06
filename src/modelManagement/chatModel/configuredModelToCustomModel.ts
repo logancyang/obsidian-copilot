@@ -19,15 +19,20 @@ import { providerRequiresApiKey } from "@/modelManagement/providers/providerRequ
 import type { ConfiguredModel, Provider } from "@/modelManagement/types/persisted";
 
 /**
- * `models.dev` catalog provider ids that have a dedicated
- * `ChatModelProviders` constructor in `ChatModelManager`. Everything else
- * `openai-compatible` (including the Ollama / LM Studio built-in templates,
- * whose base URLs already carry `/v1`, and arbitrary custom proxies) routes
- * through `OPENAI_FORMAT` — generic `ChatOpenAI` driven by the provider's
- * `baseUrl`. Falling through is safe: it loses provider-specific niceties
- * (e.g. OpenRouter reasoning/caching headers) but still serves chat.
+ * Canonical `models.dev` catalog-id → legacy `ChatModelProviders` table. Two consumers:
+ *  - `mapProviderTypeToChatModelProvider` refines an `openai-compatible` provider into its
+ *    dedicated `ChatModelManager` constructor. Everything else (the Ollama / LM Studio
+ *    built-in templates, whose base URLs already carry `/v1`, and arbitrary custom proxies)
+ *    routes through `OPENAI_FORMAT` — generic `ChatOpenAI` driven by the provider's
+ *    `baseUrl`. Falling through is safe: it loses provider-specific niceties (e.g. OpenRouter
+ *    reasoning/caching headers) but still serves chat.
+ *  - `getLegacyChatModelKeys` (in `chatModelSelection`) enumerates legacy `name|provider`
+ *    selection keys.
+ * `anthropic`/`google` are included for the legacy-key path; the chat path reaches them via
+ * the `providerType` switch *before* this lookup, so they're never consulted in the
+ * `openai-compatible` branch.
  */
-const CATALOG_ID_TO_CHAT_PROVIDER: Record<string, ChatModelProviders> = {
+export const CATALOG_ID_TO_CHAT_PROVIDER: Record<string, ChatModelProviders> = {
   openai: ChatModelProviders.OPENAI,
   groq: ChatModelProviders.GROQ,
   mistral: ChatModelProviders.MISTRAL,
@@ -36,6 +41,8 @@ const CATALOG_ID_TO_CHAT_PROVIDER: Record<string, ChatModelProviders> = {
   xai: ChatModelProviders.XAI,
   cohere: ChatModelProviders.COHEREAI,
   siliconflow: ChatModelProviders.SILICONFLOW,
+  anthropic: ChatModelProviders.ANTHROPIC,
+  google: ChatModelProviders.GOOGLE,
 };
 
 function normalizeBaseUrl(value: string | undefined): string {
