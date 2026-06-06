@@ -106,19 +106,26 @@ const OpencodeManagedInstall: React.FC<{
 
   React.useEffect(() => () => abortRef.current?.abort(), []);
 
-  const handleUninstall = React.useCallback(() => {
+  // Uninstall fully reclaims opencode: it removes every downloaded copy — all
+  // versions under ~/.obsidian-copilot/opencode AND the old pre-migration copy
+  // inside the vault — and clears managed settings. The in-vault sweep lets a
+  // preview tester move off the synced binary in one click (Uninstall, then
+  // Install). The confirm shows the reclaimable size.
+  const handleUninstall = React.useCallback(async () => {
+    const bytes = await manager.downloadsSize().catch(() => 0);
     new ConfirmModal(
       app,
       async () => {
         try {
           await manager.uninstall();
-          new Notice("opencode uninstalled.");
+          new Notice(`opencode uninstalled${bytes > 0 ? ` (freed ${formatBytes(bytes)})` : ""}.`);
         } catch (e) {
           logError("[AgentMode] uninstall failed", e);
           new Notice(`Uninstall failed: ${e instanceof Error ? e.message : String(e)}`);
         }
       },
-      "Remove the installed opencode binary? Your BYOK keys and MCP config will be kept.",
+      `Remove all downloaded opencode binaries${bytes > 0 ? ` (${formatBytes(bytes)})` : ""}, ` +
+        "including any old copy inside your vault? Your custom binary path and BYOK keys are kept.",
       "Uninstall opencode",
       "Uninstall"
     ).open();

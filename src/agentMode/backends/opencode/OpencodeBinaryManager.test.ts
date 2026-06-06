@@ -56,6 +56,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import {
   computeInstallState,
+  legacyVaultDataDir,
   opencodeManagedDataDir,
   OpencodeBinaryManager,
   parseVersionFromStdout,
@@ -80,15 +81,19 @@ const FileSystemAdapterMock = jest.requireMock("obsidian").FileSystemAdapter as 
   getBasePath: () => string;
 };
 
+// Deliberately not ".obsidian": the config dir is user-configurable, so using a
+// non-default value proves the legacy-path code reads `vault.configDir`.
+const CONFIG_DIR = "my-config";
+
 /**
  * A desktop CopilotPlugin stand-in whose vault adapter passes the
- * `instanceof FileSystemAdapter` guard so getDataDir() resolves.
+ * `instanceof FileSystemAdapter` guard so getDataDir()/legacy paths resolve.
  */
-function vaultPlugin(pluginId = "copilot-test"): never {
+function vaultPlugin(vaultBase = "/vault", pluginId = "copilot-test"): never {
   const adapter = new FileSystemAdapterMock();
-  adapter.getBasePath = () => "/vault";
+  adapter.getBasePath = () => vaultBase;
   return {
-    app: { vault: { adapter } },
+    app: { vault: { adapter, configDir: CONFIG_DIR } },
     manifest: { id: pluginId },
   } as never;
 }
@@ -438,4 +443,101 @@ describe("install-dir paths (outside the vault)", () => {
       expect(() => mgr.getDataDir()).toThrow(/home directory/i);
     }
   );
+});
+
+describe("OpencodeBinaryManager.uninstall / downloadsSize", () => {
+  let home: string;
+
+  beforeEach(async () => {
+    home = await fs.promises.mkdtemp(path.join(os.tmpdir(), "opencode-home-"));
+    jest.mocked(os.homedir).mockReturnValue(home);
+  });
+
+  afterEach(async () => {
+    jest.mocked(os.homedir).mockReset();
+    await fs.promises.rm(home, { recursive: true, force: true });
+  });
+
+  /** Seed two managed version dirs under the OS-local install root. */
+  async function seedDownloads(mgr: OpencodeBinaryManager): Promise<string> {
+    const dataDir = mgr.getDataDir();
+    for (const [version, bytes] of [
+      ["1.14.0", 10],
+      ["1.15.0", 25],
+    ] as const) {
+      const bin = path.join(dataDir, version, "bin", "opencode");
+      await fs.promises.mkdir(path.dirname(bin), { recursive: true });
+      await fs.promises.writeFile(bin, "x".repeat(bytes));
+    }
+    return dataDir;
+  }
+
+  it("downloadsSize sums every downloaded binary; 0 when none", async () => {
+    const mgr = new OpencodeBinaryManager(vaultPlugin());
+    expect(await mgr.downloadsSize()).toBe(0);
+    await seedDownloads(mgr);
+    expect(await mgr.downloadsSize()).toBe(35);
+  });
+
+  it("uninstall wipes the whole install dir and clears managed settings", async () => {
+    const mgr = new OpencodeBinaryManager(vaultPlugin());
+    const dataDir = await seedDownloads(mgr);
+    settingsMock.__reset({
+      binaryPath: path.join(dataDir, "1.15.0", "bin", "opencode"),
+      binaryVersion: "1.15.0",
+      binarySource: "managed",
+    });
+
+    await mgr.uninstall();
+
+    expect(fs.existsSync(dataDir)).toBe(false);
+    expect(settingsMock.__get()).toEqual({
+      binaryPath: undefined,
+      binaryVersion: undefined,
+      binarySource: undefined,
+    });
+  });
+
+  it("uninstall keeps a custom binary path setting (only reclaims downloads)", async () => {
+    const mgr = new OpencodeBinaryManager(vaultPlugin());
+    const dataDir = await seedDownloads(mgr);
+    settingsMock.__reset({
+      binaryPath: "/usr/local/bin/opencode",
+      binaryVersion: "1.99.0",
+      binarySource: "custom",
+    });
+
+    await mgr.uninstall();
+
+    expect(fs.existsSync(dataDir)).toBe(false);
+    expect(settingsMock.__get().binaryPath).toBe("/usr/local/bin/opencode");
+  });
+
+  it("also counts and removes the pre-migration in-vault copy (one-click migration)", async () => {
+    const vaultBase = await fs.promises.mkdtemp(path.join(os.tmpdir(), "opencode-vault-"));
+    try {
+      const mgr = new OpencodeBinaryManager(vaultPlugin(vaultBase));
+      // Simulate a just-updated tester: binary still lives only inside the vault.
+      const legacy = legacyVaultDataDir(vaultBase, CONFIG_DIR, "copilot-test");
+      const legacyBin = path.join(legacy, "1.14.0", "bin", "opencode");
+      await fs.promises.mkdir(path.dirname(legacyBin), { recursive: true });
+      await fs.promises.writeFile(legacyBin, "z".repeat(40));
+      settingsMock.__reset({
+        binaryPath: legacyBin,
+        binaryVersion: "1.14.0",
+        binarySource: "managed",
+      });
+
+      // Counted even though nothing is in the OS-local dir yet, so the button
+      // isn't a no-op for a freshly-updated tester.
+      expect(await mgr.downloadsSize()).toBe(40);
+
+      await mgr.uninstall();
+
+      expect(fs.existsSync(legacy)).toBe(false);
+      expect(settingsMock.__get().binaryPath).toBeUndefined();
+    } finally {
+      await fs.promises.rm(vaultBase, { recursive: true, force: true });
+    }
+  });
 });

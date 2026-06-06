@@ -176,6 +176,23 @@ export function opencodeManagedDataDir(homeDir: string): string {
 }
 
 /**
+ * The pre-#2569 in-vault install root,
+ * `<vault>/.obsidian/plugins/<id>/data/opencode`. Managed installs used to
+ * live here and were replicated across devices by every sync service.
+ *
+ * Kept only so the user-triggered {@link OpencodeBinaryManager.uninstall} can
+ * reclaim a preview tester's stale in-vault copy in the same click — there is
+ * no auto-running migration. Never written to.
+ */
+export function legacyVaultDataDir(
+  vaultBasePath: string,
+  configDir: string,
+  pluginId: string
+): string {
+  return path.join(vaultBasePath, configDir, "plugins", pluginId, "data", "opencode");
+}
+
+/**
  * Manages the lifecycle of the opencode binary on disk: platform-aware
  * download from GitHub releases, extraction into a per-user OS-local dir
  * (outside the vault, see {@link opencodeManagedDataDir}), and persistence of
@@ -434,19 +451,52 @@ export class OpencodeBinaryManager {
   }
 
   /**
-   * Remove the active managed version dir and clear settings. For a custom
-   * binary this only clears settings — the binary on disk belongs to the user
-   * and we don't touch it. Other version dirs are kept either way.
+   * Every dir {@link uninstall} reclaims: the OS-local managed root plus the
+   * pre-#2569 in-vault copy (so a tester who just updated, and still has the
+   * binary only inside the vault, isn't told there's nothing to remove).
+   * `getDataDir()` is resolved defensively so a bad home dir doesn't block
+   * reclaiming the in-vault copy.
    */
-  async uninstall(): Promise<void> {
-    const s = readOpencodeSettings();
-    if (s.binarySource === "managed" && s.binaryVersion) {
-      const versionDir = path.join(this.getDataDir(), s.binaryVersion);
-      await removeDir(versionDir).catch((e) =>
-        logError(`[AgentMode] failed to remove ${versionDir}`, e)
+  private reclaimableDirs(): string[] {
+    const dirs: string[] = [];
+    try {
+      dirs.push(this.getDataDir());
+    } catch {
+      /* unusable home dir — nothing managed to reclaim there */
+    }
+    const adapter = this.plugin.app.vault.adapter;
+    if (adapter instanceof FileSystemAdapter) {
+      dirs.push(
+        legacyVaultDataDir(
+          adapter.getBasePath(),
+          this.plugin.app.vault.configDir,
+          this.plugin.manifest.id
+        )
       );
     }
-    clearOpencodeBinary();
+    return dirs;
+  }
+
+  /** Total bytes of every downloaded managed binary (OS-local + legacy in-vault). */
+  async downloadsSize(): Promise<number> {
+    const sizes = await Promise.all(this.reclaimableDirs().map(dirSize));
+    return sizes.reduce((total, n) => total + n, 0);
+  }
+
+  /**
+   * Uninstall the managed opencode binary: remove EVERY downloaded copy — the
+   * whole OS-local `~/.obsidian-copilot/opencode` tree (all versions) AND the
+   * pre-#2569 in-vault copy — then clear managed settings.
+   *
+   * Wiping the legacy in-vault dir here means a preview tester migrates off the
+   * synced copy in one click (Uninstall, then Install). A custom binary path is
+   * left untouched — it lives outside our dirs and belongs to the user.
+   */
+  async uninstall(): Promise<void> {
+    await Promise.all(this.reclaimableDirs().map((dir) => removeDir(dir)));
+    if (readOpencodeSettings().binarySource !== "custom") {
+      clearOpencodeBinary();
+    }
   }
 
   /**
@@ -535,6 +585,29 @@ async function readManifest(p: string): Promise<InstallManifest | null> {
 
 async function removeDir(p: string): Promise<void> {
   await fs.promises.rm(p, { recursive: true, force: true });
+}
+
+/** Recursively sum the byte size of all files under `dir`; 0 if it's absent. */
+async function dirSize(dir: string): Promise<number> {
+  let entries: fs.Dirent[];
+  try {
+    entries = await fs.promises.readdir(dir, { withFileTypes: true });
+  } catch {
+    return 0;
+  }
+  let total = 0;
+  for (const e of entries) {
+    const full = path.join(dir, e.name);
+    if (e.isDirectory()) {
+      total += await dirSize(full);
+    } else if (e.isFile()) {
+      total += await fs.promises
+        .stat(full)
+        .then((s) => s.size)
+        .catch(() => 0);
+    }
+  }
+  return total;
 }
 
 /**
