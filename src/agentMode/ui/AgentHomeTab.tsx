@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import React, { memo } from "react";
 
@@ -14,6 +15,10 @@ interface AgentHomeTabProps {
   onClick: () => void;
   /** id of the panel this tab controls, for `aria-controls`. */
   controlsId: string;
+  /** When true, the tab is greyed out and cannot be selected. */
+  disabled?: boolean;
+  /** Hover hint shown over a disabled tab (e.g. "Coming soon"). */
+  disabledTooltip?: string;
 }
 
 /**
@@ -23,6 +28,12 @@ interface AgentHomeTabProps {
  * no shadow. Built on the shared {@link Button} with the `ghost2` variant (which
  * carries `clickable-icon`, resetting Obsidian's native button chrome so a tab
  * doesn't render as a raised default button) and `role="tab"` for the tablist.
+ *
+ * A `disabled` tab is greyed and non-activating (a feature not yet shipped). We
+ * use `aria-disabled` + a no-op click rather than the native `disabled`
+ * attribute so the element still receives the pointer events the hover tooltip
+ * needs; the shelf also refuses to make a disabled tab active. The count is
+ * hidden while disabled so an unreleased feature doesn't surface a tally.
  */
 export const AgentHomeTab = memo(function AgentHomeTab({
   id,
@@ -32,8 +43,10 @@ export const AgentHomeTab = memo(function AgentHomeTab({
   active,
   onClick,
   controlsId,
+  disabled = false,
+  disabledTooltip,
 }: AgentHomeTabProps): React.ReactElement {
-  return (
+  const tab = (
     <Button
       id={id}
       type="button"
@@ -41,20 +54,35 @@ export const AgentHomeTab = memo(function AgentHomeTab({
       variant="ghost2"
       aria-selected={active}
       aria-controls={controlsId}
-      onClick={onClick}
+      aria-disabled={disabled || undefined}
+      onClick={disabled ? undefined : onClick}
       className={cn(
         "tw-h-auto tw-flex-1 tw-gap-2 tw-rounded-md tw-px-3 tw-py-1.5",
         "tw-text-ui-small tw-font-medium tw-duration-200",
-        active
-          ? "tw-bg-primary tw-text-normal hover:tw-bg-primary"
-          : "tw-bg-transparent tw-text-muted hover:tw-bg-modifier-hover hover:tw-text-normal"
+        disabled
+          ? "tw-cursor-not-allowed tw-bg-transparent tw-text-muted tw-opacity-50"
+          : active
+            ? "tw-bg-primary tw-text-normal hover:tw-bg-primary"
+            : "tw-bg-transparent tw-text-muted hover:tw-bg-modifier-hover hover:tw-text-normal"
       )}
     >
       <span className="tw-flex tw-shrink-0 tw-items-center tw-text-muted">{icon}</span>
       <span>{title}</span>
-      <span className={cn("tw-text-ui-smaller", active ? "tw-text-muted" : "tw-text-faint")}>
-        {count}
-      </span>
+      {!disabled && (
+        <span className={cn("tw-text-ui-smaller", active ? "tw-text-muted" : "tw-text-faint")}>
+          {count}
+        </span>
+      )}
     </Button>
   );
+
+  if (disabled && disabledTooltip) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>{tab}</TooltipTrigger>
+        <TooltipContent side="top">{disabledTooltip}</TooltipContent>
+      </Tooltip>
+    );
+  }
+  return tab;
 });

@@ -11,6 +11,14 @@ export interface AgentHomeShelfSection {
   count: number;
   /** Rendered into the panel while this tab is the selected one. */
   renderBody: () => React.ReactNode;
+  /**
+   * When true, the tab is greyed out and cannot be selected, and its body is
+   * never mounted (used for features that aren't shipped yet). The shelf keeps
+   * a disabled section from becoming active, so its `renderBody` never runs.
+   */
+  disabled?: boolean;
+  /** Hover hint shown over a disabled tab (e.g. "Coming soon"). */
+  disabledTooltip?: string;
 }
 
 interface AgentHomeShelfProps {
@@ -26,8 +34,12 @@ interface AgentHomeShelfProps {
  * tabs doesn't change the card height.
  */
 export function AgentHomeShelf({ sections, className }: AgentHomeShelfProps): React.ReactElement {
-  const [activeId, setActiveId] = useState<string | null>(sections[0]?.id ?? null);
-  const active = sections.find((s) => s.id === activeId) ?? sections[0] ?? null;
+  // Default to (and only ever resolve to) the first selectable section — a
+  // disabled tab can't be activated, so its body never mounts.
+  const firstSelectable = sections.find((s) => !s.disabled) ?? null;
+  const [activeId, setActiveId] = useState<string | null>(firstSelectable?.id ?? null);
+  const requested = sections.find((s) => s.id === activeId);
+  const active = requested && !requested.disabled ? requested : firstSelectable;
   const panelId = useId();
 
   // Stable per-tab id so the single shared panel can point back at the *active*
@@ -65,6 +77,8 @@ export function AgentHomeShelf({ sections, className }: AgentHomeShelfProps): Re
             count={section.count}
             active={section.id === active.id}
             controlsId={panelId}
+            disabled={section.disabled}
+            disabledTooltip={section.disabledTooltip}
             onClick={() => setActiveId(section.id)}
           />
         ))}

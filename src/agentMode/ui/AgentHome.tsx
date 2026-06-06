@@ -164,12 +164,11 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
 
   const projects = useProjects();
 
-  // Read-only landing in PR1: selecting a project only surfaces a coming-soon
-  // notice — no project entry, no setCurrentProject, no usage touch, no session
-  // or history-scope change.
-  const handleProjectComingSoon = useCallback(() => {
-    new Notice("Projects are coming soon.");
-  }, []);
+  // Projects aren't shipped yet, so the Projects tab is disabled on the shelf
+  // (greyed, "Coming soon" on hover) and its list never mounts. This no-op
+  // stands in for ProjectPickerList's required handlers until selection lands;
+  // it's unreachable while the tab is disabled.
+  const handleProjectComingSoon = useCallback(() => {}, []);
 
   // Landing "New chat": spin up a fresh session in a new tab, the same path the
   // tab strip's "+" uses. Guard on getIsStarting() like handleNewChat above and
@@ -252,19 +251,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   const landingSections = useMemo<AgentHomeShelfSection[]>(
     () => [
       {
-        id: "projects",
-        icon: <Folder className="tw-size-4" />,
-        title: "Projects",
-        count: projects.length,
-        renderBody: () => (
-          <ProjectPickerList
-            projects={projects}
-            onSelect={handleProjectComingSoon}
-            onCreate={handleProjectComingSoon}
-          />
-        ),
-      },
-      {
         id: "chats",
         icon: <MessageSquare className="tw-size-4" />,
         title: "Recent Chats",
@@ -278,6 +264,24 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
             onOpenSourceFile={handleOpenSourceFile}
             onLoadHistory={handleLoadChatHistory}
             onCreate={handleCreateChat}
+          />
+        ),
+      },
+      {
+        // Projects isn't shipped yet: greyed on the right, "Coming soon" on
+        // hover, and its list never mounts (the shelf won't make a disabled
+        // tab active). Kept wired to ProjectPickerList for when selection lands.
+        id: "projects",
+        icon: <Folder className="tw-size-4" />,
+        title: "Projects",
+        count: projects.length,
+        disabled: true,
+        disabledTooltip: "Coming soon",
+        renderBody: () => (
+          <ProjectPickerList
+            projects={projects}
+            onSelect={handleProjectComingSoon}
+            onCreate={handleProjectComingSoon}
           />
         ),
       },
