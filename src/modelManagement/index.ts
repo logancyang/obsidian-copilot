@@ -43,7 +43,6 @@ export {
 } from "./chatModel/configuredModelToCustomModel";
 export {
   findChatBackendEntry,
-  getLegacyChatModelKey,
   isChatModelSelectionForEntry,
   resolveChatModelSelectionId,
 } from "./chatModel/chatModelSelection";

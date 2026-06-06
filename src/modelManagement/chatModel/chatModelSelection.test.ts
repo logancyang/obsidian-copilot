@@ -2,11 +2,7 @@ import { ChatModelProviders } from "@/constants";
 import type { ConfiguredModel, Provider } from "@/modelManagement/types/persisted";
 import type { EnabledBackendEntry } from "@/modelManagement/types/runtime";
 
-import {
-  findChatBackendEntry,
-  getLegacyChatModelKey,
-  resolveChatModelSelectionId,
-} from "./chatModelSelection";
+import { findChatBackendEntry, resolveChatModelSelectionId } from "./chatModelSelection";
 
 function provider(id: string, overrides: Partial<Provider> = {}): Provider {
   return {
@@ -47,7 +43,6 @@ describe("chatModelSelection", () => {
     const p = provider("p1");
     const target = entry("a", "gpt-4o", p);
 
-    expect(getLegacyChatModelKey(target)).toBe(`gpt-4o|${ChatModelProviders.OPENAI}`);
     expect(resolveChatModelSelectionId([target], `gpt-4o|${ChatModelProviders.OPENAI}`)).toBe("a");
   });
 

@@ -26,11 +26,11 @@ const DISPLAY_NAME_TO_LEGACY_PROVIDER: Record<string, ChatModelProviders> = {
   siliconflow: ChatModelProviders.SILICONFLOW,
 };
 
-/** Legacy selections used `wireModelId|ChatModelProviders`; keep them readable during migration. */
-export function getLegacyChatModelKey(entry: ResolvedChatBackendEntry): string {
-  return `${entry.configuredModel.info.id}|${mapProviderTypeToChatModelProvider(entry.provider)}`;
-}
-
+/**
+ * Legacy selections used `wireModelId|ChatModelProviders`; keep them resolvable
+ * during migration. A model may have been persisted under different provider
+ * spellings depending on how it was selected, so enumerate every plausible form.
+ */
 function getLegacyChatModelKeys(entry: ResolvedChatBackendEntry): readonly string[] {
   const providers = new Set<ChatModelProviders>([
     mapProviderTypeToChatModelProvider(entry.provider),
