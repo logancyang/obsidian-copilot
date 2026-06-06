@@ -276,10 +276,16 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     // same gate-aware seed pass against the current folder.
     const prevFolder = prev.agentMode?.skills?.folder ?? DEFAULT_SKILLS_FOLDER;
     const nextFolder = next.agentMode?.skills?.folder ?? DEFAULT_SKILLS_FOLDER;
+    // `shouldUseMiyo` depends on `isSelfHostAccessValid()`, which reads the
+    // self-host validation fields — and those are refreshed asynchronously at
+    // startup (after the initial seed pass). Watch them too, so the skill is
+    // re-seeded when validation flips invalid→valid without a reload.
     const miyoAvailabilityChanged =
       prev.enableMiyo !== next.enableMiyo ||
       prev.miyoServerUrl !== next.miyoServerUrl ||
-      prev.isPlusUser !== next.isPlusUser;
+      prev.isPlusUser !== next.isPlusUser ||
+      prev.selfHostModeValidatedAt !== next.selfHostModeValidatedAt ||
+      prev.selfHostValidationCount !== next.selfHostValidationCount;
     if (prevFolder !== nextFolder || miyoAvailabilityChanged) {
       void seedManagedBuiltins(nextFolder).catch((e) =>
         logError("[Skills] builtin skill re-seeding failed", e)
