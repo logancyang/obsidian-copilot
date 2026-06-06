@@ -41,6 +41,28 @@ if (typeof import_meta === 'undefined') {
     url: typeof __filename !== 'undefined' ? 'file://' + __filename : 'file:///obsidian-plugin'
   };
 }
+
+// Minimal \`process\` shim so the bundle survives MODULE EVALUATION on Obsidian
+// mobile, whose WebView has no Node \`process\` global. Desktop-only code (Agent
+// Mode) is statically imported and therefore evaluated on every platform; many
+// of those modules — and bundled Node deps — read \`process.platform\`/\`.env\` at
+// module scope, which throws "Can't find variable: process" on mobile and kills
+// the whole plugin at load. On desktop (Electron) \`globalThis.process\` exists
+// and is used as-is, so this only stubs mobile, where those code paths never run.
+var process = globalThis.process || {
+  env: {},
+  platform: '',
+  arch: '',
+  argv: [],
+  version: '',
+  versions: {},
+  cwd: function () { return '/'; },
+  nextTick: function (cb) { Promise.resolve().then(cb); },
+  on: function () {},
+  off: function () {},
+  once: function () {},
+  emit: function () { return false; },
+};
 `;
 
 const prod = process.argv[2] === "production";
