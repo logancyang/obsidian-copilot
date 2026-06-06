@@ -1,8 +1,3 @@
-// Must be the first import — patches Node's `events.setMaxListeners` so the
-// Claude Agent SDK's call with a web-realm AbortSignal stops throwing in
-// Electron's renderer. See file for details.
-import "@/utils/rendererEventsShim";
-
 import {
   AGENT_CHAT_MODE,
   CopilotAgentView,
@@ -82,6 +77,7 @@ import {
 } from "@/settings/model";
 import { dehydrateDeviceProfile, hydrateDeviceProfile } from "@/settings/deviceProfiles";
 import { getDeviceId } from "@/utils/deviceId";
+import { installRendererEventsShim } from "@/utils/rendererEventsShim";
 import { ProjectContextCache } from "@/cache/projectContextCache";
 import { ContextProcessor } from "@/contextProcessor";
 import { CustomCommandManager } from "@/commands/customCommandManager";
@@ -155,6 +151,12 @@ export default class CopilotPlugin extends Plugin {
   private webSelectionTracker?: WebSelectionTracker;
   private readonly chatHistoryLastAccessedAtManager = new RecentUsageManager<string>();
   async onload(): Promise<void> {
+    // Patch Node's `events.setMaxListeners` so the Claude Agent SDK's call with
+    // a web-realm AbortSignal stops throwing in Electron's renderer. No-ops on
+    // mobile (no node:events / no SDK). Must run before any Agent Mode session;
+    // doing it here (not as a module-load side effect) keeps mobile from
+    // evaluating `node:events` at import and crashing the whole plugin.
+    installRendererEventsShim();
     // Reason: clear stale module-level persistence state + KeychainService
     // singleton left over from a previous plugin lifecycle in the same
     // process (disable→enable, dev hot reload, "Open another vault" without

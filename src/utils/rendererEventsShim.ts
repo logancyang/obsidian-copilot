@@ -1,3 +1,4 @@
+import { Platform } from "obsidian";
 import { EventEmitter } from "node:events";
 
 type SetMaxListenersFn = (n?: number, ...targets: unknown[]) => void;
@@ -39,8 +40,16 @@ function hasAbortSignalShape(value: unknown): boolean {
  *
  * The wrapper drops the throw only when every supplied target looks like an
  * `AbortSignal`; unrelated misuse still propagates.
+ *
+ * Desktop (Electron renderer) only. On mobile there is no `node:events` (it's
+ * marked external and resolves to `undefined`) and no Claude Agent SDK to shim,
+ * so this is a no-op there. The mobile guard returns BEFORE any `EventEmitter`
+ * access, which is why this must not run at module load: a side-effect call
+ * referencing `EventEmitter` crashes the whole plugin on mobile during import
+ * (`undefined is not an object`). Call it once from `onload` instead.
  */
-function installShim(): void {
+export function installRendererEventsShim(): void {
+  if (Platform.isMobile) return;
   const target = EventEmitter as unknown as { setMaxListeners: MarkedFn };
   const original = target.setMaxListeners;
   if (original[APPLIED]) return;
@@ -57,5 +66,3 @@ function installShim(): void {
 
   target.setMaxListeners = wrapped;
 }
-
-installShim();
