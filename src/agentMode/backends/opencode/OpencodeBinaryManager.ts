@@ -217,29 +217,6 @@ export class OpencodeBinaryManager {
     return opencodeManagedDataDir(os.homedir());
   }
 
-  /**
-   * Delete sibling version dirs under `dataDir` other than `keepVersion`, so a
-   * version bump doesn't leave the old multi-MB binary behind forever. Skips
-   * dotfile dirs (`.tmp-*` / `.old-*` in-flight staging) and ignores per-entry
-   * failures — pruning is best-effort housekeeping, never fatal to an install.
-   */
-  private async pruneOtherVersions(dataDir: string, keepVersion: string): Promise<void> {
-    let entries: fs.Dirent[];
-    try {
-      entries = await fs.promises.readdir(dataDir, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    await Promise.all(
-      entries.map(async (e) => {
-        if (!e.isDirectory() || e.name === keepVersion || e.name.startsWith(".")) return;
-        await removeDir(path.join(dataDir, e.name)).catch((err) =>
-          logWarn(`[AgentMode] failed to prune old opencode version ${e.name}: ${err}`)
-        );
-      })
-    );
-  }
-
   getPinnedVersion(): string {
     return OPENCODE_PINNED_VERSION;
   }
@@ -361,9 +338,6 @@ export class OpencodeBinaryManager {
         binaryPath: finalBinPath,
         binarySource: "managed",
       });
-      // Drop superseded version dirs so installs don't accumulate (the in-vault
-      // layout used to keep every version, which is how it grew to 200MB+).
-      await this.pruneOtherVersions(dataDir, version);
       opts.onProgress?.({ phase: "done", version, path: finalBinPath });
       logInfo(`[AgentMode] opencode ${version} installed at ${finalBinPath}`);
       return { version, path: finalBinPath };
