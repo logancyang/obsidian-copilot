@@ -4,7 +4,7 @@ import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
 import type { AgentToolStatus } from "@/agentMode/session/types";
 import { lookupToolSummary } from "@/agentMode/ui/toolSummaries";
 import { renderDiff } from "@/agentMode/ui/diffRender";
-import { getVaultBase } from "@/agentMode/ui/vaultPath";
+import { getVaultBase } from "@/utils/vaultPath";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/context";
 

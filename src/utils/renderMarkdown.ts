@@ -1,3 +1,5 @@
+import { openWithSystemDefault } from "@/utils/openWithSystemDefault";
+import { getVaultBase, isAbsolutePath, toVaultRelative } from "@/utils/vaultPath";
 import { App, Component, MarkdownRenderer } from "obsidian";
 
 /**
@@ -59,8 +61,30 @@ function wireInternalLinks(
     if (!link || !el.contains(link)) return;
     if (e.button !== 0 && e.button !== 1) return;
     e.preventDefault();
-    const href = link.getAttribute("data-href") || link.getAttribute("href");
-    if (!href) return;
+    const raw = link.getAttribute("data-href") || link.getAttribute("href");
+    if (!raw) return;
+    // Coding agents that run with the vault as their cwd emit links with the
+    // note's absolute on-disk path (e.g. `/Users/me/Vault/Inbox/Foo.md`).
+    // `openLinkText` resolves its target relative to the vault root, dropping
+    // the leading slash — so an absolute path becomes a bogus vault-relative
+    // path that materializes the whole `Users/me/Vault/...` folder chain as a
+    // phantom note. Normalize before opening; mirror `ActionCard`.
+    let href = raw;
+    try {
+      href = decodeURIComponent(raw);
+    } catch {
+      // keep raw on malformed percent escapes
+    }
+    if (isAbsolutePath(href)) {
+      const rel = toVaultRelative(href, getVaultBase(app));
+      if (rel === href) {
+        // Absolute path outside the vault — don't let openLinkText fabricate a
+        // phantom note; hand off to the OS default app instead.
+        void openWithSystemDefault(href);
+        return;
+      }
+      href = rel;
+    }
     const newLeaf = e.button === 1 || e.ctrlKey || e.metaKey;
     void app.workspace.openLinkText(href, sourcePath, newLeaf);
   };

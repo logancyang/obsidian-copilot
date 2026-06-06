@@ -2,7 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import { Bot, MessageCircleQuestion } from "lucide-react";
 import { pickToolIcon } from "@/agentMode/ui/toolIcons";
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
-import { toVaultRelative } from "@/agentMode/ui/vaultPath";
+import { toVaultRelative } from "@/utils/vaultPath";
 
 /**
  * Render-time context passed through to the summary callbacks that need

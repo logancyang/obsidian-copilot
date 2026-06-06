@@ -22,6 +22,8 @@ import { Input } from "@/components/ui/input";
 import { SettingItem } from "@/components/ui/setting-item";
 import { cn } from "@/lib/utils";
 import { logError, logWarn } from "@/logger";
+import { openWithSystemDefault } from "@/utils/openWithSystemDefault";
+import { getVaultBase, toVaultRelative } from "@/utils/vaultPath";
 import { updateSetting, useSettingsValue, validateSkillsFolder } from "@/settings/model";
 import { AlertTriangle, Folder, Search } from "lucide-react";
 import { App, FileSystemAdapter, Notice, TFile, TFolder } from "obsidian";
@@ -153,8 +155,8 @@ export const SkillsSettings: React.FC = () => {
    */
   const handleOpenSkillMdAbsPath = useCallback(
     (absPath: string) => {
-      const vaultRel = vaultRelativePath(app, absPath);
-      if (vaultRel !== null && app.vault.getAbstractFileByPath(vaultRel) instanceof TFile) {
+      const vaultRel = toVaultRelative(absPath, getVaultBase(app));
+      if (vaultRel !== absPath && app.vault.getAbstractFileByPath(vaultRel) instanceof TFile) {
         void app.workspace.openLinkText(vaultRel, "", true);
         return;
       }
@@ -174,8 +176,8 @@ export const SkillsSettings: React.FC = () => {
   /** Reveal the canonical skill folder in Obsidian's file explorer. */
   const handleRevealInVault = useCallback(
     (skill: Skill) => {
-      const folderRel = vaultRelativePath(app, skill.dirPath);
-      if (folderRel === null) {
+      const folderRel = toVaultRelative(skill.dirPath, getVaultBase(app));
+      if (folderRel === skill.dirPath) {
         new Notice("Could not resolve the skill folder inside this vault.");
         return;
       }
@@ -463,53 +465,6 @@ function filterSkills(skills: Skill[], query: string): Skill[] {
 /** Pluralise the skill count for the toolbar. */
 function formatSkillCount(n: number): string {
   return `${n} skill${n === 1 ? "" : "s"}`;
-}
-
-/**
- * Open an absolute file path with the OS default app. Used when a SKILL.md
- * lives under an agent dotfile folder that Obsidian doesn't index. Returns
- * via a `Notice` on failure so the user still sees a path they can paste
- * into their own editor.
- */
-async function openWithSystemDefault(absPath: string): Promise<void> {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const electron = require("electron") as {
-      shell?: { openPath?: (path: string) => Promise<string> };
-      remote?: { shell?: { openPath?: (path: string) => Promise<string> } };
-    };
-    const shell = electron.shell ?? electron.remote?.shell;
-    if (!shell?.openPath) {
-      new Notice(`Open this file to edit it: ${absPath}`);
-      return;
-    }
-    const errMsg = await shell.openPath(absPath);
-    if (typeof errMsg === "string" && errMsg.length > 0) {
-      logError(`[skills] shell.openPath failed for ${absPath}: ${errMsg}`);
-      new Notice(`Could not open SKILL.md: ${errMsg}`);
-    }
-  } catch (err) {
-    logError(`[skills] openWithSystemDefault failed for ${absPath}:`, err);
-    new Notice(`Open this file to edit it: ${absPath}`);
-  }
-}
-
-/**
- * Convert an absolute path returned by `SkillManager` into a vault-relative
- * POSIX path suitable for `openLinkText` / `revealInFolder`. Returns `null`
- * if the vault has no `FileSystemAdapter` or the absolute path lies outside
- * the vault.
- */
-function vaultRelativePath(app: App, absPath: string): string | null {
-  const adapter = app.vault.adapter;
-  if (!(adapter instanceof FileSystemAdapter)) return null;
-  const base = adapter.getBasePath().replace(/[/\\]+$/, "");
-  const norm = absPath.replace(/\\/g, "/");
-  const baseNorm = base.replace(/\\/g, "/");
-  if (norm === baseNorm) return "";
-  const prefix = `${baseNorm}/`;
-  if (!norm.startsWith(prefix)) return null;
-  return norm.slice(prefix.length);
 }
 
 /**

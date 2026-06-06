@@ -1,4 +1,4 @@
-import { toVaultRelative } from "@/agentMode/ui/vaultPath";
+import { isAbsolutePath, toVaultRelative } from "@/utils/vaultPath";
 
 describe("toVaultRelative", () => {
   const base = "/Users/me/vault";
@@ -29,5 +29,25 @@ describe("toVaultRelative", () => {
 
   it("handles nested subdirectories", () => {
     expect(toVaultRelative("/Users/me/vault/a/b/c/d.md", base)).toBe("a/b/c/d.md");
+  });
+
+  it("does not treat a sibling vault as inside (path-segment boundary)", () => {
+    expect(toVaultRelative("/Users/me/vault-other/x.md", base)).toBe("/Users/me/vault-other/x.md");
+  });
+});
+
+describe("isAbsolutePath", () => {
+  it("detects POSIX absolute paths", () => {
+    expect(isAbsolutePath("/Users/me/vault/a.md")).toBe(true);
+  });
+
+  it("detects Windows drive-letter absolute paths", () => {
+    expect(isAbsolutePath("C:\\Users\\me\\a.md")).toBe(true);
+    expect(isAbsolutePath("C:/Users/me/a.md")).toBe(true);
+  });
+
+  it("treats relative paths as not absolute", () => {
+    expect(isAbsolutePath("notes/a.md")).toBe(false);
+    expect(isAbsolutePath("Some Note")).toBe(false);
   });
 });

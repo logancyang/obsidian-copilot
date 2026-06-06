@@ -47,7 +47,7 @@ export function toVaultRelative(p: string, vaultBase: string | null): string {
   return rel || p;
 }
 
-function isAbsolutePath(p: string): boolean {
+export function isAbsolutePath(p: string): boolean {
   return p.startsWith("/") || /^[A-Za-z]:[\\/]/.test(p);
 }
 
