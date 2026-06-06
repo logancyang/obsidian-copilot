@@ -113,6 +113,7 @@ describe("configuredModelToCustomModel", () => {
     expect(custom.provider).toBe(ChatModelProviders.ANTHROPIC);
     expect(custom.apiKey).toBe("sk-ant");
     expect(custom.enabled).toBe(true);
+    expect(custom.configuredModelId).toBe("cm1");
   });
 
   it("passes the resolved key through and carries the provider base URL", () => {

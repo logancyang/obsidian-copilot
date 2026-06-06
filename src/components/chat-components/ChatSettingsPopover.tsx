@@ -44,7 +44,7 @@ export function ChatSettingsPopover() {
     (model) => `${model.name}|${model.provider}` === modelKey
   );
   const bridgedModel = useResolvedChatBackendModel(app, modelKey);
-  const canEditModelParameters = originalModel !== undefined;
+  const canEditModelParameters = originalModel !== undefined && bridgedModel === null;
 
   // Local editing state
   const [localModel, setLocalModel] = useState<CustomModel | undefined>(originalModel);
@@ -53,7 +53,7 @@ export function ChatSettingsPopover() {
     setPrevModelKey(modelKey);
     setLocalModel(originalModel);
   }
-  const displayModel = localModel ?? bridgedModel ?? undefined;
+  const displayModel = bridgedModel ?? localModel ?? undefined;
 
   // System prompt state (session-level, in-memory)
   const prompts = useSystemPrompts();

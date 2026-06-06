@@ -83,6 +83,7 @@ interface ChainAndMemory {
 
 /** Returns a stable key for caching chain per model. */
 function getModelKey(model: CustomModel): string {
+  if (model.configuredModelId) return model.configuredModelId;
   return `${model.name}|${model.provider}`;
 }
 

@@ -132,6 +132,8 @@ export interface SetChainOptions {
 }
 
 export interface CustomModel {
+  /** Present for chat-backend bridged models; distinguishes same wire id across providers. */
+  configuredModelId?: string;
   name: string;
   provider: string;
   baseUrl?: string;

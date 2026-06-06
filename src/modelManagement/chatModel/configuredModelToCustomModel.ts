@@ -130,6 +130,7 @@ export function configuredModelToCustomModel(params: {
   if (info.modalities?.input?.includes("image")) capabilities.push(ModelCapability.VISION);
 
   return {
+    configuredModelId: configuredModel.configuredModelId,
     name: info.id,
     provider: mapProviderTypeToChatModelProvider(provider),
     displayName: info.displayName,
