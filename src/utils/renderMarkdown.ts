@@ -75,6 +75,7 @@ function wireInternalLinks(
     } catch {
       // keep raw on malformed percent escapes
     }
+    href = toExistingRootRelativeVaultPath(app, href) ?? href;
     if (isAbsolutePath(href)) {
       const rel = toVaultRelative(href, getVaultBase(app));
       if (rel === href) {
@@ -94,4 +95,14 @@ function wireInternalLinks(
     el.removeEventListener("click", handleClick);
     el.removeEventListener("auxclick", handleClick);
   });
+}
+
+function toExistingRootRelativeVaultPath(app: App, href: string): string | null {
+  if (!href.startsWith("/") || href.startsWith("//")) return null;
+  const rel = href.replace(/^\/+/, "");
+  if (!rel) return null;
+  const anchorIndex = rel.indexOf("#");
+  const filePath = anchorIndex === -1 ? rel : rel.slice(0, anchorIndex);
+  if (!filePath) return null;
+  return app.vault.getAbstractFileByPath(filePath) ? rel : null;
 }

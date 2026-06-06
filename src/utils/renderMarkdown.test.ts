@@ -26,14 +26,19 @@ const VAULT = "/Users/me/vault";
 
 interface TestApp {
   workspace: { openLinkText: jest.Mock; getActiveFile: () => null };
-  vault: { adapter: unknown };
+  vault: { adapter: unknown; getAbstractFileByPath: jest.Mock };
 }
 
-function buildApp(base = VAULT): TestApp {
+function buildApp(base = VAULT, indexedFiles: string[] = []): TestApp {
   const adapter = new (FileSystemAdapter as unknown as new (b: string) => unknown)(base);
   return {
     workspace: { openLinkText: jest.fn(), getActiveFile: () => null },
-    vault: { adapter },
+    vault: {
+      adapter,
+      getAbstractFileByPath: jest.fn((path: string) =>
+        indexedFiles.includes(path) ? { path } : null
+      ),
+    },
   };
 }
 
@@ -83,6 +88,24 @@ describe("renderMarkdown internal-link handling", () => {
     await clickInternalLink(app, "/etc/passwd");
     expect(app.workspace.openLinkText).not.toHaveBeenCalled();
     expect(openWithSystemDefault).toHaveBeenCalledWith("/etc/passwd");
+  });
+
+  it("opens root-relative vault links through openLinkText", async () => {
+    const app = buildApp(VAULT, ["Folder/Foo.md"]);
+    await clickInternalLink(app, "/Folder/Foo.md");
+    expect(app.workspace.openLinkText).toHaveBeenCalledWith("Folder/Foo.md", "source.md", false);
+    expect(openWithSystemDefault).not.toHaveBeenCalled();
+  });
+
+  it("opens root-relative vault links with headings through openLinkText", async () => {
+    const app = buildApp(VAULT, ["Folder/Foo.md"]);
+    await clickInternalLink(app, "/Folder/Foo.md#Heading");
+    expect(app.workspace.openLinkText).toHaveBeenCalledWith(
+      "Folder/Foo.md#Heading",
+      "source.md",
+      false
+    );
+    expect(openWithSystemDefault).not.toHaveBeenCalled();
   });
 
   it("passes plain relative wikilinks through unchanged", async () => {
