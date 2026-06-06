@@ -50,6 +50,7 @@ jest.mock("@/settings/model", () => {
 });
 
 import { OPENCODE_MIN_ACP_VERSION, OPENCODE_PINNED_VERSION } from "@/constants";
+import { copilotAppDataDir } from "@/utils/appPaths";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -414,9 +415,27 @@ describe("install-dir paths (outside the vault)", () => {
     expect(opencodeManagedDataDir("/Users/me")).not.toContain("plugins");
   });
 
+  it("opencodeManagedDataDir composes under the shared app-data root", () => {
+    expect(opencodeManagedDataDir("/Users/me")).toBe(
+      path.join(copilotAppDataDir("/Users/me"), "opencode")
+    );
+  });
+
   it("getDataDir resolves to the home-dir location, not the vault", () => {
     jest.mocked(os.homedir).mockReturnValue("/Users/me");
     const mgr = new OpencodeBinaryManager(vaultPlugin());
     expect(mgr.getDataDir()).toBe(opencodeManagedDataDir("/Users/me"));
   });
+
+  it.each([
+    ["empty home", ""],
+    ["filesystem root", path.parse(process.cwd()).root],
+  ])(
+    "getDataDir throws an actionable error when the home dir is unusable (%s)",
+    (_label, badHome) => {
+      jest.mocked(os.homedir).mockReturnValue(badHome);
+      const mgr = new OpencodeBinaryManager(vaultPlugin());
+      expect(() => mgr.getDataDir()).toThrow(/home directory/i);
+    }
+  );
 });

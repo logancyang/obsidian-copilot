@@ -17,6 +17,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { promisify } from "node:util";
 import { renameWithRetry } from "@/agentMode/skills/renameWithRetry";
+import { copilotAppDataDir } from "@/utils/appPaths";
 import { expectedBinaryName, resolveOpencodeTarget } from "./platformResolver";
 
 const execFileAsync = promisify(execFile);
@@ -158,8 +159,10 @@ function clearOpencodeBinary(): void {
 
 /**
  * Per-user, OS-local directory the managed opencode binary installs into,
- * OUTSIDE the Obsidian vault. Mirrors how companion tools install their CLIs
- * under the home dir (e.g. Miyo's `~/.miyo/bin`).
+ * OUTSIDE the Obsidian vault — `~/.obsidian-copilot/opencode`. Composed under
+ * the shared {@link copilotAppDataDir} root so the namespace is defined once.
+ * Mirrors how companion tools install their CLIs under the home dir (e.g.
+ * Miyo's `~/.miyo/bin`).
  *
  * Why not the plugin data dir (`<vault>/.obsidian/plugins/copilot/data/...`):
  * that lives inside the vault, so sync services (Obsidian Sync, iCloud,
@@ -169,7 +172,7 @@ function clearOpencodeBinary(): void {
  * scope while staying per-user.
  */
 export function opencodeManagedDataDir(homeDir: string): string {
-  return path.join(homeDir, ".obsidian-copilot", "opencode");
+  return path.join(copilotAppDataDir(homeDir), "opencode");
 }
 
 /**
@@ -214,7 +217,19 @@ export class OpencodeBinaryManager {
     if (!(adapter instanceof FileSystemAdapter)) {
       throw new Error("Agent Mode requires desktop Obsidian (FileSystemAdapter).");
     }
-    return opencodeManagedDataDir(os.homedir());
+    const home = os.homedir();
+    // Guard against a missing/garbage home dir (empty string, or the filesystem
+    // root) before we build an install path under it: `os.homedir()` can return
+    // "" in broken/sandboxed environments, and installing into `/.obsidian-copilot`
+    // would be wrong and almost certainly unwritable. Fail with an actionable
+    // message instead of a confusing downstream spawn error.
+    if (!home || !path.isAbsolute(home) || path.parse(home).root === home) {
+      throw new Error(
+        "Could not resolve your home directory to install the opencode runtime. " +
+          "Agent Mode installs it under ~/.obsidian-copilot; check that your account has a valid home directory."
+      );
+    }
+    return opencodeManagedDataDir(home);
   }
 
   getPinnedVersion(): string {
@@ -265,7 +280,18 @@ export class OpencodeBinaryManager {
       return { version, path: finalBinPath };
     }
 
-    await fs.promises.mkdir(dataDir, { recursive: true });
+    // Create the OS-local install root up front so an unwritable home dir
+    // (sandboxed/confined HOME on Linux Flatpak/Snap, locked-down accounts)
+    // fails here with an actionable message naming the path, rather than later
+    // mid-extraction.
+    try {
+      await fs.promises.mkdir(dataDir, { recursive: true });
+    } catch (e) {
+      throw new Error(
+        `Could not create the opencode install directory at ${dataDir}: ` +
+          `${e instanceof Error ? e.message : String(e)}. Check that it is writable.`
+      );
+    }
     const tmpDir = path.join(dataDir, `.tmp-${version}-${randomBytes(4).toString("hex")}`);
     await fs.promises.mkdir(tmpDir, { recursive: true });
 

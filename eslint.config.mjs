@@ -237,6 +237,7 @@ export default [
   {
     files: [
       "src/agentMode/**",
+      "src/utils/appPaths.ts",
       "src/utils/detectBinary.ts",
       "src/utils/binaryPath.ts",
       "src/utils/nodeToolBinDirs.ts",
