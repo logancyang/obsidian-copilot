@@ -508,6 +508,44 @@ describe("ClaudeSdkBackendProcess.newSession dynamic catalog", () => {
     const call = promptCalls[0][0] as { options: { effort?: string } };
     expect(call.options.effort).toBe("high");
   });
+
+  it("disables thinking when the extended-thinking toggle is off", async () => {
+    queryMock.mockImplementation(() => makeQuery([resultMessage()]));
+    const proc = new ClaudeSdkBackendProcess({
+      pathToClaudeCodeExecutable: "/usr/local/bin/claude",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      app: { vault: {} } as any,
+      clientVersion: "1.2.3",
+      descriptor: fakeDescriptor(),
+      getEnableThinking: () => false,
+    });
+
+    const { sessionId } = await proc.newSession({ cwd: "/vault", mcpServers: [] });
+    proc.registerSessionHandler(sessionId, () => {});
+    await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
+
+    const call = getPromptQueryCalls()[0][0] as { options: { thinking?: unknown } };
+    expect(call.options.thinking).toEqual({ type: "disabled" });
+  });
+
+  it("requests summarized adaptive thinking when the toggle is on", async () => {
+    queryMock.mockImplementation(() => makeQuery([resultMessage()]));
+    const proc = new ClaudeSdkBackendProcess({
+      pathToClaudeCodeExecutable: "/usr/local/bin/claude",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      app: { vault: {} } as any,
+      clientVersion: "1.2.3",
+      descriptor: fakeDescriptor(),
+      getEnableThinking: () => true,
+    });
+
+    const { sessionId } = await proc.newSession({ cwd: "/vault", mcpServers: [] });
+    proc.registerSessionHandler(sessionId, () => {});
+    await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
+
+    const call = getPromptQueryCalls()[0][0] as { options: { thinking?: unknown } };
+    expect(call.options.thinking).toEqual({ type: "adaptive", display: "summarized" });
+  });
 });
 
 function errorResultMessage(errors: string[]): SDKMessage {

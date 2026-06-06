@@ -325,11 +325,14 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     if (session.model) options.model = session.model;
     if (session.permissionMode) options.permissionMode = session.permissionMode;
     if (session.effort) options.effort = session.effort;
-    if (this.opts.getEnableThinking?.()) {
-      // Opus 4.7+ defaults thinking.display to "omitted", so summaries never
-      // reach the UI; force "summarized" (pre-4.7 models default to summarized).
-      options.thinking = { type: "adaptive", display: "summarized" };
-    }
+    // Keep the toggle authoritative. Leaving `thinking` unset when off lets the
+    // model's default take over — Sonnet 4.6 / Opus 4.6 default to adaptive
+    // "summarized", so reasoning keeps streaming — so disable it explicitly.
+    // When on, Opus 4.7+ defaults display to "omitted" (summaries never reach
+    // the UI), so force "summarized" (pre-4.7 models default to summarized).
+    options.thinking = this.opts.getEnableThinking?.()
+      ? { type: "adaptive", display: "summarized" }
+      : { type: "disabled" };
     const envOverrides = this.opts.getEnvOverrides?.();
     // Builtin Copilot Plus skill scripts read the license from the env. The
     // descriptor supplies it via `getManagedEnv` (sdk/ can't import backends/);
