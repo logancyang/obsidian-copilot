@@ -15,6 +15,7 @@ import { ReactModal } from "@/components/modals/ReactModal";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { formatBinaryPathForDisplay } from "@/utils/binaryPath";
 import { OPENCODE_MIN_ACP_VERSION, OPENCODE_PINNED_VERSION } from "@/constants";
 import { cn } from "@/lib/utils";
 import { logError } from "@/logger";
@@ -158,7 +159,9 @@ const OpencodeManagedInstall: React.FC<{
         <dt className="tw-text-muted">Version</dt>
         <dd className="tw-font-mono">v{OPENCODE_PINNED_VERSION} (pinned)</dd>
         <dt className="tw-text-muted">Destination</dt>
-        <dd className="tw-break-all tw-font-mono tw-text-xs">{manager.getDataDir()}</dd>
+        <dd className="tw-break-all tw-font-mono tw-text-xs">
+          {formatBinaryPathForDisplay(manager.getDataDir())}
+        </dd>
       </dl>
       {run.kind === "error" && (
         <pre className="tw-max-h-32 tw-overflow-auto tw-whitespace-pre-wrap tw-rounded tw-bg-secondary tw-p-2 tw-text-xs tw-text-error">
