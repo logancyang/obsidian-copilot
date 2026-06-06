@@ -11,6 +11,13 @@ jest.mock("@/logger", () => ({
   logError: jest.fn(),
 }));
 
+// Override only homedir so tests can redirect the OS-local install root into a
+// temp dir; tmpdir() and everything else stay real.
+jest.mock("node:os", () => {
+  const actual = jest.requireActual("node:os");
+  return { ...actual, homedir: jest.fn(() => actual.homedir()) };
+});
+
 // In-memory settings store for the manager's getSettings/setSettings calls.
 // Defined inside jest.mock so it's hoisted alongside the factory.
 jest.mock("@/settings/model", () => {
@@ -48,6 +55,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import {
   computeInstallState,
+  opencodeManagedDataDir,
   OpencodeBinaryManager,
   parseVersionFromStdout,
   pickMatchingAsset,
@@ -64,6 +72,25 @@ const fakePlugin = {
   app: { vault: { adapter: {} } },
   manifest: { id: "copilot-test" },
 } as never;
+
+// The mocked FileSystemAdapter class, used to build a desktop-like plugin whose
+// `adapter instanceof FileSystemAdapter` holds so getDataDir/legacy paths work.
+const FileSystemAdapterMock = jest.requireMock("obsidian").FileSystemAdapter as new () => {
+  getBasePath: () => string;
+};
+
+/**
+ * A desktop CopilotPlugin stand-in whose vault adapter passes the
+ * `instanceof FileSystemAdapter` guard so getDataDir() resolves.
+ */
+function vaultPlugin(pluginId = "copilot-test"): never {
+  const adapter = new FileSystemAdapterMock();
+  adapter.getBasePath = () => "/vault";
+  return {
+    app: { vault: { adapter } },
+    manifest: { id: pluginId },
+  } as never;
+}
 
 describe("pickMatchingAsset", () => {
   const release = {
@@ -373,5 +400,23 @@ fi
       binaryVersion: "1.15.11",
       binarySource: "custom",
     });
+  });
+});
+
+describe("install-dir paths (outside the vault)", () => {
+  afterEach(() => jest.mocked(os.homedir).mockReset());
+
+  it("opencodeManagedDataDir is under the home dir, not the vault", () => {
+    expect(opencodeManagedDataDir("/Users/me")).toBe(
+      path.join("/Users/me", ".obsidian-copilot", "opencode")
+    );
+    // Sanity: nothing about the path references the vault/plugin data dir.
+    expect(opencodeManagedDataDir("/Users/me")).not.toContain("plugins");
+  });
+
+  it("getDataDir resolves to the home-dir location, not the vault", () => {
+    jest.mocked(os.homedir).mockReturnValue("/Users/me");
+    const mgr = new OpencodeBinaryManager(vaultPlugin());
+    expect(mgr.getDataDir()).toBe(opencodeManagedDataDir("/Users/me"));
   });
 });
