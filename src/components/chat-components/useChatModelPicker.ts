@@ -74,7 +74,6 @@ export function useChatModelPicker(params: {
         displayName: configuredModel.info.displayName || configuredModel.info.id,
         enabled: true,
         capabilities,
-        _group: provider.displayName,
         _disabledReason: needsKey ? "Add API key" : undefined,
       };
       const modelKey = getModelKeyFromModel(modelEntry);
