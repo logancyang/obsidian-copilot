@@ -17,9 +17,11 @@ import type {
  * Warm result of a successful preload — the still-running backend process,
  * the probe session id it owns, and the state snapshot it reported. Handed
  * off via `takeWarm()` so the manager can skip a fresh subprocess spawn +
- * `initialize` handshake on the first chat open, and (when the user opens
- * a fresh chat on that backend) adopt the probe session as the user's
- * session instead of paying another `newSession` round-trip.
+ * `initialize` handshake on the first chat open. The manager reuses the
+ * process but starts its own `newSession` for the chat — the probe session
+ * is never adopted as a user chat, since opencode persists and resumes it
+ * (transcript and title intact) and reusing it would leak a prior
+ * conversation into a supposedly fresh chat. `state` still seeds the picker.
  */
 export interface WarmBackend {
   proc: BackendProcess;

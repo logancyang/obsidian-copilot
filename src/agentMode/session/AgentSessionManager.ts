@@ -241,36 +241,28 @@ export class AgentSessionManager {
 
     const seedSelection = this.getDefaultSelection(resolvedId) ?? undefined;
 
-    let session: AgentSession;
+    // A new chat must always start from a brand-new backend session. When a
+    // warm preload probe is available we reuse its already-spawned and
+    // initialize-handshaken subprocess (the expensive part), but never its
+    // *session*: opencode persists its probe session id and resumes it from
+    // disk on the next preload, so adopting that session as the chat would
+    // replay the previous conversation's transcript and auto-title into a
+    // supposedly fresh chat. `AgentSession.start` runs `newSession` on the
+    // (warm or cold) proc; the probe's state still seeds the picker so it
+    // doesn't blink while that round-trip is in flight.
+    const session = AgentSession.start({
+      backend,
+      cwd: vaultBasePath,
+      internalId: uuidv4(),
+      backendId: resolvedId,
+      defaultModelSelection: seedSelection,
+      initialCachedState: warm?.state ?? this.preloader.getCachedBackendState(resolvedId),
+      getDescriptor: () => this.opts.resolveDescriptor(resolvedId),
+    });
     if (warm) {
-      // The probe session that preload created is reused as the user's
-      // session: skips an extra `newSession` round-trip on the warm proc.
-      // The probe ran with no user preferences, so `defaultModelSelection`
-      // is what makes the session apply the persisted preference (with the
-      // optimistic seed so the picker never flashes the probe's default).
-      session = new AgentSession({
-        backend,
-        backendSessionId: warm.probeSessionId,
-        internalId: uuidv4(),
-        backendId: resolvedId,
-        initialState: warm.state,
-        defaultModelSelection: seedSelection,
-        cwd: vaultBasePath,
-        getDescriptor: () => this.opts.resolveDescriptor(resolvedId),
-      });
       logInfo(
-        `[AgentMode] session adopted warm probe (internal=${session.internalId} backend-id=${warm.probeSessionId} backend=${resolvedId})`
+        `[AgentMode] session reused warm proc with a fresh session (internal=${session.internalId} backend=${resolvedId})`
       );
-    } else {
-      session = AgentSession.start({
-        backend,
-        cwd: vaultBasePath,
-        internalId: uuidv4(),
-        backendId: resolvedId,
-        defaultModelSelection: seedSelection,
-        initialCachedState: this.preloader.getCachedBackendState(resolvedId),
-        getDescriptor: () => this.opts.resolveDescriptor(resolvedId),
-      });
     }
     this.sessions.set(session.internalId, session);
     this.chatUIStates.set(session.internalId, new AgentChatUIState(session));

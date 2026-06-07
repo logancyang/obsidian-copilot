@@ -317,28 +317,24 @@ describe("AgentSessionManager.createSession", () => {
   });
 });
 
-describe("AgentSessionManager warm-backend adoption", () => {
-  it("reuses the preloader's warm proc instead of spawning a fresh one", async () => {
-    // A warm proc is just another mock backend — the manager doesn't care
-    // it came from the preloader, only that it skips start() / newSession.
-    const warmProc = makeMockBackendProcess();
+describe("AgentSessionManager warm-backend reuse", () => {
+  const probeState = {
+    model: {
+      current: { baseModelId: "anthropic/sonnet", effort: null },
+      availableModels: [
+        { baseModelId: "anthropic/sonnet", name: "Sonnet", provider: null, effortOptions: [] },
+      ],
+    },
+    mode: null,
+  };
+
+  // Build a manager whose preloader hands out exactly one warm proc (with a
+  // persisted probe session id) on the first `takeWarm`, then null.
+  function buildManagerWithWarm(warmProc: ReturnType<typeof makeMockBackendProcess>) {
     const descriptor = buildDescriptor();
-    const probeState = {
-      model: {
-        current: { baseModelId: "anthropic/sonnet", effort: null },
-        availableModels: [
-          { baseModelId: "anthropic/sonnet", name: "Sonnet", provider: null, effortOptions: [] },
-        ],
-      },
-      mode: null,
-    };
     const takeWarmMock = jest
       .fn()
-      .mockReturnValueOnce({
-        proc: warmProc,
-        probeSessionId: "probe-1",
-        state: probeState,
-      })
+      .mockReturnValueOnce({ proc: warmProc, probeSessionId: "probe-1", state: probeState })
       .mockReturnValue(null);
     const modelPreloader = {
       getCachedBackendState: jest.fn(() => probeState),
@@ -360,21 +356,41 @@ describe("AgentSessionManager warm-backend adoption", () => {
         >[2]["modelPreloader"],
       }
     );
+    return { mgr, descriptor };
+  }
+
+  it("reuses the preloader's warm proc instead of spawning a fresh one", async () => {
+    const warmProc = makeMockBackendProcess();
+    const { mgr, descriptor } = buildManagerWithWarm(warmProc);
 
     await mgr.createSession();
 
     // start() on the warm proc must not be re-invoked — preload already did it.
     expect(mockBackendStart).not.toHaveBeenCalled();
-    // The session should NOT have gone through AgentSession.start (that path
-    // is for newSession-driven creates). Warm adoption uses the constructor
-    // directly.
-    expect(sessionCreateSpy).not.toHaveBeenCalled();
     // No fresh backend was created either — descriptor.createBackendProcess
     // is the spawn primitive.
     expect(descriptor.createBackendProcess).not.toHaveBeenCalled();
     // Active session is the warm one.
     expect(mgr.getActiveSession()).not.toBeNull();
     expect(mgr.getActiveSession()?.backendId).toBe("opencode");
+  });
+
+  it("starts a fresh session on the warm proc instead of adopting the probe session", async () => {
+    // Regression guard for the opencode "new chat replays prior conversation"
+    // bug: opencode resumes its persisted probe session (transcript + title
+    // intact), so the warm probe's *session* must never be adopted as the
+    // user's chat — only the subprocess is reused.
+    const warmProc = makeMockBackendProcess();
+    const { mgr } = buildManagerWithWarm(warmProc);
+
+    await mgr.createSession();
+
+    // The chat went through the newSession-driven start path, on the warm proc.
+    expect(sessionCreateSpy).toHaveBeenCalledTimes(1);
+    const opts = sessionCreateSpy.mock.calls[0][0];
+    expect(opts.backend).toBe(warmProc);
+    // The probe session id is never threaded in as a session to adopt.
+    expect(opts).not.toHaveProperty("backendSessionId");
   });
 
   it("falls back to a fresh spawn when no warm entry is available", async () => {
