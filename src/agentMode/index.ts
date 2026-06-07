@@ -291,6 +291,15 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
         logError("[Skills] builtin skill re-seeding failed", e)
       );
     }
+    // Miyo availability also gates the `miyo-search` system-prompt steering
+    // (see `buildAgentSystemPrompt`). codex/opencode bake the prompt at spawn,
+    // so a mid-session flip needs a restart to apply — otherwise the skill is
+    // (un)seeded but the running agent never (loses)/gains the steering until a
+    // manual reload. `restartSystemPromptAffected` dedupes on the real prompt
+    // key, so it's a no-op when the rebuilt prompt is unchanged.
+    if (miyoAvailabilityChanged) {
+      restartSystemPromptAffected();
+    }
   });
   // A backend's binary path (or a binary install/update) is resolved at spawn
   // time, so a change must reach the running/warm process — otherwise it only
