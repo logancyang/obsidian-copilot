@@ -3,7 +3,6 @@ import { useApp } from "@/context";
 import { Badge } from "@/components/ui/badge";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { SettingItem } from "@/components/ui/setting-item";
-import { DEFAULT_SETTINGS } from "@/constants";
 import { logInfo } from "@/logger";
 import { MiyoClient } from "@/miyo/MiyoClient";
 import { getMiyoCustomUrl, getMiyoFolderName, MIYO_DEEPLINK_URL } from "@/miyo/miyoUtils";
@@ -91,28 +90,19 @@ export const CopilotPlusSettings: React.FC = () => {
       setIsValidatingSelfHost(false);
     }
 
-    const enableMiyoSearch = async () => {
-      if (settings.embeddingBatchSize !== DEFAULT_SETTINGS.embeddingBatchSize) {
-        // Reset to the default for local stability.
-        updateSetting("embeddingBatchSize", DEFAULT_SETTINGS.embeddingBatchSize);
-      }
-
+    // Miyo owns indexing and scanning (its folder watcher/scanner) and embeds
+    // server-side, so enabling only flips the flags. Switching the active
+    // backend is handled by the settings-change subscriber in VectorStoreManager.
+    const enableMiyoSearch = () => {
       updateSetting("enableMiyo", true);
-
       if (!settings.enableSemanticSearchV3) {
         updateSetting("enableSemanticSearchV3", true);
       }
-
-      const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
-      await VectorStoreManager.getInstance().indexVaultToVectorStore(false, {
-        userInitiated: true,
-      });
     };
 
-    // Folder already registered in Miyo: enable directly. Miyo owns scanning, so
-    // there's nothing to confirm.
+    // Folder already registered in Miyo: enable directly, no confirmation needed.
     if (folderRegistered) {
-      await enableMiyoSearch();
+      enableMiyoSearch();
       return;
     }
 
