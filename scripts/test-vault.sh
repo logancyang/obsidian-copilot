@@ -59,6 +59,12 @@ DEPLOY_MODE="link"
 if [[ "$(uname -r 2>/dev/null)" == *[Mm]icrosoft* ]] && [[ "$VAULT_REAL" == /mnt/* ]]; then
   DEPLOY_MODE="copy"
 fi
+# iCloud-synced vaults (Obsidian on iOS/iPadOS) can't use symlinks: iCloud
+# uploads file contents, not link targets, so a symlinked main.js never reaches
+# the phone. Copy real files so the mobile device receives the build.
+if [[ "$VAULT_REAL" == *"/Mobile Documents/"* ]]; then
+  DEPLOY_MODE="copy"
+fi
 
 echo "==> Installing dependencies"
 npm install --prefer-offline --no-audit --no-fund
