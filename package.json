@@ -17,6 +17,7 @@
     "format:check": "prettier --check 'src/**/*.{js,ts,tsx,md}'",
     "version": "node version-bump.mjs",
     "test": "jest --testPathIgnorePatterns=src/integration_tests/",
+    "test:mobile-load": "npm run build && node scripts/mobile-load-smoke.cjs",
     "test:integration": "jest src/integration_tests/",
     "prepare": "husky",
     "prompt:debug": "node scripts/printPromptDebug.js",
