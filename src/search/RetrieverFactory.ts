@@ -6,7 +6,6 @@ import { App } from "obsidian";
 import { SelfHostRetriever, VectorSearchBackend } from "./selfHostRetriever";
 import { MiyoSemanticRetriever } from "./miyo/MiyoSemanticRetriever";
 import { MergedSemanticRetriever } from "./v3/MergedSemanticRetriever";
-import { RETURN_ALL_LIMIT } from "./v3/SearchCore";
 import { TieredLexicalRetriever } from "./v3/TieredLexicalRetriever";
 
 /**
@@ -345,10 +344,8 @@ export class RetrieverFactory {
    * @returns Miyo semantic retriever instance.
    */
   static createMiyoRetriever(app: App, options: RetrieverOptions): MiyoSemanticRetriever {
-    const normalized = normalizeOptions(options);
-    const semanticMax = normalized.returnAll
-      ? RETURN_ALL_LIMIT
-      : Math.min(normalized.maxK * 2, RETURN_ALL_LIMIT);
-    return new MiyoSemanticRetriever(app, { ...normalized, maxK: semanticMax });
+    // maxK is the post-filter cap on returned chunks; the retriever over-fetches
+    // candidates internally to compensate for inclusion/exclusion filtering.
+    return new MiyoSemanticRetriever(app, normalizeOptions(options));
   }
 }

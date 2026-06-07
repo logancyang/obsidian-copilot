@@ -5,8 +5,12 @@ import { App } from "obsidian";
 import { logInfo, logWarn } from "@/logger";
 import { MiyoClient, MiyoSearchFilter, MiyoSearchResult } from "@/miyo/MiyoClient";
 import { getMiyoCustomUrl, getMiyoFolderName, getVaultRelativeMiyoPath } from "@/miyo/miyoUtils";
+import { createCopilotPatternFilter } from "@/search/searchUtils";
 import { getSettings } from "@/settings/model";
 import { RETURN_ALL_LIMIT } from "@/search/v3/SearchCore";
+
+/** Number of chunks to return when the caller does not request a specific limit. */
+const DEFAULT_FINAL_K = 20;
 
 type MiyoSemanticRetrieverOptions = {
   minSimilarityScore?: number;
@@ -26,7 +30,8 @@ export class MiyoSemanticRetriever extends BaseRetriever {
 
   private client: MiyoClient;
   private readonly returnAll: boolean;
-  private readonly maxK: number;
+  /** Maximum number of chunks returned after inclusion/exclusion filtering. */
+  private readonly finalK: number;
   private readonly minSimilarityScore: number;
 
   /**
@@ -42,7 +47,7 @@ export class MiyoSemanticRetriever extends BaseRetriever {
     super();
     this.client = new MiyoClient();
     this.returnAll = Boolean(options.returnAll);
-    this.maxK = Math.max(1, options.maxK);
+    this.finalK = options.maxK > 0 ? options.maxK : DEFAULT_FINAL_K;
     this.minSimilarityScore = options.minSimilarityScore ?? 0.1;
   }
 
@@ -60,12 +65,45 @@ export class MiyoSemanticRetriever extends BaseRetriever {
   ): Promise<Document[]> {
     const searchChunks = await this.searchMiyo(query);
     const dedupedChunks = this.deduplicateResults(searchChunks);
+    const allowedChunks = this.filterByCopilotPatterns(dedupedChunks);
+    const limitedChunks = allowedChunks.slice(0, this.finalK);
 
     if (getSettings().debug) {
-      this.logDebugInfo(query, searchChunks, dedupedChunks);
+      this.logDebugInfo(query, searchChunks, limitedChunks);
     }
 
-    return dedupedChunks;
+    return limitedChunks;
+  }
+
+  /**
+   * Filter chunks by Copilot's QA inclusion/exclusion rules so Miyo results
+   * honor the same scope as locally-indexed search.
+   *
+   * @param chunks - Deduplicated chunks from Miyo.
+   * @returns Chunks whose source path passes the inclusion/exclusion rules.
+   */
+  private filterByCopilotPatterns(chunks: Document[]): Document[] {
+    const isAllowed = createCopilotPatternFilter(this.app);
+    const allowed: Document[] = [];
+    const excludedPaths: string[] = [];
+    for (const chunk of chunks) {
+      const path = chunk.metadata.path as string;
+      if (isAllowed(path)) {
+        allowed.push(chunk);
+      } else {
+        excludedPaths.push(path);
+      }
+    }
+
+    if (getSettings().debug) {
+      const uniqueExcluded = Array.from(new Set(excludedPaths));
+      logInfo(
+        `MiyoSemanticRetriever: inclusion/exclusion rules kept ${allowed.length}/${chunks.length} chunks` +
+          (uniqueExcluded.length > 0 ? `; excluded ${uniqueExcluded.join(", ")}` : "")
+      );
+    }
+
+    return allowed;
   }
 
   /**
@@ -77,13 +115,15 @@ export class MiyoSemanticRetriever extends BaseRetriever {
   private async searchMiyo(query: string): Promise<Document[]> {
     try {
       const baseUrl = await this.client.resolveBaseUrl(getMiyoCustomUrl(getSettings()));
-      const limit = this.returnAll ? RETURN_ALL_LIMIT : this.maxK;
+      // Over-fetch candidates so inclusion/exclusion filtering still leaves
+      // enough chunks to fill finalK; the result set is capped afterwards.
+      const limit = RETURN_ALL_LIMIT;
       const filters = this.buildSearchFilters();
       if (getSettings().debug) {
         logInfo("MiyoSemanticRetriever: search params:", {
           baseUrl,
           limit,
-          maxK: this.maxK,
+          finalK: this.finalK,
           minSimilarityScore: this.minSimilarityScore,
           returnAll: this.returnAll,
           filters,
