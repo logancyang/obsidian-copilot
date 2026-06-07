@@ -287,18 +287,23 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
       prev.selfHostModeValidatedAt !== next.selfHostModeValidatedAt ||
       prev.selfHostValidationCount !== next.selfHostValidationCount;
     if (prevFolder !== nextFolder || miyoAvailabilityChanged) {
-      void seedManagedBuiltins(nextFolder).catch((e) =>
-        logError("[Skills] builtin skill re-seeding failed", e)
-      );
-    }
-    // Miyo availability also gates the `miyo-search` system-prompt steering
-    // (see `buildAgentSystemPrompt`). codex/opencode bake the prompt at spawn,
-    // so a mid-session flip needs a restart to apply — otherwise the skill is
-    // (un)seeded but the running agent never (loses)/gains the steering until a
-    // manual reload. `restartSystemPromptAffected` dedupes on the real prompt
-    // key, so it's a no-op when the rebuilt prompt is unchanged.
-    if (miyoAvailabilityChanged) {
-      restartSystemPromptAffected();
+      // Miyo availability also gates the `miyo-search` system-prompt steering
+      // (see `buildAgentSystemPrompt`). codex/opencode bake the prompt at spawn,
+      // so a mid-session flip needs a restart to apply. Chain the restart AFTER
+      // the seed + `skillManager.refresh()` resolve so the skill is written and
+      // reconciled into the agent dirs before the agent respawns — otherwise
+      // codex (which has `restartOnManagedSkillsChange: false`) could come back
+      // with steering pointing at a skill that isn't on disk yet. The seed pass
+      // swallows its own errors and always refreshes, so this normally runs
+      // after reconcile; `restartSystemPromptAffected` dedupes on the real prompt
+      // key, so it's a no-op when the rebuilt prompt is unchanged.
+      void seedManagedBuiltins(nextFolder)
+        .then(() => {
+          if (miyoAvailabilityChanged) {
+            restartSystemPromptAffected();
+          }
+        })
+        .catch((e) => logError("[Skills] builtin skill re-seeding failed", e));
     }
   });
   // A backend's binary path (or a binary install/update) is resolved at spawn
