@@ -91,38 +91,40 @@ export const CopilotPlusSettings: React.FC = () => {
       setIsValidatingSelfHost(false);
     }
 
-    const confirmChange = async () => {
-      if (enabled && settings.embeddingBatchSize !== DEFAULT_SETTINGS.embeddingBatchSize) {
+    const enableMiyoSearch = async () => {
+      if (settings.embeddingBatchSize !== DEFAULT_SETTINGS.embeddingBatchSize) {
+        // Reset to the default for local stability.
         updateSetting("embeddingBatchSize", DEFAULT_SETTINGS.embeddingBatchSize);
       }
 
-      updateSetting("enableMiyo", enabled);
+      updateSetting("enableMiyo", true);
 
-      if (enabled && !settings.enableSemanticSearchV3) {
+      if (!settings.enableSemanticSearchV3) {
         updateSetting("enableSemanticSearchV3", true);
       }
 
-      if (settings.enableSemanticSearchV3 || enabled) {
-        const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
-        await VectorStoreManager.getInstance().indexVaultToVectorStore(false, {
-          userInitiated: true,
-        });
-      }
+      const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
+      await VectorStoreManager.getInstance().indexVaultToVectorStore(false, {
+        userInitiated: true,
+      });
     };
 
-    const modalContent = folderRegistered ? (
-      <div>
-        Enabling Miyo Search will use your vault folder (
-        <span className="tw-font-medium">{folderName}</span>) as the Miyo folder identifier and
-        request a scan from Miyo. Embedding Batch Size will be reset to the default (
-        {DEFAULT_SETTINGS.embeddingBatchSize}) for local stability.
-      </div>
-    ) : (
+    // Folder already registered in Miyo: enable directly. Miyo owns scanning, so
+    // there's nothing to confirm.
+    if (folderRegistered) {
+      await enableMiyoSearch();
+      return;
+    }
+
+    // Folder not registered yet: guide the user to add it in Miyo via deeplink,
+    // then enable on confirm.
+    new ConfirmModal(
+      app,
+      enableMiyoSearch,
       <div className="tw-flex tw-flex-col tw-gap-3">
         <div>
           Your vault folder (<span className="tw-font-medium">{folderName}</span>) is not registered
-          in Miyo yet. Add it in Miyo first, then continue to request a scan. Embedding Batch Size
-          will be reset to the default ({DEFAULT_SETTINGS.embeddingBatchSize}) for local stability.
+          in Miyo yet. Add it in Miyo first, then continue.
         </div>
         <a
           href={MIYO_DEEPLINK_URL}
@@ -132,10 +134,10 @@ export const CopilotPlusSettings: React.FC = () => {
         >
           Open Miyo to add your vault folder
         </a>
-      </div>
-    );
-
-    new ConfirmModal(app, confirmChange, modalContent, "Request Miyo Scan").open();
+      </div>,
+      "Register vault folder in Miyo",
+      "Enable Miyo Search"
+    ).open();
   };
 
   return (
@@ -277,7 +279,7 @@ export const CopilotPlusSettings: React.FC = () => {
                   <SettingItem
                     type="switch"
                     title="Enable Miyo"
-                    description="Use Miyo as your local search, PDF parsing, and context hub. Copilot will send the current vault folder name to Miyo and can request scans, but folder registration is managed in Miyo."
+                    description="Use Miyo as your local search, PDF parsing, and context hub. Copilot sends the current vault folder name to Miyo; folder registration and scanning are managed in Miyo."
                     checked={settings.enableMiyo}
                     onCheckedChange={(checked) => void handleMiyoSearchToggle(checked)}
                     disabled={isValidatingSelfHost}
