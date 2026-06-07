@@ -12,7 +12,7 @@ function ConfirmModalContent({
   confirmButtonText,
   cancelButtonText,
 }: {
-  content: string;
+  content: React.ReactNode;
   onConfirm: () => void;
   onCancel: () => void;
   confirmButtonText: string;
@@ -44,7 +44,7 @@ export class ConfirmModal extends Modal {
   constructor(
     app: App,
     private onConfirm: () => void | Promise<void>,
-    private content: string,
+    private content: React.ReactNode,
     title: string,
     private confirmButtonText: string = "Continue",
     private cancelButtonText: string = "Cancel",

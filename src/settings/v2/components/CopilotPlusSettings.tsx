@@ -4,11 +4,11 @@ import { Badge } from "@/components/ui/badge";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { SettingItem } from "@/components/ui/setting-item";
 import { DEFAULT_SETTINGS } from "@/constants";
+import { logInfo } from "@/logger";
 import { MiyoClient } from "@/miyo/MiyoClient";
-import { getMiyoCustomUrl, getMiyoFolderName } from "@/miyo/miyoUtils";
+import { getMiyoCustomUrl, getMiyoFolderName, MIYO_DEEPLINK_URL } from "@/miyo/miyoUtils";
 import { useIsSelfHostEligible, validateSelfHostMode } from "@/plusUtils";
 import { updateSetting, useSettingsValue } from "@/settings/model";
-import { Notice } from "obsidian";
 import React, { useState } from "react";
 import { ToolSettingsSection } from "./ToolSettingsSection";
 
@@ -54,13 +54,38 @@ export const CopilotPlusSettings: React.FC = () => {
       return;
     }
 
+    const customUrl = getMiyoCustomUrl(settings);
+    const folderName = getMiyoFolderName(app);
+    const miyoClient = new MiyoClient();
+
+    // Distinguish two failure modes so we can guide the user precisely. Both
+    // offer a miyo:// deeplink, framed for the case: (1) the app is not running
+    // -> "Open Miyo" to start it; (2) it is running but the vault folder is not
+    // registered yet -> "Open Miyo to add your vault folder".
     setIsValidatingSelfHost(true);
+    let folderRegistered = false;
     try {
-      const miyoClient = new MiyoClient();
-      const isMiyoAvailable = await miyoClient.isBackendAvailable(getMiyoCustomUrl(settings));
+      const isMiyoAvailable = await miyoClient.isBackendAvailable(customUrl);
       if (!isMiyoAvailable) {
-        new Notice("Miyo app is not available. Please start the Miyo app and try again.");
+        new ConfirmModal(
+          app,
+          () => {
+            window.open(MIYO_DEEPLINK_URL, "_blank");
+          },
+          <div>The Miyo app is not running. Open Miyo, then enable Miyo Search again.</div>,
+          "Miyo app not available",
+          "Open Miyo"
+        ).open();
         return;
+      }
+      try {
+        const baseUrl = await miyoClient.resolveBaseUrl(customUrl);
+        await miyoClient.getFolder(baseUrl, folderName);
+        folderRegistered = true;
+      } catch (error) {
+        // A missing folder surfaces as a non-2xx (e.g. 404). The Miyo app is
+        // reachable here, so treat any lookup failure as "not registered yet".
+        logInfo(`Miyo folder "${folderName}" not registered; prompting user to add it: ${error}`);
       }
     } finally {
       setIsValidatingSelfHost(false);
@@ -85,12 +110,32 @@ export const CopilotPlusSettings: React.FC = () => {
       }
     };
 
-    new ConfirmModal(
-      app,
-      confirmChange,
-      `Enabling Miyo Search will use your current vault folder name as the Miyo folder identifier and request a scan from Miyo. Make sure this folder is already registered in Miyo. Embedding Batch Size will be reset to the default (${DEFAULT_SETTINGS.embeddingBatchSize}) for local stability. Continue?`,
-      "Request Miyo Scan"
-    ).open();
+    const modalContent = folderRegistered ? (
+      <div>
+        Enabling Miyo Search will use your vault folder (
+        <span className="tw-font-medium">{folderName}</span>) as the Miyo folder identifier and
+        request a scan from Miyo. Embedding Batch Size will be reset to the default (
+        {DEFAULT_SETTINGS.embeddingBatchSize}) for local stability.
+      </div>
+    ) : (
+      <div className="tw-flex tw-flex-col tw-gap-3">
+        <div>
+          Your vault folder (<span className="tw-font-medium">{folderName}</span>) is not registered
+          in Miyo yet. Add it in Miyo first, then continue to request a scan. Embedding Batch Size
+          will be reset to the default ({DEFAULT_SETTINGS.embeddingBatchSize}) for local stability.
+        </div>
+        <a
+          href={MIYO_DEEPLINK_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="tw-text-accent hover:tw-underline"
+        >
+          Open Miyo to add your vault folder
+        </a>
+      </div>
+    );
+
+    new ConfirmModal(app, confirmChange, modalContent, "Request Miyo Scan").open();
   };
 
   return (

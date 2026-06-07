@@ -3,6 +3,13 @@ import { CopilotSettings } from "@/settings/model";
 import { App, Platform } from "obsidian";
 
 /**
+ * Deeplink that launches (or focuses) the Miyo desktop app via its registered
+ * URL scheme. Used to send users straight into Miyo to register their vault
+ * folder instead of asking them to open the app manually.
+ */
+export const MIYO_DEEPLINK_URL = "miyo://";
+
+/**
  * Convert backslashes to forward slashes and trim trailing slashes.
  *
  * @param path - Filesystem path.
