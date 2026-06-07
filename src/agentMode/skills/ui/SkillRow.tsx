@@ -212,8 +212,12 @@ export const SkillRow: React.FC<SkillRowProps> = ({
         })}
       </div>
 
-      {/* Overflow popover — Edit / Properties / Reveal / Delete (or Migrate when locked down) */}
-      <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+      {/* Overflow popover — Edit / Properties / Reveal / Delete (or Migrate when locked down).
+          modal={false} keeps Radix from engaging react-remove-scroll's body scroll lock:
+          "Reveal in vault" moves focus into the file-explorer leaf, which can interrupt the
+          menu's close/unmount and strand the document-level wheel listener, killing scroll
+          everywhere until restart (issue #118). The sibling menu in AgentTabStrip does the same. */}
+      <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen} modal={false}>
         <DropdownMenuTrigger asChild>
           <Button
             variant="ghost"
