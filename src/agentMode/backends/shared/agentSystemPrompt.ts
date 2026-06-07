@@ -14,6 +14,9 @@
  *      enabled Settings → System prompts → "Disable builtin system prompt".
  *      Followed by `COPILOT_PLUS_TOOLS_STEERING` (prefer the builtin Copilot
  *      Plus skills, with a fallback to the agent's own tools) — sent to everyone.
+ *      Then `COPILOT_MIYO_SEARCH_STEERING` — appended only when `shouldUseMiyo`
+ *      is true, so the agent is pointed at the `miyo-search` skill only while
+ *      Miyo is enabled and available.
  *   2. The pill-syntax directive (`buildPillSyntaxDirective`) — always present;
  *      it teaches the agent how to read the chat editor's `[[note]]`/`{folder}`
  *      tokens and is functional wiring, not "builtin framing" the user toggles.
@@ -36,6 +39,8 @@
 // system-prompt builder needs only this one pure function, not SkillManager,
 // discovery, or the Skills UI the barrel also re-exports.
 import { buildPillSyntaxDirective } from "@/agentMode/skills/pillSyntaxDirective";
+import { shouldUseMiyo } from "@/miyo/miyoUtils";
+import { getSettings } from "@/settings/model";
 import { getDisableBuiltinSystemPrompt } from "@/system-prompts/state";
 import { getEffectiveUserPrompt } from "@/system-prompts/systemPromptBuilder";
 /**
@@ -57,6 +62,22 @@ For these requests, prefer the bundled Copilot skill over any built-in tool of y
 Each skill ships both a \`.sh\` and a \`.mjs\` script. Run the \`.sh\` with \`sh\` first; if the platform can't run \`sh\` (for example, Windows without Git Bash), run the matching \`.mjs\` with \`node\` instead. If neither \`sh\` nor \`node\` is available, tell the user to install Node.js from https://nodejs.org and try again.
 
 If the matching skill is missing, disabled, or reports that it needs an active Copilot Plus license, fall back to whatever equivalent capability you have (or tell the user it's unavailable) — don't refuse the request.`;
+
+/**
+ * Steers the agent toward the bundled `miyo-search` skill for vault search. A
+ * prose skill is only invoked if the model thinks to use it, and the SKILL.md
+ * description alone proved unreliable, so we name it explicitly in the system
+ * prompt the way `COPILOT_PLUS_TOOLS_STEERING` names the relay skills, with
+ * concrete triggers (grep too slow / too few relevant hits / explicit request).
+ *
+ * Unlike the Plus steering, this is gated: it is appended only when
+ * `shouldUseMiyo(...)` is true, so it never tells the agent to reach for a
+ * skill that isn't seeded. That keeps the prompt in lockstep with the
+ * seeding gate in `agentMode/index.ts` (both key off `shouldUseMiyo`), which is
+ * how the skill respects the user's "Miyo enabled" setting.
+ */
+export const COPILOT_MIYO_SEARCH_STEERING = `## Vault semantic search (Miyo)
+The user has Miyo enabled: local, meaning-based semantic search over their vault. For any vault-search intent, use the \`miyo-search\` skill when your builtin \`grep\` search is too slow or doesn't surface enough relevant notes, or whenever the user explicitly asks for Miyo search. Follow the skill's own instructions to run it.`;
 
 export const COPILOT_PROMPT_BASE = `You are Obsidian Copilot, an AI assistant that helps users work with their Obsidian vault — markdown notes for knowledge management, writing, and research. You are NOT a software-engineering agent or CLI coding tool. The working directory is the user's Obsidian vault: a collection of markdown notes, not a code repository. Disregard any framing in environment metadata that suggests otherwise.
 
@@ -119,6 +140,12 @@ export function buildAgentSystemPrompt(): string {
     // can't run, its script exits with the upgrade notice and the fallback
     // clause routes the agent back to its own tools. Safe for everyone.
     parts.push(COPILOT_PLUS_TOOLS_STEERING);
+    // Miyo steering is gated on the same `shouldUseMiyo` check that seeds the
+    // skill, so we only point the agent at `miyo-search` when it's actually
+    // available — the prompt-side half of respecting the "Miyo enabled" setting.
+    if (shouldUseMiyo(getSettings())) {
+      parts.push(COPILOT_MIYO_SEARCH_STEERING);
+    }
   }
 
   parts.push(buildPillSyntaxDirective());

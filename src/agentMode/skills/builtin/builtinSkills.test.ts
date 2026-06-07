@@ -119,6 +119,16 @@ describe("miyo-search builtin skill", () => {
     expect(MIYO_SEARCH_SKILL.skillMd).not.toContain(PLUS_ENV.baseUrl);
   });
 
+  it("documents concrete triggers for when to call it", () => {
+    const md = MIYO_SEARCH_SKILL.skillMd;
+    // The description is the agent's primary "when to use" signal.
+    expect(md).toMatch(/description:[^\n]*too slow/i);
+    expect(md).toMatch(/description:[^\n]*explicitly asks for Miyo search/i);
+    // The body reinforces the same triggers.
+    expect(md).toMatch(/When to use it/);
+    expect(md).toMatch(/doesn't surface enough relevant notes/i);
+  });
+
   it("documents the search + files subcommands with --json output", () => {
     const md = MIYO_SEARCH_SKILL.skillMd;
     expect(md).toContain("miyo search");

@@ -6,8 +6,10 @@ import {
   updateCachedSystemPrompts,
 } from "@/system-prompts/state";
 import type { UserSystemPrompt } from "@/system-prompts/type";
+import { shouldUseMiyo } from "@/miyo/miyoUtils";
 import {
   buildAgentSystemPrompt,
+  COPILOT_MIYO_SEARCH_STEERING,
   COPILOT_PLUS_TOOLS_STEERING,
   COPILOT_PROMPT_BASE,
 } from "./agentSystemPrompt";
@@ -17,6 +19,14 @@ jest.mock("@/logger", () => ({
   logWarn: jest.fn(),
   logError: jest.fn(),
 }));
+
+// The Miyo steering is gated on `shouldUseMiyo`; mock it so tests can flip the
+// gate without standing up self-host validation state.
+jest.mock("@/miyo/miyoUtils", () => ({
+  shouldUseMiyo: jest.fn(() => false),
+}));
+
+const mockShouldUseMiyo = shouldUseMiyo as jest.MockedFunction<typeof shouldUseMiyo>;
 
 function makePrompt(title: string, content: string): UserSystemPrompt {
   return { title, content, createdMs: 0, modifiedMs: 0, lastUsedMs: 0 };
@@ -34,6 +44,7 @@ describe("buildAgentSystemPrompt", () => {
   beforeEach(() => {
     resetSettings();
     resetPromptState();
+    mockShouldUseMiyo.mockReturnValue(false);
   });
 
   it("includes the Copilot base prompt and the pill-syntax directive by default", () => {
@@ -104,6 +115,30 @@ describe("buildAgentSystemPrompt", () => {
     setDisableBuiltinSystemPrompt(true);
     const prompt = buildAgentSystemPrompt();
     expect(prompt).not.toContain(COPILOT_PLUS_TOOLS_STEERING);
+  });
+
+  it("omits the Miyo steering when Miyo is not in use", () => {
+    mockShouldUseMiyo.mockReturnValue(false);
+    const prompt = buildAgentSystemPrompt();
+    expect(prompt).not.toContain(COPILOT_MIYO_SEARCH_STEERING);
+    expect(prompt).not.toContain("miyo-search");
+  });
+
+  it("appends the Miyo steering only when Miyo is in use", () => {
+    mockShouldUseMiyo.mockReturnValue(true);
+    const prompt = buildAgentSystemPrompt();
+    expect(prompt).toContain(COPILOT_MIYO_SEARCH_STEERING);
+    // Names the skill and gives concrete triggers for when to call it.
+    expect(prompt).toContain("miyo-search");
+    expect(prompt).toMatch(/too slow|enough relevant/i);
+    expect(prompt).toMatch(/explicitly asks/i);
+  });
+
+  it("suppresses the Miyo steering when the builtin prompt is disabled, even if Miyo is in use", () => {
+    mockShouldUseMiyo.mockReturnValue(true);
+    setDisableBuiltinSystemPrompt(true);
+    const prompt = buildAgentSystemPrompt();
+    expect(prompt).not.toContain(COPILOT_MIYO_SEARCH_STEERING);
   });
 });
 

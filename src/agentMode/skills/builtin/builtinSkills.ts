@@ -408,7 +408,7 @@ export const MIYO_SEARCH_SKILL: BuiltinSkill = {
   enabledAgents: ["claude", "codex", "opencode"],
   skillMd: `---
 name: miyo-search
-description: Search the user's Obsidian vault with Miyo local semantic search. Use when the user wants to find notes, recall what they wrote about a topic, or ground an answer in their own vault — prefer this over reading files blindly for meaning-based recall. Needs the Miyo desktop app installed and running.
+description: Semantic (meaning-based) search over the user's Obsidian vault via the local Miyo app. For any vault-search intent, use it when builtin grep search is too slow or doesn't surface enough relevant notes, or when the user explicitly asks for Miyo search. Needs the Miyo desktop app installed and running.
 metadata:
   copilot-enabled-agents: claude, codex, opencode
   copilot-builtin-version: "${MIYO_SEARCH_VERSION}"
@@ -417,9 +417,13 @@ metadata:
 # Miyo vault search
 
 Search the user's indexed Obsidian vault through Miyo, a local companion app
-that runs semantic search over their notes on their own machine. Use it to find
-relevant notes by meaning (not just filename) and to browse what Miyo has
+that runs semantic search over their notes on their own machine. It finds
+relevant notes by meaning (not just filename) and can browse what Miyo has
 indexed. All calls are local — no network, no API key.
+
+When to use it: for any vault-search intent, reach for Miyo when your builtin
+\`grep\` search is too slow or doesn't surface enough relevant notes, or when
+the user explicitly asks for Miyo search.
 
 ## How to run
 
