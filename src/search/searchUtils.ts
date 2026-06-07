@@ -194,6 +194,19 @@ export function createCopilotPatternFilter(app: App): (path: string) => boolean 
 }
 
 /**
+ * Whether any QA inclusion/exclusion pattern is currently configured. Callers
+ * use this to decide whether {@link createCopilotPatternFilter} can actually
+ * remove results — when nothing is configured the filter is a no-op, so there
+ * is no point over-fetching candidates to compensate for it.
+ *
+ * @returns True when at least one inclusion or exclusion pattern is active.
+ */
+export function hasActiveCopilotPatterns(): boolean {
+  const { inclusions, exclusions } = getMatchingPatterns();
+  return Boolean(inclusions || exclusions);
+}
+
+/**
  * Break down the patterns into their respective categories.
  * @param patterns - The patterns to categorize.
  * @returns An object containing the categorized patterns.

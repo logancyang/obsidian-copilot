@@ -94,7 +94,7 @@ describe("MiyoSemanticRetriever", () => {
       "http://miyo.local",
       "/vault",
       "query with [[notes/a]] mention",
-      RETURN_ALL_LIMIT,
+      10,
       undefined
     );
     expect(mockGetDocumentsByPath).not.toHaveBeenCalled();
@@ -111,8 +111,11 @@ describe("MiyoSemanticRetriever", () => {
 
     const startTime = 1700000000000;
     const endTime = 1700600000000;
+    // Time-range queries are issued with returnAll enabled by callers, so the
+    // retriever over-fetches the full candidate pool.
     const retriever = createRetriever({
       timeRange: { startTime, endTime },
+      returnAll: true,
     });
 
     await retriever.getRelevantDocuments("show notes from this week");
@@ -146,7 +149,19 @@ describe("MiyoSemanticRetriever", () => {
     );
   });
 
-  it("over-fetches but caps returned chunks to the requested limit", async () => {
+  it("over-fetches but caps returned chunks to the requested limit when a filter is active", async () => {
+    // An active inclusion/exclusion pattern can drop results, so the retriever
+    // over-fetches candidates to still fill the requested cap.
+    (getSettings as jest.Mock).mockReturnValue({
+      miyoServerUrl: "http://miyo.local",
+      debug: false,
+      qaExclusions: "private",
+    });
+    const app = {
+      vault: { getAbstractFileByPath: () => null },
+      metadataCache: {},
+    } as unknown as App;
+
     mockSearch.mockResolvedValue({
       results: Array.from({ length: 5 }, (_, i) => ({
         id: `doc-${i}`,
@@ -157,7 +172,11 @@ describe("MiyoSemanticRetriever", () => {
       })),
     });
 
-    const retriever = createRetriever({ maxK: 2 });
+    const retriever = new MiyoSemanticRetriever(app, {
+      maxK: 2,
+      salientTerms: [],
+      minSimilarityScore: 0.2,
+    });
     const documents = await retriever.getRelevantDocuments("query");
 
     // Over-fetches the full candidate pool but returns only the top maxK.
@@ -173,6 +192,17 @@ describe("MiyoSemanticRetriever", () => {
       "notes/0.md",
       "notes/1.md",
     ]);
+  });
+
+  it("bounds the request to the requested limit when no filter is active", async () => {
+    // With no inclusion/exclusion pattern and returnAll off, over-fetching only
+    // wastes transfer/processing, so the request is bounded to the cap.
+    mockSearch.mockResolvedValue({ results: [] });
+
+    const retriever = createRetriever({ maxK: 3 });
+    await retriever.getRelevantDocuments("query");
+
+    expect(mockSearch).toHaveBeenCalledWith("http://miyo.local", "/vault", "query", 3, undefined);
   });
 
   it("filters chunks by Copilot inclusion/exclusion rules", async () => {
