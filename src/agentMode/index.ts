@@ -23,7 +23,7 @@ import {
   createDefaultPermissionPrompter,
 } from "./ui/permissionPrompter";
 
-export { AGENT_CHAT_MODE } from "./session/AgentChatPersistenceManager";
+export { AGENT_CHAT_MODE } from "@/constants";
 export { AgentModeChat } from "./ui/AgentModeChat";
 export { default as CopilotAgentView } from "./ui/CopilotAgentView";
 export {

@@ -8,6 +8,7 @@ export const BREVILABS_API_BASE_URL = "https://api.brevilabs.com/v1";
 export const BREVILABS_MODELS_BASE_URL = "https://models.brevilabs.com/v1";
 export const CHAT_VIEWTYPE = "copilot-chat-view";
 export const CHAT_AGENT_VIEWTYPE = "copilot-agent-chat-view";
+export const AGENT_CHAT_MODE = "agent";
 export const RELEVANT_NOTES_VIEWTYPE = "copilot-relevant-notes-view";
 
 // Custom Obsidian icon for Agent Mode surfaces (view tab, ribbon, commands).

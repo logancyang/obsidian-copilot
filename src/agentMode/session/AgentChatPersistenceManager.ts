@@ -1,4 +1,4 @@
-import { AI_SENDER, USER_SENDER } from "@/constants";
+import { AGENT_CHAT_MODE, AI_SENDER, USER_SENDER } from "@/constants";
 import { logError, logInfo, logWarn } from "@/logger";
 import { getSettings } from "@/settings/model";
 import { FormattedDateTime } from "@/types/message";
@@ -23,7 +23,6 @@ import type { AgentChatMessage, BackendId } from "./types";
 
 const SAFE_FILENAME_BYTE_LIMIT = 100;
 export const AGENT_FILENAME_PREFIX = "agent__";
-export const AGENT_CHAT_MODE = "agent";
 
 /**
  * Result of `loadFile` — restores display-only Agent Mode messages plus

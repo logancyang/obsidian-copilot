@@ -22,6 +22,7 @@ import { SystemPromptRegister } from "@/system-prompts/systemPromptRegister";
 import { ProjectRegister } from "@/projects/projectRegister";
 import {
   ABORT_REASON,
+  AGENT_CHAT_MODE,
   CHAT_AGENT_VIEWTYPE,
   CHAT_VIEWTYPE,
   COPILOT_AGENT_ICON_ID,
@@ -107,8 +108,6 @@ import {
   trashFile,
 } from "@/utils/vaultAdapterUtils";
 import { v4 as uuidv4 } from "uuid";
-
-const AGENT_CHAT_MODE = "agent";
 
 // Removed unused FileTrackingState interface
 
