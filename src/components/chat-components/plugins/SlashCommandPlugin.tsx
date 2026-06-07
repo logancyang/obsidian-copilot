@@ -1,13 +1,13 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { $getSelection, $isRangeSelection, TextNode } from "lexical";
 import fuzzysort from "fuzzysort";
+import { Platform } from "obsidian";
 
-import { listBackendDescriptors, useIsAgentModeEnabled, useManagedSkills } from "@/agentMode";
-import type { BackendId } from "@/agentMode";
 import { useCustomCommands } from "@/commands/state";
 import { CustomCommandManager } from "@/commands/customCommandManager";
 import { sortSlashCommands } from "@/commands/customCommandUtils";
+import { logError } from "@/logger";
 import { useSettingsValue } from "@/settings/model";
 import { TypeaheadMenuPortal } from "@/components/chat-components/TypeaheadMenuPortal";
 import { TypeaheadOption } from "@/components/chat-components/TypeaheadMenuContent";
@@ -15,11 +15,69 @@ import {
   useTypeaheadPlugin,
   TypeaheadState,
 } from "@/components/chat-components/hooks/useTypeaheadPlugin";
+import type { BackendId, Skill } from "@/agentMode";
 
 import { composeSlashMenuItems, type SlashMenuItem } from "./slashMenuItems";
 
 interface SlashCommandOption extends TypeaheadOption {
   item: SlashMenuItem;
+}
+
+interface AgentSlashData {
+  enabled: boolean;
+  skills: Skill[];
+  backendIds: ReadonlySet<BackendId> | null;
+}
+
+const EMPTY_SKILLS = Object.freeze([]) as unknown as Skill[];
+const EMPTY_AGENT_SLASH_DATA: AgentSlashData = Object.freeze({
+  enabled: false,
+  skills: EMPTY_SKILLS,
+  backendIds: null,
+});
+
+function useAgentSlashData(): AgentSlashData {
+  const [data, setData] = useState<AgentSlashData>(EMPTY_AGENT_SLASH_DATA);
+
+  useEffect(() => {
+    if (!Platform.isDesktopApp) return;
+
+    let cancelled = false;
+    let unsubscribe: (() => void) | undefined;
+
+    async function loadAgentSlashData(): Promise<void> {
+      const { getManagedSkills, SkillManager, listBackendDescriptors } =
+        await import("@/agentMode");
+
+      const update = () => {
+        if (cancelled) return;
+        setData({
+          enabled: true,
+          skills: getManagedSkills(),
+          backendIds: new Set(listBackendDescriptors().map((descriptor) => descriptor.id)),
+        });
+      };
+
+      update();
+
+      if (SkillManager.hasInstance()) {
+        unsubscribe = SkillManager.getInstance().subscribeToSkillSetChange(update);
+      }
+    }
+
+    void loadAgentSlashData().catch((error) => {
+      if (!cancelled) {
+        logError("Failed to load Agent Mode slash commands.", error);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
+  }, []);
+
+  return data;
 }
 
 /**
@@ -29,14 +87,16 @@ interface SlashCommandOption extends TypeaheadOption {
  * skill) rather than silently filtering everything out, which is the
  * behaviour a typoed or stale setting would otherwise produce.
  */
-function useActiveSlashBackend(): BackendId | null {
+function useActiveSlashBackend(
+  agentModeEnabled: boolean,
+  backendIds: ReadonlySet<BackendId> | null
+): BackendId | null {
   const settings = useSettingsValue();
-  const agentModeEnabled = useIsAgentModeEnabled();
   if (!agentModeEnabled) return null;
   const activeBackend = settings.agentMode?.activeBackend;
   if (typeof activeBackend !== "string" || activeBackend.length === 0) return null;
-  const known = listBackendDescriptors().some((d) => d.id === activeBackend);
-  return known ? activeBackend : null;
+  if (!backendIds?.has(activeBackend)) return null;
+  return activeBackend;
 }
 
 /**
@@ -55,8 +115,8 @@ function useActiveSlashBackend(): BackendId | null {
 export function SlashCommandPlugin(): JSX.Element {
   const [editor] = useLexicalComposerContext();
   const commands = useCustomCommands();
-  const skills = useManagedSkills();
-  const activeBackend = useActiveSlashBackend();
+  const agentSlashData = useAgentSlashData();
+  const activeBackend = useActiveSlashBackend(agentSlashData.enabled, agentSlashData.backendIds);
   const [currentQuery, setCurrentQuery] = useState("");
 
   // Recency / strategy sort happens before composition so the slash plugin
@@ -64,7 +124,7 @@ export function SlashCommandPlugin(): JSX.Element {
   const sortedCommands = useMemo(() => sortSlashCommands(commands), [commands]);
 
   const allOptions = useMemo<SlashCommandOption[]>(() => {
-    const items = composeSlashMenuItems(skills, sortedCommands, activeBackend);
+    const items = composeSlashMenuItems(agentSlashData.skills, sortedCommands, activeBackend);
     return items.map((item) => ({
       key: item.key,
       title: item.name,
@@ -74,7 +134,7 @@ export function SlashCommandPlugin(): JSX.Element {
       content: item.body,
       item,
     }));
-  }, [skills, sortedCommands, activeBackend]);
+  }, [agentSlashData.skills, sortedCommands, activeBackend]);
 
   const filteredOptions = useMemo(() => {
     if (!currentQuery) return allOptions;

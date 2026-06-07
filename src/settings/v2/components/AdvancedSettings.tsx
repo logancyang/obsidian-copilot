@@ -22,14 +22,15 @@ import {
   updateSetting,
   useSettingsValue,
 } from "@/settings/model";
-import { acpFrameSink } from "@/agentMode";
 import { ArrowUpRight, Info, Plus, ShieldCheck, Trash2, Unlock } from "lucide-react";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { MigrateConfirmModal } from "@/components/modals/MigrateConfirmModal";
-import { type App, Notice } from "obsidian";
-import React, { useCallback, useState } from "react";
+import { type App, Notice, Platform } from "obsidian";
+import React, { useCallback, useEffect, useState } from "react";
 import { getPromptFilePath, SystemPromptAddModal } from "@/system-prompts";
 import { useSystemPrompts } from "@/system-prompts/state";
+
+const DESKTOP_UNAVAILABLE_FRAME_LOG_PATH = "(Agent Mode frame logs are desktop-only)";
 
 /**
  * Returns a `saveData` callback bound to the loaded Copilot plugin instance.
@@ -58,6 +59,22 @@ export const AdvancedSettings: React.FC = () => {
   const prompts = useSystemPrompts();
   const [forgetting, setForgetting] = useState(false);
   const [migrating, setMigrating] = useState(false);
+  const [frameLogPath, setFrameLogPath] = useState(DESKTOP_UNAVAILABLE_FRAME_LOG_PATH);
+
+  useEffect(() => {
+    if (!Platform.isDesktopApp) return;
+
+    let cancelled = false;
+    void import("@/agentMode").then(({ acpFrameSink }) => {
+      if (!cancelled) {
+        setFrameLogPath(acpFrameSink.getPath());
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const keychainAvailable = KeychainService.getInstance().isAvailable();
   const keychainOnly = isKeychainOnly(settings);
@@ -455,7 +472,7 @@ export const AdvancedSettings: React.FC = () => {
         <SettingItem
           type="switch"
           title="Log Full Agent Mode Frames"
-          description={`Writes diagnostic Agent Mode frames as NDJSON outside your vault at ${acpFrameSink.getPath()}. Frames include prompts, tool inputs/outputs, and attachments; oversized frames are summarized to avoid runaway logs. Sensitive content lands on disk in plaintext. Leave off unless actively debugging.`}
+          description={`Writes diagnostic Agent Mode frames as NDJSON outside your vault at ${frameLogPath}. Frames include prompts, tool inputs/outputs, and attachments; oversized frames are summarized to avoid runaway logs. Sensitive content lands on disk in plaintext. Leave off unless actively debugging.`}
           checked={settings.agentMode.debugFullFrames}
           onCheckedChange={(checked) => {
             setSettings((cur) => ({
@@ -467,15 +484,21 @@ export const AdvancedSettings: React.FC = () => {
         <SettingItem
           type="custom"
           title="Agent Mode Frame Log"
-          description={`Open or clear the Agent Mode frame log (${acpFrameSink.getPath()}).`}
+          description={`Open or clear the Agent Mode frame log (${frameLogPath}).`}
         >
           <div className="tw-flex tw-gap-2">
             <Button
               variant="secondary"
               size="sm"
               onClick={async () => {
+                if (!Platform.isDesktopApp) {
+                  new Notice("Agent Mode frame logs are available on desktop only.");
+                  return;
+                }
                 try {
+                  const { acpFrameSink } = await import("@/agentMode");
                   await acpFrameSink.open();
+                  setFrameLogPath(acpFrameSink.getPath());
                 } catch {
                   new Notice("Failed to open Agent Mode frame log.");
                 }
@@ -487,8 +510,14 @@ export const AdvancedSettings: React.FC = () => {
               variant="secondary"
               size="sm"
               onClick={async () => {
+                if (!Platform.isDesktopApp) {
+                  new Notice("Agent Mode frame logs are available on desktop only.");
+                  return;
+                }
                 try {
+                  const { acpFrameSink } = await import("@/agentMode");
                   await acpFrameSink.clear();
+                  setFrameLogPath(acpFrameSink.getPath());
                   new Notice("Agent Mode frame log cleared.");
                 } catch {
                   new Notice("Failed to clear Agent Mode frame log.");

@@ -8,17 +8,47 @@ import CopilotPlugin from "@/main";
 import { ByokPanel, ModelManagementProvider } from "@/modelManagement";
 import { resetSettings } from "@/settings/model";
 import { CommandSettings } from "@/settings/v2/components/CommandSettings";
-import { SkillsSettings } from "@/agentMode";
 import { Bot, Cog, Command, Cpu, Database, Sparkle, Sparkles, Wrench } from "lucide-react";
+import { Platform } from "obsidian";
 import React from "react";
 import { AdvancedSettings } from "./components/AdvancedSettings";
-import { AgentSettings } from "./components/AgentSettings";
 import { BasicSettings } from "./components/BasicSettings";
 import { CopilotPlusSettings } from "./components/CopilotPlusSettings";
 import { QASettings } from "./components/QASettings";
 
 const TAB_IDS = ["basic", "byok", "agent", "QA", "command", "skills", "plus", "advanced"] as const;
 type TabId = (typeof TAB_IDS)[number];
+
+const LazyAgentSettings = React.lazy(() =>
+  import("./components/AgentSettings").then((module) => ({ default: module.AgentSettings }))
+);
+const LazySkillsSettings = React.lazy(() =>
+  import("@/agentMode").then((module) => ({ default: module.SkillsSettings }))
+);
+
+const DesktopOnlySettingsPanel: React.FC = () => (
+  <section className="tw-rounded-md tw-border tw-border-solid tw-border-border tw-p-4 tw-text-sm tw-text-muted">
+    Agent settings are available on desktop.
+  </section>
+);
+
+const AgentSettingsPanel: React.FC = () => {
+  if (!Platform.isDesktopApp) return <DesktopOnlySettingsPanel />;
+  return (
+    <React.Suspense fallback={null}>
+      <LazyAgentSettings />
+    </React.Suspense>
+  );
+};
+
+const SkillsSettingsPanel: React.FC = () => {
+  if (!Platform.isDesktopApp) return <DesktopOnlySettingsPanel />;
+  return (
+    <React.Suspense fallback={null}>
+      <LazySkillsSettings />
+    </React.Suspense>
+  );
+};
 
 // tab icons
 const icons: Record<TabId, JSX.Element> = {
@@ -36,10 +66,10 @@ const icons: Record<TabId, JSX.Element> = {
 const components: Record<TabId, React.FC> = {
   basic: () => <BasicSettings />,
   byok: () => <ByokPanel />,
-  agent: () => <AgentSettings />,
+  agent: AgentSettingsPanel,
   QA: () => <QASettings />,
   command: () => <CommandSettings />,
-  skills: () => <SkillsSettings />,
+  skills: SkillsSettingsPanel,
   plus: () => <CopilotPlusSettings />,
   advanced: () => <AdvancedSettings />,
 };

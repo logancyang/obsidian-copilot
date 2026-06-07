@@ -1,15 +1,4 @@
-import {
-  AGENT_CHAT_MODE,
-  CopilotAgentView,
-  createAgentSessionManager,
-  isAgentModeEnabled,
-  PlanPreviewView,
-  PLAN_PREVIEW_VIEW_TYPE,
-  setFrameSinkVaultBasePath,
-  SkillManager,
-  type AgentSessionManager,
-} from "@/agentMode";
-import { wireAgentModelDiscovery } from "@/agentMode/agentModelDiscovery";
+import type { AgentSessionManager } from "@/agentMode";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import ProjectManager from "@/LLMProviders/projectManager";
 import {
@@ -119,6 +108,8 @@ import {
 } from "@/utils/vaultAdapterUtils";
 import { v4 as uuidv4 } from "uuid";
 
+const AGENT_CHAT_MODE = "agent";
+
 // Removed unused FileTrackingState interface
 
 export default class CopilotPlugin extends Plugin {
@@ -134,6 +125,9 @@ export default class CopilotPlugin extends Plugin {
   settingsUnsubscriber?: () => void;
   chatUIState: ChatManagerChatUIState;
   agentSessionManager?: AgentSessionManager;
+  private CopilotAgentView?: typeof import("@/agentMode").CopilotAgentView;
+  private PlanPreviewView?: typeof import("@/agentMode").PlanPreviewView;
+  private planPreviewViewType?: typeof import("@/agentMode").PLAN_PREVIEW_VIEW_TYPE;
   private agentModelDiscoveryUnsubscriber?: () => void;
   modelManagement!: ModelManagementApi;
   private ribbonIconEl?: HTMLElement;
@@ -248,7 +242,19 @@ export default class CopilotPlugin extends Plugin {
     this.projectManager = ProjectManager.getInstance(this.app, this);
 
     // Initialize Agent Mode coordinator (desktop only — ACP needs subprocess support).
-    if (!Platform.isMobile) {
+    if (Platform.isDesktopApp) {
+      const {
+        CopilotAgentView,
+        PlanPreviewView,
+        PLAN_PREVIEW_VIEW_TYPE,
+        createAgentSessionManager,
+        setFrameSinkVaultBasePath,
+      } = await import("@/agentMode");
+      const { wireAgentModelDiscovery } = await import("@/agentMode/agentModelDiscovery");
+      this.CopilotAgentView = CopilotAgentView;
+      this.PlanPreviewView = PlanPreviewView;
+      this.planPreviewViewType = PLAN_PREVIEW_VIEW_TYPE;
+
       // Seed the frame-log sink with the vault base path (desktop FileSystemAdapter only).
       const adapter = this.app.vault.adapter;
       setFrameSinkVaultBasePath(
@@ -314,14 +320,21 @@ export default class CopilotPlugin extends Plugin {
       RELEVANT_NOTES_VIEWTYPE,
       (leaf: WorkspaceLeaf) => new RelevantNotesView(leaf, this)
     );
-    if (!Platform.isMobile) {
+    if (
+      Platform.isDesktopApp &&
+      this.CopilotAgentView &&
+      this.PlanPreviewView &&
+      this.planPreviewViewType
+    ) {
+      const AgentView = this.CopilotAgentView;
+      const PreviewView = this.PlanPreviewView;
       this.safeRegisterView(
         CHAT_AGENT_VIEWTYPE,
-        (leaf: WorkspaceLeaf) => new CopilotAgentView(leaf, this)
+        (leaf: WorkspaceLeaf) => new AgentView(leaf, this)
       );
       this.safeRegisterView(
-        PLAN_PREVIEW_VIEW_TYPE,
-        (leaf: WorkspaceLeaf) => new PlanPreviewView(leaf)
+        this.planPreviewViewType,
+        (leaf: WorkspaceLeaf) => new PreviewView(leaf)
       );
     }
 
@@ -459,8 +472,11 @@ export default class CopilotPlugin extends Plugin {
     this.settingsUnsubscriber?.();
 
     // Tear down skills vault watchers + debounce timers.
-    if (SkillManager.hasInstance()) {
-      SkillManager.getInstance().dispose();
+    if (Platform.isDesktopApp) {
+      const { SkillManager } = await import("@/agentMode");
+      if (SkillManager.hasInstance()) {
+        SkillManager.getInstance().dispose();
+      }
     }
 
     // Cleanup selection handler
@@ -556,8 +572,8 @@ export default class CopilotPlugin extends Plugin {
       .getLeavesOfType(viewType)
       .map((leaf) => leaf.view)
       .find(
-        (v): v is CopilotView | CopilotAgentView =>
-          v instanceof CopilotView || v instanceof CopilotAgentView
+        (v): v is CopilotView | InstanceType<NonNullable<typeof this.CopilotAgentView>> =>
+          v instanceof CopilotView || this.isCopilotAgentView(v)
       );
 
     if (view) {
@@ -864,7 +880,7 @@ export default class CopilotPlugin extends Plugin {
     // mount-timing guess. Also covers the already-open-and-active case, where
     // revealLeaf fires no active-leaf-change to drive focus.
     const view = leaf?.view;
-    if (view instanceof CopilotAgentView) {
+    if (this.isCopilotAgentView(view)) {
       view.eventTarget.queueVisible();
     }
     return leaf;
@@ -899,11 +915,13 @@ export default class CopilotPlugin extends Plugin {
     if (!leaf) return;
 
     this.app.workspace.revealLeaf(leaf);
-    const view = leaf.view as CopilotView | CopilotAgentView;
+    const view = leaf.view;
     // The bus latches the text if the view's React tree hasn't mounted its
     // listener yet, so a freshly-opened view drains it on mount — delivery no
     // longer depends on guessing how long mounting takes.
-    view.eventTarget.queueInsertText(text);
+    if (view instanceof CopilotView || this.isCopilotAgentView(view)) {
+      view.eventTarget.queueInsertText(text);
+    }
   }
 
   async newAgentChat(): Promise<void> {
@@ -934,7 +952,7 @@ export default class CopilotPlugin extends Plugin {
   }
 
   private requireAgentView(): AgentSessionManager | null {
-    if (Platform.isMobile) {
+    if (!Platform.isDesktopApp) {
       new Notice("Agent Chat is not available on mobile.");
       return null;
     }
@@ -946,7 +964,14 @@ export default class CopilotPlugin extends Plugin {
   }
 
   private canUseAgentView(): boolean {
-    return !!this.agentSessionManager && isAgentModeEnabled();
+    return !!this.agentSessionManager && Platform.isDesktopApp;
+  }
+
+  private isCopilotAgentView(
+    view: unknown
+  ): view is InstanceType<NonNullable<typeof this.CopilotAgentView>> {
+    const AgentView = this.CopilotAgentView;
+    return !!AgentView && view instanceof AgentView;
   }
 
   async loadSettings() {
@@ -1147,7 +1172,9 @@ export default class CopilotPlugin extends Plugin {
     await manager.loadSessionFromHistory(file);
     void this.touchChatHistoryLastAccessedAt(file);
 
-    (leaf.view as CopilotAgentView | undefined)?.updateView();
+    if (this.isCopilotAgentView(leaf.view)) {
+      leaf.view.updateView();
+    }
   }
 
   async openChatSourceFile(fileId: string): Promise<void> {
