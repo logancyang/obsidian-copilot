@@ -1,6 +1,5 @@
 import { AgentModeChat } from "@/agentMode/ui/AgentModeChat";
 import { attachChatViewLayoutObservers } from "@/components/chat-components/attachChatViewLayoutObservers";
-import { ChatViewLayout } from "@/components/chat-components/ChatViewLayout";
 import { CHAT_AGENT_VIEWTYPE, COPILOT_AGENT_ICON_ID } from "@/constants";
 import { ChatViewEventTarget, EventTargetContext } from "@/context";
 import CopilotPlugin from "@/main";
@@ -13,7 +12,6 @@ import { Root } from "react-dom/client";
 export default class CopilotAgentView extends ItemView {
   private root: Root | null = null;
   private handleSaveAsNote: (() => Promise<void>) | null = null;
-  private layout: ChatViewLayout | null = null;
   private disposeLayoutObservers: (() => void) | null = null;
   eventTarget: ChatViewEventTarget;
 
@@ -46,7 +44,6 @@ export default class CopilotAgentView extends ItemView {
   async onOpen(): Promise<void> {
     this.root = createPluginRoot(this.containerEl.children[1], this.app);
     this.renderChat();
-    this.layout = new ChatViewLayout(this.containerEl, this.app.workspace);
 
     const observers = attachChatViewLayoutObservers(this.containerEl);
     this.disposeLayoutObservers = observers.dispose;
@@ -89,8 +86,6 @@ export default class CopilotAgentView extends ItemView {
   async onClose(): Promise<void> {
     this.disposeLayoutObservers?.();
     this.disposeLayoutObservers = null;
-    this.layout?.destroy();
-    this.layout = null;
 
     if (this.root) {
       this.root.unmount();
