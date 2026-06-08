@@ -346,6 +346,39 @@ describe("AgentSession.sendPrompt", () => {
     expect(placeholder?.message).toContain("Rate limit exceeded");
   });
 
+  it("surfaces a provider error stringified inside data.message (codex-acp)", async () => {
+    const mock = makeMockBackend();
+    // codex-acp reports JSON-RPC -32603 "Internal error" with the real provider
+    // error nested as a JSON *string* in data.message.
+    const error = new Error("Internal error");
+    (error as { data?: unknown }).data = {
+      message: JSON.stringify({
+        type: "error",
+        status: 400,
+        error: {
+          type: "invalid_request_error",
+          message:
+            "The 'gpt-5.5' model requires a newer version of Codex. Please upgrade to the latest app or CLI and try again.",
+        },
+      }),
+      codex_error_info: "other",
+    };
+    mock.prompt.mockRejectedValueOnce(error);
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "codex",
+    });
+
+    await expect(session.sendPrompt("hi").turn).rejects.toThrow("Internal error");
+
+    const placeholder = session.store.getDisplayMessages().find((m) => m.sender === AI_SENDER);
+    expect(placeholder?.isErrorMessage).toBe(true);
+    expect(placeholder?.message).toContain("invalid_request_error");
+    expect(placeholder?.message).toContain("requires a newer version of Codex");
+  });
+
   it("renders a visible error (not an empty bubble) when the backend reports auth required", async () => {
     const mock = makeMockBackend();
     mock.prompt.mockRejectedValueOnce(new AuthRequiredError("You're not signed in to Claude."));

@@ -1407,6 +1407,16 @@ function findProviderErrorPayload(
       return { type: errorRecord.type, message: errorRecord.message };
     }
   }
+  // Some agents (e.g. codex-acp) stringify the upstream provider error as JSON
+  // inside a `message` field. Parse and recurse so the real reason surfaces
+  // instead of a bare "Internal error".
+  if (typeof record.message === "string") {
+    const parsed = tryParseJsonObject(record.message);
+    if (parsed) {
+      const nested = findProviderErrorPayload(parsed, seen);
+      if (nested) return nested;
+    }
+  }
   if (record.data) {
     const nested = findProviderErrorPayload(record.data, seen);
     if (nested) return nested;
@@ -1420,6 +1430,18 @@ function findProviderErrorPayload(
   const cause = record.cause;
   if (cause) return findProviderErrorPayload(cause, seen);
   return null;
+}
+
+/** Parse a string into a plain object, or null if it isn't JSON-object-shaped. */
+function tryParseJsonObject(s: string): Record<string, unknown> | null {
+  const t = s.trim();
+  if (!t.startsWith("{")) return null; // cheap guard; don't parse plain text
+  try {
+    const v = JSON.parse(t);
+    return v && typeof v === "object" ? (v as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
 }
 
 export function buildPromptBlocks(
