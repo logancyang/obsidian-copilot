@@ -96,16 +96,16 @@ function checkAgentModeImportBoundaries() {
       }
     }
 
+    // Every dynamic Agent Mode import must be gated by `isDesktopRuntime()`,
+    // NOT a bare `Platform.isDesktopApp`: the latter stays `true` under
+    // `app.emulateMobile(true)` (which stubs Node to null), so it does not keep the
+    // `@/agentMode` barrel off the emulated-mobile load path and the plugin crashes.
     const dynamicImports = Array.from(source.matchAll(dynamicAgentModeImport));
-    if (dynamicImports.length > 0) {
-      if (!source.includes("Platform.isDesktopApp")) {
-        fail(`${relativePath}: dynamic Agent Mode import must be gated by Platform.isDesktopApp.`);
-      }
-      if (source.includes("Platform.isMobile")) {
-        fail(
-          `${relativePath}: Agent Mode gates should use Platform.isDesktopApp, not Platform.isMobile.`
-        );
-      }
+    if (dynamicImports.length > 0 && !source.includes("isDesktopRuntime")) {
+      fail(
+        `${relativePath}: dynamic Agent Mode import must be gated by isDesktopRuntime() ` +
+          `— Platform.isDesktopApp is true under app.emulateMobile(true).`
+      );
     }
   }
 }

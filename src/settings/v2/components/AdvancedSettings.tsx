@@ -25,8 +25,9 @@ import {
 import { ArrowUpRight, Info, Plus, ShieldCheck, Trash2, Unlock } from "lucide-react";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { MigrateConfirmModal } from "@/components/modals/MigrateConfirmModal";
-import { type App, Notice, Platform } from "obsidian";
+import { type App, Notice } from "obsidian";
 import React, { useCallback, useEffect, useState } from "react";
+import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { getPromptFilePath, SystemPromptAddModal } from "@/system-prompts";
 import { useSystemPrompts } from "@/system-prompts/state";
 
@@ -62,7 +63,7 @@ export const AdvancedSettings: React.FC = () => {
   const [frameLogPath, setFrameLogPath] = useState(DESKTOP_UNAVAILABLE_FRAME_LOG_PATH);
 
   useEffect(() => {
-    if (!Platform.isDesktopApp) return;
+    if (!isDesktopRuntime()) return;
 
     let cancelled = false;
     void import("@/agentMode").then(({ acpFrameSink }) => {
@@ -491,7 +492,7 @@ export const AdvancedSettings: React.FC = () => {
               variant="secondary"
               size="sm"
               onClick={async () => {
-                if (!Platform.isDesktopApp) {
+                if (!isDesktopRuntime()) {
                   new Notice("Agent Mode frame logs are available on desktop only.");
                   return;
                 }
@@ -510,7 +511,7 @@ export const AdvancedSettings: React.FC = () => {
               variant="secondary"
               size="sm"
               onClick={async () => {
-                if (!Platform.isDesktopApp) {
+                if (!isDesktopRuntime()) {
                   new Notice("Agent Mode frame logs are available on desktop only.");
                   return;
                 }

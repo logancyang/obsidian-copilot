@@ -67,6 +67,7 @@ import {
 } from "@/settings/model";
 import { dehydrateDeviceProfile, hydrateDeviceProfile } from "@/settings/deviceProfiles";
 import { getDeviceId } from "@/utils/deviceId";
+import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { installRendererEventsShim } from "@/utils/rendererEventsShim";
 import { ProjectContextCache } from "@/cache/projectContextCache";
 import { ContextProcessor } from "@/contextProcessor";
@@ -240,8 +241,11 @@ export default class CopilotPlugin extends Plugin {
     // Initialize ProjectManager
     this.projectManager = ProjectManager.getInstance(this.app, this);
 
-    // Initialize Agent Mode coordinator (desktop only — ACP needs subprocess support).
-    if (Platform.isDesktopApp) {
+    // Initialize Agent Mode coordinator (desktop only — ACP needs subprocess
+    // support). Gate on `isDesktopRuntime()`, not `Platform.isDesktopApp`:
+    // under `app.emulateMobile(true)` the latter stays true while Node is stubbed,
+    // so importing the `@/agentMode` barrel there would crash the plugin at load.
+    if (isDesktopRuntime()) {
       const {
         CopilotAgentView,
         PlanPreviewView,
@@ -320,7 +324,7 @@ export default class CopilotPlugin extends Plugin {
       (leaf: WorkspaceLeaf) => new RelevantNotesView(leaf, this)
     );
     if (
-      Platform.isDesktopApp &&
+      isDesktopRuntime() &&
       this.CopilotAgentView &&
       this.PlanPreviewView &&
       this.planPreviewViewType
@@ -470,8 +474,10 @@ export default class CopilotPlugin extends Plugin {
     this.projectRegister?.cleanup();
     this.settingsUnsubscriber?.();
 
-    // Tear down skills vault watchers + debounce timers.
-    if (Platform.isDesktopApp) {
+    // Tear down skills vault watchers + debounce timers. Gate matches onload so
+    // we never import the `@/agentMode` barrel on a Node-less runtime (mobile /
+    // emulateMobile), which would crash during unload.
+    if (isDesktopRuntime()) {
       const { SkillManager } = await import("@/agentMode");
       if (SkillManager.hasInstance()) {
         SkillManager.getInstance().dispose();
@@ -951,7 +957,7 @@ export default class CopilotPlugin extends Plugin {
   }
 
   private requireAgentView(): AgentSessionManager | null {
-    if (!Platform.isDesktopApp) {
+    if (!isDesktopRuntime()) {
       new Notice("Agent Chat is not available on mobile.");
       return null;
     }
@@ -963,7 +969,7 @@ export default class CopilotPlugin extends Plugin {
   }
 
   private canUseAgentView(): boolean {
-    return !!this.agentSessionManager && Platform.isDesktopApp;
+    return !!this.agentSessionManager && isDesktopRuntime();
   }
 
   private isCopilotAgentView(

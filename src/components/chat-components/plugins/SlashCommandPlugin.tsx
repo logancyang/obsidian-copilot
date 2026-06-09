@@ -2,13 +2,13 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { $getSelection, $isRangeSelection, TextNode } from "lexical";
 import fuzzysort from "fuzzysort";
-import { Platform } from "obsidian";
 
 import { useCustomCommands } from "@/commands/state";
 import { CustomCommandManager } from "@/commands/customCommandManager";
 import { sortSlashCommands } from "@/commands/customCommandUtils";
 import { logError } from "@/logger";
 import { useSettingsValue } from "@/settings/model";
+import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { TypeaheadMenuPortal } from "@/components/chat-components/TypeaheadMenuPortal";
 import { TypeaheadOption } from "@/components/chat-components/TypeaheadMenuContent";
 import {
@@ -40,7 +40,7 @@ function useAgentSlashData(): AgentSlashData {
   const [data, setData] = useState<AgentSlashData>(EMPTY_AGENT_SLASH_DATA);
 
   useEffect(() => {
-    if (!Platform.isDesktopApp) return;
+    if (!isDesktopRuntime()) return;
 
     let cancelled = false;
     let unsubscribe: (() => void) | undefined;

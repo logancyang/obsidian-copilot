@@ -27,7 +27,8 @@ import { shouldUseMiyo } from "@/miyo/miyoUtils";
 import { getAllQAMarkdownContent } from "@/search/searchUtils";
 import { NoteSelectedTextContext, WebSelectedTextContext } from "@/types/message";
 import { ensureFolderExists, isSourceModeOn } from "@/utils";
-import { Editor, MarkdownView, Notice, Platform, TFile } from "obsidian";
+import { isDesktopRuntime } from "@/utils/desktopRuntime";
+import { Editor, MarkdownView, Notice, TFile } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
 import { COMMAND_IDS, COMMAND_ICONS, COMMAND_NAMES, CommandId } from "@/constants";
 import { setSelectedTextContexts } from "@/aiParams";
@@ -127,8 +128,9 @@ export function registerCommands(plugin: CopilotPlugin) {
   });
 
   // Agent Mode is always on, but requires subprocess support — register the
-  // agent commands on desktop only.
-  if (Platform.isDesktopApp) {
+  // agent commands only where the Node runtime exists (real desktop, not
+  // `emulateMobile`, where importing Agent Mode would crash).
+  if (isDesktopRuntime()) {
     addCommand(plugin, COMMAND_IDS.OPEN_AGENT_CHAT_WINDOW, () => {
       void plugin.activateAgentView();
     });

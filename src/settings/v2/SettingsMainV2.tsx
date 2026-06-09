@@ -9,8 +9,8 @@ import { ByokPanel, ModelManagementProvider } from "@/modelManagement";
 import { resetSettings } from "@/settings/model";
 import { CommandSettings } from "@/settings/v2/components/CommandSettings";
 import { Bot, Cog, Command, Cpu, Database, Sparkle, Sparkles, Wrench } from "lucide-react";
-import { Platform } from "obsidian";
 import React from "react";
+import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { AdvancedSettings } from "./components/AdvancedSettings";
 import { BasicSettings } from "./components/BasicSettings";
 import { CopilotPlusSettings } from "./components/CopilotPlusSettings";
@@ -33,7 +33,7 @@ const DesktopOnlySettingsPanel: React.FC = () => (
 );
 
 const AgentSettingsPanel: React.FC = () => {
-  if (!Platform.isDesktopApp) return <DesktopOnlySettingsPanel />;
+  if (!isDesktopRuntime()) return <DesktopOnlySettingsPanel />;
   return (
     <React.Suspense fallback={null}>
       <LazyAgentSettings />
@@ -42,7 +42,7 @@ const AgentSettingsPanel: React.FC = () => {
 };
 
 const SkillsSettingsPanel: React.FC = () => {
-  if (!Platform.isDesktopApp) return <DesktopOnlySettingsPanel />;
+  if (!isDesktopRuntime()) return <DesktopOnlySettingsPanel />;
   return (
     <React.Suspense fallback={null}>
       <LazySkillsSettings />
