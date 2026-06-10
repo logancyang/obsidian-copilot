@@ -1523,6 +1523,25 @@ describe("AgentSessionManager chat history aggregation", () => {
     expect((await index.getEntry("opencode", "s1"))?.title).toBe("New title");
   });
 
+  it("native rename matches the live session by backend, not session id alone", async () => {
+    const { manager, index } = buildHistoryHarness();
+    const live = await manager.createSession("opencode");
+    const liveId = live.getBackendSessionId()!;
+    await index.recordSession({
+      backendId: "codex",
+      sessionId: liveId,
+      title: "Codex entry",
+      createdAtMs: 1_000,
+      lastAccessedAtMs: 2_000,
+    });
+
+    // Renaming the codex native entry whose id collides with the live
+    // opencode session must NOT relabel the opencode tab.
+    await manager.updateChatTitle(buildNativeChatId("codex", liveId), "Codex renamed");
+    expect((await index.getEntry("codex", liveId))?.title).toBe("Codex renamed");
+    expect(live.setLabel).not.toHaveBeenCalled();
+  });
+
   it("matches live sessions by the (backendId, sessionId) pair, not session id alone", async () => {
     const { manager } = buildHistoryHarness();
     const session = await manager.createSession("opencode");

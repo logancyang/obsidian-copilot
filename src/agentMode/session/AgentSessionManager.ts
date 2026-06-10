@@ -241,8 +241,13 @@ export class AgentSessionManager {
       const index = this.opts.sessionIndex;
       if (!index) throw new Error("Agent session index is not configured.");
       await index.setTitle(native.backendId, native.sessionId, newTitle);
+      // Match the (backendId, sessionId) pair, not the id alone: on a
+      // cross-backend id collision, renaming by id could relabel the wrong
+      // backend's live tab (and its index entry via the label autosave).
       const live = this.getSessionByBackendId(native.sessionId);
-      if (live && live.getStatus() !== "closed") live.setLabel(newTitle);
+      if (live && live.backendId === native.backendId && live.getStatus() !== "closed") {
+        live.setLabel(newTitle);
+      }
       return;
     }
     const persistence = this.opts.persistenceManager;
