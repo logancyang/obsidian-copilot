@@ -302,9 +302,13 @@ export class AgentSessionManager {
 
   /**
    * Sweep already-running backends' native session stores into the index.
-   * Strictly opportunistic: never spawns a backend, swallows per-backend
-   * failures, and is capped by {@link LIST_SESSIONS_TIMEOUT_MS} so the
-   * history surface stays responsive when an agent is slow to answer.
+   * "Running" includes the preloader's warm probe subprocesses — they're
+   * spawned for every installed backend at plugin load, so sweeping them
+   * surfaces codex/opencode history on the very first Agent Home open,
+   * before any chat has started a manager-owned backend. Strictly
+   * opportunistic: never spawns a backend, swallows per-backend failures,
+   * and is capped by {@link LIST_SESSIONS_TIMEOUT_MS} so the history
+   * surface stays responsive when an agent is slow to answer.
    */
   private async refreshNativeSessionsFromBackends(): Promise<void> {
     const index = this.opts.sessionIndex;
@@ -312,12 +316,20 @@ export class AgentSessionManager {
     const adapter = this.app.vault.adapter;
     if (!(adapter instanceof FileSystemAdapter)) return;
     const vaultBasePath = adapter.getBasePath();
-    const sweeps: Promise<void>[] = [];
-    for (const [backendId, proc] of this.backends) {
-      if (!proc.isRunning()) continue;
-      sweeps.push(this.sweepNativeSessions(backendId, proc, vaultBasePath));
+    // Manager-owned procs win over warm probes for the same backend id —
+    // they're the same subprocess lineage, but the manager's entry is the
+    // one whose lifecycle we control.
+    const procs = new Map<BackendId, BackendProcess>();
+    for (const { backendId, proc } of this.preloader.getWarmProcs()) {
+      if (proc.isRunning()) procs.set(backendId, proc);
     }
-    if (sweeps.length === 0) return;
+    for (const [backendId, proc] of this.backends) {
+      if (proc.isRunning()) procs.set(backendId, proc);
+    }
+    if (procs.size === 0) return;
+    const sweeps = Array.from(procs, ([backendId, proc]) =>
+      this.sweepNativeSessions(backendId, proc, vaultBasePath)
+    );
     await withTimeout(
       Promise.allSettled(sweeps).then(() => undefined),
       LIST_SESSIONS_TIMEOUT_MS,

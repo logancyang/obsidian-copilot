@@ -140,6 +140,19 @@ export class AgentModelPreloader {
     return entry;
   }
 
+  /**
+   * Snapshot of the still-warm probe processes, for read-only RPC sweeps
+   * (the history surface's `listSessions`). Unlike {@link takeWarm} this
+   * does NOT consume the entries — the preloader keeps ownership, and the
+   * manager can still adopt the proc later.
+   */
+  getWarmProcs(): Array<{ backendId: BackendId; proc: BackendProcess }> {
+    return Array.from(this.warm.entries(), ([backendId, entry]) => ({
+      backendId,
+      proc: entry.proc,
+    }));
+  }
+
   /** Best-effort probe; failures are logged and swallowed. Dedupes per backend. */
   preload(backendId: BackendId): Promise<void> {
     if (this.disposed) return Promise.resolve();

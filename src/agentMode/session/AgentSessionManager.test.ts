@@ -160,6 +160,7 @@ function buildManager(): AgentSessionManager {
     setCached: jest.fn(),
     clearCached: jest.fn(),
     takeWarm: jest.fn(() => null),
+    getWarmProcs: jest.fn(() => []),
   };
   return new AgentSessionManager(
     buildApp(),
@@ -235,6 +236,7 @@ describe("AgentSessionManager.createSession", () => {
         cache.delete(id);
       }),
       takeWarm: jest.fn(() => null),
+      getWarmProcs: jest.fn(() => []),
     };
     const descriptor = buildDescriptor();
     const mgr = new AgentSessionManager(
@@ -561,6 +563,7 @@ describe("AgentSessionManager.restartBackend", () => {
       setCached: jest.fn(),
       clearCached: jest.fn(),
       takeWarm: jest.fn(() => null),
+      getWarmProcs: jest.fn(() => []),
     };
     const descriptor = {
       ...buildDescriptor(),
@@ -599,6 +602,7 @@ describe("AgentSessionManager.restartBackend", () => {
       setCached: jest.fn(),
       clearCached: jest.fn(),
       takeWarm: jest.fn(() => null),
+      getWarmProcs: jest.fn(() => []),
     };
     const descriptor = {
       ...buildDescriptor(),
@@ -635,6 +639,7 @@ describe("AgentSessionManager.restartBackend", () => {
       setCached: jest.fn(),
       clearCached: jest.fn(),
       takeWarm: jest.fn(() => null),
+      getWarmProcs: jest.fn(() => []),
     };
     const descriptor = {
       ...buildDescriptor(),
@@ -693,6 +698,7 @@ describe("AgentSessionManager.restartBackend", () => {
       setCached: jest.fn(),
       clearCached: jest.fn(),
       takeWarm: jest.fn(() => null),
+      getWarmProcs: jest.fn(() => []),
     };
     const descriptor = {
       ...buildDescriptor(),
@@ -1020,6 +1026,7 @@ describe("AgentSessionManager.applySelection", () => {
       setCached: jest.fn(),
       clearCached: jest.fn(),
       takeWarm: jest.fn(() => null),
+      getWarmProcs: jest.fn(() => []),
     };
     const mgr = new AgentSessionManager(
       buildApp(),
@@ -1111,6 +1118,7 @@ describe("AgentSessionManager.applySelection", () => {
       setCached: jest.fn(),
       clearCached: jest.fn(),
       takeWarm: jest.fn(() => null),
+      getWarmProcs: jest.fn(() => []),
     };
     const mgr = new AgentSessionManager(
       buildApp(),
@@ -1164,6 +1172,7 @@ describe("AgentSessionManager.onInstallStateChanged", () => {
       setCached: jest.fn(),
       clearCached: jest.fn(),
       takeWarm: jest.fn(() => null),
+      getWarmProcs: jest.fn(() => []),
     };
     const descriptor = {
       ...buildDescriptor(),
@@ -1301,6 +1310,8 @@ describe("AgentSessionManager chat history aggregation", () => {
     /** Hidden-folder files: never in the metadata cache, read via adapter. */
     hiddenFiles?: Record<string, string>;
     listSessions?: jest.Mock;
+    /** When set, the preloader exposes a warm opencode probe proc with this listSessions. */
+    warmListSessions?: jest.Mock;
     probeSessionId?: string;
   }) {
     const frontmatterByPath = opts?.files ?? {};
@@ -1367,6 +1378,16 @@ describe("AgentSessionManager chat history aggregation", () => {
           setCached: jest.fn(),
           clearCached: jest.fn(),
           takeWarm: jest.fn(() => null),
+          getWarmProcs: jest.fn(() =>
+            opts?.warmListSessions
+              ? [
+                  {
+                    backendId: "opencode",
+                    proc: { ...makeMockBackendProcess(), listSessions: opts.warmListSessions },
+                  },
+                ]
+              : []
+          ),
         } as unknown as ConstructorParameters<typeof AgentSessionManager>[2]["modelPreloader"],
         persistenceManager: persistence as unknown as ConstructorParameters<
           typeof AgentSessionManager
@@ -1500,6 +1521,26 @@ describe("AgentSessionManager chat history aggregation", () => {
     });
     await manager.updateChatTitle(buildNativeChatId("opencode", "s1"), "New title");
     expect((await index.getEntry("opencode", "s1"))?.title).toBe("New title");
+  });
+
+  it("sweeps the preloader's warm probe procs before any chat starts a backend", async () => {
+    const warmListSessions = jest.fn(async () => ({
+      sessions: [
+        {
+          sessionId: "pre-existing",
+          cwd: "/vault",
+          title: "Chat from before this app session",
+          updatedAt: new Date(6_000).toISOString(),
+        },
+      ],
+    }));
+    const { manager } = buildHistoryHarness({ warmListSessions });
+    // No createSession call: the manager owns no backend, only the warm
+    // probe exists — the first Agent Home open must still surface history.
+    const items = await manager.getChatHistoryItems();
+    expect(warmListSessions).toHaveBeenCalledWith({ cwd: "/vault" });
+    expect(items).toHaveLength(1);
+    expect(items[0]?.id).toBe(buildNativeChatId("opencode", "pre-existing"));
   });
 
   it("sweeps running backends' listSessions into history, scoped to the vault cwd", async () => {
