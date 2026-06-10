@@ -1145,6 +1145,12 @@ export class AgentSessionManager {
     if (!session) {
       throw new Error(`Could not resume session ${sessionId} from the ${backendId} session store.`);
     }
+    // Rebuild the visible transcript for backends that resume without
+    // replaying it (Claude SDK reads its on-disk session jsonl). ACP backends
+    // replay through `loadSession`, so they don't implement this and the
+    // session already has its messages. Best-effort: an empty result leaves
+    // the resumed-but-blank session as-is rather than failing the open.
+    await this.hydrateResumedTranscript(session, backendId, sessionId);
     const index = this.opts.sessionIndex;
     if (index) {
       const entry = await index.getEntry(backendId, sessionId);
@@ -1153,6 +1159,33 @@ export class AgentSessionManager {
     }
     this.notify();
     return session;
+  }
+
+  /**
+   * Load a resumed session's display transcript from the backend's on-disk
+   * store when the backend supports it and the session came back empty.
+   * No-op for backends that replay via `loadSession` (they have no
+   * `readPersistedTranscript`) or when the store can't be reached.
+   */
+  private async hydrateResumedTranscript(
+    session: AgentSession,
+    backendId: BackendId,
+    sessionId: SessionId
+  ): Promise<void> {
+    const proc = this.backends.get(backendId);
+    if (!proc?.readPersistedTranscript) return;
+    if (session.store.getDisplayMessages().length > 0) return;
+    const adapter = this.app.vault.adapter;
+    if (!(adapter instanceof FileSystemAdapter)) return;
+    try {
+      const transcript = await proc.readPersistedTranscript({
+        sessionId,
+        cwd: adapter.getBasePath(),
+      });
+      if (transcript.length > 0) session.store.loadMessages(transcript);
+    } catch (e) {
+      logWarn(`[AgentMode] could not hydrate transcript for ${sessionId}`, e);
+    }
   }
 
   /**

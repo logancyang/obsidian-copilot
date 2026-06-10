@@ -22,9 +22,14 @@ import {
   type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 import { App } from "obsidian";
+import { readFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { v4 as uuidv4 } from "uuid";
 import { translateBackendState } from "@/agentMode/session/translateBackendState";
+import { parseClaudeTranscript } from "./claudeSessionTranscript";
 import type {
+  AgentChatMessage,
   BackendConfigOption,
   BackendDescriptor,
   BackendProcess,
@@ -511,6 +516,34 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
 
   async listSessions(_params: ListSessionsInput): Promise<ListSessionsOutput> {
     throw new MethodUnsupportedError("session/list");
+  }
+
+  /**
+   * Rebuild a session's display transcript by reading the Claude CLI's on-disk
+   * record at `<config>/projects/<encoded-cwd>/<sessionId>.jsonl`. The SDK
+   * exposes no transcript API and `resumeSession` returns no prior messages,
+   * so this is how a native (autosave-off) Claude chat shows its conversation
+   * when reopened from recent chats. Best-effort: a missing/GC'd file or a
+   * custom config dir we can't resolve degrades to an empty transcript (the
+   * session still resumes; only the visible scrollback is absent).
+   *
+   * The project dir name is the cwd with every non-alphanumeric character
+   * replaced by `-`, matching the CLI's own encoding.
+   */
+  async readPersistedTranscript(params: {
+    sessionId: SessionId;
+    cwd: string;
+  }): Promise<AgentChatMessage[]> {
+    try {
+      const configDir = process.env.CLAUDE_CONFIG_DIR?.trim() || path.join(os.homedir(), ".claude");
+      const projectDir = params.cwd.replace(/[^a-zA-Z0-9]/g, "-");
+      const file = path.join(configDir, "projects", projectDir, `${params.sessionId}.jsonl`);
+      const text = await readFile(file, "utf8");
+      return parseClaudeTranscript(text);
+    } catch (err) {
+      logWarn(`[AgentMode] could not read Claude transcript for ${params.sessionId}`, err);
+      return [];
+    }
   }
 
   /**

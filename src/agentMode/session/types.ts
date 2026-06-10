@@ -682,6 +682,17 @@ export interface BackendProcess {
   resumeSession(params: ResumeSessionInput): Promise<ResumeSessionOutput>;
   loadSession(params: LoadSessionInput): Promise<LoadSessionOutput>;
   /**
+   * Optional: rebuild a session's display transcript from the backend's own
+   * on-disk store, for resuming a native (no-markdown) history entry. The
+   * Claude SDK implements this by reading its CLI session jsonl, since
+   * `resumeSession` returns no prior messages; ACP backends replay the
+   * transcript through `loadSession` instead and omit this.
+   */
+  readPersistedTranscript?(params: {
+    sessionId: SessionId;
+    cwd: string;
+  }): Promise<AgentChatMessage[]>;
+  /**
    * Whether the backend can route MCP servers of the given transport.
    * ACP runtime probes this from the agent's advertised capabilities; the
    * Claude SDK adapter accepts http/sse natively.
