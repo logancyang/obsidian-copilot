@@ -54,6 +54,42 @@ export function resolveSeedModelId(
 }
 
 /**
+ * The env var the `claude` CLI reads to override which model it talks to.
+ * When a user sets it in the Claude backend's env overrides, we surface its
+ * value as a synthetic catalog entry so the model becomes pickable.
+ */
+export const CUSTOM_MODEL_ENV_KEY = "ANTHROPIC_MODEL";
+
+/**
+ * Build a synthetic `ModelInfo` for a user-declared custom model id taken from
+ * the `ANTHROPIC_MODEL` env override, or `null` when the override is unset or
+ * blank. The id is its own display name; effort fields stay unset (the SDK
+ * advertises none for an unknown model, so no effort option is synthesized).
+ */
+export function customModelFromEnv(
+  envOverrides: Record<string, string> | undefined
+): ModelInfo | null {
+  const id = envOverrides?.[CUSTOM_MODEL_ENV_KEY]?.trim();
+  if (!id) return null;
+  return {
+    value: id,
+    displayName: id,
+    description: `Custom model from ${CUSTOM_MODEL_ENV_KEY}`,
+  };
+}
+
+/**
+ * Append a custom model to the SDK catalog so it flows through model discovery
+ * and the picker. Returns the catalog unchanged (same reference) when there's
+ * no custom model or it already shadows a real catalog entry by `value`, so a
+ * custom id matching a built-in never double-lists.
+ */
+export function mergeCustomModel(catalog: ModelInfo[], custom: ModelInfo | null): ModelInfo[] {
+  if (!custom || catalog.some((m) => m.value === custom.value)) return catalog;
+  return [...catalog, custom];
+}
+
+/**
  * Plugin-lifetime cache of the SDK's model catalog, shared across every
  * `ClaudeSdkBackendProcess` instance so opening a chat doesn't re-spawn
  * the `claude` CLI to read the model list.
