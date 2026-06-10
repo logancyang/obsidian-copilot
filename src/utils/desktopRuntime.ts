@@ -13,5 +13,6 @@ import { Platform } from "obsidian";
  * (emulated-)mobile".
  */
 export function isDesktopRuntime(): boolean {
+  // eslint-disable-next-line no-restricted-properties -- this helper owns the canonical check
   return Platform.isDesktopApp && !Platform.isMobile;
 }

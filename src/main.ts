@@ -89,7 +89,6 @@ import {
   MarkdownView,
   Menu,
   Notice,
-  Platform,
   Plugin,
   TFile,
   ViewCreator,
@@ -306,7 +305,7 @@ export default class CopilotPlugin extends Plugin {
     // Single source of truth for Active Web Tab ({activeWebTab}) state
     // Preserves activeWebTab when switching to Chat view
     // Only run on desktop - Web Viewer is not available on mobile
-    if (Platform.isDesktopApp) {
+    if (isDesktopRuntime()) {
       const { activeLeafRef, layoutRef } = startActiveWebTabTracking(this.app, {
         preserveOnViewTypes: [CHAT_VIEWTYPE],
       });
@@ -744,7 +743,7 @@ export default class CopilotPlugin extends Plugin {
    */
   initWebSelectionWatcher() {
     // Only run on desktop
-    if (!Platform.isDesktopApp) {
+    if (!isDesktopRuntime()) {
       return;
     }
 

@@ -22,6 +22,7 @@
 // eslint-disable-next-line import/no-nodejs-modules
 import { Buffer } from "buffer";
 import { Platform } from "obsidian";
+import { isDesktopRuntime } from "@/utils/desktopRuntime";
 
 interface SafeStorage {
   isEncryptionAvailable(): boolean;
@@ -37,7 +38,7 @@ let safeStorageInternal: SafeStorage | null = null;
  * @returns The Electron safeStorage instance, or `null` when unavailable.
  */
 function getSafeStorage(): SafeStorage | null {
-  if (!Platform.isDesktopApp && !Platform.isDesktop) return null;
+  if (!isDesktopRuntime() && !Platform.isDesktop) return null;
   if (safeStorageInternal) return safeStorageInternal;
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports

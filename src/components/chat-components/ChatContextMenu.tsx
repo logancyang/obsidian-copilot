@@ -1,6 +1,7 @@
 import { AlertCircle, CheckCircle, CircleDashed, Loader2 } from "lucide-react";
-import { Platform, TFile, TFolder } from "obsidian";
+import { TFile, TFolder } from "obsidian";
 import React, { useRef, useState } from "react";
+import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { Button } from "@/components/ui/button";
 import {
   ContextNoteBadge,
@@ -112,7 +113,7 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
 
   const activeNoteVisible = includeActiveNote && !hasAnySelection && Boolean(currentActiveFile);
   const activeWebTabVisible =
-    includeActiveWebTab && !hasAnySelection && Boolean(activeWebTab) && Platform.isDesktopApp;
+    includeActiveWebTab && !hasAnySelection && Boolean(activeWebTab) && isDesktopRuntime();
 
   const hasContext =
     uniqueNotes.length > 0 ||

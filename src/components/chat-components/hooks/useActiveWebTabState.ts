@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Platform } from "obsidian";
+import { isDesktopRuntime } from "@/utils/desktopRuntime";
 
 import { useApp } from "@/context";
 import { getWebViewerService } from "@/services/webViewerService/webViewerServiceSingleton";
@@ -21,7 +21,7 @@ const EMPTY_ACTIVE_WEB_TAB_STATE: ActiveWebTabStateSnapshot = {
 export function useActiveWebTabState(): ActiveWebTabStateSnapshot {
   const app = useApp();
   const [state, setState] = useState<ActiveWebTabStateSnapshot>(() => {
-    if (!Platform.isDesktopApp) {
+    if (!isDesktopRuntime()) {
       return EMPTY_ACTIVE_WEB_TAB_STATE;
     }
     try {
@@ -32,7 +32,7 @@ export function useActiveWebTabState(): ActiveWebTabStateSnapshot {
   });
 
   useEffect(() => {
-    if (!Platform.isDesktopApp) {
+    if (!isDesktopRuntime()) {
       setState(EMPTY_ACTIVE_WEB_TAB_STATE);
       return;
     }

@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
-import { Platform, TFolder, TFile } from "obsidian";
+import { TFolder, TFile } from "obsidian";
+import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { FileText, Wrench, Folder, FileClock, Globe, CircleDashed } from "lucide-react";
 import fuzzysort from "fuzzysort";
 import { getToolDescription } from "@/tools/toolManager";
@@ -34,7 +35,7 @@ export function useAtMentionSearch(
   // - In category mode with a search query (searching across all categories)
   // - In search mode when webTabs category is selected
   const shouldEnableWebTabPolling =
-    Platform.isDesktopApp &&
+    isDesktopRuntime() &&
     ((mode === "category" && query.trim().length > 0) ||
       (mode === "search" && selectedCategory === "webTabs"));
   const openWebTabs = useOpenWebTabs({ enabled: shouldEnableWebTabPolling });
@@ -91,7 +92,7 @@ export function useAtMentionSearch(
 
   const webTabItems: AtMentionOption[] = useMemo(
     () =>
-      Platform.isDesktopApp
+      isDesktopRuntime()
         ? openWebTabs.map((tab, index) => {
             const isLoaded = tab.isLoaded !== false;
             return {

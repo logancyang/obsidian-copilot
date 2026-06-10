@@ -119,6 +119,22 @@ export default [
             "Don't use the global `app` (footgun in popouts). Thread `app` via useApp() or a parameter. See designdocs/agents/PLUGIN_DEV_GUIDE.md.",
         },
       ],
+
+      // Ban `Platform.isDesktopApp` — it stays true under
+      // `app.emulateMobile(true)` (which stubs Node's built-ins to null), so
+      // desktop-only / Node-dependent code still runs there and crashes the
+      // plugin. Gate on isDesktopRuntime() (desktop app AND not mobile) instead.
+      // The helper itself (src/utils/desktopRuntime.ts) is exempt via an inline
+      // disable, since it owns the canonical check.
+      "no-restricted-properties": [
+        "error",
+        {
+          object: "Platform",
+          property: "isDesktopApp",
+          message:
+            "Use isDesktopRuntime() from @/utils/desktopRuntime instead. Platform.isDesktopApp stays true under app.emulateMobile(true) (Node stubbed to null), so desktop-only/Node code still runs there and crashes.",
+        },
+      ],
     },
   },
 

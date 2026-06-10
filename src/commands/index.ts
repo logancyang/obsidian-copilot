@@ -578,8 +578,7 @@ export function registerCommands(plugin: CopilotPlugin) {
 
   // Add web selection to chat context command (manual)
   addCommand(plugin, COMMAND_IDS.ADD_WEB_SELECTION_TO_CHAT_CONTEXT, async () => {
-    const { Platform } = await import("obsidian");
-    if (!Platform.isDesktopApp) {
+    if (!isDesktopRuntime()) {
       new Notice("Web selection is only available on desktop");
       return;
     }

@@ -10,7 +10,7 @@ import {
   $getRoot,
 } from "lexical";
 import { Globe } from "lucide-react";
-import { Platform } from "obsidian";
+import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { ACTIVE_WEB_TAB_MARKER } from "@/constants";
 import { BasePillNode, getEditorDocument, SerializedBasePillNode } from "./BasePillNode";
 import { TruncatedPillText } from "./TruncatedPillText";
@@ -110,7 +110,7 @@ function ActiveWebTabPillComponent(): JSX.Element {
   const { activeWebTabForMentions } = useActiveWebTabState();
 
   // Not supported on mobile
-  if (!Platform.isDesktopApp) {
+  if (!isDesktopRuntime()) {
     return (
       <PillBadge>
         <div className="tw-flex tw-items-center tw-gap-1">

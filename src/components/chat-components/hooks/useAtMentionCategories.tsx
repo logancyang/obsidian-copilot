@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
-import { Platform, TFile, TFolder } from "obsidian";
+import { TFile, TFolder } from "obsidian";
+import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { FileText, Wrench, Folder, Globe, Image } from "lucide-react";
 import { TypeaheadOption } from "@/components/chat-components/TypeaheadMenuContent";
 import type { WebTabContext } from "@/types/message";
@@ -93,7 +94,7 @@ export function useAtMentionCategories(showTools: boolean = false): CategoryOpti
         return showTools;
       }
       if (cat.category === "webTabs") {
-        return Platform.isDesktopApp;
+        return isDesktopRuntime();
       }
       return true;
     });
