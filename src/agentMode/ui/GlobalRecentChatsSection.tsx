@@ -1,45 +1,37 @@
-import {
-  AgentHomeCreateRow,
-  AgentHomeListRow,
-  INLINE_LIMIT,
-} from "@/agentMode/ui/AgentHomeSection";
 import { backendRegistry } from "@/agentMode/backends/registry";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { SearchBar } from "@/components/ui/SearchBar";
+import { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import { cn } from "@/lib/utils";
-import {
-  ChatHistoryItem,
-  ChatHistoryPopover,
-} from "@/components/chat-components/ChatHistoryPopover";
+import { isNativeChatId } from "@/utils/nativeChatId";
+import { formatCompactRelativeTime } from "@/utils/formatRelativeTime";
 import { sortByStrategy } from "@/utils/recentUsageManager";
-import { ChevronRight, MessageCircle } from "lucide-react";
-import React, { memo, useMemo } from "react";
+import { ArrowUpRight, Check, Edit2, MessageCircle, Trash2, X } from "lucide-react";
+import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
 
 interface GlobalRecentChatsSectionProps {
-  /** Recent chats supplied by core (global getChatHistoryItems). Pure display. */
+  /** Recent chats supplied by core (global getChatHistoryItems). */
   items: ChatHistoryItem[];
-  /**
-   * Open a chat by id — drives both the inline rows and the View-all popover, so
-   * "open a chat" has one id-based entry point (same handler the conversation
-   * control bar uses). The View-all popover handlers below come from the same
-   * `useAgentHistoryControls`, so the landing reuses the full
-   * {@link ChatHistoryPopover} (search, time grouping, rename, delete,
-   * open-source) without any new backend work.
-   */
+  /** Open a chat by id (markdown path or native session id). */
   onLoadChat: (id: string) => Promise<void>;
   onUpdateTitle: (id: string, newTitle: string) => Promise<void>;
   onDeleteChat: (id: string) => Promise<void>;
+  /**
+   * Open the chat's source note. Only meaningful for markdown-saved chats;
+   * native (autosave-off) entries have no file, so the row hides the action.
+   */
   onOpenSourceFile: (id: string) => Promise<void>;
-  /** Refresh the items when the popover opens (mirrors the control-bar button). */
+  /** Refresh the items (called once when the section mounts). */
   onLoadHistory?: () => void;
-  /** Optional create action — renders a "New chat" row atop the list. */
-  onCreate?: () => void;
   className?: string;
 }
 
 /**
- * Brand icon for the backend a chat ran on, mirroring the chat history popover's
- * resolver. Returns `undefined` for legacy chats without a `backendId`; the
- * popover then falls back to its own generic icon (`MessageCircle`), and the
- * inline rows below fall back to the same icon so the two surfaces match.
+ * Brand icon for the backend a chat ran on. Returns `undefined` for legacy
+ * chats without a `backendId`, in which case the row falls back to a generic
+ * message glyph.
  */
 function resolveChatIcon(
   item: ChatHistoryItem
@@ -47,13 +39,9 @@ function resolveChatIcon(
   return item.backendId ? backendRegistry[item.backendId]?.Icon : undefined;
 }
 
-// Most-recent-first, via the same `sortByStrategy("recent")` the Projects list
-// uses — so the inline preview orders identically (primary: last-used desc,
-// falling back to created; ties broken by name then created). The section is
-// literally "Recent Chats", so the inline preview is pinned to "recent"; the
-// View-all popover follows the user's configurable `chatHistorySortStrategy`
-// (same as everywhere else the popover renders). Upstream `getChatHistoryItems()`
-// returns vault-scan order, so the inline sort lives here.
+// Most-recent-first, matching the rest of the landing (last-used desc, falling
+// back to created; ties broken by name then created). Upstream
+// `getChatHistoryItems()` returns vault-scan order, so the sort lives here.
 function sortChatsByRecent(items: ChatHistoryItem[]): ChatHistoryItem[] {
   return sortByStrategy(items, "recent", {
     getName: (item) => item.title,
@@ -63,11 +51,9 @@ function sortChatsByRecent(items: ChatHistoryItem[]): ChatHistoryItem[] {
 }
 
 /**
- * Neutral tile holding the chat's backend brand glyph (or the generic fallback),
- * sized to match the project tiles so both lists share one leading-slot width —
- * their labels then line up when you switch tabs, and it matches the "New chat"
- * create row's tile. Projects are color-coded by id; chats aren't, so this uses a
- * single muted surface rather than a hued tint.
+ * Neutral tile holding the chat's backend brand glyph (or the generic
+ * fallback), sized to match the project tiles so the two shelf tabs share one
+ * leading-slot width.
  */
 const ChatIconTile = memo(({ Icon }: { Icon: React.ComponentType<{ className?: string }> }) => (
   <span
@@ -81,115 +67,276 @@ ChatIconTile.displayName = "ChatIconTile";
 
 interface RecentChatRowProps {
   item: ChatHistoryItem;
-  /** Open by id; the row fires it and forgets (loads surface their own Notice). */
-  onOpen: (id: string) => void | Promise<void>;
+  isEditing: boolean;
+  editingTitle: string;
+  confirmingDelete: boolean;
+  onOpen: (id: string) => void;
+  onStartEdit: (id: string, title: string) => void;
+  onEditingTitleChange: (title: string) => void;
+  onSaveEdit: () => void;
+  onCancelEdit: () => void;
+  onStartDelete: (id: string) => void;
+  onConfirmDelete: (id: string) => void;
+  onCancelDelete: () => void;
+  /** Whether this chat has a source note to open (markdown-saved only). */
+  canOpenSourceFile: boolean;
+  onOpenSourceFile: (id: string) => void;
 }
 
-const RecentChatRow = memo(({ item, onOpen }: RecentChatRowProps) => (
-  <AgentHomeListRow
-    label={item.title}
-    timeMs={item.lastAccessedAt.getTime()}
-    onClick={() => void onOpen(item.id)}
-    leading={<ChatIconTile Icon={resolveChatIcon(item) ?? MessageCircle} />}
-  />
-));
-RecentChatRow.displayName = "RecentChatRow";
-
 /**
- * "Recent Chats" section for the Agent Home landing (design A.2). The inline
- * preview is read-only; the View-all opens the full management popover.
- *
- * Shows the {@link INLINE_LIMIT} most-recent chats inline; the "View all" trigger
- * opens the full {@link ChatHistoryPopover} so the user can search, rename,
- * delete, and open the source file — the same management surface as the
- * conversation-state control bar. Pure presentation: the data source and all
- * mutations are owned by core. Named with the `Global` prefix so PR2 can
- * introduce a per-project `Project Chats` variant without collision.
+ * One chat row: click to open, hover to reveal go-to-file (markdown only),
+ * rename (inline edit), and delete (two-step confirm). Mirrors the chat
+ * history popover's row affordances so the landing surface manages chats
+ * directly instead of deferring everything to a separate popover.
  */
-export const GlobalRecentChatsSection = memo(
-  ({
-    items,
-    onLoadChat,
-    onUpdateTitle,
-    onDeleteChat,
-    onOpenSourceFile,
-    onLoadHistory,
-    onCreate,
-    className,
-  }: GlobalRecentChatsSectionProps): React.ReactElement => {
-    // Sort once for the inline preview; the popover re-sorts the full list by
-    // the user's configured strategy, so it reads `items` directly below.
-    const sortedItems = useMemo(() => sortChatsByRecent(items), [items]);
-    const inlineItems = useMemo(() => sortedItems.slice(0, INLINE_LIMIT), [sortedItems]);
-    const total = items.length;
-    const hasOverflow = total > INLINE_LIMIT;
+const RecentChatRow = memo(function RecentChatRow({
+  item,
+  isEditing,
+  editingTitle,
+  confirmingDelete,
+  onOpen,
+  onStartEdit,
+  onEditingTitleChange,
+  onSaveEdit,
+  onCancelEdit,
+  onStartDelete,
+  onConfirmDelete,
+  onCancelDelete,
+  canOpenSourceFile,
+  onOpenSourceFile,
+}: RecentChatRowProps): React.ReactElement {
+  const Icon = resolveChatIcon(item) ?? MessageCircle;
 
+  if (isEditing) {
     return (
-      <div className={cn("tw-flex tw-flex-col tw-divide-y tw-divide-border", className)}>
-        {onCreate && <AgentHomeCreateRow label="New chat" onClick={onCreate} />}
-        {total === 0 ? (
-          <div className="tw-px-2 tw-py-1.5 tw-text-xs tw-text-muted">No recent chats</div>
-        ) : (
-          <>
-            {inlineItems.map((item) => (
-              <RecentChatRow key={item.id} item={item} onOpen={onLoadChat} />
-            ))}
-            {hasOverflow && (
-              <ChatHistoryPopover
-                chatHistory={items}
-                onUpdateTitle={onUpdateTitle}
-                onDeleteChat={onDeleteChat}
-                onLoadChat={onLoadChat}
-                onOpenSourceFile={onOpenSourceFile}
-                getIcon={resolveChatIcon}
-                // Full-width row near the pane's lower half: open downward like
-                // an accordion, left-aligned with the inline rows above. Radix
-                // flips to "top" if the area below is tight (e.g. mobile keyboard).
-                side="bottom"
-                align="start"
-              >
-                {/* Same "View all" trigger shape as the Projects section (div
-                    role=button); pl-6 aligns under these rows' single-glyph chat
-                    icons (the Projects list uses pl-8 to clear its wider tiles).
-                    Radix merges its toggle
-                    onClick onto this child; Enter/Space dispatch a click so the
-                    popover opens for keyboard users without this row owning the
-                    popover's open state.
-
-                    DESIGN NOTE: onLoadHistory runs on every toggle (open *and*
-                    close), because Radix fires the merged onClick both ways and
-                    this row can't see the popover's open state. That's an
-                    intentional, harmless refresh — the same pattern the
-                    conversation control bar uses on its History button
-                    (AgentChatControls). A refresh on close just re-reads the
-                    same vault history; loadChatHistory is mounted-guarded and
-                    self-correcting, so a fast open/close race only momentarily
-                    shows near-identical data. A "refresh only on open" fix would
-                    need ChatHistoryPopover to expose onOpenChange — not worth
-                    touching the shared base for this. If a future review flags
-                    this again, point them at this note. */}
-                <div
-                  role="button"
-                  tabIndex={0}
-                  className="tw-flex tw-cursor-pointer tw-items-center tw-justify-between tw-rounded-md tw-px-2 tw-py-1.5 tw-text-xs tw-text-accent tw-transition-colors hover:tw-bg-modifier-hover hover:tw-text-accent-hover"
-                  onClick={() => onLoadHistory?.()}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      e.currentTarget.click();
-                    }
-                  }}
-                >
-                  <span>View all chats</span>
-                  <ChevronRight className="tw-size-3 tw-shrink-0" />
-                </div>
-              </ChatHistoryPopover>
-            )}
-          </>
-        )}
+      <div className="tw-flex tw-min-h-9 tw-items-center tw-gap-2 tw-rounded-md tw-px-2 tw-py-1.5">
+        <ChatIconTile Icon={Icon} />
+        <Input
+          value={editingTitle}
+          onChange={(e) => onEditingTitleChange(e.target.value)}
+          className="!tw-h-6 tw-flex-1"
+          autoFocus
+          onKeyDown={(e) => {
+            if (e.key === "Enter") onSaveEdit();
+            else if (e.key === "Escape") onCancelEdit();
+          }}
+        />
+        <Button size="sm" variant="ghost" onClick={onSaveEdit} className="tw-size-5 tw-p-0">
+          <Check className="tw-size-3" />
+        </Button>
+        <Button size="sm" variant="ghost" onClick={onCancelEdit} className="tw-size-5 tw-p-0">
+          <X className="tw-size-3" />
+        </Button>
       </div>
     );
   }
-);
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      className={cn(
+        "tw-group tw-flex tw-min-h-9 tw-cursor-pointer tw-items-center tw-gap-2 tw-rounded-md tw-px-2 tw-py-1.5",
+        "tw-text-left tw-transition-colors hover:tw-bg-modifier-hover"
+      )}
+      onClick={() => onOpen(item.id)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpen(item.id);
+        }
+      }}
+    >
+      <ChatIconTile Icon={Icon} />
+      <span
+        className="tw-min-w-0 tw-flex-1 tw-truncate tw-text-ui-small tw-text-normal"
+        title={item.title}
+      >
+        {item.title}
+      </span>
+
+      {/* Relative time by default; the action cluster replaces it on hover so
+          a narrow sidebar doesn't have to fit both. */}
+      <span
+        className="tw-shrink-0 tw-whitespace-nowrap tw-text-xs tw-text-muted group-hover:tw-hidden"
+        title={new Date(item.lastAccessedAt).toLocaleString()}
+      >
+        {formatCompactRelativeTime(item.lastAccessedAt.getTime())}
+      </span>
+      <div className="tw-hidden tw-shrink-0 tw-items-center tw-gap-1.5 group-hover:tw-flex">
+        {confirmingDelete ? (
+          <>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={(e) => {
+                e.stopPropagation();
+                onConfirmDelete(item.id);
+              }}
+              className="tw-size-5 tw-p-0 tw-text-error hover:tw-text-error"
+              title="Confirm delete"
+            >
+              <Check className="tw-size-3" />
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={(e) => {
+                e.stopPropagation();
+                onCancelDelete();
+              }}
+              className="tw-size-5 tw-p-0"
+              title="Cancel"
+            >
+              <X className="tw-size-3" />
+            </Button>
+          </>
+        ) : (
+          <>
+            {canOpenSourceFile && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenSourceFile(item.id);
+                }}
+                className="tw-size-5 tw-p-0"
+                title="Open source note"
+              >
+                <ArrowUpRight className="tw-size-4" />
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={(e) => {
+                e.stopPropagation();
+                onStartEdit(item.id, item.title);
+              }}
+              className="tw-size-5 tw-p-0"
+              title="Rename"
+            >
+              <Edit2 className="tw-size-3" />
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={(e) => {
+                e.stopPropagation();
+                onStartDelete(item.id);
+              }}
+              className="tw-size-5 tw-p-0 tw-text-error hover:tw-text-error"
+              title="Delete"
+            >
+              <Trash2 className="tw-size-3" />
+            </Button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+});
+
+/**
+ * "Recent Chats" section for the Agent Home landing. A searchable, scrollable
+ * list whose rows manage chats in place — open, rename, delete, and (for
+ * markdown-saved chats only) open the source note — the same affordances as the
+ * chat history popover, without a separate "view all" step. Native
+ * (autosave-off) sessions appear here too; they just have no source note.
+ */
+export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
+  items,
+  onLoadChat,
+  onUpdateTitle,
+  onDeleteChat,
+  onOpenSourceFile,
+  onLoadHistory,
+  className,
+}: GlobalRecentChatsSectionProps): React.ReactElement {
+  const [query, setQuery] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingTitle, setEditingTitle] = useState("");
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  // Refresh once when the section first mounts (i.e. the user opened the
+  // Recent Chats tab), mirroring the old popover's refresh-on-open.
+  useEffect(() => {
+    onLoadHistory?.();
+  }, [onLoadHistory]);
+
+  const sortedItems = useMemo(() => sortChatsByRecent(items), [items]);
+  const filteredItems = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return sortedItems;
+    return sortedItems.filter((item) => item.title.toLowerCase().includes(q));
+  }, [sortedItems, query]);
+
+  const handleStartEdit = useCallback((id: string, title: string) => {
+    setConfirmDeleteId(null);
+    setEditingId(id);
+    setEditingTitle(title);
+  }, []);
+
+  const handleSaveEdit = useCallback(() => {
+    const trimmed = editingTitle.trim();
+    const id = editingId;
+    setEditingId(null);
+    if (!id || !trimmed) return;
+    void onUpdateTitle(id, trimmed);
+  }, [editingId, editingTitle, onUpdateTitle]);
+
+  const handleConfirmDelete = useCallback(
+    (id: string) => {
+      setConfirmDeleteId(null);
+      void onDeleteChat(id);
+    },
+    [onDeleteChat]
+  );
+
+  const handleOpenSourceFile = useCallback(
+    (id: string) => {
+      void onOpenSourceFile(id);
+    },
+    [onOpenSourceFile]
+  );
+
+  return (
+    <div className={cn("tw-flex tw-flex-col tw-gap-2", className)}>
+      {items.length > 0 && (
+        <SearchBar value={query} onChange={setQuery} placeholder="Search chats..." />
+      )}
+      {filteredItems.length === 0 ? (
+        <div className="tw-px-2 tw-py-1.5 tw-text-xs tw-text-muted">
+          {items.length === 0 ? "No recent chats" : "No matching chats"}
+        </div>
+      ) : (
+        <ScrollArea className="tw-max-h-80 tw-overflow-y-auto">
+          <div className="tw-flex tw-flex-col tw-divide-y tw-divide-border">
+            {filteredItems.map((item) => (
+              <RecentChatRow
+                key={item.id}
+                item={item}
+                isEditing={editingId === item.id}
+                editingTitle={editingTitle}
+                confirmingDelete={confirmDeleteId === item.id}
+                onOpen={onLoadChat}
+                onStartEdit={handleStartEdit}
+                onEditingTitleChange={setEditingTitle}
+                onSaveEdit={handleSaveEdit}
+                onCancelEdit={() => setEditingId(null)}
+                onStartDelete={setConfirmDeleteId}
+                onConfirmDelete={handleConfirmDelete}
+                onCancelDelete={() => setConfirmDeleteId(null)}
+                canOpenSourceFile={!isNativeChatId(item.id)}
+                onOpenSourceFile={handleOpenSourceFile}
+              />
+            ))}
+          </div>
+        </ScrollArea>
+      )}
+    </div>
+  );
+});
 
 GlobalRecentChatsSection.displayName = "GlobalRecentChatsSection";

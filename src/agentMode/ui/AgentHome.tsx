@@ -170,19 +170,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   // it's unreachable while the tab is disabled.
   const handleProjectComingSoon = useCallback(() => {}, []);
 
-  // Landing "New chat": spin up a fresh session in a new tab, the same path the
-  // tab strip's "+" uses. Guard on getIsStarting() like handleNewChat above and
-  // AgentTabStrip's "+" — createSession() sets the starting flag synchronously
-  // (before its first await), so a second click while a create is in flight is
-  // a no-op instead of spawning a duplicate session/tab.
-  const handleCreateChat = useCallback(() => {
-    if (manager.getIsStarting()) return;
-    manager.createSession().catch((e) => {
-      logError("[AgentMode] createSession failed", e);
-      new Notice("Failed to start a new chat. Please try again.");
-    });
-  }, [manager]);
-
   const modelPickerOverride = useAgentModelPicker(manager);
   const modePickerOverride = useAgentModePicker(manager);
 
@@ -263,7 +250,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
             onDeleteChat={handleDeleteChat}
             onOpenSourceFile={handleOpenSourceFile}
             onLoadHistory={handleLoadChatHistory}
-            onCreate={handleCreateChat}
           />
         ),
       },
@@ -290,7 +276,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       projects,
       chatHistoryItems,
       handleProjectComingSoon,
-      handleCreateChat,
       handleLoadChat,
       handleUpdateChatTitle,
       handleDeleteChat,
