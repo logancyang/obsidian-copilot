@@ -52,7 +52,7 @@ const claudeWire: ModelWireCodec = {
     provider: "anthropic",
   }),
   effortConfigFor: (baseModelId: string): BackendConfigOption | null => {
-    const catalog = getCachedSdkCatalog();
+    const catalog = getCachedSdkCatalog(getSettings().agentMode?.backends?.claude?.envOverrides);
     if (!catalog) return null;
     const modelInfo = catalog.find((m) => m.value === baseModelId);
     if (!modelInfo) return null;

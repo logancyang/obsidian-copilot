@@ -54,9 +54,7 @@ import { AuthRequiredError, MethodUnsupportedError } from "@/agentMode/session/e
 import { createTranslatorState, mapStopReason, translateSdkMessage } from "./sdkMessageTranslator";
 import { PermissionBridge, type AskUserQuestionPrompter } from "./permissionBridge";
 import {
-  customModelFromEnv,
   getCachedSdkCatalog,
-  mergeCustomModel,
   probeClaudeSdkCatalog,
   resolveSeedModelId,
   synthesizeEffortConfigOption,
@@ -247,8 +245,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     // Resolve the catalog before returning so the picker never sees an
     // empty model list. On a probe miss, at most one subprocess is
     // spawned (deduped via cachedModelsProbe).
-    await this.ensureModelCatalog();
-    const catalog = this.effectiveCatalog();
+    const catalog = await this.ensureModelCatalog();
     const defaultId = this.opts.getDefaultModelId?.();
     const seedModelId = resolveSeedModelId(catalog, defaultId);
 
@@ -539,8 +536,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       const cfg = mcpServerSpecToSdkConfig(server);
       if (cfg) mcp[server.name] = cfg;
     }
-    await this.ensureModelCatalog();
-    const catalog = this.effectiveCatalog();
+    const catalog = await this.ensureModelCatalog();
     const defaultId = this.opts.getDefaultModelId?.();
     const seedModelId = resolveSeedModelId(catalog, defaultId);
 
@@ -604,38 +600,28 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
    */
   private ensureModelCatalog(): Promise<ModelInfo[]> {
     if (this.cachedModels) return Promise.resolve(this.cachedModels);
-    const fromCache = getCachedSdkCatalog();
+    const envOverrides = this.opts.getEnvOverrides?.();
+    const fromCache = getCachedSdkCatalog(envOverrides);
     if (fromCache && fromCache.length > 0) {
       this.cachedModels = fromCache;
       return Promise.resolve(fromCache);
     }
     if (this.cachedModelsProbe) return this.cachedModelsProbe;
-    const probePromise = probeClaudeSdkCatalog(this.opts.pathToClaudeCodeExecutable).then(
-      (models) => {
-        if (models.length > 0) this.cachedModels = models;
-        else this.cachedModelsProbe = null;
-        return models;
-      }
-    );
+    const probePromise = probeClaudeSdkCatalog(
+      this.opts.pathToClaudeCodeExecutable,
+      envOverrides
+    ).then((models) => {
+      if (models.length > 0) this.cachedModels = models;
+      else this.cachedModelsProbe = null;
+      return models;
+    });
     this.cachedModelsProbe = probePromise;
     return probePromise;
   }
 
-  /**
-   * The SDK catalog plus any user-declared custom model (from the
-   * `ANTHROPIC_MODEL` env override). Read live so a settings edit applies on
-   * the next session/state without re-probing the CLI.
-   */
-  private effectiveCatalog(): ModelInfo[] {
-    return mergeCustomModel(
-      this.cachedModels ?? [],
-      customModelFromEnv(this.opts.getEnvOverrides?.())
-    );
-  }
-
   private computeState(sessionId: SessionId): BackendState {
     const session = this.sessions.get(sessionId);
-    const catalog = this.effectiveCatalog();
+    const catalog = this.cachedModels ?? [];
     const seedModel = session?.model;
     const models: RawModelState | null =
       catalog.length > 0 && seedModel

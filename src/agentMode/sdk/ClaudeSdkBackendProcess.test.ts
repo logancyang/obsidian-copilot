@@ -52,7 +52,7 @@ jest.mock("./effortOption", () => ({
 }));
 
 import { ClaudeSdkBackendProcess, promptInputToAnthropicContent } from "./ClaudeSdkBackendProcess";
-import { customModelFromEnv, getCachedSdkCatalog, mergeCustomModel } from "./effortOption";
+import { getCachedSdkCatalog } from "./effortOption";
 import { AuthRequiredError } from "@/agentMode/session/errors";
 
 beforeEach(() => {
@@ -548,13 +548,22 @@ describe("ClaudeSdkBackendProcess.newSession dynamic catalog", () => {
   });
 });
 
-describe("custom model from ANTHROPIC_MODEL env override", () => {
+describe("ANTHROPIC_MODEL env override reaches the catalog probe", () => {
   beforeEach(() => {
     queryMock.mockReset();
     createSdkMcpServerMock.mockClear();
   });
 
-  it("surfaces the custom model as a selectable catalog entry alongside built-ins", async () => {
+  it("threads the backend's env overrides into the probe on a cold cache", async () => {
+    // Cold module cache forces a real probe; the SDK reflects ANTHROPIC_MODEL
+    // into init.models itself, so the env just has to reach the probe.
+    (getCachedSdkCatalog as jest.Mock).mockReturnValue(undefined);
+    const initializationResult = jest.fn().mockResolvedValue({ models: FAKE_CATALOG });
+    queryMock.mockReturnValue({
+      initializationResult,
+      interrupt: jest.fn().mockResolvedValue(undefined),
+    });
+
     const proc = new ClaudeSdkBackendProcess({
       pathToClaudeCodeExecutable: "/usr/local/bin/claude",
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -564,60 +573,15 @@ describe("custom model from ANTHROPIC_MODEL env override", () => {
       getEnvOverrides: () => ({ ANTHROPIC_MODEL: "claude-fable-5" }),
     });
 
-    const resp = await proc.newSession({ cwd: "/vault", mcpServers: [] });
-    const ids = resp.state.model?.availableModels.map((m) => m.baseModelId);
-    expect(ids).toContain("claude-fable-5");
-    expect(ids).toContain("claude-fake-pro");
-    // A custom model the SDK never advertised carries no effort levels.
-    const custom = resp.state.model?.availableModels.find(
-      (m) => m.baseModelId === "claude-fable-5"
-    );
-    expect(custom?.effortOptions).toEqual([]);
-  });
+    await proc.newSession({ cwd: "/vault", mcpServers: [] });
 
-  it("honors the custom model as the persisted default", async () => {
-    const proc = new ClaudeSdkBackendProcess({
-      pathToClaudeCodeExecutable: "/usr/local/bin/claude",
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      app: { vault: {} } as any,
-      clientVersion: "1.2.3",
-      descriptor: fakeDescriptor(),
-      getEnvOverrides: () => ({ ANTHROPIC_MODEL: "claude-fable-5" }),
-      getDefaultModelId: () => "claude-fable-5",
-    });
-
-    const resp = await proc.newSession({ cwd: "/vault", mcpServers: [] });
-    expect(resp.state.model?.current.baseModelId).toBe("claude-fable-5");
-  });
-
-  it("sends the custom model id as options.model on prompt", async () => {
-    queryMock.mockImplementation(() => makeQuery([resultMessage()]));
-    const proc = new ClaudeSdkBackendProcess({
-      pathToClaudeCodeExecutable: "/usr/local/bin/claude",
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      app: { vault: {} } as any,
-      clientVersion: "1.2.3",
-      descriptor: fakeDescriptor(),
-      getEnvOverrides: () => ({ ANTHROPIC_MODEL: "claude-fable-5" }),
-      getDefaultModelId: () => "claude-fable-5",
-    });
-
-    const { sessionId } = await proc.newSession({ cwd: "/vault", mcpServers: [] });
-    proc.registerSessionHandler(sessionId, () => {});
-    await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
-
-    const call = getPromptQueryCalls()[0][0] as { options: { model?: string } };
-    expect(call.options.model).toBe("claude-fable-5");
-  });
-
-  it("adds no entry for a blank override and dedupes a built-in id (stable ref)", () => {
-    expect(customModelFromEnv(undefined)).toBeNull();
-    expect(customModelFromEnv({})).toBeNull();
-    expect(customModelFromEnv({ ANTHROPIC_MODEL: "   " })).toBeNull();
-    // A custom id shadowing a real catalog entry never double-lists; the
-    // catalog comes back by the same reference.
-    const shadow = customModelFromEnv({ ANTHROPIC_MODEL: "claude-fake-pro" });
-    expect(mergeCustomModel(FAKE_CATALOG, shadow)).toBe(FAKE_CATALOG);
+    const probeCall = queryMock.mock.calls[0][0] as {
+      options: { pathToClaudeCodeExecutable: string; env?: Record<string, string> };
+    };
+    expect(probeCall.options.pathToClaudeCodeExecutable).toBe("/usr/local/bin/claude");
+    expect(probeCall.options.env?.ANTHROPIC_MODEL).toBe("claude-fable-5");
+    // Child env is process.env plus the overrides, not a bare override map.
+    expect(probeCall.options.env?.PATH).toBe(process.env.PATH);
   });
 });
 

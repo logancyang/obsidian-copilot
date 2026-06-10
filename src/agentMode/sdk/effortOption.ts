@@ -3,6 +3,7 @@ import {
   query,
   type EffortLevel,
   type ModelInfo,
+  type Options,
   type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 import { logWarn } from "@/logger";
@@ -54,50 +55,31 @@ export function resolveSeedModelId(
 }
 
 /**
- * The env var the `claude` CLI reads to override which model it talks to.
- * When a user sets it in the Claude backend's env overrides, we surface its
- * value as a synthetic catalog entry so the model becomes pickable.
+ * Order-independent key for the env overrides that influence which models the
+ * `claude` CLI advertises — chiefly `ANTHROPIC_MODEL`, which the CLI reflects
+ * into its init handshake. Used to scope the catalog cache so editing the
+ * override invalidates a stale entry. Mirrors `backendEnvOverridesKey` in
+ * `agentMode/index.ts`.
  */
-export const CUSTOM_MODEL_ENV_KEY = "ANTHROPIC_MODEL";
-
-/**
- * Build a synthetic `ModelInfo` for a user-declared custom model id taken from
- * the `ANTHROPIC_MODEL` env override, or `null` when the override is unset or
- * blank. The id is its own display name; effort fields stay unset (the SDK
- * advertises none for an unknown model, so no effort option is synthesized).
- */
-export function customModelFromEnv(
-  envOverrides: Record<string, string> | undefined
-): ModelInfo | null {
-  const id = envOverrides?.[CUSTOM_MODEL_ENV_KEY]?.trim();
-  if (!id) return null;
-  return {
-    value: id,
-    displayName: id,
-    description: `Custom model from ${CUSTOM_MODEL_ENV_KEY}`,
-  };
-}
-
-/**
- * Append a custom model to the SDK catalog so it flows through model discovery
- * and the picker. Returns the catalog unchanged (same reference) when there's
- * no custom model or it already shadows a real catalog entry by `value`, so a
- * custom id matching a built-in never double-lists.
- */
-export function mergeCustomModel(catalog: ModelInfo[], custom: ModelInfo | null): ModelInfo[] {
-  if (!custom || catalog.some((m) => m.value === custom.value)) return catalog;
-  return [...catalog, custom];
+function catalogEnvKey(envOverrides: Record<string, string> | undefined): string {
+  const entries = Object.entries(envOverrides ?? {}).sort(([a], [b]) => a.localeCompare(b));
+  return JSON.stringify(entries);
 }
 
 /**
  * Plugin-lifetime cache of the SDK's model catalog, shared across every
- * `ClaudeSdkBackendProcess` instance so opening a chat doesn't re-spawn
- * the `claude` CLI to read the model list.
+ * `ClaudeSdkBackendProcess` instance so opening a chat doesn't re-spawn the
+ * `claude` CLI to read the model list. Keyed by the env overrides passed to
+ * the probe: editing `ANTHROPIC_MODEL` yields a different key, so the stale
+ * entry is ignored and the next `ensureModelCatalog()` re-probes with the new
+ * env (the backend is also restarted on the same settings change).
  */
-let cachedSdkCatalog: ModelInfo[] | null = null;
+let cachedSdkCatalog: { key: string; models: ModelInfo[] } | null = null;
 
-export function getCachedSdkCatalog(): ModelInfo[] | null {
-  return cachedSdkCatalog;
+export function getCachedSdkCatalog(
+  envOverrides: Record<string, string> | undefined
+): ModelInfo[] | null {
+  return cachedSdkCatalog?.key === catalogEnvKey(envOverrides) ? cachedSdkCatalog.models : null;
 }
 
 /**
@@ -105,28 +87,41 @@ export function getCachedSdkCatalog(): ModelInfo[] | null {
  * handshake — which carries the catalog of models the bundled `claude`
  * CLI advertises (per-model `supportsEffort` + `supportedEffortLevels`).
  *
+ * `envOverrides` (the user's Claude env-override box) is merged onto
+ * `process.env` for the probe. This is what surfaces a custom
+ * `ANTHROPIC_MODEL`: the CLI reflects the override into `init.models` as a
+ * first-class entry with full effort metadata, so no synthetic entry is
+ * needed and there's a single source of truth.
+ *
  * The SDK requires streaming-input mode to expose `initializationResult()`,
  * so we feed it a generator that never yields and tear the query down
  * via `interrupt()` once the handshake completes. Failures resolve to
  * an empty array (logged) so callers can degrade gracefully.
  *
- * Successful, non-empty probes update the module-level cache so a later
- * `getCachedSdkCatalog()` returns hot data without re-probing.
+ * Successful, non-empty probes update the module-level cache (keyed by
+ * `envOverrides`) so a later `getCachedSdkCatalog()` returns hot data without
+ * re-probing.
  */
 export async function probeClaudeSdkCatalog(
-  pathToClaudeCodeExecutable: string
+  pathToClaudeCodeExecutable: string,
+  envOverrides?: Record<string, string>
 ): Promise<ModelInfo[]> {
   // eslint-disable-next-line require-yield
   const noopPrompt = (async function* (): AsyncIterable<SDKUserMessage> {
     await new Promise<void>(() => {});
   })();
-  const probe = query({
-    prompt: noopPrompt,
-    options: { pathToClaudeCodeExecutable },
-  });
+  const options: Options = { pathToClaudeCodeExecutable };
+  if (envOverrides && Object.keys(envOverrides).length > 0) {
+    // Options.env replaces (not merges with) the child env, so include
+    // process.env to preserve PATH and friends — same as the prompt path.
+    options.env = { ...process.env, ...envOverrides };
+  }
+  const probe = query({ prompt: noopPrompt, options });
   try {
     const init = await probe.initializationResult();
-    if (init.models.length > 0) cachedSdkCatalog = init.models;
+    if (init.models.length > 0) {
+      cachedSdkCatalog = { key: catalogEnvKey(envOverrides), models: init.models };
+    }
     return init.models;
   } catch (e) {
     logWarn("[AgentMode] Claude SDK init probe failed", e);
