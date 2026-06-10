@@ -1,4 +1,5 @@
 import type { AgentSessionManager } from "@/agentMode";
+import { isNativeChatId, parseNativeChatId } from "@/agentMode";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import ProjectManager from "@/LLMProviders/projectManager";
 import {
@@ -1156,6 +1157,10 @@ export default class CopilotPlugin extends Plugin {
   }
 
   async loadChatById(fileId: string): Promise<void> {
+    if (isNativeChatId(fileId)) {
+      await this.loadNativeAgentChat(fileId);
+      return;
+    }
     const file = await resolveFileByPath(this.app, fileId);
     if (!file) throw new Error("Chat file not found.");
 
@@ -1165,6 +1170,27 @@ export default class CopilotPlugin extends Plugin {
       return;
     }
     await this.loadChatHistory(file);
+  }
+
+  /**
+   * Open a chat that lives only in a backend's native session store (recent
+   * chats entry with no markdown note). Resumes through the agent manager;
+   * recency tracking is handled by the session index rather than file
+   * frontmatter.
+   */
+  private async loadNativeAgentChat(chatId: string): Promise<void> {
+    const ref = parseNativeChatId(chatId);
+    if (!ref) throw new Error("Chat not found.");
+    const manager = this.requireAgentView();
+    if (!manager) return;
+    const leaf = await this.activateAgentView();
+    if (!leaf) return;
+
+    await manager.loadNativeSessionFromHistory(ref.backendId, ref.sessionId);
+
+    if (this.isCopilotAgentView(leaf.view)) {
+      leaf.view.updateView();
+    }
   }
 
   private async loadAgentChatHistory(file: TFile): Promise<void> {
@@ -1182,6 +1208,12 @@ export default class CopilotPlugin extends Plugin {
   }
 
   async openChatSourceFile(fileId: string): Promise<void> {
+    if (isNativeChatId(fileId)) {
+      new Notice(
+        "This chat has no saved note. Turn on Autosave Chat to save chats as notes in your vault."
+      );
+      return;
+    }
     const file = this.app.vault.getAbstractFileByPath(fileId);
     if (file instanceof TFile) {
       await this.app.workspace.getLeaf(true).openFile(file);

@@ -44,8 +44,10 @@ import { escapeXml } from "@/LLMProviders/chainRunner/utils/xmlParsing";
  * Prefix opencode uses for placeholder titles before its title-summarizer
  * agent runs. Treating these as "no title" prevents the tab from briefly
  * showing "New session - 2026-…" before the LLM-generated label arrives.
+ * Exported so the manager's `listSessions` history sweep applies the same
+ * "placeholder is not a real title" rule.
  */
-const DEFAULT_TITLE_PREFIX = "New session";
+export const DEFAULT_TITLE_PREFIX = "New session";
 /**
  * Memory backstop for tool output kept in long-lived React state — NOT a
  * display cap. At ~256KB it sits far above any realistic command/search/file

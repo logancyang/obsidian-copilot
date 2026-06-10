@@ -9,6 +9,7 @@ import { backendRegistry, listBackendDescriptors } from "./backends/registry";
 import type { BackendId } from "./session/types";
 import { AgentChatPersistenceManager } from "./session/AgentChatPersistenceManager";
 import { AgentModelPreloader } from "./session/AgentModelPreloader";
+import { AgentSessionIndex } from "./session/AgentSessionIndex";
 import { AgentSessionManager } from "./session/AgentSessionManager";
 import { shouldUseMiyo } from "@/miyo/miyoUtils";
 import { SkillManager } from "./skills";
@@ -36,6 +37,7 @@ export type { AgentModelPickerOverride } from "./ui/useAgentModelPicker";
 export { useAgentModePicker } from "./ui/useAgentModePicker";
 export type { AgentModePickerOverride } from "./ui/useAgentModePicker";
 export type { AgentSessionManager } from "./session/AgentSessionManager";
+export { isNativeChatId, parseNativeChatId } from "./session/AgentSessionIndex";
 export type { AgentBrand, BackendDescriptor, BackendId, InstallState } from "./session/types";
 // First-enrollment default-enable rule (enable the agent's current model).
 export { computeDefaultEnabledIds } from "./session/agentDefaultEnable";
@@ -143,6 +145,17 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
   const skillManager = SkillManager.initialize(app, collectAgentSkillsDirsProjectRel());
   const preloader = new AgentModelPreloader(app, plugin, (id) => backendRegistry[id]);
   const persistenceManager = new AgentChatPersistenceManager(app);
+  // Plugin-local (per-vault) record of resumable backend sessions, so recent
+  // chats can list and resume sessions that were never saved as markdown.
+  const vaultAdapter = app.vault.adapter;
+  const sessionIndex = new AgentSessionIndex(
+    {
+      exists: (p) => vaultAdapter.exists(p),
+      read: (p) => vaultAdapter.read(p),
+      write: (p, c) => vaultAdapter.write(p, c),
+    },
+    `${app.vault.configDir}/plugins/${plugin.manifest.id}/agent-chat-index.json`
+  );
   // Mutable ref breaks the construction cycle: the prompter needs the
   // manager, but handlers only fire after a session exists, which can't
   // happen before assignment below.
@@ -159,6 +172,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     resolveDescriptor: (id) => backendRegistry[id],
     modelPreloader: preloader,
     persistenceManager,
+    sessionIndex,
   });
   managerRef = manager;
   // Skill-set changes restart the affected backend when its descriptor
