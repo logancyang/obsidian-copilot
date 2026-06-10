@@ -1,5 +1,6 @@
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
-import { buildNativeChatId, type AgentSessionIndexEntry } from "./AgentSessionIndex";
+import { buildNativeChatId } from "@/utils/nativeChatId";
+import type { AgentSessionIndexEntry } from "./AgentSessionIndex";
 import { mergeChatHistoryItems, UNTITLED_NATIVE_CHAT } from "./chatHistoryMerge";
 
 function mdItem(overrides: Partial<ChatHistoryItem> = {}): ChatHistoryItem {

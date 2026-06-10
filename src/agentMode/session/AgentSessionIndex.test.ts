@@ -1,10 +1,5 @@
-import {
-  AgentSessionIndex,
-  buildNativeChatId,
-  isNativeChatId,
-  parseNativeChatId,
-  type AgentSessionIndexStorage,
-} from "./AgentSessionIndex";
+import { buildNativeChatId, isNativeChatId, parseNativeChatId } from "@/utils/nativeChatId";
+import { AgentSessionIndex, type AgentSessionIndexStorage } from "./AgentSessionIndex";
 
 jest.mock("@/logger", () => ({
   logInfo: jest.fn(),

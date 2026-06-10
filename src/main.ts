@@ -1,5 +1,7 @@
 import type { AgentSessionManager } from "@/agentMode";
-import { isNativeChatId, parseNativeChatId } from "@/agentMode";
+// Deep import (not the barrel): these run on the load path for every
+// platform, and the barrel pulls Node-only modules that crash mobile.
+import { isNativeChatId, parseNativeChatId } from "@/utils/nativeChatId";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import ProjectManager from "@/LLMProviders/projectManager";
 import {

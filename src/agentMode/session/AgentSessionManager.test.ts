@@ -5,7 +5,8 @@
  */
 import { FileSystemAdapter, App, TFile } from "obsidian";
 import { AgentSession } from "./AgentSession";
-import { AgentSessionIndex, buildNativeChatId } from "./AgentSessionIndex";
+import { buildNativeChatId } from "@/utils/nativeChatId";
+import { AgentSessionIndex } from "./AgentSessionIndex";
 import { AgentSessionManager } from "./AgentSessionManager";
 import { setSettings as mockedSetSettings } from "@/settings/model";
 import type { BackendDescriptor } from "./types";
@@ -1297,18 +1298,26 @@ describe("AgentSessionManager chat history aggregation", () => {
 
   function buildHistoryHarness(opts?: {
     files?: Record<string, FakeFrontmatter>;
+    /** Hidden-folder files: never in the metadata cache, read via adapter. */
+    hiddenFiles?: Record<string, string>;
     listSessions?: jest.Mock;
     probeSessionId?: string;
   }) {
     const frontmatterByPath = opts?.files ?? {};
-    const tfiles = Object.keys(frontmatterByPath).map((p) => {
+    const hiddenByPath = opts?.hiddenFiles ?? {};
+    const tfiles = [...Object.keys(frontmatterByPath), ...Object.keys(hiddenByPath)].map((p) => {
       const f = new MockTFile(p);
       f.stat = { ctime: 1_000, mtime: 1_000, size: 0 };
       return f;
     });
     const adapter = new (FileSystemAdapter as unknown as new (basePath: string) => unknown)(
       "/vault"
-    );
+    ) as { read: jest.Mock };
+    adapter.read.mockImplementation(async (p: string) => {
+      const content = hiddenByPath[p];
+      if (content === undefined) throw new Error(`ENOENT: ${p}`);
+      return content;
+    });
     const app = {
       vault: {
         adapter,
@@ -1405,6 +1414,28 @@ describe("AgentSessionManager chat history aggregation", () => {
     expect(native?.id).toBe(buildNativeChatId("opencode", "s2"));
     expect(native?.title).toBe("Native only chat");
     expect(native?.backendId).toBe("opencode");
+  });
+
+  it("de-duplicates hidden-folder chats via the adapter frontmatter fallback", async () => {
+    // Hidden save folders (e.g. under the config dir) are never indexed by
+    // the metadata cache; the session ref must come from an adapter read or
+    // the markdown row can't merge with its native twin.
+    const { manager, index } = buildHistoryHarness({
+      hiddenFiles: {
+        ".copilot/chats/agent__hidden.md":
+          '---\nepoch: 1000\nmode: agent\nbackendId: opencode\nsessionId: "s1"\n---\n\n**user**: hi',
+      },
+    });
+    await index.recordSession({
+      backendId: "opencode",
+      sessionId: "s1",
+      title: "Hidden twin",
+      createdAtMs: 1_000,
+      lastAccessedAtMs: 2_000,
+    });
+    const items = await manager.getChatHistoryItems();
+    expect(items).toHaveLength(1);
+    expect(items[0]?.id).toBe(".copilot/chats/agent__hidden.md");
   });
 
   it("lists native sessions when no markdown notes exist (autosave off)", async () => {

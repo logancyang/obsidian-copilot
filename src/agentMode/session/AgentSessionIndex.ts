@@ -45,34 +45,6 @@ const SAVE_DEBOUNCE_MS = 500;
 const MAX_ENTRIES = 500;
 const MAX_TOMBSTONES = 500;
 
-/** `ChatHistoryItem.id` prefix marking a native-store (no markdown file) entry. */
-export const NATIVE_CHAT_ID_PREFIX = "copilot-agent-session://";
-
-/** Encode a (backendId, sessionId) pair as a history-item id. */
-export function buildNativeChatId(backendId: BackendId, sessionId: string): string {
-  return `${NATIVE_CHAT_ID_PREFIX}${backendId}/${encodeURIComponent(sessionId)}`;
-}
-
-export function isNativeChatId(id: string): boolean {
-  return id.startsWith(NATIVE_CHAT_ID_PREFIX);
-}
-
-/** Inverse of {@link buildNativeChatId}. Returns null for malformed ids. */
-export function parseNativeChatId(id: string): { backendId: BackendId; sessionId: string } | null {
-  if (!isNativeChatId(id)) return null;
-  const rest = id.slice(NATIVE_CHAT_ID_PREFIX.length);
-  const sep = rest.indexOf("/");
-  if (sep <= 0 || sep === rest.length - 1) return null;
-  try {
-    return {
-      backendId: rest.slice(0, sep),
-      sessionId: decodeURIComponent(rest.slice(sep + 1)),
-    };
-  } catch {
-    return null;
-  }
-}
-
 function entryKey(backendId: string, sessionId: string): string {
   return `${backendId}:${sessionId}`;
 }

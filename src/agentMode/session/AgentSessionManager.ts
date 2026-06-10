@@ -11,7 +11,8 @@ import { v4 as uuidv4 } from "uuid";
 import { AgentSession, ATTENTION_TRIGGER_STATUSES, DEFAULT_TITLE_PREFIX } from "./AgentSession";
 import type { AgentChatPersistenceManager } from "./AgentChatPersistenceManager";
 import type { AgentModelPreloader, WarmBackend } from "./AgentModelPreloader";
-import { parseNativeChatId, type AgentSessionIndex } from "./AgentSessionIndex";
+import { parseNativeChatId } from "@/utils/nativeChatId";
+import type { AgentSessionIndex } from "./AgentSessionIndex";
 import { mergeChatHistoryItems, type MarkdownChatEntry } from "./chatHistoryMerge";
 import { MethodUnsupportedError } from "./errors";
 import { resolveMcpServers } from "./mcpResolver";
@@ -207,14 +208,20 @@ export class AgentSessionManager {
     if (persistence) {
       const files = await persistence.getAgentChatHistoryFiles();
       const tracker = this.plugin.getChatHistoryLastAccessedAtManager();
-      markdownEntries = files.map((file) => {
-        const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
-        return {
-          item: fileToHistoryItem(this.app, file, tracker),
-          backendId: typeof fm?.backendId === "string" ? fm.backendId : undefined,
-          sessionId: typeof fm?.sessionId === "string" ? fm.sessionId : undefined,
-        };
-      });
+      markdownEntries = await Promise.all(
+        files.map(async (file) => {
+          // readSessionRefFromFile falls back to an adapter read for files in
+          // hidden save folders, which the metadata cache never indexes — a
+          // cache-only read would leave those rows unmergeable and duplicate
+          // their native twins.
+          const ref = await this.readSessionRefFromFile(file.path);
+          return {
+            item: fileToHistoryItem(this.app, file, tracker),
+            backendId: ref?.backendId,
+            sessionId: ref?.sessionId,
+          };
+        })
+      );
     }
     if (!index) return markdownEntries.map((e) => e.item);
 
