@@ -2,7 +2,7 @@ import { type App, Platform } from "obsidian";
 import type CopilotPlugin from "@/main";
 import { logError } from "@/logger";
 import { DEFAULT_SKILLS_FOLDER } from "@/constants";
-import { getSettings, subscribeToSettingsChange } from "@/settings/model";
+import { getSettings, subscribeToSettingsChange, type CopilotSettings } from "@/settings/model";
 import { subscribeToSystemPromptChange } from "@/system-prompts/state";
 import { buildAgentSystemPrompt } from "./backends/shared/agentSystemPrompt";
 import { backendRegistry, listBackendDescriptors } from "./backends/registry";
@@ -107,6 +107,19 @@ function collectAgentSkillsDirsProjectRel(): Record<string, string> {
  */
 function backendSystemPromptKey(_backendId: BackendId): string {
   return buildAgentSystemPrompt();
+}
+
+/**
+ * Order-independent dedup key for a backend's env overrides, so the restart
+ * subscription fires iff the effective record actually changes (not on key
+ * reordering or unrelated settings writes).
+ */
+function backendEnvOverridesKey(settings: CopilotSettings, backendId: BackendId): string {
+  const backends = settings.agentMode?.backends as
+    | Partial<Record<BackendId, { envOverrides?: Record<string, string> }>>
+    | undefined;
+  const env = backends?.[backendId]?.envOverrides ?? {};
+  return JSON.stringify(Object.entries(env).sort(([a], [b]) => a.localeCompare(b)));
 }
 
 /**
@@ -220,6 +233,27 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     }
   };
   subscribeToSystemPromptChange(restartSystemPromptAffected);
+  // Env overrides are baked into subprocess spawn env, and the Claude SDK
+  // folds them into its model catalog (a custom `ANTHROPIC_MODEL` becomes a
+  // picker entry). Either way an edit only reaches the live or warm process on
+  // a fresh spawn/probe, so restart the backend whose record actually changed.
+  // The editor debounces commits and the manager/preloader coalesce rapid
+  // restarts, so a burst of edits folds into one re-probe (same rationale as
+  // the provider-config subscription above).
+  subscribeToSettingsChange((prev, next) => {
+    for (const descriptor of listBackendDescriptors()) {
+      if (
+        backendEnvOverridesKey(prev, descriptor.id) === backendEnvOverridesKey(next, descriptor.id)
+      ) {
+        continue;
+      }
+      void manager
+        .restartBackend(descriptor.id, "env overrides changed")
+        .catch((error) =>
+          logError(`[AgentMode] restart after env overrides change failed: ${descriptor.id}`, error)
+        );
+    }
+  });
   // Seed the plugin-shipped builtin skills into the canonical folder, then run
   // discovery so the pass picks them up and fans them out to the agent dirs.
   // The Plus relay skills are always seeded; the Miyo vault-search skill is
