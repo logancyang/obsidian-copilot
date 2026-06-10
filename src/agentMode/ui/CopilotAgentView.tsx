@@ -3,14 +3,13 @@ import { attachChatViewLayoutObservers } from "@/components/chat-components/atta
 import { CHAT_AGENT_VIEWTYPE, COPILOT_AGENT_ICON_ID } from "@/constants";
 import { ChatViewEventTarget, EventTargetContext } from "@/context";
 import CopilotPlugin from "@/main";
-import { createPluginRoot } from "@/utils/react/createPluginRoot";
+import { mountPluginViewRoot, type PluginViewRootHandle } from "@/utils/react/mountPluginViewRoot";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { ItemView, WorkspaceLeaf } from "obsidian";
 import * as React from "react";
-import { Root } from "react-dom/client";
 
 export default class CopilotAgentView extends ItemView {
-  private root: Root | null = null;
+  private viewRoot: PluginViewRootHandle | null = null;
   private handleSaveAsNote: (() => Promise<void>) | null = null;
   private disposeLayoutObservers: (() => void) | null = null;
   eventTarget: ChatViewEventTarget;
@@ -42,8 +41,7 @@ export default class CopilotAgentView extends ItemView {
   }
 
   async onOpen(): Promise<void> {
-    this.root = createPluginRoot(this.containerEl.children[1], this.app);
-    this.renderChat();
+    this.viewRoot = mountPluginViewRoot(this.containerEl, this.app, () => this.renderTree());
 
     const observers = attachChatViewLayoutObservers(this.containerEl);
     this.disposeLayoutObservers = observers.dispose;
@@ -55,10 +53,8 @@ export default class CopilotAgentView extends ItemView {
     );
   }
 
-  private renderChat(): void {
-    if (!this.root) return;
-
-    this.root.render(
+  private renderTree(): React.ReactNode {
+    return (
       <EventTargetContext.Provider value={this.eventTarget}>
         <Tooltip.Provider delayDuration={0}>
           <AgentModeChat
@@ -80,16 +76,14 @@ export default class CopilotAgentView extends ItemView {
   }
 
   updateView(): void {
-    this.renderChat();
+    this.viewRoot?.rerender();
   }
 
   async onClose(): Promise<void> {
     this.disposeLayoutObservers?.();
     this.disposeLayoutObservers = null;
 
-    if (this.root) {
-      this.root.unmount();
-      this.root = null;
-    }
+    this.viewRoot?.unmount();
+    this.viewRoot = null;
   }
 }
