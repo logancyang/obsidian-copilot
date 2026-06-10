@@ -238,6 +238,40 @@ describe("buildPromptBlocks", () => {
   });
 });
 
+describe("AgentSession.loadDisplayMessages", () => {
+  it("replaces the transcript and notifies subscribers so an open view re-renders", () => {
+    const mock = makeMockBackend();
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+    });
+    const onMessagesChanged = jest.fn();
+    session.subscribe({ onMessagesChanged, onStatusChanged: () => {} });
+
+    session.loadDisplayMessages([
+      {
+        id: "m0",
+        sender: USER_SENDER,
+        message: "earlier prompt",
+        isVisible: true,
+        timestamp: null,
+      },
+      { id: "m1", sender: AI_SENDER, message: "earlier reply", isVisible: true, timestamp: null },
+    ]);
+
+    // The missing notification here was the bug: store.loadMessages alone left
+    // a freshly-activated tab blank until a tab switch forced a re-read.
+    expect(onMessagesChanged).toHaveBeenCalledTimes(1);
+    expect(session.hasUserVisibleMessages()).toBe(true);
+    expect(session.store.getDisplayMessages().map((m) => m.message)).toEqual([
+      "earlier prompt",
+      "earlier reply",
+    ]);
+  });
+});
+
 describe("AgentSession.sendPrompt", () => {
   it("appends user + placeholder synchronously and resolves on stopReason", async () => {
     const mock = makeMockBackend();

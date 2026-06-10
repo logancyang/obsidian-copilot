@@ -1093,6 +1093,10 @@ export class AgentSessionManager {
       state.path = undefined;
     }
 
+    // Captured before we create the loaded session (which becomes active) so
+    // we can replace an empty landing tab in place instead of leaving it.
+    const previousActiveId = this.activeSessionId;
+
     const loaded = await this.opts.persistenceManager.loadFile(file);
 
     let session: AgentSession | null = null;
@@ -1103,7 +1107,7 @@ export class AgentSessionManager {
       session = await this.createSession(loaded.backendId);
     }
 
-    session.store.loadMessages(loaded.messages);
+    session.loadDisplayMessages(loaded.messages);
     if (loaded.label) session.setLabel(loaded.label);
     this.getSessionState(session.internalId).path = file.path;
     if (loaded.sessionId) {
@@ -1111,8 +1115,32 @@ export class AgentSessionManager {
       // merged history ranks this chat correctly after a reopen.
       void this.opts.sessionIndex?.touch(loaded.backendId, loaded.sessionId);
     }
+    this.absorbIntoEmptyActiveTab(session, previousActiveId);
     this.notify();
     return session;
+  }
+
+  /**
+   * When a history item is opened while the active tab is an empty landing
+   * (no user-visible messages), give the loaded session that tab's strip
+   * position and close the empty one — so opening a chat doesn't leave a
+   * stray blank tab behind. A tab with a real conversation is never
+   * clobbered; the loaded chat opens as a new tab in that case.
+   */
+  private absorbIntoEmptyActiveTab(loaded: AgentSession, previousActiveId: string | null): void {
+    if (!previousActiveId || previousActiveId === loaded.internalId) return;
+    const previous = this.sessions.get(previousActiveId);
+    if (!previous || previous.hasUserVisibleMessages()) return;
+    const oldIdx = Array.from(this.sessions.keys()).indexOf(previousActiveId);
+    if (oldIdx >= 0) {
+      this.moveMapEntry(this.sessions, loaded.internalId, oldIdx);
+      this.moveMapEntry(this.chatUIStates, loaded.internalId, oldIdx);
+    }
+    // Background close: the loaded session is already active, so closing the
+    // empty one won't reassign the active pointer.
+    void this.closeSession(previousActiveId).catch((e) =>
+      logWarn(`[AgentMode] closing empty tab during history load failed`, e)
+    );
   }
 
   /**
@@ -1141,6 +1169,9 @@ export class AgentSessionManager {
       this.setActiveSession(existing.internalId);
       return existing;
     }
+    // Captured before the resumed session becomes active so we can replace an
+    // empty landing tab in place rather than spawning a new one.
+    const previousActiveId = this.activeSessionId;
     const session = await this.tryResumeSessionFromHistory(backendId, sessionId);
     if (!session) {
       throw new Error(`Could not resume session ${sessionId} from the ${backendId} session store.`);
@@ -1157,6 +1188,7 @@ export class AgentSessionManager {
       if (entry?.title) session.setLabel(entry.title);
       await index.touch(backendId, sessionId);
     }
+    this.absorbIntoEmptyActiveTab(session, previousActiveId);
     this.notify();
     return session;
   }
@@ -1182,7 +1214,7 @@ export class AgentSessionManager {
         sessionId,
         cwd: adapter.getBasePath(),
       });
-      if (transcript.length > 0) session.store.loadMessages(transcript);
+      if (transcript.length > 0) session.loadDisplayMessages(transcript);
     } catch (e) {
       logWarn(`[AgentMode] could not hydrate transcript for ${sessionId}`, e);
     }

@@ -2,6 +2,7 @@ import { AI_SENDER, USER_SENDER, WEB_SELECTED_TEXT_TAG } from "@/constants";
 import { logInfo, logWarn } from "@/logger";
 import { AgentMessageStore } from "@/agentMode/session/AgentMessageStore";
 import {
+  AgentChatMessage,
   AgentMessagePart,
   AgentQuestionAnswers,
   AgentToolCallOutput,
@@ -624,6 +625,19 @@ export class AgentSession {
    */
   hasUserVisibleMessages(): boolean {
     return this.store.getDisplayMessages().length > 0;
+  }
+
+  /**
+   * Replace the display transcript from persisted history (a markdown note or
+   * a backend's on-disk session store) and notify subscribers so an already-
+   * open chat view re-renders immediately. `store.loadMessages` alone mutates
+   * state without firing `onMessagesChanged`, so a freshly-activated tab would
+   * otherwise render blank until the next backend-identity change (e.g. the
+   * user switching tabs and back).
+   */
+  loadDisplayMessages(messages: AgentChatMessage[]): void {
+    this.store.loadMessages(messages);
+    this.notifyMessages();
   }
 
   /**
