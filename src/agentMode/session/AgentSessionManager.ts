@@ -13,7 +13,11 @@ import type { AgentChatPersistenceManager } from "./AgentChatPersistenceManager"
 import type { AgentModelPreloader, WarmBackend } from "./AgentModelPreloader";
 import { parseNativeChatId } from "@/utils/nativeChatId";
 import type { AgentSessionIndex } from "./AgentSessionIndex";
-import { mergeChatHistoryItems, type MarkdownChatEntry } from "./chatHistoryMerge";
+import {
+  deriveChatTitleFromMessages,
+  mergeChatHistoryItems,
+  type MarkdownChatEntry,
+} from "./chatHistoryMerge";
 import { MethodUnsupportedError } from "./errors";
 import { resolveMcpServers } from "./mcpResolver";
 import { replayPersistedMode } from "./replayPersistedMode";
@@ -1307,14 +1311,23 @@ export class AgentSessionManager {
     const messages = session.store.getDisplayMessages();
     if (messages.length === 0) return;
     const now = Date.now();
-    const title = session.getLabel();
+    // Prefer the agent/user label; fall back to a title derived from the
+    // first user message so chats that have no agent title (every Claude
+    // Code chat — its SDK has no title API) don't read "Untitled chat".
+    // The derived title is recorded agent-sourced, so an opencode/codex
+    // summarizer title still overrides it later, and a user rename always wins.
+    const label = session.getLabel();
+    const title = label ?? deriveChatTitleFromMessages(messages);
+    const titleSource: "user" | "agent" | undefined = !title
+      ? undefined
+      : label && session.getLabelSource() === "user"
+        ? "user"
+        : "agent";
     await index.recordSession({
       backendId: session.backendId,
       sessionId,
       title,
-      // "user" must ride through so a tab rename survives native sweeps the
-      // same way it survives agent retitles on the live session.
-      titleSource: title ? (session.getLabelSource() === "user" ? "user" : "agent") : undefined,
+      titleSource,
       createdAtMs: messages[0]?.timestamp?.epoch ?? now,
       lastAccessedAtMs: now,
     });

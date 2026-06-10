@@ -1,6 +1,8 @@
+import { USER_SENDER } from "@/constants";
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import { buildNativeChatId } from "@/utils/nativeChatId";
 import type { AgentSessionIndexEntry } from "./AgentSessionIndex";
+import type { AgentChatMessage } from "./types";
 
 /**
  * A markdown-persisted chat plus the backend session identity from its
@@ -13,8 +15,32 @@ export interface MarkdownChatEntry {
   sessionId?: string;
 }
 
-/** Fallback row title for a native session the backend never titled. */
+/** Last-resort row title when a native session has no title to show at all. */
 export const UNTITLED_NATIVE_CHAT = "Untitled chat";
+
+/** Max length of a title derived from the first user message before eliding. */
+const MAX_DERIVED_TITLE_CHARS = 60;
+
+/**
+ * Derive a readable title from a chat's first user message, mirroring what the
+ * markdown autosave path already does for note filenames. Used as the native
+ * index title when no agent-generated label exists yet — notably for Claude
+ * Code, whose SDK exposes no session-title API, so without this every CC chat
+ * in recent history would read "Untitled chat". Stored as an overridable
+ * (agent-sourced) title so an opencode/codex summarizer title still wins later.
+ * Returns null when there's no usable user text.
+ */
+export function deriveChatTitleFromMessages(messages: AgentChatMessage[]): string | null {
+  const firstUser = messages.find((m) => m.sender === USER_SENDER && m.message.trim());
+  if (!firstUser) return null;
+  const text = firstUser.message
+    .replace(/\[\[([^\]]+)\]\]/g, "$1") // show wikilink target text, not the brackets
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!text) return null;
+  if (text.length <= MAX_DERIVED_TITLE_CHARS) return text;
+  return `${text.slice(0, MAX_DERIVED_TITLE_CHARS).trimEnd()}…`;
+}
 
 /**
  * Merge markdown-saved chats with native-store sessions into one de-duplicated
