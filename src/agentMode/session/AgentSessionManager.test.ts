@@ -1523,6 +1523,21 @@ describe("AgentSessionManager chat history aggregation", () => {
     expect((await index.getEntry("opencode", "s1"))?.title).toBe("New title");
   });
 
+  it("matches live sessions by the (backendId, sessionId) pair, not session id alone", async () => {
+    const { manager } = buildHistoryHarness();
+    const session = await manager.createSession("opencode");
+    const liveId = session.getBackendSessionId()!;
+
+    // Same backend + session id: focuses the existing tab.
+    await expect(manager.loadNativeSessionFromHistory("opencode", liveId)).resolves.toBe(session);
+
+    // Same session id on a DIFFERENT backend must not focus the opencode
+    // tab — it falls through to the resume path (which here fails on the
+    // unknown backend rather than silently hijacking the wrong session).
+    await expect(manager.loadNativeSessionFromHistory("codex", liveId)).rejects.toThrow();
+    expect(manager.getActiveSession()).toBe(session);
+  });
+
   it("sweeps the preloader's warm probe procs before any chat starts a backend", async () => {
     const warmListSessions = jest.fn(async () => ({
       sessions: [

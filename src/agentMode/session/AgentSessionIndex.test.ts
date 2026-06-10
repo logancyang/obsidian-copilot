@@ -117,6 +117,44 @@ describe("AgentSessionIndex", () => {
     expect(updated?.lastAccessedAtMs).toBeGreaterThan(1);
   });
 
+  it("a user rename survives discovered-session merges; agent titles stay refreshable", async () => {
+    const index = new AgentSessionIndex(makeStorage(), INDEX_PATH);
+    await index.recordSession(entry({ title: "Agent title", titleSource: "agent" }));
+    await index.setTitle("opencode", "s1", "My rename");
+    await index.mergeDiscoveredSessions([entry({ title: "Agent title v2" })]);
+    expect(await index.getEntry("opencode", "s1")).toMatchObject({
+      title: "My rename",
+      titleSource: "user",
+    });
+
+    // Without a user rename the agent store's fresher title wins.
+    await index.recordSession(
+      entry({ sessionId: "s2", title: "Agent title", titleSource: "agent" })
+    );
+    await index.mergeDiscoveredSessions([entry({ sessionId: "s2", title: "Agent title v2" })]);
+    expect((await index.getEntry("opencode", "s2"))?.title).toBe("Agent title v2");
+  });
+
+  it("a user-sourced live label survives discovered-session merges via recordSession", async () => {
+    const index = new AgentSessionIndex(makeStorage(), INDEX_PATH);
+    // A tab rename on a live session reaches the index through the
+    // write-through path (recordSession), not setTitle.
+    await index.recordSession(entry({ title: "Tab rename", titleSource: "user" }));
+    await index.mergeDiscoveredSessions([entry({ title: "Agent original" })]);
+    expect((await index.getEntry("opencode", "s1"))?.title).toBe("Tab rename");
+  });
+
+  it("the user title marker round-trips through persistence", async () => {
+    const storage = makeStorage();
+    const first = new AgentSessionIndex(storage, INDEX_PATH);
+    await first.recordSession(entry());
+    await first.setTitle("opencode", "s1", "My rename");
+    await first.flush();
+    const second = new AgentSessionIndex(storage, INDEX_PATH);
+    await second.mergeDiscoveredSessions([entry({ title: "Agent original" })]);
+    expect((await second.getEntry("opencode", "s1"))?.title).toBe("My rename");
+  });
+
   it("persists across instances via flush and ignores corrupt files", async () => {
     const storage = makeStorage();
     const first = new AgentSessionIndex(storage, INDEX_PATH);

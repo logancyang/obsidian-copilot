@@ -635,6 +635,16 @@ export class AgentSession {
     return this.label;
   }
 
+  /**
+   * Who set the current label: `"user"` (Rename), `"agent"`
+   * (`session_info_update` / title poll), or `null` when unlabeled. The
+   * session index records this so a user rename survives native
+   * `listSessions` sweeps the same way it survives agent retitles here.
+   */
+  getLabelSource(): "user" | "agent" | null {
+    return this.labelSource;
+  }
+
   setLabel(label: string | null): void {
     const next = label?.trim() ? label.trim() : null;
     if (next === this.label) return;

@@ -1125,8 +1125,10 @@ export class AgentSessionManager {
     if (this.disposed) {
       throw new Error("AgentSessionManager has been shut down");
     }
+    // Identity is the (backendId, sessionId) pair — matching on sessionId
+    // alone could focus another backend's tab on an id collision.
     const existing = this.getSessionByBackendId(sessionId);
-    if (existing && existing.getStatus() !== "closed") {
+    if (existing && existing.backendId === backendId && existing.getStatus() !== "closed") {
       this.setActiveSession(existing.internalId);
       return existing;
     }
@@ -1300,10 +1302,14 @@ export class AgentSessionManager {
     const messages = session.store.getDisplayMessages();
     if (messages.length === 0) return;
     const now = Date.now();
+    const title = session.getLabel();
     await index.recordSession({
       backendId: session.backendId,
       sessionId,
-      title: session.getLabel(),
+      title,
+      // "user" must ride through so a tab rename survives native sweeps the
+      // same way it survives agent retitles on the live session.
+      titleSource: title ? (session.getLabelSource() === "user" ? "user" : "agent") : undefined,
       createdAtMs: messages[0]?.timestamp?.epoch ?? now,
       lastAccessedAtMs: now,
     });

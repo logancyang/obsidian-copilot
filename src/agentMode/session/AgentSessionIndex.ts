@@ -13,6 +13,14 @@ export interface AgentSessionIndexEntry {
   sessionId: string;
   /** Last known user-visible title (agent label or user rename), or null. */
   title: string | null;
+  /**
+   * Who set `title`. `"user"` titles win over anything a native
+   * `listSessions` sweep discovers — the agent store keeps its original
+   * title (we never mutate it), so without this marker a plugin-side rename
+   * would be clobbered on the next sweep. Mirrors `AgentSession`'s
+   * `labelSource` semantics. Absent ≙ agent-sourced / unknown.
+   */
+  titleSource?: "user" | "agent";
   createdAtMs: number;
   lastAccessedAtMs: number;
 }
@@ -58,10 +66,13 @@ function sanitizeEntry(raw: unknown): AgentSessionIndexEntry | null {
   const lastAccessedAtMs =
     typeof r.lastAccessedAtMs === "number" && r.lastAccessedAtMs > 0 ? r.lastAccessedAtMs : null;
   if (!createdAtMs && !lastAccessedAtMs) return null;
+  const title = typeof r.title === "string" && r.title.trim() ? r.title.trim() : null;
   return {
     backendId: r.backendId,
     sessionId: r.sessionId,
-    title: typeof r.title === "string" && r.title.trim() ? r.title.trim() : null,
+    title,
+    titleSource:
+      title && (r.titleSource === "user" || r.titleSource === "agent") ? r.titleSource : undefined,
     createdAtMs: createdAtMs ?? lastAccessedAtMs!,
     lastAccessedAtMs: lastAccessedAtMs ?? createdAtMs!,
   };
@@ -111,10 +122,12 @@ export class AgentSessionIndex {
     const key = entryKey(entry.backendId, entry.sessionId);
     this.tombstones.delete(key);
     const existing = this.entries.get(key);
+    const keepExistingTitle = entry.title == null;
     this.entries.set(key, {
       backendId: entry.backendId,
       sessionId: entry.sessionId,
-      title: entry.title ?? existing?.title ?? null,
+      title: keepExistingTitle ? (existing?.title ?? null) : entry.title,
+      titleSource: keepExistingTitle ? existing?.titleSource : entry.titleSource,
       createdAtMs: Math.min(entry.createdAtMs, existing?.createdAtMs ?? entry.createdAtMs),
       lastAccessedAtMs: Math.max(
         entry.lastAccessedAtMs,
@@ -127,8 +140,9 @@ export class AgentSessionIndex {
   /**
    * Merge sessions discovered via a backend's native `listSessions`. Unlike
    * {@link recordSession} this respects tombstones (a deleted chat must not
-   * resurrect just because the backend still stores it) and never moves
-   * `lastAccessedAtMs` backwards.
+   * resurrect just because the backend still stores it), never moves
+   * `lastAccessedAtMs` backwards, and never overwrites a user-renamed title
+   * — discovered titles are agent-store originals.
    */
   async mergeDiscoveredSessions(entries: AgentSessionIndexEntry[]): Promise<void> {
     await this.ensureLoaded();
@@ -137,10 +151,12 @@ export class AgentSessionIndex {
       const key = entryKey(entry.backendId, entry.sessionId);
       if (this.tombstones.has(key)) continue;
       const existing = this.entries.get(key);
+      const keepExistingTitle = existing?.titleSource === "user" || entry.title == null;
       const next: AgentSessionIndexEntry = {
         backendId: entry.backendId,
         sessionId: entry.sessionId,
-        title: entry.title ?? existing?.title ?? null,
+        title: keepExistingTitle ? (existing?.title ?? null) : entry.title,
+        titleSource: keepExistingTitle ? existing?.titleSource : "agent",
         createdAtMs: Math.min(entry.createdAtMs, existing?.createdAtMs ?? entry.createdAtMs),
         lastAccessedAtMs: Math.max(
           entry.lastAccessedAtMs,
@@ -160,14 +176,21 @@ export class AgentSessionIndex {
     if (changed) this.scheduleSave();
   }
 
-  /** Rename support for native-only entries (no frontmatter to patch). */
+  /**
+   * Rename support for native-only entries (no frontmatter to patch). Marks
+   * the title user-sourced so discovered-session merges can't clobber it.
+   */
   async setTitle(backendId: BackendId, sessionId: string, title: string): Promise<void> {
     await this.ensureLoaded();
     const key = entryKey(backendId, sessionId);
     const existing = this.entries.get(key);
     if (!existing) return;
     const trimmed = title.trim();
-    this.entries.set(key, { ...existing, title: trimmed || null });
+    this.entries.set(key, {
+      ...existing,
+      title: trimmed || null,
+      titleSource: trimmed ? "user" : undefined,
+    });
     this.scheduleSave();
   }
 
