@@ -3,6 +3,7 @@ import { logInfo } from "@/logger";
 import { getSettings } from "@/settings/model";
 import type { CopilotSettings } from "@/settings/model";
 import { isSelfHostedProvider } from "@/modelManagement";
+import { isCatalogProviderDefaultEndpoint } from "@/utils/providerBaseUrl";
 import type { BackendConfigRegistry, ProviderRegistry } from "@/modelManagement";
 import { AcpBackend, AcpSpawnDescriptor } from "@/agentMode/acp/types";
 import type { CopilotMode } from "@/agentMode/session/types";
@@ -143,7 +144,8 @@ export async function buildOpencodeConfig(
     // identity and must be registered explicitly as `@ai-sdk/openai-compatible`
     // pointed at its own baseURL.
     const origin = entry.provider.origin;
-    const hasCatalogIdentity = origin.kind === "byok" && !!origin.catalogProviderId;
+    const catalogProviderId = origin.kind === "byok" ? origin.catalogProviderId : undefined;
+    const hasCatalogIdentity = !!catalogProviderId;
     // Whether a missing key should drop the provider is a separate question:
     // self-hosted endpoints commonly run key-less. Detect that from the baseUrl
     // host so it stays correct even if a local runner gains a catalog id.
@@ -160,15 +162,28 @@ export async function buildOpencodeConfig(
         );
         continue;
       }
-      const baseURL = entry.provider.baseUrl;
+      const rawBaseURL = entry.provider.baseUrl;
       // A non-catalog provider with no baseURL is unroutable — opencode has no
       // registry default to fall back on.
-      if (!hasCatalogIdentity && !baseURL) {
+      if (!hasCatalogIdentity && !rawBaseURL) {
         logInfo(
           `[AgentMode] skipping ${mapping.id}/${entry.configuredModel.info.id}: ${origin.kind} provider has no baseUrl`
         );
         continue;
       }
+      // The AI SDK treats `baseURL` as the complete prefix (the versioned
+      // models.dev form), but stored values are often host-only — the
+      // configure dialog's Google seed, or a user trimming `/v1beta` to fix
+      // legacy chat (#152). When the value is just the provider's canonical
+      // endpoint in some spelling, drop it and let opencode's registry
+      // default apply: that is always the correct form. Anything else is a
+      // genuine proxy/gateway override and is forwarded verbatim.
+      const baseURL =
+        hasCatalogIdentity &&
+        rawBaseURL &&
+        isCatalogProviderDefaultEndpoint(catalogProviderId, rawBaseURL)
+          ? undefined
+          : rawBaseURL;
       // Omit apiKey/baseURL when falsy: an empty-string key reaches
       // `@ai-sdk/openai-compatible` as `Authorization: Bearer ` (silent 401),
       // and an empty baseURL would clobber opencode's registry default.

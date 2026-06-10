@@ -466,6 +466,45 @@ describe("buildOpencodeConfig — provider/model injection", () => {
     });
   });
 
+  it("omits the baseURL when a catalog provider's URL is its own host-only endpoint (Google dialog seed)", async () => {
+    // The dialog seeds Google with the host-only endpoint, but the AI SDK
+    // treats baseURL as the complete prefix — forwarding it would drop the
+    // `/v1beta` segment and 404 every call. Recognize the canonical endpoint
+    // and let opencode's registry default (the versioned form) apply.
+    const provider = makeProvider(
+      "p-google",
+      { kind: "byok", catalogProviderId: "google" },
+      {
+        providerType: "google" as ProviderType,
+        baseUrl: "https://generativelanguage.googleapis.com",
+      }
+    );
+    const deps = makeDeps({
+      resolved: [okEntry(provider, makeModel("p-google", "gemini-2.5-flash"))],
+      keys: { "p-google": "g-123" },
+    });
+    const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
+      provider: Record<string, { options?: { baseURL?: string; apiKey?: string } }>;
+    };
+    expect(cfg.provider.google.options).toEqual({ apiKey: "g-123" });
+  });
+
+  it("omits the baseURL when a catalog provider's URL is its versioned endpoint (Groq models.dev seed)", async () => {
+    const provider = makeProvider(
+      "p-groq",
+      { kind: "byok", catalogProviderId: "groq" },
+      { providerType: "openai-compatible", baseUrl: "https://api.groq.com/openai/v1" }
+    );
+    const deps = makeDeps({
+      resolved: [okEntry(provider, makeModel("p-groq", "llama-3.3-70b-versatile"))],
+      keys: { "p-groq": "gq-123" },
+    });
+    const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
+      provider: Record<string, { options?: { baseURL?: string; apiKey?: string } }>;
+    };
+    expect(cfg.provider.groq.options).toEqual({ apiKey: "gq-123" });
+  });
+
   it("registers Copilot Plus as a custom openai-compatible provider from its own fields", async () => {
     // Plus has no catalog identity, so it's registered like a custom endpoint —
     // npm/name/baseURL all read off the provider row (seeded by CopilotPlusSetupApi).

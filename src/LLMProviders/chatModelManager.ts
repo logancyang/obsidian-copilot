@@ -25,6 +25,7 @@ import {
   safeFetchNoThrow,
   shouldUseGitHubCopilotResponsesApi,
 } from "@/utils";
+import { googleHostBaseUrl, groqHostBaseUrl } from "@/utils/providerBaseUrl";
 import { ChatAnthropic } from "@langchain/anthropic";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { BaseLanguageModel } from "@langchain/core/language_models/base";
@@ -332,7 +333,9 @@ export default class ChatModelManager {
         ),
         model: modelName,
         safetySettings: GOOGLE_SAFETY_SETTINGS_BLOCK_NONE,
-        baseUrl: customModel.baseUrl,
+        // ChatGoogleGenerativeAI appends `/v1beta` itself; a stored versioned
+        // base URL would double the segment (`/v1beta/v1beta/…` → 404).
+        baseUrl: googleHostBaseUrl(customModel.baseUrl),
       },
       [ChatModelProviders.XAI]: {
         apiKey: await this.resolveApiKey(
@@ -376,7 +379,9 @@ export default class ChatModelManager {
           allowLegacyCredentialFallback
         ),
         model: modelName,
-        baseUrl: customModel.baseUrl,
+        // groq-sdk appends `/openai/v1` itself; the stored URL is usually the
+        // versioned models.dev form, which would double the segment.
+        baseUrl: groqHostBaseUrl(customModel.baseUrl),
       },
       [ChatModelProviders.OLLAMA]: {
         // ChatOllama has `model` instead of `modelName`!!
