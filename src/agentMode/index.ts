@@ -1,15 +1,20 @@
-import { type App, Platform } from "obsidian";
+import { type App, FileSystemAdapter, Platform } from "obsidian";
+import os from "node:os";
+import * as path from "node:path";
 import type CopilotPlugin from "@/main";
 import { logError } from "@/logger";
 import { DEFAULT_SKILLS_FOLDER } from "@/constants";
 import { getSettings, subscribeToSettingsChange, type CopilotSettings } from "@/settings/model";
 import { subscribeToSystemPromptChange } from "@/system-prompts/state";
+import { copilotAppDataDir } from "@/utils/appPaths";
+import { md5 } from "@/utils/hash";
 import { buildAgentSystemPrompt } from "./backends/shared/agentSystemPrompt";
 import { backendRegistry, listBackendDescriptors } from "./backends/registry";
 import type { BackendId } from "./session/types";
 import { AgentChatPersistenceManager } from "./session/AgentChatPersistenceManager";
 import { AgentModelPreloader } from "./session/AgentModelPreloader";
 import { AgentSessionIndex } from "./session/AgentSessionIndex";
+import { createNodeFileStorage } from "./session/nodeFileStorage";
 import { AgentSessionManager } from "./session/AgentSessionManager";
 import { shouldUseMiyo } from "@/miyo/miyoUtils";
 import { SkillManager } from "./skills";
@@ -146,15 +151,33 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
   const persistenceManager = new AgentChatPersistenceManager(app);
   // Plugin-local (per-vault) record of resumable backend sessions, so recent
   // chats can list and resume sessions that were never saved as markdown.
+  //
+  // Stored OUTSIDE the vault, under `~/.obsidian-copilot/vaults/<vaultId>/`,
+  // because the index mirrors device-local backend stores (`~/.claude/projects`,
+  // opencode's own session dirs) and references session ids that only resolve
+  // on the machine that created them. Keeping it off vault sync avoids ghost
+  // entries and write conflicts across synced devices (iCloud/Syncthing/
+  // Obsidian Sync). Scoped by a vault id (hash of the vault path) so vaults
+  // don't share one file. Agent Mode is desktop-only, so Node fs is fine.
   const vaultAdapter = app.vault.adapter;
-  const sessionIndex = new AgentSessionIndex(
-    {
-      exists: (p) => vaultAdapter.exists(p),
-      read: (p) => vaultAdapter.read(p),
-      write: (p, c) => vaultAdapter.write(p, c),
-    },
-    `${app.vault.configDir}/plugins/${plugin.manifest.id}/agent-chat-index.json`
+  const vaultBasePath = vaultAdapter instanceof FileSystemAdapter ? vaultAdapter.getBasePath() : "";
+  const vaultId = vaultBasePath ? md5(vaultBasePath).slice(0, 8) : "default";
+  const indexPath = path.join(
+    copilotAppDataDir(os.homedir()),
+    "vaults",
+    vaultId,
+    "agent-chat-index.json"
   );
+  // One-time migration from the previous in-vault location, so existing
+  // history survives the move and the old (synced) file is removed.
+  const legacyIndexPath = `${app.vault.configDir}/plugins/${plugin.manifest.id}/agent-chat-index.json`;
+  const sessionIndex = new AgentSessionIndex(createNodeFileStorage(), indexPath, {
+    read: async () =>
+      (await vaultAdapter.exists(legacyIndexPath)) ? vaultAdapter.read(legacyIndexPath) : null,
+    cleanup: async () => {
+      if (await vaultAdapter.exists(legacyIndexPath)) await vaultAdapter.remove(legacyIndexPath);
+    },
+  });
   // Mutable ref breaks the construction cycle: the prompter needs the
   // manager, but handlers only fire after a session exists, which can't
   // happen before assignment below.

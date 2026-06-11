@@ -188,4 +188,68 @@ describe("AgentSessionIndex", () => {
     expect(await index.getEntries()).toHaveLength(1);
     expect(await index.isTombstoned("codex", "z")).toBe(false);
   });
+
+  describe("legacy migration", () => {
+    function legacySnapshot(): string {
+      return JSON.stringify({
+        version: 1,
+        entries: [
+          {
+            backendId: "opencode",
+            sessionId: "s1",
+            title: "From the old location",
+            createdAtMs: 1_000,
+            lastAccessedAtMs: 2_000,
+          },
+        ],
+        tombstones: { "codex:gone": 3_000 },
+      });
+    }
+
+    it("ingests the legacy file, writes the new location, and removes the old one", async () => {
+      const storage = makeStorage();
+      const cleanup = jest.fn(async () => undefined);
+      const index = new AgentSessionIndex(storage, INDEX_PATH, {
+        read: async () => legacySnapshot(),
+        cleanup,
+      });
+
+      expect(await index.getEntry("opencode", "s1")).toMatchObject({
+        title: "From the old location",
+      });
+      expect(await index.isTombstoned("codex", "gone")).toBe(true);
+      // New location written, old location cleaned up.
+      expect(storage.files.get(INDEX_PATH)).toContain("s1");
+      expect(cleanup).toHaveBeenCalledTimes(1);
+    });
+
+    it("ignores the legacy file when the new location already exists", async () => {
+      const storage = makeStorage({
+        [INDEX_PATH]: JSON.stringify({
+          version: 1,
+          entries: [entry({ sessionId: "new", title: "Current" })],
+          tombstones: {},
+        }),
+      });
+      const read = jest.fn(async () => legacySnapshot());
+      const cleanup = jest.fn(async () => undefined);
+      const index = new AgentSessionIndex(storage, INDEX_PATH, { read, cleanup });
+
+      expect(await index.getEntry("opencode", "new")).toMatchObject({ title: "Current" });
+      expect(await index.getEntry("opencode", "s1")).toBeNull();
+      expect(read).not.toHaveBeenCalled();
+      expect(cleanup).not.toHaveBeenCalled();
+    });
+
+    it("no-ops when there is no legacy file", async () => {
+      const storage = makeStorage();
+      const cleanup = jest.fn(async () => undefined);
+      const index = new AgentSessionIndex(storage, INDEX_PATH, {
+        read: async () => null,
+        cleanup,
+      });
+      expect(await index.getEntries()).toEqual([]);
+      expect(cleanup).not.toHaveBeenCalled();
+    });
+  });
 });
