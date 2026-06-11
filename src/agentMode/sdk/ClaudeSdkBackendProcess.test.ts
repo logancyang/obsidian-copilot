@@ -53,7 +53,6 @@ jest.mock("./effortOption", () => ({
 
 import { ClaudeSdkBackendProcess, promptInputToAnthropicContent } from "./ClaudeSdkBackendProcess";
 import { getCachedSdkCatalog } from "./effortOption";
-import { STREAM_STALL_MESSAGE } from "./streamStallGuard";
 import { AuthRequiredError } from "@/agentMode/session/errors";
 
 beforeEach(() => {
@@ -677,14 +676,13 @@ describe("ClaudeSdkBackendProcess.prompt stream-stall watchdog", () => {
     createSdkMcpServerMock.mockClear();
   });
 
-  function makeProc(notifyUser?: (message: string) => void) {
+  function makeProc() {
     return new ClaudeSdkBackendProcess({
       pathToClaudeCodeExecutable: "/usr/local/bin/claude",
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       app: { vault: {} } as any,
       clientVersion: "1.2.3",
       descriptor: fakeDescriptor(),
-      notifyUser,
     });
   }
 
@@ -717,16 +715,17 @@ describe("ClaudeSdkBackendProcess.prompt stream-stall watchdog", () => {
     });
   }
 
-  it("aborts the turn, notifies the user, and rejects when the stream stalls mid-message", async () => {
+  it("aborts the turn and rejects when the stream stalls mid-message", async () => {
     queryMock.mockImplementation((arg: unknown) => makeStallingQuery(arg));
-    const notifyUser = jest.fn();
-    const proc = makeProc(notifyUser);
+    const proc = makeProc();
     const { sessionId } = await proc.newSession({ cwd: "/vault", mcpServers: [] });
     proc.registerSessionHandler(sessionId, () => {});
 
     jest.useFakeTimers();
     try {
       const turn = proc.prompt({ sessionId, prompt: [{ type: "text", text: "draft a plan" }] });
+      // The thrown stall error is what `AgentSession` renders as the in-chat
+      // turn error via `markMessageError`.
       const assertion = expect(turn).rejects.toThrow(/stalled/i);
       // Past the idle window; advanceTimersByTimeAsync flushes microtasks so the
       // two deltas are consumed and the watchdog timer fires.
@@ -738,8 +737,6 @@ describe("ClaudeSdkBackendProcess.prompt stream-stall watchdog", () => {
     // The query was aborted (not left dangling) so the turn can be retried.
     const call = getPromptQueryCalls()[0][0] as { options: { abortController: AbortController } };
     expect(call.options.abortController.signal.aborted).toBe(true);
-    // The user gets a transient notice in addition to the in-chat turn error.
-    expect(notifyUser).toHaveBeenCalledWith(STREAM_STALL_MESSAGE);
   });
 
   it("passes an abort controller to query() and never fires while the stream is healthy", async () => {
