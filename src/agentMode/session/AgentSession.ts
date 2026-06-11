@@ -672,6 +672,18 @@ export class AgentSession {
    * No-op when the user has already renamed this session — Rename wins so
    * later agent-side title revisions don't blow away the user's choice.
    */
+  /**
+   * Apply a label restored from persisted history with its original source.
+   * A user-renamed title is reapplied as a sticky user rename; an agent or
+   * derived title is applied agent-sourced, so a resumed opencode/codex
+   * session can still refresh its title from later `session_info_update` /
+   * title-poll updates instead of being frozen as if the user had renamed it.
+   */
+  restoreLabel(label: string, source: "user" | "agent"): void {
+    if (source === "user") this.setLabel(label);
+    else this.applyAgentLabel(label);
+  }
+
   private applyAgentLabel(label: string | null | undefined): void {
     if (this.labelSource === "user") return;
     const next = label?.trim() ? label.trim() : null;

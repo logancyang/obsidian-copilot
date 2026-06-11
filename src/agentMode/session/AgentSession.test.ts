@@ -272,6 +272,42 @@ describe("AgentSession.loadDisplayMessages", () => {
   });
 });
 
+describe("AgentSession.restoreLabel", () => {
+  function makeResumedSession(mock: ReturnType<typeof makeMockBackend>) {
+    return new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+    });
+  }
+
+  it("an agent-sourced restored title can still be refreshed by later agent updates", () => {
+    const mock = makeMockBackend();
+    const session = makeResumedSession(mock);
+    session.restoreLabel("Discovered title", "agent");
+    expect(session.getLabel()).toBe("Discovered title");
+
+    mock.emit({
+      sessionId: "acp-1",
+      update: { sessionUpdate: "session_info_update", title: "Newer agent title" },
+    });
+    expect(session.getLabel()).toBe("Newer agent title");
+  });
+
+  it("a user-sourced restored title is sticky against later agent updates", () => {
+    const mock = makeMockBackend();
+    const session = makeResumedSession(mock);
+    session.restoreLabel("My rename", "user");
+
+    mock.emit({
+      sessionId: "acp-1",
+      update: { sessionUpdate: "session_info_update", title: "Agent title" },
+    });
+    expect(session.getLabel()).toBe("My rename");
+  });
+});
+
 describe("AgentSession.sendPrompt", () => {
   it("appends user + placeholder synchronously and resolves on stopReason", async () => {
     const mock = makeMockBackend();

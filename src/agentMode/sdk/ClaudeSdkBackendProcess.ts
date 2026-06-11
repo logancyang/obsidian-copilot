@@ -527,15 +527,19 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
    * custom config dir we can't resolve degrades to an empty transcript (the
    * session still resumes; only the visible scrollback is absent).
    *
-   * The project dir name is the cwd with every non-alphanumeric character
-   * replaced by `-`, matching the CLI's own encoding.
+   * `CLAUDE_CONFIG_DIR` is resolved with the SAME precedence the SDK is
+   * spawned with (`env overrides` > managed env > `process.env`), so a user
+   * who points Claude at a custom config dir via Agent Mode's env overrides
+   * still gets their transcript read from the right place. The project dir
+   * name is the cwd with every non-alphanumeric character replaced by `-`,
+   * matching the CLI's own encoding.
    */
   async readPersistedTranscript(params: {
     sessionId: SessionId;
     cwd: string;
   }): Promise<AgentChatMessage[]> {
     try {
-      const configDir = process.env.CLAUDE_CONFIG_DIR?.trim() || path.join(os.homedir(), ".claude");
+      const configDir = (await this.resolveClaudeConfigDir()).trim();
       const projectDir = params.cwd.replace(/[^a-zA-Z0-9]/g, "-");
       const file = path.join(configDir, "projects", projectDir, `${params.sessionId}.jsonl`);
       const text = await readFile(file, "utf8");
@@ -544,6 +548,22 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       logWarn(`[AgentMode] could not read Claude transcript for ${params.sessionId}`, err);
       return [];
     }
+  }
+
+  /**
+   * The Claude config dir the spawned SDK actually uses: env overrides win
+   * over managed env, which win over the ambient `process.env`, falling back
+   * to `~/.claude`. Mirrors the `options.env` layering in {@link prompt}.
+   */
+  private async resolveClaudeConfigDir(): Promise<string> {
+    const envOverrides = this.opts.getEnvOverrides?.() ?? {};
+    const managedEnv = (await this.opts.getManagedEnv?.()) ?? {};
+    return (
+      envOverrides.CLAUDE_CONFIG_DIR ||
+      managedEnv.CLAUDE_CONFIG_DIR ||
+      process.env.CLAUDE_CONFIG_DIR ||
+      path.join(os.homedir(), ".claude")
+    );
   }
 
   /**

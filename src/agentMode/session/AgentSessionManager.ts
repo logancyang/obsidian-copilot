@@ -271,6 +271,7 @@ export class AgentSessionManager {
     const native = parseNativeChatId(fileId);
     if (native) {
       if (!index) throw new Error("Agent session index is not configured.");
+      this.cancelPendingIndexTouch(native.backendId, native.sessionId);
       await index.deleteSession(native.backendId, native.sessionId);
       return;
     }
@@ -278,9 +279,34 @@ export class AgentSessionManager {
     if (!persistence) throw new Error("Agent chat persistence is not configured.");
     if (index) {
       const ref = await this.readSessionRefFromFile(fileId);
-      if (ref) await index.deleteSession(ref.backendId, ref.sessionId);
+      if (ref) {
+        this.cancelPendingIndexTouch(ref.backendId, ref.sessionId);
+        await index.deleteSession(ref.backendId, ref.sessionId);
+      }
     }
     await persistence.deleteFile(fileId);
+  }
+
+  /**
+   * Drop any debounced index write-through still pending for a live session
+   * with this (backendId, sessionId). Without this, deleting a chat inside the
+   * ~500ms debounce window of a recent message/label change lets the already-
+   * queued `flushIndexTouch` fire after the tombstone is written — its
+   * `recordSession` clears the tombstone and re-adds the deleted chat to
+   * Recent Chats. Activity *after* the delete still re-indexes normally (a
+   * deliberate "the user is using it again" signal); only the pre-delete
+   * timer is cancelled.
+   */
+  private cancelPendingIndexTouch(backendId: BackendId, sessionId: string): void {
+    for (const session of this.sessions.values()) {
+      if (session.backendId !== backendId) continue;
+      if (session.getBackendSessionId() !== sessionId) continue;
+      const state = this.sessionState.get(session.internalId);
+      if (state?.indexTimer) {
+        window.clearTimeout(state.indexTimer);
+        state.indexTimer = undefined;
+      }
+    }
   }
 
   /**
@@ -1185,7 +1211,12 @@ export class AgentSessionManager {
     const index = this.opts.sessionIndex;
     if (index) {
       const entry = await index.getEntry(backendId, sessionId);
-      if (entry?.title) session.setLabel(entry.title);
+      // Reapply with the recorded source: a user rename stays sticky, but an
+      // agent/derived title is agent-sourced so a resumed opencode/codex
+      // session can still refresh its title from later agent updates.
+      if (entry?.title) {
+        session.restoreLabel(entry.title, entry.titleSource === "user" ? "user" : "agent");
+      }
       await index.touch(backendId, sessionId);
     }
     this.absorbIntoEmptyActiveTab(session, previousActiveId);
