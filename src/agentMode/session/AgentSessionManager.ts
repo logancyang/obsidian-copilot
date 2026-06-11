@@ -248,10 +248,7 @@ export class AgentSessionManager {
       // Match the (backendId, sessionId) pair, not the id alone: on a
       // cross-backend id collision, renaming by id could relabel the wrong
       // backend's live tab (and its index entry via the label autosave).
-      const live = this.getSessionByBackendId(native.sessionId);
-      if (live && live.backendId === native.backendId && live.getStatus() !== "closed") {
-        live.setLabel(newTitle);
-      }
+      this.findLiveSession(native.backendId, native.sessionId)?.setLabel(newTitle);
       return;
     }
     const persistence = this.opts.persistenceManager;
@@ -992,6 +989,23 @@ export class AgentSessionManager {
     return null;
   }
 
+  /**
+   * Live (non-closed) session matching BOTH `backendId` and the backend
+   * `sessionId`. Matching the full identity at once — rather than finding the
+   * first session by `sessionId` and checking the backend after — keeps an
+   * (effectively impossible, UUID) cross-backend id collision from hiding the
+   * correct already-open tab. Used by the native-history open/rename paths.
+   */
+  private findLiveSession(backendId: BackendId, sessionId: string): AgentSession | null {
+    for (const session of this.sessions.values()) {
+      if (session.backendId !== backendId) continue;
+      if (session.getBackendSessionId() !== sessionId) continue;
+      if (session.getStatus() === "closed") continue;
+      return session;
+    }
+    return null;
+  }
+
   getChatUIState(id: string): AgentChatUIState | null {
     return this.chatUIStates.get(id) ?? null;
   }
@@ -1188,10 +1202,10 @@ export class AgentSessionManager {
     if (this.disposed) {
       throw new Error("AgentSessionManager has been shut down");
     }
-    // Identity is the (backendId, sessionId) pair — matching on sessionId
-    // alone could focus another backend's tab on an id collision.
-    const existing = this.getSessionByBackendId(sessionId);
-    if (existing && existing.backendId === backendId && existing.getStatus() !== "closed") {
+    // Identity is the (backendId, sessionId) pair — searched together so an
+    // id collision across backends can't hide the correct already-open tab.
+    const existing = this.findLiveSession(backendId, sessionId);
+    if (existing) {
       this.setActiveSession(existing.internalId);
       return existing;
     }
