@@ -107,6 +107,7 @@ import { RecentUsageManager } from "@/utils/recentUsageManager";
 import {
   listMarkdownFiles,
   patchFrontmatter,
+  readFrontmatterViaAdapter,
   resolveFileByPath,
   trashFile,
 } from "@/utils/vaultAdapterUtils";
@@ -1166,8 +1167,22 @@ export default class CopilotPlugin extends Plugin {
     const file = await resolveFileByPath(this.app, fileId);
     if (!file) throw new Error("Chat file not found.");
 
-    const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
-    if (frontmatter?.mode === AGENT_CHAT_MODE) {
+    // Hidden-folder notes (e.g. a dot-folder save location) aren't indexed by
+    // metadataCache, so fall back to an adapter read before deciding this
+    // isn't an agent chat — otherwise a hidden agent note that Recent Chats
+    // surfaces would misroute to the legacy chat loader instead of resuming
+    // the agent session.
+    const cachedMode = this.app.metadataCache.getFileCache(file)?.frontmatter?.mode;
+    let mode = typeof cachedMode === "string" ? cachedMode : undefined;
+    if (!mode) {
+      try {
+        const fm = await readFrontmatterViaAdapter(this.app, file.path);
+        if (typeof fm?.mode === "string") mode = fm.mode;
+      } catch {
+        // Leave mode undefined; routes to the legacy loader below.
+      }
+    }
+    if (mode === AGENT_CHAT_MODE) {
       await this.loadAgentChatHistory(file);
       return;
     }
