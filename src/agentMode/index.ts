@@ -168,16 +168,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     vaultId,
     "agent-chat-index.json"
   );
-  // One-time migration from the previous in-vault location, so existing
-  // history survives the move and the old (synced) file is removed.
-  const legacyIndexPath = `${app.vault.configDir}/plugins/${plugin.manifest.id}/agent-chat-index.json`;
-  const sessionIndex = new AgentSessionIndex(createNodeFileStorage(), indexPath, {
-    read: async () =>
-      (await vaultAdapter.exists(legacyIndexPath)) ? vaultAdapter.read(legacyIndexPath) : null,
-    cleanup: async () => {
-      if (await vaultAdapter.exists(legacyIndexPath)) await vaultAdapter.remove(legacyIndexPath);
-    },
-  });
+  const sessionIndex = new AgentSessionIndex(createNodeFileStorage(), indexPath);
   // Mutable ref breaks the construction cycle: the prompter needs the
   // manager, but handlers only fire after a session exists, which can't
   // happen before assignment below.

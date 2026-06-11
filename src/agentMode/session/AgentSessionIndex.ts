@@ -1,4 +1,4 @@
-import { logInfo, logWarn } from "@/logger";
+import { logWarn } from "@/logger";
 import type { BackendId } from "./types";
 
 /**
@@ -47,18 +47,6 @@ export interface AgentSessionIndexStorage {
   exists(path: string): Promise<boolean>;
   read(path: string): Promise<string>;
   write(path: string, content: string): Promise<void>;
-}
-
-/**
- * One-time migration from a legacy index location. `read` returns the old
- * file's contents (or `null` if absent); `cleanup` removes it once the data
- * has been re-written to the new location. Used to move the index out of the
- * synced vault folder into the device-local OS app-data dir without losing
- * a user's existing history.
- */
-export interface AgentSessionIndexMigration {
-  read(): Promise<string | null>;
-  cleanup(): Promise<void>;
 }
 
 const SAVE_DEBOUNCE_MS = 500;
@@ -110,8 +98,7 @@ export class AgentSessionIndex {
 
   constructor(
     private readonly storage: AgentSessionIndexStorage,
-    private readonly filePath: string,
-    private readonly migration?: AgentSessionIndexMigration
+    private readonly filePath: string
   ) {}
 
   /** All known entries, unsorted. Tombstoned sessions are never present. */
@@ -256,43 +243,24 @@ export class AgentSessionIndex {
 
   private async loadFromDisk(): Promise<void> {
     try {
-      if (await this.storage.exists(this.filePath)) {
-        this.ingest(await this.storage.read(this.filePath));
-        return;
+      if (!(await this.storage.exists(this.filePath))) return;
+      const raw = JSON.parse(
+        await this.storage.read(this.filePath)
+      ) as Partial<AgentSessionIndexFile> | null;
+      if (!raw || typeof raw !== "object") return;
+      for (const candidate of Array.isArray(raw.entries) ? raw.entries : []) {
+        const entry = sanitizeEntry(candidate);
+        if (entry) this.entries.set(entryKey(entry.backendId, entry.sessionId), entry);
       }
-      // Primary file absent. One-time migration from a legacy location (e.g.
-      // an older in-vault index) if one is configured: ingest it, write to the
-      // new location, then remove the old file — write before delete so a
-      // failed write can't lose history.
-      if (this.migration) {
-        const legacy = await this.migration.read();
-        if (legacy) {
-          this.ingest(legacy);
-          await this.storage.write(this.filePath, this.serialize());
-          await this.migration.cleanup();
-          logInfo(`[AgentMode] migrated agent session index to ${this.filePath}`);
+      if (raw.tombstones && typeof raw.tombstones === "object") {
+        for (const [key, value] of Object.entries(raw.tombstones)) {
+          if (typeof value === "number" && value > 0) this.tombstones.set(key, value);
         }
       }
     } catch (e) {
-      // A corrupt or unreadable index degrades to "no native history" rather
-      // than failing the whole recent-chats surface; the next save rewrites a
-      // clean file.
+      // A corrupt index degrades to "no native history" rather than failing
+      // the whole recent-chats surface; the next save rewrites a clean file.
       logWarn(`[AgentMode] failed to load agent session index at ${this.filePath}`, e);
-    }
-  }
-
-  /** Parse a serialized index file into the in-memory maps. */
-  private ingest(text: string): void {
-    const raw = JSON.parse(text) as Partial<AgentSessionIndexFile> | null;
-    if (!raw || typeof raw !== "object") return;
-    for (const candidate of Array.isArray(raw.entries) ? raw.entries : []) {
-      const entry = sanitizeEntry(candidate);
-      if (entry) this.entries.set(entryKey(entry.backendId, entry.sessionId), entry);
-    }
-    if (raw.tombstones && typeof raw.tombstones === "object") {
-      for (const [key, value] of Object.entries(raw.tombstones)) {
-        if (typeof value === "number" && value > 0) this.tombstones.set(key, value);
-      }
     }
   }
 
