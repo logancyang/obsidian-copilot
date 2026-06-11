@@ -141,6 +141,11 @@ const RecentChatRow = memo(function RecentChatRow({
       )}
       onClick={() => onOpen(item.id)}
       onKeyDown={(e) => {
+        // Only the row itself opens on Enter/Space. Without this, a keydown on
+        // a focused action button (rename/delete/open-source) bubbles up here
+        // and would also open the chat — the buttons stop click propagation,
+        // not keydown.
+        if (e.target !== e.currentTarget) return;
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
           onOpen(item.id);
