@@ -240,7 +240,6 @@ export const AgentChatInput = memo(function AgentChatInput({
       const expanded = await expandCustomCommandPrefix(
         text,
         getCachedCustomCommands(),
-        app,
         noteSelection?.content ?? "",
         activeFile
       );

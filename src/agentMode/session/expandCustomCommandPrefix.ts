@@ -1,6 +1,6 @@
-import { processPrompt } from "@/commands/customCommandUtils";
+import { translateCommandToAgentText } from "@/agentMode/session/translateCommandToAgentText";
 import type { CustomCommand } from "@/commands/type";
-import type { App, TFile } from "obsidian";
+import type { TFile } from "obsidian";
 
 export interface ExpandCustomCommandResult {
   /** Final text to send to the backend. Equal to input when no command matched. */
@@ -11,12 +11,13 @@ export interface ExpandCustomCommandResult {
 
 /**
  * If `input` starts with `/<command-title>` (optionally followed by
- * whitespace + args), substitute the command's body and return the
- * processed prompt. Otherwise return `input` unchanged.
+ * whitespace + args), substitute the command's body and return it translated
+ * into Agent chat syntax (see {@link translateCommandToAgentText}). Otherwise
+ * return `input` unchanged.
  *
  * Args typed after the command name are appended to the command body
- * (separated by a blank line) so `processPrompt` can resolve `{}` /
- * `{selection}` against either selected text or the trailing args.
+ * (separated by a blank line) so the translator can resolve `{}` /
+ * `{copilot-selection}` against either selected text or the trailing args.
  *
  * Matching is case-insensitive on `title`. When multiple titles share a
  * prefix (e.g. `foo` and `foo-bar`), the longest match wins. The match
@@ -26,7 +27,6 @@ export interface ExpandCustomCommandResult {
 export async function expandCustomCommandPrefix(
   input: string,
   commands: readonly CustomCommand[],
-  app: App,
   selectedText: string,
   activeNote: TFile | null
 ): Promise<ExpandCustomCommandResult> {
@@ -48,6 +48,6 @@ export async function expandCustomCommandPrefix(
   const args = afterSlash.slice(matched.title.length).trim();
   const body = args ? `${matched.content}\n\n${args}` : matched.content;
 
-  const result = await processPrompt(app, body, selectedText, app.vault, activeNote, false);
-  return { text: result.processedPrompt, matched };
+  const text = translateCommandToAgentText(body, selectedText, activeNote);
+  return { text, matched };
 }
