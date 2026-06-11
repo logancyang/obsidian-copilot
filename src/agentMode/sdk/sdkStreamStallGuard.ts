@@ -1,13 +1,6 @@
 /**
  * Mid-stream stall guard — **Claude Agent SDK only.**
  *
- * This is specific to the Claude Agent SDK message stream and its Anthropic
- * streaming-event vocabulary (`content_block_*`, `message_*`). The ACP backends
- * (opencode, codex) speak a different protocol entirely — ACP `session/update`
- * notifications (`agent_message_chunk`, `tool_call`, …) over a JSON-RPC
- * request/response transport — and are **not** covered by this guard. Don't
- * reuse it for them; the `SDKMessage` type signature already prevents it.
- *
  * Why it exists: the driver loop in `ClaudeSdkBackendProcess.prompt()` advances
  * only when the `query()` async-iterator yields. If a streaming response goes
  * half-open mid-message (so no terminal `result` ever arrives), `for await`
