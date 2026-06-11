@@ -818,9 +818,9 @@ ${chatContent}`;
     messages: ChatMessage[],
     existingTopic?: string
   ): void {
-    const settings = getSettings();
-
-    if (!settings.generateAIChatTitleOnSave || !file || existingTopic) {
+    // AI title generation on save is always on for saved (legacy) chat notes;
+    // skip only when there's no file or the note already carries a topic.
+    if (!file || existingTopic) {
       return;
     }
 

@@ -1227,7 +1227,7 @@ export default class CopilotPlugin extends Plugin {
   async openChatSourceFile(fileId: string): Promise<void> {
     if (isNativeChatId(fileId)) {
       new Notice(
-        "This chat has no saved note. Turn on Autosave Chat to save chats as notes in your vault."
+        "This chat has no saved note. Turn on Autosave Chat as Markdown to save chats as notes in your vault."
       );
       return;
     }

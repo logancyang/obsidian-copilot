@@ -260,18 +260,10 @@ export const BasicSettings: React.FC = () => {
         <div className="tw-space-y-4">
           <SettingItem
             type="switch"
-            title="Autosave Chat"
-            description="Automatically saves the chat after every user message and AI response."
+            title="Autosave Chat as Markdown"
+            description="Writes each chat to a Markdown note in your vault after every user message and AI response. With this off, agent chats still appear in Recent Chats from session history; only the Markdown note is skipped."
             checked={settings.autosaveChat}
             onCheckedChange={(checked) => updateSetting("autosaveChat", checked)}
-          />
-
-          <SettingItem
-            type="switch"
-            title="Generate AI Chat Title on Save"
-            description="When enabled, uses an AI model to generate a concise title for saved chat notes. When disabled, uses the first 10 words of the first user message."
-            checked={settings.generateAIChatTitleOnSave}
-            onCheckedChange={(checked) => updateSetting("generateAIChatTitleOnSave", checked)}
           />
 
           <SettingItem

@@ -88,11 +88,6 @@ export interface CopilotSettings {
   defaultSaveFolder: string;
   defaultConversationTag: string;
   autosaveChat: boolean;
-  /**
-   * When enabled, generate a short AI title for chat notes on save.
-   * When disabled (default), use the first 10 words of the first user message.
-   */
-  generateAIChatTitleOnSave: boolean;
   autoAddActiveContentToContext: boolean;
   customPromptsFolder: string;
   indexVaultToVectorStore: string;
@@ -663,11 +658,6 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
       sanitizedSettings.autoAddActiveContentToContext =
         DEFAULT_SETTINGS.autoAddActiveContentToContext;
     }
-  }
-
-  // Ensure generateAIChatTitleOnSave has a default value
-  if (typeof sanitizedSettings.generateAIChatTitleOnSave !== "boolean") {
-    sanitizedSettings.generateAIChatTitleOnSave = DEFAULT_SETTINGS.generateAIChatTitleOnSave;
   }
 
   // Ensure enableMiyo has a default value

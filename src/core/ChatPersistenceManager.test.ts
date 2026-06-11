@@ -27,7 +27,6 @@ jest.mock("@/settings/model", () => ({
     defaultSaveFolder: "test-folder",
     defaultConversationTag: "copilot-conversation",
     defaultConversationNoteName: "{$topic}@{$date}_{$time}",
-    generateAIChatTitleOnSave: true,
   }),
 }));
 jest.mock("@/aiParams", () => ({
