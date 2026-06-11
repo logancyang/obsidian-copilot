@@ -1,13 +1,21 @@
 /**
- * Mid-stream stall guard for the Claude Agent SDK message stream.
+ * Mid-stream stall guard — **Claude Agent SDK only.**
  *
- * The driver loop in `ClaudeSdkBackendProcess.prompt()` advances only when the
- * `query()` async-iterator yields. If a streaming response goes half-open
- * mid-message (so no terminal `result` ever arrives), `for await` would park
- * forever and wedge the turn in a permanent "running" state. `guardStreamStall`
- * wraps the stream and, *while an assistant message is actively streaming*,
- * aborts the query when no chunk arrives within `timeoutMs` — turning a silent
- * hang into a surfaced error the session can recover from.
+ * This is specific to the Claude Agent SDK message stream and its Anthropic
+ * streaming-event vocabulary (`content_block_*`, `message_*`). The ACP backends
+ * (opencode, codex) speak a different protocol entirely — ACP `session/update`
+ * notifications (`agent_message_chunk`, `tool_call`, …) over a JSON-RPC
+ * request/response transport — and are **not** covered by this guard. Don't
+ * reuse it for them; the `SDKMessage` type signature already prevents it.
+ *
+ * Why it exists: the driver loop in `ClaudeSdkBackendProcess.prompt()` advances
+ * only when the `query()` async-iterator yields. If a streaming response goes
+ * half-open mid-message (so no terminal `result` ever arrives), `for await`
+ * would park forever and wedge the turn in a permanent "running" state.
+ * `guardSdkStreamStall` wraps the stream and, *while an assistant message is
+ * actively streaming*, aborts the query when no chunk arrives within
+ * `timeoutMs` — turning a silent hang into a surfaced error the session can
+ * recover from.
  *
  * Streamed tokens arrive sub-second once content starts, so a multi-second
  * mid-message gap means the stream died. The timer is armed only after the
@@ -16,13 +24,13 @@
  */
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 
-export const STREAM_STALL_TIMEOUT_MS = 60_000;
+export const SDK_STREAM_STALL_TIMEOUT_MS = 60_000;
 
-export const STREAM_STALL_MESSAGE =
+export const SDK_STREAM_STALL_MESSAGE =
   `Claude stopped responding — the response stream stalled mid-reply (no output for ` +
-  `${STREAM_STALL_TIMEOUT_MS / 1000}s) and the turn was ended. Send your message again to continue.`;
+  `${SDK_STREAM_STALL_TIMEOUT_MS / 1000}s) and the turn was ended. Send your message again to continue.`;
 
-export interface StreamStallGuardOptions {
+export interface SdkStreamStallGuardOptions {
   /** Aborted on stall so the SDK stops and cleans up the in-flight request. */
   abortController: AbortController;
   /** Override the default idle window (mainly for tests). */
@@ -48,11 +56,12 @@ function isContentStreamEvent(evType: string | null): boolean {
 /**
  * Yields every message from `source` unchanged. If the stream stalls mid-
  * message, aborts `abortController` and — once the underlying iterator unwinds
- * — throws `Error(STREAM_STALL_MESSAGE)`. Real transport errors propagate as-is.
+ * — throws `Error(SDK_STREAM_STALL_MESSAGE)`. Real transport errors propagate
+ * as-is.
  */
-export async function* guardStreamStall(
+export async function* guardSdkStreamStall(
   source: AsyncIterable<SDKMessage>,
-  { abortController, timeoutMs = STREAM_STALL_TIMEOUT_MS, onStall }: StreamStallGuardOptions
+  { abortController, timeoutMs = SDK_STREAM_STALL_TIMEOUT_MS, onStall }: SdkStreamStallGuardOptions
 ): AsyncGenerator<SDKMessage> {
   let stalled = false;
   let contentStarted = false;
@@ -85,5 +94,5 @@ export async function* guardStreamStall(
   } finally {
     disarm();
   }
-  if (stalled) throw new Error(STREAM_STALL_MESSAGE);
+  if (stalled) throw new Error(SDK_STREAM_STALL_MESSAGE);
 }

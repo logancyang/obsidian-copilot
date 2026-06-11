@@ -71,7 +71,7 @@ import {
   logSdkOutbound,
   logSdkOutboundResult,
 } from "./sdkDebugTap";
-import { guardStreamStall } from "./streamStallGuard";
+import { guardSdkStreamStall } from "./sdkStreamStallGuard";
 
 interface SessionState {
   cwd: string | null;
@@ -368,15 +368,15 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
 
     // Abort the query if the response stream goes half-open mid-message: that
     // would otherwise park the loop below forever and wedge the turn in a
-    // permanent "running" state. `guardStreamStall` owns the watchdog and
-    // throws `STREAM_STALL_MESSAGE` (surfaced to the user) if it trips.
+    // permanent "running" state. `guardSdkStreamStall` owns the watchdog and
+    // throws `SDK_STREAM_STALL_MESSAGE` (surfaced to the user) if it trips.
     const turnAbort = new AbortController();
     options.abortController = turnAbort;
 
     const q = query({ prompt: promptStream, options });
     session.active = q;
     session.firstPromptStarted = true;
-    const stream = guardStreamStall(q, {
+    const stream = guardSdkStreamStall(q, {
       abortController: turnAbort,
       // The thrown stall error lands as an in-chat error on the turn (via
       // `AgentSession`'s catch → `markMessageError`); this just records it in

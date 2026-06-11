@@ -1,5 +1,5 @@
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import { guardStreamStall, STREAM_STALL_MESSAGE } from "./streamStallGuard";
+import { guardSdkStreamStall, SDK_STREAM_STALL_MESSAGE } from "./sdkStreamStallGuard";
 
 function streamEvent(innerType: string): SDKMessage {
   return { type: "stream_event", event: { type: innerType } } as unknown as SDKMessage;
@@ -52,7 +52,7 @@ function controllableSource() {
   };
 }
 
-describe("guardStreamStall", () => {
+describe("guardSdkStreamStall", () => {
   it("yields every message unchanged and never trips on a clean stream", async () => {
     async function* source(): AsyncGenerator<SDKMessage> {
       yield streamEvent("message_start");
@@ -63,7 +63,7 @@ describe("guardStreamStall", () => {
     const abortController = new AbortController();
     const onStall = jest.fn();
 
-    const seen = await collect(guardStreamStall(source(), { abortController, onStall }));
+    const seen = await collect(guardSdkStreamStall(source(), { abortController, onStall }));
 
     expect(seen).toEqual([
       "stream:message_start",
@@ -91,9 +91,9 @@ describe("guardStreamStall", () => {
     jest.useFakeTimers();
     try {
       const run = collect(
-        guardStreamStall(source(), { abortController, timeoutMs: 1_000, onStall })
+        guardSdkStreamStall(source(), { abortController, timeoutMs: 1_000, onStall })
       );
-      const assertion = expect(run).rejects.toThrow(STREAM_STALL_MESSAGE);
+      const assertion = expect(run).rejects.toThrow(SDK_STREAM_STALL_MESSAGE);
       await jest.advanceTimersByTimeAsync(1_500);
       await assertion;
     } finally {
@@ -111,7 +111,7 @@ describe("guardStreamStall", () => {
     jest.useFakeTimers();
     try {
       const run = collect(
-        guardStreamStall(src.iterable, { abortController, timeoutMs: 1_000, onStall })
+        guardSdkStreamStall(src.iterable, { abortController, timeoutMs: 1_000, onStall })
       );
 
       src.push(streamEvent("message_start"));
@@ -143,7 +143,7 @@ describe("guardStreamStall", () => {
     jest.useFakeTimers();
     try {
       const run = collect(
-        guardStreamStall(src.iterable, { abortController, timeoutMs: 1_000, onStall })
+        guardSdkStreamStall(src.iterable, { abortController, timeoutMs: 1_000, onStall })
       );
 
       // Stream a complete message, then go quiet *between* messages.
@@ -179,9 +179,9 @@ describe("guardStreamStall", () => {
       throw new Error("network down");
     }
 
-    await expect(collect(guardStreamStall(source(), { abortController, onStall }))).rejects.toThrow(
-      "network down"
-    );
+    await expect(
+      collect(guardSdkStreamStall(source(), { abortController, onStall }))
+    ).rejects.toThrow("network down");
     expect(onStall).not.toHaveBeenCalled();
     expect(abortController.signal.aborted).toBe(false);
   });
