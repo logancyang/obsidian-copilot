@@ -5,6 +5,7 @@ import type { AgentToolStatus } from "@/agentMode/session/types";
 import { lookupToolSummary } from "@/agentMode/ui/toolSummaries";
 import { renderDiff } from "@/agentMode/ui/diffRender";
 import { getVaultBase } from "@/utils/vaultPath";
+import { openVaultPath } from "@/utils/openVaultPath";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/context";
 
@@ -57,7 +58,11 @@ export const ActionCard: React.FC<ActionCardProps> = ({ part, inline }) => {
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              void app.workspace.openLinkText(targetPath, "", true);
+              // `targetPath` is vault-relative for in-vault notes but stays
+              // absolute for files the agent read/wrote outside the vault.
+              // Route through `openVaultPath` so an outside-vault path opens
+              // in the OS app instead of fabricating a phantom vault folder.
+              openVaultPath(app, targetPath, { newLeaf: true });
             }}
           >
             {line}

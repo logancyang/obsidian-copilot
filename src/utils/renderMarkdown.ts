@@ -1,5 +1,4 @@
-import { openWithSystemDefault } from "@/utils/openWithSystemDefault";
-import { getVaultBase, isAbsolutePath, toVaultRelative } from "@/utils/vaultPath";
+import { openVaultPath } from "@/utils/openVaultPath";
 import { App, Component, MarkdownRenderer } from "obsidian";
 
 /**
@@ -66,28 +65,18 @@ function wireInternalLinks(
     // Coding agents that run with the vault as their cwd emit links with the
     // note's absolute on-disk path (e.g. `/Users/me/Vault/Inbox/Foo.md`).
     // `openLinkText` resolves its target relative to the vault root, dropping
-    // the leading slash — so an absolute path becomes a bogus vault-relative
-    // path that materializes the whole `Users/me/Vault/...` folder chain as a
-    // phantom note. Normalize before opening; mirror `ActionCard`.
+    // the leading slash — so an absolute path outside the vault would
+    // materialize the whole `Users/me/...` folder chain as a phantom note.
+    // `openVaultPath` routes those to the OS instead. Decode first: the DOM
+    // href is percent-encoded (`Foo%20Bar.md`), unlike a raw filesystem path.
     let href = raw;
     try {
       href = decodeURIComponent(raw);
     } catch {
       // keep raw on malformed percent escapes
     }
-    href = toExistingRootRelativeVaultPath(app, href) ?? href;
-    if (isAbsolutePath(href)) {
-      const rel = toVaultRelative(href, getVaultBase(app));
-      if (rel === href) {
-        // Absolute path outside the vault — don't let openLinkText fabricate a
-        // phantom note; hand off to the OS default app instead.
-        void openWithSystemDefault(href);
-        return;
-      }
-      href = rel;
-    }
     const newLeaf = e.button === 1 || e.ctrlKey || e.metaKey;
-    void app.workspace.openLinkText(href, sourcePath, newLeaf);
+    openVaultPath(app, href, { newLeaf, sourcePath });
   };
   el.addEventListener("click", handleClick);
   el.addEventListener("auxclick", handleClick);
@@ -95,14 +84,4 @@ function wireInternalLinks(
     el.removeEventListener("click", handleClick);
     el.removeEventListener("auxclick", handleClick);
   });
-}
-
-function toExistingRootRelativeVaultPath(app: App, href: string): string | null {
-  if (!href.startsWith("/") || href.startsWith("//")) return null;
-  const rel = href.replace(/^\/+/, "");
-  if (!rel) return null;
-  const anchorIndex = rel.indexOf("#");
-  const filePath = anchorIndex === -1 ? rel : rel.slice(0, anchorIndex);
-  if (!filePath) return null;
-  return app.vault.getAbstractFileByPath(filePath) ? rel : null;
 }
