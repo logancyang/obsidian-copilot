@@ -304,7 +304,9 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
   return (
     <div className={cn("tw-flex tw-flex-col tw-gap-2", className)}>
       {items.length > 0 && (
-        <SearchBar value={query} onChange={setQuery} placeholder="Search chats..." />
+        <div className="tw-p-1">
+          <SearchBar value={query} onChange={setQuery} placeholder="Search chats..." />
+        </div>
       )}
       {filteredItems.length === 0 ? (
         <div className="tw-px-2 tw-py-1.5 tw-text-xs tw-text-muted">
