@@ -25,6 +25,18 @@ describe("translateCommandToAgentText", () => {
     expect(out).not.toContain('<variable name="activeNote">');
   });
 
+  it("rewrites lowercase {activenote} used by existing custom prompts", () => {
+    expect(translateCommandToAgentText("Summarize {activenote}.", "", mockFile("Daily"))).toBe(
+      "Summarize [[Daily]]."
+    );
+  });
+
+  it("preserves lowercase {activenote} when no active file is available", () => {
+    expect(translateCommandToAgentText("Summarize {activenote}.", "", null)).toBe(
+      "Summarize {activenote}."
+    );
+  });
+
   it("strips the braces from {[[Note Title]]} into a bare [[wikilink]]", () => {
     expect(translateCommandToAgentText("Use {[[Some Prompt]]} now.", "", null)).toBe(
       "Use [[Some Prompt]] now."

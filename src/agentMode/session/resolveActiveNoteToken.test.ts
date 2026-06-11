@@ -42,10 +42,10 @@ describe("resolveActiveNoteToken", () => {
     expect(out).toBe("Look in {Projects} and summarize [[Daily]].");
   });
 
-  it("treats `{ActiveNote}` (wrong case) as a non-match — only the reserved literal is replaced", () => {
-    const text = "Mention {ActiveNote} and {activeNote}.";
+  it("matches active-note token casing used by existing custom prompts", () => {
+    const text = "Mention {ActiveNote}, {activenote}, and {activeNote}.";
     expect(resolveActiveNoteToken(text, mockFile("Daily"))).toBe(
-      "Mention {ActiveNote} and [[Daily]]."
+      "Mention [[Daily]], [[Daily]], and [[Daily]]."
     );
   });
 

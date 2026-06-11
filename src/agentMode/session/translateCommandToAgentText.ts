@@ -51,7 +51,7 @@ export function translateCommandToAgentText(
     if (token === ACTIVE_WEB_TAB_MARKER) return token; // live marker, resolved downstream
     const name = rawName.trim();
     if (name.startsWith('"')) return token; // JSON object literal, not a variable
-    if (name === "activeNote") return token; // no active file resolved it above
+    if (name.toLowerCase() === "activenote") return token; // no active file resolved it above
     return name;
   });
 }
