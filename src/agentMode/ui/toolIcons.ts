@@ -8,6 +8,7 @@ import {
   ListChecks,
   Pencil,
   Search,
+  Sparkles,
   Terminal,
   Trash2,
   ArrowRightLeft,
@@ -41,6 +42,7 @@ const VENDOR_ICONS: Record<string, LucideIcon> = {
   Agent: Bot,
   TodoWrite: ListChecks,
   ExitPlanMode: ClipboardList,
+  Skill: Sparkles,
 };
 
 const KIND_ICONS: Record<string, LucideIcon> = {

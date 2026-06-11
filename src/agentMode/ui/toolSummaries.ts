@@ -202,6 +202,19 @@ function targetFromPath(part: ToolCallPart, vaultBase: string | null): string | 
   return null;
 }
 
+/**
+ * The skill identifier from a `Skill` tool call's input (Claude Code logs the
+ * slash-command name as `input.skill`, e.g. "copilot-read-pdf"). Returns the
+ * trimmed name, or null while the input is still streaming in.
+ */
+function skillNameFromInput(part: ToolCallPart): string | null {
+  const input = part.input as { skill?: unknown } | null | undefined;
+  const skill = input?.skill;
+  if (typeof skill !== "string") return null;
+  const trimmed = skill.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
 function queryFromInput(part: ToolCallPart): string | null {
   const input = part.input as
     | { query?: unknown; pattern?: unknown; q?: unknown }
@@ -427,6 +440,24 @@ const ASK_USER_QUESTION_SUMMARY: ToolSummary = {
   }),
 };
 
+const SKILL_SUMMARY: ToolSummary = {
+  icon: pickToolIcon({ vendorToolName: "Skill" }),
+  collapsedLine: (p) => {
+    const v = verb(p, "Running", "Ran");
+    const name = skillNameFromInput(p);
+    return name ? `${v} skill ${name}` : `${v} a skill`;
+  },
+  outcome: () => null,
+  aggregate: (parts) => ({
+    line: `Ran ${pluralize(parts.length, "skill")}${statusSuffix(parts)}`,
+    outcome: "",
+  }),
+  expandedDetails: (p) => {
+    const input = p.input as { args?: unknown } | null | undefined;
+    return typeof input?.args === "string" && input.args.length > 0 ? input.args : null;
+  },
+};
+
 const VENDOR_SUMMARIES: Record<string, ToolSummary> = {
   Read: READ_SUMMARY,
   Edit: EDIT_SUMMARY,
@@ -446,6 +477,7 @@ const VENDOR_SUMMARIES: Record<string, ToolSummary> = {
   ExitPlanMode: EXIT_PLAN_SUMMARY,
   AskUserQuestion: ASK_USER_QUESTION_SUMMARY,
   LS: LIST_SUMMARY,
+  Skill: SKILL_SUMMARY,
 };
 
 // ---- ACP-kind fallbacks (work for opencode, codex, future backends) ----

@@ -210,6 +210,47 @@ describe("lookupToolSummary", () => {
     expect(lookupToolSummary(t).collapsedLine(t, CTX)).toBe("Asked a question");
   });
 
+  it("names the invoked skill from input.skill", () => {
+    const t = tool({
+      vendorToolName: "Skill",
+      title: "Skill",
+      status: "completed",
+      input: { skill: "copilot-read-pdf", args: "notes/foo.pdf — read chapter one" },
+    });
+    expect(lookupToolSummary(t).collapsedLine(t, CTX)).toBe("Ran skill copilot-read-pdf");
+  });
+
+  it("renders the skill in present tense while in flight", () => {
+    const t = tool({
+      vendorToolName: "Skill",
+      title: "Skill",
+      status: "in_progress",
+      input: { skill: "copilot-read-pdf" },
+    });
+    expect(lookupToolSummary(t).collapsedLine(t, CTX)).toBe("Running skill copilot-read-pdf");
+  });
+
+  it("falls back to a generic skill line before input has streamed in", () => {
+    const t = tool({ vendorToolName: "Skill", title: "Skill", status: "completed" });
+    expect(lookupToolSummary(t).collapsedLine(t, CTX)).toBe("Ran a skill");
+  });
+
+  it("surfaces the skill args in the expanded card", () => {
+    const t = tool({
+      vendorToolName: "Skill",
+      title: "Skill",
+      status: "completed",
+      input: { skill: "copilot-read-pdf", args: "notes/foo.pdf — read chapter one" },
+    });
+    expect(lookupToolSummary(t).expandedDetails?.(t)).toBe("notes/foo.pdf — read chapter one");
+  });
+
+  it("aggregates consecutive skill calls", () => {
+    const s1 = tool({ vendorToolName: "Skill", status: "completed", input: { skill: "a" } });
+    const s2 = tool({ vendorToolName: "Skill", status: "completed", input: { skill: "b" } });
+    expect(lookupToolSummary(s1).aggregate([s1, s2]).line).toBe("Ran 2 skills");
+  });
+
   it("hides the duplicated vendor name while Read input is still streaming", () => {
     // SDK seeds title to the vendor name before any input-JSON has been
     // parsed. Should render "Reading …" rather than "Reading Read".
