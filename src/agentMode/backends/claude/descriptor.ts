@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { Notice } from "obsidian";
 import { logWarn } from "@/logger";
 import type CopilotPlugin from "@/main";
 import {
@@ -243,6 +244,9 @@ export const ClaudeBackendDescriptor: BackendDescriptor = {
       getManagedEnv: () => buildCopilotPlusEnv(args.clientVersion),
       checkAuth: async () =>
         (await getClaudeAuthStatus(claudePath, claudeChildEnv(getSettings()))).loggedIn,
+      // Transient toast for a detected mid-stream stall (the turn also shows an
+      // in-chat error). Lives here so the `sdk/` layer stays UI-free.
+      notifyUser: (message) => new Notice(message, 10_000),
       isPlanModePlanFilePath: isClaudePlanModePlanFilePath,
       getDefaultModelId: () => getSettings().agentMode?.backends?.claude?.defaultModel?.baseModelId,
       // Forward the shared composed system prompt — the Copilot base framing

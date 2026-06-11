@@ -53,6 +53,7 @@ jest.mock("./effortOption", () => ({
 
 import { ClaudeSdkBackendProcess, promptInputToAnthropicContent } from "./ClaudeSdkBackendProcess";
 import { getCachedSdkCatalog } from "./effortOption";
+import { STREAM_STALL_MESSAGE } from "./streamStallGuard";
 import { AuthRequiredError } from "@/agentMode/session/errors";
 
 beforeEach(() => {
@@ -667,5 +668,100 @@ describe("ClaudeSdkBackendProcess.prompt auth gate", () => {
     queryMock.mockImplementationOnce(() => makeQuery([resultMessage()]));
     await proc.prompt({ sessionId, prompt: [{ type: "text", text: "2" }] });
     expect(checkAuth).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("ClaudeSdkBackendProcess.prompt stream-stall watchdog", () => {
+  beforeEach(() => {
+    queryMock.mockReset();
+    createSdkMcpServerMock.mockClear();
+  });
+
+  function makeProc(notifyUser?: (message: string) => void) {
+    return new ClaudeSdkBackendProcess({
+      pathToClaudeCodeExecutable: "/usr/local/bin/claude",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      app: { vault: {} } as any,
+      clientVersion: "1.2.3",
+      descriptor: fakeDescriptor(),
+      notifyUser,
+    });
+  }
+
+  /**
+   * A query whose stream emits a couple of mid-message deltas (arming the
+   * watchdog) and then goes silent forever — until the backend's abort
+   * controller fires, at which point the generator returns (the SDK "stops and
+   * cleans up"). Reproduces a dropped/half-open response with no terminal
+   * `result`, which would otherwise park `for await` and wedge the turn.
+   */
+  function makeStallingQuery(arg: unknown) {
+    const { options } = arg as { options: { abortController: AbortController } };
+    const { signal } = options.abortController;
+    const iter = (async function* () {
+      yield streamEvent({ type: "message_start", message: {} });
+      yield streamEvent({
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "text_delta", text: "Draf" },
+      });
+      await new Promise<void>((resolve) => {
+        if (signal.aborted) resolve();
+        else signal.addEventListener("abort", () => resolve(), { once: true });
+      });
+    })();
+    return Object.assign(iter, {
+      interrupt: jest.fn().mockResolvedValue(undefined),
+      setModel: jest.fn().mockResolvedValue(undefined),
+      setPermissionMode: jest.fn().mockResolvedValue(undefined),
+    });
+  }
+
+  it("aborts the turn, notifies the user, and rejects when the stream stalls mid-message", async () => {
+    queryMock.mockImplementation((arg: unknown) => makeStallingQuery(arg));
+    const notifyUser = jest.fn();
+    const proc = makeProc(notifyUser);
+    const { sessionId } = await proc.newSession({ cwd: "/vault", mcpServers: [] });
+    proc.registerSessionHandler(sessionId, () => {});
+
+    jest.useFakeTimers();
+    try {
+      const turn = proc.prompt({ sessionId, prompt: [{ type: "text", text: "draft a plan" }] });
+      const assertion = expect(turn).rejects.toThrow(/stalled/i);
+      // Past the idle window; advanceTimersByTimeAsync flushes microtasks so the
+      // two deltas are consumed and the watchdog timer fires.
+      await jest.advanceTimersByTimeAsync(61_000);
+      await assertion;
+    } finally {
+      jest.useRealTimers();
+    }
+    // The query was aborted (not left dangling) so the turn can be retried.
+    const call = getPromptQueryCalls()[0][0] as { options: { abortController: AbortController } };
+    expect(call.options.abortController.signal.aborted).toBe(true);
+    // The user gets a transient notice in addition to the in-chat turn error.
+    expect(notifyUser).toHaveBeenCalledWith(STREAM_STALL_MESSAGE);
+  });
+
+  it("passes an abort controller to query() and never fires while the stream is healthy", async () => {
+    queryMock.mockImplementation(() =>
+      makeQuery([
+        streamEvent({ type: "message_start", message: {} }),
+        streamEvent({
+          type: "content_block_delta",
+          index: 0,
+          delta: { type: "text_delta", text: "ok" },
+        }),
+        streamEvent({ type: "message_stop" }),
+        resultMessage(),
+      ])
+    );
+    const proc = makeProc();
+    const { sessionId } = await proc.newSession({ cwd: "/vault", mcpServers: [] });
+    proc.registerSessionHandler(sessionId, () => {});
+
+    const resp = await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
+    expect(resp.stopReason).toBe("end_turn");
+    const call = getPromptQueryCalls()[0][0] as { options: { abortController?: unknown } };
+    expect(call.options.abortController).toBeInstanceOf(AbortController);
   });
 });

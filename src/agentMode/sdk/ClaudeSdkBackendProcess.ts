@@ -71,6 +71,7 @@ import {
   logSdkOutbound,
   logSdkOutboundResult,
 } from "./sdkDebugTap";
+import { guardStreamStall, STREAM_STALL_MESSAGE } from "./streamStallGuard";
 
 interface SessionState {
   cwd: string | null;
@@ -151,6 +152,13 @@ export interface ClaudeSdkBackendProcessOptions {
    * ends without output, which forces a re-check (covers mid-session expiry).
    */
   checkAuth?: () => Promise<boolean>;
+  /**
+   * Surface a transient, user-visible message (e.g. an Obsidian `Notice`) for
+   * out-of-band conditions the in-chat turn error alone might not make obvious
+   * — today, a detected mid-stream stall. Wired at the descriptor (UI) layer so
+   * `sdk/` stays UI-free; omitted in tests.
+   */
+  notifyUser?: (message: string) => void;
 }
 
 /**
@@ -365,15 +373,32 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       params.sessionId
     );
 
+    // Abort the query if the response stream goes half-open mid-message: that
+    // would otherwise park the loop below forever and wedge the turn in a
+    // permanent "running" state. `guardStreamStall` owns the watchdog and
+    // throws `STREAM_STALL_MESSAGE` (surfaced to the user) if it trips.
+    const turnAbort = new AbortController();
+    options.abortController = turnAbort;
+
     const q = query({ prompt: promptStream, options });
     session.active = q;
     session.firstPromptStarted = true;
+    const stream = guardStreamStall(q, {
+      abortController: turnAbort,
+      onStall: (idleMs) => {
+        logSdkError("←", "stream:stalled", { idleMs }, params.sessionId);
+        // The thrown stall error already lands as an in-chat error on the turn;
+        // also nudge the user with a transient notice so it's not missed if the
+        // turn scrolled off-screen.
+        this.opts.notifyUser?.(STREAM_STALL_MESSAGE);
+      },
+    });
 
     const translatorState = createTranslatorState();
     let stopReason: StopReason = "end_turn";
     let resultErrorMessage: string | null = null;
     try {
-      for await (const sdkMsg of q) {
+      for await (const sdkMsg of stream) {
         if (this.shuttingDown) break;
         logSdkInbound(describeSdkMessage(sdkMsg), sdkMsg, params.sessionId);
         const events = translateSdkMessage(sdkMsg, params.sessionId, translatorState);
