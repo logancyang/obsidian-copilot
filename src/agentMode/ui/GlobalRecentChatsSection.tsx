@@ -155,15 +155,18 @@ const RecentChatRow = memo(function RecentChatRow({
         {item.title}
       </span>
 
-      {/* Relative time by default; the action cluster replaces it on hover so
-          a narrow sidebar doesn't have to fit both. */}
+      {/* Relative time by default; the action cluster replaces it on hover or
+          keyboard focus so a narrow sidebar doesn't have to fit both. The
+          `group-focus-within` path keeps the actions reachable for keyboard
+          users (focusing the row reveals them, so Tab can move into them) —
+          on hover alone they'd stay `display:none` and out of the tab order. */}
       <span
-        className="tw-shrink-0 tw-whitespace-nowrap tw-text-xs tw-text-muted group-hover:tw-hidden"
+        className="tw-shrink-0 tw-whitespace-nowrap tw-text-xs tw-text-muted group-focus-within:tw-hidden group-hover:tw-hidden"
         title={new Date(item.lastAccessedAt).toLocaleString()}
       >
         {formatCompactRelativeTime(item.lastAccessedAt.getTime())}
       </span>
-      <div className="tw-hidden tw-shrink-0 tw-items-center tw-gap-1.5 group-hover:tw-flex">
+      <div className="tw-hidden tw-shrink-0 tw-items-center tw-gap-1.5 group-focus-within:tw-flex group-hover:tw-flex">
         {confirmingDelete ? (
           <>
             <Button
