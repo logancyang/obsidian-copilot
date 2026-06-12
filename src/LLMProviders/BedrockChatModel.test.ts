@@ -544,7 +544,7 @@ describe("BedrockChatModel streaming decode", () => {
     });
 
     it("omits temperature for opus-4-7 cross-region inference profiles", () => {
-      const model = createModel(false, "us.anthropic.claude-opus-4-8");
+      const model = createModel(false, "global.anthropic.claude-opus-4-7-20260115-v1:0");
       const requestBody = asInternal(model).buildRequestBody([userMessage], { temperature: 0.7 });
 
       expect(requestBody.temperature).toBeUndefined();
