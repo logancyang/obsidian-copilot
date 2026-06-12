@@ -210,4 +210,99 @@ describe("AgentMessageStore", () => {
     store.truncateAfterMessageId(a);
     expect(store.getDisplayMessages()).toHaveLength(1);
   });
+
+  describe("getDisplayMessages memoization (streaming re-render coalescing)", () => {
+    it("returns the same array reference when nothing changed", () => {
+      const store = new AgentMessageStore();
+      store.addMessage(placeholder());
+      const first = store.getDisplayMessages();
+      const second = store.getDisplayMessages();
+      // An idle subscription tick (no mutation) must hand back the exact same
+      // array so the top-level `messages` memo bails out without diffing.
+      expect(second).toBe(first);
+    });
+
+    it("keeps stable identities for unchanged messages while one streams", () => {
+      const store = new AgentMessageStore();
+      const stable = store.addMessage({
+        message: "done",
+        sender: AI_SENDER,
+        timestamp: formatDateTime(new Date()),
+        isVisible: true,
+      });
+      const streaming = store.addMessage(placeholder());
+
+      const before = store.getDisplayMessages();
+      const stableBefore = before.find((m) => m.id === stable);
+      const streamingBefore = before.find((m) => m.id === streaming);
+
+      // Stream a token into only the second message.
+      store.appendAgentText(streaming, "Hello");
+
+      const after = store.getDisplayMessages();
+      const stableAfter = after.find((m) => m.id === stable);
+      const streamingAfter = after.find((m) => m.id === streaming);
+
+      // The array is rebuilt (something changed)...
+      expect(after).not.toBe(before);
+      // ...but the untouched message keeps its identity so its memoized React
+      // component skips re-rendering...
+      expect(stableAfter).toBe(stableBefore);
+      // ...while the streamed message gets a fresh object reflecting the new text.
+      expect(streamingAfter).not.toBe(streamingBefore);
+      expect(streamingAfter?.message).toBe("Hello");
+    });
+
+    it("re-adapts a message after every kind of in-place mutation", () => {
+      const store = new AgentMessageStore();
+      const id = store.addMessage(placeholder());
+
+      const v0 = store.getDisplayMessages()[0];
+      store.appendDisplayText(id, "x");
+      const v1 = store.getDisplayMessages()[0];
+      expect(v1).not.toBe(v0);
+
+      store.upsertAgentPart(id, { kind: "tool_call", id: "tc1", title: "t", status: "pending" });
+      const v2 = store.getDisplayMessages()[0];
+      expect(v2).not.toBe(v1);
+
+      store.markTurnComplete(id, "end_turn", 10);
+      const v3 = store.getDisplayMessages()[0];
+      expect(v3).not.toBe(v2);
+      expect(v3.turnStopReason).toBe("end_turn");
+    });
+
+    it("does not re-adapt when upsertAgentPart is a no-op", () => {
+      const store = new AgentMessageStore();
+      const id = store.addMessage(placeholder());
+      const part: AgentMessagePart = {
+        kind: "tool_call",
+        id: "tc1",
+        title: "Read README",
+        status: "pending",
+      };
+      store.upsertAgentPart(id, part);
+      const before = store.getDisplayMessages()[0];
+      // Re-applying an identical snapshot is a no-op, so the cached view must
+      // survive — no spurious identity churn for the React tree.
+      expect(store.upsertAgentPart(id, { ...part })).toBe(false);
+      const after = store.getDisplayMessages()[0];
+      expect(after).toBe(before);
+    });
+
+    it("drops cached views for deleted and truncated messages", () => {
+      const store = new AgentMessageStore();
+      const a = store.addMessage(placeholder());
+      const b = store.addMessage(placeholder());
+      store.getDisplayMessages();
+
+      store.deleteMessage(b);
+      expect(store.getDisplayMessages().map((m) => m.id)).toEqual([a]);
+
+      const c = store.addMessage(placeholder());
+      store.truncateAfterMessageId(a);
+      expect(store.getDisplayMessages().map((m) => m.id)).toEqual([a]);
+      expect(store.getMessage(c)).toBeUndefined();
+    });
+  });
 });

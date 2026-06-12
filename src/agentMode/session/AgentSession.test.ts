@@ -2340,3 +2340,127 @@ describe("tryReadExitPlanModeCall", () => {
     expect(tryReadExitPlanModeCall({ kind: "switch_mode", rawInput: undefined })).toBeNull();
   });
 });
+
+describe("AgentSession streamed-token notification coalescing", () => {
+  // Controllable rAF: streaming notifications are rAF-batched, so we drive the
+  // frame boundary manually to assert how many `onMessagesChanged` fires the
+  // UI actually sees. Without this they'd coalesce on jsdom's timer and the
+  // assertions would be timing-dependent.
+  let rafQueue: FrameRequestCallback[];
+  let originalRaf: typeof window.requestAnimationFrame;
+  let originalCancelRaf: typeof window.cancelAnimationFrame;
+
+  const flushFrame = () => {
+    const pending = rafQueue;
+    rafQueue = [];
+    for (const cb of pending) cb(performance.now());
+  };
+
+  beforeEach(() => {
+    rafQueue = [];
+    originalRaf = window.requestAnimationFrame;
+    originalCancelRaf = window.cancelAnimationFrame;
+    window.requestAnimationFrame = (cb: FrameRequestCallback): number => {
+      rafQueue.push(cb);
+      return rafQueue.length; // 1-based handle
+    };
+    window.cancelAnimationFrame = (handle: number): void => {
+      const idx = handle - 1;
+      if (idx >= 0 && idx < rafQueue.length) rafQueue.splice(idx, 1);
+    };
+  });
+
+  afterEach(() => {
+    window.requestAnimationFrame = originalRaf;
+    window.cancelAnimationFrame = originalCancelRaf;
+  });
+
+  const streamChunk = (mock: MockBackend, text: string) =>
+    mock.emit({
+      sessionId: "acp-1",
+      update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text } },
+    });
+
+  it("collapses a burst of streamed chunks into one notification per frame", async () => {
+    const mock = makeMockBackend();
+    let resolvePrompt: ((v: { stopReason: "end_turn" }) => void) | null = null;
+    mock.prompt.mockImplementation(
+      () => new Promise((resolve) => (resolvePrompt = resolve as typeof resolvePrompt))
+    );
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+    });
+
+    const onMessagesChanged = jest.fn();
+    session.subscribe({ onMessagesChanged, onStatusChanged: () => {} });
+
+    const { turn } = session.sendPrompt("hi");
+    // The synchronous user-message + placeholder append notifies immediately so
+    // the user's message paints within one frame — NOT rAF-deferred.
+    expect(onMessagesChanged).toHaveBeenCalledTimes(1);
+
+    // A fast token burst within one frame schedules a single rAF.
+    onMessagesChanged.mockClear();
+    streamChunk(mock, "Hel");
+    streamChunk(mock, "lo");
+    streamChunk(mock, ", world");
+    // No notification yet — they were coalesced behind the frame.
+    expect(onMessagesChanged).not.toHaveBeenCalled();
+    // Store is updated synchronously regardless of the deferred notification.
+    expect(session.store.getDisplayMessages().find((m) => m.sender === AI_SENDER)?.message).toBe(
+      "Hello, world"
+    );
+
+    flushFrame();
+    // The whole burst collapsed into exactly one re-render.
+    expect(onMessagesChanged).toHaveBeenCalledTimes(1);
+
+    resolvePrompt!({ stopReason: "end_turn" });
+    await turn;
+    flushFrame();
+  });
+
+  it("always delivers the trailing turn-complete notification (no dropped final state)", async () => {
+    const mock = makeMockBackend();
+    let resolvePrompt: ((v: { stopReason: "end_turn" }) => void) | null = null;
+    mock.prompt.mockImplementation(
+      () => new Promise((resolve) => (resolvePrompt = resolve as typeof resolvePrompt))
+    );
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+    });
+
+    const onMessagesChanged = jest.fn();
+    session.subscribe({ onMessagesChanged, onStatusChanged: () => {} });
+
+    const { turn } = session.sendPrompt("hi");
+    onMessagesChanged.mockClear();
+
+    // A chunk arrives and schedules a rAF that has NOT fired yet.
+    streamChunk(mock, "partial");
+    expect(rafQueue).toHaveLength(1);
+    expect(onMessagesChanged).not.toHaveBeenCalled();
+
+    // The turn completes before the scheduled frame runs. The turn-complete
+    // notification must fire immediately (trailing edge) and cancel the stale
+    // pending rAF so the message settles to its complete final state — even if
+    // the browser never grants another animation frame.
+    resolvePrompt!({ stopReason: "end_turn" });
+    await turn;
+
+    expect(onMessagesChanged).toHaveBeenCalled();
+    // The pending streaming frame was cancelled by the immediate flush, so a
+    // later frame can't fire a duplicate/stale notification.
+    expect(rafQueue).toHaveLength(0);
+
+    const placeholder = session.store.getDisplayMessages().find((m) => m.sender === AI_SENDER);
+    expect(placeholder?.message).toBe("partial");
+    expect(placeholder?.turnStopReason).toBe("end_turn");
+  });
+});

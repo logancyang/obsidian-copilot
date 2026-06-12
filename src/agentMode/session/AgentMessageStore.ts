@@ -26,6 +26,12 @@ interface StoredAgentMessage {
   content?: unknown[];
   turnStopReason?: StopReason;
   turnDurationMs?: number;
+  // Bumped on every in-place mutation of this message so `getDisplayMessages`
+  // can cache the adapted view and only re-adapt when the version moves. The
+  // streaming append paths mutate `parts`/`displayText` in place (same array
+  // and object references), so a structural diff would miss them — the
+  // version counter is the source of truth for "this message changed".
+  version: number;
 }
 
 const MAX_COMPARE_JSON_CHARS = 8_000;
@@ -171,9 +177,25 @@ function textFingerprint(text: string): string {
  */
 export class AgentMessageStore {
   private messages: StoredAgentMessage[] = [];
+  // Per-message memo of the adapted `AgentChatMessage` plus the `version` it
+  // was built from. `getDisplayMessages` reuses the cached object when the
+  // version is unchanged, so unchanged messages keep a stable identity across
+  // streaming ticks — letting the memoized React message components skip them
+  // instead of re-rendering the whole transcript once per streamed token.
+  private displayCache = new Map<string, { version: number; view: AgentChatMessage }>();
+  // Memo of the last `getDisplayMessages` array so an idle subscription tick
+  // (notification with no content change) returns the same reference and the
+  // top-level `messages` memo bails out entirely.
+  private lastDisplay: AgentChatMessage[] | null = null;
 
   private generateId(): string {
     return `msg-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+  }
+
+  /** Bump a message's version so its cached adapted view is rebuilt. */
+  private touch(msg: StoredAgentMessage): void {
+    msg.version += 1;
+    this.lastDisplay = null;
   }
 
   /** Add a message; returns its assigned id. */
@@ -192,7 +214,9 @@ export class AgentMessageStore {
       parts: message.parts,
       turnStopReason: message.turnStopReason,
       turnDurationMs: message.turnDurationMs,
+      version: 0,
     });
+    this.lastDisplay = null;
     return id;
   }
 
@@ -207,6 +231,7 @@ export class AgentMessageStore {
     if (msg.turnStopReason !== undefined) return false;
     msg.turnStopReason = stopReason;
     msg.turnDurationMs = durationMs;
+    this.touch(msg);
     return true;
   }
 
@@ -219,6 +244,7 @@ export class AgentMessageStore {
     const msg = this.messages.find((m) => m.id === id);
     if (!msg) return false;
     msg.displayText += chunk;
+    this.touch(msg);
     return true;
   }
 
@@ -241,6 +267,7 @@ export class AgentMessageStore {
     } else {
       msg.parts.push({ kind: "text", text });
     }
+    this.touch(msg);
     return true;
   }
 
@@ -259,6 +286,7 @@ export class AgentMessageStore {
     } else {
       msg.parts.push({ kind: "thought", text });
     }
+    this.touch(msg);
     return true;
   }
 
@@ -278,10 +306,12 @@ export class AgentMessageStore {
       if (idx !== -1) {
         if (partsEqual(msg.parts[idx], part)) return false;
         msg.parts[idx] = part;
+        this.touch(msg);
         return true;
       }
     }
     msg.parts.push(part);
+    this.touch(msg);
     return true;
   }
 
@@ -296,6 +326,7 @@ export class AgentMessageStore {
     msg.isErrorMessage = true;
     const suffix = msg.displayText.length > 0 ? "\n\n" : "";
     msg.displayText += `${suffix}**Error:** ${errorText}`;
+    this.touch(msg);
     return true;
   }
 
@@ -320,28 +351,61 @@ export class AgentMessageStore {
     const idx = this.messages.findIndex((m) => m.id === id);
     if (idx === -1) return false;
     this.messages.splice(idx, 1);
+    this.displayCache.delete(id);
+    this.lastDisplay = null;
     return true;
   }
 
   clear(): void {
     this.messages = [];
+    this.displayCache.clear();
+    this.lastDisplay = null;
   }
 
   truncateAfterMessageId(messageId: string): void {
     const idx = this.messages.findIndex((m) => m.id === messageId);
     if (idx !== -1) {
+      for (const dropped of this.messages.slice(idx + 1)) {
+        this.displayCache.delete(dropped.id);
+      }
       this.messages = this.messages.slice(0, idx + 1);
+      this.lastDisplay = null;
     }
   }
 
-  /** Visible messages, shaped for the UI. */
+  /**
+   * Visible messages, shaped for the UI. Memoized two ways so a fast token
+   * stream doesn't rebuild the whole transcript per notification:
+   *   - Each adapted message is cached by `version`, so an unchanged message
+   *     keeps the SAME object reference across ticks. Downstream React message
+   *     components are memoized on that reference and skip re-rendering.
+   *   - The returned array is itself cached (`lastDisplay`) and only rebuilt
+   *     when a mutation cleared it, so an idle notification returns the exact
+   *     same array and the top-level consumer bails out without diffing.
+   */
   getDisplayMessages(): AgentChatMessage[] {
-    return this.messages.filter((m) => m.isVisible).map((m) => this.toAgentChatMessage(m));
+    if (this.lastDisplay !== null) return this.lastDisplay;
+    const display = this.messages.filter((m) => m.isVisible).map((m) => this.adaptCached(m));
+    this.lastDisplay = display;
+    return display;
   }
 
   getMessage(id: string): AgentChatMessage | undefined {
     const msg = this.messages.find((m) => m.id === id);
-    return msg ? this.toAgentChatMessage(msg) : undefined;
+    return msg ? this.adaptCached(msg) : undefined;
+  }
+
+  /**
+   * Return the adapted view for a stored message, reusing the cached object
+   * when its `version` is unchanged so the identity stays stable across
+   * streaming ticks.
+   */
+  private adaptCached(m: StoredAgentMessage): AgentChatMessage {
+    const cached = this.displayCache.get(m.id);
+    if (cached && cached.version === m.version) return cached.view;
+    const view = this.toAgentChatMessage(m);
+    this.displayCache.set(m.id, { version: m.version, view });
+    return view;
   }
 
   loadMessages(messages: AgentChatMessage[]): void {
@@ -359,6 +423,7 @@ export class AgentMessageStore {
         parts: msg.parts,
         turnStopReason: msg.turnStopReason,
         turnDurationMs: msg.turnDurationMs,
+        version: 0,
       });
     }
     logInfo(`[AgentMessageStore] Loaded ${messages.length} messages`);
