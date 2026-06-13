@@ -391,6 +391,82 @@ describe("sanitizeSettings - legacy Miyo settings cleanup", () => {
   });
 });
 
+describe("sanitizeSettings - self-host validation receipt seeding", () => {
+  it("seeds the validation receipt when migrating legacy enableSelfHostedSearch=true with no receipt", () => {
+    const legacy = {
+      ...DEFAULT_SETTINGS,
+      enableSelfHostMode: undefined,
+      enableSelfHostedSearch: true,
+      selfHostModeValidatedAt: null,
+      selfHostValidationCount: 0,
+    } as unknown as CopilotSettings;
+
+    const sanitized = sanitizeSettings(legacy);
+
+    expect(sanitized.enableSelfHostMode).toBe(true);
+    expect(sanitized.selfHostModeValidatedAt).not.toBeNull();
+    expect(typeof sanitized.selfHostModeValidatedAt).toBe("number");
+    expect(sanitized.selfHostValidationCount).toBeGreaterThanOrEqual(1);
+  });
+
+  it("seeds the receipt when enableSelfHostMode=true but selfHostModeValidatedAt is null", () => {
+    const settings = {
+      ...DEFAULT_SETTINGS,
+      enableSelfHostMode: true,
+      selfHostModeValidatedAt: null,
+      selfHostValidationCount: 0,
+    } as unknown as CopilotSettings;
+
+    const sanitized = sanitizeSettings(settings);
+
+    expect(sanitized.selfHostModeValidatedAt).not.toBeNull();
+    expect(sanitized.selfHostValidationCount).toBeGreaterThanOrEqual(1);
+  });
+
+  it("preserves an existing validation count instead of lowering it", () => {
+    const settings = {
+      ...DEFAULT_SETTINGS,
+      enableSelfHostMode: true,
+      selfHostModeValidatedAt: null,
+      selfHostValidationCount: 5,
+    } as unknown as CopilotSettings;
+
+    const sanitized = sanitizeSettings(settings);
+
+    expect(sanitized.selfHostModeValidatedAt).not.toBeNull();
+    expect(sanitized.selfHostValidationCount).toBe(5);
+  });
+
+  it("does NOT seed when enableSelfHostMode is false", () => {
+    const settings = {
+      ...DEFAULT_SETTINGS,
+      enableSelfHostMode: false,
+      selfHostModeValidatedAt: null,
+      selfHostValidationCount: 0,
+    } as unknown as CopilotSettings;
+
+    const sanitized = sanitizeSettings(settings);
+
+    expect(sanitized.selfHostModeValidatedAt).toBeNull();
+    expect(sanitized.selfHostValidationCount).toBe(0);
+  });
+
+  it("does not overwrite an already-set validation timestamp", () => {
+    const existingTimestamp = 1700000000000;
+    const settings = {
+      ...DEFAULT_SETTINGS,
+      enableSelfHostMode: true,
+      selfHostModeValidatedAt: existingTimestamp,
+      selfHostValidationCount: 2,
+    } as unknown as CopilotSettings;
+
+    const sanitized = sanitizeSettings(settings);
+
+    expect(sanitized.selfHostModeValidatedAt).toBe(existingTimestamp);
+    expect(sanitized.selfHostValidationCount).toBe(2);
+  });
+});
+
 describe("getSystemPrompt", () => {
   beforeEach(() => {
     jest.clearAllMocks();
