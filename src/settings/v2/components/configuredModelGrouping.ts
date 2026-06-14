@@ -1,8 +1,7 @@
 /** Pure grouping logic for `ConfiguredModelEnableList`, split from the React container so it's testable with plain data. */
 
-import type { ModelEnableGroup, ModelEnableRow } from "@/agentMode";
+import { isOpencodeZenWireId, type ModelEnableGroup, type ModelEnableRow } from "@/agentMode";
 import type { ConfiguredModel, Provider } from "@/modelManagement";
-import { isFreeModelCost, isSelfHostedProvider } from "@/modelManagement";
 
 /** One candidate model joined to its provider, plus current enabled state. */
 export interface Candidate {
@@ -111,17 +110,15 @@ export function opencodeOnlySubGroupLabel(model: ConfiguredModel, provider: Prov
  * matching it. This keeps the row identical to the chat picker.
  */
 export function toRow(candidate: Candidate): ModelEnableRow {
-  const { configuredModel, provider, enabled } = candidate;
-  const { displayName, id, description, cost } = configuredModel.info;
+  const { configuredModel, enabled } = candidate;
+  const { displayName, id, description } = configuredModel.info;
   return {
     id: configuredModel.configuredModelId,
     label: displayName || id,
     description: description || undefined,
     wireId: id,
     enabled,
-    // Only warn on free models routed through a third party; a self-hosted /
-    // local endpoint (Ollama, LM Studio) keeps prompts on the user's machine.
-    isFree: isFreeModelCost(cost) && !isSelfHostedProvider(provider),
+    isFree: isOpencodeZenWireId(id),
   };
 }
 

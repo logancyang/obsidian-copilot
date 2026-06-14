@@ -1,13 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, ChevronDown } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import * as SliderPrimitive from "@radix-ui/react-slider";
 import { Button } from "@/components/ui/button";
-import { HelpTooltip } from "@/components/ui/help-tooltip";
+import { FreeModelWarningIcon } from "@/components/ui/FreeModelWarningIcon";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ModelDisplay } from "@/components/ui/model-display";
 import { type ModelSelectorEntry } from "@/components/ui/ModelSelector";
 import { getModelKeyFromModel } from "@/settings/model";
-import { FREE_MODEL_PRIVACY_WARNING } from "@/components/ui/freeModelWarning";
 import { cn } from "@/lib/utils";
 
 export interface ModelEffortPickerOverride {
@@ -276,23 +275,7 @@ export function ModelEffortPicker({ override, className }: ModelEffortPickerProp
                     <div className="tw-min-w-0">
                       <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-1">
                         <ModelDisplay model={entry} iconSize={12} />
-                        {entry._isFree && (
-                          <span
-                            className="tw-flex tw-shrink-0 tw-items-center"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <HelpTooltip
-                              side="top"
-                              content={FREE_MODEL_PRIVACY_WARNING}
-                              buttonClassName="tw-size-4"
-                            >
-                              <AlertTriangle
-                                className="tw-size-3.5 tw-text-warning"
-                                aria-label="Free model privacy warning"
-                              />
-                            </HelpTooltip>
-                          </span>
-                        )}
+                        {entry._isFree && <FreeModelWarningIcon />}
                       </div>
                       {entry._subtitle && (
                         <div className="tw-truncate tw-text-xs tw-text-muted">

@@ -225,48 +225,26 @@ describe("toRow", () => {
     expect(row.description).toBe("Opus 4.7 with 1M context · Most capable for complex work");
   });
 
-  it("flags a zero-cost model as free and a priced or cost-less model as not free", () => {
-    const provider = agentProvider("opencode", "opencode", "opencode");
-    const row = (
-      configuredModelId: string,
-      wireId: string,
-      cost?: { input: number; output: number }
-    ) =>
-      toRow({
-        configuredModel: {
-          configuredModelId,
-          providerId: "opencode",
-          info: { id: wireId, displayName: wireId, ...(cost ? { cost } : {}) },
-          configuredAt: 0,
-        },
-        provider,
-        enabled: false,
-      });
-    expect(row("cm1", "opencode/big-pickle", { input: 0, output: 0 }).isFree).toBe(true);
-    expect(row("cm2", "opencode/glm-5", { input: 1, output: 3.2 }).isFree).toBe(false);
-    expect(row("cm3", "opencode/mystery").isFree).toBe(false);
-  });
-
-  it("does not flag a zero-cost self-hosted (local) model as free", () => {
-    const localProvider: Provider = {
-      providerId: "lmstudio",
-      providerType: "openai-compatible",
-      displayName: "LM Studio",
-      origin: { kind: "byok" },
-      baseUrl: "http://localhost:1234/v1",
-      addedAt: 0,
-    };
-    const local = toRow({
-      configuredModel: {
-        configuredModelId: "cm-local",
-        providerId: "lmstudio",
-        info: { id: "gpt-oss-20b", displayName: "GPT OSS 20B", cost: { input: 0, output: 0 } },
-        configuredAt: 0,
-      },
-      provider: localProvider,
+  it("flags opencode Zen models (opencode/ wire id) as free, others not", () => {
+    const provider = agentProvider("oc", "opencode", "opencode");
+    const zen = toRow({
+      configuredModel: model("z", "oc", "opencode/big-pickle"),
+      provider,
       enabled: false,
     });
-    expect(local.isFree).toBe(false);
+    const lms = toRow({
+      configuredModel: model("l", "oc", "lmstudio/gpt-oss-20b"),
+      provider,
+      enabled: false,
+    });
+    const byok = toRow({
+      configuredModel: model("b", "p", "claude-sonnet-4-5"),
+      provider: byokProvider("p", "Anthropic"),
+      enabled: false,
+    });
+    expect(zen.isFree).toBe(true);
+    expect(lms.isFree).toBe(false);
+    expect(byok.isFree).toBe(false);
   });
 });
 

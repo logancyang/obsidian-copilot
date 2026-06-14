@@ -133,11 +133,11 @@ export interface EnabledModelEntry {
   description?: string;
   credentialState: EnabledModelCredentialState;
   /**
-   * `true` when the model is free per the catalog (zero input+output cost) AND
-   * routed through a third party. Drives the picker's privacy warning, since
-   * such providers' terms commonly allow retaining or training on prompts.
-   * Self-hosted / local endpoints (Ollama, LM Studio) are excluded — their
-   * prompts never leave the machine. `undefined`/`false` when not flagged.
+   * `true` for an opencode Zen model (the free tier opencode hosts itself,
+   * wire-id prefix `opencode/`). Drives the picker's privacy warning, since
+   * prompts go to a third party whose terms may allow logging or training.
+   * Models served elsewhere — BYOK, self-hosted/local (Ollama, LM Studio),
+   * other opencode sub-providers — are not flagged.
    */
   isFree?: boolean;
 }

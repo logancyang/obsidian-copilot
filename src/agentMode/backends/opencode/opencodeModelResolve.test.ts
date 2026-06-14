@@ -1,6 +1,10 @@
 import type { CopilotSettings } from "@/settings/model";
 import type { ConfiguredModel, Provider, ProviderOrigin, ProviderType } from "@/modelManagement";
-import { mapProviderToOpencodeId, opencodeEnabledModelEntries } from "./opencodeModelResolve";
+import {
+  isOpencodeZenWireId,
+  mapProviderToOpencodeId,
+  opencodeEnabledModelEntries,
+} from "./opencodeModelResolve";
 
 /** Build a minimal `Provider` row for a given origin + type. */
 function makeProvider(
@@ -85,6 +89,16 @@ describe("mapProviderToOpencodeId", () => {
   });
 });
 
+describe("isOpencodeZenWireId", () => {
+  it("matches the opencode/ prefix only", () => {
+    expect(isOpencodeZenWireId("opencode/big-pickle")).toBe(true);
+    expect(isOpencodeZenWireId("opencode/deepseek-v4-flash-free")).toBe(true);
+    expect(isOpencodeZenWireId("lmstudio/gpt-oss-20b")).toBe(false);
+    expect(isOpencodeZenWireId("openrouter/anthropic/claude")).toBe(false);
+    expect(isOpencodeZenWireId("opencode-zen/x")).toBe(false); // prefix must be exactly `opencode/`
+  });
+});
+
 describe("opencodeEnabledModelEntries", () => {
   const byokProvider = (overrides: Partial<Provider> = {}): Provider => ({
     ...makeProvider("p1", { kind: "byok", catalogProviderId: "openrouter" }, "openai-compatible"),
@@ -133,47 +147,27 @@ describe("opencodeEnabledModelEntries", () => {
     expect(entry.credentialState).toBe("ok");
   });
 
-  it("flags a zero-cost model as free, and a priced or cost-less model as not free", () => {
-    const free: ConfiguredModel = {
-      configuredModelId: "cm-free",
-      providerId: "p1",
-      info: { id: "opencode/big-pickle", displayName: "Big Pickle", cost: { input: 0, output: 0 } },
-      configuredAt: 0,
-    };
-    const paid: ConfiguredModel = {
-      configuredModelId: "cm-paid",
-      providerId: "p1",
-      info: { id: "opencode/glm-5", displayName: "GLM 5", cost: { input: 1, output: 3.2 } },
-      configuredAt: 0,
-    };
-    const unknown = makeModel("cm-unknown", "p1", "opencode/mystery"); // no cost in info
+  it("flags opencode Zen models (opencode/ prefix) as free, others not", () => {
     const settings = makeSettings({
-      enabledModels: ["cm-free", "cm-paid", "cm-unknown"],
+      enabledModels: ["zen", "lms"],
       providers: { p1: makeProvider("p1", { kind: "agent", agentType: "opencode" }) },
-      configuredModels: [free, paid, unknown],
+      configuredModels: [
+        makeModel("zen", "p1", "opencode/big-pickle"),
+        makeModel("lms", "p1", "lmstudio/gpt-oss-20b"),
+      ],
     });
     const byId = new Map(opencodeEnabledModelEntries(settings).map((e) => [e.baseModelId, e]));
     expect(byId.get("opencode/big-pickle")?.isFree).toBe(true);
-    expect(byId.get("opencode/glm-5")?.isFree).toBe(false);
-    expect(byId.get("opencode/mystery")?.isFree).toBe(false);
+    expect(byId.get("lmstudio/gpt-oss-20b")?.isFree).toBe(false);
   });
 
-  it("does not flag a zero-cost self-hosted (local) model as free", () => {
-    const local: ConfiguredModel = {
-      configuredModelId: "cm-local",
-      providerId: "p1",
-      info: { id: "gpt-oss-20b", displayName: "GPT OSS 20B", cost: { input: 0, output: 0 } },
-      configuredAt: 0,
-    };
+  it("does not flag a BYOK model whose routed wire id is not opencode Zen", () => {
     const settings = makeSettings({
-      enabledModels: ["cm-local"],
-      // OpenAI-compatible BYOK pointed at a localhost endpoint = self-hosted.
-      providers: {
-        p1: makeProvider("p1", { kind: "byok" }, "openai-compatible"),
-      },
-      configuredModels: [local],
+      enabledModels: ["cm1"],
+      providers: { p1: byokProvider() },
+      configuredModels: [makeModel("cm1", "p1", "qwen/qwen3-max")],
     });
-    settings.providers.p1.baseUrl = "http://localhost:1234/v1";
+    // baseModelId becomes `openrouter/qwen/qwen3-max` — not an `opencode/` prefix.
     expect(opencodeEnabledModelEntries(settings)[0].isFree).toBe(false);
   });
 

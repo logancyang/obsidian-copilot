@@ -190,19 +190,6 @@ const GOOGLE_CATALOG: CatalogProvider = {
   },
 };
 
-// Mirrors models.dev: provider id `opencode`, models keyed by their BARE id,
-// while opencode reports PREFIXED wire ids (`opencode/<model>`). Free models
-// carry zero input+output cost.
-const OPENCODE_CATALOG: CatalogProvider = {
-  id: "opencode",
-  displayName: "opencode",
-  providerType: "openai-compatible",
-  models: {
-    "big-pickle": { id: "big-pickle", displayName: "Big Pickle", cost: { input: 0, output: 0 } },
-    "glm-5": { id: "glm-5", displayName: "GLM 5", cost: { input: 1, output: 3.2 } },
-  },
-};
-
 interface Harness {
   api: AgentSetupApi;
   providers: FakeProviderRegistry;
@@ -686,52 +673,5 @@ describe("AgentSetupApi.syncAgentModels", () => {
       proId
     );
     expect(h.backends.enabledFor("opencode").sort()).toEqual([sonnetId, proId].sort());
-  });
-});
-
-describe("AgentSetupApi — opencode catalog cost enrichment", () => {
-  it("resolves a prefixed opencode wire id to its catalog cost while pinning the prefixed id", async () => {
-    const h = makeHarness([OPENCODE_CATALOG]);
-    const reg = await h.api.registerAgentProvider({
-      agentType: "opencode",
-      providerType: "openai-compatible",
-      displayName: "opencode",
-      apiKey: null,
-      wireModelIds: ["opencode/big-pickle", "opencode/glm-5"],
-    });
-
-    const free = h.models.getByWireId(reg.providerId, "opencode/big-pickle")!;
-    const paid = h.models.getByWireId(reg.providerId, "opencode/glm-5")!;
-    // info.id keeps the full prefixed wire form, not the catalog's bare id.
-    expect(free.info.id).toBe("opencode/big-pickle");
-    expect(paid.info.id).toBe("opencode/glm-5");
-    // Catalog cost reached the persisted rows via the qualified-key lookup.
-    expect(free.info.cost).toEqual({ input: 0, output: 0 });
-    expect(paid.info.cost).toEqual({ input: 1, output: 3.2 });
-  });
-
-  it("backfills cost in place on an already-enrolled row during sync", async () => {
-    // Simulate a pre-existing enrollment whose row was created before cost was
-    // resolvable (no cost on the info), then a later discovery sync.
-    const h = makeHarness([OPENCODE_CATALOG]);
-    const providerId = await h.providers.add({
-      providerType: "openai-compatible",
-      displayName: "opencode",
-      origin: { kind: "agent", agentType: "opencode" },
-    });
-    const seeded = await h.models.add({
-      providerId,
-      info: { id: "opencode/big-pickle", displayName: "Big Pickle" }, // no cost
-    });
-    h.models.update.mockClear();
-
-    await h.api.syncAgentModels({
-      agentType: "opencode",
-      wireModelIds: ["opencode/big-pickle"],
-    });
-
-    expect(h.models.update).toHaveBeenCalled();
-    expect(h.models.get(seeded)!.info.cost).toEqual({ input: 0, output: 0 });
-    expect(h.models.get(seeded)!.info.id).toBe("opencode/big-pickle");
   });
 });

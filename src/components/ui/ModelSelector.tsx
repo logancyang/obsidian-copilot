@@ -46,10 +46,9 @@ export type ModelSelectorEntry = CustomModel & {
    */
   _subtitle?: string;
   /**
-   * `true` for a free model (zero catalog cost) routed through a third party.
-   * The dropdown row renders a privacy-warning icon + tooltip beside the name,
-   * since such providers may retain or train on prompts. Self-hosted / local
-   * models are excluded.
+   * `true` for an opencode Zen model (opencode's self-hosted free tier). The
+   * dropdown row renders a privacy-warning icon + tooltip beside the name,
+   * since prompts go to a third party that may retain or train on them.
    */
   _isFree?: boolean;
 };

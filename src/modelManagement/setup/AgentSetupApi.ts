@@ -341,12 +341,6 @@ export class AgentSetupApi {
    * catalog match — this is what keeps `ConfiguredModel.info` byte-identical to
    * the chat picker's `ModelEntry`. Catalog-supplied `limits`/`cost`/etc. are
    * preserved. A missing fallback leaves the resolved value untouched.
-   *
-   * The resolved `id` is always pinned to `wireId`, not the catalog model id:
-   * opencode reports prefixed wire ids (`opencode/big-pickle`) that resolve to a
-   * catalog entry keyed bare (`big-pickle`), and the rest of the system
-   * round-trips `ConfiguredModel.info.id` as the full wire id. Without this the
-   * enriched row would adopt the bare id and break model selection / reconcile.
    */
   #applyAgentDisplay(
     base: ModelInfo,
@@ -356,12 +350,9 @@ export class AgentSetupApi {
   ): ModelInfo {
     const displayName = fallbackDisplayNames?.[wireId];
     const description = fallbackDescriptions?.[wireId];
-    if (displayName === undefined && description === undefined) {
-      return base.id === wireId ? base : { ...base, id: wireId };
-    }
+    if (displayName === undefined && description === undefined) return base;
     return {
       ...base,
-      id: wireId,
       displayName: displayName ?? base.displayName,
       description: description ?? base.description,
     };
@@ -384,15 +375,8 @@ export class AgentSetupApi {
     const lookup = new Map<string, ModelInfo>();
     for (const catalogProvider of this.#catalog.getAllProviders()) {
       if (catalogProvider.providerType !== providerType) continue;
-      for (const [modelId, info] of Object.entries(catalogProvider.models)) {
-        // Index by the bare model id and by the provider-qualified
-        // `<provider>/<model>` form. Most backends report bare wire ids, but
-        // opencode reports prefixed ones (`opencode/big-pickle`) while the
-        // catalog keys models bare; the qualified key lets those resolve so
-        // catalog metadata (cost, limits, modalities) reaches their rows too.
-        if (!lookup.has(modelId)) lookup.set(modelId, info);
-        const qualified = `${catalogProvider.id}/${modelId}`;
-        if (!lookup.has(qualified)) lookup.set(qualified, info);
+      for (const [wireId, info] of Object.entries(catalogProvider.models)) {
+        if (!lookup.has(wireId)) lookup.set(wireId, info);
       }
     }
     return lookup;
@@ -438,19 +422,14 @@ export class AgentSetupApi {
         added.push({ wireId: info.id, configuredModelId });
         continue;
       }
-      // Refresh display strings and catalog-derived cost in place when they
-      // drifted, without touching the configuredModelId (so
-      // `BackendConfig.enabledModels` refs don't churn). Refreshing cost lets
-      // already-enrolled rows pick up catalog pricing the original enrollment
-      // missed (e.g. opencode's prefixed wire ids now resolve), so the free-model
-      // signal backfills onto existing installs on the next discovery sync.
+      // Refresh display strings in place when they drifted, without touching the
+      // configuredModelId (so `BackendConfig.enabledModels` refs don't churn).
       if (
         current.info.displayName !== info.displayName ||
-        current.info.description !== info.description ||
-        !sameCost(current.info.cost, info.cost)
+        current.info.description !== info.description
       ) {
         await this.#models.update(current.configuredModelId, {
-          info: { displayName: info.displayName, description: info.description, cost: info.cost },
+          info: { displayName: info.displayName, description: info.description },
         });
       }
     }
@@ -464,16 +443,4 @@ export class AgentSetupApi {
 
     return { added, removed };
   }
-}
-
-/** Shallow equality for two catalog `cost` snapshots (both possibly undefined). */
-function sameCost(a: ModelInfo["cost"], b: ModelInfo["cost"]): boolean {
-  if (a === b) return true;
-  if (!a || !b) return false;
-  return (
-    a.input === b.input &&
-    a.output === b.output &&
-    a.cacheRead === b.cacheRead &&
-    a.cacheWrite === b.cacheWrite
-  );
 }
