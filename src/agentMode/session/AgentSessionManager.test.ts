@@ -139,6 +139,8 @@ function buildDescriptor(): BackendDescriptor {
   return {
     id: "opencode",
     displayName: "opencode",
+    // opencode runs a title summarizer, so native title discovery trusts it.
+    summarizesSessionTitle: true,
     // Default to installed: a manager that owns a running backend is, in
     // production, always operating on an installed one. Tests that exercise
     // the uninstalled path override this per-case.
@@ -1313,6 +1315,8 @@ describe("AgentSessionManager chat history aggregation", () => {
     /** When set, the preloader exposes a warm opencode probe proc with this listSessions. */
     warmListSessions?: jest.Mock;
     probeSessionId?: string;
+    /** Defaults to true; set false to model a non-summarizing backend (codex). */
+    summarizesSessionTitle?: boolean;
   }) {
     const frontmatterByPath = opts?.files ?? {};
     const hiddenByPath = opts?.hiddenFiles ?? {};
@@ -1356,6 +1360,7 @@ describe("AgentSessionManager chat history aggregation", () => {
     const index = new AgentSessionIndex(makeIndexStorage(), "plugins/copilot/index.json");
     const descriptor = {
       ...buildDescriptor(),
+      summarizesSessionTitle: opts?.summarizesSessionTitle ?? true,
       getProbeSessionId: jest.fn(() => opts?.probeSessionId),
     } as unknown as BackendDescriptor;
     if (opts?.listSessions) {
@@ -1604,5 +1609,26 @@ describe("AgentSessionManager chat history aggregation", () => {
     expect(native[0]?.id).toBe(buildNativeChatId("opencode", "in-vault"));
     expect(native[0]?.title).toBe("Real chat");
     expect(native[0]?.lastAccessedAt.getTime()).toBe(7_000);
+  });
+
+  it("skips native title discovery for non-summarizing backends (codex)", async () => {
+    // codex names a session after the raw first prompt, so its listSessions
+    // title can leak the injected context envelope. The sweep must not trust it.
+    const listSessions = jest.fn(async () => ({
+      sessions: [
+        {
+          sessionId: "ctx-leak",
+          cwd: "/vault",
+          title: "<copilot-context> The user attached the following vault items",
+          updatedAt: null,
+        },
+      ],
+    }));
+    const { manager } = buildHistoryHarness({ listSessions, summarizesSessionTitle: false });
+    await manager.createSession("opencode");
+
+    const items = await manager.getChatHistoryItems();
+    expect(listSessions).not.toHaveBeenCalled();
+    expect(items.filter((i) => i.id.startsWith("copilot-agent-session://"))).toHaveLength(0);
   });
 });

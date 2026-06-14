@@ -383,6 +383,13 @@ export class AgentSessionManager {
   ): Promise<void> {
     const index = this.opts.sessionIndex;
     if (!index) return;
+    const descriptor = this.opts.resolveDescriptor(backendId);
+    // Only backends that summarize their own titles contribute trustworthy
+    // titles to native discovery. For the rest (codex, Claude Code) the agent's
+    // title is the raw first prompt (which leaks the injected context envelope),
+    // and the sweep has no transcript to derive a clean one — those sessions are
+    // indexed via flushIndexTouch with a client-derived title instead.
+    if (!descriptor?.summarizesSessionTitle) return;
     let sessions;
     try {
       ({ sessions } = await proc.listSessions({ cwd: vaultBasePath }));
@@ -392,9 +399,7 @@ export class AgentSessionManager {
       }
       return;
     }
-    const probeSessionId = this.opts
-      .resolveDescriptor(backendId)
-      ?.getProbeSessionId?.(getSettings());
+    const probeSessionId = descriptor.getProbeSessionId?.(getSettings());
     const now = Date.now();
     const discovered = [];
     for (const s of sessions) {
