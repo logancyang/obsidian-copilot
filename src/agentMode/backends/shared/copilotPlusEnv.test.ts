@@ -1,19 +1,25 @@
 import { buildCopilotPlusEnv } from "./copilotPlusEnv";
 import { getSettings } from "@/settings/model";
 import { getDecryptedKey } from "@/encryptionService";
+import { getMiyoCustomUrl } from "@/miyo/miyoUtils";
 import { BREVILABS_API_BASE_URL } from "@/constants";
 import { PLUS_ENV } from "@/agentMode/skills/builtin/builtinSkills";
 
 jest.mock("@/settings/model", () => ({ getSettings: jest.fn() }));
 jest.mock("@/encryptionService", () => ({ getDecryptedKey: jest.fn() }));
+jest.mock("@/miyo/miyoUtils", () => ({ getMiyoCustomUrl: jest.fn() }));
 jest.mock("@/logger", () => ({ logWarn: jest.fn() }));
 
 const mockGetSettings = getSettings as jest.Mock;
 const mockGetDecryptedKey = getDecryptedKey as jest.Mock;
+const mockGetMiyoCustomUrl = getMiyoCustomUrl as jest.Mock;
 
 beforeEach(() => {
   mockGetSettings.mockReset();
   mockGetDecryptedKey.mockReset();
+  mockGetMiyoCustomUrl.mockReset();
+  // Default: no custom Miyo URL configured (local loopback).
+  mockGetMiyoCustomUrl.mockReturnValue("");
 });
 
 describe("buildCopilotPlusEnv", () => {
@@ -57,5 +63,31 @@ describe("buildCopilotPlusEnv", () => {
     mockGetSettings.mockReturnValue({ isPlusUser: true, plusLicenseKey: "encrypted-key" });
     mockGetDecryptedKey.mockResolvedValue("");
     expect(await buildCopilotPlusEnv()).toEqual({});
+  });
+
+  it("injects MIYO_URL when a custom Miyo server URL is set, independent of Plus", async () => {
+    mockGetSettings.mockReturnValue({ isPlusUser: false });
+    mockGetMiyoCustomUrl.mockReturnValue("http://192.168.1.10:8742");
+    expect(await buildCopilotPlusEnv()).toEqual({ MIYO_URL: "http://192.168.1.10:8742" });
+    // Non-Plus: no relay env, and no decryption attempted.
+    expect(mockGetDecryptedKey).not.toHaveBeenCalled();
+  });
+
+  it("merges MIYO_URL with the Plus relay env for a Plus user with a custom Miyo URL", async () => {
+    mockGetSettings.mockReturnValue({
+      isPlusUser: true,
+      plusLicenseKey: "encrypted-key",
+      userId: "user-123",
+    });
+    mockGetDecryptedKey.mockResolvedValue("plain-key");
+    mockGetMiyoCustomUrl.mockReturnValue("http://miyo.example:8742");
+
+    expect(await buildCopilotPlusEnv("4.0.0")).toEqual({
+      MIYO_URL: "http://miyo.example:8742",
+      [PLUS_ENV.licenseKey]: "plain-key",
+      [PLUS_ENV.baseUrl]: BREVILABS_API_BASE_URL,
+      [PLUS_ENV.userId]: "user-123",
+      [PLUS_ENV.clientVersion]: "4.0.0",
+    });
   });
 });

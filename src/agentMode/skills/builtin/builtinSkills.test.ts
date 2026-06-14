@@ -157,6 +157,10 @@ describe("miyo-search builtin skill", () => {
     // POSIX: absolute install path tried before falling back to PATH.
     expect(miyoScript(".sh")).toContain("$HOME/.miyo/bin/miyo");
     expect(miyoScript(".sh")).toContain("command -v miyo");
+    // The .sh also covers the Windows install (Git Bash prefers .sh): cygpath
+    // converts %LOCALAPPDATA% so the miyo.exe path resolves there too.
+    expect(miyoScript(".sh")).toContain("cygpath");
+    expect(miyoScript(".sh")).toContain("miyo.exe");
     // Node fallback covers the Windows copied install location + the POSIX one.
     expect(miyoScript(".mjs")).toContain(".miyo");
     expect(miyoScript(".mjs")).toContain("miyo.exe");

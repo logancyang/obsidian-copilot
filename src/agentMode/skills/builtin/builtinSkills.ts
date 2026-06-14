@@ -399,13 +399,22 @@ die() {
 QUERY="$*"
 [ -n "$QUERY" ] || die "Usage: sh miyo-search.sh <query>" 1
 
+# Resolve the Windows install location too: on Windows + Git Bash this .sh is
+# preferred over the .mjs, and Miyo installs the CLI under %LOCALAPPDATA%.
+WIN_MIYO=""
+if [ -n "$LOCALAPPDATA" ] && command -v cygpath >/dev/null 2>&1; then
+  WIN_MIYO="$(cygpath -u "$LOCALAPPDATA")/Miyo/bin/miyo/miyo.exe"
+fi
+
 # Absolute install path first (Obsidian shells often miss Miyo's bin on PATH).
 if [ -x "$HOME/.miyo/bin/miyo" ]; then
   MIYO="$HOME/.miyo/bin/miyo"
+elif [ -n "$WIN_MIYO" ] && [ -x "$WIN_MIYO" ]; then
+  MIYO="$WIN_MIYO"
 elif command -v miyo >/dev/null 2>&1; then
   MIYO=miyo
 else
-  die "Miyo CLI not found (no ~/.miyo/bin/miyo and 'miyo' not on PATH). The Miyo desktop app is not installed — tell the user to install and open Miyo, then retry. Do not retry in a loop." 3
+  die "Miyo CLI not found (no ~/.miyo/bin/miyo, no Windows install, and 'miyo' not on PATH). The Miyo desktop app is not installed — tell the user to install and open Miyo, then retry. Do not retry in a loop." 3
 fi
 
 OUT=$("$MIYO" search "$QUERY" -n 10 --json 2>&1) || die "Miyo search failed — the Miyo app may not be running. Tell the user to open Miyo, then continue without vault search if they can't. Details: $OUT" 1
