@@ -224,6 +224,28 @@ describe("toRow", () => {
     expect(row.label).toBe("Default (recommended)");
     expect(row.description).toBe("Opus 4.7 with 1M context · Most capable for complex work");
   });
+
+  it("flags a zero-cost model as free and a priced or cost-less model as not free", () => {
+    const provider = agentProvider("opencode", "opencode", "opencode");
+    const row = (
+      configuredModelId: string,
+      wireId: string,
+      cost?: { input: number; output: number }
+    ) =>
+      toRow({
+        configuredModel: {
+          configuredModelId,
+          providerId: "opencode",
+          info: { id: wireId, displayName: wireId, ...(cost ? { cost } : {}) },
+          configuredAt: 0,
+        },
+        provider,
+        enabled: false,
+      });
+    expect(row("cm1", "opencode/big-pickle", { input: 0, output: 0 }).isFree).toBe(true);
+    expect(row("cm2", "opencode/glm-5", { input: 1, output: 3.2 }).isFree).toBe(false);
+    expect(row("cm3", "opencode/mystery").isFree).toBe(false);
+  });
 });
 
 describe("rowMatches", () => {

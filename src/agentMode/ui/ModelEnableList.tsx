@@ -1,9 +1,11 @@
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { SearchBar } from "@/components/ui/SearchBar";
 import { SettingSwitch } from "@/components/ui/setting-switch";
 import { cn } from "@/lib/utils";
-import { ChevronRight } from "lucide-react";
+import { FREE_MODEL_PRIVACY_WARNING } from "@/components/ui/freeModelWarning";
+import { AlertTriangle, ChevronRight } from "lucide-react";
 import React from "react";
 
 /** A single toggleable model row. */
@@ -18,6 +20,12 @@ export interface ModelEnableRow {
   wireId?: string;
   /** Whether the model is currently enabled. */
   enabled: boolean;
+  /**
+   * `true` for a free model (zero catalog cost). Renders a privacy-warning icon
+   * + tooltip beside the label, since free models are usually routed through
+   * third-party providers that may retain or train on prompts.
+   */
+  isFree?: boolean;
 }
 
 /** A provider-display-name-grouped section of model rows. */
@@ -89,7 +97,17 @@ export const ModelEnableList: React.FC<ModelEnableListProps> = ({
           )}
         >
           <div className="tw-min-w-0">
-            <div className="tw-truncate">{row.label}</div>
+            <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-1">
+              <span className="tw-truncate">{row.label}</span>
+              {row.isFree && (
+                <HelpTooltip content={FREE_MODEL_PRIVACY_WARNING} buttonClassName="tw-size-4">
+                  <AlertTriangle
+                    className="tw-size-3.5 tw-shrink-0 tw-text-warning"
+                    aria-label="Free model privacy warning"
+                  />
+                </HelpTooltip>
+              )}
+            </div>
             {row.description && (
               <div className="tw-truncate tw-text-xs tw-text-muted">{row.description}</div>
             )}

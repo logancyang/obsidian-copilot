@@ -2,6 +2,7 @@
 
 import type { ModelEnableGroup, ModelEnableRow } from "@/agentMode";
 import type { ConfiguredModel, Provider } from "@/modelManagement";
+import { isFreeModelCost } from "@/modelManagement";
 
 /** One candidate model joined to its provider, plus current enabled state. */
 export interface Candidate {
@@ -111,13 +112,14 @@ export function opencodeOnlySubGroupLabel(model: ConfiguredModel, provider: Prov
  */
 export function toRow(candidate: Candidate): ModelEnableRow {
   const { configuredModel, enabled } = candidate;
-  const { displayName, id, description } = configuredModel.info;
+  const { displayName, id, description, cost } = configuredModel.info;
   return {
     id: configuredModel.configuredModelId,
     label: displayName || id,
     description: description || undefined,
     wireId: id,
     enabled,
+    isFree: isFreeModelCost(cost),
   };
 }
 

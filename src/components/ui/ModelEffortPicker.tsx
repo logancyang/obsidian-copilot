@@ -7,16 +7,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ModelDisplay } from "@/components/ui/model-display";
 import { type ModelSelectorEntry } from "@/components/ui/ModelSelector";
 import { getModelKeyFromModel } from "@/settings/model";
+import { FREE_MODEL_PRIVACY_WARNING } from "@/components/ui/freeModelWarning";
 import { cn } from "@/lib/utils";
-
-/**
- * Shown beside free models (zero catalog cost) in the picker. Free models are
- * usually routed through third-party providers whose terms allow retaining or
- * training on submitted prompts, so we nudge users to check before sending
- * sensitive notes.
- */
-const FREE_MODEL_PRIVACY_WARNING =
-  "Free model. The provider may log or train on your prompts. Review their privacy terms before sending sensitive content.";
 
 export interface ModelEffortPickerOverride {
   models: ModelSelectorEntry[];
