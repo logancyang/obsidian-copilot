@@ -611,25 +611,6 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
     sanitizedSettings.selfHostApiKey = legacySelfHostedSearchApiKey as string;
   }
 
-  // Defensive seeding: if self-host mode is enabled but the validation receipt is
-  // missing (selfHostModeValidatedAt == null), seed it so an eligible user is not
-  // blocked from their own self-host tools (web search, YouTube) on first launch.
-  // This covers both the legacy enableSelfHostedSearch -> enableSelfHostMode migration
-  // above (which never seeded the receipt) and any "toggle on but receipt null" state.
-  // We intentionally do NOT seed when the toggle is off, so users who never had
-  // self-host mode on are never granted access. Periodic refreshSelfHostModeValidation()
-  // still disables the toggle and clears the receipt for genuinely ineligible plans.
-  if (
-    sanitizedSettings.enableSelfHostMode === true &&
-    sanitizedSettings.selfHostModeValidatedAt == null
-  ) {
-    sanitizedSettings.selfHostModeValidatedAt = Date.now();
-    sanitizedSettings.selfHostValidationCount = Math.max(
-      sanitizedSettings.selfHostValidationCount || 0,
-      1
-    );
-  }
-
   // Migration: Rename legacy enableMiyoSearch to enableMiyo.
   if (legacyEnableMiyoSearch !== undefined && sanitizedSettings.enableMiyo === undefined) {
     sanitizedSettings.enableMiyo = legacyEnableMiyoSearch as boolean;

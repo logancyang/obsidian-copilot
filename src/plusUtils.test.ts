@@ -52,7 +52,7 @@ describe("isSelfHostAccessValid", () => {
 });
 
 describe("isSelfHostModeValid", () => {
-  it("returns false when the toggle is off, even with a valid receipt", () => {
+  it("returns false when the toggle is off, regardless of any receipt", () => {
     mockGetSettings.mockReturnValue(
       buildSettings({
         enableSelfHostMode: false,
@@ -63,7 +63,7 @@ describe("isSelfHostModeValid", () => {
     expect(isSelfHostModeValid()).toBe(false);
   });
 
-  it("returns false when the toggle is on but the receipt is null (pre-fix state)", () => {
+  it("returns true when the toggle is on even with a null receipt (gates on the toggle alone)", () => {
     mockGetSettings.mockReturnValue(
       buildSettings({
         enableSelfHostMode: true,
@@ -71,15 +71,15 @@ describe("isSelfHostModeValid", () => {
         selfHostValidationCount: 0,
       })
     );
-    expect(isSelfHostModeValid()).toBe(false);
+    expect(isSelfHostModeValid()).toBe(true);
   });
 
-  it("returns true when the toggle is on and the receipt has been seeded (post-fix state)", () => {
+  it("returns true when the toggle is on regardless of grace/permanent receipt state", () => {
     mockGetSettings.mockReturnValue(
       buildSettings({
         enableSelfHostMode: true,
-        selfHostModeValidatedAt: Date.now(),
-        selfHostValidationCount: 1,
+        selfHostModeValidatedAt: Date.now() - SELF_HOST_GRACE_PERIOD_MS - 1000,
+        selfHostValidationCount: 0,
       })
     );
     expect(isSelfHostModeValid()).toBe(true);

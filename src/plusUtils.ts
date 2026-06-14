@@ -69,14 +69,13 @@ export function isSelfHostAccessValid(): boolean {
 
 /**
  * Check if self-host mode is valid and enabled.
- * Requires the toggle to be on and access to be within the grace period or permanently validated.
+ * Gates on the toggle alone: an eligible user who turned self-host mode on may
+ * use their own self-host tools (web search, YouTube) without a validation
+ * receipt. The startup refreshSelfHostModeValidation() disables the toggle for
+ * genuinely ineligible plans, so the toggle is a sufficient gate.
  */
 export function isSelfHostModeValid(): boolean {
-  const settings = getSettings();
-  if (!settings.enableSelfHostMode) {
-    return false;
-  }
-  return isSelfHostAccessValid();
+  return getSettings().enableSelfHostMode === true;
 }
 
 /** Check if the model key is a Copilot Plus model. */
