@@ -76,6 +76,17 @@ const NO_LICENSE_UPSELL =
 const LICENSE_INVALID_MESSAGE =
   "Your Copilot Plus license is inactive or expired, so this skill is unavailable — do not retry it. Complete the request using your own equivalent built-in tools if you have them; otherwise tell the user it's unavailable, and never refuse. You may briefly let the user know they can renew their Copilot Plus license at https://www.obsidiancopilot.com to restore the higher-quality versions of these tools.";
 
+/**
+ * The license is valid but the relay couldn't complete THIS request — the relay
+ * was unreachable, or it returned a non-2xx that isn't a 401/403 (e.g. the page
+ * a fetch targets is blocked, a video has no transcript, a transient 5xx). Since
+ * the steering routes these tasks away from the agent's own tools, the error
+ * must invite a fallback so a single bad URL/input doesn't dead-end a request
+ * the native tool could still complete. Appended after the concrete HTTP detail.
+ */
+const RELAY_FAILED_FALLBACK =
+  "If you have your own equivalent built-in tool for this, use it to complete the request; otherwise tell the user it could not be completed.";
+
 /** Wrap a string as a single-quoted shell literal (safe for embedding in `sh`). */
 function shSingleQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
@@ -105,6 +116,7 @@ CLIENT_VERSION="\${${PLUS_ENV.clientVersion}:-}"
 NO_LICENSE=${shSingleQuote(NO_LICENSE_MESSAGE)}
 NO_LICENSE_UPSELL=${shSingleQuote(NO_LICENSE_UPSELL)}
 LICENSE_INVALID=${shSingleQuote(LICENSE_INVALID_MESSAGE)}
+RELAY_FAILED_FALLBACK=${shSingleQuote(RELAY_FAILED_FALLBACK)}
 
 die() {
   printf '%s\\n' "$1" >&2
@@ -135,13 +147,13 @@ relay() {
     -H "Authorization: Bearer $KEY" \\
     -H "X-Client-Version: $CLIENT_VERSION" \\
     --data-binary @-)
-  [ $? -eq 0 ] || die "Could not reach the Copilot relay." 1
+  [ $? -eq 0 ] || die "Could not reach the Copilot relay. $RELAY_FAILED_FALLBACK" 1
   code=$(printf '%s' "$resp" | tail -n1)
   out=$(printf '%s' "$resp" | sed '$d')
   case "$code" in
     401|403) die "$LICENSE_INVALID" ;;
     2*) printf '%s\\n' "$out" ;;
-    *) die "Request failed (HTTP $code): $out" 1 ;;
+    *) die "Request failed (HTTP $code): $out. $RELAY_FAILED_FALLBACK" 1 ;;
   esac
 }
 `;
@@ -173,6 +185,7 @@ const CLIENT_VERSION = process.env.${PLUS_ENV.clientVersion} || "";
 const NO_LICENSE = ${JSON.stringify(NO_LICENSE_MESSAGE)};
 const NO_LICENSE_UPSELL = ${JSON.stringify(NO_LICENSE_UPSELL)};
 const LICENSE_INVALID = ${JSON.stringify(LICENSE_INVALID_MESSAGE)};
+const RELAY_FAILED_FALLBACK = ${JSON.stringify(RELAY_FAILED_FALLBACK)};
 
 function die(message, code = 2) {
   process.stderr.write(String(message) + "\\n");
@@ -207,14 +220,14 @@ async function relay(endpoint, body) {
       body: JSON.stringify(body),
     });
   } catch {
-    die("Could not reach the Copilot relay.", 1);
+    die("Could not reach the Copilot relay. " + RELAY_FAILED_FALLBACK, 1);
   }
   const out = await resp.text();
   if (resp.status === 401 || resp.status === 403) die(LICENSE_INVALID);
   if (resp.status >= 200 && resp.status < 300) {
     process.stdout.write(out + "\\n");
   } else {
-    die("Request failed (HTTP " + resp.status + "): " + out, 1);
+    die("Request failed (HTTP " + resp.status + "): " + out + ". " + RELAY_FAILED_FALLBACK, 1);
   }
 }
 `;

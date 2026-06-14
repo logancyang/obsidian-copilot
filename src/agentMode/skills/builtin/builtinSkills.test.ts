@@ -90,11 +90,18 @@ describe("builtin Copilot Plus skills", () => {
       // The old hard "requires Copilot Plus / upgrade" block is gone.
       expect(sh).not.toContain("require Copilot Plus");
 
+      // A non-license relay failure (unreachable, or a non-2xx that isn't
+      // 401/403 — e.g. a page that can't be fetched) still routes the agent to
+      // its own tool rather than dead-ending the request.
+      expect(sh).toContain("$RELAY_FAILED_FALLBACK");
+      expect(sh).toContain("your own equivalent built-in tool for this");
+
       const mjs = scriptOf(skill.name, ".mjs");
       expect(mjs).toContain("your own equivalent built-in tools");
       expect(mjs).not.toContain("web tools");
       expect(mjs).toContain("process.pid % 4 === 0");
       expect(mjs).toContain("die(LICENSE_INVALID)");
+      expect(mjs).toContain("RELAY_FAILED_FALLBACK");
     }
   });
 
