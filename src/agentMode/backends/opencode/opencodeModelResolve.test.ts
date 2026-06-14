@@ -133,6 +133,31 @@ describe("opencodeEnabledModelEntries", () => {
     expect(entry.credentialState).toBe("ok");
   });
 
+  it("flags a zero-cost model as free, and a priced or cost-less model as not free", () => {
+    const free: ConfiguredModel = {
+      configuredModelId: "cm-free",
+      providerId: "p1",
+      info: { id: "opencode/big-pickle", displayName: "Big Pickle", cost: { input: 0, output: 0 } },
+      configuredAt: 0,
+    };
+    const paid: ConfiguredModel = {
+      configuredModelId: "cm-paid",
+      providerId: "p1",
+      info: { id: "opencode/glm-5", displayName: "GLM 5", cost: { input: 1, output: 3.2 } },
+      configuredAt: 0,
+    };
+    const unknown = makeModel("cm-unknown", "p1", "opencode/mystery"); // no cost in info
+    const settings = makeSettings({
+      enabledModels: ["cm-free", "cm-paid", "cm-unknown"],
+      providers: { p1: makeProvider("p1", { kind: "agent", agentType: "opencode" }) },
+      configuredModels: [free, paid, unknown],
+    });
+    const byId = new Map(opencodeEnabledModelEntries(settings).map((e) => [e.baseModelId, e]));
+    expect(byId.get("opencode/big-pickle")?.isFree).toBe(true);
+    expect(byId.get("opencode/glm-5")?.isFree).toBe(false);
+    expect(byId.get("opencode/mystery")?.isFree).toBe(false);
+  });
+
   it("returns the shared frozen empty array when nothing is enabled", () => {
     const first = opencodeEnabledModelEntries(makeSettings({ enabledModels: [] }));
     const second = opencodeEnabledModelEntries(makeSettings({ enabledModels: [] }));

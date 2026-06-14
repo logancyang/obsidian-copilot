@@ -45,6 +45,13 @@ export type ModelSelectorEntry = CustomModel & {
    * ignores it and stays single-line.
    */
   _subtitle?: string;
+  /**
+   * `true` for a free model (zero catalog cost). The dropdown row renders a
+   * privacy-warning icon + tooltip beside the name, since free models are
+   * usually routed through third-party providers that may retain or train on
+   * prompts.
+   */
+  _isFree?: boolean;
 };
 
 interface ModelSelectorProps {

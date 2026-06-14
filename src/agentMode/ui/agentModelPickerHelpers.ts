@@ -120,7 +120,13 @@ function appendFromEnabledEntries(
     const reported = reportedById.get(enabled.baseModelId);
     const name = reported?.name || enabled.name || enabled.baseModelId;
     const subtitle = reported?.description ?? enabled.description;
-    const entry = synthesizeAgentEntry(enabled.baseModelId, name, descriptor, subtitle);
+    const entry = synthesizeAgentEntry(
+      enabled.baseModelId,
+      name,
+      descriptor,
+      subtitle,
+      enabled.isFree
+    );
     const reason = credentialDisabledReason(enabled.credentialState, !!reported);
     if (reason) entry._disabledReason = reason;
     entries.push(entry);
@@ -156,7 +162,8 @@ export function synthesizeAgentEntry(
   baseModelId: string,
   humanName: string,
   descriptor: BackendDescriptor,
-  subtitle?: string
+  subtitle?: string,
+  isFree?: boolean
 ): ModelSelectorEntry {
   return {
     name: baseModelId,
@@ -167,6 +174,7 @@ export function synthesizeAgentEntry(
     _group: descriptor.displayName,
     _backendId: descriptor.id,
     _subtitle: subtitle,
+    _isFree: isFree,
   };
 }
 

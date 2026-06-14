@@ -77,6 +77,18 @@ function credentialStateFor(provider: Provider, native: boolean): EnabledModelCr
 }
 
 /**
+ * `true` when the catalog marks this model as free (zero input *and* output
+ * cost). Free opencode models are routed through third-party providers whose
+ * terms commonly allow logging/training on prompts; the picker surfaces a
+ * privacy warning for them. Returns `false` when cost is unknown — we only
+ * warn on a positive free signal, never on missing data.
+ */
+function isFreeModel(model: ConfiguredModel): boolean {
+  const cost = model.info.cost;
+  return cost?.input === 0 && cost?.output === 0;
+}
+
+/**
  * Enabled opencode models enriched for the chat picker: wire base id, display
  * name/description, and per-model credential health. Lets the picker iterate
  * the enabled set (not the reported∩enabled intersection) so a model opencode
@@ -110,6 +122,7 @@ export function opencodeEnabledModelEntries(
       name: configuredModel.info.displayName || configuredModel.info.id,
       description: configuredModel.info.description,
       credentialState: credentialStateFor(provider, mapping.native),
+      isFree: isFreeModel(configuredModel),
     });
   }
   return out.length === 0 ? EMPTY_ENABLED_ENTRIES : out;

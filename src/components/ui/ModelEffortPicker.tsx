@@ -1,12 +1,22 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { AlertTriangle, ChevronDown } from "lucide-react";
 import * as SliderPrimitive from "@radix-ui/react-slider";
 import { Button } from "@/components/ui/button";
+import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ModelDisplay } from "@/components/ui/model-display";
 import { type ModelSelectorEntry } from "@/components/ui/ModelSelector";
 import { getModelKeyFromModel } from "@/settings/model";
 import { cn } from "@/lib/utils";
+
+/**
+ * Shown beside free models (zero catalog cost) in the picker. Free models are
+ * usually routed through third-party providers whose terms allow retaining or
+ * training on submitted prompts, so we nudge users to check before sending
+ * sensitive notes.
+ */
+const FREE_MODEL_PRIVACY_WARNING =
+  "Free model. The provider may log or train on your prompts. Review their privacy terms before sending sensitive content.";
 
 export interface ModelEffortPickerOverride {
   models: ModelSelectorEntry[];
@@ -272,7 +282,26 @@ export function ModelEffortPicker({ override, className }: ModelEffortPickerProp
                       {isActive ? "✓" : isHighlight ? "›" : ""}
                     </span>
                     <div className="tw-min-w-0">
-                      <ModelDisplay model={entry} iconSize={12} />
+                      <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-1">
+                        <ModelDisplay model={entry} iconSize={12} />
+                        {entry._isFree && (
+                          <span
+                            className="tw-flex tw-shrink-0 tw-items-center"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <HelpTooltip
+                              side="top"
+                              content={FREE_MODEL_PRIVACY_WARNING}
+                              buttonClassName="tw-size-4"
+                            >
+                              <AlertTriangle
+                                className="tw-size-3.5 tw-text-warning"
+                                aria-label="Free model privacy warning"
+                              />
+                            </HelpTooltip>
+                          </span>
+                        )}
+                      </div>
                       {entry._subtitle && (
                         <div className="tw-truncate tw-text-xs tw-text-muted">
                           {entry._subtitle}

@@ -132,6 +132,13 @@ export interface EnabledModelEntry {
   name: string;
   description?: string;
   credentialState: EnabledModelCredentialState;
+  /**
+   * `true` when the model is free per the catalog (zero input+output cost).
+   * Drives the picker's privacy warning: free models are typically routed
+   * through third-party providers whose terms allow retaining or training on
+   * prompts. `undefined` when cost is unknown (not flagged).
+   */
+  isFree?: boolean;
 }
 
 /**
