@@ -73,20 +73,26 @@ describe("builtin Copilot Plus skills", () => {
   it("falls back to the agent's own tools instead of blocking when Plus is absent", () => {
     for (const skill of BUILTIN_SKILLS) {
       const sh = scriptOf(skill.name, ".sh");
-      // No license: tell the agent to use its own web tools, never refuse, and
-      // only append the upsell occasionally (gated on the process id).
-      expect(sh).toContain("Use your own built-in web tools");
+      // No license: tell the agent to use its own equivalent tools, never
+      // refuse, and only append the upsell occasionally (gated on the pid). The
+      // fallback wording is generic (not web-specific) so it suits the PDF skill
+      // too, which shares this message.
+      expect(sh).toContain("your own equivalent built-in tools");
+      expect(sh).not.toContain("web tools");
       expect(sh).toContain("never refuse");
       expect(sh).toContain("$(( $$ % 4 ))");
+      // The upsell carries the actionable instruction to obtain a license key.
+      expect(sh).toContain("get a license key at https://www.obsidiancopilot.com");
       // The invalid/expired-license (401/403) path is distinct and warrants a
       // renewal note, but still falls back rather than refusing.
       expect(sh).toContain('401|403) die "$LICENSE_INVALID"');
-      expect(sh).toContain("renew Copilot Plus");
+      expect(sh).toContain("renew their Copilot Plus license");
       // The old hard "requires Copilot Plus / upgrade" block is gone.
       expect(sh).not.toContain("require Copilot Plus");
 
       const mjs = scriptOf(skill.name, ".mjs");
-      expect(mjs).toContain("Use your own built-in web tools");
+      expect(mjs).toContain("your own equivalent built-in tools");
+      expect(mjs).not.toContain("web tools");
       expect(mjs).toContain("process.pid % 4 === 0");
       expect(mjs).toContain("die(LICENSE_INVALID)");
     }

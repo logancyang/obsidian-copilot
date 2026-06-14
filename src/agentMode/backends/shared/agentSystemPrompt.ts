@@ -49,8 +49,8 @@ import { getEffectiveUserPrompt } from "@/system-prompts/systemPromptBuilder";
  * built-in web/fetch tools, with an explicit fallback so the request never
  * dead-ends. Sent to every user regardless of Plus status: if a skill can't
  * run (no license, self-host, disabled, missing), its script exits telling the
- * agent to use its own web tools, and the fallback clause routes it there — so
- * steering never blocks free users and is safe for everyone.
+ * agent to use its own equivalent tools, and the fallback clause routes it
+ * there — so steering never blocks free users and is safe for everyone.
  */
 export const COPILOT_PLUS_TOOLS_STEERING = `## Copilot Plus tools
 For these requests, prefer the bundled Copilot skill over any built-in tool of your own:
@@ -62,7 +62,7 @@ For these requests, prefer the bundled Copilot skill over any built-in tool of y
 
 Each skill ships both a \`.sh\` and a \`.mjs\` script. Run the \`.sh\` with \`sh\` first; if the platform can't run \`sh\` (for example, Windows without Git Bash), run the matching \`.mjs\` with \`node\` instead. If neither \`sh\` nor \`node\` is available, tell the user to install Node.js from https://nodejs.org and try again.
 
-If a skill is missing, disabled, or reports that Copilot Plus is not active, silently fall back to your own equivalent web tool and complete the request — never refuse and never block the user on upgrading. Only pass along an upgrade or renewal note when the skill's own message explicitly invites it, and keep any such mention brief and occasional.`;
+If a skill is missing, disabled, or reports that Copilot Plus is not active, silently fall back to your own equivalent tool (or, if you have none for that task, tell the user it's unavailable) and complete the request — never refuse and never block the user on upgrading. Only pass along an upgrade or renewal note when the skill's own message explicitly invites it, and keep any such mention brief and occasional.`;
 
 /**
  * Steers the agent toward the bundled `miyo-search` skill for vault search. A
@@ -138,8 +138,8 @@ export function buildAgentSystemPrompt(): string {
     // Always steer toward the builtin Copilot Plus skills, regardless of Plus
     // status. Gating on `isPlusUser` would be wrong anyway — valid self-host
     // mode is Plus-enabled but reports `isPlusUser: false` — and if a skill
-    // can't run, its script exits telling the agent to use its own web tools
-    // and the fallback clause routes it there. Never blocks free users.
+    // can't run, its script exits telling the agent to use its own equivalent
+    // tools and the fallback clause routes it there. Never blocks free users.
     parts.push(COPILOT_PLUS_TOOLS_STEERING);
     // Miyo steering is gated on the same `shouldUseMiyo` check that seeds the
     // skill, so we only point the agent at `miyo-search` when it's actually

@@ -105,8 +105,8 @@ describe("buildAgentSystemPrompt", () => {
     expect(nonPlus).toContain("copilot-youtube-transcript");
     expect(nonPlus).toContain("copilot-fetch-x");
     // Fallback clause so a missing/unlicensed skill never dead-ends or blocks
-    // a free user — it routes the agent to its own web tools instead.
-    expect(nonPlus).toMatch(/silently fall back to your own equivalent web tool/i);
+    // a free user — it routes the agent to its own equivalent tool instead.
+    expect(nonPlus).toMatch(/silently fall back to your own equivalent tool/i);
     expect(nonPlus).toMatch(/never refuse and never block the user/i);
 
     // A Plus user gets the same steering.

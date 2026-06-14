@@ -12,8 +12,9 @@ import type { BackendId } from "@/agentMode/session/types";
  * env vars the plugin injects at spawn time (see `buildCopilotPlusEnv`) and call
  * the Brevilabs relay directly — no key is embedded in the skill files. When no
  * license is configured (free user) or the relay rejects it, the script exits
- * non-zero with a message that tells the agent to fall back to its own built-in
- * web tools — never to block the user — with only an occasional, gentle upsell.
+ * non-zero with a message that tells the agent to fall back to its own
+ * equivalent built-in capability — never to block the user — with only an
+ * occasional, gentle upsell.
  *
  * Why ship both an `sh` and a Node script: `sh` + `curl` is preferred because
  * the script runs in the *agent's* shell, where `sh`, `curl`, `sed`, and
@@ -53,16 +54,19 @@ export const PLUS_ENV = {
  * No Copilot Plus license is configured — the free-user case (a non-Plus user
  * gets an empty env from `buildCopilotPlusEnv`, so `KEY`/`BASE` are absent).
  * The skill simply isn't available; we must NOT block the user. The message
- * tells the agent to quietly use its own web tools and never refuse or push an
- * upgrade. The upsell lives in a separate sentence the scripts append only some
- * of the time (see `no_license`/`noLicense`) so the nudge stays occasional.
+ * tells the agent to quietly use its own equivalent capability and never refuse
+ * or push an upgrade. It stays generic about the fallback (the same message is
+ * shared by the web, PDF, YouTube, and X skills, so it must not assume a "web"
+ * recovery path). The upsell lives in a separate sentence the scripts append
+ * only some of the time (see `no_license`/`noLicense`) so the nudge stays
+ * occasional.
  */
 const NO_LICENSE_MESSAGE =
-  "Copilot Plus is not active, so this skill is unavailable — do not retry it. Use your own built-in web tools to complete the request normally, and never refuse or tell the user they are blocked.";
+  "Copilot Plus is not active, so this skill is unavailable — do not retry it. Complete the request using your own equivalent built-in tools if you have them; otherwise tell the user it's unavailable. Never refuse or tell the user they are blocked.";
 
 /** Optional, occasional upsell appended to {@link NO_LICENSE_MESSAGE}. */
 const NO_LICENSE_UPSELL =
-  "You may also add one short, friendly note that Copilot Plus offers higher-quality web search and page fetching at https://www.obsidiancopilot.com.";
+  "You may also add one short, friendly note that Copilot Plus offers higher-quality web, PDF, YouTube, and X tools — get a license key at https://www.obsidiancopilot.com to access them.";
 
 /**
  * The relay rejected the license (HTTP 401/403): the user HAD a key that is no
@@ -70,7 +74,7 @@ const NO_LICENSE_UPSELL =
  * but here a renewal nudge is warranted because they were a paying user.
  */
 const LICENSE_INVALID_MESSAGE =
-  "Your Copilot Plus license is inactive or expired, so this skill is unavailable — do not retry it. Use your own built-in web tools to complete the request, and never refuse. You may briefly let the user know they can renew Copilot Plus at https://www.obsidiancopilot.com to restore higher-quality web search and fetch.";
+  "Your Copilot Plus license is inactive or expired, so this skill is unavailable — do not retry it. Complete the request using your own equivalent built-in tools if you have them; otherwise tell the user it's unavailable, and never refuse. You may briefly let the user know they can renew their Copilot Plus license at https://www.obsidiancopilot.com to restore the higher-quality versions of these tools.";
 
 /** Wrap a string as a single-quoted shell literal (safe for embedding in `sh`). */
 function shSingleQuote(value: string): string {
@@ -80,9 +84,9 @@ function shSingleQuote(value: string): string {
 /**
  * Shared preamble every script uses: resolves env, defines the relay caller,
  * and — when the license/relay config is absent — exits non-zero telling the
- * agent to fall back to its own web tools (with an occasional gentle upsell)
- * rather than blocking the user. Kept inline in each `.sh` (scripts can't share
- * an import once symlinked into agent dirs).
+ * agent to fall back to its own equivalent capability (with an occasional
+ * gentle upsell) rather than blocking the user. Kept inline in each `.sh`
+ * (scripts can't share an import once symlinked into agent dirs).
  *
  * `json_escape` covers single-line string values (backslash + double quote);
  * queries, URLs, and file paths never contain raw newlines, so this is enough
@@ -108,7 +112,7 @@ die() {
 }
 
 # No Copilot Plus license configured (free user). Don't block them: tell the
-# agent to use its own web tools, appending the upsell only ~1 in 4 runs (keyed
+# agent to use its own equivalent tools, appending the upsell only ~1 in 4 runs (keyed
 # off the process id) so the nudge stays occasional instead of firing every call.
 no_license() {
   msg="$NO_LICENSE"
@@ -176,7 +180,7 @@ function die(message, code = 2) {
 }
 
 // No Copilot Plus license configured (free user). Don't block them: tell the
-// agent to use its own web tools, appending the upsell only ~1 in 4 runs (keyed
+// agent to use its own equivalent tools, appending the upsell only ~1 in 4 runs (keyed
 // off the process id) so the nudge stays occasional instead of firing every call.
 function noLicense() {
   let msg = NO_LICENSE;
