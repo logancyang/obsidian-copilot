@@ -111,6 +111,9 @@ export const CodexBackendDescriptor: BackendDescriptor = {
   restartOnManagedSkillsChange: false,
   restartOnProviderConfigChange: false,
   restartOnSystemPromptChange: true,
+  // codex names a session after the raw first prompt (which leaks the injected
+  // context envelope), so the session derives the tab title client-side instead.
+  summarizesSessionTitle: false,
   wire: codexWire,
   showModelDescriptions: true,
 

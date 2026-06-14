@@ -37,6 +37,7 @@ import {
 import { err2String, formatDateTime } from "@/utils";
 import { MethodUnsupportedError } from "@/agentMode/session/errors";
 import { resolveMcpServers } from "@/agentMode/session/mcpResolver";
+import { deriveChatTitleFromMessages } from "@/agentMode/session/chatHistoryMerge";
 import { getSettings } from "@/settings/model";
 import { ContextProcessor } from "@/contextProcessor";
 import { escapeXml } from "@/LLMProviders/chainRunner/utils/xmlParsing";
@@ -684,6 +685,17 @@ export class AgentSession {
     else this.applyAgentLabel(label);
   }
 
+  /**
+   * Whether this backend produces its own clean session titles (opencode). When
+   * false (codex, Claude Code) the session derives the tab label client-side and
+   * ignores any backend-provided title. Defaults to `true` when no descriptor is
+   * wired (legacy/test construction), preserving the prior trust-the-backend
+   * behavior.
+   */
+  private backendSummarizesTitle(): boolean {
+    return this.getDescriptor?.()?.summarizesSessionTitle ?? true;
+  }
+
   private applyAgentLabel(label: string | null | undefined): void {
     if (this.labelSource === "user") return;
     const next = label?.trim() ? label.trim() : null;
@@ -751,6 +763,13 @@ export class AgentSession {
     this.placeholderId = this.store.addMessage(placeholder);
     this.currentMessageIds = new Set();
     this.notifyMessages();
+
+    // Backends without a title summarizer (codex, Claude Code) have no usable
+    // backend-provided title, so derive the tab label from the first user
+    // message. Recorded agent-sourced (not "user"), so a later Rename still wins.
+    if (this.label === null && !this.backendSummarizesTitle()) {
+      this.applyAgentLabel(deriveChatTitleFromMessages(this.store.getDisplayMessages()));
+    }
 
     this.abortController = new AbortController();
     // Clear any prior terminal error before the new turn starts so the
@@ -1146,7 +1165,9 @@ export class AgentSession {
 
     // Session-scoped updates aren't tied to a turn placeholder.
     if (update.sessionUpdate === "session_info_update") {
-      this.applyAgentLabel(update.title);
+      // Only trust a pushed title from a backend that actually summarizes
+      // (opencode). codex would push its raw-prompt-derived title here.
+      if (this.backendSummarizesTitle()) this.applyAgentLabel(update.title);
       return;
     }
     if (update.sessionUpdate === "state_changed") {
@@ -1372,6 +1393,9 @@ export class AgentSession {
    */
   private async pollSessionTitle(): Promise<void> {
     if (this.labelSource === "user") return;
+    // Only backends that summarize return a clean title; for the rest the tab
+    // label is derived client-side from the first user message (see sendPrompt).
+    if (!this.backendSummarizesTitle()) return;
     try {
       const resp = await this.backend.listSessions(this.cwd ? { cwd: this.cwd } : {});
       const entry = resp.sessions.find((s) => s.sessionId === this.backendSessionId);

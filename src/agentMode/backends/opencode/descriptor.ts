@@ -148,6 +148,8 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
   restartOnManagedSkillsChange: true,
   restartOnProviderConfigChange: true,
   restartOnSystemPromptChange: true,
+  // opencode runs a title-summarizer agent and returns clean session titles.
+  summarizesSessionTitle: true,
   wire: opencodeWire,
 
   getEnabledModelEntries(settings: CopilotSettings): EnabledModelEntry[] {

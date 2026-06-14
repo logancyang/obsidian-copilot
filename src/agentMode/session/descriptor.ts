@@ -145,6 +145,21 @@ export interface BackendDescriptor {
    */
   readonly restartOnSystemPromptChange: boolean;
 
+  /**
+   * When true, this backend runs its own title-summarizer agent and returns a
+   * clean conversation title via `session/list` / a pushed `session_info_update`
+   * (opencode). The session trusts those titles.
+   *
+   * When false (codex, Claude Code), the backend has no usable title source:
+   * codex names a session after the raw first prompt, leaking the injected
+   * `<copilot-context>` envelope, and the Claude SDK exposes no title API. For
+   * these the session derives the tab title client-side from the user's first
+   * visible message and ignores any backend-provided title.
+   *
+   * Required (not optional) so a new backend must make an explicit decision.
+   */
+  readonly summarizesSessionTitle: boolean;
+
   /** Sync read of install/setup state from settings + last-known disk reconcile. */
   getInstallState(settings: CopilotSettings): InstallState;
 

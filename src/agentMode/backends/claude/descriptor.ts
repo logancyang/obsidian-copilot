@@ -150,6 +150,9 @@ export const ClaudeBackendDescriptor: BackendDescriptor = {
   // The Claude SDK adapter re-reads the composed system prompt per
   // `newSession()`, so a new chat picks up prompt changes without a restart.
   restartOnSystemPromptChange: false,
+  // The Claude SDK exposes no session-title API, so the session derives the tab
+  // title client-side from the user's first message.
+  summarizesSessionTitle: false,
   wire: claudeWire,
   showModelDescriptions: true,
 

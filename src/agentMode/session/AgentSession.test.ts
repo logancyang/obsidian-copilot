@@ -86,6 +86,16 @@ function makeMockBackend(): MockBackend {
   };
 }
 
+/** Descriptor stub for a backend that summarizes its own titles (opencode). */
+function summarizingDescriptor(): BackendDescriptor {
+  return { summarizesSessionTitle: true } as unknown as BackendDescriptor;
+}
+
+/** Descriptor stub for a backend that does NOT summarize (codex, Claude Code). */
+function nonSummarizingDescriptor(): BackendDescriptor {
+  return { summarizesSessionTitle: false } as unknown as BackendDescriptor;
+}
+
 describe("buildPromptBlocks", () => {
   // eslint-disable-next-line obsidianmd/no-tfile-tfolder-cast -- test fixture; not a real TFile
   const makeFile = (path: string) => ({ path }) as unknown as TFile;
@@ -1752,6 +1762,97 @@ describe("AgentSession title poll after turn", () => {
     await flushMicrotasks();
     expect(mock.listSessions).toHaveBeenCalledWith({});
     expect(session.getLabel()).toBe("Found me");
+  });
+});
+
+describe("AgentSession client-derived title (non-summarizing backends)", () => {
+  async function flushMicrotasks(): Promise<void> {
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+  }
+
+  function makeSession(backendId: "codex" | "claude" | "opencode", summarizes: boolean) {
+    return new AgentSession({
+      backend: makeMockBackend().asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId,
+      getDescriptor: summarizes ? summarizingDescriptor : nonSummarizingDescriptor,
+    });
+  }
+
+  it("derives the tab label from the first user message for codex", () => {
+    const session = makeSession("codex", false);
+    session.sendPrompt("Summarize my meeting notes");
+    expect(session.getLabel()).toBe("Summarize my meeting notes");
+    expect(session.getLabelSource()).toBe("agent");
+  });
+
+  it("derives the tab label from the first user message for Claude Code", () => {
+    const session = makeSession("claude", false);
+    session.sendPrompt("Refactor the auth module");
+    expect(session.getLabel()).toBe("Refactor the auth module");
+  });
+
+  it("strips wikilink brackets when deriving the title", () => {
+    const session = makeSession("codex", false);
+    session.sendPrompt("Review [[Project Plan]] please");
+    expect(session.getLabel()).toBe("Review Project Plan please");
+  });
+
+  it("keeps the first message's derived title across later turns", async () => {
+    const session = makeSession("codex", false);
+    await session.sendPrompt("First prompt").turn;
+    expect(session.getLabel()).toBe("First prompt");
+    await session.sendPrompt("A different second prompt").turn;
+    expect(session.getLabel()).toBe("First prompt");
+  });
+
+  it("does not override a user rename with a derived title", () => {
+    const session = makeSession("codex", false);
+    session.setLabel("My rename");
+    session.sendPrompt("Some prompt that would otherwise become the title");
+    expect(session.getLabel()).toBe("My rename");
+    expect(session.getLabelSource()).toBe("user");
+  });
+
+  it("does not derive a label for a summarizing backend (opencode)", () => {
+    const session = makeSession("opencode", true);
+    session.sendPrompt("This should not become the tab title");
+    expect(session.getLabel()).toBeNull();
+  });
+
+  it("ignores a backend-pushed session_info_update title for non-summarizing backends", () => {
+    const mock = makeMockBackend();
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "codex",
+      getDescriptor: nonSummarizingDescriptor,
+    });
+    session.sendPrompt("Original user prompt");
+    mock.emit({
+      sessionId: "acp-1",
+      update: { sessionUpdate: "session_info_update", title: "<copilot-context> leaked title" },
+    });
+    expect(session.getLabel()).toBe("Original user prompt");
+  });
+
+  it("does not poll listSessions after a turn for non-summarizing backends", async () => {
+    const mock = makeMockBackend();
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "codex",
+      cwd: "/vault",
+      getDescriptor: nonSummarizingDescriptor,
+    });
+    await session.sendPrompt("hello").turn;
+    await flushMicrotasks();
+    expect(mock.listSessions).not.toHaveBeenCalled();
   });
 });
 
