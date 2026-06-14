@@ -15,8 +15,11 @@ import type { AgentChatMessage } from "@/agentMode/session/types";
  *
  * Each line is one JSON record. We keep only genuine user prompts and assistant
  * prose, skipping everything else the CLI logs:
- *  - `type: "user"` with a **string** content → a typed prompt. (Array content
- *    on a user record is a `tool_result`, not user input — skipped.)
+ *  - `type: "user"` with a **string** content → a typed prompt.
+ *  - `type: "user"` with **array** content → either a multimodal prompt (text +
+ *    image blocks, e.g. an attached image) or a `tool_result`. We keep the text
+ *    blocks (images are dropped from the display) and skip the record only when
+ *    it carries a `tool_result` block, which is agent output rather than input.
  *  - `type: "assistant"` → concatenated `text` blocks (tool_use / thinking
  *    blocks dropped); skipped entirely when the turn was pure tool use.
  *  - `isMeta` / `isSidechain` records, summaries, attachments, queue ops,
@@ -43,16 +46,17 @@ export function parseClaudeTranscript(jsonlText: string): AgentChatMessage[] {
     if (entry.type === "user" && typeof content === "string") {
       sender = USER_SENDER;
       text = stripUserMessageWrapper(content).trim();
+    } else if (entry.type === "user" && Array.isArray(content)) {
+      // A tool_result is agent output the CLI logs as a user record — skip it.
+      // Anything else (text + image blocks) is a genuine multimodal prompt;
+      // keep its text and drop the images from the display.
+      if (!content.some((b) => b?.type === "tool_result")) {
+        sender = USER_SENDER;
+        text = stripUserMessageWrapper(joinTextBlocks(content)).trim();
+      }
     } else if (entry.type === "assistant" && Array.isArray(content)) {
       sender = AI_SENDER;
-      text = content
-        .filter(
-          (b): b is { type: "text"; text: string } =>
-            b?.type === "text" && typeof b.text === "string"
-        )
-        .map((b) => b.text)
-        .join("\n\n")
-        .trim();
+      text = joinTextBlocks(content);
     }
     if (!sender || !text) continue;
 
@@ -74,8 +78,24 @@ interface ClaudeTranscriptEntry {
   timestamp?: unknown;
   message?: {
     role?: string;
-    content?: string | Array<{ type?: string; text?: string }>;
+    content?: string | ContentBlock[];
   };
+}
+
+interface ContentBlock {
+  type?: string;
+  text?: string;
+}
+
+/** Concatenate the `text` blocks of a content array, ignoring tool_use, image, etc. */
+function joinTextBlocks(content: ContentBlock[]): string {
+  return content
+    .filter(
+      (b): b is { type: "text"; text: string } => b?.type === "text" && typeof b.text === "string"
+    )
+    .map((b) => b.text)
+    .join("\n\n")
+    .trim();
 }
 
 /**

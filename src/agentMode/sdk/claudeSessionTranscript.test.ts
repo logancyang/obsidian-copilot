@@ -52,6 +52,48 @@ describe("parseClaudeTranscript", () => {
     ]);
   });
 
+  it("keeps the text of a multimodal user prompt and drops its image blocks", () => {
+    const jsonl = [
+      line({
+        type: "user",
+        timestamp: TS,
+        message: {
+          role: "user",
+          content: [
+            { type: "text", text: "what is in this picture?" },
+            { type: "image", source: { type: "base64", media_type: "image/png", data: "iVBOR" } },
+          ],
+        },
+      }),
+      line({
+        type: "assistant",
+        timestamp: TS,
+        message: { role: "assistant", content: [{ type: "text", text: "a cat" }] },
+      }),
+    ].join("\n");
+
+    expect(parseClaudeTranscript(jsonl).map((m) => [m.sender, m.message])).toEqual([
+      [USER_SENDER, "what is in this picture?"],
+      [AI_SENDER, "a cat"],
+    ]);
+  });
+
+  it("unwraps the <user-message> envelope on a multimodal prompt", () => {
+    const wrapped =
+      "<copilot-context>\nNotes:\n- a.md\n</copilot-context>\n\n<user-message>\ndescribe the image\n</user-message>";
+    const jsonl = line({
+      type: "user",
+      message: {
+        role: "user",
+        content: [
+          { type: "text", text: wrapped },
+          { type: "image", source: { type: "base64", media_type: "image/png", data: "iVBOR" } },
+        ],
+      },
+    });
+    expect(parseClaudeTranscript(jsonl)[0].message).toBe("describe the image");
+  });
+
   it("unwraps the <user-message> envelope, dropping the context block", () => {
     const wrapped =
       "<copilot-context>\nNotes:\n- a.md\n</copilot-context>\n\n<user-message>\nsummarize a.md\n</user-message>";
