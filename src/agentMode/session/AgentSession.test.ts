@@ -1,6 +1,11 @@
 import { AI_SENDER, USER_SENDER } from "@/constants";
 import type { TFile } from "obsidian";
-import { AgentSession, buildPromptBlocks, tryReadExitPlanModeCall } from "./AgentSession";
+import {
+  AgentSession,
+  buildPromptBlocks,
+  buildUserDisplayContent,
+  tryReadExitPlanModeCall,
+} from "./AgentSession";
 import { AuthRequiredError, MethodUnsupportedError } from "./errors";
 import type {
   AgentToolCallOutput,
@@ -318,6 +323,30 @@ describe("AgentSession.restoreLabel", () => {
   });
 });
 
+describe("buildUserDisplayContent", () => {
+  it("returns undefined when there is no prompt content", () => {
+    expect(buildUserDisplayContent()).toBeUndefined();
+    expect(buildUserDisplayContent([])).toBeUndefined();
+  });
+
+  it("returns undefined when prompt content has no images", () => {
+    expect(buildUserDisplayContent([{ type: "text", text: "hi" }])).toBeUndefined();
+  });
+
+  it("projects each image block into an image_url data-URL entry, ignoring non-images", () => {
+    expect(
+      buildUserDisplayContent([
+        { type: "text", text: "describe these" },
+        { type: "image", mimeType: "image/png", data: "AAA=" },
+        { type: "image", mimeType: "image/jpeg", data: "BBB=" },
+      ])
+    ).toEqual([
+      { type: "image_url", image_url: { url: "data:image/png;base64,AAA=" } },
+      { type: "image_url", image_url: { url: "data:image/jpeg;base64,BBB=" } },
+    ]);
+  });
+});
+
 describe("AgentSession.sendPrompt", () => {
   it("appends user + placeholder synchronously and resolves on stopReason", async () => {
     const mock = makeMockBackend();
@@ -361,7 +390,11 @@ describe("AgentSession.sendPrompt", () => {
     ]).turn;
     const messages = session.store.getDisplayMessages();
     expect(messages[0].message).toBe("describe");
-    expect(messages[0].content).toBeUndefined();
+    // The posted user bubble carries the image as a renderable data-URL entry,
+    // while the backend still receives the original base64 image block.
+    expect(messages[0].content).toEqual([
+      { type: "image_url", image_url: { url: "data:image/png;base64,aGVsbG8=" } },
+    ]);
     expect(mock.prompt).toHaveBeenCalledWith({
       sessionId: "acp-1",
       prompt: [
@@ -369,6 +402,18 @@ describe("AgentSession.sendPrompt", () => {
         { type: "image", mimeType: "image/png", data: "aGVsbG8=" },
       ],
     });
+  });
+
+  it("leaves the user message content unset when no images are attached", () => {
+    const mock = makeMockBackend();
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+    });
+    session.sendPrompt("just text");
+    expect(session.store.getDisplayMessages()[0].content).toBeUndefined();
   });
 
   it("rejects if a turn is already in flight", () => {

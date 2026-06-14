@@ -750,6 +750,9 @@ export class AgentSession {
       timestamp: formatDateTime(new Date()),
       isVisible: true,
       context,
+      // Surface attached images in the posted bubble. The backend consumes the
+      // original `promptContent` image blocks; this is a display-only projection.
+      content: buildUserDisplayContent(promptContent),
     };
     const userMessageId = this.store.addMessage(userMessage);
 
@@ -1504,6 +1507,26 @@ function tryParseJsonObject(s: string): Record<string, unknown> | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Project outgoing image prompt blocks into the display `content` shape the
+ * chat renderer understands: `ChatSingleMessage` renders `image_url` entries as
+ * `<img>`. The backend still consumes the original `PromptContent` image blocks
+ * (base64); this is a display-only projection so attached images show in the
+ * posted user bubble. Returns undefined when there are no images.
+ */
+export function buildUserDisplayContent(
+  promptContent?: PromptContent[]
+): Array<{ type: "image_url"; image_url: { url: string } }> | undefined {
+  const images = (promptContent ?? []).filter(
+    (p): p is Extract<PromptContent, { type: "image" }> => p.type === "image"
+  );
+  if (images.length === 0) return undefined;
+  return images.map((img) => ({
+    type: "image_url",
+    image_url: { url: `data:${img.mimeType};base64,${img.data}` },
+  }));
 }
 
 export function buildPromptBlocks(
