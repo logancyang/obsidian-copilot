@@ -133,10 +133,11 @@ export interface EnabledModelEntry {
   description?: string;
   credentialState: EnabledModelCredentialState;
   /**
-   * `true` when the model is free per the catalog (zero input+output cost).
-   * Drives the picker's privacy warning: free models are typically routed
-   * through third-party providers whose terms allow retaining or training on
-   * prompts. `undefined` when cost is unknown (not flagged).
+   * `true` when the model is free per the catalog (zero input+output cost) AND
+   * routed through a third party. Drives the picker's privacy warning, since
+   * such providers' terms commonly allow retaining or training on prompts.
+   * Self-hosted / local endpoints (Ollama, LM Studio) are excluded — their
+   * prompts never leave the machine. `undefined`/`false` when not flagged.
    */
   isFree?: boolean;
 }

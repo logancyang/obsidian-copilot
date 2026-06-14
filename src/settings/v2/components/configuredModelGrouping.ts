@@ -2,7 +2,7 @@
 
 import type { ModelEnableGroup, ModelEnableRow } from "@/agentMode";
 import type { ConfiguredModel, Provider } from "@/modelManagement";
-import { isFreeModelCost } from "@/modelManagement";
+import { isFreeModelCost, isSelfHostedProvider } from "@/modelManagement";
 
 /** One candidate model joined to its provider, plus current enabled state. */
 export interface Candidate {
@@ -111,7 +111,7 @@ export function opencodeOnlySubGroupLabel(model: ConfiguredModel, provider: Prov
  * matching it. This keeps the row identical to the chat picker.
  */
 export function toRow(candidate: Candidate): ModelEnableRow {
-  const { configuredModel, enabled } = candidate;
+  const { configuredModel, provider, enabled } = candidate;
   const { displayName, id, description, cost } = configuredModel.info;
   return {
     id: configuredModel.configuredModelId,
@@ -119,7 +119,9 @@ export function toRow(candidate: Candidate): ModelEnableRow {
     description: description || undefined,
     wireId: id,
     enabled,
-    isFree: isFreeModelCost(cost),
+    // Only warn on free models routed through a third party; a self-hosted /
+    // local endpoint (Ollama, LM Studio) keeps prompts on the user's machine.
+    isFree: isFreeModelCost(cost) && !isSelfHostedProvider(provider),
   };
 }
 

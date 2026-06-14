@@ -21,9 +21,10 @@ export interface ModelEnableRow {
   /** Whether the model is currently enabled. */
   enabled: boolean;
   /**
-   * `true` for a free model (zero catalog cost). Renders a privacy-warning icon
-   * + tooltip beside the label, since free models are usually routed through
-   * third-party providers that may retain or train on prompts.
+   * `true` for a free model (zero catalog cost) routed through a third party.
+   * Renders a privacy-warning icon + tooltip beside the label, since such
+   * providers may retain or train on prompts. Self-hosted / local models
+   * (Ollama, LM Studio) are excluded.
    */
   isFree?: boolean;
 }

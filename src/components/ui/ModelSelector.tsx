@@ -46,10 +46,10 @@ export type ModelSelectorEntry = CustomModel & {
    */
   _subtitle?: string;
   /**
-   * `true` for a free model (zero catalog cost). The dropdown row renders a
-   * privacy-warning icon + tooltip beside the name, since free models are
-   * usually routed through third-party providers that may retain or train on
-   * prompts.
+   * `true` for a free model (zero catalog cost) routed through a third party.
+   * The dropdown row renders a privacy-warning icon + tooltip beside the name,
+   * since such providers may retain or train on prompts. Self-hosted / local
+   * models are excluded.
    */
   _isFree?: boolean;
 };

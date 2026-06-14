@@ -158,6 +158,25 @@ describe("opencodeEnabledModelEntries", () => {
     expect(byId.get("opencode/mystery")?.isFree).toBe(false);
   });
 
+  it("does not flag a zero-cost self-hosted (local) model as free", () => {
+    const local: ConfiguredModel = {
+      configuredModelId: "cm-local",
+      providerId: "p1",
+      info: { id: "gpt-oss-20b", displayName: "GPT OSS 20B", cost: { input: 0, output: 0 } },
+      configuredAt: 0,
+    };
+    const settings = makeSettings({
+      enabledModels: ["cm-local"],
+      // OpenAI-compatible BYOK pointed at a localhost endpoint = self-hosted.
+      providers: {
+        p1: makeProvider("p1", { kind: "byok" }, "openai-compatible"),
+      },
+      configuredModels: [local],
+    });
+    settings.providers.p1.baseUrl = "http://localhost:1234/v1";
+    expect(opencodeEnabledModelEntries(settings)[0].isFree).toBe(false);
+  });
+
   it("returns the shared frozen empty array when nothing is enabled", () => {
     const first = opencodeEnabledModelEntries(makeSettings({ enabledModels: [] }));
     const second = opencodeEnabledModelEntries(makeSettings({ enabledModels: [] }));

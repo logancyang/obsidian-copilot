@@ -1,6 +1,6 @@
 import type { CopilotSettings } from "@/settings/model";
 import type { ConfiguredModel, Provider } from "@/modelManagement";
-import { isFreeModelCost, providerRequiresApiKey } from "@/modelManagement";
+import { isFreeModelCost, isSelfHostedProvider, providerRequiresApiKey } from "@/modelManagement";
 import type { EnabledModelCredentialState, EnabledModelEntry } from "@/agentMode/session/types";
 
 export interface OpencodeProviderMapping {
@@ -110,7 +110,9 @@ export function opencodeEnabledModelEntries(
       name: configuredModel.info.displayName || configuredModel.info.id,
       description: configuredModel.info.description,
       credentialState: credentialStateFor(provider, mapping.native),
-      isFree: isFreeModelCost(configuredModel.info.cost),
+      // Only warn on free models routed through a third party; a self-hosted /
+      // local endpoint (Ollama, LM Studio) keeps prompts on the user's machine.
+      isFree: isFreeModelCost(configuredModel.info.cost) && !isSelfHostedProvider(provider),
     });
   }
   return out.length === 0 ? EMPTY_ENABLED_ENTRIES : out;

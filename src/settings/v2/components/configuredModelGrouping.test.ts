@@ -246,6 +246,28 @@ describe("toRow", () => {
     expect(row("cm2", "opencode/glm-5", { input: 1, output: 3.2 }).isFree).toBe(false);
     expect(row("cm3", "opencode/mystery").isFree).toBe(false);
   });
+
+  it("does not flag a zero-cost self-hosted (local) model as free", () => {
+    const localProvider: Provider = {
+      providerId: "lmstudio",
+      providerType: "openai-compatible",
+      displayName: "LM Studio",
+      origin: { kind: "byok" },
+      baseUrl: "http://localhost:1234/v1",
+      addedAt: 0,
+    };
+    const local = toRow({
+      configuredModel: {
+        configuredModelId: "cm-local",
+        providerId: "lmstudio",
+        info: { id: "gpt-oss-20b", displayName: "GPT OSS 20B", cost: { input: 0, output: 0 } },
+        configuredAt: 0,
+      },
+      provider: localProvider,
+      enabled: false,
+    });
+    expect(local.isFree).toBe(false);
+  });
 });
 
 describe("rowMatches", () => {
