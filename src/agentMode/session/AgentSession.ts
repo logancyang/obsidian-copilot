@@ -752,7 +752,7 @@ export class AgentSession {
       context,
       // Surface attached images in the posted bubble. The backend consumes the
       // original `promptContent` image blocks; this is a display-only projection.
-      content: buildUserDisplayContent(promptContent),
+      content: buildUserDisplayContent(displayText, promptContent),
     };
     const userMessageId = this.store.addMessage(userMessage);
 
@@ -1509,24 +1509,40 @@ function tryParseJsonObject(s: string): Record<string, unknown> | null {
   }
 }
 
+type DisplayContentItem =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } };
+
 /**
- * Project outgoing image prompt blocks into the display `content` shape the
- * chat renderer understands: `ChatSingleMessage` renders `image_url` entries as
- * `<img>`. The backend still consumes the original `PromptContent` image blocks
- * (base64); this is a display-only projection so attached images show in the
- * posted user bubble. Returns undefined when there are no images.
+ * Project a user prompt's text + outgoing image blocks into the display
+ * `content` shape the chat renderer understands: `ChatSingleMessage` renders a
+ * `content` array of `text` and `image_url` entries (text first, then images,
+ * mirroring the legacy chat composer). The backend still consumes the original
+ * `PromptContent` image blocks (base64); this is a display-only projection so
+ * attached images show in the posted user bubble.
+ *
+ * Returns undefined when there are no images — text-only messages render via the
+ * renderer's plain `message` fallback and don't need a `content` array. When
+ * images are present, the text entry is included only if there is prompt text,
+ * so an image-only message doesn't render an empty text line.
  */
 export function buildUserDisplayContent(
+  displayText: string,
   promptContent?: PromptContent[]
-): Array<{ type: "image_url"; image_url: { url: string } }> | undefined {
+): DisplayContentItem[] | undefined {
   const images = (promptContent ?? []).filter(
     (p): p is Extract<PromptContent, { type: "image" }> => p.type === "image"
   );
   if (images.length === 0) return undefined;
-  return images.map((img) => ({
-    type: "image_url",
-    image_url: { url: `data:${img.mimeType};base64,${img.data}` },
-  }));
+  const content: DisplayContentItem[] = [];
+  if (displayText.trim()) content.push({ type: "text", text: displayText });
+  for (const img of images) {
+    content.push({
+      type: "image_url",
+      image_url: { url: `data:${img.mimeType};base64,${img.data}` },
+    });
+  }
+  return content;
 }
 
 export function buildPromptBlocks(

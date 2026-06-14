@@ -324,26 +324,29 @@ describe("AgentSession.restoreLabel", () => {
 });
 
 describe("buildUserDisplayContent", () => {
-  it("returns undefined when there is no prompt content", () => {
-    expect(buildUserDisplayContent()).toBeUndefined();
-    expect(buildUserDisplayContent([])).toBeUndefined();
+  it("returns undefined when there are no images", () => {
+    expect(buildUserDisplayContent("hi")).toBeUndefined();
+    expect(buildUserDisplayContent("hi", [])).toBeUndefined();
+    expect(buildUserDisplayContent("hi", [{ type: "text", text: "x" }])).toBeUndefined();
   });
 
-  it("returns undefined when prompt content has no images", () => {
-    expect(buildUserDisplayContent([{ type: "text", text: "hi" }])).toBeUndefined();
-  });
-
-  it("projects each image block into an image_url data-URL entry, ignoring non-images", () => {
+  it("puts the prompt text first, then an image_url entry per image", () => {
     expect(
-      buildUserDisplayContent([
-        { type: "text", text: "describe these" },
+      buildUserDisplayContent("describe these", [
         { type: "image", mimeType: "image/png", data: "AAA=" },
         { type: "image", mimeType: "image/jpeg", data: "BBB=" },
       ])
     ).toEqual([
+      { type: "text", text: "describe these" },
       { type: "image_url", image_url: { url: "data:image/png;base64,AAA=" } },
       { type: "image_url", image_url: { url: "data:image/jpeg;base64,BBB=" } },
     ]);
+  });
+
+  it("omits the text entry for an image-only message", () => {
+    expect(
+      buildUserDisplayContent("   ", [{ type: "image", mimeType: "image/png", data: "AAA=" }])
+    ).toEqual([{ type: "image_url", image_url: { url: "data:image/png;base64,AAA=" } }]);
   });
 });
 
@@ -390,9 +393,11 @@ describe("AgentSession.sendPrompt", () => {
     ]).turn;
     const messages = session.store.getDisplayMessages();
     expect(messages[0].message).toBe("describe");
-    // The posted user bubble carries the image as a renderable data-URL entry,
-    // while the backend still receives the original base64 image block.
+    // The posted user bubble carries the prompt text plus the image as a
+    // renderable data-URL entry, while the backend still receives the original
+    // base64 image block.
     expect(messages[0].content).toEqual([
+      { type: "text", text: "describe" },
       { type: "image_url", image_url: { url: "data:image/png;base64,aGVsbG8=" } },
     ]);
     expect(mock.prompt).toHaveBeenCalledWith({
