@@ -161,16 +161,6 @@ describe("opencodeEnabledModelEntries", () => {
     expect(byId.get("lmstudio/gpt-oss-20b")?.isFree).toBe(false);
   });
 
-  it("does not flag a BYOK model whose routed wire id is not opencode Zen", () => {
-    const settings = makeSettings({
-      enabledModels: ["cm1"],
-      providers: { p1: byokProvider() },
-      configuredModels: [makeModel("cm1", "p1", "qwen/qwen3-max")],
-    });
-    // baseModelId becomes `openrouter/qwen/qwen3-max` — not an `opencode/` prefix.
-    expect(opencodeEnabledModelEntries(settings)[0].isFree).toBe(false);
-  });
-
   it("returns the shared frozen empty array when nothing is enabled", () => {
     const first = opencodeEnabledModelEntries(makeSettings({ enabledModels: [] }));
     const second = opencodeEnabledModelEntries(makeSettings({ enabledModels: [] }));

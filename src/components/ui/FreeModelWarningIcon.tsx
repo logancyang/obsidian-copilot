@@ -1,8 +1,10 @@
 import { cn } from "@/lib/utils";
-import { FREE_MODEL_PRIVACY_WARNING } from "@/components/ui/freeModelWarning";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { AlertTriangle } from "lucide-react";
 import React from "react";
+
+const FREE_MODEL_PRIVACY_WARNING =
+  "Free model. The provider may log or train on your prompts. Review their privacy terms before sending sensitive content.";
 
 /**
  * Small amber warning icon shown beside opencode Zen (free third-party) models.

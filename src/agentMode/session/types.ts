@@ -133,11 +133,9 @@ export interface EnabledModelEntry {
   description?: string;
   credentialState: EnabledModelCredentialState;
   /**
-   * `true` for an opencode Zen model (the free tier opencode hosts itself,
-   * wire-id prefix `opencode/`). Drives the picker's privacy warning, since
-   * prompts go to a third party whose terms may allow logging or training.
-   * Models served elsewhere — BYOK, self-hosted/local (Ollama, LM Studio),
-   * other opencode sub-providers — are not flagged.
+   * `true` for an opencode Zen model (opencode's self-hosted free tier). The
+   * opencode backend computes this; the UI just renders a privacy warning, so
+   * it never needs to know what "Zen" means (`ui` can't import the backend).
    */
   isFree?: boolean;
 }

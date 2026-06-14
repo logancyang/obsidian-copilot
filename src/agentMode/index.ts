@@ -50,7 +50,6 @@ export { partitionOpencodeOnlyWireIds } from "./backends/opencode/opencodeProbeP
 export {
   mapProviderToOpencodeId,
   isOpencodeZenWireId,
-  OPENCODE_ZEN_PROVIDER_ID,
 } from "./backends/opencode/opencodeModelResolve";
 export type { OpencodeProviderMapping } from "./backends/opencode/opencodeModelResolve";
 export { installBadge, InstallBadge, InstallStatusLine } from "./backends/shared/installStatus";
