@@ -10,9 +10,10 @@ function scriptOf(name: string, ext: ".sh" | ".mjs" = ".sh"): string {
 }
 
 describe("builtin Copilot Plus skills", () => {
-  it("ships the four Copilot-branded skills, each fanned out to all three agents", () => {
+  it("ships the five Copilot-branded skills, each fanned out to all three agents", () => {
     expect(BUILTIN_SKILLS.map((s) => s.name)).toEqual([
       "copilot-web-search",
+      "copilot-web-fetch",
       "copilot-read-pdf",
       "copilot-youtube-transcript",
       "copilot-fetch-x",
@@ -53,8 +54,8 @@ describe("builtin Copilot Plus skills", () => {
       // Auth flows through the env var, not a literal embedded key.
       expect(sh).toContain("Authorization: Bearer $KEY");
       expect(sh).toContain("X-Client-Version: $CLIENT_VERSION");
-      // Guard + upgrade prompt when the license/relay config is absent.
-      expect(sh).toContain('[ -n "$KEY" ] && [ -n "$BASE" ] || die "$UPGRADE"');
+      // Guard + soft fallback when the license/relay config is absent.
+      expect(sh).toContain('[ -n "$KEY" ] && [ -n "$BASE" ] || no_license');
       expect(sh).toContain("Copilot Plus");
 
       const mjs = scriptOf(skill.name, ".mjs");
@@ -64,9 +65,38 @@ describe("builtin Copilot Plus skills", () => {
       expect(mjs).toContain('Authorization: "Bearer " + KEY');
       expect(mjs).toContain('"X-Client-Version": CLIENT_VERSION');
       // Same license guard as the shell script.
-      expect(mjs).toContain("if (!KEY || !BASE) die(UPGRADE);");
+      expect(mjs).toContain("if (!KEY || !BASE) noLicense();");
       expect(mjs).toContain("Copilot Plus");
     }
+  });
+
+  it("falls back to the agent's own tools instead of blocking when Plus is absent", () => {
+    for (const skill of BUILTIN_SKILLS) {
+      const sh = scriptOf(skill.name, ".sh");
+      // No license: tell the agent to use its own web tools, never refuse, and
+      // only append the upsell occasionally (gated on the process id).
+      expect(sh).toContain("Use your own built-in web tools");
+      expect(sh).toContain("never refuse");
+      expect(sh).toContain("$(( $$ % 4 ))");
+      // The invalid/expired-license (401/403) path is distinct and warrants a
+      // renewal note, but still falls back rather than refusing.
+      expect(sh).toContain('401|403) die "$LICENSE_INVALID"');
+      expect(sh).toContain("renew Copilot Plus");
+      // The old hard "requires Copilot Plus / upgrade" block is gone.
+      expect(sh).not.toContain("require Copilot Plus");
+
+      const mjs = scriptOf(skill.name, ".mjs");
+      expect(mjs).toContain("Use your own built-in web tools");
+      expect(mjs).toContain("process.pid % 4 === 0");
+      expect(mjs).toContain("die(LICENSE_INVALID)");
+    }
+  });
+
+  it("includes the firecrawl-backed web-fetch skill targeting /url4llm", () => {
+    expect(scriptOf("copilot-web-fetch", ".sh")).toContain('relay "/url4llm"');
+    expect(scriptOf("copilot-web-fetch", ".sh")).toContain('\\"url\\"');
+    expect(scriptOf("copilot-web-fetch", ".mjs")).toContain('await relay("/url4llm"');
+    expect(scriptOf("copilot-web-fetch", ".mjs")).toContain("url: ARG, user_id: USER_ID");
   });
 
   it("maps each relay tool to its endpoint and request body (both scripts)", () => {

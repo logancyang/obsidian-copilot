@@ -100,11 +100,14 @@ describe("buildAgentSystemPrompt", () => {
     const nonPlus = buildAgentSystemPrompt();
     expect(nonPlus).toContain(COPILOT_PLUS_TOOLS_STEERING);
     expect(nonPlus).toContain("copilot-web-search");
+    expect(nonPlus).toContain("copilot-web-fetch");
     expect(nonPlus).toContain("copilot-read-pdf");
     expect(nonPlus).toContain("copilot-youtube-transcript");
     expect(nonPlus).toContain("copilot-fetch-x");
-    // Fallback clause so a missing/unlicensed skill never dead-ends.
-    expect(nonPlus).toMatch(/fall back to whatever equivalent capability/i);
+    // Fallback clause so a missing/unlicensed skill never dead-ends or blocks
+    // a free user — it routes the agent to its own web tools instead.
+    expect(nonPlus).toMatch(/silently fall back to your own equivalent web tool/i);
+    expect(nonPlus).toMatch(/never refuse and never block the user/i);
 
     // A Plus user gets the same steering.
     updateSetting("isPlusUser", true);
