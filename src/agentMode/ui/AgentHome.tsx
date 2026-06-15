@@ -7,7 +7,6 @@ import { CopilotBrandIcon } from "@/agentMode/ui/CopilotBrandIcon";
 import { AgentHomeShelf, type AgentHomeShelfSection } from "@/agentMode/ui/AgentHomeShelf";
 import { GlobalRecentChatsSection } from "@/agentMode/ui/GlobalRecentChatsSection";
 import { ProjectPickerList } from "@/agentMode/ui/ProjectPickerList";
-import { ReportIssueModal } from "@/agentMode/ui/ReportIssueModal";
 import { useAgentChatRuntimeState } from "@/agentMode/ui/hooks/useAgentChatRuntimeState";
 import { useAgentHistoryControls } from "@/agentMode/ui/hooks/useAgentHistoryControls";
 import { useAgentInputDrafts } from "@/agentMode/ui/hooks/useAgentInputDrafts";
@@ -148,18 +147,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     // that session's fresh draft and AgentChatInput clears the global selected
     // text on the session switch — no explicit reset needed here.
   }, [manager]);
-
-  const handleReportIssue = useCallback(() => {
-    const captureTargetEl = chatContainerRef.current;
-    if (!app || !captureTargetEl) return;
-    const activeBackend = manager.getActiveSession()?.backendId ?? settings.agentMode.activeBackend;
-    new ReportIssueModal({
-      app,
-      captureTargetEl,
-      activeBackend,
-      pluginVersion: plugin.manifest.version,
-    }).open();
-  }, [app, manager, settings.agentMode.activeBackend, plugin.manifest.version]);
 
   const descriptor = useSessionBackendDescriptor(manager);
   const handleInstall = useCallback(() => {
@@ -378,7 +365,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                 {isGlobalLanding ? null : (
                   <AgentChatControls
                     onNewChat={handleNewChat}
-                    onReportIssue={handleReportIssue}
                     onSaveAsNote={handleSaveAsNote}
                     chatHistoryItems={chatHistoryItems}
                     onLoadHistory={handleLoadChatHistory}

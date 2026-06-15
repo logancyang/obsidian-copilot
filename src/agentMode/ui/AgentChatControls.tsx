@@ -6,7 +6,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useSettingsValue } from "@/settings/model";
-import { Bot, Bug, Download, History, MessageCirclePlus } from "lucide-react";
+import { Bot, Download, History, MessageCirclePlus } from "lucide-react";
 import React from "react";
 
 const resolveHistoryIcon = (item: ChatHistoryItem) =>
@@ -17,8 +17,6 @@ interface AgentChatControlsProps {
    * button is hidden — clicking it would be a no-op since there's nothing to
    * clear. */
   onNewChat?: () => void;
-  /** Open the "Report an issue" flow (screenshot + frame log bundle). */
-  onReportIssue?: () => void;
   /** Manual save handler. Surfaced as a Download button when
    * `settings.autosaveChat` is off, mirroring the regular chat. */
   onSaveAsNote?: () => void | Promise<void>;
@@ -42,7 +40,6 @@ interface AgentChatControlsProps {
  */
 export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
   onNewChat,
-  onReportIssue,
   onSaveAsNote,
   chatHistoryItems,
   onLoadHistory,
@@ -71,16 +68,6 @@ export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
               </Button>
             </TooltipTrigger>
             <TooltipContent>New Chat</TooltipContent>
-          </Tooltip>
-        )}
-        {onReportIssue && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost2" size="icon" title="Report an Issue" onClick={onReportIssue}>
-                <Bug className="tw-size-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Report an Issue</TooltipContent>
           </Tooltip>
         )}
         {!settings.autosaveChat && onSaveAsNote && (

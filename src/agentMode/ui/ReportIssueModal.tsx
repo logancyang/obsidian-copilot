@@ -19,8 +19,13 @@ const OPENCODE_BACKEND_ID = "opencode";
 
 export interface ReportIssueModalParams {
   app: App;
-  /** Root element of the agent view; screenshotted to capture the chat surface. */
-  captureTargetEl: HTMLElement;
+  /**
+   * Resolves the element to screenshot, called after this modal closes and just
+   * before capture. Lets the caller first dismiss any overlay (e.g. the Settings
+   * window) and reveal the Agent Mode pane so the shot is the chat surface, not
+   * the dialog. Returns `null` to skip the screenshot (e.g. no agent pane open).
+   */
+  resolveCaptureTarget: () => Promise<HTMLElement | null> | HTMLElement | null;
   /** Active backend id — gates the opencode-log option. */
   activeBackend: string;
   /** Plugin version for the report's environment block. */
@@ -199,10 +204,13 @@ export class ReportIssueModal extends Modal {
     new Notice("Preparing issue report…");
 
     try {
-      // Let the modal overlay tear down before capturing so the screenshot
-      // shows the chat surface, not a dimmed/closing dialog.
+      // Let this modal tear down, then let the caller dismiss any overlay (e.g.
+      // the Settings window) and reveal the agent pane. Wait again so the
+      // revealed pane is painted before capturePage reads its pixels.
       await sleep(200);
-      const screenshotPng = await captureViewScreenshot(this.params.captureTargetEl);
+      const captureTargetEl = await this.params.resolveCaptureTarget();
+      await sleep(250);
+      const screenshotPng = captureTargetEl ? await captureViewScreenshot(captureTargetEl) : null;
 
       // Only bundle the frame log when logging is currently enabled. A user who
       // opted out may still have a stale acp-frames.ndjson on disk; honoring the

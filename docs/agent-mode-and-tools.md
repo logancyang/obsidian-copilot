@@ -185,7 +185,7 @@ If you trust the agent and don't want to review every file change, enable **Auto
 
 ## Reporting an Issue
 
-When something goes wrong in Agent Mode, the **Report an Issue** button (the bug icon at the top of the chat) bundles everything a maintainer needs to diagnose it.
+When something goes wrong in Agent Mode, the **Report an Issue** button under **Settings → Copilot → Advanced → Agent Mode debugging** bundles everything a maintainer needs to diagnose it.
 
 Clicking it opens a short form where you describe what happened. When you submit, Copilot:
 
