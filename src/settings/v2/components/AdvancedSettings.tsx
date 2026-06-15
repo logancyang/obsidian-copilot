@@ -141,16 +141,34 @@ export const AdvancedSettings: React.FC = () => {
   };
 
   const handleReportIssue = useCallback(() => {
+    // Gate before importing the agentMode barrel: on mobile the barrel pulls in
+    // Node-only modules that throw during evaluation, so the desktop check must
+    // happen first (mirrors the frame-log buttons below).
+    if (!isDesktopRuntime()) {
+      new Notice("Reporting an issue is available on desktop only.");
+      return;
+    }
     void (async () => {
       const { ReportIssueModal } = await import("@/agentMode");
       const copilotPlugin = (
         app as unknown as {
-          plugins: { getPlugin: (id: string) => { manifest?: { version?: string } } | null };
+          plugins: {
+            getPlugin: (id: string) => {
+              manifest?: { version?: string };
+              agentSessionManager?: { getActiveSession?: () => { backendId?: string } | null };
+            } | null;
+          };
         }
       ).plugins.getPlugin("copilot");
+      // Prefer the active session's backend: switching Agent Mode tabs changes
+      // the active session without touching the persisted default backend, so
+      // settings.agentMode.activeBackend can name the wrong pane.
+      const activeBackend =
+        copilotPlugin?.agentSessionManager?.getActiveSession?.()?.backendId ??
+        settings.agentMode.activeBackend;
       new ReportIssueModal({
         app,
-        activeBackend: settings.agentMode.activeBackend,
+        activeBackend,
         pluginVersion: copilotPlugin?.manifest?.version ?? "unknown",
         // Resolve at capture time so we can close this Settings window and
         // reveal the agent pane first — the screenshot should be the chat
