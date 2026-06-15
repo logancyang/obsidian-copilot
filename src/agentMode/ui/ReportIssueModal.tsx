@@ -75,7 +75,9 @@ interface ReportIssueContentProps {
 
 function ReportIssueContent({ showOpencodeOption, onSubmit, onCancel }: ReportIssueContentProps) {
   const [note, setNote] = React.useState("");
-  const [includeOpencodeLog, setIncludeOpencodeLog] = React.useState(showOpencodeOption);
+  // Opt-in by default: the bundled log is opencode's newest *global* log, which
+  // may belong to an unrelated CLI/Desktop session, so don't attach it silently.
+  const [includeOpencodeLog, setIncludeOpencodeLog] = React.useState(false);
 
   return (
     <div className="tw-flex tw-flex-col tw-gap-4">
