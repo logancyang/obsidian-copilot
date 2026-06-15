@@ -461,9 +461,35 @@ process.stdout.write(res.stdout);
 `;
 
 /**
+ * Native Windows fallback for {@link MIYO_SEARCH_SH} — runs without Git Bash
+ * (`sh`) or Node, which a managed-opencode Windows session may both lack. cmd
+ * is always present and runnable from cmd or PowerShell. Resolves the exe under
+ * `%LOCALAPPDATA%` (where the Miyo installer copies it) first, then PATH.
+ */
+const MIYO_SEARCH_CMD = `@echo off
+setlocal enableextensions
+rem Semantic vault search via the local Miyo CLI; prints Miyo's JSON to stdout.
+if "%~1"=="" (
+  echo Usage: miyo-search.cmd "query" 1>&2
+  exit /b 1
+)
+set "MIYO=%LOCALAPPDATA%\\Miyo\\bin\\miyo\\miyo.exe"
+if not exist "%MIYO%" (
+  set "MIYO="
+  where miyo >nul 2>&1 && set "MIYO=miyo"
+)
+if not defined MIYO (
+  echo Miyo CLI not found. The Miyo desktop app is not installed - tell the user to install and open Miyo, then retry. Do not retry in a loop. 1>&2
+  exit /b 3
+)
+"%MIYO%" search %* -n 10 --json
+`;
+
+/**
  * Vault semantic search via the local Miyo desktop app's `miyo` CLI.
  *
- * Ships a runnable wrapper (`.sh` + Node `.mjs`) like the Plus relay skills,
+ * Ships a runnable wrapper (`.sh` + Node `.mjs` + Windows `.cmd`) like the Plus
+ * relay skills,
  * rather than prose telling the agent to construct the command. The script
  * resolves the binary across PATH / absolute install path / OS, so the agent
  * runs ONE deterministic command — smaller models were giving up after the
@@ -515,9 +541,16 @@ and doesn't depend on a POSIX shell (\`sh\` only exists there with Git Bash):
 node "/absolute/path/to/this/skill/directory/miyo-search.mjs" "<the user's question>"
 \`\`\`
 
-Either script works on any platform, so if one runtime is missing use the
-other; if neither \`sh\` nor \`node\` is available, tell the user to install
-Node.js from https://nodejs.org and run the command again.
+If Node isn't available on Windows either, run the native batch wrapper — it
+needs no extra runtime and works from PowerShell or cmd:
+
+\`\`\`bat
+"/absolute/path/to/this/skill/directory/miyo-search.cmd" "<the user's question>"
+\`\`\`
+
+Use whichever runtime is present (\`sh\`, \`node\`, or — on Windows — the \`.cmd\`).
+Only if none of them exists, tell the user to install Node.js from
+https://nodejs.org and run the command again.
 
 The script locates the Miyo binary itself and prints JSON to stdout — you do
 not need to know where Miyo is installed or which shell you are in. Run the
@@ -544,6 +577,7 @@ The script exits with a clear message when Miyo can't be used:
   files: [
     { path: "miyo-search.sh", content: MIYO_SEARCH_SH },
     { path: "miyo-search.mjs", content: MIYO_SEARCH_MJS },
+    { path: "miyo-search.cmd", content: MIYO_SEARCH_CMD },
   ],
 };
 

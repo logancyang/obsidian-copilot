@@ -104,16 +104,17 @@ describe("miyo-search builtin skill", () => {
     expect(MIYO_SEARCH_SKILL.enabledAgents).toEqual(["claude", "codex", "opencode"]);
   });
 
-  const miyoScript = (ext: ".sh" | ".mjs"): string => {
+  const miyoScript = (ext: ".sh" | ".mjs" | ".cmd"): string => {
     const file = MIYO_SEARCH_SKILL.files.find((f) => f.path.endsWith(ext));
     if (!file) throw new Error(`miyo-search ships no ${ext} script`);
     return file.content;
   };
 
-  it("ships an sh + node wrapper and documents the sh → node fallback", () => {
+  it("ships sh + node + Windows cmd wrappers and documents the runtime fallback", () => {
     expect(MIYO_SEARCH_SKILL.files.map((f) => f.path)).toEqual([
       "miyo-search.sh",
       "miyo-search.mjs",
+      "miyo-search.cmd",
     ]);
     expect(MIYO_SEARCH_SKILL.skillMd).toContain(
       `sh "/absolute/path/to/this/skill/directory/miyo-search.sh"`
@@ -121,6 +122,17 @@ describe("miyo-search builtin skill", () => {
     expect(MIYO_SEARCH_SKILL.skillMd).toContain(
       `node "/absolute/path/to/this/skill/directory/miyo-search.mjs"`
     );
+    expect(MIYO_SEARCH_SKILL.skillMd).toContain(
+      `"/absolute/path/to/this/skill/directory/miyo-search.cmd"`
+    );
+  });
+
+  it("the Windows cmd wrapper needs no sh/node and resolves the exe under LOCALAPPDATA", () => {
+    const cmd = miyoScript(".cmd");
+    expect(cmd).toContain("%LOCALAPPDATA%\\Miyo\\bin\\miyo\\miyo.exe");
+    expect(cmd).toContain("where miyo"); // PATH fallback
+    expect(cmd).toContain("search %* -n 10 --json");
+    expect(cmd).toMatch(/not installed/i);
   });
 
   it("keeps the SKILL.md frontmatter version in sync with the numeric version", () => {
