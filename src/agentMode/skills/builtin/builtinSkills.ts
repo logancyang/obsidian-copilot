@@ -381,16 +381,17 @@ export const BUILTIN_SKILLS: readonly BuiltinSkill[] = [
 const MIYO_SEARCH_VERSION = 2;
 
 /**
- * POSIX wrapper for the Miyo CLI. Resolves the `miyo` binary itself — leading
- * with the absolute install path (`~/.miyo/bin/miyo`) because Obsidian-launched
- * shells often inherit a reduced PATH that misses it — then runs one
- * `miyo search … --json` and prints the JSON. Giving the agent a single
- * deterministic command (instead of a PATH-first/absolute-fallback procedure it
- * has to reason through) is what makes smaller models invoke it reliably.
+ * POSIX (macOS/Linux) wrapper for the Miyo CLI; Windows uses the `.cmd` below.
+ * Resolves the `miyo` binary itself — leading with the absolute install path
+ * (`~/.miyo/bin/miyo`) because Obsidian-launched shells often inherit a reduced
+ * PATH that misses it — then runs one `miyo search … --json` and prints the
+ * JSON. A single deterministic command (vs. a PATH-first/absolute-fallback
+ * procedure the agent has to reason through) is what makes smaller models invoke
+ * it reliably.
  */
 const MIYO_SEARCH_SH = `#!/bin/sh
 # Semantic vault search via the local Miyo CLI; prints Miyo's JSON to stdout.
-# Resolves the miyo binary so the agent never has to deal with PATH or OS.
+# Resolves the miyo binary so the agent never has to deal with PATH.
 die() {
   printf '%s\\n' "$1" >&2
   exit "\${2:-2}"
@@ -399,72 +400,24 @@ die() {
 QUERY="$*"
 [ -n "$QUERY" ] || die "Usage: sh miyo-search.sh <query>" 1
 
-# Resolve the Windows install location too: on Windows + Git Bash this .sh is
-# preferred over the .mjs, and Miyo installs the CLI under %LOCALAPPDATA%.
-WIN_MIYO=""
-if [ -n "$LOCALAPPDATA" ] && command -v cygpath >/dev/null 2>&1; then
-  WIN_MIYO="$(cygpath -u "$LOCALAPPDATA")/Miyo/bin/miyo/miyo.exe"
-fi
-
 # Absolute install path first (Obsidian shells often miss Miyo's bin on PATH).
 if [ -x "$HOME/.miyo/bin/miyo" ]; then
   MIYO="$HOME/.miyo/bin/miyo"
-elif [ -n "$WIN_MIYO" ] && [ -x "$WIN_MIYO" ]; then
-  MIYO="$WIN_MIYO"
 elif command -v miyo >/dev/null 2>&1; then
   MIYO=miyo
 else
-  die "Miyo CLI not found (no ~/.miyo/bin/miyo, no Windows install, and 'miyo' not on PATH). The Miyo desktop app is not installed — tell the user to install and open Miyo, then retry. Do not retry in a loop." 3
+  die "Miyo CLI not found (no ~/.miyo/bin/miyo and 'miyo' not on PATH). The Miyo desktop app is not installed — tell the user to install and open Miyo, then retry. Do not retry in a loop." 3
 fi
 
 OUT=$("$MIYO" search "$QUERY" -n 10 --json 2>&1) || die "Miyo search failed — the Miyo app may not be running. Tell the user to open Miyo, then continue without vault search if they can't. Details: $OUT" 1
 printf '%s\\n' "$OUT"
 `;
 
-/** Node fallback for {@link MIYO_SEARCH_SH} (Windows / no `sh`). Same resolution order. */
-const MIYO_SEARCH_MJS = `#!/usr/bin/env node
-// Node fallback for miyo-search.sh — resolves the Miyo CLI and prints its JSON.
-import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
-
-function die(message, code = 2) {
-  process.stderr.write(String(message) + "\\n");
-  process.exit(code);
-}
-
-const QUERY = process.argv.slice(2).join(" ");
-if (!QUERY) die("Usage: node miyo-search.mjs <query>", 1);
-
-// Absolute install path first (Obsidian shells often miss Miyo's bin on PATH).
-const candidates = [];
-if (process.platform === "win32") {
-  const localAppData = process.env.LOCALAPPDATA;
-  if (localAppData) candidates.push(join(localAppData, "Miyo", "bin", "miyo", "miyo.exe"));
-} else {
-  candidates.push(join(homedir(), ".miyo", "bin", "miyo"));
-}
-const bin = candidates.find((p) => existsSync(p)) || "miyo";
-
-const res = spawnSync(bin, ["search", QUERY, "-n", "10", "--json"], { encoding: "utf8" });
-if (res.error) {
-  if (res.error.code === "ENOENT") {
-    die("Miyo CLI not found. The Miyo desktop app is not installed — tell the user to install and open Miyo, then retry. Do not retry in a loop.", 3);
-  }
-  die("Could not run the Miyo CLI: " + res.error.message, 1);
-}
-if (res.status !== 0) {
-  die("Miyo search failed — the Miyo app may not be running. Tell the user to open Miyo, then continue without vault search if they can't. Details: " + (res.stderr || res.stdout), 1);
-}
-process.stdout.write(res.stdout);
-`;
-
 /**
- * Native Windows fallback for {@link MIYO_SEARCH_SH} — runs without Git Bash
- * (`sh`) or Node, which a managed-opencode Windows session may both lack. cmd
- * is always present and runnable from cmd or PowerShell. Resolves the exe under
- * `%LOCALAPPDATA%` (where the Miyo installer copies it) first, then PATH.
+ * Windows wrapper for the Miyo CLI; macOS/Linux uses the `.sh` above. `cmd` is
+ * always present and runnable from cmd or PowerShell (no Git Bash or Node
+ * needed — a managed-opencode Windows session may lack both). Resolves the exe
+ * under `%LOCALAPPDATA%` (where the Miyo installer copies it) first, then PATH.
  */
 const MIYO_SEARCH_CMD = `@echo off
 setlocal enableextensions
@@ -488,12 +441,12 @@ if not defined MIYO (
 /**
  * Vault semantic search via the local Miyo desktop app's `miyo` CLI.
  *
- * Ships a runnable wrapper (`.sh` + Node `.mjs` + Windows `.cmd`) like the Plus
- * relay skills,
- * rather than prose telling the agent to construct the command. The script
- * resolves the binary across PATH / absolute install path / OS, so the agent
- * runs ONE deterministic command — smaller models were giving up after the
- * documented PATH-first attempt failed in Obsidian's reduced-PATH shells.
+ * Ships a runnable wrapper per OS — `.sh` for macOS/Linux, `.cmd` for Windows —
+ * rather than prose telling the agent to construct the command. Each resolves
+ * the binary across the absolute install path and PATH, so the agent runs ONE
+ * deterministic command (no Node, no shell/OS branching to reason through).
+ * Smaller models were giving up after the old PATH-first prose attempt failed in
+ * Obsidian's reduced-PATH shells.
  *
  * Gated on Miyo being in use: the host only seeds this skill when
  * `shouldUseMiyo(...)` is true (see `seedManagedBuiltins` in `agentMode/index`),
@@ -525,32 +478,22 @@ the user explicitly asks for Miyo search.
 
 ## How to run
 
-Find the absolute path to this SKILL.md file on disk, then run the script that
-sits next to it, passing the user's full question as the query.
+Find the absolute path to this SKILL.md file on disk, then run the script next
+to it that matches the operating system, passing the user's full question as the
+query. No extra runtime is needed — \`sh\` (macOS/Linux) and \`cmd\` (Windows) are
+always present.
 
-On macOS or Linux, prefer the POSIX shell version:
+On macOS or Linux:
 
 \`\`\`bash
 sh "/absolute/path/to/this/skill/directory/miyo-search.sh" "<the user's question>"
 \`\`\`
 
-On Windows, prefer the Node version — it invokes the Miyo executable directly
-and doesn't depend on a POSIX shell (\`sh\` only exists there with Git Bash):
-
-\`\`\`bash
-node "/absolute/path/to/this/skill/directory/miyo-search.mjs" "<the user's question>"
-\`\`\`
-
-If Node isn't available on Windows either, run the native batch wrapper — it
-needs no extra runtime and works from PowerShell or cmd:
+On Windows (works from cmd or PowerShell):
 
 \`\`\`bat
 "/absolute/path/to/this/skill/directory/miyo-search.cmd" "<the user's question>"
 \`\`\`
-
-Use whichever runtime is present (\`sh\`, \`node\`, or — on Windows — the \`.cmd\`).
-Only if none of them exists, tell the user to install Node.js from
-https://nodejs.org and run the command again.
 
 The script locates the Miyo binary itself and prints JSON to stdout — you do
 not need to know where Miyo is installed or which shell you are in. Run the
@@ -576,7 +519,6 @@ The script exits with a clear message when Miyo can't be used:
 `,
   files: [
     { path: "miyo-search.sh", content: MIYO_SEARCH_SH },
-    { path: "miyo-search.mjs", content: MIYO_SEARCH_MJS },
     { path: "miyo-search.cmd", content: MIYO_SEARCH_CMD },
   ],
 };
