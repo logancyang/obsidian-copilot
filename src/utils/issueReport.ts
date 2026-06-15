@@ -135,20 +135,42 @@ export function buildReportMarkdown(input: ReportInput, attachedFiles: string[])
 }
 
 /**
+ * `shell.openExternal` silently rejects URLs over ~2081 chars on Windows, which
+ * would skip opening the issue page while the caller still reports success. Cap
+ * the assembled URL well under that so the page always opens; the full report
+ * already lives in `report.md` on disk for the user to paste in.
+ */
+const MAX_ISSUE_URL_LENGTH = 1800;
+const BODY_TRUNCATION_NOTE =
+  "\n\n_…report truncated. The full report is saved as `report.md` in the bundle " +
+  "folder that just opened — paste it here._";
+
+/**
  * Build a prefilled GitHub "new issue" URL. The body carries the note and
  * environment; the saved files must be drag-dropped by the user since a URL
- * cannot upload binaries.
+ * cannot upload binaries. The body is truncated when needed to keep the URL
+ * within `MAX_ISSUE_URL_LENGTH`.
  */
 export function buildReportIssueUrl(input: ReportInput, attachedFiles: string[]): string {
   const firstLine = input.note.trim().split("\n")[0]?.slice(0, 80).trim();
   const title = firstLine ? `[Agent Mode] ${firstLine}` : "[Agent Mode] Issue report";
   const body = buildReportMarkdown(input, attachedFiles);
-  const params = new URLSearchParams({
-    title,
-    body,
-    labels: "agent-mode",
-  });
-  return `https://github.com/${REPORT_REPO}/issues/new?${params.toString()}`;
+  const base = `https://github.com/${REPORT_REPO}/issues/new?`;
+
+  const build = (b: string) =>
+    base + new URLSearchParams({ title, body: b, labels: "agent-mode" }).toString();
+
+  if (build(body).length <= MAX_ISSUE_URL_LENGTH) return build(body);
+
+  // URL-encoding expands characters non-linearly, so shrink the kept slice
+  // until the fully-encoded URL fits rather than estimating a byte budget.
+  let keep = body.length;
+  let truncated = build(body.slice(0, keep) + BODY_TRUNCATION_NOTE);
+  while (keep > 0 && truncated.length > MAX_ISSUE_URL_LENGTH) {
+    keep = Math.max(0, keep - Math.ceil((truncated.length - MAX_ISSUE_URL_LENGTH) / 3));
+    truncated = build(body.slice(0, keep) + BODY_TRUNCATION_NOTE);
+  }
+  return truncated;
 }
 
 function getNodeReportRuntime(): ReportRuntime {

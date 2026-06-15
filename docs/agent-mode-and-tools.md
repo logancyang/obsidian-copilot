@@ -183,6 +183,29 @@ If you trust the agent and don't want to review every file change, enable **Auto
 
 ---
 
+## Reporting an Issue
+
+When something goes wrong in Agent Mode, the **Report an Issue** button (the bug icon at the top of the chat) bundles everything a maintainer needs to diagnose it.
+
+Clicking it opens a short form where you describe what happened. When you submit, Copilot:
+
+1. Saves a screenshot of the current chat view.
+2. Saves a recent **Agent Mode log** of the behind-the-scenes messages between Copilot and the agent. This log is captured automatically so a report always has recent activity to include; you can turn it off under **Settings → Copilot → Advanced → Log Full Agent Mode Frames**.
+3. Opens the folder containing those files in your file manager.
+4. Opens a prefilled GitHub issue in your browser.
+
+The files are **not uploaded for you** — drag them from the opened folder into the GitHub issue to attach them.
+
+> **Privacy note:** The Agent Mode log can contain your prompts, note contents, and tool inputs/outputs in plaintext. Review the saved files before sharing them publicly.
+
+### Including the OpenCode log
+
+When the **OpenCode** backend is active, the form shows an optional checkbox to include OpenCode's own log. It is **off by default** because OpenCode's log is shared across all of your OpenCode sessions, so it may contain activity from unrelated projects. Turn it on only when the issue involves the OpenCode backend itself.
+
+This feature is available on desktop only.
+
+---
+
 ## Related
 
 - [Copilot Plus and Self-Host](copilot-plus-and-self-host.md) — Licensing and memory

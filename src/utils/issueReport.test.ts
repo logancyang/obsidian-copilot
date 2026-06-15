@@ -153,4 +153,13 @@ describe("buildReportIssueUrl", () => {
     const params = new URLSearchParams(url.split("?")[1]);
     expect(params.get("title")).toBe("[Agent Mode] Issue report");
   });
+
+  it("truncates the body so the URL stays under the Windows openExternal limit", () => {
+    const longNote = "x".repeat(10000);
+    const url = buildReportIssueUrl({ ...baseInput, note: longNote }, ["report.md"]);
+    // Comfortably under Electron's ~2081-char Windows ceiling for openExternal.
+    expect(url.length).toBeLessThanOrEqual(2081);
+    const params = new URLSearchParams(url.split("?")[1]);
+    expect(params.get("body")).toContain("report.md");
+  });
 });
