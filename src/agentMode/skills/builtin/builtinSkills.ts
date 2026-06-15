@@ -467,10 +467,11 @@ metadata:
 
 # Miyo vault search
 
-Search the user's indexed Obsidian vault through Miyo, a local companion app
-that runs semantic search over their notes on their own machine. It finds
-relevant notes by meaning (not just filename). All calls are local — no
-network, no API key.
+Search the user's indexed Obsidian vault through Miyo, the user's own companion
+app for semantic search over their notes. It finds relevant notes by meaning
+(not just filename). Searches go only to the user's own Miyo service — the local
+app by default, or the remote Miyo server they configured in settings — never a
+third-party API, and no API key.
 
 When to use it: for any vault-search intent, reach for Miyo when your builtin
 \`grep\` search is too slow or doesn't surface enough relevant notes, or when
