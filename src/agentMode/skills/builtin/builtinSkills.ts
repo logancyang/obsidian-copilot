@@ -489,10 +489,12 @@ On macOS or Linux:
 sh "/absolute/path/to/this/skill/directory/miyo-search.sh" "<the user's question>"
 \`\`\`
 
-On Windows (works from cmd or PowerShell):
+On Windows, run the \`.cmd\` wrapper. In PowerShell you must prefix it with the
+call operator \`&\` (PowerShell treats a quoted path on its own as a string and
+won't run it); from cmd, run the quoted path without the \`&\`:
 
-\`\`\`bat
-"/absolute/path/to/this/skill/directory/miyo-search.cmd" "<the user's question>"
+\`\`\`powershell
+& "/absolute/path/to/this/skill/directory/miyo-search.cmd" "<the user's question>"
 \`\`\`
 
 The script locates the Miyo binary itself and prints JSON to stdout — you do

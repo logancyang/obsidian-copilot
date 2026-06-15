@@ -118,8 +118,10 @@ describe("miyo-search builtin skill", () => {
     expect(MIYO_SEARCH_SKILL.skillMd).toContain(
       `sh "/absolute/path/to/this/skill/directory/miyo-search.sh"`
     );
+    // Windows is shown with the PowerShell call operator `&` (a bare quoted
+    // path is a string in PowerShell and wouldn't run).
     expect(MIYO_SEARCH_SKILL.skillMd).toContain(
-      `"/absolute/path/to/this/skill/directory/miyo-search.cmd"`
+      `& "/absolute/path/to/this/skill/directory/miyo-search.cmd"`
     );
     // No Node runtime anywhere — neither a .mjs file nor a node invocation.
     expect(MIYO_SEARCH_SKILL.files.some((f) => f.path.endsWith(".mjs"))).toBe(false);
