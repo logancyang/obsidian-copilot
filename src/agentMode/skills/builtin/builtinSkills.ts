@@ -500,19 +500,24 @@ the user explicitly asks for Miyo search.
 ## How to run
 
 Find the absolute path to this SKILL.md file on disk, then run the script that
-sits next to it, passing the user's full question as the query. Prefer the
-POSIX shell version:
+sits next to it, passing the user's full question as the query.
+
+On macOS or Linux, prefer the POSIX shell version:
 
 \`\`\`bash
 sh "/absolute/path/to/this/skill/directory/miyo-search.sh" "<the user's question>"
 \`\`\`
 
-If your platform can't run \`sh\` (for example, Windows without Git Bash), run
-the Node version that sits in the same folder instead:
+On Windows, prefer the Node version — it invokes the Miyo executable directly
+and doesn't depend on a POSIX shell (\`sh\` only exists there with Git Bash):
 
 \`\`\`bash
 node "/absolute/path/to/this/skill/directory/miyo-search.mjs" "<the user's question>"
 \`\`\`
+
+Either script works on any platform, so if one runtime is missing use the
+other; if neither \`sh\` nor \`node\` is available, tell the user to install
+Node.js from https://nodejs.org and run the command again.
 
 The script locates the Miyo binary itself and prints JSON to stdout — you do
 not need to know where Miyo is installed or which shell you are in. Run the
