@@ -8,6 +8,7 @@ import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { assembleReportBundle, type ReportEnvInfo } from "@/utils/issueReport";
 import { findLatestOpencodeLog } from "@/utils/opencodeLog";
 import { createPluginRoot } from "@/utils/react/createPluginRoot";
+import { getSettings } from "@/settings/model";
 import { App, Modal, Notice, apiVersion } from "obsidian";
 import React from "react";
 import { Root } from "react-dom/client";
@@ -176,8 +177,14 @@ export class ReportIssueModal extends Modal {
       await sleep(200);
       const screenshotPng = await captureViewScreenshot(this.params.captureTargetEl);
 
-      await frameSink.flush();
-      const frameLogPath = frameSink.getPath();
+      // Only bundle the frame log when logging is currently enabled. A user who
+      // opted out may still have a stale acp-frames.ndjson on disk; honoring the
+      // opt-out keeps that old plaintext out of the report.
+      let frameLogPath: string | null = null;
+      if (getSettings().agentMode.debugFullFrames) {
+        await frameSink.flush();
+        frameLogPath = frameSink.getPath();
+      }
 
       const opencodeLogPath =
         includeOpencodeLog && this.params.activeBackend === OPENCODE_BACKEND_ID
