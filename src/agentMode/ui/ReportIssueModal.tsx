@@ -260,7 +260,13 @@ async function resolveOpencodeLogPath(): Promise<string | null> {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const os = require("node:os") as typeof import("node:os");
-    return await findLatestOpencodeLog(process.env, os.homedir());
+    // Resolve the log dir from the same env OpencodeBackend spawns opencode with:
+    // user env overrides (e.g. XDG_DATA_HOME / HOME) relocate opencode's data dir,
+    // so the log lives wherever the merged env points, not the ambient one.
+    const envOverrides = getSettings().agentMode?.backends?.opencode?.envOverrides ?? {};
+    const env = { ...process.env, ...envOverrides };
+    const homeDir = envOverrides.HOME ?? os.homedir();
+    return await findLatestOpencodeLog(env, homeDir);
   } catch {
     return null;
   }
