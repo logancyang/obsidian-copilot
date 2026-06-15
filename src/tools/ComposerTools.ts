@@ -1,6 +1,5 @@
 import { TFile } from "obsidian";
 import { APPLY_VIEW_TYPE } from "@/components/composer/ApplyView";
-import { diffTrimmedLines } from "diff";
 import { ApplyViewResult } from "@/types";
 import { z } from "zod";
 import { createLangChainTool } from "./createLangChainTool";
@@ -44,15 +43,25 @@ async function getFile(file_path: string): Promise<TFile> {
 }
 
 /**
+ * Build the tool-result message for a preview outcome. "partial" gets an
+ * explicit warning: the file was written but does not match the proposed
+ * content, so the agent must re-read before any follow-up edit.
+ * @param result - The decision returned by the Apply view.
+ * @param file_path - Vault-relative path to the file.
+ */
+function previewResultMessage(result: ApplyViewResult, file_path: string): string {
+  if (result === "partial") {
+    return `File change result: partial. The user accepted only some of the proposed lines, so "${file_path}" was written but does NOT match the content you proposed. Re-read the file before making any further edits. Do not retry the original change.`;
+  }
+  return `File change result: ${result}. Do not retry or attempt alternative approaches to modify this file in response to the current user request.`;
+}
+
+/**
  * Show the ApplyView preview UI for file changes and return the user decision.
  * @param file_path - Vault-relative path to the file
  * @param content - Target content to compare against current file content
  */
-async function show_preview(
-  file_path: string,
-  content: string,
-  simple = false
-): Promise<ApplyViewResult> {
+async function show_preview(file_path: string, content: string): Promise<ApplyViewResult> {
   const file = await getFile(file_path);
   const activeFile = app.workspace.getActiveFile();
 
@@ -65,20 +74,19 @@ async function show_preview(
   if (file) {
     originalContent = await app.vault.read(file);
   }
-  const changes = diffTrimmedLines(originalContent, content, {
-    newlineIsToken: true,
-  });
   // Return a promise that resolves when the user makes a decision
   return new Promise((resolve) => {
-    // Open the Apply View in a new leaf with the processed content and the callback
+    // Open the Apply View in a new leaf with the exact texts and the callback.
+    // The view diffs oldText -> newText itself, so the on-disk and proposed
+    // content round-trip without passing through a lossy Change[] form.
     const leaf = app.workspace.getLeaf(true);
     void leaf.setViewState({
       type: APPLY_VIEW_TYPE,
       active: true,
       state: {
-        changes: changes,
+        oldText: originalContent,
+        newText: content,
         path: file_path,
-        simple: simple,
         resultCallback: (result: ApplyViewResult) => {
           resolve(result);
         },
@@ -192,7 +200,7 @@ const writeFileTool = createLangChainTool({
     // Simple JSON wrapper for consistent parsing
     return {
       result: result,
-      message: `File change result: ${result}. Do not retry or attempt alternative approaches to modify this file in response to the current user request.`,
+      message: previewResultMessage(result, path),
     };
   },
 });
@@ -573,10 +581,10 @@ const editFileTool = createLangChainTool({
         };
       }
 
-      const result = await show_preview(sanitizedPath, modifiedContent, true);
+      const result = await show_preview(sanitizedPath, modifiedContent);
       return {
         result: result,
-        message: `File change result: ${result}. Do not retry or attempt alternative approaches to modify this file in response to the current user request.`,
+        message: previewResultMessage(result, sanitizedPath),
       };
     } catch (error) {
       return {
