@@ -137,14 +137,13 @@ describe("buildReportMarkdown", () => {
 });
 
 describe("buildReportIssueUrl", () => {
-  it("targets the preview repo with a prefilled, encoded title and body", () => {
+  it("targets the public repo with a prefilled, encoded title and body", () => {
     const url = buildReportIssueUrl(baseInput, ["report.md"]);
-    expect(
-      url.startsWith("https://github.com/logancyang/obsidian-copilot-preview/issues/new?")
-    ).toBe(true);
+    expect(url.startsWith("https://github.com/logancyang/obsidian-copilot/issues/new?")).toBe(true);
+    expect(url.includes("obsidian-copilot-preview")).toBe(false);
     const params = new URLSearchParams(url.split("?")[1]);
     expect(params.get("title")).toBe("[Agent Mode] Agent crashed when I clicked run");
-    expect(params.get("labels")).toBe("agent-mode");
+    expect(params.get("labels")).toBe("bug");
     expect(params.get("body")).toContain("Agent crashed when I clicked run");
   });
 

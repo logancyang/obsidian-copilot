@@ -9,8 +9,12 @@
  * unit-testable without touching the real filesystem.
  */
 
-/** Preview repo is where Agent Mode issues are tracked (see project memory). */
-const REPORT_REPO = "logancyang/obsidian-copilot-preview";
+/**
+ * End-user reports go to the PUBLIC repo. The private `obsidian-copilot-preview`
+ * repo is for internal triage/BRAT only and must never receive user issues
+ * (users can't see it, and routing them there would lose the report).
+ */
+const REPORT_REPO = "logancyang/obsidian-copilot";
 const SCREENSHOT_NAME = "screenshot.png";
 const FRAME_LOG_NAME = "acp-frames.ndjson";
 const OPENCODE_LOG_NAME = "opencode.log";
@@ -158,7 +162,7 @@ export function buildReportIssueUrl(input: ReportInput, attachedFiles: string[])
   const base = `https://github.com/${REPORT_REPO}/issues/new?`;
 
   const build = (b: string) =>
-    base + new URLSearchParams({ title, body: b, labels: "agent-mode" }).toString();
+    base + new URLSearchParams({ title, body: b, labels: "bug" }).toString();
 
   if (build(body).length <= MAX_ISSUE_URL_LENGTH) return build(body);
 

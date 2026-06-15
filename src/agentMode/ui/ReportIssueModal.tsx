@@ -8,7 +8,9 @@ import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { assembleReportBundle, type ReportEnvInfo } from "@/utils/issueReport";
 import { findLatestOpencodeLog } from "@/utils/opencodeLog";
 import { createPluginRoot } from "@/utils/react/createPluginRoot";
+import { cn } from "@/lib/utils";
 import { getSettings } from "@/settings/model";
+import { AlertTriangle } from "lucide-react";
 import { App, Modal, Notice, apiVersion } from "obsidian";
 import React from "react";
 import { Root } from "react-dom/client";
@@ -104,10 +106,35 @@ function ReportIssueContent({ showOpencodeOption, onSubmit, onCancel }: ReportIs
         </label>
       )}
 
-      <div className="tw-rounded-md tw-bg-secondary tw-p-3 tw-text-xs tw-text-muted">
-        Submitting saves a screenshot of this view plus the Agent Mode frame log to a folder on your
-        computer. The log can contain your prompts, note contents, and tool inputs/outputs in
-        plaintext. Review the files before sharing them publicly.
+      <div className="tw-flex tw-flex-col tw-gap-1.5 tw-text-sm">
+        <span className="tw-font-medium">When you click “Prepare report”</span>
+        <ul className="tw-m-0 tw-flex tw-flex-col tw-gap-1 tw-pl-5 tw-text-muted">
+          <li>
+            A screenshot of the <strong className="tw-text-normal">Agent Mode chat pane</strong>{" "}
+            (not your whole screen) and a recent activity log are saved to a folder on your
+            computer.
+          </li>
+          <li>That folder opens, and a pre-filled GitHub issue opens in your browser.</li>
+          <li>Drag the saved files into the issue to attach them, then submit.</li>
+        </ul>
+      </div>
+
+      <div
+        className={cn(
+          "tw-flex tw-items-start tw-gap-2.5 tw-rounded-md tw-border tw-border-solid tw-border-warning/100",
+          "tw-bg-callout-warning/20 tw-px-3.5 tw-py-2.5 tw-text-sm tw-text-warning"
+        )}
+        role="alert"
+      >
+        <AlertTriangle className="tw-mt-0.5 tw-size-4 tw-shrink-0" aria-hidden="true" />
+        <div className="tw-flex-1">
+          <span className="tw-block tw-font-semibold">Before you share these files</span>
+          <span className="tw-mt-0.5 tw-block tw-text-normal">
+            The activity log can include your prompts, note contents, and tool inputs/outputs in
+            plain text. Review the saved files and remove anything sensitive before posting them
+            publicly.
+          </span>
+        </div>
       </div>
 
       <div className="tw-flex tw-justify-end tw-gap-2">

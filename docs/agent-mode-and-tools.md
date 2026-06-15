@@ -189,8 +189,8 @@ When something goes wrong in Agent Mode, the **Report an Issue** button (the bug
 
 Clicking it opens a short form where you describe what happened. When you submit, Copilot:
 
-1. Saves a screenshot of the current chat view.
-2. Saves a recent **Agent Mode log** of the behind-the-scenes messages between Copilot and the agent. This log is captured automatically so a report always has recent activity to include; you can turn it off under **Settings → Copilot → Advanced → Log Full Agent Mode Frames**.
+1. Saves a screenshot of the **Agent Mode chat pane** (just the agent panel, not your whole screen).
+2. Saves a recent **Agent Mode log** of the behind-the-scenes messages between Copilot and the agent. This log is captured automatically so a report always has recent activity to include; you can turn it off under **Settings → Copilot → Advanced → Keep an Agent Mode activity log**.
 3. Opens the folder containing those files in your file manager.
 4. Opens a prefilled GitHub issue in your browser.
 
