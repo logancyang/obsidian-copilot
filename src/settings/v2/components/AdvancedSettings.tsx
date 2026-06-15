@@ -473,7 +473,7 @@ export const AdvancedSettings: React.FC = () => {
         <SettingItem
           type="switch"
           title="Log Full Agent Mode Frames"
-          description={`Writes diagnostic Agent Mode frames as NDJSON outside your vault at ${frameLogPath}. Frames include prompts, tool inputs/outputs, and attachments; oversized frames are summarized to avoid runaway logs. Sensitive content lands on disk in plaintext. Leave off unless actively debugging.`}
+          description={`On by default so "Report an Issue" can attach a recent log. Writes diagnostic Agent Mode frames as NDJSON outside your vault at ${frameLogPath}. Frames include prompts, tool inputs/outputs, and attachments; oversized frames are summarized to avoid runaway logs. Sensitive content lands on disk in plaintext. Turn off to stop logging.`}
           checked={settings.agentMode.debugFullFrames}
           onCheckedChange={(checked) => {
             setSettings((cur) => ({

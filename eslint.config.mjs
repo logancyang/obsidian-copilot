@@ -258,6 +258,8 @@ export default [
       "src/utils/binaryPath.ts",
       "src/utils/nodeToolBinDirs.ts",
       "src/utils/rendererEventsShim.ts",
+      "src/utils/issueReport.ts",
+      "src/utils/opencodeLog.ts",
     ],
     rules: {
       "import/no-nodejs-modules": "off",

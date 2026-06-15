@@ -191,9 +191,55 @@ describe("sanitizeSettings - agentMode shape migration", () => {
       mcpServers: [],
       activeBackend: "opencode",
       backends: {},
-      debugFullFrames: false,
+      debugFullFrames: true,
       skills: { folder: "copilot/skills" },
     });
+  });
+
+  it("defaults debugFullFrames to on for new installs", () => {
+    expect(DEFAULT_SETTINGS.agentMode.debugFullFrames).toBe(true);
+  });
+
+  it("preserves an explicit debugFullFrames=false (a user who turned it off stays off)", () => {
+    const sanitized = sanitizeSettings({
+      ...DEFAULT_SETTINGS,
+      agentMode: {
+        byok: {},
+        mcpServers: [],
+        activeBackend: "opencode",
+        backends: {},
+        debugFullFrames: false,
+      },
+    } as unknown as CopilotSettings);
+    expect(sanitized.agentMode.debugFullFrames).toBe(false);
+  });
+
+  it("preserves an explicit debugFullFrames=true", () => {
+    const sanitized = sanitizeSettings({
+      ...DEFAULT_SETTINGS,
+      agentMode: {
+        byok: {},
+        mcpServers: [],
+        activeBackend: "opencode",
+        backends: {},
+        debugFullFrames: true,
+      },
+    } as unknown as CopilotSettings);
+    expect(sanitized.agentMode.debugFullFrames).toBe(true);
+  });
+
+  it("falls back to the on-by-default when debugFullFrames is absent or non-boolean", () => {
+    const sanitized = sanitizeSettings({
+      ...DEFAULT_SETTINGS,
+      agentMode: {
+        byok: {},
+        mcpServers: [],
+        activeBackend: "opencode",
+        backends: {},
+        debugFullFrames: "yes" as unknown as boolean,
+      },
+    } as unknown as CopilotSettings);
+    expect(sanitized.agentMode.debugFullFrames).toBe(true);
   });
 
   it("leaves backends empty when no legacy fields and no existing slice", () => {

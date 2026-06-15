@@ -1059,7 +1059,13 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
     mcpServers: [],
     activeBackend: "opencode",
     backends: {},
-    debugFullFrames: false,
+    // On by default so the diagnostic frame log is already capturing when a
+    // user hits a bug and clicks "Report an issue" (it can't capture
+    // retroactively). The migration in src/settings/model.ts preserves an
+    // explicit prior choice, so anyone who turned it off stays off. The privacy
+    // disclosure lives in the Report-issue modal, shown only when the user
+    // chooses to share the log.
+    debugFullFrames: true,
     skills: {
       folder: DEFAULT_SKILLS_FOLDER,
     },
