@@ -321,16 +321,23 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     ) {
       restartSystemPromptAffected();
     }
-    // Copilot Plus sign-in/out (or license rotation) changes the managed env
-    // injected at spawn — the decrypted license the builtin Plus skill scripts
-    // read. Restart every backend so the next session sees the license appear
-    // or disappear without a plugin reload.
-    if (prev.isPlusUser !== next.isPlusUser || prev.plusLicenseKey !== next.plusLicenseKey) {
+    // The managed env injected at spawn (see `buildCopilotPlusEnv`) changes with
+    // Copilot Plus sign-in/out or license rotation (the decrypted license the
+    // builtin Plus skill scripts read) and with the Miyo server URL (the
+    // `MIYO_URL` the bundled miyo CLI reads). Either is only read on a fresh
+    // spawn, so restart every backend — otherwise a running subprocess keeps the
+    // stale license/URL until a reload. (Restarts coalesce, so this folds with
+    // any Miyo-availability re-seed restart below.)
+    if (
+      prev.isPlusUser !== next.isPlusUser ||
+      prev.plusLicenseKey !== next.plusLicenseKey ||
+      prev.miyoServerUrl !== next.miyoServerUrl
+    ) {
       for (const descriptor of listBackendDescriptors()) {
         void manager
-          .restartBackend(descriptor.id, "Copilot Plus license changed")
+          .restartBackend(descriptor.id, "managed agent env changed")
           .catch((e) =>
-            logError(`[AgentMode] restart after plus change failed: ${descriptor.id}`, e)
+            logError(`[AgentMode] restart after managed env change failed: ${descriptor.id}`, e)
           );
       }
     }
