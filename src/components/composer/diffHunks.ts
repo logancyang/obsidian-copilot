@@ -1,20 +1,17 @@
 import { applyPatch, structuredPatch, type Hunk, type ParsedDiff } from "diff";
 
 /**
- * Pure utilities for per-hunk and per-line accept/reject in the Apply view.
+ * Pure utilities for per-line accept/reject in the Apply view.
  *
  * The diff package's {@link structuredPatch} parses (oldText, newText) into a
  * list of hunks; {@link applyPatch} then re-runs each hunk against a source
  * string, locating it by `oldStart`. Because each hunk carries its own
- * coordinates, we can drop or rewrite hunks selectively and re-apply the
- * survivors — the diff package handles line bookkeeping for us.
+ * coordinates, we can rewrite hunks selectively and re-apply them — the diff
+ * package handles line bookkeeping for us.
  *
- * Granularity:
- *  - "hunk" mode → user accepts or rejects whole hunks; we filter the hunks
- *    array and feed the surviving subset to applyPatch.
- *  - "line"  mode → user accepts or rejects individual added/removed lines;
- *    we rewrite each hunk's `lines` to keep only the accepted changes, then
- *    let applyPatch run the rewritten hunks.
+ * The user accepts or rejects individual added/removed lines; we rewrite each
+ * hunk's `lines` to keep only the accepted changes, then let applyPatch run the
+ * rewritten hunks.
  */
 
 /** A decision made on a unit of change. */
@@ -74,57 +71,6 @@ export function analyzePatch(
   });
 
   return { parsed, changes };
-}
-
-/**
- * Serialize a single {@link Hunk} into a self-contained unified-diff string
- * that {@link import("@pierre/diffs/react").PatchDiff} can render. Used by the
- * hunk-level renderer to render one PatchDiff per hunk.
- *
- * @param path - Filename used in the patch header.
- * @param hunk - Hunk to serialize.
- */
-export function hunkToPatchString(path: string, hunk: Hunk): string {
-  // Pierre's PatchDiff expects standard unified-diff format: file headers,
-  // a hunk header (@@ -X,Y +A,B @@), then the lines verbatim. Each line
-  // already carries its prefix; we just join with newlines.
-  const header =
-    `--- ${path}\n` +
-    `+++ ${path}\n` +
-    `@@ -${hunk.oldStart},${hunk.oldLines} ` +
-    `+${hunk.newStart},${hunk.newLines} @@\n`;
-  return header + hunk.lines.join("\n") + "\n";
-}
-
-/**
- * Reconstruct the final file text given per-hunk decisions.
- *
- * Rejected hunks are simply omitted from the patch we apply — applyPatch
- * leaves their source lines untouched. Accepted hunks are passed through
- * verbatim.
- *
- * @param oldText - Original file content (must match what was diffed).
- * @param parsed - Parsed patch from {@link analyzePatch}.
- * @param decisions - Decision per hunk index. Hunks without an entry are
- *   treated as accepted (the default-accept UX).
- * @returns The reconstructed text, or `null` if patch application fails
- *   (which shouldn't happen unless oldText has drifted from the diff input).
- */
-export function reconstructFromHunkDecisions(
-  oldText: string,
-  parsed: ParsedDiff,
-  decisions: Map<number, Decision>
-): string | null {
-  const acceptedHunks = parsed.hunks.filter(
-    (_, idx) => (decisions.get(idx) ?? "accept") === "accept"
-  );
-
-  // Short-circuit: nothing accepted means the file is unchanged.
-  if (acceptedHunks.length === 0) return oldText;
-
-  const filteredPatch: ParsedDiff = { ...parsed, hunks: acceptedHunks };
-  const result = applyPatch(oldText, filteredPatch);
-  return result === false ? null : result;
 }
 
 /**

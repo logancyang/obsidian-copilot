@@ -1,26 +1,27 @@
 import { PatchDiff } from "@pierre/diffs/react";
-import { createPatch } from "diff";
+import { formatPatch, type ParsedDiff } from "diff";
 import { Check, ChevronDown, ChevronRight, X as XIcon } from "lucide-react";
 import { Notice } from "obsidian";
 import React, { useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { logError } from "@/logger";
 import { Button } from "../ui/button";
-import {
-  analyzePatch,
-  reconstructFromLineDecisions,
-  type Decision,
-  type LineChange,
-} from "./diffHunks";
+import { reconstructFromLineDecisions, type Decision, type LineChange } from "./diffHunks";
 import { OBSIDIAN_PIERRE_THEME } from "./pierreTheme";
 
 /**
  * Props for {@link LineAcceptRejectRenderer}.
+ *
+ * The diff is computed once by the parent (see {@link import("./diffHunks").analyzePatch})
+ * and passed in as `parsed` + `changes`, so this component never re-diffs.
  */
 export interface LineAcceptRejectRendererProps {
+  /** Original document text — the base the diff and reconstruction run against. */
   oldText: string;
-  newText: string;
-  path: string;
+  /** Parsed old→new diff, produced once by the parent. */
+  parsed: ParsedDiff;
+  /** Flat list of every added/removed line across all hunks. */
+  changes: LineChange[];
   diffStyle: "split" | "unified";
   onAccept: (finalText: string) => void;
   onReject: () => void;
@@ -50,21 +51,20 @@ const keyOf = (c: LineChange) => `${c.hunkIndex}:${c.lineIndex}`;
  */
 export const LineAcceptRejectRenderer: React.FC<LineAcceptRejectRendererProps> = ({
   oldText,
-  newText,
-  path,
+  parsed,
+  changes,
   diffStyle,
   onAccept,
   onReject,
 }) => {
-  const { parsed, changes } = useMemo(
-    () => analyzePatch(path, oldText, newText),
-    [path, oldText, newText]
-  );
-
-  // Full-file unified patch for the read-only visual diff at the top.
+  // Full-file patch string for the read-only visual diff at the top. Derived
+  // from the already-computed `parsed` rather than re-diffing the text — this
+  // is exactly what `createPatch` produces internally. Clone the hunks first
+  // because `formatPatch` mutates hunk start coordinates for zero-length sides
+  // (e.g. a brand-new file), and `parsed` is reused by reconstruction below.
   const fullPatch = useMemo(
-    () => createPatch(path, oldText, newText, "", "", { context: 3 }),
-    [path, oldText, newText]
+    () => formatPatch({ ...parsed, hunks: parsed.hunks.map((h) => ({ ...h })) }),
+    [parsed]
   );
 
   // Map<"hunkIdx:lineIdx", "accept" | "reject">. Unspecified = "accept".
@@ -103,6 +103,13 @@ export const LineAcceptRejectRenderer: React.FC<LineAcceptRejectRendererProps> =
     if (result == null) {
       logError("Failed to reconstruct text from line decisions");
       new Notice("Failed to apply selected lines — patch did not match the original file.");
+      return;
+    }
+    // Reconstruction equal to the original means nothing was effectively
+    // applied (e.g. every line rejected). Report it as a rejection instead of
+    // writing identical content back and claiming "accepted".
+    if (result === oldText) {
+      onReject();
       return;
     }
     onAccept(result);
@@ -166,12 +173,12 @@ export const LineAcceptRejectRenderer: React.FC<LineAcceptRejectRendererProps> =
               under the user's theme. */}
           {decisionsExpanded && <div className="tw-border-b tw-border-solid tw-border-border" />}
           <ul className={cn("tw-m-0 tw-list-none tw-p-0", !decisionsExpanded && "tw-hidden")}>
-            {changes.map((c, i) => {
+            {changes.map((c) => {
               const decision = decisions.get(keyOf(c)) ?? "accept";
               const isAdd = c.kind === "+";
               return (
                 <li
-                  key={i}
+                  key={keyOf(c)}
                   className={cn(
                     "tw-flex tw-items-center tw-gap-2 tw-border-b tw-border-solid tw-border-border tw-px-3 tw-py-1.5 [&:last-child]:tw-border-b-transparent",
                     decision === "reject" && "tw-opacity-50"

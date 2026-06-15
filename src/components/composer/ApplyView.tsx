@@ -4,19 +4,26 @@ import { getSettings, updateSetting } from "@/settings/model";
 import { ApplyViewResult } from "@/types";
 import { ensureFolderExists } from "@/utils";
 import { createPluginRoot } from "@/utils/react/createPluginRoot";
-import { Change } from "diff";
 import { App, ItemView, Notice, TFile, WorkspaceLeaf } from "obsidian";
 import React, { useMemo, useState } from "react";
 import { Root } from "react-dom/client";
 import { Button } from "../ui/button";
 import { SettingSwitch } from "../ui/setting-switch";
-import { PierreRenderer } from "./PierreRenderer";
+import { analyzePatch } from "./diffHunks";
+import { LineAcceptRejectRenderer } from "./LineAcceptRejectRenderer";
 
 export const APPLY_VIEW_TYPE = "obsidian-copilot-apply-view";
 
-/** State passed when opening the Apply view. */
+/**
+ * State passed when opening the Apply view. The view diffs `oldText` → `newText`
+ * itself, so the exact on-disk and proposed texts round-trip without going
+ * through a lossy Change[] representation.
+ */
 export interface ApplyViewState {
-  changes: Change[];
+  /** Current on-disk content of the target file. */
+  oldText: string;
+  /** Proposed content to write. */
+  newText: string;
   path: string;
   resultCallback?: (result: ApplyViewResult) => void;
 }
@@ -65,14 +72,18 @@ export class ApplyView extends ItemView {
 
     // The second child is the actual content of the view; the first is the title.
     const contentEl = this.containerEl.children[1] as HTMLElement;
-    contentEl.empty();
 
-    // Force the React root to fill the leaf — without this it collapses to
-    // content height and the floating Accept/Reject bar scrolls off.
-    const rootEl = contentEl.createDiv({
-      cls: "tw-flex tw-h-full tw-min-h-0 tw-flex-col",
-    });
+    // Create the mount node and React root exactly once. Re-rendering (e.g. a
+    // second setState) must reuse the existing root — emptying contentEl and
+    // recreating the node on every render would leave the root attached to a
+    // detached element, rendering into an orphan and blanking the visible pane.
     if (!this.root) {
+      contentEl.empty();
+      // Force the React root to fill the leaf — without this it collapses to
+      // content height and the floating Accept/Reject bar scrolls off.
+      const rootEl = contentEl.createDiv({
+        cls: "tw-flex tw-h-full tw-min-h-0 tw-flex-col",
+      });
       this.root = createPluginRoot(rootEl, this.app);
     }
 
@@ -107,38 +118,35 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
     updateSetting("diffViewMode", mode);
   };
 
-  // +N / −M line counts for the header.
-  const { additions, removals } = useMemo(() => {
-    const changes = state.changes ?? [];
-    const sum = (pred: (c: Change) => boolean | undefined) =>
-      changes.filter(pred).reduce((n, c) => n + (c.count ?? 0), 0);
-    return { additions: sum((c) => c.added), removals: sum((c) => c.removed) };
-  }, [state.changes]);
-
-  // Reconstruct original and proposed full text from the change list.
-  const oldText = useMemo(
-    () =>
-      state.changes
-        .filter((c) => !c.added)
-        .map((c) => c.value)
-        .join(""),
-    [state.changes]
-  );
-  const newText = useMemo(
-    () =>
-      state.changes
-        .filter((c) => !c.removed)
-        .map((c) => c.value)
-        .join(""),
-    [state.changes]
+  // Diff the exact on-disk text against the proposal once. The visual diff and
+  // the per-line decision list both derive from this single pass, and so do the
+  // header counts below. Safe-default to "" so these hooks never dereference a
+  // missing field on a restored leaf — the validity guard below renders the
+  // error UI for genuinely invalid state.
+  const path = state?.path ?? "";
+  const oldText = state?.oldText ?? "";
+  const newText = state?.newText ?? "";
+  const { parsed, changes } = useMemo(
+    () => analyzePatch(path, oldText, newText),
+    [path, oldText, newText]
   );
 
-  // Defensive: state validity check.
-  if (!state || !state.changes) {
+  // +N / −M line counts for the header, taken from the actual changed lines.
+  const { additions, removals } = useMemo(
+    () => ({
+      additions: changes.filter((c) => c.kind === "+").length,
+      removals: changes.filter((c) => c.kind === "-").length,
+    }),
+    [changes]
+  );
+
+  // Defensive: a restored leaf can lack the text fields (state isn't serialized
+  // with a callback). This guard runs after all hooks so hook order is stable.
+  if (!state || typeof state.oldText !== "string" || typeof state.newText !== "string") {
     logError("Invalid state:", state);
     return (
       <div className="tw-flex tw-h-full tw-flex-col tw-items-center tw-justify-center">
-        <div className="tw-text-error">Error: Invalid state - missing changes</div>
+        <div className="tw-text-error">Error: Invalid state - missing content</div>
         <Button onClick={() => close("failed")} className="tw-mt-4">
           Close
         </Button>
@@ -203,7 +211,7 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
               viewMode === "split" ? "tw-font-medium tw-text-normal" : "tw-text-muted"
             )}
           >
-            Split
+            Unified
           </span>
           <SettingSwitch
             checked={viewMode === "side-by-side"}
@@ -220,10 +228,10 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
         </div>
       </div>
 
-      <PierreRenderer
+      <LineAcceptRejectRenderer
         oldText={oldText}
-        newText={newText}
-        path={state.path}
+        parsed={parsed}
+        changes={changes}
         diffStyle={viewMode === "side-by-side" ? "split" : "unified"}
         onAccept={handleAccept}
         onReject={handleReject}

@@ -1,6 +1,5 @@
 import { TFile } from "obsidian";
 import { APPLY_VIEW_TYPE } from "@/components/composer/ApplyView";
-import { diffTrimmedLines } from "diff";
 import { ApplyViewResult } from "@/types";
 import { z } from "zod";
 import { createLangChainTool } from "./createLangChainTool";
@@ -61,18 +60,18 @@ async function show_preview(file_path: string, content: string): Promise<ApplyVi
   if (file) {
     originalContent = await app.vault.read(file);
   }
-  const changes = diffTrimmedLines(originalContent, content, {
-    newlineIsToken: true,
-  });
   // Return a promise that resolves when the user makes a decision
   return new Promise((resolve) => {
-    // Open the Apply View in a new leaf with the processed content and the callback
+    // Open the Apply View in a new leaf with the exact texts and the callback.
+    // The view diffs oldText -> newText itself, so the on-disk and proposed
+    // content round-trip without passing through a lossy Change[] form.
     const leaf = app.workspace.getLeaf(true);
     void leaf.setViewState({
       type: APPLY_VIEW_TYPE,
       active: true,
       state: {
-        changes: changes,
+        oldText: originalContent,
+        newText: content,
         path: file_path,
         resultCallback: (result: ApplyViewResult) => {
           resolve(result);

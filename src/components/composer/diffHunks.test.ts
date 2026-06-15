@@ -1,23 +1,15 @@
-import {
-  analyzePatch,
-  hunkToPatchString,
-  reconstructFromHunkDecisions,
-  reconstructFromLineDecisions,
-  type Decision,
-} from "./diffHunks";
+import { analyzePatch, reconstructFromLineDecisions, type Decision } from "./diffHunks";
 
 /**
  * Tests for {@link ./diffHunks}.
  *
- * The reconstruction functions are the critical bit — they're what runs when
- * the user clicks "Apply". A bug here writes the wrong text to disk. Tests
- * cover:
+ * reconstructFromLineDecisions is the critical bit — it's what runs when the
+ * user clicks "Apply". A bug here writes the wrong text to disk. Tests cover:
  *
  *  - no-op cases (zero hunks, all-rejected)
  *  - all-accepted ≡ proposed newText (the default-accept UX must be lossless)
- *  - mixed accept/reject at hunk granularity
- *  - line-level rejection inside a single hunk
- *  - hunks at file boundaries (start, end, trailing-newline edge case)
+ *  - line-level rejection inside a single hunk, and across multiple hunks
+ *  - changes at file boundaries (start, end, trailing-newline edge case)
  */
 
 // Three changes spaced wide enough (>= 7 unchanged lines apart) that the
@@ -63,54 +55,6 @@ describe("analyzePatch", () => {
   });
 });
 
-describe("hunkToPatchString", () => {
-  it("emits a self-contained unified diff Pierre can parse", () => {
-    const { parsed } = analyzePatch("f.md", OLD, NEW);
-    const patchString = hunkToPatchString("f.md", parsed.hunks[0]);
-    expect(patchString.startsWith("--- f.md\n+++ f.md\n@@ ")).toBe(true);
-    // Must contain the hunk header coordinates from the source hunk.
-    const h = parsed.hunks[0];
-    expect(patchString).toContain(
-      `@@ -${h.oldStart},${h.oldLines} +${h.newStart},${h.newLines} @@`
-    );
-  });
-});
-
-describe("reconstructFromHunkDecisions", () => {
-  it("returns oldText unchanged when no hunks", () => {
-    const { parsed } = analyzePatch("f.md", OLD, OLD);
-    const result = reconstructFromHunkDecisions(OLD, parsed, new Map());
-    expect(result).toBe(OLD);
-  });
-
-  it("returns oldText when every hunk is rejected", () => {
-    const { parsed } = analyzePatch("f.md", OLD, NEW);
-    const decisions = new Map<number, Decision>(parsed.hunks.map((_, i) => [i, "reject"]));
-    const result = reconstructFromHunkDecisions(OLD, parsed, decisions);
-    expect(result).toBe(OLD);
-  });
-
-  it("returns newText when every hunk is accepted (default)", () => {
-    const { parsed } = analyzePatch("f.md", OLD, NEW);
-    const result = reconstructFromHunkDecisions(OLD, parsed, new Map());
-    expect(result).toBe(NEW);
-  });
-
-  it("applies only the accepted hunks (rejected hunks fall back to old lines)", () => {
-    const { parsed } = analyzePatch("f.md", OLD, NEW);
-    // Accept the first hunk only.
-    const decisions = new Map<number, Decision>([[0, "accept"]]);
-    for (let i = 1; i < parsed.hunks.length; i++) {
-      decisions.set(i, "reject");
-    }
-    const result = reconstructFromHunkDecisions(OLD, parsed, decisions);
-    // First-hunk change should be present, later changes should NOT be.
-    expect(result).toContain("line 02 CHANGED");
-    expect(result).not.toContain("line 12 MODIFIED");
-    expect(result).not.toContain("line 22 TWEAKED");
-  });
-});
-
 describe("reconstructFromLineDecisions", () => {
   it("returns newText when every change line is accepted", () => {
     const { parsed } = analyzePatch("f.md", OLD, NEW);
@@ -125,6 +69,20 @@ describe("reconstructFromLineDecisions", () => {
     );
     const result = reconstructFromLineDecisions(OLD, parsed, decisions);
     expect(result).toBe(OLD);
+  });
+
+  it("applies only the accepted lines across multiple hunks", () => {
+    const { parsed, changes } = analyzePatch("f.md", OLD, NEW);
+    // Accept every line in the first hunk, reject every line in the rest.
+    const decisions = new Map<string, Decision>();
+    for (const c of changes) {
+      decisions.set(`${c.hunkIndex}:${c.lineIndex}`, c.hunkIndex === 0 ? "accept" : "reject");
+    }
+    const result = reconstructFromLineDecisions(OLD, parsed, decisions);
+    // First-hunk change should be present, later changes should NOT be.
+    expect(result).toContain("line 02 CHANGED");
+    expect(result).not.toContain("line 12 MODIFIED");
+    expect(result).not.toContain("line 22 TWEAKED");
   });
 
   it("can accept an addition while rejecting its paired removal", () => {
@@ -172,7 +130,7 @@ describe("file-boundary edge cases", () => {
     const oldText = "first\nbody\nlast";
     const newText = "FIRST\nbody\nlast";
     const { parsed } = analyzePatch("f.md", oldText, newText);
-    const result = reconstructFromHunkDecisions(oldText, parsed, new Map());
+    const result = reconstructFromLineDecisions(oldText, parsed, new Map());
     expect(result).toBe(newText);
   });
 
@@ -180,7 +138,7 @@ describe("file-boundary edge cases", () => {
     const oldText = "first\nbody\nlast";
     const newText = "first\nbody\nLAST";
     const { parsed } = analyzePatch("f.md", oldText, newText);
-    const result = reconstructFromHunkDecisions(oldText, parsed, new Map());
+    const result = reconstructFromLineDecisions(oldText, parsed, new Map());
     expect(result).toBe(newText);
   });
 
@@ -188,7 +146,15 @@ describe("file-boundary edge cases", () => {
     const oldText = "a\nb\nc\n";
     const newText = "a\nB\nc\n";
     const { parsed } = analyzePatch("f.md", oldText, newText);
-    const result = reconstructFromHunkDecisions(oldText, parsed, new Map());
+    const result = reconstructFromLineDecisions(oldText, parsed, new Map());
+    expect(result).toBe(newText);
+  });
+
+  it("applies a no-trailing-newline edit when fully accepted", () => {
+    const oldText = "a\nb\nc";
+    const newText = "a\nB\nc";
+    const { parsed } = analyzePatch("f.md", oldText, newText);
+    const result = reconstructFromLineDecisions(oldText, parsed, new Map());
     expect(result).toBe(newText);
   });
 });
