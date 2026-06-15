@@ -54,4 +54,13 @@ export enum PromptSortStrategy {
   MANUAL = "manual",
 }
 
-export type ApplyViewResult = "accepted" | "rejected" | "aborted" | "failed";
+/**
+ * Outcome of an Apply view preview.
+ * - `accepted`: the full proposed content was written.
+ * - `partial`: the user accepted only some lines, so the file was written but
+ *   does NOT match the proposed content.
+ * - `rejected`: the user discarded the change; the file is unchanged.
+ * - `aborted`: the view closed without a decision (e.g. leaf detached).
+ * - `failed`: the write could not be completed.
+ */
+export type ApplyViewResult = "accepted" | "partial" | "rejected" | "aborted" | "failed";

@@ -43,6 +43,20 @@ async function getFile(file_path: string): Promise<TFile> {
 }
 
 /**
+ * Build the tool-result message for a preview outcome. "partial" gets an
+ * explicit warning: the file was written but does not match the proposed
+ * content, so the agent must re-read before any follow-up edit.
+ * @param result - The decision returned by the Apply view.
+ * @param file_path - Vault-relative path to the file.
+ */
+function previewResultMessage(result: ApplyViewResult, file_path: string): string {
+  if (result === "partial") {
+    return `File change result: partial. The user accepted only some of the proposed lines, so "${file_path}" was written but does NOT match the content you proposed. Re-read the file before making any further edits. Do not retry the original change.`;
+  }
+  return `File change result: ${result}. Do not retry or attempt alternative approaches to modify this file in response to the current user request.`;
+}
+
+/**
  * Show the ApplyView preview UI for file changes and return the user decision.
  * @param file_path - Vault-relative path to the file
  * @param content - Target content to compare against current file content
@@ -186,7 +200,7 @@ const writeFileTool = createLangChainTool({
     // Simple JSON wrapper for consistent parsing
     return {
       result: result,
-      message: `File change result: ${result}. Do not retry or attempt alternative approaches to modify this file in response to the current user request.`,
+      message: previewResultMessage(result, path),
     };
   },
 });
@@ -570,7 +584,7 @@ const editFileTool = createLangChainTool({
       const result = await show_preview(sanitizedPath, modifiedContent);
       return {
         result: result,
-        message: `File change result: ${result}. Do not retry or attempt alternative approaches to modify this file in response to the current user request.`,
+        message: previewResultMessage(result, sanitizedPath),
       };
     } catch (error) {
       return {

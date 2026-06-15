@@ -181,7 +181,14 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
   const handleAccept = async (finalText: string) => {
     try {
       const ok = await writeFullText(finalText);
-      close(ok ? "accepted" : "failed");
+      if (!ok) {
+        close("failed");
+        return;
+      }
+      // "accepted" only when the full proposal landed. If the user rejected
+      // some lines, the file was written but differs from what was proposed —
+      // report "partial" so the agent doesn't assume the file matches `newText`.
+      close(finalText === newText ? "accepted" : "partial");
     } catch (error) {
       logError("Error applying changes:", error);
       const message = error instanceof Error ? error.message : String(error);
