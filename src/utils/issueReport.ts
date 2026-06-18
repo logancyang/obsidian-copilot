@@ -16,7 +16,10 @@
  */
 const REPORT_REPO = "logancyang/obsidian-copilot";
 const SCREENSHOT_NAME = "screenshot.png";
-const FRAME_LOG_NAME = "acp-frames.ndjson";
+// GitHub's issue attachment allowlist rejects `.ndjson`, so the bundled frame
+// log gets a trailing `.txt` (an allowed type) while keeping `.ndjson` in the
+// name as a format hint. Content is unchanged: one JSON object per line.
+const FRAME_LOG_NAME = "acp-frames.ndjson.txt";
 const OPENCODE_LOG_NAME = "opencode.log";
 const REPORT_NOTE_NAME = "report.md";
 

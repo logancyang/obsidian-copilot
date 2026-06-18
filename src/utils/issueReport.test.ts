@@ -51,7 +51,8 @@ describe("assembleReportBundle", () => {
     expect(result.files).toEqual([
       "report.md",
       "screenshot.png",
-      "acp-frames.ndjson",
+      // Bundled with a `.txt` suffix so GitHub accepts the upload (it rejects `.ndjson`).
+      "acp-frames.ndjson.txt",
       "opencode.log",
     ]);
 
@@ -62,7 +63,7 @@ describe("assembleReportBundle", () => {
     expect(copies).toEqual([
       {
         src: "/tmp/acp-frames.ndjson",
-        dest: "/tmp/reports/report-20260615-101500/acp-frames.ndjson",
+        dest: "/tmp/reports/report-20260615-101500/acp-frames.ndjson.txt",
       },
       {
         src: "/tmp/opencode/log/session.log",
@@ -100,7 +101,7 @@ describe("assembleReportBundle", () => {
     const result = await assembleReportBundle(baseInput, runtime);
 
     expect(result.files).toContain("report.md");
-    expect(result.files).not.toContain("acp-frames.ndjson");
+    expect(result.files).not.toContain("acp-frames.ndjson.txt");
     expect(result.files).toContain("opencode.log");
   });
 
