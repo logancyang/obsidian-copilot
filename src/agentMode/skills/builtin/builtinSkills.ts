@@ -460,54 +460,38 @@ export const BUILTIN_SKILLS: readonly BuiltinSkill[] = [
 ];
 
 const MIYO_SEARCH_VERSION = 2;
+const MIYO_CHAT_SEARCH_VERSION = 1;
 
 /**
- * POSIX (macOS/Linux) wrapper for the Miyo CLI; Windows uses the `.cmd` below.
- * Resolves the `miyo` binary itself — leading with the absolute install path
- * (`~/.miyo/bin/miyo`) because Obsidian-launched shells often inherit a reduced
- * PATH that misses it — then runs one `miyo search … --json` and prints the
- * JSON. A single deterministic command (vs. a PATH-first/absolute-fallback
- * procedure the agent has to reason through) is what makes smaller models invoke
- * it reliably.
+ * Shared POSIX fragments for the Miyo wrappers. `die()` prints to stderr and
+ * exits; the resolver finds the `miyo` binary itself — leading with the
+ * absolute install path (`~/.miyo/bin/miyo`) because Obsidian-launched shells
+ * often inherit a reduced PATH that misses it — so each wrapper runs ONE
+ * deterministic command instead of a PATH-first/absolute-fallback procedure the
+ * agent has to reason through. That determinism is what makes smaller models
+ * invoke the scripts reliably.
  */
-const MIYO_SEARCH_SH = `#!/bin/sh
-# Semantic vault search via the local Miyo CLI; prints Miyo's JSON to stdout.
-# Resolves the miyo binary so the agent never has to deal with PATH.
-die() {
+const MIYO_DIE_SH = `die() {
   printf '%s\\n' "$1" >&2
   exit "\${2:-2}"
-}
+}`;
 
-QUERY="$*"
-[ -n "$QUERY" ] || die "Usage: sh miyo-search.sh <query>" 1
-
-# Absolute install path first (Obsidian shells often miss Miyo's bin on PATH).
+const MIYO_RESOLVE_SH = `# Absolute install path first (Obsidian shells often miss Miyo's bin on PATH).
 if [ -x "$HOME/.miyo/bin/miyo" ]; then
   MIYO="$HOME/.miyo/bin/miyo"
 elif command -v miyo >/dev/null 2>&1; then
   MIYO=miyo
 else
   die "Miyo CLI not found (no ~/.miyo/bin/miyo and 'miyo' not on PATH). The Miyo desktop app is not installed — tell the user to install and open Miyo, then retry. Do not retry in a loop." 3
-fi
-
-OUT=$("$MIYO" search "$QUERY" -n 10 --json 2>&1) || die "Miyo search failed — the Miyo app may not be running. Tell the user to open Miyo, then continue without vault search if they can't. Details: $OUT" 1
-printf '%s\\n' "$OUT"
-`;
+fi`;
 
 /**
- * Windows wrapper for the Miyo CLI; macOS/Linux uses the `.sh` above. `cmd` is
- * always present and runnable from cmd or PowerShell (no Git Bash or Node
- * needed — a managed-opencode Windows session may lack both). Resolves the exe
- * under `%LOCALAPPDATA%` (where the Miyo installer copies it) first, then PATH.
+ * Windows resolver fragment: finds the exe under `%LOCALAPPDATA%` (where the
+ * Miyo installer copies it) first, then PATH. `cmd` is always present and
+ * runnable from cmd or PowerShell (no Git Bash or Node needed — a
+ * managed-opencode Windows session may lack both).
  */
-const MIYO_SEARCH_CMD = `@echo off
-setlocal enableextensions
-rem Semantic vault search via the local Miyo CLI; prints Miyo's JSON to stdout.
-if "%~1"=="" (
-  echo Usage: miyo-search.cmd "query" 1>&2
-  exit /b 1
-)
-set "MIYO=%LOCALAPPDATA%\\Miyo\\bin\\miyo\\miyo.exe"
+const MIYO_RESOLVE_CMD = `set "MIYO=%LOCALAPPDATA%\\Miyo\\bin\\miyo\\miyo.exe"
 if not exist "%MIYO%" (
   set "MIYO="
   where miyo >nul 2>&1 && set "MIYO=miyo"
@@ -515,8 +499,98 @@ if not exist "%MIYO%" (
 if not defined MIYO (
   echo Miyo CLI not found. The Miyo desktop app is not installed - tell the user to install and open Miyo, then retry. Do not retry in a loop. 1>&2
   exit /b 3
+)`;
+
+/**
+ * POSIX (macOS/Linux) vault-search wrapper; Windows uses the `.cmd` below.
+ * Resolves the `miyo` binary, then runs one `miyo search … --json` over the
+ * whole vault. A single deterministic command is what makes smaller models
+ * invoke it reliably.
+ */
+const MIYO_SEARCH_SH = `#!/bin/sh
+# Semantic vault search via the local Miyo CLI; prints Miyo's JSON to stdout.
+# Resolves the miyo binary so the agent never has to deal with PATH.
+${MIYO_DIE_SH}
+
+QUERY="$*"
+[ -n "$QUERY" ] || die "Usage: sh miyo-search.sh <query>" 1
+
+${MIYO_RESOLVE_SH}
+
+OUT=$("$MIYO" search "$QUERY" -n 10 --json 2>&1) || die "Miyo search failed — the Miyo app may not be running. Tell the user to open Miyo, then continue without vault search if they can't. Details: $OUT" 1
+printf '%s\\n' "$OUT"
+`;
+
+/** Windows vault-search wrapper; macOS/Linux uses the `.sh` above. */
+const MIYO_SEARCH_CMD = `@echo off
+setlocal enableextensions
+rem Semantic vault search via the local Miyo CLI; prints Miyo's JSON to stdout.
+if "%~1"=="" (
+  echo Usage: miyo-search.cmd "query" 1>&2
+  exit /b 1
 )
+${MIYO_RESOLVE_CMD}
 "%MIYO%" search %* -n 10 --json
+`;
+
+/**
+ * POSIX (macOS/Linux) chat-search wrapper. Takes the query as the first
+ * argument and forwards any remaining arguments (e.g. `--path "Folder"`)
+ * straight to `miyo search`, so the agent can scope the search to the synced
+ * chat folders without the wrapper knowing their names.
+ */
+const MIYO_CHAT_SEARCH_SH = `#!/bin/sh
+# Semantic search over the user's synced AI chats via the local Miyo CLI.
+# Pass the query first; extra args (e.g. --path "Folder") forward to miyo search.
+${MIYO_DIE_SH}
+
+QUERY="$1"
+[ -n "$QUERY" ] || die "Usage: sh miyo-chat-search.sh <query> [--path FOLDER ...]" 1
+shift
+
+${MIYO_RESOLVE_SH}
+
+OUT=$("$MIYO" search "$QUERY" "$@" -n 10 --json 2>&1) || die "Miyo search failed — the Miyo app may not be running. Tell the user to open Miyo, then retry. Details: $OUT" 1
+printf '%s\\n' "$OUT"
+`;
+
+/**
+ * POSIX folders wrapper for the chat-search skill: lists the indexed folders so
+ * the agent can find the chat-sync folders (`"origin": "chat_sync"`) to scope
+ * the search to. Same binary resolution as the search wrappers.
+ */
+const MIYO_FOLDERS_SH = `#!/bin/sh
+# List the user's indexed Miyo folders as JSON; prints Miyo's JSON to stdout.
+${MIYO_DIE_SH}
+
+${MIYO_RESOLVE_SH}
+
+OUT=$("$MIYO" folders --json 2>&1) || die "Miyo is not running — the app may be closed. Tell the user to open Miyo, then retry. Details: $OUT" 1
+printf '%s\\n' "$OUT"
+`;
+
+/**
+ * Windows chat-search wrapper; macOS/Linux uses the `.sh` above. `%*` forwards
+ * every argument — the query and any `--path "Folder"` filters — to
+ * `miyo search`.
+ */
+const MIYO_CHAT_SEARCH_CMD = `@echo off
+setlocal enableextensions
+rem Semantic search over the user's synced AI chats via the local Miyo CLI.
+if "%~1"=="" (
+  echo Usage: miyo-chat-search.cmd "query" [--path "Folder" ...] 1>&2
+  exit /b 1
+)
+${MIYO_RESOLVE_CMD}
+"%MIYO%" search %* -n 10 --json
+`;
+
+/** Windows folders wrapper — the `.cmd` counterpart of `MIYO_FOLDERS_SH`. */
+const MIYO_FOLDERS_CMD = `@echo off
+setlocal enableextensions
+rem List the user's indexed Miyo folders as JSON; prints Miyo's JSON to stdout.
+${MIYO_RESOLVE_CMD}
+"%MIYO%" folders --json
 `;
 
 /**
@@ -529,9 +603,11 @@ if not defined MIYO (
  * Smaller models were giving up after the old PATH-first prose attempt failed in
  * Obsidian's reduced-PATH shells.
  *
- * Gated on Miyo being in use: the host only seeds this skill when
+ * Scoped to the vault at large; searching the user's saved AI chat history is a
+ * separate skill (`MIYO_CHAT_SEARCH_SKILL`) so each has a focused "when to use"
+ * signal. Both are gated on Miyo being in use: the host only seeds them when
  * `shouldUseMiyo(...)` is true (see `seedManagedBuiltins` in `agentMode/index`),
- * and prunes the seeded copy when Miyo is turned off — matching the issue's
+ * and prunes the seeded copies when Miyo is turned off — matching the issue's
  * "surface only when Miyo is installed/running" intent.
  */
 export const MIYO_SEARCH_SKILL: BuiltinSkill = {
@@ -540,7 +616,7 @@ export const MIYO_SEARCH_SKILL: BuiltinSkill = {
   enabledAgents: ["claude", "codex", "opencode"],
   skillMd: `---
 name: miyo-search
-description: Semantic (meaning-based) search over the user's Obsidian vault via the local Miyo app. For any vault-search intent, use it when builtin grep search is too slow or doesn't surface enough relevant notes, or when the user explicitly asks for Miyo search. Needs the Miyo desktop app installed and running.
+description: Semantic (meaning-based) search over the user's Obsidian vault via the local Miyo app. For any vault-search intent, use it when builtin grep search is too slow or doesn't surface enough relevant notes, or when the user explicitly asks for Miyo search. To search the user's saved AI chat history (ChatGPT / Claude) instead, use the miyo-chat-search skill. Needs the Miyo desktop app installed and running.
 metadata:
   copilot-enabled-agents: claude, codex, opencode
   copilot-builtin-version: "${MIYO_SEARCH_VERSION}"
@@ -556,7 +632,9 @@ third-party API, and no API key.
 
 When to use it: for any vault-search intent, reach for Miyo when your builtin
 \`grep\` search is too slow or doesn't surface enough relevant notes, or when
-the user explicitly asks for Miyo search.
+the user explicitly asks for Miyo search. To search the user's saved AI chat
+history (past ChatGPT / Claude conversations) instead, use the
+\`miyo-chat-search\` skill.
 
 ## How to run
 
@@ -608,12 +686,125 @@ The script exits with a clear message when Miyo can't be used:
 };
 
 /**
+ * Search the user's saved AI chat history (ChatGPT / Claude) via the local Miyo
+ * CLI. A sibling of `MIYO_SEARCH_SKILL`, split out so each has a focused
+ * "when to use" signal — vault notes vs. past AI conversations.
+ *
+ * Two scripts, two steps: `miyo-folders.*` lists the indexed folders so the
+ * agent can identify the chat folders by `"origin": "chat_sync"` (not by
+ * hardcoded names — the user may rename them), and `miyo-chat-search.*` runs a
+ * search scoped to those folders via repeatable `--path` filters it forwards to
+ * `miyo search`. Gated on Miyo being in use, exactly like the vault skill.
+ */
+export const MIYO_CHAT_SEARCH_SKILL: BuiltinSkill = {
+  name: "miyo-chat-search",
+  version: MIYO_CHAT_SEARCH_VERSION,
+  enabledAgents: ["claude", "codex", "opencode"],
+  skillMd: `---
+name: miyo-chat-search
+description: Semantic (meaning-based) search over the user's saved AI chat history — past ChatGPT and Claude conversations synced into Miyo. Use it whenever the user asks about something from an earlier AI chat (e.g. "what did ChatGPT say about…", "find the Claude thread where we discussed…", "search my old chats for…"). For searching the rest of the vault, use the miyo-search skill instead. Needs the Miyo desktop app installed and running.
+metadata:
+  copilot-enabled-agents: claude, codex, opencode
+  copilot-builtin-version: "${MIYO_CHAT_SEARCH_VERSION}"
+---
+
+# Miyo AI chat search
+
+Search the user's saved AI chat history through Miyo, the user's own companion
+app. Miyo can sync the user's ChatGPT and Claude conversations into the vault as
+notes; this skill finds the relevant conversations by meaning (not just
+filename). Searches go only to the user's own Miyo service — the local app by
+default, or the remote Miyo server they configured — never a third-party API.
+
+When to use it: whenever the user asks about something from a past AI chat —
+"what did ChatGPT suggest about X", "find the Claude thread where we discussed
+Y", "search my old chats for Z". To search the rest of the vault (not chat
+history), use the \`miyo-search\` skill instead.
+
+## How it works
+
+Synced chat history lives in dedicated folders Miyo creates — these carry
+\`"origin": "chat_sync"\` in the folder listing (commonly named "ChatGPT chats"
+and "Claude AI chats"). Searching is two steps: find those folders, then run a
+search scoped to them.
+
+Find the absolute path to this SKILL.md file on disk and run the scripts next to
+it that match the operating system. No extra runtime is needed — \`sh\`
+(macOS/Linux) and \`cmd\` (Windows) are always present, and each script locates
+the Miyo binary itself, so you never deal with PATH.
+
+### 1. List the folders to find the chat folders
+
+On macOS or Linux:
+
+\`\`\`bash
+sh "/absolute/path/to/this/skill/directory/miyo-folders.sh"
+\`\`\`
+
+On Windows (PowerShell needs the call operator \`&\`):
+
+\`\`\`powershell
+& "/absolute/path/to/this/skill/directory/miyo-folders.cmd"
+\`\`\`
+
+It prints \`{ "folders": [ { "path": ..., "origin": ... }, ... ] }\`. The chat
+folders are the ones whose \`origin\` is \`"chat_sync"\`. Match on \`origin\`, not
+the name — the user may have renamed them, and unrelated folders may have
+similar names. Collect each chat folder's \`path\`.
+
+### 2. Search, scoped to the chat folders
+
+Pass one \`--path "<folder>"\` filter per chat folder \`path\` from step 1 (repeat
+\`--path\` to cover several at once):
+
+\`\`\`bash
+sh "/absolute/path/to/this/skill/directory/miyo-chat-search.sh" "<the user's question>" --path "ChatGPT chats" --path "Claude AI chats"
+\`\`\`
+
+On Windows:
+
+\`\`\`powershell
+& "/absolute/path/to/this/skill/directory/miyo-chat-search.cmd" "<the user's question>" --path "ChatGPT chats" --path "Claude AI chats"
+\`\`\`
+
+If the user only cares about ChatGPT or only Claude, pass just that folder's
+\`--path\`. Read the JSON straight from stdout; do not pipe it through other tools
+(no \`jq\`, no \`|\`).
+
+## Reading the results
+
+Each search prints \`{ "results": [ { "path": ..., "content": ... } ], "count": N }\`.
+Each \`path\` is a saved conversation; cite it so the user can open the original
+chat.
+
+## If it reports a problem
+
+The scripts exit with a clear message when Miyo can't be used:
+
+- **Not installed** (CLI not found): the Miyo desktop app isn't installed on
+  this machine. Tell the user to install and open Miyo, then try again. Do not
+  retry in a loop.
+- **Not running** (folders / search failed): the app is installed but not
+  running. Tell the user to open Miyo, then try again.
+`,
+  files: [
+    { path: "miyo-chat-search.sh", content: MIYO_CHAT_SEARCH_SH },
+    { path: "miyo-chat-search.cmd", content: MIYO_CHAT_SEARCH_CMD },
+    { path: "miyo-folders.sh", content: MIYO_FOLDERS_SH },
+    { path: "miyo-folders.cmd", content: MIYO_FOLDERS_CMD },
+  ],
+};
+
+/**
  * The builtin skills the host should seed into the canonical folder. The Plus
- * relay skills are always included; the Miyo skill is gated on Miyo being in
- * use (the host passes \`includeMiyo = shouldUseMiyo(...)\`). Kept pure so the
- * gating decision stays in the host layer (the skills layer must not import
- * \`@/miyo\`), while the composition is unit-testable here.
+ * relay skills are always included; the Miyo skills (vault search + chat search)
+ * are gated on Miyo being in use (the host passes
+ * \`includeMiyo = shouldUseMiyo(...)\`). Kept pure so the gating decision stays
+ * in the host layer (the skills layer must not import \`@/miyo\`), while the
+ * composition is unit-testable here.
  */
 export function managedBuiltinSkills(includeMiyo: boolean): readonly BuiltinSkill[] {
-  return includeMiyo ? [...BUILTIN_SKILLS, MIYO_SEARCH_SKILL] : BUILTIN_SKILLS;
+  return includeMiyo
+    ? [...BUILTIN_SKILLS, MIYO_SEARCH_SKILL, MIYO_CHAT_SEARCH_SKILL]
+    : BUILTIN_SKILLS;
 }

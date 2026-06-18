@@ -1,4 +1,10 @@
-import { BUILTIN_SKILLS, managedBuiltinSkills, MIYO_SEARCH_SKILL, PLUS_ENV } from "./builtinSkills";
+import {
+  BUILTIN_SKILLS,
+  managedBuiltinSkills,
+  MIYO_CHAT_SEARCH_SKILL,
+  MIYO_SEARCH_SKILL,
+  PLUS_ENV,
+} from "./builtinSkills";
 
 /** A script file shipped by a skill, matched by extension (".sh" or ".mjs"). */
 function scriptOf(name: string, ext: ".sh" | ".mjs" = ".sh"): string {
@@ -194,6 +200,10 @@ describe("miyo-search builtin skill", () => {
     expect(md).toMatch(/doesn't surface enough relevant notes/i);
   });
 
+  it("points chat-history search at the sibling miyo-chat-search skill", () => {
+    expect(MIYO_SEARCH_SKILL.skillMd).toContain("miyo-chat-search");
+  });
+
   it("runs one deterministic `miyo search ... --json` in each script", () => {
     expect(miyoScript(".sh")).toContain('search "$QUERY"');
     expect(miyoScript(".sh")).toContain("--json");
@@ -216,16 +226,101 @@ describe("miyo-search builtin skill", () => {
   });
 });
 
-describe("managedBuiltinSkills", () => {
-  it("includes the Miyo skill only when Miyo is in use", () => {
-    expect(managedBuiltinSkills(true)).toContain(MIYO_SEARCH_SKILL);
-    expect(managedBuiltinSkills(false)).not.toContain(MIYO_SEARCH_SKILL);
+describe("miyo-chat-search builtin skill", () => {
+  it("is a separate, Miyo-gated skill — not one of the always-seeded Plus skills", () => {
+    expect(BUILTIN_SKILLS.map((s) => s.name)).not.toContain("miyo-chat-search");
+    expect(MIYO_CHAT_SEARCH_SKILL.name).toBe("miyo-chat-search");
+    expect(MIYO_CHAT_SEARCH_SKILL.enabledAgents).toEqual(["claude", "codex", "opencode"]);
   });
 
-  it("appends Miyo after the Plus skills, preserving their order", () => {
+  const chatFile = (name: string): string => {
+    const file = MIYO_CHAT_SEARCH_SKILL.files.find((f) => f.path === name);
+    if (!file) throw new Error(`miyo-chat-search ships no ${name} script`);
+    return file.content;
+  };
+
+  it("ships a chat-search + folders wrapper per OS — POSIX sh + Windows cmd, no Node", () => {
+    expect(MIYO_CHAT_SEARCH_SKILL.files.map((f) => f.path)).toEqual([
+      "miyo-chat-search.sh",
+      "miyo-chat-search.cmd",
+      "miyo-folders.sh",
+      "miyo-folders.cmd",
+    ]);
+    expect(MIYO_CHAT_SEARCH_SKILL.files.some((f) => f.path.endsWith(".mjs"))).toBe(false);
+    expect(MIYO_CHAT_SEARCH_SKILL.skillMd).not.toContain("node ");
+  });
+
+  it("keeps the SKILL.md frontmatter version in sync with the numeric version", () => {
+    expect(MIYO_CHAT_SEARCH_SKILL.skillMd).toContain(
+      `copilot-builtin-version: "${MIYO_CHAT_SEARCH_SKILL.version}"`
+    );
+  });
+
+  it("embeds no Plus license env — Miyo is a local loopback CLI", () => {
+    expect(MIYO_CHAT_SEARCH_SKILL.skillMd).not.toContain(PLUS_ENV.licenseKey);
+    for (const f of MIYO_CHAT_SEARCH_SKILL.files) {
+      expect(f.content).not.toContain(PLUS_ENV.licenseKey);
+    }
+  });
+
+  it("describes searching saved ChatGPT / Claude chat history", () => {
+    const md = MIYO_CHAT_SEARCH_SKILL.skillMd;
+    expect(md).toMatch(/description:[^\n]*chat history/i);
+    expect(md).toMatch(/description:[^\n]*ChatGPT/);
+    expect(md).toMatch(/description:[^\n]*Claude/);
+    // Cross-links the vault skill for non-chat searches.
+    expect(md).toContain("miyo-search");
+  });
+
+  it("documents the two-step workflow: find chat_sync folders, then scope with --path", () => {
+    const md = MIYO_CHAT_SEARCH_SKILL.skillMd;
+    expect(md).toContain("miyo-folders.sh");
+    expect(md).toContain('"chat_sync"');
+    expect(md).toMatch(/--path/);
+  });
+
+  it("forwards --path filters from the chat-search wrappers to `miyo search`", () => {
+    // POSIX: the query is $1 and remaining args ($@) pass straight through.
+    expect(chatFile("miyo-chat-search.sh")).toContain('search "$QUERY" "$@"');
+    // Windows: %* carries the query and any --path filters.
+    expect(chatFile("miyo-chat-search.cmd")).toContain("search %*");
+  });
+
+  it("ships a folders wrapper per OS that lists folders as JSON", () => {
+    expect(chatFile("miyo-folders.sh")).toContain("folders --json");
+    expect(chatFile("miyo-folders.cmd")).toContain("folders --json");
+  });
+
+  it("resolves the binary absolute-path-first with a PATH fallback, in every script", () => {
+    for (const name of ["miyo-chat-search.sh", "miyo-folders.sh"]) {
+      expect(chatFile(name)).toContain("$HOME/.miyo/bin/miyo");
+      expect(chatFile(name)).toContain("command -v miyo");
+    }
+    for (const name of ["miyo-chat-search.cmd", "miyo-folders.cmd"]) {
+      expect(chatFile(name)).toContain("%LOCALAPPDATA%\\Miyo\\bin\\miyo\\miyo.exe");
+      expect(chatFile(name)).toContain("where miyo");
+    }
+  });
+
+  it("degrades clearly when Miyo is not installed (search + folders)", () => {
+    expect(chatFile("miyo-chat-search.sh")).toMatch(/not installed/i);
+    expect(chatFile("miyo-folders.sh")).toMatch(/not installed/i);
+  });
+});
+
+describe("managedBuiltinSkills", () => {
+  it("includes the Miyo skills only when Miyo is in use", () => {
+    expect(managedBuiltinSkills(true)).toContain(MIYO_SEARCH_SKILL);
+    expect(managedBuiltinSkills(true)).toContain(MIYO_CHAT_SEARCH_SKILL);
+    expect(managedBuiltinSkills(false)).not.toContain(MIYO_SEARCH_SKILL);
+    expect(managedBuiltinSkills(false)).not.toContain(MIYO_CHAT_SEARCH_SKILL);
+  });
+
+  it("appends the Miyo skills after the Plus skills, preserving their order", () => {
     expect(managedBuiltinSkills(true).map((s) => s.name)).toEqual([
       ...BUILTIN_SKILLS.map((s) => s.name),
       "miyo-search",
+      "miyo-chat-search",
     ]);
   });
 
