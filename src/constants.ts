@@ -198,6 +198,10 @@ export enum ChatModels {
   OPENROUTER_GROK_4_3 = "x-ai/grok-4.3",
   SILICONFLOW_DEEPSEEK_V3 = "deepseek-ai/DeepSeek-V3",
   SILICONFLOW_DEEPSEEK_R1 = "deepseek-ai/DeepSeek-R1",
+  PINSTRIPES_DEEPSEEK_V4_FLASH = "deepseek-v4-flash",
+  PINSTRIPES_GLM_4_5_AIR = "glm-4.5-air",
+  PINSTRIPES_QWEN3_35B = "qwen3-35b",
+  PINSTRIPES_MINIMAX_M2_7 = "minimax-m2.7",
 }
 
 // Model Providers
@@ -219,6 +223,7 @@ export enum ChatModelProviders {
   COHEREAI = "cohereai",
   SILICONFLOW = "siliconflow",
   GITHUB_COPILOT = "github-copilot",
+  PINSTRIPES = "pinstripes",
 }
 
 export enum ModelCapability {
@@ -436,6 +441,30 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     isBuiltIn: false,
     baseUrl: "https://api.siliconflow.com/v1",
     capabilities: [ModelCapability.REASONING],
+  },
+  {
+    name: ChatModels.PINSTRIPES_DEEPSEEK_V4_FLASH,
+    provider: ChatModelProviders.PINSTRIPES,
+    enabled: false,
+    isBuiltIn: true,
+  },
+  {
+    name: ChatModels.PINSTRIPES_GLM_4_5_AIR,
+    provider: ChatModelProviders.PINSTRIPES,
+    enabled: false,
+    isBuiltIn: true,
+  },
+  {
+    name: ChatModels.PINSTRIPES_QWEN3_35B,
+    provider: ChatModelProviders.PINSTRIPES,
+    enabled: false,
+    isBuiltIn: true,
+  },
+  {
+    name: ChatModels.PINSTRIPES_MINIMAX_M2_7,
+    provider: ChatModelProviders.PINSTRIPES,
+    enabled: false,
+    isBuiltIn: true,
   },
 ];
 
@@ -736,6 +765,14 @@ export const ProviderInfo: Record<Provider, ProviderMetadata> = {
     keyManagementURL: "https://github.com/settings/apps/authorizations",
     listModelURL: "",
   },
+  [ChatModelProviders.PINSTRIPES]: {
+    label: "Pinstripes",
+    host: "https://api.pinstripes.io/v1",
+    curlBaseURL: "https://api.pinstripes.io/v1",
+    keyManagementURL: "https://pinstripes.io",
+    listModelURL: "https://api.pinstripes.io/v1/models",
+    testModel: ChatModels.PINSTRIPES_DEEPSEEK_V4_FLASH,
+  },
 };
 
 // Map provider to its settings key for API key
@@ -754,6 +791,7 @@ export const ProviderSettingsKeyMap: Record<SettingKeyProviders, keyof CopilotSe
   "amazon-bedrock": "amazonBedrockApiKey",
   siliconflow: "siliconflowApiKey",
   "github-copilot": "githubCopilotToken",
+  pinstripes: "pinstripeApiKey",
 };
 
 export enum VAULT_VECTOR_STORE_STRATEGY {
@@ -907,6 +945,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   amazonBedrockApiKey: "",
   amazonBedrockRegion: "",
   siliconflowApiKey: "",
+  pinstripeApiKey: "",
   // GitHub Copilot OAuth tokens
   githubCopilotAccessToken: "",
   githubCopilotToken: "",
