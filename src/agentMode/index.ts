@@ -18,11 +18,7 @@ import { createNodeFileStorage } from "./session/nodeFileStorage";
 import { AgentSessionManager } from "./session/AgentSessionManager";
 import { shouldUseMiyo } from "@/miyo/miyoUtils";
 import { SkillManager } from "./skills";
-import {
-  managedBuiltinSkills,
-  MIYO_CHAT_SEARCH_SKILL,
-  MIYO_SEARCH_SKILL,
-} from "./skills/builtin/builtinSkills";
+import { managedBuiltinSkills, MIYO_SEARCH_SKILL } from "./skills/builtin/builtinSkills";
 import {
   removeSeededBuiltin,
   seedBuiltinSkills,
@@ -314,7 +310,6 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
       });
       if (!useMiyo) {
         await removeSeededBuiltin(folder, MIYO_SEARCH_SKILL.name, fs);
-        await removeSeededBuiltin(folder, MIYO_CHAT_SEARCH_SKILL.name, fs);
       }
     } catch (e) {
       logError("[Skills] builtin skill seeding failed", e);
