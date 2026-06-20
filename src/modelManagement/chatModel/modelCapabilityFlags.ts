@@ -36,6 +36,18 @@ export function capabilityListFromModelInfo(info: ModelInfo): ModelCapability[] 
 }
 
 /**
+ * Capabilities for a persisted/configured model, or `undefined` when the
+ * snapshot carries no modality data at all. The presence of `modalities`
+ * is what distinguishes "known to lack vision" (returns a list without
+ * `VISION`) from "unknown" (`undefined`) — the latter lets a caller fall
+ * back to the live catalog instead of asserting no vision. Used by the agent
+ * pickers so a model's vision icon comes from its own `info` first.
+ */
+export function capabilitiesFromConfiguredInfo(info: ModelInfo): ModelCapability[] | undefined {
+  return info.modalities ? capabilityListFromModelInfo(info) : undefined;
+}
+
+/**
  * Return a NEW `ModelInfo` with `reasoning` and `modalities.input` adjusted to
  * reflect `caps`. Other input modalities (e.g. "text", "audio") and the
  * existing `output` array are preserved; the input object is never mutated.

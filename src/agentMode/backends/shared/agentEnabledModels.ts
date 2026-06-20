@@ -1,5 +1,5 @@
 import type { CopilotSettings } from "@/settings/model";
-import type { ConfiguredModel } from "@/modelManagement";
+import { type ConfiguredModel, capabilitiesFromConfiguredInfo } from "@/modelManagement";
 import type { EnabledModelEntry } from "@/agentMode/session/types";
 
 /** See AGENTS.md → "Referential stability". */
@@ -41,6 +41,7 @@ export function agentOriginEnabledModelEntries(
       name: configuredModel.info.displayName || configuredModel.info.id,
       description: configuredModel.info.description,
       credentialState: "ok",
+      capabilities: capabilitiesFromConfiguredInfo(configuredModel.info),
     });
   }
 

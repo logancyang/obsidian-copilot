@@ -219,11 +219,13 @@ function appendFromEnabledEntries(
     const reported = reportedById.get(enabled.baseModelId);
     const name = reported?.name || enabled.name || enabled.baseModelId;
     const subtitle = reported?.description ?? enabled.description;
-    const capabilities = capabilitiesFromCatalog(
-      catalog,
-      reported?.provider ?? null,
-      enabled.baseModelId
-    );
+    // Prefer the model's own persisted capabilities (derived from its
+    // `ConfiguredModel.info` modality snapshot) — reliable without the live
+    // catalog. Fall back to the catalog only when the stored info was silent
+    // (`undefined`) on modalities, so a known no-vision model isn't re-guessed.
+    const capabilities =
+      enabled.capabilities ??
+      capabilitiesFromCatalog(catalog, reported?.provider ?? null, enabled.baseModelId);
     const entry = synthesizeAgentEntry(
       enabled.baseModelId,
       name,

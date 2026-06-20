@@ -1,7 +1,11 @@
 /** Pure grouping logic for `ConfiguredModelEnableList`, split from the React container so it's testable with plain data. */
 
 import { isOpencodeZenWireId, type ModelEnableGroup, type ModelEnableRow } from "@/agentMode";
-import type { ConfiguredModel, Provider } from "@/modelManagement";
+import {
+  capabilityListFromModelInfo,
+  type ConfiguredModel,
+  type Provider,
+} from "@/modelManagement";
 
 /** One candidate model joined to its provider, plus current enabled state. */
 export interface Candidate {
@@ -119,6 +123,7 @@ export function toRow(candidate: Candidate): ModelEnableRow {
     wireId: id,
     enabled,
     isFree: isOpencodeZenWireId(id),
+    capabilities: capabilityListFromModelInfo(configuredModel.info),
   };
 }
 

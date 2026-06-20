@@ -1,8 +1,10 @@
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { FreeModelWarningIcon } from "@/components/ui/FreeModelWarningIcon";
+import { ModelCapabilityIcons } from "@/components/ui/model-display";
 import { SearchBar } from "@/components/ui/SearchBar";
 import { SettingSwitch } from "@/components/ui/setting-switch";
+import type { ModelCapability } from "@/constants";
 import { cn } from "@/lib/utils";
 import { ChevronRight } from "lucide-react";
 import React from "react";
@@ -19,6 +21,8 @@ export interface ModelEnableRow {
   wireId?: string;
   /** Whether the model is currently enabled. */
   enabled: boolean;
+  /** Modality icons (vision/websearch) shown beside the label; reasoning is not rendered. */
+  capabilities?: ModelCapability[];
   /**
    * `true` for a free model (zero catalog cost) routed through a third party.
    * Renders a privacy-warning icon + tooltip beside the label, since such
@@ -100,6 +104,11 @@ export const ModelEnableList: React.FC<ModelEnableListProps> = ({
             <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-1">
               <span className="tw-truncate">{row.label}</span>
               {row.isFree && <FreeModelWarningIcon />}
+              {row.capabilities && row.capabilities.length > 0 && (
+                <span className="tw-flex tw-shrink-0 tw-items-center tw-gap-0.5">
+                  <ModelCapabilityIcons capabilities={row.capabilities} iconSize={14} />
+                </span>
+              )}
             </div>
             {row.description && (
               <div className="tw-truncate tw-text-xs tw-text-muted">{row.description}</div>
