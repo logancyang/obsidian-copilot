@@ -45,11 +45,11 @@ import CopilotPlugin from "@/main";
 import { useIsPlusUser } from "@/plusUtils";
 import { ProjectFileManager } from "@/projects/ProjectFileManager";
 import { useProjects } from "@/projects/state";
-import { useSettingsValue } from "@/settings/model";
+import { getModelKeyFromModel, useSettingsValue } from "@/settings/model";
 import { ChatManagerChatUIState } from "@/state/ChatUIState";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { ChatMessage } from "@/types/message";
-import { err2String, isPlusChain } from "@/utils";
+import { err2String, isPlusChain, modelSupportsVision } from "@/utils";
 import { arrayBufferToBase64 } from "@/utils/base64";
 import { appendUniqueFiles } from "@/utils/fileListUtils";
 import { Notice, TFile } from "obsidian";
@@ -310,6 +310,23 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     if (hasUrlsInContext && !isPlusChain(currentChain)) {
       // Show notice but continue processing the message without URL context
       new Notice(RESTRICTION_MESSAGES.URL_PROCESSING_RESTRICTED);
+    }
+
+    // Hard-block sending images to a model that is KNOWN to lack vision. We only
+    // block when capabilities are populated (an empty array still means "known");
+    // undefined capabilities mean "unknown" and must not block. Inputs are left
+    // intact so the user can switch models without retyping.
+    if (selectedImages.length > 0) {
+      const activeModel = chatModelPicker.models.find(
+        (m) => getModelKeyFromModel(m) === chatModelPicker.value
+      );
+      if (Array.isArray(activeModel?.capabilities) && !modelSupportsVision(activeModel)) {
+        const modelLabel = activeModel.displayName || activeModel.name;
+        new Notice(
+          `${modelLabel} doesn't support images. Switch to a vision-capable model, or enable Vision for this model in its provider settings.`
+        );
+        return;
+      }
     }
 
     try {
