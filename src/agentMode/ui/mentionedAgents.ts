@@ -24,8 +24,8 @@ export function listInstalledAgentBrands(settings: CopilotSettings): ReadonlyArr
  * pills the user `@`-mentioned. The session's main agent is always the first
  * answer (baseline), even when unmentioned; an explicit `@`-mention of the
  * main agent is deduped rather than doubled. Mentions of agents that aren't
- * installed are dropped. Order is stable: main first, then mentions in the
- * order the user added them.
+ * installed are dropped. Order is stable: main first, then the mentions in the
+ * order received (the pill sync plugin reports them sorted by backend id).
  */
 export function resolveMentionedAgents(args: {
   mainAgentId: BackendId;
