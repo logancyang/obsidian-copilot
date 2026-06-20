@@ -219,6 +219,12 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   // surface flips from the centered landing to the conversation layout.
   const isGlobalLanding = !manager.getActiveSession()?.hasUserVisibleMessages();
 
+  // The session's main agent — the always-included baseline answer and the
+  // dedup anchor for `@`-mentions. Prefer the starting backend (set while the
+  // first session spins up) and fall back to the active session's backend.
+  const mainAgentId =
+    manager.getStartingBackendId() ?? manager.getActiveSession()?.backendId ?? null;
+
   // Rotating landing greeting: re-rolled per session id (so each fresh chat /
   // landing open gets a new line) but stable across the stream re-renders within
   // a session, so it doesn't flicker as tokens arrive. sessionId is the
@@ -380,6 +386,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                     sessionId={sessionId}
                     draft={draft}
                     app={app}
+                    mainAgentId={mainAgentId}
                     updateUserMessageHistory={updateUserMessageHistory}
                     isStarting={isStarting}
                     hasPendingPlanPermission={hasPendingPlanPermission}

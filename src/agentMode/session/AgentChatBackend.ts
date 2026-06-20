@@ -3,6 +3,7 @@ import type {
   AgentChatMessage,
   AgentQuestionAnswers,
   AskUserQuestionPrompt,
+  BackendId,
   BackendState,
   CurrentPlan,
   PermissionPrompt,
@@ -22,10 +23,19 @@ import type {
  */
 export interface AgentChatBackend {
   subscribe(listener: () => void): () => void;
+  /**
+   * Append a user message and start the turn. `mentionedAgents` is the resolved
+   * fan-out selection (main agent first, then `@`-mentioned installed agents).
+   * Present only when the turn fans out to more than the main agent; absent for
+   * the existing single-agent path. Phase 1 only emits this; the fan-out
+   * orchestration that consumes it lands in a later phase (read it via
+   * `AgentSession.getLastMentionedAgents()`).
+   */
   sendMessage(
     text: string,
     context?: MessageContext,
-    promptContent?: PromptContent[]
+    promptContent?: PromptContent[],
+    mentionedAgents?: ReadonlyArray<BackendId>
   ): { id: string; turn: Promise<void> };
   cancel(): Promise<void>;
   deleteMessage(id: string): Promise<boolean>;

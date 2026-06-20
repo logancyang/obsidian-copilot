@@ -46,6 +46,8 @@ import { $removeActiveWebTabPills } from "./pills/ActiveWebTabPillNode";
 import { $findWebTabPills, $removeWebTabPillsByUrl } from "./pills/WebTabPillNode";
 import LexicalEditor from "./LexicalEditor";
 import { cn } from "@/lib/utils";
+import { type AgentMentionBrand, EMPTY_AGENT_MENTION_BRANDS } from "./hooks/useAtMentionCategories";
+import { $createAgentPillNode } from "./pills/AgentPillNode";
 
 const ACCENT_CIRCLE_BUTTON_CLASS =
   "tw-rounded-full tw-bg-interactive-accent tw-text-on-accent hover:tw-bg-interactive-accent-hover";
@@ -173,6 +175,19 @@ export interface ChatInputProps {
    * tool runner.
    */
   isAgentMode?: boolean;
+
+  /**
+   * Installed coding agents the user can `@`-mention this turn (Agent Mode
+   * only). Non-empty enables the "Agents" typeahead group and agent pills.
+   */
+  agentBrands?: ReadonlyArray<AgentMentionBrand>;
+
+  /**
+   * Fires with the backend ids of the agent pills currently in the editor,
+   * whenever that set changes. The Agent Mode wrapper resolves these into the
+   * structured `mentionedAgents` selection at send time.
+   */
+  onMentionedAgentsChange?: (backendIds: string[]) => void;
 }
 
 /**
@@ -219,6 +234,8 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
     onEditCancel,
     initialContext,
     isAgentMode = false,
+    agentBrands = EMPTY_AGENT_MENTION_BRANDS,
+    onMentionedAgentsChange,
   },
   ref
 ) {
@@ -346,6 +363,16 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
     });
   };
 
+  // Agent pills are id-only; the sync plugin reports the full current set on
+  // every change, so forward it straight to the Agent Mode wrapper, which
+  // resolves the structured selection at send time.
+  const handleAgentsChange = useCallback(
+    (backendIds: string[]) => {
+      onMentionedAgentsChange?.(backendIds);
+    },
+    [onMentionedAgentsChange]
+  );
+
   // Handle when URLs are removed from pills (when pills are deleted in editor)
   const handleURLPillsRemoved = (removedUrls: string[]) => {
     const removedUrlSet = new Set(removedUrls);
@@ -439,6 +466,19 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
             }
           });
           // Note: toolsFromPills will be updated automatically via ToolPillSyncPlugin
+        }
+        break;
+      case "agents":
+        // Insert an agent pill at the cursor; agentsFromPills syncs via
+        // AgentPillSyncPlugin. `data` is the backend id.
+        if (typeof data === "string" && lexicalEditorRef.current) {
+          const label = agentBrands.find((b) => b.id === data)?.displayName ?? data;
+          lexicalEditorRef.current.update(() => {
+            const selection = $getSelection();
+            if ($isRangeSelection(selection)) {
+              selection.insertNodes([$createAgentPillNode(data, label)]);
+            }
+          });
         }
         break;
       case "folders":
@@ -806,6 +846,8 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
           onWebTabsChange={setWebTabsFromPills}
           onActiveWebTabAdded={handleActiveWebTabAdded}
           onActiveWebTabRemoved={handleActiveWebTabRemoved}
+          agentBrands={agentBrands}
+          onAgentsChange={handleAgentsChange}
           onEditorReady={onEditorReady}
           onImagePaste={onAddImage}
           onTagSelected={onTagSelected}

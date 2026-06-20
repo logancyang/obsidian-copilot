@@ -19,6 +19,13 @@ import { Button } from "@/components/ui/button";
 import { ACTIVE_WEB_TAB_MARKER, EVENT_NAMES } from "@/constants";
 import { EventTargetContext } from "@/context";
 import { logError, logWarn } from "@/logger";
+import {
+  isFanout,
+  listInstalledAgentBrands,
+  resolveMentionedAgents,
+} from "@/agentMode/ui/mentionedAgents";
+import type { BackendId } from "@/agentMode/session/types";
+import { useSettingsValue } from "@/settings/model";
 import { buildWebTabsWithActiveSnapshot } from "@/services/webViewerService/activeWebTabSnapshot";
 import {
   isNoteSelectedTextContext,
@@ -30,7 +37,7 @@ import { arrayBufferToBase64 } from "@/utils/base64";
 import { mergeWebTabContexts } from "@/utils/urlNormalization";
 import { Clock, X } from "lucide-react";
 import { App, Notice, TFile } from "obsidian";
-import React, { memo, useCallback, useContext, useEffect, useRef } from "react";
+import React, { memo, useCallback, useContext, useEffect, useMemo, useRef } from "react";
 import { v4 as uuidv4 } from "uuid";
 
 interface AgentChatInputProps {
@@ -45,6 +52,12 @@ interface AgentChatInputProps {
    */
   draft: AgentInputDraftControls;
   app: App;
+  /**
+   * The session's main agent (always included as the baseline answer). Used to
+   * dedup an explicit `@`-mention of the main agent and to anchor the resolved
+   * `mentionedAgents` ordering. `null` before a session lands.
+   */
+  mainAgentId: BackendId | null;
   updateUserMessageHistory: (newMessage: string) => void;
   isStarting: boolean;
   hasPendingPlanPermission: boolean;
@@ -90,6 +103,12 @@ const combineQueuedMessages = (items: QueuedAgentMessage[]): QueuedAgentMessage 
   const allSelected = items.flatMap((i) => i.context?.selectedTextContexts ?? []);
   const allWebTabs = items.flatMap((i) => i.context?.webTabs ?? []);
   const allPromptContent = items.flatMap((i) => i.promptContent ?? []);
+  // Union the per-message fan-out selections, preserving first-seen order (each
+  // already leads with the main agent, so the combined list does too).
+  const mergedAgents = dedupeBy(
+    items.flatMap((i) => i.mentionedAgents ?? []),
+    (id) => id
+  );
 
   return {
     id: `queued-combined-${uuidv4()}`,
@@ -101,6 +120,7 @@ const combineQueuedMessages = (items: QueuedAgentMessage[]): QueuedAgentMessage 
       mergeWebTabContexts(allWebTabs)
     ),
     promptContent: allPromptContent.length > 0 ? allPromptContent : undefined,
+    mentionedAgents: mergedAgents.length > 0 ? mergedAgents : undefined,
   };
 };
 
@@ -132,6 +152,7 @@ export const AgentChatInput = memo(function AgentChatInput({
   sessionId,
   draft,
   app,
+  mainAgentId,
   updateUserMessageHistory,
   isStarting,
   hasPendingPlanPermission,
@@ -140,6 +161,7 @@ export const AgentChatInput = memo(function AgentChatInput({
   onCycleMode,
 }: AgentChatInputProps) {
   const eventTarget = useContext(EventTargetContext);
+  const settings = useSettingsValue();
   const [selectedTextContexts] = useSelectedTextContexts();
   // SSoT for the Active Web Tab; `activeWebTabForMentions` matches the send
   // snapshot (preserved only when focusing the chat panel). Drives the
@@ -149,6 +171,17 @@ export const AgentChatInput = memo(function AgentChatInput({
 
   const isMountedRef = useRef(false);
   const previousSessionIdRef = useRef(sessionId);
+
+  // Installed coding agents the user can `@`-mention this turn. Registry-driven
+  // and recomputed only when settings change, so the hot streaming path is
+  // unaffected. The active set of mentioned pills is held in a ref (not state)
+  // so a mention edit never re-renders this memoized composer mid-stream; it's
+  // read at send time.
+  const agentBrands = useMemo(() => listInstalledAgentBrands(settings), [settings]);
+  const mentionedAgentIdsRef = useRef<string[]>([]);
+  const handleMentionedAgentsChange = useCallback((backendIds: string[]) => {
+    mentionedAgentIdsRef.current = backendIds;
+  }, []);
 
   // Draft state is owned by AgentHome (so it can read `loading`/feed the drop
   // overlay); this composer is the controlled consumer.
@@ -203,7 +236,12 @@ export const AgentChatInput = memo(function AgentChatInput({
     async (item: QueuedAgentMessage) => {
       setLoading(true);
       try {
-        const { turn } = backend.sendMessage(item.text, item.context, item.promptContent);
+        const { turn } = backend.sendMessage(
+          item.text,
+          item.context,
+          item.promptContent,
+          item.mentionedAgents
+        );
         if (item.rawInput) updateUserMessageHistory(item.rawInput);
         await turn;
       } catch (error) {
@@ -268,14 +306,30 @@ export const AgentChatInput = memo(function AgentChatInput({
         if (block) content.push(block);
       }
 
+      // Resolve the `@`-mentioned agents into the structured fan-out selection
+      // (main agent first, then installed mentions, deduped). Only carried when
+      // it actually fans out — the single-agent path stays byte-for-byte the
+      // existing behavior with no `mentionedAgents` on the send.
+      let mentionedAgents: ReadonlyArray<BackendId> | undefined;
+      if (mainAgentId) {
+        const resolved = resolveMentionedAgents({
+          mainAgentId,
+          mentionedAgentIds: mentionedAgentIdsRef.current,
+          installedAgentIds: new Set(agentBrands.map((b) => b.id)),
+        });
+        if (isFanout(resolved)) mentionedAgents = resolved;
+      }
+
       const item: QueuedAgentMessage = {
         id: `queued-${uuidv4()}`,
         text: resolvedText,
         rawInput,
         context: buildMessageContext(notes, selectedTextContexts, resolvedWebTabs),
         promptContent: content.length > 0 ? content : undefined,
+        mentionedAgents,
       };
 
+      mentionedAgentIdsRef.current = [];
       resetCompose();
       // The message context was already snapshotted above from this render's
       // captured `selectedTextContexts`, so clearing the global atom here is safe
@@ -306,6 +360,8 @@ export const AgentChatInput = memo(function AgentChatInput({
       resetCompose,
       runSend,
       setQueuedMessages,
+      mainAgentId,
+      agentBrands,
     ]
   );
 
@@ -400,6 +456,8 @@ export const AgentChatInput = memo(function AgentChatInput({
           modePickerOverride={modePickerOverride ?? undefined}
           selectedTextContexts={selectedTextContexts}
           onRemoveSelectedText={removeSelectedTextContext}
+          agentBrands={agentBrands}
+          onMentionedAgentsChange={handleMentionedAgentsChange}
           showProgressCard={NOOP}
           showIndexingCard={NOOP}
         />

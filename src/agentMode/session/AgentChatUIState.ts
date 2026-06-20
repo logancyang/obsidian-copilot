@@ -5,6 +5,7 @@ import type {
   AgentChatMessage,
   AgentQuestionAnswers,
   AskUserQuestionPrompt,
+  BackendId,
   BackendState,
   CurrentPlan,
   PermissionPrompt,
@@ -59,9 +60,15 @@ export class AgentChatUIState implements AgentChatBackend {
   sendMessage(
     text: string,
     context?: MessageContext,
-    promptContent?: PromptContent[]
+    promptContent?: PromptContent[],
+    mentionedAgents?: ReadonlyArray<BackendId>
   ): { id: string; turn: Promise<void> } {
-    const { userMessageId, turn } = this.session.sendPrompt(text, context, promptContent);
+    const { userMessageId, turn } = this.session.sendPrompt(
+      text,
+      context,
+      promptContent,
+      mentionedAgents
+    );
     this.notifyListeners();
     const wrapped = turn.then(
       () => undefined,

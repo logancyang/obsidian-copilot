@@ -10,9 +10,11 @@ import {
 } from "@/components/chat-components/utils/lexicalTextUtils";
 import {
   useAtMentionCategories,
+  AgentMentionBrand,
   AtMentionCategory,
   AtMentionOption,
   CategoryOption,
+  EMPTY_AGENT_MENTION_BRANDS,
 } from "@/components/chat-components/hooks/useAtMentionCategories";
 import { useAtMentionSearch } from "@/components/chat-components/hooks/useAtMentionSearch";
 
@@ -21,12 +23,18 @@ interface AtMentionCommandPluginProps {
   /** Whether to surface Copilot built-in `@` tools (category + search hits). */
   showTools?: boolean;
   currentActiveFile?: TFile | null;
+  /**
+   * Installed coding agents mentionable in this composer. Non-empty only in
+   * Agent Mode; surfaces the "Agents" typeahead group and inserts agent pills.
+   */
+  agentBrands?: ReadonlyArray<AgentMentionBrand>;
 }
 
 export function AtMentionCommandPlugin({
   isCopilotPlus = false,
   showTools = false,
   currentActiveFile = null,
+  agentBrands = EMPTY_AGENT_MENTION_BRANDS,
 }: AtMentionCommandPluginProps): JSX.Element {
   const app = useApp();
   const [editor] = useLexicalComposerContext();
@@ -43,7 +51,7 @@ export function AtMentionCommandPlugin({
   // Use the shared at-mention categories hook. Action categories (e.g. Images,
   // which opens a file picker) are not supported inline because the editor has
   // no pill representation for them — they only appear in the `+` popover.
-  const allCategoryOptions = useAtMentionCategories(showTools);
+  const allCategoryOptions = useAtMentionCategories(showTools, agentBrands.length > 0);
   const availableCategoryOptions = useMemo(
     () => allCategoryOptions.filter((c) => !c.isAction),
     [allCategoryOptions]
@@ -91,7 +99,8 @@ export function AtMentionCommandPlugin({
     isCopilotPlus,
     showTools,
     availableCategoryOptions,
-    currentActiveFile
+    currentActiveFile,
+    agentBrands
   );
 
   // Type guard functions

@@ -19,6 +19,7 @@ import { FolderPillNode } from "./pills/FolderPillNode";
 import { ActiveNotePillNode } from "./pills/ActiveNotePillNode";
 import { WebTabPillNode } from "./pills/WebTabPillNode";
 import { ActiveWebTabPillNode } from "./pills/ActiveWebTabPillNode";
+import { AgentPillNode } from "./pills/AgentPillNode";
 import { PillDeletionPlugin } from "./plugins/PillDeletionPlugin";
 import { KeyboardPlugin } from "./plugins/KeyboardPlugin";
 import { ValueSyncPlugin } from "./plugins/ValueSyncPlugin";
@@ -29,6 +30,7 @@ import { ToolPillSyncPlugin } from "./plugins/ToolPillSyncPlugin";
 import { FolderPillSyncPlugin } from "./plugins/FolderPillSyncPlugin";
 import { ActiveNotePillSyncPlugin } from "./plugins/ActiveNotePillSyncPlugin";
 import { WebTabPillSyncPlugin } from "./plugins/WebTabPillSyncPlugin";
+import { AgentPillSyncPlugin } from "./plugins/AgentPillSyncPlugin";
 import { PastePlugin } from "./plugins/PastePlugin";
 import { TextInsertionPlugin } from "./plugins/TextInsertionPlugin";
 import { useChatInput } from "@/context/ChatInputContext";
@@ -37,6 +39,7 @@ import { logError } from "@/logger";
 import { ActiveFileProvider } from "./context/ActiveFileContext";
 import { ChainType } from "@/chainType";
 import { useSettingsValue } from "@/settings/model";
+import { type AgentMentionBrand, EMPTY_AGENT_MENTION_BRANDS } from "./hooks/useAtMentionCategories";
 
 interface LexicalEditorProps {
   value: string;
@@ -59,6 +62,9 @@ interface LexicalEditorProps {
   onWebTabsRemoved?: (removedWebTabs: WebTabContext[]) => void;
   onActiveWebTabAdded?: () => void;
   onActiveWebTabRemoved?: () => void;
+  onAgentsChange?: (backendIds: string[]) => void;
+  /** Installed coding agents mentionable in the composer (Agent Mode only). */
+  agentBrands?: ReadonlyArray<AgentMentionBrand>;
   onEditorReady?: (editor: LexicalEditorType) => void;
   onImagePaste?: (files: File[]) => void;
   onTagSelected?: () => void;
@@ -92,6 +98,8 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
   onWebTabsRemoved,
   onActiveWebTabAdded,
   onActiveWebTabRemoved,
+  onAgentsChange,
+  agentBrands = EMPTY_AGENT_MENTION_BRANDS,
   onEditorReady,
   onImagePaste,
   onTagSelected,
@@ -139,6 +147,7 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
         FolderPillNode,
         WebTabPillNode,
         ActiveWebTabPillNode,
+        AgentPillNode,
         ...(onURLsChange ? [URLPillNode] : []),
       ],
       onError: (error: Error) => {
@@ -215,6 +224,7 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
             onActiveWebTabAdded={onActiveWebTabAdded}
             onActiveWebTabRemoved={onActiveWebTabRemoved}
           />
+          <AgentPillSyncPlugin onAgentsChange={onAgentsChange} />
           <PillDeletionPlugin />
           <PastePlugin enableURLPills={!!onURLsChange} onImagePaste={onImagePaste} />
           <SlashCommandPlugin />
@@ -226,6 +236,7 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
             isCopilotPlus={isCopilotPlus}
             showTools={showTools}
             currentActiveFile={currentActiveFile}
+            agentBrands={agentBrands}
           />
           <TextInsertionPlugin />
         </div>

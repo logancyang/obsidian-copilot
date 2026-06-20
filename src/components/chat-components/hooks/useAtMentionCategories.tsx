@@ -1,11 +1,12 @@
 import React, { useMemo } from "react";
 import { TFile, TFolder } from "obsidian";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
-import { FileText, Wrench, Folder, Globe, Image } from "lucide-react";
+import { FileText, Wrench, Folder, Globe, Image, Bot } from "lucide-react";
 import { TypeaheadOption } from "@/components/chat-components/TypeaheadMenuContent";
 import type { WebTabContext } from "@/types/message";
 
 export type AtMentionCategory =
+  | "agents"
   | "notes"
   | "tools"
   | "folders"
@@ -20,11 +21,39 @@ export interface AtMentionOption extends TypeaheadOption {
   isAction?: boolean;
 }
 
+/**
+ * Minimal, agent-agnostic brand shape for a mentionable coding agent. Kept
+ * local to chat-components (host) so the generic composer never imports Agent
+ * Mode internals; the Agent Mode layer passes its structurally-compatible
+ * `AgentBrand` down as props.
+ */
+export interface AgentMentionBrand {
+  readonly id: string;
+  readonly displayName: string;
+  readonly Icon: React.ComponentType<{ className?: string }>;
+}
+
+/** Frozen empty brand list — referential stability for the no-agents default. */
+export const EMPTY_AGENT_MENTION_BRANDS: ReadonlyArray<AgentMentionBrand> = Object.freeze([]);
+
 export interface CategoryOption extends TypeaheadOption {
   category: AtMentionCategory;
   icon: React.ReactNode;
   isAction?: boolean;
 }
+
+/**
+ * "Agents" typeahead group — only surfaced in Agent Mode, and only when at
+ * least one backend is installed. Rendered at the very top of the typeahead so
+ * `@`-mentioning a coding agent is the first affordance.
+ */
+const AGENTS_CATEGORY: CategoryOption = {
+  key: "agents",
+  title: "Agents",
+  subtitle: "Ask another coding agent this turn",
+  category: "agents",
+  icon: <Bot className="tw-size-4" />,
+};
 
 const CATEGORY_OPTIONS: CategoryOption[] = [
   {
@@ -85,11 +114,16 @@ export function shouldShowAtMentionTools(args: {
  * @param showTools - Whether to include the Copilot Tools category. Compute
  *   via {@link shouldShowAtMentionTools} from the caller's higher-level
  *   signals (e.g. Copilot Plus on, Agent Mode off).
+ * @param showAgents - Whether to include the Agents category (Agent Mode with
+ *   at least one installed backend). Rendered first when present.
  * @returns Array of CategoryOption objects
  */
-export function useAtMentionCategories(showTools: boolean = false): CategoryOption[] {
+export function useAtMentionCategories(
+  showTools: boolean = false,
+  showAgents: boolean = false
+): CategoryOption[] {
   return useMemo(() => {
-    return CATEGORY_OPTIONS.filter((cat) => {
+    const base = CATEGORY_OPTIONS.filter((cat) => {
       if (cat.category === "tools") {
         return showTools;
       }
@@ -98,5 +132,6 @@ export function useAtMentionCategories(showTools: boolean = false): CategoryOpti
       }
       return true;
     });
-  }, [showTools]);
+    return showAgents ? [AGENTS_CATEGORY, ...base] : base;
+  }, [showTools, showAgents]);
 }

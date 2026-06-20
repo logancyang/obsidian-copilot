@@ -18,10 +18,18 @@ import { $createToolPillNode } from "@/components/chat-components/pills/ToolPill
 import { $createFolderPillNode } from "@/components/chat-components/pills/FolderPillNode";
 import { $createWebTabPillNode } from "@/components/chat-components/pills/WebTabPillNode";
 import { $createActiveWebTabPillNode } from "@/components/chat-components/pills/ActiveWebTabPillNode";
+import { $createAgentPillNode } from "@/components/chat-components/pills/AgentPillNode";
 import { logInfo } from "@/logger";
 import { AVAILABLE_TOOLS } from "@/components/chat-components/constants/tools";
 
-export type PillType = "notes" | "tools" | "folders" | "active-note" | "webTabs" | "activeWebTab";
+export type PillType =
+  | "notes"
+  | "tools"
+  | "folders"
+  | "active-note"
+  | "webTabs"
+  | "activeWebTab"
+  | "agents";
 
 // Type representing different kinds of parsed content segments
 export type ParsedContentType =
@@ -77,6 +85,11 @@ function $createPillNode(pillData: PillData) {
       break;
     case "activeWebTab":
       return $createActiveWebTabPillNode();
+    case "agents":
+      if (typeof data === "string") {
+        return $createAgentPillNode(data, title ?? data);
+      }
+      break;
   }
 
   throw new Error(`Invalid pill data: ${JSON.stringify(pillData)}`);

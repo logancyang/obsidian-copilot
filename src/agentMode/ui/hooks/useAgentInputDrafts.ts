@@ -1,4 +1,4 @@
-import type { PromptContent } from "@/agentMode/session/types";
+import type { BackendId, PromptContent } from "@/agentMode/session/types";
 import type { MessageContext } from "@/types/message";
 import { TFile } from "obsidian";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -12,6 +12,12 @@ export interface QueuedAgentMessage {
   context?: MessageContext;
   /** Image blocks for the backend prompt. */
   promptContent?: PromptContent[];
+  /**
+   * Resolved fan-out selection (main agent first, then mentioned). Present only
+   * when the user `@`-mentioned at least one additional agent; absent for the
+   * single-agent path. Snapshotted at enqueue time alongside the rest.
+   */
+  mentionedAgents?: ReadonlyArray<BackendId>;
 }
 
 /**

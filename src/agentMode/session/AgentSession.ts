@@ -68,6 +68,9 @@ const EMPTY_QUESTIONS: AskUserQuestionPrompt[] = [];
 // Canonical "no answers" map. Resolving an in-flight question with this on
 // cancel/dispose makes the bridge treat it as a user cancellation.
 const EMPTY_ANSWERS: AgentQuestionAnswers = Object.freeze({});
+// Canonical "no fan-out" selection — referential stability for the seam getter
+// on the single-agent path.
+const EMPTY_BACKEND_IDS: ReadonlyArray<BackendId> = Object.freeze([]);
 
 /**
  * Optimistically swap `state.model.current.baseModelId` for the persisted
@@ -230,6 +233,12 @@ export class AgentSession {
   // preconditions pass. Yields the per-turn `"error"` status while the
   // session sits idle between a failed turn and the next prompt.
   private lastTurnError = false;
+  // SEAM (multi-agent fan-out, phase 1): the resolved fan-out selection for the
+  // most recent turn — main agent first, then `@`-mentioned installed agents.
+  // Empty until a turn fans out. Phase 1 only records it; the orchestration that
+  // dispatches one ephemeral read-only sub-session per agent reads this in a
+  // later phase. The single-agent path leaves it empty and behaves unchanged.
+  private lastMentionedAgents: ReadonlyArray<BackendId> = EMPTY_BACKEND_IDS;
   private placeholderId: string | null = null;
   // ACP `messageId`s seen on this turn's content chunks. Used to re-route
   // trailing chunks that a backend flushes *after* the `session/prompt` result
@@ -731,7 +740,8 @@ export class AgentSession {
   sendPrompt(
     displayText: string,
     context?: MessageContext,
-    promptContent?: PromptContent[]
+    promptContent?: PromptContent[],
+    mentionedAgents?: ReadonlyArray<BackendId>
   ): { userMessageId: string; turn: Promise<StopReason> } {
     const status = this.getStatus();
     if (status === "starting") {
@@ -774,6 +784,12 @@ export class AgentSession {
       this.applyAgentLabel(deriveChatTitleFromMessages(this.store.getDisplayMessages()));
     }
 
+    // Record the fan-out selection for this turn (empty = single-agent path).
+    // Phase 1 only stores it; the later fan-out orchestration reads it via
+    // `getLastMentionedAgents()`.
+    this.lastMentionedAgents =
+      mentionedAgents && mentionedAgents.length > 0 ? mentionedAgents : EMPTY_BACKEND_IDS;
+
     this.abortController = new AbortController();
     // Clear any prior terminal error before the new turn starts so the
     // derived status reflects the fresh `"running"` state. Both flips
@@ -783,6 +799,16 @@ export class AgentSession {
 
     const turn = this.runTurn(displayText, context, promptContent);
     return { userMessageId, turn };
+  }
+
+  /**
+   * SEAM (multi-agent fan-out, phase 1): the resolved fan-out selection for the
+   * most recent `sendPrompt` — main agent first, then `@`-mentioned installed
+   * agents. Empty for the single-agent path. The fan-out orchestrator (later
+   * phase) reads this to dispatch one ephemeral read-only sub-session per agent.
+   */
+  getLastMentionedAgents(): ReadonlyArray<BackendId> {
+    return this.lastMentionedAgents;
   }
 
   private async runTurn(
