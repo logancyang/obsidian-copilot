@@ -5,6 +5,7 @@ import { listBackendDescriptors } from "@/agentMode/backends/registry";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import { modelStateSignature } from "@/agentMode/session/translateBackendState";
 import type { BackendDescriptor } from "@/agentMode/session/types";
+import type { CatalogLookup } from "./agentModelPickerHelpers";
 import { buildAgentModelPicker } from "./agentModelPickerHelpers";
 import { useManagerSubscribe } from "./useManagerSubscribe";
 
@@ -94,7 +95,8 @@ function useAgentModelSignal(
  * Mode is *not* part of this override — see `useAgentModePicker` for that.
  */
 export function useAgentModelPicker(
-  manager: AgentSessionManager | null
+  manager: AgentSessionManager | null,
+  catalog: CatalogLookup | null
 ): AgentModelPickerOverride | null {
   const settings = useSettingsValue();
   const descriptors = useMemo(() => listBackendDescriptors(), []);
@@ -103,6 +105,6 @@ export function useAgentModelPicker(
     // `signal` is the memo invalidator — referenced here so
     // react-hooks/exhaustive-deps accepts it in the dep array.
     void signal;
-    return buildAgentModelPicker({ manager, descriptors, settings });
-  }, [manager, descriptors, settings, signal]);
+    return buildAgentModelPicker({ manager, descriptors, settings, catalog });
+  }, [manager, descriptors, settings, catalog, signal]);
 }

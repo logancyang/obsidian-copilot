@@ -170,7 +170,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   // it's unreachable while the tab is disabled.
   const handleProjectComingSoon = useCallback(() => {}, []);
 
-  const modelPickerOverride = useAgentModelPicker(manager);
+  const modelPickerOverride = useAgentModelPicker(manager, plugin.modelManagement.catalogService);
   const modePickerOverride = useAgentModePicker(manager);
 
   const handleCycleMode = useCallback(() => {
