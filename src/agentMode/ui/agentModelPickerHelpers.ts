@@ -84,6 +84,16 @@ export interface CatalogModelInfo {
  */
 export interface CatalogLookup {
   getProvider(id: string): { models: Record<string, CatalogModelInfo> } | undefined;
+  /**
+   * Lazily download/populate the catalog. Optional so test stubs and any
+   * synchronous-only lookup stay assignable. The picker calls it once on mount
+   * because nothing else in the agent path warms the catalog — without it
+   * `getProvider` always misses and no capability icons render.
+   */
+  ensureLoaded?(): Promise<void>;
+  /** Subscribe to catalog (re)population so the picker re-derives capabilities
+   *  once data lands. Returns an unsubscribe fn. Optional for the same reason. */
+  onChange?(listener: () => void): () => void;
 }
 
 /**

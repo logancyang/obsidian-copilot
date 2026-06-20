@@ -29,7 +29,11 @@ jest.mock("@/modelManagement/ui/ModelManagementContext", () => ({
     configuredModelRegistry: { bulkSet: mockBulkSet },
     backendConfigRegistry: { enableModel: mockEnableModel, removeRefs: mockRemoveRefs },
     coordinator: { removeProvider: jest.fn() },
-    catalogService: { getProvider: mockGetProvider },
+    catalogService: {
+      getProvider: mockGetProvider,
+      ensureLoaded: jest.fn().mockResolvedValue(undefined),
+      onChange: jest.fn().mockReturnValue(() => {}),
+    },
   }),
 }));
 // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real `useApp` hook; the name must match the export
@@ -534,7 +538,7 @@ describe("ConfigureProviderForm (Advanced capability overrides)", () => {
     fireEvent.click(screen.getByTestId("advanced-toggle"));
   }
 
-  it("lists each selected non-embedding model with vision + reasoning toggles", async () => {
+  it("lists each selected non-embedding model with a vision toggle", async () => {
     mockGetProvider.mockReturnValue(anthropicCatalogMetadata);
     render(
       <ConfigureProviderForm state={{ mode: "edit", providerId: "p1" }} onClose={jest.fn()} />
@@ -543,7 +547,8 @@ describe("ConfigureProviderForm (Advanced capability overrides)", () => {
     expandAdvanced();
     expect(screen.getByTestId("advanced-row-claude-sonnet")).toBeTruthy();
     expect(screen.getByTestId("advanced-vision-claude-sonnet")).toBeTruthy();
-    expect(screen.getByTestId("advanced-reasoning-claude-sonnet")).toBeTruthy();
+    // Reasoning is no longer surfaced as a toggle (ubiquitous; kept runtime-only).
+    expect(screen.queryByTestId("advanced-reasoning-claude-sonnet")).toBeNull();
   });
 
   it("shows an empty hint when no models are selected", async () => {

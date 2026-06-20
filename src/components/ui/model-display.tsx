@@ -1,7 +1,7 @@
 import React from "react";
 import { CustomModel } from "@/aiParams";
 import { getProviderLabel } from "@/utils";
-import { Lightbulb, Eye, Globe } from "lucide-react";
+import { Eye, Globe } from "lucide-react";
 import { ModelCapability } from "@/constants";
 
 interface ModelDisplayProps {
@@ -26,14 +26,6 @@ export const ModelCapabilityIcons: React.FC<ModelCapabilityIconsProps> = ({
         .sort((a, b) => a.localeCompare(b))
         .map((cap) => {
           switch (cap) {
-            case ModelCapability.REASONING:
-              return (
-                <Lightbulb
-                  key={cap}
-                  className="tw-text-model-capabilities-blue"
-                  style={{ width: iconSize, height: iconSize }}
-                />
-              );
             case ModelCapability.VISION:
               return (
                 <Eye
@@ -85,8 +77,6 @@ export const getModelDisplayWithIcons = (model: CustomModel): string => {
     model.capabilities
       ?.map((cap) => {
         switch (cap) {
-          case ModelCapability.REASONING:
-            return "Reasoning";
           case ModelCapability.VISION:
             return "Vision";
           case ModelCapability.WEB_SEARCH:

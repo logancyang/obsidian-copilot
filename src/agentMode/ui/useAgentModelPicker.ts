@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import type { ModelSelectorEntry } from "@/components/ui/ModelSelector";
 import { useSettingsValue } from "@/settings/model";
 import { listBackendDescriptors } from "@/agentMode/backends/registry";
@@ -86,6 +86,38 @@ function useAgentModelSignal(
 }
 
 /**
+ * Warm the catalog once and re-render when it (re)populates, so the picker
+ * derives capability icons as soon as `models.dev` data lands. Nothing else in
+ * the agent path calls `ensureLoaded`, so without this `getProvider` always
+ * misses and capabilities never show. Returns a version counter that mutates on
+ * every `onChange` — fed into the picker memo so it recomputes.
+ */
+function useCatalogVersion(catalog: CatalogLookup | null): number {
+  const ensuredRef = useRef(false);
+  useEffect(() => {
+    if (ensuredRef.current) return;
+    ensuredRef.current = true;
+    void catalog?.ensureLoaded?.();
+  }, [catalog]);
+
+  const subscribe = useCallback(
+    (onStoreChange: () => void) => catalog?.onChange?.(onStoreChange) ?? (() => {}),
+    [catalog]
+  );
+  const versionRef = useRef(0);
+  const getSnapshot = useCallback(() => versionRef.current, []);
+  return useSyncExternalStore(
+    (onStoreChange) =>
+      subscribe(() => {
+        versionRef.current += 1;
+        onStoreChange();
+      }),
+    getSnapshot,
+    getSnapshot
+  );
+}
+
+/**
  * Build the `modelPickerOverride` for `ChatInput` — one grouped section per
  * registered backend, plus an optional effort sibling for the active model.
  * Once the active session has any user-visible messages, non-active backend
@@ -101,10 +133,12 @@ export function useAgentModelPicker(
   const settings = useSettingsValue();
   const descriptors = useMemo(() => listBackendDescriptors(), []);
   const signal = useAgentModelSignal(manager, descriptors);
+  const catalogVersion = useCatalogVersion(catalog);
   return useMemo(() => {
-    // `signal` is the memo invalidator — referenced here so
-    // react-hooks/exhaustive-deps accepts it in the dep array.
+    // `signal` / `catalogVersion` are memo invalidators — referenced here so
+    // react-hooks/exhaustive-deps accepts them in the dep array.
     void signal;
+    void catalogVersion;
     return buildAgentModelPicker({ manager, descriptors, settings, catalog });
-  }, [manager, descriptors, settings, catalog, signal]);
+  }, [manager, descriptors, settings, catalog, signal, catalogVersion]);
 }

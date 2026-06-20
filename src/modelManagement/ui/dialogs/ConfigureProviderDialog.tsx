@@ -186,13 +186,36 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
         ? provider.origin.catalogProviderId
         : undefined;
 
+  // Warm the catalog and re-render when it (re)populates, so a cold first open
+  // enriches rows the moment `models.dev` lands instead of capturing an empty
+  // snapshot forever (the memo below would otherwise never recompute). Mirrors
+  // the load/subscribe pattern in `ByokPanel`.
+  const [catalogVersion, setCatalogVersion] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    const bump = (): void => {
+      if (!cancelled) setCatalogVersion((v) => v + 1);
+    };
+    const unsub = api.catalogService.onChange(bump);
+    api.catalogService
+      .ensureLoaded()
+      .then(bump)
+      .catch((err) => logError("[ConfigureProviderDialog] catalog ensureLoaded failed", err));
+    return () => {
+      cancelled = true;
+      unsub();
+    };
+  }, [api]);
+
   // Catalog metadata for row enrichment only — never seeds the candidate
   // pool. Live catalog wins; on miss (offline, legacy id) we fall back to
   // an empty record and rows render id-only until metadata loads.
   const catalogMetadata = useMemo<Record<string, ModelInfo>>(() => {
     if (!catalogProviderId) return EMPTY_METADATA;
     return api.catalogService.getProvider(catalogProviderId)?.models ?? EMPTY_METADATA;
-  }, [catalogProviderId, api]);
+    // `catalogVersion` re-runs this once the catalog lands.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [catalogProviderId, api, catalogVersion]);
 
   const [displayName, setDisplayName] = useState(() =>
     state.mode === "new" ? state.source.displayName : (provider?.displayName ?? "")
@@ -606,14 +629,6 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
                         checked={caps.vision}
                         onCheckedChange={(next) => setCapFlag(info.id, "vision", next)}
                         data-testid={`advanced-vision-${info.id}`}
-                      />
-                    </label>
-                    <label className="tw-flex tw-shrink-0 tw-items-center tw-gap-2 tw-text-xs tw-text-muted">
-                      Reasoning
-                      <SettingSwitch
-                        checked={caps.reasoning}
-                        onCheckedChange={(next) => setCapFlag(info.id, "reasoning", next)}
-                        data-testid={`advanced-reasoning-${info.id}`}
                       />
                     </label>
                   </div>

@@ -47,7 +47,7 @@ describe("ModelChecklist", () => {
     expect(screen.getByText("Embedding")).toBeTruthy();
   });
 
-  it("renders read-only capability icons derived from ModelInfo", () => {
+  it("renders read-only vision icon, but never a reasoning icon", () => {
     const VISION_REASON: ModelInfo = {
       id: "omni",
       displayName: "Omni",
@@ -63,8 +63,9 @@ describe("ModelChecklist", () => {
       />
     );
     const omniRow = screen.getByTestId("model-row-omni");
-    // Lightbulb (reasoning) + Eye (vision) render as two SVG icons.
-    expect(omniRow.querySelectorAll("svg").length).toBe(2);
+    // Only the Eye (vision) icon renders — reasoning is ubiquitous and is
+    // intentionally not shown, even though it's still derived for runtime.
+    expect(omniRow.querySelectorAll("svg").length).toBe(1);
     // A plain model shows no capability icons.
     expect(screen.getByTestId("model-row-gpt-5").querySelectorAll("svg").length).toBe(0);
     expect(container).toBeTruthy();
