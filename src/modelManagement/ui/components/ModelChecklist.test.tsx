@@ -47,6 +47,29 @@ describe("ModelChecklist", () => {
     expect(screen.getByText("Embedding")).toBeTruthy();
   });
 
+  it("renders read-only capability icons derived from ModelInfo", () => {
+    const VISION_REASON: ModelInfo = {
+      id: "omni",
+      displayName: "Omni",
+      modalities: { input: ["text", "image"] },
+      reasoning: true,
+    };
+    const { container } = render(
+      <ModelChecklist
+        availableModels={[VISION_REASON, PLAIN]}
+        selected={new Set<string>()}
+        onToggle={jest.fn()}
+        onAddId={jest.fn()}
+      />
+    );
+    const omniRow = screen.getByTestId("model-row-omni");
+    // Lightbulb (reasoning) + Eye (vision) render as two SVG icons.
+    expect(omniRow.querySelectorAll("svg").length).toBe(2);
+    // A plain model shows no capability icons.
+    expect(screen.getByTestId("model-row-gpt-5").querySelectorAll("svg").length).toBe(0);
+    expect(container).toBeTruthy();
+  });
+
   it("emits onToggle with the wire id when a checkbox is clicked", () => {
     const onToggle = jest.fn();
     renderList({ availableModels: [PLAIN], onToggle });

@@ -24,12 +24,16 @@ import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { ReactModal } from "@/components/modals/ReactModal";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { SearchBar } from "@/components/ui/SearchBar";
+import { SettingSwitch } from "@/components/ui/setting-switch";
 import { useApp } from "@/context";
+import { cn } from "@/lib/utils";
 import { logError } from "@/logger";
+import { capsFromModelInfo, type CapFlags } from "@/modelManagement/chatModel/modelCapabilityFlags";
 import type { ModelManagementApi } from "@/modelManagement/createModelManagement";
 import { BYOK_DEFAULT_AUTO_ENROLL } from "@/modelManagement/setup/ByokSetupApi";
 import { providerRequiresApiKey } from "@/modelManagement/providers/providerRequiresApiKey";
@@ -44,9 +48,9 @@ import {
 } from "@/modelManagement/ui/ModelManagementContext";
 import { settingsStore } from "@/settings/model";
 import { useAtomValue } from "jotai";
-import { CheckCircle2, Loader2, XCircle } from "lucide-react";
+import { CheckCircle2, ChevronDown, Loader2, XCircle } from "lucide-react";
 import { App, Notice } from "obsidian";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useModelCandidatePool } from "./useModelCandidatePool";
 
 /**
@@ -206,6 +210,11 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
   const [testing, setTesting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [modelQuery, setModelQuery] = useState("");
+  // User-edited capability overrides from the Advanced panel, keyed by wire id.
+  // Only ids the user actually toggled live here; untouched selected models
+  // fall through to their effective (catalog/saved) caps in the pool's overlay.
+  const [capOverrides, setCapOverrides] = useState<Record<string, CapFlags>>({});
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   // Whether this provider needs a key. New mode reads the picked definition;
   // edit mode reads the explicit persisted flag — never inferred from the
@@ -232,8 +241,46 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
     extras,
     requiresApiKey,
     providerHydrated: state.mode === "edit" ? !!provider : true,
+    capOverrides,
     api,
   });
+
+  // Saved snapshots by wire id. In edit mode the user's previously-saved caps
+  // live here; the catalog-first `resolveModelInfo` would otherwise mask a
+  // prior override (Risk R1), so the Advanced panel seeds from the saved
+  // snapshot when present and falls back to the catalog/synth resolution.
+  const savedInfoByWireId = useMemo(
+    () => new Map(existingModels.map((m) => [m.info.id, m.info])),
+    [existingModels]
+  );
+
+  const effectiveCapsForId = useCallback(
+    (wireId: string): CapFlags =>
+      capsFromModelInfo(savedInfoByWireId.get(wireId) ?? pool.resolveModelInfo(wireId)),
+    [savedInfoByWireId, pool]
+  );
+
+  // Selected, non-embedding models for the Advanced panel — each row shows the
+  // user override if set, else the effective (saved-then-catalog) caps, so the
+  // toggles reflect exactly what would be saved.
+  const advancedModels = useMemo(
+    () =>
+      [...pool.selectedWireIds]
+        .map((id) => pool.resolveModelInfo(id))
+        .filter((info) => !info.isEmbedding)
+        .map((info) => ({
+          info,
+          caps: capOverrides[info.id] ?? effectiveCapsForId(info.id),
+        })),
+    [pool, capOverrides, effectiveCapsForId]
+  );
+
+  const setCapFlag = (wireId: string, key: keyof CapFlags, value: boolean): void => {
+    setCapOverrides((prev) => {
+      const base = prev[wireId] ?? effectiveCapsForId(wireId);
+      return { ...prev, [wireId]: { ...base, [key]: value } };
+    });
+  };
 
   // Single verification path shared by Test and save-time auto-verify. In new
   // mode the synthetic provider carries `catalogProviderId` so the adapter's
@@ -514,6 +561,71 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
             fetchError={pool.fetchError}
           />
         </div>
+
+        <Collapsible
+          open={advancedOpen}
+          onOpenChange={setAdvancedOpen}
+          className="tw-flex tw-flex-col tw-gap-2"
+        >
+          <CollapsibleTrigger
+            className={cn(
+              "tw-flex tw-items-center tw-gap-1.5 tw-bg-transparent tw-p-0 tw-text-left",
+              "tw-text-sm tw-font-medium tw-text-normal tw-shadow-none"
+            )}
+            data-testid="advanced-toggle"
+          >
+            <ChevronDown
+              className={cn(
+                "tw-size-4 tw-shrink-0 tw-transition-transform",
+                advancedOpen && "tw-rotate-180"
+              )}
+            />
+            Advanced
+          </CollapsibleTrigger>
+          <CollapsibleContent className="tw-flex tw-flex-col tw-gap-2">
+            {advancedModels.length > 0 ? (
+              <div
+                className={cn(
+                  "tw-flex tw-flex-col tw-divide-y tw-divide-border tw-rounded-md",
+                  "tw-border tw-border-solid tw-border-border"
+                )}
+                data-testid="advanced-capabilities"
+              >
+                {advancedModels.map(({ info, caps }) => (
+                  <div
+                    key={info.id}
+                    data-testid={`advanced-row-${info.id}`}
+                    className="tw-flex tw-items-center tw-gap-4 tw-px-3 tw-py-2 tw-text-sm"
+                  >
+                    <span className="tw-min-w-0 tw-flex-1 tw-truncate tw-text-normal">
+                      {info.displayName}
+                    </span>
+                    <label className="tw-flex tw-shrink-0 tw-items-center tw-gap-2 tw-text-xs tw-text-muted">
+                      Vision
+                      <SettingSwitch
+                        checked={caps.vision}
+                        onCheckedChange={(next) => setCapFlag(info.id, "vision", next)}
+                        data-testid={`advanced-vision-${info.id}`}
+                      />
+                    </label>
+                    <label className="tw-flex tw-shrink-0 tw-items-center tw-gap-2 tw-text-xs tw-text-muted">
+                      Reasoning
+                      <SettingSwitch
+                        checked={caps.reasoning}
+                        onCheckedChange={(next) => setCapFlag(info.id, "reasoning", next)}
+                        data-testid={`advanced-reasoning-${info.id}`}
+                      />
+                    </label>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="tw-text-xs tw-text-muted" data-testid="advanced-empty">
+                Select at least one non-embedding model to adjust its capabilities.
+              </div>
+            )}
+          </CollapsibleContent>
+        </Collapsible>
       </div>
 
       {state.mode === "new" ? (
