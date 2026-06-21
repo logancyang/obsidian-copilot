@@ -188,9 +188,19 @@ export const AgentChatInput = memo(function AgentChatInput({
   // read at send time. Free users get the frozen empty list, so the "Agents"
   // typeahead group never renders and no agent pill can be inserted; paid users
   // are completely unaffected.
-  const agentBrands = useMemo(
-    () => (canUseMultiAgent ? listInstalledAgentBrands(settings) : EMPTY_AGENT_MENTION_BRANDS),
-    [canUseMultiAgent, settings]
+  const installedAgentBrands = useMemo(() => listInstalledAgentBrands(settings), [settings]);
+  // Typeahead list is entitlement-gated: free users get the frozen empty list so
+  // the "Agents" group never renders and no pill can be inserted. Both operands
+  // are stable refs, so the ternary yields a stable reference without a memo.
+  const agentBrands = canUseMultiAgent ? installedAgentBrands : EMPTY_AGENT_MENTION_BRANDS;
+  // Send-time allowlist is the REAL installed set, INDEPENDENT of the gated
+  // typeahead list. A pasted/imported pill — or a stale-false Plus cache the
+  // send-boundary gate is meant to re-verify — must still resolve to a real
+  // answerer so the turn fans out and hits AgentSession's authoritative
+  // entitlement check, instead of being silently stripped to a single-agent turn.
+  const installedAgentIds = useMemo(
+    () => new Set(installedAgentBrands.map((b) => b.id)),
+    [installedAgentBrands]
   );
   const mentionedAgentIdsRef = useRef<string[]>([]);
   const handleMentionedAgentsChange = useCallback((backendIds: string[]) => {
@@ -333,7 +343,7 @@ export const AgentChatInput = memo(function AgentChatInput({
       if (mainAgentId) {
         const answerers = resolveAnswerers({
           mentionedAgentIds: mentionedAgentIdsRef.current,
-          installedAgentIds: new Set(agentBrands.map((b) => b.id)),
+          installedAgentIds,
         });
         if (isFanout(answerers, mainAgentId)) mentionedAgents = answerers;
       }
@@ -379,7 +389,7 @@ export const AgentChatInput = memo(function AgentChatInput({
       runSend,
       setQueuedMessages,
       mainAgentId,
-      agentBrands,
+      installedAgentIds,
     ]
   );
 
