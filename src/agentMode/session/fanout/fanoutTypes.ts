@@ -1,6 +1,5 @@
 import type {
   AgentChatMessage,
-  AgentMessagePart,
   AgentToolKind,
   BackendId,
   PromptContent,
@@ -265,12 +264,7 @@ const FANOUT_HISTORY_TRUNCATION_MARKER = "[earlier conversation truncated]";
 /** Inline marker appended when a single retained turn is itself truncated to fit the cap. */
 const FANOUT_HISTORY_TURN_TRUNCATION_MARKER = "[turn truncated]";
 
-/**
- * Per-tool-output char budget within a rendered turn. One verbose tool card
- * (a long grep dump or file read) must not dominate the history at the expense
- * of the surrounding conversation, so each tool output is trimmed to this head
- * length before the overall {@link FANOUT_HISTORY_MAX_CHARS} cap applies on top.
- */
+/** Per-item char budget so one large excerpt can't dominate the history. */
 const FANOUT_HISTORY_TOOL_OUTPUT_MAX_CHARS = 2_000;
 
 /** Trim `s` to its leading `max` chars, appending `marker` only when it actually overflows. */
@@ -280,51 +274,10 @@ function trimHead(s: string, max: number, marker: string): string {
 }
 
 /**
- * Concise, provider-neutral text for the renderable non-prose parts of an
- * assistant turn. Prose (`text` parts) is intentionally skipped here because
- * `AgentChatMessage.message` already aggregates every streamed text part (the
- * store keeps `displayText` in sync with the `text` parts), so rendering them
- * again would duplicate the prose. `thought` parts are omitted as internal
- * reasoning. Drives off part `kind` only — no per-agent-name branching:
- *   - `tool_call` → `[tool: <identity>]` plus the renderable text output,
- *     trimmed per part so one card can't dominate.
- *   - `plan` → `[plan]` plus each entry's status + content (so a follow-up like
- *     "review the plan above" has the plan to read).
- */
-function renderNonProseParts(parts: readonly AgentMessagePart[]): string[] {
-  const out: string[] = [];
-  for (const part of parts) {
-    if (part.kind === "tool_call") {
-      const identity = part.vendorToolName?.trim() || part.title.trim() || "tool";
-      const outputText = (part.output ?? [])
-        .filter((o): o is { type: "text"; text: string } => o.type === "text")
-        .map((o) => o.text)
-        .join("\n")
-        .trim();
-      const trimmed = trimHead(
-        outputText,
-        FANOUT_HISTORY_TOOL_OUTPUT_MAX_CHARS,
-        FANOUT_HISTORY_TURN_TRUNCATION_MARKER
-      );
-      out.push(trimmed.length > 0 ? `[tool: ${identity}]\n${trimmed}` : `[tool: ${identity}]`);
-    } else if (part.kind === "plan") {
-      const lines = part.entries.map((e) => `- (${e.status}) ${e.content}`).join("\n");
-      out.push(lines.length > 0 ? `[plan]\n${lines}` : "[plan]");
-    }
-    // `text` parts are already in `message` (prose); `thought` parts are omitted.
-  }
-  return out;
-}
-
-/**
  * Count the image attachment blocks in a user message's `content` array. The
- * field is typed `unknown[]` (display-only: `buildUserDisplayContent` projects
- * attached images into it), so each entry is narrowed defensively — a non-null
- * object whose `type` is a string equal to `"image"` or `"image_url"`. Both
- * shapes are matched: the live projection emits `image_url` entries, while the
- * underlying prompt block shape is `image`, so either form is recognized
- * without assuming a concrete type or casting. Non-object / non-image entries
- * (e.g. `text` blocks, `null`, strings) are ignored.
+ * field is typed `unknown[]`, so each entry is narrowed defensively to a non-null
+ * object whose `type` is `"image"` (prompt-block shape) or `"image_url"` (the
+ * live `buildUserDisplayContent` projection); other entries are ignored.
  */
 function countImageAttachments(content: readonly unknown[] | undefined): number {
   if (!content) return 0;
@@ -338,40 +291,15 @@ function countImageAttachments(content: readonly unknown[] | undefined): number 
 }
 
 /**
- * Concise marker noting that a turn carried image attachments whose bytes are
- * NOT included in fan-out history (only this signal that they existed). Singular
- * vs plural is correct so the marker reads naturally for one or many images.
- * Fully fixed text plus a count — nothing user-controlled, so no escaping is
- * needed here. Threading the actual image bytes into the prompt is a tracked
- * follow-up (full multimodal history); this marker only prevents silent context
- * loss in the meantime.
- */
-function imageAttachmentMarker(count: number): string {
-  const noun = count === 1 ? "image attachment" : "image attachments";
-  return `[${count} ${noun} omitted from history; the image content is not included here but existed in this turn]`;
-}
-
-/**
- * Render a turn's attached {@link MessageContext} (the visible notes, selected
- * excerpts, folders, urls, tags, and web tabs the user pinned to that turn) into
- * a single `[context]` section so a fan-out agent — running a FRESH session with
- * no memory — can resolve a follow-up like "explain the selected excerpt above"
- * that the single-agent backend would have seen inline. PURE: renders ONLY what
- * is stored on the objects; full note/web-tab bodies are read from the vault at
- * prompt time and are NOT on `context` (a tracked follow-up), so this lists note
- * NAMES + the already-captured selection excerpts, never file contents.
- *
- * Highest value is `selectedTextContexts`: the excerpt `content` is the thing a
- * follow-up references, so each is rendered with its label and the actual text,
- * trimmed PER ITEM via {@link trimHead} (reusing the per-tool-output budget) so
- * one large excerpt can't dominate the surrounding history. Every other field
- * collapses to a concise identifier line. Empty/absent sub-fields are omitted;
- * an empty/undefined context renders NOTHING (the array is empty) so the turn is
- * byte-for-byte unchanged. Dynamic values (titles, excerpt content, urls, names)
- * are NOT escaped here: `buildConversationHistoryBlock` escapes the whole turn
- * body once, so escaping internally would double-encode — same convention as the
- * tool/plan renderers above, which also emit raw text. Drives off field presence
- * only, no per-agent-name branching.
+ * Render a turn's attached {@link MessageContext} (pinned notes, selected
+ * excerpts, folders, urls, tags, web tabs) into one `[context]` section so a
+ * fan-out agent — a FRESH session with no memory — can resolve a follow-up like
+ * "explain the selected excerpt above". Selection excerpts carry their actual
+ * text (trimmed per item); every other field collapses to an identifier line.
+ * Note paths and tab urls (not basenames/titles) are emitted so a fresh
+ * session's Read/fetch can resolve them. Values are NOT escaped here:
+ * `buildConversationHistoryBlock` escapes the whole turn body once. An empty
+ * context renders nothing, leaving the turn byte-for-byte unchanged.
  */
 function renderMessageContext(context: MessageContext | undefined): string[] {
   if (!context) return [];
@@ -391,9 +319,6 @@ function renderMessageContext(context: MessageContext | undefined): string[] {
     lines.push(`[selected from ${label}]\n${excerpt}`);
   }
 
-  // Use the vault path, not the basename: a fan-out agent runs in a fresh
-  // session, so the path is what lets its Read tool resolve a note in a folder
-  // or disambiguate duplicate basenames.
   const noteNames = (context.notes ?? []).map((n) => n.path);
   if (noteNames.length > 0) lines.push(`[notes: ${noteNames.join(", ")}]`);
 
@@ -407,8 +332,6 @@ function renderMessageContext(context: MessageContext | undefined): string[] {
     lines.push(`[tags: ${context.tags.join(", ")}]`);
   }
   if (context.webTabs && context.webTabs.length > 0) {
-    // Keep the URL alongside the title: the title alone can't be fetched or
-    // identified by a fresh fan-out session.
     const tabs = context.webTabs.map((t) => (t.title ? `${t.title} (${t.url})` : t.url)).join(", ");
     lines.push(`[web tabs: ${tabs}]`);
   }
@@ -418,37 +341,31 @@ function renderMessageContext(context: MessageContext | undefined): string[] {
 }
 
 /**
- * The renderable inner body of one transcript turn: its prose (from `message`,
- * which already aggregates the text parts), its non-prose parts (tool outputs,
- * plan entries), a marker for any image attachments on the turn's `content`,
- * then its attached {@link MessageContext} (pinned notes / selected excerpts /
- * tabs). Returns `null` only when the turn carries NO renderable content at all
- * — prose, parts, images, AND context all absent. A turn that is ONLY context
- * (empty prose, no parts/images) now renders its `[context]` section so it is no
- * longer dropped from history; a turn with no context renders byte-for-byte as
- * before.
- */
-/**
  * History-safe prose for an assistant turn. A fan-out turn's `message` body is
- * the PERSISTED composite — HTML-comment section markers plus marker-escaped
- * content — so feeding it raw into `<conversation_history>` would leak hidden
- * metadata (markers, status/error attributes, the escape sentinel) to the agents.
- * Render the clean composite from the live/parsed `fanout` turn instead (backend
- * ids as labels); fall back to parsing the body, else the plain message. A
- * non-fan-out message has no `fanout` and no markers, so it returns unchanged.
+ * the PERSISTED composite (HTML-comment markers + marker-escaped content), so
+ * feeding it raw would leak hidden metadata; render the clean composite from the
+ * live/parsed `fanout` turn instead. A non-fan-out message returns unchanged.
  */
 function historyProse(message: AgentChatMessage): string {
   const turn = message.fanout ?? parseFanoutComposite(message.message);
   return turn ? renderFanoutComposite(turn, (id) => id) : message.message;
 }
 
+/**
+ * One transcript turn's renderable body: prose, an image-attachment marker, then
+ * its attached {@link MessageContext}. `null` when all are absent.
+ */
 function renderTurnContent(message: AgentChatMessage): string | null {
   const segments: string[] = [];
   const prose = historyProse(message).trim();
   if (prose.length > 0) segments.push(prose);
-  if (message.parts) segments.push(...renderNonProseParts(message.parts));
+  // Note that images existed even though their bytes aren't in fan-out history,
+  // so the context loss isn't silent.
   const imageCount = countImageAttachments(message.content);
-  if (imageCount > 0) segments.push(imageAttachmentMarker(imageCount));
+  if (imageCount > 0) {
+    const noun = imageCount === 1 ? "image attachment" : "image attachments";
+    segments.push(`[${imageCount} ${noun} omitted from history; existed in this turn]`);
+  }
   segments.push(...renderMessageContext(message.context));
   if (segments.length === 0) return null;
   return segments.join("\n");
@@ -456,26 +373,15 @@ function renderTurnContent(message: AgentChatMessage): string | null {
 
 /**
  * Render the prior visible transcript into a single read-only
- * `<conversation_history>` block for fan-out agent prompts (D2 / realizes D9).
- * Each fan-out agent opens a FRESH session with no memory, so this is how it
- * sees what came before — framed as context to USE, not a task to redo or
- * re-answer.
+ * `<conversation_history>` block for fan-out agent prompts. Each fan-out agent
+ * opens a FRESH session with no memory, so this is how it sees what came before,
+ * framed as context to USE, not a task to redo.
  *
- * `messages` must be PRIOR turns only (the caller excludes the current
- * in-flight user message + assistant placeholder). Each turn is labeled by role
- * (`user` / `assistant`) and rendered from its FULL visible content: prose plus
- * tool-call outputs and plan entries (thoughts omitted), so a follow-up like
- * "explain the command output above" or "review the plan above" has the context
- * the single-agent backend memory would have carried. A turn is skipped only
- * when it has no renderable content at all. Content is XML-escaped (same
- * convention as the `<web_*>` / prior-turns builders) so message text can't
- * break the framing.
- *
- * The result is bounded by `maxChars` (plus the small, constant framing chrome
- * and truncation markers) for ANY input: oldest turns are dropped first, and if
- * a single retained turn still overflows it is itself truncated to the cap.
- * Returns `null` when there is no prior history (empty input or all-empty) so
- * the caller leaves the fan-out prompt byte-for-byte unchanged.
+ * `messages` must be PRIOR turns only (caller excludes the in-flight pair). Each
+ * turn is labeled by role and XML-escaped so its text can't break the framing.
+ * The body is bounded by `maxChars`: oldest turns drop first, and a single
+ * retained turn that still overflows is itself truncated. Returns `null` for no
+ * prior history so the caller leaves the prompt byte-for-byte unchanged.
  */
 export function buildConversationHistoryBlock(
   messages: readonly AgentChatMessage[],

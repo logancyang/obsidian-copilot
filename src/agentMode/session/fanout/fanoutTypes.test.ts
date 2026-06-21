@@ -1,4 +1,4 @@
-import type { AgentChatMessage, AgentMessagePart, AgentToolKind } from "@/agentMode/session/types";
+import type { AgentChatMessage, AgentToolKind } from "@/agentMode/session/types";
 import { AI_SENDER, USER_SENDER } from "@/constants";
 import type { MessageContext } from "@/types/message";
 import {
@@ -17,17 +17,12 @@ import {
   type FanoutTurn,
 } from "./fanoutTypes";
 
-const histMsg = (
-  sender: string,
-  message: string,
-  parts?: AgentMessagePart[]
-): AgentChatMessage => ({
+const histMsg = (sender: string, message: string): AgentChatMessage => ({
   id: `${sender}-${message.slice(0, 8)}`,
   sender,
   timestamp: null,
   isVisible: true,
   message,
-  ...(parts ? { parts } : {}),
 });
 
 const upper = (id: string) => id.toUpperCase();
