@@ -578,13 +578,13 @@ describe("buildConversationHistoryBlock", () => {
     expect(block).toContain("a promise represents an eventual value");
   });
 
-  it("renders a notes-only context as the note basenames", () => {
+  it("renders a notes-only context as the note vault paths", () => {
     const msg = withContext(USER_SENDER, "compare these notes", {
       notes: [noteFile("Alpha"), noteFile("Beta")],
       urls: [],
     });
     const block = buildConversationHistoryBlock([msg], FANOUT_HISTORY_MAX_CHARS)!;
-    expect(block).toContain("[notes: Alpha, Beta]");
+    expect(block).toContain("[notes: Alpha.md, Beta.md]");
   });
 
   it("renders folders, urls, tags, and web tabs as concise identifier lines", () => {
@@ -602,7 +602,7 @@ describe("buildConversationHistoryBlock", () => {
     expect(block).toContain("[folders: Projects/AI]");
     expect(block).toContain("[urls: https://example.com/a]");
     expect(block).toContain("[tags: #research, #qa]");
-    expect(block).toContain("[web tabs: Tab One, https://tab.example/2]");
+    expect(block).toContain("[web tabs: Tab One (https://tab.example/1), https://tab.example/2]");
   });
 
   it("does NOT drop a context-only turn (empty prose, no parts/images) and labels its role", () => {
@@ -613,7 +613,7 @@ describe("buildConversationHistoryBlock", () => {
     const block = buildConversationHistoryBlock([msg], FANOUT_HISTORY_MAX_CHARS)!;
     expect((block.match(/<turn /g) ?? []).length).toBe(1);
     expect(block).toContain('<turn role="user">');
-    expect(block).toContain("[notes: OnlyNote]");
+    expect(block).toContain("[notes: OnlyNote.md]");
   });
 
   it("leaves a turn with an empty context byte-for-byte unchanged", () => {

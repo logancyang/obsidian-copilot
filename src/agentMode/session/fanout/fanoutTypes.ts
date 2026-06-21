@@ -417,7 +417,10 @@ function renderMessageContext(context: MessageContext | undefined): string[] {
     lines.push(`[selected from ${label}]\n${excerpt}`);
   }
 
-  const noteNames = (context.notes ?? []).map((n) => n.basename);
+  // Use the vault path, not the basename: a fan-out agent runs in a fresh
+  // session, so the path is what lets its Read tool resolve a note in a folder
+  // or disambiguate duplicate basenames.
+  const noteNames = (context.notes ?? []).map((n) => n.path);
   if (noteNames.length > 0) lines.push(`[notes: ${noteNames.join(", ")}]`);
 
   if (context.folders && context.folders.length > 0) {
@@ -430,7 +433,9 @@ function renderMessageContext(context: MessageContext | undefined): string[] {
     lines.push(`[tags: ${context.tags.join(", ")}]`);
   }
   if (context.webTabs && context.webTabs.length > 0) {
-    const tabs = context.webTabs.map((t) => t.title || t.url).join(", ");
+    // Keep the URL alongside the title: the title alone can't be fetched or
+    // identified by a fresh fan-out session.
+    const tabs = context.webTabs.map((t) => (t.title ? `${t.title} (${t.url})` : t.url)).join(", ");
     lines.push(`[web tabs: ${tabs}]`);
   }
 
