@@ -1,11 +1,13 @@
 import { FanoutTurnView } from "@/agentMode/ui/FanoutTurnView";
 import {
   defaultFanoutOption,
+  fanoutDisplayName,
   FANOUT_SUMMARY_OPTION,
   type FanoutOptionValue,
 } from "@/agentMode/ui/fanoutDropdown";
 import { ChatButtons } from "@/components/chat-components/ChatButtons";
 import type { FanoutTurn } from "@/agentMode/session/fanout/fanoutTypes";
+import { renderFanoutComposite } from "@/agentMode/session/fanout/fanoutTypes";
 import type { AgentChatMessage } from "@/agentMode/session/types";
 import type { ChatMessage } from "@/types/message";
 import { insertAtCursor } from "@/utils";
@@ -25,10 +27,11 @@ interface FanoutMessageCardProps {
  * normal Agent-Mode AI card (timestamp + Insert / Replace + Copy; no
  * Regenerate/Edit/Delete are wired in Agent Mode, so none show).
  *
- * There is ONE copy/insert affordance, and it is context-aware: it acts on the
- * tab currently in view — the summary on the Summary tab, that agent's answer on
- * an agent tab — i.e. "copy what you see". The card owns the selected tab so the
- * action bar can target it.
+ * There is ONE copy/insert affordance, and it is context-aware: on the Summary
+ * tab it acts on the WHOLE composite (summary + every agent's answer — the
+ * default tab, so copy-all is one click away); on an agent tab it acts on just
+ * that agent's answer. The card owns the selected tab so the action bar can
+ * target it.
  */
 export const FanoutMessageCard: React.FC<FanoutMessageCardProps> = memo(
   ({ message, turn, app }) => {
@@ -41,11 +44,16 @@ export const FanoutMessageCard: React.FC<FanoutMessageCardProps> = memo(
         ? FANOUT_SUMMARY_OPTION
         : selected;
 
-    // The text the action bar's Copy/Insert operate on: exactly the tab in view.
-    const currentText =
-      activeValue === FANOUT_SUMMARY_OPTION
-        ? turn.summary.text
-        : (turn.answers[activeValue]?.text ?? "");
+    // The text the action bar's Copy/Insert operate on: the whole composite on
+    // the Summary tab (markers stripped — readable prose, the copy-all path),
+    // otherwise just the selected agent's answer.
+    const currentText = useMemo(
+      () =>
+        activeValue === FANOUT_SUMMARY_OPTION
+          ? renderFanoutComposite(turn, fanoutDisplayName)
+          : (turn.answers[activeValue]?.text ?? ""),
+      [turn, activeValue]
+    );
 
     const handleInsert = useCallback(() => {
       void insertAtCursor(app, currentText);
