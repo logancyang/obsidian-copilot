@@ -7,6 +7,7 @@ import {
   tryReadExitPlanModeCall,
   withReadOnlyPreamble,
 } from "./AgentSession";
+import { ensureMultiAgentEntitlement, showMultiAgentUpgradePrompt } from "@/plusUtils";
 import { AuthRequiredError, MethodUnsupportedError } from "./errors";
 import type { FanoutRunInput } from "./fanout/FanoutOrchestrator";
 import { FANOUT_READONLY_PREAMBLE, type FanoutTurn } from "./fanout/fanoutTypes";
@@ -26,6 +27,14 @@ jest.mock("@/logger", () => ({
 }));
 jest.mock("@/settings/model", () => ({
   getSettings: jest.fn().mockReturnValue({ agentMode: { mcpServers: [] } }),
+}));
+// The authoritative send-boundary paywall (Phase 4) lives in plusUtils; mock it
+// so fan-out tests don't reach the real `isPlusEnabled()`/BrevilabsClient. The
+// helper defaults to "entitled" so existing fan-out tests keep passing; the
+// paywall tests below flip it per-case.
+jest.mock("@/plusUtils", () => ({
+  ensureMultiAgentEntitlement: jest.fn(async () => true),
+  showMultiAgentUpgradePrompt: jest.fn(),
 }));
 
 interface MockBackend {
@@ -954,6 +963,174 @@ describe("AgentSession fan-out branching", () => {
     const assistantMsgs = messages.filter((m) => m.sender === AI_SENDER);
     expect(assistantMsgs.find((m) => m.id === fanoutMsgId)?.fanout).toBeDefined();
     expect(assistantMsgs.find((m) => m.id !== fanoutMsgId)?.fanout).toBeUndefined();
+  });
+});
+
+describe("AgentSession fan-out paywall (send-boundary entitlement)", () => {
+  const mockedEnsure = ensureMultiAgentEntitlement as jest.MockedFunction<
+    typeof ensureMultiAgentEntitlement
+  >;
+  const mockedPrompt = showMultiAgentUpgradePrompt as jest.MockedFunction<
+    typeof showMultiAgentUpgradePrompt
+  >;
+
+  const fanoutRunner = () =>
+    jest.fn(async (input: FanoutRunInput): Promise<FanoutTurn> => {
+      const turn: FanoutTurn = {
+        answers: {
+          opencode: { backendId: "opencode", status: "done", text: "a" },
+          claude: { backendId: "claude", status: "done", text: "b" },
+        },
+        summary: { status: "done", text: "summary" },
+      };
+      input.onChange(turn);
+      return turn;
+    });
+
+  beforeEach(() => {
+    // Default state: entitled. Individual tests override as needed.
+    mockedEnsure.mockReset();
+    mockedEnsure.mockResolvedValue(true);
+    mockedPrompt.mockReset();
+  });
+
+  it("allows the fan-out for an entitled user (gate returns true) and runs the runner", async () => {
+    const mock = makeMockBackend();
+    const runFanoutTurn = fanoutRunner();
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+      runFanoutTurn,
+    });
+
+    const stopReason = await session.sendPrompt("review", undefined, undefined, [
+      "opencode",
+      "claude",
+    ]).turn;
+
+    expect(mockedEnsure).toHaveBeenCalledTimes(1);
+    expect(mockedPrompt).not.toHaveBeenCalled();
+    expect(runFanoutTurn).toHaveBeenCalledTimes(1);
+    expect(stopReason).toBe("end_turn");
+  });
+
+  it("BLOCKS the fan-out for a non-entitled user: no runner, upgrade prompt shown, turn refused", async () => {
+    mockedEnsure.mockResolvedValue(false);
+    const mock = makeMockBackend();
+    const runFanoutTurn = fanoutRunner();
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+      runFanoutTurn,
+    });
+
+    const stopReason = await session.sendPrompt("review", undefined, undefined, [
+      "opencode",
+      "claude",
+    ]).turn;
+
+    expect(mockedEnsure).toHaveBeenCalledTimes(1);
+    // Hard stop: the fan-out runner never ran, and there was NO silent
+    // single-agent fallback to backend.prompt.
+    expect(runFanoutTurn).not.toHaveBeenCalled();
+    expect(mock.prompt).not.toHaveBeenCalled();
+    // The upgrade prompt surfaced.
+    expect(mockedPrompt).toHaveBeenCalledTimes(1);
+    // The turn settled as a refusal and the session is usable again (idle), with
+    // no dangling streaming placeholder.
+    expect(stopReason).toBe("refusal");
+    expect(session.getStatus()).toBe("idle");
+
+    const placeholder = session.store.getDisplayMessages().find((m) => m.sender === AI_SENDER);
+    expect(placeholder?.isErrorMessage).toBe(true);
+    expect(placeholder?.message).toContain("Copilot Plus");
+    expect(placeholder?.fanout).toBeUndefined();
+  });
+
+  it("does NOT trigger the gate for a non-fan-out (single-agent) turn", async () => {
+    const mock = makeMockBackend();
+    const runFanoutTurn = jest.fn();
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+      runFanoutTurn,
+    });
+
+    // No mentioned agents -> single-agent path; the paywall must never run.
+    await session.sendPrompt("hi").turn;
+    // Only the main agent @-ed -> collapses to single-agent; also no gate.
+    await session.sendPrompt("hi again", undefined, undefined, ["opencode"]).turn;
+
+    expect(mockedEnsure).not.toHaveBeenCalled();
+    expect(mockedPrompt).not.toHaveBeenCalled();
+    expect(runFanoutTurn).not.toHaveBeenCalled();
+    expect(mock.prompt).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("ensureMultiAgentEntitlement (paywall helper)", () => {
+  // These exercise the REAL helper against mocked isPlusEnabled/BrevilabsClient,
+  // verifying the fast path takes no network call and the slow path re-verifies.
+  const validateLicenseKey = jest.fn();
+
+  beforeEach(() => {
+    jest.resetModules();
+    validateLicenseKey.mockReset();
+  });
+
+  async function loadHelper(
+    isPlus: boolean
+  ): Promise<(app?: unknown, ctx?: Record<string, unknown>) => Promise<boolean>> {
+    jest.doMock("@/plusUtils", () => jest.requireActual("@/plusUtils"));
+    jest.doMock("@/logger", () => ({
+      logInfo: jest.fn(),
+      logWarn: jest.fn(),
+      logError: jest.fn(),
+    }));
+    jest.doMock("@/settings/model", () => ({
+      getSettings: jest.fn().mockReturnValue({ isPlusUser: isPlus, enableSelfHostMode: false }),
+      setSettings: jest.fn(),
+      updateSetting: jest.fn(),
+      useSettingsValue: jest.fn(),
+    }));
+    jest.doMock("@/LLMProviders/brevilabsClient", () => ({
+      BrevilabsClient: { getInstance: () => ({ validateLicenseKey }) },
+    }));
+    const mod = await import("@/plusUtils");
+    return mod.ensureMultiAgentEntitlement;
+  }
+
+  it("fast path: a cached Plus user is allowed with NO network call", async () => {
+    const ensure = await loadHelper(true);
+    await expect(ensure()).resolves.toBe(true);
+    expect(validateLicenseKey).not.toHaveBeenCalled();
+  });
+
+  it("slow path: a stale-false cache that the backend confirms paid is allowed", async () => {
+    validateLicenseKey.mockResolvedValue({ isValid: true });
+    const ensure = await loadHelper(false);
+    await expect(ensure()).resolves.toBe(true);
+    expect(validateLicenseKey).toHaveBeenCalledTimes(1);
+    // The feature context is forwarded for backend telemetry/upsell.
+    expect(validateLicenseKey.mock.calls[0][1]).toMatchObject({ feature: "multi_agent_per_turn" });
+  });
+
+  it("slow path: a genuinely free user is blocked (isValid false)", async () => {
+    validateLicenseKey.mockResolvedValue({ isValid: false });
+    const ensure = await loadHelper(false);
+    await expect(ensure()).resolves.toBe(false);
+  });
+
+  it("slow path: an unverifiable result (undefined) is blocked", async () => {
+    validateLicenseKey.mockResolvedValue({ isValid: undefined });
+    const ensure = await loadHelper(false);
+    await expect(ensure()).resolves.toBe(false);
   });
 });
 

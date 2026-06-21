@@ -35,6 +35,8 @@ import {
   MessageContext,
 } from "@/types/message";
 import { err2String, formatDateTime } from "@/utils";
+import { ensureMultiAgentEntitlement, showMultiAgentUpgradePrompt } from "@/plusUtils";
+import type { App } from "obsidian";
 import { MethodUnsupportedError } from "@/agentMode/session/errors";
 import { resolveMcpServers } from "@/agentMode/session/mcpResolver";
 import { deriveChatTitleFromMessages } from "@/agentMode/session/chatHistoryMerge";
@@ -209,6 +211,13 @@ export interface AgentSessionStartOptions {
    * to the raw id.
    */
   getDisplayName?: (backendId: BackendId) => string;
+  /**
+   * Resolve the Obsidian `App` for send-boundary side effects that need it
+   * (the multi-agent entitlement re-check passes it to `validateLicenseKey` so
+   * a license expiry can surface the standard modal). Threaded via DI so the
+   * session never reaches for the global `app`. Manager-supplied; tests omit it.
+   */
+  getApp?: () => App;
 }
 
 /**
@@ -232,6 +241,7 @@ export interface AgentSessionStateOptions {
   getDescriptor?: () => BackendDescriptor | undefined;
   runFanoutTurn?: RunFanoutTurn;
   getDisplayName?: (backendId: BackendId) => string;
+  getApp?: () => App;
 }
 
 /**
@@ -258,6 +268,7 @@ export class AgentSession {
   private readonly getDescriptor: (() => BackendDescriptor | undefined) | null;
   private readonly runFanoutTurn: RunFanoutTurn | null;
   private readonly getDisplayName: ((backendId: BackendId) => string) | null;
+  private readonly getApp: (() => App) | null;
   // `status` is derived from the primitives below — see `getStatus()`.
   // `cachedStatus` is a memo of the last value we fired through
   // `onStatusChanged`, used purely for change detection. It is not the
@@ -372,6 +383,7 @@ export class AgentSession {
     this.getDescriptor = opts.getDescriptor ?? null;
     this.runFanoutTurn = opts.runFanoutTurn ?? null;
     this.getDisplayName = opts.getDisplayName ?? null;
+    this.getApp = opts.getApp ?? null;
     if ("backendSessionId" in opts) {
       this.backendSessionId = opts.backendSessionId;
       const originalState = opts.initialState ?? null;
@@ -892,6 +904,15 @@ export class AgentSession {
         isFanout(this.lastMentionedAgents, this.backendId) &&
         placeholderId
       ) {
+        // AUTHORITATIVE paywall: a fan-out turn is a Plus-only feature. The
+        // typeahead UI gate (Phase 3) can be bypassed (pasting an agent pill),
+        // so re-check entitlement here at the single session boundary before any
+        // fan-out work. Paying users short-circuit with zero network latency;
+        // everyone else is hard-blocked (no silent single-agent fallback).
+        if (!(await this.ensureMultiAgentEntitlement())) {
+          return this.blockFanoutForEntitlement(placeholderId, turnStartedAt);
+        }
+
         // Give every fresh ephemeral fan-out agent the PRIOR visible transcript
         // as a read-only `<conversation_history>` block so `@agent` follow-ups
         // ("that plan", "the answer above") and fan-out→fan-out continuity work
@@ -991,6 +1012,37 @@ export class AgentSession {
       this.abortController = null;
       this.recomputeStatusIfChanged();
     }
+  }
+
+  /**
+   * Single authoritative entitlement gate for the multi-agent fan-out path,
+   * invoked at the session send boundary so a UI bypass can't evade it.
+   * Delegates to the shared `ensureMultiAgentEntitlement` helper (the source of
+   * truth): paying users (cached, sync) allow with no network call; otherwise it
+   * re-verifies against `/license`. The session is non-React, so the helper's
+   * sync `isPlusEnabled()` fast path is the correct entitlement signal here.
+   */
+  private ensureMultiAgentEntitlement(): Promise<boolean> {
+    return ensureMultiAgentEntitlement(this.getApp?.(), { feature: "multi_agent_per_turn" });
+  }
+
+  /**
+   * Clean up a fan-out turn that was blocked by the paywall: surface the upgrade
+   * prompt and finalize the placeholder as an error so no empty/streaming
+   * assistant bubble dangles. The surrounding `runTurn` lifecycle (finally) then
+   * flips the session back to a usable idle state so the user can resend.
+   */
+  private blockFanoutForEntitlement(placeholderId: string, turnStartedAt: number): StopReason {
+    showMultiAgentUpgradePrompt();
+    this.store.markMessageError(
+      placeholderId,
+      "Multi-agent QA is a Copilot Plus feature. Upgrade to mention more than one agent in a turn."
+    );
+    this.store.markTurnComplete(placeholderId, "refusal", Date.now() - turnStartedAt);
+    this.currentMessageIds = new Set();
+    if (this.placeholderId === placeholderId) this.placeholderId = null;
+    this.notifyMessages();
+    return "refusal";
   }
 
   /**

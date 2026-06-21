@@ -6,6 +6,7 @@ import {
   ChatModels,
   EmbeddingModelProviders,
   EmbeddingModels,
+  PLUS_UTM_MEDIUMS,
   PlusUtmMedium,
 } from "@/constants";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
@@ -140,6 +141,54 @@ export function useIsPlusUser(): boolean | undefined {
  */
 export function canUseMultiAgent(): boolean {
   return isPlusEnabled();
+}
+
+/**
+ * Authoritative send-boundary entitlement check for the multi-agent fan-out
+ * feature. This is the single source of truth the non-React session calls right
+ * before dispatching a fan-out turn, so a UI bypass (e.g. pasting an agent pill)
+ * cannot evade the paywall.
+ *
+ * Fast path: a paying user (cached `isPlusEnabled()`) is allowed with ZERO
+ * network latency — no `/license` round-trip on the hot send path.
+ *
+ * Slow path (cache says not entitled): re-verify against the backend `/license`
+ * endpoint via `validateLicenseKey`, which itself flips `isPlusUser` on/off. A
+ * confirmed paid user (`isValid === true`, e.g. a stale-false cache) is allowed;
+ * anything else (not valid, or undefined/unverifiable) is a HARD block — the
+ * caller must not silently fall back to a single-agent turn.
+ *
+ * The `feature` context is forwarded to `/license` for backend telemetry/upsell.
+ */
+export async function ensureMultiAgentEntitlement(
+  app?: App,
+  context?: Record<string, unknown>
+): Promise<boolean> {
+  // Paying users: allow immediately, no network call (byte-for-byte send path).
+  if (isPlusEnabled()) {
+    return true;
+  }
+  // Cache says not entitled — re-verify so a stale-false cache for a real paid
+  // user still gets through. `validateLicenseKey` flips the cached flag itself.
+  const result = await BrevilabsClient.getInstance().validateLicenseKey(app, {
+    feature: "multi_agent_per_turn",
+    ...context,
+  });
+  return result.isValid === true;
+}
+
+/**
+ * Surface the multi-agent-is-Plus upgrade prompt. Reuses the shared Plus CTA
+ * path (`navigateToPlusPage`) so the upgrade destination stays consistent with
+ * every other Plus gate. Kept as one function so the blocked-turn callers and
+ * tests share a single source of truth for the copy + action.
+ */
+export function showMultiAgentUpgradePrompt(): void {
+  new Notice(
+    "Multi-agent QA (@-mentioning more than one agent in a turn) is a Copilot Plus feature. Opening the upgrade page…",
+    8000
+  );
+  navigateToPlusPage(PLUS_UTM_MEDIUMS.MULTI_AGENT);
 }
 
 /**
