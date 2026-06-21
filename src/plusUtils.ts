@@ -133,43 +133,31 @@ export function useIsPlusUser(): boolean | undefined {
 }
 
 /**
- * Synchronous entitlement check for the multi-agent per-turn QA ("fan-out")
- * feature. Gated behind any paid plan (Plus / believer / supporter, and future
- * tiers), so it reuses the Plus entitlement rather than inventing a parallel
- * notion of "paid". This is the sync form; pair it with the `isPlusEnabled`
- * family for non-React call sites (e.g. a send-time backend gate).
+ * Synchronous entitlement check for the multi-agent fan-out feature. Reuses the
+ * Plus entitlement (any paid plan) rather than a parallel notion of "paid".
  */
 export function canUseMultiAgent(): boolean {
   return isPlusEnabled();
 }
 
 /**
- * Authoritative send-boundary entitlement check for the multi-agent fan-out
- * feature. This is the single source of truth the non-React session calls right
- * before dispatching a fan-out turn, so a UI bypass (e.g. pasting an agent pill)
- * cannot evade the paywall.
+ * Authoritative send-boundary entitlement check for the fan-out feature — the
+ * single source of truth the non-React session calls before dispatching, so a UI
+ * bypass can't evade the paywall.
  *
- * Fast path: a paying user (cached `isPlusEnabled()`) is allowed with ZERO
- * network latency — no `/license` round-trip on the hot send path.
- *
- * Slow path (cache says not entitled): re-verify against the backend `/license`
- * endpoint via `validateLicenseKey`, which itself flips `isPlusUser` on/off. A
- * confirmed paid user (`isValid === true`, e.g. a stale-false cache) is allowed;
- * anything else (not valid, or undefined/unverifiable) is a HARD block — the
- * caller must not silently fall back to a single-agent turn.
- *
- * The `feature` context is forwarded to `/license` for backend telemetry/upsell.
+ * Fast path: a paying user (cached `isPlusEnabled()`) is allowed with no network
+ * call. Slow path: re-verify against `/license` so a stale-false cache still gets
+ * through; anything not confirmed valid is a HARD block (no single-agent fallback).
  */
 export async function ensureMultiAgentEntitlement(
   app?: App,
   context?: Record<string, unknown>
 ): Promise<boolean> {
-  // Paying users: allow immediately, no network call (byte-for-byte send path).
   if (isPlusEnabled()) {
     return true;
   }
-  // Cache says not entitled — re-verify so a stale-false cache for a real paid
-  // user still gets through. `validateLicenseKey` flips the cached flag itself.
+  // Re-verify so a stale-false cache for a real paid user still gets through;
+  // `validateLicenseKey` flips the cached flag itself.
   const result = await BrevilabsClient.getInstance().validateLicenseKey(app, {
     feature: "multi_agent_per_turn",
     ...context,
@@ -178,10 +166,8 @@ export async function ensureMultiAgentEntitlement(
 }
 
 /**
- * Surface the multi-agent-is-Plus upgrade prompt. Reuses the shared Plus CTA
- * path (`navigateToPlusPage`) so the upgrade destination stays consistent with
- * every other Plus gate. Kept as one function so the blocked-turn callers and
- * tests share a single source of truth for the copy + action.
+ * Surface the multi-agent-is-Plus upgrade prompt, reusing the shared Plus CTA
+ * (`navigateToPlusPage`) so callers and tests share one copy + action.
  */
 export function showMultiAgentUpgradePrompt(): void {
   new Notice(
@@ -192,17 +178,10 @@ export function showMultiAgentUpgradePrompt(): void {
 }
 
 /**
- * Reactive form of {@link canUseMultiAgent} for React render gates: it
- * subscribes to settings so the gate flips live when the entitlement changes.
- *
- * It mirrors `useIsPlusUser` (not `isPlusEnabled`), so it can differ from the
- * sync `canUseMultiAgent()` on one edge: a self-host user who has toggled
- * `enableSelfHostMode` on but has no license key / validation receipt yet. The
- * sync form trusts the toggle (via `isSelfHostModeValid`); the reactive form
- * additionally requires the license key + receipt (via `useIsPlusUser`). Both
- * deltas are inherited intentionally from their bases and kept consistent with
- * every other Plus gate in the app. `undefined` (Plus state still resolving) is
- * treated as not-yet-entitled.
+ * Reactive form of {@link canUseMultiAgent} for React render gates; subscribes to
+ * settings so the gate flips live. Mirrors `useIsPlusUser` (not `isPlusEnabled`),
+ * so it can differ from the sync form for a self-host user with the toggle on but
+ * no license receipt yet. `undefined` (still resolving) reads as not entitled.
  */
 export function useCanUseMultiAgent(): boolean {
   return useIsPlusUser() === true;
