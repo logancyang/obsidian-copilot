@@ -14,12 +14,14 @@ jest.mock("@/agentMode/backends/registry", () => {
   };
 });
 
+import type { FanoutSummaryStatus } from "@/agentMode/session/fanout/fanoutTypes";
 import {
   agentStateForStatus,
   buildFanoutOptions,
   defaultFanoutOption,
   FANOUT_SUMMARY_OPTION,
   selectedAnswer,
+  summaryDisplayState,
 } from "@/agentMode/ui/fanoutDropdown";
 
 function answer(
@@ -34,7 +36,7 @@ function answer(
 function turn(
   answers: AgentAnswer[],
   summaryText = "",
-  summaryStatus = "done" as const
+  summaryStatus: FanoutSummaryStatus = "done"
 ): FanoutTurn {
   const map: Record<string, AgentAnswer> = {};
   for (const a of answers) map[a.backendId] = a;
@@ -127,5 +129,24 @@ describe("selectedAnswer", () => {
   it("returns null when the agent has no slot", () => {
     const t = turn([answer("opencode", "done", "a")]);
     expect(selectedAnswer(t, "ghost")).toBeNull();
+  });
+});
+
+describe("summaryDisplayState", () => {
+  it("is writing while the summary streams", () => {
+    const t = turn([answer("opencode", "done", "a")], "", "streaming");
+    expect(summaryDisplayState(t)).toBe("writing");
+  });
+  it("is waiting while any agent is still running", () => {
+    const t = turn([answer("opencode", "running"), answer("claude", "done", "b")], "", "pending");
+    expect(summaryDisplayState(t)).toBe("waiting");
+  });
+  it("is cancelled when pending but every agent is terminal (turn aborted before summary)", () => {
+    const t = turn([answer("opencode", "cancelled"), answer("claude", "done", "b")], "", "pending");
+    expect(summaryDisplayState(t)).toBe("cancelled");
+  });
+  it("is unavailable when done with no text (summary generation failed)", () => {
+    const t = turn([answer("opencode", "done", "a")], "", "done");
+    expect(summaryDisplayState(t)).toBe("unavailable");
   });
 });

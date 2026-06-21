@@ -211,13 +211,17 @@ export const AgentChatInput = memo(function AgentChatInput({
     };
   }, []);
 
-  // Selected-text contexts are a global ephemeral atom, not per-session draft.
-  // Clear them when switching sessions so a selection made in one session
-  // doesn't silently ride along into the next.
+  // Clear cross-session ephemeral state on a session switch. Selected-text
+  // contexts are a global atom (not per-session draft), and the mentioned-agent
+  // ids live in a ref here rather than the keyed ChatInput, so neither is reset
+  // by the editor remount — without this, a selection or an `@agent` pill from
+  // one session would silently ride along into the next prompt (e.g. an
+  // unrelated send fanning out to a previous session's agents).
   useEffect(() => {
     if (previousSessionIdRef.current === sessionId) return;
     previousSessionIdRef.current = sessionId;
     clearSelectedTextContexts();
+    mentionedAgentIdsRef.current = [];
   }, [sessionId]);
 
   const handleStopGenerating = useCallback(async () => {

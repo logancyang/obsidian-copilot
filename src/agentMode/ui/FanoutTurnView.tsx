@@ -4,6 +4,7 @@ import {
   defaultFanoutOption,
   FANOUT_SUMMARY_OPTION,
   selectedAnswer,
+  summaryDisplayState,
   type FanoutAgentState,
   type FanoutOption,
   type FanoutOptionValue,
@@ -133,14 +134,38 @@ interface FanoutTurnBodyProps {
  */
 const FanoutTurnBody: React.FC<FanoutTurnBodyProps> = ({ turn, value, app }) => {
   if (value === FANOUT_SUMMARY_OPTION) {
-    const summary = turn.summary;
-    if (summary.text) return <AgentMarkdownText text={summary.text} app={app} />;
-    return (
-      <FanoutStatusLine
-        icon={<Loader2 className="tw-size-4 tw-animate-spin tw-text-loading" />}
-        text={summary.status === "pending" ? "Waiting for answers…" : "Writing summary…"}
-      />
-    );
+    if (turn.summary.text) return <AgentMarkdownText text={turn.summary.text} app={app} />;
+    switch (summaryDisplayState(turn)) {
+      case "writing":
+        return (
+          <FanoutStatusLine
+            icon={<Loader2 className="tw-size-4 tw-animate-spin tw-text-loading" />}
+            text="Writing summary…"
+          />
+        );
+      case "waiting":
+        return (
+          <FanoutStatusLine
+            icon={<Loader2 className="tw-size-4 tw-animate-spin tw-text-loading" />}
+            text="Waiting for answers…"
+          />
+        );
+      case "cancelled":
+        return (
+          <FanoutStatusLine
+            icon={<CircleSlash className="tw-size-4 tw-text-muted" />}
+            text="Summary cancelled"
+          />
+        );
+      case "unavailable":
+        return (
+          <FanoutStatusLine
+            icon={<AlertTriangle className="tw-size-4 tw-text-error" />}
+            text="Summary unavailable"
+            tone="error"
+          />
+        );
+    }
   }
 
   const answer = selectedAnswer(turn, value);

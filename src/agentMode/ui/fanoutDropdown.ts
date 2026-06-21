@@ -40,6 +40,30 @@ export function agentStateForStatus(status: AgentAnswerStatus): FanoutAgentState
 }
 
 /**
+ * Presentational state of the summary slot when it has no text yet. Distinct
+ * from a perpetual spinner: a cancelled turn skips summary generation (status
+ * stays `pending` with no agent still running), and a failed summary lands
+ * `done` with empty text — both are terminal and must not animate forever.
+ * `writing`/`waiting` are the genuine in-progress spinners.
+ */
+export type FanoutSummaryState = "writing" | "waiting" | "cancelled" | "unavailable";
+
+/**
+ * Classify an empty summary slot for rendering. Call only when the summary has
+ * no text. `streaming` → actively writing; `pending` with an agent still
+ * running → waiting on answers; `pending` with every agent terminal → the turn
+ * was cancelled before the summary ran; `done` with no text → summary failed.
+ */
+export function summaryDisplayState(turn: FanoutTurn): FanoutSummaryState {
+  if (turn.summary.status === "streaming") return "writing";
+  if (turn.summary.status === "pending") {
+    const anyRunning = Object.values(turn.answers).some((a) => a.status === "running");
+    return anyRunning ? "waiting" : "cancelled";
+  }
+  return "unavailable";
+}
+
+/**
  * One entry in the dropdown switcher. `value` is what the `Select` reports;
  * `label` + `Icon` render the row (registry-driven — no per-agent hardcoding).
  * The summary entry carries no icon. Agent entries carry their live `state`
