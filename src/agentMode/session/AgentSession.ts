@@ -43,10 +43,12 @@ import { ContextProcessor } from "@/contextProcessor";
 import { escapeXml } from "@/LLMProviders/chainRunner/utils/xmlParsing";
 import type { FanoutRunInput } from "@/agentMode/session/fanout/FanoutOrchestrator";
 import {
+  buildPriorFanoutContextBlock,
   collapseFanoutTurnToSummaryText,
   FANOUT_READONLY_PREAMBLE,
   snapshotFanoutTurn,
   type FanoutTurn,
+  type PendingFanoutContext,
 } from "@/agentMode/session/fanout/fanoutTypes";
 
 /**
@@ -270,6 +272,12 @@ export class AgentSession {
   // no-migration decision). `null` on the single-agent path; reset at each
   // turn start and on dispose.
   private liveFanoutTurn: FanoutTurn | null = null;
+  // Fan-out turns the visible backend never processed (they ran on ephemeral
+  // sub-sessions). Each completed fan-out turn with a non-empty summary pushes a
+  // {question, summary} entry here; the next single-agent turn injects them all
+  // in order as a labeled prior-turn block, then clears, so follow-ups keep the
+  // QA context. LIVE-ONLY — never persisted (mirrors the no-migration decision).
+  private pendingFanoutContext: PendingFanoutContext[] = [];
   private placeholderId: string | null = null;
   // ACP `messageId`s seen on this turn's content chunks. Used to re-route
   // trailing chunks that a backend flushes *after* the `session/prompt` result
@@ -866,16 +874,30 @@ export class AgentSession {
       // synchronously within this turn (callers rely on that timing).
       const hasWebTabs = (context?.webTabs?.length ?? 0) > 0;
       const webTabBlock = hasWebTabs ? await serializeWebTabContext(context) : "";
-      const promptBlocks = buildPromptBlocks(displayText, context, promptContent, webTabBlock);
 
       // Fan-out path: more than one agent for this turn (main + ≥1 mentioned)
       // dispatches the identical prompt to every backend in parallel via
-      // ephemeral read-only sub-sessions. The single-agent path (0 mentions, or
-      // no fan-out dispatcher wired) falls through to the existing
-      // `backend.prompt()` below, unchanged.
+      // ephemeral read-only sub-sessions. It does NOT inject (or flush) the
+      // pending fan-out buffer — it never talks to the visible backend, so it
+      // only appends to the buffer on completion. The single-agent path (0
+      // mentions, or no fan-out dispatcher wired) falls through below.
       if (this.runFanoutTurn && this.lastMentionedAgents.length > 1 && placeholderId) {
+        const promptBlocks = buildPromptBlocks(displayText, context, promptContent, webTabBlock);
         return await this.runFanoutPath(placeholderId, displayText, promptBlocks, turnStartedAt);
       }
+
+      // Single-agent path: prepend any buffered fan-out turns (in order) as one
+      // labeled prior-turn block so the backend regains continuity, then clear
+      // the buffer. Empty buffer → `null` block → prompt byte-for-byte as today.
+      const leadingContextBlock = buildPriorFanoutContextBlock(this.pendingFanoutContext);
+      if (leadingContextBlock !== null) this.pendingFanoutContext = [];
+      const promptBlocks = buildPromptBlocks(
+        displayText,
+        context,
+        promptContent,
+        webTabBlock,
+        leadingContextBlock
+      );
 
       const req: PromptInput = {
         sessionId,
@@ -974,7 +996,14 @@ export class AgentSession {
     // live in `liveFanoutTurn`, but the placeholder's serialized body carries
     // just the main agent's generated summary text.
     const summaryText = collapseFanoutTurnToSummaryText(turn);
-    if (summaryText) this.store.appendAgentText(placeholderId, summaryText);
+    if (summaryText) {
+      this.store.appendAgentText(placeholderId, summaryText);
+      // Buffer this turn so the next single-agent prompt can replay it: the
+      // visible backend never saw it (it ran on ephemeral sub-sessions). Skip
+      // an empty summary (cancelled / all-failed) — nothing to carry forward.
+      // The fan-out path only appends; the single-agent path flushes.
+      this.pendingFanoutContext.push({ question: originalPromptText, summary: summaryText });
+    }
     if (this.store.markTurnComplete(placeholderId, stopReason, Date.now() - turnStartedAt)) {
       this.notifyMessages();
     }
@@ -1690,13 +1719,17 @@ export function buildPromptBlocks(
   displayText: string,
   context?: MessageContext,
   content?: PromptContent[],
-  webTabBlock?: string
+  webTabBlock?: string,
+  leadingContextBlock?: string | null
 ): PromptContent[] {
-  // Context sections precede the user message: the vault envelope (notes +
+  // Context sections precede the user message: an optional prior-turn block
+  // (buffered fan-out turns the backend never saw), the vault envelope (notes +
   // note excerpts), web-selection excerpts, then live web-tab content. Web
   // tab/selection blocks reuse the legacy `<web_*>` tags so the model reads
-  // the same shapes it does in the non-agent chat.
+  // the same shapes it does in the non-agent chat. `leadingContextBlock` is
+  // absent on the common path, leaving the prompt byte-for-byte unchanged.
   const sections = [
+    leadingContextBlock?.trim() || null,
     buildContextEnvelope(context),
     buildWebSelectionBlocks(context),
     webTabBlock?.trim() || null,

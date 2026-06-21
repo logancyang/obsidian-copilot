@@ -1,4 +1,5 @@
 import type { AgentToolKind, BackendId, PromptContent } from "@/agentMode/session/types";
+import { escapeXml } from "@/LLMProviders/chainRunner/utils/xmlParsing";
 
 /**
  * Read-only QA preamble prepended to every fan-out agent's prompt (the
@@ -156,6 +157,57 @@ export const FANOUT_SUMMARY_INSTRUCTION =
 /** The text persisted when every fan-out agent failed (D7 zero-success case). */
 export const FANOUT_ALL_FAILED_SUMMARY =
   "All agents failed to answer; no summary could be generated.";
+
+/**
+ * A fan-out turn the visible session's backend never saw. The whole turn runs
+ * on ephemeral read-only sub-sessions, so the live backend has no record of it;
+ * we buffer the user's question + the persisted summary and replay it as a
+ * labeled prior-turn block on the next single-agent prompt to keep continuity.
+ * LIVE-ONLY: never serialized (mirrors the no-migration decision).
+ */
+export interface PendingFanoutContext {
+  /** The user's original prompt text for that fan-out turn. */
+  question: string;
+  /** The main agent's narrative summary — the only part of the turn persisted. */
+  summary: string;
+}
+
+/** Frozen empty buffer — the referentially-stable "nothing pending" value. */
+export const EMPTY_PENDING_FANOUT_CONTEXT: ReadonlyArray<PendingFanoutContext> = Object.freeze([]);
+
+/**
+ * Compose the buffered fan-out turns into a single labeled prior-turn context
+ * block, prepended to the next single-agent prompt so the backend (which never
+ * processed those turns) reads them as EARLIER conversation in this chat — not
+ * as a fresh task. Pure. Returns `null` for an empty buffer so the caller can
+ * leave the prompt byte-for-byte unchanged in the common case. Each entry is
+ * wrapped in `<multi_agent_turn>` with labeled question/summary, consistent with
+ * the `<web_*>` / context-envelope tag style used elsewhere in the prompt.
+ */
+export function buildPriorFanoutContextBlock(
+  entries: ReadonlyArray<PendingFanoutContext>
+): string | null {
+  if (entries.length === 0) return null;
+  // Escape the user-controlled question/summary so a `<` or a stray
+  // `</summary>` can't break the framing — same convention as the sibling
+  // `<web_*>` block builders in AgentSession.
+  const turns = entries
+    .map(
+      (e) =>
+        `<multi_agent_turn>\n<question>\n${escapeXml(e.question)}\n</question>\n` +
+        `<summary>\n${escapeXml(e.summary)}\n</summary>\n</multi_agent_turn>`
+    )
+    .join("\n");
+  return (
+    "<prior_turns>\n" +
+    "Earlier in this conversation you ran the following multi-agent turn(s). " +
+    "Each shows the user's question and the summary that was already shown to " +
+    "the user. Treat these as conversation history for continuity; do not " +
+    "redo or re-answer them.\n" +
+    `${turns}\n` +
+    "</prior_turns>"
+  );
+}
 
 /** One agent's succeeded answer, ready to feed into the summary prompt. */
 export interface SucceededAnswer {

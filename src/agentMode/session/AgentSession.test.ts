@@ -918,6 +918,130 @@ describe("AgentSession fan-out branching", () => {
   });
 });
 
+describe("AgentSession fan-out follow-up continuity", () => {
+  /** A fan-out runner that returns a turn with the given summary text. */
+  const fanoutWithSummary = (summary: string) =>
+    jest.fn(async (input: FanoutRunInput): Promise<FanoutTurn> => {
+      const turn: FanoutTurn = {
+        answers: {
+          opencode: { backendId: "opencode", status: "done", text: "a" },
+          claude: { backendId: "claude", status: "done", text: "b" },
+        },
+        summary: { status: "done", text: summary },
+      };
+      input.onChange(turn);
+      return turn;
+    });
+
+  /** A fan-out runner whose turn is cancelled (empty summary). */
+  const fanoutCancelled = () =>
+    jest.fn(async (input: FanoutRunInput): Promise<FanoutTurn> => {
+      const turn: FanoutTurn = {
+        answers: {
+          opencode: { backendId: "opencode", status: "cancelled", text: "" },
+          claude: { backendId: "claude", status: "cancelled", text: "" },
+        },
+        summary: { status: "pending", text: "" },
+      };
+      input.onChange(turn);
+      return turn;
+    });
+
+  const lastPromptText = (mock: ReturnType<typeof makeMockBackend>): string => {
+    const calls = mock.prompt.mock.calls;
+    const last = calls[calls.length - 1][0] as { prompt: Array<{ text: string }> };
+    return last.prompt[0].text;
+  };
+
+  it("injects the buffered question + summary on the next single-agent turn, then clears", async () => {
+    const mock = makeMockBackend();
+    const runFanoutTurn = fanoutWithSummary("the fan-out summary");
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+      runFanoutTurn,
+    });
+
+    await session.sendPrompt("compare X and Y", undefined, undefined, ["opencode", "claude"]).turn;
+    expect(mock.prompt).not.toHaveBeenCalled();
+
+    await session.sendPrompt("now expand on that").turn;
+
+    const text = lastPromptText(mock);
+    expect(text).toContain("<prior_turns>");
+    expect(text).toContain("compare X and Y");
+    expect(text).toContain("the fan-out summary");
+    expect(text).toContain("<user-message>\nnow expand on that\n</user-message>");
+
+    // Buffer cleared: a second single-agent turn carries no prior-turn block.
+    await session.sendPrompt("and again").turn;
+    expect(lastPromptText(mock)).not.toContain("<prior_turns>");
+  });
+
+  it("accumulates two back-to-back fan-out turns and injects both in order", async () => {
+    const mock = makeMockBackend();
+    const runFanoutTurn = jest
+      .fn()
+      .mockImplementationOnce(fanoutWithSummary("first summary"))
+      .mockImplementationOnce(fanoutWithSummary("second summary"));
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+      runFanoutTurn,
+    });
+
+    await session.sendPrompt("first question", undefined, undefined, ["opencode", "claude"]).turn;
+    await session.sendPrompt("second question", undefined, undefined, ["opencode", "claude"]).turn;
+    // A fan-out-after-fan-out turn does NOT flush — the backend was never called.
+    expect(mock.prompt).not.toHaveBeenCalled();
+
+    await session.sendPrompt("single follow-up").turn;
+    const text = lastPromptText(mock);
+    expect(text.indexOf("first question")).toBeLessThan(text.indexOf("second question"));
+    expect(text.indexOf("first summary")).toBeLessThan(text.indexOf("second summary"));
+    expect((text.match(/<multi_agent_turn>/g) ?? []).length).toBe(2);
+  });
+
+  it("does not buffer a cancelled / empty-summary fan-out turn", async () => {
+    const mock = makeMockBackend();
+    const runFanoutTurn = fanoutCancelled();
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+      runFanoutTurn,
+    });
+
+    await session.sendPrompt("cancelled question", undefined, undefined, ["opencode", "claude"])
+      .turn;
+    await session.sendPrompt("follow-up").turn;
+
+    expect(lastPromptText(mock)).not.toContain("<prior_turns>");
+  });
+
+  it("leaves the single-agent prompt byte-for-byte unchanged when the buffer is empty", async () => {
+    const mock = makeMockBackend();
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+    });
+
+    await session.sendPrompt("plain question").turn;
+
+    expect(mock.prompt).toHaveBeenCalledWith({
+      sessionId: "acp-1",
+      prompt: [{ type: "text", text: "plain question" }],
+    });
+  });
+});
+
 describe("AgentSession.create (via start)", () => {
   it("captures `state.model` from newSession and exposes via getState", async () => {
     const mock = makeMockBackend();

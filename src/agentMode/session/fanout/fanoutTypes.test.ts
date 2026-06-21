@@ -1,7 +1,9 @@
 import type { AgentToolKind } from "@/agentMode/session/types";
 import {
+  buildPriorFanoutContextBlock,
   buildSummaryUserPrompt,
   collapseFanoutTurnToSummaryText,
+  EMPTY_PENDING_FANOUT_CONTEXT,
   isWriteOrExecToolKind,
   selectSummaryInputs,
   snapshotFanoutTurn,
@@ -160,5 +162,44 @@ describe("snapshotFanoutTurn", () => {
     const snap = snapshotFanoutTurn(live());
     expect(Object.keys(snap.answers)).toEqual(["claude", "codex"]);
     expect(snap.answers.codex.text).toBe("full");
+  });
+});
+
+describe("buildPriorFanoutContextBlock", () => {
+  it("returns null for an empty buffer so the prompt stays unchanged", () => {
+    expect(buildPriorFanoutContextBlock([])).toBeNull();
+    expect(buildPriorFanoutContextBlock(EMPTY_PENDING_FANOUT_CONTEXT)).toBeNull();
+  });
+
+  it("frames a single turn as prior conversation with labeled question + summary", () => {
+    const block = buildPriorFanoutContextBlock([{ question: "How do X?", summary: "Do Y." }]);
+    expect(block).not.toBeNull();
+    expect(block).toContain("<prior_turns>");
+    expect(block).toContain("</prior_turns>");
+    expect(block).toContain("<multi_agent_turn>");
+    expect(block).toContain("<question>\nHow do X?\n</question>");
+    expect(block).toContain("<summary>\nDo Y.\n</summary>");
+    // Reads as history, not a new instruction to re-answer.
+    expect(block).toContain("conversation history");
+  });
+
+  it("escapes XML-special characters so a stray tag can't break the framing", () => {
+    const block = buildPriorFanoutContextBlock([
+      { question: "what about <b> & </summary>?", summary: "a < b" },
+    ])!;
+    expect(block).not.toContain("</summary>?");
+    expect(block).toContain("&lt;b&gt;");
+    expect(block).toContain("&amp;");
+    expect(block).toContain("a &lt; b");
+  });
+
+  it("includes every buffered turn in order", () => {
+    const block = buildPriorFanoutContextBlock([
+      { question: "Q1", summary: "S1" },
+      { question: "Q2", summary: "S2" },
+    ])!;
+    expect(block.indexOf("Q1")).toBeLessThan(block.indexOf("Q2"));
+    expect(block.indexOf("S1")).toBeLessThan(block.indexOf("S2"));
+    expect((block.match(/<multi_agent_turn>/g) ?? []).length).toBe(2);
   });
 });
