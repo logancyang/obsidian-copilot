@@ -282,6 +282,23 @@ describe("buildConversationHistoryBlock", () => {
     expect(block.indexOf("What is the plan?")).toBeLessThan(block.indexOf("Here is the plan."));
   });
 
+  it("renders a fan-out turn's clean answers in history, not the raw composite markers", () => {
+    const turn: FanoutTurn = {
+      answers: { opencode: { backendId: "opencode", status: "done", text: "opencode answer" } },
+      summary: { status: "done", text: "the summary", complete: true },
+    };
+    const body = serializeFanoutComposite(turn, (id) => id);
+    // No `.fanout` on the message → historyProse must parse the composite body
+    // and render it cleanly, so the hidden markers never reach the agents.
+    const block = buildConversationHistoryBlock(
+      [histMsg(USER_SENDER, "q"), histMsg(AI_SENDER, body)],
+      FANOUT_HISTORY_MAX_CHARS
+    )!;
+    expect(block).toContain("the summary");
+    expect(block).toContain("opencode answer");
+    expect(block).not.toContain("<!--copilot:");
+  });
+
   it("returns null for an empty transcript", () => {
     expect(buildConversationHistoryBlock([], FANOUT_HISTORY_MAX_CHARS)).toBeNull();
   });

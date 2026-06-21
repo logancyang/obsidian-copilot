@@ -483,9 +483,23 @@ function renderMessageContext(context: MessageContext | undefined): string[] {
  * longer dropped from history; a turn with no context renders byte-for-byte as
  * before.
  */
+/**
+ * History-safe prose for an assistant turn. A fan-out turn's `message` body is
+ * the PERSISTED composite — HTML-comment section markers plus marker-escaped
+ * content — so feeding it raw into `<conversation_history>` would leak hidden
+ * metadata (markers, status/error attributes, the escape sentinel) to the agents.
+ * Render the clean composite from the live/parsed `fanout` turn instead (backend
+ * ids as labels); fall back to parsing the body, else the plain message. A
+ * non-fan-out message has no `fanout` and no markers, so it returns unchanged.
+ */
+function historyProse(message: AgentChatMessage): string {
+  const turn = message.fanout ?? parseFanoutComposite(message.message);
+  return turn ? renderFanoutComposite(turn, (id) => id) : message.message;
+}
+
 function renderTurnContent(message: AgentChatMessage): string | null {
   const segments: string[] = [];
-  const prose = message.message.trim();
+  const prose = historyProse(message).trim();
   if (prose.length > 0) segments.push(prose);
   if (message.parts) segments.push(...renderNonProseParts(message.parts));
   const imageCount = countImageAttachments(message.content);
