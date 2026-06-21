@@ -926,9 +926,16 @@ export class AgentSession {
         prompt: promptBlocks,
       };
       const resp = await this.backend.prompt(req);
-      // Prompt sent successfully — the backend now has the buffered context, so
-      // flush it. A thrown prompt skips this and keeps the buffer for retry.
-      if (leadingContextBlock !== null) this.pendingFanoutContext = [];
+      // Flush the buffered context only on a NON-cancelled completion — at that
+      // point the backend has durably ingested the injected `<prior_turns>`
+      // block. A thrown prompt skips this entirely and keeps the buffer. A
+      // CANCELLED prompt resolves (it doesn't throw) but may have been stopped
+      // before the backend ingested the block, so we also keep the buffer and
+      // re-inject on the next turn; a duplicate re-injection is harmless,
+      // losing the multi-agent context is the bug.
+      if (leadingContextBlock !== null && resp.stopReason !== "cancelled") {
+        this.pendingFanoutContext = [];
+      }
       if (
         placeholderId &&
         resp.stopReason !== "cancelled" &&

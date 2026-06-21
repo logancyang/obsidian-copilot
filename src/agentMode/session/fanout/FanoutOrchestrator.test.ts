@@ -2,6 +2,8 @@ import type {
   BackendDescriptor,
   BackendId,
   BackendProcess,
+  BackendState,
+  ModelApplySpec,
   ModelSelection,
   SessionEvent,
   SessionUpdateHandler,
@@ -40,8 +42,20 @@ interface MockProc {
  * summary turn (a second sub-session on the main backend) resolve independently;
  * `resolvePrompt`/`rejectPrompt` settle the oldest still-pending prompt.
  */
-function makeMockProc(sessionId: string): MockProc {
+/**
+ * When `modelApply` is supplied the opened sub-session's `state.model.apply`
+ * carries that spec, so the orchestrator routes the model switch through the
+ * declared channel (a `setConfigOption` spec stands in for opencode ≥ 1.15.13,
+ * where `session/set_model` is gone). The refreshed state returned by each
+ * config-option round-trip echoes the same spec so the model-specific effort
+ * `effortConfigId` is readable after the bare model is activated.
+ */
+function makeMockProc(sessionId: string, modelApply?: ModelApplySpec): MockProc {
   let handler: SessionUpdateHandler | null = null;
+  const stateForModelApply = (): BackendState => ({
+    model: modelApply ? ({ apply: modelApply } as BackendState["model"]) : null,
+    mode: null,
+  });
   const pending: Array<{
     resolve: () => void;
     reject: (err: unknown) => void;
@@ -58,7 +72,7 @@ function makeMockProc(sessionId: string): MockProc {
   };
   const setSessionMode = jest.fn(async () => ({ model: null, mode: null }));
   const setSessionModel = jest.fn(async () => ({ model: null, mode: null }));
-  const setSessionConfigOption = jest.fn(async () => ({ model: null, mode: null }));
+  const setSessionConfigOption = jest.fn(async () => stateForModelApply());
   const cancel = jest.fn(async () => undefined);
   const proc = {
     isRunning: () => true,
@@ -70,7 +84,7 @@ function makeMockProc(sessionId: string): MockProc {
         handler = null;
       };
     },
-    newSession: jest.fn(async () => ({ sessionId, state: { model: null, mode: null } })),
+    newSession: jest.fn(async () => ({ sessionId, state: stateForModelApply() })),
     prompt: jest.fn(() => promptPromise()),
     cancel,
     setSessionModel,
@@ -147,14 +161,21 @@ interface HostHarness {
 function makeHost(
   config: Record<
     BackendId,
-    { sessionId: string; readOnlyModeId?: string; effortConfig?: { id: string } }
+    {
+      sessionId: string;
+      readOnlyModeId?: string;
+      effortConfig?: { id: string };
+      modelApply?: ModelApplySpec;
+    }
   >,
   defaults: Partial<Record<BackendId, ModelSelection>> = {}
 ): HostHarness {
   const procs = new Map<BackendId, MockProc>();
   const descriptors = new Map<BackendId, BackendDescriptor>();
-  for (const [id, { sessionId, readOnlyModeId, effortConfig }] of Object.entries(config)) {
-    procs.set(id, makeMockProc(sessionId));
+  for (const [id, { sessionId, readOnlyModeId, effortConfig, modelApply }] of Object.entries(
+    config
+  )) {
+    procs.set(id, makeMockProc(sessionId, modelApply));
     descriptors.set(id, descriptorFor(id, readOnlyModeId, effortConfig));
   }
   const readOnlyRegistered: string[] = [];
@@ -376,6 +397,124 @@ describe("FanoutOrchestrator.run", () => {
       configId: "effort",
       value: "high",
     });
+  });
+
+  it("routes the model via setSessionConfigOption (not setSessionModel) for a config-option-model backend", async () => {
+    // opencode ≥ 1.15.13: the catalog is a `category:"model"` config option and
+    // `session/set_model` is gone, so the MODEL itself must be applied via
+    // setSessionConfigOption and effort via the model-specific effort option.
+    const { host, procs } = makeHost(
+      {
+        opencode: {
+          sessionId: "s-opencode",
+          modelApply: { kind: "setConfigOption", configId: "model", effortConfigId: "thought" },
+        },
+      },
+      { opencode: { baseModelId: "anthropic/claude-opus-4-5", effort: "high" } }
+    );
+    const orchestrator = new FanoutOrchestrator(host);
+    const controller = new AbortController();
+    const runPromise = orchestrator.run(runInput(["opencode"], { signal: controller.signal }));
+    await flush();
+    procs.get("opencode")!.resolvePrompt();
+    await flush();
+    procs.get("opencode")!.resolvePrompt();
+    await runPromise;
+
+    // The model goes through the config-option channel with the bare wire id…
+    expect(procs.get("opencode")!.setSessionConfigOption).toHaveBeenCalledWith({
+      sessionId: "s-opencode",
+      configId: "model",
+      value: "anthropic/claude-opus-4-5/default",
+    });
+    // …effort through the model-specific effort option reported by the state…
+    expect(procs.get("opencode")!.setSessionConfigOption).toHaveBeenCalledWith({
+      sessionId: "s-opencode",
+      configId: "thought",
+      value: "high",
+    });
+    // …and setSessionModel (the now-unsupported RPC) is never touched.
+    expect(procs.get("opencode")!.setSessionModel).not.toHaveBeenCalled();
+  });
+
+  it("applies only the model (no effort option) for a config-option-model backend with default effort", async () => {
+    const { host, procs } = makeHost(
+      {
+        opencode: {
+          sessionId: "s-opencode",
+          modelApply: { kind: "setConfigOption", configId: "model", effortConfigId: "thought" },
+        },
+      },
+      { opencode: { baseModelId: "anthropic/claude-opus-4-5", effort: null } }
+    );
+    const orchestrator = new FanoutOrchestrator(host);
+    const controller = new AbortController();
+    const runPromise = orchestrator.run(runInput(["opencode"], { signal: controller.signal }));
+    await flush();
+    procs.get("opencode")!.resolvePrompt();
+    await flush();
+    procs.get("opencode")!.resolvePrompt();
+    await runPromise;
+
+    // The model switch fires once (the bare model); no effort round-trip.
+    expect(procs.get("opencode")!.setSessionConfigOption).toHaveBeenCalledWith({
+      sessionId: "s-opencode",
+      configId: "model",
+      value: "anthropic/claude-opus-4-5/default",
+    });
+    expect(procs.get("opencode")!.setSessionConfigOption).not.toHaveBeenCalledWith({
+      sessionId: "s-opencode",
+      configId: "thought",
+      value: expect.anything(),
+    });
+    expect(procs.get("opencode")!.setSessionModel).not.toHaveBeenCalled();
+  });
+
+  it("no-ops the config-option-model channel when no default selection is configured", async () => {
+    const { host, procs } = makeHost({
+      opencode: {
+        sessionId: "s-opencode",
+        modelApply: { kind: "setConfigOption", configId: "model", effortConfigId: "thought" },
+      },
+    });
+    const orchestrator = new FanoutOrchestrator(host);
+    const controller = new AbortController();
+    const runPromise = orchestrator.run(runInput(["opencode"], { signal: controller.signal }));
+    await flush();
+    procs.get("opencode")!.resolvePrompt();
+    await flush();
+    procs.get("opencode")!.resolvePrompt();
+    await runPromise;
+
+    expect(procs.get("opencode")!.setSessionConfigOption).not.toHaveBeenCalled();
+    expect(procs.get("opencode")!.setSessionModel).not.toHaveBeenCalled();
+  });
+
+  it("swallows a failed config-option-model apply and still runs the turn", async () => {
+    const { host, procs } = makeHost(
+      {
+        opencode: {
+          sessionId: "s-opencode",
+          modelApply: { kind: "setConfigOption", configId: "model", effortConfigId: "thought" },
+        },
+      },
+      { opencode: { baseModelId: "anthropic/claude-opus-4-5", effort: "high" } }
+    );
+    procs
+      .get("opencode")!
+      .setSessionConfigOption.mockRejectedValueOnce(new Error("set_config_option failed"));
+    const orchestrator = new FanoutOrchestrator(host);
+    const controller = new AbortController();
+    const runPromise = orchestrator.run(runInput(["opencode"], { signal: controller.signal }));
+    await flush();
+    procs.get("opencode")!.emit(textChunk("s-opencode", "still answered"));
+    procs.get("opencode")!.resolvePrompt();
+    await flush();
+    procs.get("opencode")!.resolvePrompt();
+    const turn = await runPromise;
+
+    expect(turn.answers.opencode.status).toBe("done");
+    expect(turn.answers.opencode.text).toBe("still answered");
   });
 
   it("applies the model but skips the config option for an explicit-default effort", async () => {

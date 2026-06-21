@@ -1127,6 +1127,40 @@ describe("AgentSession fan-out follow-up continuity", () => {
     expect(lastPromptText(mock)).not.toContain("<prior_turns>");
   });
 
+  it("preserves the buffer when the single-agent replay is cancelled, replaying it on the next turn", async () => {
+    const mock = makeMockBackend();
+    const runFanoutTurn = fanoutWithSummary("the fan-out summary");
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+      runFanoutTurn,
+    });
+
+    await session.sendPrompt("compare X and Y", undefined, undefined, ["opencode", "claude"]).turn;
+
+    // First single-agent follow-up resolves CANCELLED (it does not throw). The
+    // backend may have been stopped before durably ingesting the injected
+    // <prior_turns> block, so the buffer must NOT be flushed.
+    mock.prompt.mockResolvedValueOnce({ stopReason: "cancelled" });
+    const cancelled = await session.sendPrompt("first follow-up").turn;
+    expect(cancelled).toBe("cancelled");
+    // The cancelled replay still injected the block (the prompt was built)…
+    expect(lastPromptText(mock)).toContain("<prior_turns>");
+
+    // …and the buffer survived, so the NEXT (non-cancelled) turn re-injects it.
+    await session.sendPrompt("retry follow-up").turn;
+    const text = lastPromptText(mock);
+    expect(text).toContain("<prior_turns>");
+    expect(text).toContain("compare X and Y");
+    expect(text).toContain("the fan-out summary");
+
+    // The successful replay clears the buffer.
+    await session.sendPrompt("third follow-up").turn;
+    expect(lastPromptText(mock)).not.toContain("<prior_turns>");
+  });
+
   it("accumulates two back-to-back fan-out turns and injects both in order", async () => {
     const mock = makeMockBackend();
     const runFanoutTurn = jest
