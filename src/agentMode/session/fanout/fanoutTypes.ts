@@ -204,19 +204,31 @@ export function snapshotFanoutTurn(turn: FanoutTurn): FanoutTurn {
  * answers it is handed.
  */
 export const FANOUT_SUMMARY_INSTRUCTION =
-  "Below are the answers that one or more AI agents gave to the user's question. " +
-  "Produce ONLY the answer to that question, synthesized from theirs. Follow " +
-  "these rules strictly:\n" +
-  "- You are NOT one of the agents: never answer as yourself or add your own " +
-  "identity, knowledge, or opinion.\n" +
-  "- Output ONLY the substantive answer. Do NOT mention how many agents there " +
-  "were, which did or did not answer, any tools/skills/environment scaffolding, " +
-  "or that anything was missing or irrelevant.\n" +
-  "- Do NOT add notes, caveats, disclaimers, preambles, or meta-commentary, and " +
-  "do NOT narrate agreement or disagreement unless the agents give genuinely " +
-  "conflicting substantive answers (then state each briefly).\n" +
-  "- Be concise and scale to the question: a simple question gets one sentence.\n" +
-  "- Do NOT modify any files or run write/shell tools.";
+  "You are a neutral synthesizer. The labeled blocks below are answers that " +
+  "SEVERAL DIFFERENT AI agents each gave to the user's question. Write a " +
+  "synthesis of THEIR answers for the user — you are reporting on what the agents " +
+  "said, not answering the question yourself.\n\n" +
+  "VOICE (critical):\n" +
+  "- Write in the THIRD PERSON and attribute every point to the agent that made " +
+  'it, by name — for example "<agent> reports that it …" or "<agent A> and ' +
+  '<agent B> both note …".\n' +
+  '- The agents wrote in the first person; convert their "I/my" into "<agent> ' +
+  'says it …". NEVER write in the first person or speak as if the question were ' +
+  'asked of you — no sentence may begin with "I".\n\n' +
+  "SCOPE:\n" +
+  "- Use ONLY the answers shown. Ignore any environment scaffolding they include " +
+  "(tool lists, available skills/agents, system boilerplate). Do not mention how " +
+  "many agents there were, who did not answer, or anything missing.\n\n" +
+  "FORMAT:\n" +
+  "- If only ONE agent answered: one to three sentences summarizing its answer, " +
+  "attributed by name. No headings.\n" +
+  "- If TWO OR MORE answered, use these markdown sections, omitting any that is " +
+  "empty:\n" +
+  '  "**Each agent**" — one concise bullet per agent: "**<agent>**: <gist>".\n' +
+  '  "**Agreements**" — the points the agents share.\n' +
+  '  "**Disagreements**" — where they differ, naming the agents on each side.\n' +
+  "- Summarize; do not paste an agent's full answer back. Be concise.\n\n" +
+  "Do NOT modify any files or run write/shell tools.";
 
 /** The text persisted when every fan-out agent failed (D7 zero-success case). */
 export const FANOUT_ALL_FAILED_SUMMARY =
