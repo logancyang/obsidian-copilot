@@ -48,9 +48,9 @@ import { isFanout } from "@/agentMode/session/fanout/answerers";
 import {
   buildConversationHistoryBlock,
   buildPriorFanoutContextBlock,
-  collapseFanoutTurnToSummaryText,
   FANOUT_HISTORY_MAX_CHARS,
   FANOUT_READONLY_PREAMBLE,
+  renderFanoutComposite,
   selectSummaryInputs,
   serializeFanoutComposite,
   type FanoutTurn,
@@ -1099,13 +1099,20 @@ export class AgentSession {
       const composite = serializeFanoutComposite(turn, (id) => this.displayNameFor(id));
       this.store.appendAgentText(placeholderId, composite);
       // Buffer this turn so the next single-agent prompt can replay it: the
-      // visible backend never saw it (it ran on ephemeral sub-sessions). The
-      // replay continuity uses just the summary text (the user-facing artifact),
-      // not the full composite — `collapseFanoutTurnToSummaryText` falls back to
-      // a concise note when agents answered but no summary was generated.
-      const summaryText = collapseFanoutTurnToSummaryText(turn);
-      if (summaryText) {
-        this.pendingFanoutContext.push({ question: originalPromptText, summary: summaryText });
+      // visible backend never saw it (it ran on ephemeral sub-sessions). Prefer
+      // the summary (the user-facing artifact); but when the summary is
+      // unavailable (it failed/cancelled) while agents DID answer, replay the
+      // readable answers themselves so a follow-up like "what did they say?"
+      // still has the content the user saw, not just a generic note.
+      const summaryText = turn.summary.text.trim();
+      const replay =
+        summaryText.length > 0
+          ? summaryText
+          : selectSummaryInputs(turn).succeeded.length > 0
+            ? renderFanoutComposite(turn, (id) => this.displayNameFor(id))
+            : "";
+      if (replay) {
+        this.pendingFanoutContext.push({ question: originalPromptText, summary: replay });
       }
     }
     if (this.store.markTurnComplete(placeholderId, stopReason, Date.now() - turnStartedAt)) {

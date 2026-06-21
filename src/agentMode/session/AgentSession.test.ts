@@ -1421,7 +1421,7 @@ describe("AgentSession fan-out follow-up continuity", () => {
     expect(lastPromptText(mock)).not.toContain("<prior_turns>");
   });
 
-  it("persists a fallback note (not a blank bubble) when agents answered but no summary was generated", async () => {
+  it("replays the agents' answers when they answered but no summary was generated", async () => {
     const mock = makeMockBackend();
     const runFanoutTurn = fanoutAnswersNoSummary();
     const session = new AgentSession({
@@ -1435,12 +1435,15 @@ describe("AgentSession fan-out follow-up continuity", () => {
     await session.sendPrompt("multi question", undefined, undefined, ["opencode", "claude"]).turn;
     await session.sendPrompt("follow-up").turn;
 
-    // The turn produced successful answers, so it is buffered + replayed with a
-    // non-blank fallback summary instead of being dropped as an empty bubble.
+    // No summary was generated, but agents answered — so the follow-up replays
+    // the readable answers themselves (not a generic 'unavailable' note), so a
+    // question like "what did they say?" still has the content the user saw.
     const text = lastPromptText(mock);
     expect(text).toContain("<prior_turns>");
     expect(text).toContain("multi question");
-    expect(text).toContain("a combined summary could not be generated");
+    expect(text).toContain("answer a");
+    expect(text).toContain("answer b");
+    expect(text).not.toContain("a combined summary could not be generated");
   });
 
   it("leaves the single-agent prompt byte-for-byte unchanged when the buffer is empty", async () => {
