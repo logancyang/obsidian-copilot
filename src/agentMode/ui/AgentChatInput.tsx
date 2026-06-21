@@ -14,9 +14,12 @@ import {
 import { CustomCommandManager } from "@/commands/customCommandManager";
 import { getCachedCustomCommands } from "@/commands/state";
 import ChatInput, { type ChatInputProps } from "@/components/chat-components/ChatInput";
+import { EMPTY_AGENT_MENTION_BRANDS } from "@/components/chat-components/hooks/useAtMentionCategories";
 import { useActiveWebTabState } from "@/components/chat-components/hooks/useActiveWebTabState";
 import { Button } from "@/components/ui/button";
-import { ACTIVE_WEB_TAB_MARKER, EVENT_NAMES } from "@/constants";
+import { ACTIVE_WEB_TAB_MARKER, EVENT_NAMES, PLUS_UTM_MEDIUMS } from "@/constants";
+import { cn } from "@/lib/utils";
+import { navigateToPlusPage, useCanUseMultiAgent } from "@/plusUtils";
 import { EventTargetContext } from "@/context";
 import { logError, logWarn } from "@/logger";
 import {
@@ -35,7 +38,7 @@ import {
 } from "@/types/message";
 import { arrayBufferToBase64 } from "@/utils/base64";
 import { mergeWebTabContexts } from "@/utils/urlNormalization";
-import { Clock, X } from "lucide-react";
+import { Clock, Sparkles, X } from "lucide-react";
 import { App, Notice, TFile } from "obsidian";
 import React, { memo, useCallback, useContext, useEffect, useMemo, useRef } from "react";
 import { v4 as uuidv4 } from "uuid";
@@ -173,12 +176,22 @@ export const AgentChatInput = memo(function AgentChatInput({
   const isMountedRef = useRef(false);
   const previousSessionIdRef = useRef(sessionId);
 
+  // Multi-agent fan-out (the `@agent` typeahead group + pills) is a paid-only
+  // feature. Reactive so a settings change flips the gate live. This is the UI
+  // gate; the authoritative send-time check is a separate backend layer.
+  const canUseMultiAgent = useCanUseMultiAgent();
+
   // Installed coding agents the user can `@`-mention this turn. Registry-driven
   // and recomputed only when settings change, so the hot streaming path is
   // unaffected. The active set of mentioned pills is held in a ref (not state)
   // so a mention edit never re-renders this memoized composer mid-stream; it's
-  // read at send time.
-  const agentBrands = useMemo(() => listInstalledAgentBrands(settings), [settings]);
+  // read at send time. Free users get the frozen empty list, so the "Agents"
+  // typeahead group never renders and no agent pill can be inserted; paid users
+  // are completely unaffected.
+  const agentBrands = useMemo(
+    () => (canUseMultiAgent ? listInstalledAgentBrands(settings) : EMPTY_AGENT_MENTION_BRANDS),
+    [canUseMultiAgent, settings]
+  );
   const mentionedAgentIdsRef = useRef<string[]>([]);
   const handleMentionedAgentsChange = useCallback((backendIds: string[]) => {
     mentionedAgentIdsRef.current = backendIds;
@@ -421,6 +434,7 @@ export const AgentChatInput = memo(function AgentChatInput({
       {queuedMessages.length > 0 && (
         <QueuedMessageList messages={queuedMessages} onRemove={handleRemoveQueuedMessage} />
       )}
+      {!canUseMultiAgent && <MultiAgentUpsellHint />}
       <div
         className={hasPendingPlanPermission ? "tw-pointer-events-none tw-opacity-50" : undefined}
         aria-disabled={hasPendingPlanPermission || undefined}
@@ -470,6 +484,31 @@ export const AgentChatInput = memo(function AgentChatInput({
     </>
   );
 });
+
+/**
+ * Subtle, discoverable upsell shown to free users where the multi-agent
+ * `@`-mention affordance would otherwise be. Keeps the gate honest (free users
+ * can't mention agents) while still surfacing the paid feature. Clicking opens
+ * the Plus page with a multi-agent UTM medium so the entry point is attributable.
+ */
+const MultiAgentUpsellHint: React.FC = () => {
+  return (
+    <div className="tw-flex tw-justify-end tw-px-2 tw-pb-1">
+      <Button
+        variant="ghost2"
+        size="fit"
+        className={cn(
+          "tw-flex tw-items-center tw-text-ui-smaller tw-text-muted",
+          "hover:tw-text-normal"
+        )}
+        onClick={() => navigateToPlusPage(PLUS_UTM_MEDIUMS.MULTI_AGENT)}
+      >
+        <Sparkles className="tw-size-3" />
+        Mention multiple agents with Copilot Plus
+      </Button>
+    </div>
+  );
+};
 
 interface QueuedMessageListProps {
   messages: QueuedAgentMessage[];

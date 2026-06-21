@@ -132,6 +132,34 @@ export function useIsPlusUser(): boolean | undefined {
 }
 
 /**
+ * Synchronous entitlement check for the multi-agent per-turn QA ("fan-out")
+ * feature. Gated behind any paid plan (Plus / believer / supporter, and future
+ * tiers), so it reuses the Plus entitlement rather than inventing a parallel
+ * notion of "paid". This is the sync form; pair it with the `isPlusEnabled`
+ * family for non-React call sites (e.g. a send-time backend gate).
+ */
+export function canUseMultiAgent(): boolean {
+  return isPlusEnabled();
+}
+
+/**
+ * Reactive form of {@link canUseMultiAgent} for React render gates: it
+ * subscribes to settings so the gate flips live when the entitlement changes.
+ *
+ * It mirrors `useIsPlusUser` (not `isPlusEnabled`), so it can differ from the
+ * sync `canUseMultiAgent()` on one edge: a self-host user who has toggled
+ * `enableSelfHostMode` on but has no license key / validation receipt yet. The
+ * sync form trusts the toggle (via `isSelfHostModeValid`); the reactive form
+ * additionally requires the license key + receipt (via `useIsPlusUser`). Both
+ * deltas are inherited intentionally from their bases and kept consistent with
+ * every other Plus gate in the app. `undefined` (Plus state still resolving) is
+ * treated as not-yet-entitled.
+ */
+export function useCanUseMultiAgent(): boolean {
+  return useIsPlusUser() === true;
+}
+
+/**
  * Check if the user is a Plus user.
  * When self-host mode is valid, this returns true to allow offline usage.
  */

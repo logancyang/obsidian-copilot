@@ -7,7 +7,7 @@ jest.mock("@/settings/model", () => ({
   getSettings: () => mockGetSettings(),
 }));
 
-import { isSelfHostAccessValid, isSelfHostModeValid } from "@/plusUtils";
+import { canUseMultiAgent, isSelfHostAccessValid, isSelfHostModeValid } from "@/plusUtils";
 
 const SELF_HOST_GRACE_PERIOD_MS = 15 * 24 * 60 * 60 * 1000;
 
@@ -48,6 +48,25 @@ describe("isSelfHostAccessValid", () => {
       })
     );
     expect(isSelfHostAccessValid()).toBe(true);
+  });
+});
+
+describe("canUseMultiAgent", () => {
+  it("returns false for a free user (no Plus, no self-host)", () => {
+    mockGetSettings.mockReturnValue(
+      buildSettings({ isPlusUser: false, enableSelfHostMode: false })
+    );
+    expect(canUseMultiAgent()).toBe(false);
+  });
+
+  it("returns true for a Plus user", () => {
+    mockGetSettings.mockReturnValue(buildSettings({ isPlusUser: true, enableSelfHostMode: false }));
+    expect(canUseMultiAgent()).toBe(true);
+  });
+
+  it("returns true when self-host mode is on (believer/supporter offline path)", () => {
+    mockGetSettings.mockReturnValue(buildSettings({ isPlusUser: false, enableSelfHostMode: true }));
+    expect(canUseMultiAgent()).toBe(true);
   });
 });
 
