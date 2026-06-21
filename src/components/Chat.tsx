@@ -323,7 +323,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
       if (Array.isArray(activeModel?.capabilities) && !modelSupportsVision(activeModel)) {
         const modelLabel = activeModel.displayName || activeModel.name;
         new Notice(
-          `${modelLabel} doesn't support images. Switch to a vision-capable model, or enable Vision for this model in its provider settings.`
+          `${modelLabel} doesn't support images. Switch to a vision-capable model to send images.`
         );
         return;
       }

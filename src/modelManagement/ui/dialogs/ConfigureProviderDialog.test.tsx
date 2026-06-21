@@ -60,16 +60,6 @@ jest.mock("@/modelManagement/state/atoms", () => {
         origin: { kind: "byok" },
         addedAt: 0,
       },
-      {
-        // Risk R1 fixture: a saved model carries a vision override the catalog
-        // metadata disagrees with. Re-saving must preserve the saved caps.
-        providerId: "p-vision",
-        providerType: "anthropic",
-        displayName: "Vision Provider",
-        baseUrl: "https://api.anthropic.com",
-        origin: { kind: "byok", catalogProviderId: "vision" },
-        addedAt: 0,
-      },
     ]),
     configuredModelsAtom: jotai.atom([
       {
@@ -86,18 +76,6 @@ jest.mock("@/modelManagement/state/atoms", () => {
         configuredModelId: "cm2",
         providerId: "p1",
         info: { id: "claude-opus", displayName: "Claude Opus 4.5" },
-        configuredAt: 0,
-      },
-      {
-        // Risk R1: saved snapshot has vision (image input) — the catalog
-        // metadata for the same id lacks it (see visionCatalogMetadata).
-        configuredModelId: "cm-vision",
-        providerId: "p-vision",
-        info: {
-          id: "seer",
-          displayName: "Seer",
-          modalities: { input: ["text", "image"], output: ["text"] },
-        },
         configuredAt: 0,
       },
     ]),
@@ -176,18 +154,6 @@ const anthropicCatalogMetadata = {
     "claude-opus": { id: "claude-opus", displayName: "Claude Opus 4.5" },
     "claude-haiku": { id: "claude-haiku", displayName: "Claude Haiku 4.5" },
     "voyage-embed": { id: "voyage-embed", displayName: "Voyage Embed", isEmbedding: true },
-  },
-};
-
-// R1: the catalog masks the saved vision (no image input) for the same id, so
-// the catalog-first resolver would drop a prior override absent the overlay fix.
-const visionCatalogMetadata = {
-  id: "vision",
-  displayName: "Vision Provider",
-  providerType: "anthropic" as const,
-  defaultBaseUrl: "https://api.anthropic.com",
-  models: {
-    seer: { id: "seer", displayName: "Seer", modalities: { input: ["text"], output: ["text"] } },
   },
 };
 
@@ -530,105 +496,6 @@ describe("ConfigureProviderForm (edit mode)", () => {
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Save" }).hasAttribute("disabled")).toBe(true)
     );
-  });
-});
-
-describe("ConfigureProviderForm (Advanced capability overrides)", () => {
-  function expandAdvanced(): void {
-    fireEvent.click(screen.getByTestId("advanced-toggle"));
-  }
-
-  it("lists each selected non-embedding model with a vision toggle", async () => {
-    mockGetProvider.mockReturnValue(anthropicCatalogMetadata);
-    render(
-      <ConfigureProviderForm state={{ mode: "edit", providerId: "p1" }} onClose={jest.fn()} />
-    );
-    await waitFor(() => expect(screen.getByTestId("model-row-claude-sonnet")).toBeTruthy());
-    expandAdvanced();
-    expect(screen.getByTestId("advanced-row-claude-sonnet")).toBeTruthy();
-    expect(screen.getByTestId("advanced-vision-claude-sonnet")).toBeTruthy();
-    // Reasoning is no longer surfaced as a toggle (ubiquitous; kept runtime-only).
-    expect(screen.queryByTestId("advanced-reasoning-claude-sonnet")).toBeNull();
-  });
-
-  it("shows an empty hint when no models are selected", async () => {
-    mockListProviderModels.mockResolvedValue({ ok: true, modelIds: ["llama3.2"] });
-    render(
-      <ConfigureProviderForm state={{ mode: "new", source: ollamaSource }} onClose={jest.fn()} />
-    );
-    await waitFor(() => expect(screen.getByTestId("model-row-llama3.2")).toBeTruthy());
-    expandAdvanced();
-    expect(screen.getByTestId("advanced-empty")).toBeTruthy();
-  });
-
-  it("excludes embedding models from the panel", async () => {
-    mockGetProvider.mockReturnValue(anthropicCatalogMetadata);
-    mockListProviderModels.mockResolvedValue({ ok: true, modelIds: ["voyage-embed"] });
-    render(
-      <ConfigureProviderForm state={{ mode: "edit", providerId: "p1" }} onClose={jest.fn()} />
-    );
-    await waitFor(() => expect(screen.getByTestId("model-row-voyage-embed")).toBeTruthy());
-    fireEvent.click(rowCheckbox("voyage-embed"));
-    expandAdvanced();
-    expect(screen.queryByTestId("advanced-row-voyage-embed")).toBeNull();
-  });
-
-  it("persists a vision override onto a catalog model that lacked it", async () => {
-    mockGetProvider.mockReturnValue(anthropicCatalogMetadata);
-    mockVerifyCredentials.mockResolvedValue({ ok: true, checkedAt: 1 });
-    const onClose = jest.fn();
-    render(
-      <ConfigureProviderForm state={{ mode: "new", source: anthropicSource }} onClose={onClose} />
-    );
-    fireEvent.change(screen.getByTestId("api-key"), { target: { value: "sk-ant" } });
-    manualAddId("claude-sonnet");
-    expandAdvanced();
-    // claude-sonnet has no vision in the catalog — turn it on.
-    fireEvent.click(screen.getByTestId("advanced-vision-claude-sonnet"));
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
-    await waitFor(() => expect(mockSetupProvider).toHaveBeenCalled());
-    const saved = mockSetupProvider.mock.calls[0][0] as { models: Array<{ id: string }> };
-    const seer = saved.models.find((m) => m.id === "claude-sonnet") as {
-      modalities?: { input?: string[] };
-    };
-    expect(seer.modalities?.input).toContain("image");
-  });
-
-  it("R1: re-saving an untouched model preserves a saved vision override against catalog precedence", async () => {
-    // p-vision's saved model has image input; its catalog metadata (resolved
-    // via getProvider) does not. The user never opens Advanced — the overlay
-    // must still re-assert the saved caps.
-    mockGetProvider.mockReturnValue(visionCatalogMetadata);
-    mockBulkSet.mockResolvedValue(["cm-vision"]);
-    const onClose = jest.fn();
-    render(
-      <ConfigureProviderForm state={{ mode: "edit", providerId: "p-vision" }} onClose={onClose} />
-    );
-    await waitFor(() => expect(rowCheckbox("seer").getAttribute("aria-checked")).toBe("true"));
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
-    await waitFor(() => expect(mockBulkSet).toHaveBeenCalled());
-    const [, infos] = mockBulkSet.mock.calls[0] as [string, Array<{ id: string }>];
-    const seer = infos.find((m) => m.id === "seer") as { modalities?: { input?: string[] } };
-    expect(seer.modalities?.input).toContain("image");
-  });
-
-  it("R1: toggling vision off on a saved-vision model drops image on re-save", async () => {
-    mockGetProvider.mockReturnValue(visionCatalogMetadata);
-    mockBulkSet.mockResolvedValue(["cm-vision"]);
-    render(
-      <ConfigureProviderForm state={{ mode: "edit", providerId: "p-vision" }} onClose={jest.fn()} />
-    );
-    await waitFor(() => expect(screen.getByTestId("model-row-seer")).toBeTruthy());
-    expandAdvanced();
-    // The toggle seeds from the SAVED caps (vision on), so a click turns it off.
-    const visionToggle = screen.getByTestId("advanced-vision-seer");
-    expect(visionToggle.getAttribute("aria-checked")).toBe("true");
-    fireEvent.click(visionToggle);
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
-    await waitFor(() => expect(mockBulkSet).toHaveBeenCalled());
-    const [, infos] = mockBulkSet.mock.calls[0] as [string, Array<{ id: string }>];
-    const seer = infos.find((m) => m.id === "seer") as { modalities?: { input?: string[] } };
-    expect(seer.modalities?.input ?? []).not.toContain("image");
   });
 });
 

@@ -12,18 +12,11 @@
  * endpoint, or manual entry. Catalog hits only enrich row labels/limits.
  */
 import { looksLikeEmbeddingModel } from "@/modelManagement/catalog/catalogTransform";
-import {
-  applyCapsToModelInfo,
-  capsFromModelInfo,
-  type CapFlags,
-} from "@/modelManagement/chatModel/modelCapabilityFlags";
 import type { ModelManagementApi } from "@/modelManagement/createModelManagement";
 import { listProviderModels } from "@/modelManagement/providers/adapters/listProviderModels";
 import type { ModelInfo, ProviderType } from "@/modelManagement/types/catalog";
 import type { ConfiguredModel } from "@/modelManagement/types/persisted";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-
-const EMPTY_CAP_OVERRIDES: Readonly<Record<string, CapFlags>> = Object.freeze({});
 
 export interface UseModelCandidatePoolArgs {
   mode: "new" | "edit";
@@ -41,13 +34,6 @@ export interface UseModelCandidatePoolArgs {
   requiresApiKey: boolean;
   /** Edit mode: gate the mount fetch on the provider row having hydrated. */
   providerHydrated: boolean;
-  /**
-   * Per-wire-id capability overrides from the Advanced panel. `buildSelectedModelInfos`
-   * overlays these onto each selected non-embedding model so the user's vision/reasoning
-   * choices survive catalog-wins precedence on re-save (Risk R1). Embedding models are
-   * never overlaid.
-   */
-  capOverrides?: Readonly<Record<string, CapFlags>>;
   api: ModelManagementApi;
 }
 
@@ -79,7 +65,6 @@ export function useModelCandidatePool({
   extras,
   requiresApiKey,
   providerHydrated,
-  capOverrides = EMPTY_CAP_OVERRIDES,
   api,
 }: UseModelCandidatePoolArgs): ModelCandidatePool {
   const [selectedWireIds, setSelectedWireIds] = useState<Set<string>>(() =>
@@ -254,26 +239,13 @@ export function useModelCandidatePool({
     [existingByWireId]
   );
 
-  // Resolved `ModelInfo`s for the selected ids — same precedence the picker
-  // rendered, so what gets persisted matches what the user saw. For every
-  // selected non-embedding model we overlay an effective `CapFlags`:
-  //   user override (Advanced panel)  ??  the saved snapshot's caps  ??  resolved caps.
-  // The saved-snapshot fallback is the Risk R1 fix: `resolveModelInfo` is
-  // catalog-first, so without re-asserting the saved caps a re-save would
-  // silently discard a prior vision/reasoning override the catalog disagrees
-  // with — even when the user never opened the Advanced panel. Embedding
-  // models are never overlaid.
+  // Resolved `ModelInfo`s for the selected ids — same catalog → snapshot →
+  // synthesize precedence the picker rendered, so what gets persisted matches
+  // what the user saw. Capabilities ride along on each `ModelInfo` (its
+  // `modalities` / `reasoning`); there's no separate overlay.
   const buildSelectedModelInfos = useCallback(
-    (): ModelInfo[] =>
-      [...selectedWireIds].map((id) => {
-        const info = resolveModelInfo(id);
-        if (info.isEmbedding) return info;
-        const savedInfo = existingByWireId.get(id);
-        const effective = capsFromModelInfo(savedInfo ?? info);
-        const caps = capOverrides[id] ?? effective;
-        return applyCapsToModelInfo(info, caps);
-      }),
-    [selectedWireIds, resolveModelInfo, capOverrides, existingByWireId]
+    (): ModelInfo[] => [...selectedWireIds].map((id) => resolveModelInfo(id)),
+    [selectedWireIds, resolveModelInfo]
   );
 
   return {
