@@ -872,6 +872,19 @@ describe("serializeFanoutComposite / parseFanoutComposite", () => {
     expect(parseFanoutComposite("just a normal assistant reply with ### a heading")).toBeNull();
   });
 
+  it("returns null for a normal message that merely MENTIONS the marker format", () => {
+    // A message discussing the serializer (e.g. in a code block) must not be
+    // mistaken for a composite and hidden behind the fan-out card on reload.
+    const discussing =
+      "The format uses comments like `<!--copilot:multi-agent v=1-->` and " +
+      '`<!--copilot:agent id="x" status="done"-->` to mark sections.';
+    expect(parseFanoutComposite(discussing)).toBeNull();
+    // Even both wrapper markers present, but with NO real sections, is not a turn.
+    expect(
+      parseFanoutComposite("<!--copilot:multi-agent v=1-->\n\n<!--copilot:multi-agent-end-->")
+    ).toBeNull();
+  });
+
   it("ignores cosmetic headings, keying only on the comment markers", () => {
     // A heading that names a non-existent agent must not create a slot.
     const turn = multiTurn();

@@ -678,8 +678,13 @@ const FANOUT_COMPOSITE_VERSION = 1;
 /** Opening marker that flags an assistant body as a serialized fan-out composite. */
 const FANOUT_MARKER_OPEN = `<!--copilot:multi-agent v=${FANOUT_COMPOSITE_VERSION}-->`;
 
-/** Sentinel that {@link parseFanoutComposite} keys on to detect a composite body (version-agnostic). */
-const FANOUT_MARKER_PREFIX = "<!--copilot:multi-agent";
+/**
+ * Version-agnostic open marker matcher. {@link parseFanoutComposite} requires
+ * BOTH this and the close marker (the COMPLETE wrapper) before treating a body
+ * as a composite, so a normal answer that merely mentions the marker format —
+ * e.g. in a code block — is never misread as a serialized turn.
+ */
+const FANOUT_MARKER_OPEN_RE = /<!--copilot:multi-agent v=\d+-->/;
 
 /** Closing marker of a serialized fan-out composite. */
 const FANOUT_MARKER_CLOSE = "<!--copilot:multi-agent-end-->";
@@ -874,7 +879,10 @@ function statusFromMarker(raw: string | undefined): AgentAnswerStatus {
  * restored verbatim.
  */
 export function parseFanoutComposite(body: string): FanoutTurn | null {
-  if (!body.includes(FANOUT_MARKER_PREFIX)) return null;
+  // Require the COMPLETE wrapper (open + close), not just a marker substring, so
+  // a plain answer that happens to contain `<!--copilot:…` (e.g. discussing this
+  // serializer) is left as-is instead of being hidden behind the fan-out card.
+  if (!FANOUT_MARKER_OPEN_RE.test(body) || !body.includes(FANOUT_MARKER_CLOSE)) return null;
 
   const answers: Record<BackendId, AgentAnswer> = {};
   let summaryText = "";
@@ -920,6 +928,10 @@ export function parseFanoutComposite(body: string): FanoutTurn | null {
       ...(errorReason !== undefined ? { error: errorReason } : {}),
     };
   }
+
+  // An empty wrapper (no summary text AND no agent sections) is not a real turn
+  // — e.g. a message that pasted just the open/close markers. Leave it as-is.
+  if (summaryText.length === 0 && Object.keys(answers).length === 0) return null;
 
   return { answers, summary: { status: "done", text: summaryText } };
 }
