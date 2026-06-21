@@ -8,11 +8,23 @@ import {
   type FanoutOption,
   type FanoutOptionValue,
 } from "@/agentMode/ui/fanoutDropdown";
+import { CopilotSpinner } from "@/components/chat-components/CopilotSpinner";
 import { cn } from "@/lib/utils";
 import type { FanoutTurn } from "@/agentMode/session/fanout/fanoutTypes";
 import { App } from "obsidian";
 import { AlertTriangle, Check, CircleSlash, Loader2 } from "lucide-react";
 import React, { memo, useCallback, useMemo } from "react";
+
+/**
+ * The "agent is working" indicator for the response area — the same animated
+ * sigma (Σ) spinner the rest of the app shows while thinking/reasoning, sized to
+ * sit inline with a status label.
+ */
+const ThinkingSpinner: React.FC = () => (
+  <span className="tw-flex tw-size-4 tw-shrink-0 tw-items-center tw-justify-center">
+    <CopilotSpinner />
+  </span>
+);
 
 interface FanoutTurnViewProps {
   /** Fan-out turn for a multi-agent assistant message (live or reloaded). */
@@ -139,19 +151,9 @@ const FanoutTurnBody: React.FC<FanoutTurnBodyProps> = ({ turn, value, app }) => 
     }
     switch (summaryDisplayState(turn)) {
       case "writing":
-        return (
-          <FanoutStatusLine
-            icon={<Loader2 className="tw-size-4 tw-animate-spin tw-text-loading" />}
-            text="Writing summary…"
-          />
-        );
+        return <FanoutStatusLine icon={<ThinkingSpinner />} text="Writing summary…" />;
       case "waiting":
-        return (
-          <FanoutStatusLine
-            icon={<Loader2 className="tw-size-4 tw-animate-spin tw-text-loading" />}
-            text="Waiting for answers…"
-          />
-        );
+        return <FanoutStatusLine icon={<ThinkingSpinner />} text="Waiting for answers…" />;
       case "cancelled":
         return (
           <FanoutStatusLine
@@ -197,22 +199,14 @@ const FanoutTurnBody: React.FC<FanoutTurnBodyProps> = ({ turn, value, app }) => 
       <div className="tw-flex tw-flex-col tw-gap-1">
         <FanoutSlotBody text={answer.text} app={app} />
         {answer.status === "running" ? (
-          <FanoutStatusLine
-            icon={<Loader2 className="tw-size-4 tw-animate-spin tw-text-loading" />}
-            text="Streaming…"
-          />
+          <FanoutStatusLine icon={<ThinkingSpinner />} text="Streaming…" />
         ) : null}
       </div>
     );
   }
 
   // Running with no text yet — the in-place thinking spinner.
-  return (
-    <FanoutStatusLine
-      icon={<Loader2 className="tw-size-4 tw-animate-spin tw-text-loading" />}
-      text="Thinking…"
-    />
-  );
+  return <FanoutStatusLine icon={<ThinkingSpinner />} text="Thinking…" />;
 };
 
 interface FanoutSlotBodyProps {
