@@ -760,6 +760,26 @@ describe("serializeFanoutComposite / parseFanoutComposite", () => {
     });
   });
 
+  it("escapes > in marker attributes so backend error text can't corrupt the marker", () => {
+    const turn: FanoutTurn = {
+      answers: {
+        opencode: { backendId: "opencode", status: "done", text: "ok" },
+        codex: {
+          backendId: "codex",
+          status: "error",
+          text: "",
+          error: "syntax error: expected > here",
+        },
+      },
+      summary: { status: "done", text: "sum" },
+    };
+    const parsed = parseFanoutComposite(serializeFanoutComposite(turn, name))!;
+    // The `>` in the error attribute did not terminate the agent marker early,
+    // so the errored slot still reconstructs.
+    expect(Object.keys(parsed.answers)).toEqual(["opencode", "codex"]);
+    expect(parsed.answers.codex.status).toBe("error");
+  });
+
   it("persists an errored agent's partial text and its error reason", () => {
     const turn: FanoutTurn = {
       answers: {

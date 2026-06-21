@@ -790,9 +790,15 @@ export function renderFanoutComposite(
   return sections.join("\n\n");
 }
 
-/** Escape a value placed inside a marker attribute so `"` / `--` can't break the comment. */
+/**
+ * Escape a value placed inside a marker attribute so it can't break the comment
+ * or the parser: `--` would close/confuse the HTML comment, `"` would end the
+ * attribute, and `>` would terminate the marker early (the parser matches agent
+ * markers with `agent[^>]*`). Backend-controlled text (e.g. an agent error like
+ * `expected >`) flows through here, so all three must be neutralized.
+ */
 function escapeMarkerAttr(value: string): string {
-  return value.replace(/--/g, "—").replace(/"/g, "'");
+  return value.replace(/--/g, "—").replace(/"/g, "'").replace(/>/g, "›");
 }
 
 /** Read a `key="value"` attribute out of a marker's inner text. */
