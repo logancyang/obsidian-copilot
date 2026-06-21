@@ -703,10 +703,11 @@ const FANOUT_NO_ANSWER_NOTE = "did not answer";
  * HTML-comment section markers so a reload can reconstruct the dropdown
  * ({@link parseFanoutComposite}) while a marker-unaware renderer still shows
  * readable markdown (the `### Heading` lines are cosmetic; the parse keys ONLY
- * on the comment markers). Failed/cancelled/empty agents emit a body-less marker
- * carrying their `status` + a short `note` — mirroring {@link selectSummaryInputs}.
- * Each persisted answer is capped ({@link FANOUT_PERSISTED_ANSWER_MAX_CHARS}) and
- * its inner text is marker-escaped so it can never forge a section.
+ * on the comment markers). A failed/cancelled agent persists its PARTIAL text
+ * (so reload matches the live tab) when it streamed any, else a body-less marker
+ * carrying its `status` + a short `note`; the summary still excludes it. Each
+ * persisted answer is capped ({@link FANOUT_PERSISTED_ANSWER_MAX_CHARS}) and its
+ * inner text is marker-escaped so it can never forge a section.
  */
 export function serializeFanoutComposite(
   turn: FanoutTurn,
@@ -722,20 +723,34 @@ export function serializeFanoutComposite(
   for (const backendId of Object.keys(turn.answers)) {
     const name = displayName(backendId);
     const nameAttr = ` name="${escapeMarkerAttr(name)}"`;
+    const slot = turn.answers[backendId];
     if (succeededIds.has(backendId)) {
-      const slot = turn.answers[backendId];
       lines.push(
         `<!--copilot:agent id="${escapeMarkerAttr(backendId)}"${nameAttr} status="done"-->`,
         `### ${name}`,
         escapeFanoutMarkers(capPersistedAnswer(slot.text.trim()))
       );
     } else {
-      // Body-less marker: a failed/cancelled/empty agent persists only the fact
-      // that it participated and did not answer (mirrors selectSummaryInputs).
-      const status = turn.answers[backendId].status;
-      lines.push(
-        `<!--copilot:agent id="${escapeMarkerAttr(backendId)}"${nameAttr} status="${escapeMarkerAttr(status)}" note="${FANOUT_NO_ANSWER_NOTE}"-->`
-      );
+      // A failed/cancelled agent. If it streamed partial text before stopping,
+      // persist that text (with its terminal status) so a reload matches the
+      // live tab, which shows it; a truly empty slot gets a body-less marker
+      // recording that it participated and did not answer. Either way the
+      // summary still excludes it (selectSummaryInputs treats it as failed).
+      const errorAttr =
+        slot.status === "error" && slot.error ? ` error="${escapeMarkerAttr(slot.error)}"` : "";
+      const statusAttr = ` status="${escapeMarkerAttr(slot.status)}"`;
+      const partial = slot.text.trim();
+      if (partial.length > 0) {
+        lines.push(
+          `<!--copilot:agent id="${escapeMarkerAttr(backendId)}"${nameAttr}${statusAttr}${errorAttr}-->`,
+          `### ${name}`,
+          escapeFanoutMarkers(capPersistedAnswer(partial))
+        );
+      } else {
+        lines.push(
+          `<!--copilot:agent id="${escapeMarkerAttr(backendId)}"${nameAttr}${statusAttr}${errorAttr} note="${FANOUT_NO_ANSWER_NOTE}"-->`
+        );
+      }
     }
   }
 
@@ -836,13 +851,15 @@ export function parseFanoutComposite(body: string): FanoutTurn | null {
     if (!id) continue;
     const status = statusFromMarker(readMarkerAttr(section.marker, "status"));
     const note = readMarkerAttr(section.marker, "note");
+    const errorReason = readMarkerAttr(section.marker, "error");
     answers[id] = {
       backendId: id,
       status,
-      // A body-less "did not answer" marker reconstructs an empty failed slot;
-      // a `done` marker carries its answer text.
-      text: status === "done" && note === undefined ? inner : "",
-      ...(status === "error" && note !== undefined ? { error: note } : {}),
+      // A body-less "did not answer" marker (carries `note`) reconstructs an
+      // empty slot; every other slot — a `done` answer or a terminal slot with
+      // partial text — carries its body verbatim.
+      text: note !== undefined ? "" : inner,
+      ...(errorReason !== undefined ? { error: errorReason } : {}),
     };
   }
 

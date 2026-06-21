@@ -744,17 +744,36 @@ describe("serializeFanoutComposite / parseFanoutComposite", () => {
     expect(parsed.answers.codex.text).toBe("");
   });
 
-  it("does NOT persist a cancelled agent's partial text (mirrors selectSummaryInputs)", () => {
+  it("persists a cancelled agent's partial text so reload matches the live tab", () => {
     const turn: FanoutTurn = {
       answers: {
         opencode: { backendId: "opencode", status: "done", text: "good" },
-        codex: { backendId: "codex", status: "cancelled", text: "PARTIAL_SECRET" },
+        codex: { backendId: "codex", status: "cancelled", text: "PARTIAL streamed before cancel" },
       },
       summary: { status: "done", text: "sum" },
     };
     const body = serializeFanoutComposite(turn, name);
-    expect(body).not.toContain("PARTIAL_SECRET");
-    expect(parseFanoutComposite(body)!.answers.codex.text).toBe("");
+    expect(body).toContain("PARTIAL streamed before cancel");
+    expect(parseFanoutComposite(body)!.answers.codex).toMatchObject({
+      status: "cancelled",
+      text: "PARTIAL streamed before cancel",
+    });
+  });
+
+  it("persists an errored agent's partial text and its error reason", () => {
+    const turn: FanoutTurn = {
+      answers: {
+        opencode: { backendId: "opencode", status: "done", text: "good" },
+        codex: { backendId: "codex", status: "error", text: "half an answer", error: "timed out" },
+      },
+      summary: { status: "done", text: "sum" },
+    };
+    const parsed = parseFanoutComposite(serializeFanoutComposite(turn, name))!;
+    expect(parsed.answers.codex).toMatchObject({
+      status: "error",
+      text: "half an answer",
+      error: "timed out",
+    });
   });
 
   it("losslessly round-trips an answer that literally contains the marker prefix", () => {
