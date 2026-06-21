@@ -311,24 +311,29 @@ export class FanoutOrchestrator {
     return new Promise<"done" | "aborted">((resolve, reject) => {
       let settled = false;
       const cancelSubSession = () => void proc.cancel({ sessionId }).catch(() => undefined);
+      // Tear down BOTH the deadline timer and the abort listener on whichever
+      // path settles first, so a settled prompt leaks neither a live 5-minute
+      // timer (the abort path) nor an abort handler (the timeout/resolve path).
+      const cleanup = () => {
+        window.clearTimeout(timeout);
+        signal.removeEventListener("abort", onAbort);
+      };
       const onAbort = () => {
         if (settled) return;
         settled = true;
+        cleanup();
         cancelSubSession();
         resolve("aborted");
       };
       const timeout = window.setTimeout(() => {
         if (settled) return;
         settled = true;
+        cleanup();
         cancelSubSession();
         reject(new Error(FANOUT_AGENT_TIMEOUT_ERROR));
       }, FANOUT_AGENT_TIMEOUT_MS);
       signal.addEventListener("abort", onAbort, { once: true });
 
-      const cleanup = () => {
-        window.clearTimeout(timeout);
-        signal.removeEventListener("abort", onAbort);
-      };
       proc.prompt({ sessionId, prompt }).then(
         () => {
           if (settled) return;

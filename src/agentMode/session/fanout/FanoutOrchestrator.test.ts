@@ -341,6 +341,41 @@ describe("FanoutOrchestrator.run", () => {
     expect(turn.summary.status).toBe("pending");
   });
 
+  it("clears the per-agent deadline timer on abort (no leaked timer, slot stays cancelled)", async () => {
+    jest.useFakeTimers();
+    try {
+      const { host, procs } = makeHost({
+        claude: { sessionId: "s-claude" },
+        codex: { sessionId: "s-codex" },
+      });
+      const orchestrator = new FanoutOrchestrator(host);
+      const controller = new AbortController();
+      const runPromise = orchestrator.run(
+        runInput(["claude", "codex"], { signal: controller.signal })
+      );
+
+      // Both sub-sessions reach their pending prompt(), arming a deadline timer each.
+      await jest.advanceTimersByTimeAsync(0);
+      // User cancels; backends honor it and resolve their pending prompts.
+      controller.abort();
+      procs.get("claude")!.resolvePrompt();
+      procs.get("codex")!.resolvePrompt();
+      const turn = await runPromise;
+
+      // Both slots are terminal-cancelled, and the deadline timers were cleared
+      // on the abort path — none survives to fire 5 min later.
+      expect(turn.answers.claude.status).toBe("cancelled");
+      expect(turn.answers.codex.status).toBe("cancelled");
+      expect(jest.getTimerCount()).toBe(0);
+      // Advancing past the deadline must not resurrect/relabel a settled slot.
+      await jest.advanceTimersByTimeAsync(FANOUT_AGENT_TIMEOUT_MS);
+      expect(turn.answers.claude.status).toBe("cancelled");
+      expect(turn.answers.codex.status).toBe("cancelled");
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it("fails a hung agent's own slot on timeout while the others complete and the summary still runs", async () => {
     jest.useFakeTimers();
     try {
