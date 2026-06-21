@@ -204,18 +204,19 @@ export function snapshotFanoutTurn(turn: FanoutTurn): FanoutTurn {
  * answers it is handed.
  */
 export const FANOUT_SUMMARY_INSTRUCTION =
-  "Several AI agents independently answered the user's question shown below. You " +
-  "are NOT one of those agents and you are NOT being asked the question yourself: " +
-  "do NOT answer it from your own perspective or substitute your own identity, " +
-  "knowledge, or opinion. Your only job is to summarize and reconcile what THE " +
-  "AGENTS said. Report their answer concisely, scaled to the question — a simple " +
-  "question gets one or two sentences. If they agree, state the shared answer " +
-  "once as what the agents reported; if they disagree, give the answers and note " +
-  "the key disagreement briefly, attributing a claim to the agent that made it " +
-  "when it matters. IGNORE any environment scaffolding in their answers (tool " +
-  "lists, available skills or agents, system boilerplate) — it is not part of an " +
-  "answer. Do not pad with meta-commentary. Do NOT modify any files or run " +
-  "write/shell tools.";
+  "Below are the answers that one or more AI agents gave to the user's question. " +
+  "Produce ONLY the answer to that question, synthesized from theirs. Follow " +
+  "these rules strictly:\n" +
+  "- You are NOT one of the agents: never answer as yourself or add your own " +
+  "identity, knowledge, or opinion.\n" +
+  "- Output ONLY the substantive answer. Do NOT mention how many agents there " +
+  "were, which did or did not answer, any tools/skills/environment scaffolding, " +
+  "or that anything was missing or irrelevant.\n" +
+  "- Do NOT add notes, caveats, disclaimers, preambles, or meta-commentary, and " +
+  "do NOT narrate agreement or disagreement unless the agents give genuinely " +
+  "conflicting substantive answers (then state each briefly).\n" +
+  "- Be concise and scale to the question: a simple question gets one sentence.\n" +
+  "- Do NOT modify any files or run write/shell tools.";
 
 /** The text persisted when every fan-out agent failed (D7 zero-success case). */
 export const FANOUT_ALL_FAILED_SUMMARY =
@@ -600,17 +601,14 @@ export function buildSummaryUserPrompt(
   const sections = inputs.succeeded.map(
     ({ backendId, text }) => `### ${displayNameFor(backendId)}\n${text}`
   );
+  // Only the SUCCEEDED answers are shown to the summarizer. Agents that did not
+  // answer are intentionally omitted entirely (not listed as a "gap") so the
+  // summary can't mention or speculate about them — it sees only real answers.
   const parts = [
     FANOUT_SUMMARY_INSTRUCTION,
-    `## Original question\n${originalPrompt.trim()}`,
+    `## Question\n${originalPrompt.trim()}`,
     `## Agent answers\n${sections.join("\n\n")}`,
   ];
-  if (inputs.failed.length > 0) {
-    const names = inputs.failed.map(displayNameFor).join(", ");
-    parts.push(
-      `## Note\nThese agents did not return an answer: ${names}. Summarize only the answers above and note this gap.`
-    );
-  }
   return [{ type: "text", text: parts.join("\n\n") }];
 }
 
@@ -780,10 +778,16 @@ export function renderFanoutComposite(
 
   for (const backendId of Object.keys(turn.answers)) {
     const name = displayName(backendId);
+    const slot = turn.answers[backendId];
     if (succeededIds.has(backendId)) {
-      sections.push(`### ${name}\n${turn.answers[backendId].text.trim()}`);
+      sections.push(`### ${name}\n${slot.text.trim()}`);
     } else {
-      sections.push(`### ${name}\n_${FANOUT_NO_ANSWER_NOTE}_`);
+      // A terminal slot that streamed partial text keeps it (matching the
+      // persisted body and the live tab); a truly empty one gets the note.
+      const partial = slot.text.trim();
+      sections.push(
+        partial.length > 0 ? `### ${name}\n${partial}` : `### ${name}\n_${FANOUT_NO_ANSWER_NOTE}_`
+      );
     }
   }
 

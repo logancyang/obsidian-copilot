@@ -827,7 +827,7 @@ describe("FanoutOrchestrator.run", () => {
     expect(summaryStatuses[summaryStatuses.length - 1]).toBe("done");
   });
 
-  it("feeds the summary only succeeded answers, labeled, and names the failed agent", async () => {
+  it("feeds the summary only succeeded answers, labeled, and omits the failed agent", async () => {
     const { host, procs } = makeHost({
       claude: { sessionId: "s-claude" },
       codex: { sessionId: "s-codex" },
@@ -852,9 +852,9 @@ describe("FanoutOrchestrator.run", () => {
     expect(text).toContain("the original question");
     expect(text).toContain("CLAUDE");
     expect(text).toContain("Claude answer");
-    // The failed agent is named, never fed as an answer.
-    expect(text).toContain("did not return an answer: CODEX");
-    expect(text).not.toContain("### CODEX");
+    // The failed agent is never fed as an answer AND never named to the
+    // summarizer, so the summary can't mention or speculate about it.
+    expect(text).not.toContain("CODEX");
   });
 
   it("lands a brief all-failed note (no fabricated summary) when zero agents succeed", async () => {
@@ -903,7 +903,9 @@ describe("FanoutOrchestrator.run", () => {
     const summaryCall = (procs.get("claude")!.proc.prompt as jest.Mock).mock.calls[1][0];
     const text = summaryCall.prompt[0].text as string;
     expect(text).toContain("### CLAUDE");
-    expect(text).toContain("did not return an answer: CODEX");
+    // The done-but-empty agent is treated as failed: not fed as an answer and
+    // not named to the summarizer.
+    expect(text).not.toContain("CODEX");
   });
 
   it("settles a timed-out MAIN answer prompt before reusing the backend for the summary", async () => {

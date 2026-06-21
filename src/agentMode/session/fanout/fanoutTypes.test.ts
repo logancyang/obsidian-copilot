@@ -154,7 +154,7 @@ describe("buildSummaryUserPrompt", () => {
     expect(prompt).toBeNull();
   });
 
-  it("composes a single text block with the question, labeled answers, and a failure note", () => {
+  it("composes a single text block with the question and the succeeded answers only", () => {
     const prompt = buildSummaryUserPrompt(
       "  the question  ",
       {
@@ -173,17 +173,20 @@ describe("buildSummaryUserPrompt", () => {
     expect(text).toContain("the question");
     expect(text).toContain("### CLAUDE\nclaude says X");
     expect(text).toContain("### OPENCODE\nopencode says Y");
-    expect(text).toContain("did not return an answer: CODEX");
   });
 
-  it("omits the failure note when every agent succeeded", () => {
+  it("never tells the summarizer about agents that did not answer", () => {
+    // The summarizer must not be able to mention non-answerers, so the failed
+    // list is omitted from the prompt entirely (not surfaced as a 'gap' note).
     const prompt = buildSummaryUserPrompt(
       "q",
-      { succeeded: [{ backendId: "claude", text: "a" }], failed: [] },
+      { succeeded: [{ backendId: "claude", text: "a" }], failed: ["codex", "opencode"] },
       upper
     );
     const text = (prompt![0] as { text: string }).text;
     expect(text).not.toContain("did not return an answer");
+    expect(text).not.toContain("CODEX");
+    expect(text).not.toContain("OPENCODE");
   });
 });
 

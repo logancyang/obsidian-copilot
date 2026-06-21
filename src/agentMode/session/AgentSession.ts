@@ -51,7 +51,6 @@ import {
   FANOUT_HISTORY_MAX_CHARS,
   FANOUT_READONLY_PREAMBLE,
   renderFanoutComposite,
-  selectSummaryInputs,
   serializeFanoutComposite,
   type FanoutTurn,
   type PendingFanoutContext,
@@ -1093,8 +1092,11 @@ export class AgentSession {
     // reconstructed on reload (parseFanoutComposite). A turn with no successes
     // AND no summary text (e.g. cancelled before any answer landed) collapses to
     // empty, so we persist/buffer nothing — no misleading blank bubble.
-    const hasContent =
-      turn.summary.text.trim().length > 0 || selectSummaryInputs(turn).succeeded.length > 0;
+    // Any non-empty slot text counts — including a terminal slot's partial text
+    // (serializeFanoutComposite persists it), so a turn cancelled mid-stream is
+    // saved and replayed, not dropped as a blank bubble.
+    const hasAnswerText = Object.values(turn.answers).some((a) => a.text.trim().length > 0);
+    const hasContent = turn.summary.text.trim().length > 0 || hasAnswerText;
     if (hasContent) {
       const composite = serializeFanoutComposite(turn, (id) => this.displayNameFor(id));
       this.store.appendAgentText(placeholderId, composite);
@@ -1108,7 +1110,7 @@ export class AgentSession {
       const replay =
         summaryText.length > 0
           ? summaryText
-          : selectSummaryInputs(turn).succeeded.length > 0
+          : hasAnswerText
             ? renderFanoutComposite(turn, (id) => this.displayNameFor(id))
             : "";
       if (replay) {
