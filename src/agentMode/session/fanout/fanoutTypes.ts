@@ -127,6 +127,14 @@ export type FanoutSummaryStatus = "pending" | "streaming" | "done";
 export interface FanoutSummary {
   status: FanoutSummaryStatus;
   text: string;
+  /**
+   * True once the summary finished generating SUCCESSFULLY — not interrupted by
+   * cancel, error, or timeout. `status` alone can't say (it is forced to `done`
+   * on every exit so the UI never sticks on a spinner), so the single-agent
+   * continuity replay uses this to decide whether to trust the summary text or
+   * fall back to replaying the agents' answers. Live-only; never serialized.
+   */
+  complete?: boolean;
 }
 
 /**

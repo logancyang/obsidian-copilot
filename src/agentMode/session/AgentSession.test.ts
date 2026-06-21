@@ -1143,7 +1143,7 @@ describe("AgentSession fan-out conversation history", () => {
           opencode: { backendId: "opencode", status: "done", text: "a" },
           claude: { backendId: "claude", status: "done", text: "b" },
         },
-        summary: { status: "done", text: summary },
+        summary: { status: "done", text: summary, complete: true },
       };
       input.onChange(turn);
       return turn;
@@ -1242,7 +1242,7 @@ describe("AgentSession fan-out follow-up continuity", () => {
           opencode: { backendId: "opencode", status: "done", text: "a" },
           claude: { backendId: "claude", status: "done", text: "b" },
         },
-        summary: { status: "done", text: summary },
+        summary: { status: "done", text: summary, complete: true },
       };
       input.onChange(turn);
       return turn;
@@ -1275,6 +1275,21 @@ describe("AgentSession fan-out follow-up continuity", () => {
           claude: { backendId: "claude", status: "done", text: "answer b" },
         },
         summary: { status: "done", text: "" },
+      };
+      input.onChange(turn);
+      return turn;
+    });
+
+  // Agents answered, the summary STREAMED partial text and was then interrupted
+  // (cancel/error): `status` is forced to `done` but `complete` is never set.
+  const fanoutInterruptedSummary = () =>
+    jest.fn(async (input: FanoutRunInput): Promise<FanoutTurn> => {
+      const turn: FanoutTurn = {
+        answers: {
+          opencode: { backendId: "opencode", status: "done", text: "answer a" },
+          claude: { backendId: "claude", status: "done", text: "answer b" },
+        },
+        summary: { status: "done", text: "partial sum", complete: false },
       };
       input.onChange(turn);
       return turn;
@@ -1444,6 +1459,30 @@ describe("AgentSession fan-out follow-up continuity", () => {
     expect(text).toContain("answer a");
     expect(text).toContain("answer b");
     expect(text).not.toContain("a combined summary could not be generated");
+  });
+
+  it("replays the agents' answers when the summary was interrupted mid-stream", async () => {
+    const mock = makeMockBackend();
+    const runFanoutTurn = fanoutInterruptedSummary();
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+      runFanoutTurn,
+    });
+
+    await session.sendPrompt("multi question", undefined, undefined, ["opencode", "claude"]).turn;
+    await session.sendPrompt("follow-up").turn;
+
+    // The summary streamed partial text then was interrupted (not complete), so
+    // the follow-up replays the full composite (which carries the answers),
+    // instead of ONLY the incomplete summary as before. The presence of the
+    // answers is the guard: the old behavior replayed just "partial sum".
+    const text = lastPromptText(mock);
+    expect(text).toContain("<prior_turns>");
+    expect(text).toContain("answer a");
+    expect(text).toContain("answer b");
   });
 
   it("leaves the single-agent prompt byte-for-byte unchanged when the buffer is empty", async () => {

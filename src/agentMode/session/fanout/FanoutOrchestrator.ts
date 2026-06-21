@@ -207,6 +207,7 @@ export class FanoutOrchestrator {
     if (!summaryPrompt) {
       turn.summary.status = "done";
       turn.summary.text = FANOUT_ALL_FAILED_SUMMARY;
+      turn.summary.complete = true; // the final intended text for the zero-success case
       input.onChange(turn);
       return;
     }
@@ -214,7 +215,7 @@ export class FanoutOrchestrator {
     turn.summary.status = "streaming";
     input.onChange(turn);
     try {
-      await this.runReadOnlySubSession({
+      const outcome = await this.runReadOnlySubSession({
         backendId: input.mainAgent,
         prompt: summaryPrompt,
         signal: input.signal,
@@ -223,7 +224,11 @@ export class FanoutOrchestrator {
           input.onChange(turn);
         },
       });
+      // Only a clean finish is a trustworthy summary; an "aborted" outcome (cancel)
+      // leaves partial text that the continuity replay must not prefer.
+      if (outcome === "done") turn.summary.complete = true;
     } catch (err) {
+      // Errored/timed out mid-stream: partial text, NOT complete.
       logWarn(`[AgentMode] fan-out summary failed`, err);
     } finally {
       turn.summary.status = "done";

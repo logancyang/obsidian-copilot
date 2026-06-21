@@ -1106,9 +1106,13 @@ export class AgentSession {
       // unavailable (it failed/cancelled) while agents DID answer, replay the
       // readable answers themselves so a follow-up like "what did they say?"
       // still has the content the user saw, not just a generic note.
+      // Prefer the summary ONLY when it generated successfully. A summary that
+      // streamed partial text and was then cancelled/errored is incomplete, so —
+      // like the no-summary case — replay the agents' answers (persisted in the
+      // composite) instead, or the follow-up loses the content it never saw.
       const summaryText = turn.summary.text.trim();
       const replay =
-        summaryText.length > 0
+        turn.summary.complete && summaryText.length > 0
           ? summaryText
           : hasAnswerText
             ? renderFanoutComposite(turn, (id) => this.displayNameFor(id))
