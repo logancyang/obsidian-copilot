@@ -5,8 +5,11 @@ import {
   buildPromptBlocks,
   buildUserDisplayContent,
   tryReadExitPlanModeCall,
+  withReadOnlyPreamble,
 } from "./AgentSession";
 import { AuthRequiredError, MethodUnsupportedError } from "./errors";
+import type { FanoutRunInput } from "./fanout/FanoutOrchestrator";
+import { FANOUT_READONLY_PREAMBLE, type FanoutTurn } from "./fanout/fanoutTypes";
 import type {
   AgentToolCallOutput,
   BackendDescriptor,
@@ -767,6 +770,111 @@ describe("AgentSession.sendPrompt", () => {
     expect(mock.cancel).toHaveBeenCalledWith({ sessionId: "acp-1" });
     resolvePrompt!({ stopReason: "cancelled" });
     expect(await turn).toBe("cancelled");
+  });
+});
+
+describe("withReadOnlyPreamble", () => {
+  it("leads the first text block with the read-only instruction", () => {
+    const out = withReadOnlyPreamble([{ type: "text", text: "the question" }]);
+    expect(out).toEqual([{ type: "text", text: `${FANOUT_READONLY_PREAMBLE}\n\nthe question` }]);
+  });
+
+  it("inserts a leading text block when the prompt has none (image-only)", () => {
+    const out = withReadOnlyPreamble([{ type: "image", mimeType: "image/png", data: "x" }]);
+    expect(out[0]).toEqual({ type: "text", text: FANOUT_READONLY_PREAMBLE });
+    expect(out).toHaveLength(2);
+  });
+});
+
+describe("AgentSession fan-out branching", () => {
+  it("dispatches to the fan-out runner (not backend.prompt) when >1 agent", async () => {
+    const mock = makeMockBackend();
+    const runFanoutTurn = jest.fn(async (input: FanoutRunInput): Promise<FanoutTurn> => {
+      const turn: FanoutTurn = {
+        answers: {
+          opencode: { backendId: "opencode", status: "done", text: "opencode answer" },
+          claude: { backendId: "claude", status: "done", text: "claude answer" },
+        },
+        summary: { status: "pending", text: "" },
+      };
+      input.onChange(turn);
+      return turn;
+    });
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+      runFanoutTurn,
+    });
+
+    const stopReason = await session.sendPrompt("review", undefined, undefined, [
+      "opencode",
+      "claude",
+    ]).turn;
+
+    expect(stopReason).toBe("end_turn");
+    expect(runFanoutTurn).toHaveBeenCalledTimes(1);
+    expect(mock.prompt).not.toHaveBeenCalled();
+    // Every agent received the identical prompt blocks, led by the read-only
+    // QA preamble (the universal "answer only, no writes" instruction).
+    expect(runFanoutTurn.mock.calls[0][0].agents).toEqual(["opencode", "claude"]);
+    const fanoutPrompt = runFanoutTurn.mock.calls[0][0].prompt[0] as { type: "text"; text: string };
+    expect(fanoutPrompt.text).toContain("read-only");
+    expect(fanoutPrompt.text).toContain("review");
+    // Live per-agent answers are exposed for the UI...
+    expect(session.getLiveFanoutTurn()?.answers.claude.text).toBe("claude answer");
+  });
+
+  it("collapses a fan-out turn to summary-only — no per-agent text in the saved body", async () => {
+    const mock = makeMockBackend();
+    const runFanoutTurn = jest.fn(async (input: FanoutRunInput): Promise<FanoutTurn> => {
+      const turn: FanoutTurn = {
+        answers: {
+          opencode: { backendId: "opencode", status: "done", text: "OPENCODE_SECRET_ANSWER" },
+          claude: { backendId: "claude", status: "done", text: "CLAUDE_SECRET_ANSWER" },
+        },
+        // Phase 3 fills this; simulate a completed summary here to assert the
+        // persistence seam writes only the summary text.
+        summary: { status: "done", text: "the narrative summary" },
+      };
+      input.onChange(turn);
+      return turn;
+    });
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+      runFanoutTurn,
+    });
+
+    await session.sendPrompt("review", undefined, undefined, ["opencode", "claude"]).turn;
+
+    const placeholder = session.store.getDisplayMessages().find((m) => m.sender === AI_SENDER);
+    // The serialized display body is the summary only — per-agent answers never
+    // reach the persisted message.
+    expect(placeholder?.message).toBe("the narrative summary");
+    expect(placeholder?.message).not.toContain("SECRET_ANSWER");
+  });
+
+  it("uses the single-agent path (backend.prompt) when only the main agent runs", async () => {
+    const mock = makeMockBackend();
+    const runFanoutTurn = jest.fn();
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+      runFanoutTurn,
+    });
+
+    // A single mentioned agent (just the main) must NOT fan out.
+    await session.sendPrompt("hi", undefined, undefined, ["opencode"]).turn;
+
+    expect(runFanoutTurn).not.toHaveBeenCalled();
+    expect(mock.prompt).toHaveBeenCalledTimes(1);
+    expect(session.getLiveFanoutTurn()).toBeNull();
   });
 });
 

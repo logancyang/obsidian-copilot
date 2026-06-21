@@ -21,6 +21,12 @@ import {
 import { MethodUnsupportedError } from "./errors";
 import { resolveMcpServers } from "./mcpResolver";
 import { replayPersistedMode } from "./replayPersistedMode";
+import {
+  FanoutOrchestrator,
+  type FanoutHost,
+  type FanoutRunInput,
+} from "./fanout/FanoutOrchestrator";
+import type { FanoutTurn } from "./fanout/fanoutTypes";
 import type {
   AgentQuestionAnswers,
   AskUserQuestionPrompt,
@@ -30,6 +36,7 @@ import type {
   BackendState,
   CopilotMode,
   EffortOption,
+  McpServerSpec,
   ModeApplySpec,
   ModelSelection,
   PermissionDecision,
@@ -173,6 +180,14 @@ export class AgentSessionManager {
     }
   >();
 
+  // Backend session ids of ephemeral read-only fan-out sub-sessions. The shared
+  // permission prompter consults this so write/exec tools are hard-denied (and
+  // reads allowed) for these sessions, which have no visible tab to prompt on.
+  private readonly readOnlyFanoutSessions = new Set<SessionId>();
+  // Orchestrates multi-agent read-only QA turns. Owns no state beyond the host
+  // seam this manager provides; see `runFanoutTurn`.
+  private readonly fanoutOrchestrator: FanoutOrchestrator;
+
   private getSessionState(internalId: string) {
     let entry = this.sessionState.get(internalId);
     if (!entry) {
@@ -191,6 +206,48 @@ export class AgentSessionManager {
       throw new Error("AgentSessionManager is desktop only");
     }
     this.preloader = opts.modelPreloader;
+    this.fanoutOrchestrator = new FanoutOrchestrator(this.createFanoutHost());
+  }
+
+  /**
+   * Whether `backendSessionId` is an ephemeral read-only fan-out sub-session.
+   * The shared permission prompter (wired in `agentMode/index.ts`) consults
+   * this to apply the read-only policy — allow reads, deny writes/exec.
+   */
+  isReadOnlyFanoutSession(backendSessionId: SessionId): boolean {
+    return this.readOnlyFanoutSessions.has(backendSessionId);
+  }
+
+  /**
+   * Run a multi-agent read-only QA turn (Phase 2): dispatch the identical
+   * prompt to every agent (main + mentioned) in parallel via ephemeral
+   * read-only sub-sessions. Called by `AgentSession.runTurn` when the turn has
+   * more than one agent. The summary slot is left pending for Phase 3.
+   */
+  runFanoutTurn(input: FanoutRunInput): Promise<FanoutTurn> {
+    return this.fanoutOrchestrator.run(input);
+  }
+
+  /** Narrow backend seam the {@link FanoutOrchestrator} drives. */
+  private createFanoutHost(): FanoutHost {
+    return {
+      ensureBackendForFanout: async (backendId) => {
+        const descriptor = this.resolveDescriptor(backendId);
+        const { proc } = await this.ensureBackend(backendId, descriptor);
+        return { proc, descriptor };
+      },
+      getDefaultSelection: (backendId) => this.getDefaultSelection(backendId),
+      getCwd: () => {
+        const adapter = this.app.vault.adapter;
+        return adapter instanceof FileSystemAdapter ? adapter.getBasePath() : null;
+      },
+      getMcpServers: (proc): McpServerSpec[] =>
+        resolveMcpServers(proc, getSettings().agentMode?.mcpServers),
+      registerReadOnlySession: (sessionId) => {
+        this.readOnlyFanoutSessions.add(sessionId);
+        return () => this.readOnlyFanoutSessions.delete(sessionId);
+      },
+    };
   }
 
   /**
@@ -509,6 +566,7 @@ export class AgentSessionManager {
       defaultModelSelection: seedSelection,
       initialCachedState: warm?.state ?? this.preloader.getCachedBackendState(resolvedId),
       getDescriptor: () => this.opts.resolveDescriptor(resolvedId),
+      runFanoutTurn: (input) => this.runFanoutTurn(input),
     });
     if (warm) {
       logInfo(
@@ -1353,6 +1411,7 @@ export class AgentSessionManager {
       initialState: resumeResult.state,
       cwd: vaultBasePath,
       getDescriptor: () => this.opts.resolveDescriptor(backendId),
+      runFanoutTurn: (input) => this.runFanoutTurn(input),
     });
     this.sessions.set(session.internalId, session);
     this.chatUIStates.set(session.internalId, new AgentChatUIState(session));

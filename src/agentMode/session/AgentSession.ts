@@ -41,6 +41,20 @@ import { deriveChatTitleFromMessages } from "@/agentMode/session/chatHistoryMerg
 import { getSettings } from "@/settings/model";
 import { ContextProcessor } from "@/contextProcessor";
 import { escapeXml } from "@/LLMProviders/chainRunner/utils/xmlParsing";
+import type { FanoutRunInput } from "@/agentMode/session/fanout/FanoutOrchestrator";
+import {
+  collapseFanoutTurnToSummaryText,
+  FANOUT_READONLY_PREAMBLE,
+  type FanoutTurn,
+} from "@/agentMode/session/fanout/fanoutTypes";
+
+/**
+ * Seam the session calls to dispatch a multi-agent read-only QA turn. Supplied
+ * by `AgentSessionManager` (which owns `ensureBackend` / default-model lookup /
+ * the read-only permission registry); omitted in tests and on the single-agent
+ * path. Returns the completed live {@link FanoutTurn}.
+ */
+export type RunFanoutTurn = (input: FanoutRunInput) => Promise<FanoutTurn>;
 
 /**
  * Prefix opencode uses for placeholder titles before its title-summarizer
@@ -174,6 +188,13 @@ export interface AgentSessionStartOptions {
    * without coupling to specific backends. Manager-supplied; tests omit it.
    */
   getDescriptor?: () => BackendDescriptor | undefined;
+  /**
+   * Optional fan-out dispatcher. When supplied, a turn with more than one agent
+   * (main + `@`-mentioned) runs the multi-agent read-only QA path instead of
+   * the single `backend.prompt()`. Manager-supplied; tests and the single-agent
+   * path omit it.
+   */
+  runFanoutTurn?: RunFanoutTurn;
 }
 
 /**
@@ -195,6 +216,7 @@ export interface AgentSessionStateOptions {
   defaultModelSelection?: ModelSelection;
   cwd?: string | null;
   getDescriptor?: () => BackendDescriptor | undefined;
+  runFanoutTurn?: RunFanoutTurn;
 }
 
 /**
@@ -219,6 +241,7 @@ export class AgentSession {
   private readonly backend: BackendProcess;
   private readonly cwd: string | null;
   private readonly getDescriptor: (() => BackendDescriptor | undefined) | null;
+  private readonly runFanoutTurn: RunFanoutTurn | null;
   // `status` is derived from the primitives below — see `getStatus()`.
   // `cachedStatus` is a memo of the last value we fired through
   // `onStatusChanged`, used purely for change detection. It is not the
@@ -239,6 +262,13 @@ export class AgentSession {
   // dispatches one ephemeral read-only sub-session per agent reads this in a
   // later phase. The single-agent path leaves it empty and behaves unchanged.
   private lastMentionedAgents: ReadonlyArray<BackendId> = EMPTY_BACKEND_IDS;
+  // Live-only fan-out state for the in-flight (or just-completed) multi-agent
+  // turn. NEVER serialized: on save the turn collapses to its summary text
+  // (written into the placeholder's `message`), so per-agent answers stay in
+  // memory only and existing single-agent transcripts load unchanged (the
+  // no-migration decision). `null` on the single-agent path; reset at each
+  // turn start and on dispose.
+  private liveFanoutTurn: FanoutTurn | null = null;
   private placeholderId: string | null = null;
   // ACP `messageId`s seen on this turn's content chunks. Used to re-route
   // trailing chunks that a backend flushes *after* the `session/prompt` result
@@ -325,6 +355,7 @@ export class AgentSession {
     this.backendId = opts.backendId;
     this.cwd = opts.cwd ?? null;
     this.getDescriptor = opts.getDescriptor ?? null;
+    this.runFanoutTurn = opts.runFanoutTurn ?? null;
     if ("backendSessionId" in opts) {
       this.backendSessionId = opts.backendSessionId;
       const originalState = opts.initialState ?? null;
@@ -789,6 +820,9 @@ export class AgentSession {
     // `getLastMentionedAgents()`.
     this.lastMentionedAgents =
       mentionedAgents && mentionedAgents.length > 0 ? mentionedAgents : EMPTY_BACKEND_IDS;
+    // Drop any prior turn's live fan-out state so a single-agent follow-up
+    // doesn't keep showing the previous multi-agent dropdown.
+    this.liveFanoutTurn = null;
 
     this.abortController = new AbortController();
     // Clear any prior terminal error before the new turn starts so the
@@ -828,6 +862,16 @@ export class AgentSession {
       const hasWebTabs = (context?.webTabs?.length ?? 0) > 0;
       const webTabBlock = hasWebTabs ? await serializeWebTabContext(context) : "";
       const promptBlocks = buildPromptBlocks(displayText, context, promptContent, webTabBlock);
+
+      // Fan-out path: more than one agent for this turn (main + ≥1 mentioned)
+      // dispatches the identical prompt to every backend in parallel via
+      // ephemeral read-only sub-sessions. The single-agent path (0 mentions, or
+      // no fan-out dispatcher wired) falls through to the existing
+      // `backend.prompt()` below, unchanged.
+      if (this.runFanoutTurn && this.lastMentionedAgents.length > 1 && placeholderId) {
+        return await this.runFanoutPath(placeholderId, promptBlocks, turnStartedAt);
+      }
+
       const req: PromptInput = {
         sessionId,
         prompt: promptBlocks,
@@ -884,6 +928,58 @@ export class AgentSession {
   }
 
   /**
+   * Dispatch a multi-agent read-only QA turn. Every agent (main + mentioned)
+   * runs the identical `promptBlocks` in a parallel ephemeral read-only
+   * sub-session; answers stream into per-agent slots of a single live
+   * {@link FanoutTurn} held in memory. The summary slot stays pending (Phase 3
+   * fills it). On completion only the summary text is written into the
+   * placeholder's display body — per-agent answers are never persisted, so the
+   * markdown transcript format is unchanged (no migration).
+   *
+   * Returns a `StopReason` so the surrounding `runTurn` lifecycle (status flips,
+   * settled-stream bookkeeping) is identical to the single-agent path.
+   */
+  private async runFanoutPath(
+    placeholderId: string,
+    promptBlocks: PromptContent[],
+    turnStartedAt: number
+  ): Promise<StopReason> {
+    const signal = this.abortController?.signal ?? new AbortController().signal;
+    const input: FanoutRunInput = {
+      agents: this.lastMentionedAgents,
+      prompt: withReadOnlyPreamble(promptBlocks),
+      signal,
+      onChange: (turn) => {
+        this.liveFanoutTurn = turn;
+        this.scheduleNotifyMessages();
+      },
+    };
+    const turn = await this.runFanoutTurn!(input);
+    this.liveFanoutTurn = turn;
+
+    const stopReason: StopReason = signal.aborted ? "cancelled" : "end_turn";
+    // Collapse to summary-only for persistence/display: per-agent answers stay
+    // live in `liveFanoutTurn`, but the placeholder's serialized body carries
+    // just the summary text (empty until Phase 3 generates it).
+    const summaryText = collapseFanoutTurnToSummaryText(turn);
+    if (summaryText) this.store.appendAgentText(placeholderId, summaryText);
+    if (this.store.markTurnComplete(placeholderId, stopReason, Date.now() - turnStartedAt)) {
+      this.notifyMessages();
+    }
+    if (this.placeholderId === placeholderId) this.placeholderId = null;
+    return stopReason;
+  }
+
+  /**
+   * The live fan-out state for the most recent multi-agent turn, or `null` on
+   * the single-agent path. The Phase 4 UI renders the per-agent dropdown from
+   * this; Phase 3 fills its `summary` slot. Live-only — never persisted.
+   */
+  getLiveFanoutTurn(): FanoutTurn | null {
+    return this.liveFanoutTurn;
+  }
+
+  /**
    * Cancel any in-flight turn. The backend may still emit a few trailing
    * session events before the prompt promise resolves with
    * `stopReason: "cancelled"` — that's expected.
@@ -923,6 +1019,7 @@ export class AgentSession {
     this.flushQuestionResolvers();
     this.decidedPlanToolCallIds.clear();
     this.currentPlan = null;
+    this.liveFanoutTurn = null;
     this.settledStream = null;
     this.currentMessageIds = new Set();
     // Fire the `"closed"` transition before clearing listeners so
@@ -1593,6 +1690,22 @@ export function buildPromptBlocks(
   const extras = content ?? [];
   if (extras.length === 0) return [{ type: "text", text: headText }];
   return [{ type: "text", text: headText }, ...extras];
+}
+
+/**
+ * Prepend the read-only QA instruction to the shared prompt blocks for a
+ * fan-out turn — the universal "answer only, no writes" enforcement layer (D5).
+ * The instruction leads the first text block (or a new one when there is none)
+ * so every agent reads the same read-only framing before the context envelope
+ * and user message. Identical for every agent (apples-to-apples, D10).
+ */
+export function withReadOnlyPreamble(blocks: PromptContent[]): PromptContent[] {
+  const i = blocks.findIndex((b) => b.type === "text");
+  if (i === -1) return [{ type: "text", text: FANOUT_READONLY_PREAMBLE }, ...blocks];
+  const block = blocks[i] as Extract<PromptContent, { type: "text" }>;
+  const out = blocks.slice();
+  out[i] = { type: "text", text: `${FANOUT_READONLY_PREAMBLE}\n\n${block.text}` };
+  return out;
 }
 
 /**
