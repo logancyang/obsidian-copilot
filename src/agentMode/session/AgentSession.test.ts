@@ -918,6 +918,105 @@ describe("AgentSession fan-out branching", () => {
   });
 });
 
+describe("AgentSession fan-out conversation history", () => {
+  /** A fan-out runner returning the given summary; captures its input prompt. */
+  const fanoutWithSummary = (summary: string) =>
+    jest.fn(async (input: FanoutRunInput): Promise<FanoutTurn> => {
+      const turn: FanoutTurn = {
+        answers: {
+          opencode: { backendId: "opencode", status: "done", text: "a" },
+          claude: { backendId: "claude", status: "done", text: "b" },
+        },
+        summary: { status: "done", text: summary },
+      };
+      input.onChange(turn);
+      return turn;
+    });
+
+  const fanoutPromptText = (
+    runFanoutTurn: jest.Mock,
+    callIndex = 0
+  ): { type: "text"; text: string } =>
+    runFanoutTurn.mock.calls[callIndex][0].prompt[0] as { type: "text"; text: string };
+
+  it("includes the prior transcript as a conversation_history block on a fan-out follow-up", async () => {
+    const mock = makeMockBackend();
+    // First a single-agent turn so a prior transcript exists.
+    const runFanoutTurn = fanoutWithSummary("summary");
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+      runFanoutTurn,
+    });
+
+    await session.sendPrompt("what is the master plan").turn;
+    // Simulate the assistant's prior reply landing in the transcript.
+    session.store.appendAgentText(
+      session.store.getDisplayMessages().find((m) => m.sender === AI_SENDER)!.id,
+      "the master plan is X"
+    );
+
+    await session.sendPrompt("expand on that plan", undefined, undefined, ["opencode", "claude"])
+      .turn;
+
+    const text = fanoutPromptText(runFanoutTurn).text;
+    expect(text).toContain("<conversation_history>");
+    expect(text).toContain("what is the master plan");
+    expect(text).toContain("the master plan is X");
+    // The current question follows the history, inside the user-message block.
+    expect(text).toContain("<user-message>\nexpand on that plan\n</user-message>");
+    // The current in-flight user message is NOT duplicated inside history.
+    expect((text.match(/expand on that plan/g) ?? []).length).toBe(1);
+  });
+
+  it("the second of two back-to-back fan-outs sees the first turn's summary", async () => {
+    const mock = makeMockBackend();
+    const runFanoutTurn = fanoutWithSummary("FIRST_FANOUT_SUMMARY");
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+      runFanoutTurn,
+    });
+
+    await session.sendPrompt("first fan-out question", undefined, undefined, ["opencode", "claude"])
+      .turn;
+    await session.sendPrompt("second fan-out question", undefined, undefined, [
+      "opencode",
+      "claude",
+    ]).turn;
+
+    const secondText = fanoutPromptText(runFanoutTurn, 1).text;
+    expect(secondText).toContain("<conversation_history>");
+    expect(secondText).toContain("first fan-out question");
+    expect(secondText).toContain("FIRST_FANOUT_SUMMARY");
+  });
+
+  it("adds no history block on the first fan-out turn (empty transcript)", async () => {
+    const mock = makeMockBackend();
+    const runFanoutTurn = fanoutWithSummary("summary");
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+      runFanoutTurn,
+    });
+
+    await session.sendPrompt("first ever question", undefined, undefined, ["opencode", "claude"])
+      .turn;
+
+    const text = fanoutPromptText(runFanoutTurn).text;
+    expect(text).not.toContain("<conversation_history>");
+    // Byte-for-byte: read-only preamble immediately followed by the user message
+    // (no leading context section), exactly as before this feature.
+    expect(text).toBe(`${FANOUT_READONLY_PREAMBLE}\n\nfirst ever question`);
+  });
+});
+
 describe("AgentSession fan-out follow-up continuity", () => {
   /** A fan-out runner that returns a turn with the given summary text. */
   const fanoutWithSummary = (summary: string) =>

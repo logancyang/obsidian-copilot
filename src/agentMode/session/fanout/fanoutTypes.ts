@@ -1,4 +1,10 @@
-import type { AgentToolKind, BackendId, PromptContent } from "@/agentMode/session/types";
+import type {
+  AgentChatMessage,
+  AgentToolKind,
+  BackendId,
+  PromptContent,
+} from "@/agentMode/session/types";
+import { USER_SENDER } from "@/constants";
 import { escapeXml } from "@/LLMProviders/chainRunner/utils/xmlParsing";
 
 /**
@@ -224,6 +230,74 @@ export function buildPriorFanoutContextBlock(
     `${turns}\n` +
     "</prior_turns>"
   );
+}
+
+/**
+ * Char cap on the rendered `<conversation_history>` block injected into every
+ * fan-out agent's prompt. Each fan-out agent runs in a FRESH single-turn
+ * ephemeral sub-session, so the entire prior transcript rides in ONE prompt;
+ * unlike a long-running session, nothing here gets compacted, so an oversized
+ * block would hard-error the model API ("prompt too long") rather than
+ * auto-truncate (D3). 48k chars (~12k tokens) covers typical chats with room to
+ * spare against a ~200k-token window even multiplied across agents; oldest-first
+ * truncation only kicks in on pathologically long conversations.
+ */
+export const FANOUT_HISTORY_MAX_CHARS = 48_000;
+
+/** Marker prepended when the oldest turns are dropped to fit the cap. */
+const FANOUT_HISTORY_TRUNCATION_MARKER = "[earlier conversation truncated]";
+
+/**
+ * Render the prior visible transcript into a single read-only
+ * `<conversation_history>` block for fan-out agent prompts (D2 / realizes D9).
+ * Each fan-out agent opens a FRESH session with no memory, so this is how it
+ * sees what came before — framed as context to USE, not a task to redo or
+ * re-answer.
+ *
+ * `messages` must be PRIOR turns only (the caller excludes the current
+ * in-flight user message + assistant placeholder). Each non-empty message is
+ * labeled by role (`user` / `assistant`) using its display text; empty messages
+ * are skipped. Content is XML-escaped (same convention as the `<web_*>` /
+ * prior-turns builders) so message text can't break the framing.
+ *
+ * Past {@link FANOUT_HISTORY_MAX_CHARS} the OLDEST turns are dropped first and a
+ * clear truncation marker is prepended, keeping the most recent context (D3).
+ * Returns `null` when there is no prior history (empty input or all-empty) so
+ * the caller leaves the fan-out prompt byte-for-byte unchanged.
+ */
+export function buildConversationHistoryBlock(
+  messages: readonly AgentChatMessage[],
+  maxChars: number
+): string | null {
+  const rendered: string[] = [];
+  for (const m of messages) {
+    const text = m.message.trim();
+    if (text.length === 0) continue;
+    const role = m.sender === USER_SENDER ? "user" : "assistant";
+    rendered.push(`<turn role="${role}">\n${escapeXml(text)}\n</turn>`);
+  }
+  if (rendered.length === 0) return null;
+
+  // Drop oldest-first until the joined turns fit the cap, tracking a running
+  // char total (each turn's length plus the "\n" separator that joins it to the
+  // next) so we never re-join the whole transcript per drop. Bound by the body
+  // length (the framing chrome is small and constant); only the most recent
+  // turns survive a pathologically long chat.
+  let total = rendered.reduce((n, t) => n + t.length + 1, -1);
+  let truncated = false;
+  while (rendered.length > 1 && total > maxChars) {
+    total -= rendered.shift()!.length + 1;
+    truncated = true;
+  }
+
+  const header =
+    "Earlier in this conversation the following was said. Treat this as " +
+    "read-only context to inform your answer; do NOT redo or re-answer these " +
+    "earlier turns. Answer only the current question that follows.";
+  const body = truncated
+    ? `${FANOUT_HISTORY_TRUNCATION_MARKER}\n${rendered.join("\n")}`
+    : rendered.join("\n");
+  return `<conversation_history>\n${header}\n${body}\n</conversation_history>`;
 }
 
 /** One agent's succeeded answer, ready to feed into the summary prompt. */

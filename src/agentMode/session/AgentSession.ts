@@ -43,8 +43,10 @@ import { ContextProcessor } from "@/contextProcessor";
 import { escapeXml } from "@/LLMProviders/chainRunner/utils/xmlParsing";
 import type { FanoutRunInput } from "@/agentMode/session/fanout/FanoutOrchestrator";
 import {
+  buildConversationHistoryBlock,
   buildPriorFanoutContextBlock,
   collapseFanoutTurnToSummaryText,
+  FANOUT_HISTORY_MAX_CHARS,
   FANOUT_READONLY_PREAMBLE,
   snapshotFanoutTurn,
   type FanoutTurn,
@@ -844,7 +846,7 @@ export class AgentSession {
     this.lastTurnError = false;
     this.recomputeStatusIfChanged();
 
-    const turn = this.runTurn(displayText, context, promptContent);
+    const turn = this.runTurn(displayText, userMessageId, context, promptContent);
     return { userMessageId, turn };
   }
 
@@ -860,6 +862,7 @@ export class AgentSession {
 
   private async runTurn(
     displayText: string,
+    userMessageId: string,
     context: MessageContext | undefined,
     promptContent?: PromptContent[]
   ): Promise<StopReason> {
@@ -882,7 +885,23 @@ export class AgentSession {
       // only appends to the buffer on completion. The single-agent path (0
       // mentions, or no fan-out dispatcher wired) falls through below.
       if (this.runFanoutTurn && this.lastMentionedAgents.length > 1 && placeholderId) {
-        const promptBlocks = buildPromptBlocks(displayText, context, promptContent, webTabBlock);
+        // Give every fresh ephemeral fan-out agent the PRIOR visible transcript
+        // as a read-only `<conversation_history>` block so `@agent` follow-ups
+        // ("that plan", "the answer above") and fan-out→fan-out continuity work
+        // (D9). "Prior" excludes this turn's own in-flight user message and
+        // assistant placeholder — both already appended in `sendPrompt` before
+        // this runs. Null (no prior history) → byte-for-byte unchanged prompt.
+        const historyBlock = buildConversationHistoryBlock(
+          this.priorDisplayMessages(userMessageId, placeholderId),
+          FANOUT_HISTORY_MAX_CHARS
+        );
+        const promptBlocks = buildPromptBlocks(
+          displayText,
+          context,
+          promptContent,
+          webTabBlock,
+          historyBlock
+        );
         return await this.runFanoutPath(placeholderId, displayText, promptBlocks, turnStartedAt);
       }
 
@@ -1018,6 +1037,24 @@ export class AgentSession {
     }
     if (this.placeholderId === placeholderId) this.placeholderId = null;
     return stopReason;
+  }
+
+  /**
+   * The visible transcript EXCLUDING the current turn — its in-flight user
+   * message and assistant placeholder, identified by the exact ids `sendPrompt`
+   * captured when it appended them. Used to render the fan-out
+   * conversation-history block from the PRIOR conversation only. Threads the
+   * store explicitly; never the global app. Excluding by identity (not by
+   * position/sender) keeps this correct if anything is ever inserted between or
+   * after those two messages.
+   */
+  private priorDisplayMessages(
+    userMessageId: string,
+    placeholderId: string
+  ): readonly AgentChatMessage[] {
+    return this.store
+      .getDisplayMessages()
+      .filter((m) => m.id !== userMessageId && m.id !== placeholderId);
   }
 
   /**

@@ -1,16 +1,27 @@
-import type { AgentToolKind } from "@/agentMode/session/types";
+import type { AgentChatMessage, AgentToolKind } from "@/agentMode/session/types";
+import { AI_SENDER, USER_SENDER } from "@/constants";
 import {
+  buildConversationHistoryBlock,
   buildPriorFanoutContextBlock,
   buildSummaryUserPrompt,
   collapseFanoutTurnToSummaryText,
   EMPTY_PENDING_FANOUT_CONTEXT,
   FANOUT_ALL_FAILED_SUMMARY,
+  FANOUT_HISTORY_MAX_CHARS,
   FANOUT_SUMMARY_UNAVAILABLE,
   isWriteOrExecToolKind,
   selectSummaryInputs,
   snapshotFanoutTurn,
   type FanoutTurn,
 } from "./fanoutTypes";
+
+const histMsg = (sender: string, message: string): AgentChatMessage => ({
+  id: `${sender}-${message.slice(0, 8)}`,
+  sender,
+  timestamp: null,
+  isVisible: true,
+  message,
+});
 
 const upper = (id: string) => id.toUpperCase();
 
@@ -237,5 +248,80 @@ describe("buildPriorFanoutContextBlock", () => {
     expect(block.indexOf("Q1")).toBeLessThan(block.indexOf("Q2"));
     expect(block.indexOf("S1")).toBeLessThan(block.indexOf("S2"));
     expect((block.match(/<multi_agent_turn>/g) ?? []).length).toBe(2);
+  });
+});
+
+describe("buildConversationHistoryBlock", () => {
+  it("renders prior turns labeled by role, framed as read-only history", () => {
+    const block = buildConversationHistoryBlock(
+      [histMsg(USER_SENDER, "What is the plan?"), histMsg(AI_SENDER, "Here is the plan.")],
+      FANOUT_HISTORY_MAX_CHARS
+    )!;
+    expect(block).toContain("<conversation_history>");
+    expect(block).toContain("</conversation_history>");
+    expect(block).toContain('<turn role="user">');
+    expect(block).toContain('<turn role="assistant">');
+    expect(block).toContain("What is the plan?");
+    expect(block).toContain("Here is the plan.");
+    expect(block.toLowerCase()).toContain("do not");
+    // Order preserved: user turn precedes the assistant turn.
+    expect(block.indexOf("What is the plan?")).toBeLessThan(block.indexOf("Here is the plan."));
+  });
+
+  it("returns null for an empty transcript", () => {
+    expect(buildConversationHistoryBlock([], FANOUT_HISTORY_MAX_CHARS)).toBeNull();
+  });
+
+  it("returns null when every message is empty/whitespace", () => {
+    const block = buildConversationHistoryBlock(
+      [histMsg(USER_SENDER, "   "), histMsg(AI_SENDER, "")],
+      FANOUT_HISTORY_MAX_CHARS
+    );
+    expect(block).toBeNull();
+  });
+
+  it("skips empty messages but keeps non-empty ones", () => {
+    const block = buildConversationHistoryBlock(
+      [
+        histMsg(USER_SENDER, "real question"),
+        histMsg(AI_SENDER, "   "),
+        histMsg(AI_SENDER, "real answer"),
+      ],
+      FANOUT_HISTORY_MAX_CHARS
+    )!;
+    expect((block.match(/<turn /g) ?? []).length).toBe(2);
+    expect(block).toContain("real question");
+    expect(block).toContain("real answer");
+  });
+
+  it("escapes content so message text cannot break the framing", () => {
+    const block = buildConversationHistoryBlock(
+      [histMsg(USER_SENDER, "a < b && </conversation_history>")],
+      FANOUT_HISTORY_MAX_CHARS
+    )!;
+    expect(block).toContain("a &lt; b");
+    expect(block).toContain("&lt;/conversation_history&gt;");
+    // Exactly one real closing tag — the escaped one must not count.
+    expect((block.match(/<\/conversation_history>/g) ?? []).length).toBe(1);
+  });
+
+  it("drops the oldest turns first and prepends a truncation marker past the cap", () => {
+    const big = "x".repeat(400);
+    const messages = Array.from({ length: 20 }, (_, i) =>
+      histMsg(i % 2 === 0 ? USER_SENDER : AI_SENDER, `turn-${i}-${big}`)
+    );
+    const block = buildConversationHistoryBlock(messages, 1000)!;
+    expect(block).toContain("[earlier conversation truncated]");
+    // Oldest dropped, most-recent kept.
+    expect(block).not.toContain("turn-0-");
+    expect(block).toContain("turn-19-");
+  });
+
+  it("does not truncate or mark when under the cap", () => {
+    const block = buildConversationHistoryBlock(
+      [histMsg(USER_SENDER, "short q"), histMsg(AI_SENDER, "short a")],
+      FANOUT_HISTORY_MAX_CHARS
+    )!;
+    expect(block).not.toContain("[earlier conversation truncated]");
   });
 });
