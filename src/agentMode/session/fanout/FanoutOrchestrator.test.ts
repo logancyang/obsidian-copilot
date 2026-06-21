@@ -367,6 +367,30 @@ describe("FanoutOrchestrator.run", () => {
     });
   });
 
+  it("applies the model but skips the config option for an explicit-default effort", async () => {
+    // The user pinned the model but left effort at the backend default
+    // (`effort: null`), so the model still switches while the effort
+    // config-option round-trip must NOT fire.
+    const { host, procs } = makeHost(
+      { claude: { sessionId: "s-claude", effortConfig: { id: "effort" } } },
+      { claude: { baseModelId: "claude-opus-4-5", effort: null } }
+    );
+    const orchestrator = new FanoutOrchestrator(host);
+    const controller = new AbortController();
+    const runPromise = orchestrator.run(runInput(["claude"], { signal: controller.signal }));
+    await flush();
+    procs.get("claude")!.resolvePrompt();
+    await flush();
+    procs.get("claude")!.resolvePrompt();
+    await runPromise;
+
+    expect(procs.get("claude")!.setSessionModel).toHaveBeenCalledWith({
+      sessionId: "s-claude",
+      modelId: "claude-opus-4-5",
+    });
+    expect(procs.get("claude")!.setSessionConfigOption).not.toHaveBeenCalled();
+  });
+
   it("no-ops when the backend has no configured default selection", async () => {
     const { host, procs } = makeHost({ claude: { sessionId: "s-claude" } });
     const orchestrator = new FanoutOrchestrator(host);
