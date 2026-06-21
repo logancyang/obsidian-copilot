@@ -980,6 +980,36 @@ describe("AgentSession fan-out follow-up continuity", () => {
     expect(lastPromptText(mock)).not.toContain("<prior_turns>");
   });
 
+  it("preserves the buffer when the single-agent prompt throws, replaying it on the next turn", async () => {
+    const mock = makeMockBackend();
+    const runFanoutTurn = fanoutWithSummary("the fan-out summary");
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+      runFanoutTurn,
+    });
+
+    await session.sendPrompt("compare X and Y", undefined, undefined, ["opencode", "claude"]).turn;
+
+    // First single-agent follow-up: the backend rejects. The buffer must NOT be
+    // flushed — the backend never received the injected context.
+    mock.prompt.mockRejectedValueOnce(new Error("transport boom"));
+    await expect(session.sendPrompt("first follow-up").turn).rejects.toThrow("transport boom");
+
+    // Next single-agent turn succeeds and still carries the buffered fan-out QA.
+    await session.sendPrompt("retry follow-up").turn;
+    const text = lastPromptText(mock);
+    expect(text).toContain("<prior_turns>");
+    expect(text).toContain("compare X and Y");
+    expect(text).toContain("the fan-out summary");
+
+    // And it is cleared after the successful replay.
+    await session.sendPrompt("third follow-up").turn;
+    expect(lastPromptText(mock)).not.toContain("<prior_turns>");
+  });
+
   it("accumulates two back-to-back fan-out turns and injects both in order", async () => {
     const mock = makeMockBackend();
     const runFanoutTurn = jest

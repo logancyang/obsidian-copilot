@@ -887,10 +887,13 @@ export class AgentSession {
       }
 
       // Single-agent path: prepend any buffered fan-out turns (in order) as one
-      // labeled prior-turn block so the backend regains continuity, then clear
-      // the buffer. Empty buffer → `null` block → prompt byte-for-byte as today.
+      // labeled prior-turn block so the backend regains continuity. Empty buffer
+      // → `null` block → prompt byte-for-byte as today. The buffer is captured
+      // into `promptBlocks` here but only CLEARED after `backend.prompt()`
+      // resolves (below) — if the prompt throws, the buffer is preserved so the
+      // dropped context can ride the next single-agent turn instead of being
+      // lost with no record.
       const leadingContextBlock = buildPriorFanoutContextBlock(this.pendingFanoutContext);
-      if (leadingContextBlock !== null) this.pendingFanoutContext = [];
       const promptBlocks = buildPromptBlocks(
         displayText,
         context,
@@ -904,6 +907,9 @@ export class AgentSession {
         prompt: promptBlocks,
       };
       const resp = await this.backend.prompt(req);
+      // Prompt sent successfully — the backend now has the buffered context, so
+      // flush it. A thrown prompt skips this and keeps the buffer for retry.
+      if (leadingContextBlock !== null) this.pendingFanoutContext = [];
       if (
         placeholderId &&
         resp.stopReason !== "cancelled" &&
