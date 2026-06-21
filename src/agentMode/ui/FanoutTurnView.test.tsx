@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import type {
   AgentAnswer,
@@ -12,15 +12,6 @@ jest.mock("@/agentMode/ui/AgentMarkdownText", () => ({
   AgentMarkdownText: ({ text }: { text: string }) => <div data-testid="agent-md">{text}</div>,
 }));
 
-// The per-slot copy uses CopyButton → a tooltip whose portal reads the
-// Obsidian-only `activeDocument` global; stub it out (not the unit under test).
-jest.mock("@/components/chat-components/CopyButton", () => ({
-  CopyButton: ({ text }: { text: string }) => (
-    // eslint-disable-next-line @eslint-react/dom/no-missing-button-type -- test stub
-    <button data-testid="slot-copy" data-text={text} />
-  ),
-}));
-
 jest.mock("@/agentMode/backends/registry", () => {
   const Icon = () => null;
   return {
@@ -32,6 +23,7 @@ jest.mock("@/agentMode/backends/registry", () => {
 });
 
 import { FanoutTurnView } from "@/agentMode/ui/FanoutTurnView";
+import { defaultFanoutOption, type FanoutOptionValue } from "@/agentMode/ui/fanoutDropdown";
 
 function answer(
   backendId: string,
@@ -54,7 +46,14 @@ function turn(
 
 const app = { workspace: { getActiveFile: () => null } } as never;
 
-const renderView = (t: FanoutTurn) => render(<FanoutTurnView turn={t} app={app} />);
+// FanoutTurnView is controlled (the card owns the selected tab); a tiny stateful
+// harness supplies value/onSelect so a tab click still switches the body.
+const Harness: React.FC<{ t: FanoutTurn }> = ({ t }) => {
+  const [value, setValue] = useState<FanoutOptionValue>(() => defaultFanoutOption(t));
+  return <FanoutTurnView turn={t} app={app} value={value} onSelect={setValue} />;
+};
+
+const renderView = (t: FanoutTurn) => render(<Harness t={t} />);
 
 describe("FanoutTurnView", () => {
   it("defaults to the summary view (summary-first)", () => {

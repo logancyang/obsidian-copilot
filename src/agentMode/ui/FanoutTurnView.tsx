@@ -1,7 +1,6 @@
 import { AgentMarkdownText } from "@/agentMode/ui/AgentMarkdownText";
 import {
   buildFanoutOptions,
-  defaultFanoutOption,
   FANOUT_SUMMARY_OPTION,
   selectedAnswer,
   summaryDisplayState,
@@ -9,17 +8,19 @@ import {
   type FanoutOption,
   type FanoutOptionValue,
 } from "@/agentMode/ui/fanoutDropdown";
-import { CopyButton } from "@/components/chat-components/CopyButton";
 import { cn } from "@/lib/utils";
 import type { FanoutTurn } from "@/agentMode/session/fanout/fanoutTypes";
 import { App } from "obsidian";
 import { AlertTriangle, Check, CircleSlash, Loader2 } from "lucide-react";
-import React, { memo, useCallback, useMemo, useState } from "react";
+import React, { memo, useCallback, useMemo } from "react";
 
 interface FanoutTurnViewProps {
   /** Fan-out turn for a multi-agent assistant message (live or reloaded). */
   turn: FanoutTurn;
   app: App;
+  /** Selected tab — controlled by the card so its action bar can copy/insert it. */
+  value: FanoutOptionValue;
+  onSelect: (value: FanoutOptionValue) => void;
 }
 
 interface FanoutTabProps {
@@ -87,38 +88,34 @@ const FanoutStatusDot: React.FC<FanoutStatusDotProps> = ({ state }) => {
  * agent's narrative summary and each participating agent's full answer. Each
  * agent tab reflects its live state (D7) via a status dot (spinner / check /
  * alert / slash) and updates live as `turn` changes. The selected slot's
- * markdown renders below with an inline copy of just that slot's text.
+ * markdown renders below; Copy/Insert for it live on the card's action bar.
  *
  * Drives off `message.fanout`, so it renders for BOTH the live in-flight turn
  * and a reloaded transcript whose composite body was parsed back into a turn.
+ * Controlled: the owning card holds the selected tab so its single action-bar
+ * Copy/Insert can act on exactly the tab in view.
  */
-export const FanoutTurnView: React.FC<FanoutTurnViewProps> = memo(({ turn, app }) => {
-  const options = useMemo(() => buildFanoutOptions(turn), [turn]);
-  const [selected, setSelected] = useState<FanoutOptionValue>(() => defaultFanoutOption(turn));
+export const FanoutTurnView: React.FC<FanoutTurnViewProps> = memo(
+  ({ turn, app, value, onSelect }) => {
+    const options = useMemo(() => buildFanoutOptions(turn), [turn]);
 
-  // If the selected agent's slot disappears (defensive — slots are stable
-  // within a turn), fall back to the summary rather than rendering nothing.
-  const activeValue =
-    selected !== FANOUT_SUMMARY_OPTION && !turn.answers[selected]
-      ? FANOUT_SUMMARY_OPTION
-      : selected;
-
-  return (
-    <div className="tw-flex tw-flex-col tw-gap-2">
-      <div role="tablist" aria-label="Agent answers" className="tw-flex tw-flex-wrap tw-gap-1">
-        {options.map((option) => (
-          <FanoutTab
-            key={option.value}
-            option={option}
-            selected={option.value === activeValue}
-            onSelect={setSelected}
-          />
-        ))}
+    return (
+      <div className="tw-flex tw-flex-col tw-gap-2">
+        <div role="tablist" aria-label="Agent answers" className="tw-flex tw-flex-wrap tw-gap-1">
+          {options.map((option) => (
+            <FanoutTab
+              key={option.value}
+              option={option}
+              selected={option.value === value}
+              onSelect={onSelect}
+            />
+          ))}
+        </div>
+        <FanoutTurnBody turn={turn} value={value} app={app} />
       </div>
-      <FanoutTurnBody turn={turn} value={activeValue} app={app} />
-    </div>
-  );
-});
+    );
+  }
+);
 FanoutTurnView.displayName = "FanoutTurnView";
 
 interface FanoutTurnBodyProps {
@@ -133,8 +130,7 @@ interface FanoutTurnBodyProps {
  * answer — streaming tokens with a spinner, the finished answer, an error chip
  * with a short reason (incl. per-agent timeouts), or a muted cancelled state
  * when the user aborted the turn. Any partial text that streamed before a
- * failure/cancel is still shown above the chip so nothing is lost. A small
- * inline copy button on a non-empty body copies just that slot's text.
+ * failure/cancel is still shown above the chip so nothing is lost.
  */
 const FanoutTurnBody: React.FC<FanoutTurnBodyProps> = ({ turn, value, app }) => {
   if (value === FANOUT_SUMMARY_OPTION) {
@@ -226,20 +222,12 @@ interface FanoutSlotBodyProps {
 }
 
 /**
- * The selected slot's markdown plus a small inline copy button that copies just
- * THIS slot's text (the 2-tier copy: per-slot here, whole-composite on the
- * card's action bar). The copy control sits above the rendered markdown,
- * right-aligned, and only appears on hover to stay out of the way.
+ * The selected slot's rendered markdown. Copy/Insert for the slot in view lives
+ * on the card's single action bar (it acts on whichever tab is selected), so the
+ * body carries no copy control of its own.
  */
 const FanoutSlotBody: React.FC<FanoutSlotBodyProps> = ({ text, app }) => (
-  <div className="tw-group tw-flex tw-flex-col tw-gap-1">
-    <div className="tw-flex tw-justify-end">
-      <div className="tw-opacity-0 tw-transition-opacity group-hover:tw-opacity-100">
-        <CopyButton text={text} />
-      </div>
-    </div>
-    <AgentMarkdownText text={text} app={app} />
-  </div>
+  <AgentMarkdownText text={text} app={app} />
 );
 
 interface FanoutTerminalStateProps {
