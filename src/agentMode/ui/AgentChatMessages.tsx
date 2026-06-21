@@ -1,5 +1,6 @@
 import { AgentTrail } from "@/agentMode/ui/AgentTrailView";
 import { AskUserQuestionCard } from "@/agentMode/ui/AskUserQuestionCard";
+import { FanoutTurnView } from "@/agentMode/ui/FanoutTurnView";
 import { PlanProposalCard } from "@/agentMode/ui/PlanProposalCard";
 import { ToolPermissionCard } from "@/agentMode/ui/ToolPermissionCard";
 import { BottomLoadingIndicator } from "@/components/chat-components/BottomLoadingIndicator";
@@ -7,6 +8,7 @@ import ChatSingleMessage from "@/components/chat-components/ChatSingleMessage";
 import { USER_SENDER } from "@/constants";
 import { useChatScrolling } from "@/hooks/useChatScrolling";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
+import type { FanoutTurn } from "@/agentMode/session/fanout/fanoutTypes";
 import type {
   AgentChatMessage,
   AskUserQuestionPrompt,
@@ -27,6 +29,14 @@ interface AgentChatMessagesProps {
   /** True while a turn is in flight. The last assistant message in the
    *  visible list is treated as the streaming placeholder. */
   isLoading: boolean;
+  /**
+   * Live per-agent fan-out state for the active multi-agent turn, or `null` on
+   * the single-agent path. When present it belongs to the LAST assistant
+   * message (the live placeholder / just-completed turn), which renders the
+   * summary-first dropdown instead of the plain assistant body. Reloaded
+   * summary-only turns carry no live state and render normally.
+   */
+  liveFanoutTurn: FanoutTurn | null;
 }
 
 /**
@@ -47,6 +57,14 @@ function toChatMessageView(m: AgentChatMessage): ChatMessage {
   };
 }
 
+/** The last non-user (assistant) message, or `undefined` if none. */
+function lastAssistant(visible: AgentChatMessage[]): AgentChatMessage | undefined {
+  for (let i = visible.length - 1; i >= 0; i--) {
+    if (visible[i].sender !== USER_SENDER) return visible[i];
+  }
+  return undefined;
+}
+
 const AgentChatMessages = memo(
   ({
     messages,
@@ -56,6 +74,7 @@ const AgentChatMessages = memo(
     pendingAskUserQuestions,
     chatBackend,
     isLoading,
+    liveFanoutTurn,
   }: AgentChatMessagesProps) => {
     const visible = useMemo(() => messages.filter((m) => m.isVisible), [messages]);
     const adapted = useMemo(() => visible.map(toChatMessageView), [visible]);
@@ -92,13 +111,7 @@ const AgentChatMessages = memo(
     // in-place `isStreamingPlaceholder` spinner covers that).
     const { streamingMessageId, showBottomLoader } = useMemo(() => {
       if (!isLoading) return { streamingMessageId: undefined, showBottomLoader: false };
-      let streaming: AgentChatMessage | undefined;
-      for (let i = visible.length - 1; i >= 0; i--) {
-        if (visible[i].sender !== USER_SENDER) {
-          streaming = visible[i];
-          break;
-        }
-      }
+      const streaming = lastAssistant(visible);
       if (!streaming) return { streamingMessageId: undefined, showBottomLoader: false };
       const parts = streaming.parts ?? [];
       const last = parts[parts.length - 1];
@@ -107,6 +120,17 @@ const AgentChatMessages = memo(
       const showLoader = last?.kind !== "thought" && (hasParts || hasBody);
       return { streamingMessageId: streaming.id, showBottomLoader: showLoader };
     }, [isLoading, visible]);
+
+    // The live fan-out turn belongs to the last assistant message (the live
+    // placeholder, or the just-completed turn while its state lingers in
+    // memory). That message renders the summary-first dropdown instead of the
+    // plain assistant body; every earlier message renders normally. A reloaded
+    // transcript carries no live fan-out state, so this id is `undefined` and
+    // all messages take the normal path.
+    const fanoutMessageId = useMemo(
+      () => (liveFanoutTurn ? lastAssistant(visible)?.id : undefined),
+      [liveFanoutTurn, visible]
+    );
 
     if (visible.length === 0) {
       return (
@@ -146,6 +170,12 @@ const AgentChatMessages = memo(
             // they hit send rather than an empty assistant bubble.
             const isStreamingPlaceholder =
               isAssistant && message.id === streamingMessageId && !hasParts && !message.message;
+            // The active multi-agent turn owns this message's body — the
+            // summary-first dropdown replaces the plain assistant text and the
+            // streaming spinner (its per-agent slots show their own live
+            // states). `liveFanoutTurn` is non-null exactly when `fanoutMessageId`
+            // is set, so this is the live turn.
+            const isFanoutMessage = message.id === fanoutMessageId && liveFanoutTurn != null;
 
             return (
               <div
@@ -156,7 +186,11 @@ const AgentChatMessages = memo(
                   minHeight: shouldApplyMinHeight ? `${containerMinHeight}px` : "auto",
                 }}
               >
-                {isStreamingPlaceholder ? (
+                {isFanoutMessage ? (
+                  <div className="tw-px-3 tw-pt-2">
+                    <FanoutTurnView turn={liveFanoutTurn} app={app} />
+                  </div>
+                ) : isStreamingPlaceholder ? (
                   <div className="tw-px-3 tw-pt-2">
                     <BottomLoadingIndicator />
                   </div>

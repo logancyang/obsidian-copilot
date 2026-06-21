@@ -1,6 +1,7 @@
 import { logError, logWarn } from "@/logger";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
+import type { FanoutTurn } from "@/agentMode/session/fanout/fanoutTypes";
 import type {
   AgentChatMessage,
   AgentQuestionAnswers,
@@ -108,6 +109,10 @@ export class AgentChatUIState implements AgentChatBackend {
 
   isStarting(): boolean {
     return this.session.getStatus() === "starting";
+  }
+
+  getLiveFanoutTurn(): FanoutTurn | null {
+    return this.session.getLiveFanoutTurn();
   }
 
   getBackendState(): BackendState | null {

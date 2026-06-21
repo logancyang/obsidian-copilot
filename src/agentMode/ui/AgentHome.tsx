@@ -97,6 +97,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     currentPlan,
     pendingToolPermissions,
     pendingAskUserQuestions,
+    liveFanoutTurn,
   } = useAgentChatRuntimeState(backend);
 
   const chatContainerRef = useRef<HTMLDivElement>(null);
@@ -366,6 +367,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                     pendingAskUserQuestions={pendingAskUserQuestions}
                     chatBackend={backend}
                     isLoading={draft.loading}
+                    liveFanoutTurn={liveFanoutTurn}
                   />
                 )}
                 {isGlobalLanding ? null : (

@@ -1,4 +1,5 @@
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
+import type { FanoutTurn } from "@/agentMode/session/fanout/fanoutTypes";
 import type {
   AgentChatMessage,
   AskUserQuestionPrompt,
@@ -21,6 +22,13 @@ export interface AgentChatRuntimeState {
   currentPlan: CurrentPlan | null;
   pendingToolPermissions: PermissionPrompt[];
   pendingAskUserQuestions: AskUserQuestionPrompt[];
+  /**
+   * Live per-agent fan-out state for the active multi-agent QA turn, or `null`
+   * on the single-agent path. Drives the summary-first dropdown; `null` falls
+   * through to the normal assistant rendering (incl. reloaded summary-only
+   * transcripts, which never carry live fan-out state).
+   */
+  liveFanoutTurn: FanoutTurn | null;
 }
 
 export function useAgentChatRuntimeState(backend: AgentChatBackend): AgentChatRuntimeState {
@@ -37,6 +45,9 @@ export function useAgentChatRuntimeState(backend: AgentChatBackend): AgentChatRu
   );
   const [pendingAskUserQuestions, setPendingAskUserQuestions] = useState<AskUserQuestionPrompt[]>(
     () => backend.getPendingAskUserQuestions()
+  );
+  const [liveFanoutTurn, setLiveFanoutTurn] = useState<FanoutTurn | null>(() =>
+    backend.getLiveFanoutTurn()
   );
 
   const isMountedRef = useRef(false);
@@ -61,6 +72,7 @@ export function useAgentChatRuntimeState(backend: AgentChatBackend): AgentChatRu
       setCurrentPlan(backend.getCurrentPlan());
       setPendingToolPermissions(backend.getPendingToolPermissions());
       setPendingAskUserQuestions(backend.getPendingAskUserQuestions());
+      setLiveFanoutTurn(backend.getLiveFanoutTurn());
     };
     sync();
     return backend.subscribe(() => {
@@ -76,5 +88,6 @@ export function useAgentChatRuntimeState(backend: AgentChatBackend): AgentChatRu
     currentPlan,
     pendingToolPermissions,
     pendingAskUserQuestions,
+    liveFanoutTurn,
   };
 }

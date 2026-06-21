@@ -1,4 +1,5 @@
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
+import type { FanoutTurn } from "@/agentMode/session/fanout/fanoutTypes";
 import type {
   AgentChatMessage,
   AskUserQuestionPrompt,
@@ -15,6 +16,7 @@ interface FakeBackendState {
   currentPlan: CurrentPlan | null;
   pendingToolPermissions: PermissionPrompt[];
   pendingAskUserQuestions: AskUserQuestionPrompt[];
+  liveFanoutTurn: FanoutTurn | null;
 }
 
 /**
@@ -30,6 +32,7 @@ function makeFakeBackend(initial: Partial<FakeBackendState> = {}) {
     currentPlan: initial.currentPlan ?? null,
     pendingToolPermissions: initial.pendingToolPermissions ?? [],
     pendingAskUserQuestions: initial.pendingAskUserQuestions ?? [],
+    liveFanoutTurn: initial.liveFanoutTurn ?? null,
   };
   const listeners = new Set<() => void>();
 
@@ -44,6 +47,7 @@ function makeFakeBackend(initial: Partial<FakeBackendState> = {}) {
     getCurrentPlan: () => state.currentPlan,
     getPendingToolPermissions: () => state.pendingToolPermissions,
     getPendingAskUserQuestions: () => state.pendingAskUserQuestions,
+    getLiveFanoutTurn: () => state.liveFanoutTurn,
   } as unknown as AgentChatBackend;
 
   return {
