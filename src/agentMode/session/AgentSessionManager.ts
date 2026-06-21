@@ -180,12 +180,9 @@ export class AgentSessionManager {
     }
   >();
 
-  // Backend session ids of ephemeral read-only fan-out sub-sessions. The shared
-  // permission prompter consults this so write/exec tools are hard-denied (and
-  // reads allowed) for these sessions, which have no visible tab to prompt on.
+  // Session ids of ephemeral read-only fan-out sub-sessions; the shared permission
+  // prompter consults this to hard-deny write/exec tools for them.
   private readonly readOnlyFanoutSessions = new Set<SessionId>();
-  // Orchestrates multi-agent read-only QA turns. Owns no state beyond the host
-  // seam this manager provides; see `runFanoutTurn`.
   private readonly fanoutOrchestrator: FanoutOrchestrator;
 
   private getSessionState(internalId: string) {
@@ -209,21 +206,12 @@ export class AgentSessionManager {
     this.fanoutOrchestrator = new FanoutOrchestrator(this.createFanoutHost());
   }
 
-  /**
-   * Whether `backendSessionId` is an ephemeral read-only fan-out sub-session.
-   * The shared permission prompter (wired in `agentMode/index.ts`) consults
-   * this to apply the read-only policy — allow reads, deny writes/exec.
-   */
+  /** Whether `backendSessionId` is an ephemeral read-only fan-out sub-session. */
   isReadOnlyFanoutSession(backendSessionId: SessionId): boolean {
     return this.readOnlyFanoutSessions.has(backendSessionId);
   }
 
-  /**
-   * Run a multi-agent read-only QA turn: dispatch the identical prompt to every
-   * answerer (the deduped `@`-mentioned agents) in parallel via ephemeral
-   * read-only sub-sessions, then summarize on the session's main agent. Called
-   * by `AgentSession.runTurn` when the turn fans out.
-   */
+  /** Run a multi-agent read-only QA turn. Called by `AgentSession.runTurn` when the turn fans out. */
   runFanoutTurn(input: FanoutRunInput): Promise<FanoutTurn> {
     return this.fanoutOrchestrator.run(input);
   }
@@ -1680,9 +1668,8 @@ export class AgentSessionManager {
     if (this.opts.askUserQuestionPrompter) {
       proc.setAskUserQuestionPrompter?.(this.opts.askUserQuestionPrompter);
     }
-    // Lets a backend with its own permission gate (Claude SDK) hard-deny
-    // write/exec tools for read-only fan-out sub-sessions, defending in depth
-    // against a wrong sandbox-mode switch — see `permissionBridge`.
+    // Lets a backend with its own permission gate (Claude SDK) hard-deny write/exec
+    // tools for read-only fan-out sub-sessions — see `permissionBridge`.
     proc.setReadOnlySessionPredicate?.((sessionId) => this.isReadOnlyFanoutSession(sessionId));
   }
 

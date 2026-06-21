@@ -13,18 +13,14 @@ import {
 } from "@/agentMode/session/types";
 
 /**
- * Resolve a `PermissionPrompt` for a read-only fan-out sub-session: allow
- * read/search/fetch tools, hard-deny write/exec tools. Auto-decided without a
- * user card — fan-out sub-sessions have no visible tab to surface one on. This
- * is the per-backend enforcement layer the orchestrator relies on (it routes
- * through the same shared prompter every backend uses), on top of the universal
- * "answer only, no writes" prompt preamble.
+ * Decide a `PermissionPrompt` for a read-only fan-out sub-session: allow
+ * read/search/fetch, hard-deny write/exec. Auto-decided — these ephemeral
+ * sub-sessions have no visible tab to surface a card on. The per-backend
+ * enforcement layer behind the orchestrator's read-only guarantee.
  */
 function decideReadOnly(req: PermissionPrompt): PermissionDecision {
   const deny = isWriteOrExecToolKind(req.toolCall.kind);
   const kinds = deny ? PERMISSION_REJECT_KINDS : PERMISSION_ALLOW_KINDS;
-  // Both kind lists have two fixed entries, so `includes` preserves the allow-
-  // /reject-once-first ordering while collapsing the nested scan to one `find`.
   const opt = req.options.find((o) => kinds.includes(o.kind));
   if (!opt) return { outcome: { outcome: "cancelled" } };
   const decision: PermissionDecision = { outcome: { outcome: "selected", optionId: opt.optionId } };
@@ -40,10 +36,8 @@ function decideReadOnly(req: PermissionPrompt): PermissionDecision {
  * other tool call flows through `handleToolPermission`. Returns `cancelled`
  * when no session owns the request — without that the SDK turn would hang.
  *
- * `isReadOnlySession`, when supplied, is consulted first: a request from a
- * read-only fan-out sub-session is decided by {@link decideReadOnly} (allow
- * reads, deny writes/exec) instead of being routed to a visible session, since
- * fan-out sub-sessions are ephemeral and have no tab to prompt on.
+ * `isReadOnlySession`, when supplied, is consulted first: a fan-out sub-session
+ * request is decided by {@link decideReadOnly} rather than routed to a tab.
  */
 export function createDefaultPermissionPrompter(
   resolveSession: (backendSessionId: SessionId) => AgentSession | null,

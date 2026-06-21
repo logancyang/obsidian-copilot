@@ -4,17 +4,11 @@ import type { BackendId } from "@/agentMode/session/types";
 export const EMPTY_ANSWERERS: ReadonlyArray<BackendId> = Object.freeze([]);
 
 /**
- * Resolve the agents that should ANSWER a turn from the pills the user
- * `@`-mentioned: the deduped, installed mentions ONLY. The session's main agent
- * is NOT auto-included — it is the separate summarizer, and answers only when it
- * is itself explicitly `@`-mentioned. Mentions of agents that aren't installed
- * are dropped. Order is stable, following the order received (the pill sync
- * plugin reports them sorted by backend id). May be empty (no mentions),
- * `[main]` (only the user's own agent), or any larger set.
- *
- * Pure and UI-free so both the composer (which resolves the user's pills) and
- * the session layer (which re-derives fan-out routing from the stored selection)
- * share one source of truth — see {@link isFanout}.
+ * Resolve the agents that should ANSWER a turn from the user's `@`-mentions: the
+ * deduped, installed mentions ONLY. The main agent is NOT auto-included — it is
+ * the separate summarizer, answering only when itself mentioned. Order is stable
+ * (the pill sync plugin reports them sorted by backend id). Pure and UI-free so
+ * the composer and the session layer share one source of truth — see {@link isFanout}.
  */
 export function resolveAnswerers(args: {
   mentionedAgentIds: ReadonlyArray<BackendId>;
@@ -34,12 +28,9 @@ export function resolveAnswerers(args: {
 
 /**
  * Whether a resolved answerer set actually fans out. True for any non-empty set
- * EXCEPT the degenerate `[main]` (the user `@`-ed only their own agent): that
- * collapses to the normal single-agent path — identical to a plain turn — so
- * the main agent isn't asked to both answer and summarize the same backend. The
- * single-agent path (`[]` or `[main]`) is the existing behavior and must stay
- * byte-for-byte identical, so callers gate the structured `mentionedAgents`
- * emission on this.
+ * EXCEPT the degenerate `[main]` (only the user's own agent), which collapses to
+ * the normal single-agent path so the main agent isn't asked to both answer and
+ * summarize the same backend. Callers gate the `mentionedAgents` emission on this.
  */
 export function isFanout(answerers: ReadonlyArray<BackendId>, mainAgentId: BackendId): boolean {
   if (answerers.length === 0) return false;

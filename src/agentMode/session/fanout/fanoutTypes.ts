@@ -14,12 +14,8 @@ import {
 } from "@/types/message";
 
 /**
- * Read-only QA preamble prepended to every fan-out agent's prompt (the
- * universal enforcement layer — D5 / the Assumption). It bounds the turn to a
- * single read-only answer while leaving the agent free to loop over non-write
- * tools (grep, read, web fetch/search, vault search) to answer well. The
- * per-backend permission denial and sandbox mode are belt-and-suspenders on top
- * of this instruction.
+ * Read-only QA preamble prepended to every fan-out agent's prompt. Per-backend
+ * permission denial and sandbox mode are belt-and-suspenders on top of it.
  */
 export const FANOUT_READONLY_PREAMBLE =
   "You are answering a read-only question. Do NOT modify any files, run any " +
@@ -28,42 +24,30 @@ export const FANOUT_READONLY_PREAMBLE =
   "Respond with your analysis directly.";
 
 /**
- * Per-turn fan-out state for a multi-agent QA turn. Held LIVE in memory on the
- * owning assistant message (`AgentChatMessage.fanout`) and PERSISTED to the
- * message body as a composite (see {@link serializeFanoutComposite}) so the
- * dropdown is reconstructed on reload (see {@link parseFanoutComposite}). The
- * main agent fills the summary once every answer settles (D6); the UI renders
- * the tab row over `answers`.
+ * Per-turn fan-out state. Held LIVE on the owning assistant message
+ * (`AgentChatMessage.fanout`) and PERSISTED to the message body as a composite
+ * ({@link serializeFanoutComposite}) so the dropdown reconstructs on reload
+ * ({@link parseFanoutComposite}).
  */
 export interface FanoutTurn {
   /**
    * One slot per ANSWERER (the deduped `@`-mentioned installed agents), keyed by
    * `BackendId`. The session main agent is the separate summarizer and has a
-   * slot only if it was itself `@`-mentioned. Each answer streams into its own
-   * slot independently (D7).
+   * slot only if it was itself `@`-mentioned.
    */
   answers: Record<BackendId, AgentAnswer>;
-  /**
-   * The narrative summary slot, filled by the main agent over the surviving
-   * answers (D6). The only part of the turn that persists.
-   */
+  /** Narrative summary, filled by the main agent. The only part that persists. */
   summary: FanoutSummary;
 }
 
 /**
- * Live status of one agent's answer within a {@link FanoutTurn}.
- * `cancelled` is a distinct terminal state from `error`: the user aborted the
- * turn (not an agent fault), so the UI reads it as cancelled rather than a
- * failure. Both are terminal; neither feeds the summary.
+ * Live status of one agent's answer. `cancelled` is distinct from `error`: the
+ * user aborted the turn, not an agent fault. Both are terminal; neither feeds
+ * the summary.
  */
 export type AgentAnswerStatus = "running" | "done" | "error" | "cancelled";
 
-/**
- * One agent's slot in a fan-out turn. `text` accumulates streamed prose;
- * `error` carries a human-readable failure when `status === "error"` (including
- * a per-agent timeout) so one agent's failure never throws out of the
- * orchestrator and the others keep streaming.
- */
+/** One agent's slot in a fan-out turn. `error` is set when `status === "error"`. */
 export interface AgentAnswer {
   backendId: BackendId;
   status: AgentAnswerStatus;
@@ -72,13 +56,10 @@ export interface AgentAnswer {
 }
 
 /**
- * Per-agent answer timeout. A single hung/long-running sub-session must fail
- * ITS OWN slot without stalling the others or the summary, so each agent's
- * `prompt()` races this deadline; on expiry the orchestrator cancels that
- * sub-session and marks the slot `error` with {@link FANOUT_AGENT_TIMEOUT_ERROR}.
- * Five minutes is generous for a read-only QA answer (the agent may loop over
- * grep/read/fetch tools) while still bounding a wedged subprocess. Not a
- * user-facing setting (out of scope for v1).
+ * Per-agent answer timeout. Each agent's `prompt()` races this deadline; on
+ * expiry the orchestrator cancels that sub-session and marks the slot `error`
+ * with {@link FANOUT_AGENT_TIMEOUT_ERROR}, so one hung sub-session fails its own
+ * slot without stalling the others.
  */
 export const FANOUT_AGENT_TIMEOUT_MS = 5 * 60 * 1000;
 
@@ -87,36 +68,23 @@ export const FANOUT_AGENT_TIMEOUT_ERROR = "Timed out waiting for this agent to a
 
 /**
  * Grace window the orchestrator waits, after requesting `cancel`, for a
- * cancelled/timed-out sub-session's underlying `prompt()` to actually settle
- * before it lets that backend be reused (the summary reuses the main agent's
- * backend). `cancel` only interrupts — the backend query keeps unwinding, and
- * the Claude SDK backend's permission-bridge/session context is process-global
- * for the active query, so a second prompt on the same backend mid-unwind can
- * misroute permission decisions or corrupt the summary. Awaiting settlement
- * makes "settled" mean the query has truly stopped. Bounded so a backend that
- * ignores cancel cannot hang the turn forever — if the grace elapses we proceed
- * anyway (logged), preserving the timeout's bounded-wall-clock guarantee.
+ * cancelled/timed-out sub-session's `prompt()` to settle before that backend is
+ * reused (the summary reuses the main agent's backend). The Claude SDK backend's
+ * permission-bridge/session context is process-global for the active query, so a
+ * second prompt mid-unwind can misroute permission decisions or corrupt the
+ * summary. Bounded so a backend that ignores cancel can't hang the turn forever
+ * — if the grace elapses we proceed anyway (logged).
  */
 export const FANOUT_CANCEL_GRACE_MS = 3 * 1000;
 
 /**
  * Tail grace the orchestrator holds an ephemeral sub-session's update handler
- * open AFTER its `prompt()` resolves normally, before it unregisters the handler
- * and closes the session. Some ACP backends (opencode, fast models) flush a
- * turn's FINAL `agent_message_chunk` events just AFTER the `session/prompt`
- * result resolves; without this window those trailing chunks arrive once the
- * handler is already gone and are dropped, truncating an agent's answer (or the
- * summary) right at the end. The single-agent path keeps its session-level
- * handler alive permanently and re-routes such chunks onto a settled
- * placeholder; a fan-out sub-session is ephemeral and must close, so it instead
- * waits this short bounded window for the flush, then tears down.
- *
- * Kept SHORT: the flush is effectively immediate after the result resolves, so a
- * few hundred ms captures it without materially delaying turn completion.
- * Backends that emit no trailing chunks simply wait out a harmless window. Only
- * applied on the NORMAL resolve path — cancel/timeout intentionally suppress
- * late output and skip this wait (mirroring the single-agent "except on explicit
- * cancel" carve-out).
+ * open after `prompt()` resolves normally, before tearing it down. Some ACP
+ * backends (opencode, fast models) flush a turn's FINAL `agent_message_chunk`
+ * events just after the `session/prompt` result resolves; without this window
+ * those trailing chunks arrive once the handler is gone and are dropped,
+ * truncating an answer at the end. Only applied on the normal resolve path —
+ * cancel/timeout intentionally suppress late output and skip this wait.
  */
 export const FANOUT_TRAILING_CHUNK_GRACE_MS = 500;
 
@@ -128,24 +96,18 @@ export interface FanoutSummary {
   status: FanoutSummaryStatus;
   text: string;
   /**
-   * True once the summary finished generating SUCCESSFULLY — not interrupted by
-   * cancel, error, or timeout. `status` alone can't say (it is forced to `done`
-   * on every exit so the UI never sticks on a spinner), so the single-agent
-   * continuity replay uses this to decide whether to trust the summary text or
-   * fall back to replaying the agents' answers. Live-only; never serialized.
+   * True once the summary finished SUCCESSFULLY (not cancel/error/timeout).
+   * `status` alone can't say — it is forced to `done` on every exit so the UI
+   * never sticks on a spinner. Live-only; never serialized.
    */
   complete?: boolean;
 }
 
 /**
- * Tool kinds that mutate the vault or execute commands. A fan-out QA
- * sub-session is read-only, so these are hard-denied while every other kind
- * (read / search / fetch / think / switch_mode / other) is allowed — the
- * agent may freely loop over non-write tools within its single turn (the
- * Assumption + Risk in the plan). `other` is intentionally allowed: denying it
- * would block legitimate read-only MCP tools, and the universal "answer only,
- * no writes" prompt instruction plus per-backend sandbox already steer the
- * agent away from mutations.
+ * Tool kinds that mutate the vault or execute commands, hard-denied in a
+ * read-only fan-out sub-session. `other` is intentionally NOT here: denying it
+ * would block legitimate read-only MCP tools, and the prompt + sandbox already
+ * steer the agent away from mutations.
  */
 const WRITE_OR_EXEC_KINDS: ReadonlySet<AgentToolKind> = new Set<AgentToolKind>([
   "edit",
@@ -155,10 +117,8 @@ const WRITE_OR_EXEC_KINDS: ReadonlySet<AgentToolKind> = new Set<AgentToolKind>([
 ]);
 
 /**
- * Whether a tool of the given kind must be denied in a read-only fan-out
- * sub-session. Pure; the canonical predicate behind the permission-prompter
- * read-only policy. `undefined` (kind not reported) is treated as a write to
- * fail safe — an unknown tool in a read-only turn should not slip through.
+ * Whether a tool kind must be denied in a read-only fan-out sub-session.
+ * `undefined` (kind not reported) is treated as a write to fail safe.
  */
 export function isWriteOrExecToolKind(kind: AgentToolKind | undefined): boolean {
   if (kind === undefined) return true;
@@ -166,18 +126,11 @@ export function isWriteOrExecToolKind(kind: AgentToolKind | undefined): boolean 
 }
 
 /**
- * The text persisted for a completed fan-out turn: the summary only. Per-agent
- * answers are live-only, so this is the single seam through which a multi-agent
- * turn reaches disk — guaranteeing no per-agent answer is ever serialized.
+ * The text persisted for a completed fan-out turn: the summary only.
  *
- * Returns the trimmed summary text when present (the normal path, and the
- * zero-success all-failed note, which `runSummary` already wrote into the slot).
- * When the summary is empty BUT at least one agent succeeded — summary
- * generation threw, ended empty, or the turn was cancelled after answers
- * landed — falls back to {@link FANOUT_SUMMARY_UNAVAILABLE} so a turn with
- * SUCCESSFUL answers never reloads as a blank assistant bubble. A turn with no
- * successes and no summary (e.g. cancelled before any answer landed) collapses
- * to empty so the caller persists/buffers nothing.
+ * Falls back to {@link FANOUT_SUMMARY_UNAVAILABLE} when the summary is empty but
+ * at least one agent succeeded, so a turn with successful answers never reloads
+ * as a blank bubble. A turn with no successes and no summary collapses to empty.
  */
 export function collapseFanoutTurnToSummaryText(turn: FanoutTurn): string {
   const text = turn.summary.text.trim();
@@ -187,14 +140,10 @@ export function collapseFanoutTurnToSummaryText(turn: FanoutTurn): string {
 
 /**
  * A fresh, structurally-copied snapshot of a live fan-out turn. The orchestrator
- * mutates a single {@link FanoutTurn} in place and re-emits the SAME reference
- * on every streamed token (see `FanoutOrchestrator`). The UI subscribes through
- * React state, which bails on `Object.is`-equal updates — so handing the live
- * object straight to `setState` would freeze the dropdown on its first frame.
- * Copying the turn (and each answer slot) yields a new reference per query, so
- * each coalesced notify produces a render with the latest streamed text/status.
- * Copies the answer slots too so a captured snapshot stays stable even as the
- * live turn keeps mutating underneath it.
+ * mutates one {@link FanoutTurn} in place and re-emits the SAME reference per
+ * token; React `setState` bails on `Object.is`-equal updates, so a fresh copy
+ * (turn + each answer slot) is needed for the dropdown to re-render and for a
+ * captured snapshot to stay stable as the live turn keeps mutating.
  */
 export function snapshotFanoutTurn(turn: FanoutTurn): FanoutTurn {
   const answers: Record<BackendId, AgentAnswer> = {};
@@ -205,12 +154,8 @@ export function snapshotFanoutTurn(turn: FanoutTurn): FanoutTurn {
 }
 
 /**
- * Provider-neutral instruction for the main agent's narrative summary (D6). It
- * frames a NEW user turn — never replaces any backend system prompt — and is
- * read-only: the summary sub-session synthesizes, it does not write. The format
- * ADAPTS to the task: convergent questions get reconciled (agreements /
- * disagreements); divergent deliverables (rewrites, drafts, code) get a
- * choose-or-merge synthesis, since those outputs are alternatives, not claims.
+ * Provider-neutral instruction for the main agent's narrative summary. Frames a
+ * NEW user turn (never replaces a backend system prompt) and is read-only.
  */
 export const FANOUT_SUMMARY_INSTRUCTION =
   "You are a neutral synthesizer. The labeled blocks below are what SEVERAL " +
@@ -249,30 +194,24 @@ export const FANOUT_SUMMARY_INSTRUCTION =
   "summarize the approach only.\n\n" +
   "Do NOT modify any files or run write/shell tools.";
 
-/** The text persisted when every fan-out agent failed (D7 zero-success case). */
+/** The text persisted when every fan-out agent failed. */
 export const FANOUT_ALL_FAILED_SUMMARY =
   "All agents failed to answer; no summary could be generated.";
 
 /**
- * The text persisted when at least one agent answered but the narrative summary
- * could not be generated (summary threw, ended empty, or the turn was cancelled
- * after answers landed). Without this, an empty summary would persist a blank
- * assistant bubble that discards a turn with successful answers on reload.
+ * The text persisted when at least one agent answered but the summary could not
+ * be generated, so a turn with successful answers never reloads blank.
  */
 export const FANOUT_SUMMARY_UNAVAILABLE =
   "Multiple agents answered this turn, but a combined summary could not be generated.";
 
 /**
- * A fan-out turn the visible session's backend never saw. The whole turn runs
- * on ephemeral read-only sub-sessions, so the live backend has no record of it;
- * we buffer the user's question + the persisted summary and replay it as a
- * labeled prior-turn block on the next single-agent prompt to keep continuity.
- * LIVE-ONLY: never serialized (mirrors the no-migration decision).
+ * A fan-out turn the visible session's backend never saw (it ran on ephemeral
+ * sub-sessions). Buffered and replayed as a labeled prior-turn block on the next
+ * single-agent prompt for continuity. LIVE-ONLY: never serialized.
  */
 export interface PendingFanoutContext {
-  /** The user's original prompt text for that fan-out turn. */
   question: string;
-  /** The main agent's narrative summary — the only part of the turn persisted. */
   summary: string;
 }
 
@@ -280,21 +219,16 @@ export interface PendingFanoutContext {
 export const EMPTY_PENDING_FANOUT_CONTEXT: ReadonlyArray<PendingFanoutContext> = Object.freeze([]);
 
 /**
- * Compose the buffered fan-out turns into a single labeled prior-turn context
- * block, prepended to the next single-agent prompt so the backend (which never
- * processed those turns) reads them as EARLIER conversation in this chat — not
- * as a fresh task. Pure. Returns `null` for an empty buffer so the caller can
- * leave the prompt byte-for-byte unchanged in the common case. Each entry is
- * wrapped in `<multi_agent_turn>` with labeled question/summary, consistent with
- * the `<web_*>` / context-envelope tag style used elsewhere in the prompt.
+ * Compose the buffered fan-out turns into a labeled prior-turn block for the next
+ * single-agent prompt so the backend reads them as earlier conversation, not a
+ * fresh task. Returns `null` for an empty buffer (prompt unchanged).
  */
 export function buildPriorFanoutContextBlock(
   entries: ReadonlyArray<PendingFanoutContext>
 ): string | null {
   if (entries.length === 0) return null;
-  // Escape the user-controlled question/summary so a `<` or a stray
-  // `</summary>` can't break the framing — same convention as the sibling
-  // `<web_*>` block builders in AgentSession.
+  // Escape the user-controlled question/summary so a stray `</summary>` can't
+  // break the framing — same convention as the sibling `<web_*>` builders.
   const turns = entries
     .map(
       (e) =>
@@ -592,11 +526,9 @@ export interface SucceededAnswer {
 }
 
 /**
- * The agents whose answers feed the summary, partitioned for failure-awareness
- * (D7): `succeeded` are `done` slots with non-empty text (the summary
- * reconciles these); `failed` are slots that errored OR finished empty (the
- * summary notes them by name). Insertion order is preserved on both lists,
- * matching the answer-slot order.
+ * The agents whose answers feed the summary, partitioned: `succeeded` are `done`
+ * slots with non-empty text; `failed` are slots that errored or finished empty.
+ * Insertion order is preserved on both, matching the answer-slot order.
  */
 export interface SummaryInputs {
   succeeded: SucceededAnswer[];
@@ -604,10 +536,8 @@ export interface SummaryInputs {
 }
 
 /**
- * Partition a settled turn's answers into the {@link SummaryInputs} the summary
- * runs over. Pure — the failure-aware core of Phase 3. A `done` slot with only
- * whitespace is treated as a failure: it carries nothing to reconcile, so the
- * summary names it rather than feeding the main agent an empty answer.
+ * Partition a settled turn's answers into {@link SummaryInputs}. A `done` slot
+ * with only whitespace is treated as a failure — it carries nothing to reconcile.
  */
 export function selectSummaryInputs(turn: FanoutTurn): SummaryInputs {
   const succeeded: SucceededAnswer[] = [];
@@ -625,28 +555,20 @@ export function selectSummaryInputs(turn: FanoutTurn): SummaryInputs {
 }
 
 /**
- * Per-answer char cap on the agent answers fed into the SUMMARY prompt. Unlike
- * the persisted cap (which bounds the on-disk transcript), this bounds the MODEL
- * INPUT: every succeeded answer is concatenated into ONE summary sub-session
- * prompt, so one huge answer (a long file excerpt or tool dump) could otherwise
- * push that prompt past the context window or time it out and leave the turn
- * with no summary. Tighter than the persisted cap because several answers stack
- * into a single prompt (worst case ≈ agent count × this).
+ * Per-answer char cap on answers fed into the SUMMARY prompt (bounds MODEL
+ * INPUT, not the on-disk transcript). Several answers stack into one summary
+ * prompt, so this is tighter than the persisted cap to avoid blowing the context
+ * window (worst case ≈ agent count × this).
  */
 const FANOUT_SUMMARY_ANSWER_MAX_CHARS = 12_000;
 const FANOUT_SUMMARY_ANSWER_TRUNCATION_MARKER = "[answer truncated]";
 
 /**
  * Compose the NEW user-turn prompt fed to the main agent for the summary: the
- * read-only summary instruction, the user's original prompt, then each
- * succeeded answer labeled by its agent's display name, and a closing note
- * listing any agents that failed (D7). Returns a single text block so the
- * summary sub-session sees one coherent prompt. `displayNameFor` resolves a
- * `BackendId` to its human label; it falls back to the id when unknown so a
- * newly added backend still renders sensibly (no per-agent branching).
- *
- * Returns `null` when zero agents succeeded — the caller must not fabricate a
- * summary over nothing; it sets the zero-success terminal state instead.
+ * instruction, the user's original prompt, then each succeeded answer labeled by
+ * its agent's display name. `displayNameFor` falls back to the id when unknown.
+ * Returns `null` when zero agents succeeded so the caller doesn't fabricate a
+ * summary over nothing.
  */
 export function buildSummaryUserPrompt(
   originalPrompt: string,
@@ -654,15 +576,14 @@ export function buildSummaryUserPrompt(
   displayNameFor: (backendId: BackendId) => string
 ): PromptContent[] | null {
   if (inputs.succeeded.length === 0) return null;
-  // `text` is whitespace-trimmed by selectSummaryInputs; cap its LENGTH here so a
-  // single oversized answer can't blow the summary sub-session's context/timeout.
+  // Cap each answer's length so a single oversized one can't blow the summary
+  // sub-session's context/timeout.
   const sections = inputs.succeeded.map(
     ({ backendId, text }) =>
       `### ${displayNameFor(backendId)}\n${trimHead(text, FANOUT_SUMMARY_ANSWER_MAX_CHARS, FANOUT_SUMMARY_ANSWER_TRUNCATION_MARKER)}`
   );
-  // Only the SUCCEEDED answers are shown to the summarizer. Agents that did not
-  // answer are intentionally omitted entirely (not listed as a "gap") so the
-  // summary can't mention or speculate about them — it sees only real answers.
+  // Only SUCCEEDED answers are shown; failed agents are omitted entirely so the
+  // summary can't mention or speculate about them.
   const parts = [
     FANOUT_SUMMARY_INSTRUCTION,
     `## Question\n${originalPrompt.trim()}`,
@@ -672,18 +593,12 @@ export function buildSummaryUserPrompt(
 }
 
 /**
- * Generous char cap on EACH persisted agent answer in the composite body. The
- * dropdown reconstructed on reload shows full per-agent answers, but an
- * unbounded answer (a multi-thousand-line dump from one agent) would bloat the
- * saved note; this caps each answer's persisted text while staying large enough
- * that a normal QA answer is never clipped. Independent of the prompt-time
- * {@link FANOUT_HISTORY_MAX_CHARS} (that bounds the model API input; this bounds
- * the on-disk transcript). Only the per-agent answer bodies are capped — the
- * summary is persisted in full as it is the primary shown artifact.
+ * Char cap on EACH persisted agent answer in the composite body (bounds the
+ * on-disk transcript, not the model input). Large enough that a normal QA answer
+ * is never clipped. The summary is persisted in full as the primary artifact.
  */
 export const FANOUT_PERSISTED_ANSWER_MAX_CHARS = 24_000;
 
-/** Inline marker appended when a persisted agent answer is truncated to fit the cap. */
 const FANOUT_PERSISTED_ANSWER_TRUNCATION_MARKER = "[answer truncated]";
 
 /** Composite format version, embedded in the opening marker for forward-compat. */
@@ -694,9 +609,8 @@ const FANOUT_MARKER_OPEN = `<!--copilot:multi-agent v=${FANOUT_COMPOSITE_VERSION
 
 /**
  * Version-agnostic open marker matcher. {@link parseFanoutComposite} requires
- * BOTH this and the close marker (the COMPLETE wrapper) before treating a body
- * as a composite, so a normal answer that merely mentions the marker format —
- * e.g. in a code block — is never misread as a serialized turn.
+ * both this and the close marker before treating a body as a composite, so an
+ * answer merely mentioning the format is never misread as a serialized turn.
  */
 const FANOUT_MARKER_OPEN_RE = /<!--copilot:multi-agent v=\d+-->/;
 
@@ -707,19 +621,15 @@ const FANOUT_MARKER_CLOSE = "<!--copilot:multi-agent-end-->";
 const FANOUT_MARKER_SUMMARY = "<!--copilot:summary-->";
 
 /**
- * Marker-escape sentinel: a Private-Use-Area codepoint that will not occur in
+ * Marker-escape sentinel: a Private-Use-Area codepoint that won't occur in
  * normal prose. An answer may legitimately contain the literal marker prefix
- * (e.g. an agent quoting this very format); writing it verbatim would let that
- * text forge a section marker and corrupt the parse. We neutralize the COLON
- * after `copilot` on write and restore it on read.
+ * (e.g. quoting this format); writing it verbatim would forge a section marker.
+ * We neutralize the colon after `copilot` on write and restore it on read.
  *
- * The scheme is fully lossless even when the answer ALSO already contains the
- * sentinel itself: we first escape every literal sentinel as `S` + `0`, then
- * escape each marker colon as `S` + `1`. Because all pre-existing sentinels are
- * already doubled by the time the colon escape runs, the two escapes never
- * collide, and the read side (longest-match `S0`\u2192`S`, `S1`\u2192`:`-in-marker)
- * reverses both unambiguously. Without the sentinel-doubling step, an answer
- * containing the raw escaped byte sequence would be silently corrupted on read.
+ * Lossless even when the answer already contains the sentinel: literal sentinels
+ * are escaped FIRST (`S`+`0`), then marker colons (`S`+`1`), so the two never
+ * collide and the read side reverses both unambiguously. The sentinel-doubling
+ * step is required \u2014 without it, raw escaped byte sequences corrupt on read.
  */
 const FANOUT_MARKER_SENTINEL = "\uE000";
 const FANOUT_SENTINEL_LITERAL_ESCAPE = `${FANOUT_MARKER_SENTINEL}0`;
@@ -728,9 +638,9 @@ const FANOUT_LITERAL_MARKER_PREFIX = "<!--copilot:";
 const FANOUT_ESCAPED_MARKER_PREFIX = `<!--copilot${FANOUT_SENTINEL_COLON_ESCAPE}`;
 
 /**
- * Escape body text so it can never forge a section marker and round-trips
- * losslessly. Order matters: double any literal sentinel FIRST so the
- * subsequently-introduced colon escapes are the only single-sentinel sequences.
+ * Escape body text so it can never forge a section marker. Order matters: double
+ * any literal sentinel FIRST so the colon escapes are the only single-sentinel
+ * sequences.
  */
 function escapeFanoutMarkers(text: string): string {
   return text
@@ -740,11 +650,7 @@ function escapeFanoutMarkers(text: string): string {
     .join(FANOUT_ESCAPED_MARKER_PREFIX);
 }
 
-/**
- * Inverse of {@link escapeFanoutMarkers}. Restore the colon-marker escapes
- * FIRST, then collapse the doubled literal sentinels \u2014 the mirror of the write
- * order so both layers reverse exactly.
- */
+/** Inverse of {@link escapeFanoutMarkers}: restore colon escapes, then collapse doubled sentinels. */
 function unescapeFanoutMarkers(text: string): string {
   return text
     .split(FANOUT_ESCAPED_MARKER_PREFIX)
@@ -759,20 +665,16 @@ function capPersistedAnswer(text: string): string {
   return `${text.slice(0, FANOUT_PERSISTED_ANSWER_MAX_CHARS)}\n${FANOUT_PERSISTED_ANSWER_TRUNCATION_MARKER}`;
 }
 
-/** Short note emitted (in the `note` attribute) for an agent that produced no answer. */
+/** Note emitted (in the `note` attribute) for an agent that produced no answer. */
 const FANOUT_NO_ANSWER_NOTE = "did not answer";
 
 /**
  * Serialize a completed fan-out turn into the PERSISTED assistant message body:
- * a composite of the summary plus each SUCCEEDED agent's answer, delimited by
- * HTML-comment section markers so a reload can reconstruct the dropdown
- * ({@link parseFanoutComposite}) while a marker-unaware renderer still shows
- * readable markdown (the `### Heading` lines are cosmetic; the parse keys ONLY
- * on the comment markers). A failed/cancelled agent persists its PARTIAL text
- * (so reload matches the live tab) when it streamed any, else a body-less marker
- * carrying its `status` + a short `note`; the summary still excludes it. Each
- * persisted answer is capped ({@link FANOUT_PERSISTED_ANSWER_MAX_CHARS}) and its
- * inner text is marker-escaped so it can never forge a section.
+ * the summary plus each agent's answer, delimited by HTML-comment section markers
+ * the reload parse keys on ({@link parseFanoutComposite}); the `### Heading`
+ * lines are cosmetic. A failed/cancelled agent persists its partial text when it
+ * streamed any, else a body-less marker carrying `status` + `note`. Each answer
+ * is capped and marker-escaped so it can't forge a section.
  */
 export function serializeFanoutComposite(
   turn: FanoutTurn,
@@ -796,11 +698,8 @@ export function serializeFanoutComposite(
         escapeFanoutMarkers(capPersistedAnswer(slot.text.trim()))
       );
     } else {
-      // A failed/cancelled agent. If it streamed partial text before stopping,
-      // persist that text (with its terminal status) so a reload matches the
-      // live tab, which shows it; a truly empty slot gets a body-less marker
-      // recording that it participated and did not answer. Either way the
-      // summary still excludes it (selectSummaryInputs treats it as failed).
+      // A failed/cancelled agent: persist its partial text (with terminal status)
+      // so a reload matches the live tab, else a body-less "did not answer" marker.
       const errorAttr =
         slot.status === "error" && slot.error ? ` error="${escapeMarkerAttr(slot.error)}"` : "";
       const statusAttr = ` status="${escapeMarkerAttr(slot.status)}"`;
@@ -824,10 +723,8 @@ export function serializeFanoutComposite(
 }
 
 /**
- * The CLEAN composite (markers stripped) for copy / insert of the WHOLE turn:
- * readable markdown with the summary, each succeeded agent's answer under a
- * heading, and a one-line "did not answer" note per failed agent. Independent
- * of the persisted body so the user copies prose, never the invisible markers.
+ * The CLEAN composite (markers stripped) for copy / insert of the whole turn:
+ * readable markdown so the user copies prose, never the invisible markers.
  */
 export function renderFanoutComposite(
   turn: FanoutTurn,
@@ -846,8 +743,7 @@ export function renderFanoutComposite(
     if (succeededIds.has(backendId)) {
       sections.push(`### ${name}\n${slot.text.trim()}`);
     } else {
-      // A terminal slot that streamed partial text keeps it (matching the
-      // persisted body and the live tab); a truly empty one gets the note.
+      // A terminal slot keeps partial text if any; an empty one gets the note.
       const partial = slot.text.trim();
       sections.push(
         partial.length > 0 ? `### ${name}\n${partial}` : `### ${name}\n_${FANOUT_NO_ANSWER_NOTE}_`
@@ -859,11 +755,9 @@ export function renderFanoutComposite(
 }
 
 /**
- * Escape a value placed inside a marker attribute so it can't break the comment
- * or the parser: `--` would close/confuse the HTML comment, `"` would end the
- * attribute, and `>` would terminate the marker early (the parser matches agent
- * markers with `agent[^>]*`). Backend-controlled text (e.g. an agent error like
- * `expected >`) flows through here, so all three must be neutralized.
+ * Escape a marker attribute value so it can't break the comment or parser: `--`
+ * confuses the HTML comment, `"` ends the attribute, `>` terminates the marker
+ * early. Backend-controlled text flows through here, so all three are neutralized.
  */
 function escapeMarkerAttr(value: string): string {
   return value.replace(/--/g, "—").replace(/"/g, "'").replace(/>/g, "›");
@@ -878,32 +772,26 @@ function readMarkerAttr(marker: string, key: string): string | undefined {
 /** Map a serialized status string back to a terminal {@link AgentAnswerStatus}. */
 function statusFromMarker(raw: string | undefined): AgentAnswerStatus {
   if (raw === "done" || raw === "error" || raw === "cancelled") return raw;
-  // `running` is never persisted (the turn is terminal on save); any unknown
-  // value is treated as a non-success so the slot reads as a failed answer.
+  // Any unknown/non-terminal value reads as a failed answer.
   return "error";
 }
 
 /**
- * Inverse of {@link serializeFanoutComposite}. Returns `null` when `body` is a
- * plain/old assistant message (no composite marker) so the caller leaves it
- * unchanged. When present, reconstructs a {@link FanoutTurn} with terminal
- * statuses, keying ONLY on the HTML-comment section markers (the cosmetic
- * `### Heading` lines are ignored). Round-trips with serialize; inner text is
- * marker-unescaped so an answer that literally contained `<!--copilot:` is
- * restored verbatim.
+ * Inverse of {@link serializeFanoutComposite}. Returns `null` for a plain/old
+ * message (no composite marker). Reconstructs a {@link FanoutTurn} keying ONLY on
+ * the section markers (the cosmetic `### Heading` lines are ignored); inner text
+ * is marker-unescaped so a literal `<!--copilot:` is restored verbatim.
  */
 export function parseFanoutComposite(body: string): FanoutTurn | null {
-  // Require the COMPLETE wrapper (open + close), not just a marker substring, so
-  // a plain answer that happens to contain `<!--copilot:…` (e.g. discussing this
-  // serializer) is left as-is instead of being hidden behind the fan-out card.
+  // Require the COMPLETE wrapper (open + close), so a plain answer that merely
+  // contains `<!--copilot:…` is left as-is, not hidden behind the fan-out card.
   if (!FANOUT_MARKER_OPEN_RE.test(body) || !body.includes(FANOUT_MARKER_CLOSE)) return null;
 
   const answers: Record<BackendId, AgentAnswer> = {};
   let summaryText = "";
 
-  // Split on every section marker, tagging each chunk with the marker that
-  // opened it. The leading chunk (before the open marker) and the trailing
-  // chunk (after the end marker) are framing chrome and ignored.
+  // Split on every section marker, tagging each chunk with its opening marker;
+  // chunks before the open / after the end marker are framing chrome.
   const markerRe = /<!--copilot:(summary|agent[^>]*|multi-agent(?:-end)?[^>]*)-->/g;
   type Section = { marker: string; body: string };
   const sections: Section[] = [];
@@ -935,27 +823,23 @@ export function parseFanoutComposite(body: string): FanoutTurn | null {
     answers[id] = {
       backendId: id,
       status,
-      // A body-less "did not answer" marker (carries `note`) reconstructs an
-      // empty slot; every other slot — a `done` answer or a terminal slot with
-      // partial text — carries its body verbatim.
+      // A body-less "did not answer" marker (carries `note`) is an empty slot;
+      // every other slot carries its body verbatim.
       text: note !== undefined ? "" : inner,
       ...(errorReason !== undefined ? { error: errorReason } : {}),
     };
   }
 
-  // An empty wrapper (no summary text AND no agent sections) is not a real turn
-  // — e.g. a message that pasted just the open/close markers. Leave it as-is.
+  // An empty wrapper (no summary AND no agent sections) is not a real turn.
   if (summaryText.length === 0 && Object.keys(answers).length === 0) return null;
 
   return { answers, summary: { status: "done", text: summaryText } };
 }
 
 /**
- * Drop the leading cosmetic `### Heading` line a section body opens with (if
- * any) so it is not folded back into the reconstructed text. Skips the blank
- * line that the marker-join leaves before the heading, strips only that FIRST
- * non-blank line and only when it is an ATX heading, so answer prose that itself
- * uses `###` headings further down is preserved.
+ * Drop the leading cosmetic `### Heading` line a section body opens with, if any.
+ * Strips only that FIRST non-blank line and only when it's an ATX heading, so
+ * answer prose using `###` further down is preserved.
  */
 function stripLeadingHeading(sectionBody: string): string {
   const lines = sectionBody.split("\n");

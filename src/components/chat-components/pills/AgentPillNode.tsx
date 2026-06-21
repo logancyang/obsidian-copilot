@@ -18,11 +18,9 @@ export interface SerializedAgentPillNode extends SerializedBasePillNode {
 }
 
 /**
- * Agent pill node: a coding agent the user `@`-mentioned in the composer to
- * answer the turn alongside the session's main agent. The pill's value is the
- * backend id (what the composer emits); `label` is the display name captured at
- * insert time. Kept registry-agnostic so the generic chat editor never depends
- * on Agent Mode internals.
+ * Agent pill node: a coding agent `@`-mentioned in the composer. Value is the
+ * backend id, `label` the display name captured at insert time. Registry-agnostic
+ * so the generic chat editor never depends on Agent Mode internals.
  */
 export class AgentPillNode extends BasePillNode {
   __label: string;
@@ -80,21 +78,18 @@ export class AgentPillNode extends BasePillNode {
   }
 
   /**
-   * Contribute nothing to the editor's serialized text. The base returns
-   * `__value` (the backend id), but for an agent mention that id is pure
-   * routing metadata — the mention already feeds `mentionedAgents`
-   * structurally via the sync plugin. Returning it here would leak the raw
-   * backend id into `inputMessage` (and the prompt every agent receives),
-   * turning `@Claude should we…?` into `claude should we…?`. The visible pill
-   * comes from `decorate()`, not this text.
+   * Contribute nothing to the serialized text. The backend id is pure routing
+   * metadata (the mention feeds `mentionedAgents` structurally via the sync
+   * plugin); emitting it here would leak the raw id into the prompt. The visible
+   * pill comes from `decorate()`.
    */
   getTextContent(): string {
     return "";
   }
 
   exportDOM(editor: LexicalEditor): DOMExportOutput {
-    // Base writes the data-attribute, value, and textContent; layer on the
-    // label so it round-trips through DOM import.
+    // Base writes data-attribute/value/textContent; layer on the label so it
+    // round-trips through DOM import.
     const out = super.exportDOM(editor);
     if (out.element instanceof HTMLElement) {
       out.element.setAttribute("data-pill-label", this.__label);

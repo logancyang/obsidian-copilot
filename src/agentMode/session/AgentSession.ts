@@ -58,9 +58,7 @@ import {
 
 /**
  * Seam the session calls to dispatch a multi-agent read-only QA turn. Supplied
- * by `AgentSessionManager` (which owns `ensureBackend` / default-model lookup /
- * the read-only permission registry); omitted in tests and on the single-agent
- * path. Returns the completed live {@link FanoutTurn}.
+ * by `AgentSessionManager`; omitted in tests and on the single-agent path.
  */
 export type RunFanoutTurn = (input: FanoutRunInput) => Promise<FanoutTurn>;
 
@@ -90,8 +88,7 @@ const EMPTY_QUESTIONS: AskUserQuestionPrompt[] = [];
 // Canonical "no answers" map. Resolving an in-flight question with this on
 // cancel/dispose makes the bridge treat it as a user cancellation.
 const EMPTY_ANSWERS: AgentQuestionAnswers = Object.freeze({});
-// Canonical "no fan-out" selection — referential stability for the seam getter
-// on the single-agent path.
+// Canonical "no fan-out" selection — referential stability on the single-agent path.
 const EMPTY_BACKEND_IDS: ReadonlyArray<BackendId> = Object.freeze([]);
 
 /**
@@ -198,23 +195,19 @@ export interface AgentSessionStartOptions {
   getDescriptor?: () => BackendDescriptor | undefined;
   /**
    * Optional fan-out dispatcher. When supplied, a turn with more than one agent
-   * (main + `@`-mentioned) runs the multi-agent read-only QA path instead of
-   * the single `backend.prompt()`. Manager-supplied; tests and the single-agent
-   * path omit it.
+   * runs the multi-agent read-only QA path instead of `backend.prompt()`.
+   * Manager-supplied; tests and the single-agent path omit it.
    */
   runFanoutTurn?: RunFanoutTurn;
   /**
-   * Resolve an arbitrary `BackendId` (an answerer's, not just this session's) to
-   * its display name, used to label the persisted fan-out composite headings.
-   * Manager-supplied; tests/single-agent omit it and the serializer falls back
-   * to the raw id.
+   * Resolve any `BackendId` to its display name for the persisted composite
+   * headings. Manager-supplied; without it the serializer falls back to the id.
    */
   getDisplayName?: (backendId: BackendId) => string;
   /**
-   * Resolve the Obsidian `App` for send-boundary side effects that need it
-   * (the multi-agent entitlement re-check passes it to `validateLicenseKey` so
-   * a license expiry can surface the standard modal). Threaded via DI so the
-   * session never reaches for the global `app`. Manager-supplied; tests omit it.
+   * Resolve the Obsidian `App` for send-boundary side effects (the entitlement
+   * re-check passes it to `validateLicenseKey`). Threaded via DI so the session
+   * never reaches for the global `app`. Manager-supplied; tests omit it.
    */
   getApp?: () => App;
 }
@@ -282,17 +275,12 @@ export class AgentSession {
   // preconditions pass. Yields the per-turn `"error"` status while the
   // session sits idle between a failed turn and the next prompt.
   private lastTurnError = false;
-  // SEAM (multi-agent fan-out): the resolved answerer selection for the most
-  // recent turn — the deduped `@`-mentioned installed agents, which may or may
-  // not include the main agent. Empty until a turn fans out. The orchestration
-  // dispatches one ephemeral read-only sub-session per agent; the main agent
-  // summarizes separately. The single-agent path leaves it empty (unchanged).
+  // The resolved answerer selection for the most recent turn (deduped
+  // `@`-mentioned installed agents). Empty on the single-agent path.
   private lastMentionedAgents: ReadonlyArray<BackendId> = EMPTY_BACKEND_IDS;
-  // Fan-out turns the visible backend never processed (they ran on ephemeral
-  // sub-sessions). Each completed fan-out turn with a non-empty summary pushes a
-  // {question, summary} entry here; the next single-agent turn injects them all
-  // in order as a labeled prior-turn block, then clears, so follow-ups keep the
-  // QA context. LIVE-ONLY — never persisted (mirrors the no-migration decision).
+  // Fan-out turns the visible backend never processed. The next single-agent turn
+  // injects them in order as a labeled prior-turn block, then clears, so follow-ups
+  // keep the QA context. LIVE-ONLY — never persisted.
   private pendingFanoutContext: PendingFanoutContext[] = [];
   private placeholderId: string | null = null;
   // ACP `messageId`s seen on this turn's content chunks. Used to re-route
@@ -843,8 +831,6 @@ export class AgentSession {
     }
 
     // Record the fan-out selection for this turn (empty = single-agent path).
-    // Phase 1 only stores it; the later fan-out orchestration reads it via
-    // `getLastMentionedAgents()`.
     this.lastMentionedAgents =
       mentionedAgents && mentionedAgents.length > 0 ? mentionedAgents : EMPTY_BACKEND_IDS;
 
@@ -859,13 +845,7 @@ export class AgentSession {
     return { userMessageId, turn };
   }
 
-  /**
-   * SEAM (multi-agent fan-out): the resolved answerer selection for the most
-   * recent `sendPrompt` — the `@`-mentioned installed agents (deduped), which
-   * may or may not include the session's main agent. Empty for the single-agent
-   * path. The fan-out orchestrator dispatches one ephemeral read-only
-   * sub-session per agent here; the main agent summarizes separately.
-   */
+  /** The resolved answerer selection for the most recent `sendPrompt`; empty on the single-agent path. */
   getLastMentionedAgents(): ReadonlyArray<BackendId> {
     return this.lastMentionedAgents;
   }
@@ -888,36 +868,27 @@ export class AgentSession {
       const hasWebTabs = (context?.webTabs?.length ?? 0) > 0;
       const webTabBlock = hasWebTabs ? await serializeWebTabContext(context) : "";
 
-      // Fan-out path: one or more `@`-mentioned answerers dispatch the identical
-      // prompt to every backend in parallel via ephemeral read-only sub-sessions,
-      // and the session's main agent ALWAYS summarizes over them. It does NOT
-      // inject (or flush) the pending fan-out buffer — it never talks to the
-      // visible backend, so it only appends to the buffer on completion. The
-      // single-agent path (no mentions, or only the main agent `@`-ed) falls
-      // through below. `isFanout` collapses the degenerate `[main]` case (the
-      // user `@`-ed only their own agent) so the main agent never both answers
-      // and summarizes the same backend — shared with the composer, which gates
-      // the `mentionedAgents` emission on the same predicate.
+      // Fan-out path: the `@`-mentioned answerers dispatch the identical prompt in
+      // parallel ephemeral read-only sub-sessions and the main agent summarizes.
+      // It never talks to the visible backend, so it doesn't inject/flush the
+      // pending fan-out buffer (only appends on completion). `isFanout` collapses
+      // the degenerate `[main]` case so the main agent never both answers and
+      // summarizes — shared with the composer's `mentionedAgents` gate.
       if (
         this.runFanoutTurn &&
         isFanout(this.lastMentionedAgents, this.backendId) &&
         placeholderId
       ) {
-        // AUTHORITATIVE paywall: a fan-out turn is a Plus-only feature. The
-        // typeahead UI gate (Phase 3) can be bypassed (pasting an agent pill),
-        // so re-check entitlement here at the single session boundary before any
-        // fan-out work. Paying users short-circuit with zero network latency;
-        // everyone else is hard-blocked (no silent single-agent fallback).
+        // Authoritative paywall: a fan-out turn is Plus-only, and the typeahead UI
+        // gate can be bypassed (pasting a pill), so re-check entitlement here at
+        // the session boundary. Paying users short-circuit; everyone else is hard-blocked.
         if (!(await this.ensureMultiAgentEntitlement())) {
           return this.blockFanoutForEntitlement(placeholderId, turnStartedAt);
         }
 
-        // Give every fresh ephemeral fan-out agent the PRIOR visible transcript
-        // as a read-only `<conversation_history>` block so `@agent` follow-ups
-        // ("that plan", "the answer above") and fan-out→fan-out continuity work
-        // (D9). "Prior" excludes this turn's own in-flight user message and
-        // assistant placeholder — both already appended in `sendPrompt` before
-        // this runs. Null (no prior history) → byte-for-byte unchanged prompt.
+        // Give every fan-out agent the PRIOR visible transcript as a read-only
+        // `<conversation_history>` block so follow-ups ("the answer above") work.
+        // "Prior" excludes this turn's own user message + placeholder. Null → unchanged prompt.
         const historyBlock = buildConversationHistoryBlock(
           this.priorDisplayMessages(userMessageId, placeholderId),
           FANOUT_HISTORY_MAX_CHARS
@@ -932,13 +903,10 @@ export class AgentSession {
         return await this.runFanoutPath(placeholderId, displayText, promptBlocks, turnStartedAt);
       }
 
-      // Single-agent path: prepend any buffered fan-out turns (in order) as one
-      // labeled prior-turn block so the backend regains continuity. Empty buffer
-      // → `null` block → prompt byte-for-byte as today. The buffer is captured
-      // into `promptBlocks` here but only CLEARED after `backend.prompt()`
-      // resolves (below) — if the prompt throws, the buffer is preserved so the
-      // dropped context can ride the next single-agent turn instead of being
-      // lost with no record.
+      // Single-agent path: prepend any buffered fan-out turns as one labeled
+      // prior-turn block so the backend regains continuity. Empty buffer → `null`
+      // → unchanged prompt. Cleared only after `backend.prompt()` resolves below,
+      // so a thrown prompt preserves the buffer for the next turn.
       const leadingContextBlock = buildPriorFanoutContextBlock(this.pendingFanoutContext);
       const promptBlocks = buildPromptBlocks(
         displayText,
@@ -953,13 +921,10 @@ export class AgentSession {
         prompt: promptBlocks,
       };
       const resp = await this.backend.prompt(req);
-      // Flush the buffered context only on a NON-cancelled completion — at that
-      // point the backend has durably ingested the injected `<prior_turns>`
-      // block. A thrown prompt skips this entirely and keeps the buffer. A
-      // CANCELLED prompt resolves (it doesn't throw) but may have been stopped
-      // before the backend ingested the block, so we also keep the buffer and
-      // re-inject on the next turn; a duplicate re-injection is harmless,
-      // losing the multi-agent context is the bug.
+      // Flush the buffer only on a non-cancelled completion — only then has the
+      // backend durably ingested the `<prior_turns>` block. A cancelled prompt may
+      // have stopped before ingesting it, so keep and re-inject (a duplicate is
+      // harmless; losing the multi-agent context is the bug).
       if (leadingContextBlock !== null && resp.stopReason !== "cancelled") {
         this.pendingFanoutContext = [];
       }
@@ -1014,22 +979,18 @@ export class AgentSession {
   }
 
   /**
-   * Single authoritative entitlement gate for the multi-agent fan-out path,
-   * invoked at the session send boundary so a UI bypass can't evade it.
-   * Delegates to the shared `ensureMultiAgentEntitlement` helper (the source of
-   * truth): paying users (cached, sync) allow with no network call; otherwise it
-   * re-verifies against `/license`. The session is non-React, so the helper's
-   * sync `isPlusEnabled()` fast path is the correct entitlement signal here.
+   * Authoritative entitlement gate for the fan-out path, at the session send
+   * boundary so a UI bypass can't evade it. Delegates to the shared helper:
+   * paying users allow sync with no network call; otherwise it re-verifies
+   * against `/license`.
    */
   private ensureMultiAgentEntitlement(): Promise<boolean> {
     return ensureMultiAgentEntitlement(this.getApp?.(), { feature: "multi_agent_per_turn" });
   }
 
   /**
-   * Clean up a fan-out turn that was blocked by the paywall: surface the upgrade
-   * prompt and finalize the placeholder as an error so no empty/streaming
-   * assistant bubble dangles. The surrounding `runTurn` lifecycle (finally) then
-   * flips the session back to a usable idle state so the user can resend.
+   * Clean up a paywall-blocked fan-out turn: surface the upgrade prompt and
+   * finalize the placeholder as an error so no dangling bubble remains.
    */
   private blockFanoutForEntitlement(placeholderId: string, turnStartedAt: number): StopReason {
     showMultiAgentUpgradePrompt();
@@ -1045,17 +1006,11 @@ export class AgentSession {
   }
 
   /**
-   * Dispatch a multi-agent read-only QA turn. Every ANSWERER (the deduped
-   * `@`-mentioned agents) runs the identical `promptBlocks` in a parallel
-   * ephemeral read-only sub-session; answers stream into per-agent slots of a
-   * single live {@link FanoutTurn} held in memory. Once every answer settles the
-   * session's main agent fills the summary slot (D6), whether or not it was
-   * itself an answerer. On completion only the summary text is written into the
-   * placeholder's display body — per-agent answers are never persisted, so the
-   * markdown transcript format is unchanged (no migration).
-   *
-   * Returns a `StopReason` so the surrounding `runTurn` lifecycle (status flips,
-   * settled-stream bookkeeping) is identical to the single-agent path.
+   * Dispatch a fan-out turn. Every ANSWERER runs the identical `promptBlocks` in
+   * a parallel ephemeral read-only sub-session, answers stream into per-agent
+   * slots of one live {@link FanoutTurn}, and the main agent fills the summary
+   * once they settle. Returns a `StopReason` so the surrounding `runTurn`
+   * lifecycle matches the single-agent path.
    */
   private async runFanoutPath(
     placeholderId: string,
@@ -1066,19 +1021,16 @@ export class AgentSession {
     const signal = this.abortController?.signal ?? new AbortController().signal;
     const input: FanoutRunInput = {
       agents: this.lastMentionedAgents,
-      // The summarizer is ALWAYS the session's own main agent, tracked
-      // separately from the answerers — it writes the narrative summary over the
-      // answers (D6) regardless of whether it is itself one of the answerers.
+      // The summarizer is ALWAYS the session's main agent, separate from the answerers.
       mainAgent: this.backendId,
       prompt: withReadOnlyPreamble(promptBlocks),
-      // The user's raw question, fed to the summary as the "original question".
-      // Distinct from `prompt`, which carries the read-only preamble + context.
+      // The raw question fed to the summary. Distinct from `prompt`, which carries
+      // the read-only preamble + context.
       originalPromptText,
       signal,
       onChange: (turn) => {
-        // The turn now rides on the placeholder message itself (live state lives
-        // on `message.fanout`); `setFanout` bumps the message version so the
-        // dropdown re-renders per streamed slot.
+        // Live state rides on the placeholder's `message.fanout`; `setFanout` bumps
+        // the message version so the dropdown re-renders per streamed slot.
         this.store.setFanout(placeholderId, turn);
         this.scheduleNotifyMessages();
       },
@@ -1087,29 +1039,19 @@ export class AgentSession {
     this.store.setFanout(placeholderId, turn);
 
     const stopReason: StopReason = signal.aborted ? "cancelled" : "end_turn";
-    // Persist the FULL composite (summary + each succeeded answer + body-less
-    // markers for failed agents) as the message body so the dropdown is
-    // reconstructed on reload (parseFanoutComposite). A turn with no successes
-    // AND no summary text (e.g. cancelled before any answer landed) collapses to
-    // empty, so we persist/buffer nothing — no misleading blank bubble.
-    // Any non-empty slot text counts — including a terminal slot's partial text
-    // (serializeFanoutComposite persists it), so a turn cancelled mid-stream is
-    // saved and replayed, not dropped as a blank bubble.
+    // Persist the FULL composite as the message body so the dropdown reconstructs
+    // on reload. Any non-empty slot text counts (including a terminal slot's
+    // partial text), so a turn cancelled mid-stream is saved, not dropped blank;
+    // a turn with no content at all persists/buffers nothing.
     const hasAnswerText = Object.values(turn.answers).some((a) => a.text.trim().length > 0);
     const hasContent = turn.summary.text.trim().length > 0 || hasAnswerText;
     if (hasContent) {
       const composite = serializeFanoutComposite(turn, (id) => this.displayNameFor(id));
       this.store.appendAgentText(placeholderId, composite);
-      // Buffer this turn so the next single-agent prompt can replay it: the
-      // visible backend never saw it (it ran on ephemeral sub-sessions). Prefer
-      // the summary (the user-facing artifact); but when the summary is
-      // unavailable (it failed/cancelled) while agents DID answer, replay the
-      // readable answers themselves so a follow-up like "what did they say?"
-      // still has the content the user saw, not just a generic note.
-      // Prefer the summary ONLY when it generated successfully. A summary that
-      // streamed partial text and was then cancelled/errored is incomplete, so —
-      // like the no-summary case — replay the agents' answers (persisted in the
-      // composite) instead, or the follow-up loses the content it never saw.
+      // Buffer this turn so the next single-agent prompt can replay it (the visible
+      // backend never saw it). Prefer the summary ONLY when it generated
+      // successfully; an incomplete (cancelled/errored) summary falls back to
+      // replaying the agents' answers so a follow-up keeps the content the user saw.
       const summaryText = turn.summary.text.trim();
       const replay =
         turn.summary.complete && summaryText.length > 0
@@ -1129,13 +1071,10 @@ export class AgentSession {
   }
 
   /**
-   * The visible transcript EXCLUDING the current turn — its in-flight user
-   * message and assistant placeholder, identified by the exact ids `sendPrompt`
-   * captured when it appended them. Used to render the fan-out
-   * conversation-history block from the PRIOR conversation only. Threads the
-   * store explicitly; never the global app. Excluding by identity (not by
-   * position/sender) keeps this correct if anything is ever inserted between or
-   * after those two messages.
+   * The visible transcript EXCLUDING the current turn's user message and
+   * placeholder, by exact id. Used to render the fan-out conversation-history
+   * block from PRIOR conversation only. Excluding by identity (not position)
+   * stays correct if anything is inserted between or after those messages.
    */
   private priorDisplayMessages(
     userMessageId: string,
@@ -1147,10 +1086,8 @@ export class AgentSession {
   }
 
   /**
-   * Resolve a `BackendId` to its display name for the persisted composite,
-   * via the manager-injected resolver, falling back to the raw id when none is
-   * supplied (tests / single-agent). Mirrors the `fanoutDropdown` brand resolver
-   * so the serialized heading and the rendered tab label agree.
+   * Resolve a `BackendId` to its display name via the injected resolver (id
+   * fallback). Mirrors the `fanoutDropdown` resolver so heading and tab agree.
    */
   private displayNameFor(backendId: BackendId): string {
     return this.getDisplayName?.(backendId) ?? backendId;
@@ -1852,11 +1789,9 @@ export function buildPromptBlocks(
   leadingContextBlock?: string | null
 ): PromptContent[] {
   // Context sections precede the user message: an optional prior-turn block
-  // (buffered fan-out turns the backend never saw), the vault envelope (notes +
-  // note excerpts), web-selection excerpts, then live web-tab content. Web
-  // tab/selection blocks reuse the legacy `<web_*>` tags so the model reads
-  // the same shapes it does in the non-agent chat. `leadingContextBlock` is
-  // absent on the common path, leaving the prompt byte-for-byte unchanged.
+  // (buffered fan-out turns the backend never saw), the vault envelope, web-
+  // selection excerpts, then live web-tab content. Web blocks reuse the legacy
+  // `<web_*>` tags. `leadingContextBlock` is absent on the common path.
   const sections = [
     leadingContextBlock?.trim() || null,
     buildContextEnvelope(context),
@@ -1873,11 +1808,9 @@ export function buildPromptBlocks(
 }
 
 /**
- * Prepend the read-only QA instruction to the shared prompt blocks for a
- * fan-out turn — the universal "answer only, no writes" enforcement layer (D5).
- * The instruction leads the first text block (or a new one when there is none)
- * so every agent reads the same read-only framing before the context envelope
- * and user message. Identical for every agent (apples-to-apples, D10).
+ * Prepend the read-only QA instruction to the shared prompt blocks for a fan-out
+ * turn. Leads the first text block (or a new one) so every agent reads the same
+ * read-only framing before the context. Identical for every agent.
  */
 export function withReadOnlyPreamble(blocks: PromptContent[]): PromptContent[] {
   const i = blocks.findIndex((b) => b.type === "text");

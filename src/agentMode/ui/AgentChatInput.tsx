@@ -56,10 +56,8 @@ interface AgentChatInputProps {
   draft: AgentInputDraftControls;
   app: App;
   /**
-   * The session's main agent (the summarizer, NOT auto-added as an answerer).
-   * Used by `isFanout` to collapse the degenerate `[main]` selection — when the
-   * user `@`-ed only their own agent — to the single-agent path. `null` before a
-   * session lands.
+   * The session's main agent (the summarizer). Used by `isFanout` to collapse the
+   * degenerate `[main]` selection to the single-agent path. `null` before a session lands.
    */
   mainAgentId: BackendId | null;
   updateUserMessageHistory: (newMessage: string) => void;
@@ -107,8 +105,7 @@ const combineQueuedMessages = (items: QueuedAgentMessage[]): QueuedAgentMessage 
   const allSelected = items.flatMap((i) => i.context?.selectedTextContexts ?? []);
   const allWebTabs = items.flatMap((i) => i.context?.webTabs ?? []);
   const allPromptContent = items.flatMap((i) => i.promptContent ?? []);
-  // Union the per-message fan-out answerer selections, preserving first-seen
-  // order (each is the resolved answerer list — installed `@`-mentions only).
+  // Union the per-message answerer selections, preserving first-seen order.
   const mergedAgents = dedupeBy(
     items.flatMap((i) => i.mentionedAgents ?? []),
     (id) => id
@@ -176,32 +173,23 @@ export const AgentChatInput = memo(function AgentChatInput({
   const isMountedRef = useRef(false);
   const previousSessionIdRef = useRef(sessionId);
 
-  // Multi-agent fan-out (the `@agent` typeahead group + pills) is a paid-only
-  // feature. Reactive so a settings change flips the gate live. This is the UI
-  // gate; the authoritative send-time check is a separate backend layer.
+  // The `@agent` typeahead group + pills are paid-only. Reactive so a settings
+  // change flips the gate live; the authoritative send-time check is separate.
   const canUseMultiAgent = useCanUseMultiAgent();
 
-  // Installed coding agents the user can `@`-mention this turn. Registry-driven
-  // and recomputed only when settings change, so the hot streaming path is
-  // unaffected. The active set of mentioned pills is held in a ref (not state)
-  // so a mention edit never re-renders this memoized composer mid-stream; it's
-  // read at send time. Free users get the frozen empty list, so the "Agents"
-  // typeahead group never renders and no agent pill can be inserted; paid users
-  // are completely unaffected.
+  // Installed agents the user can `@`-mention, recomputed only on settings change.
   const installedAgentBrands = useMemo(() => listInstalledAgentBrands(settings), [settings]);
-  // Typeahead list is entitlement-gated: free users get the frozen empty list so
-  // the "Agents" group never renders and no pill can be inserted. Both operands
-  // are stable refs, so the ternary yields a stable reference without a memo.
+  // Entitlement-gated typeahead list: free users get the frozen empty list so the
+  // "Agents" group never renders. Both operands are stable refs (no memo needed).
   const agentBrands = canUseMultiAgent ? installedAgentBrands : EMPTY_AGENT_MENTION_BRANDS;
-  // Send-time allowlist is the REAL installed set, INDEPENDENT of the gated
-  // typeahead list. A pasted/imported pill — or a stale-false Plus cache the
-  // send-boundary gate is meant to re-verify — must still resolve to a real
-  // answerer so the turn fans out and hits AgentSession's authoritative
-  // entitlement check, instead of being silently stripped to a single-agent turn.
+  // The send-time allowlist is the REAL installed set, INDEPENDENT of the gated
+  // typeahead list: a pasted pill (or a stale-false cache) must still resolve to a
+  // real answerer so the turn fans out and hits the authoritative entitlement check.
   const installedAgentIds = useMemo(
     () => new Set(installedAgentBrands.map((b) => b.id)),
     [installedAgentBrands]
   );
+  // Held in a ref (not state) so a mention edit never re-renders mid-stream; read at send time.
   const mentionedAgentIdsRef = useRef<string[]>([]);
   const handleMentionedAgentsChange = useCallback((backendIds: string[]) => {
     mentionedAgentIdsRef.current = backendIds;
@@ -235,12 +223,9 @@ export const AgentChatInput = memo(function AgentChatInput({
     };
   }, []);
 
-  // Clear cross-session ephemeral state on a session switch. Selected-text
-  // contexts are a global atom (not per-session draft), and the mentioned-agent
-  // ids live in a ref here rather than the keyed ChatInput, so neither is reset
-  // by the editor remount — without this, a selection or an `@agent` pill from
-  // one session would silently ride along into the next prompt (e.g. an
-  // unrelated send fanning out to a previous session's agents).
+  // Clear cross-session ephemeral state on a session switch: the global
+  // selected-text atom and the mentioned-agent ref (neither is reset by the
+  // editor remount), so a selection or `@agent` pill can't ride into the next session.
   useEffect(() => {
     if (previousSessionIdRef.current === sessionId) return;
     previousSessionIdRef.current = sessionId;
@@ -334,11 +319,9 @@ export const AgentChatInput = memo(function AgentChatInput({
         if (block) content.push(block);
       }
 
-      // Resolve the `@`-mentioned agents into the structured set of ANSWERERS
-      // (installed mentions, deduped) — the session's main agent is the separate
-      // summarizer, not auto-added here. Only carried when it actually fans out;
-      // the single-agent path (no mentions, or only the main agent) stays
-      // byte-for-byte the existing behavior with no `mentionedAgents` on the send.
+      // Resolve the `@`-mentions into the ANSWERER set (installed, deduped). Only
+      // carried when it actually fans out; the single-agent path sends no
+      // `mentionedAgents` and stays byte-for-byte the existing behavior.
       let mentionedAgents: ReadonlyArray<BackendId> | undefined;
       if (mainAgentId) {
         const answerers = resolveAnswerers({
@@ -495,12 +478,7 @@ export const AgentChatInput = memo(function AgentChatInput({
   );
 });
 
-/**
- * Subtle, discoverable upsell shown to free users where the multi-agent
- * `@`-mention affordance would otherwise be. Keeps the gate honest (free users
- * can't mention agents) while still surfacing the paid feature. Clicking opens
- * the Plus page with a multi-agent UTM medium so the entry point is attributable.
- */
+/** Upsell shown to free users where the `@`-mention affordance would otherwise be. */
 const MultiAgentUpsellHint: React.FC = () => {
   return (
     <div className="tw-flex tw-justify-end tw-px-2 tw-pb-1">

@@ -22,10 +22,9 @@ export interface AtMentionOption extends TypeaheadOption {
 }
 
 /**
- * Minimal, agent-agnostic brand shape for a mentionable coding agent. Kept
- * local to chat-components (host) so the generic composer never imports Agent
- * Mode internals; the Agent Mode layer passes its structurally-compatible
- * `AgentBrand` down as props.
+ * Minimal brand shape for a mentionable coding agent. Local to chat-components so
+ * the generic composer never imports Agent Mode internals; Agent Mode passes its
+ * structurally-compatible `AgentBrand` down as props.
  */
 export interface AgentMentionBrand {
   readonly id: string;
@@ -42,11 +41,7 @@ export interface CategoryOption extends TypeaheadOption {
   isAction?: boolean;
 }
 
-/**
- * "Agents" typeahead group — only surfaced in Agent Mode, and only when at
- * least one backend is installed. Rendered at the very top of the typeahead so
- * `@`-mentioning a coding agent is the first affordance.
- */
+/** "Agents" typeahead group — surfaced only in Agent Mode with a backend installed, rendered first. */
 const AGENTS_CATEGORY: CategoryOption = {
   key: "agents",
   title: "Agents",

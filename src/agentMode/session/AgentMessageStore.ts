@@ -32,10 +32,8 @@ interface StoredAgentMessage {
   content?: unknown[];
   turnStopReason?: StopReason;
   turnDurationMs?: number;
-  // Live per-agent fan-out state for a multi-agent QA message. In-memory only;
-  // the persisted body (displayText) carries the composite that reconstructs it
-  // on load. Bumping `version` when this changes invalidates the cached view so
-  // the dropdown re-renders per streamed tick.
+  // Live per-agent fan-out state. In-memory only; the persisted body carries the
+  // composite that reconstructs it on load.
   fanout?: FanoutTurn;
   // Bumped on every in-place mutation of this message so `getDisplayMessages`
   // can cache the adapted view and only re-adapt when the version moves. The
@@ -247,12 +245,9 @@ export class AgentMessageStore {
   }
 
   /**
-   * Set (or update) the live fan-out turn on a message and bump its version so
-   * the memoized display view invalidates and the dropdown re-renders for the
-   * latest streamed slot. Stores the live reference; `getDisplayMessages`
-   * snapshots it per tick so each coalesced notify yields a fresh object (the
-   * UI's `setState` bails on `Object.is`-equal updates otherwise). Returns false
-   * when the target message is missing.
+   * Set the live fan-out turn on a message and bump its version so the memoized
+   * view invalidates. Stores the live reference; `getDisplayMessages` snapshots
+   * it per tick. Returns false when the message is missing.
    */
   setFanout(id: string, turn: FanoutTurn): boolean {
     const msg = this.messages.find((m) => m.id === id);
@@ -438,10 +433,9 @@ export class AgentMessageStore {
   loadMessages(messages: AgentChatMessage[]): void {
     this.clear();
     for (const msg of messages) {
-      // Reconstruct the per-agent fan-out dropdown from a saved composite body.
-      // `parseFanoutComposite` returns null for a plain/old message, so the
-      // common single-agent transcript is untouched. The body is kept as-is
-      // (composite + invisible markers); only the live `fanout` view is rebuilt.
+      // Reconstruct the fan-out dropdown from a saved composite body;
+      // `parseFanoutComposite` returns null for a plain/old message. The body is
+      // kept as-is — only the live `fanout` view is rebuilt.
       const fanout =
         msg.sender === USER_SENDER ? undefined : (parseFanoutComposite(msg.message) ?? undefined);
       this.messages.push({
@@ -483,9 +477,8 @@ export class AgentMessageStore {
       parts: m.parts,
       turnStopReason: m.turnStopReason,
       turnDurationMs: m.turnDurationMs,
-      // Snapshot the live turn so each adapted view (rebuilt on version bump)
-      // carries a fresh reference; the orchestrator mutates one turn object in
-      // place, so handing the same reference would freeze the dropdown.
+      // Snapshot so each adapted view carries a fresh reference; the orchestrator
+      // mutates one turn in place, so the same reference would freeze the dropdown.
       ...(m.fanout ? { fanout: snapshotFanoutTurn(m.fanout) } : {}),
     };
   }

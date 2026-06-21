@@ -22,31 +22,24 @@ interface FanoutMessageCardProps {
 }
 
 /**
- * The assistant card for a multi-agent fan-out turn. Renders the segmented tab
- * row ({@link FanoutTurnView}) as the body, then the SAME action bar as the
- * normal Agent-Mode AI card (timestamp + Insert / Replace + Copy; no
- * Regenerate/Edit/Delete are wired in Agent Mode, so none show).
- *
- * There is ONE copy/insert affordance, and it is context-aware: on the Summary
- * tab it acts on the WHOLE composite (summary + every agent's answer — the
- * default tab, so copy-all is one click away); on an agent tab it acts on just
- * that agent's answer. The card owns the selected tab so the action bar can
- * target it.
+ * The assistant card for a fan-out turn: the segmented tab row
+ * ({@link FanoutTurnView}) plus the same action bar as the normal AI card. Its
+ * one Copy/Insert affordance is context-aware — the WHOLE composite on the
+ * Summary tab, just that agent's answer on an agent tab. The card owns the
+ * selected tab so the action bar can target it.
  */
 export const FanoutMessageCard: React.FC<FanoutMessageCardProps> = memo(
   ({ message, turn, app }) => {
     const [selected, setSelected] = useState<FanoutOptionValue>(() => defaultFanoutOption(turn));
 
-    // If the selected agent's slot disappears (defensive — slots are stable
-    // within a turn), fall back to the summary rather than targeting nothing.
+    // Fall back to the summary if the selected slot disappears (defensive).
     const activeValue =
       selected !== FANOUT_SUMMARY_OPTION && !turn.answers[selected]
         ? FANOUT_SUMMARY_OPTION
         : selected;
 
-    // The text the action bar's Copy/Insert operate on: the whole composite on
-    // the Summary tab (markers stripped — readable prose, the copy-all path),
-    // otherwise just the selected agent's answer.
+    // What Copy/Insert operate on: the whole composite on the Summary tab, else
+    // just the selected agent's answer.
     const currentText = useMemo(
       () =>
         activeValue === FANOUT_SUMMARY_OPTION
@@ -59,9 +52,8 @@ export const FanoutMessageCard: React.FC<FanoutMessageCardProps> = memo(
       void insertAtCursor(app, currentText);
     }, [app, currentText]);
 
-    // Reuse ChatButtons by handing it a view whose `message` is the selected
-    // tab's text — its Copy reads `message.message`, keeping the affordance
-    // identical to the normal AI card (same component).
+    // Reuse ChatButtons by handing it a view whose `message` is the selected tab's
+    // text (its Copy reads `message.message`).
     const buttonsMessage = useMemo<ChatMessage>(
       () => ({
         id: message.id,

@@ -15,11 +15,7 @@ import { App } from "obsidian";
 import { AlertTriangle, Check, CircleSlash, Loader2 } from "lucide-react";
 import React, { memo, useCallback, useMemo } from "react";
 
-/**
- * The "agent is working" indicator for the response area — the same animated
- * sigma (Σ) spinner the rest of the app shows while thinking/reasoning, sized to
- * sit inline with a status label.
- */
+/** The app's animated sigma spinner, sized to sit inline with a status label. */
 const ThinkingSpinner: React.FC = () => (
   <span className="tw-flex tw-size-4 tw-shrink-0 tw-items-center tw-justify-center">
     <CopilotSpinner />
@@ -41,10 +37,7 @@ interface FanoutTabProps {
   onSelect: (value: FanoutOptionValue) => void;
 }
 
-/**
- * One segmented-row tab: the agent brand icon (summary tab has none) plus a
- * live status dot, and the label. Selecting it switches the body below.
- */
+/** One segmented-row tab: brand icon, label, and live status dot. */
 const FanoutTab: React.FC<FanoutTabProps> = ({ option, selected, onSelect }) => {
   const { value, Icon, label, state } = option;
   const handleClick = useCallback(() => onSelect(value), [onSelect, value]);
@@ -73,11 +66,7 @@ interface FanoutStatusDotProps {
   state: FanoutAgentState | undefined;
 }
 
-/**
- * The trailing live status indicator on an agent tab: a spinner while
- * streaming, a check when the answer is done, an alert on error, a muted slash
- * when cancelled. The summary tab carries no agent state and renders nothing.
- */
+/** The trailing status indicator on an agent tab; the summary tab renders nothing. */
 const FanoutStatusDot: React.FC<FanoutStatusDotProps> = ({ state }) => {
   if (state === "streaming") {
     return <Loader2 className="tw-size-3 tw-shrink-0 tw-animate-spin tw-text-loading" />;
@@ -95,17 +84,11 @@ const FanoutStatusDot: React.FC<FanoutStatusDotProps> = ({ state }) => {
 };
 
 /**
- * Render a multi-agent fan-out turn as one assistant turn: a segmented tab row
- * (D8) — Summary first and selected by default — that switches between the main
- * agent's narrative summary and each participating agent's full answer. Each
- * agent tab reflects its live state (D7) via a status dot (spinner / check /
- * alert / slash) and updates live as `turn` changes. The selected slot's
- * markdown renders below; Copy/Insert for it live on the card's action bar.
- *
- * Drives off `message.fanout`, so it renders for BOTH the live in-flight turn
- * and a reloaded transcript whose composite body was parsed back into a turn.
- * Controlled: the owning card holds the selected tab so its single action-bar
- * Copy/Insert can act on exactly the tab in view.
+ * Render a fan-out turn as one assistant turn: a segmented tab row (Summary
+ * first, default) switching between the summary and each agent's answer, each
+ * tab reflecting its live state. Renders for BOTH a live turn and a reloaded
+ * composite. Controlled — the owning card holds the selected tab so its action
+ * bar can Copy/Insert the tab in view.
  */
 export const FanoutTurnView: React.FC<FanoutTurnViewProps> = memo(
   ({ turn, app, value, onSelect }) => {
@@ -137,12 +120,9 @@ interface FanoutTurnBodyProps {
 }
 
 /**
- * The body for the current selection: the summary (or its pending/streaming
- * placeholder) when the summary is selected, otherwise the chosen agent's
- * answer — streaming tokens with a spinner, the finished answer, an error chip
- * with a short reason (incl. per-agent timeouts), or a muted cancelled state
- * when the user aborted the turn. Any partial text that streamed before a
- * failure/cancel is still shown above the chip so nothing is lost.
+ * The body for the current selection: the summary (or its placeholder), else the
+ * chosen agent's answer — streaming, finished, an error chip, or a cancelled
+ * state. Partial text that streamed before a failure/cancel is shown above the chip.
  */
 const FanoutTurnBody: React.FC<FanoutTurnBodyProps> = ({ turn, value, app }) => {
   if (value === FANOUT_SUMMARY_OPTION) {
@@ -215,11 +195,7 @@ interface FanoutSlotBodyProps {
   app: App;
 }
 
-/**
- * The selected slot's rendered markdown. Copy/Insert for the slot in view lives
- * on the card's single action bar (it acts on whichever tab is selected), so the
- * body carries no copy control of its own.
- */
+/** The selected slot's rendered markdown; Copy/Insert lives on the card's action bar. */
 const FanoutSlotBody: React.FC<FanoutSlotBodyProps> = ({ text, app }) => (
   <AgentMarkdownText text={text} app={app} />
 );
@@ -232,9 +208,8 @@ interface FanoutTerminalStateProps {
 }
 
 /**
- * A terminal (error/cancelled) agent body: render any partial answer that
- * streamed before the agent stopped, then the status chip below it, so a
- * mid-stream failure or cancel never discards the tokens already received.
+ * A terminal (error/cancelled) agent body: any partial answer that streamed
+ * before stopping, then the status chip, so a mid-stream stop discards no tokens.
  */
 const FanoutTerminalState: React.FC<FanoutTerminalStateProps> = ({
   partialText,

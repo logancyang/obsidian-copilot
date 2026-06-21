@@ -363,9 +363,8 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
     });
   };
 
-  // Agent pills are id-only; the sync plugin reports the full current set on
-  // every change, so forward it straight to the Agent Mode wrapper, which
-  // resolves the structured selection at send time.
+  // Forward the full current set of mentioned backend ids to the Agent Mode
+  // wrapper, which resolves the structured selection at send time.
   const handleAgentsChange = useCallback(
     (backendIds: string[]) => {
       onMentionedAgentsChange?.(backendIds);

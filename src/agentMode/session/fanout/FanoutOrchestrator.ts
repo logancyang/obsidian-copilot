@@ -23,9 +23,9 @@ import {
 } from "./fanoutTypes";
 
 /**
- * Backend capabilities the orchestrator needs from the session manager. Kept as
- * a narrow seam so the orchestrator never imports `AgentSessionManager`
- * (avoiding a dependency cycle) and stays unit-testable with a stub host.
+ * Backend capabilities the orchestrator needs from the session manager. A narrow
+ * seam so the orchestrator never imports `AgentSessionManager` (dependency cycle)
+ * and stays unit-testable with a stub host.
  */
 export interface FanoutHost {
   /** Obtain a running backend process + descriptor for `backendId`. */
@@ -34,36 +34,29 @@ export interface FanoutHost {
   ): Promise<{ proc: BackendProcess; descriptor: BackendDescriptor }>;
   /** The user's previously-configured default model selection for `backendId`. */
   getDefaultSelection(backendId: BackendId): ModelSelection | null;
-  /**
-   * Human display label for `backendId` (e.g. "Claude"), used to label each
-   * agent's answer in the summary prompt. Falls back to the id when unknown so a
-   * newly registered backend still renders without per-agent branching.
-   */
+  /** Display label for `backendId`, used to label each agent's answer; falls back to the id. */
   getDisplayName(backendId: BackendId): string;
   /** Absolute vault working directory shared by all sub-sessions. */
   getCwd(): string | null;
   /** Neutral MCP server specs to open each sub-session with. */
   getMcpServers(proc: BackendProcess): Parameters<BackendProcess["newSession"]>[0]["mcpServers"];
   /**
-   * Register a backend session id as a read-only fan-out sub-session, so the
-   * shared permission prompter denies write/exec tools and allows reads for it.
-   * Returns an unregister fn called when the sub-session closes.
+   * Register a session id as a read-only fan-out sub-session so the shared
+   * permission prompter denies write/exec tools for it. Returns an unregister fn.
    */
   registerReadOnlySession(sessionId: SessionId): () => void;
   /**
-   * Mark a fan-out sub-session so it never surfaces in Recent Chats. opencode/
-   * codex persist `newSession` to disk and the native-discovery sweep would
-   * otherwise list these ephemeral sessions as phantom chats; tombstoning the
-   * id keeps the sweep from bringing them back, even across restarts.
+   * Tombstone a fan-out sub-session so it never surfaces in Recent Chats.
+   * opencode/codex persist `newSession` to disk and the native-discovery sweep
+   * would otherwise list these ephemeral sessions as phantom chats.
    */
   excludeSubSessionFromHistory(backendId: BackendId, sessionId: SessionId): void;
 }
 
 /**
- * The assistant prose chunk from a session event, or `null` for anything that
- * is not part of the answer surface. Only `agent_message_chunk` text feeds an
- * answer / the summary — thoughts and tool calls are excluded (Phase 4 may add
- * richer rendering).
+ * The assistant prose chunk from a session event, or `null` otherwise. Only
+ * `agent_message_chunk` text feeds an answer/summary; thoughts and tool calls
+ * are excluded.
  */
 function textChunkOf(event: SessionEvent): string | null {
   const update = event.update;
@@ -72,41 +65,35 @@ function textChunkOf(event: SessionEvent): string | null {
   return update.content.text;
 }
 
-/** Inputs for one fan-out turn — identical prompt + context for every agent (D10). */
+/** Inputs for one fan-out turn — identical prompt + context for every agent. */
 export interface FanoutRunInput {
   /**
    * The `@`-mentioned installed answerers (deduped). Each gets an answer slot.
-   * Decoupled from {@link mainAgent}: the summarizer is NOT assumed to be one of
-   * these (it answers only if it was itself `@`-mentioned).
+   * Decoupled from {@link mainAgent}: the summarizer answers only if itself mentioned.
    */
   agents: ReadonlyArray<BackendId>;
   /**
    * The session's main agent — ALWAYS the summarizer, tracked separately from
-   * {@link agents}. It generates the narrative summary after every non-failed
-   * answer settles (D6), in its own read-only sub-session, whether or not it is
-   * one of the answerers.
+   * {@link agents}, whether or not it is one of the answerers.
    */
   mainAgent: BackendId;
   /** The identical prompt blocks (text envelope + context + images) every agent receives. */
   prompt: PromptContent[];
   /**
-   * Plain text of the user's original question, fed to the summary prompt as
-   * the "original question" the agents answered. Distinct from {@link prompt},
-   * which also carries the read-only preamble + context envelope.
+   * Plain text of the user's original question, fed to the summary prompt.
+   * Distinct from {@link prompt}, which also carries preamble + context envelope.
    */
   originalPromptText: string;
-  /** Aborts every in-flight sub-session prompt when fired (cancellation). */
+  /** Aborts every in-flight sub-session prompt when fired. */
   signal: AbortSignal;
-  /** Called whenever any slot mutates, so the UI can render live partials (D7). */
+  /** Called whenever any slot mutates, so the UI can render live partials. */
   onChange: (turn: FanoutTurn) => void;
 }
 
 /**
  * Build the initial live turn: one `running` slot per ANSWERER (insertion order
- * preserved) plus a pending summary. The summarizer (the session main agent)
- * gets no answer slot unless it is itself one of the answerers. Exported for
- * tests and for the caller that needs to seed the UI before the first stream
- * chunk lands.
+ * preserved) plus a pending summary. Exported so the caller can seed the UI
+ * before the first stream chunk lands.
  */
 export function createFanoutTurn(agents: ReadonlyArray<BackendId>): FanoutTurn {
   const answers: Record<BackendId, AgentAnswer> = {};
@@ -117,18 +104,15 @@ export function createFanoutTurn(agents: ReadonlyArray<BackendId>): FanoutTurn {
 }
 
 /**
- * Orchestrates a multi-agent read-only QA turn. Every ANSWERER runs in a
- * freshly created, ephemeral, read-only sub-session on its own backend — never
- * registered as a visible AgentSession / tab — and receives the identical
- * prompt + context. Answers stream into per-agent slots of a single in-memory
- * {@link FanoutTurn}; once every answer settles the session's main agent (the
- * summarizer, distinct from the answerers unless it was also `@`-mentioned)
- * writes the narrative summary over the survivors into the summary slot (D6/D7).
+ * Orchestrates a multi-agent read-only QA turn. Every ANSWERER runs in an
+ * ephemeral, read-only sub-session on its own backend (never a visible
+ * AgentSession/tab) with the identical prompt; answers stream into per-agent
+ * slots of one {@link FanoutTurn}. Once every answer settles the main agent
+ * (summarizer) writes the narrative summary over the survivors.
  *
- * One agent's error never throws out of the whole run (`allSettled`-style
- * collection): a failed agent sets its slot to `error` and the others continue.
- * Sub-session prompts are cancellable via the input `signal`, and every
- * sub-session is closed at turn end.
+ * One agent's error never throws out of the run — its slot goes `error`, others
+ * continue. Prompts are cancellable via `signal`; every sub-session closes at
+ * turn end.
  */
 export class FanoutOrchestrator {
   constructor(private readonly host: FanoutHost) {}
@@ -139,9 +123,8 @@ export class FanoutOrchestrator {
 
     await Promise.all(input.agents.map((backendId) => this.runAgent(backendId, turn, input)));
 
-    // Every answer has settled. The main agent now writes the narrative summary
-    // over the survivors (D6/D7). Cancellation skips it — there is nothing to
-    // reconcile and the turn is ending.
+    // Every answer settled; the main agent summarizes the survivors. Cancellation
+    // skips it — nothing to reconcile and the turn is ending.
     if (!input.signal.aborted) {
       await this.runSummary(turn, input);
     }
@@ -150,16 +133,13 @@ export class FanoutOrchestrator {
   }
 
   /**
-   * Run one agent in an ephemeral read-only sub-session. Resolves (never
-   * rejects) once the slot reaches a terminal state, so one agent's failure or
-   * timeout never throws out of the whole run and the siblings keep streaming:
+   * Run one agent in an ephemeral read-only sub-session. Resolves (never rejects)
+   * once the slot is terminal, so one agent's failure never throws out of the run:
    *
-   * - normal completion → `done` (carries whatever, possibly empty, text landed)
-   * - user cancel (the run signal aborted) → `cancelled` (terminal, not a fault)
+   * - normal completion → `done`
+   * - user cancel (run signal aborted) → `cancelled` (not a fault)
    * - per-agent timeout → `error` with the timeout reason
-   * - any thrown/rejected backend call → `error` with the failure text
-   *
-   * Closes the sub-session in `finally` (inside {@link runReadOnlySubSession}).
+   * - any thrown backend call → `error` with the failure text
    */
   private async runAgent(
     backendId: BackendId,
@@ -167,9 +147,9 @@ export class FanoutOrchestrator {
     input: FanoutRunInput
   ): Promise<void> {
     const slot = turn.answers[backendId];
-    // A slot only ever transitions while still `running`; once terminal it is
-    // frozen. Gating every mutation through one checkpoint keeps streamed text,
-    // the terminal status flip, and the error path from racing each other.
+    // A slot transitions only while `running`; once terminal it is frozen. Gating
+    // every mutation here keeps streamed text, the status flip, and the error path
+    // from racing each other.
     const mutateIfRunning = (apply: () => void) => {
       if (slot.status !== "running") return;
       apply();
@@ -182,9 +162,7 @@ export class FanoutOrchestrator {
         signal: input.signal,
         onText: (text) => mutateIfRunning(() => (slot.text += text)),
       });
-      // An abort mid-prompt (or before dispatch) is a clean cancel, NOT a fault:
-      // the slot reaches a `cancelled` terminal state rather than being left
-      // `running` or mislabelled `done`. Otherwise the turn completed normally.
+      // An abort is a clean cancel, not a fault: the slot goes `cancelled`, not `done`.
       mutateIfRunning(() => (slot.status = outcome === "aborted" ? "cancelled" : "done"));
     } catch (err) {
       mutateIfRunning(() => {
@@ -196,15 +174,11 @@ export class FanoutOrchestrator {
   }
 
   /**
-   * The main agent's narrative summary (Phase 3 / D6). Runs after every answer
-   * settles, over the agents that SUCCEEDED ({@link selectSummaryInputs}); a
-   * failed agent is named, not fabricated over (D7). With ZERO successes there
-   * is nothing to reconcile, so the summary lands `done` with a brief
-   * all-failed note rather than an invented summary or a hard error — the turn
-   * still completes and persists that note (the chosen zero-success terminal
-   * state). The summary itself runs read-only in its own ephemeral sub-session
-   * of the main backend, streaming token-by-token into `summary.text` while the
-   * status moves pending → streaming → done.
+   * The main agent's narrative summary, over the agents that SUCCEEDED
+   * ({@link selectSummaryInputs}). With ZERO successes it lands `done` with a
+   * brief all-failed note rather than an invented summary or a hard error. Runs
+   * read-only in its own ephemeral sub-session of the main backend, streaming
+   * into `summary.text` while status moves pending → streaming → done.
    */
   private async runSummary(turn: FanoutTurn, input: FanoutRunInput): Promise<void> {
     const inputs = selectSummaryInputs(turn);
@@ -214,7 +188,7 @@ export class FanoutOrchestrator {
     if (!summaryPrompt) {
       turn.summary.status = "done";
       turn.summary.text = FANOUT_ALL_FAILED_SUMMARY;
-      turn.summary.complete = true; // the final intended text for the zero-success case
+      turn.summary.complete = true;
       input.onChange(turn);
       return;
     }
@@ -231,8 +205,8 @@ export class FanoutOrchestrator {
           input.onChange(turn);
         },
       });
-      // Only a clean finish is a trustworthy summary; an "aborted" outcome (cancel)
-      // leaves partial text that the continuity replay must not prefer.
+      // Only a clean finish is trustworthy; an aborted summary leaves partial text
+      // the continuity replay must not prefer.
       if (outcome === "done") turn.summary.complete = true;
     } catch (err) {
       // Errored/timed out mid-stream: partial text, NOT complete.
@@ -244,34 +218,22 @@ export class FanoutOrchestrator {
   }
 
   /**
-   * Open an ephemeral, read-only sub-session on `backendId`, apply the
-   * read-only sandbox mode + the user's default model, stream the prompt's
-   * assistant text through `onText`, and tear the sub-session down when the
-   * attempt settles. Shared by every per-agent answer AND the main-agent
-   * summary, so both run through the exact same read-only registration + sandbox
-   * path. The sub-session is registered via
-   * {@link FanoutHost.registerReadOnlySession}, so the permission prompter
-   * hard-denies writes for it (D5).
+   * Open an ephemeral, read-only sub-session on `backendId`, apply the read-only
+   * sandbox mode + default model, stream assistant text through `onText`, and
+   * tear it down when the attempt settles. Shared by per-agent answers AND the
+   * summary. Registered via {@link FanoutHost.registerReadOnlySession} so the
+   * permission prompter hard-denies writes.
    *
-   * Returns `"aborted"` when the run signal fired before/during the attempt
-   * (user cancel → a terminal `cancelled` slot, not a fault), else `"done"`.
-   * THROWS {@link FANOUT_AGENT_TIMEOUT_ERROR} if the WHOLE attempt — setup
-   * (`ensureBackendForFanout` / `newSession` / mode+model round-trips) AND the
-   * `prompt()` — outlives {@link FANOUT_AGENT_TIMEOUT_MS}. Bounding setup too
-   * (not just the prompt) means a cold or wedged backend whose `newSession`
-   * never resolves can no longer hang the turn: the abort signal interrupts the
-   * pending setup await promptly, and the deadline fails the slot on its own —
-   * the {@link runAttemptWithTimeout} race resolves the slot WITHOUT waiting on
-   * the stuck attempt.
+   * Returns `"aborted"` when the run signal fired (user cancel → `cancelled` slot),
+   * else `"done"`. THROWS {@link FANOUT_AGENT_TIMEOUT_ERROR} if the WHOLE attempt
+   * — setup AND `prompt()` — outlives {@link FANOUT_AGENT_TIMEOUT_MS}; bounding
+   * setup too means a cold/wedged `newSession` can't hang the turn.
    *
-   * The sub-session is closed (best-effort `cancel`) and its handlers
-   * unregistered in the ATTEMPT's own `finally`, which runs exactly when the
-   * attempt truly settles. That is what guarantees no orphan even when the race
-   * already bailed during setup: a `newSession` that resolves LATE still records
-   * its `sessionId`, and the attempt's `finally` then tears that session down.
-   * On the normal path the handler is held open through
-   * {@link FANOUT_TRAILING_CHUNK_GRACE_MS} inside the attempt (before teardown)
-   * so trailing chunks still route into the slot; cancel/timeout suppress that.
+   * Teardown (best-effort `cancel` + handler unregister) happens in the attempt's
+   * own `finally`, so even a late-resolving `newSession` is torn down after the
+   * race bailed. On the normal path the handler is held open through
+   * {@link FANOUT_TRAILING_CHUNK_GRACE_MS} so trailing chunks still route in;
+   * cancel/timeout suppress that.
    */
   private async runReadOnlySubSession(params: {
     backendId: BackendId;
@@ -281,13 +243,11 @@ export class FanoutOrchestrator {
   }): Promise<"done" | "aborted"> {
     const { backendId, prompt, signal, onText } = params;
 
-    // The attempt owns the full lifecycle — setup, prompt, trailing-chunk grace,
-    // and teardown — so its `finally` always closes any session it opened, even
-    // one from a `newSession` that resolves AFTER the race below already bailed
-    // on abort/timeout. It reports its in-flight `prompt()` (once dispatched) via
-    // `onPrompt`, with a `cancelPrompt` that interrupts that prompt's backend
-    // query, so the race's cancel paths can request the cancel and await the
-    // query's real settlement before the backend is reused.
+    // The attempt owns the full lifecycle (setup, prompt, trailing-chunk grace,
+    // teardown), so its `finally` always closes any session it opened — even a
+    // late-resolving `newSession`. It reports its in-flight `prompt()` via
+    // `onPrompt` with a `cancelPrompt` so the race's cancel paths can interrupt
+    // and await the query's real settlement before the backend is reused.
     const attempt = async (
       onPrompt: (p: Promise<unknown>, cancelPrompt: () => void) => void,
       raceSettled: () => boolean
@@ -307,8 +267,8 @@ export class FanoutOrchestrator {
         });
         sessionId = opened.sessionId;
         unregisterReadOnly = this.host.registerReadOnlySession(sessionId);
-        // opencode/codex persist this session to disk; tombstone it now so the
-        // native-discovery sweep never lists it as a phantom Recent Chat.
+        // Tombstone the disk-persisted session so the discovery sweep never lists
+        // it as a phantom Recent Chat.
         this.host.excludeSubSessionFromHistory(backendId, sessionId);
 
         unregisterHandler = proc.registerSessionHandler(sessionId, (event) => {
@@ -316,24 +276,19 @@ export class FanoutOrchestrator {
           if (text !== null) onText(text);
         });
 
-        // Read-only sandbox mode and default-model selection mutate disjoint
-        // session fields, so run both round-trips concurrently to halve
-        // per-agent setup latency on the path before `prompt()`. The model
-        // channel comes from the freshly opened sub-session's own
-        // `BackendState.model.apply` spec, so backends whose model switch is a
-        // config option (opencode ≥ 1.15.13) route through the same RPC the
-        // visible session would.
+        // Sandbox mode and model selection mutate disjoint fields, so run both
+        // round-trips concurrently. The model channel comes from the sub-session's
+        // own `BackendState.model.apply` spec, so config-option backends (opencode
+        // ≥ 1.15.13) route through the same RPC the visible session would.
         const modelApply = opened.state.model?.apply ?? null;
         await Promise.all([
           this.applyReadOnlyMode(proc, descriptor, sessionId),
           this.applyDefaultModel(proc, descriptor, backendId, sessionId, modelApply),
         ]);
 
-        // If the abort/timeout race already won during setup, do NOT dispatch
-        // the prompt: the slot is already terminal, and starting a backend query
-        // now would run a read-only prompt behind it and — for a timed-out main
-        // agent — could overlap the later summary on this same backend. The
-        // `finally` still tears down the (possibly late-opened) sub-session.
+        // If the race already won during setup, do NOT dispatch: the slot is
+        // terminal, and a query now could overlap the later summary on this same
+        // backend. The `finally` still tears the sub-session down.
         if (raceSettled()) return "done";
 
         const promptProc = proc;
@@ -343,23 +298,17 @@ export class FanoutOrchestrator {
           promptProc.cancel({ sessionId: promptSessionId }).catch(() => undefined);
         });
         await promptPromise;
-        // Hold the still-registered handler open a short bounded window so
-        // trailing `agent_message_chunk` events some backends flush AFTER
-        // `session/prompt` resolves still route into the slot instead of being
-        // dropped. Skipped once the race already bailed (abort OR timeout): a
-        // prompt that resolved only because the backend honored the cancel must
-        // suppress late output and tear down at once, not linger for the grace.
+        // Hold the handler open a bounded window so trailing chunks some backends
+        // flush after `session/prompt` resolves still route in. Skipped once the
+        // race bailed — a cancel-honored prompt must suppress late output.
         if (!raceSettled()) await this.awaitTrailingChunks();
         return "done";
       } finally {
         unregisterHandler?.();
         unregisterReadOnly?.();
         if (proc && sessionId) {
-          // Best-effort cancel ends the in-flight query on the shared backend
-          // process. opencode/codex still persist the session to disk, so the
-          // turn already tombstoned it (above) to keep it out of Recent Chats.
-          // Runs on every exit (done / aborted / timeout / throw) — including a
-          // session a late `newSession` opened after the race bailed.
+          // Best-effort cancel ends the in-flight query. Runs on every exit (done
+          // / aborted / timeout / throw), including a late-opened session.
           proc.cancel({ sessionId }).catch(() => undefined);
         }
       }
@@ -371,12 +320,7 @@ export class FanoutOrchestrator {
     );
   }
 
-  /**
-   * Hold {@link FANOUT_TRAILING_CHUNK_GRACE_MS} so an ephemeral sub-session's
-   * still-registered handler captures the final `agent_message_chunk` events a
-   * backend flushes just after `session/prompt` resolves. The one-shot timer
-   * resolves and is gone, so it cannot outlive the wait or leak.
-   */
+  /** Hold {@link FANOUT_TRAILING_CHUNK_GRACE_MS} so the handler captures trailing chunks. */
   private awaitTrailingChunks(): Promise<void> {
     return new Promise<void>((resolve) => {
       window.setTimeout(resolve, FANOUT_TRAILING_CHUNK_GRACE_MS);
@@ -384,35 +328,24 @@ export class FanoutOrchestrator {
   }
 
   /**
-   * Run one per-agent `attempt` (setup + prompt) racing both the run signal
-   * (user cancel) and a single per-agent deadline that covers the WHOLE attempt.
-   * On abort: resolve `"aborted"` (the slot goes terminal-cancelled). On
-   * timeout: throw {@link FANOUT_AGENT_TIMEOUT_ERROR} (the slot goes
-   * terminal-error) so a hung agent never blocks the turn or the summary. A
-   * setup await that is still pending (a cold/wedged backend whose `newSession`
-   * never resolves) is interrupted PROMPTLY by either path — the helper settles
-   * without waiting on it, so the turn can never spin behind it.
+   * Run one `attempt` (setup + prompt) racing the run signal (user cancel) and a
+   * per-agent deadline covering the WHOLE attempt. Abort → resolve `"aborted"`;
+   * timeout → throw {@link FANOUT_AGENT_TIMEOUT_ERROR}, so a hung agent never
+   * blocks the turn. A still-pending setup await is interrupted promptly by either
+   * path — the helper settles without waiting on it.
    *
-   * `attempt` reports its in-flight `prompt()` (once dispatched) via `onPrompt`.
-   * Cancel only INTERRUPTS — the underlying `prompt()` promise keeps unwinding
-   * the backend query after `cancel` returns. The Claude SDK backend's
-   * permission-bridge/session context is process-global for the active query,
-   * so reusing that backend (the summary reuses the main agent's) while a
-   * cancelled/timed-out prompt is still unwinding can misroute permission
-   * decisions or corrupt the summary. So on the abort AND timeout paths, IF a
-   * prompt is already in flight, we cancel it and AWAIT its real settlement
-   * (swallowed) before this helper settles — "settled" then means the backend
-   * query truly stopped, not just that cancel was requested. That wait is
-   * bounded by {@link FANOUT_CANCEL_GRACE_MS} so a backend that ignores cancel
-   * cannot hang the turn forever (we log and proceed). When abort/timeout fires
-   * during SETUP (no prompt yet) there is nothing to settle, so the helper
-   * resolves immediately; the still-running attempt tears its own session down
-   * in its `finally` once it unwinds. The happy path (prompt resolves on its
-   * own) never enters this grace.
+   * Cancel only INTERRUPTS; the `prompt()` promise keeps unwinding the backend
+   * query after `cancel` returns. The Claude SDK backend's permission-bridge/
+   * session context is process-global for the active query, so reusing that
+   * backend (the summary reuses the main agent's) mid-unwind can misroute
+   * permission decisions or corrupt the summary. So on abort/timeout, if a prompt
+   * is in flight, we cancel it and AWAIT its settlement (bounded by
+   * {@link FANOUT_CANCEL_GRACE_MS}; log and proceed if it ignores cancel) before
+   * settling. During setup (no prompt) there's nothing to await. The happy path
+   * never enters this grace.
    *
-   * Both the deadline timer and the abort listener are torn down on whichever
-   * path settles first, so a settled attempt leaks neither a live deadline timer
-   * (the abort path) nor an abort handler (the timeout/resolve path).
+   * The deadline timer and abort listener are both torn down on whichever path
+   * settles first, so neither leaks.
    */
   private runAttemptWithTimeout(
     attempt: (
@@ -423,30 +356,22 @@ export class FanoutOrchestrator {
   ): Promise<"done" | "aborted"> {
     return new Promise<"done" | "aborted">((resolve, reject) => {
       let settled = false;
-      // The in-flight prompt's settlement, mapped to `undefined` on BOTH
-      // outcomes — a cancelled/timed-out backend prompt usually REJECTS, and we
-      // only care that it stopped. Stays `null` while still in setup (no prompt
-      // dispatched yet), so the cancel paths know there is nothing to await.
-      // Mapping both outcomes here also keeps the swallowed rejection from
-      // surfacing as unhandled.
+      // The in-flight prompt's settlement, mapped to `undefined` on BOTH outcomes
+      // (a cancelled prompt usually rejects; we only care that it stopped, and the
+      // mapping keeps the swallowed rejection from surfacing as unhandled). Stays
+      // `null` during setup, so the cancel paths know there's nothing to await.
       let promptSettled: Promise<void> | null = null;
       // Interrupts the in-flight prompt's backend query (set once dispatched).
       let cancelInFlightPrompt: (() => void) | null = null;
 
-      // Tear down BOTH the deadline timer and the abort listener on whichever
-      // path settles first.
       const cleanup = () => {
         window.clearTimeout(timeout);
         signal.removeEventListener("abort", onAbort);
       };
 
-      // Request the in-flight prompt's cancel, then wait (bounded by the grace)
-      // for it to actually settle before finishing via `done()`. With no prompt
-      // in flight (still setting up) there is nothing to interrupt or unwind, so
-      // finish immediately — the still-running attempt tears down any session a
-      // late `newSession` opens in its own `finally`. `done` wraps the outer
-      // promise's resolve/reject, so calling it twice (grace fired, then the
-      // prompt settled, or vice-versa) is a no-op.
+      // Cancel the in-flight prompt, then wait (bounded by the grace) for it to
+      // settle before `done()`. With no prompt in flight, finish immediately. `done`
+      // wraps the outer resolve/reject, so a double call (grace vs settle) is a no-op.
       const settleAfterCancel = (done: () => void) => {
         if (promptSettled === null) {
           done();
@@ -459,16 +384,15 @@ export class FanoutOrchestrator {
           );
           done();
         }, FANOUT_CANCEL_GRACE_MS);
-        // `promptSettled` never rejects (both outcomes mapped to undefined), so
-        // this branch cannot leak an unhandled rejection.
+        // `promptSettled` never rejects (both outcomes mapped to undefined).
         void promptSettled.then(() => {
           window.clearTimeout(grace);
           done();
         });
       };
 
-      // Both cancel paths share the same single-shot teardown; they differ only
-      // in how the helper finally settles (aborted vs. timeout error).
+      // Both cancel paths share one single-shot teardown, differing only in how
+      // the helper settles (aborted vs. timeout error).
       const beginCancel = (done: () => void) => {
         if (settled) return;
         settled = true;
@@ -482,20 +406,17 @@ export class FanoutOrchestrator {
       );
       signal.addEventListener("abort", onAbort, { once: true });
 
-      // If Stop was pressed during the async work BEFORE this attempt (license
-      // re-verify, web-tab serialization, …), the signal is ALREADY aborted and
-      // the listener just armed will never fire. Settle now via the same cancel
-      // path and return WITHOUT starting `attempt`, so no sub-session is opened
-      // and no read-only prompt is dispatched after Stop.
+      // If Stop was pressed before this attempt, the signal is already aborted and
+      // the just-armed listener will never fire. Settle now WITHOUT starting
+      // `attempt`, so no sub-session is opened after Stop.
       if (signal.aborted) {
         beginCancel(() => resolve("aborted"));
         return;
       }
 
-      // `onPrompt` records the dispatched prompt so a later abort/timeout can
-      // cancel it and await its real unwind. If abort/timeout ALREADY fired
-      // (during setup), cancel it right away — the slot is already terminal, so
-      // we must not leave a live backend query running behind it.
+      // Records the dispatched prompt so a later abort/timeout can cancel and await
+      // its unwind. If abort/timeout ALREADY fired (during setup), cancel at once
+      // so no live query runs behind an already-terminal slot.
       const onPrompt = (p: Promise<unknown>, cancelPrompt: () => void) => {
         promptSettled = p.then(
           () => undefined,
@@ -508,22 +429,19 @@ export class FanoutOrchestrator {
         }
       };
 
-      // `raceSettled()` is true once abort or timeout has won the race, so the
-      // attempt can skip its trailing-chunk hold and tear down at once on either
-      // bail (not just on the run-signal abort).
+      // `raceSettled()` is true once abort/timeout won, so the attempt skips its
+      // trailing-chunk hold and tears down at once on either bail.
       attempt(onPrompt, () => settled).then(
         () => {
           if (settled) return;
           settled = true;
           cleanup();
-          // An attempt that resolved only because the backend honored the
-          // cancel is still a user abort — read it off the signal so the slot
-          // lands `cancelled`, not `done`. No grace here: it settled on its own.
+          // A cancel-honored resolve is still a user abort — read it off the signal
+          // so the slot lands `cancelled`, not `done`.
           resolve(signal.aborted ? "aborted" : "done");
         },
         (err) => {
-          // Lost the race (already aborted/timed out): the terminal state is
-          // already chosen — swallow the trailing rejection.
+          // Lost the race: the terminal state is chosen — swallow the rejection.
           if (settled) return;
           settled = true;
           cleanup();
@@ -534,18 +452,14 @@ export class FanoutOrchestrator {
   }
 
   /**
-   * Apply the backend's GENUINE read-only sandbox mode when it advertises one
-   * via `ModeMapping.readOnlyModeId` (codex → `read-only`). Belt-and-suspenders
-   * on top of the prompt preamble + permission denial.
+   * Apply the backend's genuine read-only sandbox mode when it advertises one via
+   * `ModeMapping.readOnlyModeId` (codex → `read-only`). Belt-and-suspenders on top
+   * of the prompt preamble + permission denial.
    *
-   * Deliberately keyed off `readOnlyModeId`, NOT `canonical.plan`: a backend's
-   * plan mode may be a real planning mode that drafts and writes plan artifacts
-   * (Claude's `plan` writes plan files), which is the opposite of read-only.
-   * Backends without a true read-only sandbox (Claude, opencode) leave
-   * `readOnlyModeId` unset and rely on the prompt + permission layers instead —
-   * the permission prompter hard-denies their writes regardless. Best-effort
-   * and intentionally narrow: `setMode` ids are static, so a stateless
-   * `getModeMapping` probe resolves them.
+   * Keyed off `readOnlyModeId`, NOT `canonical.plan`: a backend's plan mode may
+   * write plan artifacts (Claude's `plan` writes files), the opposite of
+   * read-only. Backends without a true read-only sandbox leave it unset and rely
+   * on the prompt + permission layers (which hard-deny writes regardless).
    */
   private async applyReadOnlyMode(
     proc: BackendProcess,
@@ -564,32 +478,23 @@ export class FanoutOrchestrator {
   }
 
   /**
-   * Switch the sub-session onto the user's previously-configured default model
-   * AND effort for this backend (plan Details). Best-effort — a missing default
-   * or an unsupported switch leaves the backend's own default in place.
+   * Switch the sub-session onto the user's configured default model AND effort.
+   * Best-effort — a missing default or unsupported switch leaves the backend's own.
    *
-   * The orchestrator only holds a raw `(proc, sessionId)` pair (not a full
-   * `AgentSession`), so it mirrors `AgentSession.applyModelWireId` +
-   * `descriptor.applySelection` generically off the sub-session's own
-   * `BackendState.model.apply` spec (`modelApply`) rather than per agent name.
-   * Both the MODEL and the EFFORT channel are driven by that spec:
+   * The orchestrator holds only a raw `(proc, sessionId)` pair, so it mirrors
+   * `AgentSession.applyModelWireId` + `descriptor.applySelection` generically off
+   * the sub-session's own `BackendState.model.apply` spec (`modelApply`):
    *
-   *   - `setModel` spec (claude, codex, opencode ≤ 1.15.12): the model goes
-   *     through `setSessionModel` (the ACP `session/set_model` channel). Effort
-   *     either rides the wire id (codex / suffix-style, `effortConfigFor`
-   *     omitted) or — for descriptor-style backends (Claude SDK) where
-   *     `wire.encode` drops effort — applies via a second `setSessionConfigOption`
-   *     using `wire.effortConfigFor(baseModelId)`. Without that second call the
-   *     sub-session silently runs at the backend default effort.
+   *   - `setModel` spec (claude, codex, opencode ≤ 1.15.12): model via
+   *     `setSessionModel`. Effort rides the wire id (codex) or applies via a
+   *     second `setSessionConfigOption` using `wire.effortConfigFor` (Claude SDK,
+   *     where `wire.encode` drops effort) — without it, the default effort runs.
    *
-   *   - `setConfigOption` spec (opencode ≥ 1.15.13, where `session/set_model` is
-   *     gone and the catalog is a `category:"model"` config option): the MODEL
-   *     itself is set with `setSessionConfigOption({ configId, value: wire })` —
-   *     `setSessionModel` would hit the now-unsupported RPC and leave the backend
-   *     default. Effort is a sibling `category:"thought_level"` option opencode
-   *     only surfaces for the ACTIVE model, so (mirroring opencode's
-   *     `applySelection`) we activate the bare model first, then read the
-   *     refreshed state's `effortConfigId` and apply effort against it.
+   *   - `setConfigOption` spec (opencode ≥ 1.15.13, `session/set_model` gone): the
+   *     MODEL is set via `setSessionConfigOption` (`setSessionModel` would hit the
+   *     unsupported RPC). Effort is a sibling option only surfaced for the ACTIVE
+   *     model, so we activate the bare model first, then apply effort against the
+   *     refreshed `effortConfigId` (mirroring opencode's `applySelection`).
    */
   private async applyDefaultModel(
     proc: BackendProcess,
@@ -622,11 +527,10 @@ export class FanoutOrchestrator {
   }
 
   /**
-   * Apply model + effort for the config-option model channel (opencode ≥
-   * 1.15.13), mirroring opencode's `descriptor.applySelection`. The model is set
-   * with the bare wire id (effort dropped) so the backend can surface the
-   * model-specific effort option; effort is then applied against the
-   * `effortConfigId` reported by the state the model switch returns.
+   * Apply model + effort for the config-option channel (opencode ≥ 1.15.13),
+   * mirroring opencode's `descriptor.applySelection`. The bare model is set first
+   * (effort dropped) so the backend surfaces the model-specific effort option;
+   * effort is then applied against the returned state's `effortConfigId`.
    */
   private async applyConfigOptionModel(
     proc: BackendProcess,

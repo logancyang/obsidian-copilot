@@ -1,8 +1,6 @@
 import type React from "react";
 import type { FormattedDateTime, MessageContext } from "@/types/message";
-// Type-only (and circular) import: `fanoutTypes` imports value/type shapes from
-// this module; `import type` makes the cycle compile-time only, so no runtime
-// load order issue.
+// `import type` keeps the cycle with `fanoutTypes` compile-time only.
 import type { FanoutTurn } from "@/agentMode/session/fanout/fanoutTypes";
 
 export type {
@@ -66,13 +64,9 @@ export interface ModeMapping {
   configId?: string;
   canonical: Partial<Record<CopilotMode, string>>;
   /**
-   * Native mode id of the backend's genuine READ-ONLY sandbox — a mode that
-   * can read/reason but cannot write or exec. Set ONLY when such a sandbox
-   * exists (Codex `"read-only"`); leave unset/null otherwise. Distinct from
-   * `canonical.plan`: a backend's plan mode may be a real planning mode that
-   * drafts and writes plan artifacts (Claude), which is NOT read-only. The
-   * fan-out orchestrator applies this (never `canonical.plan`) to put a QA
-   * sub-session into a true read-only sandbox.
+   * Native mode id of the backend's genuine READ-ONLY sandbox (Codex
+   * `"read-only"`); unset when none exists. Distinct from `canonical.plan`, which
+   * may write plan artifacts (Claude). The fan-out orchestrator applies this.
    */
   readOnlyModeId?: string | null;
 }
@@ -685,12 +679,10 @@ export interface BackendProcess {
     fn: (req: AskUserQuestionPrompt) => Promise<AgentQuestionAnswers>
   ): void;
   /**
-   * Optional: register a predicate the backend consults to decide whether a
-   * given session is an ephemeral read-only fan-out QA sub-session. Backends
-   * with their own permission gate (Claude SDK's `canUseTool`) use it to
-   * hard-deny write/exec tools for such sessions, defending in depth against a
-   * wrong sandbox-mode switch. Backends whose writes are fully governed by the
-   * shared permission prompter (ACP) omit it.
+   * Optional: register a predicate telling the backend whether a session is an
+   * ephemeral read-only fan-out sub-session. Backends with their own permission
+   * gate (Claude SDK's `canUseTool`) use it to hard-deny write/exec for such
+   * sessions; ACP backends governed by the shared prompter omit it.
    */
   setReadOnlySessionPredicate?(fn: (sessionId: SessionId) => boolean): void;
   registerSessionHandler(sessionId: SessionId, handler: SessionUpdateHandler): () => void;
@@ -814,12 +806,10 @@ export interface AgentChatMessage {
    */
   turnDurationMs?: number;
   /**
-   * Per-agent fan-out state when this assistant message is a multi-agent QA
-   * turn, else absent. LIVE in-memory only — it is NOT a separate serialized
-   * field: persistence rides in the message body as a composite (see
-   * `serializeFanoutComposite`) and is reconstructed onto this field on load
-   * (see `parseFanoutComposite`). When present, the UI renders the summary +
-   * per-agent tab row instead of the plain assistant body.
+   * Per-agent fan-out state when this assistant message is a multi-agent QA turn.
+   * LIVE in-memory only — persistence rides in the body as a composite
+   * (`serializeFanoutComposite`) and is reconstructed here on load
+   * (`parseFanoutComposite`). When present, the UI renders the tab row.
    */
   fanout?: FanoutTurn;
 }

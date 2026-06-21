@@ -9,23 +9,16 @@ import type { AgentBrand, BackendId } from "@/agentMode/session/types";
 /** The summary entry's reserved option value — never a valid `BackendId`. */
 export const FANOUT_SUMMARY_OPTION = "__summary__";
 
-/**
- * A selectable value in the fan-out switcher: {@link FANOUT_SUMMARY_OPTION} or
- * an agent's `BackendId`. Both are `string` (so this alias collapses to
- * `string`); the name documents the intent at call sites.
- */
+/** A selectable value: {@link FANOUT_SUMMARY_OPTION} or an agent's `BackendId`. */
 export type FanoutOptionValue = BackendId;
 
 /**
- * Presentational state of one agent's slot, derived from its live status (D7).
- * `running` shows a spinner over the streaming tokens, `done` shows the answer,
- * `error` shows an error chip, `cancelled` shows a muted cancelled chip (user
- * aborted the turn — a clean stop, not a fault). Decoupled from
- * {@link AgentAnswerStatus} so the renderer switches on intent, not raw status.
+ * Presentational state of one agent's slot, derived from its live status.
+ * Decoupled from {@link AgentAnswerStatus} so the renderer switches on intent.
  */
 export type FanoutAgentState = "streaming" | "answer" | "error" | "cancelled";
 
-/** Map an agent answer's live status to its presentational state (D7). */
+/** Map an agent answer's live status to its presentational state. */
 export function agentStateForStatus(status: AgentAnswerStatus): FanoutAgentState {
   switch (status) {
     case "running":
@@ -40,19 +33,16 @@ export function agentStateForStatus(status: AgentAnswerStatus): FanoutAgentState
 }
 
 /**
- * Presentational state of the summary slot when it has no text yet. Distinct
- * from a perpetual spinner: a cancelled turn skips summary generation (status
- * stays `pending` with no agent still running), and a failed summary lands
- * `done` with empty text — both are terminal and must not animate forever.
- * `writing`/`waiting` are the genuine in-progress spinners.
+ * Presentational state of an empty summary slot. `writing`/`waiting` are the
+ * genuine in-progress spinners; `cancelled`/`unavailable` are terminal and must
+ * not animate forever.
  */
 export type FanoutSummaryState = "writing" | "waiting" | "cancelled" | "unavailable";
 
 /**
- * Classify an empty summary slot for rendering. Call only when the summary has
- * no text. `streaming` → actively writing; `pending` with an agent still
- * running → waiting on answers; `pending` with every agent terminal → the turn
- * was cancelled before the summary ran; `done` with no text → summary failed.
+ * Classify an empty summary slot for rendering. `streaming` → writing; `pending`
+ * with an agent running → waiting; `pending` all-terminal → cancelled before
+ * summary; `done` empty → summary failed.
  */
 export function summaryDisplayState(turn: FanoutTurn): FanoutSummaryState {
   if (turn.summary.status === "streaming") return "writing";
@@ -64,10 +54,8 @@ export function summaryDisplayState(turn: FanoutTurn): FanoutSummaryState {
 }
 
 /**
- * One entry in the dropdown switcher. `value` is what the `Select` reports;
- * `label` + `Icon` render the row (registry-driven — no per-agent hardcoding).
- * The summary entry carries no icon. Agent entries carry their live `state`
- * so the dropdown can reflect streaming/error without re-reading the turn.
+ * One entry in the dropdown switcher. `label` + `Icon` render the row
+ * (registry-driven). The summary entry carries no icon/state.
  */
 export interface FanoutOption {
   value: FanoutOptionValue;
@@ -78,11 +66,7 @@ export interface FanoutOption {
   state?: FanoutAgentState;
 }
 
-/**
- * Resolve a `BackendId` to its registry brand (display name + icon). Falls back
- * to the id as the label when the backend is unknown, so a newly added backend
- * still renders sensibly without a per-agent branch.
- */
+/** Resolve a `BackendId` to its registry brand (display name + icon); id fallback if unknown. */
 function brandFor(backendId: BackendId): { displayName: string; Icon?: AgentBrand["Icon"] } {
   const descriptor = backendRegistry[backendId];
   if (!descriptor) return { displayName: backendId };
@@ -90,20 +74,16 @@ function brandFor(backendId: BackendId): { displayName: string; Icon?: AgentBran
 }
 
 /**
- * Resolve a `BackendId` to its registry display name (id fallback for an
- * unknown backend). Shared by the clean-composite renderer so the copied/
- * inserted headings match the rendered tab labels — same resolver, no
- * per-agent branch.
+ * Resolve a `BackendId` to its display name. Shared by the clean-composite
+ * renderer so copied/inserted headings match the rendered tab labels.
  */
 export function fanoutDisplayName(backendId: BackendId): string {
   return brandFor(backendId).displayName;
 }
 
 /**
- * Derive the dropdown options for a fan-out turn: the summary first (D8 makes
- * it the default view), then one entry per agent in slot order (main agent
- * first). Pure — the presentational core unit-tested in isolation. Insertion
- * order of `turn.answers` is preserved so the main agent appears first.
+ * Derive the dropdown options: the summary first (the default view), then one
+ * entry per agent in slot order (insertion order preserved).
  */
 export function buildFanoutOptions(turn: FanoutTurn): FanoutOption[] {
   const options: FanoutOption[] = [{ value: FANOUT_SUMMARY_OPTION, label: "Summary" }];
@@ -120,20 +100,14 @@ export function buildFanoutOptions(turn: FanoutTurn): FanoutOption[] {
   return options;
 }
 
-/**
- * The default selected option for a turn. Summary-first (D8): the summary is
- * always the default view. Kept as a function (rather than a constant) so a
- * future variant — e.g. select the main agent while the summary is still
- * pending — has a single seam to change.
- */
+/** The default selected option: always the summary. A function for a single future seam. */
 export function defaultFanoutOption(_turn: FanoutTurn): FanoutOptionValue {
   return FANOUT_SUMMARY_OPTION;
 }
 
 /**
- * The summary slot, or the answer slot for the given selection. Returns `null`
- * when the value names an agent that no longer has a slot (defensive — the
- * selection is always one of {@link buildFanoutOptions}' values in practice).
+ * The summary slot (`null`), or the answer slot for the selection. `null` too
+ * when the value names an agent with no slot (defensive).
  */
 export function selectedAnswer(turn: FanoutTurn, value: FanoutOptionValue): AgentAnswer | null {
   if (value === FANOUT_SUMMARY_OPTION) return null;
