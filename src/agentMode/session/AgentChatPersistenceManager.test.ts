@@ -126,6 +126,33 @@ describe("AgentChatPersistenceManager", () => {
     expect(loaded.messages[1].message).toBe("hi back");
   });
 
+  it("serializes a mid-stream fan-out turn so an interrupted autosave isn't blank", async () => {
+    // A long fan-out turn whose composite body has NOT been written to `message`
+    // yet (still streaming), saved mid-turn (reload/close/crash). The live fanout
+    // must be serialized so the streamed per-agent text survives, not a blank bubble.
+    const fanoutMsg: AgentChatMessage = {
+      id: "msg-2",
+      sender: AI_SENDER,
+      message: "",
+      isVisible: true,
+      timestamp: { epoch: 2, display: "2026/01/01 12:00:00", fileName: "20260101_120000" },
+      fanout: {
+        answers: {
+          opencode: { backendId: "opencode", status: "running", text: "partial opencode answer" },
+        },
+        summary: { status: "streaming", text: "" },
+      },
+    };
+    const saved = await manager.saveSession(
+      [makeMessage(USER_SENDER, "q"), fanoutMsg],
+      "claude",
+      {}
+    );
+    const file = app.files.get(saved!.path)!;
+    const loaded = await manager.loadFile(file as unknown as TFile);
+    expect(loaded.messages[1].message).toContain("partial opencode answer");
+  });
+
   it("escapes and round-trips a label containing quotes and backslashes", async () => {
     const tricky = 'has "quotes" and \\backslashes\\';
     const messages = [makeMessage(USER_SENDER, "hi")];

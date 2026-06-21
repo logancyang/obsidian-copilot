@@ -1,3 +1,4 @@
+import { serializeFanoutComposite } from "@/agentMode/session/fanout/fanoutTypes";
 import { AGENT_CHAT_MODE, AI_SENDER, USER_SENDER } from "@/constants";
 import { logError, logInfo, logWarn } from "@/logger";
 import { getSettings } from "@/settings/model";
@@ -288,7 +289,17 @@ export class AgentChatPersistenceManager {
     return messages
       .map((m) => {
         const ts = m.timestamp ? m.timestamp.display : "Unknown time";
-        return `**${m.sender}**: ${m.message}\n[Timestamp: ${ts}]`;
+        // A fan-out turn streams into `m.fanout`; its composite body is written
+        // to `m.message` only at completion. If autosave fires mid-turn (a long
+        // turn outliving the debounce, then reload/close/crash), serialize the
+        // LIVE fanout so the saved chat keeps the streamed per-agent text instead
+        // of a blank assistant bubble. Backend ids label the sections here; the
+        // completed turn later overwrites `m.message` with display-name labels.
+        const body =
+          m.message.length === 0 && m.fanout
+            ? serializeFanoutComposite(m.fanout, (id) => id)
+            : m.message;
+        return `**${m.sender}**: ${body}\n[Timestamp: ${ts}]`;
       })
       .join("\n\n");
   }
