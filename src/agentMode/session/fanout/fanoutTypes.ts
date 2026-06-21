@@ -19,8 +19,8 @@ export const FANOUT_READONLY_PREAMBLE =
  * shape is never serialized. On save the turn collapses to just its
  * {@link FanoutSummary} text, written as an ordinary assistant message, so
  * existing single-agent transcripts load byte-for-byte unchanged (the t4
- * no-migration decision). Phase 3 fills the summary; Phase 4 renders the
- * dropdown over `answers`.
+ * no-migration decision). The main agent fills the summary once every answer
+ * settles (D6); Phase 4 renders the dropdown over `answers`.
  */
 export interface FanoutTurn {
   /**
@@ -30,9 +30,8 @@ export interface FanoutTurn {
    */
   answers: Record<BackendId, AgentAnswer>;
   /**
-   * The narrative summary slot. Phase 2 leaves this `pending` and never
-   * generates content — it is the typed hook Phase 3 fills and the only part
-   * of the turn that persists.
+   * The narrative summary slot, filled by the main agent over the surviving
+   * answers (D6). The only part of the turn that persists.
    */
   summary: FanoutSummary;
 }
@@ -53,7 +52,7 @@ export interface AgentAnswer {
   error?: string;
 }
 
-/** Status of the main-agent narrative summary slot. Content is Phase 3. */
+/** Status of the main-agent narrative summary slot. */
 export type FanoutSummaryStatus = "pending" | "streaming" | "done";
 
 /** The summary slot — the only part of a fan-out turn that is persisted. */
@@ -95,7 +94,8 @@ export function isWriteOrExecToolKind(kind: AgentToolKind | undefined): boolean 
  * answers are live-only, so this is the single seam through which a multi-agent
  * turn reaches disk — guaranteeing no per-agent answer is ever serialized.
  * Returns the trimmed summary text, or an empty string when the summary has no
- * content yet (Phase 2 always returns empty since the summary stays pending).
+ * content (e.g. the zero-success all-failed note is still written, but a
+ * never-generated summary collapses to empty).
  */
 export function collapseFanoutTurnToSummaryText(turn: FanoutTurn): string {
   return turn.summary.text.trim();

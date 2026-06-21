@@ -102,7 +102,8 @@ export function createFanoutTurn(agents: ReadonlyArray<BackendId>): FanoutTurn {
  * runs in a freshly created, ephemeral, read-only sub-session on its own
  * backend — never registered as a visible AgentSession / tab — and receives the
  * identical prompt + context. Answers stream into per-agent slots of a single
- * in-memory {@link FanoutTurn}; the summary slot is left pending for Phase 3.
+ * in-memory {@link FanoutTurn}; once every answer settles the main agent writes
+ * the narrative summary over the survivors into the summary slot (D6/D7).
  *
  * One agent's error never throws out of the whole run (`allSettled`-style
  * collection): a failed agent sets its slot to `error` and the others continue.

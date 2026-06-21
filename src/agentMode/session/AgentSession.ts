@@ -931,8 +931,8 @@ export class AgentSession {
    * Dispatch a multi-agent read-only QA turn. Every agent (main + mentioned)
    * runs the identical `promptBlocks` in a parallel ephemeral read-only
    * sub-session; answers stream into per-agent slots of a single live
-   * {@link FanoutTurn} held in memory. The summary slot stays pending (Phase 3
-   * fills it). On completion only the summary text is written into the
+   * {@link FanoutTurn} held in memory. Once every answer settles the main agent
+   * fills the summary slot (D6). On completion only the summary text is written into the
    * placeholder's display body — per-agent answers are never persisted, so the
    * markdown transcript format is unchanged (no migration).
    *
@@ -967,7 +967,7 @@ export class AgentSession {
     const stopReason: StopReason = signal.aborted ? "cancelled" : "end_turn";
     // Collapse to summary-only for persistence/display: per-agent answers stay
     // live in `liveFanoutTurn`, but the placeholder's serialized body carries
-    // just the summary text (empty until Phase 3 generates it).
+    // just the main agent's generated summary text.
     const summaryText = collapseFanoutTurnToSummaryText(turn);
     if (summaryText) this.store.appendAgentText(placeholderId, summaryText);
     if (this.store.markTurnComplete(placeholderId, stopReason, Date.now() - turnStartedAt)) {
@@ -980,7 +980,8 @@ export class AgentSession {
   /**
    * The live fan-out state for the most recent multi-agent turn, or `null` on
    * the single-agent path. The Phase 4 UI renders the per-agent dropdown from
-   * this; Phase 3 fills its `summary` slot. Live-only — never persisted.
+   * this; its `summary` slot carries the main agent's narrative summary (D6).
+   * Live-only — never persisted.
    */
   getLiveFanoutTurn(): FanoutTurn | null {
     return this.liveFanoutTurn;
