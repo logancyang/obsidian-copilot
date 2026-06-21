@@ -33,6 +33,9 @@ interface MockProc {
   resolvePrompt: () => void;
   rejectPrompt: (err: unknown) => void;
   promptCount: () => number;
+  /** Resolve a controlled (initially pending) `newSession` — no-op otherwise. */
+  resolveNewSession: () => void;
+  newSessionCount: () => number;
 }
 
 /**
@@ -51,12 +54,23 @@ interface MockProc {
  * config-option round-trip echoes the same spec so the model-specific effort
  * `effortConfigId` is readable after the bare model is activated.
  */
-function makeMockProc(sessionId: string, modelApply?: ModelApplySpec): MockProc {
+/**
+ * `controlledNewSession` makes `newSession` stay pending until the test calls
+ * `resolveNewSession()`, modeling a cold or wedged backend whose `session/new`
+ * has not returned yet (so the orchestrator is blocked in SETUP, not the
+ * prompt). Left off, `newSession` resolves immediately as before.
+ */
+function makeMockProc(
+  sessionId: string,
+  modelApply?: ModelApplySpec,
+  controlledNewSession?: boolean
+): MockProc {
   let handler: SessionUpdateHandler | null = null;
   const stateForModelApply = (): BackendState => ({
     model: modelApply ? ({ apply: modelApply } as BackendState["model"]) : null,
     mode: null,
   });
+  const pendingNewSession: Array<() => void> = [];
   const pending: Array<{
     resolve: () => void;
     reject: (err: unknown) => void;
@@ -85,7 +99,11 @@ function makeMockProc(sessionId: string, modelApply?: ModelApplySpec): MockProc 
         handler = null;
       };
     },
-    newSession: jest.fn(async () => ({ sessionId, state: stateForModelApply() })),
+    newSession: jest.fn(() => {
+      const opened = { sessionId, state: stateForModelApply() };
+      if (!controlledNewSession) return Promise.resolve(opened);
+      return new Promise((resolve) => pendingNewSession.push(() => resolve(opened)));
+    }),
     prompt: jest.fn(() => promptPromise()),
     cancel,
     setSessionModel,
@@ -110,6 +128,8 @@ function makeMockProc(sessionId: string, modelApply?: ModelApplySpec): MockProc 
     resolvePrompt: () => settleOldest((p) => p.resolve()),
     rejectPrompt: (err) => settleOldest((p) => p.reject(err)),
     promptCount: () => (proc.prompt as jest.Mock).mock.calls.length,
+    resolveNewSession: () => pendingNewSession.shift()?.(),
+    newSessionCount: () => (proc.newSession as jest.Mock).mock.calls.length,
   };
 }
 
@@ -167,16 +187,18 @@ function makeHost(
       readOnlyModeId?: string;
       effortConfig?: { id: string };
       modelApply?: ModelApplySpec;
+      controlledNewSession?: boolean;
     }
   >,
   defaults: Partial<Record<BackendId, ModelSelection>> = {}
 ): HostHarness {
   const procs = new Map<BackendId, MockProc>();
   const descriptors = new Map<BackendId, BackendDescriptor>();
-  for (const [id, { sessionId, readOnlyModeId, effortConfig, modelApply }] of Object.entries(
-    config
-  )) {
-    procs.set(id, makeMockProc(sessionId, modelApply));
+  for (const [
+    id,
+    { sessionId, readOnlyModeId, effortConfig, modelApply, controlledNewSession },
+  ] of Object.entries(config)) {
+    procs.set(id, makeMockProc(sessionId, modelApply, controlledNewSession));
     descriptors.set(id, descriptorFor(id, readOnlyModeId, effortConfig));
   }
   const readOnlyRegistered: string[] = [];
@@ -1182,6 +1204,127 @@ describe("FanoutOrchestrator.run", () => {
       // No summary ran on cancel and no timer leaked.
       expect(turn.summary.status).toBe("pending");
       expect(procs.get("claude")!.promptCount()).toBe(1);
+      expect(jest.getTimerCount()).toBe(0);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("lands a slot cancelled PROMPTLY when its newSession is wedged and the run aborts (no prompt, no hang)", async () => {
+    jest.useFakeTimers();
+    try {
+      // codex's backend is cold: its `newSession` never returns, so the agent is
+      // stuck in SETUP — the only protection that matters is the abort race,
+      // since there is no prompt to time out yet. claude answers normally.
+      const { host, procs } = makeHost({
+        claude: { sessionId: "s-claude" },
+        codex: { sessionId: "s-codex", controlledNewSession: true },
+      });
+      const orchestrator = new FanoutOrchestrator(host);
+      const controller = new AbortController();
+      const runPromise = orchestrator.run(
+        runInput(["claude", "codex"], { signal: controller.signal })
+      );
+
+      // claude reaches + settles its prompt; codex is blocked in `newSession`.
+      await jest.advanceTimersByTimeAsync(0);
+      expect(procs.get("codex")!.promptCount()).toBe(0); // never got past setup
+      procs.get("claude")!.emit(textChunk("s-claude", "claude answer"));
+      procs.get("claude")!.resolvePrompt();
+
+      // The user cancels while codex is still wedged in setup. The slot must
+      // settle PROMPTLY — without waiting on the stuck `newSession` — so the turn
+      // completes instead of spinning forever behind the cold backend.
+      controller.abort();
+      // No real wall-clock advance needed for the wedged agent: only the cancel
+      // path drives it. (claude's trailing grace was suppressed by the abort.)
+      const turn = await runPromise;
+
+      expect(turn.answers.codex.status).toBe("cancelled");
+      expect(turn.answers.claude.status).toBe("cancelled");
+      // codex never dispatched a prompt — it never escaped setup.
+      expect(procs.get("codex")!.promptCount()).toBe(0);
+      // Aborted run skips the summary.
+      expect(turn.summary.status).toBe("pending");
+      // No deadline timer survives the abort.
+      expect(jest.getTimerCount()).toBe(0);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("tears down a sub-session whose newSession resolves AFTER the abort already bailed (no orphan)", async () => {
+    jest.useFakeTimers();
+    try {
+      // codex is wedged in `newSession` when the run aborts; the slot settles
+      // without it. LATER the backend finally returns the session — that late
+      // sub-session must still be cancelled so nothing leaks behind the bail.
+      const { host, procs } = makeHost({
+        claude: { sessionId: "s-claude" },
+        codex: { sessionId: "s-codex", controlledNewSession: true },
+      });
+      const orchestrator = new FanoutOrchestrator(host);
+      const controller = new AbortController();
+      const runPromise = orchestrator.run(
+        runInput(["claude", "codex"], { signal: controller.signal })
+      );
+
+      await jest.advanceTimersByTimeAsync(0);
+      procs.get("claude")!.resolvePrompt();
+      controller.abort();
+      const turn = await runPromise;
+      expect(turn.answers.codex.status).toBe("cancelled");
+      // The late session had not been created yet, so nothing was cancelled.
+      expect(procs.get("codex")!.cancel).not.toHaveBeenCalled();
+
+      // The cold backend now returns the session AFTER the slot is terminal. The
+      // attempt resumes, finds the run already aborted, and tears the orphaned
+      // sub-session down (its dispatched prompt is cancelled, then closed).
+      procs.get("codex")!.resolveNewSession();
+      await jest.advanceTimersByTimeAsync(0);
+      expect(procs.get("codex")!.cancel).toHaveBeenCalledWith({ sessionId: "s-codex" });
+      expect(jest.getTimerCount()).toBe(0);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("fails a slot with the timeout error when SETUP (not just the prompt) exceeds the deadline", async () => {
+    jest.useFakeTimers();
+    try {
+      // codex's `newSession` never resolves; the WHOLE-attempt deadline (which
+      // now covers setup, not only the prompt) must fail codex's own slot while
+      // claude — which answered — is unaffected and the summary still runs.
+      const { host, procs } = makeHost({
+        claude: { sessionId: "s-claude" },
+        codex: { sessionId: "s-codex", controlledNewSession: true },
+      });
+      const orchestrator = new FanoutOrchestrator(host);
+      const controller = new AbortController();
+      const runPromise = orchestrator.run(
+        runInput(["claude", "codex"], { signal: controller.signal })
+      );
+
+      await jest.advanceTimersByTimeAsync(0);
+      procs.get("claude")!.emit(textChunk("s-claude", "claude answer"));
+      procs.get("claude")!.resolvePrompt();
+      // Trip the per-agent deadline while codex is still in setup. No prompt is
+      // in flight, so the slot errors immediately (no cancel grace to wait out).
+      await jest.advanceTimersByTimeAsync(FANOUT_AGENT_TIMEOUT_MS);
+      // The summary runs over the survivor (claude's second prompt); settle it.
+      procs.get("claude")!.emit(textChunk("s-claude", "summary"));
+      procs.get("claude")!.resolvePrompt();
+      await jest.advanceTimersByTimeAsync(FANOUT_TRAILING_CHUNK_GRACE_MS);
+      await drainMicrotasks();
+      const turn = await runPromise;
+
+      expect(turn.answers.codex.status).toBe("error");
+      expect(turn.answers.codex.error).toBe(FANOUT_AGENT_TIMEOUT_ERROR);
+      expect(turn.answers.claude.status).toBe("done");
+      expect(turn.summary.status).toBe("done");
+      expect(turn.summary.text).toBe("summary");
+      // codex never dispatched a prompt (it never left setup).
+      expect(procs.get("codex")!.promptCount()).toBe(0);
       expect(jest.getTimerCount()).toBe(0);
     } finally {
       jest.useRealTimers();

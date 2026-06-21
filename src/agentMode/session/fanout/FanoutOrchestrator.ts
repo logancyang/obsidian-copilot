@@ -234,23 +234,32 @@ export class FanoutOrchestrator {
   /**
    * Open an ephemeral, read-only sub-session on `backendId`, apply the
    * read-only sandbox mode + the user's default model, stream the prompt's
-   * assistant text through `onText`, and tear the sub-session down in
-   * `finally`. Shared by every per-agent answer AND the main-agent summary, so
-   * both run through the exact same read-only registration + sandbox path. The
-   * sub-session is registered via {@link FanoutHost.registerReadOnlySession},
-   * so the permission prompter hard-denies writes for it (D5).
+   * assistant text through `onText`, and tear the sub-session down when the
+   * attempt settles. Shared by every per-agent answer AND the main-agent
+   * summary, so both run through the exact same read-only registration + sandbox
+   * path. The sub-session is registered via
+   * {@link FanoutHost.registerReadOnlySession}, so the permission prompter
+   * hard-denies writes for it (D5).
    *
-   * Returns `"aborted"` when the run signal fired before/during the prompt
+   * Returns `"aborted"` when the run signal fired before/during the attempt
    * (user cancel → a terminal `cancelled` slot, not a fault), else `"done"`.
-   * THROWS {@link FANOUT_AGENT_TIMEOUT_ERROR} if `prompt()` outlives
-   * {@link FANOUT_AGENT_TIMEOUT_MS} so a wedged sub-session fails its own slot
-   * without stalling the siblings or the summary.
+   * THROWS {@link FANOUT_AGENT_TIMEOUT_ERROR} if the WHOLE attempt — setup
+   * (`ensureBackendForFanout` / `newSession` / mode+model round-trips) AND the
+   * `prompt()` — outlives {@link FANOUT_AGENT_TIMEOUT_MS}. Bounding setup too
+   * (not just the prompt) means a cold or wedged backend whose `newSession`
+   * never resolves can no longer hang the turn: the abort signal interrupts the
+   * pending setup await promptly, and the deadline fails the slot on its own —
+   * the {@link runAttemptWithTimeout} race resolves the slot WITHOUT waiting on
+   * the stuck attempt.
    *
-   * The sub-session is closed (best-effort `cancel`) in `finally` for EVERY
-   * exit — normal, aborted, timed out, or thrown — so no ACP sub-session leaks.
-   * On abort the in-flight `prompt()` is cancelled immediately via the signal
-   * listener, and the abort checkpoints before dispatch short-circuit so a late
-   * sub-session is never even prompted.
+   * The sub-session is closed (best-effort `cancel`) and its handlers
+   * unregistered in the ATTEMPT's own `finally`, which runs exactly when the
+   * attempt truly settles. That is what guarantees no orphan even when the race
+   * already bailed during setup: a `newSession` that resolves LATE still records
+   * its `sessionId`, and the attempt's `finally` then tears that session down.
+   * On the normal path the handler is held open through
+   * {@link FANOUT_TRAILING_CHUNK_GRACE_MS} inside the attempt (before teardown)
+   * so trailing chunks still route into the slot; cancel/timeout suppress that.
    */
   private async runReadOnlySubSession(params: {
     backendId: BackendId;
@@ -259,61 +268,84 @@ export class FanoutOrchestrator {
     onText: (text: string) => void;
   }): Promise<"done" | "aborted"> {
     const { backendId, prompt, signal, onText } = params;
-    let proc: BackendProcess | null = null;
-    let sessionId: SessionId | null = null;
-    let unregisterReadOnly: (() => void) | null = null;
-    let unregisterHandler: (() => void) | null = null;
 
-    try {
-      const ensured = await this.host.ensureBackendForFanout(backendId);
-      proc = ensured.proc;
-      const descriptor = ensured.descriptor;
-      if (signal.aborted) return "aborted";
+    // The attempt owns the full lifecycle — setup, prompt, trailing-chunk grace,
+    // and teardown — so its `finally` always closes any session it opened, even
+    // one from a `newSession` that resolves AFTER the race below already bailed
+    // on abort/timeout. It reports its in-flight `prompt()` (once dispatched) via
+    // `onPrompt`, with a `cancelPrompt` that interrupts that prompt's backend
+    // query, so the race's cancel paths can request the cancel and await the
+    // query's real settlement before the backend is reused.
+    const attempt = async (
+      onPrompt: (p: Promise<unknown>, cancelPrompt: () => void) => void,
+      raceSettled: () => boolean
+    ): Promise<"done"> => {
+      let proc: BackendProcess | null = null;
+      let sessionId: SessionId | null = null;
+      let unregisterReadOnly: (() => void) | null = null;
+      let unregisterHandler: (() => void) | null = null;
+      try {
+        const ensured = await this.host.ensureBackendForFanout(backendId);
+        proc = ensured.proc;
+        const descriptor = ensured.descriptor;
 
-      const opened = await proc.newSession({
-        cwd: this.host.getCwd() ?? "",
-        mcpServers: this.host.getMcpServers(proc),
-      });
-      sessionId = opened.sessionId;
-      unregisterReadOnly = this.host.registerReadOnlySession(sessionId);
+        const opened = await proc.newSession({
+          cwd: this.host.getCwd() ?? "",
+          mcpServers: this.host.getMcpServers(proc),
+        });
+        sessionId = opened.sessionId;
+        unregisterReadOnly = this.host.registerReadOnlySession(sessionId);
 
-      unregisterHandler = proc.registerSessionHandler(sessionId, (event) => {
-        const text = textChunkOf(event);
-        if (text !== null) onText(text);
-      });
+        unregisterHandler = proc.registerSessionHandler(sessionId, (event) => {
+          const text = textChunkOf(event);
+          if (text !== null) onText(text);
+        });
 
-      // Read-only sandbox mode and default-model selection mutate disjoint
-      // session fields, so run both round-trips concurrently to halve per-agent
-      // setup latency on the path before `prompt()`. The model channel comes
-      // from the freshly opened sub-session's own `BackendState.model.apply`
-      // spec, so backends whose model switch is a config option (opencode ≥
-      // 1.15.13) route through the same RPC the visible session would.
-      const modelApply = opened.state.model?.apply ?? null;
-      await Promise.all([
-        this.applyReadOnlyMode(proc, descriptor, sessionId),
-        this.applyDefaultModel(proc, descriptor, backendId, sessionId, modelApply),
-      ]);
-      if (signal.aborted) return "aborted";
+        // Read-only sandbox mode and default-model selection mutate disjoint
+        // session fields, so run both round-trips concurrently to halve
+        // per-agent setup latency on the path before `prompt()`. The model
+        // channel comes from the freshly opened sub-session's own
+        // `BackendState.model.apply` spec, so backends whose model switch is a
+        // config option (opencode ≥ 1.15.13) route through the same RPC the
+        // visible session would.
+        const modelApply = opened.state.model?.apply ?? null;
+        await Promise.all([
+          this.applyReadOnlyMode(proc, descriptor, sessionId),
+          this.applyDefaultModel(proc, descriptor, backendId, sessionId, modelApply),
+        ]);
 
-      const outcome = await this.runPromptWithTimeout(proc, sessionId, prompt, signal);
-      // On normal completion, hold the still-registered handler open a short
-      // bounded window so trailing `agent_message_chunk` events some backends
-      // flush AFTER `session/prompt` resolves still route into the same slot
-      // instead of being dropped. Only a self-resolved, non-cancelled prompt
-      // earns this — an abort returns "aborted" and is suppressed like the rest
-      // (timeout/throw exit via `finally` and skip it too).
-      if (outcome === "done") await this.awaitTrailingChunks();
-      return outcome;
-    } finally {
-      unregisterHandler?.();
-      unregisterReadOnly?.();
-      if (proc && sessionId) {
-        // Best-effort cancel closes the ephemeral session on the shared
-        // backend process; it is never persisted as a session. Runs on every
-        // exit (done / aborted / timeout / throw) so no sub-session leaks.
-        proc.cancel({ sessionId }).catch(() => undefined);
+        const promptProc = proc;
+        const promptSessionId = sessionId;
+        const promptPromise = promptProc.prompt({ sessionId, prompt });
+        onPrompt(promptPromise, () => {
+          promptProc.cancel({ sessionId: promptSessionId }).catch(() => undefined);
+        });
+        await promptPromise;
+        // Hold the still-registered handler open a short bounded window so
+        // trailing `agent_message_chunk` events some backends flush AFTER
+        // `session/prompt` resolves still route into the slot instead of being
+        // dropped. Skipped once the race already bailed (abort OR timeout): a
+        // prompt that resolved only because the backend honored the cancel must
+        // suppress late output and tear down at once, not linger for the grace.
+        if (!raceSettled()) await this.awaitTrailingChunks();
+        return "done";
+      } finally {
+        unregisterHandler?.();
+        unregisterReadOnly?.();
+        if (proc && sessionId) {
+          // Best-effort cancel closes the ephemeral session on the shared
+          // backend process; it is never persisted as a session. Runs on every
+          // exit (done / aborted / timeout / throw) so no sub-session leaks —
+          // including a session a late `newSession` opened after the race bailed.
+          proc.cancel({ sessionId }).catch(() => undefined);
+        }
       }
-    }
+    };
+
+    return this.runAttemptWithTimeout(
+      (onPrompt, raceSettled) => attempt(onPrompt, raceSettled),
+      signal
+    );
   }
 
   /**
@@ -329,37 +361,55 @@ export class FanoutOrchestrator {
   }
 
   /**
-   * Await `prompt()` racing both the run signal (user cancel) and a per-agent
-   * deadline. On abort: cancel the sub-session and resolve `"aborted"` (the slot
-   * goes terminal-cancelled). On timeout: cancel the sub-session and throw
-   * {@link FANOUT_AGENT_TIMEOUT_ERROR} (the slot goes terminal-error) so the
-   * hung agent never blocks the turn or the summary.
+   * Run one per-agent `attempt` (setup + prompt) racing both the run signal
+   * (user cancel) and a single per-agent deadline that covers the WHOLE attempt.
+   * On abort: resolve `"aborted"` (the slot goes terminal-cancelled). On
+   * timeout: throw {@link FANOUT_AGENT_TIMEOUT_ERROR} (the slot goes
+   * terminal-error) so a hung agent never blocks the turn or the summary. A
+   * setup await that is still pending (a cold/wedged backend whose `newSession`
+   * never resolves) is interrupted PROMPTLY by either path — the helper settles
+   * without waiting on it, so the turn can never spin behind it.
    *
+   * `attempt` reports its in-flight `prompt()` (once dispatched) via `onPrompt`.
    * Cancel only INTERRUPTS — the underlying `prompt()` promise keeps unwinding
    * the backend query after `cancel` returns. The Claude SDK backend's
    * permission-bridge/session context is process-global for the active query,
    * so reusing that backend (the summary reuses the main agent's) while a
    * cancelled/timed-out prompt is still unwinding can misroute permission
-   * decisions or corrupt the summary. So on the abort AND timeout paths we
-   * AWAIT the real prompt promise to settle (swallowed) before this helper
-   * resolves — "settled" then means the backend query truly stopped, not just
-   * that cancel was requested. That wait is bounded by
-   * {@link FANOUT_CANCEL_GRACE_MS} so a backend that ignores cancel cannot hang
-   * the turn forever (we log and proceed). The happy path (prompt resolves on
-   * its own) never enters this grace.
+   * decisions or corrupt the summary. So on the abort AND timeout paths, IF a
+   * prompt is already in flight, we cancel it and AWAIT its real settlement
+   * (swallowed) before this helper settles — "settled" then means the backend
+   * query truly stopped, not just that cancel was requested. That wait is
+   * bounded by {@link FANOUT_CANCEL_GRACE_MS} so a backend that ignores cancel
+   * cannot hang the turn forever (we log and proceed). When abort/timeout fires
+   * during SETUP (no prompt yet) there is nothing to settle, so the helper
+   * resolves immediately; the still-running attempt tears its own session down
+   * in its `finally` once it unwinds. The happy path (prompt resolves on its
+   * own) never enters this grace.
    *
    * Both the deadline timer and the abort listener are torn down on whichever
-   * path settles first, so a settled prompt leaks neither a live 5-minute timer
+   * path settles first, so a settled attempt leaks neither a live deadline timer
    * (the abort path) nor an abort handler (the timeout/resolve path).
    */
-  private runPromptWithTimeout(
-    proc: BackendProcess,
-    sessionId: SessionId,
-    prompt: PromptContent[],
+  private runAttemptWithTimeout(
+    attempt: (
+      onPrompt: (p: Promise<unknown>, cancelPrompt: () => void) => void,
+      raceSettled: () => boolean
+    ) => Promise<"done">,
     signal: AbortSignal
   ): Promise<"done" | "aborted"> {
     return new Promise<"done" | "aborted">((resolve, reject) => {
       let settled = false;
+      // The in-flight prompt's settlement, mapped to `undefined` on BOTH
+      // outcomes — a cancelled/timed-out backend prompt usually REJECTS, and we
+      // only care that it stopped. Stays `null` while still in setup (no prompt
+      // dispatched yet), so the cancel paths know there is nothing to await.
+      // Mapping both outcomes here also keeps the swallowed rejection from
+      // surfacing as unhandled.
+      let promptSettled: Promise<void> | null = null;
+      // Interrupts the in-flight prompt's backend query (set once dispatched).
+      let cancelInFlightPrompt: (() => void) | null = null;
+
       // Tear down BOTH the deadline timer and the abort listener on whichever
       // path settles first.
       const cleanup = () => {
@@ -367,26 +417,19 @@ export class FanoutOrchestrator {
         signal.removeEventListener("abort", onAbort);
       };
 
-      // Hold the real prompt promise so the cancel paths can await its actual
-      // settlement. `promptSettled` resolves once the underlying prompt has
-      // fully unwound, regardless of whether it fulfilled or rejected — a
-      // cancelled/timed-out backend prompt usually REJECTS, and we only care
-      // that it stopped. Mapping both outcomes to a resolved value here (rather
-      // than catching on each downstream branch) is also what keeps the
-      // swallowed rejection from surfacing as unhandled.
-      const promptPromise = proc.prompt({ sessionId, prompt });
-      const promptSettled = promptPromise.then(
-        () => undefined,
-        () => undefined
-      );
-
-      // Request cancel, then wait (bounded by the grace) for the underlying
-      // prompt to actually settle before finishing via `done()`. `done` wraps
-      // the outer promise's resolve/reject, so calling it twice (grace fired,
-      // then the prompt settled, or vice-versa) is a no-op — clearing the grace
-      // timer on settlement is the only teardown needed.
+      // Request the in-flight prompt's cancel, then wait (bounded by the grace)
+      // for it to actually settle before finishing via `done()`. With no prompt
+      // in flight (still setting up) there is nothing to interrupt or unwind, so
+      // finish immediately — the still-running attempt tears down any session a
+      // late `newSession` opens in its own `finally`. `done` wraps the outer
+      // promise's resolve/reject, so calling it twice (grace fired, then the
+      // prompt settled, or vice-versa) is a no-op.
       const settleAfterCancel = (done: () => void) => {
-        proc.cancel({ sessionId }).catch(() => undefined);
+        if (promptSettled === null) {
+          done();
+          return;
+        }
+        cancelInFlightPrompt?.();
         const grace = window.setTimeout(() => {
           logWarn(
             `[AgentMode] fan-out prompt did not settle within the cancel grace; reusing backend anyway`
@@ -416,14 +459,33 @@ export class FanoutOrchestrator {
       );
       signal.addEventListener("abort", onAbort, { once: true });
 
-      promptPromise.then(
+      // `onPrompt` records the dispatched prompt so a later abort/timeout can
+      // cancel it and await its real unwind. If abort/timeout ALREADY fired
+      // (during setup), cancel it right away — the slot is already terminal, so
+      // we must not leave a live backend query running behind it.
+      const onPrompt = (p: Promise<unknown>, cancelPrompt: () => void) => {
+        promptSettled = p.then(
+          () => undefined,
+          () => undefined
+        );
+        cancelInFlightPrompt = cancelPrompt;
+        if (settled) {
+          cancelPrompt();
+          p.catch(() => undefined);
+        }
+      };
+
+      // `raceSettled()` is true once abort or timeout has won the race, so the
+      // attempt can skip its trailing-chunk hold and tear down at once on either
+      // bail (not just on the run-signal abort).
+      attempt(onPrompt, () => settled).then(
         () => {
           if (settled) return;
           settled = true;
           cleanup();
-          // A prompt that resolved only because the backend honored the cancel
-          // is still a user abort — read it off the signal so the slot lands
-          // `cancelled`, not `done`. No grace here: it settled on its own.
+          // An attempt that resolved only because the backend honored the
+          // cancel is still a user abort — read it off the signal so the slot
+          // lands `cancelled`, not `done`. No grace here: it settled on its own.
           resolve(signal.aborted ? "aborted" : "done");
         },
         (err) => {
