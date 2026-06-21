@@ -459,6 +459,16 @@ export class FanoutOrchestrator {
       );
       signal.addEventListener("abort", onAbort, { once: true });
 
+      // If Stop was pressed during the async work BEFORE this attempt (license
+      // re-verify, web-tab serialization, …), the signal is ALREADY aborted and
+      // the listener just armed will never fire. Settle now via the same cancel
+      // path and return WITHOUT starting `attempt`, so no sub-session is opened
+      // and no read-only prompt is dispatched after Stop.
+      if (signal.aborted) {
+        beginCancel(() => resolve("aborted"));
+        return;
+      }
+
       // `onPrompt` records the dispatched prompt so a later abort/timeout can
       // cancel it and await its real unwind. If abort/timeout ALREADY fired
       // (during setup), cancel it right away — the slot is already terminal, so

@@ -1253,6 +1253,41 @@ describe("FanoutOrchestrator.run", () => {
     }
   });
 
+  it("settles without launching agents when the run signal is ALREADY aborted before dispatch", async () => {
+    jest.useFakeTimers();
+    try {
+      // Stop was pressed during the async work BEFORE fan-out dispatch (e.g.
+      // license re-verify), so the signal is already aborted when run() starts.
+      // The abort listener armed inside the helper would never fire for an
+      // already-fired signal, so the upfront `signal.aborted` check must settle
+      // each agent without opening a sub-session or dispatching a prompt.
+      const { host, procs } = makeHost({
+        claude: { sessionId: "s-claude" },
+        codex: { sessionId: "s-codex" },
+      });
+      const orchestrator = new FanoutOrchestrator(host);
+      const controller = new AbortController();
+      controller.abort();
+
+      const turn = await orchestrator.run(
+        runInput(["claude", "codex"], { signal: controller.signal })
+      );
+
+      // No agent opened a sub-session or dispatched a prompt after Stop.
+      expect(procs.get("claude")!.newSessionCount()).toBe(0);
+      expect(procs.get("codex")!.newSessionCount()).toBe(0);
+      expect(procs.get("claude")!.promptCount()).toBe(0);
+      expect(procs.get("codex")!.promptCount()).toBe(0);
+      // Both slots terminal-cancelled; the aborted run skips the summary; no leak.
+      expect(turn.answers.claude.status).toBe("cancelled");
+      expect(turn.answers.codex.status).toBe("cancelled");
+      expect(turn.summary.status).toBe("pending");
+      expect(jest.getTimerCount()).toBe(0);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it("tears down a sub-session whose newSession resolves AFTER the abort already bailed (no orphan)", async () => {
     jest.useFakeTimers();
     try {
