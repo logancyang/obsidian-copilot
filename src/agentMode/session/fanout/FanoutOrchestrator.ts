@@ -50,6 +50,13 @@ export interface FanoutHost {
    * Returns an unregister fn called when the sub-session closes.
    */
   registerReadOnlySession(sessionId: SessionId): () => void;
+  /**
+   * Mark a fan-out sub-session so it never surfaces in Recent Chats. opencode/
+   * codex persist `newSession` to disk and the native-discovery sweep would
+   * otherwise list these ephemeral sessions as phantom chats; tombstoning the
+   * id keeps the sweep from bringing them back, even across restarts.
+   */
+  excludeSubSessionFromHistory(backendId: BackendId, sessionId: SessionId): void;
 }
 
 /**
@@ -300,6 +307,9 @@ export class FanoutOrchestrator {
         });
         sessionId = opened.sessionId;
         unregisterReadOnly = this.host.registerReadOnlySession(sessionId);
+        // opencode/codex persist this session to disk; tombstone it now so the
+        // native-discovery sweep never lists it as a phantom Recent Chat.
+        this.host.excludeSubSessionFromHistory(backendId, sessionId);
 
         unregisterHandler = proc.registerSessionHandler(sessionId, (event) => {
           const text = textChunkOf(event);
@@ -345,10 +355,11 @@ export class FanoutOrchestrator {
         unregisterHandler?.();
         unregisterReadOnly?.();
         if (proc && sessionId) {
-          // Best-effort cancel closes the ephemeral session on the shared
-          // backend process; it is never persisted as a session. Runs on every
-          // exit (done / aborted / timeout / throw) so no sub-session leaks —
-          // including a session a late `newSession` opened after the race bailed.
+          // Best-effort cancel ends the in-flight query on the shared backend
+          // process. opencode/codex still persist the session to disk, so the
+          // turn already tombstoned it (above) to keep it out of Recent Chats.
+          // Runs on every exit (done / aborted / timeout / throw) — including a
+          // session a late `newSession` opened after the race bailed.
           proc.cancel({ sessionId }).catch(() => undefined);
         }
       }

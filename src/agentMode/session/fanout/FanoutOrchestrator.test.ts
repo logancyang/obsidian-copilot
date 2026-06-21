@@ -177,6 +177,7 @@ interface HostHarness {
   procs: Map<BackendId, MockProc>;
   readOnlyRegistered: string[];
   readOnlyUnregistered: string[];
+  excludedFromHistory: Array<{ backendId: BackendId; sessionId: string }>;
 }
 
 function makeHost(
@@ -203,6 +204,7 @@ function makeHost(
   }
   const readOnlyRegistered: string[] = [];
   const readOnlyUnregistered: string[] = [];
+  const excludedFromHistory: Array<{ backendId: BackendId; sessionId: string }> = [];
   const host: FanoutHost = {
     ensureBackendForFanout: async (backendId) => ({
       proc: procs.get(backendId)!.proc,
@@ -216,8 +218,11 @@ function makeHost(
       readOnlyRegistered.push(sessionId);
       return () => readOnlyUnregistered.push(sessionId);
     },
+    excludeSubSessionFromHistory: (backendId, sessionId) => {
+      excludedFromHistory.push({ backendId, sessionId });
+    },
   };
-  return { host, procs, readOnlyRegistered, readOnlyUnregistered };
+  return { host, procs, readOnlyRegistered, readOnlyUnregistered, excludedFromHistory };
 }
 
 const flush = () => new Promise((r) => window.setTimeout(r, 0));
@@ -274,10 +279,12 @@ describe("createFanoutTurn", () => {
 
 describe("FanoutOrchestrator.run", () => {
   it("streams each agent's answer into its own slot and marks them done", async () => {
-    const { host, procs, readOnlyRegistered, readOnlyUnregistered } = makeHost({
-      claude: { sessionId: "s-claude" },
-      codex: { sessionId: "s-codex" },
-    });
+    const { host, procs, readOnlyRegistered, readOnlyUnregistered, excludedFromHistory } = makeHost(
+      {
+        claude: { sessionId: "s-claude" },
+        codex: { sessionId: "s-codex" },
+      }
+    );
     const orchestrator = new FanoutOrchestrator(host);
     const controller = new AbortController();
     const snapshots: string[] = [];
@@ -318,6 +325,13 @@ describe("FanoutOrchestrator.run", () => {
     // second session on the main backend), all unregistered on teardown.
     expect(readOnlyRegistered.sort()).toEqual(["s-claude", "s-claude", "s-codex"]);
     expect(readOnlyUnregistered.sort()).toEqual(["s-claude", "s-claude", "s-codex"]);
+    // Every sub-session (incl. the summary's) is tombstoned so it never leaks
+    // into Recent Chats as a phantom native session.
+    expect(excludedFromHistory.map((e) => e.sessionId).sort()).toEqual([
+      "s-claude",
+      "s-claude",
+      "s-codex",
+    ]);
     expect(snapshots.length).toBeGreaterThan(1);
   });
 

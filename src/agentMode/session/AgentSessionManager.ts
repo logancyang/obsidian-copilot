@@ -248,6 +248,9 @@ export class AgentSessionManager {
         this.readOnlyFanoutSessions.add(sessionId);
         return () => this.readOnlyFanoutSessions.delete(sessionId);
       },
+      excludeSubSessionFromHistory: (backendId, sessionId) => {
+        void this.opts.sessionIndex?.deleteSession(backendId, sessionId);
+      },
     };
   }
 
