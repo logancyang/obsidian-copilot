@@ -9,7 +9,13 @@ import type {
   SessionEvent,
   SessionId,
 } from "@/agentMode/session/types";
-import { type AgentAnswer, type FanoutTurn } from "./fanoutTypes";
+import {
+  buildSummaryUserPrompt,
+  FANOUT_ALL_FAILED_SUMMARY,
+  selectSummaryInputs,
+  type AgentAnswer,
+  type FanoutTurn,
+} from "./fanoutTypes";
 
 /**
  * Backend capabilities the orchestrator needs from the session manager. Kept as
@@ -23,6 +29,12 @@ export interface FanoutHost {
   ): Promise<{ proc: BackendProcess; descriptor: BackendDescriptor }>;
   /** The user's previously-configured default model selection for `backendId`. */
   getDefaultSelection(backendId: BackendId): ModelSelection | null;
+  /**
+   * Human display label for `backendId` (e.g. "Claude"), used to label each
+   * agent's answer in the summary prompt. Falls back to the id when unknown so a
+   * newly registered backend still renders without per-agent branching.
+   */
+  getDisplayName(backendId: BackendId): string;
   /** Absolute vault working directory shared by all sub-sessions. */
   getCwd(): string | null;
   /** Neutral MCP server specs to open each sub-session with. */
@@ -35,12 +47,37 @@ export interface FanoutHost {
   registerReadOnlySession(sessionId: SessionId): () => void;
 }
 
+/**
+ * The assistant prose chunk from a session event, or `null` for anything that
+ * is not part of the answer surface. Only `agent_message_chunk` text feeds an
+ * answer / the summary — thoughts and tool calls are excluded (Phase 4 may add
+ * richer rendering).
+ */
+function textChunkOf(event: SessionEvent): string | null {
+  const update = event.update;
+  if (update.sessionUpdate !== "agent_message_chunk") return null;
+  if (update.content.type !== "text") return null;
+  return update.content.text;
+}
+
 /** Inputs for one fan-out turn — identical prompt + context for every agent (D10). */
 export interface FanoutRunInput {
   /** Main agent first, then each `@`-mentioned installed agent (deduped). */
   agents: ReadonlyArray<BackendId>;
+  /**
+   * The session's main agent (always `agents[0]`). It generates the narrative
+   * summary after every non-failed agent settles (D6), in its own read-only
+   * sub-session.
+   */
+  mainAgent: BackendId;
   /** The identical prompt blocks (text envelope + context + images) every agent receives. */
   prompt: PromptContent[];
+  /**
+   * Plain text of the user's original question, fed to the summary prompt as
+   * the "original question" the agents answered. Distinct from {@link prompt},
+   * which also carries the read-only preamble + context envelope.
+   */
+  originalPromptText: string;
   /** Aborts every in-flight sub-session prompt when fired (cancellation). */
   signal: AbortSignal;
   /** Called whenever any slot mutates, so the UI can render live partials (D7). */
@@ -81,6 +118,13 @@ export class FanoutOrchestrator {
 
     await Promise.all(input.agents.map((backendId) => this.runAgent(backendId, turn, input)));
 
+    // Every answer has settled. The main agent now writes the narrative summary
+    // over the survivors (D6/D7). Cancellation skips it — there is nothing to
+    // reconcile and the turn is ending.
+    if (!input.signal.aborted) {
+      await this.runSummary(turn, input);
+    }
+
     return turn;
   }
 
@@ -95,52 +139,23 @@ export class FanoutOrchestrator {
     turn: FanoutTurn,
     input: FanoutRunInput
   ): Promise<void> {
-    let proc: BackendProcess | null = null;
-    let descriptor: BackendDescriptor | null = null;
-    let sessionId: SessionId | null = null;
-    let unregisterReadOnly: (() => void) | null = null;
-    let unregisterHandler: (() => void) | null = null;
-
-    const fail = (message: string): void => {
-      const slot = turn.answers[backendId];
-      slot.status = "error";
-      slot.error = message;
-      input.onChange(turn);
-    };
-
+    const slot = turn.answers[backendId];
     try {
-      ({ proc, descriptor } = await this.host.ensureBackendForFanout(backendId));
-      if (input.signal.aborted) return fail("Cancelled");
-
-      const opened = await proc.newSession({
-        cwd: this.host.getCwd() ?? "",
-        mcpServers: this.host.getMcpServers(proc),
+      await this.runReadOnlySubSession({
+        backendId,
+        prompt: input.prompt,
+        signal: input.signal,
+        onText: (text) => {
+          if (slot.status === "error") return;
+          slot.text += text;
+          input.onChange(turn);
+        },
+        onAborted: () => {
+          slot.status = "error";
+          slot.error = "Cancelled";
+          input.onChange(turn);
+        },
       });
-      sessionId = opened.sessionId;
-      unregisterReadOnly = this.host.registerReadOnlySession(sessionId);
-
-      unregisterHandler = proc.registerSessionHandler(sessionId, (event) =>
-        this.applyEvent(event, backendId, turn, input)
-      );
-
-      // Read-only sandbox mode and default-model selection mutate disjoint
-      // session fields, so run both round-trips concurrently to halve per-agent
-      // setup latency on the path before `prompt()`.
-      await Promise.all([
-        this.applyReadOnlyMode(proc, descriptor, sessionId),
-        this.applyDefaultModel(proc, descriptor, backendId, sessionId),
-      ]);
-      if (input.signal.aborted) return fail("Cancelled");
-
-      const onAbort = () => void proc?.cancel({ sessionId: sessionId! }).catch(() => undefined);
-      input.signal.addEventListener("abort", onAbort, { once: true });
-      try {
-        await proc.prompt({ sessionId, prompt: input.prompt });
-      } finally {
-        input.signal.removeEventListener("abort", onAbort);
-      }
-
-      const slot = turn.answers[backendId];
       // A clean turn with no streamed text still resolves `done` — the slot
       // carries whatever (possibly empty) text landed; Phase 4 renders the
       // empty state. Only a thrown error becomes an `error` slot.
@@ -150,7 +165,115 @@ export class FanoutOrchestrator {
       }
     } catch (err) {
       logWarn(`[AgentMode] fan-out agent ${backendId} failed`, err);
-      fail(err2String(err));
+      slot.status = "error";
+      slot.error = err2String(err);
+      input.onChange(turn);
+    }
+  }
+
+  /**
+   * The main agent's narrative summary (Phase 3 / D6). Runs after every answer
+   * settles, over the agents that SUCCEEDED ({@link selectSummaryInputs}); a
+   * failed agent is named, not fabricated over (D7). With ZERO successes there
+   * is nothing to reconcile, so the summary lands `done` with a brief
+   * all-failed note rather than an invented summary or a hard error — the turn
+   * still completes and persists that note (the chosen zero-success terminal
+   * state). The summary itself runs read-only in its own ephemeral sub-session
+   * of the main backend, streaming token-by-token into `summary.text` while the
+   * status moves pending → streaming → done.
+   */
+  private async runSummary(turn: FanoutTurn, input: FanoutRunInput): Promise<void> {
+    const inputs = selectSummaryInputs(turn);
+    const summaryPrompt = buildSummaryUserPrompt(input.originalPromptText, inputs, (backendId) =>
+      this.host.getDisplayName(backendId)
+    );
+    if (!summaryPrompt) {
+      turn.summary.status = "done";
+      turn.summary.text = FANOUT_ALL_FAILED_SUMMARY;
+      input.onChange(turn);
+      return;
+    }
+
+    turn.summary.status = "streaming";
+    input.onChange(turn);
+    try {
+      await this.runReadOnlySubSession({
+        backendId: input.mainAgent,
+        prompt: summaryPrompt,
+        signal: input.signal,
+        onText: (text) => {
+          turn.summary.text += text;
+          input.onChange(turn);
+        },
+        onAborted: () => undefined,
+      });
+    } catch (err) {
+      logWarn(`[AgentMode] fan-out summary failed`, err);
+    } finally {
+      turn.summary.status = "done";
+      input.onChange(turn);
+    }
+  }
+
+  /**
+   * Open an ephemeral, read-only sub-session on `backendId`, apply the
+   * read-only sandbox mode + the user's default model, stream the prompt's
+   * assistant text through `onText`, and tear the sub-session down in
+   * `finally`. Shared by every per-agent answer AND the main-agent summary, so
+   * both run through the exact same read-only registration + sandbox path. The
+   * sub-session is registered via {@link FanoutHost.registerReadOnlySession},
+   * so the permission prompter hard-denies writes for it (D5). `onAborted` runs
+   * when the signal is already aborted before the prompt is dispatched.
+   */
+  private async runReadOnlySubSession(params: {
+    backendId: BackendId;
+    prompt: PromptContent[];
+    signal: AbortSignal;
+    onText: (text: string) => void;
+    onAborted: () => void;
+  }): Promise<void> {
+    const { backendId, prompt, signal, onText, onAborted } = params;
+    let proc: BackendProcess | null = null;
+    let sessionId: SessionId | null = null;
+    let unregisterReadOnly: (() => void) | null = null;
+    let unregisterHandler: (() => void) | null = null;
+
+    try {
+      const ensured = await this.host.ensureBackendForFanout(backendId);
+      proc = ensured.proc;
+      const descriptor = ensured.descriptor;
+      if (signal.aborted) return onAborted();
+
+      const opened = await proc.newSession({
+        cwd: this.host.getCwd() ?? "",
+        mcpServers: this.host.getMcpServers(proc),
+      });
+      sessionId = opened.sessionId;
+      unregisterReadOnly = this.host.registerReadOnlySession(sessionId);
+
+      unregisterHandler = proc.registerSessionHandler(sessionId, (event) => {
+        const text = textChunkOf(event);
+        if (text !== null) onText(text);
+      });
+
+      // Read-only sandbox mode and default-model selection mutate disjoint
+      // session fields, so run both round-trips concurrently to halve per-agent
+      // setup latency on the path before `prompt()`.
+      await Promise.all([
+        this.applyReadOnlyMode(proc, descriptor, sessionId),
+        this.applyDefaultModel(proc, descriptor, backendId, sessionId),
+      ]);
+      if (signal.aborted) return onAborted();
+
+      const sid = sessionId;
+      const p = proc;
+      const onAbort = () => void p.cancel({ sessionId: sid }).catch(() => undefined);
+      signal.addEventListener("abort", onAbort, { once: true });
+      try {
+        await proc.prompt({ sessionId, prompt });
+      } finally {
+        signal.removeEventListener("abort", onAbort);
+      }
     } finally {
       unregisterHandler?.();
       unregisterReadOnly?.();
@@ -160,26 +283,6 @@ export class FanoutOrchestrator {
         proc.cancel({ sessionId }).catch(() => undefined);
       }
     }
-  }
-
-  /**
-   * Stream an agent's prose into its slot. Only assistant message chunks feed
-   * the answer text — thoughts and tool calls are not part of the QA answer
-   * surface (Phase 4 may add richer rendering). No-op for other event kinds.
-   */
-  private applyEvent(
-    event: SessionEvent,
-    backendId: BackendId,
-    turn: FanoutTurn,
-    input: FanoutRunInput
-  ): void {
-    const update = event.update;
-    if (update.sessionUpdate !== "agent_message_chunk") return;
-    if (update.content.type !== "text") return;
-    const slot = turn.answers[backendId];
-    if (slot.status === "error") return;
-    slot.text += update.content.text;
-    input.onChange(turn);
   }
 
   /**

@@ -869,7 +869,7 @@ export class AgentSession {
       // no fan-out dispatcher wired) falls through to the existing
       // `backend.prompt()` below, unchanged.
       if (this.runFanoutTurn && this.lastMentionedAgents.length > 1 && placeholderId) {
-        return await this.runFanoutPath(placeholderId, promptBlocks, turnStartedAt);
+        return await this.runFanoutPath(placeholderId, displayText, promptBlocks, turnStartedAt);
       }
 
       const req: PromptInput = {
@@ -941,13 +941,20 @@ export class AgentSession {
    */
   private async runFanoutPath(
     placeholderId: string,
+    originalPromptText: string,
     promptBlocks: PromptContent[],
     turnStartedAt: number
   ): Promise<StopReason> {
     const signal = this.abortController?.signal ?? new AbortController().signal;
     const input: FanoutRunInput = {
       agents: this.lastMentionedAgents,
+      // The session's main agent is always first (Phase 1); it writes the
+      // narrative summary over the answers (D6).
+      mainAgent: this.lastMentionedAgents[0],
       prompt: withReadOnlyPreamble(promptBlocks),
+      // The user's raw question, fed to the summary as the "original question".
+      // Distinct from `prompt`, which carries the read-only preamble + context.
+      originalPromptText,
       signal,
       onChange: (turn) => {
         this.liveFanoutTurn = turn;

@@ -1,4 +1,4 @@
-import type { AgentToolKind, BackendId } from "@/agentMode/session/types";
+import type { AgentToolKind, BackendId, PromptContent } from "@/agentMode/session/types";
 
 /**
  * Read-only QA preamble prepended to every fan-out agent's prompt (the
@@ -99,4 +99,97 @@ export function isWriteOrExecToolKind(kind: AgentToolKind | undefined): boolean 
  */
 export function collapseFanoutTurnToSummaryText(turn: FanoutTurn): string {
   return turn.summary.text.trim();
+}
+
+/**
+ * Concise, provider-neutral instruction for the main agent's narrative summary
+ * (Phase 3 / D6). It frames a NEW user turn — it never replaces any backend
+ * system prompt — and asks for reconciling prose, not a structured table. It is
+ * also read-only: the summary sub-session must not write, only synthesize the
+ * answers it is handed.
+ */
+export const FANOUT_SUMMARY_INSTRUCTION =
+  "Several AI agents independently answered the question below. Write a single " +
+  "narrative summary that reconciles and contrasts their answers: highlight " +
+  "where they agree, where they diverge, and any unique points worth keeping. " +
+  "Do NOT modify any files or run write/shell tools — answer only. Write " +
+  "flowing prose, not a table or bullet list of each agent verbatim.";
+
+/** The text persisted when every fan-out agent failed (D7 zero-success case). */
+export const FANOUT_ALL_FAILED_SUMMARY =
+  "All agents failed to answer; no summary could be generated.";
+
+/** One agent's succeeded answer, ready to feed into the summary prompt. */
+export interface SucceededAnswer {
+  backendId: BackendId;
+  text: string;
+}
+
+/**
+ * The agents whose answers feed the summary, partitioned for failure-awareness
+ * (D7): `succeeded` are `done` slots with non-empty text (the summary
+ * reconciles these); `failed` are slots that errored OR finished empty (the
+ * summary notes them by name). Insertion order is preserved on both lists so
+ * the main agent appears first, matching the answer slots.
+ */
+export interface SummaryInputs {
+  succeeded: SucceededAnswer[];
+  failed: BackendId[];
+}
+
+/**
+ * Partition a settled turn's answers into the {@link SummaryInputs} the summary
+ * runs over. Pure — the failure-aware core of Phase 3. A `done` slot with only
+ * whitespace is treated as a failure: it carries nothing to reconcile, so the
+ * summary names it rather than feeding the main agent an empty answer.
+ */
+export function selectSummaryInputs(turn: FanoutTurn): SummaryInputs {
+  const succeeded: SucceededAnswer[] = [];
+  const failed: BackendId[] = [];
+  for (const backendId of Object.keys(turn.answers)) {
+    const slot = turn.answers[backendId];
+    const text = slot.text.trim();
+    if (slot.status === "done" && text.length > 0) {
+      succeeded.push({ backendId, text });
+    } else {
+      failed.push(backendId);
+    }
+  }
+  return { succeeded, failed };
+}
+
+/**
+ * Compose the NEW user-turn prompt fed to the main agent for the summary: the
+ * read-only summary instruction, the user's original prompt, then each
+ * succeeded answer labeled by its agent's display name, and a closing note
+ * listing any agents that failed (D7). Returns a single text block so the
+ * summary sub-session sees one coherent prompt. `displayNameFor` resolves a
+ * `BackendId` to its human label; it falls back to the id when unknown so a
+ * newly added backend still renders sensibly (no per-agent branching).
+ *
+ * Returns `null` when zero agents succeeded — the caller must not fabricate a
+ * summary over nothing; it sets the zero-success terminal state instead.
+ */
+export function buildSummaryUserPrompt(
+  originalPrompt: string,
+  inputs: SummaryInputs,
+  displayNameFor: (backendId: BackendId) => string
+): PromptContent[] | null {
+  if (inputs.succeeded.length === 0) return null;
+  // `text` is already trimmed by selectSummaryInputs — no re-trim.
+  const sections = inputs.succeeded.map(
+    ({ backendId, text }) => `### ${displayNameFor(backendId)}\n${text}`
+  );
+  const parts = [
+    FANOUT_SUMMARY_INSTRUCTION,
+    `## Original question\n${originalPrompt.trim()}`,
+    `## Agent answers\n${sections.join("\n\n")}`,
+  ];
+  if (inputs.failed.length > 0) {
+    const names = inputs.failed.map(displayNameFor).join(", ");
+    parts.push(
+      `## Note\nThese agents did not return an answer: ${names}. Summarize only the answers above and note this gap.`
+    );
+  }
+  return [{ type: "text", text: parts.join("\n\n") }];
 }

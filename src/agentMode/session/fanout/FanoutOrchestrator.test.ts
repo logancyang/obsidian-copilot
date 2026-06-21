@@ -7,6 +7,7 @@ import type {
   SessionUpdateHandler,
 } from "@/agentMode/session/types";
 import { createFanoutTurn, FanoutOrchestrator, type FanoutHost } from "./FanoutOrchestrator";
+import { FANOUT_ALL_FAILED_SUMMARY } from "./fanoutTypes";
 
 jest.mock("@/logger", () => ({
   logInfo: jest.fn(),
@@ -22,22 +23,33 @@ interface MockProc {
   cancel: jest.Mock;
   resolvePrompt: () => void;
   rejectPrompt: (err: unknown) => void;
+  promptCount: () => number;
 }
 
 /**
  * Mock backend process whose `prompt` stays pending until the test resolves it,
  * so streamed events can land before the turn settles. `sessionId` is fixed per
- * backend so the orchestrator's per-session handler routing is exercised.
+ * backend so the orchestrator's per-session handler routing is exercised. Each
+ * `prompt` call pushes its own resolver, so the answer turn and the later
+ * summary turn (a second sub-session on the main backend) resolve independently;
+ * `resolvePrompt`/`rejectPrompt` settle the oldest still-pending prompt.
  */
 function makeMockProc(sessionId: string): MockProc {
   let handler: SessionUpdateHandler | null = null;
-  let resolvePrompt!: () => void;
-  let rejectPrompt!: (err: unknown) => void;
+  const pending: Array<{
+    resolve: () => void;
+    reject: (err: unknown) => void;
+  }> = [];
   const promptPromise = () =>
     new Promise<{ stopReason: "end_turn" }>((resolve, reject) => {
-      resolvePrompt = () => resolve({ stopReason: "end_turn" });
-      rejectPrompt = reject;
+      pending.push({ resolve: () => resolve({ stopReason: "end_turn" }), reject });
     });
+  const settleOldest = (
+    apply: (p: { resolve: () => void; reject: (e: unknown) => void }) => void
+  ) => {
+    const next = pending.shift();
+    if (next) apply(next);
+  };
   const setSessionMode = jest.fn(async () => ({ model: null, mode: null }));
   const setSessionModel = jest.fn(async () => ({ model: null, mode: null }));
   const cancel = jest.fn(async () => undefined);
@@ -72,8 +84,9 @@ function makeMockProc(sessionId: string): MockProc {
     setSessionMode,
     setSessionModel,
     cancel,
-    resolvePrompt: () => resolvePrompt(),
-    rejectPrompt: (err) => rejectPrompt(err),
+    resolvePrompt: () => settleOldest((p) => p.resolve()),
+    rejectPrompt: (err) => settleOldest((p) => p.reject(err)),
+    promptCount: () => (proc.prompt as jest.Mock).mock.calls.length,
   };
 }
 
@@ -119,6 +132,7 @@ function makeHost(
       descriptor: descriptors.get(backendId)!,
     }),
     getDefaultSelection: (backendId) => defaults[backendId] ?? null,
+    getDisplayName: (backendId) => backendId.toUpperCase(),
     getCwd: () => "/vault",
     getMcpServers: () => [],
     registerReadOnlySession: (sessionId) => {
@@ -130,6 +144,26 @@ function makeHost(
 }
 
 const flush = () => new Promise((r) => window.setTimeout(r, 0));
+
+/**
+ * Build a `run` input with the Phase 3 fields defaulted: `mainAgent` is the
+ * first agent (the session main, per Phase 1) and `originalPromptText` is a
+ * fixed question. Tests override fields as needed.
+ */
+function runInput(
+  agents: BackendId[],
+  overrides: Partial<Parameters<FanoutOrchestrator["run"]>[0]> = {}
+): Parameters<FanoutOrchestrator["run"]>[0] {
+  return {
+    agents,
+    mainAgent: agents[0],
+    prompt: [{ type: "text", text: "q" }],
+    originalPromptText: "the original question",
+    signal: new AbortController().signal,
+    onChange: () => {},
+    ...overrides,
+  };
+}
 
 describe("createFanoutTurn", () => {
   it("seeds one running slot per agent (insertion order) plus a pending summary", () => {
@@ -150,18 +184,23 @@ describe("FanoutOrchestrator.run", () => {
     const controller = new AbortController();
     const snapshots: string[] = [];
 
-    const runPromise = orchestrator.run({
-      agents: ["claude", "codex"],
-      prompt: [{ type: "text", text: "review this" }],
-      signal: controller.signal,
-      onChange: (turn) => snapshots.push(JSON.stringify(turn.answers)),
-    });
+    const runPromise = orchestrator.run(
+      runInput(["claude", "codex"], {
+        prompt: [{ type: "text", text: "review this" }],
+        signal: controller.signal,
+        onChange: (turn) => snapshots.push(JSON.stringify(turn.answers)),
+      })
+    );
 
     await flush();
     procs.get("claude")!.emit(textChunk("s-claude", "Claude says hi"));
     procs.get("codex")!.emit(textChunk("s-codex", "Codex says hi"));
     procs.get("claude")!.resolvePrompt();
     procs.get("codex")!.resolvePrompt();
+    // Answers settled; the main agent (claude) now opens a summary sub-session.
+    await flush();
+    procs.get("claude")!.emit(textChunk("s-claude", "summary"));
+    procs.get("claude")!.resolvePrompt();
 
     const turn = await runPromise;
     expect(turn.answers.claude).toEqual({
@@ -174,11 +213,12 @@ describe("FanoutOrchestrator.run", () => {
       status: "done",
       text: "Codex says hi",
     });
-    // Summary stays pending in Phase 2.
-    expect(turn.summary.status).toBe("pending");
-    // Each sub-session was registered and then unregistered as read-only.
-    expect(readOnlyRegistered.sort()).toEqual(["s-claude", "s-codex"]);
-    expect(readOnlyUnregistered.sort()).toEqual(["s-claude", "s-codex"]);
+    expect(turn.summary.status).toBe("done");
+    expect(turn.summary.text).toBe("summary");
+    // Three sub-sessions registered read-only: two answers + the summary (a
+    // second session on the main backend), all unregistered on teardown.
+    expect(readOnlyRegistered.sort()).toEqual(["s-claude", "s-claude", "s-codex"]);
+    expect(readOnlyUnregistered.sort()).toEqual(["s-claude", "s-claude", "s-codex"]);
     expect(snapshots.length).toBeGreaterThan(1);
   });
 
@@ -190,17 +230,17 @@ describe("FanoutOrchestrator.run", () => {
     const orchestrator = new FanoutOrchestrator(host);
     const controller = new AbortController();
 
-    const runPromise = orchestrator.run({
-      agents: ["claude", "codex"],
-      prompt: [{ type: "text", text: "q" }],
-      signal: controller.signal,
-      onChange: () => {},
-    });
+    const runPromise = orchestrator.run(
+      runInput(["claude", "codex"], { signal: controller.signal })
+    );
 
     await flush();
     procs.get("claude")!.emit(textChunk("s-claude", "ok"));
     procs.get("claude")!.resolvePrompt();
     procs.get("codex")!.rejectPrompt(new Error("backend boom"));
+    // The main agent (claude) summarizes over the one survivor.
+    await flush();
+    procs.get("claude")!.resolvePrompt();
 
     const turn = await runPromise;
     expect(turn.answers.claude.status).toBe("done");
@@ -216,15 +256,15 @@ describe("FanoutOrchestrator.run", () => {
     const orchestrator = new FanoutOrchestrator(host);
     const controller = new AbortController();
 
-    const runPromise = orchestrator.run({
-      agents: ["codex", "opencode"],
-      prompt: [{ type: "text", text: "q" }],
-      signal: controller.signal,
-      onChange: () => {},
-    });
+    const runPromise = orchestrator.run(
+      runInput(["codex", "opencode"], { signal: controller.signal })
+    );
     await flush();
     procs.get("codex")!.resolvePrompt();
     procs.get("opencode")!.resolvePrompt();
+    // Main agent (codex) summary turn.
+    await flush();
+    procs.get("codex")!.resolvePrompt();
     await runPromise;
 
     expect(procs.get("codex")!.setSessionMode).toHaveBeenCalledWith({
@@ -241,12 +281,10 @@ describe("FanoutOrchestrator.run", () => {
     );
     const orchestrator = new FanoutOrchestrator(host);
     const controller = new AbortController();
-    const runPromise = orchestrator.run({
-      agents: ["claude"],
-      prompt: [{ type: "text", text: "q" }],
-      signal: controller.signal,
-      onChange: () => {},
-    });
+    const runPromise = orchestrator.run(runInput(["claude"], { signal: controller.signal }));
+    await flush();
+    procs.get("claude")!.resolvePrompt();
+    // Summary turn on the same (main) backend.
     await flush();
     procs.get("claude")!.resolvePrompt();
     await runPromise;
@@ -261,16 +299,140 @@ describe("FanoutOrchestrator.run", () => {
     const { host, procs } = makeHost({ claude: { sessionId: "s-claude" } });
     const orchestrator = new FanoutOrchestrator(host);
     const controller = new AbortController();
-    const runPromise = orchestrator.run({
-      agents: ["claude"],
-      prompt: [{ type: "text", text: "q" }],
-      signal: controller.signal,
-      onChange: () => {},
-    });
+    const runPromise = orchestrator.run(runInput(["claude"], { signal: controller.signal }));
     await flush();
     controller.abort();
     procs.get("claude")!.resolvePrompt();
     await runPromise;
     expect(procs.get("claude")!.cancel).toHaveBeenCalledWith({ sessionId: "s-claude" });
+  });
+
+  it("skips the summary when the turn is cancelled", async () => {
+    const { host, procs } = makeHost({ claude: { sessionId: "s-claude" } });
+    const orchestrator = new FanoutOrchestrator(host);
+    const controller = new AbortController();
+    const runPromise = orchestrator.run(runInput(["claude"], { signal: controller.signal }));
+    await flush();
+    controller.abort();
+    procs.get("claude")!.resolvePrompt();
+    const turn = await runPromise;
+    // Only the answer prompt ran — no summary sub-session was dispatched.
+    expect(procs.get("claude")!.promptCount()).toBe(1);
+    expect(turn.summary.status).toBe("pending");
+  });
+
+  it("streams the summary after all answers settle, status pending→streaming→done", async () => {
+    const { host, procs } = makeHost({
+      claude: { sessionId: "s-claude" },
+      codex: { sessionId: "s-codex" },
+    });
+    const orchestrator = new FanoutOrchestrator(host);
+    const controller = new AbortController();
+    const summaryStatuses: string[] = [];
+    const runPromise = orchestrator.run(
+      runInput(["claude", "codex"], {
+        signal: controller.signal,
+        onChange: (turn) => summaryStatuses.push(turn.summary.status),
+      })
+    );
+
+    await flush();
+    procs.get("claude")!.emit(textChunk("s-claude", "A"));
+    procs.get("codex")!.emit(textChunk("s-codex", "B"));
+    procs.get("claude")!.resolvePrompt();
+    procs.get("codex")!.resolvePrompt();
+    await flush();
+    // The summary sub-session is the main agent's SECOND prompt; the answer must
+    // have settled before it is dispatched.
+    expect(procs.get("claude")!.promptCount()).toBe(2);
+    procs.get("claude")!.emit(textChunk("s-claude", "Recon"));
+    procs.get("claude")!.emit(textChunk("s-claude", "ciled"));
+    procs.get("claude")!.resolvePrompt();
+
+    const turn = await runPromise;
+    expect(turn.summary.text).toBe("Reconciled");
+    // pending (seed) → streaming (before prompt) → ... → done (terminal).
+    expect(summaryStatuses[0]).toBe("pending");
+    expect(summaryStatuses).toContain("streaming");
+    expect(summaryStatuses[summaryStatuses.length - 1]).toBe("done");
+  });
+
+  it("feeds the summary only succeeded answers, labeled, and names the failed agent", async () => {
+    const { host, procs } = makeHost({
+      claude: { sessionId: "s-claude" },
+      codex: { sessionId: "s-codex" },
+    });
+    const orchestrator = new FanoutOrchestrator(host);
+    const controller = new AbortController();
+    const runPromise = orchestrator.run(
+      runInput(["claude", "codex"], { signal: controller.signal })
+    );
+
+    await flush();
+    procs.get("claude")!.emit(textChunk("s-claude", "Claude answer"));
+    procs.get("claude")!.resolvePrompt();
+    procs.get("codex")!.rejectPrompt(new Error("boom"));
+    await flush();
+    procs.get("claude")!.resolvePrompt();
+    await runPromise;
+
+    // The main agent's second prompt is the summary; inspect what it received.
+    const summaryCall = (procs.get("claude")!.proc.prompt as jest.Mock).mock.calls[1][0];
+    const text = summaryCall.prompt[0].text as string;
+    expect(text).toContain("the original question");
+    expect(text).toContain("CLAUDE");
+    expect(text).toContain("Claude answer");
+    // The failed agent is named, never fed as an answer.
+    expect(text).toContain("did not return an answer: CODEX");
+    expect(text).not.toContain("### CODEX");
+  });
+
+  it("lands a brief all-failed note (no fabricated summary) when zero agents succeed", async () => {
+    const { host, procs } = makeHost({
+      claude: { sessionId: "s-claude" },
+      codex: { sessionId: "s-codex" },
+    });
+    const orchestrator = new FanoutOrchestrator(host);
+    const controller = new AbortController();
+    const runPromise = orchestrator.run(
+      runInput(["claude", "codex"], { signal: controller.signal })
+    );
+
+    await flush();
+    procs.get("claude")!.rejectPrompt(new Error("boom-a"));
+    procs.get("codex")!.rejectPrompt(new Error("boom-b"));
+    const turn = await runPromise;
+
+    expect(turn.summary.status).toBe("done");
+    expect(turn.summary.text).toBe(FANOUT_ALL_FAILED_SUMMARY);
+    // No summary sub-session was dispatched — nothing to reconcile.
+    expect(procs.get("claude")!.promptCount()).toBe(1);
+    expect(procs.get("codex")!.promptCount()).toBe(1);
+  });
+
+  it("treats a done-but-empty answer as failed for summary input", async () => {
+    const { host, procs } = makeHost({
+      claude: { sessionId: "s-claude" },
+      codex: { sessionId: "s-codex" },
+    });
+    const orchestrator = new FanoutOrchestrator(host);
+    const controller = new AbortController();
+    const runPromise = orchestrator.run(
+      runInput(["claude", "codex"], { signal: controller.signal })
+    );
+
+    await flush();
+    procs.get("claude")!.emit(textChunk("s-claude", "real answer"));
+    procs.get("claude")!.resolvePrompt();
+    // Codex finishes cleanly but emitted no text → done-but-empty.
+    procs.get("codex")!.resolvePrompt();
+    await flush();
+    procs.get("claude")!.resolvePrompt();
+    await runPromise;
+
+    const summaryCall = (procs.get("claude")!.proc.prompt as jest.Mock).mock.calls[1][0];
+    const text = summaryCall.prompt[0].text as string;
+    expect(text).toContain("### CLAUDE");
+    expect(text).toContain("did not return an answer: CODEX");
   });
 });

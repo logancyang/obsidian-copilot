@@ -237,6 +237,7 @@ export class AgentSessionManager {
         return { proc, descriptor };
       },
       getDefaultSelection: (backendId) => this.getDefaultSelection(backendId),
+      getDisplayName: (backendId) => this.resolveDescriptor(backendId).displayName,
       getCwd: () => {
         const adapter = this.app.vault.adapter;
         return adapter instanceof FileSystemAdapter ? adapter.getBasePath() : null;
