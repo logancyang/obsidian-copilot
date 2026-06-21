@@ -109,7 +109,14 @@ export class PermissionBridge {
     const isReadOnlySession = this.opts.getIsReadOnlySession?.();
     if (sessionId && isReadOnlySession?.(sessionId)) {
       const { tool, mcpServer } = resolveToolName(toolName);
-      if (isWriteOrExecToolKind(deriveToolKind(tool, mcpServer))) {
+      const kind = deriveToolKind(tool, mcpServer);
+      // An MCP tool whose name isn't a known built-in derives to `other`, which
+      // is otherwise allowed. We can't verify a third-party MCP tool is
+      // read-only (e.g. `mcp__filesystem__write_file`), so fail safe and deny
+      // unknown MCP tools in a read-only QA turn; known-classified MCP reads
+      // (read/search/fetch) still fall through.
+      const isUnverifiableMcpTool = Boolean(mcpServer) && kind === "other";
+      if (isWriteOrExecToolKind(kind) || isUnverifiableMcpTool) {
         return this.deny(
           "canUseTool:response",
           "Read-only QA turn: write and exec tools are disabled.",

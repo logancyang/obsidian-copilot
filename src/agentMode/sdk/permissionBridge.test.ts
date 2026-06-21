@@ -352,6 +352,21 @@ describe("PermissionBridge.canUseTool", () => {
       expect(result.behavior).toBe("allow");
     });
 
+    it("denies an UNKNOWN MCP tool (kind 'other') in a read-only session — fail safe", async () => {
+      const prompter = jest.fn();
+      const bridge = new PermissionBridge({
+        getPrompter: () => prompter,
+        getIsReadOnlySession: () => () => true,
+      });
+      bridge.setSessionContext("session-1");
+
+      // A third-party MCP tool whose name isn't a known built-in derives to
+      // `other`; it can't be verified read-only, so the gate must deny it.
+      const result = await bridge.canUseTool("mcp__notion__create_page", { title: "x" }, ctx);
+      expect(result.behavior).toBe("deny");
+      expect(prompter).not.toHaveBeenCalled();
+    });
+
     it("does not gate writes when the session is NOT read-only (plan auto-allow still applies)", async () => {
       const prompter = jest.fn();
       const bridge = new PermissionBridge({
