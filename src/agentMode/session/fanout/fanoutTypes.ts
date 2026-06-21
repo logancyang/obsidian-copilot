@@ -204,15 +204,18 @@ export function snapshotFanoutTurn(turn: FanoutTurn): FanoutTurn {
  * answers it is handed.
  */
 export const FANOUT_SUMMARY_INSTRUCTION =
-  "Several AI agents independently answered the user's question below. Give a " +
-  "single, direct answer to that question by synthesizing theirs. Be concise and " +
-  "scale the length to the question — a simple question gets a one or two " +
-  "sentence answer. Focus ONLY on substance that addresses the question; IGNORE " +
-  "any environment scaffolding an agent included (tool lists, available skills " +
-  "or agents, system boilerplate) — it is not part of their answer. If they " +
-  "materially disagree, give the answer and note the key disagreement in a " +
-  "sentence; if they agree, state it once. Do not narrate each agent or add " +
-  "meta-commentary. Do NOT modify any files or run write/shell tools — answer only.";
+  "Several AI agents independently answered the user's question shown below. You " +
+  "are NOT one of those agents and you are NOT being asked the question yourself: " +
+  "do NOT answer it from your own perspective or substitute your own identity, " +
+  "knowledge, or opinion. Your only job is to summarize and reconcile what THE " +
+  "AGENTS said. Report their answer concisely, scaled to the question — a simple " +
+  "question gets one or two sentences. If they agree, state the shared answer " +
+  "once as what the agents reported; if they disagree, give the answers and note " +
+  "the key disagreement briefly, attributing a claim to the agent that made it " +
+  "when it matters. IGNORE any environment scaffolding in their answers (tool " +
+  "lists, available skills or agents, system boilerplate) — it is not part of an " +
+  "answer. Do not pad with meta-commentary. Do NOT modify any files or run " +
+  "write/shell tools.";
 
 /** The text persisted when every fan-out agent failed (D7 zero-success case). */
 export const FANOUT_ALL_FAILED_SUMMARY =
