@@ -319,6 +319,13 @@ export class FanoutOrchestrator {
           this.applyDefaultModel(proc, descriptor, backendId, sessionId, modelApply),
         ]);
 
+        // If the abort/timeout race already won during setup, do NOT dispatch
+        // the prompt: the slot is already terminal, and starting a backend query
+        // now would run a read-only prompt behind it and — for a timed-out main
+        // agent — could overlap the later summary on this same backend. The
+        // `finally` still tears down the (possibly late-opened) sub-session.
+        if (raceSettled()) return "done";
+
         const promptProc = proc;
         const promptSessionId = sessionId;
         const promptPromise = promptProc.prompt({ sessionId, prompt });

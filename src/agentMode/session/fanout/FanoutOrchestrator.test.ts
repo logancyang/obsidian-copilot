@@ -1313,10 +1313,12 @@ describe("FanoutOrchestrator.run", () => {
       expect(procs.get("codex")!.cancel).not.toHaveBeenCalled();
 
       // The cold backend now returns the session AFTER the slot is terminal. The
-      // attempt resumes, finds the run already aborted, and tears the orphaned
-      // sub-session down (its dispatched prompt is cancelled, then closed).
+      // attempt resumes, finds the race already settled, and tears the orphaned
+      // sub-session down WITHOUT dispatching a prompt (which would start a backend
+      // query behind the terminal slot / overlap the summary).
       procs.get("codex")!.resolveNewSession();
       await jest.advanceTimersByTimeAsync(0);
+      expect(procs.get("codex")!.promptCount()).toBe(0);
       expect(procs.get("codex")!.cancel).toHaveBeenCalledWith({ sessionId: "s-codex" });
       expect(jest.getTimerCount()).toBe(0);
     } finally {
