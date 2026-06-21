@@ -387,6 +387,76 @@ describe("buildConversationHistoryBlock", () => {
     expect(block).toContain("Add tests");
   });
 
+  it("renders a user turn's prose AND a marker for its image attachments", () => {
+    const msg: AgentChatMessage = {
+      ...histMsg(USER_SENDER, "describe the screenshot above"),
+      content: [
+        { type: "text", text: "describe the screenshot above" },
+        { type: "image_url", image_url: { url: "data:image/png;base64,AAA=" } },
+      ],
+    };
+    const block = buildConversationHistoryBlock([msg], FANOUT_HISTORY_MAX_CHARS)!;
+    expect((block.match(/<turn /g) ?? []).length).toBe(1);
+    expect(block).toContain("describe the screenshot above");
+    expect(block).toContain("[1 image attachment omitted from history");
+  });
+
+  it("does NOT drop an image-only turn (empty prose, no parts) and labels its role", () => {
+    const msg: AgentChatMessage = {
+      ...histMsg(USER_SENDER, "   "),
+      content: [{ type: "image_url", image_url: { url: "data:image/png;base64,AAA=" } }],
+    };
+    const block = buildConversationHistoryBlock([msg], FANOUT_HISTORY_MAX_CHARS)!;
+    expect((block.match(/<turn /g) ?? []).length).toBe(1);
+    expect(block).toContain('<turn role="user">');
+    expect(block).toContain("[1 image attachment omitted from history");
+  });
+
+  it("pluralizes the image marker for multiple attachments", () => {
+    const msg: AgentChatMessage = {
+      ...histMsg(USER_SENDER, "compare these"),
+      content: [
+        { type: "image", mimeType: "image/png", data: "AAA=" },
+        { type: "image", mimeType: "image/jpeg", data: "BBB=" },
+        { type: "image_url", image_url: { url: "data:image/gif;base64,CCC=" } },
+      ],
+    };
+    const block = buildConversationHistoryBlock([msg], FANOUT_HISTORY_MAX_CHARS)!;
+    expect(block).toContain("[3 image attachments omitted from history");
+  });
+
+  it("leaves a turn with no image content byte-for-byte unchanged", () => {
+    const messages = [
+      histMsg(USER_SENDER, "What is the plan?"),
+      histMsg(AI_SENDER, "Here is the plan."),
+    ];
+    const withoutContent = buildConversationHistoryBlock(messages, FANOUT_HISTORY_MAX_CHARS);
+    // Same messages but with an explicit empty/no-image content array.
+    const withEmptyContent = buildConversationHistoryBlock(
+      messages.map((m) => ({ ...m, content: [{ type: "text", text: m.message }] })),
+      FANOUT_HISTORY_MAX_CHARS
+    );
+    expect(withoutContent).not.toContain("omitted from history");
+    expect(withEmptyContent).toBe(withoutContent);
+  });
+
+  it("ignores non-object and non-image content entries safely", () => {
+    const msg: AgentChatMessage = {
+      ...histMsg(USER_SENDER, "hello"),
+      content: [
+        null,
+        "a bare string",
+        42,
+        { type: "text", text: "not an image" },
+        { notType: "image" },
+        { type: "audio" },
+      ],
+    };
+    const block = buildConversationHistoryBlock([msg], FANOUT_HISTORY_MAX_CHARS)!;
+    expect(block).toContain("hello");
+    expect(block).not.toContain("omitted from history");
+  });
+
   it("omits thought parts (internal reasoning) from the history", () => {
     const block = buildConversationHistoryBlock(
       [

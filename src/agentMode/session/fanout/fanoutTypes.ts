@@ -338,17 +338,56 @@ function renderNonProseParts(parts: readonly AgentMessagePart[]): string[] {
 }
 
 /**
+ * Count the image attachment blocks in a user message's `content` array. The
+ * field is typed `unknown[]` (display-only: `buildUserDisplayContent` projects
+ * attached images into it), so each entry is narrowed defensively — a non-null
+ * object whose `type` is a string equal to `"image"` or `"image_url"`. Both
+ * shapes are matched: the live projection emits `image_url` entries, while the
+ * underlying prompt block shape is `image`, so either form is recognized
+ * without assuming a concrete type or casting. Non-object / non-image entries
+ * (e.g. `text` blocks, `null`, strings) are ignored.
+ */
+function countImageAttachments(content: readonly unknown[] | undefined): number {
+  if (!content) return 0;
+  let count = 0;
+  for (const entry of content) {
+    if (typeof entry !== "object" || entry === null) continue;
+    const type = (entry as { type?: unknown }).type;
+    if (type === "image" || type === "image_url") count += 1;
+  }
+  return count;
+}
+
+/**
+ * Concise marker noting that a turn carried image attachments whose bytes are
+ * NOT included in fan-out history (only this signal that they existed). Singular
+ * vs plural is correct so the marker reads naturally for one or many images.
+ * Fully fixed text plus a count — nothing user-controlled, so no escaping is
+ * needed here. Threading the actual image bytes into the prompt is a tracked
+ * follow-up (full multimodal history); this marker only prevents silent context
+ * loss in the meantime.
+ */
+function imageAttachmentMarker(count: number): string {
+  const noun = count === 1 ? "image attachment" : "image attachments";
+  return `[${count} ${noun} omitted from history; the image content is not included here but existed in this turn]`;
+}
+
+/**
  * The renderable inner body of one transcript turn: its prose (from `message`,
- * which already aggregates the text parts) followed by its non-prose parts
- * (tool outputs, plan entries). Returns `null` when the turn carries NO
- * renderable content at all — only such truly-empty turns are dropped, so a
- * turn that is all tool/plan parts (empty prose) is still rendered.
+ * which already aggregates the text parts), its non-prose parts (tool outputs,
+ * plan entries), then a marker for any image attachments on the turn's
+ * `content`. Returns `null` only when the turn carries NO renderable content at
+ * all — prose, parts, AND images all absent. A turn that is ONLY image content
+ * (empty prose, no parts) now renders the marker so it is no longer dropped from
+ * history; a turn with no image content renders byte-for-byte as before.
  */
 function renderTurnContent(message: AgentChatMessage): string | null {
   const segments: string[] = [];
   const prose = message.message.trim();
   if (prose.length > 0) segments.push(prose);
   if (message.parts) segments.push(...renderNonProseParts(message.parts));
+  const imageCount = countImageAttachments(message.content);
+  if (imageCount > 0) segments.push(imageAttachmentMarker(imageCount));
   if (segments.length === 0) return null;
   return segments.join("\n");
 }
