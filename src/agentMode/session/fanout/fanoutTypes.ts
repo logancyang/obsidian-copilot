@@ -204,11 +204,15 @@ export function snapshotFanoutTurn(turn: FanoutTurn): FanoutTurn {
  * answers it is handed.
  */
 export const FANOUT_SUMMARY_INSTRUCTION =
-  "Several AI agents independently answered the question below. Write a single " +
-  "narrative summary that reconciles and contrasts their answers: highlight " +
-  "where they agree, where they diverge, and any unique points worth keeping. " +
-  "Do NOT modify any files or run write/shell tools — answer only. Write " +
-  "flowing prose, not a table or bullet list of each agent verbatim.";
+  "Several AI agents independently answered the user's question below. Give a " +
+  "single, direct answer to that question by synthesizing theirs. Be concise and " +
+  "scale the length to the question — a simple question gets a one or two " +
+  "sentence answer. Focus ONLY on substance that addresses the question; IGNORE " +
+  "any environment scaffolding an agent included (tool lists, available skills " +
+  "or agents, system boilerplate) — it is not part of their answer. If they " +
+  "materially disagree, give the answer and note the key disagreement in a " +
+  "sentence; if they agree, state it once. Do not narrate each agent or add " +
+  "meta-commentary. Do NOT modify any files or run write/shell tools — answer only.";
 
 /** The text persisted when every fan-out agent failed (D7 zero-success case). */
 export const FANOUT_ALL_FAILED_SUMMARY =
