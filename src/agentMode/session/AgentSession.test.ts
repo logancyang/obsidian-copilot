@@ -876,6 +876,46 @@ describe("AgentSession fan-out branching", () => {
     expect(mock.prompt).toHaveBeenCalledTimes(1);
     expect(session.getLiveFanoutTurn()).toBeNull();
   });
+
+  it("clears a prior turn's live fan-out before the next turn's first notify (no dropdown leak)", async () => {
+    const mock = makeMockBackend();
+    const runFanoutTurn = jest.fn(async (input: FanoutRunInput): Promise<FanoutTurn> => {
+      const turn: FanoutTurn = {
+        answers: {
+          opencode: { backendId: "opencode", status: "done", text: "a" },
+          claude: { backendId: "claude", status: "done", text: "b" },
+        },
+        summary: { status: "done", text: "summary" },
+      };
+      input.onChange(turn);
+      return turn;
+    });
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+      runFanoutTurn,
+    });
+
+    await session.sendPrompt("review", undefined, undefined, ["opencode", "claude"]).turn;
+    expect(session.getLiveFanoutTurn()).not.toBeNull();
+
+    // The live fan-out must be cleared before the next (single-agent) turn's
+    // placeholder is announced, or the new placeholder would briefly render the
+    // stale dropdown. Capture what a subscriber sees on that first notify.
+    const liveAtFirstNotify: Array<FanoutTurn | null> = [];
+    const unsubscribe = session.subscribe({
+      onMessagesChanged: () => liveAtFirstNotify.push(session.getLiveFanoutTurn()),
+      onStatusChanged: () => undefined,
+    });
+    await session.sendPrompt("follow up").turn;
+    unsubscribe();
+
+    expect(liveAtFirstNotify.length).toBeGreaterThan(0);
+    expect(liveAtFirstNotify.every((t) => t === null)).toBe(true);
+    expect(session.getLiveFanoutTurn()).toBeNull();
+  });
 });
 
 describe("AgentSession.create (via start)", () => {

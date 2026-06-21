@@ -102,6 +102,25 @@ export function collapseFanoutTurnToSummaryText(turn: FanoutTurn): string {
 }
 
 /**
+ * A fresh, structurally-copied snapshot of a live fan-out turn. The orchestrator
+ * mutates a single {@link FanoutTurn} in place and re-emits the SAME reference
+ * on every streamed token (see `FanoutOrchestrator`). The UI subscribes through
+ * React state, which bails on `Object.is`-equal updates — so handing the live
+ * object straight to `setState` would freeze the dropdown on its first frame.
+ * Copying the turn (and each answer slot) yields a new reference per query, so
+ * each coalesced notify produces a render with the latest streamed text/status.
+ * Copies the answer slots too so a captured snapshot stays stable even as the
+ * live turn keeps mutating underneath it.
+ */
+export function snapshotFanoutTurn(turn: FanoutTurn): FanoutTurn {
+  const answers: Record<BackendId, AgentAnswer> = {};
+  for (const backendId of Object.keys(turn.answers)) {
+    answers[backendId] = { ...turn.answers[backendId] };
+  }
+  return { answers, summary: { ...turn.summary } };
+}
+
+/**
  * Concise, provider-neutral instruction for the main agent's narrative summary
  * (Phase 3 / D6). It frames a NEW user turn — it never replaces any backend
  * system prompt — and asks for reconciling prose, not a structured table. It is

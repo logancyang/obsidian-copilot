@@ -4,6 +4,7 @@ import {
   collapseFanoutTurnToSummaryText,
   isWriteOrExecToolKind,
   selectSummaryInputs,
+  snapshotFanoutTurn,
   type FanoutTurn,
 } from "./fanoutTypes";
 
@@ -110,5 +111,41 @@ describe("buildSummaryUserPrompt", () => {
     );
     const text = (prompt![0] as { text: string }).text;
     expect(text).not.toContain("did not return an answer");
+  });
+});
+
+describe("snapshotFanoutTurn", () => {
+  const live = (): FanoutTurn => ({
+    answers: {
+      claude: { backendId: "claude", status: "running", text: "partial" },
+      codex: { backendId: "codex", status: "done", text: "full" },
+    },
+    summary: { status: "streaming", text: "summary so far" },
+  });
+
+  it("returns a fresh top-level reference so React state updates do not bail", () => {
+    const turn = live();
+    const snap = snapshotFanoutTurn(turn);
+    expect(snap).not.toBe(turn);
+    expect(snap.answers).not.toBe(turn.answers);
+    expect(snap.summary).not.toBe(turn.summary);
+  });
+
+  it("copies each answer slot so a captured snapshot is stable under later mutation", () => {
+    const turn = live();
+    const snap = snapshotFanoutTurn(turn);
+    // The orchestrator mutates the live turn in place after emitting.
+    turn.answers.claude.text += " more";
+    turn.answers.claude.status = "done";
+    turn.summary.text = "final";
+    expect(snap.answers.claude.text).toBe("partial");
+    expect(snap.answers.claude.status).toBe("running");
+    expect(snap.summary.text).toBe("summary so far");
+  });
+
+  it("preserves slot order and values", () => {
+    const snap = snapshotFanoutTurn(live());
+    expect(Object.keys(snap.answers)).toEqual(["claude", "codex"]);
+    expect(snap.answers.codex.text).toBe("full");
   });
 });

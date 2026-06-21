@@ -45,6 +45,7 @@ import type { FanoutRunInput } from "@/agentMode/session/fanout/FanoutOrchestrat
 import {
   collapseFanoutTurnToSummaryText,
   FANOUT_READONLY_PREAMBLE,
+  snapshotFanoutTurn,
   type FanoutTurn,
 } from "@/agentMode/session/fanout/fanoutTypes";
 
@@ -785,6 +786,13 @@ export class AgentSession {
       throw new Error("Session is closed");
     }
 
+    // Drop any prior turn's live fan-out state BEFORE appending this turn's
+    // placeholder and notifying. The fan-out dropdown is keyed to the last
+    // assistant message; if the stale turn were still set when `notifyMessages`
+    // fires below, the new (single-agent) placeholder would briefly render the
+    // previous turn's dropdown until the first stream chunk cleared it.
+    this.liveFanoutTurn = null;
+
     const userMessage: NewAgentChatMessage = {
       message: displayText,
       sender: USER_SENDER,
@@ -820,9 +828,6 @@ export class AgentSession {
     // `getLastMentionedAgents()`.
     this.lastMentionedAgents =
       mentionedAgents && mentionedAgents.length > 0 ? mentionedAgents : EMPTY_BACKEND_IDS;
-    // Drop any prior turn's live fan-out state so a single-agent follow-up
-    // doesn't keep showing the previous multi-agent dropdown.
-    this.liveFanoutTurn = null;
 
     this.abortController = new AbortController();
     // Clear any prior terminal error before the new turn starts so the
@@ -984,7 +989,12 @@ export class AgentSession {
    * Live-only — never persisted.
    */
   getLiveFanoutTurn(): FanoutTurn | null {
-    return this.liveFanoutTurn;
+    // The orchestrator mutates one turn object in place and re-emits the SAME
+    // reference per streamed token, so returning it directly would make the
+    // UI's `setState` bail (`Object.is`-equal) and freeze the dropdown on its
+    // first frame. Snapshot it so each coalesced notify yields a fresh
+    // reference and the live per-agent states/text actually re-render.
+    return this.liveFanoutTurn ? snapshotFanoutTurn(this.liveFanoutTurn) : null;
   }
 
   /**
