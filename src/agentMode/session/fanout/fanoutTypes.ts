@@ -79,6 +79,20 @@ export const FANOUT_AGENT_TIMEOUT_MS = 5 * 60 * 1000;
 /** Human-readable reason set on a slot that exceeded {@link FANOUT_AGENT_TIMEOUT_MS}. */
 export const FANOUT_AGENT_TIMEOUT_ERROR = "Timed out waiting for this agent to answer.";
 
+/**
+ * Grace window the orchestrator waits, after requesting `cancel`, for a
+ * cancelled/timed-out sub-session's underlying `prompt()` to actually settle
+ * before it lets that backend be reused (the summary reuses the main agent's
+ * backend). `cancel` only interrupts — the backend query keeps unwinding, and
+ * the Claude SDK backend's permission-bridge/session context is process-global
+ * for the active query, so a second prompt on the same backend mid-unwind can
+ * misroute permission decisions or corrupt the summary. Awaiting settlement
+ * makes "settled" mean the query has truly stopped. Bounded so a backend that
+ * ignores cancel cannot hang the turn forever — if the grace elapses we proceed
+ * anyway (logged), preserving the timeout's bounded-wall-clock guarantee.
+ */
+export const FANOUT_CANCEL_GRACE_MS = 3 * 1000;
+
 /** Status of the main-agent narrative summary slot. */
 export type FanoutSummaryStatus = "pending" | "streaming" | "done";
 

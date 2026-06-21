@@ -11,6 +11,7 @@ import {
   FANOUT_AGENT_TIMEOUT_ERROR,
   FANOUT_AGENT_TIMEOUT_MS,
   FANOUT_ALL_FAILED_SUMMARY,
+  FANOUT_CANCEL_GRACE_MS,
 } from "./fanoutTypes";
 
 jest.mock("@/logger", () => ({
@@ -176,6 +177,16 @@ function makeHost(
 }
 
 const flush = () => new Promise((r) => window.setTimeout(r, 0));
+
+/**
+ * Drain a long chain of dependent microtasks under fake timers. A single
+ * `advanceTimersByTimeAsync(0)` flushes only one microtask wave; the
+ * timeout-reject → runAgent catch → Promise.all → runSummary dispatch path
+ * spans several, so we pump a handful of waves.
+ */
+const drainMicrotasks = async () => {
+  for (let i = 0; i < 8; i++) await jest.advanceTimersByTimeAsync(0);
+};
 
 /**
  * Build a `run` input with the Phase 3 fields defaulted: `mainAgent` is the
@@ -523,12 +534,15 @@ describe("FanoutOrchestrator.run", () => {
       // Let both sub-sessions reach their pending prompt() (newSession + mode +
       // model round-trips are microtasks under fake timers).
       await jest.advanceTimersByTimeAsync(0);
-      // Claude answers and settles; codex hangs (never resolves its prompt).
+      // Claude answers and settles; codex hangs AND ignores cancel (never
+      // resolves its prompt, even after the timeout fires cancel).
       procs.get("claude")!.emit(textChunk("s-claude", "Claude answer"));
       procs.get("claude")!.resolvePrompt();
-      // Trip the per-agent deadline — codex's slot must error on its own. The
-      // async advance also flushes the timeout rejection + summary dispatch.
+      // Trip the per-agent deadline — codex's slot must error on its own.
       await jest.advanceTimersByTimeAsync(FANOUT_AGENT_TIMEOUT_MS);
+      // codex ignores cancel, so the timeout error only lands after the cancel
+      // grace elapses — the turn must NOT hang waiting on a wedged backend.
+      await jest.advanceTimersByTimeAsync(FANOUT_CANCEL_GRACE_MS);
       procs.get("claude")!.resolvePrompt(); // the summary sub-session
       await jest.advanceTimersByTimeAsync(0);
       const turn = await runPromise;
@@ -541,6 +555,8 @@ describe("FanoutOrchestrator.run", () => {
       // The summary still ran over the survivor (claude's second prompt).
       expect(procs.get("claude")!.promptCount()).toBe(2);
       expect(turn.summary.status).toBe("done");
+      // No timer survives the grace — neither the deadline nor the grace leaks.
+      expect(jest.getTimerCount()).toBe(0);
     } finally {
       jest.useRealTimers();
     }
@@ -673,5 +689,127 @@ describe("FanoutOrchestrator.run", () => {
     const text = summaryCall.prompt[0].text as string;
     expect(text).toContain("### CLAUDE");
     expect(text).toContain("did not return an answer: CODEX");
+  });
+
+  it("settles a timed-out MAIN answer prompt before reusing the backend for the summary", async () => {
+    jest.useFakeTimers();
+    try {
+      // claude is the main (reused for the summary) and times out; codex is a
+      // survivor so the summary still has something to reconcile and therefore
+      // DOES dispatch a second prompt on claude's backend.
+      const { host, procs } = makeHost({
+        claude: { sessionId: "s-claude" },
+        codex: { sessionId: "s-codex" },
+      });
+      const orchestrator = new FanoutOrchestrator(host);
+      const controller = new AbortController();
+      const runPromise = orchestrator.run(
+        runInput(["claude", "codex"], { signal: controller.signal })
+      );
+
+      // Both reach their pending answer prompt; codex answers and settles.
+      await jest.advanceTimersByTimeAsync(0);
+      procs.get("codex")!.emit(textChunk("s-codex", "codex answer"));
+      procs.get("codex")!.resolvePrompt();
+      // Trip the deadline for the still-pending main (claude) prompt. cancel is
+      // requested, but claude's underlying prompt has NOT settled yet (the
+      // backend keeps unwinding), so the orchestrator must wait inside the
+      // cancel grace rather than reuse claude's backend for the summary.
+      await jest.advanceTimersByTimeAsync(FANOUT_AGENT_TIMEOUT_MS);
+      // Still only claude's answer prompt has been dispatched — the summary must
+      // NOT start on the main backend while the timed-out answer is pending.
+      expect(procs.get("claude")!.promptCount()).toBe(1);
+      expect(procs.get("claude")!.cancel).toHaveBeenCalledWith({ sessionId: "s-claude" });
+
+      // claude's backend now honors the cancel WITHIN the grace: the answer
+      // prompt settles, unblocking the orchestrator to reuse the backend. Flush
+      // the chained microtasks (timeout reject → runAgent catch → Promise.all →
+      // runSummary dispatch) that follow that settlement.
+      procs.get("claude")!.resolvePrompt();
+      await drainMicrotasks();
+      // Only now does the summary sub-session start — no overlap with the
+      // still-running (timed-out) main answer prompt.
+      expect(procs.get("claude")!.promptCount()).toBe(2);
+
+      procs.get("claude")!.emit(textChunk("s-claude", "summary"));
+      procs.get("claude")!.resolvePrompt();
+      await drainMicrotasks();
+      const turn = await runPromise;
+
+      expect(turn.answers.claude.status).toBe("error");
+      expect(turn.answers.claude.error).toBe(FANOUT_AGENT_TIMEOUT_ERROR);
+      expect(turn.answers.codex.status).toBe("done");
+      expect(turn.summary.status).toBe("done");
+      expect(turn.summary.text).toBe("summary");
+      // No deadline or grace timer survives once the prompt settled in-grace.
+      expect(jest.getTimerCount()).toBe(0);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("does not incur the cancel grace on the happy path (prompt resolves normally)", async () => {
+    jest.useFakeTimers();
+    try {
+      const { host, procs } = makeHost({ claude: { sessionId: "s-claude" } });
+      const orchestrator = new FanoutOrchestrator(host);
+      const controller = new AbortController();
+      const runPromise = orchestrator.run(runInput(["claude"], { signal: controller.signal }));
+
+      await jest.advanceTimersByTimeAsync(0);
+      procs.get("claude")!.emit(textChunk("s-claude", "answer"));
+      // Prompt resolves on its own, well before the deadline. The summary must
+      // dispatch immediately, with NO wall-clock advance through the grace.
+      procs.get("claude")!.resolvePrompt();
+      await jest.advanceTimersByTimeAsync(0);
+      expect(procs.get("claude")!.promptCount()).toBe(2);
+
+      procs.get("claude")!.emit(textChunk("s-claude", "summary"));
+      procs.get("claude")!.resolvePrompt();
+      await jest.advanceTimersByTimeAsync(0);
+      const turn = await runPromise;
+
+      expect(turn.answers.claude.status).toBe("done");
+      expect(turn.answers.claude.text).toBe("answer");
+      expect(turn.summary.status).toBe("done");
+      // Deadline timers cleared on the resolve path; nothing waited the grace.
+      expect(jest.getTimerCount()).toBe(0);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("awaits the underlying prompt settlement on abort before reusing the backend, slot terminal-cancelled", async () => {
+    jest.useFakeTimers();
+    try {
+      const { host, procs } = makeHost({ claude: { sessionId: "s-claude" } });
+      const orchestrator = new FanoutOrchestrator(host);
+      const controller = new AbortController();
+      const runPromise = orchestrator.run(runInput(["claude"], { signal: controller.signal }));
+
+      await jest.advanceTimersByTimeAsync(0);
+      // User cancels mid-prompt: cancel is requested but the underlying prompt
+      // is still pending, so the abort path waits inside the grace.
+      controller.abort();
+      await jest.advanceTimersByTimeAsync(0);
+      expect(procs.get("claude")!.cancel).toHaveBeenCalledWith({ sessionId: "s-claude" });
+      // The run does not finish while the answer prompt is still unwinding.
+      let finished = false;
+      void runPromise.then(() => (finished = true));
+      await jest.advanceTimersByTimeAsync(0);
+      expect(finished).toBe(false);
+
+      // Backend honors the cancel within the grace; the prompt settles.
+      procs.get("claude")!.resolvePrompt();
+      const turn = await runPromise;
+
+      // Abort still yields a terminal-cancelled slot, and no summary ran.
+      expect(turn.answers.claude.status).toBe("cancelled");
+      expect(procs.get("claude")!.promptCount()).toBe(1);
+      expect(turn.summary.status).toBe("pending");
+      expect(jest.getTimerCount()).toBe(0);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

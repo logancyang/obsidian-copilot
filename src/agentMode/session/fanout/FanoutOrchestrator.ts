@@ -14,6 +14,7 @@ import {
   FANOUT_AGENT_TIMEOUT_ERROR,
   FANOUT_AGENT_TIMEOUT_MS,
   FANOUT_ALL_FAILED_SUMMARY,
+  FANOUT_CANCEL_GRACE_MS,
   selectSummaryInputs,
   type AgentAnswer,
   type FanoutTurn,
@@ -295,12 +296,27 @@ export class FanoutOrchestrator {
 
   /**
    * Await `prompt()` racing both the run signal (user cancel) and a per-agent
-   * deadline. On abort: cancel the sub-session immediately and resolve
-   * `"aborted"` (the slot goes terminal-cancelled). On timeout: cancel the
-   * sub-session and throw {@link FANOUT_AGENT_TIMEOUT_ERROR} (the slot goes
-   * terminal-error) so the hung agent never blocks the turn or the summary.
-   * Both listeners/timers are torn down in `finally` so a settled prompt leaks
-   * neither a timer nor an abort handler.
+   * deadline. On abort: cancel the sub-session and resolve `"aborted"` (the slot
+   * goes terminal-cancelled). On timeout: cancel the sub-session and throw
+   * {@link FANOUT_AGENT_TIMEOUT_ERROR} (the slot goes terminal-error) so the
+   * hung agent never blocks the turn or the summary.
+   *
+   * Cancel only INTERRUPTS — the underlying `prompt()` promise keeps unwinding
+   * the backend query after `cancel` returns. The Claude SDK backend's
+   * permission-bridge/session context is process-global for the active query,
+   * so reusing that backend (the summary reuses the main agent's) while a
+   * cancelled/timed-out prompt is still unwinding can misroute permission
+   * decisions or corrupt the summary. So on the abort AND timeout paths we
+   * AWAIT the real prompt promise to settle (swallowed) before this helper
+   * resolves — "settled" then means the backend query truly stopped, not just
+   * that cancel was requested. That wait is bounded by
+   * {@link FANOUT_CANCEL_GRACE_MS} so a backend that ignores cancel cannot hang
+   * the turn forever (we log and proceed). The happy path (prompt resolves on
+   * its own) never enters this grace.
+   *
+   * Both the deadline timer and the abort listener are torn down on whichever
+   * path settles first, so a settled prompt leaks neither a live 5-minute timer
+   * (the abort path) nor an abort handler (the timeout/resolve path).
    */
   private runPromptWithTimeout(
     proc: BackendProcess,
@@ -310,38 +326,61 @@ export class FanoutOrchestrator {
   ): Promise<"done" | "aborted"> {
     return new Promise<"done" | "aborted">((resolve, reject) => {
       let settled = false;
-      const cancelSubSession = () => void proc.cancel({ sessionId }).catch(() => undefined);
       // Tear down BOTH the deadline timer and the abort listener on whichever
-      // path settles first, so a settled prompt leaks neither a live 5-minute
-      // timer (the abort path) nor an abort handler (the timeout/resolve path).
+      // path settles first.
       const cleanup = () => {
         window.clearTimeout(timeout);
         signal.removeEventListener("abort", onAbort);
       };
-      const onAbort = () => {
-        if (settled) return;
-        settled = true;
-        cleanup();
-        cancelSubSession();
-        resolve("aborted");
+
+      // Hold the real prompt promise so the cancel paths can await its actual
+      // settlement. A no-op catch is attached up front so the swallowed
+      // rejection on a cancel/timeout path never surfaces as unhandled.
+      const promptPromise = proc.prompt({ sessionId, prompt });
+      promptPromise.catch(() => undefined);
+
+      // Request cancel, then wait (bounded by the grace) for the underlying
+      // prompt to actually settle before finishing via `done()`. `done` wraps
+      // the outer promise's resolve/reject, so calling it twice (grace fired,
+      // then the prompt settled, or vice-versa) is a no-op — clearing the grace
+      // timer on settlement is the only teardown needed.
+      const settleAfterCancel = (done: () => void) => {
+        proc.cancel({ sessionId }).catch(() => undefined);
+        const grace = window.setTimeout(() => {
+          logWarn(
+            `[AgentMode] fan-out prompt did not settle within the cancel grace; reusing backend anyway`
+          );
+          done();
+        }, FANOUT_CANCEL_GRACE_MS);
+        void promptPromise.finally(() => {
+          window.clearTimeout(grace);
+          done();
+        });
       };
-      const timeout = window.setTimeout(() => {
+
+      // Both cancel paths share the same single-shot teardown; they differ only
+      // in how the helper finally settles (aborted vs. timeout error).
+      const beginCancel = (done: () => void) => {
         if (settled) return;
         settled = true;
         cleanup();
-        cancelSubSession();
-        reject(new Error(FANOUT_AGENT_TIMEOUT_ERROR));
-      }, FANOUT_AGENT_TIMEOUT_MS);
+        settleAfterCancel(done);
+      };
+      const onAbort = () => beginCancel(() => resolve("aborted"));
+      const timeout = window.setTimeout(
+        () => beginCancel(() => reject(new Error(FANOUT_AGENT_TIMEOUT_ERROR))),
+        FANOUT_AGENT_TIMEOUT_MS
+      );
       signal.addEventListener("abort", onAbort, { once: true });
 
-      proc.prompt({ sessionId, prompt }).then(
+      promptPromise.then(
         () => {
           if (settled) return;
           settled = true;
           cleanup();
           // A prompt that resolved only because the backend honored the cancel
           // is still a user abort — read it off the signal so the slot lands
-          // `cancelled`, not `done`.
+          // `cancelled`, not `done`. No grace here: it settled on its own.
           resolve(signal.aborted ? "aborted" : "done");
         },
         (err) => {
