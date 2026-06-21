@@ -24,6 +24,7 @@ interface MockProc {
   emit: (event: SessionEvent) => void;
   setSessionMode: jest.Mock;
   setSessionModel: jest.Mock;
+  setSessionConfigOption: jest.Mock;
   cancel: jest.Mock;
   resolvePrompt: () => void;
   rejectPrompt: (err: unknown) => void;
@@ -56,6 +57,7 @@ function makeMockProc(sessionId: string): MockProc {
   };
   const setSessionMode = jest.fn(async () => ({ model: null, mode: null }));
   const setSessionModel = jest.fn(async () => ({ model: null, mode: null }));
+  const setSessionConfigOption = jest.fn(async () => ({ model: null, mode: null }));
   const cancel = jest.fn(async () => undefined);
   const proc = {
     isRunning: () => true,
@@ -74,7 +76,7 @@ function makeMockProc(sessionId: string): MockProc {
     isSetSessionModelSupported: () => true,
     setSessionMode,
     isSetSessionModeSupported: () => true,
-    setSessionConfigOption: jest.fn(async () => ({ model: null, mode: null })),
+    setSessionConfigOption,
     isSetSessionConfigOptionSupported: () => true,
     listSessions: jest.fn(async () => ({ sessions: [] })),
     resumeSession: jest.fn(),
@@ -87,6 +89,7 @@ function makeMockProc(sessionId: string): MockProc {
     emit: (event) => handler?.(event),
     setSessionMode,
     setSessionModel,
+    setSessionConfigOption,
     cancel,
     resolvePrompt: () => settleOldest((p) => p.resolve()),
     rejectPrompt: (err) => settleOldest((p) => p.reject(err)),
@@ -94,10 +97,26 @@ function makeMockProc(sessionId: string): MockProc {
   };
 }
 
-function descriptorFor(id: BackendId, readOnlyModeId?: string): BackendDescriptor {
+/**
+ * Build a descriptor stub. `effortConfig` makes the wire codec
+ * descriptor-style (Claude SDK shape): `encode` emits the bare base id and
+ * effort travels through a config option, so the orchestrator must dispatch it
+ * via `setSessionConfigOption`. Omitting it gives the suffix-style codec
+ * (codex/opencode) that packs effort into the model id.
+ */
+function descriptorFor(
+  id: BackendId,
+  readOnlyModeId?: string,
+  effortConfig?: { id: string }
+): BackendDescriptor {
   return {
     id,
-    wire: { encode: (s: ModelSelection) => `${s.baseModelId}/${s.effort ?? "default"}` },
+    wire: effortConfig
+      ? {
+          encode: (s: ModelSelection) => s.baseModelId,
+          effortConfigFor: () => ({ id: effortConfig.id }),
+        }
+      : { encode: (s: ModelSelection) => `${s.baseModelId}/${s.effort ?? "default"}` },
     getModeMapping: readOnlyModeId
       ? () => ({
           kind: "setMode" as const,
@@ -125,14 +144,17 @@ interface HostHarness {
 }
 
 function makeHost(
-  config: Record<BackendId, { sessionId: string; readOnlyModeId?: string }>,
+  config: Record<
+    BackendId,
+    { sessionId: string; readOnlyModeId?: string; effortConfig?: { id: string } }
+  >,
   defaults: Partial<Record<BackendId, ModelSelection>> = {}
 ): HostHarness {
   const procs = new Map<BackendId, MockProc>();
   const descriptors = new Map<BackendId, BackendDescriptor>();
-  for (const [id, { sessionId, readOnlyModeId }] of Object.entries(config)) {
+  for (const [id, { sessionId, readOnlyModeId, effortConfig }] of Object.entries(config)) {
     procs.set(id, makeMockProc(sessionId));
-    descriptors.set(id, descriptorFor(id, readOnlyModeId));
+    descriptors.set(id, descriptorFor(id, readOnlyModeId, effortConfig));
   }
   const readOnlyRegistered: string[] = [];
   const readOnlyUnregistered: string[] = [];
@@ -294,9 +316,33 @@ describe("FanoutOrchestrator.run", () => {
     expect(procs.get("opencode")!.setSessionMode).not.toHaveBeenCalled();
   });
 
-  it("switches each sub-session onto the backend's configured default model", async () => {
+  it("switches a wire-encoded-effort backend with setSessionModel only (no config option)", async () => {
     const { host, procs } = makeHost(
-      { claude: { sessionId: "s-claude" } },
+      { codex: { sessionId: "s-codex" } },
+      { codex: { baseModelId: "gpt-5-codex", effort: "high" } }
+    );
+    const orchestrator = new FanoutOrchestrator(host);
+    const controller = new AbortController();
+    const runPromise = orchestrator.run(runInput(["codex"], { signal: controller.signal }));
+    await flush();
+    procs.get("codex")!.resolvePrompt();
+    // Summary turn on the same (main) backend.
+    await flush();
+    procs.get("codex")!.resolvePrompt();
+    await runPromise;
+
+    // Effort rides inside the wire id, so the model call carries everything…
+    expect(procs.get("codex")!.setSessionModel).toHaveBeenCalledWith({
+      sessionId: "s-codex",
+      modelId: "gpt-5-codex/high",
+    });
+    // …and no spurious effort config-option round-trip fires.
+    expect(procs.get("codex")!.setSessionConfigOption).not.toHaveBeenCalled();
+  });
+
+  it("applies model AND effort for a config-option-effort backend", async () => {
+    const { host, procs } = makeHost(
+      { claude: { sessionId: "s-claude", effortConfig: { id: "effort" } } },
       { claude: { baseModelId: "claude-opus-4-5", effort: "high" } }
     );
     const orchestrator = new FanoutOrchestrator(host);
@@ -309,10 +355,55 @@ describe("FanoutOrchestrator.run", () => {
     procs.get("claude")!.resolvePrompt();
     await runPromise;
 
+    // Claude's wire id is the bare base; effort travels via setSessionConfigOption.
     expect(procs.get("claude")!.setSessionModel).toHaveBeenCalledWith({
       sessionId: "s-claude",
-      modelId: "claude-opus-4-5/high",
+      modelId: "claude-opus-4-5",
     });
+    expect(procs.get("claude")!.setSessionConfigOption).toHaveBeenCalledWith({
+      sessionId: "s-claude",
+      configId: "effort",
+      value: "high",
+    });
+  });
+
+  it("no-ops when the backend has no configured default selection", async () => {
+    const { host, procs } = makeHost({ claude: { sessionId: "s-claude" } });
+    const orchestrator = new FanoutOrchestrator(host);
+    const controller = new AbortController();
+    const runPromise = orchestrator.run(runInput(["claude"], { signal: controller.signal }));
+    await flush();
+    procs.get("claude")!.resolvePrompt();
+    await flush();
+    procs.get("claude")!.resolvePrompt();
+    await runPromise;
+
+    expect(procs.get("claude")!.setSessionModel).not.toHaveBeenCalled();
+    expect(procs.get("claude")!.setSessionConfigOption).not.toHaveBeenCalled();
+  });
+
+  it("swallows a failed default-model apply and still runs the turn", async () => {
+    const { host, procs } = makeHost(
+      { claude: { sessionId: "s-claude", effortConfig: { id: "effort" } } },
+      { claude: { baseModelId: "claude-opus-4-5", effort: "high" } }
+    );
+    // The model switch fails (e.g. backend dropped set_model); the turn must
+    // still proceed on the backend default rather than throwing.
+    procs.get("claude")!.setSessionModel.mockRejectedValueOnce(new Error("set_model gone"));
+    const orchestrator = new FanoutOrchestrator(host);
+    const controller = new AbortController();
+    const runPromise = orchestrator.run(runInput(["claude"], { signal: controller.signal }));
+    await flush();
+    procs.get("claude")!.emit(textChunk("s-claude", "still answered"));
+    procs.get("claude")!.resolvePrompt();
+    await flush();
+    procs.get("claude")!.resolvePrompt();
+    const turn = await runPromise;
+
+    // The rejected model apply is swallowed: the answer still streams and the
+    // slot lands done instead of erroring out the whole turn.
+    expect(turn.answers.claude.status).toBe("done");
+    expect(turn.answers.claude.text).toBe("still answered");
   });
 
   it("cancels in-flight sub-session prompts when the signal aborts", async () => {
