@@ -205,37 +205,48 @@ export function snapshotFanoutTurn(turn: FanoutTurn): FanoutTurn {
 }
 
 /**
- * Concise, provider-neutral instruction for the main agent's narrative summary
- * (Phase 3 / D6). It frames a NEW user turn — it never replaces any backend
- * system prompt — and asks for reconciling prose, not a structured table. It is
- * also read-only: the summary sub-session must not write, only synthesize the
- * answers it is handed.
+ * Provider-neutral instruction for the main agent's narrative summary (D6). It
+ * frames a NEW user turn — never replaces any backend system prompt — and is
+ * read-only: the summary sub-session synthesizes, it does not write. The format
+ * ADAPTS to the task: convergent questions get reconciled (agreements /
+ * disagreements); divergent deliverables (rewrites, drafts, code) get a
+ * choose-or-merge synthesis, since those outputs are alternatives, not claims.
  */
 export const FANOUT_SUMMARY_INSTRUCTION =
-  "You are a neutral synthesizer. The labeled blocks below are answers that " +
-  "SEVERAL DIFFERENT AI agents each gave to the user's question. Write a " +
-  "synthesis of THEIR answers for the user — you are reporting on what the agents " +
-  "said, not answering the question yourself.\n\n" +
-  "VOICE (critical):\n" +
-  "- Write in the THIRD PERSON and attribute every point to the agent that made " +
-  'it, by name — for example "<agent> reports that it …" or "<agent A> and ' +
-  '<agent B> both note …".\n' +
-  '- The agents wrote in the first person; convert their "I/my" into "<agent> ' +
-  'says it …". NEVER write in the first person or speak as if the question were ' +
-  'asked of you — no sentence may begin with "I".\n\n' +
-  "SCOPE:\n" +
-  "- Use ONLY the answers shown. Ignore any environment scaffolding they include " +
-  "(tool lists, available skills/agents, system boilerplate). Do not mention how " +
-  "many agents there were, who did not answer, or anything missing.\n\n" +
-  "FORMAT:\n" +
-  "- If only ONE agent answered: one to three sentences summarizing its answer, " +
-  "attributed by name. No headings.\n" +
-  "- If TWO OR MORE answered, use these markdown sections, omitting any that is " +
-  "empty:\n" +
-  '  "**Each agent**" — one concise bullet per agent: "**<agent>**: <gist>".\n' +
+  "You are a neutral synthesizer. The labeled blocks below are what SEVERAL " +
+  "DIFFERENT AI agents each produced in response to the user's request. Write a " +
+  "synthesis for the user ABOUT their outputs — you are reporting on what the " +
+  "agents produced, not doing the task yourself.\n\n" +
+  "VOICE (always):\n" +
+  "- Third person, attributing each point to the agent by name (convert the " +
+  'agents\' "I/my" into "<agent> …"). NEVER write in the first person or as if ' +
+  'the request were made of you; no sentence may begin with "I".\n' +
+  "- Use ONLY the outputs shown; ignore any environment scaffolding (tool lists, " +
+  "available skills/agents, boilerplate). Do not mention how many agents there " +
+  "were, who did not respond, or anything missing. Be concise.\n\n" +
+  "FIRST pick the MODE from the request and the outputs:\n" +
+  "- ANSWER mode — the agents answered a question or analyzed something (facts, " +
+  "explanation, a recommendation, identity); there is a best answer to converge " +
+  "on.\n" +
+  "- DELIVERABLE mode — the agents each produced an ALTERNATIVE ARTIFACT the user " +
+  "will choose from or use (a rewrite, draft, message, translation, code, plan, " +
+  "design); these are options, not competing claims.\n\n" +
+  "If only ONE agent responded (either mode): one to three sentences on its " +
+  "answer or approach, attributed, no headings.\n\n" +
+  "TWO OR MORE in ANSWER mode — markdown sections, omitting any that is empty:\n" +
+  '  "**Each agent**" — one concise bullet per agent.\n' +
   '  "**Agreements**" — the points the agents share.\n' +
-  '  "**Disagreements**" — where they differ, naming the agents on each side.\n' +
-  "- Summarize; do not paste an agent's full answer back. Be concise.\n\n" +
+  '  "**Disagreements**" — where they differ, naming the sides.\n\n' +
+  "TWO OR MORE in DELIVERABLE mode — help the user CHOOSE or MERGE, NOT " +
+  "agreements/disagreements:\n" +
+  '  "**Options**" — one bullet per agent on what is DISTINCTIVE about its take ' +
+  "(the angle, tone, structure, or tradeoff that would make someone pick it, and " +
+  "who it suits).\n" +
+  '  "**Recommendation**" — name the best option for the likely goal and why in a ' +
+  "sentence or two; if a combination is clearly better, say which parts of which " +
+  "to merge.\n" +
+  "  Do NOT reproduce the artifacts (the user already has each in its own tab); " +
+  "summarize the approach only.\n\n" +
   "Do NOT modify any files or run write/shell tools.";
 
 /** The text persisted when every fan-out agent failed (D7 zero-success case). */
