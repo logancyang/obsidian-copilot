@@ -16,6 +16,7 @@ import {
   FANOUT_AGENT_TIMEOUT_MS,
   FANOUT_ALL_FAILED_SUMMARY,
   FANOUT_CANCEL_GRACE_MS,
+  FANOUT_TRAILING_CHUNK_GRACE_MS,
   selectSummaryInputs,
   type AgentAnswer,
   type FanoutTurn,
@@ -286,7 +287,15 @@ export class FanoutOrchestrator {
       ]);
       if (signal.aborted) return "aborted";
 
-      return await this.runPromptWithTimeout(proc, sessionId, prompt, signal);
+      const outcome = await this.runPromptWithTimeout(proc, sessionId, prompt, signal);
+      // On normal completion, hold the still-registered handler open a short
+      // bounded window so trailing `agent_message_chunk` events some backends
+      // flush AFTER `session/prompt` resolves still route into the same slot
+      // instead of being dropped. Only a self-resolved, non-cancelled prompt
+      // earns this — an abort returns "aborted" and is suppressed like the rest
+      // (timeout/throw exit via `finally` and skip it too).
+      if (outcome === "done") await this.awaitTrailingChunks();
+      return outcome;
     } finally {
       unregisterHandler?.();
       unregisterReadOnly?.();
@@ -297,6 +306,18 @@ export class FanoutOrchestrator {
         proc.cancel({ sessionId }).catch(() => undefined);
       }
     }
+  }
+
+  /**
+   * Hold {@link FANOUT_TRAILING_CHUNK_GRACE_MS} so an ephemeral sub-session's
+   * still-registered handler captures the final `agent_message_chunk` events a
+   * backend flushes just after `session/prompt` resolves. The one-shot timer
+   * resolves and is gone, so it cannot outlive the wait or leak.
+   */
+  private awaitTrailingChunks(): Promise<void> {
+    return new Promise<void>((resolve) => {
+      window.setTimeout(resolve, FANOUT_TRAILING_CHUNK_GRACE_MS);
+    });
   }
 
   /**

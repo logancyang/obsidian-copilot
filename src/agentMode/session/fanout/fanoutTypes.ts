@@ -93,6 +93,27 @@ export const FANOUT_AGENT_TIMEOUT_ERROR = "Timed out waiting for this agent to a
  */
 export const FANOUT_CANCEL_GRACE_MS = 3 * 1000;
 
+/**
+ * Tail grace the orchestrator holds an ephemeral sub-session's update handler
+ * open AFTER its `prompt()` resolves normally, before it unregisters the handler
+ * and closes the session. Some ACP backends (opencode, fast models) flush a
+ * turn's FINAL `agent_message_chunk` events just AFTER the `session/prompt`
+ * result resolves; without this window those trailing chunks arrive once the
+ * handler is already gone and are dropped, truncating an agent's answer (or the
+ * summary) right at the end. The single-agent path keeps its session-level
+ * handler alive permanently and re-routes such chunks onto a settled
+ * placeholder; a fan-out sub-session is ephemeral and must close, so it instead
+ * waits this short bounded window for the flush, then tears down.
+ *
+ * Kept SHORT: the flush is effectively immediate after the result resolves, so a
+ * few hundred ms captures it without materially delaying turn completion.
+ * Backends that emit no trailing chunks simply wait out a harmless window. Only
+ * applied on the NORMAL resolve path — cancel/timeout intentionally suppress
+ * late output and skip this wait (mirroring the single-agent "except on explicit
+ * cancel" carve-out).
+ */
+export const FANOUT_TRAILING_CHUNK_GRACE_MS = 500;
+
 /** Status of the main-agent narrative summary slot. */
 export type FanoutSummaryStatus = "pending" | "streaming" | "done";
 

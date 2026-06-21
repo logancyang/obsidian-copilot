@@ -14,6 +14,7 @@ import {
   FANOUT_AGENT_TIMEOUT_MS,
   FANOUT_ALL_FAILED_SUMMARY,
   FANOUT_CANCEL_GRACE_MS,
+  FANOUT_TRAILING_CHUNK_GRACE_MS,
 } from "./fanoutTypes";
 
 jest.mock("@/logger", () => ({
@@ -200,6 +201,16 @@ function makeHost(
 const flush = () => new Promise((r) => window.setTimeout(r, 0));
 
 /**
+ * Real-timer flush that also clears the post-resolve trailing-chunk grace a
+ * normally-completed sub-session now waits before it unregisters its handler.
+ * Use after resolving an answer prompt when the test then asserts on the
+ * downstream summary dispatch / slot text (which only lands once that grace
+ * elapses). Padded past the grace so the deferred teardown has fired.
+ */
+const flushPastGrace = () =>
+  new Promise((r) => window.setTimeout(r, FANOUT_TRAILING_CHUNK_GRACE_MS + 20));
+
+/**
  * Drain a long chain of dependent microtasks under fake timers. A single
  * `advanceTimersByTimeAsync(0)` flushes only one microtask wave; the
  * timeout-reject → runAgent catch → Promise.all → runSummary dispatch path
@@ -261,8 +272,9 @@ describe("FanoutOrchestrator.run", () => {
     procs.get("codex")!.emit(textChunk("s-codex", "Codex says hi"));
     procs.get("claude")!.resolvePrompt();
     procs.get("codex")!.resolvePrompt();
-    // Answers settled; the main agent (claude) now opens a summary sub-session.
-    await flush();
+    // Answers settled; the main agent (claude) now opens a summary sub-session
+    // once the post-resolve trailing-chunk grace on both answers elapses.
+    await flushPastGrace();
     procs.get("claude")!.emit(textChunk("s-claude", "summary"));
     procs.get("claude")!.resolvePrompt();
 
@@ -302,8 +314,9 @@ describe("FanoutOrchestrator.run", () => {
     procs.get("claude")!.emit(textChunk("s-claude", "ok"));
     procs.get("claude")!.resolvePrompt();
     procs.get("codex")!.rejectPrompt(new Error("backend boom"));
-    // The main agent (claude) summarizes over the one survivor.
-    await flush();
+    // The main agent (claude) summarizes over the one survivor once claude's
+    // post-resolve trailing-chunk grace elapses.
+    await flushPastGrace();
     procs.get("claude")!.resolvePrompt();
 
     const turn = await runPromise;
@@ -330,7 +343,7 @@ describe("FanoutOrchestrator.run", () => {
     procs.get("codex")!.resolvePrompt();
     procs.get("opencode")!.resolvePrompt();
     // Main agent (codex) summary turn.
-    await flush();
+    await flushPastGrace();
     procs.get("codex")!.resolvePrompt();
     await runPromise;
 
@@ -359,7 +372,7 @@ describe("FanoutOrchestrator.run", () => {
     await flush();
     procs.get("codex")!.resolvePrompt();
     // Summary turn on the same (main) backend.
-    await flush();
+    await flushPastGrace();
     procs.get("codex")!.resolvePrompt();
     await runPromise;
 
@@ -383,7 +396,7 @@ describe("FanoutOrchestrator.run", () => {
     await flush();
     procs.get("claude")!.resolvePrompt();
     // Summary turn on the same (main) backend.
-    await flush();
+    await flushPastGrace();
     procs.get("claude")!.resolvePrompt();
     await runPromise;
 
@@ -417,7 +430,7 @@ describe("FanoutOrchestrator.run", () => {
     const runPromise = orchestrator.run(runInput(["opencode"], { signal: controller.signal }));
     await flush();
     procs.get("opencode")!.resolvePrompt();
-    await flush();
+    await flushPastGrace();
     procs.get("opencode")!.resolvePrompt();
     await runPromise;
 
@@ -452,7 +465,7 @@ describe("FanoutOrchestrator.run", () => {
     const runPromise = orchestrator.run(runInput(["opencode"], { signal: controller.signal }));
     await flush();
     procs.get("opencode")!.resolvePrompt();
-    await flush();
+    await flushPastGrace();
     procs.get("opencode")!.resolvePrompt();
     await runPromise;
 
@@ -482,7 +495,7 @@ describe("FanoutOrchestrator.run", () => {
     const runPromise = orchestrator.run(runInput(["opencode"], { signal: controller.signal }));
     await flush();
     procs.get("opencode")!.resolvePrompt();
-    await flush();
+    await flushPastGrace();
     procs.get("opencode")!.resolvePrompt();
     await runPromise;
 
@@ -509,7 +522,7 @@ describe("FanoutOrchestrator.run", () => {
     await flush();
     procs.get("opencode")!.emit(textChunk("s-opencode", "still answered"));
     procs.get("opencode")!.resolvePrompt();
-    await flush();
+    await flushPastGrace();
     procs.get("opencode")!.resolvePrompt();
     const turn = await runPromise;
 
@@ -530,7 +543,7 @@ describe("FanoutOrchestrator.run", () => {
     const runPromise = orchestrator.run(runInput(["claude"], { signal: controller.signal }));
     await flush();
     procs.get("claude")!.resolvePrompt();
-    await flush();
+    await flushPastGrace();
     procs.get("claude")!.resolvePrompt();
     await runPromise;
 
@@ -548,7 +561,7 @@ describe("FanoutOrchestrator.run", () => {
     const runPromise = orchestrator.run(runInput(["claude"], { signal: controller.signal }));
     await flush();
     procs.get("claude")!.resolvePrompt();
-    await flush();
+    await flushPastGrace();
     procs.get("claude")!.resolvePrompt();
     await runPromise;
 
@@ -570,7 +583,7 @@ describe("FanoutOrchestrator.run", () => {
     await flush();
     procs.get("claude")!.emit(textChunk("s-claude", "still answered"));
     procs.get("claude")!.resolvePrompt();
-    await flush();
+    await flushPastGrace();
     procs.get("claude")!.resolvePrompt();
     const turn = await runPromise;
 
@@ -683,7 +696,8 @@ describe("FanoutOrchestrator.run", () => {
       // grace elapses — the turn must NOT hang waiting on a wedged backend.
       await jest.advanceTimersByTimeAsync(FANOUT_CANCEL_GRACE_MS);
       procs.get("claude")!.resolvePrompt(); // the summary sub-session
-      await jest.advanceTimersByTimeAsync(0);
+      // The summary resolved normally, so clear its trailing-chunk grace.
+      await jest.advanceTimersByTimeAsync(FANOUT_TRAILING_CHUNK_GRACE_MS);
       const turn = await runPromise;
 
       expect(turn.answers.claude.status).toBe("done");
@@ -735,7 +749,7 @@ describe("FanoutOrchestrator.run", () => {
     procs.get("codex")!.emit(textChunk("s-codex", "B"));
     procs.get("claude")!.resolvePrompt();
     procs.get("codex")!.resolvePrompt();
-    await flush();
+    await flushPastGrace();
     // The summary sub-session is the main agent's SECOND prompt; the answer must
     // have settled before it is dispatched.
     expect(procs.get("claude")!.promptCount()).toBe(2);
@@ -766,7 +780,7 @@ describe("FanoutOrchestrator.run", () => {
     procs.get("claude")!.emit(textChunk("s-claude", "Claude answer"));
     procs.get("claude")!.resolvePrompt();
     procs.get("codex")!.rejectPrompt(new Error("boom"));
-    await flush();
+    await flushPastGrace();
     procs.get("claude")!.resolvePrompt();
     await runPromise;
 
@@ -820,7 +834,7 @@ describe("FanoutOrchestrator.run", () => {
     procs.get("claude")!.resolvePrompt();
     // Codex finishes cleanly but emitted no text → done-but-empty.
     procs.get("codex")!.resolvePrompt();
-    await flush();
+    await flushPastGrace();
     procs.get("claude")!.resolvePrompt();
     await runPromise;
 
@@ -872,6 +886,9 @@ describe("FanoutOrchestrator.run", () => {
 
       procs.get("claude")!.emit(textChunk("s-claude", "summary"));
       procs.get("claude")!.resolvePrompt();
+      // The summary resolved normally, so its sub-session holds the trailing
+      // chunk grace before tearing down; clear it so the run completes.
+      await jest.advanceTimersByTimeAsync(FANOUT_TRAILING_CHUNK_GRACE_MS);
       await drainMicrotasks();
       const turn = await runPromise;
 
@@ -880,7 +897,7 @@ describe("FanoutOrchestrator.run", () => {
       expect(turn.answers.codex.status).toBe("done");
       expect(turn.summary.status).toBe("done");
       expect(turn.summary.text).toBe("summary");
-      // No deadline or grace timer survives once the prompt settled in-grace.
+      // No deadline, cancel grace, or trailing-chunk grace timer survives.
       expect(jest.getTimerCount()).toBe(0);
     } finally {
       jest.useRealTimers();
@@ -924,6 +941,8 @@ describe("FanoutOrchestrator.run", () => {
 
       procs.get("claude")!.emit(textChunk("s-claude", "summary"));
       procs.get("claude")!.resolvePrompt();
+      // Clear the summary's post-resolve trailing-chunk grace so the run ends.
+      await jest.advanceTimersByTimeAsync(FANOUT_TRAILING_CHUNK_GRACE_MS);
       await drainMicrotasks();
       const turn = await runPromise;
 
@@ -942,7 +961,7 @@ describe("FanoutOrchestrator.run", () => {
     expect(unhandled).toEqual([]);
   });
 
-  it("does not incur the cancel grace on the happy path (prompt resolves normally)", async () => {
+  it("incurs only the short trailing-chunk grace (not the cancel grace) on the happy path", async () => {
     jest.useFakeTimers();
     try {
       const { host, procs } = makeHost({ claude: { sessionId: "s-claude" } });
@@ -953,20 +972,26 @@ describe("FanoutOrchestrator.run", () => {
       await jest.advanceTimersByTimeAsync(0);
       procs.get("claude")!.emit(textChunk("s-claude", "answer"));
       // Prompt resolves on its own, well before the deadline. The summary must
-      // dispatch immediately, with NO wall-clock advance through the grace.
+      // NOT dispatch until the short trailing-chunk grace elapses (so late
+      // chunks still land), but well before the much longer cancel grace.
       procs.get("claude")!.resolvePrompt();
       await jest.advanceTimersByTimeAsync(0);
+      expect(procs.get("claude")!.promptCount()).toBe(1);
+      // The brief trailing-chunk grace is far shorter than the cancel grace, so
+      // advancing the trailing window dispatches the summary…
+      expect(FANOUT_TRAILING_CHUNK_GRACE_MS).toBeLessThan(FANOUT_CANCEL_GRACE_MS);
+      await jest.advanceTimersByTimeAsync(FANOUT_TRAILING_CHUNK_GRACE_MS);
       expect(procs.get("claude")!.promptCount()).toBe(2);
 
       procs.get("claude")!.emit(textChunk("s-claude", "summary"));
       procs.get("claude")!.resolvePrompt();
-      await jest.advanceTimersByTimeAsync(0);
+      await jest.advanceTimersByTimeAsync(FANOUT_TRAILING_CHUNK_GRACE_MS);
       const turn = await runPromise;
 
       expect(turn.answers.claude.status).toBe("done");
       expect(turn.answers.claude.text).toBe("answer");
       expect(turn.summary.status).toBe("done");
-      // Deadline timers cleared on the resolve path; nothing waited the grace.
+      // Deadline + trailing-grace timers all cleared on the resolve path.
       expect(jest.getTimerCount()).toBe(0);
     } finally {
       jest.useRealTimers();
@@ -1001,6 +1026,98 @@ describe("FanoutOrchestrator.run", () => {
       expect(turn.answers.claude.status).toBe("cancelled");
       expect(procs.get("claude")!.promptCount()).toBe(1);
       expect(turn.summary.status).toBe("pending");
+      expect(jest.getTimerCount()).toBe(0);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("captures a trailing chunk flushed AFTER prompt resolves, within the grace, into the slot", async () => {
+    jest.useFakeTimers();
+    try {
+      const { host, procs } = makeHost({ claude: { sessionId: "s-claude" } });
+      const orchestrator = new FanoutOrchestrator(host);
+      const controller = new AbortController();
+      const runPromise = orchestrator.run(runInput(["claude"], { signal: controller.signal }));
+
+      await jest.advanceTimersByTimeAsync(0);
+      procs.get("claude")!.emit(textChunk("s-claude", "first part "));
+      // The backend resolves the prompt, THEN (like opencode / fast models)
+      // flushes the turn's final chunk just after — while still inside the
+      // trailing-chunk grace, before the handler is torn down.
+      procs.get("claude")!.resolvePrompt();
+      await jest.advanceTimersByTimeAsync(FANOUT_TRAILING_CHUNK_GRACE_MS - 1);
+      procs.get("claude")!.emit(textChunk("s-claude", "trailing tail"));
+      // Let the grace elapse and the summary run.
+      await jest.advanceTimersByTimeAsync(FANOUT_TRAILING_CHUNK_GRACE_MS);
+      procs.get("claude")!.emit(textChunk("s-claude", "summary"));
+      procs.get("claude")!.resolvePrompt();
+      await jest.advanceTimersByTimeAsync(FANOUT_TRAILING_CHUNK_GRACE_MS);
+      const turn = await runPromise;
+
+      // The trailing chunk landed in the SAME slot — not dropped.
+      expect(turn.answers.claude.status).toBe("done");
+      expect(turn.answers.claude.text).toBe("first part trailing tail");
+      expect(turn.summary.text).toBe("summary");
+      expect(jest.getTimerCount()).toBe(0);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("captures a trailing summary chunk flushed after the summary prompt resolves", async () => {
+    jest.useFakeTimers();
+    try {
+      const { host, procs } = makeHost({ claude: { sessionId: "s-claude" } });
+      const orchestrator = new FanoutOrchestrator(host);
+      const controller = new AbortController();
+      const runPromise = orchestrator.run(runInput(["claude"], { signal: controller.signal }));
+
+      await jest.advanceTimersByTimeAsync(0);
+      procs.get("claude")!.emit(textChunk("s-claude", "answer"));
+      procs.get("claude")!.resolvePrompt();
+      await jest.advanceTimersByTimeAsync(FANOUT_TRAILING_CHUNK_GRACE_MS);
+      // The summary sub-session resolves, then flushes its final chunk within
+      // the grace — it must still append to the summary slot.
+      procs.get("claude")!.emit(textChunk("s-claude", "Summ"));
+      procs.get("claude")!.resolvePrompt();
+      await jest.advanceTimersByTimeAsync(FANOUT_TRAILING_CHUNK_GRACE_MS - 1);
+      procs.get("claude")!.emit(textChunk("s-claude", "ary tail"));
+      await jest.advanceTimersByTimeAsync(FANOUT_TRAILING_CHUNK_GRACE_MS);
+      const turn = await runPromise;
+
+      expect(turn.summary.text).toBe("Summary tail");
+      expect(jest.getTimerCount()).toBe(0);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("suppresses a late chunk on cancel — no trailing grace, output dropped", async () => {
+    jest.useFakeTimers();
+    try {
+      const { host, procs } = makeHost({ claude: { sessionId: "s-claude" } });
+      const orchestrator = new FanoutOrchestrator(host);
+      const controller = new AbortController();
+      const runPromise = orchestrator.run(runInput(["claude"], { signal: controller.signal }));
+
+      await jest.advanceTimersByTimeAsync(0);
+      procs.get("claude")!.emit(textChunk("s-claude", "partial"));
+      // User cancels; the backend honors it and resolves the in-flight prompt.
+      controller.abort();
+      procs.get("claude")!.resolvePrompt();
+      // A late chunk arrives, but the cancel path tears the handler down
+      // immediately (no trailing grace), so it must NOT land.
+      await jest.advanceTimersByTimeAsync(0);
+      procs.get("claude")!.emit(textChunk("s-claude", "late dropped"));
+      await jest.advanceTimersByTimeAsync(FANOUT_TRAILING_CHUNK_GRACE_MS);
+      const turn = await runPromise;
+
+      expect(turn.answers.claude.status).toBe("cancelled");
+      expect(turn.answers.claude.text).toBe("partial");
+      // No summary ran on cancel and no timer leaked.
+      expect(turn.summary.status).toBe("pending");
+      expect(procs.get("claude")!.promptCount()).toBe(1);
       expect(jest.getTimerCount()).toBe(0);
     } finally {
       jest.useRealTimers();
