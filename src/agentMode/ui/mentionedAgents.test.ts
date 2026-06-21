@@ -30,26 +30,16 @@ function descriptor(id: string, install: InstallState): BackendDescriptor {
 const settings = {} as CopilotSettings;
 
 describe("listInstalledAgentBrands", () => {
-  it("offers only installed (ready) backends, projected to brands", () => {
+  it("offers only installed (ready) backends projected to brands; excludes absent/errored", () => {
     mockedList.mockReturnValue([
       descriptor("opencode", { kind: "ready", source: "managed" }),
       descriptor("claude", { kind: "absent" }),
-      descriptor("codex", { kind: "ready", source: "custom" }),
+      descriptor("codex", { kind: "error", message: "boom" }),
     ]);
 
     const brands = listInstalledAgentBrands(settings);
-
-    expect(brands.map((b) => b.id)).toEqual(["opencode", "codex"]);
+    expect(brands.map((b) => b.id)).toEqual(["opencode"]);
     expect(brands[0]).toMatchObject({ id: "opencode", displayName: "Opencode", Icon });
-  });
-
-  it("excludes errored backends", () => {
-    mockedList.mockReturnValue([
-      descriptor("opencode", { kind: "ready", source: "managed" }),
-      descriptor("claude", { kind: "error", message: "boom" }),
-    ]);
-
-    expect(listInstalledAgentBrands(settings).map((b) => b.id)).toEqual(["opencode"]);
   });
 
   it("returns the frozen empty constant when nothing is installed", () => {
@@ -62,39 +52,18 @@ describe("resolveAnswerers", () => {
   const installed = new Set(["opencode", "claude", "codex"]);
 
   it("returns the frozen empty constant when nothing is mentioned (main is NOT auto-included)", () => {
-    expect(
-      resolveAnswerers({
-        mentionedAgentIds: [],
-        installedAgentIds: installed,
-      })
-    ).toBe(EMPTY_ANSWERERS);
+    expect(resolveAnswerers({ mentionedAgentIds: [], installedAgentIds: installed })).toBe(
+      EMPTY_ANSWERERS
+    );
   });
 
-  it("returns the mentions in order, without the main agent", () => {
+  it("returns mentions in order (keeping an explicitly-mentioned main), dedup'd", () => {
     expect(
       resolveAnswerers({
-        mentionedAgentIds: ["claude", "codex"],
-        installedAgentIds: installed,
-      })
-    ).toEqual(["claude", "codex"]);
-  });
-
-  it("keeps the main agent when it is explicitly mentioned (it then answers too)", () => {
-    expect(
-      resolveAnswerers({
-        mentionedAgentIds: ["claude", "opencode"],
+        mentionedAgentIds: ["claude", "opencode", "claude"],
         installedAgentIds: installed,
       })
     ).toEqual(["claude", "opencode"]);
-  });
-
-  it("dedupes repeated mentions", () => {
-    expect(
-      resolveAnswerers({
-        mentionedAgentIds: ["claude", "claude"],
-        installedAgentIds: installed,
-      })
-    ).toEqual(["claude"]);
   });
 
   it("drops mentions of uninstalled agents", () => {
@@ -109,23 +78,13 @@ describe("resolveAnswerers", () => {
 
 describe("isFanout", () => {
   // Claude is the session main agent in these cases.
-  it("is false for no answerers (no qualifying mentions)", () => {
+  it("routes single-vs-fan-out: collapses to single-agent only when no non-main answerer exists", () => {
+    // No answerers, or the only answerer IS the main agent → single-agent.
     expect(isFanout([], "claude")).toBe(false);
-  });
-
-  it("is false when the ONLY answerer is the main agent (@claude foo collapses to single-agent)", () => {
     expect(isFanout(["claude"], "claude")).toBe(false);
-  });
-
-  it("is true for a single non-main answerer (@opencode → opencode answers, Claude summarizes)", () => {
+    // A non-main answerer (alone or with others) → fan-out, main summarizes.
     expect(isFanout(["opencode"], "claude")).toBe(true);
-  });
-
-  it("is true for multiple answerers (@opencode @codex → both answer, Claude summarizes)", () => {
     expect(isFanout(["opencode", "codex"], "claude")).toBe(true);
-  });
-
-  it("is true when the main agent is one of several answerers (@claude @opencode)", () => {
     expect(isFanout(["claude", "opencode"], "claude")).toBe(true);
   });
 });

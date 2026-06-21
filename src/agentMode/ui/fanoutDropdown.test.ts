@@ -44,22 +44,16 @@ function turn(
 }
 
 describe("agentStateForStatus", () => {
-  it("maps running to a streaming spinner state", () => {
+  it("maps each slot status to its display state", () => {
     expect(agentStateForStatus("running")).toBe("streaming");
-  });
-  it("maps done to the answer state", () => {
     expect(agentStateForStatus("done")).toBe("answer");
-  });
-  it("maps error to the error state", () => {
     expect(agentStateForStatus("error")).toBe("error");
-  });
-  it("maps cancelled to the cancelled state", () => {
     expect(agentStateForStatus("cancelled")).toBe("cancelled");
   });
 });
 
 describe("buildFanoutOptions", () => {
-  it("lists the summary first, then each agent in slot order", () => {
+  it("lists the summary first then each agent in slot order, resolving name/icon and live state", () => {
     const t = turn([
       answer("opencode", "done", "main answer"),
       answer("claude", "running"),
@@ -75,31 +69,13 @@ describe("buildFanoutOptions", () => {
     ]);
     expect(options[0].label).toBe("Summary");
     expect(options[0].Icon).toBeUndefined();
-  });
-
-  it("resolves each agent's display name and brand icon from the registry", () => {
-    const options = buildFanoutOptions(turn([answer("claude", "done", "x")]));
+    // Brand name + icon resolved from the registry; state mirrors slot status.
     const claude = options.find((o) => o.value === "claude");
     expect(claude?.label).toBe("Claude");
     expect(claude?.Icon).toBeDefined();
-  });
-
-  it("reflects each agent's live state (running -> streaming, done -> answer, error -> error)", () => {
-    const options = buildFanoutOptions(
-      turn([
-        answer("opencode", "done", "a"),
-        answer("claude", "running"),
-        answer("codex", "error", "", "x"),
-      ])
-    );
+    expect(claude?.state).toBe("streaming");
     expect(options.find((o) => o.value === "opencode")?.state).toBe("answer");
-    expect(options.find((o) => o.value === "claude")?.state).toBe("streaming");
     expect(options.find((o) => o.value === "codex")?.state).toBe("error");
-  });
-
-  it("maps a cancelled slot to the cancelled state", () => {
-    const options = buildFanoutOptions(turn([answer("claude", "cancelled", "partial")]));
-    expect(options.find((o) => o.value === "claude")?.state).toBe("cancelled");
   });
 
   it("falls back to the backend id when the registry has no entry", () => {
@@ -118,29 +94,15 @@ describe("defaultFanoutOption", () => {
 });
 
 describe("selectedAnswer", () => {
-  it("returns null for the summary value", () => {
+  it("returns null for the summary value and the agent's slot for an agent value", () => {
     const t = turn([answer("opencode", "done", "a")]);
     expect(selectedAnswer(t, FANOUT_SUMMARY_OPTION)).toBeNull();
-  });
-  it("returns the agent's slot for an agent value", () => {
-    const t = turn([answer("opencode", "done", "a")]);
     expect(selectedAnswer(t, "opencode")?.text).toBe("a");
-  });
-  it("returns null when the agent has no slot", () => {
-    const t = turn([answer("opencode", "done", "a")]);
     expect(selectedAnswer(t, "ghost")).toBeNull();
   });
 });
 
 describe("summaryDisplayState", () => {
-  it("is writing while the summary streams", () => {
-    const t = turn([answer("opencode", "done", "a")], "", "streaming");
-    expect(summaryDisplayState(t)).toBe("writing");
-  });
-  it("is waiting while any agent is still running", () => {
-    const t = turn([answer("opencode", "running"), answer("claude", "done", "b")], "", "pending");
-    expect(summaryDisplayState(t)).toBe("waiting");
-  });
   it("is cancelled when pending but every agent is terminal (turn aborted before summary)", () => {
     const t = turn([answer("opencode", "cancelled"), answer("claude", "done", "b")], "", "pending");
     expect(summaryDisplayState(t)).toBe("cancelled");

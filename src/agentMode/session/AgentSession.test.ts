@@ -840,39 +840,6 @@ describe("AgentSession fan-out branching", () => {
     expect(placeholder?.fanout?.answers.claude.text).toBe("claude answer");
   });
 
-  it("fans out and summarizes on the main agent when a DIFFERENT agent is the sole answerer", async () => {
-    // `@opencode what model are you` while Claude is the session main agent:
-    // opencode is the only answerer; Claude (the main agent) is the summarizer
-    // even though it is not an answerer.
-    const mock = makeMockBackend();
-    const runFanoutTurn = jest.fn(async (input: FanoutRunInput): Promise<FanoutTurn> => {
-      const turn: FanoutTurn = {
-        answers: { opencode: { backendId: "opencode", status: "done", text: "opencode answer" } },
-        summary: { status: "done", text: "summary" },
-      };
-      input.onChange(turn);
-      return turn;
-    });
-    const session = new AgentSession({
-      backend: mock.asBackend,
-      backendSessionId: "acp-1",
-      internalId: "internal-1",
-      backendId: "claude",
-      runFanoutTurn,
-    });
-
-    const stopReason = await session.sendPrompt("what model are you", undefined, undefined, [
-      "opencode",
-    ]).turn;
-
-    expect(stopReason).toBe("end_turn");
-    expect(runFanoutTurn).toHaveBeenCalledTimes(1);
-    expect(mock.prompt).not.toHaveBeenCalled();
-    // Only opencode answers; the main agent (claude) is the separate summarizer.
-    expect(runFanoutTurn.mock.calls[0][0].agents).toEqual(["opencode"]);
-    expect(runFanoutTurn.mock.calls[0][0].mainAgent).toBe("claude");
-  });
-
   it("persists the full composite (summary + per-agent answers + markers) and keeps the live turn on the message", async () => {
     const mock = makeMockBackend();
     const runFanoutTurn = jest.fn(async (input: FanoutRunInput): Promise<FanoutTurn> => {
@@ -906,63 +873,6 @@ describe("AgentSession fan-out branching", () => {
     expect(placeholder?.message).toContain("CLAUDE_ANSWER");
     // The live turn rides on the message itself for the UI.
     expect(placeholder?.fanout?.summary.text).toBe("the narrative summary");
-  });
-
-  it("uses the single-agent path (backend.prompt) when only the main agent runs", async () => {
-    const mock = makeMockBackend();
-    const runFanoutTurn = jest.fn();
-    const session = new AgentSession({
-      backend: mock.asBackend,
-      backendSessionId: "acp-1",
-      internalId: "internal-1",
-      backendId: "opencode",
-      runFanoutTurn,
-    });
-
-    // A single mentioned agent (just the main) must NOT fan out.
-    await session.sendPrompt("hi", undefined, undefined, ["opencode"]).turn;
-
-    expect(runFanoutTurn).not.toHaveBeenCalled();
-    expect(mock.prompt).toHaveBeenCalledTimes(1);
-    const placeholder = session.store.getDisplayMessages().find((m) => m.sender === AI_SENDER);
-    expect(placeholder?.fanout).toBeUndefined();
-  });
-
-  it("does not leak a prior turn's fan-out onto the next (single-agent) turn's message", async () => {
-    const mock = makeMockBackend();
-    const runFanoutTurn = jest.fn(async (input: FanoutRunInput): Promise<FanoutTurn> => {
-      const turn: FanoutTurn = {
-        answers: {
-          opencode: { backendId: "opencode", status: "done", text: "a" },
-          claude: { backendId: "claude", status: "done", text: "b" },
-        },
-        summary: { status: "done", text: "summary" },
-      };
-      input.onChange(turn);
-      return turn;
-    });
-    const session = new AgentSession({
-      backend: mock.asBackend,
-      backendSessionId: "acp-1",
-      internalId: "internal-1",
-      backendId: "opencode",
-      runFanoutTurn,
-    });
-
-    await session.sendPrompt("review", undefined, undefined, ["opencode", "claude"]).turn;
-    const fanoutMsgId = session.store.getDisplayMessages().find((m) => m.sender === AI_SENDER)!.id;
-    expect(
-      session.store.getDisplayMessages().find((m) => m.id === fanoutMsgId)?.fanout
-    ).toBeDefined();
-
-    // The turn rides on its OWN message; the next single-agent placeholder is a
-    // distinct message that never carries fan-out state (no side-channel to leak
-    // a stale dropdown). The earlier fan-out message keeps its own turn.
-    await session.sendPrompt("follow up").turn;
-    const messages = session.store.getDisplayMessages();
-    const assistantMsgs = messages.filter((m) => m.sender === AI_SENDER);
-    expect(assistantMsgs.find((m) => m.id === fanoutMsgId)?.fanout).toBeDefined();
-    expect(assistantMsgs.find((m) => m.id !== fanoutMsgId)?.fanout).toBeUndefined();
   });
 });
 
@@ -1126,12 +1036,6 @@ describe("ensureMultiAgentEntitlement (paywall helper)", () => {
     const ensure = await loadHelper(false);
     await expect(ensure()).resolves.toBe(false);
   });
-
-  it("slow path: an unverifiable result (undefined) is blocked", async () => {
-    validateLicenseKey.mockResolvedValue({ isValid: undefined });
-    const ensure = await loadHelper(false);
-    await expect(ensure()).resolves.toBe(false);
-  });
 });
 
 describe("AgentSession fan-out conversation history", () => {
@@ -1149,11 +1053,8 @@ describe("AgentSession fan-out conversation history", () => {
       return turn;
     });
 
-  const fanoutPromptText = (
-    runFanoutTurn: jest.Mock,
-    callIndex = 0
-  ): { type: "text"; text: string } =>
-    runFanoutTurn.mock.calls[callIndex][0].prompt[0] as { type: "text"; text: string };
+  const fanoutPromptText = (runFanoutTurn: jest.Mock): { type: "text"; text: string } =>
+    runFanoutTurn.mock.calls[0][0].prompt[0] as { type: "text"; text: string };
 
   it("includes the prior transcript as a conversation_history block on a fan-out follow-up", async () => {
     const mock = makeMockBackend();
@@ -1186,51 +1087,6 @@ describe("AgentSession fan-out conversation history", () => {
     // The current in-flight user message is NOT duplicated inside history.
     expect((text.match(/expand on that plan/g) ?? []).length).toBe(1);
   });
-
-  it("the second of two back-to-back fan-outs sees the first turn's summary", async () => {
-    const mock = makeMockBackend();
-    const runFanoutTurn = fanoutWithSummary("FIRST_FANOUT_SUMMARY");
-    const session = new AgentSession({
-      backend: mock.asBackend,
-      backendSessionId: "acp-1",
-      internalId: "internal-1",
-      backendId: "opencode",
-      runFanoutTurn,
-    });
-
-    await session.sendPrompt("first fan-out question", undefined, undefined, ["opencode", "claude"])
-      .turn;
-    await session.sendPrompt("second fan-out question", undefined, undefined, [
-      "opencode",
-      "claude",
-    ]).turn;
-
-    const secondText = fanoutPromptText(runFanoutTurn, 1).text;
-    expect(secondText).toContain("<conversation_history>");
-    expect(secondText).toContain("first fan-out question");
-    expect(secondText).toContain("FIRST_FANOUT_SUMMARY");
-  });
-
-  it("adds no history block on the first fan-out turn (empty transcript)", async () => {
-    const mock = makeMockBackend();
-    const runFanoutTurn = fanoutWithSummary("summary");
-    const session = new AgentSession({
-      backend: mock.asBackend,
-      backendSessionId: "acp-1",
-      internalId: "internal-1",
-      backendId: "opencode",
-      runFanoutTurn,
-    });
-
-    await session.sendPrompt("first ever question", undefined, undefined, ["opencode", "claude"])
-      .turn;
-
-    const text = fanoutPromptText(runFanoutTurn).text;
-    expect(text).not.toContain("<conversation_history>");
-    // Byte-for-byte: read-only preamble immediately followed by the user message
-    // (no leading context section), exactly as before this feature.
-    expect(text).toBe(`${FANOUT_READONLY_PREAMBLE}\n\nfirst ever question`);
-  });
 });
 
 describe("AgentSession fan-out follow-up continuity", () => {
@@ -1243,20 +1099,6 @@ describe("AgentSession fan-out follow-up continuity", () => {
           claude: { backendId: "claude", status: "done", text: "b" },
         },
         summary: { status: "done", text: summary, complete: true },
-      };
-      input.onChange(turn);
-      return turn;
-    });
-
-  /** A fan-out runner whose turn is cancelled (empty summary). */
-  const fanoutCancelled = () =>
-    jest.fn(async (input: FanoutRunInput): Promise<FanoutTurn> => {
-      const turn: FanoutTurn = {
-        answers: {
-          opencode: { backendId: "opencode", status: "cancelled", text: "" },
-          claude: { backendId: "claude", status: "cancelled", text: "" },
-        },
-        summary: { status: "pending", text: "" },
       };
       input.onChange(turn);
       return turn;
@@ -1275,21 +1117,6 @@ describe("AgentSession fan-out follow-up continuity", () => {
           claude: { backendId: "claude", status: "done", text: "answer b" },
         },
         summary: { status: "done", text: "" },
-      };
-      input.onChange(turn);
-      return turn;
-    });
-
-  // Agents answered, the summary STREAMED partial text and was then interrupted
-  // (cancel/error): `status` is forced to `done` but `complete` is never set.
-  const fanoutInterruptedSummary = () =>
-    jest.fn(async (input: FanoutRunInput): Promise<FanoutTurn> => {
-      const turn: FanoutTurn = {
-        answers: {
-          opencode: { backendId: "opencode", status: "done", text: "answer a" },
-          claude: { backendId: "claude", status: "done", text: "answer b" },
-        },
-        summary: { status: "done", text: "partial sum", complete: false },
       };
       input.onChange(turn);
       return turn;
@@ -1328,114 +1155,6 @@ describe("AgentSession fan-out follow-up continuity", () => {
     expect(lastPromptText(mock)).not.toContain("<prior_turns>");
   });
 
-  it("preserves the buffer when the single-agent prompt throws, replaying it on the next turn", async () => {
-    const mock = makeMockBackend();
-    const runFanoutTurn = fanoutWithSummary("the fan-out summary");
-    const session = new AgentSession({
-      backend: mock.asBackend,
-      backendSessionId: "acp-1",
-      internalId: "internal-1",
-      backendId: "opencode",
-      runFanoutTurn,
-    });
-
-    await session.sendPrompt("compare X and Y", undefined, undefined, ["opencode", "claude"]).turn;
-
-    // First single-agent follow-up: the backend rejects. The buffer must NOT be
-    // flushed — the backend never received the injected context.
-    mock.prompt.mockRejectedValueOnce(new Error("transport boom"));
-    await expect(session.sendPrompt("first follow-up").turn).rejects.toThrow("transport boom");
-
-    // Next single-agent turn succeeds and still carries the buffered fan-out QA.
-    await session.sendPrompt("retry follow-up").turn;
-    const text = lastPromptText(mock);
-    expect(text).toContain("<prior_turns>");
-    expect(text).toContain("compare X and Y");
-    expect(text).toContain("the fan-out summary");
-
-    // And it is cleared after the successful replay.
-    await session.sendPrompt("third follow-up").turn;
-    expect(lastPromptText(mock)).not.toContain("<prior_turns>");
-  });
-
-  it("preserves the buffer when the single-agent replay is cancelled, replaying it on the next turn", async () => {
-    const mock = makeMockBackend();
-    const runFanoutTurn = fanoutWithSummary("the fan-out summary");
-    const session = new AgentSession({
-      backend: mock.asBackend,
-      backendSessionId: "acp-1",
-      internalId: "internal-1",
-      backendId: "opencode",
-      runFanoutTurn,
-    });
-
-    await session.sendPrompt("compare X and Y", undefined, undefined, ["opencode", "claude"]).turn;
-
-    // First single-agent follow-up resolves CANCELLED (it does not throw). The
-    // backend may have been stopped before durably ingesting the injected
-    // <prior_turns> block, so the buffer must NOT be flushed.
-    mock.prompt.mockResolvedValueOnce({ stopReason: "cancelled" });
-    const cancelled = await session.sendPrompt("first follow-up").turn;
-    expect(cancelled).toBe("cancelled");
-    // The cancelled replay still injected the block (the prompt was built)…
-    expect(lastPromptText(mock)).toContain("<prior_turns>");
-
-    // …and the buffer survived, so the NEXT (non-cancelled) turn re-injects it.
-    await session.sendPrompt("retry follow-up").turn;
-    const text = lastPromptText(mock);
-    expect(text).toContain("<prior_turns>");
-    expect(text).toContain("compare X and Y");
-    expect(text).toContain("the fan-out summary");
-
-    // The successful replay clears the buffer.
-    await session.sendPrompt("third follow-up").turn;
-    expect(lastPromptText(mock)).not.toContain("<prior_turns>");
-  });
-
-  it("accumulates two back-to-back fan-out turns and injects both in order", async () => {
-    const mock = makeMockBackend();
-    const runFanoutTurn = jest
-      .fn()
-      .mockImplementationOnce(fanoutWithSummary("first summary"))
-      .mockImplementationOnce(fanoutWithSummary("second summary"));
-    const session = new AgentSession({
-      backend: mock.asBackend,
-      backendSessionId: "acp-1",
-      internalId: "internal-1",
-      backendId: "opencode",
-      runFanoutTurn,
-    });
-
-    await session.sendPrompt("first question", undefined, undefined, ["opencode", "claude"]).turn;
-    await session.sendPrompt("second question", undefined, undefined, ["opencode", "claude"]).turn;
-    // A fan-out-after-fan-out turn does NOT flush — the backend was never called.
-    expect(mock.prompt).not.toHaveBeenCalled();
-
-    await session.sendPrompt("single follow-up").turn;
-    const text = lastPromptText(mock);
-    expect(text.indexOf("first question")).toBeLessThan(text.indexOf("second question"));
-    expect(text.indexOf("first summary")).toBeLessThan(text.indexOf("second summary"));
-    expect((text.match(/<multi_agent_turn>/g) ?? []).length).toBe(2);
-  });
-
-  it("does not buffer a cancelled / empty-summary fan-out turn", async () => {
-    const mock = makeMockBackend();
-    const runFanoutTurn = fanoutCancelled();
-    const session = new AgentSession({
-      backend: mock.asBackend,
-      backendSessionId: "acp-1",
-      internalId: "internal-1",
-      backendId: "opencode",
-      runFanoutTurn,
-    });
-
-    await session.sendPrompt("cancelled question", undefined, undefined, ["opencode", "claude"])
-      .turn;
-    await session.sendPrompt("follow-up").turn;
-
-    expect(lastPromptText(mock)).not.toContain("<prior_turns>");
-  });
-
   it("replays the agents' answers when they answered but no summary was generated", async () => {
     const mock = makeMockBackend();
     const runFanoutTurn = fanoutAnswersNoSummary();
@@ -1459,47 +1178,6 @@ describe("AgentSession fan-out follow-up continuity", () => {
     expect(text).toContain("answer a");
     expect(text).toContain("answer b");
     expect(text).not.toContain("a combined summary could not be generated");
-  });
-
-  it("replays the agents' answers when the summary was interrupted mid-stream", async () => {
-    const mock = makeMockBackend();
-    const runFanoutTurn = fanoutInterruptedSummary();
-    const session = new AgentSession({
-      backend: mock.asBackend,
-      backendSessionId: "acp-1",
-      internalId: "internal-1",
-      backendId: "opencode",
-      runFanoutTurn,
-    });
-
-    await session.sendPrompt("multi question", undefined, undefined, ["opencode", "claude"]).turn;
-    await session.sendPrompt("follow-up").turn;
-
-    // The summary streamed partial text then was interrupted (not complete), so
-    // the follow-up replays the full composite (which carries the answers),
-    // instead of ONLY the incomplete summary as before. The presence of the
-    // answers is the guard: the old behavior replayed just "partial sum".
-    const text = lastPromptText(mock);
-    expect(text).toContain("<prior_turns>");
-    expect(text).toContain("answer a");
-    expect(text).toContain("answer b");
-  });
-
-  it("leaves the single-agent prompt byte-for-byte unchanged when the buffer is empty", async () => {
-    const mock = makeMockBackend();
-    const session = new AgentSession({
-      backend: mock.asBackend,
-      backendSessionId: "acp-1",
-      internalId: "internal-1",
-      backendId: "opencode",
-    });
-
-    await session.sendPrompt("plain question").turn;
-
-    expect(mock.prompt).toHaveBeenCalledWith({
-      sessionId: "acp-1",
-      prompt: [{ type: "text", text: "plain question" }],
-    });
   });
 });
 

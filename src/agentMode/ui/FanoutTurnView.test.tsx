@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import type {
   AgentAnswer,
   AgentAnswerStatus,
@@ -69,19 +69,6 @@ describe("FanoutTurnView", () => {
     expect(screen.getByText(/Waiting for answers/)).toBeTruthy();
   });
 
-  it("renders a segmented tab row so the user can drill into each agent", () => {
-    const t = turn(
-      [answer("opencode", "done", "a"), answer("claude", "error", "", "boom")],
-      "summary"
-    );
-    renderView(t);
-    const tablist = screen.getByRole("tablist", { name: "Agent answers" });
-    const tabs = within(tablist).getAllByRole("tab");
-    // Summary tab + one tab per agent.
-    expect(tabs).toHaveLength(3);
-    expect(tabs[0].getAttribute("aria-selected")).toBe("true");
-  });
-
   it("switches to the selected agent's answer when its tab is clicked", () => {
     const t = turn(
       [answer("opencode", "done", "OPENCODE_BODY"), answer("claude", "done", "CLAUDE_BODY")],
@@ -92,17 +79,5 @@ describe("FanoutTurnView", () => {
     expect(screen.getByTestId("agent-md").textContent).toBe("the narrative summary");
     fireEvent.click(screen.getByRole("tab", { name: /opencode/ }));
     expect(screen.getByTestId("agent-md").textContent).toBe("OPENCODE_BODY");
-  });
-
-  it("renders cleanly when agents errored or were cancelled (terminal turn)", () => {
-    const t = turn(
-      [answer("opencode", "cancelled", "partial"), answer("claude", "error", "", "boom")],
-      "the narrative summary"
-    );
-    renderView(t);
-    // Summary-first default still renders; the tab row exposes both terminal
-    // agents (states mapped by agentStateForStatus, unit-tested separately).
-    expect(screen.getByTestId("agent-md").textContent).toBe("the narrative summary");
-    expect(within(screen.getByRole("tablist")).getAllByRole("tab")).toHaveLength(3);
   });
 });

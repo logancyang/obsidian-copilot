@@ -316,19 +316,24 @@ describe("AgentMessageStore", () => {
       summary: { status: "done", text: summaryText },
     });
 
-    it("setFanout surfaces a snapshot on the display view and bumps the version", () => {
+    it("setFanout surfaces a FRESH snapshot each tick so React state updates don't bail", () => {
       const store = new AgentMessageStore();
       const id = store.addMessage(placeholder());
-      const before = store.getDisplayMessages().find((m) => m.id === id);
-      expect(before?.fanout).toBeUndefined();
+      expect(store.getDisplayMessages().find((m) => m.id === id)?.fanout).toBeUndefined();
 
       const turn = liveTurn();
       expect(store.setFanout(id, turn)).toBe(true);
-      const after = store.getDisplayMessages().find((m) => m.id === id);
-      expect(after?.fanout?.summary.text).toBe("the summary");
-      // A snapshot, not the same reference — so React state updates don't bail.
-      expect(after?.fanout).not.toBe(turn);
-      expect(after?.fanout?.answers).not.toBe(turn.answers);
+      const after = store.getDisplayMessages().find((m) => m.id === id)?.fanout;
+      expect(after?.summary.text).toBe("the summary");
+      // A snapshot, not the same reference.
+      expect(after).not.toBe(turn);
+      expect(after?.answers).not.toBe(turn.answers);
+
+      // Re-setting (mutated live turn) yields a fresh reference, not a frozen one.
+      store.setFanout(id, liveTurn("updated summary"));
+      const second = store.getDisplayMessages().find((m) => m.id === id)?.fanout;
+      expect(second).not.toBe(after);
+      expect(second?.summary.text).toBe("updated summary");
     });
 
     it("setFanout returns false for an unknown message", () => {
@@ -336,60 +341,30 @@ describe("AgentMessageStore", () => {
       expect(store.setFanout("nope", liveTurn())).toBe(false);
     });
 
-    it("yields a FRESH fanout reference each tick so the dropdown does not freeze", () => {
-      const store = new AgentMessageStore();
-      const id = store.addMessage(placeholder());
-      store.setFanout(id, liveTurn());
-      const first = store.getDisplayMessages().find((m) => m.id === id)?.fanout;
-      // Mutate the live turn in place and re-set (mirrors the orchestrator).
-      const turn = liveTurn("updated summary");
-      store.setFanout(id, turn);
-      const second = store.getDisplayMessages().find((m) => m.id === id)?.fanout;
-      expect(second).not.toBe(first);
-      expect(second?.summary.text).toBe("updated summary");
-    });
-
-    it("loadMessages reconstructs the dropdown from a saved composite body", () => {
+    it("loadMessages rebuilds the dropdown from an assistant composite, never from a user/plain body", () => {
       const store = new AgentMessageStore();
       const body = serializeFanoutComposite(liveTurn("loaded summary"), (x) => x.toUpperCase());
       store.loadMessages([
-        {
-          id: "u1",
-          sender: USER_SENDER,
-          message: "the question",
-          timestamp: null,
-          isVisible: true,
-        },
+        // A user message carrying the same body must NOT be read as a composite.
+        { id: "u1", sender: USER_SENDER, message: body, timestamp: null, isVisible: true },
         { id: "a1", sender: AI_SENDER, message: body, timestamp: null, isVisible: true },
-      ]);
-      const assistant = store.getDisplayMessages().find((m) => m.id === "a1");
-      // The body is kept as-is (composite + markers) AND the dropdown is rebuilt.
-      expect(assistant?.message).toBe(body);
-      expect(assistant?.fanout?.summary.text).toBe("loaded summary");
-      expect(Object.keys(assistant?.fanout?.answers ?? {})).toEqual(["opencode", "codex"]);
-    });
-
-    it("loadMessages leaves a plain assistant message without a fanout", () => {
-      const store = new AgentMessageStore();
-      store.loadMessages([
         {
-          id: "a1",
+          id: "a2",
           sender: AI_SENDER,
           message: "just a normal reply",
           timestamp: null,
           isVisible: true,
         },
       ]);
-      expect(store.getDisplayMessages().find((m) => m.id === "a1")?.fanout).toBeUndefined();
-    });
-
-    it("loadMessages never reads a fan-out composite from a USER message", () => {
-      const store = new AgentMessageStore();
-      const body = serializeFanoutComposite(liveTurn(), (x) => x);
-      store.loadMessages([
-        { id: "u1", sender: USER_SENDER, message: body, timestamp: null, isVisible: true },
-      ]);
-      expect(store.getDisplayMessages().find((m) => m.id === "u1")?.fanout).toBeUndefined();
+      const display = store.getDisplayMessages();
+      const assistant = display.find((m) => m.id === "a1");
+      // The body is kept as-is (composite + markers) AND the dropdown is rebuilt.
+      expect(assistant?.message).toBe(body);
+      expect(assistant?.fanout?.summary.text).toBe("loaded summary");
+      expect(Object.keys(assistant?.fanout?.answers ?? {})).toEqual(["opencode", "codex"]);
+      // A plain assistant reply and the user message stay without a fanout.
+      expect(display.find((m) => m.id === "a2")?.fanout).toBeUndefined();
+      expect(display.find((m) => m.id === "u1")?.fanout).toBeUndefined();
     });
   });
 });
