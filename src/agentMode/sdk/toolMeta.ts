@@ -38,7 +38,7 @@ export function deriveToolKind(toolName: string, mcpServer?: string): AgentToolK
   if (lower === "read" || lower === "glob" || lower === "grep" || lower === "ls") {
     return "read";
   }
-  if (lower === "write" || lower === "edit" || lower === "multiedit") {
+  if (lower === "write" || lower === "edit" || lower === "multiedit" || lower === "notebookedit") {
     return "edit";
   }
   if (lower === "bash") return "execute";
