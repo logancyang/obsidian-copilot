@@ -18,7 +18,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { FanoutTurn } from "@/agentMode/session/fanout/fanoutTypes";
 import { App } from "obsidian";
-import { AlertTriangle, Loader2 } from "lucide-react";
+import { AlertTriangle, CircleSlash, Loader2 } from "lucide-react";
 import React, { memo, useCallback, useMemo, useState } from "react";
 
 interface FanoutTurnViewProps {
@@ -49,8 +49,8 @@ interface FanoutOptionGlyphProps {
 
 /**
  * The leading glyph for a row: a spinner while the agent streams, a warning
- * triangle on error, otherwise the brand icon. The summary row (no `Icon`,
- * no `state`) renders nothing.
+ * triangle on error, a muted slash when cancelled, otherwise the brand icon.
+ * The summary row (no `Icon`, no `state`) renders nothing.
  */
 const FanoutOptionGlyph: React.FC<FanoutOptionGlyphProps> = ({ Icon, state }) => {
   if (state === "streaming") {
@@ -58,6 +58,9 @@ const FanoutOptionGlyph: React.FC<FanoutOptionGlyphProps> = ({ Icon, state }) =>
   }
   if (state === "error") {
     return <AlertTriangle className="tw-size-4 tw-shrink-0 tw-text-error" />;
+  }
+  if (state === "cancelled") {
+    return <CircleSlash className="tw-size-4 tw-shrink-0 tw-text-muted" />;
   }
   if (Icon) return <Icon className="tw-size-4 tw-shrink-0" />;
   return null;
@@ -123,8 +126,10 @@ interface FanoutTurnBodyProps {
 /**
  * The body for the current selection: the summary (or its pending/streaming
  * placeholder) when the summary is selected, otherwise the chosen agent's
- * answer — streaming tokens with a spinner, the finished answer, or an error
- * state (Phase 5 refines the error copy; this renders a basic error state).
+ * answer — streaming tokens with a spinner, the finished answer, an error chip
+ * with a short reason (incl. per-agent timeouts), or a muted cancelled state
+ * when the user aborted the turn. Any partial text that streamed before a
+ * failure/cancel is still shown above the chip so nothing is lost.
  */
 const FanoutTurnBody: React.FC<FanoutTurnBodyProps> = ({ turn, value, app }) => {
   if (value === FANOUT_SUMMARY_OPTION) {
@@ -141,13 +146,22 @@ const FanoutTurnBody: React.FC<FanoutTurnBodyProps> = ({ turn, value, app }) => 
   const answer = selectedAnswer(turn, value);
   if (!answer) return null;
 
-  if (answer.status === "error") {
+  if (answer.status === "error" || answer.status === "cancelled") {
+    const isError = answer.status === "error";
     return (
-      <FanoutStatusLine
-        icon={<AlertTriangle className="tw-size-4 tw-text-error" />}
-        text={answer.error?.trim() || "This agent failed to answer."}
-        tone="error"
-      />
+      <FanoutTerminalState app={app} partialText={answer.text}>
+        <FanoutStatusLine
+          icon={
+            isError ? (
+              <AlertTriangle className="tw-size-4 tw-text-error" />
+            ) : (
+              <CircleSlash className="tw-size-4 tw-text-muted" />
+            )
+          }
+          text={isError ? answer.error?.trim() || "This agent failed to answer." : "Cancelled"}
+          tone={isError ? "error" : undefined}
+        />
+      </FanoutTerminalState>
     );
   }
 
@@ -171,6 +185,32 @@ const FanoutTurnBody: React.FC<FanoutTurnBodyProps> = ({ turn, value, app }) => 
       icon={<Loader2 className="tw-size-4 tw-animate-spin tw-text-loading" />}
       text="Thinking…"
     />
+  );
+};
+
+interface FanoutTerminalStateProps {
+  /** Whatever prose streamed before the agent errored or was cancelled. */
+  partialText: string;
+  app: App;
+  children: React.ReactNode;
+}
+
+/**
+ * A terminal (error/cancelled) agent body: render any partial answer that
+ * streamed before the agent stopped, then the status chip below it, so a
+ * mid-stream failure or cancel never discards the tokens already received.
+ */
+const FanoutTerminalState: React.FC<FanoutTerminalStateProps> = ({
+  partialText,
+  app,
+  children,
+}) => {
+  if (!partialText.trim()) return <>{children}</>;
+  return (
+    <div className="tw-flex tw-flex-col tw-gap-1">
+      <AgentMarkdownText text={partialText} app={app} />
+      {children}
+    </div>
   );
 };
 

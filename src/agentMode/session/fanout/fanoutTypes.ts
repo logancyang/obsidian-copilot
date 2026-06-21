@@ -36,14 +36,19 @@ export interface FanoutTurn {
   summary: FanoutSummary;
 }
 
-/** Live status of one agent's answer within a {@link FanoutTurn}. */
-export type AgentAnswerStatus = "running" | "done" | "error";
+/**
+ * Live status of one agent's answer within a {@link FanoutTurn}.
+ * `cancelled` is a distinct terminal state from `error`: the user aborted the
+ * turn (not an agent fault), so the UI reads it as cancelled rather than a
+ * failure. Both are terminal; neither feeds the summary.
+ */
+export type AgentAnswerStatus = "running" | "done" | "error" | "cancelled";
 
 /**
  * One agent's slot in a fan-out turn. `text` accumulates streamed prose;
- * `error` carries a human-readable failure when `status === "error"` so one
- * agent's failure never throws out of the orchestrator (full partial-failure
- * polish is Phase 5).
+ * `error` carries a human-readable failure when `status === "error"` (including
+ * a per-agent timeout) so one agent's failure never throws out of the
+ * orchestrator and the others keep streaming.
  */
 export interface AgentAnswer {
   backendId: BackendId;
@@ -51,6 +56,20 @@ export interface AgentAnswer {
   text: string;
   error?: string;
 }
+
+/**
+ * Per-agent answer timeout. A single hung/long-running sub-session must fail
+ * ITS OWN slot without stalling the others or the summary, so each agent's
+ * `prompt()` races this deadline; on expiry the orchestrator cancels that
+ * sub-session and marks the slot `error` with {@link FANOUT_AGENT_TIMEOUT_ERROR}.
+ * Five minutes is generous for a read-only QA answer (the agent may loop over
+ * grep/read/fetch tools) while still bounding a wedged subprocess. Not a
+ * user-facing setting (out of scope for v1).
+ */
+export const FANOUT_AGENT_TIMEOUT_MS = 5 * 60 * 1000;
+
+/** Human-readable reason set on a slot that exceeded {@link FANOUT_AGENT_TIMEOUT_MS}. */
+export const FANOUT_AGENT_TIMEOUT_ERROR = "Timed out waiting for this agent to answer.";
 
 /** Status of the main-agent narrative summary slot. */
 export type FanoutSummaryStatus = "pending" | "streaming" | "done";

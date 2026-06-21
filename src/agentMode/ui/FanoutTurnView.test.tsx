@@ -67,4 +67,16 @@ describe("FanoutTurnView", () => {
     render(<FanoutTurnView turn={t} app={app} />);
     expect(screen.getByLabelText("Select agent answer")).toBeTruthy();
   });
+
+  it("renders cleanly when agents errored or were cancelled (terminal turn)", () => {
+    const t = turn(
+      [answer("opencode", "cancelled", "partial"), answer("claude", "error", "", "boom")],
+      "the narrative summary"
+    );
+    render(<FanoutTurnView turn={t} app={app} />);
+    // Summary-first default still renders; the switcher exposes both terminal
+    // agents (states mapped by agentStateForStatus, unit-tested separately).
+    expect(screen.getByTestId("agent-md").textContent).toBe("the narrative summary");
+    expect(screen.getByLabelText("Select agent answer")).toBeTruthy();
+  });
 });

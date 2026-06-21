@@ -11,6 +11,8 @@ import type {
 } from "@/agentMode/session/types";
 import {
   buildSummaryUserPrompt,
+  FANOUT_AGENT_TIMEOUT_ERROR,
+  FANOUT_AGENT_TIMEOUT_MS,
   FANOUT_ALL_FAILED_SUMMARY,
   selectSummaryInputs,
   type AgentAnswer,
@@ -131,9 +133,15 @@ export class FanoutOrchestrator {
 
   /**
    * Run one agent in an ephemeral read-only sub-session. Resolves (never
-   * rejects) once the slot reaches a terminal state — a thrown/rejected backend
-   * call lands as an `error` slot so siblings keep running (Phase 5 owns the
-   * richer failure UX). Closes the sub-session in `finally`.
+   * rejects) once the slot reaches a terminal state, so one agent's failure or
+   * timeout never throws out of the whole run and the siblings keep streaming:
+   *
+   * - normal completion → `done` (carries whatever, possibly empty, text landed)
+   * - user cancel (the run signal aborted) → `cancelled` (terminal, not a fault)
+   * - per-agent timeout → `error` with the timeout reason
+   * - any thrown/rejected backend call → `error` with the failure text
+   *
+   * Closes the sub-session in `finally` (inside {@link runReadOnlySubSession}).
    */
   private async runAgent(
     backendId: BackendId,
@@ -141,34 +149,31 @@ export class FanoutOrchestrator {
     input: FanoutRunInput
   ): Promise<void> {
     const slot = turn.answers[backendId];
+    // A slot only ever transitions while still `running`; once terminal it is
+    // frozen. Gating every mutation through one checkpoint keeps streamed text,
+    // the terminal status flip, and the error path from racing each other.
+    const mutateIfRunning = (apply: () => void) => {
+      if (slot.status !== "running") return;
+      apply();
+      input.onChange(turn);
+    };
     try {
-      await this.runReadOnlySubSession({
+      const outcome = await this.runReadOnlySubSession({
         backendId,
         prompt: input.prompt,
         signal: input.signal,
-        onText: (text) => {
-          if (slot.status === "error") return;
-          slot.text += text;
-          input.onChange(turn);
-        },
-        onAborted: () => {
-          slot.status = "error";
-          slot.error = "Cancelled";
-          input.onChange(turn);
-        },
+        onText: (text) => mutateIfRunning(() => (slot.text += text)),
       });
-      // A clean turn with no streamed text still resolves `done` — the slot
-      // carries whatever (possibly empty) text landed; Phase 4 renders the
-      // empty state. Only a thrown error becomes an `error` slot.
-      if (slot.status === "running") {
-        slot.status = "done";
-        input.onChange(turn);
-      }
+      // An abort mid-prompt (or before dispatch) is a clean cancel, NOT a fault:
+      // the slot reaches a `cancelled` terminal state rather than being left
+      // `running` or mislabelled `done`. Otherwise the turn completed normally.
+      mutateIfRunning(() => (slot.status = outcome === "aborted" ? "cancelled" : "done"));
     } catch (err) {
-      logWarn(`[AgentMode] fan-out agent ${backendId} failed`, err);
-      slot.status = "error";
-      slot.error = err2String(err);
-      input.onChange(turn);
+      mutateIfRunning(() => {
+        logWarn(`[AgentMode] fan-out agent ${backendId} failed`, err);
+        slot.status = "error";
+        slot.error = err2String(err);
+      });
     }
   }
 
@@ -206,7 +211,6 @@ export class FanoutOrchestrator {
           turn.summary.text += text;
           input.onChange(turn);
         },
-        onAborted: () => undefined,
       });
     } catch (err) {
       logWarn(`[AgentMode] fan-out summary failed`, err);
@@ -223,17 +227,27 @@ export class FanoutOrchestrator {
    * `finally`. Shared by every per-agent answer AND the main-agent summary, so
    * both run through the exact same read-only registration + sandbox path. The
    * sub-session is registered via {@link FanoutHost.registerReadOnlySession},
-   * so the permission prompter hard-denies writes for it (D5). `onAborted` runs
-   * when the signal is already aborted before the prompt is dispatched.
+   * so the permission prompter hard-denies writes for it (D5).
+   *
+   * Returns `"aborted"` when the run signal fired before/during the prompt
+   * (user cancel → a terminal `cancelled` slot, not a fault), else `"done"`.
+   * THROWS {@link FANOUT_AGENT_TIMEOUT_ERROR} if `prompt()` outlives
+   * {@link FANOUT_AGENT_TIMEOUT_MS} so a wedged sub-session fails its own slot
+   * without stalling the siblings or the summary.
+   *
+   * The sub-session is closed (best-effort `cancel`) in `finally` for EVERY
+   * exit — normal, aborted, timed out, or thrown — so no ACP sub-session leaks.
+   * On abort the in-flight `prompt()` is cancelled immediately via the signal
+   * listener, and the abort checkpoints before dispatch short-circuit so a late
+   * sub-session is never even prompted.
    */
   private async runReadOnlySubSession(params: {
     backendId: BackendId;
     prompt: PromptContent[];
     signal: AbortSignal;
     onText: (text: string) => void;
-    onAborted: () => void;
-  }): Promise<void> {
-    const { backendId, prompt, signal, onText, onAborted } = params;
+  }): Promise<"done" | "aborted"> {
+    const { backendId, prompt, signal, onText } = params;
     let proc: BackendProcess | null = null;
     let sessionId: SessionId | null = null;
     let unregisterReadOnly: (() => void) | null = null;
@@ -243,7 +257,7 @@ export class FanoutOrchestrator {
       const ensured = await this.host.ensureBackendForFanout(backendId);
       proc = ensured.proc;
       const descriptor = ensured.descriptor;
-      if (signal.aborted) return onAborted();
+      if (signal.aborted) return "aborted";
 
       const opened = await proc.newSession({
         cwd: this.host.getCwd() ?? "",
@@ -264,26 +278,77 @@ export class FanoutOrchestrator {
         this.applyReadOnlyMode(proc, descriptor, sessionId),
         this.applyDefaultModel(proc, descriptor, backendId, sessionId),
       ]);
-      if (signal.aborted) return onAborted();
+      if (signal.aborted) return "aborted";
 
-      const sid = sessionId;
-      const p = proc;
-      const onAbort = () => void p.cancel({ sessionId: sid }).catch(() => undefined);
-      signal.addEventListener("abort", onAbort, { once: true });
-      try {
-        await proc.prompt({ sessionId, prompt });
-      } finally {
-        signal.removeEventListener("abort", onAbort);
-      }
+      return await this.runPromptWithTimeout(proc, sessionId, prompt, signal);
     } finally {
       unregisterHandler?.();
       unregisterReadOnly?.();
       if (proc && sessionId) {
         // Best-effort cancel closes the ephemeral session on the shared
-        // backend process; it is never persisted as a session.
+        // backend process; it is never persisted as a session. Runs on every
+        // exit (done / aborted / timeout / throw) so no sub-session leaks.
         proc.cancel({ sessionId }).catch(() => undefined);
       }
     }
+  }
+
+  /**
+   * Await `prompt()` racing both the run signal (user cancel) and a per-agent
+   * deadline. On abort: cancel the sub-session immediately and resolve
+   * `"aborted"` (the slot goes terminal-cancelled). On timeout: cancel the
+   * sub-session and throw {@link FANOUT_AGENT_TIMEOUT_ERROR} (the slot goes
+   * terminal-error) so the hung agent never blocks the turn or the summary.
+   * Both listeners/timers are torn down in `finally` so a settled prompt leaks
+   * neither a timer nor an abort handler.
+   */
+  private runPromptWithTimeout(
+    proc: BackendProcess,
+    sessionId: SessionId,
+    prompt: PromptContent[],
+    signal: AbortSignal
+  ): Promise<"done" | "aborted"> {
+    return new Promise<"done" | "aborted">((resolve, reject) => {
+      let settled = false;
+      const cancelSubSession = () => void proc.cancel({ sessionId }).catch(() => undefined);
+      const onAbort = () => {
+        if (settled) return;
+        settled = true;
+        cancelSubSession();
+        resolve("aborted");
+      };
+      const timeout = window.setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        cancelSubSession();
+        reject(new Error(FANOUT_AGENT_TIMEOUT_ERROR));
+      }, FANOUT_AGENT_TIMEOUT_MS);
+      signal.addEventListener("abort", onAbort, { once: true });
+
+      const cleanup = () => {
+        window.clearTimeout(timeout);
+        signal.removeEventListener("abort", onAbort);
+      };
+      proc.prompt({ sessionId, prompt }).then(
+        () => {
+          if (settled) return;
+          settled = true;
+          cleanup();
+          // A prompt that resolved only because the backend honored the cancel
+          // is still a user abort — read it off the signal so the slot lands
+          // `cancelled`, not `done`.
+          resolve(signal.aborted ? "aborted" : "done");
+        },
+        (err) => {
+          // Lost the race (already aborted/timed out): the terminal state is
+          // already chosen — swallow the trailing rejection.
+          if (settled) return;
+          settled = true;
+          cleanup();
+          reject(err instanceof Error ? err : new Error(err2String(err)));
+        }
+      );
+    });
   }
 
   /**

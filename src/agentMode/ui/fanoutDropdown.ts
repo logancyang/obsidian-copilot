@@ -19,10 +19,11 @@ export type FanoutOptionValue = BackendId;
 /**
  * Presentational state of one agent's slot, derived from its live status (D7).
  * `running` shows a spinner over the streaming tokens, `done` shows the answer,
- * `error` shows an error chip. Decoupled from {@link AgentAnswerStatus} so the
- * renderer switches on intent, not raw status.
+ * `error` shows an error chip, `cancelled` shows a muted cancelled chip (user
+ * aborted the turn — a clean stop, not a fault). Decoupled from
+ * {@link AgentAnswerStatus} so the renderer switches on intent, not raw status.
  */
-export type FanoutAgentState = "streaming" | "answer" | "error";
+export type FanoutAgentState = "streaming" | "answer" | "error" | "cancelled";
 
 /** Map an agent answer's live status to its presentational state (D7). */
 export function agentStateForStatus(status: AgentAnswerStatus): FanoutAgentState {
@@ -31,6 +32,8 @@ export function agentStateForStatus(status: AgentAnswerStatus): FanoutAgentState
       return "streaming";
     case "error":
       return "error";
+    case "cancelled":
+      return "cancelled";
     case "done":
       return "answer";
   }

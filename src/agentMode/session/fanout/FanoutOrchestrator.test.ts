@@ -7,7 +7,11 @@ import type {
   SessionUpdateHandler,
 } from "@/agentMode/session/types";
 import { createFanoutTurn, FanoutOrchestrator, type FanoutHost } from "./FanoutOrchestrator";
-import { FANOUT_ALL_FAILED_SUMMARY } from "./fanoutTypes";
+import {
+  FANOUT_AGENT_TIMEOUT_ERROR,
+  FANOUT_AGENT_TIMEOUT_MS,
+  FANOUT_ALL_FAILED_SUMMARY,
+} from "./fanoutTypes";
 
 jest.mock("@/logger", () => ({
   logInfo: jest.fn(),
@@ -305,6 +309,75 @@ describe("FanoutOrchestrator.run", () => {
     procs.get("claude")!.resolvePrompt();
     await runPromise;
     expect(procs.get("claude")!.cancel).toHaveBeenCalledWith({ sessionId: "s-claude" });
+  });
+
+  it("cancels EVERY in-flight sub-session and lands each slot terminal-cancelled on abort", async () => {
+    const { host, procs } = makeHost({
+      claude: { sessionId: "s-claude" },
+      codex: { sessionId: "s-codex" },
+    });
+    const orchestrator = new FanoutOrchestrator(host);
+    const controller = new AbortController();
+    const runPromise = orchestrator.run(
+      runInput(["claude", "codex"], { signal: controller.signal })
+    );
+
+    await flush();
+    // Both sub-sessions are mid-prompt; the user cancels the turn.
+    controller.abort();
+    // Backends honor the cancel and resolve their pending prompts.
+    procs.get("claude")!.resolvePrompt();
+    procs.get("codex")!.resolvePrompt();
+    const turn = await runPromise;
+
+    // Every in-flight sub-session got cancel called (abort listener path).
+    expect(procs.get("claude")!.cancel).toHaveBeenCalledWith({ sessionId: "s-claude" });
+    expect(procs.get("codex")!.cancel).toHaveBeenCalledWith({ sessionId: "s-codex" });
+    // No slot is left running; an abort mid-prompt is terminal-cancelled, not done.
+    expect(turn.answers.claude.status).toBe("cancelled");
+    expect(turn.answers.codex.status).toBe("cancelled");
+    // No summary sub-session ran after cancel (only the two answer prompts).
+    expect(procs.get("claude")!.promptCount()).toBe(1);
+    expect(turn.summary.status).toBe("pending");
+  });
+
+  it("fails a hung agent's own slot on timeout while the others complete and the summary still runs", async () => {
+    jest.useFakeTimers();
+    try {
+      const { host, procs } = makeHost({
+        claude: { sessionId: "s-claude" },
+        codex: { sessionId: "s-codex" },
+      });
+      const orchestrator = new FanoutOrchestrator(host);
+      const controller = new AbortController();
+      const runPromise = orchestrator.run(
+        runInput(["claude", "codex"], { signal: controller.signal })
+      );
+
+      // Let both sub-sessions reach their pending prompt() (newSession + mode +
+      // model round-trips are microtasks under fake timers).
+      await jest.advanceTimersByTimeAsync(0);
+      // Claude answers and settles; codex hangs (never resolves its prompt).
+      procs.get("claude")!.emit(textChunk("s-claude", "Claude answer"));
+      procs.get("claude")!.resolvePrompt();
+      // Trip the per-agent deadline — codex's slot must error on its own. The
+      // async advance also flushes the timeout rejection + summary dispatch.
+      await jest.advanceTimersByTimeAsync(FANOUT_AGENT_TIMEOUT_MS);
+      procs.get("claude")!.resolvePrompt(); // the summary sub-session
+      await jest.advanceTimersByTimeAsync(0);
+      const turn = await runPromise;
+
+      expect(turn.answers.claude.status).toBe("done");
+      expect(turn.answers.codex.status).toBe("error");
+      expect(turn.answers.codex.error).toBe(FANOUT_AGENT_TIMEOUT_ERROR);
+      // The hung sub-session was cancelled so it never leaks.
+      expect(procs.get("codex")!.cancel).toHaveBeenCalledWith({ sessionId: "s-codex" });
+      // The summary still ran over the survivor (claude's second prompt).
+      expect(procs.get("claude")!.promptCount()).toBe(2);
+      expect(turn.summary.status).toBe("done");
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it("skips the summary when the turn is cancelled", async () => {

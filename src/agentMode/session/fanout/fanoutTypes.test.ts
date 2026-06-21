@@ -69,6 +69,19 @@ describe("selectSummaryInputs", () => {
     const { failed } = selectSummaryInputs(turn());
     expect(failed).toEqual(["codex", "opencode"]);
   });
+
+  it("treats a cancelled slot as failed even when it carries partial text", () => {
+    const t: FanoutTurn = {
+      answers: {
+        claude: { backendId: "claude", status: "done", text: "claude answer" },
+        codex: { backendId: "codex", status: "cancelled", text: "partial" },
+      },
+      summary: { status: "pending", text: "" },
+    };
+    const { succeeded, failed } = selectSummaryInputs(t);
+    expect(succeeded).toEqual([{ backendId: "claude", text: "claude answer" }]);
+    expect(failed).toEqual(["codex"]);
+  });
 });
 
 describe("buildSummaryUserPrompt", () => {

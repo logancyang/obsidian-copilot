@@ -51,6 +51,9 @@ describe("agentStateForStatus", () => {
   it("maps error to the error state", () => {
     expect(agentStateForStatus("error")).toBe("error");
   });
+  it("maps cancelled to the cancelled state", () => {
+    expect(agentStateForStatus("cancelled")).toBe("cancelled");
+  });
 });
 
 describe("buildFanoutOptions", () => {
@@ -90,6 +93,11 @@ describe("buildFanoutOptions", () => {
     expect(options.find((o) => o.value === "opencode")?.state).toBe("answer");
     expect(options.find((o) => o.value === "claude")?.state).toBe("streaming");
     expect(options.find((o) => o.value === "codex")?.state).toBe("error");
+  });
+
+  it("maps a cancelled slot to the cancelled state", () => {
+    const options = buildFanoutOptions(turn([answer("claude", "cancelled", "partial")]));
+    expect(options.find((o) => o.value === "claude")?.state).toBe("cancelled");
   });
 
   it("falls back to the backend id when the registry has no entry", () => {
