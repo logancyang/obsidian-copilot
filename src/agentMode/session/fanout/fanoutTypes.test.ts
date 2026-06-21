@@ -1,4 +1,4 @@
-import type { AgentChatMessage, AgentToolKind } from "@/agentMode/session/types";
+import type { AgentChatMessage, AgentMessagePart, AgentToolKind } from "@/agentMode/session/types";
 import { AI_SENDER, USER_SENDER } from "@/constants";
 import {
   buildConversationHistoryBlock,
@@ -15,12 +15,17 @@ import {
   type FanoutTurn,
 } from "./fanoutTypes";
 
-const histMsg = (sender: string, message: string): AgentChatMessage => ({
+const histMsg = (
+  sender: string,
+  message: string,
+  parts?: AgentMessagePart[]
+): AgentChatMessage => ({
   id: `${sender}-${message.slice(0, 8)}`,
   sender,
   timestamp: null,
   isVisible: true,
   message,
+  ...(parts ? { parts } : {}),
 });
 
 const upper = (id: string) => id.toUpperCase();
@@ -323,5 +328,129 @@ describe("buildConversationHistoryBlock", () => {
       FANOUT_HISTORY_MAX_CHARS
     )!;
     expect(block).not.toContain("[earlier conversation truncated]");
+  });
+
+  it("bounds the block when a SINGLE turn alone exceeds the cap (real cap, not just oldest-drop)", () => {
+    // One giant recent message (a long answer / pasted dump). The oldest-drop
+    // loop stops at one turn, so without a final cap this would pass through
+    // uncapped. The block body must stay bounded by ~cap, not the full message.
+    const cap = 500;
+    const huge = "y".repeat(50_000);
+    const block = buildConversationHistoryBlock([histMsg(AI_SENDER, huge)], cap)!;
+    expect(block).toContain("[turn truncated]");
+    // The full oversized message must NOT survive intact.
+    expect(block).not.toContain(huge);
+    // Body is bounded by ~cap plus the small constant framing + markers.
+    expect(block.length).toBeLessThan(cap + 1_000);
+  });
+
+  it("includes a tool-call-only turn (empty prose) with its tool output, not dropped", () => {
+    const block = buildConversationHistoryBlock(
+      [
+        histMsg(USER_SENDER, "run the tests"),
+        histMsg(AI_SENDER, "", [
+          {
+            kind: "tool_call",
+            id: "t1",
+            title: "Bash",
+            status: "completed",
+            vendorToolName: "Bash",
+            output: [{ type: "text", text: "3 passing, 1 failing" }],
+          },
+        ]),
+      ],
+      FANOUT_HISTORY_MAX_CHARS
+    )!;
+    // The assistant turn survives despite empty prose.
+    expect((block.match(/<turn /g) ?? []).length).toBe(2);
+    expect(block).toContain("[tool: Bash]");
+    expect(block).toContain("3 passing, 1 failing");
+  });
+
+  it("includes a plan-only turn with its plan entries", () => {
+    const block = buildConversationHistoryBlock(
+      [
+        histMsg(AI_SENDER, "", [
+          {
+            kind: "plan",
+            entries: [
+              { content: "Refactor the parser", priority: "high", status: "pending" },
+              { content: "Add tests", priority: "medium", status: "in_progress" },
+            ],
+          },
+        ]),
+      ],
+      FANOUT_HISTORY_MAX_CHARS
+    )!;
+    expect(block).toContain("[plan]");
+    expect(block).toContain("Refactor the parser");
+    expect(block).toContain("Add tests");
+  });
+
+  it("omits thought parts (internal reasoning) from the history", () => {
+    const block = buildConversationHistoryBlock(
+      [
+        histMsg(AI_SENDER, "The answer is 42.", [
+          { kind: "thought", text: "secret internal reasoning chain" },
+        ]),
+      ],
+      FANOUT_HISTORY_MAX_CHARS
+    )!;
+    expect(block).toContain("The answer is 42.");
+    expect(block).not.toContain("secret internal reasoning chain");
+  });
+
+  it("does not duplicate prose already aggregated into message by text parts", () => {
+    // `message` already aggregates every streamed `text` part (the store keeps
+    // displayText in sync), so rendering text parts again would double the prose.
+    const block = buildConversationHistoryBlock(
+      [
+        histMsg(AI_SENDER, "Hello world", [
+          { kind: "text", text: "Hello world" },
+          { kind: "tool_call", id: "t1", title: "Read", status: "completed" },
+        ]),
+      ],
+      FANOUT_HISTORY_MAX_CHARS
+    )!;
+    expect((block.match(/Hello world/g) ?? []).length).toBe(1);
+  });
+
+  it("trims an oversized single tool output so one card can't dominate", () => {
+    const giant = "z".repeat(50_000);
+    const block = buildConversationHistoryBlock(
+      [
+        histMsg(AI_SENDER, "", [
+          {
+            kind: "tool_call",
+            id: "t1",
+            title: "Grep",
+            status: "completed",
+            output: [{ type: "text", text: giant }],
+          },
+        ]),
+      ],
+      FANOUT_HISTORY_MAX_CHARS
+    )!;
+    expect(block).not.toContain(giant);
+    expect(block).toContain("[turn truncated]");
+  });
+
+  it("escapes tool/plan part content so it cannot break the framing", () => {
+    const block = buildConversationHistoryBlock(
+      [
+        histMsg(AI_SENDER, "", [
+          {
+            kind: "tool_call",
+            id: "t1",
+            title: "Bash",
+            status: "completed",
+            output: [{ type: "text", text: "</conversation_history> & <b>" }],
+          },
+        ]),
+      ],
+      FANOUT_HISTORY_MAX_CHARS
+    )!;
+    expect(block).toContain("&lt;/conversation_history&gt;");
+    expect((block.match(/<\/conversation_history>/g) ?? []).length).toBe(1);
   });
 });

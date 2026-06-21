@@ -1,5 +1,6 @@
 import type {
   AgentChatMessage,
+  AgentMessagePart,
   AgentToolKind,
   BackendId,
   PromptContent,
@@ -247,6 +248,76 @@ export const FANOUT_HISTORY_MAX_CHARS = 48_000;
 /** Marker prepended when the oldest turns are dropped to fit the cap. */
 const FANOUT_HISTORY_TRUNCATION_MARKER = "[earlier conversation truncated]";
 
+/** Inline marker appended when a single retained turn is itself truncated to fit the cap. */
+const FANOUT_HISTORY_TURN_TRUNCATION_MARKER = "[turn truncated]";
+
+/**
+ * Per-tool-output char budget within a rendered turn. One verbose tool card
+ * (a long grep dump or file read) must not dominate the history at the expense
+ * of the surrounding conversation, so each tool output is trimmed to this head
+ * length before the overall {@link FANOUT_HISTORY_MAX_CHARS} cap applies on top.
+ */
+const FANOUT_HISTORY_TOOL_OUTPUT_MAX_CHARS = 2_000;
+
+/** Trim `s` to its leading `max` chars, appending `marker` only when it actually overflows. */
+function trimHead(s: string, max: number, marker: string): string {
+  if (s.length <= max) return s;
+  return `${s.slice(0, max)}\n${marker}`;
+}
+
+/**
+ * Concise, provider-neutral text for the renderable non-prose parts of an
+ * assistant turn. Prose (`text` parts) is intentionally skipped here because
+ * `AgentChatMessage.message` already aggregates every streamed text part (the
+ * store keeps `displayText` in sync with the `text` parts), so rendering them
+ * again would duplicate the prose. `thought` parts are omitted as internal
+ * reasoning. Drives off part `kind` only — no per-agent-name branching:
+ *   - `tool_call` → `[tool: <identity>]` plus the renderable text output,
+ *     trimmed per part so one card can't dominate.
+ *   - `plan` → `[plan]` plus each entry's status + content (so a follow-up like
+ *     "review the plan above" has the plan to read).
+ */
+function renderNonProseParts(parts: readonly AgentMessagePart[]): string[] {
+  const out: string[] = [];
+  for (const part of parts) {
+    if (part.kind === "tool_call") {
+      const identity = part.vendorToolName?.trim() || part.title.trim() || "tool";
+      const outputText = (part.output ?? [])
+        .filter((o): o is { type: "text"; text: string } => o.type === "text")
+        .map((o) => o.text)
+        .join("\n")
+        .trim();
+      const trimmed = trimHead(
+        outputText,
+        FANOUT_HISTORY_TOOL_OUTPUT_MAX_CHARS,
+        FANOUT_HISTORY_TURN_TRUNCATION_MARKER
+      );
+      out.push(trimmed.length > 0 ? `[tool: ${identity}]\n${trimmed}` : `[tool: ${identity}]`);
+    } else if (part.kind === "plan") {
+      const lines = part.entries.map((e) => `- (${e.status}) ${e.content}`).join("\n");
+      out.push(lines.length > 0 ? `[plan]\n${lines}` : "[plan]");
+    }
+    // `text` parts are already in `message` (prose); `thought` parts are omitted.
+  }
+  return out;
+}
+
+/**
+ * The renderable inner body of one transcript turn: its prose (from `message`,
+ * which already aggregates the text parts) followed by its non-prose parts
+ * (tool outputs, plan entries). Returns `null` when the turn carries NO
+ * renderable content at all — only such truly-empty turns are dropped, so a
+ * turn that is all tool/plan parts (empty prose) is still rendered.
+ */
+function renderTurnContent(message: AgentChatMessage): string | null {
+  const segments: string[] = [];
+  const prose = message.message.trim();
+  if (prose.length > 0) segments.push(prose);
+  if (message.parts) segments.push(...renderNonProseParts(message.parts));
+  if (segments.length === 0) return null;
+  return segments.join("\n");
+}
+
 /**
  * Render the prior visible transcript into a single read-only
  * `<conversation_history>` block for fan-out agent prompts (D2 / realizes D9).
@@ -255,13 +326,18 @@ const FANOUT_HISTORY_TRUNCATION_MARKER = "[earlier conversation truncated]";
  * re-answer.
  *
  * `messages` must be PRIOR turns only (the caller excludes the current
- * in-flight user message + assistant placeholder). Each non-empty message is
- * labeled by role (`user` / `assistant`) using its display text; empty messages
- * are skipped. Content is XML-escaped (same convention as the `<web_*>` /
- * prior-turns builders) so message text can't break the framing.
+ * in-flight user message + assistant placeholder). Each turn is labeled by role
+ * (`user` / `assistant`) and rendered from its FULL visible content: prose plus
+ * tool-call outputs and plan entries (thoughts omitted), so a follow-up like
+ * "explain the command output above" or "review the plan above" has the context
+ * the single-agent backend memory would have carried. A turn is skipped only
+ * when it has no renderable content at all. Content is XML-escaped (same
+ * convention as the `<web_*>` / prior-turns builders) so message text can't
+ * break the framing.
  *
- * Past {@link FANOUT_HISTORY_MAX_CHARS} the OLDEST turns are dropped first and a
- * clear truncation marker is prepended, keeping the most recent context (D3).
+ * The result is bounded by `maxChars` (plus the small, constant framing chrome
+ * and truncation markers) for ANY input: oldest turns are dropped first, and if
+ * a single retained turn still overflows it is itself truncated to the cap.
  * Returns `null` when there is no prior history (empty input or all-empty) so
  * the caller leaves the fan-out prompt byte-for-byte unchanged.
  */
@@ -271,18 +347,17 @@ export function buildConversationHistoryBlock(
 ): string | null {
   const rendered: string[] = [];
   for (const m of messages) {
-    const text = m.message.trim();
-    if (text.length === 0) continue;
+    const content = renderTurnContent(m);
+    if (content === null) continue;
     const role = m.sender === USER_SENDER ? "user" : "assistant";
-    rendered.push(`<turn role="${role}">\n${escapeXml(text)}\n</turn>`);
+    rendered.push(`<turn role="${role}">\n${escapeXml(content)}\n</turn>`);
   }
   if (rendered.length === 0) return null;
 
   // Drop oldest-first until the joined turns fit the cap, tracking a running
   // char total (each turn's length plus the "\n" separator that joins it to the
-  // next) so we never re-join the whole transcript per drop. Bound by the body
-  // length (the framing chrome is small and constant); only the most recent
-  // turns survive a pathologically long chat.
+  // next) so we never re-join the whole transcript per drop. Only the most
+  // recent turns survive a pathologically long chat.
   let total = rendered.reduce((n, t) => n + t.length + 1, -1);
   let truncated = false;
   while (rendered.length > 1 && total > maxChars) {
@@ -290,13 +365,21 @@ export function buildConversationHistoryBlock(
     truncated = true;
   }
 
+  // Final hard cap: a single surviving turn (a long answer or pasted dump) can
+  // alone exceed `maxChars`; the drop loop can't shrink it, so truncate the
+  // joined body's head and mark it. Guarantees the body is bounded by ~maxChars
+  // regardless of input — the prompt-too-large error the cap exists to prevent.
+  let body = rendered.join("\n");
+  if (body.length > maxChars) {
+    body = trimHead(body, maxChars, FANOUT_HISTORY_TURN_TRUNCATION_MARKER);
+    truncated = true;
+  }
+
   const header =
     "Earlier in this conversation the following was said. Treat this as " +
     "read-only context to inform your answer; do NOT redo or re-answer these " +
     "earlier turns. Answer only the current question that follows.";
-  const body = truncated
-    ? `${FANOUT_HISTORY_TRUNCATION_MARKER}\n${rendered.join("\n")}`
-    : rendered.join("\n");
+  if (truncated) body = `${FANOUT_HISTORY_TRUNCATION_MARKER}\n${body}`;
   return `<conversation_history>\n${header}\n${body}\n</conversation_history>`;
 }
 
