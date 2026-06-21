@@ -175,6 +175,18 @@ describe("buildSummaryUserPrompt", () => {
     expect(text).toContain("### OPENCODE\nopencode says Y");
   });
 
+  it("caps an oversized answer so it can't blow the summary sub-session", () => {
+    const huge = "z".repeat(50_000);
+    const prompt = buildSummaryUserPrompt(
+      "q",
+      { succeeded: [{ backendId: "claude", text: huge }], failed: [] },
+      upper
+    );
+    const text = (prompt![0] as { text: string }).text;
+    expect(text).toContain("[answer truncated]");
+    expect(text.length).toBeLessThan(huge.length);
+  });
+
   it("never tells the summarizer about agents that did not answer", () => {
     // The summarizer must not be able to mention non-answerers, so the failed
     // list is omitted from the prompt entirely (not surfaced as a 'gap' note).

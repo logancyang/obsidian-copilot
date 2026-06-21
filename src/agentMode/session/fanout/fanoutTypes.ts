@@ -625,6 +625,18 @@ export function selectSummaryInputs(turn: FanoutTurn): SummaryInputs {
 }
 
 /**
+ * Per-answer char cap on the agent answers fed into the SUMMARY prompt. Unlike
+ * the persisted cap (which bounds the on-disk transcript), this bounds the MODEL
+ * INPUT: every succeeded answer is concatenated into ONE summary sub-session
+ * prompt, so one huge answer (a long file excerpt or tool dump) could otherwise
+ * push that prompt past the context window or time it out and leave the turn
+ * with no summary. Tighter than the persisted cap because several answers stack
+ * into a single prompt (worst case ≈ agent count × this).
+ */
+const FANOUT_SUMMARY_ANSWER_MAX_CHARS = 12_000;
+const FANOUT_SUMMARY_ANSWER_TRUNCATION_MARKER = "[answer truncated]";
+
+/**
  * Compose the NEW user-turn prompt fed to the main agent for the summary: the
  * read-only summary instruction, the user's original prompt, then each
  * succeeded answer labeled by its agent's display name, and a closing note
@@ -642,9 +654,11 @@ export function buildSummaryUserPrompt(
   displayNameFor: (backendId: BackendId) => string
 ): PromptContent[] | null {
   if (inputs.succeeded.length === 0) return null;
-  // `text` is already trimmed by selectSummaryInputs — no re-trim.
+  // `text` is whitespace-trimmed by selectSummaryInputs; cap its LENGTH here so a
+  // single oversized answer can't blow the summary sub-session's context/timeout.
   const sections = inputs.succeeded.map(
-    ({ backendId, text }) => `### ${displayNameFor(backendId)}\n${text}`
+    ({ backendId, text }) =>
+      `### ${displayNameFor(backendId)}\n${trimHead(text, FANOUT_SUMMARY_ANSWER_MAX_CHARS, FANOUT_SUMMARY_ANSWER_TRUNCATION_MARKER)}`
   );
   // Only the SUCCEEDED answers are shown to the summarizer. Agents that did not
   // answer are intentionally omitted entirely (not listed as a "gap") so the
