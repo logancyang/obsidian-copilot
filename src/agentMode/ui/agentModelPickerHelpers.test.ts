@@ -4,11 +4,8 @@ import {
   buildEffortSibling,
   buildModelOnChange,
   buildPickerEntries,
-  capabilitiesFromModelInfo,
   resolveActiveDisplayState,
   synthesizeAgentEntry,
-  type CatalogLookup,
-  type CatalogModelInfo,
 } from "./agentModelPickerHelpers";
 import { ModelCapability } from "@/constants";
 import { getModelKeyFromModel } from "@/settings/model";
@@ -193,7 +190,7 @@ describe("buildPickerEntries", () => {
       activeModelState: makeModelState("gpt-5", [codexEntry]),
       activeCurrentEntry: codexEntry,
     };
-    const { entries } = buildPickerEntries(manager, [codex, claude], ctx, emptySettings, null);
+    const { entries } = buildPickerEntries(manager, [codex, claude], ctx, emptySettings);
     const ids = entries.map((e) => e._backendId);
     expect(ids).toEqual(["codex"]);
   });
@@ -218,7 +215,7 @@ describe("buildPickerEntries", () => {
       activeModelState: makeModelState("ghost-model", [stranded]),
       activeCurrentEntry: stranded,
     };
-    const { entries, valueKey } = buildPickerEntries(manager, [codex], ctx, emptySettings, null);
+    const { entries, valueKey } = buildPickerEntries(manager, [codex], ctx, emptySettings);
     expect(entries[0].name).toBe("ghost-model");
     expect(entries[0]._backendId).toBe("codex");
     expect(valueKey).toBe("codex:ghost-model|agent");
@@ -241,7 +238,7 @@ describe("buildPickerEntries", () => {
       activeModelState: makeModelState("gpt-5", [entry]),
       activeCurrentEntry: entry,
     };
-    const { entries } = buildPickerEntries(manager, [codex], ctx, emptySettings, null);
+    const { entries } = buildPickerEntries(manager, [codex], ctx, emptySettings);
     expect(entries).toHaveLength(1);
     expect(entries[0].name).toBe("gpt-5");
   });
@@ -278,7 +275,7 @@ describe("buildPickerEntries", () => {
       activeModelState: null,
       activeCurrentEntry: undefined,
     };
-    const { entries } = buildPickerEntries(manager, [opencode], ctx, emptySettings, null);
+    const { entries } = buildPickerEntries(manager, [opencode], ctx, emptySettings);
     expect(entries.map((e) => e.name)).toEqual(["anthropic/claude-sonnet-4-6"]);
   });
 
@@ -305,7 +302,7 @@ describe("buildPickerEntries", () => {
       activeModelState: makeModelState("kept-model", [kept, dropped]),
       activeCurrentEntry: kept,
     };
-    const { entries } = buildPickerEntries(manager, [opencode], ctx, emptySettings, null);
+    const { entries } = buildPickerEntries(manager, [opencode], ctx, emptySettings);
     expect(entries.map((e) => e.name)).toEqual(["kept-model"]);
   });
 
@@ -337,7 +334,7 @@ describe("buildPickerEntries", () => {
       activeModelState: makeModelState("gpt-5", [entry]),
       activeCurrentEntry: entry,
     };
-    const { entries } = buildPickerEntries(manager, [codex], ctx, emptySettings, null);
+    const { entries } = buildPickerEntries(manager, [codex], ctx, emptySettings);
     expect(entries[0]._subtitle).toBe("Frontier model for complex coding");
   });
 
@@ -365,7 +362,7 @@ describe("buildPickerEntries", () => {
       activeModelState: makeModelState("ghost", [stranded]),
       activeCurrentEntry: stranded,
     };
-    const { entries } = buildPickerEntries(manager, [codex], ctx, emptySettings, null);
+    const { entries } = buildPickerEntries(manager, [codex], ctx, emptySettings);
     expect(entries[0]._subtitle).toBe("Opus 4.7 with 1M context");
   });
 
@@ -393,7 +390,7 @@ describe("buildPickerEntries", () => {
       activeModelState: makeModelState("anthropic/claude-haiku", [sticky]),
       activeCurrentEntry: sticky,
     };
-    const { entries } = buildPickerEntries(manager, [opencode], ctx, emptySettings, null);
+    const { entries } = buildPickerEntries(manager, [opencode], ctx, emptySettings);
     expect(entries.map((e) => e.name)).toEqual(["anthropic/claude-haiku"]);
   });
 });
@@ -420,7 +417,6 @@ describe("appendBackendSection — getEnabledModelEntries path", () => {
       backendModels: [makeModelEntry("openrouter/c", "Reported C")],
       keepBaseModelId: null,
       settings: emptySettings,
-      catalog: null,
     });
     const byId = Object.fromEntries(entries.map((e) => [e.name, e]));
     expect(byId["openrouter/a"]._disabledReason).toBe("Add API key");
@@ -453,7 +449,6 @@ describe("appendBackendSection — getEnabledModelEntries path", () => {
       ],
       keepBaseModelId: null,
       settings: emptySettings,
-      catalog: null,
     });
     const byId = Object.fromEntries(entries.map((e) => [e.name, e]));
     expect(byId["opencode/big-pickle"]._isFree).toBe(true);
@@ -475,7 +470,6 @@ describe("appendBackendSection — getEnabledModelEntries path", () => {
       backendModels: [makeModelEntry("opus-4-5", "Opus 4.5")],
       keepBaseModelId: null,
       settings: emptySettings,
-      catalog: null,
     });
     const byId = Object.fromEntries(entries.map((e) => [e.name, e]));
     expect(byId["opus-4-5"]._disabledReason).toBeUndefined();
@@ -491,7 +485,6 @@ describe("appendBackendSection — getEnabledModelEntries path", () => {
         backendModels: [makeModelEntry("openrouter/a"), makeModelEntry("sticky")],
         keepBaseModelId: "sticky",
         settings: emptySettings,
-        catalog: null,
       }
     );
     const names = entries.map((e) => e.name);
@@ -504,7 +497,7 @@ describe("appendBackendSection — getEnabledModelEntries path", () => {
     appendBackendSection(
       entries,
       opencodeWithEntries([{ baseModelId: "openrouter/a", name: "A", credentialState: "ok" }]),
-      { backendModels: null, keepBaseModelId: null, settings: emptySettings, catalog: null }
+      { backendModels: null, keepBaseModelId: null, settings: emptySettings }
     );
     // No flags before the catalog loads — buildPickerEntries shows "Loading…".
     expect(entries).toHaveLength(0);
@@ -729,39 +722,9 @@ describe("buildEffortOptionsByModelKey", () => {
   });
 });
 
-// ---- capability enrichment ---------------------------------------------
+// ---- capability propagation --------------------------------------------
 
-describe("capabilitiesFromModelInfo", () => {
-  function info(partial: CatalogModelInfo): CatalogModelInfo {
-    return { ...partial };
-  }
-
-  it("maps image input to VISION and reasoning to REASONING", () => {
-    expect(
-      capabilitiesFromModelInfo(info({ modalities: { input: ["text", "image"] }, reasoning: true }))
-    ).toEqual([ModelCapability.VISION, ModelCapability.REASONING]);
-  });
-
-  it("returns an empty array for a known model with neither capability", () => {
-    expect(capabilitiesFromModelInfo(info({ modalities: { input: ["text"] } }))).toEqual([]);
-  });
-
-  it("omits VISION when modalities are absent", () => {
-    expect(capabilitiesFromModelInfo(info({ reasoning: true }))).toEqual([
-      ModelCapability.REASONING,
-    ]);
-  });
-});
-
-describe("buildPickerEntries — catalog capability enrichment", () => {
-  function makeCatalog(
-    providerId: string,
-    models: Record<string, CatalogModelInfo>
-  ): CatalogLookup {
-    const provider = { models };
-    return { getProvider: (id) => (id === providerId ? provider : undefined) };
-  }
-
+describe("buildPickerEntries — persisted capability propagation", () => {
   function reported(baseModelId: string, provider: string | null): ModelEntry {
     return { baseModelId, name: baseModelId, provider, effortOptions: [] };
   }
@@ -778,11 +741,16 @@ describe("buildPickerEntries — catalog capability enrichment", () => {
     };
   }
 
-  it("sets capabilities on a catalog hit (bare base id, provider == catalog id)", () => {
+  it("surfaces an enabled model's persisted capabilities on its picker entry", () => {
     const claude = {
       ...makeDescriptor("claude"),
       getEnabledModelEntries: () => [
-        { baseModelId: "claude-sonnet-4-5", name: "Sonnet", credentialState: "ok" as const },
+        {
+          baseModelId: "claude-sonnet-4-5",
+          name: "Sonnet",
+          credentialState: "ok" as const,
+          capabilities: [ModelCapability.VISION, ModelCapability.REASONING],
+        },
       ],
     } as unknown as BackendDescriptor;
     const manager = makeManager({
@@ -793,56 +761,12 @@ describe("buildPickerEntries — catalog capability enrichment", () => {
         },
       },
     });
-    const catalog = makeCatalog("anthropic", {
-      "claude-sonnet-4-5": { modalities: { input: ["text", "image"] }, reasoning: true },
-    });
-    const { entries } = buildPickerEntries(
-      manager,
-      [claude],
-      ctxFor("claude"),
-      emptySettings,
-      catalog
-    );
+    const { entries } = buildPickerEntries(manager, [claude], ctxFor("claude"), emptySettings);
     const entry = entries.find((e) => e.name === "claude-sonnet-4-5");
     expect(entry?.capabilities).toEqual([ModelCapability.VISION, ModelCapability.REASONING]);
   });
 
-  it("strips a leading provider segment from a suffix-style base id before lookup", () => {
-    const opencode = {
-      ...makeDescriptor("opencode"),
-      getEnabledModelEntries: () => [
-        {
-          baseModelId: "anthropic/claude-sonnet-4-5",
-          name: "Sonnet",
-          credentialState: "ok" as const,
-        },
-      ],
-    } as unknown as BackendDescriptor;
-    const manager = makeManager({
-      cachedStateById: {
-        opencode: {
-          model: makeModelState("anthropic/claude-sonnet-4-5", [
-            reported("anthropic/claude-sonnet-4-5", "anthropic"),
-          ]),
-          mode: null,
-        },
-      },
-    });
-    const catalog = makeCatalog("anthropic", {
-      "claude-sonnet-4-5": { modalities: { input: ["text", "image"] } },
-    });
-    const { entries } = buildPickerEntries(
-      manager,
-      [opencode],
-      ctxFor("opencode"),
-      emptySettings,
-      catalog
-    );
-    const entry = entries.find((e) => e.name === "anthropic/claude-sonnet-4-5");
-    expect(entry?.capabilities).toEqual([ModelCapability.VISION]);
-  });
-
-  it("leaves capabilities undefined on a catalog miss (provider not in catalog)", () => {
+  it("leaves capabilities undefined when the enabled entry carries none", () => {
     const claude = {
       ...makeDescriptor("claude"),
       getEnabledModelEntries: () => [
@@ -857,67 +781,7 @@ describe("buildPickerEntries — catalog capability enrichment", () => {
         },
       },
     });
-    // Catalog only knows "openai" — the "anthropic" lookup misses.
-    const catalog = makeCatalog("openai", { "gpt-5": {} });
-    const { entries } = buildPickerEntries(
-      manager,
-      [claude],
-      ctxFor("claude"),
-      emptySettings,
-      catalog
-    );
-    const entry = entries.find((e) => e.name === "claude-sonnet-4-5");
-    expect(entry?.capabilities).toBeUndefined();
-  });
-
-  it("leaves capabilities undefined when the model has no provider attribution", () => {
-    const codex = {
-      ...makeDescriptor("codex"),
-      getEnabledModelEntries: () => [
-        { baseModelId: "gpt-5", name: "GPT-5", credentialState: "ok" as const },
-      ],
-    } as unknown as BackendDescriptor;
-    const manager = makeManager({
-      cachedStateById: {
-        codex: { model: makeModelState("gpt-5", [reported("gpt-5", null)]), mode: null },
-      },
-    });
-    const catalog = makeCatalog("openai", {
-      "gpt-5": { modalities: { input: ["text", "image"] } },
-    });
-    const { entries } = buildPickerEntries(
-      manager,
-      [codex],
-      ctxFor("codex"),
-      emptySettings,
-      catalog
-    );
-    const entry = entries.find((e) => e.name === "gpt-5");
-    expect(entry?.capabilities).toBeUndefined();
-  });
-
-  it("leaves capabilities undefined when no catalog is provided", () => {
-    const claude = {
-      ...makeDescriptor("claude"),
-      getEnabledModelEntries: () => [
-        { baseModelId: "claude-sonnet-4-5", name: "Sonnet", credentialState: "ok" as const },
-      ],
-    } as unknown as BackendDescriptor;
-    const manager = makeManager({
-      cachedStateById: {
-        claude: {
-          model: makeModelState("claude-sonnet-4-5", [reported("claude-sonnet-4-5", "anthropic")]),
-          mode: null,
-        },
-      },
-    });
-    const { entries } = buildPickerEntries(
-      manager,
-      [claude],
-      ctxFor("claude"),
-      emptySettings,
-      null
-    );
+    const { entries } = buildPickerEntries(manager, [claude], ctxFor("claude"), emptySettings);
     const entry = entries.find((e) => e.name === "claude-sonnet-4-5");
     expect(entry?.capabilities).toBeUndefined();
   });

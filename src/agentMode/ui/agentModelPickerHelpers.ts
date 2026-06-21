@@ -1,6 +1,6 @@
 import { Notice } from "obsidian";
 import { logError } from "@/logger";
-import { ModelCapability } from "@/constants";
+import type { ModelCapability } from "@/constants";
 import type { ModelSelectorEntry } from "@/components/ui/ModelSelector";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type { AgentChatUIState } from "@/agentMode/session/AgentChatUIState";
@@ -66,90 +66,6 @@ export function handlePickerSwitchError(err: unknown, action: "model" | "effort"
 export const AGENT_PROVIDER = "agent";
 
 /**
- * Minimal structural view of a catalog `ModelInfo` — only the fields capability
- * derivation reads. Declared locally (not imported from `@/modelManagement`)
- * because the agent-mode `ui` layer must not depend on that module; the real
- * `ModelInfo` is structurally assignable to this.
- */
-export interface CatalogModelInfo {
-  modalities?: { input?: string[] };
-  reasoning?: boolean;
-}
-
-/**
- * Narrow read-only view of the catalog the picker needs — just the synchronous
- * in-memory provider lookup. Declared structurally (no `@/modelManagement`
- * import) so the build path stays inside the `ui` boundary; the real
- * `CatalogDownloadService` is assignable to it. Trivially stubbable in tests.
- */
-export interface CatalogLookup {
-  getProvider(id: string): { models: Record<string, CatalogModelInfo> } | undefined;
-  /**
-   * Lazily download/populate the catalog. Optional so test stubs and any
-   * synchronous-only lookup stay assignable. The picker calls it once on mount
-   * because nothing else in the agent path warms the catalog — without it
-   * `getProvider` always misses and no capability icons render.
-   */
-  ensureLoaded?(): Promise<void>;
-  /** Subscribe to catalog (re)population so the picker re-derives capabilities
-   *  once data lands. Returns an unsubscribe fn. Optional for the same reason. */
-  onChange?(listener: () => void): () => void;
-}
-
-/**
- * Derive picker capabilities from a catalog `ModelInfo`. The agent-side analog
- * of `configuredModelToCustomModel`'s derivation — kept identical so a model
- * surfaces the same capabilities whether configured for chat or reached via an
- * agent backend. A model is vision-capable when it lists `"image"` input;
- * reasoning when `reasoning === true`.
- */
-export function capabilitiesFromModelInfo(info: CatalogModelInfo): ModelCapability[] {
-  const capabilities: ModelCapability[] = [];
-  if (info.modalities?.input?.includes("image")) capabilities.push(ModelCapability.VISION);
-  if (info.reasoning) capabilities.push(ModelCapability.REASONING);
-  return capabilities;
-}
-
-/**
- * Resolve the catalog `ModelInfo` for an agent model, or `undefined` on any
- * miss (no provider attribution, provider not in catalog, id not found). The
- * catalog keys models by bare wire id; `provider` is the normalized Copilot
- * provider id, which coincides with the models.dev catalog provider id for the
- * frontier providers (`anthropic`, `openai`, `google`, …). Suffix-style
- * backends (opencode) carry a `<provider>/` prefix on `baseModelId`, so we also
- * try the id with its leading provider segment stripped.
- */
-function lookupCatalogModelInfo(
-  catalog: CatalogLookup | null,
-  provider: string | null,
-  baseModelId: string
-): CatalogModelInfo | undefined {
-  if (!catalog || !provider) return undefined;
-  const models = catalog.getProvider(provider)?.models;
-  if (!models) return undefined;
-  const direct = models[baseModelId];
-  if (direct) return direct;
-  const slash = baseModelId.indexOf("/");
-  if (slash >= 0) return models[baseModelId.slice(slash + 1)];
-  return undefined;
-}
-
-/**
- * Capabilities for an agent model, derived from the catalog. Returns
- * `undefined` (NOT `[]`) on a catalog miss so the image-send guard treats the
- * model as "unknown" and never blocks it. A hit returns the derived array
- * (possibly empty — a known model that genuinely lacks vision/reasoning).
- */
-function capabilitiesFromCatalog(
-  catalog: CatalogLookup | null,
-  provider: string | null,
-  baseModelId: string
-): ModelCapability[] | undefined {
-  const info = lookupCatalogModelInfo(catalog, provider, baseModelId);
-  return info ? capabilitiesFromModelInfo(info) : undefined;
-}
-
-/**
  * Append one backend's section to the picker.
  *
  * One policy for every backend, via `getEnabledModelEntries`: iterate the
@@ -177,8 +93,6 @@ export function appendBackendSection(
     keepBaseModelId: string | null;
     /** Current settings — read by `getEnabledModelEntries`. */
     settings: CopilotSettings;
-    /** Catalog for capability enrichment; `null` when not yet loaded. */
-    catalog: CatalogLookup | null;
   }
 ): void {
   const enabledEntries = descriptor.getEnabledModelEntries?.(ctx.settings) ?? null;
@@ -191,8 +105,7 @@ export function appendBackendSection(
     descriptor,
     enabledEntries,
     ctx.backendModels,
-    ctx.keepBaseModelId,
-    ctx.catalog
+    ctx.keepBaseModelId
   );
 }
 
@@ -210,8 +123,7 @@ function appendFromEnabledEntries(
   descriptor: BackendDescriptor,
   enabledEntries: ReadonlyArray<EnabledModelEntry>,
   backendModels: ReadonlyArray<ModelEntry>,
-  keepBaseModelId: string | null,
-  catalog: CatalogLookup | null
+  keepBaseModelId: string | null
 ): void {
   const reportedById = new Map(backendModels.map((m) => [m.baseModelId, m]));
   const emitted = new Set<string>();
@@ -219,13 +131,10 @@ function appendFromEnabledEntries(
     const reported = reportedById.get(enabled.baseModelId);
     const name = reported?.name || enabled.name || enabled.baseModelId;
     const subtitle = reported?.description ?? enabled.description;
-    // Prefer the model's own persisted capabilities (derived from its
-    // `ConfiguredModel.info` modality snapshot) — reliable without the live
-    // catalog. Fall back to the catalog only when the stored info was silent
-    // (`undefined`) on modalities, so a known no-vision model isn't re-guessed.
-    const capabilities =
-      enabled.capabilities ??
-      capabilitiesFromCatalog(catalog, reported?.provider ?? null, enabled.baseModelId);
+    // Capabilities come from the model's persisted `ConfiguredModel.info`
+    // modality snapshot. `undefined` (no snapshot) means "unknown" — no icon,
+    // and the image-send guard leaves the model unblocked.
+    const capabilities = enabled.capabilities;
     const entry = synthesizeAgentEntry(
       enabled.baseModelId,
       name,
@@ -243,11 +152,6 @@ function appendFromEnabledEntries(
   if (keepBaseModelId && !emitted.has(keepBaseModelId)) {
     const reported = reportedById.get(keepBaseModelId);
     if (reported) {
-      const capabilities = capabilitiesFromCatalog(
-        catalog,
-        reported.provider,
-        reported.baseModelId
-      );
       entries.push(
         synthesizeAgentEntry(
           reported.baseModelId,
@@ -255,7 +159,7 @@ function appendFromEnabledEntries(
           descriptor,
           reported.description,
           undefined,
-          capabilities
+          undefined
         )
       );
     }
@@ -284,9 +188,10 @@ export function synthesizeAgentEntry(
   subtitle?: string,
   isFree?: boolean,
   /**
-   * Catalog-derived capabilities, or `undefined` when unknown (catalog miss).
-   * Left off the entry entirely when undefined so the image-send guard treats
-   * the model as "unknown" — never blocked.
+   * Capabilities from the model's persisted `ConfiguredModel.info` snapshot, or
+   * `undefined` when unknown (no snapshot). Left off the entry entirely when
+   * undefined so the image-send guard treats the model as "unknown" — never
+   * blocked.
    */
   capabilities?: ModelCapability[]
 ): ModelSelectorEntry {
@@ -381,8 +286,7 @@ export function buildPickerEntries(
   manager: AgentSessionManager,
   descriptors: BackendDescriptor[],
   ctx: ModelActiveContext,
-  settings: CopilotSettings,
-  catalog: CatalogLookup | null
+  settings: CopilotSettings
 ): { entries: ModelSelectorEntry[]; valueKey: string } {
   const entries: ModelSelectorEntry[] = [];
   for (const descriptor of descriptors) {
@@ -397,7 +301,6 @@ export function buildPickerEntries(
       backendModels,
       keepBaseModelId,
       settings,
-      catalog,
     });
     // No catalog cached yet (and not because the agent intentionally
     // omitted a model state). Show a per-backend loading / failure row so
@@ -432,7 +335,7 @@ export function buildPickerEntries(
         ctx.activeDescriptor,
         ctx.activeCurrentEntry.description,
         undefined,
-        capabilitiesFromCatalog(catalog, ctx.activeCurrentEntry.provider, baseId)
+        undefined
       );
       entries.unshift(synth);
       valueKey = getModelKeyFromModel(synth);
@@ -652,13 +555,11 @@ export function buildAgentModelPicker(args: {
   manager: AgentSessionManager | null;
   descriptors: BackendDescriptor[];
   settings: CopilotSettings;
-  /** Catalog for capability enrichment; `null` until it has loaded. */
-  catalog: CatalogLookup | null;
 }): AgentModelPickerOverride | null {
-  const { manager, descriptors, settings, catalog } = args;
+  const { manager, descriptors, settings } = args;
   if (!manager) return null;
   const ctx = collectModelActiveContext(manager);
-  const { entries, valueKey } = buildPickerEntries(manager, descriptors, ctx, settings, catalog);
+  const { entries, valueKey } = buildPickerEntries(manager, descriptors, ctx, settings);
   const onChange = buildModelOnChange(manager, ctx, entries);
   return {
     models: entries,
