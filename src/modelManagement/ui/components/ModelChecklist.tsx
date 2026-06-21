@@ -15,9 +15,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { ModelCapabilityIcons } from "@/components/ui/model-display";
+import { ModelCapabilityIcons, hasCapabilityIcons } from "@/components/ui/model-display";
 import { cn } from "@/lib/utils";
-import { capabilityListFromModelInfo } from "@/modelManagement/chatModel/modelCapabilityFlags";
+import { capabilitiesFromConfiguredInfo } from "@/modelManagement/chatModel/modelCapabilityFlags";
 import type { ModelInfo } from "@/modelManagement/types/catalog";
 import {
   formatContextWindow,
@@ -119,7 +119,7 @@ export const ModelChecklist: React.FC<ModelChecklistProps> = ({
             const releaseLabel = formatReleaseDate(model.releaseDate);
             const isLastChecked = index === checkedCount - 1 && checkedCount < filtered.length;
             const removable = onRemoveId !== undefined && customIds?.has(model.id) === true;
-            const capabilities = capabilityListFromModelInfo(model);
+            const capabilities = capabilitiesFromConfiguredInfo(model);
             return (
               <label
                 key={model.id}
@@ -145,7 +145,7 @@ export const ModelChecklist: React.FC<ModelChecklistProps> = ({
                       Embedding
                     </Badge>
                   )}
-                  {capabilities.length > 0 && (
+                  {hasCapabilityIcons(capabilities) && (
                     <span className="tw-flex tw-shrink-0 tw-items-center tw-gap-0.5">
                       <ModelCapabilityIcons capabilities={capabilities} iconSize={14} />
                     </span>

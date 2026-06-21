@@ -47,28 +47,36 @@ describe("ModelChecklist", () => {
     expect(screen.getByText("Embedding")).toBeTruthy();
   });
 
-  it("renders read-only vision icon, but never a reasoning icon", () => {
+  it("badges only the no-vision exception: nothing for vision or unknown, an eye-off for known text-only", () => {
     const VISION_REASON: ModelInfo = {
       id: "omni",
       displayName: "Omni",
       modalities: { input: ["text", "image"] },
       reasoning: true,
     };
-    const { container } = render(
+    const TEXT_ONLY: ModelInfo = {
+      id: "text-only",
+      displayName: "Text Only",
+      modalities: { input: ["text"] },
+    };
+    render(
       <ModelChecklist
-        availableModels={[VISION_REASON, PLAIN]}
+        availableModels={[VISION_REASON, TEXT_ONLY, PLAIN]}
         selected={new Set<string>()}
         onToggle={jest.fn()}
         onAddId={jest.fn()}
       />
     );
-    const omniRow = screen.getByTestId("model-row-omni");
-    // Only the Eye (vision) icon renders — reasoning is ubiquitous and is
-    // intentionally not shown, even though it's still derived for runtime.
-    expect(omniRow.querySelectorAll("svg").length).toBe(1);
-    // A plain model shows no capability icons.
+    // Vision is the norm (not badged) and reasoning is hidden — a vision-capable
+    // model shows no capability icon.
+    expect(screen.getByTestId("model-row-omni").querySelectorAll("svg").length).toBe(0);
+    // A model KNOWN to lack image input shows the muted eye-off.
+    expect(
+      screen.getByTestId("model-row-text-only").querySelector('[data-testid="model-cap-no-vision"]')
+    ).not.toBeNull();
+    // A model whose snapshot has no modality data is "unknown" — render nothing,
+    // never assert a missing capability.
     expect(screen.getByTestId("model-row-gpt-5").querySelectorAll("svg").length).toBe(0);
-    expect(container).toBeTruthy();
   });
 
   it("emits onToggle with the wire id when a checkbox is clicked", () => {

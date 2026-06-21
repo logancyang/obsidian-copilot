@@ -1,7 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { FreeModelWarningIcon } from "@/components/ui/FreeModelWarningIcon";
-import { ModelCapabilityIcons } from "@/components/ui/model-display";
+import { ModelCapabilityIcons, hasCapabilityIcons } from "@/components/ui/model-display";
 import { SearchBar } from "@/components/ui/SearchBar";
 import { SettingSwitch } from "@/components/ui/setting-switch";
 import type { ModelCapability } from "@/constants";
@@ -104,7 +104,7 @@ export const ModelEnableList: React.FC<ModelEnableListProps> = ({
             <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-1">
               <span className="tw-truncate">{row.label}</span>
               {row.isFree && <FreeModelWarningIcon />}
-              {row.capabilities && row.capabilities.length > 0 && (
+              {hasCapabilityIcons(row.capabilities) && (
                 <span className="tw-flex tw-shrink-0 tw-items-center tw-gap-0.5">
                   <ModelCapabilityIcons capabilities={row.capabilities} iconSize={14} />
                 </span>

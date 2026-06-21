@@ -2,7 +2,7 @@
 
 import { isOpencodeZenWireId, type ModelEnableGroup, type ModelEnableRow } from "@/agentMode";
 import {
-  capabilityListFromModelInfo,
+  capabilitiesFromConfiguredInfo,
   type ConfiguredModel,
   type Provider,
 } from "@/modelManagement";
@@ -123,7 +123,7 @@ export function toRow(candidate: Candidate): ModelEnableRow {
     wireId: id,
     enabled,
     isFree: isOpencodeZenWireId(id),
-    capabilities: capabilityListFromModelInfo(configuredModel.info),
+    capabilities: capabilitiesFromConfiguredInfo(configuredModel.info),
   };
 }
 

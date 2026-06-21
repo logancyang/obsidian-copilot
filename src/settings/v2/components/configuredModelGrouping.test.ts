@@ -258,6 +258,38 @@ describe("toRow", () => {
     expect(noVisionRow.capabilities ?? []).not.toContain(ModelCapability.VISION);
   });
 
+  it("leaves capabilities undefined for an unknown snapshot, defined for a known one", () => {
+    const provider = agentProvider("claude", "claude", "Claude");
+    // No `modalities` at all — we don't know, so the row stays "unknown"
+    // (undefined). The picker renders nothing rather than asserting no vision.
+    const unknownRow = toRow({
+      configuredModel: {
+        configuredModelId: "cm",
+        providerId: "claude",
+        info: { id: "claude-sonnet-4-5", displayName: "Claude Sonnet 4.5" },
+        configuredAt: 0,
+      },
+      provider,
+      enabled: true,
+    });
+    expect(unknownRow.capabilities).toBeUndefined();
+
+    // A snapshot WITH modalities but no image input is "known to lack vision" —
+    // a defined array, so the picker renders the eye-off rather than nothing.
+    const knownNoVisionRow = toRow({
+      configuredModel: {
+        configuredModelId: "cm2",
+        providerId: "claude",
+        info: { id: "text-only", displayName: "Text Only", modalities: { input: ["text"] } },
+        configuredAt: 0,
+      },
+      provider,
+      enabled: true,
+    });
+    expect(knownNoVisionRow.capabilities).toBeDefined();
+    expect(knownNoVisionRow.capabilities).not.toContain(ModelCapability.VISION);
+  });
+
   it("flags opencode Zen models (opencode/ wire id) as free, others not", () => {
     const provider = agentProvider("oc", "opencode", "opencode");
     const zen = toRow({
