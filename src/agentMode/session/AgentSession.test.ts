@@ -819,11 +819,47 @@ describe("AgentSession fan-out branching", () => {
     // Every agent received the identical prompt blocks, led by the read-only
     // QA preamble (the universal "answer only, no writes" instruction).
     expect(runFanoutTurn.mock.calls[0][0].agents).toEqual(["opencode", "claude"]);
+    // The summarizer is ALWAYS the session's own main agent (here it is also one
+    // of the answerers because it was explicitly `@`-mentioned).
+    expect(runFanoutTurn.mock.calls[0][0].mainAgent).toBe("opencode");
     const fanoutPrompt = runFanoutTurn.mock.calls[0][0].prompt[0] as { type: "text"; text: string };
     expect(fanoutPrompt.text).toContain("read-only");
     expect(fanoutPrompt.text).toContain("review");
     // Live per-agent answers are exposed for the UI...
     expect(session.getLiveFanoutTurn()?.answers.claude.text).toBe("claude answer");
+  });
+
+  it("fans out and summarizes on the main agent when a DIFFERENT agent is the sole answerer", async () => {
+    // `@opencode what model are you` while Claude is the session main agent:
+    // opencode is the only answerer; Claude (the main agent) is the summarizer
+    // even though it is not an answerer.
+    const mock = makeMockBackend();
+    const runFanoutTurn = jest.fn(async (input: FanoutRunInput): Promise<FanoutTurn> => {
+      const turn: FanoutTurn = {
+        answers: { opencode: { backendId: "opencode", status: "done", text: "opencode answer" } },
+        summary: { status: "done", text: "summary" },
+      };
+      input.onChange(turn);
+      return turn;
+    });
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "claude",
+      runFanoutTurn,
+    });
+
+    const stopReason = await session.sendPrompt("what model are you", undefined, undefined, [
+      "opencode",
+    ]).turn;
+
+    expect(stopReason).toBe("end_turn");
+    expect(runFanoutTurn).toHaveBeenCalledTimes(1);
+    expect(mock.prompt).not.toHaveBeenCalled();
+    // Only opencode answers; the main agent (claude) is the separate summarizer.
+    expect(runFanoutTurn.mock.calls[0][0].agents).toEqual(["opencode"]);
+    expect(runFanoutTurn.mock.calls[0][0].mainAgent).toBe("claude");
   });
 
   it("collapses a fan-out turn to summary-only — no per-agent text in the saved body", async () => {

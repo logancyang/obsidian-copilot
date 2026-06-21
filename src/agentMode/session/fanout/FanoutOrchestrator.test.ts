@@ -221,9 +221,10 @@ const drainMicrotasks = async () => {
 };
 
 /**
- * Build a `run` input with the Phase 3 fields defaulted: `mainAgent` is the
- * first agent (the session main, per Phase 1) and `originalPromptText` is a
- * fixed question. Tests override fields as needed.
+ * Build a `run` input with sensible defaults: `mainAgent` (the summarizer)
+ * defaults to the first agent for the common case where the main agent is also
+ * an answerer, but it is decoupled from `agents` — tests override it to a
+ * backend that is NOT an answerer. `originalPromptText` is a fixed question.
  */
 function runInput(
   agents: BackendId[],
@@ -296,6 +297,67 @@ describe("FanoutOrchestrator.run", () => {
     expect(readOnlyRegistered.sort()).toEqual(["s-claude", "s-claude", "s-codex"]);
     expect(readOnlyUnregistered.sort()).toEqual(["s-claude", "s-claude", "s-codex"]);
     expect(snapshots.length).toBeGreaterThan(1);
+  });
+
+  it("summarizes on the main agent even when it is NOT one of the answerers", async () => {
+    // The session main agent (claude) is the summarizer but did NOT answer:
+    // only opencode is an answerer (`@opencode what model are you`). claude must
+    // still open a summary sub-session over opencode's answer.
+    const { host, procs } = makeHost({
+      opencode: { sessionId: "s-opencode" },
+      claude: { sessionId: "s-claude" },
+    });
+    const orchestrator = new FanoutOrchestrator(host);
+    const controller = new AbortController();
+    const runPromise = orchestrator.run(
+      runInput(["opencode"], { mainAgent: "claude", signal: controller.signal })
+    );
+
+    await flush();
+    procs.get("opencode")!.emit(textChunk("s-opencode", "opencode answer"));
+    procs.get("opencode")!.resolvePrompt();
+    // Only opencode got an answer slot — claude has none unless mentioned.
+    await flushPastGrace();
+    procs.get("claude")!.emit(textChunk("s-claude", "summary over opencode"));
+    procs.get("claude")!.resolvePrompt();
+    const turn = await runPromise;
+
+    expect(Object.keys(turn.answers)).toEqual(["opencode"]);
+    expect(turn.answers.opencode.status).toBe("done");
+    // The summary ran on the main backend (claude), its first and only prompt.
+    expect(procs.get("claude")!.promptCount()).toBe(1);
+    expect(procs.get("opencode")!.promptCount()).toBe(1);
+    expect(turn.summary.status).toBe("done");
+    expect(turn.summary.text).toBe("summary over opencode");
+    // The summary prompt named opencode's answer (read off the main backend).
+    const summaryCall = (procs.get("claude")!.proc.prompt as jest.Mock).mock.calls[0][0];
+    expect(summaryCall.prompt[0].text).toContain("OPENCODE");
+    expect(summaryCall.prompt[0].text).toContain("opencode answer");
+  });
+
+  it("runs the summary for a single (non-main) answerer", async () => {
+    // A lone non-main answerer still gets a summary (always-summarize): the main
+    // agent reconciles even a single answer rather than skipping the summary.
+    const { host, procs } = makeHost({
+      opencode: { sessionId: "s-opencode" },
+      claude: { sessionId: "s-claude" },
+    });
+    const orchestrator = new FanoutOrchestrator(host);
+    const controller = new AbortController();
+    const runPromise = orchestrator.run(
+      runInput(["opencode"], { mainAgent: "claude", signal: controller.signal })
+    );
+
+    await flush();
+    procs.get("opencode")!.emit(textChunk("s-opencode", "the answer"));
+    procs.get("opencode")!.resolvePrompt();
+    await flushPastGrace();
+    procs.get("claude")!.emit(textChunk("s-claude", "recap"));
+    procs.get("claude")!.resolvePrompt();
+    const turn = await runPromise;
+
+    expect(turn.summary.status).toBe("done");
+    expect(turn.summary.text).toBe("recap");
   });
 
   it("isolates a failed agent as an error slot while others complete", async () => {

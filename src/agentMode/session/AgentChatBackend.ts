@@ -26,11 +26,11 @@ export interface AgentChatBackend {
   subscribe(listener: () => void): () => void;
   /**
    * Append a user message and start the turn. `mentionedAgents` is the resolved
-   * fan-out selection (main agent first, then `@`-mentioned installed agents).
-   * Present only when the turn fans out to more than the main agent; absent for
-   * the existing single-agent path. Phase 1 only emits this; the fan-out
-   * orchestration that consumes it lands in a later phase (read it via
-   * `AgentSession.getLastMentionedAgents()`).
+   * answerer selection (the deduped `@`-mentioned installed agents, which may or
+   * may not include the main agent). Present only when the turn fans out; absent
+   * for the single-agent path (no qualifying mentions, or only the main agent
+   * `@`-ed). Consumed by the fan-out orchestration via
+   * `AgentSession.getLastMentionedAgents()`; the main agent summarizes separately.
    */
   sendMessage(
     text: string,

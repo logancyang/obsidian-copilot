@@ -67,12 +67,17 @@ function textChunkOf(event: SessionEvent): string | null {
 
 /** Inputs for one fan-out turn — identical prompt + context for every agent (D10). */
 export interface FanoutRunInput {
-  /** Main agent first, then each `@`-mentioned installed agent (deduped). */
+  /**
+   * The `@`-mentioned installed answerers (deduped). Each gets an answer slot.
+   * Decoupled from {@link mainAgent}: the summarizer is NOT assumed to be one of
+   * these (it answers only if it was itself `@`-mentioned).
+   */
   agents: ReadonlyArray<BackendId>;
   /**
-   * The session's main agent (always `agents[0]`). It generates the narrative
-   * summary after every non-failed agent settles (D6), in its own read-only
-   * sub-session.
+   * The session's main agent — ALWAYS the summarizer, tracked separately from
+   * {@link agents}. It generates the narrative summary after every non-failed
+   * answer settles (D6), in its own read-only sub-session, whether or not it is
+   * one of the answerers.
    */
   mainAgent: BackendId;
   /** The identical prompt blocks (text envelope + context + images) every agent receives. */
@@ -90,9 +95,11 @@ export interface FanoutRunInput {
 }
 
 /**
- * Build the initial live turn: one `running` slot per agent (insertion order
- * preserved) plus a pending summary. Exported for tests and for the caller that
- * needs to seed the UI before the first stream chunk lands.
+ * Build the initial live turn: one `running` slot per ANSWERER (insertion order
+ * preserved) plus a pending summary. The summarizer (the session main agent)
+ * gets no answer slot unless it is itself one of the answerers. Exported for
+ * tests and for the caller that needs to seed the UI before the first stream
+ * chunk lands.
  */
 export function createFanoutTurn(agents: ReadonlyArray<BackendId>): FanoutTurn {
   const answers: Record<BackendId, AgentAnswer> = {};
@@ -103,12 +110,13 @@ export function createFanoutTurn(agents: ReadonlyArray<BackendId>): FanoutTurn {
 }
 
 /**
- * Orchestrates a multi-agent read-only QA turn. Every agent (main + mentioned)
- * runs in a freshly created, ephemeral, read-only sub-session on its own
- * backend — never registered as a visible AgentSession / tab — and receives the
- * identical prompt + context. Answers stream into per-agent slots of a single
- * in-memory {@link FanoutTurn}; once every answer settles the main agent writes
- * the narrative summary over the survivors into the summary slot (D6/D7).
+ * Orchestrates a multi-agent read-only QA turn. Every ANSWERER runs in a
+ * freshly created, ephemeral, read-only sub-session on its own backend — never
+ * registered as a visible AgentSession / tab — and receives the identical
+ * prompt + context. Answers stream into per-agent slots of a single in-memory
+ * {@link FanoutTurn}; once every answer settles the session's main agent (the
+ * summarizer, distinct from the answerers unless it was also `@`-mentioned)
+ * writes the narrative summary over the survivors into the summary slot (D6/D7).
  *
  * One agent's error never throws out of the whole run (`allSettled`-style
  * collection): a failed agent sets its slot to `error` and the others continue.

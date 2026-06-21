@@ -37,9 +37,10 @@ export const FANOUT_READONLY_PREAMBLE =
  */
 export interface FanoutTurn {
   /**
-   * One slot per participating agent (main agent first, then each
-   * `@`-mentioned agent), keyed by `BackendId`. Each agent's answer streams
-   * into its own slot independently (D7).
+   * One slot per ANSWERER (the deduped `@`-mentioned installed agents), keyed by
+   * `BackendId`. The session main agent is the separate summarizer and has a
+   * slot only if it was itself `@`-mentioned. Each answer streams into its own
+   * slot independently (D7).
    */
   answers: Record<BackendId, AgentAnswer>;
   /**
@@ -541,8 +542,8 @@ export interface SucceededAnswer {
  * The agents whose answers feed the summary, partitioned for failure-awareness
  * (D7): `succeeded` are `done` slots with non-empty text (the summary
  * reconciles these); `failed` are slots that errored OR finished empty (the
- * summary notes them by name). Insertion order is preserved on both lists so
- * the main agent appears first, matching the answer slots.
+ * summary notes them by name). Insertion order is preserved on both lists,
+ * matching the answer-slot order.
  */
 export interface SummaryInputs {
   succeeded: SucceededAnswer[];

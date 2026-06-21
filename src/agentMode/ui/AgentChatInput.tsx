@@ -22,7 +22,7 @@ import { logError, logWarn } from "@/logger";
 import {
   isFanout,
   listInstalledAgentBrands,
-  resolveMentionedAgents,
+  resolveAnswerers,
 } from "@/agentMode/ui/mentionedAgents";
 import type { BackendId } from "@/agentMode/session/types";
 import { useSettingsValue } from "@/settings/model";
@@ -53,9 +53,10 @@ interface AgentChatInputProps {
   draft: AgentInputDraftControls;
   app: App;
   /**
-   * The session's main agent (always included as the baseline answer). Used to
-   * dedup an explicit `@`-mention of the main agent and to anchor the resolved
-   * `mentionedAgents` ordering. `null` before a session lands.
+   * The session's main agent (the summarizer, NOT auto-added as an answerer).
+   * Used by `isFanout` to collapse the degenerate `[main]` selection — when the
+   * user `@`-ed only their own agent — to the single-agent path. `null` before a
+   * session lands.
    */
   mainAgentId: BackendId | null;
   updateUserMessageHistory: (newMessage: string) => void;
@@ -103,8 +104,8 @@ const combineQueuedMessages = (items: QueuedAgentMessage[]): QueuedAgentMessage 
   const allSelected = items.flatMap((i) => i.context?.selectedTextContexts ?? []);
   const allWebTabs = items.flatMap((i) => i.context?.webTabs ?? []);
   const allPromptContent = items.flatMap((i) => i.promptContent ?? []);
-  // Union the per-message fan-out selections, preserving first-seen order (each
-  // already leads with the main agent, so the combined list does too).
+  // Union the per-message fan-out answerer selections, preserving first-seen
+  // order (each is the resolved answerer list — installed `@`-mentions only).
   const mergedAgents = dedupeBy(
     items.flatMap((i) => i.mentionedAgents ?? []),
     (id) => id
@@ -310,18 +311,18 @@ export const AgentChatInput = memo(function AgentChatInput({
         if (block) content.push(block);
       }
 
-      // Resolve the `@`-mentioned agents into the structured fan-out selection
-      // (main agent first, then installed mentions, deduped). Only carried when
-      // it actually fans out — the single-agent path stays byte-for-byte the
-      // existing behavior with no `mentionedAgents` on the send.
+      // Resolve the `@`-mentioned agents into the structured set of ANSWERERS
+      // (installed mentions, deduped) — the session's main agent is the separate
+      // summarizer, not auto-added here. Only carried when it actually fans out;
+      // the single-agent path (no mentions, or only the main agent) stays
+      // byte-for-byte the existing behavior with no `mentionedAgents` on the send.
       let mentionedAgents: ReadonlyArray<BackendId> | undefined;
       if (mainAgentId) {
-        const resolved = resolveMentionedAgents({
-          mainAgentId,
+        const answerers = resolveAnswerers({
           mentionedAgentIds: mentionedAgentIdsRef.current,
           installedAgentIds: new Set(agentBrands.map((b) => b.id)),
         });
-        if (isFanout(resolved)) mentionedAgents = resolved;
+        if (isFanout(answerers, mainAgentId)) mentionedAgents = answerers;
       }
 
       const item: QueuedAgentMessage = {

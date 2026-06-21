@@ -42,6 +42,7 @@ import { getSettings } from "@/settings/model";
 import { ContextProcessor } from "@/contextProcessor";
 import { escapeXml } from "@/LLMProviders/chainRunner/utils/xmlParsing";
 import type { FanoutRunInput } from "@/agentMode/session/fanout/FanoutOrchestrator";
+import { isFanout } from "@/agentMode/session/fanout/answerers";
 import {
   buildConversationHistoryBlock,
   buildPriorFanoutContextBlock,
@@ -261,11 +262,11 @@ export class AgentSession {
   // preconditions pass. Yields the per-turn `"error"` status while the
   // session sits idle between a failed turn and the next prompt.
   private lastTurnError = false;
-  // SEAM (multi-agent fan-out, phase 1): the resolved fan-out selection for the
-  // most recent turn — main agent first, then `@`-mentioned installed agents.
-  // Empty until a turn fans out. Phase 1 only records it; the orchestration that
-  // dispatches one ephemeral read-only sub-session per agent reads this in a
-  // later phase. The single-agent path leaves it empty and behaves unchanged.
+  // SEAM (multi-agent fan-out): the resolved answerer selection for the most
+  // recent turn — the deduped `@`-mentioned installed agents, which may or may
+  // not include the main agent. Empty until a turn fans out. The orchestration
+  // dispatches one ephemeral read-only sub-session per agent; the main agent
+  // summarizes separately. The single-agent path leaves it empty (unchanged).
   private lastMentionedAgents: ReadonlyArray<BackendId> = EMPTY_BACKEND_IDS;
   // Live-only fan-out state for the in-flight (or just-completed) multi-agent
   // turn. NEVER serialized: on save the turn collapses to its summary text
@@ -851,10 +852,11 @@ export class AgentSession {
   }
 
   /**
-   * SEAM (multi-agent fan-out, phase 1): the resolved fan-out selection for the
-   * most recent `sendPrompt` — main agent first, then `@`-mentioned installed
-   * agents. Empty for the single-agent path. The fan-out orchestrator (later
-   * phase) reads this to dispatch one ephemeral read-only sub-session per agent.
+   * SEAM (multi-agent fan-out): the resolved answerer selection for the most
+   * recent `sendPrompt` — the `@`-mentioned installed agents (deduped), which
+   * may or may not include the session's main agent. Empty for the single-agent
+   * path. The fan-out orchestrator dispatches one ephemeral read-only
+   * sub-session per agent here; the main agent summarizes separately.
    */
   getLastMentionedAgents(): ReadonlyArray<BackendId> {
     return this.lastMentionedAgents;
@@ -878,13 +880,21 @@ export class AgentSession {
       const hasWebTabs = (context?.webTabs?.length ?? 0) > 0;
       const webTabBlock = hasWebTabs ? await serializeWebTabContext(context) : "";
 
-      // Fan-out path: more than one agent for this turn (main + ≥1 mentioned)
-      // dispatches the identical prompt to every backend in parallel via
-      // ephemeral read-only sub-sessions. It does NOT inject (or flush) the
-      // pending fan-out buffer — it never talks to the visible backend, so it
-      // only appends to the buffer on completion. The single-agent path (0
-      // mentions, or no fan-out dispatcher wired) falls through below.
-      if (this.runFanoutTurn && this.lastMentionedAgents.length > 1 && placeholderId) {
+      // Fan-out path: one or more `@`-mentioned answerers dispatch the identical
+      // prompt to every backend in parallel via ephemeral read-only sub-sessions,
+      // and the session's main agent ALWAYS summarizes over them. It does NOT
+      // inject (or flush) the pending fan-out buffer — it never talks to the
+      // visible backend, so it only appends to the buffer on completion. The
+      // single-agent path (no mentions, or only the main agent `@`-ed) falls
+      // through below. `isFanout` collapses the degenerate `[main]` case (the
+      // user `@`-ed only their own agent) so the main agent never both answers
+      // and summarizes the same backend — shared with the composer, which gates
+      // the `mentionedAgents` emission on the same predicate.
+      if (
+        this.runFanoutTurn &&
+        isFanout(this.lastMentionedAgents, this.backendId) &&
+        placeholderId
+      ) {
         // Give every fresh ephemeral fan-out agent the PRIOR visible transcript
         // as a read-only `<conversation_history>` block so `@agent` follow-ups
         // ("that plan", "the answer above") and fan-out→fan-out continuity work
@@ -987,11 +997,12 @@ export class AgentSession {
   }
 
   /**
-   * Dispatch a multi-agent read-only QA turn. Every agent (main + mentioned)
-   * runs the identical `promptBlocks` in a parallel ephemeral read-only
-   * sub-session; answers stream into per-agent slots of a single live
-   * {@link FanoutTurn} held in memory. Once every answer settles the main agent
-   * fills the summary slot (D6). On completion only the summary text is written into the
+   * Dispatch a multi-agent read-only QA turn. Every ANSWERER (the deduped
+   * `@`-mentioned agents) runs the identical `promptBlocks` in a parallel
+   * ephemeral read-only sub-session; answers stream into per-agent slots of a
+   * single live {@link FanoutTurn} held in memory. Once every answer settles the
+   * session's main agent fills the summary slot (D6), whether or not it was
+   * itself an answerer. On completion only the summary text is written into the
    * placeholder's display body — per-agent answers are never persisted, so the
    * markdown transcript format is unchanged (no migration).
    *
@@ -1007,9 +1018,10 @@ export class AgentSession {
     const signal = this.abortController?.signal ?? new AbortController().signal;
     const input: FanoutRunInput = {
       agents: this.lastMentionedAgents,
-      // The session's main agent is always first (Phase 1); it writes the
-      // narrative summary over the answers (D6).
-      mainAgent: this.lastMentionedAgents[0],
+      // The summarizer is ALWAYS the session's own main agent, tracked
+      // separately from the answerers — it writes the narrative summary over the
+      // answers (D6) regardless of whether it is itself one of the answerers.
+      mainAgent: this.backendId,
       prompt: withReadOnlyPreamble(promptBlocks),
       // The user's raw question, fed to the summary as the "original question".
       // Distinct from `prompt`, which carries the read-only preamble + context.

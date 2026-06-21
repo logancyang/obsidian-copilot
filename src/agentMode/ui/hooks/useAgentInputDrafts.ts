@@ -13,9 +13,10 @@ export interface QueuedAgentMessage {
   /** Image blocks for the backend prompt. */
   promptContent?: PromptContent[];
   /**
-   * Resolved fan-out selection (main agent first, then mentioned). Present only
-   * when the user `@`-mentioned at least one additional agent; absent for the
-   * single-agent path. Snapshotted at enqueue time alongside the rest.
+   * Resolved answerer selection (the deduped `@`-mentioned installed agents).
+   * Present only when the turn fans out; absent for the single-agent path (no
+   * qualifying mentions, or only the main agent `@`-ed). Snapshotted at enqueue
+   * time alongside the rest.
    */
   mentionedAgents?: ReadonlyArray<BackendId>;
 }
