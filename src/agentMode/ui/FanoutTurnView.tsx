@@ -9,75 +9,88 @@ import {
   type FanoutOption,
   type FanoutOptionValue,
 } from "@/agentMode/ui/fanoutDropdown";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { CopyButton } from "@/components/chat-components/CopyButton";
 import { cn } from "@/lib/utils";
 import type { FanoutTurn } from "@/agentMode/session/fanout/fanoutTypes";
 import { App } from "obsidian";
-import { AlertTriangle, CircleSlash, Loader2 } from "lucide-react";
+import { AlertTriangle, Check, CircleSlash, Loader2 } from "lucide-react";
 import React, { memo, useCallback, useMemo, useState } from "react";
 
 interface FanoutTurnViewProps {
-  /** Live fan-out turn for the active multi-agent assistant message. */
+  /** Fan-out turn for a multi-agent assistant message (live or reloaded). */
   turn: FanoutTurn;
   app: App;
 }
 
-interface FanoutOptionRowProps {
+interface FanoutTabProps {
   option: FanoutOption;
+  selected: boolean;
+  onSelect: (value: FanoutOptionValue) => void;
 }
 
-/** A single dropdown row: brand icon (or live spinner / error glyph) + label. */
-const FanoutOptionRow: React.FC<FanoutOptionRowProps> = ({ option }) => {
-  const { Icon, label, state } = option;
+/**
+ * One segmented-row tab: the agent brand icon (summary tab has none) plus a
+ * live status dot, and the label. Selecting it switches the body below.
+ */
+const FanoutTab: React.FC<FanoutTabProps> = ({ option, selected, onSelect }) => {
+  const { value, Icon, label, state } = option;
+  const handleClick = useCallback(() => onSelect(value), [onSelect, value]);
   return (
-    <span className="tw-flex tw-items-center tw-gap-2">
-      <FanoutOptionGlyph Icon={Icon} state={state} />
-      <span className="tw-truncate">{label}</span>
-    </span>
+    <button
+      type="button"
+      role="tab"
+      aria-selected={selected}
+      onClick={handleClick}
+      className={cn(
+        "tw-flex tw-items-center tw-gap-1.5 tw-rounded-md tw-border tw-border-solid tw-border-transparent tw-px-2 tw-py-1 tw-text-sm tw-transition-colors",
+        selected
+          ? "tw-bg-interactive-accent tw-text-on-accent"
+          : "tw-text-muted hover:tw-bg-interactive-hover"
+      )}
+    >
+      {Icon ? <Icon className="tw-size-4 tw-shrink-0" /> : null}
+      <span className="tw-max-w-32 tw-truncate">{label}</span>
+      <FanoutStatusDot state={state} />
+    </button>
   );
 };
 
-interface FanoutOptionGlyphProps {
-  Icon: FanoutOption["Icon"];
+interface FanoutStatusDotProps {
+  /** Agent live state; `undefined` for the summary tab (it has its own state). */
   state: FanoutAgentState | undefined;
 }
 
 /**
- * The leading glyph for a row: a spinner while the agent streams, a warning
- * triangle on error, a muted slash when cancelled, otherwise the brand icon.
- * The summary row (no `Icon`, no `state`) renders nothing.
+ * The trailing live status indicator on an agent tab: a spinner while
+ * streaming, a check when the answer is done, an alert on error, a muted slash
+ * when cancelled. The summary tab carries no agent state and renders nothing.
  */
-const FanoutOptionGlyph: React.FC<FanoutOptionGlyphProps> = ({ Icon, state }) => {
+const FanoutStatusDot: React.FC<FanoutStatusDotProps> = ({ state }) => {
   if (state === "streaming") {
-    return <Loader2 className="tw-size-4 tw-shrink-0 tw-animate-spin tw-text-loading" />;
+    return <Loader2 className="tw-size-3 tw-shrink-0 tw-animate-spin tw-text-loading" />;
+  }
+  if (state === "answer") {
+    return <Check className="tw-size-3 tw-shrink-0 tw-text-success" />;
   }
   if (state === "error") {
-    return <AlertTriangle className="tw-size-4 tw-shrink-0 tw-text-error" />;
+    return <AlertTriangle className="tw-size-3 tw-shrink-0 tw-text-error" />;
   }
   if (state === "cancelled") {
-    return <CircleSlash className="tw-size-4 tw-shrink-0 tw-text-muted" />;
+    return <CircleSlash className="tw-size-3 tw-shrink-0 tw-text-muted" />;
   }
-  if (Icon) return <Icon className="tw-size-4 tw-shrink-0" />;
   return null;
 };
 
 /**
- * Render a multi-agent fan-out turn as one assistant turn: a summary-first
- * dropdown (D8) that switches between the main agent's narrative summary and
- * each participating agent's full answer. Each agent entry reflects its live
- * state (D7) — a spinner while streaming, the answer when done, an error chip
- * on failure — and updates live as `turn` changes (the parent re-renders this
- * component, and only this component, per streamed token).
+ * Render a multi-agent fan-out turn as one assistant turn: a segmented tab row
+ * (D8) — Summary first and selected by default — that switches between the main
+ * agent's narrative summary and each participating agent's full answer. Each
+ * agent tab reflects its live state (D7) via a status dot (spinner / check /
+ * alert / slash) and updates live as `turn` changes. The selected slot's
+ * markdown renders below with an inline copy of just that slot's text.
  *
- * Only the active/live turn renders this rich view. A reloaded multi-agent turn
- * persists as a plain summary-only assistant message (no live fan-out state),
- * so it never reaches here — it renders through the normal assistant path.
+ * Drives off `message.fanout`, so it renders for BOTH the live in-flight turn
+ * and a reloaded transcript whose composite body was parsed back into a turn.
  */
 export const FanoutTurnView: React.FC<FanoutTurnViewProps> = memo(({ turn, app }) => {
   const options = useMemo(() => buildFanoutOptions(turn), [turn]);
@@ -90,28 +103,18 @@ export const FanoutTurnView: React.FC<FanoutTurnViewProps> = memo(({ turn, app }
       ? FANOUT_SUMMARY_OPTION
       : selected;
 
-  const handleChange = useCallback((value: string) => {
-    setSelected(value);
-  }, []);
-
-  const selectedOption = options.find((o) => o.value === activeValue);
-
   return (
     <div className="tw-flex tw-flex-col tw-gap-2">
-      <Select value={activeValue} onValueChange={handleChange}>
-        <SelectTrigger className="tw-w-fit tw-min-w-40" aria-label="Select agent answer">
-          <SelectValue>
-            {selectedOption ? <FanoutOptionRow option={selectedOption} /> : null}
-          </SelectValue>
-        </SelectTrigger>
-        <SelectContent>
-          {options.map((option) => (
-            <SelectItem key={option.value} value={option.value}>
-              <FanoutOptionRow option={option} />
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <div role="tablist" aria-label="Agent answers" className="tw-flex tw-flex-wrap tw-gap-1">
+        {options.map((option) => (
+          <FanoutTab
+            key={option.value}
+            option={option}
+            selected={option.value === activeValue}
+            onSelect={setSelected}
+          />
+        ))}
+      </div>
       <FanoutTurnBody turn={turn} value={activeValue} app={app} />
     </div>
   );
@@ -130,11 +133,14 @@ interface FanoutTurnBodyProps {
  * answer — streaming tokens with a spinner, the finished answer, an error chip
  * with a short reason (incl. per-agent timeouts), or a muted cancelled state
  * when the user aborted the turn. Any partial text that streamed before a
- * failure/cancel is still shown above the chip so nothing is lost.
+ * failure/cancel is still shown above the chip so nothing is lost. A small
+ * inline copy button on a non-empty body copies just that slot's text.
  */
 const FanoutTurnBody: React.FC<FanoutTurnBodyProps> = ({ turn, value, app }) => {
   if (value === FANOUT_SUMMARY_OPTION) {
-    if (turn.summary.text) return <AgentMarkdownText text={turn.summary.text} app={app} />;
+    if (turn.summary.text) {
+      return <FanoutSlotBody text={turn.summary.text} app={app} />;
+    }
     switch (summaryDisplayState(turn)) {
       case "writing":
         return (
@@ -193,7 +199,7 @@ const FanoutTurnBody: React.FC<FanoutTurnBodyProps> = ({ turn, value, app }) => 
   if (answer.text) {
     return (
       <div className="tw-flex tw-flex-col tw-gap-1">
-        <AgentMarkdownText text={answer.text} app={app} />
+        <FanoutSlotBody text={answer.text} app={app} />
         {answer.status === "running" ? (
           <FanoutStatusLine
             icon={<Loader2 className="tw-size-4 tw-animate-spin tw-text-loading" />}
@@ -212,6 +218,29 @@ const FanoutTurnBody: React.FC<FanoutTurnBodyProps> = ({ turn, value, app }) => 
     />
   );
 };
+
+interface FanoutSlotBodyProps {
+  /** The selected slot's markdown text. */
+  text: string;
+  app: App;
+}
+
+/**
+ * The selected slot's markdown plus a small inline copy button that copies just
+ * THIS slot's text (the 2-tier copy: per-slot here, whole-composite on the
+ * card's action bar). The copy control sits above the rendered markdown,
+ * right-aligned, and only appears on hover to stay out of the way.
+ */
+const FanoutSlotBody: React.FC<FanoutSlotBodyProps> = ({ text, app }) => (
+  <div className="tw-group tw-flex tw-flex-col tw-gap-1">
+    <div className="tw-flex tw-justify-end">
+      <div className="tw-opacity-0 tw-transition-opacity group-hover:tw-opacity-100">
+        <CopyButton text={text} />
+      </div>
+    </div>
+    <AgentMarkdownText text={text} app={app} />
+  </div>
+);
 
 interface FanoutTerminalStateProps {
   /** Whatever prose streamed before the agent errored or was cancelled. */

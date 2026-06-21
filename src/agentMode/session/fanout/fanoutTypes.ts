@@ -28,12 +28,12 @@ export const FANOUT_READONLY_PREAMBLE =
   "Respond with your analysis directly.";
 
 /**
- * Per-turn fan-out state for a multi-agent QA turn (Phase 2). LIVE-ONLY: this
- * shape is never serialized. On save the turn collapses to just its
- * {@link FanoutSummary} text, written as an ordinary assistant message, so
- * existing single-agent transcripts load byte-for-byte unchanged (the t4
- * no-migration decision). The main agent fills the summary once every answer
- * settles (D6); Phase 4 renders the dropdown over `answers`.
+ * Per-turn fan-out state for a multi-agent QA turn. Held LIVE in memory on the
+ * owning assistant message (`AgentChatMessage.fanout`) and PERSISTED to the
+ * message body as a composite (see {@link serializeFanoutComposite}) so the
+ * dropdown is reconstructed on reload (see {@link parseFanoutComposite}). The
+ * main agent fills the summary once every answer settles (D6); the UI renders
+ * the tab row over `answers`.
  */
 export interface FanoutTurn {
   /**
@@ -605,4 +605,259 @@ export function buildSummaryUserPrompt(
     );
   }
   return [{ type: "text", text: parts.join("\n\n") }];
+}
+
+/**
+ * Generous char cap on EACH persisted agent answer in the composite body. The
+ * dropdown reconstructed on reload shows full per-agent answers, but an
+ * unbounded answer (a multi-thousand-line dump from one agent) would bloat the
+ * saved note; this caps each answer's persisted text while staying large enough
+ * that a normal QA answer is never clipped. Independent of the prompt-time
+ * {@link FANOUT_HISTORY_MAX_CHARS} (that bounds the model API input; this bounds
+ * the on-disk transcript). Only the per-agent answer bodies are capped — the
+ * summary is persisted in full as it is the primary shown artifact.
+ */
+export const FANOUT_PERSISTED_ANSWER_MAX_CHARS = 24_000;
+
+/** Inline marker appended when a persisted agent answer is truncated to fit the cap. */
+const FANOUT_PERSISTED_ANSWER_TRUNCATION_MARKER = "[answer truncated]";
+
+/** Composite format version, embedded in the opening marker for forward-compat. */
+const FANOUT_COMPOSITE_VERSION = 1;
+
+/** Opening marker that flags an assistant body as a serialized fan-out composite. */
+const FANOUT_MARKER_OPEN = `<!--copilot:multi-agent v=${FANOUT_COMPOSITE_VERSION}-->`;
+
+/** Sentinel that {@link parseFanoutComposite} keys on to detect a composite body (version-agnostic). */
+const FANOUT_MARKER_PREFIX = "<!--copilot:multi-agent";
+
+/** Closing marker of a serialized fan-out composite. */
+const FANOUT_MARKER_CLOSE = "<!--copilot:multi-agent-end-->";
+
+/** Section marker introducing the summary block. */
+const FANOUT_MARKER_SUMMARY = "<!--copilot:summary-->";
+
+/**
+ * Marker-escape sentinel: a Private-Use-Area codepoint that will not occur in
+ * normal prose. An answer may legitimately contain the literal marker prefix
+ * (e.g. an agent quoting this very format); writing it verbatim would let that
+ * text forge a section marker and corrupt the parse. We neutralize the COLON
+ * after `copilot` on write and restore it on read.
+ *
+ * The scheme is fully lossless even when the answer ALSO already contains the
+ * sentinel itself: we first escape every literal sentinel as `S` + `0`, then
+ * escape each marker colon as `S` + `1`. Because all pre-existing sentinels are
+ * already doubled by the time the colon escape runs, the two escapes never
+ * collide, and the read side (longest-match `S0`\u2192`S`, `S1`\u2192`:`-in-marker)
+ * reverses both unambiguously. Without the sentinel-doubling step, an answer
+ * containing the raw escaped byte sequence would be silently corrupted on read.
+ */
+const FANOUT_MARKER_SENTINEL = "\uE000";
+const FANOUT_SENTINEL_LITERAL_ESCAPE = `${FANOUT_MARKER_SENTINEL}0`;
+const FANOUT_SENTINEL_COLON_ESCAPE = `${FANOUT_MARKER_SENTINEL}1`;
+const FANOUT_LITERAL_MARKER_PREFIX = "<!--copilot:";
+const FANOUT_ESCAPED_MARKER_PREFIX = `<!--copilot${FANOUT_SENTINEL_COLON_ESCAPE}`;
+
+/**
+ * Escape body text so it can never forge a section marker and round-trips
+ * losslessly. Order matters: double any literal sentinel FIRST so the
+ * subsequently-introduced colon escapes are the only single-sentinel sequences.
+ */
+function escapeFanoutMarkers(text: string): string {
+  return text
+    .split(FANOUT_MARKER_SENTINEL)
+    .join(FANOUT_SENTINEL_LITERAL_ESCAPE)
+    .split(FANOUT_LITERAL_MARKER_PREFIX)
+    .join(FANOUT_ESCAPED_MARKER_PREFIX);
+}
+
+/**
+ * Inverse of {@link escapeFanoutMarkers}. Restore the colon-marker escapes
+ * FIRST, then collapse the doubled literal sentinels \u2014 the mirror of the write
+ * order so both layers reverse exactly.
+ */
+function unescapeFanoutMarkers(text: string): string {
+  return text
+    .split(FANOUT_ESCAPED_MARKER_PREFIX)
+    .join(FANOUT_LITERAL_MARKER_PREFIX)
+    .split(FANOUT_SENTINEL_LITERAL_ESCAPE)
+    .join(FANOUT_MARKER_SENTINEL);
+}
+
+/** Trim a persisted agent answer to the cap, marking it only when it overflows. */
+function capPersistedAnswer(text: string): string {
+  if (text.length <= FANOUT_PERSISTED_ANSWER_MAX_CHARS) return text;
+  return `${text.slice(0, FANOUT_PERSISTED_ANSWER_MAX_CHARS)}\n${FANOUT_PERSISTED_ANSWER_TRUNCATION_MARKER}`;
+}
+
+/** Short note emitted (in the `note` attribute) for an agent that produced no answer. */
+const FANOUT_NO_ANSWER_NOTE = "did not answer";
+
+/**
+ * Serialize a completed fan-out turn into the PERSISTED assistant message body:
+ * a composite of the summary plus each SUCCEEDED agent's answer, delimited by
+ * HTML-comment section markers so a reload can reconstruct the dropdown
+ * ({@link parseFanoutComposite}) while a marker-unaware renderer still shows
+ * readable markdown (the `### Heading` lines are cosmetic; the parse keys ONLY
+ * on the comment markers). Failed/cancelled/empty agents emit a body-less marker
+ * carrying their `status` + a short `note` — mirroring {@link selectSummaryInputs}.
+ * Each persisted answer is capped ({@link FANOUT_PERSISTED_ANSWER_MAX_CHARS}) and
+ * its inner text is marker-escaped so it can never forge a section.
+ */
+export function serializeFanoutComposite(
+  turn: FanoutTurn,
+  displayName: (backendId: BackendId) => string
+): string {
+  const { succeeded } = selectSummaryInputs(turn);
+  const succeededIds = new Set(succeeded.map((s) => s.backendId));
+  const summaryText = turn.summary.text.trim();
+
+  const lines: string[] = [FANOUT_MARKER_OPEN, FANOUT_MARKER_SUMMARY, "### Summary"];
+  if (summaryText.length > 0) lines.push(escapeFanoutMarkers(summaryText));
+
+  for (const backendId of Object.keys(turn.answers)) {
+    const name = displayName(backendId);
+    const nameAttr = ` name="${escapeMarkerAttr(name)}"`;
+    if (succeededIds.has(backendId)) {
+      const slot = turn.answers[backendId];
+      lines.push(
+        `<!--copilot:agent id="${escapeMarkerAttr(backendId)}"${nameAttr} status="done"-->`,
+        `### ${name}`,
+        escapeFanoutMarkers(capPersistedAnswer(slot.text.trim()))
+      );
+    } else {
+      // Body-less marker: a failed/cancelled/empty agent persists only the fact
+      // that it participated and did not answer (mirrors selectSummaryInputs).
+      const status = turn.answers[backendId].status;
+      lines.push(
+        `<!--copilot:agent id="${escapeMarkerAttr(backendId)}"${nameAttr} status="${escapeMarkerAttr(status)}" note="${FANOUT_NO_ANSWER_NOTE}"-->`
+      );
+    }
+  }
+
+  lines.push(FANOUT_MARKER_CLOSE);
+  return lines.join("\n");
+}
+
+/**
+ * The CLEAN composite (markers stripped) for copy / insert of the WHOLE turn:
+ * readable markdown with the summary, each succeeded agent's answer under a
+ * heading, and a one-line "did not answer" note per failed agent. Independent
+ * of the persisted body so the user copies prose, never the invisible markers.
+ */
+export function renderFanoutComposite(
+  turn: FanoutTurn,
+  displayName: (backendId: BackendId) => string
+): string {
+  const { succeeded } = selectSummaryInputs(turn);
+  const succeededIds = new Set(succeeded.map((s) => s.backendId));
+  const sections: string[] = [];
+
+  const summaryText = turn.summary.text.trim();
+  sections.push(summaryText.length > 0 ? `### Summary\n${summaryText}` : "### Summary");
+
+  for (const backendId of Object.keys(turn.answers)) {
+    const name = displayName(backendId);
+    if (succeededIds.has(backendId)) {
+      sections.push(`### ${name}\n${turn.answers[backendId].text.trim()}`);
+    } else {
+      sections.push(`### ${name}\n_${FANOUT_NO_ANSWER_NOTE}_`);
+    }
+  }
+
+  return sections.join("\n\n");
+}
+
+/** Escape a value placed inside a marker attribute so `"` / `--` can't break the comment. */
+function escapeMarkerAttr(value: string): string {
+  return value.replace(/--/g, "—").replace(/"/g, "'");
+}
+
+/** Read a `key="value"` attribute out of a marker's inner text. */
+function readMarkerAttr(marker: string, key: string): string | undefined {
+  const match = marker.match(new RegExp(`${key}="([^"]*)"`));
+  return match ? match[1] : undefined;
+}
+
+/** Map a serialized status string back to a terminal {@link AgentAnswerStatus}. */
+function statusFromMarker(raw: string | undefined): AgentAnswerStatus {
+  if (raw === "done" || raw === "error" || raw === "cancelled") return raw;
+  // `running` is never persisted (the turn is terminal on save); any unknown
+  // value is treated as a non-success so the slot reads as a failed answer.
+  return "error";
+}
+
+/**
+ * Inverse of {@link serializeFanoutComposite}. Returns `null` when `body` is a
+ * plain/old assistant message (no composite marker) so the caller leaves it
+ * unchanged. When present, reconstructs a {@link FanoutTurn} with terminal
+ * statuses, keying ONLY on the HTML-comment section markers (the cosmetic
+ * `### Heading` lines are ignored). Round-trips with serialize; inner text is
+ * marker-unescaped so an answer that literally contained `<!--copilot:` is
+ * restored verbatim.
+ */
+export function parseFanoutComposite(body: string): FanoutTurn | null {
+  if (!body.includes(FANOUT_MARKER_PREFIX)) return null;
+
+  const answers: Record<BackendId, AgentAnswer> = {};
+  let summaryText = "";
+
+  // Split on every section marker, tagging each chunk with the marker that
+  // opened it. The leading chunk (before the open marker) and the trailing
+  // chunk (after the end marker) are framing chrome and ignored.
+  const markerRe = /<!--copilot:(summary|agent[^>]*|multi-agent(?:-end)?[^>]*)-->/g;
+  type Section = { marker: string; body: string };
+  const sections: Section[] = [];
+  let match: RegExpExecArray | null;
+  let lastMarker: string | null = null;
+  let lastIndex = 0;
+  while ((match = markerRe.exec(body)) !== null) {
+    if (lastMarker !== null) {
+      sections.push({ marker: lastMarker, body: body.slice(lastIndex, match.index) });
+    }
+    lastMarker = match[0];
+    lastIndex = markerRe.lastIndex;
+  }
+  if (lastMarker !== null) sections.push({ marker: lastMarker, body: body.slice(lastIndex) });
+
+  for (const section of sections) {
+    if (section.marker.startsWith("<!--copilot:multi-agent")) continue; // open/end chrome
+    const inner = stripLeadingHeading(unescapeFanoutMarkers(section.body)).trim();
+    if (section.marker === FANOUT_MARKER_SUMMARY) {
+      summaryText = inner;
+      continue;
+    }
+    // Agent section.
+    const id = readMarkerAttr(section.marker, "id");
+    if (!id) continue;
+    const status = statusFromMarker(readMarkerAttr(section.marker, "status"));
+    const note = readMarkerAttr(section.marker, "note");
+    answers[id] = {
+      backendId: id,
+      status,
+      // A body-less "did not answer" marker reconstructs an empty failed slot;
+      // a `done` marker carries its answer text.
+      text: status === "done" && note === undefined ? inner : "",
+      ...(status === "error" && note !== undefined ? { error: note } : {}),
+    };
+  }
+
+  return { answers, summary: { status: "done", text: summaryText } };
+}
+
+/**
+ * Drop the leading cosmetic `### Heading` line a section body opens with (if
+ * any) so it is not folded back into the reconstructed text. Skips the blank
+ * line that the marker-join leaves before the heading, strips only that FIRST
+ * non-blank line and only when it is an ATX heading, so answer prose that itself
+ * uses `###` headings further down is preserved.
+ */
+function stripLeadingHeading(sectionBody: string): string {
+  const lines = sectionBody.split("\n");
+  let i = 0;
+  while (i < lines.length && lines[i].trim() === "") i += 1;
+  if (i < lines.length && /^#{1,6}\s/.test(lines[i].trim())) {
+    return lines.slice(i + 1).join("\n");
+  }
+  return sectionBody;
 }

@@ -90,6 +90,16 @@ function brandFor(backendId: BackendId): { displayName: string; Icon?: AgentBran
 }
 
 /**
+ * Resolve a `BackendId` to its registry display name (id fallback for an
+ * unknown backend). Shared by the clean-composite renderer so the copied/
+ * inserted headings match the rendered tab labels — same resolver, no
+ * per-agent branch.
+ */
+export function fanoutDisplayName(backendId: BackendId): string {
+  return brandFor(backendId).displayName;
+}
+
+/**
  * Derive the dropdown options for a fan-out turn: the summary first (D8 makes
  * it the default view), then one entry per agent in slot order (main agent
  * first). Pure — the presentational core unit-tested in isolation. Insertion

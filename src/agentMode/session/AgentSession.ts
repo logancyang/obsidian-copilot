@@ -49,7 +49,8 @@ import {
   collapseFanoutTurnToSummaryText,
   FANOUT_HISTORY_MAX_CHARS,
   FANOUT_READONLY_PREAMBLE,
-  snapshotFanoutTurn,
+  selectSummaryInputs,
+  serializeFanoutComposite,
   type FanoutTurn,
   type PendingFanoutContext,
 } from "@/agentMode/session/fanout/fanoutTypes";
@@ -201,6 +202,13 @@ export interface AgentSessionStartOptions {
    * path omit it.
    */
   runFanoutTurn?: RunFanoutTurn;
+  /**
+   * Resolve an arbitrary `BackendId` (an answerer's, not just this session's) to
+   * its display name, used to label the persisted fan-out composite headings.
+   * Manager-supplied; tests/single-agent omit it and the serializer falls back
+   * to the raw id.
+   */
+  getDisplayName?: (backendId: BackendId) => string;
 }
 
 /**
@@ -223,6 +231,7 @@ export interface AgentSessionStateOptions {
   cwd?: string | null;
   getDescriptor?: () => BackendDescriptor | undefined;
   runFanoutTurn?: RunFanoutTurn;
+  getDisplayName?: (backendId: BackendId) => string;
 }
 
 /**
@@ -248,6 +257,7 @@ export class AgentSession {
   private readonly cwd: string | null;
   private readonly getDescriptor: (() => BackendDescriptor | undefined) | null;
   private readonly runFanoutTurn: RunFanoutTurn | null;
+  private readonly getDisplayName: ((backendId: BackendId) => string) | null;
   // `status` is derived from the primitives below — see `getStatus()`.
   // `cachedStatus` is a memo of the last value we fired through
   // `onStatusChanged`, used purely for change detection. It is not the
@@ -268,13 +278,6 @@ export class AgentSession {
   // dispatches one ephemeral read-only sub-session per agent; the main agent
   // summarizes separately. The single-agent path leaves it empty (unchanged).
   private lastMentionedAgents: ReadonlyArray<BackendId> = EMPTY_BACKEND_IDS;
-  // Live-only fan-out state for the in-flight (or just-completed) multi-agent
-  // turn. NEVER serialized: on save the turn collapses to its summary text
-  // (written into the placeholder's `message`), so per-agent answers stay in
-  // memory only and existing single-agent transcripts load unchanged (the
-  // no-migration decision). `null` on the single-agent path; reset at each
-  // turn start and on dispose.
-  private liveFanoutTurn: FanoutTurn | null = null;
   // Fan-out turns the visible backend never processed (they ran on ephemeral
   // sub-sessions). Each completed fan-out turn with a non-empty summary pushes a
   // {question, summary} entry here; the next single-agent turn injects them all
@@ -368,6 +371,7 @@ export class AgentSession {
     this.cwd = opts.cwd ?? null;
     this.getDescriptor = opts.getDescriptor ?? null;
     this.runFanoutTurn = opts.runFanoutTurn ?? null;
+    this.getDisplayName = opts.getDisplayName ?? null;
     if ("backendSessionId" in opts) {
       this.backendSessionId = opts.backendSessionId;
       const originalState = opts.initialState ?? null;
@@ -797,13 +801,6 @@ export class AgentSession {
       throw new Error("Session is closed");
     }
 
-    // Drop any prior turn's live fan-out state BEFORE appending this turn's
-    // placeholder and notifying. The fan-out dropdown is keyed to the last
-    // assistant message; if the stale turn were still set when `notifyMessages`
-    // fires below, the new (single-agent) placeholder would briefly render the
-    // previous turn's dropdown until the first stream chunk cleared it.
-    this.liveFanoutTurn = null;
-
     const userMessage: NewAgentChatMessage = {
       message: displayText,
       sender: USER_SENDER,
@@ -1028,28 +1025,36 @@ export class AgentSession {
       originalPromptText,
       signal,
       onChange: (turn) => {
-        this.liveFanoutTurn = turn;
+        // The turn now rides on the placeholder message itself (live state lives
+        // on `message.fanout`); `setFanout` bumps the message version so the
+        // dropdown re-renders per streamed slot.
+        this.store.setFanout(placeholderId, turn);
         this.scheduleNotifyMessages();
       },
     };
     const turn = await this.runFanoutTurn!(input);
-    this.liveFanoutTurn = turn;
+    this.store.setFanout(placeholderId, turn);
 
     const stopReason: StopReason = signal.aborted ? "cancelled" : "end_turn";
-    // Collapse to summary-only for persistence/display: per-agent answers stay
-    // live in `liveFanoutTurn`, but the placeholder's serialized body carries
-    // just the main agent's generated summary text.
-    // Never empty: `collapseFanoutTurnToSummaryText` falls back to a concise
-    // note when the summary was not generated but agents answered (and to the
-    // all-failed note when none did), so a turn with successful answers can't
-    // reload as a blank assistant bubble.
-    const summaryText = collapseFanoutTurnToSummaryText(turn);
-    if (summaryText) {
-      this.store.appendAgentText(placeholderId, summaryText);
+    // Persist the FULL composite (summary + each succeeded answer + body-less
+    // markers for failed agents) as the message body so the dropdown is
+    // reconstructed on reload (parseFanoutComposite). A turn with no successes
+    // AND no summary text (e.g. cancelled before any answer landed) collapses to
+    // empty, so we persist/buffer nothing — no misleading blank bubble.
+    const hasContent =
+      turn.summary.text.trim().length > 0 || selectSummaryInputs(turn).succeeded.length > 0;
+    if (hasContent) {
+      const composite = serializeFanoutComposite(turn, (id) => this.displayNameFor(id));
+      this.store.appendAgentText(placeholderId, composite);
       // Buffer this turn so the next single-agent prompt can replay it: the
-      // visible backend never saw it (it ran on ephemeral sub-sessions).
-      // The fan-out path only appends; the single-agent path flushes.
-      this.pendingFanoutContext.push({ question: originalPromptText, summary: summaryText });
+      // visible backend never saw it (it ran on ephemeral sub-sessions). The
+      // replay continuity uses just the summary text (the user-facing artifact),
+      // not the full composite — `collapseFanoutTurnToSummaryText` falls back to
+      // a concise note when agents answered but no summary was generated.
+      const summaryText = collapseFanoutTurnToSummaryText(turn);
+      if (summaryText) {
+        this.pendingFanoutContext.push({ question: originalPromptText, summary: summaryText });
+      }
     }
     if (this.store.markTurnComplete(placeholderId, stopReason, Date.now() - turnStartedAt)) {
       this.notifyMessages();
@@ -1077,18 +1082,13 @@ export class AgentSession {
   }
 
   /**
-   * The live fan-out state for the most recent multi-agent turn, or `null` on
-   * the single-agent path. The Phase 4 UI renders the per-agent dropdown from
-   * this; its `summary` slot carries the main agent's narrative summary (D6).
-   * Live-only — never persisted.
+   * Resolve a `BackendId` to its display name for the persisted composite,
+   * via the manager-injected resolver, falling back to the raw id when none is
+   * supplied (tests / single-agent). Mirrors the `fanoutDropdown` brand resolver
+   * so the serialized heading and the rendered tab label agree.
    */
-  getLiveFanoutTurn(): FanoutTurn | null {
-    // The orchestrator mutates one turn object in place and re-emits the SAME
-    // reference per streamed token, so returning it directly would make the
-    // UI's `setState` bail (`Object.is`-equal) and freeze the dropdown on its
-    // first frame. Snapshot it so each coalesced notify yields a fresh
-    // reference and the live per-agent states/text actually re-render.
-    return this.liveFanoutTurn ? snapshotFanoutTurn(this.liveFanoutTurn) : null;
+  private displayNameFor(backendId: BackendId): string {
+    return this.getDisplayName?.(backendId) ?? backendId;
   }
 
   /**
@@ -1131,7 +1131,6 @@ export class AgentSession {
     this.flushQuestionResolvers();
     this.decidedPlanToolCallIds.clear();
     this.currentPlan = null;
-    this.liveFanoutTurn = null;
     this.settledStream = null;
     this.currentMessageIds = new Set();
     // Fire the `"closed"` transition before clearing listeners so

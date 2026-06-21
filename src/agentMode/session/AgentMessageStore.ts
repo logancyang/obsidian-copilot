@@ -1,11 +1,17 @@
 import { logInfo } from "@/logger";
 import {
+  parseFanoutComposite,
+  snapshotFanoutTurn,
+  type FanoutTurn,
+} from "@/agentMode/session/fanout/fanoutTypes";
+import {
   AgentChatMessage,
   AgentMessagePart,
   AgentToolCallOutput,
   NewAgentChatMessage,
   StopReason,
 } from "@/agentMode/session/types";
+import { USER_SENDER } from "@/constants";
 import { FormattedDateTime, MessageContext } from "@/types/message";
 import { formatDateTime } from "@/utils";
 
@@ -26,6 +32,11 @@ interface StoredAgentMessage {
   content?: unknown[];
   turnStopReason?: StopReason;
   turnDurationMs?: number;
+  // Live per-agent fan-out state for a multi-agent QA message. In-memory only;
+  // the persisted body (displayText) carries the composite that reconstructs it
+  // on load. Bumping `version` when this changes invalidates the cached view so
+  // the dropdown re-renders per streamed tick.
+  fanout?: FanoutTurn;
   // Bumped on every in-place mutation of this message so `getDisplayMessages`
   // can cache the adapted view and only re-adapt when the version moves. The
   // streaming append paths mutate `parts`/`displayText` in place (same array
@@ -236,6 +247,22 @@ export class AgentMessageStore {
   }
 
   /**
+   * Set (or update) the live fan-out turn on a message and bump its version so
+   * the memoized display view invalidates and the dropdown re-renders for the
+   * latest streamed slot. Stores the live reference; `getDisplayMessages`
+   * snapshots it per tick so each coalesced notify yields a fresh object (the
+   * UI's `setState` bails on `Object.is`-equal updates otherwise). Returns false
+   * when the target message is missing.
+   */
+  setFanout(id: string, turn: FanoutTurn): boolean {
+    const msg = this.messages.find((m) => m.id === id);
+    if (!msg) return false;
+    msg.fanout = turn;
+    this.touch(msg);
+    return true;
+  }
+
+  /**
    * Append text to a message body. Used to stream `agent_message_chunk`
    * updates into the placeholder assistant message. Returns false if the
    * target message is missing (the session was likely reset mid-turn).
@@ -411,6 +438,12 @@ export class AgentMessageStore {
   loadMessages(messages: AgentChatMessage[]): void {
     this.clear();
     for (const msg of messages) {
+      // Reconstruct the per-agent fan-out dropdown from a saved composite body.
+      // `parseFanoutComposite` returns null for a plain/old message, so the
+      // common single-agent transcript is untouched. The body is kept as-is
+      // (composite + invisible markers); only the live `fanout` view is rebuilt.
+      const fanout =
+        msg.sender === USER_SENDER ? undefined : (parseFanoutComposite(msg.message) ?? undefined);
       this.messages.push({
         id: msg.id || this.generateId(),
         displayText: msg.message,
@@ -423,6 +456,7 @@ export class AgentMessageStore {
         parts: msg.parts,
         turnStopReason: msg.turnStopReason,
         turnDurationMs: msg.turnDurationMs,
+        fanout,
         version: 0,
       });
     }
@@ -449,6 +483,10 @@ export class AgentMessageStore {
       parts: m.parts,
       turnStopReason: m.turnStopReason,
       turnDurationMs: m.turnDurationMs,
+      // Snapshot the live turn so each adapted view (rebuilt on version bump)
+      // carries a fresh reference; the orchestrator mutates one turn object in
+      // place, so handing the same reference would freeze the dropdown.
+      ...(m.fanout ? { fanout: snapshotFanoutTurn(m.fanout) } : {}),
     };
   }
 }

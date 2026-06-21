@@ -1,5 +1,6 @@
-import { AI_SENDER } from "@/constants";
+import { AI_SENDER, USER_SENDER } from "@/constants";
 import { AgentMessagePart } from "@/agentMode/session/types";
+import { serializeFanoutComposite, type FanoutTurn } from "@/agentMode/session/fanout/fanoutTypes";
 import { formatDateTime } from "@/utils";
 import { AgentMessageStore } from "./AgentMessageStore";
 
@@ -303,6 +304,92 @@ describe("AgentMessageStore", () => {
       store.truncateAfterMessageId(a);
       expect(store.getDisplayMessages().map((m) => m.id)).toEqual([a]);
       expect(store.getMessage(c)).toBeUndefined();
+    });
+  });
+
+  describe("fanout", () => {
+    const liveTurn = (summaryText = "the summary"): FanoutTurn => ({
+      answers: {
+        opencode: { backendId: "opencode", status: "done", text: "opencode answer" },
+        codex: { backendId: "codex", status: "done", text: "codex answer" },
+      },
+      summary: { status: "done", text: summaryText },
+    });
+
+    it("setFanout surfaces a snapshot on the display view and bumps the version", () => {
+      const store = new AgentMessageStore();
+      const id = store.addMessage(placeholder());
+      const before = store.getDisplayMessages().find((m) => m.id === id);
+      expect(before?.fanout).toBeUndefined();
+
+      const turn = liveTurn();
+      expect(store.setFanout(id, turn)).toBe(true);
+      const after = store.getDisplayMessages().find((m) => m.id === id);
+      expect(after?.fanout?.summary.text).toBe("the summary");
+      // A snapshot, not the same reference — so React state updates don't bail.
+      expect(after?.fanout).not.toBe(turn);
+      expect(after?.fanout?.answers).not.toBe(turn.answers);
+    });
+
+    it("setFanout returns false for an unknown message", () => {
+      const store = new AgentMessageStore();
+      expect(store.setFanout("nope", liveTurn())).toBe(false);
+    });
+
+    it("yields a FRESH fanout reference each tick so the dropdown does not freeze", () => {
+      const store = new AgentMessageStore();
+      const id = store.addMessage(placeholder());
+      store.setFanout(id, liveTurn());
+      const first = store.getDisplayMessages().find((m) => m.id === id)?.fanout;
+      // Mutate the live turn in place and re-set (mirrors the orchestrator).
+      const turn = liveTurn("updated summary");
+      store.setFanout(id, turn);
+      const second = store.getDisplayMessages().find((m) => m.id === id)?.fanout;
+      expect(second).not.toBe(first);
+      expect(second?.summary.text).toBe("updated summary");
+    });
+
+    it("loadMessages reconstructs the dropdown from a saved composite body", () => {
+      const store = new AgentMessageStore();
+      const body = serializeFanoutComposite(liveTurn("loaded summary"), (x) => x.toUpperCase());
+      store.loadMessages([
+        {
+          id: "u1",
+          sender: USER_SENDER,
+          message: "the question",
+          timestamp: null,
+          isVisible: true,
+        },
+        { id: "a1", sender: AI_SENDER, message: body, timestamp: null, isVisible: true },
+      ]);
+      const assistant = store.getDisplayMessages().find((m) => m.id === "a1");
+      // The body is kept as-is (composite + markers) AND the dropdown is rebuilt.
+      expect(assistant?.message).toBe(body);
+      expect(assistant?.fanout?.summary.text).toBe("loaded summary");
+      expect(Object.keys(assistant?.fanout?.answers ?? {})).toEqual(["opencode", "codex"]);
+    });
+
+    it("loadMessages leaves a plain assistant message without a fanout", () => {
+      const store = new AgentMessageStore();
+      store.loadMessages([
+        {
+          id: "a1",
+          sender: AI_SENDER,
+          message: "just a normal reply",
+          timestamp: null,
+          isVisible: true,
+        },
+      ]);
+      expect(store.getDisplayMessages().find((m) => m.id === "a1")?.fanout).toBeUndefined();
+    });
+
+    it("loadMessages never reads a fan-out composite from a USER message", () => {
+      const store = new AgentMessageStore();
+      const body = serializeFanoutComposite(liveTurn(), (x) => x);
+      store.loadMessages([
+        { id: "u1", sender: USER_SENDER, message: body, timestamp: null, isVisible: true },
+      ]);
+      expect(store.getDisplayMessages().find((m) => m.id === "u1")?.fanout).toBeUndefined();
     });
   });
 });

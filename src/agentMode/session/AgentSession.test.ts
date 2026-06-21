@@ -825,8 +825,10 @@ describe("AgentSession fan-out branching", () => {
     const fanoutPrompt = runFanoutTurn.mock.calls[0][0].prompt[0] as { type: "text"; text: string };
     expect(fanoutPrompt.text).toContain("read-only");
     expect(fanoutPrompt.text).toContain("review");
-    // Live per-agent answers are exposed for the UI...
-    expect(session.getLiveFanoutTurn()?.answers.claude.text).toBe("claude answer");
+    // Live per-agent answers ride on the assistant message itself (message.fanout),
+    // surfaced through the display view for the UI dropdown.
+    const placeholder = session.store.getDisplayMessages().find((m) => m.sender === AI_SENDER);
+    expect(placeholder?.fanout?.answers.claude.text).toBe("claude answer");
   });
 
   it("fans out and summarizes on the main agent when a DIFFERENT agent is the sole answerer", async () => {
@@ -862,16 +864,14 @@ describe("AgentSession fan-out branching", () => {
     expect(runFanoutTurn.mock.calls[0][0].mainAgent).toBe("claude");
   });
 
-  it("collapses a fan-out turn to summary-only — no per-agent text in the saved body", async () => {
+  it("persists the full composite (summary + per-agent answers + markers) and keeps the live turn on the message", async () => {
     const mock = makeMockBackend();
     const runFanoutTurn = jest.fn(async (input: FanoutRunInput): Promise<FanoutTurn> => {
       const turn: FanoutTurn = {
         answers: {
-          opencode: { backendId: "opencode", status: "done", text: "OPENCODE_SECRET_ANSWER" },
-          claude: { backendId: "claude", status: "done", text: "CLAUDE_SECRET_ANSWER" },
+          opencode: { backendId: "opencode", status: "done", text: "OPENCODE_ANSWER" },
+          claude: { backendId: "claude", status: "done", text: "CLAUDE_ANSWER" },
         },
-        // Phase 3 fills this; simulate a completed summary here to assert the
-        // persistence seam writes only the summary text.
         summary: { status: "done", text: "the narrative summary" },
       };
       input.onChange(turn);
@@ -888,10 +888,15 @@ describe("AgentSession fan-out branching", () => {
     await session.sendPrompt("review", undefined, undefined, ["opencode", "claude"]).turn;
 
     const placeholder = session.store.getDisplayMessages().find((m) => m.sender === AI_SENDER);
-    // The serialized display body is the summary only — per-agent answers never
-    // reach the persisted message.
-    expect(placeholder?.message).toBe("the narrative summary");
-    expect(placeholder?.message).not.toContain("SECRET_ANSWER");
+    // Phase 2: the persisted body is the FULL composite so the dropdown is
+    // reconstructable on reload — summary AND per-agent answers AND the invisible
+    // section markers all ride in the message body.
+    expect(placeholder?.message).toContain("<!--copilot:multi-agent v=1-->");
+    expect(placeholder?.message).toContain("the narrative summary");
+    expect(placeholder?.message).toContain("OPENCODE_ANSWER");
+    expect(placeholder?.message).toContain("CLAUDE_ANSWER");
+    // The live turn rides on the message itself for the UI.
+    expect(placeholder?.fanout?.summary.text).toBe("the narrative summary");
   });
 
   it("uses the single-agent path (backend.prompt) when only the main agent runs", async () => {
@@ -910,10 +915,11 @@ describe("AgentSession fan-out branching", () => {
 
     expect(runFanoutTurn).not.toHaveBeenCalled();
     expect(mock.prompt).toHaveBeenCalledTimes(1);
-    expect(session.getLiveFanoutTurn()).toBeNull();
+    const placeholder = session.store.getDisplayMessages().find((m) => m.sender === AI_SENDER);
+    expect(placeholder?.fanout).toBeUndefined();
   });
 
-  it("clears a prior turn's live fan-out before the next turn's first notify (no dropdown leak)", async () => {
+  it("does not leak a prior turn's fan-out onto the next (single-agent) turn's message", async () => {
     const mock = makeMockBackend();
     const runFanoutTurn = jest.fn(async (input: FanoutRunInput): Promise<FanoutTurn> => {
       const turn: FanoutTurn = {
@@ -935,22 +941,19 @@ describe("AgentSession fan-out branching", () => {
     });
 
     await session.sendPrompt("review", undefined, undefined, ["opencode", "claude"]).turn;
-    expect(session.getLiveFanoutTurn()).not.toBeNull();
+    const fanoutMsgId = session.store.getDisplayMessages().find((m) => m.sender === AI_SENDER)!.id;
+    expect(
+      session.store.getDisplayMessages().find((m) => m.id === fanoutMsgId)?.fanout
+    ).toBeDefined();
 
-    // The live fan-out must be cleared before the next (single-agent) turn's
-    // placeholder is announced, or the new placeholder would briefly render the
-    // stale dropdown. Capture what a subscriber sees on that first notify.
-    const liveAtFirstNotify: Array<FanoutTurn | null> = [];
-    const unsubscribe = session.subscribe({
-      onMessagesChanged: () => liveAtFirstNotify.push(session.getLiveFanoutTurn()),
-      onStatusChanged: () => undefined,
-    });
+    // The turn rides on its OWN message; the next single-agent placeholder is a
+    // distinct message that never carries fan-out state (no side-channel to leak
+    // a stale dropdown). The earlier fan-out message keeps its own turn.
     await session.sendPrompt("follow up").turn;
-    unsubscribe();
-
-    expect(liveAtFirstNotify.length).toBeGreaterThan(0);
-    expect(liveAtFirstNotify.every((t) => t === null)).toBe(true);
-    expect(session.getLiveFanoutTurn()).toBeNull();
+    const messages = session.store.getDisplayMessages();
+    const assistantMsgs = messages.filter((m) => m.sender === AI_SENDER);
+    expect(assistantMsgs.find((m) => m.id === fanoutMsgId)?.fanout).toBeDefined();
+    expect(assistantMsgs.find((m) => m.id !== fanoutMsgId)?.fanout).toBeUndefined();
   });
 });
 

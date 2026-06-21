@@ -1,5 +1,9 @@
 import type React from "react";
 import type { FormattedDateTime, MessageContext } from "@/types/message";
+// Type-only (and circular) import: `fanoutTypes` imports value/type shapes from
+// this module; `import type` makes the cycle compile-time only, so no runtime
+// load order issue.
+import type { FanoutTurn } from "@/agentMode/session/fanout/fanoutTypes";
 
 export type {
   BackendAuth,
@@ -809,6 +813,15 @@ export interface AgentChatMessage {
    * turn ends.
    */
   turnDurationMs?: number;
+  /**
+   * Per-agent fan-out state when this assistant message is a multi-agent QA
+   * turn, else absent. LIVE in-memory only — it is NOT a separate serialized
+   * field: persistence rides in the message body as a composite (see
+   * `serializeFanoutComposite`) and is reconstructed onto this field on load
+   * (see `parseFanoutComposite`). When present, the UI renders the summary +
+   * per-agent tab row instead of the plain assistant body.
+   */
+  fanout?: FanoutTurn;
 }
 
 /** Creation shape — id is assigned by the store if absent. */

@@ -568,6 +568,7 @@ export class AgentSessionManager {
       initialCachedState: warm?.state ?? this.preloader.getCachedBackendState(resolvedId),
       getDescriptor: () => this.opts.resolveDescriptor(resolvedId),
       runFanoutTurn: (input) => this.runFanoutTurn(input),
+      getDisplayName: (backendId) => this.resolveDescriptor(backendId).displayName,
     });
     if (warm) {
       logInfo(
@@ -1413,6 +1414,7 @@ export class AgentSessionManager {
       cwd: vaultBasePath,
       getDescriptor: () => this.opts.resolveDescriptor(backendId),
       runFanoutTurn: (input) => this.runFanoutTurn(input),
+      getDisplayName: (id) => this.resolveDescriptor(id).displayName,
     });
     this.sessions.set(session.internalId, session);
     this.chatUIStates.set(session.internalId, new AgentChatUIState(session));

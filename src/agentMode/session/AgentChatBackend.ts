@@ -1,4 +1,3 @@
-import type { FanoutTurn } from "@/agentMode/session/fanout/fanoutTypes";
 import type { MessageContext } from "@/types/message";
 import type {
   AgentChatMessage,
@@ -45,15 +44,6 @@ export interface AgentChatBackend {
 
   /** True while ACP `session/new` is still in flight. Send is gated on this. */
   isStarting(): boolean;
-
-  /**
-   * Live per-agent fan-out state for the active multi-agent QA turn, or `null`
-   * on the single-agent path. LIVE-ONLY: present for the in-memory active turn,
-   * never for a reloaded transcript (which persists summary-only). The
-   * summary-first dropdown UI renders from this; the normal assistant path
-   * renders when it's `null`.
-   */
-  getLiveFanoutTurn(): FanoutTurn | null;
 
   /** Latest unified picker state, or `null` while the backend session is still starting. */
   getBackendState(): BackendState | null;
