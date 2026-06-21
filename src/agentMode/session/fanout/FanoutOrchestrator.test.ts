@@ -748,6 +748,61 @@ describe("FanoutOrchestrator.run", () => {
     }
   });
 
+  it("settles (no unhandled rejection) when the cancelled MAIN prompt REJECTS rather than resolves", async () => {
+    // Realistic backend behavior: a cancelled/timed-out prompt usually REJECTS
+    // as it unwinds (not resolves). The settle-wait must treat that rejection as
+    // "settled" AND never leak it as an unhandled rejection (the swallowed
+    // prompt is awaited via a both-outcomes-mapped chain, not a bare `.finally`).
+    const unhandled: unknown[] = [];
+    const onUnhandled = (e: PromiseRejectionEvent) => unhandled.push(e.reason);
+    const onNodeUnhandled = (reason: unknown) => unhandled.push(reason);
+    window.addEventListener("unhandledrejection", onUnhandled);
+    process.on("unhandledRejection", onNodeUnhandled);
+    jest.useFakeTimers();
+    try {
+      const { host, procs } = makeHost({
+        claude: { sessionId: "s-claude" },
+        codex: { sessionId: "s-codex" },
+      });
+      const orchestrator = new FanoutOrchestrator(host);
+      const controller = new AbortController();
+      const runPromise = orchestrator.run(
+        runInput(["claude", "codex"], { signal: controller.signal })
+      );
+
+      await jest.advanceTimersByTimeAsync(0);
+      procs.get("codex")!.emit(textChunk("s-codex", "codex answer"));
+      procs.get("codex")!.resolvePrompt();
+      // Trip the main's deadline; cancel is requested but the prompt is pending.
+      await jest.advanceTimersByTimeAsync(FANOUT_AGENT_TIMEOUT_MS);
+      expect(procs.get("claude")!.promptCount()).toBe(1);
+
+      // The backend honors the cancel within the grace by REJECTING the prompt.
+      // That counts as settled: the orchestrator proceeds to reuse the backend.
+      procs.get("claude")!.rejectPrompt(new Error("backend cancelled"));
+      await drainMicrotasks();
+      expect(procs.get("claude")!.promptCount()).toBe(2);
+
+      procs.get("claude")!.emit(textChunk("s-claude", "summary"));
+      procs.get("claude")!.resolvePrompt();
+      await drainMicrotasks();
+      const turn = await runPromise;
+
+      expect(turn.answers.claude.status).toBe("error");
+      expect(turn.answers.claude.error).toBe(FANOUT_AGENT_TIMEOUT_ERROR);
+      expect(turn.summary.status).toBe("done");
+      expect(turn.summary.text).toBe("summary");
+      expect(jest.getTimerCount()).toBe(0);
+    } finally {
+      jest.useRealTimers();
+      window.removeEventListener("unhandledrejection", onUnhandled);
+      process.off("unhandledRejection", onNodeUnhandled);
+    }
+    // Give any queued unhandled-rejection events a turn to fire before asserting.
+    await flush();
+    expect(unhandled).toEqual([]);
+  });
+
   it("does not incur the cancel grace on the happy path (prompt resolves normally)", async () => {
     jest.useFakeTimers();
     try {

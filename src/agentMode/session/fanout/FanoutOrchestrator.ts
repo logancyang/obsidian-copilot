@@ -334,10 +334,17 @@ export class FanoutOrchestrator {
       };
 
       // Hold the real prompt promise so the cancel paths can await its actual
-      // settlement. A no-op catch is attached up front so the swallowed
-      // rejection on a cancel/timeout path never surfaces as unhandled.
+      // settlement. `promptSettled` resolves once the underlying prompt has
+      // fully unwound, regardless of whether it fulfilled or rejected — a
+      // cancelled/timed-out backend prompt usually REJECTS, and we only care
+      // that it stopped. Mapping both outcomes to a resolved value here (rather
+      // than catching on each downstream branch) is also what keeps the
+      // swallowed rejection from surfacing as unhandled.
       const promptPromise = proc.prompt({ sessionId, prompt });
-      promptPromise.catch(() => undefined);
+      const promptSettled = promptPromise.then(
+        () => undefined,
+        () => undefined
+      );
 
       // Request cancel, then wait (bounded by the grace) for the underlying
       // prompt to actually settle before finishing via `done()`. `done` wraps
@@ -352,7 +359,9 @@ export class FanoutOrchestrator {
           );
           done();
         }, FANOUT_CANCEL_GRACE_MS);
-        void promptPromise.finally(() => {
+        // `promptSettled` never rejects (both outcomes mapped to undefined), so
+        // this branch cannot leak an unhandled rejection.
+        void promptSettled.then(() => {
           window.clearTimeout(grace);
           done();
         });
