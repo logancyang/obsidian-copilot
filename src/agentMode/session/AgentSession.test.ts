@@ -947,6 +947,24 @@ describe("AgentSession fan-out follow-up continuity", () => {
       return turn;
     });
 
+  /**
+   * A fan-out runner whose agents answered successfully but whose summary never
+   * produced text (summary generation threw / ended empty). The persisted body
+   * must fall back to a note, never a blank bubble.
+   */
+  const fanoutAnswersNoSummary = () =>
+    jest.fn(async (input: FanoutRunInput): Promise<FanoutTurn> => {
+      const turn: FanoutTurn = {
+        answers: {
+          opencode: { backendId: "opencode", status: "done", text: "answer a" },
+          claude: { backendId: "claude", status: "done", text: "answer b" },
+        },
+        summary: { status: "done", text: "" },
+      };
+      input.onChange(turn);
+      return turn;
+    });
+
   const lastPromptText = (mock: ReturnType<typeof makeMockBackend>): string => {
     const calls = mock.prompt.mock.calls;
     const last = calls[calls.length - 1][0] as { prompt: Array<{ text: string }> };
@@ -1052,6 +1070,28 @@ describe("AgentSession fan-out follow-up continuity", () => {
     await session.sendPrompt("follow-up").turn;
 
     expect(lastPromptText(mock)).not.toContain("<prior_turns>");
+  });
+
+  it("persists a fallback note (not a blank bubble) when agents answered but no summary was generated", async () => {
+    const mock = makeMockBackend();
+    const runFanoutTurn = fanoutAnswersNoSummary();
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+      runFanoutTurn,
+    });
+
+    await session.sendPrompt("multi question", undefined, undefined, ["opencode", "claude"]).turn;
+    await session.sendPrompt("follow-up").turn;
+
+    // The turn produced successful answers, so it is buffered + replayed with a
+    // non-blank fallback summary instead of being dropped as an empty bubble.
+    const text = lastPromptText(mock);
+    expect(text).toContain("<prior_turns>");
+    expect(text).toContain("multi question");
+    expect(text).toContain("a combined summary could not be generated");
   });
 
   it("leaves the single-agent prompt byte-for-byte unchanged when the buffer is empty", async () => {

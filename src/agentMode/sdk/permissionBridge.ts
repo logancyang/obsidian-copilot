@@ -23,6 +23,7 @@ import type {
 } from "@/agentMode/session/types";
 import { PERMISSION_OPTION_KINDS } from "@/agentMode/session/types";
 import { resolveToolName } from "@/agentMode/session/toolName";
+import { isWriteOrExecToolKind } from "@/agentMode/session/fanout/fanoutTypes";
 import { err2String } from "@/utils";
 import { logSdkInbound, logSdkOutbound } from "./sdkDebugTap";
 import { deriveToolKind, deriveToolTitle, vendorMetaFields } from "./toolMeta";
@@ -57,6 +58,17 @@ export interface PermissionBridgeOptions {
    * prompter like any other tool.
    */
   isPlanModePlanFilePath?: (absolutePath: string) => boolean;
+  /**
+   * Lazily fetch the predicate deciding whether a backend session is an
+   * ephemeral read-only fan-out QA sub-session. Lazy (like `getPrompter`) so
+   * the manager can register it after the backend is constructed. Consulted at
+   * the TOP of `canUseTool`, BEFORE the plan-file auto-allow: a read-only
+   * session hard-denies every write/exec tool (including plan-file `Write`s) so
+   * the auto-allow can never reopen a write path during a read-only QA turn.
+   * Closes the hole generically even if a mode switch failed to sandbox the
+   * backend.
+   */
+  getIsReadOnlySession?: () => ((sessionId: SessionId) => boolean) | null;
 }
 
 export class PermissionBridge {
@@ -88,6 +100,23 @@ export class PermissionBridge {
       { toolName, input, suggestions: ctx.suggestions },
       sessionId
     );
+
+    // Read-only fan-out QA sub-sessions hard-deny writes/exec BEFORE the
+    // plan-file auto-allow below, so a read-only turn can never finalize a
+    // plan file (or any other write) even if the sandbox mode switch was wrong
+    // for this backend. Reads/searches/fetches fall through to the normal path
+    // (the prompter then allows them).
+    const isReadOnlySession = this.opts.getIsReadOnlySession?.();
+    if (sessionId && isReadOnlySession?.(sessionId)) {
+      const { tool, mcpServer } = resolveToolName(toolName);
+      if (isWriteOrExecToolKind(deriveToolKind(tool, mcpServer))) {
+        return this.deny(
+          "canUseTool:response",
+          "Read-only QA turn: write and exec tools are disabled.",
+          sessionId
+        );
+      }
+    }
 
     if (toolName === "Write") {
       const filePath = typeof input.file_path === "string" ? input.file_path : null;

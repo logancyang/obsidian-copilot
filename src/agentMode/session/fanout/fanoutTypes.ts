@@ -113,12 +113,20 @@ export function isWriteOrExecToolKind(kind: AgentToolKind | undefined): boolean 
  * The text persisted for a completed fan-out turn: the summary only. Per-agent
  * answers are live-only, so this is the single seam through which a multi-agent
  * turn reaches disk — guaranteeing no per-agent answer is ever serialized.
- * Returns the trimmed summary text, or an empty string when the summary has no
- * content (e.g. the zero-success all-failed note is still written, but a
- * never-generated summary collapses to empty).
+ *
+ * Returns the trimmed summary text when present (the normal path, and the
+ * zero-success all-failed note, which `runSummary` already wrote into the slot).
+ * When the summary is empty BUT at least one agent succeeded — summary
+ * generation threw, ended empty, or the turn was cancelled after answers
+ * landed — falls back to {@link FANOUT_SUMMARY_UNAVAILABLE} so a turn with
+ * SUCCESSFUL answers never reloads as a blank assistant bubble. A turn with no
+ * successes and no summary (e.g. cancelled before any answer landed) collapses
+ * to empty so the caller persists/buffers nothing.
  */
 export function collapseFanoutTurnToSummaryText(turn: FanoutTurn): string {
-  return turn.summary.text.trim();
+  const text = turn.summary.text.trim();
+  if (text.length > 0) return text;
+  return selectSummaryInputs(turn).succeeded.length > 0 ? FANOUT_SUMMARY_UNAVAILABLE : "";
 }
 
 /**
@@ -157,6 +165,15 @@ export const FANOUT_SUMMARY_INSTRUCTION =
 /** The text persisted when every fan-out agent failed (D7 zero-success case). */
 export const FANOUT_ALL_FAILED_SUMMARY =
   "All agents failed to answer; no summary could be generated.";
+
+/**
+ * The text persisted when at least one agent answered but the narrative summary
+ * could not be generated (summary threw, ended empty, or the turn was cancelled
+ * after answers landed). Without this, an empty summary would persist a blank
+ * assistant bubble that discards a turn with successful answers on reload.
+ */
+export const FANOUT_SUMMARY_UNAVAILABLE =
+  "Multiple agents answered this turn, but a combined summary could not be generated.";
 
 /**
  * A fan-out turn the visible session's backend never saw. The whole turn runs

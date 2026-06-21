@@ -4,6 +4,8 @@ import {
   buildSummaryUserPrompt,
   collapseFanoutTurnToSummaryText,
   EMPTY_PENDING_FANOUT_CONTEXT,
+  FANOUT_ALL_FAILED_SUMMARY,
+  FANOUT_SUMMARY_UNAVAILABLE,
   isWriteOrExecToolKind,
   selectSummaryInputs,
   snapshotFanoutTurn,
@@ -47,8 +49,42 @@ describe("collapseFanoutTurnToSummaryText", () => {
     expect(text).not.toContain("full answer");
   });
 
-  it("returns empty string for a pending summary (Phase 2 leaves it unfilled)", () => {
-    expect(collapseFanoutTurnToSummaryText(turnWith(""))).toBe("");
+  it("falls back to the unavailable note when agents answered but no summary was generated", () => {
+    // turnWith() seeds two `done` slots with non-empty text → successes exist.
+    const text = collapseFanoutTurnToSummaryText(turnWith(""));
+    expect(text).toBe(FANOUT_SUMMARY_UNAVAILABLE);
+    // The fallback must never be blank — that's the blank-bubble bug.
+    expect(text.length).toBeGreaterThan(0);
+  });
+
+  it("collapses to empty when no agent succeeded and no summary text was written", () => {
+    // e.g. a turn cancelled before any answer landed — nothing to persist, so
+    // the caller buffers/persists nothing (no misleading 'all failed' bubble).
+    const cancelledEmpty: FanoutTurn = {
+      answers: {
+        claude: { backendId: "claude", status: "cancelled", text: "" },
+        codex: { backendId: "codex", status: "cancelled", text: "" },
+      },
+      summary: { status: "pending", text: "" },
+    };
+    expect(collapseFanoutTurnToSummaryText(cancelledEmpty)).toBe("");
+  });
+
+  it("returns the all-failed note verbatim once runSummary has written it into the slot", () => {
+    // The genuine zero-success path: runSummary set the slot to the all-failed
+    // note, so collapse passes it through (never inventing it itself).
+    const allFailed: FanoutTurn = {
+      answers: {
+        claude: { backendId: "claude", status: "error", text: "", error: "boom" },
+        codex: { backendId: "codex", status: "error", text: "", error: "boom" },
+      },
+      summary: { status: "done", text: FANOUT_ALL_FAILED_SUMMARY },
+    };
+    expect(collapseFanoutTurnToSummaryText(allFailed)).toBe(FANOUT_ALL_FAILED_SUMMARY);
+  });
+
+  it("leaves a normal successful summary unchanged", () => {
+    expect(collapseFanoutTurnToSummaryText(turnWith("real summary"))).toBe("real summary");
   });
 });
 

@@ -61,6 +61,16 @@ export interface ModeMapping {
   /** Required when `kind === "configOption"`. Ignored for `setMode`. */
   configId?: string;
   canonical: Partial<Record<CopilotMode, string>>;
+  /**
+   * Native mode id of the backend's genuine READ-ONLY sandbox — a mode that
+   * can read/reason but cannot write or exec. Set ONLY when such a sandbox
+   * exists (Codex `"read-only"`); leave unset/null otherwise. Distinct from
+   * `canonical.plan`: a backend's plan mode may be a real planning mode that
+   * drafts and writes plan artifacts (Claude), which is NOT read-only. The
+   * fan-out orchestrator applies this (never `canonical.plan`) to put a QA
+   * sub-session into a true read-only sandbox.
+   */
+  readOnlyModeId?: string | null;
 }
 
 /** One option in the mode picker — a Copilot-canonical mode the backend supports. */
@@ -670,6 +680,15 @@ export interface BackendProcess {
   setAskUserQuestionPrompter?(
     fn: (req: AskUserQuestionPrompt) => Promise<AgentQuestionAnswers>
   ): void;
+  /**
+   * Optional: register a predicate the backend consults to decide whether a
+   * given session is an ephemeral read-only fan-out QA sub-session. Backends
+   * with their own permission gate (Claude SDK's `canUseTool`) use it to
+   * hard-deny write/exec tools for such sessions, defending in depth against a
+   * wrong sandbox-mode switch. Backends whose writes are fully governed by the
+   * shared permission prompter (ACP) omit it.
+   */
+  setReadOnlySessionPredicate?(fn: (sessionId: SessionId) => boolean): void;
   registerSessionHandler(sessionId: SessionId, handler: SessionUpdateHandler): () => void;
   newSession(params: OpenSessionInput): Promise<OpenSessionOutput>;
   prompt(params: PromptInput): Promise<PromptOutput>;

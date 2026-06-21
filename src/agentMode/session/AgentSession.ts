@@ -1001,12 +1001,15 @@ export class AgentSession {
     // Collapse to summary-only for persistence/display: per-agent answers stay
     // live in `liveFanoutTurn`, but the placeholder's serialized body carries
     // just the main agent's generated summary text.
+    // Never empty: `collapseFanoutTurnToSummaryText` falls back to a concise
+    // note when the summary was not generated but agents answered (and to the
+    // all-failed note when none did), so a turn with successful answers can't
+    // reload as a blank assistant bubble.
     const summaryText = collapseFanoutTurnToSummaryText(turn);
     if (summaryText) {
       this.store.appendAgentText(placeholderId, summaryText);
       // Buffer this turn so the next single-agent prompt can replay it: the
-      // visible backend never saw it (it ran on ephemeral sub-sessions). Skip
-      // an empty summary (cancelled / all-failed) — nothing to carry forward.
+      // visible backend never saw it (it ran on ephemeral sub-sessions).
       // The fan-out path only appends; the single-agent path flushes.
       this.pendingFanoutContext.push({ question: originalPromptText, summary: summaryText });
     }

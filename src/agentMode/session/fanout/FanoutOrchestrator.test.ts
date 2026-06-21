@@ -94,12 +94,18 @@ function makeMockProc(sessionId: string): MockProc {
   };
 }
 
-function descriptorFor(id: BackendId, planNativeId?: string): BackendDescriptor {
+function descriptorFor(id: BackendId, readOnlyModeId?: string): BackendDescriptor {
   return {
     id,
     wire: { encode: (s: ModelSelection) => `${s.baseModelId}/${s.effort ?? "default"}` },
-    getModeMapping: planNativeId
-      ? () => ({ kind: "setMode" as const, canonical: { plan: planNativeId } })
+    getModeMapping: readOnlyModeId
+      ? () => ({
+          kind: "setMode" as const,
+          // `plan` deliberately diverges from `readOnlyModeId` so the test
+          // proves the orchestrator applies the read-only sandbox id, NOT plan.
+          canonical: { plan: "plan", default: "auto" },
+          readOnlyModeId,
+        })
       : undefined,
   } as unknown as BackendDescriptor;
 }
@@ -119,14 +125,14 @@ interface HostHarness {
 }
 
 function makeHost(
-  config: Record<BackendId, { sessionId: string; planNativeId?: string }>,
+  config: Record<BackendId, { sessionId: string; readOnlyModeId?: string }>,
   defaults: Partial<Record<BackendId, ModelSelection>> = {}
 ): HostHarness {
   const procs = new Map<BackendId, MockProc>();
   const descriptors = new Map<BackendId, BackendDescriptor>();
-  for (const [id, { sessionId, planNativeId }] of Object.entries(config)) {
+  for (const [id, { sessionId, readOnlyModeId }] of Object.entries(config)) {
     procs.set(id, makeMockProc(sessionId));
-    descriptors.set(id, descriptorFor(id, planNativeId));
+    descriptors.set(id, descriptorFor(id, readOnlyModeId));
   }
   const readOnlyRegistered: string[] = [];
   const readOnlyUnregistered: string[] = [];
@@ -252,9 +258,12 @@ describe("FanoutOrchestrator.run", () => {
     expect(turn.answers.codex.error).toContain("backend boom");
   });
 
-  it("applies the read-only sandbox mode only for backends that map plan→read-only", async () => {
+  it("applies the read-only sandbox id (never plan) only for backends that advertise one", async () => {
     const { host, procs } = makeHost({
-      codex: { sessionId: "s-codex", planNativeId: "read-only" },
+      // codex advertises a genuine read-only sandbox; its plan id is "plan".
+      codex: { sessionId: "s-codex", readOnlyModeId: "read-only" },
+      // opencode has no readOnlyModeId → no mode switch (relies on prompt +
+      // permission layers). Stands in for any backend lacking a sandbox.
       opencode: { sessionId: "s-opencode" },
     });
     const orchestrator = new FanoutOrchestrator(host);
@@ -271,10 +280,17 @@ describe("FanoutOrchestrator.run", () => {
     procs.get("codex")!.resolvePrompt();
     await runPromise;
 
+    // Applies the read-only sandbox id, NOT canonical.plan ("plan") — a backend
+    // (Claude) whose plan mode writes plan files must never be put into it here.
     expect(procs.get("codex")!.setSessionMode).toHaveBeenCalledWith({
       sessionId: "s-codex",
       modeId: "read-only",
     });
+    expect(procs.get("codex")!.setSessionMode).not.toHaveBeenCalledWith({
+      sessionId: "s-codex",
+      modeId: "plan",
+    });
+    // No readOnlyModeId → setSessionMode is never called for that backend.
     expect(procs.get("opencode")!.setSessionMode).not.toHaveBeenCalled();
   });
 

@@ -357,14 +357,18 @@ export class FanoutOrchestrator {
   }
 
   /**
-   * Apply the backend's read-only sandbox mode when it exposes one via a
-   * `setMode`-style mapping (codex maps canonical `plan` → its `read-only`
-   * sandbox, applied with a static native id). Belt-and-suspenders on top of the
-   * prompt preamble + permission denial. Best-effort and intentionally narrow:
-   * `setMode` plan ids are static, so a stateless `getModeMapping` probe
-   * resolves them. `configOption`-style backends (opencode) need live session
-   * config to resolve a native id — and opencode advertises no `plan` mode
-   * anyway — so they rely on the prompt + permission layers, never this one.
+   * Apply the backend's GENUINE read-only sandbox mode when it advertises one
+   * via `ModeMapping.readOnlyModeId` (codex → `read-only`). Belt-and-suspenders
+   * on top of the prompt preamble + permission denial.
+   *
+   * Deliberately keyed off `readOnlyModeId`, NOT `canonical.plan`: a backend's
+   * plan mode may be a real planning mode that drafts and writes plan artifacts
+   * (Claude's `plan` writes plan files), which is the opposite of read-only.
+   * Backends without a true read-only sandbox (Claude, opencode) leave
+   * `readOnlyModeId` unset and rely on the prompt + permission layers instead —
+   * the permission prompter hard-denies their writes regardless. Best-effort
+   * and intentionally narrow: `setMode` ids are static, so a stateless
+   * `getModeMapping` probe resolves them.
    */
   private async applyReadOnlyMode(
     proc: BackendProcess,
@@ -373,7 +377,7 @@ export class FanoutOrchestrator {
   ): Promise<void> {
     const mapping = descriptor.getModeMapping?.(null, null);
     if (mapping?.kind !== "setMode") return;
-    const nativeId = mapping.canonical.plan;
+    const nativeId = mapping.readOnlyModeId;
     if (!nativeId) return;
     try {
       await proc.setSessionMode({ sessionId, modeId: nativeId });

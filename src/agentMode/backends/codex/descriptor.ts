@@ -189,6 +189,9 @@ export const CodexBackendDescriptor: BackendDescriptor = {
     return {
       kind: "setMode",
       canonical: { default: "auto", plan: "read-only", auto: "full-access" },
+      // Codex's `read-only` preset is a genuine no-write/no-exec sandbox, so it
+      // doubles as the fan-out read-only sandbox mode.
+      readOnlyModeId: "read-only",
     };
   },
 };

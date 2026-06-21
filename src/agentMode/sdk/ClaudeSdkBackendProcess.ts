@@ -175,6 +175,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
   private permissionPrompter: ((req: PermissionPrompt) => Promise<PermissionDecision>) | null =
     null;
   private askUserQuestionPrompter: AskUserQuestionPrompter | null = null;
+  private isReadOnlySession: ((sessionId: SessionId) => boolean) | null = null;
   private exitListeners = new Set<() => void>();
   private shuttingDown = false;
   private readonly bridge: PermissionBridge;
@@ -196,6 +197,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       getPrompter: () => this.permissionPrompter,
       getAskUserQuestionPrompter: () => this.askUserQuestionPrompter,
       isPlanModePlanFilePath: opts.isPlanModePlanFilePath,
+      getIsReadOnlySession: () => this.isReadOnlySession,
     });
     logInfo(
       `[AgentMode] ClaudeSdkBackendProcess constructed (claude=${opts.pathToClaudeCodeExecutable})`
@@ -213,6 +215,10 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
 
   setPermissionPrompter(fn: (req: PermissionPrompt) => Promise<PermissionDecision>): void {
     this.permissionPrompter = fn;
+  }
+
+  setReadOnlySessionPredicate(fn: (sessionId: SessionId) => boolean): void {
+    this.isReadOnlySession = fn;
   }
 
   setAskUserQuestionPrompter(fn: AskUserQuestionPrompter): void {

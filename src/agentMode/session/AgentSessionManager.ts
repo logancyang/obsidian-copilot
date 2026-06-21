@@ -1673,6 +1673,10 @@ export class AgentSessionManager {
     if (this.opts.askUserQuestionPrompter) {
       proc.setAskUserQuestionPrompter?.(this.opts.askUserQuestionPrompter);
     }
+    // Lets a backend with its own permission gate (Claude SDK) hard-deny
+    // write/exec tools for read-only fan-out sub-sessions, defending in depth
+    // against a wrong sandbox-mode switch — see `permissionBridge`.
+    proc.setReadOnlySessionPredicate?.((sessionId) => this.isReadOnlyFanoutSession(sessionId));
   }
 
   private async ensureBackend(

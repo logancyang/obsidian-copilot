@@ -79,6 +79,19 @@ export class AgentPillNode extends BasePillNode {
     return this.getValue();
   }
 
+  /**
+   * Contribute nothing to the editor's serialized text. The base returns
+   * `__value` (the backend id), but for an agent mention that id is pure
+   * routing metadata — the mention already feeds `mentionedAgents`
+   * structurally via the sync plugin. Returning it here would leak the raw
+   * backend id into `inputMessage` (and the prompt every agent receives),
+   * turning `@Claude should we…?` into `claude should we…?`. The visible pill
+   * comes from `decorate()`, not this text.
+   */
+  getTextContent(): string {
+    return "";
+  }
+
   exportDOM(editor: LexicalEditor): DOMExportOutput {
     // Base writes the data-attribute, value, and textContent; layer on the
     // label so it round-trips through DOM import.

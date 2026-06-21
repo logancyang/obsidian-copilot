@@ -308,6 +308,70 @@ describe("PermissionBridge.canUseTool", () => {
     });
   });
 
+  describe("read-only fan-out session gating", () => {
+    it("denies a plan-file Write BEFORE the plan-file auto-allow when the session is read-only", async () => {
+      const planMatcher = jest.fn((p: string) => p.endsWith("/.claude/plans/foo.md"));
+      const prompter = jest.fn();
+      const bridge = new PermissionBridge({
+        getPrompter: () => prompter,
+        isPlanModePlanFilePath: planMatcher,
+        // The current session is a read-only fan-out sub-session.
+        getIsReadOnlySession: () => () => true,
+      });
+      bridge.setSessionContext("session-1");
+
+      const result = await bridge.canUseTool(
+        "Write",
+        { file_path: "/Users/x/.claude/plans/foo.md", content: "# plan" },
+        ctx
+      );
+
+      // The read-only deny fires first: the plan-file auto-allow never runs and
+      // the prompter is never consulted.
+      expect(result.behavior).toBe("deny");
+      if (result.behavior === "deny") {
+        expect(result.message).toContain("Read-only QA turn");
+      }
+      expect(planMatcher).not.toHaveBeenCalled();
+      expect(prompter).not.toHaveBeenCalled();
+    });
+
+    it("still allows reads in a read-only session (only write/exec are denied)", async () => {
+      const prompter = jest.fn(async () => ({
+        outcome: { outcome: "selected" as const, optionId: "allow_once" as const },
+      }));
+      const bridge = new PermissionBridge({
+        getPrompter: () => prompter,
+        getIsReadOnlySession: () => () => true,
+      });
+      bridge.setSessionContext("session-1");
+
+      const result = await bridge.canUseTool("Read", { file_path: "/tmp/a.md" }, ctx);
+      // A read tool falls through to the normal prompter path.
+      expect(prompter).toHaveBeenCalled();
+      expect(result.behavior).toBe("allow");
+    });
+
+    it("does not gate writes when the session is NOT read-only (plan auto-allow still applies)", async () => {
+      const prompter = jest.fn();
+      const bridge = new PermissionBridge({
+        getPrompter: () => prompter,
+        isPlanModePlanFilePath: (p) => p.endsWith("/.claude/plans/foo.md"),
+        getIsReadOnlySession: () => () => false,
+      });
+      bridge.setSessionContext("session-1");
+
+      const result = await bridge.canUseTool(
+        "Write",
+        { file_path: "/Users/x/.claude/plans/foo.md", content: "# plan" },
+        ctx
+      );
+      // Not read-only → the plan-file auto-allow proceeds as before.
+      expect(result.behavior).toBe("allow");
+      expect(prompter).not.toHaveBeenCalled();
+    });
+  });
+
   describe("ExitPlanMode handling", () => {
     it("synthesizes a prompt with switch_mode kind and isPlanProposal=true", async () => {
       let captured: PermissionPrompt | null = null;
