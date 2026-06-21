@@ -125,19 +125,6 @@ export function isWriteOrExecToolKind(kind: AgentToolKind | undefined): boolean 
 }
 
 /**
- * The text persisted for a completed fan-out turn: the summary only.
- *
- * Falls back to {@link FANOUT_SUMMARY_UNAVAILABLE} when the summary is empty but
- * at least one agent succeeded, so a turn with successful answers never reloads
- * as a blank bubble. A turn with no successes and no summary collapses to empty.
- */
-export function collapseFanoutTurnToSummaryText(turn: FanoutTurn): string {
-  const text = turn.summary.text.trim();
-  if (text.length > 0) return text;
-  return selectSummaryInputs(turn).succeeded.length > 0 ? FANOUT_SUMMARY_UNAVAILABLE : "";
-}
-
-/**
  * A fresh, structurally-copied snapshot of a live fan-out turn. The orchestrator
  * mutates one {@link FanoutTurn} in place and re-emits the SAME reference per
  * token; React `setState` bails on `Object.is`-equal updates, so a fresh copy
@@ -196,13 +183,6 @@ export const FANOUT_SUMMARY_INSTRUCTION =
 /** The text persisted when every fan-out agent failed. */
 export const FANOUT_ALL_FAILED_SUMMARY =
   "All agents failed to answer; no summary could be generated.";
-
-/**
- * The text persisted when at least one agent answered but the summary could not
- * be generated, so a turn with successful answers never reloads blank.
- */
-export const FANOUT_SUMMARY_UNAVAILABLE =
-  "Multiple agents answered this turn, but a combined summary could not be generated.";
 
 /**
  * A fan-out turn the visible session's backend never saw (it ran on ephemeral
@@ -501,7 +481,7 @@ export function buildSummaryUserPrompt(
 /**
  * Char cap on EACH persisted agent answer in the composite body (bounds the
  * on-disk transcript, not the model input). Large enough that a normal QA answer
- * is never clipped. The summary is persisted in full as the primary artifact.
+ * is never clipped; the summary is persisted uncapped.
  */
 export const FANOUT_PERSISTED_ANSWER_MAX_CHARS = 24_000;
 

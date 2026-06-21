@@ -454,6 +454,10 @@ export class AgentSessionManager {
     for (const s of sessions) {
       if (!isSameCwd(s.cwd, vaultBasePath)) continue;
       if (probeSessionId && s.sessionId === probeSessionId) continue;
+      // A live fan-out sub-session is ephemeral: skip it even before its
+      // async tombstone lands, so a sweep racing the in-flight turn can't
+      // surface it as a phantom chat.
+      if (this.readOnlyFanoutSessions.has(s.sessionId)) continue;
       const title = s.title?.trim();
       if (!title || title.startsWith(DEFAULT_TITLE_PREFIX)) continue;
       const updatedAtMs = s.updatedAt ? Date.parse(s.updatedAt) : NaN;
