@@ -7,6 +7,11 @@ import type {
 } from "@/agentMode/session/types";
 import { USER_SENDER } from "@/constants";
 import { escapeXml } from "@/LLMProviders/chainRunner/utils/xmlParsing";
+import {
+  isNoteSelectedTextContext,
+  isWebSelectedTextContext,
+  type MessageContext,
+} from "@/types/message";
 
 /**
  * Read-only QA preamble prepended to every fan-out agent's prompt (the
@@ -373,13 +378,76 @@ function imageAttachmentMarker(count: number): string {
 }
 
 /**
+ * Render a turn's attached {@link MessageContext} (the visible notes, selected
+ * excerpts, folders, urls, tags, and web tabs the user pinned to that turn) into
+ * a single `[context]` section so a fan-out agent — running a FRESH session with
+ * no memory — can resolve a follow-up like "explain the selected excerpt above"
+ * that the single-agent backend would have seen inline. PURE: renders ONLY what
+ * is stored on the objects; full note/web-tab bodies are read from the vault at
+ * prompt time and are NOT on `context` (a tracked follow-up), so this lists note
+ * NAMES + the already-captured selection excerpts, never file contents.
+ *
+ * Highest value is `selectedTextContexts`: the excerpt `content` is the thing a
+ * follow-up references, so each is rendered with its label and the actual text,
+ * trimmed PER ITEM via {@link trimHead} (reusing the per-tool-output budget) so
+ * one large excerpt can't dominate the surrounding history. Every other field
+ * collapses to a concise identifier line. Empty/absent sub-fields are omitted;
+ * an empty/undefined context renders NOTHING (the array is empty) so the turn is
+ * byte-for-byte unchanged. Dynamic values (titles, excerpt content, urls, names)
+ * are NOT escaped here: `buildConversationHistoryBlock` escapes the whole turn
+ * body once, so escaping internally would double-encode — same convention as the
+ * tool/plan renderers above, which also emit raw text. Drives off field presence
+ * only, no per-agent-name branching.
+ */
+function renderMessageContext(context: MessageContext | undefined): string[] {
+  if (!context) return [];
+  const lines: string[] = [];
+
+  for (const sel of context.selectedTextContexts ?? []) {
+    const label = isNoteSelectedTextContext(sel)
+      ? sel.noteTitle
+      : isWebSelectedTextContext(sel)
+        ? sel.title || sel.url
+        : "selection";
+    const excerpt = trimHead(
+      sel.content.trim(),
+      FANOUT_HISTORY_TOOL_OUTPUT_MAX_CHARS,
+      FANOUT_HISTORY_TURN_TRUNCATION_MARKER
+    );
+    lines.push(`[selected from ${label}]\n${excerpt}`);
+  }
+
+  const noteNames = (context.notes ?? []).map((n) => n.basename);
+  if (noteNames.length > 0) lines.push(`[notes: ${noteNames.join(", ")}]`);
+
+  if (context.folders && context.folders.length > 0) {
+    lines.push(`[folders: ${context.folders.join(", ")}]`);
+  }
+  if (context.urls && context.urls.length > 0) {
+    lines.push(`[urls: ${context.urls.join(", ")}]`);
+  }
+  if (context.tags && context.tags.length > 0) {
+    lines.push(`[tags: ${context.tags.join(", ")}]`);
+  }
+  if (context.webTabs && context.webTabs.length > 0) {
+    const tabs = context.webTabs.map((t) => t.title || t.url).join(", ");
+    lines.push(`[web tabs: ${tabs}]`);
+  }
+
+  if (lines.length === 0) return [];
+  return [`[context]\n${lines.join("\n")}`];
+}
+
+/**
  * The renderable inner body of one transcript turn: its prose (from `message`,
  * which already aggregates the text parts), its non-prose parts (tool outputs,
- * plan entries), then a marker for any image attachments on the turn's
- * `content`. Returns `null` only when the turn carries NO renderable content at
- * all — prose, parts, AND images all absent. A turn that is ONLY image content
- * (empty prose, no parts) now renders the marker so it is no longer dropped from
- * history; a turn with no image content renders byte-for-byte as before.
+ * plan entries), a marker for any image attachments on the turn's `content`,
+ * then its attached {@link MessageContext} (pinned notes / selected excerpts /
+ * tabs). Returns `null` only when the turn carries NO renderable content at all
+ * — prose, parts, images, AND context all absent. A turn that is ONLY context
+ * (empty prose, no parts/images) now renders its `[context]` section so it is no
+ * longer dropped from history; a turn with no context renders byte-for-byte as
+ * before.
  */
 function renderTurnContent(message: AgentChatMessage): string | null {
   const segments: string[] = [];
@@ -388,6 +456,7 @@ function renderTurnContent(message: AgentChatMessage): string | null {
   if (message.parts) segments.push(...renderNonProseParts(message.parts));
   const imageCount = countImageAttachments(message.content);
   if (imageCount > 0) segments.push(imageAttachmentMarker(imageCount));
+  segments.push(...renderMessageContext(message.context));
   if (segments.length === 0) return null;
   return segments.join("\n");
 }

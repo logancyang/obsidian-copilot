@@ -1,5 +1,7 @@
 import type { AgentChatMessage, AgentMessagePart, AgentToolKind } from "@/agentMode/session/types";
 import { AI_SENDER, USER_SENDER } from "@/constants";
+import type { MessageContext } from "@/types/message";
+import type { TFile } from "obsidian";
 import {
   buildConversationHistoryBlock,
   buildPriorFanoutContextBlock,
@@ -522,5 +524,157 @@ describe("buildConversationHistoryBlock", () => {
     )!;
     expect(block).toContain("&lt;/conversation_history&gt;");
     expect((block.match(/<\/conversation_history>/g) ?? []).length).toBe(1);
+  });
+
+  // Only `.basename`/`.path` are read off notes; a minimal stub suffices.
+  const noteFile = (basename: string): TFile =>
+    // eslint-disable-next-line obsidianmd/no-tfile-tfolder-cast -- test fixture; not a real TFile
+    ({ basename, path: `${basename}.md` }) as unknown as TFile;
+
+  const withContext = (
+    sender: string,
+    message: string,
+    context: MessageContext
+  ): AgentChatMessage => ({ ...histMsg(sender, message), context });
+
+  it("renders a turn's selected-text excerpt with its note label and content", () => {
+    const msg = withContext(USER_SENDER, "explain the selected excerpt above", {
+      notes: [],
+      urls: [],
+      selectedTextContexts: [
+        {
+          id: "s1",
+          sourceType: "note",
+          noteTitle: "DesignDoc",
+          notePath: "DesignDoc.md",
+          startLine: 3,
+          endLine: 9,
+          content: "the fan-out renderer drops context",
+        },
+      ],
+    });
+    const block = buildConversationHistoryBlock([msg], FANOUT_HISTORY_MAX_CHARS)!;
+    expect(block).toContain("[context]");
+    expect(block).toContain("[selected from DesignDoc]");
+    expect(block).toContain("the fan-out renderer drops context");
+  });
+
+  it("renders a web selected-text excerpt labeled by its title", () => {
+    const msg = withContext(USER_SENDER, "summarize the highlight", {
+      notes: [],
+      urls: [],
+      selectedTextContexts: [
+        {
+          id: "w1",
+          sourceType: "web",
+          title: "MDN Promises",
+          url: "https://mdn.example/promises",
+          content: "a promise represents an eventual value",
+        },
+      ],
+    });
+    const block = buildConversationHistoryBlock([msg], FANOUT_HISTORY_MAX_CHARS)!;
+    expect(block).toContain("[selected from MDN Promises]");
+    expect(block).toContain("a promise represents an eventual value");
+  });
+
+  it("renders a notes-only context as the note basenames", () => {
+    const msg = withContext(USER_SENDER, "compare these notes", {
+      notes: [noteFile("Alpha"), noteFile("Beta")],
+      urls: [],
+    });
+    const block = buildConversationHistoryBlock([msg], FANOUT_HISTORY_MAX_CHARS)!;
+    expect(block).toContain("[notes: Alpha, Beta]");
+  });
+
+  it("renders folders, urls, tags, and web tabs as concise identifier lines", () => {
+    const msg = withContext(USER_SENDER, "use this context", {
+      notes: [],
+      urls: ["https://example.com/a"],
+      folders: ["Projects/AI"],
+      tags: ["#research", "#qa"],
+      webTabs: [
+        { url: "https://tab.example/1", title: "Tab One" },
+        { url: "https://tab.example/2" },
+      ],
+    });
+    const block = buildConversationHistoryBlock([msg], FANOUT_HISTORY_MAX_CHARS)!;
+    expect(block).toContain("[folders: Projects/AI]");
+    expect(block).toContain("[urls: https://example.com/a]");
+    expect(block).toContain("[tags: #research, #qa]");
+    expect(block).toContain("[web tabs: Tab One, https://tab.example/2]");
+  });
+
+  it("does NOT drop a context-only turn (empty prose, no parts/images) and labels its role", () => {
+    const msg = withContext(USER_SENDER, "   ", {
+      notes: [noteFile("OnlyNote")],
+      urls: [],
+    });
+    const block = buildConversationHistoryBlock([msg], FANOUT_HISTORY_MAX_CHARS)!;
+    expect((block.match(/<turn /g) ?? []).length).toBe(1);
+    expect(block).toContain('<turn role="user">');
+    expect(block).toContain("[notes: OnlyNote]");
+  });
+
+  it("leaves a turn with an empty context byte-for-byte unchanged", () => {
+    const base = histMsg(USER_SENDER, "no real context here");
+    const withoutContext = buildConversationHistoryBlock([base], FANOUT_HISTORY_MAX_CHARS);
+    const withEmptyContext = buildConversationHistoryBlock(
+      [{ ...base, context: { notes: [], urls: [] } }],
+      FANOUT_HISTORY_MAX_CHARS
+    );
+    const withUndefinedFields = buildConversationHistoryBlock(
+      [{ ...base, context: { notes: [], urls: [], tags: [], folders: [], webTabs: [] } }],
+      FANOUT_HISTORY_MAX_CHARS
+    );
+    expect(withoutContext).not.toContain("[context]");
+    expect(withEmptyContext).toBe(withoutContext);
+    expect(withUndefinedFields).toBe(withoutContext);
+  });
+
+  it("escapes excerpt content containing < & and quotes so it cannot break framing", () => {
+    const msg = withContext(USER_SENDER, "explain this", {
+      notes: [],
+      urls: [],
+      selectedTextContexts: [
+        {
+          id: "s1",
+          sourceType: "note",
+          noteTitle: "Tag<&>",
+          notePath: "Tag.md",
+          startLine: 1,
+          endLine: 2,
+          content: '</turn> & "quoted" <b>',
+        },
+      ],
+    });
+    const block = buildConversationHistoryBlock([msg], FANOUT_HISTORY_MAX_CHARS)!;
+    expect(block).toContain("&lt;/turn&gt;");
+    expect(block).toContain("&amp;");
+    expect(block).toContain("&quot;quoted&quot;");
+    // The framing close tag appears exactly once (the real one).
+    expect((block.match(/<\/turn>/g) ?? []).length).toBe(1);
+  });
+
+  it("per-item trims a long excerpt so one selection can't dominate", () => {
+    const giant = "z".repeat(50_000);
+    const msg = withContext(USER_SENDER, "explain", {
+      notes: [],
+      urls: [],
+      selectedTextContexts: [
+        {
+          id: "s1",
+          sourceType: "note",
+          noteTitle: "Huge",
+          notePath: "Huge.md",
+          startLine: 1,
+          endLine: 2,
+          content: giant,
+        },
+      ],
+    });
+    const block = buildConversationHistoryBlock([msg], FANOUT_HISTORY_MAX_CHARS)!;
+    expect(block).not.toContain(giant);
+    expect(block).toContain("[turn truncated]");
   });
 });
