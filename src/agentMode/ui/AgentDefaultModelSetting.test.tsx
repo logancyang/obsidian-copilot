@@ -140,4 +140,28 @@ describe("AgentDefaultModelSetting", () => {
     });
     expect(persist).toHaveBeenCalledWith("opencode", null);
   });
+
+  it("shows 'Agent default' effort for a null-effort default over a concrete-only catalog", () => {
+    const persist = jest.fn().mockResolvedValue(undefined);
+    const manager = makeManager({
+      // Stored model with effort explicitly unset (agent default).
+      defaultSelection: { baseModelId: "opus", effort: null },
+      // Catalog enumerates only concrete values, no null/unset option.
+      effortByModel: {
+        opus: [
+          { value: "low", label: "Low" },
+          { value: "high", label: "High" },
+        ],
+      },
+      persist,
+    });
+    render(<AgentDefaultModelSetting descriptor={makeDescriptor()} manager={manager} />);
+
+    // The effort select reflects the unset state, not the first concrete option.
+    const effortSelect = screen.getByDisplayValue("Agent default");
+    expect(effortSelect).not.toBeNull();
+    // Picking a concrete effort persists it against the same model.
+    fireEvent.change(effortSelect, { target: { value: "high" } });
+    expect(persist).toHaveBeenCalledWith("opencode", { baseModelId: "opus", effort: "high" });
+  });
 });

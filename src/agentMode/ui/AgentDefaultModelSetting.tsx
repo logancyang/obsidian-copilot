@@ -60,9 +60,19 @@ export const AgentDefaultModelSetting: React.FC<Props> = ({ descriptor, manager 
   const selectedBaseId = current?.baseModelId ?? AGENT_DEFAULT_VALUE;
   // Only a concrete default exposes an effort row; the agent-default case
   // lets the agent choose effort, so there's nothing to persist.
-  const effortOptions = hasExplicitDefault
+  const rawEffortOptions = hasExplicitDefault
     ? resolveEffortOptions(manager, descriptor.id, selectedBaseId)
     : EMPTY_EFFORT_OPTIONS;
+  // A stored `effort: null` means "let the agent choose". Some catalogs (e.g.
+  // Claude's low/medium/high) only enumerate concrete values, so without an
+  // explicit unset option the select would render the first concrete effort as
+  // selected while the runtime still treats null as the agent default. Prepend
+  // an "Agent default" option (the null-valued convention) when the catalog
+  // doesn't already carry one.
+  const effortOptions =
+    rawEffortOptions.length > 0 && !rawEffortOptions.some((o) => o.value === null)
+      ? [{ value: null, label: AGENT_DEFAULT_LABEL }, ...rawEffortOptions]
+      : rawEffortOptions;
 
   const onModelChange = (baseModelId: string): void => {
     if (baseModelId === AGENT_DEFAULT_VALUE) {
@@ -119,7 +129,7 @@ export const AgentDefaultModelSetting: React.FC<Props> = ({ descriptor, manager 
         <SettingItem
           type="select"
           title="Default effort"
-          value={current?.effort ?? effortOptions[0]?.value ?? ""}
+          value={current?.effort ?? ""}
           onChange={(value) => onEffortChange(value === "" ? null : value)}
           options={effortOptions.map((o) => ({ label: o.label, value: o.value ?? "" }))}
         />
