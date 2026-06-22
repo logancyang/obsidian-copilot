@@ -36,7 +36,9 @@ describe("createDefaultPermissionPrompter — read-only fan-out policy", () => {
       () => null,
       () => true
     );
-    for (const kind of ["edit", "delete", "move", "execute"] as AgentToolKind[]) {
+    // `other` is an unknown/MCP tool that can't be verified read-only, so it
+    // is denied too (fail-safe), alongside the write/exec kinds.
+    for (const kind of ["edit", "delete", "move", "execute", "other"] as AgentToolKind[]) {
       const decision = await prompter(promptFor("ro-session", kind));
       expect(decision.outcome).toEqual({ outcome: "selected", optionId: "reject_once" });
       expect(decision.denyMessage).toContain("Read-only");

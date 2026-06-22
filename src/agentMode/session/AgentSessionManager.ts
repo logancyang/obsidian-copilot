@@ -1541,9 +1541,18 @@ export class AgentSessionManager {
     // the backend session id in the signature so the first save after the
     // session finishes starting (when sessionId flips from null → real)
     // always writes through, even if the message list hasn't changed yet.
+    // For an in-flight fan-out turn `message` stays empty until completion, so
+    // fold in a fingerprint of the live slots — otherwise mid-stream autosaves
+    // de-dupe to the first partial snapshot and a crash loses later progress.
+    const last = messages[messages.length - 1];
+    const fanoutSig = last?.fanout
+      ? Object.values(last.fanout.answers)
+          .map((a) => `${a.status}:${a.text.length}`)
+          .join(",") + `|${last.fanout.summary.status}:${last.fanout.summary.text.length}`
+      : "";
     const signature = `${label ?? ""}-${sessionId ?? ""}-${messages.length}-${
-      messages[messages.length - 1]?.message ?? ""
-    }`;
+      last?.message ?? ""
+    }-${fanoutSig}`;
     const state = this.getSessionState(session.internalId);
     if (state.signature === signature) {
       return state.path ? { path: state.path } : null;
