@@ -189,6 +189,11 @@ export class AgentSessionManager {
   // Session ids of ephemeral read-only fan-out sub-sessions; the shared permission
   // prompter consults this to hard-deny write/exec tools for them.
   private readonly readOnlyFanoutSessions = new Set<SessionId>();
+  // Serializes per-session default-model re-applies so two rapid settings
+  // changes can't race their setModel/setConfigOption round-trips and leave
+  // the session on a stale model. Each link re-reads the latest default, so
+  // the final settings value always wins.
+  private readonly defaultApplyChains = new Map<string, Promise<void>>();
   private readonly fanoutOrchestrator: FanoutOrchestrator;
   // Tear-down for the settings subscription that re-applies a changed
   // per-backend default model to any live session on that backend.
@@ -242,31 +247,39 @@ export class AgentSessionManager {
       if (before?.baseModelId === after?.baseModelId && before?.effort === after?.effort) continue;
       const descriptor = this.opts.resolveDescriptor(backendId);
       if (!descriptor) continue;
-      // Cleared to "Agent default": revert the live session to the agent's
-      // native default so the next turn isn't pinned to the old explicit
-      // model, honoring the settings copy. With no probed catalog there's no
-      // native id to target, so leave the session as-is.
-      const target = after ?? this.nativeDefaultSelection(backendId);
-      if (!target) continue;
-      // A session still in its startup window has no `backendSessionId` yet,
-      // so `applySelection` (setModel/setConfigOption) would throw. Defer to
-      // `ready` and re-resolve the target then, so the final value wins when
-      // several changes land before startup completes.
-      if (session.getStatus() === "starting") {
-        void session.ready
-          .then(() => {
-            const latest =
-              this.getDefaultSelection(backendId) ?? this.nativeDefaultSelection(backendId);
-            if (!latest) return;
-            return descriptor.applySelection(session, latest);
-          })
-          .catch((e) => logWarn(`[AgentMode] deferred default model for ${backendId} failed`, e));
-        continue;
-      }
-      void descriptor
-        .applySelection(session, target)
-        .catch((e) => logWarn(`[AgentMode] re-applying default model for ${backendId} failed`, e));
+      this.enqueueDefaultApply(session, descriptor);
     }
+  }
+
+  /**
+   * Append a default-model re-apply to the session's serialized chain. The
+   * apply re-reads the latest default at run time (clearing to "Agent default"
+   * resolves to the catalog native so the next turn isn't pinned to the old
+   * explicit model; no probed catalog leaves the session as-is), so when
+   * several changes land in a burst the final settings value wins instead of
+   * an out-of-order round-trip. Chaining off `session.ready` also covers a
+   * session still in its startup window, which has no `backendSessionId` yet
+   * and would throw on a bare `applySelection`.
+   */
+  private enqueueDefaultApply(session: AgentSession, descriptor: BackendDescriptor): void {
+    const backendId = session.backendId;
+    const prior = this.defaultApplyChains.get(session.internalId) ?? Promise.resolve();
+    const next = prior
+      .then(() => session.ready)
+      .then(() => {
+        if (session.getStatus() === "closed") return;
+        const target =
+          this.getDefaultSelection(backendId) ?? this.nativeDefaultSelection(backendId);
+        if (!target) return;
+        return descriptor.applySelection(session, target);
+      })
+      .catch((e) => logWarn(`[AgentMode] re-applying default model for ${backendId} failed`, e))
+      .finally(() => {
+        if (this.defaultApplyChains.get(session.internalId) === next) {
+          this.defaultApplyChains.delete(session.internalId);
+        }
+      });
+    this.defaultApplyChains.set(session.internalId, next);
   }
 
   /**
@@ -297,7 +310,12 @@ export class AgentSessionManager {
         const { proc } = await this.ensureBackend(backendId, descriptor);
         return { proc, descriptor };
       },
-      getDefaultSelection: (backendId) => this.getDefaultSelection(backendId),
+      // Mirror createSession's fallback: a fan-out sub-session spawned on a
+      // warm/running subprocess inherits the model baked into its spawn-time
+      // config, so a cleared default must resolve to the catalog native to
+      // override that stale model rather than no-op.
+      getDefaultSelection: (backendId) =>
+        this.getDefaultSelection(backendId) ?? this.nativeDefaultSelection(backendId),
       getDisplayName: (backendId) => this.resolveDescriptor(backendId).displayName,
       getCwd: () => {
         const adapter = this.app.vault.adapter;

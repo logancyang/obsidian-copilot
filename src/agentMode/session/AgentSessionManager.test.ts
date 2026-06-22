@@ -1167,6 +1167,13 @@ describe("AgentSessionManager.applySelection", () => {
 });
 
 describe("AgentSessionManager default-model settings subscription", () => {
+  // The per-session apply chain hops through several resolved promises
+  // (prior link → session.ready → apply). Drain enough microtasks that a
+  // synchronous assertion sees the apply.
+  async function flushApplyChain(): Promise<void> {
+    for (let i = 0; i < 12; i++) await Promise.resolve();
+  }
+
   function makeApplySelectionDescriptor(applySelectionMock: jest.Mock): BackendDescriptor {
     return {
       id: "opencode",
@@ -1218,11 +1225,19 @@ describe("AgentSessionManager default-model settings subscription", () => {
         backends: { opencode: { defaultModel: { baseModelId: "opus", effort: "high" } } },
       },
     };
+    // The re-apply re-reads the live default at run time, so reflect it here.
+    (mockedGetSettings as jest.Mock).mockReturnValue({
+      agentMode: { activeBackend: "opencode", ...next.agentMode },
+    });
     emitSettingsChange(prev, next);
+    await flushApplyChain();
 
     expect(applySelectionMock).toHaveBeenCalledWith(session, {
       baseModelId: "opus",
       effort: "high",
+    });
+    (mockedGetSettings as jest.Mock).mockReturnValue({
+      agentMode: { activeBackend: "opencode", backends: {} },
     });
   });
 
@@ -1291,6 +1306,7 @@ describe("AgentSessionManager default-model settings subscription", () => {
       },
       { agentMode: { backends: { opencode: { defaultModel: null } } } }
     );
+    await flushApplyChain();
 
     expect(applySelectionMock).toHaveBeenCalledWith(session, {
       baseModelId: "native",
@@ -1340,13 +1356,72 @@ describe("AgentSessionManager default-model settings subscription", () => {
     );
 
     // Nothing applied while the session is still starting.
+    await flushApplyChain();
     expect(applySelectionMock).not.toHaveBeenCalled();
 
     resolveReady();
     await ready;
-    await Promise.resolve();
+    await flushApplyChain();
 
     expect(applySelectionMock).toHaveBeenCalledWith(session, latest);
+    (mockedGetSettings as jest.Mock).mockReturnValue({
+      agentMode: { activeBackend: "opencode", backends: {} },
+    });
+  });
+
+  it("serializes rapid default changes and commits the latest", async () => {
+    // Two changes land before the first applySelection round-trip settles.
+    // The applies must run in order and re-read the live default, so the last
+    // value wins rather than an out-of-order round-trip leaving a stale model.
+    const order: string[] = [];
+    let resolveFirst: () => void = () => {};
+    const applySelectionMock = jest.fn(
+      async (_session: AgentSession, sel: { baseModelId: string }) => {
+        order.push(sel.baseModelId);
+        if (order.length === 1) await new Promise<void>((r) => (resolveFirst = r));
+      }
+    );
+    const descriptor = makeApplySelectionDescriptor(applySelectionMock);
+    const mgr = new AgentSessionManager(
+      buildApp(),
+      buildPlugin() as unknown as ConstructorParameters<typeof AgentSessionManager>[1],
+      {
+        permissionPrompter: jest.fn(),
+        resolveDescriptor: (id) => (id === descriptor.id ? descriptor : undefined),
+        modelPreloader: makeStubPreloader() as unknown as ConstructorParameters<
+          typeof AgentSessionManager
+        >[2]["modelPreloader"],
+      }
+    );
+    await mgr.createSession();
+
+    const first = { baseModelId: "first", effort: null };
+    (mockedGetSettings as jest.Mock).mockReturnValue({
+      agentMode: { activeBackend: "opencode", backends: { opencode: { defaultModel: first } } },
+    });
+    emitSettingsChange(
+      { agentMode: { backends: { opencode: { defaultModel: null } } } },
+      { agentMode: { backends: { opencode: { defaultModel: first } } } }
+    );
+    await flushApplyChain();
+
+    // Second change arrives while the first apply is mid-flight.
+    const second = { baseModelId: "second", effort: null };
+    (mockedGetSettings as jest.Mock).mockReturnValue({
+      agentMode: { activeBackend: "opencode", backends: { opencode: { defaultModel: second } } },
+    });
+    emitSettingsChange(
+      { agentMode: { backends: { opencode: { defaultModel: first } } } },
+      { agentMode: { backends: { opencode: { defaultModel: second } } } }
+    );
+    await flushApplyChain();
+
+    // The second apply is still queued behind the in-flight first one.
+    expect(order).toEqual(["first"]);
+    resolveFirst();
+    await flushApplyChain();
+
+    expect(order).toEqual(["first", "second"]);
     (mockedGetSettings as jest.Mock).mockReturnValue({
       agentMode: { activeBackend: "opencode", backends: {} },
     });
