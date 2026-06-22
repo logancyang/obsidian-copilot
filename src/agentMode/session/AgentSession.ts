@@ -539,10 +539,20 @@ export class AgentSession {
     // sees the true state and issues the switch. setModel-style backends always
     // issue the round-trip regardless of current, so their optimistic seed can
     // stand and the picker doesn't blink.
-    if (originalState.model?.apply?.kind === "setConfigOption") {
+    const configOptionBacked = originalState.model?.apply?.kind === "setConfigOption";
+    if (configOptionBacked) {
       this.currentState = originalState;
     }
     try {
+      // Clearing effort to the agent default on a config-option backend whose
+      // process baked a concrete effort: the base already matches, so
+      // `applySelection` skips the model write and returns for null effort,
+      // leaving the session on the stale concrete effort. Re-write the bare
+      // model option to reset effort to the model's native default first.
+      if (configOptionBacked && selection.effort === null && originalEffort !== null) {
+        await this.applyModelWireId(descriptor.wire.encode(selection));
+        return;
+      }
       await descriptor.applySelection(this, selection);
     } catch (e) {
       logWarn(`[AgentMode] could not apply seeded selection ${encoded}; reverting seed`, e);

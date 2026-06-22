@@ -1566,6 +1566,58 @@ describe("AgentSession.create (via start)", () => {
       value: "high",
     });
   });
+
+  it("resets effort to native when seeding null effort over a stale concrete effort", async () => {
+    // Regression: a config-option opencode process baked `model/high`, the user
+    // cleared the default effort to agent default, and a fresh session reports
+    // the same base but the stale "high". applySelection skips the model write
+    // (base matches) and returns for null effort, so the chat would stay on
+    // "high". The bare model option must be re-written to reset effort.
+    const mock = makeMockBackend();
+    const entry = {
+      baseModelId: "openai/gpt-5",
+      name: "GPT-5",
+      provider: "openai",
+      effortOptions: [
+        { value: "low", label: "Low" },
+        { value: "high", label: "High" },
+      ],
+    };
+    const staleState: BackendState = {
+      model: {
+        current: { baseModelId: "openai/gpt-5", effort: "high" },
+        apply: { kind: "setConfigOption", configId: "model", effortConfigId: "thought_level" },
+        availableModels: [entry],
+      },
+      mode: null,
+    };
+    mock.newSession.mockResolvedValueOnce({ sessionId: "acp-1", state: staleState });
+    mock.setSessionConfigOption.mockResolvedValue({
+      model: { ...staleState.model!, current: { baseModelId: "openai/gpt-5", effort: "low" } },
+      mode: null,
+    });
+
+    const session = AgentSession.start({
+      backend: mock.asBackend,
+      cwd: "/vault",
+      internalId: "internal-1",
+      backendId: "opencode",
+      // Cleared effort → agent default (null), same model as the stale report.
+      defaultModelSelection: { baseModelId: "openai/gpt-5", effort: null },
+      getDescriptor: () => makeConfigOptionDescriptor(),
+    });
+    await session.ready;
+
+    // The bare model is re-written to reset effort; no effort value is sent.
+    expect(mock.setSessionConfigOption).toHaveBeenCalledWith({
+      sessionId: "acp-1",
+      configId: "model",
+      value: "openai/gpt-5",
+    });
+    expect(mock.setSessionConfigOption).not.toHaveBeenCalledWith(
+      expect.objectContaining({ configId: "thought_level" })
+    );
+  });
 });
 
 /** Minimal wire-only descriptor for tests that exercise seed/setModel. */
