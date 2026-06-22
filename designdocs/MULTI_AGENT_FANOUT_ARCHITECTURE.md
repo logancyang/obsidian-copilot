@@ -51,6 +51,28 @@ Summary-first tab row switching between the summary and each agent's full answer
 - **Two-layer paywall.** Free users get no `@agent` typeahead; if a pill is still
   present, the send boundary re-verifies entitlement (paying users skip the
   network call) and blocks with an upgrade prompt otherwise.
+- **History contract (intentional tradeoff).** The `<conversation_history>` fed
+  to each sub-session carries the user-facing context only: prose plus image
+  markers, selections, notes, and web tabs. Agent-internal tool-call and plan
+  cards are deliberately omitted to keep the renderer lean, so a follow-up like
+  "explain the command output above" can miss its referent when the prior turn
+  was a tool/plan card with no prose. Restoring a bounded tool/plan renderer is a
+  one-function change (`renderTurnContent`) if that gap matters in practice.
+- **Read-only is fail-safe for MCP.** An unknown MCP tool (kind `other`) can't be
+  verified read-only, so the permission bridge denies it in a sub-session;
+  known-classified MCP reads still pass.
+
+## Deferred design debt
+
+Captured for follow-up; intentionally not in the v1 PR to keep it merge-focused:
+
+- Move "prepare / own / clean up an ephemeral read-only backend session" into a
+  single host primitive (`openReadOnlySubSession`) so the orchestrator only runs
+  prompts, races timeout/cancel, and summarizes. Reduces lifecycle coupling.
+- Split `fanoutTypes.ts` by responsibility (composite, prompt, history) for
+  auditability (not a line reduction).
+- Model the summary as one explicit status (`pending|streaming|done|error|cancelled`)
+  instead of `status` plus a live-only `complete` flag.
 
 ## Reload caveat
 
