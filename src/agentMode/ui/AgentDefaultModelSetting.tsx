@@ -4,13 +4,21 @@ import { useSettingsValue } from "@/settings/model";
 import React, { useSyncExternalStore } from "react";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import type { BackendDescriptor, EnabledModelEntry } from "@/agentMode/session/types";
-import { MISSING_KEY_LABEL, resolveEffortOptions } from "./agentModelPickerHelpers";
+import {
+  EMPTY_EFFORT_OPTIONS,
+  MISSING_KEY_LABEL,
+  resolveEffortOptions,
+} from "./agentModelPickerHelpers";
 import { useManagerSubscribe } from "./useManagerSubscribe";
 
 interface Props {
   descriptor: BackendDescriptor;
   manager: AgentSessionManager;
 }
+
+/** Sentinel option representing "no stored default — let the agent choose". */
+const AGENT_DEFAULT_VALUE = "__agent_default__";
+const AGENT_DEFAULT_LABEL = "Agent default";
 
 /**
  * Per-agent "Default model" picker shown in each toggled-on agent's settings
@@ -36,11 +44,26 @@ export const AgentDefaultModelSetting: React.FC<Props> = ({ descriptor, manager 
   const enabled = descriptor.getEnabledModelEntries?.(settings) ?? null;
   if (!enabled || enabled.length === 0) return null;
 
+  // No stored default → the agent's own native default is used for new chats
+  // and fan-out (see `AgentSessionManager.createSession`). Represent that
+  // explicitly with a sentinel rather than showing a real model as "selected"
+  // (which would also let an effort-only change silently persist that model).
   const current = manager.getDefaultSelection(descriptor.id);
-  const selectedBaseId = current?.baseModelId ?? enabled[0].baseModelId;
-  const effortOptions = resolveEffortOptions(manager, descriptor.id, selectedBaseId);
+  const hasExplicitDefault = current !== null;
+  const selectedBaseId = current?.baseModelId ?? AGENT_DEFAULT_VALUE;
+  // Only a concrete default exposes an effort row; the agent-default case
+  // lets the agent choose effort, so there's nothing to persist.
+  const effortOptions = hasExplicitDefault
+    ? resolveEffortOptions(manager, descriptor.id, selectedBaseId)
+    : EMPTY_EFFORT_OPTIONS;
 
   const onModelChange = (baseModelId: string): void => {
+    if (baseModelId === AGENT_DEFAULT_VALUE) {
+      manager
+        .persistDefaultSelection(descriptor.id, null)
+        .catch((e) => logError(`[AgentMode] clear default model for ${descriptor.id} failed`, e));
+      return;
+    }
     // A stale effort value may not exist on the newly-selected model
     // (opencode's effort is model-specific), so reset it to the new model's
     // first option, or null when it has none.
@@ -52,6 +75,7 @@ export const AgentDefaultModelSetting: React.FC<Props> = ({ descriptor, manager 
   };
 
   const onEffortChange = (effort: string | null): void => {
+    if (!hasExplicitDefault) return;
     manager
       .persistDefaultSelection(descriptor.id, { baseModelId: selectedBaseId, effort })
       .catch((e) => logError(`[AgentMode] persist default effort for ${descriptor.id} failed`, e));
@@ -65,7 +89,10 @@ export const AgentDefaultModelSetting: React.FC<Props> = ({ descriptor, manager 
         description="Used for new chats and multi-agent answers on this agent. Open chats switch on their next turn."
         value={selectedBaseId}
         onChange={onModelChange}
-        options={enabled.map((e) => ({ label: modelOptionLabel(e), value: e.baseModelId }))}
+        options={[
+          { label: AGENT_DEFAULT_LABEL, value: AGENT_DEFAULT_VALUE },
+          ...enabled.map((e) => ({ label: modelOptionLabel(e), value: e.baseModelId })),
+        ]}
       />
       {effortOptions.length > 0 && (
         <SettingItem

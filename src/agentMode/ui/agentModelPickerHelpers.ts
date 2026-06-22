@@ -21,7 +21,7 @@ import type {
 import type { AgentModelPickerOverride } from "./useAgentModelPicker";
 
 /** Frozen empty effort list — referential stability for the "no effort" case. */
-const EMPTY_EFFORT_OPTIONS = Object.freeze([]) as unknown as EffortOption[];
+export const EMPTY_EFFORT_OPTIONS = Object.freeze([]) as unknown as EffortOption[];
 
 /**
  * Right-side flag for an enabled model whose provider has no API key. Shared

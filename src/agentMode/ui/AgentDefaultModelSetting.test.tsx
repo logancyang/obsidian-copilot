@@ -90,4 +90,30 @@ describe("AgentDefaultModelSetting", () => {
     render(<AgentDefaultModelSetting descriptor={makeDescriptor()} manager={manager} />);
     expect(screen.queryByText(/BYOK \(Add API key\)/)).not.toBeNull();
   });
+
+  it("represents an unset default as 'Agent default' with no effort row", () => {
+    const manager = makeManager({
+      defaultSelection: null,
+      effortByModel: { opus: [{ value: "high", label: "High" }] },
+    });
+    render(<AgentDefaultModelSetting descriptor={makeDescriptor()} manager={manager} />);
+    // The model select shows the sentinel, not the first enabled model.
+    expect(screen.getByDisplayValue("Agent default")).not.toBeNull();
+    // No concrete default → the agent picks effort, so no Default effort row.
+    expect(screen.queryByText("Default effort")).toBeNull();
+  });
+
+  it("selecting 'Agent default' clears the stored default", () => {
+    const persist = jest.fn().mockResolvedValue(undefined);
+    const manager = makeManager({
+      defaultSelection: { baseModelId: "opus", effort: "high" },
+      effortByModel: { opus: [{ value: "high", label: "High" }] },
+      persist,
+    });
+    render(<AgentDefaultModelSetting descriptor={makeDescriptor()} manager={manager} />);
+    fireEvent.change(screen.getByDisplayValue("Opus"), {
+      target: { value: "__agent_default__" },
+    });
+    expect(persist).toHaveBeenCalledWith("opencode", null);
+  });
 });

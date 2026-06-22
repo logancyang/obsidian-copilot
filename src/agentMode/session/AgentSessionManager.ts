@@ -705,7 +705,7 @@ export class AgentSessionManager {
       .then(async () => {
         if (descriptor.applyInitialSessionConfig) {
           try {
-            await descriptor.applyInitialSessionConfig(session, getSettings());
+            await descriptor.applyInitialSessionConfig(session, getSettings(), resolvedSeed);
           } catch (e) {
             logWarn(
               `[AgentMode] applyInitialSessionConfig failed for ${resolvedId}; continuing`,

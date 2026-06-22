@@ -286,9 +286,16 @@ export interface BackendDescriptor {
 
   /**
    * Optional: replay persisted state on a freshly created session. Runs
-   * once after `createSession` resolves.
+   * once after `createSession` resolves. `seededSelection` is the exact
+   * (model, effort) the session was created with — a transient cross-backend
+   * pick carries the user's drafted effort here, which must win over the
+   * backend's persisted default so the pick isn't overwritten on startup.
    */
-  applyInitialSessionConfig?(session: AgentSession, settings: CopilotSettings): Promise<void>;
+  applyInitialSessionConfig?(
+    session: AgentSession,
+    settings: CopilotSettings,
+    seededSelection?: ModelSelection
+  ): Promise<void>;
 
   /**
    * Optional: identify the backend's own plan-mode plan files. Used by the
