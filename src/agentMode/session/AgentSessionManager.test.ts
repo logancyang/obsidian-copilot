@@ -1593,6 +1593,37 @@ describe("AgentSessionManager chat history aggregation", () => {
     expect(sessionExistsLocally).toHaveBeenCalledWith({ sessionId: "foreign", cwd: "/vault" });
   });
 
+  it("tombstones the native twin of a dropped non-local markdown chat", async () => {
+    // A normal autosaved chat has both a note AND a flushIndexTouch index
+    // entry on its origin machine. When the note syncs to a second device but
+    // the backend transcript doesn't, dropping the markdown row alone leaves
+    // the index entry to resurface as a native-only row that still dead-ends.
+    // The drop must tombstone the twin so the chat is fully removed.
+    const sessionExistsLocally = jest.fn(async () => false);
+    const { manager, index } = buildHistoryHarness({
+      files: {
+        "chats/agent__foreign.md": {
+          epoch: 1_000,
+          topic: "Made elsewhere",
+          backendId: "opencode",
+          sessionId: "foreign",
+        },
+      },
+      warmSessionExistsLocally: sessionExistsLocally,
+    });
+    await index.recordSession({
+      backendId: "opencode",
+      sessionId: "foreign",
+      title: "Made elsewhere",
+      createdAtMs: 1_000,
+      lastAccessedAtMs: 2_000,
+    });
+
+    const items = await manager.getChatHistoryItems();
+    expect(items).toHaveLength(0);
+    expect(await index.isTombstoned("opencode", "foreign")).toBe(true);
+  });
+
   it("keeps markdown chats when no running backend can confirm the session is absent", async () => {
     // No warm proc exposes the locality probe, so the manager can't prove the
     // session is foreign — it must keep the row rather than risk hiding a

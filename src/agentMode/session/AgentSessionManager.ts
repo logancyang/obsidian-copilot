@@ -436,6 +436,11 @@ export class AgentSessionManager {
    * Only hides a row when a running backend can cheaply and definitively say
    * the session is absent; an unknown answer (no such capability, backend not
    * running, or a probe error) keeps the row so we never hide a local chat.
+   *
+   * A dropped chat's `(backendId, sessionId)` is also tombstoned in the index,
+   * so the native sweep below doesn't resurface it as a markdown-less row that
+   * dead-ends in `loadNativeSessionFromHistory` — a normal autosaved chat has
+   * a `flushIndexTouch` index entry twinned with its note.
    */
   private async dropNonLocalMarkdownEntries(
     entries: MarkdownChatEntry[]
@@ -456,6 +461,16 @@ export class AgentSessionManager {
         }
       })
     );
+    const index = this.opts.sessionIndex;
+    if (index) {
+      await Promise.all(
+        entries.map(async (entry, i) => {
+          if (keep[i] || !entry.backendId || !entry.sessionId) return;
+          this.cancelPendingIndexTouch(entry.backendId, entry.sessionId);
+          await index.deleteSession(entry.backendId, entry.sessionId);
+        })
+      );
+    }
     return entries.filter((_, i) => keep[i]);
   }
 
