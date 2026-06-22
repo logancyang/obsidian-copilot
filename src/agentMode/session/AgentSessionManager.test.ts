@@ -8,7 +8,10 @@ import { AgentSession } from "./AgentSession";
 import { buildNativeChatId } from "@/utils/nativeChatId";
 import { AgentSessionIndex } from "./AgentSessionIndex";
 import { AgentSessionManager } from "./AgentSessionManager";
-import { setSettings as mockedSetSettings } from "@/settings/model";
+import {
+  getSettings as mockedGetSettings,
+  setSettings as mockedSetSettings,
+} from "@/settings/model";
 import type { BackendDescriptor } from "./types";
 
 jest.mock("@/logger", () => ({
@@ -1193,6 +1196,60 @@ describe("AgentSessionManager default-model settings subscription", () => {
       { agentMode: { backends: { claude: { defaultModel: { baseModelId: "x", effort: null } } } } }
     );
     expect(applySelectionMock).not.toHaveBeenCalled();
+  });
+
+  it("defers re-apply for a starting session until ready, using the latest default", async () => {
+    const applySelectionMock = jest.fn(async () => {});
+    const descriptor = makeApplySelectionDescriptor(applySelectionMock);
+    let resolveReady: () => void = () => {};
+    const ready = new Promise<void>((resolve) => {
+      resolveReady = resolve;
+    });
+    // A session that is still starting (no backend session id yet) would throw
+    // from setModel/setConfigOption, so the re-apply must wait on `ready`.
+    sessionCreateSpy.mockImplementationOnce((opts) => {
+      const session = makeMockSession({ internalId: opts.internalId, backendId: opts.backendId });
+      Object.defineProperty(session, "ready", { value: ready });
+      getSessionTestHandle(session).setStatus("starting");
+      return session;
+    });
+    const mgr = new AgentSessionManager(
+      buildApp(),
+      buildPlugin() as unknown as ConstructorParameters<typeof AgentSessionManager>[1],
+      {
+        permissionPrompter: jest.fn(),
+        resolveDescriptor: (id) => (id === descriptor.id ? descriptor : undefined),
+        modelPreloader: makeStubPreloader() as unknown as ConstructorParameters<
+          typeof AgentSessionManager
+        >[2]["modelPreloader"],
+      }
+    );
+    const session = await mgr.createSession();
+
+    const latest = { baseModelId: "opus", effort: "low" };
+    (mockedGetSettings as jest.Mock).mockReturnValue({
+      agentMode: { activeBackend: "opencode", backends: { opencode: { defaultModel: latest } } },
+    });
+    emitSettingsChange(
+      {
+        agentMode: {
+          backends: { opencode: { defaultModel: { baseModelId: "opus", effort: "high" } } },
+        },
+      },
+      { agentMode: { backends: { opencode: { defaultModel: latest } } } }
+    );
+
+    // Nothing applied while the session is still starting.
+    expect(applySelectionMock).not.toHaveBeenCalled();
+
+    resolveReady();
+    await ready;
+    await Promise.resolve();
+
+    expect(applySelectionMock).toHaveBeenCalledWith(session, latest);
+    (mockedGetSettings as jest.Mock).mockReturnValue({
+      agentMode: { activeBackend: "opencode", backends: {} },
+    });
   });
 });
 

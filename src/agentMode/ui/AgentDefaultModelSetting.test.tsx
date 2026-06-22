@@ -33,6 +33,7 @@ function makeManager(opts: {
   const effortByModel = opts.effortByModel ?? {};
   return {
     getPreloadStatus: () => "ready",
+    getModelCacheSignature: () => "ready#",
     subscribe: () => () => {},
     subscribeModelCache: () => () => {},
     getActiveChatUIState: () => null,

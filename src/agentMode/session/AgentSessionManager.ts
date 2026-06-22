@@ -32,6 +32,7 @@ import {
   type FanoutRunInput,
 } from "./fanout/FanoutOrchestrator";
 import type { FanoutTurn } from "./fanout/fanoutTypes";
+import { backendStateSignature } from "./translateBackendState";
 import type {
   AgentQuestionAnswers,
   AskUserQuestionPrompt,
@@ -242,6 +243,20 @@ export class AgentSessionManager {
       if (before?.baseModelId === after.baseModelId && before?.effort === after.effort) continue;
       const descriptor = this.opts.resolveDescriptor(backendId);
       if (!descriptor) continue;
+      // A session still in its startup window has no `backendSessionId` yet,
+      // so `applySelection` (setModel/setConfigOption) would throw. Defer to
+      // `ready` and re-read the live default then, so the final value wins
+      // when several changes land before startup completes.
+      if (session.getStatus() === "starting") {
+        void session.ready
+          .then(() => {
+            const latest = this.getDefaultSelection(backendId);
+            if (!latest) return;
+            return descriptor.applySelection(session, latest);
+          })
+          .catch((e) => logWarn(`[AgentMode] deferred default model for ${backendId} failed`, e));
+        continue;
+      }
       void descriptor
         .applySelection(session, after)
         .catch((e) => logWarn(`[AgentMode] re-applying default model for ${backendId} failed`, e));
@@ -974,6 +989,27 @@ export class AgentSessionManager {
   /** Subscribe to preloader cache updates. Used by the picker hook. */
   subscribeModelCache(listener: () => void): () => void {
     return this.preloader.subscribe(listener);
+  }
+
+  /**
+   * Stable string that changes whenever anything a model picker reads for
+   * `backendId` changes: preload status, the cached backend state, and the
+   * prefetched effort catalog. A `useSyncExternalStore` snapshot built only
+   * from `getPreloadStatus` would miss the post-`"ready"` effort-catalog
+   * prefetch (the snapshot stays `"ready"`, so React skips the rerender and
+   * the Default effort dropdown never appears).
+   */
+  getModelCacheSignature(backendId: BackendId): string {
+    const status = this.getPreloadStatus(backendId);
+    const state = backendStateSignature(this.getCachedBackendState(backendId));
+    const effort = this.getEffortCatalog(backendId);
+    const effortSig = effort
+      ? Object.keys(effort)
+          .sort()
+          .map((id) => `${id}:${effort[id].map((o) => o.value ?? "").join(",")}`)
+          .join("|")
+      : "";
+    return `${status}#${state}#${effortSig}`;
   }
 
   /** Kick off a (best-effort) model probe for `backendId`. */

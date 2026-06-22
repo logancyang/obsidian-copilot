@@ -22,12 +22,14 @@ interface Props {
  */
 export const AgentDefaultModelSetting: React.FC<Props> = ({ descriptor, manager }) => {
   // Re-render when the model cache settles so freshly-probed effort options
-  // and model names appear without a settings-tab reopen.
+  // and model names appear without a settings-tab reopen. The snapshot is a
+  // cache signature, not just the preload status, so the post-`"ready"`
+  // effort-catalog prefetch still triggers a rerender.
   const subscribe = useManagerSubscribe(manager);
   useSyncExternalStore(
     subscribe,
-    () => manager.getPreloadStatus(descriptor.id),
-    () => manager.getPreloadStatus(descriptor.id)
+    () => manager.getModelCacheSignature(descriptor.id),
+    () => manager.getModelCacheSignature(descriptor.id)
   );
 
   const settings = useSettingsValue();
