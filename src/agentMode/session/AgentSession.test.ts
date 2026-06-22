@@ -1405,12 +1405,11 @@ describe("AgentSession.create (via start)", () => {
     await session.ready;
   });
 
-  it("does not seed effort into currentState (effort stays as backend reported)", async () => {
-    // Regression: previously, the optimistic seed wrote both `baseModelId`
-    // and `effort` into currentState. For descriptor-style backends where
-    // effort lives outside the wire id, `applyInitialSessionConfig` would
-    // see the seeded effort match the persisted effort and skip the real
-    // `setConfigOption`, silently dropping the user's persisted effort.
+  it("applies a seeded effort via setConfigOption without a redundant setModel", async () => {
+    // A cross-backend seed carrying a drafted effort must be applied through
+    // the descriptor's channel. For descriptor-style backends where effort
+    // lives outside the wire id, the base is unchanged so no setModel fires,
+    // but the drafted effort still reaches the backend via setConfigOption.
     const mock = makeMockBackend();
     const backendState: BackendState = {
       model: {
@@ -1431,6 +1430,13 @@ describe("AgentSession.create (via start)", () => {
       mode: null,
     };
     mock.newSession.mockResolvedValueOnce({ sessionId: "acp-1", state: backendState });
+    mock.setSessionConfigOption.mockResolvedValueOnce({
+      model: {
+        ...backendState.model!,
+        current: { baseModelId: "anthropic/sonnet", effort: "high" },
+      },
+      mode: null,
+    });
     const session = AgentSession.start({
       backend: mock.asBackend,
       cwd: "/vault",
@@ -1443,9 +1449,13 @@ describe("AgentSession.create (via start)", () => {
     await session.ready;
     // baseModelId matches → no setModel call needed.
     expect(mock.setSessionModel).not.toHaveBeenCalled();
-    // Effort is what the backend reported, NOT the persisted "high" — so
-    // `applyInitialSessionConfig` will see a mismatch and call setConfigOption.
-    expect(session.getState()?.model?.current.effort).toBe("low");
+    // The drafted effort is dispatched through the config-option channel.
+    expect(mock.setSessionConfigOption).toHaveBeenCalledWith({
+      sessionId: "acp-1",
+      configId: "effort",
+      value: "high",
+    });
+    expect(session.getState()?.model?.current.effort).toBe("high");
   });
 
   it("reverts the seeded selection when setModel fails", async () => {
@@ -1481,18 +1491,141 @@ describe("AgentSession.create (via start)", () => {
     // Seed reverted to whatever the backend actually reported.
     expect(session.getState()?.model?.current.baseModelId).toBe("anthropic/sonnet");
   });
+
+  it("seeds config-option opencode effort via the effort option, not the model id", async () => {
+    // Regression: a cross-backend pick to config-option opencode (≥1.15.13)
+    // must set the bare model on the model config option and the effort on the
+    // separate effort option. Packing `base/effort` into the model option (the
+    // old applyModelWireId path) would start the session at the model default
+    // effort or fail, and opencode has no applyInitialSessionConfig to fix it.
+    const mock = makeMockBackend();
+    // The fresh session reports a different model than the drafted pick, so the
+    // bare-model switch is exercised before the effort write.
+    const gpt5Entry = {
+      baseModelId: "openai/gpt-5",
+      name: "GPT-5",
+      provider: "openai",
+      effortOptions: [
+        { value: "low", label: "Low" },
+        { value: "high", label: "High" },
+      ],
+    };
+    const reportedState: BackendState = {
+      model: {
+        current: { baseModelId: "anthropic/sonnet", effort: null },
+        apply: { kind: "setConfigOption", configId: "model", effortConfigId: "thought_level" },
+        availableModels: [
+          {
+            baseModelId: "anthropic/sonnet",
+            name: "Sonnet",
+            provider: "anthropic",
+            effortOptions: [],
+          },
+          gpt5Entry,
+        ],
+      },
+      mode: null,
+    };
+    const switchedState: BackendState = {
+      model: {
+        current: { baseModelId: "openai/gpt-5", effort: null },
+        apply: { kind: "setConfigOption", configId: "model", effortConfigId: "thought_level" },
+        availableModels: [reportedState.model!.availableModels[0], gpt5Entry],
+      },
+      mode: null,
+    };
+    mock.newSession.mockResolvedValueOnce({ sessionId: "acp-1", state: reportedState });
+    // First config write switches the bare model (refreshing the effort
+    // option), the second lands the effort on `thought_level`.
+    mock.setSessionConfigOption
+      .mockResolvedValueOnce(switchedState)
+      .mockResolvedValue(switchedState);
+
+    const session = AgentSession.start({
+      backend: mock.asBackend,
+      cwd: "/vault",
+      internalId: "internal-1",
+      backendId: "opencode",
+      defaultModelSelection: { baseModelId: "openai/gpt-5", effort: "high" },
+      getDescriptor: () => makeConfigOptionDescriptor(),
+    });
+    await session.ready;
+
+    // Never the model channel.
+    expect(mock.setSessionModel).not.toHaveBeenCalled();
+    // The bare model id is set on the model option (no effort suffix)…
+    expect(mock.setSessionConfigOption).toHaveBeenCalledWith({
+      sessionId: "acp-1",
+      configId: "model",
+      value: "openai/gpt-5",
+    });
+    // …and the drafted effort is set on the effort option.
+    expect(mock.setSessionConfigOption).toHaveBeenCalledWith({
+      sessionId: "acp-1",
+      configId: "thought_level",
+      value: "high",
+    });
+  });
 });
 
 /** Minimal wire-only descriptor for tests that exercise seed/setModel. */
 function makeWireOnlyDescriptor(): BackendDescriptor {
+  const wire = {
+    encode: (selection: { baseModelId: string; effort: string | null }) =>
+      selection.effort ? `${selection.baseModelId}/${selection.effort}` : selection.baseModelId,
+    decode: (wireId: string) => ({
+      selection: { baseModelId: wireId, effort: null },
+      provider: null,
+    }),
+  };
   return {
-    wire: {
-      encode: (selection: { baseModelId: string; effort: string | null }) =>
-        selection.effort ? `${selection.baseModelId}/${selection.effort}` : selection.baseModelId,
-      decode: (wireId: string) => ({
-        selection: { baseModelId: wireId, effort: null },
-        provider: null,
-      }),
+    wire,
+    // Suffix-style backend: effort rides in the wire id, so applying the
+    // encoded selection through the model channel is sufficient.
+    applySelection: (
+      session: AgentSession,
+      selection: { baseModelId: string; effort: string | null }
+    ) => session.applyModelWireId(wire.encode(selection)),
+  } as unknown as BackendDescriptor;
+}
+
+/**
+ * Descriptor mirroring config-option opencode (≥1.15.13): the model lives on a
+ * `model` config option and effort on a sibling `thought_level` option, applied
+ * after the bare model. Effort is never packed into the model wire id.
+ */
+function makeConfigOptionDescriptor(): BackendDescriptor {
+  const wire = {
+    encode: (selection: { baseModelId: string; effort: string | null }) =>
+      selection.effort ? `${selection.baseModelId}/${selection.effort}` : selection.baseModelId,
+    decode: (wireId: string) => ({
+      selection: { baseModelId: wireId, effort: null },
+      provider: null,
+    }),
+  };
+  return {
+    wire,
+    applySelection: async (
+      session: AgentSession,
+      selection: { baseModelId: string; effort: string | null }
+    ) => {
+      const apply = session.getState()?.model?.apply;
+      if (apply?.kind === "setConfigOption" && apply.effortConfigId) {
+        const currentBase = session.getState()?.model?.current.baseModelId;
+        if (currentBase !== selection.baseModelId) {
+          await session.applyModelWireId(
+            wire.encode({ baseModelId: selection.baseModelId, effort: null })
+          );
+        }
+        if (selection.effort !== null) {
+          const refreshed = session.getState()?.model?.apply;
+          const effortConfigId =
+            refreshed?.kind === "setConfigOption" ? refreshed.effortConfigId : undefined;
+          if (effortConfigId) await session.setConfigOption(effortConfigId, selection.effort);
+        }
+        return;
+      }
+      await session.applyModelWireId(wire.encode(selection));
     },
   } as unknown as BackendDescriptor;
 }
@@ -1575,13 +1708,26 @@ describe("AgentSession warm-adoption ready gating", () => {
  * would be a no-op and effort is applied via `applyInitialSessionConfig`.
  */
 function makeDescriptorWireWithoutEffort(): BackendDescriptor {
+  const wire = {
+    encode: (selection: { baseModelId: string; effort: string | null }) => selection.baseModelId,
+    decode: (wireId: string) => ({
+      selection: { baseModelId: wireId, effort: null },
+      provider: null,
+    }),
+    effortConfigFor: () => ({ id: "effort", kind: "select" }),
+  };
   return {
-    wire: {
-      encode: (selection: { baseModelId: string; effort: string | null }) => selection.baseModelId,
-      decode: (wireId: string) => ({
-        selection: { baseModelId: wireId, effort: null },
-        provider: null,
-      }),
+    wire,
+    // Claude-style: effort lives outside the wire id, so the model channel
+    // carries only the base id and effort goes through setConfigOption.
+    applySelection: async (
+      session: AgentSession,
+      selection: { baseModelId: string; effort: string | null }
+    ) => {
+      const currentBase = session.getState()?.model?.current.baseModelId;
+      if (currentBase !== selection.baseModelId)
+        await session.applyModelWireId(wire.encode(selection));
+      if (selection.effort !== null) await session.setConfigOption("effort", selection.effort);
     },
   } as unknown as BackendDescriptor;
 }

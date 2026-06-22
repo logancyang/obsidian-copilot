@@ -511,11 +511,14 @@ export class AgentSession {
    * failure any optimistic baseModelId seed is reverted to `originalState`
    * so the picker drops back to whatever the backend actually has.
    *
-   * Skips the round-trip when the encoded form matches. For descriptor-
-   * style backends (Claude SDK) where effort lives outside the wire id,
-   * an effort-only change encodes the same and `setModel` is correctly
-   * skipped here — `applyInitialSessionConfig` dispatches the effort
-   * via `setConfigOption` instead.
+   * Skips the round-trip when the encoded form matches. Dispatches through
+   * `descriptor.applySelection` rather than a raw `applyModelWireId`, so a
+   * cross-backend seed carrying a drafted effort is applied through the
+   * backend's own channel — notably config-option opencode (≥1.15.13), where
+   * effort is a separate `thought_level` option that must be sent after the
+   * bare model, not packed into the model wire id. opencode has no
+   * `applyInitialSessionConfig` to split it post-startup, so the seed must be
+   * correct here.
    */
   private async confirmSeededSelection(
     selection: ModelSelection,
@@ -527,11 +530,22 @@ export class AgentSession {
     const originalEncoded = originalState.model
       ? descriptor.wire.encode(originalState.model.current)
       : null;
-    if (encoded === originalEncoded) return;
+    const originalEffort = originalState.model?.current.effort ?? null;
+    if (encoded === originalEncoded && selection.effort === originalEffort) return;
+    // Config-option backends (opencode ≥1.15.13) guard their model switch on
+    // the *current* state, and the optimistic baseModelId seed already shows
+    // the target — which would skip the real switch and strand the backend on
+    // its originally-reported model. Drop the seed first so `applySelection`
+    // sees the true state and issues the switch. setModel-style backends always
+    // issue the round-trip regardless of current, so their optimistic seed can
+    // stand and the picker doesn't blink.
+    if (originalState.model?.apply?.kind === "setConfigOption") {
+      this.currentState = originalState;
+    }
     try {
-      await this.applyModelWireId(encoded);
+      await descriptor.applySelection(this, selection);
     } catch (e) {
-      logWarn(`[AgentMode] could not apply default model ${encoded}; reverting seed`, e);
+      logWarn(`[AgentMode] could not apply seeded selection ${encoded}; reverting seed`, e);
       this.currentState = originalState;
       this.notifyModelChanged();
     }
