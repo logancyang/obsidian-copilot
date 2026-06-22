@@ -81,13 +81,14 @@ export const AgentDefaultModelSetting: React.FC<Props> = ({ descriptor, manager 
         .catch((e) => logError(`[AgentMode] clear default model for ${descriptor.id} failed`, e));
       return;
     }
-    // A stale effort value may not exist on the newly-selected model
-    // (opencode's effort is model-specific), so reset it to the new model's
-    // first option, or null when it has none.
-    const nextEfforts = resolveEffortOptions(manager, descriptor.id, baseModelId);
-    const effort = nextEfforts[0]?.value ?? null;
+    // A model-only change carries no effort choice, so persist the agent
+    // default (null) rather than auto-selecting the new model's first concrete
+    // effort — that would silently run new chats and fan-out at an effort the
+    // user never picked. The user can then pick a concrete effort explicitly.
+    // Persisting null also drops any stale effort from the previous model
+    // (opencode's effort is model-specific).
     manager
-      .persistDefaultSelection(descriptor.id, { baseModelId, effort })
+      .persistDefaultSelection(descriptor.id, { baseModelId, effort: null })
       .catch((e) => logError(`[AgentMode] persist default model for ${descriptor.id} failed`, e));
   };
 

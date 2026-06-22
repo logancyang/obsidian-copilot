@@ -47,7 +47,7 @@ function makeManager(opts: {
 }
 
 describe("AgentDefaultModelSetting", () => {
-  it("persists the picked model with its first effort option", () => {
+  it("persists a model-only change with agent-default effort, not the first option", () => {
     const persist = jest.fn().mockResolvedValue(undefined);
     const manager = makeManager({
       defaultSelection: { baseModelId: "opus", effort: "high" },
@@ -66,10 +66,11 @@ describe("AgentDefaultModelSetting", () => {
     render(<AgentDefaultModelSetting descriptor={makeDescriptor()} manager={manager} />);
 
     const modelSelect = screen.getByDisplayValue("Opus");
-    // Switching to a model whose effort vocabulary differs must reset effort
-    // to the new model's first option, not carry over the stale "high".
+    // Switching the model alone carries no effort choice, so effort resets to
+    // the agent default (null) rather than silently adopting the new model's
+    // first concrete effort or carrying over the stale "high".
     fireEvent.change(modelSelect, { target: { value: "sonnet" } });
-    expect(persist).toHaveBeenCalledWith("opencode", { baseModelId: "sonnet", effort: "medium" });
+    expect(persist).toHaveBeenCalledWith("opencode", { baseModelId: "sonnet", effort: null });
   });
 
   it("resets effort to null when the new model has no effort options", () => {
