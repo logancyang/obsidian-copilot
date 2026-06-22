@@ -1,5 +1,8 @@
 import type { ModelInfo, SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { BackendDescriptor, SessionEvent } from "@/agentMode/session/types";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 
 const queryMock = jest.fn();
 const createSdkMcpServerMock = jest.fn((opts: unknown) => ({ type: "sdk", instance: opts }));
@@ -760,5 +763,45 @@ describe("ClaudeSdkBackendProcess.prompt stream-stall watchdog", () => {
     expect(resp.stopReason).toBe("end_turn");
     const call = getPromptQueryCalls()[0][0] as { options: { abortController?: unknown } };
     expect(call.options.abortController).toBeInstanceOf(AbortController);
+  });
+});
+
+describe("ClaudeSdkBackendProcess.sessionExistsLocally", () => {
+  const cwd = "/vault";
+  // Mirrors the CLI's project-dir encoding: non-alphanumerics → "-".
+  const projectDir = cwd.replace(/[^a-zA-Z0-9]/g, "-");
+  let configDir: string;
+
+  beforeEach(async () => {
+    configDir = await mkdtemp(path.join(os.tmpdir(), "claude-config-"));
+  });
+  afterEach(async () => {
+    await rm(configDir, { recursive: true, force: true });
+  });
+
+  function makeProc(): ClaudeSdkBackendProcess {
+    return new ClaudeSdkBackendProcess({
+      pathToClaudeCodeExecutable: "/usr/local/bin/claude",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      app: { vault: {} } as any,
+      clientVersion: "1.2.3",
+      descriptor: fakeDescriptor(),
+      getEnvOverrides: () => ({ CLAUDE_CONFIG_DIR: configDir }),
+    });
+  }
+
+  it("returns true when this device has the session transcript on disk", async () => {
+    const sessionId = "11111111-2222-3333-4444-555555555555";
+    const dir = path.join(configDir, "projects", projectDir);
+    await mkdir(dir, { recursive: true });
+    await writeFile(path.join(dir, `${sessionId}.jsonl`), "{}\n");
+
+    await expect(makeProc().sessionExistsLocally({ sessionId, cwd })).resolves.toBe(true);
+  });
+
+  it("returns false for a session whose transcript never synced to this device", async () => {
+    await expect(
+      makeProc().sessionExistsLocally({ sessionId: "absent-session-id", cwd })
+    ).resolves.toBe(false);
   });
 });

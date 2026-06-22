@@ -22,7 +22,7 @@ import {
   type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 import { App } from "obsidian";
-import { readFile } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { v4 as uuidv4 } from "uuid";
@@ -560,9 +560,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     cwd: string;
   }): Promise<AgentChatMessage[]> {
     try {
-      const configDir = (await this.resolveClaudeConfigDir()).trim();
-      const projectDir = params.cwd.replace(/[^a-zA-Z0-9]/g, "-");
-      const file = path.join(configDir, "projects", projectDir, `${params.sessionId}.jsonl`);
+      const file = await this.claudeTranscriptPath(params.sessionId, params.cwd);
       const text = await readFile(file, "utf8");
       return parseClaudeTranscript(text);
     } catch (err) {
@@ -572,19 +570,55 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
   }
 
   /**
+   * True when this device's Claude CLI still has the session's transcript on
+   * disk, so resuming it here will work. A chat started on another machine
+   * syncs its markdown note (and session id) but not the jsonl, so this
+   * returns false and Recent Chats hides the otherwise-dead row.
+   */
+  async sessionExistsLocally(params: { sessionId: SessionId; cwd: string }): Promise<boolean> {
+    try {
+      await access(await this.claudeTranscriptPath(params.sessionId, params.cwd));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Path of the Claude CLI session record at
+   * `<config>/projects/<encoded-cwd>/<sessionId>.jsonl`. `CLAUDE_CONFIG_DIR` is
+   * resolved with the SAME precedence the SDK is spawned with (`env overrides`
+   * > managed env > `process.env`), and the project dir is the cwd with every
+   * non-alphanumeric character replaced by `-`, matching the CLI's encoding.
+   */
+  private async claudeTranscriptPath(sessionId: string, cwd: string): Promise<string> {
+    const configDir = (await this.resolveClaudeConfigDir()).trim();
+    const projectDir = cwd.replace(/[^a-zA-Z0-9]/g, "-");
+    return path.join(configDir, "projects", projectDir, `${sessionId}.jsonl`);
+  }
+
+  private resolvedConfigDir: string | null = null;
+
+  /**
    * The Claude config dir the spawned SDK actually uses: env overrides win
    * over managed env, which win over the ambient `process.env`, falling back
    * to `~/.claude`. Mirrors the `options.env` layering in {@link prompt}.
+   *
+   * Memoized after the first success: the config dir is fixed for a process's
+   * lifetime, and resolving it awaits `getManagedEnv`, which decrypts the Plus
+   * license key — needless to repeat per entry when the history list probes
+   * many sessions. A failure isn't cached, so a transient env error retries.
    */
   private async resolveClaudeConfigDir(): Promise<string> {
+    if (this.resolvedConfigDir !== null) return this.resolvedConfigDir;
     const envOverrides = this.opts.getEnvOverrides?.() ?? {};
     const managedEnv = (await this.opts.getManagedEnv?.()) ?? {};
-    return (
+    this.resolvedConfigDir =
       envOverrides.CLAUDE_CONFIG_DIR ||
       managedEnv.CLAUDE_CONFIG_DIR ||
       process.env.CLAUDE_CONFIG_DIR ||
-      path.join(os.homedir(), ".claude")
-    );
+      path.join(os.homedir(), ".claude");
+    return this.resolvedConfigDir;
   }
 
   /**

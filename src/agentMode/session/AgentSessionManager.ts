@@ -276,6 +276,7 @@ export class AgentSessionManager {
         })
       );
     }
+    markdownEntries = await this.dropNonLocalMarkdownEntries(markdownEntries);
     if (!index) return markdownEntries.map((e) => e.item);
 
     await this.refreshNativeSessionsFromBackends();
@@ -397,16 +398,7 @@ export class AgentSessionManager {
     const adapter = this.app.vault.adapter;
     if (!(adapter instanceof FileSystemAdapter)) return;
     const vaultBasePath = adapter.getBasePath();
-    // Manager-owned procs win over warm probes for the same backend id —
-    // they're the same subprocess lineage, but the manager's entry is the
-    // one whose lifecycle we control.
-    const procs = new Map<BackendId, BackendProcess>();
-    for (const { backendId, proc } of this.preloader.getWarmProcs()) {
-      if (proc.isRunning()) procs.set(backendId, proc);
-    }
-    for (const [backendId, proc] of this.backends) {
-      if (proc.isRunning()) procs.set(backendId, proc);
-    }
+    const procs = this.getRunningProcsByBackend();
     if (procs.size === 0) return;
     const sweeps = Array.from(procs, ([backendId, proc]) =>
       this.sweepNativeSessions(backendId, proc, vaultBasePath)
@@ -416,6 +408,55 @@ export class AgentSessionManager {
       LIST_SESSIONS_TIMEOUT_MS,
       undefined
     );
+  }
+
+  /**
+   * Currently-running backend processes, keyed by backend id. "Running"
+   * includes the preloader's warm probe subprocesses, spawned for every
+   * installed backend at plugin load, so this is populated on the first Agent
+   * Home open without spawning anything. Manager-owned procs win over warm
+   * probes for the same backend id — they're the same subprocess lineage, but
+   * the manager's entry is the one whose lifecycle we control.
+   */
+  private getRunningProcsByBackend(): Map<BackendId, BackendProcess> {
+    const procs = new Map<BackendId, BackendProcess>();
+    for (const { backendId, proc } of this.preloader.getWarmProcs()) {
+      if (proc.isRunning()) procs.set(backendId, proc);
+    }
+    for (const [backendId, proc] of this.backends) {
+      if (proc.isRunning()) procs.set(backendId, proc);
+    }
+    return procs;
+  }
+
+  /**
+   * Drop markdown chats whose backend session can't be resumed on this device
+   * — a chat started on another machine syncs its note (with the session id)
+   * but not the backend's local transcript store, so resuming it dead-ends.
+   * Only hides a row when a running backend can cheaply and definitively say
+   * the session is absent; an unknown answer (no such capability, backend not
+   * running, or a probe error) keeps the row so we never hide a local chat.
+   */
+  private async dropNonLocalMarkdownEntries(
+    entries: MarkdownChatEntry[]
+  ): Promise<MarkdownChatEntry[]> {
+    const adapter = this.app.vault.adapter;
+    if (!(adapter instanceof FileSystemAdapter)) return entries;
+    const cwd = adapter.getBasePath();
+    const procs = this.getRunningProcsByBackend();
+    const keep = await Promise.all(
+      entries.map(async (entry) => {
+        if (!entry.backendId || !entry.sessionId) return true;
+        const proc = procs.get(entry.backendId);
+        if (!proc?.sessionExistsLocally) return true;
+        try {
+          return await proc.sessionExistsLocally({ sessionId: entry.sessionId, cwd });
+        } catch {
+          return true;
+        }
+      })
+    );
+    return entries.filter((_, i) => keep[i]);
   }
 
   /**

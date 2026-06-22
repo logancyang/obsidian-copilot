@@ -714,6 +714,17 @@ export interface BackendProcess {
     cwd: string;
   }): Promise<AgentChatMessage[]>;
   /**
+   * Optional: whether this device's backend store still holds the session,
+   * i.e. whether it can actually be resumed here. A synced markdown chat note
+   * carries a session id whose transcript lives in a machine-local store
+   * (`~/.claude/projects`, opencode/codex session dirs) that does not sync, so
+   * a chat started on another device shows up in Recent Chats but dead-ends on
+   * resume. Recent Chats uses this to hide those rows. Must be cheap and
+   * side-effect free (no subprocess spawn); backends that can't answer cheaply
+   * omit it, and the caller then keeps the row.
+   */
+  sessionExistsLocally?(params: { sessionId: SessionId; cwd: string }): Promise<boolean>;
+  /**
    * Whether the backend can route MCP servers of the given transport.
    * ACP runtime probes this from the agent's advertised capabilities; the
    * Claude SDK adapter accepts http/sse natively.

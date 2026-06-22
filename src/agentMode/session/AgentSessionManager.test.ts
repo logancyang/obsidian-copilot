@@ -1314,6 +1314,8 @@ describe("AgentSessionManager chat history aggregation", () => {
     listSessions?: jest.Mock;
     /** When set, the preloader exposes a warm opencode probe proc with this listSessions. */
     warmListSessions?: jest.Mock;
+    /** When set, the warm opencode probe proc answers this device's locality probe. */
+    warmSessionExistsLocally?: jest.Mock;
     probeSessionId?: string;
     /** Defaults to true; set false to model a non-summarizing backend (codex). */
     summarizesSessionTitle?: boolean;
@@ -1383,16 +1385,14 @@ describe("AgentSessionManager chat history aggregation", () => {
           setCached: jest.fn(),
           clearCached: jest.fn(),
           takeWarm: jest.fn(() => null),
-          getWarmProcs: jest.fn(() =>
-            opts?.warmListSessions
-              ? [
-                  {
-                    backendId: "opencode",
-                    proc: { ...makeMockBackendProcess(), listSessions: opts.warmListSessions },
-                  },
-                ]
-              : []
-          ),
+          getWarmProcs: jest.fn(() => {
+            if (!opts?.warmListSessions && !opts?.warmSessionExistsLocally) return [];
+            const proc: Record<string, unknown> = { ...makeMockBackendProcess() };
+            if (opts.warmListSessions) proc.listSessions = opts.warmListSessions;
+            if (opts.warmSessionExistsLocally)
+              proc.sessionExistsLocally = opts.warmSessionExistsLocally;
+            return [{ backendId: "opencode", proc }];
+          }),
         } as unknown as ConstructorParameters<typeof AgentSessionManager>[2]["modelPreloader"],
         persistenceManager: persistence as unknown as ConstructorParameters<
           typeof AgentSessionManager
@@ -1560,6 +1560,55 @@ describe("AgentSessionManager chat history aggregation", () => {
     // unknown backend rather than silently hijacking the wrong session).
     await expect(manager.loadNativeSessionFromHistory("codex", liveId)).rejects.toThrow();
     expect(manager.getActiveSession()).toBe(session);
+  });
+
+  it("hides a markdown chat whose backend session is absent on this device", async () => {
+    // A chat synced from another machine: its note (and session id) rides the
+    // vault, but the backend's local transcript store does not — so resuming
+    // it here would dead-end. It must not show in Recent Chats.
+    const sessionExistsLocally = jest.fn(
+      async ({ sessionId }: { sessionId: string }) => sessionId === "local"
+    );
+    const { manager } = buildHistoryHarness({
+      files: {
+        "chats/agent__local.md": {
+          epoch: 2_000,
+          topic: "Made here",
+          backendId: "opencode",
+          sessionId: "local",
+        },
+        "chats/agent__foreign.md": {
+          epoch: 1_000,
+          topic: "Made elsewhere",
+          backendId: "opencode",
+          sessionId: "foreign",
+        },
+      },
+      warmSessionExistsLocally: sessionExistsLocally,
+    });
+
+    const titles = (await manager.getChatHistoryItems()).map((i) => i.title);
+    expect(titles).toContain("Made here");
+    expect(titles).not.toContain("Made elsewhere");
+    expect(sessionExistsLocally).toHaveBeenCalledWith({ sessionId: "foreign", cwd: "/vault" });
+  });
+
+  it("keeps markdown chats when no running backend can confirm the session is absent", async () => {
+    // No warm proc exposes the locality probe, so the manager can't prove the
+    // session is foreign — it must keep the row rather than risk hiding a
+    // local chat (e.g. backend not yet running).
+    const { manager } = buildHistoryHarness({
+      files: {
+        "chats/agent__a.md": {
+          epoch: 1_000,
+          topic: "Unknowable",
+          backendId: "opencode",
+          sessionId: "s1",
+        },
+      },
+    });
+    const titles = (await manager.getChatHistoryItems()).map((i) => i.title);
+    expect(titles).toContain("Unknowable");
   });
 
   it("sweeps the preloader's warm probe procs before any chat starts a backend", async () => {
