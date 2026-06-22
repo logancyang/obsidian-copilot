@@ -306,6 +306,63 @@ describe("AgentSessionManager.createSession", () => {
     expect(mgr.getCachedBackendState("opencode")).toBe(unified);
   });
 
+  it("seeds the catalog native default when no explicit default is stored", async () => {
+    // Regression: a warm/running subprocess bakes its model from the default
+    // at spawn time. After the default is cleared, getDefaultSelection is null,
+    // so without this fallback a fresh "Agent default" chat would inherit the
+    // stale baked model. The new session must be confirmed onto the native
+    // catalog default instead.
+    const probeState = {
+      model: {
+        current: { baseModelId: "opencode/old-baked", effort: null },
+        availableModels: [
+          { baseModelId: "opencode/native", name: "Native", provider: null, effortOptions: [] },
+        ],
+      },
+      mode: null,
+    };
+    const descriptor = buildDescriptor();
+    const modelPreloader = {
+      getCachedBackendState: jest.fn(() => probeState),
+      preload: jest.fn(async () => undefined),
+      refresh: jest.fn(() => null),
+      subscribe: jest.fn(() => () => {}),
+      shutdown: jest.fn(),
+      setCached: jest.fn(),
+      clearCached: jest.fn(),
+      takeWarm: jest.fn(() => null),
+      getWarmProcs: jest.fn(() => []),
+    };
+    const mgr = new AgentSessionManager(
+      buildApp(),
+      buildPlugin() as unknown as ConstructorParameters<typeof AgentSessionManager>[1],
+      {
+        permissionPrompter: jest.fn(),
+        resolveDescriptor: (id) => (id === descriptor.id ? descriptor : undefined),
+        modelPreloader: modelPreloader as unknown as ConstructorParameters<
+          typeof AgentSessionManager
+        >[2]["modelPreloader"],
+      }
+    );
+
+    await mgr.createSession();
+    expect(sessionCreateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        defaultModelSelection: { baseModelId: "opencode/native", effort: null },
+      })
+    );
+  });
+
+  it("leaves the seed unset when no default is stored and no catalog is probed", async () => {
+    // With nothing baked we have no native id to target, so the seed stays
+    // undefined and the session inherits the backend's own native behavior.
+    const mgr = buildManager();
+    await mgr.createSession();
+    expect(sessionCreateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ defaultModelSelection: undefined })
+    );
+  });
+
   it("a concurrent create that succeeds does not wipe a sibling create's lastError", async () => {
     const mgr = buildManager();
     // First call fails. Second call starts before first settles, so the

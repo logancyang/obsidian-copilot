@@ -675,7 +675,19 @@ export class AgentSessionManager {
       throw new Error("AgentSessionManager was shut down during session creation");
     }
 
-    const resolvedSeed = seedSelection ?? this.getDefaultSelection(resolvedId) ?? undefined;
+    // Falls back to the catalog native default when there's no transient seed
+    // and no stored default. Otherwise a warm/running subprocess (e.g.
+    // opencode) keeps serving the model baked into its spawn-time config from
+    // a since-cleared default, so a brand-new "Agent default" chat would
+    // silently inherit the stale model. Confirming the native selection here
+    // pins the new session to native instead. With no probed catalog there's
+    // no native id to target, so the seed stays undefined and behavior is
+    // unchanged.
+    const resolvedSeed =
+      seedSelection ??
+      this.getDefaultSelection(resolvedId) ??
+      this.nativeDefaultSelection(resolvedId) ??
+      undefined;
 
     // A new chat must always start from a brand-new backend session. When a
     // warm preload probe is available we reuse its already-spawned and
