@@ -17,12 +17,29 @@ jest.mock("@/logger", () => ({
   logError: jest.fn(),
 }));
 
+// Captured `subscribeToSettingsChange` callbacks, so a test can drive a
+// settings change and assert the manager's reaction.
+const settingsChangeCallbacks = new Set<
+  (prev: { agentMode: unknown }, next: { agentMode: unknown }) => void
+>();
+
 jest.mock("@/settings/model", () => ({
   getSettings: jest.fn(() => ({
     agentMode: { activeBackend: "opencode", backends: {} },
   })),
   setSettings: jest.fn(),
+  subscribeToSettingsChange: jest.fn(
+    (cb: (prev: { agentMode: unknown }, next: { agentMode: unknown }) => void) => {
+      settingsChangeCallbacks.add(cb);
+      return () => settingsChangeCallbacks.delete(cb);
+    }
+  ),
 }));
+
+/** Fire the manager's settings subscription with a before/after pair. */
+function emitSettingsChange(prev: { agentMode: unknown }, next: { agentMode: unknown }): void {
+  for (const cb of settingsChangeCallbacks) cb(prev, next);
+}
 
 let mockBackendIsRunning = true;
 const mockBackendShutdown = jest.fn(async () => undefined);
@@ -187,6 +204,10 @@ beforeEach(() => {
   mockSessionDispose.mockClear();
   sessionCreateSpy.mockClear();
   nextBackendSessionId = 1;
+  // Managers from prior tests never shut down, so their settings
+  // subscriptions linger; clear them so emitSettingsChange only reaches
+  // the manager built in the current test.
+  settingsChangeCallbacks.clear();
 });
 
 describe("AgentSessionManager.createSession", () => {
@@ -1070,14 +1091,10 @@ describe("AgentSessionManager.applySelection", () => {
       baseModelId: "anthropic/sonnet",
       effort: "high",
     });
-    // Resolved selection is also persisted to settings.
-    const persistedAfterEffort = readPersistedDefault(mockedSetSettings as jest.Mock, "opencode");
-    expect(persistedAfterEffort).toEqual({
-      baseModelId: "anthropic/sonnet",
-      effort: "high",
-    });
+    // A chat pick is transient: it never writes the durable default.
+    expect(readPersistedDefault(mockedSetSettings as jest.Mock, "opencode")).toBeUndefined();
 
-    // Full patch: both fields land verbatim.
+    // Full patch: both fields land verbatim on the descriptor, still no persist.
     applySelectionMock.mockClear();
     (mockedSetSettings as jest.Mock).mockClear();
     await mgr.applySelection({ baseModelId: "anthropic/opus", effort: null });
@@ -1085,18 +1102,13 @@ describe("AgentSessionManager.applySelection", () => {
       baseModelId: "anthropic/opus",
       effort: null,
     });
-    const persistedAfterFull = readPersistedDefault(mockedSetSettings as jest.Mock, "opencode");
-    expect(persistedAfterFull).toEqual({
-      baseModelId: "anthropic/opus",
-      effort: null,
-    });
+    expect(readPersistedDefault(mockedSetSettings as jest.Mock, "opencode")).toBeUndefined();
   });
+});
 
-  it("does not persist when the descriptor's applySelection throws", async () => {
-    const applySelectionMock = jest.fn(async () => {
-      throw new Error("nope");
-    });
-    const descriptor = {
+describe("AgentSessionManager default-model settings subscription", () => {
+  function makeApplySelectionDescriptor(applySelectionMock: jest.Mock): BackendDescriptor {
+    return {
       id: "opencode",
       displayName: "opencode",
       getInstallState: jest.fn(),
@@ -1105,14 +1117,14 @@ describe("AgentSessionManager.applySelection", () => {
       createBackendProcess: jest.fn(() => makeMockBackendProcess()),
       wire: {
         encode: ({ baseModelId }: { baseModelId: string }) => baseModelId,
-        decode: (id: string) => ({
-          selection: { baseModelId: id, effort: null },
-          provider: null,
-        }),
+        decode: (id: string) => ({ selection: { baseModelId: id, effort: null }, provider: null }),
       },
       applySelection: applySelectionMock,
     } as unknown as BackendDescriptor;
-    const modelPreloader = {
+  }
+
+  function makeStubPreloader() {
+    return {
       getCachedBackendState: jest.fn(() => null),
       preload: jest.fn(async () => undefined),
       subscribe: jest.fn(() => () => {}),
@@ -1122,37 +1134,65 @@ describe("AgentSessionManager.applySelection", () => {
       takeWarm: jest.fn(() => null),
       getWarmProcs: jest.fn(() => []),
     };
+  }
+
+  it("re-applies a changed default to a live session on that backend", async () => {
+    const applySelectionMock = jest.fn(async () => {});
+    const descriptor = makeApplySelectionDescriptor(applySelectionMock);
     const mgr = new AgentSessionManager(
       buildApp(),
       buildPlugin() as unknown as ConstructorParameters<typeof AgentSessionManager>[1],
       {
         permissionPrompter: jest.fn(),
         resolveDescriptor: (id) => (id === descriptor.id ? descriptor : undefined),
-        modelPreloader: modelPreloader as unknown as ConstructorParameters<
+        modelPreloader: makeStubPreloader() as unknown as ConstructorParameters<
           typeof AgentSessionManager
         >[2]["modelPreloader"],
       }
     );
-    sessionCreateSpy.mockImplementationOnce((opts) => {
-      const s = makeMockSession({ internalId: opts.internalId, backendId: opts.backendId });
-      (s as unknown as { getState: () => unknown }).getState = () => ({
-        model: {
-          current: { baseModelId: "anthropic/sonnet", effort: null },
-          availableModels: [
-            { baseModelId: "anthropic/sonnet", name: "Sonnet", provider: null, effortOptions: [] },
-          ],
-        },
-        mode: null,
-      });
-      return s;
+    const session = await mgr.createSession();
+
+    const prev = { agentMode: { backends: { opencode: { defaultModel: null } } } };
+    const next = {
+      agentMode: {
+        backends: { opencode: { defaultModel: { baseModelId: "opus", effort: "high" } } },
+      },
+    };
+    emitSettingsChange(prev, next);
+
+    expect(applySelectionMock).toHaveBeenCalledWith(session, {
+      baseModelId: "opus",
+      effort: "high",
     });
+  });
+
+  it("ignores an unchanged default and other backends' changes", async () => {
+    const applySelectionMock = jest.fn(async () => {});
+    const descriptor = makeApplySelectionDescriptor(applySelectionMock);
+    const mgr = new AgentSessionManager(
+      buildApp(),
+      buildPlugin() as unknown as ConstructorParameters<typeof AgentSessionManager>[1],
+      {
+        permissionPrompter: jest.fn(),
+        resolveDescriptor: (id) => (id === descriptor.id ? descriptor : undefined),
+        modelPreloader: makeStubPreloader() as unknown as ConstructorParameters<
+          typeof AgentSessionManager
+        >[2]["modelPreloader"],
+      }
+    );
     await mgr.createSession();
-    (mockedSetSettings as jest.Mock).mockClear();
-    await expect(
-      mgr.applySelection({ baseModelId: "anthropic/opus", effort: "high" })
-    ).rejects.toThrow("nope");
-    // No persistence after a failed apply.
-    expect(readPersistedDefault(mockedSetSettings as jest.Mock, "opencode")).toBeUndefined();
+
+    const same = { baseModelId: "opus", effort: "high" };
+    emitSettingsChange(
+      { agentMode: { backends: { opencode: { defaultModel: same } } } },
+      { agentMode: { backends: { opencode: { defaultModel: { ...same } } } } }
+    );
+    // A different backend's default changing must not touch the opencode session.
+    emitSettingsChange(
+      { agentMode: { backends: { claude: { defaultModel: null } } } },
+      { agentMode: { backends: { claude: { defaultModel: { baseModelId: "x", effort: null } } } } }
+    );
+    expect(applySelectionMock).not.toHaveBeenCalled();
   });
 });
 

@@ -611,23 +611,18 @@ describe("buildModelOnChange", () => {
     expect(applySelection).not.toHaveBeenCalled();
   });
 
-  it("cross-backend pick persists the new (model, effort) on the target backend before creating the session", async () => {
+  it("cross-backend pick seeds the new session transiently without persisting the default", async () => {
     const persistDefaultSelection = jest.fn().mockResolvedValue(undefined);
     const createSession = jest.fn().mockResolvedValue(undefined);
     const setDefaultBackend = jest.fn();
     const closeSession = jest.fn().mockResolvedValue(undefined);
-    const callOrder: string[] = [];
-    persistDefaultSelection.mockImplementation(async () => {
-      callOrder.push("persist");
-    });
-    createSession.mockImplementation(async () => {
-      callOrder.push("create");
-    });
     const manager = makeManager({
       persistDefaultSelection,
       createSession,
       setDefaultBackend,
       closeSession,
+      // The legacy single-arg path seeds effort from the target's persisted
+      // (settings-managed) default, but must not write it back.
       defaultSelectionById: { claude: { baseModelId: "old", effort: "low" } },
     });
     const entries = [pickerEntry("claude", "opus")];
@@ -635,12 +630,8 @@ describe("buildModelOnChange", () => {
     onChange("claude:opus|agent");
     // Allow the IIFE to run.
     await new Promise((r) => window.setTimeout(r, 0));
-    expect(persistDefaultSelection).toHaveBeenCalledWith("claude", {
-      baseModelId: "opus",
-      effort: "low",
-    });
-    expect(createSession).toHaveBeenCalledWith("claude");
-    expect(callOrder).toEqual(["persist", "create"]);
+    expect(persistDefaultSelection).not.toHaveBeenCalled();
+    expect(createSession).toHaveBeenCalledWith("claude", { baseModelId: "opus", effort: "low" });
     expect(setDefaultBackend).toHaveBeenCalledWith("claude");
     expect(closeSession).toHaveBeenCalledWith("tab-1");
   });
@@ -708,7 +699,7 @@ describe("buildEffortOptionsByModelKey", () => {
       synthesizeAgentEntry(ACTIVE, ACTIVE, opencode),
       synthesizeAgentEntry(OTHER, OTHER, opencode),
     ];
-    const out = buildEffortOptionsByModelKey(manager, [opencode], entries);
+    const out = buildEffortOptionsByModelKey(manager, entries);
     expect(out[getModelKeyFromModel(entries[0])]).toEqual([{ value: "high", label: "high" }]);
     expect(out[getModelKeyFromModel(entries[1])]).toEqual([
       { value: "minimal", label: "minimal" },
@@ -725,7 +716,7 @@ describe("buildEffortOptionsByModelKey", () => {
       effortCatalogById: { opencode: {} },
     });
     const entries = [synthesizeAgentEntry(OTHER, OTHER, opencode)];
-    const out = buildEffortOptionsByModelKey(manager, [opencode], entries);
+    const out = buildEffortOptionsByModelKey(manager, entries);
     expect(out[getModelKeyFromModel(entries[0])]).toEqual([]);
   });
 });

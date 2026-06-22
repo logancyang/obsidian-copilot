@@ -12,12 +12,22 @@ import type {
   BackendDescriptor,
   BackendId,
   BackendState,
+  EffortOption,
   EnabledModelCredentialState,
   EnabledModelEntry,
   ModelEntry,
   ModelState,
 } from "@/agentMode/session/types";
 import type { AgentModelPickerOverride } from "./useAgentModelPicker";
+
+/** Frozen empty effort list — referential stability for the "no effort" case. */
+const EMPTY_EFFORT_OPTIONS = Object.freeze([]) as unknown as EffortOption[];
+
+/**
+ * Right-side flag for an enabled model whose provider has no API key. Shared
+ * with the settings default-model picker so the two pickers never diverge.
+ */
+export const MISSING_KEY_LABEL = "Add API key";
 
 /**
  * Pick the BackendState that should drive the picker's *current selection*
@@ -153,7 +163,7 @@ function credentialDisabledReason(
   state: EnabledModelCredentialState,
   reported: boolean
 ): string | undefined {
-  if (state === "missing_key") return "Add API key";
+  if (state === "missing_key") return MISSING_KEY_LABEL;
   if (!reported) return "Not offered by agent";
   return undefined;
 }
@@ -341,8 +351,9 @@ export function buildEffortSibling(
 }
 
 /**
- * Persist the picked (model, effort) as the target backend's default, then
- * spawn a fresh session on it
+ * Spawn a fresh session on the target backend seeded with the picked
+ * (model, effort). The pick is transient — it seeds the new session
+ * directly and never writes the backend's persisted default.
  */
 function runCrossBackendPick(
   manager: AgentSessionManager,
@@ -354,8 +365,7 @@ function runCrossBackendPick(
 ): void {
   void (async () => {
     try {
-      await manager.persistDefaultSelection(targetBackendId, { baseModelId, effort });
-      await manager.createSession(targetBackendId);
+      await manager.createSession(targetBackendId, { baseModelId, effort });
       manager.setDefaultBackend(targetBackendId);
       if (oldSessionId) {
         void manager
@@ -436,33 +446,34 @@ export function buildModelOnChange(
  */
 export function buildEffortOptionsByModelKey(
   manager: AgentSessionManager,
-  descriptors: BackendDescriptor[],
   entries: ModelSelectorEntry[]
-): Record<string, { label: string; value: string | null }[]> {
-  const out: Record<string, { label: string; value: string | null }[]> = {};
-  // Cache per-backend catalog lookups
-  const catalogByBackendId = new Map<string, ReadonlyArray<ModelEntry> | null>();
-  for (const d of descriptors) {
-    catalogByBackendId.set(
-      d.id,
-      manager.getCachedBackendState(d.id)?.model?.availableModels ?? null
-    );
-  }
+): Record<string, EffortOption[]> {
+  const out: Record<string, EffortOption[]> = {};
   for (const entry of entries) {
     const backendId = entry._backendId;
     const baseModelId = resolveBaseModelId(entry);
     if (!backendId || !baseModelId) continue;
-    const catalog = catalogByBackendId.get(backendId);
-    if (!catalog) continue;
-    const found = catalog.find((m) => m.baseModelId === baseModelId);
-    // The reported catalog only carries effort for the *active* model (opencode
-    // surfaces it only for the current model); fall back to the preloader's
-    // prefetched effort catalog for every other row.
-    const live = found?.effortOptions ?? [];
-    out[getModelKeyFromModel(entry)] =
-      live.length > 0 ? live : (manager.getEffortCatalog(backendId)?.[baseModelId] ?? []);
+    out[getModelKeyFromModel(entry)] = resolveEffortOptions(manager, backendId, baseModelId);
   }
   return out;
+}
+
+/**
+ * Effort options for one (backend, model). The reported catalog only carries
+ * effort for the *active* model (opencode surfaces it only for the current
+ * model); fall back to the preloader's prefetched effort catalog for every
+ * other model. Returns `EMPTY_EFFORT_OPTIONS` when the model has none.
+ */
+export function resolveEffortOptions(
+  manager: AgentSessionManager,
+  backendId: BackendId,
+  baseModelId: string
+): EffortOption[] {
+  const catalog = manager.getCachedBackendState(backendId)?.model?.availableModels ?? null;
+  const found = catalog?.find((m) => m.baseModelId === baseModelId);
+  const live = found?.effortOptions ?? [];
+  if (live.length > 0) return live;
+  return manager.getEffortCatalog(backendId)?.[baseModelId] ?? EMPTY_EFFORT_OPTIONS;
 }
 
 /**
@@ -532,7 +543,7 @@ export function buildAgentModelPicker(args: {
     value: valueKey,
     disabled: false,
     effort: buildEffortSibling(manager, ctx),
-    effortOptionsByModelKey: buildEffortOptionsByModelKey(manager, descriptors, entries),
+    effortOptionsByModelKey: buildEffortOptionsByModelKey(manager, entries),
     onChange,
     commitSelection: buildCommitSelection(manager, ctx, entries, onChange),
   };

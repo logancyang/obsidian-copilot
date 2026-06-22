@@ -1,4 +1,5 @@
 import {
+  AgentDefaultModelSetting,
   InstallBadge,
   listBackendDescriptors,
   McpServersPanel,
@@ -153,6 +154,10 @@ const BackendSection: React.FC<{
       </div>
 
       {installState.kind === "ready" && <ConfiguredModelEnableList descriptor={descriptor} />}
+
+      {installState.kind === "ready" && manager && (
+        <AgentDefaultModelSetting descriptor={descriptor} manager={manager} />
+      )}
 
       {Panel && <Panel plugin={plugin} app={plugin.app} />}
     </div>
