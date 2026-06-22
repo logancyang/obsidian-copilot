@@ -17,11 +17,11 @@ const ENABLED: EnabledModelEntry[] = [
   { baseModelId: "byok", name: "BYOK", credentialState: "missing_key" },
 ];
 
-function makeDescriptor(): BackendDescriptor {
+function makeDescriptor(enabled: EnabledModelEntry[] = ENABLED): BackendDescriptor {
   return {
     id: "opencode",
     displayName: "opencode",
-    getEnabledModelEntries: () => ENABLED,
+    getEnabledModelEntries: () => enabled,
   } as unknown as BackendDescriptor;
 }
 
@@ -112,6 +112,30 @@ describe("AgentDefaultModelSetting", () => {
     });
     render(<AgentDefaultModelSetting descriptor={makeDescriptor()} manager={manager} />);
     fireEvent.change(screen.getByDisplayValue("Opus"), {
+      target: { value: "__agent_default__" },
+    });
+    expect(persist).toHaveBeenCalledWith("opencode", null);
+  });
+
+  it("hides the control only when there are no enabled models and no stored default", () => {
+    const manager = makeManager({ defaultSelection: null });
+    const { container } = render(
+      <AgentDefaultModelSetting descriptor={makeDescriptor([])} manager={manager} />
+    );
+    expect(container.firstChild).toBeNull();
+  });
+
+  it("keeps a stored default visible (and clearable) after its model is disabled", () => {
+    const persist = jest.fn().mockResolvedValue(undefined);
+    const manager = makeManager({
+      defaultSelection: { baseModelId: "opus", effort: "high" },
+      persist,
+    });
+    // The enable list no longer contains the stored default's model.
+    render(<AgentDefaultModelSetting descriptor={makeDescriptor([])} manager={manager} />);
+    // The stale default is shown as a disabled option, not hidden.
+    expect(screen.getByDisplayValue("opus (disabled)")).not.toBeNull();
+    fireEvent.change(screen.getByDisplayValue("opus (disabled)"), {
       target: { value: "__agent_default__" },
     });
     expect(persist).toHaveBeenCalledWith("opencode", null);

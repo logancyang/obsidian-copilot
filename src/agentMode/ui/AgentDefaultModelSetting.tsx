@@ -42,7 +42,6 @@ export const AgentDefaultModelSetting: React.FC<Props> = ({ descriptor, manager 
 
   const settings = useSettingsValue();
   const enabled = descriptor.getEnabledModelEntries?.(settings) ?? null;
-  if (!enabled || enabled.length === 0) return null;
 
   // No stored default → the agent's own native default is used for new chats
   // and fan-out (see `AgentSessionManager.createSession`). Represent that
@@ -50,6 +49,14 @@ export const AgentDefaultModelSetting: React.FC<Props> = ({ descriptor, manager 
   // (which would also let an effort-only change silently persist that model).
   const current = manager.getDefaultSelection(descriptor.id);
   const hasExplicitDefault = current !== null;
+
+  // Hide the control only when there's nothing to manage: no enabled models
+  // AND no stored default. A stored default whose model was later disabled
+  // must stay visible so the user can clear it — new chats and fan-out still
+  // read it via `getDefaultSelection`, so silently hiding it would strand
+  // sessions on a model the agent no longer offers.
+  if ((!enabled || enabled.length === 0) && !hasExplicitDefault) return null;
+
   const selectedBaseId = current?.baseModelId ?? AGENT_DEFAULT_VALUE;
   // Only a concrete default exposes an effort row; the agent-default case
   // lets the agent choose effort, so there's nothing to persist.
@@ -81,6 +88,23 @@ export const AgentDefaultModelSetting: React.FC<Props> = ({ descriptor, manager 
       .catch((e) => logError(`[AgentMode] persist default effort for ${descriptor.id} failed`, e));
   };
 
+  const enabledOptions = (enabled ?? []).map((e) => ({
+    label: modelOptionLabel(e),
+    value: e.baseModelId,
+  }));
+  // A stored default whose model is no longer enabled must still appear as a
+  // selectable option, or the select would render blank and the user couldn't
+  // see what they're clearing.
+  const defaultMissingFromEnabled =
+    hasExplicitDefault && !enabledOptions.some((o) => o.value === selectedBaseId);
+  const modelOptions = defaultMissingFromEnabled
+    ? [
+        { label: AGENT_DEFAULT_LABEL, value: AGENT_DEFAULT_VALUE },
+        { label: `${current?.baseModelId} (disabled)`, value: selectedBaseId },
+        ...enabledOptions,
+      ]
+    : [{ label: AGENT_DEFAULT_LABEL, value: AGENT_DEFAULT_VALUE }, ...enabledOptions];
+
   return (
     <>
       <SettingItem
@@ -89,10 +113,7 @@ export const AgentDefaultModelSetting: React.FC<Props> = ({ descriptor, manager 
         description="Used for new chats and multi-agent answers on this agent. Open chats switch on their next turn."
         value={selectedBaseId}
         onChange={onModelChange}
-        options={[
-          { label: AGENT_DEFAULT_LABEL, value: AGENT_DEFAULT_VALUE },
-          ...enabled.map((e) => ({ label: modelOptionLabel(e), value: e.baseModelId })),
-        ]}
+        options={modelOptions}
       />
       {effortOptions.length > 0 && (
         <SettingItem
