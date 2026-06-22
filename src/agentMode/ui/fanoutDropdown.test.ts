@@ -16,6 +16,7 @@ jest.mock("@/agentMode/backends/registry", () => {
 
 import type { FanoutSummaryStatus } from "@/agentMode/session/fanout/fanoutTypes";
 import {
+  agentStateForAnswer,
   agentStateForStatus,
   buildFanoutOptions,
   defaultFanoutOption,
@@ -49,6 +50,18 @@ describe("agentStateForStatus", () => {
     expect(agentStateForStatus("done")).toBe("answer");
     expect(agentStateForStatus("error")).toBe("error");
     expect(agentStateForStatus("cancelled")).toBe("cancelled");
+  });
+});
+
+describe("agentStateForAnswer", () => {
+  it("maps a done slot with text to answer, but a done slot with no text to empty", () => {
+    expect(agentStateForAnswer(answer("opencode", "done", "hi"))).toBe("answer");
+    // The bug: a finished-but-empty slot must NOT read as a success check.
+    expect(agentStateForAnswer(answer("opencode", "done", "   "))).toBe("empty");
+  });
+  it("defers to the raw status for non-done slots", () => {
+    expect(agentStateForAnswer(answer("opencode", "running", ""))).toBe("streaming");
+    expect(agentStateForAnswer(answer("opencode", "error", "", "x"))).toBe("error");
   });
 });
 

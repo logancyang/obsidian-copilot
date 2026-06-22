@@ -80,4 +80,14 @@ describe("FanoutTurnView", () => {
     fireEvent.click(screen.getByRole("tab", { name: /opencode/ }));
     expect(screen.getByTestId("agent-md").textContent).toBe("OPENCODE_BODY");
   });
+
+  it("shows 'did not answer' (not 'Thinking…') for a finished slot with no text", () => {
+    // Regression: a done-but-empty slot was showing a green check + "Thinking…",
+    // reading as both finished and still working at once.
+    const t = turn([answer("opencode", "done", "")], "the narrative summary");
+    renderView(t);
+    fireEvent.click(screen.getByRole("tab", { name: /opencode/ }));
+    expect(screen.getByText(/did not answer/i)).toBeTruthy();
+    expect(screen.queryByText(/Thinking/i)).toBeNull();
+  });
 });

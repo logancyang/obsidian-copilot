@@ -80,7 +80,7 @@ const FanoutStatusDot: React.FC<FanoutStatusDotProps> = ({ state }) => {
   if (state === "error") {
     return <AlertTriangle className="tw-size-3 tw-shrink-0 tw-text-error" />;
   }
-  if (state === "cancelled") {
+  if (state === "cancelled" || state === "empty") {
     return <CircleSlash className="tw-size-3 tw-shrink-0 tw-text-muted" />;
   }
   return null;
@@ -185,6 +185,17 @@ const FanoutTurnBody: React.FC<FanoutTurnBodyProps> = ({ turn, value, app }) => 
           <FanoutStatusLine icon={<ThinkingSpinner />} text="Streaming…" shimmer />
         ) : null}
       </div>
+    );
+  }
+
+  // Finished with no text — terminal "did not answer", NOT a spinner (a `done`
+  // slot must never read as still thinking).
+  if (answer.status === "done") {
+    return (
+      <FanoutStatusLine
+        icon={<CircleSlash className="tw-size-4 tw-text-muted" />}
+        text="This agent did not answer."
+      />
     );
   }
 

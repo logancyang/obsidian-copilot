@@ -15,8 +15,10 @@ export type FanoutOptionValue = BackendId;
 /**
  * Presentational state of one agent's slot, derived from its live status.
  * Decoupled from {@link AgentAnswerStatus} so the renderer switches on intent.
+ * `empty` is a slot that finished but produced no text (the agent did not
+ * answer) — terminal, so it must not show a spinner or a success check.
  */
-export type FanoutAgentState = "streaming" | "answer" | "error" | "cancelled";
+export type FanoutAgentState = "streaming" | "answer" | "error" | "cancelled" | "empty";
 
 /** Map an agent answer's live status to its presentational state. */
 export function agentStateForStatus(status: AgentAnswerStatus): FanoutAgentState {
@@ -30,6 +32,16 @@ export function agentStateForStatus(status: AgentAnswerStatus): FanoutAgentState
     case "done":
       return "answer";
   }
+}
+
+/**
+ * Like {@link agentStateForStatus} but resolves a `done` slot with no text to
+ * `empty` — so it renders as "did not answer" instead of a misleading success
+ * check (the slot finished without producing an answer).
+ */
+export function agentStateForAnswer(answer: AgentAnswer): FanoutAgentState {
+  if (answer.status === "done" && answer.text.trim().length === 0) return "empty";
+  return agentStateForStatus(answer.status);
 }
 
 /**
@@ -94,7 +106,7 @@ export function buildFanoutOptions(turn: FanoutTurn): FanoutOption[] {
       value: backendId,
       label: displayName,
       Icon,
-      state: agentStateForStatus(answer.status),
+      state: agentStateForAnswer(answer),
     });
   }
   return options;
