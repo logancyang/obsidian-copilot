@@ -154,7 +154,13 @@ export const FANOUT_SUMMARY_INSTRUCTION =
   'the request were made of you; no sentence may begin with "I".\n' +
   "- Use ONLY the outputs shown; ignore any environment scaffolding (tool lists, " +
   "available skills/agents, boilerplate). Do not mention how many agents there " +
-  "were, who did not respond, or anything missing. Be concise.\n\n" +
+  "were, who did not respond, or anything missing.\n\n" +
+  "FORMAT (always): clean, scannable Markdown, and be concise. Lead with the " +
+  "bottom line in one or two sentences, THEN the sections below as `###` " +
+  "subheadings — each on its own line, preceded by a blank line, with one or two " +
+  "short paragraphs under it. Do NOT pack points into dense bullet lists; prefer " +
+  "short paragraphs and whitespace, and use a bullet list only for 3+ genuinely " +
+  "parallel items, one line each, never nested.\n\n" +
   "FIRST pick the MODE from the request and the outputs:\n" +
   "- ANSWER mode — the agents answered a question or analyzed something (facts, " +
   "explanation, a recommendation, identity); there is a best answer to converge " +
@@ -164,20 +170,25 @@ export const FANOUT_SUMMARY_INSTRUCTION =
   "design); these are options, not competing claims.\n\n" +
   "If only ONE agent responded (either mode): one to three sentences on its " +
   "answer or approach, attributed, no headings.\n\n" +
-  "TWO OR MORE in ANSWER mode — markdown sections, omitting any that is empty:\n" +
-  '  "**Each agent**" — one concise bullet per agent.\n' +
-  '  "**Agreements**" — the points the agents share.\n' +
-  '  "**Disagreements**" — where they differ, naming the sides.\n\n' +
-  "TWO OR MORE in DELIVERABLE mode — help the user CHOOSE or MERGE, NOT " +
-  "agreements/disagreements:\n" +
-  '  "**Options**" — one bullet per agent on what is DISTINCTIVE about its take ' +
-  "(the angle, tone, structure, or tradeoff that would make someone pick it, and " +
-  "who it suits).\n" +
-  '  "**Recommendation**" — name the best option for the likely goal and why in a ' +
-  "sentence or two; if a combination is clearly better, say which parts of which " +
-  "to merge.\n" +
+  "TWO OR MORE in ANSWER mode — lead with the bottom line, then these `###` " +
+  "sections, omitting any that would be empty:\n" +
+  "  ### Each agent\n" +
+  "  A short attributed paragraph for each agent's take.\n" +
+  "  ### Agreements\n" +
+  "  The points the agents share.\n" +
+  "  ### Disagreements\n" +
+  "  Where they differ, naming the sides.\n\n" +
+  "TWO OR MORE in DELIVERABLE mode — lead with the bottom line, then help the " +
+  "user CHOOSE or MERGE (NOT agreements/disagreements), as `###` sections:\n" +
+  "  ### Options\n" +
+  "  A short attributed paragraph per agent on what is DISTINCTIVE about its " +
+  "take — the angle, tone, structure, or tradeoff that would make someone pick " +
+  "it, and who it suits.\n" +
+  "  ### Recommendation\n" +
+  "  Name the best option for the likely goal and why; if a combination is " +
+  "clearly better, say which parts of which to merge.\n" +
   "  Do NOT reproduce the artifacts (the user already has each in its own tab); " +
-  "summarize the approach only.\n\n" +
+  "describe the approach only.\n\n" +
   "Do NOT modify any files or run write/shell tools.";
 
 /** The text persisted when every fan-out agent failed. */
