@@ -131,9 +131,9 @@ const FanoutTurnBody: React.FC<FanoutTurnBodyProps> = ({ turn, value, app }) => 
     }
     switch (summaryDisplayState(turn)) {
       case "writing":
-        return <FanoutStatusLine icon={<ThinkingSpinner />} text="Writing summary…" />;
+        return <FanoutStatusLine icon={<ThinkingSpinner />} text="Writing summary…" shimmer />;
       case "waiting":
-        return <FanoutStatusLine icon={<ThinkingSpinner />} text="Waiting for answers…" />;
+        return <FanoutStatusLine icon={<ThinkingSpinner />} text="Waiting for answers…" shimmer />;
       case "cancelled":
         return (
           <FanoutStatusLine
@@ -179,14 +179,14 @@ const FanoutTurnBody: React.FC<FanoutTurnBodyProps> = ({ turn, value, app }) => 
       <div className="tw-flex tw-flex-col tw-gap-1">
         <FanoutSlotBody text={answer.text} app={app} />
         {answer.status === "running" ? (
-          <FanoutStatusLine icon={<ThinkingSpinner />} text="Streaming…" />
+          <FanoutStatusLine icon={<ThinkingSpinner />} text="Streaming…" shimmer />
         ) : null}
       </div>
     );
   }
 
   // Running with no text yet — the in-place thinking spinner.
-  return <FanoutStatusLine icon={<ThinkingSpinner />} text="Thinking…" />;
+  return <FanoutStatusLine icon={<ThinkingSpinner />} text="Thinking…" shimmer />;
 };
 
 interface FanoutSlotBodyProps {
@@ -229,10 +229,12 @@ interface FanoutStatusLineProps {
   icon: React.ReactNode;
   text: string;
   tone?: "error";
+  /** Animate the label with the shared running-gradient "thinking" shimmer. */
+  shimmer?: boolean;
 }
 
 /** A small icon + label line used for streaming / pending / error states. */
-const FanoutStatusLine: React.FC<FanoutStatusLineProps> = ({ icon, text, tone }) => (
+const FanoutStatusLine: React.FC<FanoutStatusLineProps> = ({ icon, text, tone, shimmer }) => (
   <div
     className={cn(
       "tw-flex tw-items-center tw-gap-2 tw-p-1 tw-text-sm",
@@ -240,6 +242,6 @@ const FanoutStatusLine: React.FC<FanoutStatusLineProps> = ({ icon, text, tone })
     )}
   >
     {icon}
-    <span>{text}</span>
+    <span className={cn(shimmer && "copilot-shimmer-text")}>{text}</span>
   </div>
 );
