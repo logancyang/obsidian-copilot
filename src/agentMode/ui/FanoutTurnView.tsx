@@ -49,9 +49,12 @@ const FanoutTab: React.FC<FanoutTabProps> = ({ option, selected, onSelect }) => 
       onClick={handleClick}
       className={cn(
         "tw-flex tw-items-center tw-gap-1.5 tw-rounded-md tw-border tw-border-solid tw-border-transparent tw-px-2 tw-py-1 tw-text-sm tw-transition-colors",
+        // Active tab: accent border + faint accent tint + normal-weight text,
+        // matching AgentTabStrip's active-tab treatment. The accent border is the
+        // reliable highlight; a background-only swap reads as "no active tab".
         selected
-          ? "tw-bg-interactive-accent tw-text-on-accent"
-          : "tw-text-muted hover:tw-bg-interactive-hover"
+          ? "tw-border-interactive-accent tw-font-medium tw-text-normal tw-bg-interactive-accent/10"
+          : "tw-text-muted hover:tw-bg-interactive-hover hover:tw-text-normal"
       )}
     >
       {Icon ? <Icon className="tw-size-4 tw-shrink-0" /> : null}
