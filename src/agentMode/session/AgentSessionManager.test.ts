@@ -1126,9 +1126,9 @@ describe("AgentSessionManager default-model settings subscription", () => {
     } as unknown as BackendDescriptor;
   }
 
-  function makeStubPreloader() {
+  function makeStubPreloader(cachedState: unknown = null) {
     return {
-      getCachedBackendState: jest.fn(() => null),
+      getCachedBackendState: jest.fn(() => cachedState),
       preload: jest.fn(async () => undefined),
       subscribe: jest.fn(() => () => {}),
       shutdown: jest.fn(),
@@ -1196,6 +1196,49 @@ describe("AgentSessionManager default-model settings subscription", () => {
       { agentMode: { backends: { claude: { defaultModel: { baseModelId: "x", effort: null } } } } }
     );
     expect(applySelectionMock).not.toHaveBeenCalled();
+  });
+
+  it("reverts a live session to the agent's native default when the default is cleared", async () => {
+    const applySelectionMock = jest.fn(async () => {});
+    const descriptor = makeApplySelectionDescriptor(applySelectionMock);
+    // A probed catalog whose first model is the agent's native default.
+    const cachedState = {
+      model: {
+        current: { baseModelId: "native", effort: null },
+        apply: { kind: "setModel" },
+        availableModels: [
+          { baseModelId: "native", name: "Native", provider: "x", effortOptions: [] },
+        ],
+      },
+      mode: null,
+    };
+    const mgr = new AgentSessionManager(
+      buildApp(),
+      buildPlugin() as unknown as ConstructorParameters<typeof AgentSessionManager>[1],
+      {
+        permissionPrompter: jest.fn(),
+        resolveDescriptor: (id) => (id === descriptor.id ? descriptor : undefined),
+        modelPreloader: makeStubPreloader(cachedState) as unknown as ConstructorParameters<
+          typeof AgentSessionManager
+        >[2]["modelPreloader"],
+      }
+    );
+    const session = await mgr.createSession();
+
+    // User picks "Agent default" → stored default goes from explicit to null.
+    emitSettingsChange(
+      {
+        agentMode: {
+          backends: { opencode: { defaultModel: { baseModelId: "opus", effort: "high" } } },
+        },
+      },
+      { agentMode: { backends: { opencode: { defaultModel: null } } } }
+    );
+
+    expect(applySelectionMock).toHaveBeenCalledWith(session, {
+      baseModelId: "native",
+      effort: null,
+    });
   });
 
   it("defers re-apply for a starting session until ready, using the latest default", async () => {

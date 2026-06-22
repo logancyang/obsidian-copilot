@@ -239,18 +239,24 @@ export class AgentSessionManager {
       const backendId = session.backendId;
       const before = prevBackends?.[backendId]?.defaultModel ?? null;
       const after = nextBackends?.[backendId]?.defaultModel ?? null;
-      if (!after) continue;
-      if (before?.baseModelId === after.baseModelId && before?.effort === after.effort) continue;
+      if (before?.baseModelId === after?.baseModelId && before?.effort === after?.effort) continue;
       const descriptor = this.opts.resolveDescriptor(backendId);
       if (!descriptor) continue;
+      // Cleared to "Agent default": revert the live session to the agent's
+      // native default so the next turn isn't pinned to the old explicit
+      // model, honoring the settings copy. With no probed catalog there's no
+      // native id to target, so leave the session as-is.
+      const target = after ?? this.nativeDefaultSelection(backendId);
+      if (!target) continue;
       // A session still in its startup window has no `backendSessionId` yet,
       // so `applySelection` (setModel/setConfigOption) would throw. Defer to
-      // `ready` and re-read the live default then, so the final value wins
-      // when several changes land before startup completes.
+      // `ready` and re-resolve the target then, so the final value wins when
+      // several changes land before startup completes.
       if (session.getStatus() === "starting") {
         void session.ready
           .then(() => {
-            const latest = this.getDefaultSelection(backendId);
+            const latest =
+              this.getDefaultSelection(backendId) ?? this.nativeDefaultSelection(backendId);
             if (!latest) return;
             return descriptor.applySelection(session, latest);
           })
@@ -258,9 +264,19 @@ export class AgentSessionManager {
         continue;
       }
       void descriptor
-        .applySelection(session, after)
+        .applySelection(session, target)
         .catch((e) => logWarn(`[AgentMode] re-applying default model for ${backendId} failed`, e));
     }
+  }
+
+  /**
+   * The agent's catalog-declared native default as a `ModelSelection`, or
+   * `null` when no catalog has been probed. Used to revert a live session
+   * after its explicit default is cleared.
+   */
+  private nativeDefaultSelection(backendId: BackendId): ModelSelection | null {
+    const baseModelId = this.getDefaultBaseModelId(backendId);
+    return baseModelId ? { baseModelId, effort: null } : null;
   }
 
   /** Whether `backendSessionId` is an ephemeral read-only fan-out sub-session. */
