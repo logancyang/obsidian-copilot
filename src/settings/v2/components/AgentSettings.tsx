@@ -11,9 +11,11 @@ import { SettingItem } from "@/components/ui/setting-item";
 import { TabContent, TabItem, type TabItem as TabItemType } from "@/components/ui/setting-tabs";
 import { TruncatedText } from "@/components/TruncatedText";
 import { usePlugin } from "@/contexts/PluginContext";
+import { useChatBackendModelOptions } from "@/hooks/useChatBackendModelOptions";
 import { logError } from "@/logger";
-import { setSettings, useSettingsValue } from "@/settings/model";
+import { setSettings, updateSetting, useSettingsValue } from "@/settings/model";
 import { formatBinaryPathForDisplay } from "@/utils/binaryPath";
+import { MessageCircle } from "lucide-react";
 import { Platform } from "obsidian";
 import React from "react";
 import { ChatModelEnableList } from "./ChatModelEnableList";
@@ -28,6 +30,17 @@ const BACKEND_ORDER: BackendId[] = ["opencode", "claude", "codex"];
 /** Synthetic sub-tab id for the (non-backend) Quick Chat model curation. */
 const QUICK_CHAT_TAB_ID = "quickchat";
 
+/** Nearest scrollable ancestor, used to keep the tab strip anchored on switch. */
+function getScrollableParent(el: HTMLElement): HTMLElement | null {
+  let node: HTMLElement | null = el.parentElement;
+  while (node) {
+    const overflowY = getComputedStyle(node).overflowY;
+    if (overflowY === "auto" || overflowY === "scroll") return node;
+    node = node.parentElement;
+  }
+  return null;
+}
+
 /**
  * Top-level "Agents" settings tab. Owns the global default-backend picker and
  * the MCP server panel, then a sub-tab strip with one panel per backend plus a
@@ -38,6 +51,28 @@ export const AgentSettings: React.FC = () => {
   const settings = useSettingsValue();
   const plugin = usePlugin();
   const [selectedTab, setSelectedTab] = React.useState<string>(BACKEND_ORDER[0]);
+  const tabStripRef = React.useRef<HTMLDivElement>(null);
+  const pendingAnchorTop = React.useRef<number | null>(null);
+
+  // Panels vary widely in height (opencode's model list is long, Quick Chat is
+  // short), so switching to a shorter one clamps the settings scroll and jumps
+  // the view. Pin the tab strip to its pre-switch viewport position so only the
+  // content below it changes.
+  React.useLayoutEffect(() => {
+    const strip = tabStripRef.current;
+    if (!strip || pendingAnchorTop.current === null) return;
+    const scroller = getScrollableParent(strip);
+    if (scroller) {
+      const delta = strip.getBoundingClientRect().top - pendingAnchorTop.current;
+      if (delta !== 0) scroller.scrollTop += delta;
+    }
+    pendingAnchorTop.current = null;
+  }, [selectedTab]);
+
+  const handleSelectTab = React.useCallback((id: string) => {
+    pendingAnchorTop.current = tabStripRef.current?.getBoundingClientRect().top ?? null;
+    setSelectedTab(id);
+  }, []);
 
   if (Platform.isMobile) {
     return (
@@ -61,7 +96,7 @@ export const AgentSettings: React.FC = () => {
       icon: <d.Icon className="tw-size-4" />,
       label: d.displayName,
     })),
-    { id: QUICK_CHAT_TAB_ID, icon: null, label: "Quick Chat" },
+    { id: QUICK_CHAT_TAB_ID, icon: <MessageCircle className="tw-size-4" />, label: "Quick Chat" },
   ];
 
   return (
@@ -82,13 +117,13 @@ export const AgentSettings: React.FC = () => {
         <McpServersPanel />
 
         <div className="tw-flex tw-flex-col">
-          <div className="tw-flex tw-flex-wrap tw-gap-1" role="tablist">
+          <div ref={tabStripRef} className="tw-flex tw-flex-wrap tw-gap-1" role="tablist">
             {tabs.map((tab, index) => (
               <TabItem
                 key={tab.id}
                 tab={tab}
                 isSelected={selectedTab === tab.id}
-                onClick={() => setSelectedTab(tab.id)}
+                onClick={() => handleSelectTab(tab.id)}
                 isFirst={index === 0}
                 isLast={index === tabs.length - 1}
               />
@@ -120,6 +155,11 @@ export const AgentSettings: React.FC = () => {
  * BYOK / Plus registries — chat doesn't own providers.
  */
 const QuickChatPanel: React.FC = () => {
+  const settings = useSettingsValue();
+  const { options: chatModelOptions, resolveSelectionId } = useChatBackendModelOptions();
+  const resolvedDefaultModelId = resolveSelectionId(settings.defaultModelKey);
+  const hasDefault = resolvedDefaultModelId !== undefined;
+
   return (
     <div className="tw-space-y-3">
       <div className="tw-flex tw-min-w-0 tw-flex-col">
@@ -128,6 +168,22 @@ const QuickChatPanel: React.FC = () => {
           Models shown in the chat model picker. Add providers on the Models (BYOK) tab.
         </span>
       </div>
+      <SettingItem
+        type="select"
+        title="Default model"
+        description="The model new chats start with. Pick from your enabled Quick Chat models."
+        value={resolvedDefaultModelId ?? "Select Model"}
+        onChange={(value) => {
+          if (value === "Select Model") return;
+          updateSetting("defaultModelKey", value);
+        }}
+        options={
+          hasDefault
+            ? chatModelOptions
+            : [{ label: "Select Model", value: "Select Model" }, ...chatModelOptions]
+        }
+        placeholder="Model"
+      />
       <ChatModelEnableList />
     </div>
   );

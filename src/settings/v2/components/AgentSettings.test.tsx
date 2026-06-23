@@ -10,6 +10,14 @@ jest.mock("@/settings/model", () => ({
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook; name must match the export
   useSettingsValue: () => ({ agentMode: { activeBackend: "opencode", backends: {} } }),
   setSettings: jest.fn(),
+  updateSetting: jest.fn(),
+}));
+
+// Mock the chat-backend options hook to avoid pulling the heavy @/modelManagement
+// dependency chain (ByokPanel -> ConfirmModal extends Modal) into the test.
+jest.mock("@/hooks/useChatBackendModelOptions", () => ({
+  // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook; name must match the export
+  useChatBackendModelOptions: () => ({ options: [], resolveSelectionId: () => undefined }),
 }));
 
 const Icon: React.FC<{ className?: string }> = () => <svg data-testid="icon" />;
