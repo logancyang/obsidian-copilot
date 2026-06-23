@@ -7,7 +7,7 @@ import {
   buildSummaryUserPrompt,
   EMPTY_PENDING_FANOUT_CONTEXT,
   FANOUT_HISTORY_MAX_CHARS,
-  isWriteOrExecToolKind,
+  isVaultWriteToolKind,
   parseFanoutComposite,
   renderFanoutComposite,
   selectSummaryInputs,
@@ -25,23 +25,33 @@ const histMsg = (sender: string, message: string): AgentChatMessage => ({
 
 const upper = (id: string) => id.toUpperCase();
 
-describe("isWriteOrExecToolKind", () => {
-  it("denies write/exec tool kinds", () => {
-    const denied: AgentToolKind[] = ["edit", "delete", "move", "execute"];
+describe("isVaultWriteToolKind", () => {
+  it("denies vault-mutating tool kinds", () => {
+    const denied: AgentToolKind[] = ["edit", "delete", "move"];
     for (const kind of denied) {
-      expect(isWriteOrExecToolKind(kind)).toBe(true);
+      expect(isVaultWriteToolKind(kind)).toBe(true);
     }
   });
 
-  it("allows read/search/fetch/think/switch_mode/other tool kinds", () => {
-    const allowed: AgentToolKind[] = ["read", "search", "fetch", "think", "switch_mode", "other"];
+  it("allows read/search/fetch/think/switch_mode/other/execute tool kinds", () => {
+    // `execute` passes so Copilot's skill-script relay tools (web search/fetch)
+    // run in a read-only QA turn; the prompt + sandbox keep shell from writing.
+    const allowed: AgentToolKind[] = [
+      "read",
+      "search",
+      "fetch",
+      "think",
+      "switch_mode",
+      "other",
+      "execute",
+    ];
     for (const kind of allowed) {
-      expect(isWriteOrExecToolKind(kind)).toBe(false);
+      expect(isVaultWriteToolKind(kind)).toBe(false);
     }
   });
 
   it("fails safe (denies) when the kind is unknown", () => {
-    expect(isWriteOrExecToolKind(undefined)).toBe(true);
+    expect(isVaultWriteToolKind(undefined)).toBe(true);
   });
 });
 

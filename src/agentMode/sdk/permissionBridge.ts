@@ -23,7 +23,7 @@ import type {
 } from "@/agentMode/session/types";
 import { PERMISSION_OPTION_KINDS } from "@/agentMode/session/types";
 import { resolveToolName } from "@/agentMode/session/toolName";
-import { isWriteOrExecToolKind } from "@/agentMode/session/fanout/fanoutTypes";
+import { isVaultWriteToolKind } from "@/agentMode/session/fanout/fanoutTypes";
 import { err2String } from "@/utils";
 import { logSdkInbound, logSdkOutbound } from "./sdkDebugTap";
 import { deriveToolKind, deriveToolTitle, vendorMetaFields } from "./toolMeta";
@@ -116,10 +116,10 @@ export class PermissionBridge {
       // unknown MCP tools in a read-only QA turn; known-classified MCP reads
       // (read/search/fetch) still fall through.
       const isUnverifiableMcpTool = Boolean(mcpServer) && kind === "other";
-      if (isWriteOrExecToolKind(kind) || isUnverifiableMcpTool) {
+      if (isVaultWriteToolKind(kind) || isUnverifiableMcpTool) {
         return this.deny(
           "canUseTool:response",
-          "Read-only QA turn: write and exec tools are disabled.",
+          "Read-only QA turn: vault-write tools are disabled.",
           sessionId
         );
       }

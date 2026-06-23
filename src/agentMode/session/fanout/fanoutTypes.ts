@@ -103,25 +103,28 @@ export interface FanoutSummary {
 }
 
 /**
- * Tool kinds that mutate the vault or execute commands, hard-denied in a
- * read-only fan-out sub-session. `other` is intentionally NOT here: denying it
- * would block legitimate read-only MCP tools, and the prompt + sandbox already
- * steer the agent away from mutations.
+ * Tool kinds that mutate the vault, hard-denied in a read-only fan-out
+ * sub-session. `execute` is intentionally NOT here: Copilot's relay
+ * capabilities (web search/fetch, PDF, YouTube) ship as skill scripts the
+ * backend runs via shell, so a blanket exec deny silently kills web search for
+ * backends with no native equivalent (opencode). The read-only prompt preamble
+ * plus each backend's native read-only sandbox keep exec from writing. `other`
+ * is also not here: denying it would block legitimate read-only MCP tools.
  */
-const WRITE_OR_EXEC_KINDS: ReadonlySet<AgentToolKind> = new Set<AgentToolKind>([
+const VAULT_WRITE_KINDS: ReadonlySet<AgentToolKind> = new Set<AgentToolKind>([
   "edit",
   "delete",
   "move",
-  "execute",
 ]);
 
 /**
- * Whether a tool kind must be denied in a read-only fan-out sub-session.
- * `undefined` (kind not reported) is treated as a write to fail safe.
+ * Whether a tool kind mutates the vault and must be denied in a read-only
+ * fan-out sub-session. `undefined` (kind not reported) is treated as a write to
+ * fail safe.
  */
-export function isWriteOrExecToolKind(kind: AgentToolKind | undefined): boolean {
+export function isVaultWriteToolKind(kind: AgentToolKind | undefined): boolean {
   if (kind === undefined) return true;
-  return WRITE_OR_EXEC_KINDS.has(kind);
+  return VAULT_WRITE_KINDS.has(kind);
 }
 
 /**

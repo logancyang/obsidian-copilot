@@ -3,7 +3,7 @@ import type {
   AskUserQuestionPrompter,
   PermissionPrompter,
 } from "@/agentMode/session/AgentSessionManager";
-import { isWriteOrExecToolKind } from "@/agentMode/session/fanout/fanoutTypes";
+import { isVaultWriteToolKind } from "@/agentMode/session/fanout/fanoutTypes";
 import {
   PERMISSION_ALLOW_KINDS,
   PERMISSION_REJECT_KINDS,
@@ -19,17 +19,20 @@ import {
  * enforcement layer behind the orchestrator's read-only guarantee.
  */
 function decideReadOnly(req: PermissionPrompt): PermissionDecision {
-  // `other` is an unknown/MCP tool we can't verify is read-only, so fail safe
-  // and deny it here too (mirrors the Claude SDK bridge's unknown-MCP denial);
+  // Only vault mutation (edit/delete/move) is hard-denied. `execute` passes so
+  // Copilot's skill-script relay tools (web search/fetch, etc.) run; the
+  // read-only prompt + native sandbox keep shell from writing. `other` is an
+  // unknown/MCP tool we can't verify is read-only, so fail safe and deny it
+  // here too (mirrors the Claude SDK bridge's unknown-MCP denial);
   // read/search/fetch/think/switch_mode still pass.
   const kind = req.toolCall.kind;
-  const deny = isWriteOrExecToolKind(kind) || kind === "other";
+  const deny = isVaultWriteToolKind(kind) || kind === "other";
   const kinds = deny ? PERMISSION_REJECT_KINDS : PERMISSION_ALLOW_KINDS;
   const opt = req.options.find((o) => kinds.includes(o.kind));
   if (!opt) return { outcome: { outcome: "cancelled" } };
   const decision: PermissionDecision = { outcome: { outcome: "selected", optionId: opt.optionId } };
   return deny
-    ? { ...decision, denyMessage: "Read-only QA turn: write and exec tools are disabled." }
+    ? { ...decision, denyMessage: "Read-only QA turn: vault-write tools are disabled." }
     : decision;
 }
 

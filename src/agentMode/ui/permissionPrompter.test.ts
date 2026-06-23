@@ -23,7 +23,8 @@ describe("createDefaultPermissionPrompter — read-only fan-out policy", () => {
       (id) => id === "ro-session"
     );
 
-    for (const kind of ["read", "search", "fetch"] as AgentToolKind[]) {
+    // `execute` is allowed so skill-script relay tools (web search) run.
+    for (const kind of ["read", "search", "fetch", "execute"] as AgentToolKind[]) {
       const decision = await prompter(promptFor("ro-session", kind));
       expect(decision.outcome).toEqual({ outcome: "selected", optionId: "allow_once" });
     }
@@ -31,14 +32,14 @@ describe("createDefaultPermissionPrompter — read-only fan-out policy", () => {
     expect(handleToolPermission).not.toHaveBeenCalled();
   });
 
-  it("denies write/exec tools for a read-only fan-out sub-session", async () => {
+  it("denies vault-write tools for a read-only fan-out sub-session", async () => {
     const prompter = createDefaultPermissionPrompter(
       () => null,
       () => true
     );
     // `other` is an unknown/MCP tool that can't be verified read-only, so it
-    // is denied too (fail-safe), alongside the write/exec kinds.
-    for (const kind of ["edit", "delete", "move", "execute", "other"] as AgentToolKind[]) {
+    // is denied too (fail-safe), alongside the vault-mutating kinds.
+    for (const kind of ["edit", "delete", "move", "other"] as AgentToolKind[]) {
       const decision = await prompter(promptFor("ro-session", kind));
       expect(decision.outcome).toEqual({ outcome: "selected", optionId: "reject_once" });
       expect(decision.denyMessage).toContain("Read-only");

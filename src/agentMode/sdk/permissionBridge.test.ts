@@ -336,7 +336,7 @@ describe("PermissionBridge.canUseTool", () => {
       expect(prompter).not.toHaveBeenCalled();
     });
 
-    it("still allows reads in a read-only session (only write/exec are denied)", async () => {
+    it("still allows reads in a read-only session (only vault writes are denied)", async () => {
       const prompter = jest.fn(async () => ({
         outcome: { outcome: "selected" as const, optionId: "allow_once" as const },
       }));
