@@ -95,28 +95,45 @@ for f in main.js styles.css; do
   fi
 done
 
-# Write a branch- and timestamp-tagged manifest.json (real file, not a symlink)
-# so Obsidian's Community plugins list visibly reflects which worktree/branch
-# is loaded and when this build was deployed.
+# Write a timestamp-tagged manifest.json (real file, not a symlink). The plugin
+# NAME (shown in Obsidian's Community plugins list / sidebar) carries the build
+# timestamp ONLY — never the branch/worktree name, which is not a reliable signal
+# of what code is actually loaded. The DESCRIPTION still carries `branch: <name>`
+# because the `npm run test:vault` preflight in TESTING_GUIDE.md greps it
+# (`/branch: ([^ |]+)/`) to catch deploying from the wrong worktree when several
+# worktrees share one vault.
 BRANCH="$(git -C "$WORKTREE_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"
 BUILD_TS="$(date +%Y%m%d-%H%M%S)"
-echo "==> Writing branch-tagged manifest.json (branch: $BRANCH, build: $BUILD_TS)"
+echo "==> Writing timestamp-tagged manifest.json (name build: $BUILD_TS, branch: $BRANCH)"
 rm -f "$PLUGIN_DIR/manifest.json"
 SRC="$WORKTREE_ROOT/manifest.json" DEST="$PLUGIN_DIR/manifest.json" BRANCH="$BRANCH" BUILD_TS="$BUILD_TS" node -e '
   const fs = require("fs");
   const m = JSON.parse(fs.readFileSync(process.env.SRC, "utf8"));
-  m.name = m.name + " [" + process.env.BRANCH + " @ " + process.env.BUILD_TS + "]";
+  m.name = m.name + " [" + process.env.BUILD_TS + "]";
   m.description = "[branch: " + process.env.BRANCH + " | build: " + process.env.BUILD_TS + "] " + m.description;
   fs.writeFileSync(process.env.DEST, JSON.stringify(m, null, 2) + "\n");
 '
 
-echo "==> Reloading plugin in Obsidian"
+# Reload by toggling disable -> enable, NOT `plugin:reload`. On this setup
+# `plugin:reload` returns success but does NOT re-run the plugin's onload, so the
+# freshly deployed main.js never executes. A disable+enable cycle re-runs onload.
+#
+# CRITICAL: the Obsidian CLI picks its TARGET VAULT from the current working
+# directory (it resolves the vault enclosing $PWD; `vault=` does NOT override
+# this). So we MUST run the CLI from inside the target vault's directory, or the
+# reload silently hits whatever vault the caller's cwd sits in (e.g. the
+# repo/worktree vault) instead of the deploy target. Hence the `cd "$VAULT_PATH"`.
+echo "==> Reloading plugin in Obsidian (vault dir: $VAULT_PATH)"
 if [[ ! -x "$OBSIDIAN_BIN" ]]; then
   echo "warning: Obsidian CLI not found at $OBSIDIAN_BIN; skipping reload." >&2
 else
-  if ! "$OBSIDIAN_BIN" plugin:enable id="$PLUGIN_ID" >/dev/null 2>&1 \
-     || ! "$OBSIDIAN_BIN" plugin:reload id="$PLUGIN_ID" >/dev/null 2>&1; then
-    echo "warning: Obsidian doesn't appear to be running. Start it and the symlinked plugin will load on next open." >&2
+  ( cd "$VAULT_PATH" && "$OBSIDIAN_BIN" plugin:disable id="$PLUGIN_ID" >/dev/null 2>&1 ) || true
+  if ( cd "$VAULT_PATH" && "$OBSIDIAN_BIN" plugin:enable id="$PLUGIN_ID" >/dev/null 2>&1 ); then
+    echo "    reloaded (onload re-ran). Note: the sidebar manifest label only"
+    echo "    refreshes on a full Obsidian restart; use a dev-console marker to"
+    echo "    confirm the loaded build, not the label."
+  else
+    echo "warning: could not reload via the CLI. Is Obsidian running with this vault open? The plugin will load on next open." >&2
   fi
 fi
 
