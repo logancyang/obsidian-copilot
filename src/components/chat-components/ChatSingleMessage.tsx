@@ -687,7 +687,11 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
             const insertBefore = contentRef.current!.children[currentIndex];
 
             const textDiv = doc.createElement("div");
-            textDiv.className = "message-segment";
+            // `markdown-rendered` opts the container into Obsidian's native
+            // reading-view stylesheet so reloaded messages match the live
+            // render path (AgentMarkdownText). Most visibly, it restores the
+            // gray background pill on inline `<code>` spans.
+            textDiv.className = "message-segment markdown-rendered";
 
             if (insertBefore) {
               contentRef.current!.insertBefore(textDiv, insertBefore);

@@ -334,4 +334,23 @@ describe("ChatSingleMessage", () => {
     expect(messageSegment?.querySelector(".content-hr")).not.toBeNull();
     expect(messageSegment?.querySelector('a[href="#fn-2"]')?.textContent).toBe("2");
   });
+
+  it("marks rendered text segments with markdown-rendered for native reading-view styling", async () => {
+    const { container } = render(
+      <TooltipProvider>
+        <ChatSingleMessage
+          message={baseMessage}
+          app={createAppStub()}
+          isStreaming={false}
+          onDelete={() => {}}
+        />
+      </TooltipProvider>
+    );
+
+    await waitFor(() => expect(renderMarkdownMock).toHaveBeenCalled());
+
+    const messageSegment = container.querySelector(".message-segment");
+    expect(messageSegment).toBeTruthy();
+    expect(messageSegment?.classList.contains("markdown-rendered")).toBe(true);
+  });
 });
