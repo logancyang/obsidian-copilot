@@ -15,7 +15,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ModelCapabilityIcons, hasCapabilityIcons } from "@/components/ui/model-display";
 import { cn } from "@/lib/utils";
+import { capabilitiesFromConfiguredInfo } from "@/modelManagement/chatModel/modelCapabilityFlags";
 import type { ConfiguredModel, Provider } from "@/modelManagement/types/persisted";
 import {
   formatContextWindow,
@@ -193,6 +195,7 @@ const ProviderSection: React.FC<ProviderSectionProps> = ({
 const ModelRow: React.FC<{ model: ConfiguredModel }> = ({ model }) => {
   const contextLabel = formatContextWindow(model.info.limits?.context);
   const releaseLabel = formatReleaseDate(model.info.releaseDate);
+  const capabilities = capabilitiesFromConfiguredInfo(model.info);
   return (
     <div
       role="row"
@@ -208,6 +211,11 @@ const ModelRow: React.FC<{ model: ConfiguredModel }> = ({ model }) => {
           <Badge variant="secondary" className="tw-shrink-0 tw-text-ui-smaller">
             Embedding
           </Badge>
+        )}
+        {hasCapabilityIcons(capabilities) && (
+          <span className="tw-flex tw-shrink-0 tw-items-center tw-gap-0.5">
+            <ModelCapabilityIcons capabilities={capabilities} iconSize={14} />
+          </span>
         )}
       </div>
       <span className="tw-shrink-0 tw-text-xs tw-text-muted">{contextLabel}</span>
