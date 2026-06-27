@@ -6,7 +6,10 @@ import { AgentTabStrip } from "@/agentMode/ui/AgentTabStrip";
 import { CopilotBrandIcon } from "@/agentMode/ui/CopilotBrandIcon";
 import { AgentHomeShelf, type AgentHomeShelfSection } from "@/agentMode/ui/AgentHomeShelf";
 import { GlobalRecentChatsSection } from "@/agentMode/ui/GlobalRecentChatsSection";
+import { HOME_SHELF_TAB_STORAGE_KEY } from "@/agentMode/ui/homeShelfPrefs";
 import { ProjectPickerList } from "@/agentMode/ui/ProjectPickerList";
+import { RelevantNotesShelfPanel } from "@/agentMode/ui/RelevantNotesShelfPanel";
+import { useRelevantNotesPaneOpen } from "@/agentMode/ui/useRelevantNotesPaneOpen";
 import { useAgentChatRuntimeState } from "@/agentMode/ui/hooks/useAgentChatRuntimeState";
 import { useAgentHistoryControls } from "@/agentMode/ui/hooks/useAgentHistoryControls";
 import { useAgentInputDrafts } from "@/agentMode/ui/hooks/useAgentInputDrafts";
@@ -25,7 +28,7 @@ import { logError } from "@/logger";
 import type CopilotPlugin from "@/main";
 import { useProjects } from "@/projects/state";
 import { useSettingsValue } from "@/settings/model";
-import { Folder, MessageSquare } from "lucide-react";
+import { FileSearch, Folder, MessageSquare } from "lucide-react";
 import { Notice } from "obsidian";
 import React, { useCallback, useContext, useEffect, useMemo, useRef } from "react";
 
@@ -64,6 +67,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   const settings = useSettingsValue();
   const eventTarget = useContext(EventTargetContext);
   const chatInput = useChatInput();
+  const isRelevantNotesPaneOpen = useRelevantNotesPaneOpen(app);
 
   // Place the caret in the composer when the agent view opens so the user can
   // type immediately. AgentHome only mounts once preload settles and a session
@@ -262,6 +266,23 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
           />
         ),
       },
+      // Hidden while the dedicated Relevant Notes pane is open, so the shelf
+      // doesn't duplicate a surface the user already has pinned alongside chat.
+      ...(isRelevantNotesPaneOpen
+        ? []
+        : [
+            {
+              id: "relevant-notes",
+              icon: <FileSearch className="tw-size-4" />,
+              title: "Relevant Notes",
+              renderBody: () => (
+                <RelevantNotesShelfPanel
+                  onPopOut={() => void plugin.activateRelevantNotesView()}
+                  onAddToChat={(text) => void plugin.insertTextIntoActiveChat(text)}
+                />
+              ),
+            },
+          ]),
       {
         // Projects isn't shipped yet: greyed on the right, "Coming soon" on
         // hover, and its list never mounts (the shelf won't make a disabled
@@ -290,6 +311,8 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       handleDeleteChat,
       handleOpenSourceFile,
       handleLoadChatHistory,
+      isRelevantNotesPaneOpen,
+      plugin,
     ]
   );
 
@@ -411,7 +434,10 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                      keeping the tab bar in reach. No extra horizontal padding so
                      the card lines up with the composer's border. */
                   <div className="tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-pt-6">
-                    <AgentHomeShelf sections={landingSections} />
+                    <AgentHomeShelf
+                      sections={landingSections}
+                      storageKey={HOME_SHELF_TAB_STORAGE_KEY}
+                    />
                   </div>
                 ) : null}
               </div>

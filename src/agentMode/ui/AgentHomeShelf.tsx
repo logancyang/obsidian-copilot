@@ -1,6 +1,7 @@
 import { AgentHomeTab } from "@/agentMode/ui/AgentHomeTab";
+import { getHomeShelfTab, setHomeShelfTab } from "@/agentMode/ui/homeShelfPrefs";
 import { cn } from "@/lib/utils";
-import React, { useId, useState } from "react";
+import React, { useCallback, useId, useState } from "react";
 
 export interface AgentHomeShelfSection {
   /** Stable id used for tab selection. */
@@ -8,7 +9,7 @@ export interface AgentHomeShelfSection {
   /** Leading type icon for the tab. */
   icon: React.ReactNode;
   title: string;
-  count: number;
+  count?: number;
   /** Rendered into the panel while this tab is the selected one. */
   renderBody: () => React.ReactNode;
   /**
@@ -24,6 +25,7 @@ export interface AgentHomeShelfSection {
 interface AgentHomeShelfProps {
   sections: AgentHomeShelfSection[];
   className?: string;
+  storageKey?: string;
 }
 
 /**
@@ -33,11 +35,25 @@ interface AgentHomeShelfProps {
  * section bodies are sized to lead with the same number of rows, so switching
  * tabs doesn't change the card height.
  */
-export function AgentHomeShelf({ sections, className }: AgentHomeShelfProps): React.ReactElement {
+export function AgentHomeShelf({
+  sections,
+  className,
+  storageKey,
+}: AgentHomeShelfProps): React.ReactElement {
   // Default to (and only ever resolve to) the first selectable section — a
   // disabled tab can't be activated, so its body never mounts.
   const firstSelectable = sections.find((s) => !s.disabled) ?? null;
-  const [activeId, setActiveId] = useState<string | null>(firstSelectable?.id ?? null);
+  const [activeId, setActiveIdState] = useState<string | null>(() => {
+    const stored = storageKey ? getHomeShelfTab(storageKey) : null;
+    return stored ?? firstSelectable?.id ?? null;
+  });
+  const selectTab = useCallback(
+    (id: string) => {
+      setActiveIdState(id);
+      if (storageKey) setHomeShelfTab(storageKey, id);
+    },
+    [storageKey]
+  );
   const requested = sections.find((s) => s.id === activeId);
   const active = requested && !requested.disabled ? requested : firstSelectable;
   const panelId = useId();
@@ -79,7 +95,7 @@ export function AgentHomeShelf({ sections, className }: AgentHomeShelfProps): Re
             controlsId={panelId}
             disabled={section.disabled}
             disabledTooltip={section.disabledTooltip}
-            onClick={() => setActiveId(section.id)}
+            onClick={() => selectTab(section.id)}
           />
         ))}
       </div>

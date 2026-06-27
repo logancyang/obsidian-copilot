@@ -12,13 +12,13 @@
 
 import { logWarn } from "@/logger";
 
-const HOME_SHELF_TAB_KEY = "copilot:home-shelf-tab:v1";
+export const HOME_SHELF_TAB_STORAGE_KEY = "copilot:home-shelf-tab:v1";
 const POPOUT_HINT_DISMISSED_KEY = "copilot:relevant-notes-popout-hint-dismissed:v1";
 
 /** Read the last-selected shelf tab id, or `null` when unset or storage is unusable. */
-export function getHomeShelfTab(): string | null {
+export function getHomeShelfTab(storageKey: string): string | null {
   try {
-    const value = window.localStorage.getItem(HOME_SHELF_TAB_KEY);
+    const value = window.localStorage.getItem(storageKey);
     return value && value.length > 0 ? value : null;
   } catch {
     return null;
@@ -26,9 +26,9 @@ export function getHomeShelfTab(): string | null {
 }
 
 /** Persist the selected shelf tab id; no-op if storage is unusable. */
-export function setHomeShelfTab(id: string): void {
+export function setHomeShelfTab(storageKey: string, id: string): void {
   try {
-    window.localStorage.setItem(HOME_SHELF_TAB_KEY, id);
+    window.localStorage.setItem(storageKey, id);
   } catch (e) {
     logWarn("Failed to persist home shelf tab", e);
   }
