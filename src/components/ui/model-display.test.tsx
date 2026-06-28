@@ -34,19 +34,19 @@ describe("ModelCapabilityIcons", () => {
     expect(queryByTestId(NO_VISION)).toBeNull();
   });
 
-  it("renders the globe only for a vision + web-search model", () => {
+  it("renders no icon for a vision + web-search model (web search is not badged)", () => {
     const { container, queryByTestId } = render(
       <ModelCapabilityIcons capabilities={[ModelCapability.VISION, ModelCapability.WEB_SEARCH]} />
     );
-    expect(container.querySelectorAll("svg").length).toBe(1);
+    expect(container.querySelectorAll("svg").length).toBe(0);
     expect(queryByTestId(NO_VISION)).toBeNull();
   });
 
-  it("renders the globe and the eye-off for a web-search-only model", () => {
+  it("renders only the eye-off for a web-search-only model (no vision)", () => {
     const { container, queryByTestId } = render(
       <ModelCapabilityIcons capabilities={[ModelCapability.WEB_SEARCH]} />
     );
-    expect(container.querySelectorAll("svg").length).toBe(2);
+    expect(container.querySelectorAll("svg").length).toBe(1);
     expect(queryByTestId(NO_VISION)).not.toBeNull();
   });
 
@@ -60,22 +60,22 @@ describe("ModelCapabilityIcons", () => {
 });
 
 describe("hasCapabilityIcons", () => {
-  it("is false for unknown (undefined) and vision-only models", () => {
+  it("is false for unknown (undefined) and any vision-capable model", () => {
     expect(hasCapabilityIcons(undefined)).toBe(false);
     expect(hasCapabilityIcons([ModelCapability.VISION])).toBe(false);
     expect(hasCapabilityIcons([ModelCapability.VISION, ModelCapability.REASONING])).toBe(false);
+    expect(hasCapabilityIcons([ModelCapability.VISION, ModelCapability.WEB_SEARCH])).toBe(false);
   });
 
-  it("is true when an icon would render (no-vision or web search)", () => {
+  it("is true when the model is known to lack vision", () => {
     expect(hasCapabilityIcons([])).toBe(true);
     expect(hasCapabilityIcons([ModelCapability.REASONING])).toBe(true);
     expect(hasCapabilityIcons([ModelCapability.WEB_SEARCH])).toBe(true);
-    expect(hasCapabilityIcons([ModelCapability.VISION, ModelCapability.WEB_SEARCH])).toBe(true);
   });
 });
 
 describe("getModelDisplayWithIcons", () => {
-  it("surfaces Websearch but never Vision or Reasoning", () => {
+  it("shows name and provider, never a modality label", () => {
     const model: CustomModel = {
       name: "omni",
       provider: "openai",
@@ -83,7 +83,9 @@ describe("getModelDisplayWithIcons", () => {
       capabilities: [ModelCapability.VISION, ModelCapability.REASONING, ModelCapability.WEB_SEARCH],
     };
     const text = getModelDisplayWithIcons(model);
-    expect(text).toContain("Websearch");
+    expect(text).toContain("omni");
+    expect(text).toContain("OpenAI");
+    expect(text).not.toContain("Websearch");
     expect(text).not.toContain("Vision");
     expect(text).not.toContain("Reasoning");
   });
