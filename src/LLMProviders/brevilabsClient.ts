@@ -302,8 +302,14 @@ export class BrevilabsClient {
       return { isValid: undefined };
     }
     if (data?.entitlement) {
-      // Signed token present: derive tier (Plus vs Lite) from its claims.
-      await applyEntitlement(data.entitlement);
+      // Signed token present: derive tier (Plus vs Lite) from its claims. If it
+      // can't be verified (keys not shipped yet, kid rotation, clock skew), fall
+      // back to paid rather than locking out a license the server just confirmed
+      // valid — never downgrade on an unverifiable token.
+      const verified = await applyEntitlement(data.entitlement);
+      if (!verified) {
+        turnOnPaid();
+      }
     } else {
       // Pre-token server: any valid license is paid + Plus (no Lite tier yet).
       turnOnPaid();

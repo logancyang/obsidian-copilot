@@ -507,8 +507,8 @@ export function turnOnPaid(): void {
 }
 
 /**
- * Clear all entitlement state silently (no modal). Used when a cached token has
- * expired/become invalid offline — the user simply needs to reconnect.
+ * Clear all entitlement state silently (no modal). Only invoked on an
+ * authoritative negative (invalid license / no license key) via turnOffPaid.
  */
 function clearEntitlement(): void {
   setSettings({ isPaidUser: false, isPlusUser: false, entitlementToken: "" });
@@ -532,33 +532,26 @@ export function turnOffPaid(app?: App): void {
 }
 
 /**
- * Verify a signed entitlement token and apply its claims to settings:
- * `isPaidUser` = tier is not free, `isPlusUser` = the `multi_agent` capability is
- * granted (tier >= Plus). An invalid/expired token clears entitlement silently.
- * Returns true when the token grants Plus-tier access.
+ * Verify a signed entitlement token and, when valid, apply its claims to
+ * settings: `isPaidUser` = tier is not free, `isPlusUser` = the `multi_agent`
+ * capability is granted (tier >= Plus).
+ *
+ * Returns true when the token verified and was applied, false when it could NOT
+ * be verified (bad signature, expired, unknown `kid`, or — during rollout — an
+ * empty public-key set). An unverifiable token is NOT an authoritative "not
+ * entitled" signal, so this never clears flags; the caller decides the fallback
+ * (e.g. a license the server already confirmed valid stays paid). Only an
+ * authoritative negative (invalid license / no key) downgrades, via turnOffPaid.
  */
 export async function applyEntitlement(token: string): Promise<boolean> {
   const claims = await verifyEntitlement(token, { expectedUserId: getSettings().userId });
   if (!claims) {
-    clearEntitlement();
     return false;
   }
-  const isPlus = claims.features.includes("multi_agent");
   setSettings({
     entitlementToken: token,
     isPaidUser: claims.tier !== "free",
-    isPlusUser: isPlus,
+    isPlusUser: claims.features.includes("multi_agent"),
   });
-  return isPlus;
-}
-
-/**
- * Re-verify the persisted entitlement token on startup so an expired token
- * downgrades offline (no network). No-op when no token is stored, so a paid user
- * on a pre-token server keeps the fallback flags from their last license check.
- */
-export async function refreshEntitlementFromCache(): Promise<void> {
-  const token = getSettings().entitlementToken;
-  if (!token) return;
-  await applyEntitlement(token);
+  return true;
 }

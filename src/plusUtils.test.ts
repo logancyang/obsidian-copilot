@@ -114,7 +114,7 @@ describe("applyEntitlement", () => {
     });
   });
 
-  it("marks a Lite token paid but not Plus", async () => {
+  it("applies a Lite token as paid but not Plus", async () => {
     mockVerifyEntitlement.mockResolvedValue({
       user_id: "user-123",
       plan: "lite",
@@ -123,7 +123,9 @@ describe("applyEntitlement", () => {
       iat: 0,
       exp: 9_999_999_999,
     });
-    expect(await applyEntitlement("token")).toBe(false);
+    // Returns true (verified + applied); the tier shows in the flags, not the
+    // return value.
+    expect(await applyEntitlement("token")).toBe(true);
     expect(mockSetSettings).toHaveBeenCalledWith({
       entitlementToken: "token",
       isPaidUser: true,
@@ -148,14 +150,13 @@ describe("applyEntitlement", () => {
     });
   });
 
-  it("clears entitlement when the token is invalid or expired", async () => {
+  it("does NOT change settings when the token cannot be verified", async () => {
+    // An unverifiable token (bad signature, expired, unknown kid, or empty key
+    // set during rollout) is not an authoritative negative, so flags are left
+    // untouched for the caller to decide the fallback. Only turnOffPaid clears.
     mockVerifyEntitlement.mockResolvedValue(null);
     expect(await applyEntitlement("bad")).toBe(false);
-    expect(mockSetSettings).toHaveBeenCalledWith({
-      isPaidUser: false,
-      isPlusUser: false,
-      entitlementToken: "",
-    });
+    expect(mockSetSettings).not.toHaveBeenCalled();
   });
 });
 

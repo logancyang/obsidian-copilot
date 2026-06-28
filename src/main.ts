@@ -52,11 +52,7 @@ import {
 } from "@/services/settingsPersistence";
 import { UserMemoryManager } from "@/memory/UserMemoryManager";
 import { clearRecordedPromptPayload } from "@/LLMProviders/chainRunner/utils/promptPayloadRecorder";
-import {
-  checkIsPaidUser,
-  refreshEntitlementFromCache,
-  refreshSelfHostModeValidation,
-} from "@/plusUtils";
+import { checkIsPaidUser, refreshSelfHostModeValidation } from "@/plusUtils";
 import {
   getWebViewerService,
   startActiveWebTabTracking,
@@ -235,9 +231,6 @@ export default class CopilotPlugin extends Plugin {
     // Initialize BrevilabsClient
     this.brevilabsClient = BrevilabsClient.getInstance();
     this.brevilabsClient.setPluginVersion(this.manifest.version);
-    // Re-verify the cached entitlement token first (offline-safe), then refresh
-    // from the server. The network result is authoritative and lands last.
-    void refreshEntitlementFromCache();
     void checkIsPaidUser(this.app);
     void refreshSelfHostModeValidation();
 
