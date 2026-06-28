@@ -1,7 +1,7 @@
 import { BUILTIN_SKILLS, managedBuiltinSkills, MIYO_SEARCH_SKILL, PLUS_ENV } from "./builtinSkills";
 
-/** A script file shipped by a skill, matched by extension (".sh" or ".mjs"). */
-function scriptOf(name: string, ext: ".sh" | ".mjs" = ".sh"): string {
+/** A script file shipped by a skill, matched by extension (".sh", ".cmd", ".ps1"). */
+function scriptOf(name: string, ext: ".sh" | ".cmd" | ".ps1" = ".sh"): string {
   const skill = BUILTIN_SKILLS.find((s) => s.name === name);
   if (!skill) throw new Error(`no builtin skill ${name}`);
   const file = skill.files.find((f) => f.path.endsWith(ext));
@@ -29,19 +29,30 @@ describe("builtin Copilot Plus skills", () => {
     }
   });
 
-  it("ships both an sh and a node script, and documents the sh → node fallback", () => {
+  it("ships one runnable script per OS — POSIX sh + Windows cmd/ps1, no Node", () => {
     for (const skill of BUILTIN_SKILLS) {
       const sh = skill.files.find((f) => f.path.endsWith(".sh"));
-      const mjs = skill.files.find((f) => f.path.endsWith(".mjs"));
+      const cmd = skill.files.find((f) => f.path.endsWith(".cmd"));
+      const ps1 = skill.files.find((f) => f.path.endsWith(".ps1"));
       expect(sh).toBeDefined();
-      expect(mjs).toBeDefined();
-      // The two scripts share a base name (web-search.sh ↔ web-search.mjs).
-      expect(mjs!.path).toBe(sh!.path.replace(/\.sh$/, ".mjs"));
-      // SKILL.md tells the agent to prefer sh, fall back to node, then prompt
-      // for a Node install if neither runtime is available.
+      expect(cmd).toBeDefined();
+      expect(ps1).toBeDefined();
+      // The three scripts share a base name (web-search.sh ↔ .cmd ↔ .ps1).
+      expect(cmd!.path).toBe(sh!.path.replace(/\.sh$/, ".cmd"));
+      expect(ps1!.path).toBe(sh!.path.replace(/\.sh$/, ".ps1"));
+      // SKILL.md routes macOS/Linux at sh and Windows at the cmd wrapper (run
+      // with PowerShell's `&` call operator), with no Node anywhere.
       expect(skill.skillMd).toContain(`sh "/absolute/path/to/this/skill/directory/${sh!.path}"`);
-      expect(skill.skillMd).toContain(`node "/absolute/path/to/this/skill/directory/${mjs!.path}"`);
-      expect(skill.skillMd).toContain("install Node.js");
+      expect(skill.skillMd).toContain(`& "/absolute/path/to/this/skill/directory/${cmd!.path}"`);
+      expect(skill.skillMd).not.toContain("install Node.js");
+      expect(skill.skillMd).not.toContain("node ");
+      // No Node runtime ships anymore.
+      expect(skill.files.some((f) => f.path.endsWith(".mjs"))).toBe(false);
+      // The cmd launcher drives the sibling ps1 via Windows PowerShell with the
+      // execution policy relaxed, locating it relative to its own folder.
+      expect(cmd!.content).toContain("WindowsPowerShell\\v1.0\\powershell.exe");
+      expect(cmd!.content).toContain("-ExecutionPolicy Bypass");
+      expect(cmd!.content).toContain(`-File "%~dp0${ps1!.path}"`);
     }
   });
 
@@ -58,15 +69,14 @@ describe("builtin Copilot Plus skills", () => {
       expect(sh).toContain('[ -n "$KEY" ] && [ -n "$BASE" ] || no_license');
       expect(sh).toContain("Copilot Plus");
 
-      const mjs = scriptOf(skill.name, ".mjs");
-      expect(mjs).toContain(`#!/usr/bin/env node`);
-      expect(mjs).toContain(`process.env.${PLUS_ENV.licenseKey}`);
-      expect(mjs).toContain(`process.env.${PLUS_ENV.baseUrl}`);
-      expect(mjs).toContain('Authorization: "Bearer " + KEY');
-      expect(mjs).toContain('"X-Client-Version": CLIENT_VERSION');
+      const ps1 = scriptOf(skill.name, ".ps1");
+      expect(ps1).toContain(`[Environment]::GetEnvironmentVariable('${PLUS_ENV.licenseKey}')`);
+      expect(ps1).toContain(`[Environment]::GetEnvironmentVariable('${PLUS_ENV.baseUrl}')`);
+      expect(ps1).toContain('Authorization = "Bearer $KEY"');
+      expect(ps1).toContain("'X-Client-Version' = $CLIENT_VERSION");
       // Same license guard as the shell script.
-      expect(mjs).toContain("if (!KEY || !BASE) noLicense();");
-      expect(mjs).toContain("Copilot Plus");
+      expect(ps1).toContain("if (-not $KEY -or -not $BASE) { NoLicense }");
+      expect(ps1).toContain("Copilot Plus");
     }
   });
 
@@ -96,20 +106,20 @@ describe("builtin Copilot Plus skills", () => {
       expect(sh).toContain("$RELAY_FAILED_FALLBACK");
       expect(sh).toContain("your own equivalent built-in tool for this");
 
-      const mjs = scriptOf(skill.name, ".mjs");
-      expect(mjs).toContain("your own equivalent built-in tools");
-      expect(mjs).not.toContain("web tools");
-      expect(mjs).toContain("process.pid % 4 === 0");
-      expect(mjs).toContain("die(LICENSE_INVALID)");
-      expect(mjs).toContain("RELAY_FAILED_FALLBACK");
+      const ps1 = scriptOf(skill.name, ".ps1");
+      expect(ps1).toContain("your own equivalent built-in tools");
+      expect(ps1).not.toContain("web tools");
+      expect(ps1).toContain("($PID % 4) -eq 0");
+      expect(ps1).toContain("Die $LICENSE_INVALID");
+      expect(ps1).toContain("RELAY_FAILED_FALLBACK");
     }
   });
 
   it("includes the firecrawl-backed web-fetch skill targeting /url4llm", () => {
     expect(scriptOf("copilot-web-fetch", ".sh")).toContain('relay "/url4llm"');
     expect(scriptOf("copilot-web-fetch", ".sh")).toContain('\\"url\\"');
-    expect(scriptOf("copilot-web-fetch", ".mjs")).toContain('await relay("/url4llm"');
-    expect(scriptOf("copilot-web-fetch", ".mjs")).toContain("url: ARG, user_id: USER_ID");
+    expect(scriptOf("copilot-web-fetch", ".ps1")).toContain('Invoke-Relay "/url4llm"');
+    expect(scriptOf("copilot-web-fetch", ".ps1")).toContain("@{ url = $ARG; user_id = $USER_ID }");
   });
 
   it("maps each relay tool to its endpoint and request body (both scripts)", () => {
@@ -120,11 +130,13 @@ describe("builtin Copilot Plus skills", () => {
     // Single-arg tools JSON-escape the argument they pass.
     expect(scriptOf("copilot-web-search", ".sh")).toContain('$(json_escape "$ARG")');
 
-    // The node fallback hits the same endpoints with a structured body.
-    expect(scriptOf("copilot-web-search", ".mjs")).toContain('await relay("/websearch"');
-    expect(scriptOf("copilot-web-search", ".mjs")).toContain("query: ARG, user_id: USER_ID");
-    expect(scriptOf("copilot-youtube-transcript", ".mjs")).toContain('await relay("/youtube4llm"');
-    expect(scriptOf("copilot-fetch-x", ".mjs")).toContain('await relay("/twitter4llm"');
+    // The PowerShell sibling hits the same endpoints with a structured body.
+    expect(scriptOf("copilot-web-search", ".ps1")).toContain('Invoke-Relay "/websearch"');
+    expect(scriptOf("copilot-web-search", ".ps1")).toContain(
+      "@{ query = $ARG; user_id = $USER_ID }"
+    );
+    expect(scriptOf("copilot-youtube-transcript", ".ps1")).toContain('Invoke-Relay "/youtube4llm"');
+    expect(scriptOf("copilot-fetch-x", ".ps1")).toContain('Invoke-Relay "/twitter4llm"');
   });
 
   it("read-pdf base64-encodes the file into the pdf field (both scripts)", () => {
@@ -133,10 +145,12 @@ describe("builtin Copilot Plus skills", () => {
     expect(sh).toContain("base64");
     expect(sh).toContain('\\"pdf\\"');
 
-    const mjs = scriptOf("copilot-read-pdf", ".mjs");
-    expect(mjs).toContain('await relay("/pdf4llm"');
-    expect(mjs).toContain('toString("base64")');
-    expect(mjs).toContain("pdf: PDF, user_id: USER_ID");
+    const ps1 = scriptOf("copilot-read-pdf", ".ps1");
+    expect(ps1).toContain('Invoke-Relay "/pdf4llm"');
+    expect(ps1).toContain(
+      "[System.Convert]::ToBase64String([System.IO.File]::ReadAllBytes($FILE))"
+    );
+    expect(ps1).toContain("@{ pdf = $PDF; user_id = $USER_ID }");
   });
 });
 
