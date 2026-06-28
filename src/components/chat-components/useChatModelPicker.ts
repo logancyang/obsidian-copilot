@@ -1,6 +1,6 @@
-import { ModelCapability } from "@/constants";
 import {
   backendPickerAtomFamily,
+  capabilitiesFromConfiguredInfo,
   mapProviderTypeToChatModelProvider,
   providerRequiresApiKey,
   resolveChatModelSelectionId,
@@ -62,11 +62,10 @@ export function useChatModelPicker(params: {
     for (const entry of entries) {
       if (entry.state !== "ok") continue;
       const { configuredModel, provider, configuredModelId } = entry;
-      const capabilities: ModelCapability[] = [];
-      if (configuredModel.info.reasoning) capabilities.push(ModelCapability.REASONING);
-      if (configuredModel.info.modalities?.input?.includes("image")) {
-        capabilities.push(ModelCapability.VISION);
-      }
+      // Leave capabilities `undefined` when the snapshot carries no modality
+      // data so unknown models stay unblocked; only a populated array (which may
+      // be empty) asserts "known". See the image guard in `Chat.tsx`.
+      const capabilities = capabilitiesFromConfiguredInfo(configuredModel.info);
       const needsKey = providerRequiresApiKey(provider) && !provider.apiKeyKeychainId;
       const modelEntry: ModelSelectorEntry = {
         name: configuredModelId,
