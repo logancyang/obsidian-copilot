@@ -153,8 +153,8 @@ export function buildAgentSystemPrompt(opts?: { projectInstructions?: string }):
   if (!getDisableBuiltinSystemPrompt()) {
     parts.push(COPILOT_PROMPT_BASE);
     // Always steer toward the builtin Copilot Plus skills, regardless of Plus
-    // status. Gating on `isPlusUser` would be wrong anyway — valid self-host
-    // mode is Plus-enabled but reports `isPlusUser: false` — and if a skill
+    // status. Gating on `isPaidUser` would be wrong anyway — valid self-host
+    // mode is Plus-enabled but reports `isPaidUser: false` — and if a skill
     // can't run, its script exits telling the agent to use its own equivalent
     // tools and the fallback clause routes it there. Never blocks free users.
     parts.push(COPILOT_PLUS_TOOLS_STEERING);

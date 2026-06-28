@@ -2,12 +2,25 @@ import { DEFAULT_SETTINGS } from "@/constants";
 import type { CopilotSettings } from "@/settings/model";
 
 const mockGetSettings = jest.fn<CopilotSettings, []>();
+const mockSetSettings = jest.fn<void, [Partial<CopilotSettings>]>();
 
 jest.mock("@/settings/model", () => ({
   getSettings: () => mockGetSettings(),
+  setSettings: (partial: Partial<CopilotSettings>) => mockSetSettings(partial),
 }));
 
-import { canUseMultiAgent, isSelfHostAccessValid, isSelfHostModeValid } from "@/plusUtils";
+const mockVerifyEntitlement = jest.fn<Promise<unknown>, [string, unknown?]>();
+
+jest.mock("@/entitlement", () => ({
+  verifyEntitlement: (...args: [string, unknown?]) => mockVerifyEntitlement(...args),
+}));
+
+import {
+  applyEntitlement,
+  canUseMultiAgent,
+  isSelfHostAccessValid,
+  isSelfHostModeValid,
+} from "@/plusUtils";
 
 const SELF_HOST_GRACE_PERIOD_MS = 15 * 24 * 60 * 60 * 1000;
 
@@ -64,9 +77,85 @@ describe("canUseMultiAgent", () => {
     expect(canUseMultiAgent()).toBe(true);
   });
 
+  it("returns false for a Lite user (paid but below Plus)", () => {
+    mockGetSettings.mockReturnValue(
+      buildSettings({ isPaidUser: true, isPlusUser: false, enableSelfHostMode: false })
+    );
+    expect(canUseMultiAgent()).toBe(false);
+  });
+
   it("returns true when self-host mode is on (believer/supporter offline path)", () => {
     mockGetSettings.mockReturnValue(buildSettings({ isPlusUser: false, enableSelfHostMode: true }));
     expect(canUseMultiAgent()).toBe(true);
+  });
+});
+
+describe("applyEntitlement", () => {
+  beforeEach(() => {
+    mockSetSettings.mockClear();
+    mockVerifyEntitlement.mockReset();
+    mockGetSettings.mockReturnValue(buildSettings({ userId: "user-123" }));
+  });
+
+  it("grants Plus for a token carrying the multi_agent feature", async () => {
+    mockVerifyEntitlement.mockResolvedValue({
+      user_id: "user-123",
+      plan: "plus",
+      tier: "plus",
+      features: ["multi_agent", "self_host"],
+      iat: 0,
+      exp: 9_999_999_999,
+    });
+    expect(await applyEntitlement("token")).toBe(true);
+    expect(mockSetSettings).toHaveBeenCalledWith({
+      entitlementToken: "token",
+      isPaidUser: true,
+      isPlusUser: true,
+    });
+  });
+
+  it("marks a Lite token paid but not Plus", async () => {
+    mockVerifyEntitlement.mockResolvedValue({
+      user_id: "user-123",
+      plan: "lite",
+      tier: "lite",
+      features: [],
+      iat: 0,
+      exp: 9_999_999_999,
+    });
+    expect(await applyEntitlement("token")).toBe(false);
+    expect(mockSetSettings).toHaveBeenCalledWith({
+      entitlementToken: "token",
+      isPaidUser: true,
+      isPlusUser: false,
+    });
+  });
+
+  it("grants Plus for a Pro token", async () => {
+    mockVerifyEntitlement.mockResolvedValue({
+      user_id: "user-123",
+      plan: "pro",
+      tier: "pro",
+      features: ["multi_agent"],
+      iat: 0,
+      exp: 9_999_999_999,
+    });
+    expect(await applyEntitlement("token")).toBe(true);
+    expect(mockSetSettings).toHaveBeenCalledWith({
+      entitlementToken: "token",
+      isPaidUser: true,
+      isPlusUser: true,
+    });
+  });
+
+  it("clears entitlement when the token is invalid or expired", async () => {
+    mockVerifyEntitlement.mockResolvedValue(null);
+    expect(await applyEntitlement("bad")).toBe(false);
+    expect(mockSetSettings).toHaveBeenCalledWith({
+      isPaidUser: false,
+      isPlusUser: false,
+      entitlementToken: "",
+    });
   });
 });
 

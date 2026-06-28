@@ -330,7 +330,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     // stale license/URL until a reload. (Restarts coalesce, so this folds with
     // any Miyo-availability re-seed restart below.)
     if (
-      prev.isPlusUser !== next.isPlusUser ||
+      prev.isPaidUser !== next.isPaidUser ||
       prev.plusLicenseKey !== next.plusLicenseKey ||
       prev.miyoServerUrl !== next.miyoServerUrl
     ) {
@@ -355,7 +355,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     const miyoAvailabilityChanged =
       prev.enableMiyo !== next.enableMiyo ||
       prev.miyoServerUrl !== next.miyoServerUrl ||
-      prev.isPlusUser !== next.isPlusUser ||
+      prev.isPaidUser !== next.isPaidUser ||
       prev.selfHostModeValidatedAt !== next.selfHostModeValidatedAt ||
       prev.selfHostValidationCount !== next.selfHostValidationCount;
     if (prevFolder !== nextFolder || miyoAvailabilityChanged) {

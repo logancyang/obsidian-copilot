@@ -52,7 +52,11 @@ import {
 } from "@/services/settingsPersistence";
 import { UserMemoryManager } from "@/memory/UserMemoryManager";
 import { clearRecordedPromptPayload } from "@/LLMProviders/chainRunner/utils/promptPayloadRecorder";
-import { checkIsPlusUser, refreshSelfHostModeValidation } from "@/plusUtils";
+import {
+  checkIsPaidUser,
+  refreshEntitlementFromCache,
+  refreshSelfHostModeValidation,
+} from "@/plusUtils";
 import {
   getWebViewerService,
   startActiveWebTabTracking,
@@ -177,14 +181,14 @@ export default class CopilotPlugin extends Plugin {
     // sign-out→sign-in (each its own settings change) settles in issue order,
     // not in whichever overlapping reconcile happens to finish last.
     let plusSyncChain: Promise<void> = Promise.resolve();
-    const syncPlus = (isPlusUser: boolean | undefined, licenseKey: string): void => {
+    const syncPlus = (isPaidUser: boolean | undefined, licenseKey: string): void => {
       plusSyncChain = plusSyncChain.then(() =>
-        syncCopilotPlusProvider(this.modelManagement, !!isPlusUser, licenseKey)
+        syncCopilotPlusProvider(this.modelManagement, !!isPaidUser, licenseKey)
       );
     };
-    // Initial reconcile: an already-signed-in user's `isPlusUser` is restored
+    // Initial reconcile: an already-signed-in user's `isPaidUser` is restored
     // from disk without firing the subscription, so register on load.
-    syncPlus(getSettings().isPlusUser, getSettings().plusLicenseKey);
+    syncPlus(getSettings().isPaidUser, getSettings().plusLicenseKey);
     this.settingsUnsubscriber = subscribeToSettingsChange((prev, next) => {
       void (async () => {
         try {
@@ -199,19 +203,12 @@ export default class CopilotPlugin extends Plugin {
           logError("Failed to persist settings.", error);
           new Notice("Copilot failed to save settings. Check logs and try again.");
         }
-        // Sign-in / sign-out (isPlusUser flip) or key rotation while signed in.
+        // Sign-in / sign-out (isPaidUser flip) or key rotation while signed in.
         if (
-          prev?.isPlusUser !== next.isPlusUser ||
-          (next.isPlusUser && prev?.plusLicenseKey !== next.plusLicenseKey)
+          prev?.isPaidUser !== next.isPaidUser ||
+          (next.isPaidUser && prev?.plusLicenseKey !== next.plusLicenseKey)
         ) {
-          syncPlus(next.isPlusUser, next.plusLicenseKey);
-        }
-        // Sign-in / sign-out (isPlusUser flip) or key rotation while signed in.
-        if (
-          prev?.isPlusUser !== next.isPlusUser ||
-          (next.isPlusUser && prev?.plusLicenseKey !== next.plusLicenseKey)
-        ) {
-          syncPlus(next.isPlusUser, next.plusLicenseKey);
+          syncPlus(next.isPaidUser, next.plusLicenseKey);
         }
       })();
     });
@@ -238,7 +235,10 @@ export default class CopilotPlugin extends Plugin {
     // Initialize BrevilabsClient
     this.brevilabsClient = BrevilabsClient.getInstance();
     this.brevilabsClient.setPluginVersion(this.manifest.version);
-    void checkIsPlusUser(this.app);
+    // Re-verify the cached entitlement token first (offline-safe), then refresh
+    // from the server. The network result is authoritative and lands last.
+    void refreshEntitlementFromCache();
+    void checkIsPaidUser(this.app);
     void refreshSelfHostModeValidation();
 
     // Initialize ProjectManager

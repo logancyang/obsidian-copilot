@@ -940,7 +940,9 @@ export const OPENCODE_RELEASE_API_URL_TEMPLATE =
 
 export const DEFAULT_SETTINGS: CopilotSettings = {
   userId: uuidv4(),
+  isPaidUser: false,
   isPlusUser: false,
+  entitlementToken: "",
   plusLicenseKey: "",
   openAIApiKey: "",
   openAIOrgId: "",
