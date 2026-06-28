@@ -182,6 +182,12 @@ function powershellPreamble(): string {
 # stdout. Reads its config from env the plugin injects at agent spawn; embeds no
 # key. Targets Windows PowerShell 5.1 (.NET BCL only) so it needs no Node.
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+# Emit stdout/stderr as UTF-8: Windows PowerShell 5.1 defaults Console.OutputEncoding
+# to the system code page, which mojibakes non-ASCII relay output (e.g. Japanese
+# results, fetched pages, transcripts) before the agent reads it. The removed Node
+# fallback wrote UTF-8; match that. $OutputEncoding governs the pipeline too.
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
 $BASE = [Environment]::GetEnvironmentVariable('${PLUS_ENV.baseUrl}')
 $KEY = [Environment]::GetEnvironmentVariable('${PLUS_ENV.licenseKey}')
 $USER_ID = [Environment]::GetEnvironmentVariable('${PLUS_ENV.userId}')

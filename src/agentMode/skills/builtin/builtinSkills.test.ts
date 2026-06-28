@@ -82,6 +82,10 @@ describe("builtin Copilot Plus skills", () => {
       expect(ps1).toContain("[System.Text.Encoding]::UTF8.GetBytes($json)");
       expect(ps1).toContain("application/json; charset=utf-8");
       expect(ps1).toContain("-Body $bytes");
+      // Output side: force UTF-8 so non-ASCII relay output isn't mojibaked by
+      // Windows PowerShell 5.1's default code-page console encoding.
+      expect(ps1).toContain("[Console]::OutputEncoding = [System.Text.Encoding]::UTF8");
+      expect(ps1).toContain("$OutputEncoding = [System.Text.Encoding]::UTF8");
     }
   });
 
