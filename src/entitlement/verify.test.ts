@@ -1,3 +1,11 @@
+/**
+ * @jest-environment node
+ *
+ * Runs under the node environment (not jsdom) so `crypto.subtle` is the complete
+ * Node WebCrypto. jsdom ships only a partial SubtleCrypto (no `generateKey`), and
+ * patching it in jest.setup proved flaky across CI Node builds. The verification
+ * logic is WebCrypto-spec behavior, identical between Node and the webview.
+ */
 import type { EntitlementClaims } from "./types";
 import { verifyEntitlement } from "./verify";
 

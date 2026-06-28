@@ -1,5 +1,3 @@
-import { logWarn } from "@/logger";
-
 import { ENTITLEMENT_PUBLIC_KEYS } from "./publicKeys";
 import type { EntitlementClaims } from "./types";
 
@@ -80,8 +78,9 @@ export async function verifyEntitlement(
       base64UrlToBytes(signatureSegment),
       new TextEncoder().encode(`${headerSegment}.${payloadSegment}`)
     );
-  } catch (error) {
-    logWarn("[entitlement] token verification failed", error);
+  } catch {
+    // Any verification error (malformed JWK, unsupported curve, bad signature
+    // bytes) is treated as a non-verifying token; the caller decides the fallback.
     return null;
   }
   if (!verified) return null;
