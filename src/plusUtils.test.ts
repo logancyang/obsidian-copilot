@@ -88,6 +88,28 @@ describe("canUseMultiAgent", () => {
     mockGetSettings.mockReturnValue(buildSettings({ isPlusUser: false, enableSelfHostMode: true }));
     expect(canUseMultiAgent()).toBe(true);
   });
+
+  it("returns false when the entitlement token has expired (offline lock)", () => {
+    mockGetSettings.mockReturnValue(
+      buildSettings({
+        isPlusUser: true,
+        enableSelfHostMode: false,
+        entitlementExpiresAt: Date.now() - 1000,
+      })
+    );
+    expect(canUseMultiAgent()).toBe(false);
+  });
+
+  it("returns true for an unexpired entitlement token", () => {
+    mockGetSettings.mockReturnValue(
+      buildSettings({
+        isPlusUser: true,
+        enableSelfHostMode: false,
+        entitlementExpiresAt: Date.now() + 60_000,
+      })
+    );
+    expect(canUseMultiAgent()).toBe(true);
+  });
 });
 
 describe("applyEntitlement", () => {
@@ -109,6 +131,7 @@ describe("applyEntitlement", () => {
     expect(await applyEntitlement("token")).toBe(true);
     expect(mockSetSettings).toHaveBeenCalledWith({
       entitlementToken: "token",
+      entitlementExpiresAt: 9_999_999_999_000,
       isPaidUser: true,
       isPlusUser: true,
     });
@@ -128,6 +151,7 @@ describe("applyEntitlement", () => {
     expect(await applyEntitlement("token")).toBe(true);
     expect(mockSetSettings).toHaveBeenCalledWith({
       entitlementToken: "token",
+      entitlementExpiresAt: 9_999_999_999_000,
       isPaidUser: true,
       isPlusUser: false,
     });
@@ -145,6 +169,7 @@ describe("applyEntitlement", () => {
     expect(await applyEntitlement("token")).toBe(true);
     expect(mockSetSettings).toHaveBeenCalledWith({
       entitlementToken: "token",
+      entitlementExpiresAt: 9_999_999_999_000,
       isPaidUser: true,
       isPlusUser: true,
     });

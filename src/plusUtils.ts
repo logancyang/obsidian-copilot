@@ -116,17 +116,27 @@ export function isPaidEnabled(): boolean {
 }
 
 /**
+ * True once the entitlement token's expiry has passed. Only token-derived state
+ * carries an expiry (tokenless fallback leaves it 0), so this honors the JWS
+ * `exp` for the strict gate even offline, without affecting the broad paid gate.
+ */
+function isEntitlementExpired(settings: CopilotSettings): boolean {
+  return settings.entitlementExpiresAt > 0 && Date.now() >= settings.entitlementExpiresAt;
+}
+
+/**
  * Synchronous check for tier >= Plus (excludes Lite) — the gate for
  * Plus-and-above features such as multi-agent fan-out. Self-host plans
  * (Believer/Supporter) are >= Plus, so a valid self-host bypass grants this too.
- * Backed by the signed entitlement token via `settings.isPlusUser`.
+ * Backed by the signed entitlement token via `settings.isPlusUser`, and locks
+ * once the token's `exp` passes (even offline).
  */
 export function isPlusEnabled(): boolean {
   const settings = getSettings();
   if (isSelfHostModeValid()) {
     return true;
   }
-  return settings.isPlusUser === true;
+  return settings.isPlusUser === true && !isEntitlementExpired(settings);
 }
 
 /**
@@ -168,6 +178,9 @@ export function useIsPlusUser(): boolean | undefined {
   const settings = useSettingsValue();
   if (hasSelfHostHookBypass(settings)) {
     return true;
+  }
+  if (isEntitlementExpired(settings)) {
+    return false;
   }
   return settings.isPlusUser;
 }
@@ -503,7 +516,28 @@ export function navigateToPlusPage(medium: PlusUtmMedium): void {
  * safe and preserves today's behavior. See "Copilot Entitlement Token Design".
  */
 export function turnOnPaid(): void {
-  setSettings({ isPaidUser: true, isPlusUser: true, entitlementToken: "" });
+  setSettings({
+    isPaidUser: true,
+    isPlusUser: true,
+    entitlementToken: "",
+    entitlementExpiresAt: 0,
+  });
+}
+
+/**
+ * Paid license confirmed by the server, but its entitlement token could not be
+ * verified (verifying key not shipped yet / kid rotation). Grant paid so general
+ * Plus features keep working, but WITHHOLD the strict gate — otherwise an
+ * unverifiable Lite token would bypass the multi-agent gate. Fails closed for
+ * multi-agent until the matching public key ships.
+ */
+export function markPaidPendingEntitlement(): void {
+  setSettings({
+    isPaidUser: true,
+    isPlusUser: false,
+    entitlementToken: "",
+    entitlementExpiresAt: 0,
+  });
 }
 
 /**
@@ -511,7 +545,12 @@ export function turnOnPaid(): void {
  * authoritative negative (invalid license / no license key) via turnOffPaid.
  */
 function clearEntitlement(): void {
-  setSettings({ isPaidUser: false, isPlusUser: false, entitlementToken: "" });
+  setSettings({
+    isPaidUser: false,
+    isPlusUser: false,
+    entitlementToken: "",
+    entitlementExpiresAt: 0,
+  });
 }
 
 /**
@@ -550,6 +589,7 @@ export async function applyEntitlement(token: string): Promise<boolean> {
   }
   setSettings({
     entitlementToken: token,
+    entitlementExpiresAt: claims.exp * 1000,
     isPaidUser: claims.tier !== "free",
     isPlusUser: claims.features.includes("multi_agent"),
   });

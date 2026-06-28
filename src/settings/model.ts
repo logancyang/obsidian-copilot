@@ -127,6 +127,10 @@ export interface CopilotSettings {
   // Raw server-signed entitlement token (JWS). Tamper-evident, so safe to persist
   // and trust offline until its `exp`. Empty when the server hasn't issued one.
   entitlementToken: string;
+  // Epoch ms when the entitlement token expires (0 = none / tokenless fallback).
+  // The strict isPlusUser gate honors this so multi-agent locks at expiry even
+  // while offline. Derived from the token's `exp`.
+  entitlementExpiresAt: number;
   inlineEditCommands: LegacyCommandSettings[] | undefined;
   projectList: Array<ProjectConfig>;
   passMarkdownImages: boolean;

@@ -943,6 +943,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   isPaidUser: false,
   isPlusUser: false,
   entitlementToken: "",
+  entitlementExpiresAt: 0,
   plusLicenseKey: "",
   openAIApiKey: "",
   openAIOrgId: "",

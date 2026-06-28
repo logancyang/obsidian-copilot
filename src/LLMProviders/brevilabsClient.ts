@@ -2,7 +2,7 @@ import { BREVILABS_API_BASE_URL } from "@/constants";
 import { getDecryptedKey } from "@/encryptionService";
 import { MissingPlusLicenseError } from "@/error";
 import { logInfo } from "@/logger";
-import { applyEntitlement, turnOffPaid, turnOnPaid } from "@/plusUtils";
+import { applyEntitlement, markPaidPendingEntitlement, turnOffPaid, turnOnPaid } from "@/plusUtils";
 import { getSettings } from "@/settings/model";
 import { arrayBufferToBase64 } from "@/utils/base64";
 import { App, requestUrl } from "obsidian";
@@ -81,7 +81,13 @@ function parseBrevilabsResponse<T>(
     }
     return { data: null, error: new Error(`HTTP error: ${response.status}`) };
   }
-  logInfo(`[API ${endpoint} request]:`, data);
+  // Redact the signed entitlement JWS so it never lands in the shared
+  // copilot-log.md when a license response is logged.
+  const loggable =
+    data && typeof data === "object" && "entitlement" in data
+      ? { ...(data as Record<string, unknown>), entitlement: "[redacted]" }
+      : data;
+  logInfo(`[API ${endpoint} request]:`, loggable);
   return { data: data as T };
 }
 
@@ -303,12 +309,13 @@ export class BrevilabsClient {
     }
     if (data?.entitlement) {
       // Signed token present: derive tier (Plus vs Lite) from its claims. If it
-      // can't be verified (keys not shipped yet, kid rotation, clock skew), fall
-      // back to paid rather than locking out a license the server just confirmed
-      // valid — never downgrade on an unverifiable token.
+      // can't be verified (keys not shipped yet, kid rotation, clock skew), grant
+      // paid so general Plus features keep working, but withhold the strict gate —
+      // never grant multi-agent on an unverifiable token (an unverifiable Lite
+      // token must not bypass the gate), and never downgrade a confirmed license.
       const verified = await applyEntitlement(data.entitlement);
       if (!verified) {
-        turnOnPaid();
+        markPaidPendingEntitlement();
       }
     } else {
       // Pre-token server: any valid license is paid + Plus (no Lite tier yet).
