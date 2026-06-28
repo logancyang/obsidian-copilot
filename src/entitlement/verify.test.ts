@@ -1,11 +1,7 @@
-/**
- * @jest-environment node
- *
- * Runs under the node environment (not jsdom) so `crypto.subtle` is the complete
- * Node WebCrypto. jsdom ships only a partial SubtleCrypto (no `generateKey`), and
- * patching it in jest.setup proved flaky across CI Node builds. The verification
- * logic is WebCrypto-spec behavior, identical between Node and the webview.
- */
+// Uses WebCrypto (ECDSA P-256) for key generation and signing. jest.setup forces
+// Node's complete WebCrypto onto globalThis because jsdom ships only a partial
+// SubtleCrypto; the verification logic itself is WebCrypto-spec behavior,
+// identical between Node and the Obsidian webview.
 import type { EntitlementClaims } from "./types";
 import { verifyEntitlement } from "./verify";
 
