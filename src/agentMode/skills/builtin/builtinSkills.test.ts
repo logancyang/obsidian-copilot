@@ -77,6 +77,11 @@ describe("builtin Copilot Plus skills", () => {
       // Same license guard as the shell script.
       expect(ps1).toContain("if (-not $KEY -or -not $BASE) { NoLicense }");
       expect(ps1).toContain("Copilot Plus");
+      // The body is sent as explicit UTF-8 bytes — Windows PowerShell 5.1 would
+      // otherwise ASCII-encode a string body and corrupt non-ASCII input.
+      expect(ps1).toContain("[System.Text.Encoding]::UTF8.GetBytes($json)");
+      expect(ps1).toContain("application/json; charset=utf-8");
+      expect(ps1).toContain("-Body $bytes");
     }
   });
 

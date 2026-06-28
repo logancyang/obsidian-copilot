@@ -212,10 +212,14 @@ if (-not $KEY -or -not $BASE) { NoLicense }
 # Invoke-Relay endpoint body -> prints the response body, mapping HTTP status.
 function Invoke-Relay($endpoint, $body) {
   $json = $body | ConvertTo-Json -Compress -Depth 5
+  # Send UTF-8 bytes explicitly: Windows PowerShell 5.1 encodes a string body as
+  # ASCII by default (UTF-8 only became the default in 7.4), which would corrupt
+  # non-ASCII queries/URLs. A byte[] body is sent verbatim, matching curl.
+  $bytes = [System.Text.Encoding]::UTF8.GetBytes($json)
   try {
-    $resp = Invoke-WebRequest -Uri "$BASE$endpoint" -Method Post -ContentType 'application/json' \`
+    $resp = Invoke-WebRequest -Uri "$BASE$endpoint" -Method Post -ContentType 'application/json; charset=utf-8' \`
       -Headers @{ Authorization = "Bearer $KEY"; 'X-Client-Version' = $CLIENT_VERSION } \`
-      -Body $json -UseBasicParsing
+      -Body $bytes -UseBasicParsing
     $code = [int]$resp.StatusCode
     $out = $resp.Content
   } catch {
