@@ -5,10 +5,11 @@ import { TextEncoder, TextDecoder } from "util";
 window.TextEncoder = TextEncoder;
 window.TextDecoder = TextDecoder;
 
-// jsdom doesn't provide WebCrypto's SubtleCrypto; expose Node's so code that
-// verifies signatures / encrypts (entitlement tokens, encryptionService) runs.
-// Bare `crypto` resolves to `window.crypto` under jsdom, so define it there.
-if (!window.crypto?.subtle) {
+// jsdom provides no SubtleCrypto on some Node versions and only a partial one on
+// others (Node 22's jsdom lacks subtle.generateKey), so probe for the actual
+// method we need and swap in Node's complete WebCrypto when it's missing. Bare
+// `crypto` resolves to `window.crypto` under jsdom, so define it there.
+if (typeof window.crypto?.subtle?.generateKey !== "function") {
   Object.defineProperty(window, "crypto", { value: webcrypto, configurable: true });
 }
 
