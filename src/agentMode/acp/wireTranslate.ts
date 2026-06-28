@@ -27,6 +27,7 @@ import type {
   ToolKind as AcpToolKind,
 } from "@agentclientprotocol/sdk";
 import type {
+  AgentPlanEntry,
   AgentToolKind,
   AgentToolStatus,
   BackendConfigOption,
@@ -266,11 +267,96 @@ function toolCallDeltaFromAcp(
 
 // ---- Notification → SessionEvent --------------------------------------
 
-export function acpNotificationToEvent(n: SessionNotification): SessionEvent {
-  return {
-    sessionId: sessionIdFromAcp(n.sessionId),
-    update: acpUpdateToSessionUpdate(n.update),
-  };
+/**
+ * One wire notification can yield more than one session event: a `todowrite`
+ * tool call additionally synthesizes the standard `plan` update (see
+ * {@link todoToolPlanFromAcp}), so the trail's PlanPill and the todo snapshot
+ * stay backend-agnostic. The base translation always comes first.
+ *
+ * `todoToolCallIds` is one session's id set, owned by the caller
+ * (AcpBackendProcess keys it per session — see `todoToolCallIdsFor`): the first
+ * `todowrite`-titled tool call registers its id, so later `tool_call_update`s
+ * for the same call still synthesize even after opencode renames the title
+ * (e.g. "3 todos") or drops it. Omit it (tests, replay) to fall back to
+ * title-only recognition.
+ */
+export function acpNotificationToEvents(
+  n: SessionNotification,
+  todoToolCallIds?: Set<string>
+): SessionEvent[] {
+  const sessionId = sessionIdFromAcp(n.sessionId);
+  const events: SessionEvent[] = [{ sessionId, update: acpUpdateToSessionUpdate(n.update) }];
+  const todoPlan = todoToolPlanFromAcp(n.update, todoToolCallIds);
+  if (todoPlan) events.push({ sessionId, update: todoPlan });
+  return events;
+}
+
+/**
+ * opencode reports its execution todo list as a generic `todowrite` tool call
+ * whose `rawInput.todos` carries the full list — current releases (1.17.3)
+ * have NO plan-channel emission at all (verified: binary-string audit + live
+ * probes, designdocs/agent-projects/verify/README.md "Task-list channel").
+ * Synthesize the standard `plan` update from it. Builds that DO emit a real
+ * plan update coexist fine: identical entries dedupe downstream
+ * (`planEntriesEqual` for the message part, signature compare for the
+ * snapshot).
+ *
+ * Tool identity: the initial `tool_call` titles itself `todowrite`; opencode
+ * then mutates follow-up update titles (e.g. "3 todos"). We register the
+ * call's id on first sight (title === todowrite) so subsequent updates for the
+ * same id keep synthesizing regardless of title — and unknown ids are ignored,
+ * so a stray `{todos}` payload from another tool/backend can't masquerade.
+ */
+function todoToolPlanFromAcp(
+  update: SessionNotification["update"],
+  todoToolCallIds?: Set<string>
+): SessionUpdate | null {
+  if (update.sessionUpdate !== "tool_call" && update.sessionUpdate !== "tool_call_update") {
+    return null;
+  }
+  const toolCallId = (update as { toolCallId?: string }).toolCallId;
+  const title = (update as { title?: string | null }).title;
+  const isTodoTitle =
+    title != null &&
+    (() => {
+      const { tool, mcpServer } = resolveToolName(title);
+      return !mcpServer && tool.toLowerCase() === "todowrite";
+    })();
+
+  if (isTodoTitle && toolCallId) todoToolCallIds?.add(toolCallId);
+
+  // Recognized when the title says todowrite, or the id was registered from an
+  // earlier todowrite-titled call. Without a tracker (tests/replay), fall back
+  // to title-only — a renamed follow-up is then skipped, but its predecessor
+  // already delivered the same list.
+  const recognized =
+    isTodoTitle || (toolCallId != null && todoToolCallIds?.has(toolCallId) === true);
+  if (!recognized) return null;
+
+  const todos = (update.rawInput as { todos?: unknown } | undefined)?.todos;
+  if (!Array.isArray(todos)) return null;
+  const entries: AgentPlanEntry[] = [];
+  for (const todo of todos) {
+    if (typeof todo !== "object" || todo === null) continue;
+    const t = todo as { content?: unknown; status?: unknown; priority?: unknown };
+    if (typeof t.content !== "string" || t.content.length === 0) continue;
+    if (t.status !== "pending" && t.status !== "in_progress" && t.status !== "completed") continue;
+    entries.push({
+      content: t.content,
+      status: t.status,
+      priority:
+        t.priority === "high" || t.priority === "medium" || t.priority === "low"
+          ? t.priority
+          : "medium",
+    });
+  }
+  // A recognized todo tool reporting `todos: []` is a genuine clear — emit an
+  // empty plan so the snapshot resets (matching the claude path, which emits an
+  // empty plan when its last task is removed). But a NON-empty array that
+  // filtered down to nothing is malformed input, not a clear: don't wipe a good
+  // list on garbage. (`todos` is already array-guarded above.)
+  if (entries.length === 0 && todos.length > 0) return null;
+  return { sessionUpdate: "plan", entries };
 }
 
 function acpUpdateToSessionUpdate(update: SessionNotification["update"]): SessionUpdate {

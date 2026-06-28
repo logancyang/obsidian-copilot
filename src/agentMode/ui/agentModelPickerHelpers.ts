@@ -365,7 +365,8 @@ function runCrossBackendPick(
 ): void {
   void (async () => {
     try {
-      await manager.createSession(targetBackendId, { baseModelId, effort });
+      // projectId left default (active scope); the transient pick only seeds the model.
+      await manager.createSession(targetBackendId, undefined, { baseModelId, effort });
       manager.setDefaultBackend(targetBackendId);
       if (oldSessionId) {
         void manager

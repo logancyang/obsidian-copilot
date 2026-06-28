@@ -2,21 +2,41 @@ import { logError, logInfo, logWarn } from "@/logger";
 import type CopilotPlugin from "@/main";
 import { AgentChatUIState } from "@/agentMode/session/AgentChatUIState";
 import {
+  agentProjectContextLoadAtom,
+  type AgentInFlightSource,
+  type AgentProjectContextLoadState,
+  type ContextLoadStepCount,
+  type FailedItem,
+} from "@/aiParams";
+import {
   getSettings,
   setSettings,
+  settingsStore,
   subscribeToSettingsChange,
   type CopilotSettings,
 } from "@/settings/model";
+import {
+  ensureProjectContextMaterialized,
+  EMPTY_CONTEXT_MATERIALIZATION_RESULT,
+  materializeProjectContextSource,
+  type ContextMaterializationResult,
+  type ContextMaterializeProgress,
+} from "@/context/projectContextMaterializer";
+import type {
+  MaterializedSourceType,
+  MaterializeSourceIdentity,
+  SourceFailure,
+} from "@/context/contextCacheStore";
 import { err2String } from "@/utils";
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
-import { fileToHistoryItem } from "@/utils/chatHistoryUtils";
+import { fileToHistoryItem, readChatPathProjectId } from "@/utils/chatHistoryUtils";
 import { readFrontmatterViaAdapter } from "@/utils/vaultAdapterUtils";
 import { App, FileSystemAdapter, Notice, Platform, TFile } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
 import { AgentSession, ATTENTION_TRIGGER_STATUSES, DEFAULT_TITLE_PREFIX } from "./AgentSession";
 import type { AgentChatPersistenceManager } from "./AgentChatPersistenceManager";
 import type { AgentModelPreloader, WarmBackend } from "./AgentModelPreloader";
-import { parseNativeChatId } from "@/utils/nativeChatId";
+import { buildNativeChatId, parseNativeChatId } from "@/utils/nativeChatId";
 import type { AgentSessionIndex } from "./AgentSessionIndex";
 import {
   deriveChatTitleFromMessages,
@@ -33,6 +53,26 @@ import {
 } from "./fanout/FanoutOrchestrator";
 import type { FanoutTurn } from "./fanout/fanoutTypes";
 import { backendStateSignature } from "./translateBackendState";
+import { GLOBAL_SCOPE, type ProjectScopeId } from "./scope";
+import {
+  OrphanedProjectError,
+  pickScopeNeighbor,
+  resolveProjectIdForCwd,
+  resolveScopeCwd,
+} from "./sessionScope";
+import {
+  getCachedProjectRecordById,
+  getCachedProjectRecords,
+  subscribeToProjectRecords,
+} from "@/projects/state";
+import type { ProjectFileRecord } from "@/projects/type";
+import {
+  getProjectContextSignature,
+  getProjectLandingCaptureSignature,
+} from "@/projects/projectContextSignature";
+import { ProjectFileManager } from "@/projects/ProjectFileManager";
+import { ensureAgentsMirror } from "@/projects/ensureAgentsMirror";
+import { getComposedProjectInstructions } from "@/projects/projectSystemPrompt";
 import type {
   AgentQuestionAnswers,
   AskUserQuestionPrompt,
@@ -47,6 +87,7 @@ import type {
   ModelSelection,
   PermissionDecision,
   PermissionPrompt,
+  ProjectProfile,
   SessionId,
 } from "./types";
 
@@ -84,6 +125,71 @@ function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T
 function isSameCwd(a: string, b: string): boolean {
   const norm = (p: string) => p.replace(/[/\\]+$/, "");
   return norm(a) === norm(b);
+}
+
+// Referential-stability constants for "empty" returns — never hand back a fresh
+// `[]` (would churn React consumers of these getters).
+const EMPTY_SESSIONS = Object.freeze([]) as unknown as AgentSession[];
+const EMPTY_HISTORY_ITEMS = Object.freeze([]) as unknown as ChatHistoryItem[];
+// DESIGN NOTE — intentionally NOT Object.freeze'd, unlike the array constants above.
+// (a) Goal is referential stability: an empty `getRunningChatIds()` /
+//     `getAttentionChatIds()` always hands back this same instance, so React
+//     consumers compare by identity (tests assert `toBe`).
+// (b) `Object.freeze` is a no-op for a Set's contents — `Object.freeze(new Set()).add(x)`
+//     still succeeds (freeze guards own properties, not the internal `[[SetData]]` slot),
+//     so wrapping it would buy nothing the array constants' freeze buys.
+// (c) Runtime immutability rests on the `ReadonlySet<string>` type (no `.add`/`.delete` in
+//     the surface) plus the convention that no caller mutates the result — consumers only
+//     `.has()`, read `.size`, and iterate.
+const EMPTY_RECENT_CHAT_IDS: ReadonlySet<string> = new Set();
+
+// Backends that discover project instructions from a physical `AGENTS.md` in the session cwd.
+// (claude instead has `project.md` parsed and injected in-process via setProjectProfileProvider,
+// so it needs no file.) Only these require the generated mirror to exist before cwd is read.
+const CWD_INSTRUCTION_BACKENDS: ReadonlySet<BackendId> = new Set(["codex", "opencode"]);
+
+/**
+ * Map a materializer {@link SourceFailure} to the atom's {@link FailedItem}. The
+ * cache layer's `"file"` kind becomes the UI's `"nonMd"` (markdown is never
+ * materialized, so an agent failure is only ever web/youtube/nonMd).
+ */
+function toFailedItem(failure: SourceFailure): FailedItem {
+  return {
+    path: failure.source,
+    type: failure.kind === "file" ? "nonMd" : failure.kind,
+    error: failure.error,
+    usedStaleSnapshot: failure.usedStaleSnapshot,
+  };
+}
+
+/** Whether a {@link FailedItem} refers to the same source as a lifecycle event
+ * (the cache layer's `"file"` kind is the atom's `"nonMd"`). */
+function failedItemIsSource(failed: FailedItem, item: MaterializeSourceIdentity): boolean {
+  if (failed.path !== item.source) return false;
+  return item.kind === "file" ? failed.type === "nonMd" : failed.type === item.kind;
+}
+
+/** Add a source to the live "processing" set (no-op if already present). Returns a
+ * NEW array on change so the atom publish is referentially distinct. */
+function addProcessingSource(
+  list: AgentInFlightSource[],
+  item: MaterializeSourceIdentity
+): AgentInFlightSource[] {
+  if (list.some((s) => s.kind === item.kind && s.source === item.source)) return list;
+  return [...list, { kind: item.kind, source: item.source }];
+}
+
+/** Remove a source from the live "processing" set. */
+function removeProcessingSource(
+  list: AgentInFlightSource[],
+  item: MaterializeSourceIdentity
+): AgentInFlightSource[] {
+  return list.filter((s) => !(s.kind === item.kind && s.source === item.source));
+}
+
+/** Append a freshly-settled failure, dropping any prior entry for the same source. */
+function upsertFailedItem(list: FailedItem[], failure: FailedItem): FailedItem[] {
+  return [...list.filter((f) => !(f.path === failure.path && f.type === failure.type)), failure];
 }
 
 export type PermissionPrompter = (req: PermissionPrompt) => Promise<PermissionDecision>;
@@ -144,9 +250,48 @@ export class AgentSessionManager {
   private sessions = new Map<string, AgentSession>();
   private chatUIStates = new Map<string, AgentChatUIState>();
   private activeSessionId: string | null = null;
-  // Dedupe only the auto-spawn path. Direct `createSession()` calls (e.g. `+`
-  // clicks) are independent — concurrent ones each spawn their own session.
-  private firstSessionPromise: Promise<AgentSession> | null = null;
+  // The scope the active session belongs to. Invariant:
+  // `activeSession.projectId === activeProjectId` (active always belongs to the
+  // current scope). `GLOBAL_SCOPE` is the implicit global workspace.
+  private activeProjectId: ProjectScopeId = GLOBAL_SCOPE;
+  // Per-scope most-recently-used session id, so re-entering a scope restores
+  // the tab the user last looked at there.
+  private readonly lastActiveByScope = new Map<ProjectScopeId, string>();
+  // Live sessions hidden from the current tab strip. Re-entering a project
+  // detaches its prior conversational sessions here so the strip shows only the
+  // fresh visit's workset — but they stay in `this.sessions` (and on disk), so
+  // chat history still lists them and their running/attention indicators stay
+  // live. Re-attached by `setActiveSession` (history open / tab click) and
+  // pruned whenever a session leaves the pool. Keyed by the globally-unique
+  // `internalId`, so no per-scope bucketing is needed.
+  private readonly detachedFromTabIds = new Set<string>();
+  // Projects whose context sources changed since their last materialization,
+  // keyed by id → the context signature AT THE TIME the change was observed.
+  // A dirty project must NOT reuse a pre-existing empty landing on re-entry (its
+  // captured `<project_context>` is stale) and must NOT keep a stale landing in
+  // the strip. Cleared once a freshly-created session captures the SAME
+  // signature — a newer edit's signature won't match, so its dirtiness survives
+  // (no lost update). Mirrors chat mode's `markdownNeedsReload`.
+  private readonly contextDirtySignatures = new Map<ProjectScopeId, string>();
+  // A project landing session captures MORE than materialized context at
+  // creation: codex/opencode read the AGENTS.md mirror from cwd, and Claude
+  // captures its project-instructions append. The materialization dirty flag
+  // above deliberately ignores `systemPrompt`, so reuse decisions need their own
+  // fingerprint of what the session actually baked in (the landing-capture
+  // signature). Keyed by internal session id; every project session gets an
+  // entry, but only landing-shaped ones (idle/empty) are ever consulted for
+  // reuse. A missing entry means "not reusable as a project landing".
+  private readonly landingCaptureSignatures = new Map<string, string>();
+  // Snapshot of project records from the previous change notification, diffed
+  // against the next to detect context-source edits. Seeded in the constructor.
+  private previousProjectRecords: ProjectFileRecord[] = [];
+  private projectRecordsUnsubscriber?: () => void;
+  // Dedupe only the auto-spawn path, PER scope. Direct `createSession()` calls
+  // (e.g. `+` clicks) are independent — concurrent ones each spawn their own
+  // session. Keyed by scope so entering two scopes can't share one in-flight
+  // spawn; the key is cleared in `finally` so the next enter doesn't reuse a
+  // settled promise.
+  private readonly firstSessionPromiseByScope = new Map<ProjectScopeId, Promise<AgentSession>>();
   private pendingCreates = 0;
   private listeners = new Set<() => void>();
   private disposed = false;
@@ -172,7 +317,8 @@ export class AgentSessionManager {
   // - `unsub`: tear-down for the auto-save `session.subscribe()`
   // - `signature`: last serialized snapshot, for no-op skipping
   // - `modelCacheUnsub`: tear-down for the model-cache mirror subscription
-  // - `attentionUnsub`: tear-down for the needs-attention status watcher
+  // - `attentionUnsub`: tear-down for the per-session status watcher that both
+  //   flags needs-attention AND notifies on running-membership flips (spinner)
   private readonly sessionState = new Map<
     string,
     {
@@ -221,6 +367,7 @@ export class AgentSessionManager {
     this.settingsUnsub = subscribeToSettingsChange((prev, next) =>
       this.onDefaultSelectionsChanged(prev, next)
     );
+    this.setupProjectRecordChangeMonitor();
   }
 
   /**
@@ -317,6 +464,17 @@ export class AgentSessionManager {
       getDefaultSelection: (backendId) =>
         this.getDefaultSelection(backendId) ?? this.nativeDefaultSelection(backendId),
       getDisplayName: (backendId) => this.resolveDescriptor(backendId).displayName,
+      // DESIGN NOTE: fan-out sub-sessions intentionally run at the vault root,
+      // not the originating session's project folder, and aren't handed the
+      // project's `projectId` / `additionalDirectories`. This is the seam where
+      // multi-agent QA (which predates project workspaces) meets project scope.
+      // It's acceptable because the project's knowledge already reaches every
+      // answerer: `runTurn` injects the first-turn `<project_context>` block into
+      // the shared fan-out prompt. What a sub-session lacks is project-scoped
+      // tool *reach* (cwd + external roots) — tolerable for ephemeral read-only
+      // QA, whose answers are advisory and whose authoritative, fully-scoped reply
+      // comes from the main session. Threading project scope into the sub-sessions
+      // is a deliberate follow-up, not part of the project-workspace landing.
       getCwd: () => {
         const adapter = this.app.vault.adapter;
         return adapter instanceof FileSystemAdapter ? adapter.getBasePath() : null;
@@ -334,6 +492,91 @@ export class AgentSessionManager {
   }
 
   /**
+   * Watch project config edits so a changed context source (URLs / inclusions /
+   * etc.) invalidates the project's materialized context — mirroring chat mode's
+   * {@link ProjectManager.setupProjectListChangeMonitor}. Seeds the prior-records
+   * snapshot up front so the first notification diffs against the real baseline.
+   */
+  private setupProjectRecordChangeMonitor(): void {
+    this.previousProjectRecords = getCachedProjectRecords();
+    this.projectRecordsUnsubscriber?.();
+    this.projectRecordsUnsubscriber = subscribeToProjectRecords((nextRecords) => {
+      this.handleProjectRecordsChanged(nextRecords);
+    });
+  }
+
+  /**
+   * Diff the new project records against the previous snapshot and mark any
+   * project whose context signature changed as dirty (its materialized context
+   * is stale). For the ACTIVE project we also warm its off-vault conversion
+   * cache in the background so the next chat there starts with sources already
+   * fetched — the
+   * warm never publishes to {@link agentProjectContextLoadAtom}, so it can never
+   * gate the composer of a session that won't even consume the new context.
+   */
+  private handleProjectRecordsChanged(nextRecords: ProjectFileRecord[]): void {
+    if (this.disposed) return;
+    const prevRecords = this.previousProjectRecords;
+    this.previousProjectRecords = nextRecords;
+
+    // Drop dirty flags for projects that no longer exist (deleted/renamed-away).
+    const nextIds = new Set(nextRecords.map((r) => r.project.id));
+    for (const id of this.contextDirtySignatures.keys()) {
+      if (!nextIds.has(id)) this.contextDirtySignatures.delete(id);
+    }
+
+    for (const nextRecord of nextRecords) {
+      const prevRecord = prevRecords.find((r) => r.project.id === nextRecord.project.id);
+      if (!prevRecord) continue; // brand-new project: nothing materialized yet
+      const nextSignature = getProjectContextSignature(nextRecord);
+      if (getProjectContextSignature(prevRecord) === nextSignature) continue;
+
+      const projectId = nextRecord.project.id;
+      this.contextDirtySignatures.set(projectId, nextSignature);
+      if (projectId === this.activeProjectId) this.warmProjectContext(projectId);
+    }
+  }
+
+  /**
+   * Fire-and-forget refresh of a project's off-vault conversion-cache snapshots. Unlike
+   * {@link rematerializeContext} this NEVER touches the context-load atom, so it
+   * silently warms the disk cache without gating any composer. The materializer
+   * single-flights and cheap-skips unchanged sources, so a newly-added URL is
+   * fetched while everything else is a no-op. Skipped off-desktop (no adapter).
+   */
+  private warmProjectContext(projectId: ProjectScopeId): void {
+    if (this.disposed || projectId === GLOBAL_SCOPE) return;
+    let cwd: string;
+    try {
+      cwd = this.resolveSessionCwd(projectId);
+    } catch {
+      return; // off-desktop: no FileSystemAdapter, nothing to warm
+    }
+    void ensureProjectContextMaterialized(this.app, projectId, cwd).catch((err) =>
+      logWarn(`[AgentMode] background context warm failed for ${projectId}`, err)
+    );
+  }
+
+  /** Whether a project's materialized context is known to be stale. */
+  private isProjectContextDirty(projectId: ProjectScopeId): boolean {
+    return this.contextDirtySignatures.has(projectId);
+  }
+
+  /**
+   * Clear a project's dirty flag once a freshly-created session has captured its
+   * context — but ONLY if the signature the session actually captured (passed in,
+   * read synchronously at materialization kickoff) still equals the dirty one. A
+   * newer edit that landed after this session started materializing bumps the
+   * dirty signature, so it won't match and the project stays dirty (this session
+   * captured the OLDER sources). The lost-update guard for edit/create races.
+   */
+  private clearContextDirtyIfCaptured(projectId: ProjectScopeId, capturedSignature: string): void {
+    if (this.contextDirtySignatures.get(projectId) === capturedSignature) {
+      this.contextDirtySignatures.delete(projectId);
+    }
+  }
+
+  /**
    * List every known Agent Mode chat as a `ChatHistoryItem`: markdown-saved
    * notes (ranked using the plugin's shared in-memory `lastAccessedAt`
    * tracker) merged with the session index's native-store entries, de-duped
@@ -343,14 +586,21 @@ export class AgentSessionManager {
    * by {@link LIST_SESSIONS_TIMEOUT_MS}) so chats created outside the plugin
    * surface too — a backend is never spawned just to enumerate history.
    */
-  async getChatHistoryItems(): Promise<ChatHistoryItem[]> {
+  async getChatHistoryItems(scope?: ProjectScopeId): Promise<ChatHistoryItem[]> {
     const persistence = this.opts.persistenceManager;
     const index = this.opts.sessionIndex;
-    if (!persistence && !index) return [];
+    if (!persistence && !index) return EMPTY_HISTORY_ITEMS;
 
+    // Paths of saved chats backed by a live session that is flagging for
+    // attention (finished / errored / paused while backgrounded). In-memory and
+    // app-lifetime only — purely-on-disk chats stay unflagged. Applied in the
+    // map below so both the global and project views carry the cue.
+    const liveAttentionPaths = this.collectLiveAttentionPaths();
+
+    let files: TFile[] = [];
     let markdownEntries: MarkdownChatEntry[] = [];
     if (persistence) {
-      const files = await persistence.getAgentChatHistoryFiles();
+      files = await persistence.getAgentChatHistoryFiles();
       const tracker = this.plugin.getChatHistoryLastAccessedAtManager();
       markdownEntries = await Promise.all(
         files.map(async (file) => {
@@ -359,20 +609,130 @@ export class AgentSessionManager {
           // cache-only read would leave those rows unmergeable and duplicate
           // their native twins.
           const ref = await this.readSessionRefFromFile(file.path);
+          const item = fileToHistoryItem(this.app, file, tracker);
           return {
-            item: fileToHistoryItem(this.app, file, tracker),
+            item: liveAttentionPaths.has(item.id) ? { ...item, needsAttention: true } : item,
             backendId: ref?.backendId,
             sessionId: ref?.sessionId,
           };
         })
       );
     }
+
+    // Project view: resolve the AUTHORITATIVE projectId per file and keep only
+    // this scope's chats. The sync `fileToHistoryItem` reads only metadataCache,
+    // which can lag right after a save or miss hidden-dir files — that would
+    // default such a chat to global and wrongly drop it from its project list.
+    // `readChatPathProjectId` hits the cache for indexed files (zero extra IO)
+    // and falls back to a one-shot adapter read only for unindexed ones.
+    if (scope && scope !== GLOBAL_SCOPE) {
+      const resolved = await Promise.all(
+        files.map(async (file, i) => {
+          const projectId =
+            (await readChatPathProjectId(this.app, file.path))?.trim() || GLOBAL_SCOPE;
+          return projectId === scope ? markdownEntries[i] : null;
+        })
+      );
+      // Drop cross-device-unresumable chats AFTER scope resolution: the resolver
+      // indexes `markdownEntries[i]` against `files`, so filtering the list before
+      // it would misalign those indices.
+      const scopedMarkdown = await this.dropNonLocalMarkdownEntries(
+        resolved.filter((entry): entry is MarkdownChatEntry => entry !== null)
+      );
+      if (!index) {
+        const items = scopedMarkdown.map((e) => e.item);
+        return items.length === 0 ? EMPTY_HISTORY_ITEMS : items;
+      }
+      // Native entries scope by the index's recorded projectId (written
+      // through from live sessions, or cwd-attributed by the sweep), so
+      // autosave-off project chats list here too — same dual-source merge as
+      // the global view, just filtered to this scope on both sides.
+      await this.refreshNativeSessionsFromBackends();
+      const scopedNative = (await index.getEntries()).filter((e) => e.projectId === scope);
+      const merged = mergeChatHistoryItems(scopedMarkdown, scopedNative);
+      return merged.length === 0 ? EMPTY_HISTORY_ITEMS : merged;
+    }
+
     markdownEntries = await this.dropNonLocalMarkdownEntries(markdownEntries);
     if (!index) return markdownEntries.map((e) => e.item);
 
     await this.refreshNativeSessionsFromBackends();
     const nativeEntries = await index.getEntries();
     return mergeChatHistoryItems(markdownEntries, nativeEntries);
+  }
+
+  /**
+   * Saved-file paths of live sessions currently flagging `needsAttention`. The
+   * path is keyed off the session's persisted file (set after its first save),
+   * matching `ChatHistoryItem.id`. Sessions that never saved (no path) or aren't
+   * flagging are skipped.
+   */
+  private collectLiveAttentionPaths(): Set<string> {
+    const paths = new Set<string>();
+    for (const [internalId, session] of this.sessions) {
+      if (!session.getNeedsAttention()) continue;
+      const path = this.sessionState.get(internalId)?.path;
+      if (path) paths.add(path);
+    }
+    return paths;
+  }
+
+  /**
+   * Every recent-list id this session may currently be rendered under. The ids
+   * match `ChatHistoryItem.id`: the persisted markdown path once saved, the
+   * `(backendId, sessionId)` native id before that. Deliberately BOTH when both
+   * exist: the mounted landing list is a snapshot, so right after the first
+   * autosave re-keys the chat from native id to path, the visible row may still
+   * carry the old native id — emitting both keeps `.has()` hitting whichever
+   * the row was rendered under, with no history reload. Harmless overshoot: a
+   * native id maps to the same chat and its native twin row is de-duped away.
+   *
+   * DESIGN NOTE — known limitation, deliberately deferred: a session that has
+   * neither saved nor reached the native index yet has NO row in the list at
+   * all, so its spinner/dot has nowhere to hang until the list next reloads.
+   * That's a missing row, not an id mismatch — dual ids can't help, and forcing
+   * a history reload from here would couple autosave to row visibility.
+   */
+  private recentChatIdsForSession(internalId: string, session: AgentSession): string[] {
+    const ids: string[] = [];
+    const path = this.sessionState.get(internalId)?.path;
+    if (path) ids.push(path);
+    const backendSessionId = session.getBackendSessionId();
+    if (backendSessionId) ids.push(buildNativeChatId(session.backendId, backendSessionId));
+    return ids;
+  }
+
+  /**
+   * Recent-list ids of pool sessions whose backend turn is currently
+   * `"running"`, so the landing rows can swap their relative-time chip for a
+   * spinner. Only `"running"` counts — `awaiting_permission` is surfaced via
+   * the needs-attention dot. Returns a shared module constant when empty so
+   * React consumers don't churn on a fresh `Set`.
+   */
+  getRunningChatIds(): ReadonlySet<string> {
+    const ids = new Set<string>();
+    for (const [internalId, session] of this.sessions) {
+      if (session.getStatus() !== "running") continue;
+      for (const id of this.recentChatIdsForSession(internalId, session)) ids.add(id);
+    }
+    return ids.size === 0 ? EMPTY_RECENT_CHAT_IDS : ids;
+  }
+
+  /**
+   * Recent-list ids of pool sessions currently flagging needs-attention, so a
+   * row's done-dot can light up the moment its backgrounded turn finishes —
+   * the live complement to the `item.needsAttention` snapshot that
+   * `getChatHistoryItems` bakes in at load time (which goes stale the moment a
+   * session finishes after the list mounted, and never covers native-only
+   * rows). Same shape and constant-on-empty contract as `getRunningChatIds`.
+   */
+  getAttentionChatIds(): ReadonlySet<string> {
+    const ids = new Set<string>();
+    for (const [internalId, session] of this.sessions) {
+      if (!session.getNeedsAttention()) continue;
+      for (const id of this.recentChatIdsForSession(internalId, session)) ids.add(id);
+    }
+    return ids.size === 0 ? EMPTY_RECENT_CHAT_IDS : ids;
   }
 
   /**
@@ -524,7 +884,10 @@ export class AgentSessionManager {
    * Drop markdown chats whose backend session can't be resumed on this device
    * — a chat started on another machine syncs its note (with the session id)
    * but not the backend's local transcript store, so resuming it dead-ends.
-   * Only hides a row when a running backend can cheaply and definitively say
+   * Resumability is probed against each chat's own scope cwd (its project
+   * folder, or the vault root for global chats), since a backend may key its
+   * transcript store by cwd. Only hides a row when a running backend can
+   * cheaply and definitively say
    * the session is absent; an unknown answer (no such capability, backend not
    * running, or a probe error) keeps the row so we never hide a local chat.
    *
@@ -538,13 +901,28 @@ export class AgentSessionManager {
   ): Promise<MarkdownChatEntry[]> {
     const adapter = this.app.vault.adapter;
     if (!(adapter instanceof FileSystemAdapter)) return entries;
-    const cwd = adapter.getBasePath();
+    const vaultRoot = adapter.getBasePath();
     const procs = this.getRunningProcsByBackend();
     const keep = await Promise.all(
       entries.map(async (entry) => {
         if (!entry.backendId || !entry.sessionId) return true;
         const proc = procs.get(entry.backendId);
         if (!proc?.sessionExistsLocally) return true;
+        // Probe with the chat's OWN scope cwd, not the vault root: a project
+        // chat's transcript lives under its project folder (Claude keys the
+        // transcript path by cwd), so probing every row with the vault root
+        // would wrongly report a local project chat as non-resumable and hide
+        // it. Resolving per entry keeps both the flat global view and a project
+        // view correct. A scope that no longer resolves (deleted project) falls
+        // back to keeping the row — never hide a chat on an uncertain answer.
+        let cwd: string;
+        try {
+          const projectId =
+            (await readChatPathProjectId(this.app, entry.item.id))?.trim() || GLOBAL_SCOPE;
+          cwd = resolveScopeCwd(vaultRoot, projectId);
+        } catch {
+          return true;
+        }
         try {
           return await proc.sessionExistsLocally({ sessionId: entry.sessionId, cwd });
         } catch {
@@ -566,11 +944,12 @@ export class AgentSessionManager {
   }
 
   /**
-   * Merge one backend's `listSessions` result into the index. Filters to
-   * this vault's cwd (agent-side cwd filtering is not trusted — a stray
-   * session from another vault must never leak into this vault's history),
-   * skips the preloader's probe session, and requires a real title so the
-   * sweep can't surface empty placeholder sessions.
+   * Merge one backend's `listSessions` result into the index. Keeps sessions
+   * whose cwd is this vault's root (global scope) or a known project folder
+   * (attributed to that project) — agent-side cwd filtering is not trusted,
+   * and a stray session from another vault must never leak into this vault's
+   * history. Skips the preloader's probe session and requires a real title so
+   * the sweep can't surface empty placeholder sessions.
    */
   private async sweepNativeSessions(
     backendId: BackendId,
@@ -599,7 +978,12 @@ export class AgentSessionManager {
     const now = Date.now();
     const discovered = [];
     for (const s of sessions) {
-      if (!isSameCwd(s.cwd, vaultBasePath)) continue;
+      const inVaultRoot = isSameCwd(s.cwd, vaultBasePath);
+      // A session run inside a materialized project folder belongs to that
+      // project's history; anything matching neither the vault root nor a
+      // known project folder is another vault's session.
+      const projectId = inVaultRoot ? undefined : resolveProjectIdForCwd(vaultBasePath, s.cwd);
+      if (!inVaultRoot && !projectId) continue;
       if (probeSessionId && s.sessionId === probeSessionId) continue;
       // A live fan-out sub-session is ephemeral: skip it even before its
       // async tombstone lands, so a sweep racing the in-flight turn can't
@@ -615,6 +999,7 @@ export class AgentSessionManager {
         title,
         createdAtMs: timestamp,
         lastAccessedAtMs: timestamp,
+        projectId,
       });
     }
     if (discovered.length > 0) await index.mergeDiscoveredSessions(discovered);
@@ -630,24 +1015,35 @@ export class AgentSessionManager {
       throw new Error("AgentSessionManager has been shut down");
     }
     const active = this.getActiveSession();
-    if (active && active.getStatus() !== "closed") return active;
+    // Only reuse the active session when it belongs to the current scope —
+    // after `enterProject` the prior scope's session may still be pointed at by
+    // `activeSessionId` until this seeds a fresh one for the new scope.
+    if (active && active.projectId === this.activeProjectId && active.getStatus() !== "closed") {
+      return active;
+    }
     // Dedupe rapid auto-spawn callers (e.g. the router effect re-running
     // before the first create has populated the pool) so we don't seed two
-    // sessions when one was asked for.
-    if (this.firstSessionPromise) return this.firstSessionPromise;
-    this.firstSessionPromise = this.createSession();
+    // sessions when one was asked for. Keyed per scope so two scopes spawning
+    // at once don't collapse into one shared session.
+    const scope = this.activeProjectId;
+    const pending = this.firstSessionPromiseByScope.get(scope);
+    if (pending) return pending;
+    const promise = this.createSession(undefined, scope);
+    this.firstSessionPromiseByScope.set(scope, promise);
     try {
-      return await this.firstSessionPromise;
+      return await promise;
     } finally {
-      this.firstSessionPromise = null;
+      this.firstSessionPromiseByScope.delete(scope);
     }
   }
 
   /**
    * Spawn a fresh `AgentSession`. Lazily starts the requested backend on its
-   * first call. The new session becomes the active one. `backendId` defaults
-   * to `settings.agentMode.activeBackend` (the model-picker keeps that in
-   * sync with the user's most recently selected default model).
+   * first call. The new session becomes the active one *when its scope is the
+   * current one* (a background/restart create stays parked). `backendId`
+   * defaults to `settings.agentMode.activeBackend` (the model-picker keeps that
+   * in sync with the user's most recently selected default model). `projectId`
+   * defaults to the active scope and is bound immutably onto the session.
    *
    * The new session's initial (model, effort) defaults to the persisted
    * default for `backendId` via `getDefaultSelection`. Pass `seedSelection`
@@ -656,19 +1052,47 @@ export class AgentSessionManager {
    */
   async createSession(
     backendId?: BackendId,
+    projectId: ProjectScopeId = this.activeProjectId,
     seedSelection?: ModelSelection
   ): Promise<AgentSession> {
     if (this.disposed) {
       throw new Error("AgentSessionManager has been shut down");
     }
 
-    const adapter = this.app.vault.adapter;
-    if (!(adapter instanceof FileSystemAdapter)) {
-      throw new Error("Agent Mode requires desktop Obsidian (FileSystemAdapter).");
-    }
-    const vaultBasePath = adapter.getBasePath();
-
     const resolvedId = backendId ?? getSettings().agentMode?.activeBackend ?? "opencode";
+
+    // Read the live record once: it drives both the AGENTS.md mirror below and
+    // the landing-capture signature recorded after the session is built, so the
+    // two agree on the exact config this session bakes in.
+    const projectRecord =
+      projectId === GLOBAL_SCOPE ? undefined : getCachedProjectRecordById(projectId);
+    const landingCaptureSignature = projectRecord
+      ? getProjectLandingCaptureSignature(projectRecord)
+      : undefined;
+
+    // Materialize the project's AGENTS.md mirror from project.md BEFORE resolving cwd, so a
+    // cwd-instruction backend (codex/opencode) discovers the instruction file on its first
+    // session. This is the sole correctness guarantee for an old project.md-only project.
+    // Never throws (degrades gracefully); skipped for GLOBAL_SCOPE and for claude (which gets
+    // the instruction injected in-process, no file needed).
+    if (projectRecord && CWD_INSTRUCTION_BACKENDS.has(resolvedId)) {
+      await ensureAgentsMirror(this.app, projectRecord);
+    }
+
+    // Resolves the scope's cwd (vault root for global, project folder otherwise)
+    // and validates desktop/orphaned up front, before any pending-create state
+    // is mutated.
+    const cwd = this.resolveSessionCwd(projectId);
+
+    // Kick off context materialization WITHOUT blocking session creation: the
+    // session must become visible immediately so the composer's loading card +
+    // send-gate render while prefetch runs (§3.1.9). The returned promise is
+    // threaded into the session, which awaits it right before `newSession`.
+    // Skipped for GLOBAL_SCOPE — no promise, no atom write, byte-identical to a
+    // context-free create. Never rejects (degrades to empty roots).
+    const contextReady =
+      projectId === GLOBAL_SCOPE ? undefined : this.beginContextMaterialization(projectId, cwd);
+
     const descriptor = this.resolveDescriptor(resolvedId);
 
     this.pendingCreates++;
@@ -714,19 +1138,22 @@ export class AgentSessionManager {
     // disk on the next preload, so adopting that session as the chat would
     // replay the previous conversation's transcript and auto-title into a
     // supposedly fresh chat. `AgentSession.start` runs `newSession` on the
-    // (warm or cold) proc; the probe's state still seeds the picker so it
+    // (warm or cold) proc at the resolved scope cwd, threading the project
+    // scope + context roots; the probe's state still seeds the picker so it
     // doesn't blink while that round-trip is in flight.
     const session = AgentSession.start({
       backend,
-      cwd: vaultBasePath,
+      cwd,
       internalId: uuidv4(),
       backendId: resolvedId,
+      projectId,
       defaultModelSelection: resolvedSeed,
       initialCachedState: warm?.state ?? this.preloader.getCachedBackendState(resolvedId),
       getDescriptor: () => this.opts.resolveDescriptor(resolvedId),
       runFanoutTurn: (input) => this.runFanoutTurn(input),
       getDisplayName: (backendId) => this.resolveDescriptor(backendId).displayName,
       getApp: () => this.app,
+      contextReady,
     });
     if (warm) {
       logInfo(
@@ -735,7 +1162,27 @@ export class AgentSessionManager {
     }
     this.sessions.set(session.internalId, session);
     this.chatUIStates.set(session.internalId, new AgentChatUIState(session));
-    this.activeSessionId = session.internalId;
+    // Record what this project landing captured so re-entry can tell a current
+    // landing from one that baked in stale config (incl. a System-Prompt-only
+    // edit the materialization dirty flag ignores). Global sessions capture no
+    // project config, so they get no entry (and are never reused as landings).
+    if (landingCaptureSignature) {
+      this.landingCaptureSignatures.set(session.internalId, landingCaptureSignature);
+    } else {
+      this.landingCaptureSignatures.delete(session.internalId);
+    }
+    // A fresh id is never detached; clear defensively so a new session can't
+    // inherit a stale hidden-from-strip flag.
+    this.detachedFromTabIds.delete(session.internalId);
+    // Always the scope's newest MRU. But only steal the global active pointer
+    // when this session's scope is still the current one — a slow auto-spawn or
+    // a restart that replaces a *background* tab must not yank the user out of a
+    // scope they've since switched to (preserves `active.projectId ===
+    // activeProjectId`).
+    this.lastActiveByScope.set(projectId, session.internalId);
+    if (projectId === this.activeProjectId) {
+      this.activeSessionId = session.internalId;
+    }
     this.attachAutoSave(session);
     this.attachModelCacheSync(session);
     this.attachAttentionTracking(session);
@@ -749,6 +1196,22 @@ export class AgentSessionManager {
     // `ready` is already resolved, so the chain runs on the next microtask.
     void session.ready
       .then(async () => {
+        // Reaching here means the session is fully ready — it captured its context
+        // and opened its backend session (a failed startup rejects into `.catch`
+        // and never runs this). A fresh session's `ready` resolves only after
+        // `initialize()` has already awaited `contextReady`, so the await below is
+        // an already-settled microtask, not a fresh network wait — it can't stall
+        // `finishPendingCreate`. Clear the project's dirty flag FIRST, before any
+        // optional backend config that could hang and stall it. Clear only for the
+        // source revision the materializer actually captured (`contextSignature`):
+        // a newer edit mid-flight bumped the dirty signature, so it won't match and
+        // stays dirty (lost-update guard); a failed materialize carries no signature.
+        if (contextReady) {
+          const result = await contextReady;
+          if (!this.disposed && result.contextSignature !== undefined) {
+            this.clearContextDirtyIfCaptured(projectId, result.contextSignature);
+          }
+        }
         if (descriptor.applyInitialSessionConfig) {
           try {
             await descriptor.applyInitialSessionConfig(session, getSettings(), resolvedSeed);
@@ -789,6 +1252,583 @@ export class AgentSessionManager {
       throw new Error(`Unknown backend "${backendId}". Did you forget to register it?`);
     }
     return descriptor;
+  }
+
+  /**
+   * Absolute cwd for a session in `projectId`'s scope. Single source of truth
+   * for every session-construction site. Throws on a non-desktop adapter or an
+   * orphaned project (missing record) — the latter must never silently fall
+   * back to the vault root.
+   */
+  private resolveSessionCwd(projectId: ProjectScopeId): string {
+    const adapter = this.app.vault.adapter;
+    if (!(adapter instanceof FileSystemAdapter)) {
+      throw new Error("Agent Mode requires desktop Obsidian (FileSystemAdapter).");
+    }
+    return resolveScopeCwd(adapter.getBasePath(), projectId);
+  }
+
+  /**
+   * Start (but do NOT await) materializing a project's context, returning a
+   * promise of the extra searchable roots. Caller has already done config
+   * migration + cwd resolution, so the materializer sees the post-migration
+   * record and resolved cwd. Only ever invoked for a non-global scope.
+   *
+   * Publishes the blocking load state SYNCHRONOUSLY (before the session even
+   * appears) so the composer gates send the instant the tab renders, then flips
+   * to `done`/`error` and stores the result for {@link getProjectProfile} once
+   * the materializer settles. NEVER rejects — failure degrades to an empty
+   * result so the session's `newSession` (which awaits this) is never blocked.
+   *
+   * Resolves the full {@link ContextMaterializationResult} (searchable roots +
+   * the optional inline `<project_context>` block); the session captures both
+   * before opening. Progress/counts are NOT carried here — they publish
+   * separately via {@link agentProjectContextLoadAtom}.
+   */
+  private beginContextMaterialization(
+    projectId: ProjectScopeId,
+    cwd: string,
+    forceRetryFailed?: boolean
+  ): Promise<ContextMaterializationResult> {
+    // Accumulate counts so every publish carries the latest of all three steps
+    // (resolve / prefetch / parse), not just the one that fired last.
+    const counts: {
+      resolved?: number;
+      prefetch?: ContextLoadStepCount;
+      parsed?: ContextLoadStepCount;
+    } = {};
+    // Per-source state mirroring the legacy CAG tracker: `processingSources` is
+    // the live "in flight" set, `failedSources` accrues settled failures. Both
+    // publish incrementally so the popover renders a true queue; the materializer
+    // sends a final `failures` list that reconciles `failedSources` at the end.
+    let failedSources: FailedItem[] = [];
+    let processingSources: AgentInFlightSource[] = [];
+    // The latest step phase, so item-lifecycle publishes (which carry no phase of
+    // their own) keep the loading card on the current step.
+    let stepPhase: "resolve" | "prefetch" | "parse" = "resolve";
+
+    // Own the atom only when no concurrent run is already driving it. The
+    // materializer single-flights, so a second caller would otherwise (a) seed a
+    // count-less "resolve" over the owner's live counts and (b) publish a
+    // count-less terminal "done" during the owner's linger window. Letting only
+    // the flight owner publish keeps the projectId-keyed atom coherent.
+    const prior = settingsStore.get(agentProjectContextLoadAtom)[projectId];
+    const ownsPublish = !prior?.blocking;
+
+    // Seed the blocking state synchronously (before the session even appears) so
+    // the composer gates send the instant the tab renders.
+    if (ownsPublish) {
+      this.setContextLoadState(projectId, { phase: "resolve", blocking: true });
+    }
+
+    // Re-emit the running state with the current counts + per-source sets. Empty
+    // `processingSources` publishes as `undefined` (the adapter falls back to a
+    // frozen empty), matching the `retryingSources` referential-stability pattern.
+    const publishProgress = () => {
+      this.setContextLoadState(projectId, {
+        phase: stepPhase,
+        blocking: true,
+        ...counts,
+        failedSources,
+        processingSources: processingSources.length > 0 ? processingSources : undefined,
+      });
+    };
+
+    const onProgress = ownsPublish
+      ? (progress: ContextMaterializeProgress) => {
+          switch (progress.phase) {
+            case "failures":
+              // Final reconciliation of the run's failures (data-only; the
+              // terminal `done` publish carries the authoritative list).
+              failedSources = progress.failures.map(toFailedItem);
+              return;
+            case "itemStart":
+              processingSources = addProcessingSource(processingSources, progress.item);
+              failedSources = failedSources.filter((f) => !failedItemIsSource(f, progress.item));
+              publishProgress();
+              return;
+            case "itemFailed":
+              processingSources = removeProcessingSource(processingSources, progress.item);
+              failedSources = upsertFailedItem(failedSources, toFailedItem(progress.failure));
+              publishProgress();
+              return;
+            case "itemSettled":
+              processingSources = removeProcessingSource(processingSources, progress.item);
+              publishProgress();
+              return;
+            case "resolve":
+              counts.resolved = progress.resolved;
+              stepPhase = "resolve";
+              publishProgress();
+              return;
+            case "prefetch":
+              counts.prefetch = { done: progress.done, total: progress.total };
+              stepPhase = "prefetch";
+              publishProgress();
+              return;
+            case "parse":
+              counts.parsed = { done: progress.done, total: progress.total };
+              stepPhase = "parse";
+              publishProgress();
+              return;
+          }
+        }
+      : undefined;
+
+    return ensureProjectContextMaterialized(this.app, projectId, cwd, onProgress, forceRetryFailed)
+      .then((ctx) => {
+        if (ownsPublish) {
+          // Always carry `failedSources` (empty when clean) so a prior run's
+          // failures never linger; the run is done, so nothing is processing.
+          this.setContextLoadState(projectId, {
+            phase: "done",
+            blocking: false,
+            ...counts,
+            failedSources,
+          });
+        }
+        return ctx;
+      })
+      .catch((err) => {
+        // The materializer's contract is never-reject; this guards a contract
+        // breach. Publish as a completed run with a single synthetic failure
+        // (not a distinct error phase — there is no "whole context" failure state).
+        logWarn(`[AgentMode] project context materialize failed for ${projectId}; continuing`, err);
+        if (ownsPublish) {
+          this.setContextLoadState(projectId, {
+            phase: "done",
+            blocking: false,
+            failedSources: [{ path: "Project context", type: "nonMd", error: err2String(err) }],
+          });
+        }
+        return EMPTY_CONTEXT_MATERIALIZATION_RESULT;
+      });
+  }
+
+  /** Publish a project's context-load state to the projectId-keyed atom. */
+  private setContextLoadState(projectId: string, state: AgentProjectContextLoadState): void {
+    settingsStore.set(agentProjectContextLoadAtom, (prev) => ({ ...prev, [projectId]: state }));
+  }
+
+  /**
+   * Re-run a project's context materialization on demand — the status popover's
+   * "Retry" action. Fire-and-forget: progress/failures republish through
+   * {@link agentProjectContextLoadAtom} exactly like a session-create run. Passes
+   * `forceRetryFailed` so known-bad sources are re-fetched instead of honoring
+   * their persisted failure markers (the automatic path cheap-skips them). A
+   * no-op for the global scope (no per-project context).
+   *
+   * Early-exits while a run already owns the load atom (`blocking`), mirroring
+   * {@link rematerializeSource}: joining the in-flight session-create run would
+   * let its cheap-skip swallow the force, so the user's Retry would do nothing.
+   * Returns whether a real forced run started (so the caller can defer the
+   * post-retry landing refresh).
+   */
+  rematerializeContext(projectId: ProjectScopeId): boolean {
+    if (projectId === GLOBAL_SCOPE) return false;
+    // A session-create run owns the atom while blocking; don't fold the force in.
+    if (settingsStore.get(agentProjectContextLoadAtom)[projectId]?.blocking) return false;
+    let cwd: string;
+    try {
+      cwd = this.resolveSessionCwd(projectId);
+    } catch (err) {
+      // Off-desktop (no FileSystemAdapter): surface as a completed run with a
+      // single synthetic failure, mirroring the materializer's fatal path.
+      this.setContextLoadState(projectId, {
+        phase: "done",
+        blocking: false,
+        failedSources: [{ path: "Project context", type: "nonMd", error: err2String(err) }],
+      });
+      return false;
+    }
+    // Start the forced pass SYNCHRONOUSLY so it claims the materializer's
+    // single-flight slot before this returns: a background warm (a source edit)
+    // runs through that guard without owning the blocking atom, so the check
+    // above can't see it — but the forced run supersedes it (see
+    // {@link ensureProjectContextMaterialized}), and any landing refresh the
+    // returned `true` triggers then joins THIS forced run, not the stale warm.
+    void this.beginContextMaterialization(projectId, cwd, true);
+    // Reason: report whether a real run started so the caller can defer the
+    // post-retry landing refresh (skipped for the no-op scopes above).
+    return true;
+  }
+
+  /**
+   * Re-materialize a SINGLE source on demand — the per-row "Retry" in the
+   * Content Conversion panel. Ignored while a full run is in flight (the UI hides
+   * Retry then, and the running pass already re-attempts every source). On
+   * settle, drops this source's stale failure from the load atom — re-adding it
+   * only if the retry failed again — so the panel reflects the new outcome
+   * without a whole-project re-run. A no-op for the global scope.
+   *
+   * Returns whether a retry actually ran to completion — `false` when it was
+   * skipped (global scope, a full run owns the atom, or this source is already
+   * retrying), so the caller can avoid a premature post-retry refresh.
+   */
+  async rematerializeSource(
+    projectId: ProjectScopeId,
+    item: { kind: MaterializedSourceType; source: string }
+  ): Promise<boolean> {
+    if (projectId === GLOBAL_SCOPE) return false;
+    const before = settingsStore.get(agentProjectContextLoadAtom)[projectId];
+    // A full run owns the atom while blocking; don't race it.
+    if (before?.blocking) return false;
+
+    const matchesItem = (f: FailedItem) =>
+      f.path === item.source && (item.kind === "file" ? f.type === "nonMd" : f.type === item.kind);
+    const sameSource = (r: { kind: MaterializedSourceType; source: string }) =>
+      r.kind === item.kind && r.source === item.source;
+
+    // Single-flight per source: if this source's retry is already in flight, a
+    // second click would fire a duplicate materialize and let the first finisher
+    // clear the spinner early — so bail rather than re-fire.
+    const beforeRetrying = before?.retryingSources ?? [];
+    if (beforeRetrying.some(sameSource)) return false;
+
+    // Optimistically mark this source as retrying so its row flips to a spinner
+    // immediately — the click has visible feedback even if the retry fails again.
+    // Drop its stale failure now; re-add below only if the retry fails.
+    this.setContextLoadState(projectId, {
+      ...(before ?? { phase: "done" as const }),
+      blocking: false,
+      failedSources: (before?.failedSources ?? []).filter((f) => !matchesItem(f)),
+      retryingSources: [...beforeRetrying, item],
+    });
+
+    // The single-source retry serializes with any in-flight full run on the
+    // shared per-artifact lock (keyed by snapshot file name), and shared snapshots
+    // are never reconciled — so a concurrent warm can no longer reap the snapshot
+    // this Retry writes. No pre-join is needed.
+    const failures = await materializeProjectContextSource(this.app, projectId, item);
+
+    const prev = settingsStore.get(agentProjectContextLoadAtom)[projectId];
+    // A full run may have started during our await — it now owns the atom. Bail
+    // so we don't clobber its `blocking` send-gate / progress with a stale write.
+    if (prev?.blocking) return false;
+    const others = (prev?.failedSources ?? []).filter((f) => !matchesItem(f));
+    const remainingRetrying = (prev?.retryingSources ?? []).filter((r) => !sameSource(r));
+    this.setContextLoadState(projectId, {
+      ...(prev ?? { phase: "done" as const }),
+      blocking: false,
+      retryingSources: remainingRetrying.length > 0 ? remainingRetrying : undefined,
+      failedSources: [...others, ...failures.map(toFailedItem)],
+    });
+    return true;
+  }
+
+  /** The scope the active session belongs to ({@link GLOBAL_SCOPE} or a project id). */
+  getActiveProjectId(): ProjectScopeId {
+    return this.activeProjectId;
+  }
+
+  /**
+   * Sessions belonging to `projectId`, in tab order. Feeds the scoped tab strip.
+   * Distinct from {@link getSessions} (which stays full-set for draft-prune /
+   * auto-spawn). Returns a shared frozen empty array when the scope has none.
+   */
+  getSessionsForScope(projectId: ProjectScopeId): AgentSession[] {
+    const scoped: AgentSession[] = [];
+    for (const session of this.sessions.values()) {
+      if (session.projectId !== projectId) continue;
+      if (this.detachedFromTabIds.has(session.internalId)) continue;
+      scoped.push(session);
+    }
+    return scoped.length === 0 ? EMPTY_SESSIONS : scoped;
+  }
+
+  /** Session ids belonging to `projectId`, in tab order. */
+  private getSessionIdsForScope(projectId: ProjectScopeId): string[] {
+    const ids: string[] = [];
+    for (const session of this.sessions.values()) {
+      if (session.projectId !== projectId) continue;
+      if (this.detachedFromTabIds.has(session.internalId)) continue;
+      ids.push(session.internalId);
+    }
+    return ids;
+  }
+
+  /**
+   * Switch the active scope to `projectId` and surface one of its sessions:
+   * its MRU (if still alive) → any existing session in the scope → a freshly
+   * auto-spawned one. Orphaned ids (project deleted) show a Notice and are
+   * rejected without touching the active scope or cwd (no recovery UI yet).
+   * `exitProject` is just re-entering {@link GLOBAL_SCOPE}.
+   */
+  async enterProject(projectId: ProjectScopeId): Promise<void> {
+    if (this.disposed) return;
+    if (projectId !== GLOBAL_SCOPE && !getCachedProjectRecordById(projectId)) {
+      new Notice("This project no longer exists. Restore it to open its chats.");
+      return;
+    }
+    // Already here with a live in-scope session — nothing to restore.
+    const current = this.getActiveSession();
+    if (
+      projectId === this.activeProjectId &&
+      current &&
+      current.projectId === projectId &&
+      current.getStatus() !== "closed"
+    ) {
+      return;
+    }
+
+    // Snapshot the scope this entry replaces BEFORE the optimistic switch, so a
+    // rejected auto-spawn below can restore it (see `spawnEnteredScopeOrRollback`).
+    const previousActiveProjectId = this.activeProjectId;
+    const previousActiveSessionId = this.activeSessionId;
+    this.parkActiveScope();
+    this.activeProjectId = projectId;
+
+    // A project scope opens as a FRESH visit: its prior conversational chats
+    // move to chat history (detached from the tab strip — not closed, so a
+    // backgrounded turn keeps running and stays visible via the history row's
+    // spinner/done-dot). A never-used empty landing tab is reused instead of
+    // stacking a new blank tab on every visit. The global workspace keeps its
+    // restore-the-last-tab behavior (it's the implicit scope `exitProject`
+    // returns to, not a project the user deliberately re-opens).
+    if (projectId !== GLOBAL_SCOPE) {
+      // Reuse an empty landing only when it's safe: not dirty (its
+      // `<project_context>` would be stale — materialization-only, see
+      // `contextDirtySignatures`) AND its creation-time capture still matches the
+      // live project config (`pickReusableLandingSession` checks the
+      // landing-capture signature, which also covers a System-Prompt-only edit the
+      // dirty flag ignores). When we instead spawn fresh, detach the project's
+      // empty landings too so a stale blank one can't linger in the strip; when we
+      // reuse, leave them so the adopted tab survives.
+      const dirty = this.isProjectContextDirty(projectId);
+      const reusable = dirty ? null : this.pickReusableLandingSession(projectId);
+      this.detachSessionsForProjectEntry(projectId, { includeEmpty: !reusable });
+      if (reusable) {
+        this.detachedFromTabIds.delete(reusable.internalId);
+        this.activeSessionId = reusable.internalId;
+        this.lastActiveByScope.set(projectId, reusable.internalId);
+        reusable.clearNeedsAttention();
+        this.notify();
+        this.touchProjectUsage(projectId);
+        return;
+      }
+      this.activeSessionId = null;
+      this.notify();
+      await this.spawnEnteredScopeOrRollback(
+        projectId,
+        previousActiveProjectId,
+        previousActiveSessionId
+      );
+      this.touchProjectUsage(projectId);
+      return;
+    }
+
+    const restored = this.restoreScopeActiveSession(projectId);
+    if (restored) {
+      this.activeSessionId = restored.internalId;
+      this.lastActiveByScope.set(projectId, restored.internalId);
+      restored.clearNeedsAttention();
+      this.notify();
+      this.touchProjectUsage(projectId);
+      return;
+    }
+
+    // No reusable session in this scope — drop the stale cross-scope pointer
+    // (keeps the `active.projectId === activeProjectId` invariant) and spawn.
+    this.activeSessionId = null;
+    this.notify();
+    await this.getOrCreateActiveSession();
+    // Reason: count as a "use" only after the spawn resolves — a failed spawn
+    // (await throws) must not bump MRU.
+    this.touchProjectUsage(projectId);
+  }
+
+  /**
+   * Detach a project scope's prior tabs on re-entry — they stay live in the pool
+   * and listed in chat history. Conversational chats (with user-visible
+   * messages) always detach. Empty landing tabs detach only when
+   * `includeEmpty` is set (the caller is spawning a fresh session, so any
+   * existing empty landing is stale/unusable and must not linger in the strip);
+   * otherwise they're left attached so the reused one stays the visit's tab (see
+   * {@link pickReusableLandingSession}).
+   *
+   * DESIGN NOTE — detached sessions are deliberately kept ALIVE (a backgrounded
+   * turn keeps running; the history row shows its spinner/done-dot) and are NOT
+   * evicted here, so repeated project re-entry accumulates idle detached sessions
+   * for the app's lifetime. Bounding the idle-detached class — an LRU cap that
+   * never evicts running/awaiting sessions — needs a per-session backend close
+   * primitive the backends don't expose yet, so it is out of scope for the
+   * project-workspace landing. Known limitation, deliberately deferred
+   * (obsidian-copilot-preview#164; the missing close primitive is
+   * obsidian-copilot-preview#178). If a future review flags this again, point
+   * them here.
+   */
+  private detachSessionsForProjectEntry(
+    projectId: ProjectScopeId,
+    opts: { includeEmpty: boolean }
+  ): void {
+    for (const session of this.sessions.values()) {
+      if (session.projectId !== projectId) continue;
+      if (session.getStatus() === "closed") continue;
+      if (!opts.includeEmpty && !session.hasUserVisibleMessages()) continue;
+      this.detachedFromTabIds.add(session.internalId);
+    }
+  }
+
+  /**
+   * The scope's reusable empty landing tab — a live, never-messaged session that
+   * a fresh visit can adopt instead of spawning a new blank one. A candidate must
+   * also have captured the CURRENT project config (matching landing-capture
+   * signature); one that baked in stale config is skipped. Prefers the scope's
+   * MRU; falls back to the most recent matching session. `null` means the caller
+   * should spawn fresh.
+   */
+  private pickReusableLandingSession(projectId: ProjectScopeId): AgentSession | null {
+    const expected = this.currentLandingCaptureSignature(projectId);
+    if (!expected) return null;
+    const isReusable = (session: AgentSession): boolean =>
+      this.isReusableLandingShell(session, projectId) &&
+      this.landingCaptureSignatures.get(session.internalId) === expected;
+
+    const mruId = this.lastActiveByScope.get(projectId);
+    const mru = mruId ? this.sessions.get(mruId) : undefined;
+    if (mru && isReusable(mru)) return mru;
+
+    let fallback: AgentSession | null = null;
+    for (const session of this.sessions.values()) {
+      if (isReusable(session)) fallback = session;
+    }
+    return fallback;
+  }
+
+  /**
+   * Whether a session is a clean slate to adopt as a landing — idle/starting and
+   * never messaged. An "error" landing (backend never opened) or one mid-turn
+   * ("running"/"awaiting_permission") is not, so the caller should spawn fresh.
+   * This is the shell check ONLY; capture-freshness is gated separately.
+   */
+  private isReusableLandingShell(session: AgentSession, projectId: ProjectScopeId): boolean {
+    return (
+      session.projectId === projectId &&
+      (session.getStatus() === "idle" || session.getStatus() === "starting") &&
+      !session.hasUserVisibleMessages()
+    );
+  }
+
+  /** The live project record's landing-capture signature, or null off-project. */
+  private currentLandingCaptureSignature(projectId: ProjectScopeId): string | null {
+    if (projectId === GLOBAL_SCOPE) return null;
+    const record = getCachedProjectRecordById(projectId);
+    return record ? getProjectLandingCaptureSignature(record) : null;
+  }
+
+  /**
+   * Record a successful enter of `projectId` as its most-recent use, mirroring
+   * chat-mode {@link ProjectManager.switchProject}. Skips {@link GLOBAL_SCOPE}
+   * (the implicit workspace `exitProject` returns to) and any scope that is no
+   * longer current — the spawn-path caller touches after an `await`, so a
+   * concurrent `enterProject` may have moved the active scope on in the meantime.
+   */
+  private touchProjectUsage(projectId: ProjectScopeId): void {
+    // Reason: the spawn path touches after `await getOrCreateActiveSession()`;
+    // if the user switched scopes (or we were disposed) during that await, the
+    // project they LEFT must not be bumped to MRU top. Only credit the scope
+    // we're actually still in. The restored path passes trivially — there
+    // `activeProjectId` already equals `projectId` when this is called.
+    if (this.disposed || projectId === GLOBAL_SCOPE || this.activeProjectId !== projectId) return;
+    // Reason: MRU feedback only — fire-and-forget so the throttled frontmatter
+    // write never blocks the scope switch; touchProjectLastUsed logs+swallows
+    // its own failures.
+    void ProjectFileManager.getInstance(this.app).touchProjectLastUsed(projectId);
+  }
+
+  /** Leave the current project and return to the global workspace. */
+  async exitProject(): Promise<void> {
+    await this.enterProject(GLOBAL_SCOPE);
+  }
+
+  /** Record the current active session as its scope's MRU before a scope switch. */
+  private parkActiveScope(): void {
+    const active = this.getActiveSession();
+    if (active && active.getStatus() !== "closed") {
+      this.lastActiveByScope.set(active.projectId, active.internalId);
+    }
+  }
+
+  /**
+   * Pick the session to surface when entering `projectId`: its recorded MRU if
+   * still alive, else the last existing session in the scope. `null` means the
+   * scope is empty and the caller should auto-spawn.
+   */
+  private restoreScopeActiveSession(projectId: ProjectScopeId): AgentSession | null {
+    const mruId = this.lastActiveByScope.get(projectId);
+    if (mruId) {
+      const mru = this.sessions.get(mruId);
+      if (mru && mru.getStatus() !== "closed") return mru;
+    }
+    const scoped = this.getSessionsForScope(projectId);
+    return scoped.length > 0 ? scoped[scoped.length - 1] : null;
+  }
+
+  /**
+   * Park the current scope and point `activeProjectId` at `projectId` without
+   * restoring/spawning a session — used by history load, which creates the
+   * specific saved session itself right after.
+   */
+  private setActiveScope(projectId: ProjectScopeId): void {
+    if (projectId === this.activeProjectId) return;
+    this.parkActiveScope();
+    this.activeProjectId = projectId;
+  }
+
+  /**
+   * Undo the optimistic scope switch a history load performs before it has a
+   * session, when the resume/create that follows rejects. A history load calls
+   * `setActiveScope` to point `activeProjectId` at the chat's scope (so the new
+   * session activates there) while `activeSessionId` still references the
+   * previous scope's session; a failed load would otherwise strand the manager
+   * with `getActiveSession().projectId !== activeProjectId` until the user
+   * manually switches scopes. Only roll back if we're still parked in the scope
+   * we switched to — a concurrent scope switch during the awaited backend spawn
+   * means the user has moved on, and forcing them back would reintroduce the
+   * very race `createSession`'s activation guard already avoids.
+   */
+  private rollbackHistoryLoadScope(
+    attemptedProjectId: ProjectScopeId,
+    previousProjectId: ProjectScopeId
+  ): void {
+    if (this.activeProjectId === attemptedProjectId) {
+      this.activeProjectId = previousProjectId;
+    }
+  }
+
+  /**
+   * Auto-spawn a just-entered project scope's first session, undoing the
+   * optimistic scope switch if the spawn rejects (e.g. a missing backend binary).
+   * By this point `enterProject` has parked the prior scope, pointed
+   * `activeProjectId` at the new scope, detached the new scope's tabs, and nulled
+   * `activeSessionId`. The callers only surface a Notice, so without this a
+   * rejected spawn would strand the manager in a project scope with no active
+   * chat. Restores the previous scope's `activeProjectId` + active-session pointer
+   * and re-notifies, then rethrows so the caller still reports the failure.
+   *
+   * Guarded on still being parked in the attempted scope: a concurrent
+   * `enterProject` during the awaited spawn means the user moved on, and forcing
+   * them back would clobber that newer switch (mirrors
+   * {@link rollbackHistoryLoadScope}). The detached tabs are intentionally left
+   * detached — they belong to the project we failed to enter, are invisible from
+   * the restored scope, and a later successful entry re-detaches them anyway as a
+   * fresh visit.
+   */
+  private async spawnEnteredScopeOrRollback(
+    attemptedProjectId: ProjectScopeId,
+    previousProjectId: ProjectScopeId,
+    previousActiveSessionId: string | null
+  ): Promise<void> {
+    try {
+      await this.getOrCreateActiveSession();
+    } catch (err) {
+      if (this.activeProjectId === attemptedProjectId) {
+        this.activeProjectId = previousProjectId;
+        this.activeSessionId = previousActiveSessionId;
+        this.notify();
+      }
+      throw err;
+    }
   }
 
   setDefaultBackend(backendId: BackendId): void {
@@ -1121,10 +2161,11 @@ export class AgentSessionManager {
   async closeSession(id: string): Promise<void> {
     const session = this.sessions.get(id);
     if (!session) return;
-    // Capture the closed tab's index BEFORE delete so we can pick the
-    // neighbor that currently sits to its right.
-    const idsBefore = Array.from(this.sessions.keys());
-    const closedIdx = idsBefore.indexOf(id);
+    const closedScope = session.projectId;
+    // Capture the closed tab's index WITHIN ITS SCOPE before delete so the
+    // neighbour pick stays in-scope (never jumps the user to another project).
+    const scopeIdsBefore = this.getSessionIdsForScope(closedScope);
+    const closedIdx = scopeIdsBefore.indexOf(id);
     try {
       await session.cancel();
     } catch (e) {
@@ -1141,20 +2182,48 @@ export class AgentSessionManager {
     this.detachAutoSave(id);
     this.sessions.delete(id);
     this.chatUIStates.delete(id);
+    this.landingCaptureSignatures.delete(id);
+    this.detachedFromTabIds.delete(id);
+    // Drop the closed session from its scope's MRU so a later enter can't
+    // resurrect a dead id.
+    if (this.lastActiveByScope.get(closedScope) === id) {
+      this.lastActiveByScope.delete(closedScope);
+    }
     if (this.activeSessionId === id) {
-      const remaining = Array.from(this.sessions.keys());
-      this.activeSessionId =
-        remaining.length === 0 ? null : remaining[Math.min(closedIdx, remaining.length - 1)];
+      const scopeIdsAfter = this.getSessionIdsForScope(closedScope);
+      const nextId = pickScopeNeighbor(
+        scopeIdsAfter,
+        closedIdx,
+        this.lastActiveByScope.get(closedScope)
+      );
+      this.activeSessionId = nextId;
+      if (nextId) this.lastActiveByScope.set(closedScope, nextId);
+      // `activeProjectId` stays `closedScope` even when it's now empty — never
+      // silently jump the active scope on close.
     }
     this.notify();
   }
 
-  /** Move the active pointer to `id`. No-op if `id` is unknown. */
+  /**
+   * Move the active pointer to `id`. No-op if `id` is unknown. When the target
+   * lives in a different scope, the active scope follows it (cross-scope
+   * auto-switch) so the `active.projectId === activeProjectId` invariant holds.
+   * This is NOT a cancel path — the previously-active turn keeps running in the
+   * background (D6 auto-park).
+   */
   setActiveSession(id: string): void {
     const session = this.sessions.get(id);
     if (!session) return;
     if (this.activeSessionId === id) return;
+    if (session.projectId !== this.activeProjectId) {
+      this.parkActiveScope();
+      this.activeProjectId = session.projectId;
+    }
+    // Surfacing a session (history open / tab click) re-attaches it to its
+    // scope's tab strip if a prior project re-entry had detached it.
+    this.detachedFromTabIds.delete(id);
     this.activeSessionId = id;
+    this.lastActiveByScope.set(session.projectId, id);
     session.clearNeedsAttention();
     this.notify();
   }
@@ -1169,7 +2238,10 @@ export class AgentSessionManager {
    */
   async replaceSessionInPlace(oldId: string, backendId?: BackendId): Promise<AgentSession> {
     const oldIdx = Array.from(this.sessions.keys()).indexOf(oldId);
-    const created = await this.createSession(backendId);
+    // The replacement inherits the REPLACED session's scope, not the active
+    // scope (they can differ if the old tab wasn't the active one).
+    const replacedProjectId = this.sessions.get(oldId)?.projectId ?? this.activeProjectId;
+    const created = await this.createSession(backendId, replacedProjectId);
     if (oldIdx >= 0) {
       this.moveMapEntry(this.sessions, created.internalId, oldIdx);
       this.moveMapEntry(this.chatUIStates, created.internalId, oldIdx);
@@ -1269,8 +2341,9 @@ export class AgentSessionManager {
 
   /**
    * Subscribe to lifecycle changes (session created/closed/active changed/
-   * label changed, backend exit, isStarting/lastError flips). Returns an
-   * unsubscribe function. Listeners must not throw.
+   * label changed, backend exit, isStarting/lastError flips). Also fires when a
+   * session enters or leaves `running` (so the recent-list spinner can follow).
+   * Returns an unsubscribe function. Listeners must not throw.
    */
   subscribe(listener: () => void): () => void {
     this.listeners.add(listener);
@@ -1300,6 +2373,11 @@ export class AgentSessionManager {
     if (this.disposed) return;
     this.disposed = true;
     this.settingsUnsub();
+    // Unsubscribe SYNCHRONOUSLY up front: the teardown below awaits, and a
+    // project-record change landing in that window must not re-enter the handler
+    // on a half-disposed manager.
+    this.projectRecordsUnsubscriber?.();
+    this.projectRecordsUnsubscriber = undefined;
     logInfo(
       `[AgentMode] shutdown (pool size=${this.sessions.size}, backends=${this.backends.size})`
     );
@@ -1329,7 +2407,13 @@ export class AgentSessionManager {
     );
     this.sessions.clear();
     this.chatUIStates.clear();
+    this.landingCaptureSignatures.clear();
     this.activeSessionId = null;
+    this.activeProjectId = GLOBAL_SCOPE;
+    this.lastActiveByScope.clear();
+    this.detachedFromTabIds.clear();
+    this.contextDirtySignatures.clear();
+    this.firstSessionPromiseByScope.clear();
 
     const allBackends = Array.from(this.backends.values());
     await Promise.allSettled(
@@ -1383,13 +2467,38 @@ export class AgentSessionManager {
     const previousActiveId = this.activeSessionId;
 
     const loaded = await this.opts.persistenceManager.loadFile(file);
-
-    let session: AgentSession | null = null;
-    if (loaded.sessionId) {
-      session = await this.tryResumeSessionFromHistory(loaded.backendId, loaded.sessionId);
+    // `loaded.projectId` is authoritative (GLOBAL_SCOPE for legacy chats with no
+    // frontmatter). Read scope FIRST so the resumed session gets the right cwd;
+    // an orphaned project (deleted) shows a Notice and aborts rather than
+    // downgrading to the vault root (no recovery menu yet).
+    const projectId = loaded.projectId;
+    if (projectId !== GLOBAL_SCOPE && !getCachedProjectRecordById(projectId)) {
+      new Notice("This chat belongs to a project that no longer exists.");
+      throw new OrphanedProjectError(projectId);
     }
-    if (!session) {
-      session = await this.createSession(loaded.backendId);
+    // Point the active scope at the chat's scope before constructing its
+    // session (which then activates within that scope). No restore/spawn here —
+    // we create the specific saved session next. Snapshot the scope this call
+    // actually replaces right here, AFTER the awaits above — capturing earlier
+    // would let a scope switch raced in during `loadFile` make rollback restore
+    // a stale scope.
+    const previousActiveProjectId = this.activeProjectId;
+    this.setActiveScope(projectId);
+
+    // Resume or create the saved session. Either await can reject (e.g. a
+    // missing backend binary fails to spawn); on failure, undo the scope switch
+    // above so a failed open doesn't leave the active scope ahead of the active
+    // session. The throw points are all before a session activates, so no
+    // already-active session in the target scope can be wrongly rolled back.
+    let session: AgentSession;
+    try {
+      const resumed = loaded.sessionId
+        ? await this.tryResumeSessionFromHistory(loaded.backendId, loaded.sessionId, projectId)
+        : null;
+      session = resumed ?? (await this.createSession(loaded.backendId, projectId));
+    } catch (err) {
+      this.rollbackHistoryLoadScope(projectId, previousActiveProjectId);
+      throw err;
     }
 
     session.loadDisplayMessages(loaded.messages);
@@ -1400,6 +2509,7 @@ export class AgentSessionManager {
       // merged history ranks this chat correctly after a reopen.
       void this.opts.sessionIndex?.touch(loaded.backendId, loaded.sessionId);
     }
+    this.lastActiveByScope.set(projectId, session.internalId);
     this.absorbIntoEmptyActiveTab(session, previousActiveId);
     this.notify();
     return session;
@@ -1457,9 +2567,36 @@ export class AgentSessionManager {
     // Captured before the resumed session becomes active so we can replace an
     // empty landing tab in place rather than spawning a new one.
     const previousActiveId = this.activeSessionId;
-    const session = await this.tryResumeSessionFromHistory(backendId, sessionId);
-    if (!session) {
-      throw new Error(`Could not resume session ${sessionId} from the ${backendId} session store.`);
+    const index = this.opts.sessionIndex;
+    const entry = index ? await index.getEntry(backendId, sessionId) : null;
+    // Scope from the index entry (write-through / sweep attribution); absent ≙
+    // global. Mirrors loadSessionFromHistory's frontmatter handling: orphan
+    // guard first (never downgrade a project chat to the vault root), then
+    // point the active scope at the chat's scope before constructing it.
+    const projectId: ProjectScopeId = entry?.projectId ?? GLOBAL_SCOPE;
+    if (projectId !== GLOBAL_SCOPE && !getCachedProjectRecordById(projectId)) {
+      new Notice("This chat belongs to a project that no longer exists.");
+      throw new OrphanedProjectError(projectId);
+    }
+    // Snapshot the scope this call actually replaces right here, AFTER the
+    // `getEntry` await — capturing earlier would let a scope switch raced in
+    // during the await make rollback restore a stale scope.
+    const previousActiveProjectId = this.activeProjectId;
+    this.setActiveScope(projectId);
+    // Unlike markdown history there is no fresh-session fallback — a failed
+    // resume rejects, so undo the scope switch above before propagating it.
+    let session: AgentSession;
+    try {
+      const resumed = await this.tryResumeSessionFromHistory(backendId, sessionId, projectId);
+      if (!resumed) {
+        throw new Error(
+          `Could not resume session ${sessionId} from the ${backendId} session store.`
+        );
+      }
+      session = resumed;
+    } catch (err) {
+      this.rollbackHistoryLoadScope(projectId, previousActiveProjectId);
+      throw err;
     }
     // Rebuild the visible transcript for backends that resume without
     // replaying it (Claude SDK reads its on-disk session jsonl). ACP backends
@@ -1467,17 +2604,14 @@ export class AgentSessionManager {
     // session already has its messages. Best-effort: an empty result leaves
     // the resumed-but-blank session as-is rather than failing the open.
     await this.hydrateResumedTranscript(session, backendId, sessionId);
-    const index = this.opts.sessionIndex;
-    if (index) {
-      const entry = await index.getEntry(backendId, sessionId);
-      // Reapply with the recorded source: a user rename stays sticky, but an
-      // agent/derived title is agent-sourced so a resumed opencode/codex
-      // session can still refresh its title from later agent updates.
-      if (entry?.title) {
-        session.restoreLabel(entry.title, entry.titleSource === "user" ? "user" : "agent");
-      }
-      await index.touch(backendId, sessionId);
+    // Reapply with the recorded source: a user rename stays sticky, but an
+    // agent/derived title is agent-sourced so a resumed opencode/codex
+    // session can still refresh its title from later agent updates.
+    if (entry?.title) {
+      session.restoreLabel(entry.title, entry.titleSource === "user" ? "user" : "agent");
     }
+    if (index) await index.touch(backendId, sessionId);
+    this.lastActiveByScope.set(projectId, session.internalId);
     this.absorbIntoEmptyActiveTab(session, previousActiveId);
     this.notify();
     return session;
@@ -1497,12 +2631,15 @@ export class AgentSessionManager {
     const proc = this.backends.get(backendId);
     if (!proc?.readPersistedTranscript) return;
     if (session.store.getDisplayMessages().length > 0) return;
-    const adapter = this.app.vault.adapter;
-    if (!(adapter instanceof FileSystemAdapter)) return;
     try {
+      // The store is keyed by the cwd the session RAN in (Claude encodes the
+      // transcript path from it), so a project chat must hydrate from its
+      // project folder — the vault root would look in the wrong directory.
+      // Resolved inside the try: hydration is best-effort, and an orphaned
+      // scope just skips it like any other store miss.
       const transcript = await proc.readPersistedTranscript({
         sessionId,
-        cwd: adapter.getBasePath(),
+        cwd: this.resolveSessionCwd(session.projectId),
       });
       if (transcript.length > 0) session.loadDisplayMessages(transcript);
     } catch (e) {
@@ -1519,11 +2656,24 @@ export class AgentSessionManager {
    */
   private async tryResumeSessionFromHistory(
     backendId: BackendId,
-    sessionId: SessionId
+    sessionId: SessionId,
+    projectId: ProjectScopeId
   ): Promise<AgentSession | null> {
-    const adapter = this.app.vault.adapter;
-    if (!(adapter instanceof FileSystemAdapter)) return null;
-    const vaultBasePath = adapter.getBasePath();
+    // Same AGENTS.md mirror ensure as `createSession` — resume rehydrates an existing
+    // session, but its cwd still derives from the project record, so a cwd-instruction
+    // backend needs the mirror materialized before cwd is read. Never throws; skipped for
+    // GLOBAL_SCOPE and for claude.
+    if (projectId !== GLOBAL_SCOPE && CWD_INSTRUCTION_BACKENDS.has(backendId)) {
+      const record = getCachedProjectRecordById(projectId);
+      if (record) await ensureAgentsMirror(this.app, record);
+    }
+    const cwd = this.resolveSessionCwd(projectId);
+    // Kick off materialization in parallel (publishes the blocking load state up
+    // front), overlapping with `ensureBackend`. Unlike a fresh create, a resumed
+    // session can't appear before the backend rehydrates it, so we await the
+    // roots just before `loadSession`. Never rejects → resume is never blocked.
+    const contextReady =
+      projectId === GLOBAL_SCOPE ? undefined : this.beginContextMaterialization(projectId, cwd);
     const descriptor = this.resolveDescriptor(backendId);
 
     this.pendingCreates++;
@@ -1549,9 +2699,29 @@ export class AgentSessionManager {
 
     const mcpServers = resolveMcpServers(backend, getSettings().agentMode?.mcpServers);
 
+    // Await the roots now (materialize has been running alongside ensureBackend).
+    // GLOBAL has no contextReady → undefined, identical to a context-free resume.
+    // The inline `<project_context>` block is for fresh first prompts only, so a
+    // resumed session uses just the searchable roots here.
+    const additionalDirectories = contextReady
+      ? (await contextReady).additionalDirectories
+      : undefined;
+    // The await above is a new suspension point — re-check disposal before
+    // touching the (possibly tearing-down) backend, mirroring the fresh-create
+    // guard in AgentSession.initialize. Same cleanup as the path's other returns.
+    if (this.disposed) {
+      this.finishPendingCreate();
+      return null;
+    }
     let resumeResult: { sessionId: SessionId; state: BackendState } | null = null;
     try {
-      resumeResult = await backend.loadSession({ sessionId, cwd: vaultBasePath, mcpServers });
+      resumeResult = await backend.loadSession({
+        sessionId,
+        cwd,
+        mcpServers,
+        projectId,
+        additionalDirectories,
+      });
     } catch (err) {
       if (!(err instanceof MethodUnsupportedError)) {
         logWarn(`[AgentMode] loadSession failed for ${sessionId}`, err);
@@ -1564,8 +2734,10 @@ export class AgentSessionManager {
       try {
         resumeResult = await backend.resumeSession({
           sessionId,
-          cwd: vaultBasePath,
+          cwd,
           mcpServers,
+          projectId,
+          additionalDirectories,
         });
       } catch (err) {
         if (err instanceof MethodUnsupportedError) {
@@ -1590,8 +2762,9 @@ export class AgentSessionManager {
       backendSessionId: resumeResult.sessionId,
       internalId: uuidv4(),
       backendId,
+      projectId,
       initialState: resumeResult.state,
-      cwd: vaultBasePath,
+      cwd,
       getDescriptor: () => this.opts.resolveDescriptor(backendId),
       runFanoutTurn: (input) => this.runFanoutTurn(input),
       getDisplayName: (id) => this.resolveDescriptor(id).displayName,
@@ -1599,7 +2772,10 @@ export class AgentSessionManager {
     });
     this.sessions.set(session.internalId, session);
     this.chatUIStates.set(session.internalId, new AgentChatUIState(session));
+    this.detachedFromTabIds.delete(session.internalId);
     this.activeSessionId = session.internalId;
+    this.activeProjectId = projectId;
+    this.lastActiveByScope.set(projectId, session.internalId);
     this.attachAutoSave(session);
     this.attachModelCacheSync(session);
     this.attachAttentionTracking(session);
@@ -1688,6 +2864,10 @@ export class AgentSessionManager {
       titleSource,
       createdAtMs: messages[0]?.timestamp?.epoch ?? now,
       lastAccessedAtMs: now,
+      // Scope the native entry so project views can list it (markdown chats
+      // carry the scope in frontmatter; native-only chats have only this).
+      // GLOBAL_SCOPE maps to the field's "absent" encoding.
+      projectId: session.projectId === GLOBAL_SCOPE ? undefined : session.projectId,
     });
   }
 
@@ -1746,6 +2926,9 @@ export class AgentSessionManager {
       label,
       existingPath: state.path,
       sessionId,
+      // GLOBAL_SCOPE writes no frontmatter (byte-identical to legacy chats);
+      // a real project id binds the chat to that scope on disk.
+      projectId: session.projectId,
     });
     if (result) {
       state.path = result.path;
@@ -1827,12 +3010,21 @@ export class AgentSessionManager {
       onMessagesChanged: () => {},
       onStatusChanged: (next) => {
         const wasRunning = prev === "running";
+        const isRunning = next === "running";
         prev = next;
         void this.flushDeferredBackendRestartIfReady(session.backendId);
-        if (!wasRunning) return;
-        if (!ATTENTION_TRIGGER_STATUSES.has(next)) return;
-        if (this.activeSessionId === session.internalId) return;
-        session.markNeedsAttention();
+        // Existing attention marking — unchanged semantics: a backgrounded
+        // session that leaves `running` for a status that demands the user's eye.
+        if (
+          wasRunning &&
+          ATTENTION_TRIGGER_STATUSES.has(next) &&
+          this.activeSessionId !== session.internalId
+        ) {
+          session.markNeedsAttention();
+        }
+        // Re-render recent-list rows when this session's running membership
+        // flips, so the row's spinner appears/disappears in step.
+        if (wasRunning !== isRunning) this.notify();
       },
     });
     this.getSessionState(session.internalId).attentionUnsub = unsubscribe;
@@ -1868,6 +3060,29 @@ export class AgentSessionManager {
     // Lets a backend with its own permission gate (Claude SDK) hard-deny write/exec
     // tools for read-only fan-out sub-sessions — see `permissionBridge`.
     proc.setReadOnlySessionPredicate?.((sessionId) => this.isReadOnlyFanoutSession(sessionId));
+    // Inject the project-instruction resolver. Wiring here (the single
+    // warm-adopt + fresh choke point) covers both backend bring-up paths.
+    // Backends that discover instructions from cwd (codex/opencode) omit the
+    // setter and this is a no-op.
+    proc.setProjectProfileProvider?.((projectId) => this.getProjectProfile(projectId));
+  }
+
+  /**
+   * Map a scope id to the minimal {@link ProjectProfile} a backend needs to
+   * inject project instructions. Returns `undefined` for {@link GLOBAL_SCOPE}
+   * or an unknown project — keeping the `projects/` lookup here so
+   * `backends/` never imports the projects layer.
+   */
+  private getProjectProfile(projectId: ProjectScopeId): ProjectProfile | undefined {
+    if (projectId === GLOBAL_SCOPE) return undefined;
+    const record = getCachedProjectRecordById(projectId);
+    if (!record) return undefined;
+    return {
+      id: record.project.id,
+      // Layer the built-in project policy ahead of the user's own instruction body, so Claude's
+      // `<project_instructions>` carries the same composed body codex/opencode get via the mirror.
+      systemPrompt: getComposedProjectInstructions(record),
+    };
   }
 
   private async ensureBackend(
@@ -1934,12 +3149,33 @@ export class AgentSessionManager {
         this.detachAutoSave(s.internalId);
         this.sessions.delete(s.internalId);
         this.chatUIStates.delete(s.internalId);
+        this.landingCaptureSignatures.delete(s.internalId);
+        this.detachedFromTabIds.delete(s.internalId);
+        // Drop the dead session from its scope's MRU so a later enter can't
+        // resurrect a dead id.
+        if (this.lastActiveByScope.get(s.projectId) === s.internalId) {
+          this.lastActiveByScope.delete(s.projectId);
+        }
         s.cancel().catch(() => {});
         s.dispose().catch(() => {});
       }
       if (this.activeSessionId && !this.sessions.has(this.activeSessionId)) {
-        const remaining = Array.from(this.sessions.keys());
-        this.activeSessionId = remaining[0] ?? null;
+        // Repoint at a STRIP-VISIBLE survivor only. A session detached on a prior
+        // project re-entry was deliberately parked to history; crash recovery must
+        // not silently resurrect it into the active tab. If none is visible, leave
+        // active null — the crash pill shows and the router (which bails on
+        // lastError) won't auto-respawn behind the user.
+        let next: AgentSession | undefined;
+        for (const s of this.sessions.values()) {
+          if (!this.detachedFromTabIds.has(s.internalId)) {
+            next = s;
+            break;
+          }
+        }
+        this.activeSessionId = next?.internalId ?? null;
+        // Crash repointing can cross scopes; keep `active.projectId ===
+        // activeProjectId` rather than leaving a stale scope behind.
+        if (next) this.activeProjectId = next.projectId;
       }
       // Surface the crash so the empty-state pill shows it and the
       // router's auto-spawn effect (which bails on lastError) doesn't
@@ -1997,10 +3233,12 @@ export class AgentSessionManager {
       // affected sessions are still closed; the tab falls back to its
       // needs-setup state. `restartBackendNow` is otherwise only reached for an
       // installed backend, so this is a no-op for the normal restart path.
+      const replacedSession = affected.find((s) => s.internalId === this.activeSessionId);
       const shouldCreateReplacement =
-        this.isBackendInstalled(backendId) &&
-        affected.length > 0 &&
-        affected.some((s) => s.internalId === this.activeSessionId);
+        this.isBackendInstalled(backendId) && affected.length > 0 && replacedSession !== undefined;
+      // The replacement must inherit the REPLACED session's scope, not the
+      // current active scope — captured before the close loop repoints `active`.
+      const replacementProjectId = replacedSession?.projectId ?? this.activeProjectId;
       for (const session of affected) {
         await this.closeSession(session.internalId);
       }
@@ -2023,7 +3261,9 @@ export class AgentSessionManager {
         this.registerPreload(backendId, probe);
         if (shouldCreateReplacement && !this.disposed) {
           await probe;
-          await this.createSession(backendId);
+          // The replacement inherits the REPLACED session's scope (captured
+          // above as `replacementProjectId`), not the current active scope.
+          await this.createSession(backendId, replacementProjectId);
         }
       }
       this.notify();

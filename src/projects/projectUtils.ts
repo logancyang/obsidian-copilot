@@ -151,7 +151,9 @@ function joinUrlsArrayToString(urls: string[]): string {
 }
 
 /**
- * Parse a project.md file into a ProjectFileRecord.
+ * Parse a project config file (`project.md`) into a ProjectFileRecord. The `systemPrompt`
+ * is the file body (instruction text); config comes from frontmatter. The generated
+ * `AGENTS.md` mirror is never read here — `project.md` is the single source of truth.
  *
  * Key constraints:
  * - id: frontmatter is authoritative, folder name is fallback
@@ -159,7 +161,7 @@ function joinUrlsArrayToString(urls: string[]): string {
  * - inclusions/exclusions: kept as encoded strings with YAML folding stripped
  * - webUrls/youtubeUrls: stored as YAML arrays, converted to newline strings for runtime
  *
- * @param file - project.md TFile
+ * @param file - recognized project config TFile
  * @returns ProjectFileRecord, or null if parse fails
  */
 export async function parseProjectConfigFile(
@@ -286,14 +288,14 @@ export async function parseProjectConfigFile(
 }
 
 /**
- * Scan all project config files with duplicate id detection.
+ * Scan all project config files (`project.md`) with per-id deduplication.
  *
  * Performance: only traverses the projectsFolder subtree, not the entire vault.
  * Looks for \<projectsFolder\>/\<folderName\>/project.md (one level deep).
  *
- * Duplicate rules:
- * - Build id -> path[] index during scan
- * - On duplicate: logWarn, keep first by path alphabetical order (stable)
+ * Dedup rule:
+ * - Per id (across folders): build id -> path[] index; on duplicate logWarn and keep the
+ *   first by folder/path order (stable).
  *
  * @returns Records and diagnostics
  */
@@ -334,6 +336,7 @@ export async function scanAllProjectConfigFiles(app: App): Promise<{
     }
   }
 
+  // Reason: stable ordering by path keeps duplicate-id "keep first" deterministic across folders.
   files.sort((a, b) => a.path.localeCompare(b.path));
 
   const duplicateIdIndex: Record<string, string[]> = {};

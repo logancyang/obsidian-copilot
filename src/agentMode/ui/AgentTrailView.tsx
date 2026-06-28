@@ -208,20 +208,23 @@ interface PlanPillProps {
 }
 
 // Inline plan-checklist pill for `kind: "plan"` parts. Permission-gated
-// plan proposals are handled separately by `PlanProposalCard`.
-const PlanPill: React.FC<PlanPillProps> = ({ entries }) => (
-  <div className="tw-my-1 tw-rounded tw-border tw-border-border tw-bg-secondary tw-px-2 tw-py-1">
-    <p className="tw-mb-1 tw-text-xs tw-text-muted">Plan</p>
-    <ul className="tw-flex tw-flex-col tw-gap-0.5 tw-text-sm">
-      {entries.map((e, i) => (
-        // eslint-disable-next-line @eslint-react/no-array-index-key -- plan entries are positional and may share content
-        <li key={`plan-${i}`} className="tw-flex tw-items-start tw-gap-2">
-          <span aria-hidden="true">{planEntryIcon(e.status)}</span>
-          <span className={planEntryClass(e.status)}>{e.content}</span>
-        </li>
-      ))}
-    </ul>
-  </div>
-);
+// plan proposals are handled separately by `PlanProposalCard`. An empty
+// entries list (the agent deleted every task) renders nothing, not an
+// empty shell.
+const PlanPill: React.FC<PlanPillProps> = ({ entries }) =>
+  entries.length === 0 ? null : (
+    <div className="tw-my-1 tw-rounded tw-border tw-border-border tw-bg-secondary tw-px-2 tw-py-1">
+      <p className="tw-mb-1 tw-text-xs tw-text-muted">Plan</p>
+      <ul className="tw-flex tw-flex-col tw-gap-0.5 tw-text-sm">
+        {entries.map((e, i) => (
+          // eslint-disable-next-line @eslint-react/no-array-index-key -- plan entries are positional and may share content
+          <li key={`plan-${i}`} className="tw-flex tw-items-start tw-gap-2">
+            <span aria-hidden="true">{planEntryIcon(e.status)}</span>
+            <span className={planEntryClass(e.status)}>{e.content}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 
 export default AgentTrail;

@@ -23,6 +23,8 @@ interface ChatControlsProps {
   onRemoveFromContext: (category: string, data: string) => void;
 
   hideAddContextButton?: boolean;
+  statusIndicator?: React.ReactNode;
+  isAgentMode?: boolean;
 }
 
 export const ContextControl: React.FC<ChatControlsProps> = ({
@@ -41,6 +43,8 @@ export const ContextControl: React.FC<ChatControlsProps> = ({
   onAddToContext,
   onRemoveFromContext,
   hideAddContextButton,
+  statusIndicator,
+  isAgentMode,
 }) => {
   const handleRemoveContext = (category: string, data: string) => {
     // Delegate to unified handler
@@ -74,6 +78,8 @@ export const ContextControl: React.FC<ChatControlsProps> = ({
       onTypeaheadSelect={handleTypeaheadSelect}
       lexicalEditorRef={lexicalEditorRef}
       hideAddContextButton={hideAddContextButton}
+      statusIndicator={statusIndicator}
+      isAgentMode={isAgentMode}
     />
   );
 };

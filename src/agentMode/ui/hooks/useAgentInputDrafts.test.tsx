@@ -134,4 +134,69 @@ describe("useAgentInputDrafts", () => {
     rerender({ activeSessionId: "a", liveSessionIds: ["b"], defaultIncludeActiveNote: false });
     expect(result.current.input).toBe("");
   });
+
+  it("migrates a draft typed during a session swap onto the replacement id", () => {
+    // Simulates the empty-landing refresh: the user types while the old session
+    // is still active (the new id isn't in liveSessionIds yet), then the swap
+    // migrates that draft onto the new session before the old one is pruned.
+    const { result, rerender } = renderDrafts({
+      activeSessionId: "old",
+      liveSessionIds: ["old"],
+      defaultIncludeActiveNote: false,
+    });
+
+    act(() => {
+      result.current.setInput("typed during startup");
+      result.current.setContextNotes([file("note.md")]);
+      result.current.addImages([new File([], "img.png")]);
+      result.current.setIncludeActiveWebTab(true);
+      result.current.setQueue([queued("q1")]);
+    });
+
+    act(() => result.current.migrateDraft("old", "new"));
+
+    // Once React observes the new session, its draft carries the typed content.
+    rerender({ activeSessionId: "new", liveSessionIds: ["new"], defaultIncludeActiveNote: false });
+    expect(result.current.input).toBe("typed during startup");
+    expect(result.current.contextNotes.map((n) => n.path)).toEqual(["note.md"]);
+    expect(result.current.images).toHaveLength(1);
+    expect(result.current.includeActiveWebTab).toBe(true);
+    expect(result.current.queue.map((q) => q.id)).toEqual(["q1"]);
+
+    // The old id no longer holds the migrated draft.
+    rerender({ activeSessionId: "old", liveSessionIds: ["new"], defaultIncludeActiveNote: false });
+    expect(result.current.input).toBe("");
+  });
+
+  it("does not migrate an empty source draft (clean swap stays clean)", () => {
+    const { result, rerender } = renderDrafts({
+      activeSessionId: "old",
+      liveSessionIds: ["old"],
+      defaultIncludeActiveNote: false,
+    });
+
+    act(() => result.current.migrateDraft("old", "new"));
+
+    rerender({ activeSessionId: "new", liveSessionIds: ["new"], defaultIncludeActiveNote: false });
+    expect(result.current.input).toBe("");
+  });
+
+  it("does not clobber input the user already started on the replacement", () => {
+    const { result, rerender } = renderDrafts({
+      activeSessionId: "old",
+      liveSessionIds: ["old", "new"],
+      defaultIncludeActiveNote: false,
+    });
+
+    act(() => result.current.setInput("old draft"));
+    rerender({
+      activeSessionId: "new",
+      liveSessionIds: ["old", "new"],
+      defaultIncludeActiveNote: false,
+    });
+    act(() => result.current.setInput("new draft"));
+
+    act(() => result.current.migrateDraft("old", "new"));
+    expect(result.current.input).toBe("new draft");
+  });
 });

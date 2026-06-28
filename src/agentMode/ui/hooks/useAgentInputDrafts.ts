@@ -60,6 +60,13 @@ export interface AgentInputDraftControls extends AgentInputDraft {
   setIncludeActiveWebTab: (include: boolean) => void;
   setLoading: (loading: boolean) => void;
   setQueue: React.Dispatch<React.SetStateAction<QueuedAgentMessage[]>>;
+  /**
+   * Carry a compose draft from a replaced session onto its replacement, so text
+   * typed during an in-place session swap (e.g. the empty-landing context
+   * refresh) survives the old session's pruning. No-op when the source draft is
+   * empty or the target already holds user input. See {@link migrateDraft}.
+   */
+  migrateDraft: (fromSessionId: string, toSessionId: string) => void;
   /** Clear the compose fields after a send; leaves loading/queue untouched. */
   resetCompose: () => void;
 }
@@ -82,6 +89,19 @@ const createDraft = (includeActiveNote: boolean): AgentInputDraft => ({
 
 const applyArrayState = <T>(value: React.SetStateAction<T[]>, previous: T[]): T[] =>
   typeof value === "function" ? value(previous) : value;
+
+/**
+ * Whether a draft carries anything worth preserving across a session swap —
+ * any composed text/attachments/queue, or a toggle the user moved off its seed.
+ * An untouched draft migrates to nothing, so the swap stays a clean reset.
+ */
+const hasDraftPayload = (draft: AgentInputDraft, defaultIncludeActiveNote: boolean): boolean =>
+  draft.input.length > 0 ||
+  draft.images.length > 0 ||
+  draft.contextNotes.length > 0 ||
+  draft.queue.length > 0 ||
+  draft.includeActiveNote !== defaultIncludeActiveNote ||
+  draft.includeActiveWebTab;
 
 export function useAgentInputDrafts({
   activeSessionId,
@@ -177,6 +197,39 @@ export function useAgentInputDrafts({
     [updateActive]
   );
 
+  // Move a draft onto a replacement session id during an in-place swap. Writes
+  // `setDrafts` DIRECTLY (not via `updateDraft`) on purpose: the new id isn't in
+  // `liveSetRef` yet — React hasn't observed the manager's new session list when
+  // the swap resolves — so `updateDraft`'s live-guard would drop the write. The
+  // caller runs this synchronously the moment `replaceSessionInPlace` resolves,
+  // while the old session's `closeSession` is still suspended at `await cancel()`
+  // (it deletes the session only afterwards), so the source draft is still
+  // present here and the prune effect only fires later. `loading` resets — the
+  // replacement starts its own turn.
+  const migrateDraft = useCallback(
+    (fromSessionId: string, toSessionId: string) => {
+      if (fromSessionId === toSessionId) return;
+      setDrafts((prev) => {
+        const source = prev[fromSessionId];
+        if (!source || !hasDraftPayload(source, defaultIncludeActiveNote)) return prev;
+        // Never clobber input the user already started on the replacement.
+        const target = prev[toSessionId];
+        if (target && hasDraftPayload(target, defaultIncludeActiveNote)) return prev;
+        const next = { ...prev };
+        delete next[fromSessionId];
+        next[toSessionId] = {
+          ...source,
+          images: [...source.images],
+          contextNotes: [...source.contextNotes],
+          queue: [...source.queue],
+          loading: false,
+        };
+        return next;
+      });
+    },
+    [defaultIncludeActiveNote]
+  );
+
   // DESIGN NOTE: resetCompose hard-clears includeActiveNote to false after a
   // send, so within one session the active note auto-attaches only to the
   // FIRST message. Two scenarios, only one of which matches the legacy
@@ -241,6 +294,7 @@ export function useAgentInputDrafts({
       setIncludeActiveWebTab,
       setLoading,
       setQueue,
+      migrateDraft,
       resetCompose,
     }),
     [
@@ -253,6 +307,7 @@ export function useAgentInputDrafts({
       setIncludeActiveWebTab,
       setLoading,
       setQueue,
+      migrateDraft,
       resetCompose,
     ]
   );

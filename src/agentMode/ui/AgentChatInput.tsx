@@ -1,4 +1,5 @@
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
+import { GLOBAL_SCOPE } from "@/agentMode/session/scope";
 import { expandCustomCommandPrefix } from "@/agentMode/session/expandCustomCommandPrefix";
 import { resolveActiveNoteToken } from "@/agentMode/session/resolveActiveNoteToken";
 import type { PromptContent } from "@/agentMode/session/types";
@@ -66,6 +67,26 @@ interface AgentChatInputProps {
   modelPickerOverride: ChatInputProps["modelPickerOverride"];
   modePickerOverride: ChatInputProps["modePickerOverride"];
   onCycleMode: () => void;
+  /**
+   * Active scope ({@link GLOBAL_SCOPE} or a project id). Gates the
+   * context-load hold below to real projects; `GLOBAL_SCOPE` never holds.
+   */
+  activeProjectId?: string;
+  /**
+   * The active project's context is still materializing (read by the parent from
+   * `agentProjectContextLoadAtom[projectId].blocking`). Send stays clickable but
+   * **queues** instead of firing, then auto-flushes when the load clears —
+   * queue-and-hold, never a hard-disabled button.
+   */
+  contextLoadBlocking?: boolean;
+  /**
+   * Hard-disable the whole composer (pointer-events + dim), e.g. the active
+   * project was deleted out from under the user. Distinct from
+   * {@link contextLoadBlocking}, which only defers sends.
+   */
+  disabled?: boolean;
+  /** Agent project-context status icon, rendered in the composer's badge row. */
+  contextStatusIndicator?: React.ReactNode;
 }
 
 // Stable no-op handlers for ChatInput props that don't apply to Agent Mode
@@ -160,9 +181,18 @@ export const AgentChatInput = memo(function AgentChatInput({
   modelPickerOverride,
   modePickerOverride,
   onCycleMode,
+  activeProjectId,
+  contextLoadBlocking = false,
+  disabled = false,
+  contextStatusIndicator,
 }: AgentChatInputProps) {
   const eventTarget = useContext(EventTargetContext);
   const settings = useSettingsValue();
+
+  // Hold sends only while a *real* project's context is materializing. Global
+  // scope never holds, so the global landing's send path is byte-identical.
+  const holdForContext =
+    contextLoadBlocking && !!activeProjectId && activeProjectId !== GLOBAL_SCOPE;
   const [selectedTextContexts] = useSelectedTextContexts();
   // SSoT for the Active Web Tab; `activeWebTabForMentions` matches the send
   // snapshot (preserved only when focusing the chat panel). Drives the
@@ -170,7 +200,6 @@ export const AgentChatInput = memo(function AgentChatInput({
   // webTabs at send time below.
   const { activeWebTabForMentions } = useActiveWebTabState();
 
-  const isMountedRef = useRef(false);
   const previousSessionIdRef = useRef(sessionId);
 
   // The `@agent` typeahead group + pills are paid-only. Reactive so a settings
@@ -216,13 +245,6 @@ export const AgentChatInput = memo(function AgentChatInput({
     resetCompose,
   } = draft;
 
-  useEffect(() => {
-    isMountedRef.current = true;
-    return () => {
-      isMountedRef.current = false;
-    };
-  }, []);
-
   // Clear cross-session ephemeral state on a session switch: the global
   // selected-text atom and the mentioned-agent ref (neither is reset by the
   // editor remount), so a selection or `@agent` pill can't ride into the next session.
@@ -242,7 +264,7 @@ export const AgentChatInput = memo(function AgentChatInput({
     // Stop = user is bailing on the current turn; don't auto-flush queued
     // follow-ups they composed while the agent was running.
     setQueuedMessages([]);
-    if (isMountedRef.current) setLoading(false);
+    setLoading(false);
   }, [backend, setLoading, setQueuedMessages]);
 
   const runSend = useCallback(
@@ -261,7 +283,14 @@ export const AgentChatInput = memo(function AgentChatInput({
         logError("Error sending agent message:", error);
         new Notice("Failed to send message. Please try again.");
       } finally {
-        if (isMountedRef.current) setLoading(false);
+        // No mounted guard here: this composer remounts on the
+        // landing→conversation flip (AgentHome renders it at different tree
+        // positions), which happens DURING the first turn of every session —
+        // the unmounting instance must still clear the in-flight flag.
+        // `setLoading` writes AgentHome's per-session draft store (not local
+        // state), so calling it after unmount is safe, and the store itself
+        // drops updates for sessions that are no longer live.
+        setLoading(false);
       }
     },
     [backend, setLoading, updateUserMessageHistory]
@@ -269,6 +298,10 @@ export const AgentChatInput = memo(function AgentChatInput({
 
   const handleSendMessage = useCallback(
     async (webTabs?: WebTabContext[]) => {
+      // A hard-disabled composer (e.g. an orphaned project) must not send. The
+      // wrapper only blocks pointer events + dims, so a focused editor could
+      // otherwise submit a turn via the keyboard; bail before any prep work.
+      if (disabled) return;
       const text = inputMessage.trim();
       if (!text) return;
       const rawInput = inputMessage;
@@ -351,7 +384,10 @@ export const AgentChatInput = memo(function AgentChatInput({
       // again, point them here.
       clearSelectedTextContexts();
 
-      if (loading || isStarting) {
+      // Queue-and-hold: while a turn is in flight, starting, or the project's
+      // context is still materializing, park the message instead of sending.
+      // The flush effect below drains it once all three clear.
+      if (loading || isStarting || holdForContext) {
         setQueuedMessages((q) => [...q, item]);
         return;
       }
@@ -368,6 +404,8 @@ export const AgentChatInput = memo(function AgentChatInput({
       selectedTextContexts,
       loading,
       isStarting,
+      holdForContext,
+      disabled,
       resetCompose,
       runSend,
       setQueuedMessages,
@@ -397,11 +435,14 @@ export const AgentChatInput = memo(function AgentChatInput({
   // deferred to PR2; PR1 keeps execution in the foreground composer. If a
   // future review flags this again, point them at this note.
   useEffect(() => {
-    if (loading || isStarting || queuedMessages.length === 0) return;
+    // `disabled` guards the same hard-disable as the send path: a project
+    // orphaned while messages are queued must not drain its queue into a
+    // disabled composer.
+    if (disabled || loading || isStarting || holdForContext || queuedMessages.length === 0) return;
     const combined = combineQueuedMessages(queuedMessages);
     setQueuedMessages([]);
     void runSend(combined);
-  }, [loading, isStarting, queuedMessages, runSend, setQueuedMessages]);
+  }, [disabled, loading, isStarting, holdForContext, queuedMessages, runSend, setQueuedMessages]);
 
   const handleRemoveQueuedMessage = useCallback(
     (id: string) => {
@@ -429,8 +470,10 @@ export const AgentChatInput = memo(function AgentChatInput({
       )}
       {!canUseMultiAgent && <MultiAgentUpsellHint />}
       <div
-        className={hasPendingPlanPermission ? "tw-pointer-events-none tw-opacity-50" : undefined}
-        aria-disabled={hasPendingPlanPermission || undefined}
+        className={
+          hasPendingPlanPermission || disabled ? "tw-pointer-events-none tw-opacity-50" : undefined
+        }
+        aria-disabled={hasPendingPlanPermission || disabled || undefined}
       >
         {/* Key by session so ChatInput remounts on a tab/session switch. The
             per-session draft store (input/images/contextNotes/include flags)
@@ -472,6 +515,7 @@ export const AgentChatInput = memo(function AgentChatInput({
           onMentionedAgentsChange={handleMentionedAgentsChange}
           showProgressCard={NOOP}
           showIndexingCard={NOOP}
+          contextStatusIndicator={contextStatusIndicator}
         />
       </div>
     </>

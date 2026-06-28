@@ -14,11 +14,19 @@ import type {
   ToolCallContent,
 } from "@/agentMode/session/types";
 import { resolveToolName } from "@/agentMode/session/toolName";
+import {
+  createClaudeTaskPlanState,
+  planUpdateFromClaudeToolResult,
+  planUpdateFromClaudeToolUse,
+  type ClaudeTaskPlanState,
+} from "./claudeTodoPlan";
 import { deriveToolKind, deriveToolTitle, vendorMetaFields } from "./toolMeta";
 
 /**
  * Mutable per-query translator state. One instance lives for the duration of
- * a single `query()` call; reset whenever a new turn starts.
+ * a single `query()` call; reset whenever a new turn starts — EXCEPT
+ * `claudeTasks`, which the caller shares across a session's queries (Task ids
+ * created in one turn must resolve when a later turn updates them).
  */
 export interface TranslatorState {
   toolUseBlocks: Map<
@@ -34,10 +42,16 @@ export interface TranslatorState {
   >;
   /** Tool-use ids already emitted in this turn — used to dedupe in the assistant-message fallback path. */
   emittedToolUseIds: Set<string>;
+  /** Session-lived todo/Task accumulator (see claudeTodoPlan.ts). */
+  claudeTasks: ClaudeTaskPlanState;
 }
 
-export function createTranslatorState(): TranslatorState {
-  return { toolUseBlocks: new Map(), emittedToolUseIds: new Set() };
+export function createTranslatorState(claudeTasks?: ClaudeTaskPlanState): TranslatorState {
+  return {
+    toolUseBlocks: new Map(),
+    emittedToolUseIds: new Set(),
+    claudeTasks: claudeTasks ?? createClaudeTaskPlanState(),
+  };
 }
 
 function event(sessionId: SessionId, update: SessionUpdate): SessionEvent {
@@ -137,6 +151,17 @@ function translateStreamEvent(
             })
           );
         }
+        out.push(
+          ...todoPlanEvents(
+            sessionId,
+            state,
+            block.id,
+            name,
+            mcpServer,
+            parentToolUseId,
+            block.input ?? {}
+          )
+        );
         return out;
       }
       return [];
@@ -179,6 +204,15 @@ function translateStreamEvent(
             rawInput: parsed.value,
             ...vendorMetaFields(block.name, parentToolUseId, block.mcpServer),
           }),
+          ...todoPlanEvents(
+            sessionId,
+            state,
+            block.id,
+            block.name,
+            block.mcpServer,
+            parentToolUseId,
+            parsed.value
+          ),
         ];
       }
       return [];
@@ -197,6 +231,15 @@ function translateStreamEvent(
           status: "in_progress" as AgentToolStatus,
           ...vendorMetaFields(block.name, parentToolUseId, block.mcpServer),
         }),
+        ...todoPlanEvents(
+          sessionId,
+          state,
+          block.id,
+          block.name,
+          block.mcpServer,
+          parentToolUseId,
+          finalInput
+        ),
       ];
     }
     case "message_delta":
@@ -221,14 +264,39 @@ function translateAssistantMessage(
     if (state.emittedToolUseIds.has(b.id)) continue;
     state.emittedToolUseIds.add(b.id);
     out.push(event(sessionId, makeToolCallUpdate(b.id, b.name, b.input ?? {}, parentToolUseId)));
+    const { tool: name, mcpServer } = resolveToolName(b.name);
+    out.push(
+      ...todoPlanEvents(sessionId, state, b.id, name, mcpServer, parentToolUseId, b.input ?? {})
+    );
   }
   return out;
+}
+
+/**
+ * Session todo-list normalization (claudeTodoPlan.ts): feed native, TOP-LEVEL
+ * TodoWrite / TaskCreate / TaskUpdate calls into the session accumulator and
+ * surface the resulting `plan` update. MCP tools sharing a name and subagent
+ * calls (`parent_tool_use_id` set) are excluded — a subagent's todos must not
+ * pollute the session-level Progress.
+ */
+function todoPlanEvents(
+  sessionId: SessionId,
+  state: TranslatorState,
+  toolUseId: string,
+  name: string,
+  mcpServer: string | undefined,
+  parentToolUseId: string | undefined,
+  rawInput: unknown
+): SessionEvent[] {
+  if (mcpServer || parentToolUseId) return [];
+  const update = planUpdateFromClaudeToolUse(state.claudeTasks, toolUseId, name, rawInput);
+  return update ? [event(sessionId, update)] : [];
 }
 
 function translateUserMessage(
   msg: SDKUserMessage,
   sessionId: SessionId,
-  _state: TranslatorState
+  state: TranslatorState
 ): SessionEvent[] {
   const content = (msg.message as { content?: unknown }).content;
   if (!Array.isArray(content)) return [];
@@ -251,6 +319,16 @@ function translateUserMessage(
         content: outputs,
       })
     );
+    // A TaskCreate's result carries the task id; only ids pending in the
+    // accumulator match, so subagent results are inherently ignored. An
+    // is_error result still consumes its pending entry (passed as null content
+    // → no plan emitted) so failures can't accumulate over a long session.
+    const planUpdate = planUpdateFromClaudeToolResult(
+      state.claudeTasks,
+      b.tool_use_id,
+      b.is_error ? null : b.content
+    );
+    if (!b.is_error && planUpdate) out.push(event(sessionId, planUpdate));
   }
   return out;
 }

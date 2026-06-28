@@ -10,6 +10,7 @@ import { err2String, isTwitterUrl, isYoutubeUrl } from "@/utils";
 import { logError } from "@/logger";
 import { isSelfHostModeValid } from "@/plusUtils";
 import { getSettings } from "@/settings/model";
+import { extractUrlsFromText } from "@/utils/urlTagUtils";
 
 export interface MentionData {
   type: string;
@@ -36,18 +37,11 @@ export class Mention {
   }
 
   extractAllUrls(text: string): string[] {
-    // Match URLs and trim any trailing commas
-    const urlRegex = /https?:\/\/[^\s"'<>]+/g;
-    return (text.match(urlRegex) || [])
-      .map((url) => url.replace(/,+$/, "")) // Remove trailing commas
-      .filter((url, index, self) => self.indexOf(url) === index); // Remove duplicates
+    return extractUrlsFromText(text);
   }
 
   extractUrls(text: string): string[] {
-    const urlRegex = /https?:\/\/[^\s"'<>]+/g;
-    return (text.match(urlRegex) || [])
-      .map((url) => url.replace(/,+$/, ""))
-      .filter((url, index, self) => self.indexOf(url) === index);
+    return extractUrlsFromText(text);
   }
 
   async processUrl(url: string): Promise<Url4llmResponse & { error?: string }> {

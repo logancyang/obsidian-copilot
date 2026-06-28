@@ -505,6 +505,17 @@ export function registerCommands(plugin: CopilotPlugin) {
       const fileCache = FileCache.getInstance<string>();
       await fileCache.clear(plugin.app.vault);
 
+      // Clear the off-vault shared conversion cache (Agent Mode snapshots +
+      // markers). Desktop-gated + dynamic import so node:fs / conversionsLocation
+      // never load on mobile (this command module is registered on all platforms).
+      // clear() is root-confined to `context-cache/` — it never ascends to the
+      // parent `vaults/<id>/`, so `agent-chat-index.json` is untouched.
+      if (isDesktopRuntime()) {
+        const { cacheRoot } = await import("@/context/conversionsLocation");
+        const { createNodeContextCacheFs } = await import("@/context/contextCacheFs");
+        await createNodeContextCacheFs(cacheRoot(plugin.app)).clear();
+      }
+
       new Notice("All Copilot caches cleared successfully");
     } catch (error) {
       logError("Error clearing Copilot caches:", error);

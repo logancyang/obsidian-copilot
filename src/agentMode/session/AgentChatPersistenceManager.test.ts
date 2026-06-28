@@ -1,6 +1,7 @@
 /* eslint-disable obsidianmd/no-tfile-tfolder-cast -- test fixtures; not real TFiles */
 import { AI_SENDER, USER_SENDER } from "@/constants";
 import { AgentChatPersistenceManager } from "./AgentChatPersistenceManager";
+import { GLOBAL_SCOPE } from "./scope";
 import type { AgentChatMessage } from "./types";
 import type { App, TFile } from "obsidian";
 
@@ -205,5 +206,80 @@ describe("AgentChatPersistenceManager", () => {
     const result = await manager.saveSession([], "opencode");
     expect(result).toBeNull();
     expect(app.files.size).toBe(0);
+  });
+
+  describe("projectId scope round-trip", () => {
+    it("round-trips a real projectId for a project-scoped chat", async () => {
+      const messages = [makeMessage(USER_SENDER, "hi")];
+      const saved = await manager.saveSession(messages, "claude", { projectId: "proj-123" });
+      expect(saved).not.toBeNull();
+
+      const raw = app.files.get(saved!.path)!.contents!;
+      expect(raw).toContain('projectId: "proj-123"');
+
+      const loaded = await manager.loadFile(app.files.get(saved!.path) as unknown as TFile);
+      expect(loaded.projectId).toBe("proj-123");
+    });
+
+    it("defaults an unscoped chat to GLOBAL_SCOPE and writes no projectId (hard contract)", async () => {
+      const messages = [makeMessage(USER_SENDER, "hi")];
+      const saved = await manager.saveSession(messages, "claude");
+      const raw = app.files.get(saved!.path)!.contents!;
+      expect(raw).not.toContain("projectId:");
+
+      const loaded = await manager.loadFile(app.files.get(saved!.path) as unknown as TFile);
+      expect(loaded.projectId).toBe(GLOBAL_SCOPE);
+    });
+
+    it("treats an explicit GLOBAL_SCOPE like an unscoped chat (no projectId frontmatter)", async () => {
+      const messages = [makeMessage(USER_SENDER, "hi")];
+      const saved = await manager.saveSession(messages, "claude", { projectId: GLOBAL_SCOPE });
+      const raw = app.files.get(saved!.path)!.contents!;
+      expect(raw).not.toContain("projectId:");
+
+      const loaded = await manager.loadFile(app.files.get(saved!.path) as unknown as TFile);
+      expect(loaded.projectId).toBe(GLOBAL_SCOPE);
+    });
+
+    it("treats a blank projectId option like an unscoped chat", async () => {
+      const messages = [makeMessage(USER_SENDER, "hi")];
+      const saved = await manager.saveSession(messages, "claude", { projectId: "   " });
+      const raw = app.files.get(saved!.path)!.contents!;
+      expect(raw).not.toContain("projectId:");
+
+      const loaded = await manager.loadFile(app.files.get(saved!.path) as unknown as TFile);
+      expect(loaded.projectId).toBe(GLOBAL_SCOPE);
+    });
+
+    it("normalizes a padded projectId option before writing frontmatter", async () => {
+      const messages = [makeMessage(USER_SENDER, "hi")];
+      const saved = await manager.saveSession(messages, "claude", { projectId: " proj-123 " });
+      const raw = app.files.get(saved!.path)!.contents!;
+      expect(raw).toContain('projectId: "proj-123"');
+      expect(raw).not.toContain('projectId: " proj-123 "');
+
+      const loaded = await manager.loadFile(app.files.get(saved!.path) as unknown as TFile);
+      expect(loaded.projectId).toBe("proj-123");
+    });
+
+    it("maps a legacy agent__ chat with no projectId frontmatter to GLOBAL_SCOPE", async () => {
+      const path = "test-folder/agent__legacy.md";
+      await app.vault.adapter.write(
+        path,
+        [
+          "---",
+          "epoch: 1735732800000",
+          "mode: agent",
+          "backendId: claude",
+          "---",
+          "",
+          "**user**: hi",
+        ].join("\n")
+      );
+      // Reason: the stored file carries `contents`, so loadFile's vault.read
+      // path returns the frontmatter (a bare {path} fixture would read empty).
+      const loaded = await manager.loadFile(app.files.get(path) as unknown as TFile);
+      expect(loaded.projectId).toBe(GLOBAL_SCOPE);
+    });
   });
 });

@@ -1,4 +1,5 @@
 import { ChatModelProviders } from "@/constants";
+import { logWarn } from "@/logger";
 import { getSettings, resetSettings, setSettings, updateSetting } from "@/settings/model";
 import type {
   BackendConfigRegistry,
@@ -555,6 +556,7 @@ describe("buildOpencodeConfig — agent/prompt/mode/skills blocks (preserved)", 
         mcpServers: [],
         activeBackend: "opencode",
         debugFullFrames: false,
+        welcomeDismissed: false,
         skills: { folder: "copilot/skills" },
         backends: {
           opencode: {
@@ -575,6 +577,7 @@ describe("buildOpencodeConfig — agent/prompt/mode/skills blocks (preserved)", 
         mcpServers: [],
         activeBackend: "opencode",
         debugFullFrames: false,
+        welcomeDismissed: false,
         skills: { folder: "copilot/skills" },
         backends: {
           opencode: {
@@ -595,6 +598,7 @@ describe("buildOpencodeConfig — agent/prompt/mode/skills blocks (preserved)", 
         mcpServers: [],
         activeBackend: "opencode",
         debugFullFrames: false,
+        welcomeDismissed: false,
         skills: { folder: "copilot/skills" },
         backends: {
           opencode: { binaryPath: "/x" },
@@ -670,6 +674,7 @@ describe("buildOpencodeConfig — agent/prompt/mode/skills blocks (preserved)", 
         mcpServers: [],
         activeBackend: "opencode",
         debugFullFrames: false,
+        welcomeDismissed: false,
         skills: { folder: "team-skills" },
         backends: {},
       },
@@ -740,11 +745,51 @@ describe("buildOpencodeConfig — agent/prompt/mode/skills blocks (preserved)", 
   });
 });
 
+describe("buildOpencodeConfig — context-cache external_directory allow", () => {
+  beforeEach(() => {
+    resetSettings();
+    seedSkills([]);
+    resetPromptState();
+  });
+
+  type AgentPerm = {
+    agent: Record<string, { permission?: Record<string, unknown> }>;
+  };
+
+  it("injects a cacheRoot-scoped external_directory allow on both spawn agents", async () => {
+    const cfg = (await buildOpencodeConfig(
+      getSettings(),
+      NO_MODELS_DEPS,
+      "/home/u/.obsidian-copilot/vaults/abc123/context-cache"
+    )) as AgentPerm;
+    const allow = {
+      external_directory: {
+        "/home/u/.obsidian-copilot/vaults/abc123/context-cache/**": "allow",
+      },
+    };
+    // build (auto) gets only the external_directory grant — no bash/edit asks.
+    expect(cfg.agent.build.permission).toEqual(allow);
+    // copilot-build (default) keeps its ask-before-write perms AND gains allow.
+    expect(cfg.agent["copilot-build"].permission).toEqual({
+      bash: "ask",
+      edit: "ask",
+      ...allow,
+    });
+  });
+
+  it("injects nothing when no cacheRoot is provided (feature dormant)", async () => {
+    const cfg = (await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS)) as AgentPerm;
+    expect(cfg.agent.build.permission).toBeUndefined();
+    expect(cfg.agent["copilot-build"].permission).toEqual({ bash: "ask", edit: "ask" });
+  });
+});
+
 describe("OpencodeBackend.buildSpawnDescriptor", () => {
   beforeEach(() => {
     resetSettings();
     seedSkills([]);
     resetPromptState();
+    (logWarn as jest.Mock).mockClear();
   });
 
   it("throws if no binary is installed", async () => {
@@ -760,6 +805,7 @@ describe("OpencodeBackend.buildSpawnDescriptor", () => {
       mcpServers: [],
       activeBackend: "opencode",
       debugFullFrames: false,
+      welcomeDismissed: false,
       skills: { folder: "copilot/skills" },
       backends: {
         opencode: {
@@ -785,6 +831,102 @@ describe("OpencodeBackend.buildSpawnDescriptor", () => {
     const cfg = JSON.parse(desc.env.OPENCODE_CONFIG_CONTENT as string);
     expect(cfg.provider.anthropic.options).toEqual({ apiKey: "anth-xyz" });
     expect(cfg.provider.anthropic.models).toEqual({ "claude-sonnet-4-6": {} });
+  });
+
+  it("threads the injected getCacheRoot into the spawned external_directory allow", async () => {
+    updateSetting("agentMode", {
+      byok: {},
+      mcpServers: [],
+      activeBackend: "opencode",
+      debugFullFrames: false,
+      welcomeDismissed: false,
+      skills: { folder: "copilot/skills" },
+      backends: { opencode: { binaryPath: "/path/to/opencode" } },
+    });
+    const deps: OpencodeModelDeps = {
+      ...NO_MODELS_DEPS,
+      getCacheRoot: () => "/cache/root",
+    };
+    const backend = new OpencodeBackend(deps);
+    const desc = await backend.buildSpawnDescriptor({ vaultBasePath: "/vault/abs" });
+    const cfg = JSON.parse(desc.env.OPENCODE_CONFIG_CONTENT as string);
+    expect(cfg.agent.build.permission).toEqual({
+      external_directory: { "/cache/root/**": "allow" },
+    });
+    expect(cfg.agent["copilot-build"].permission).toEqual({
+      bash: "ask",
+      edit: "ask",
+      external_directory: { "/cache/root/**": "allow" },
+    });
+    expect(logWarn).not.toHaveBeenCalled();
+  });
+
+  it("warns when an OPENCODE_CONFIG_CONTENT override would drop the cache allow rule", async () => {
+    updateSetting("agentMode", {
+      byok: {},
+      mcpServers: [],
+      activeBackend: "opencode",
+      debugFullFrames: false,
+      welcomeDismissed: false,
+      skills: { folder: "copilot/skills" },
+      backends: {
+        opencode: {
+          binaryPath: "/path/to/opencode",
+          envOverrides: { OPENCODE_CONFIG_CONTENT: "{}" },
+        },
+      },
+    });
+    const deps: OpencodeModelDeps = {
+      ...NO_MODELS_DEPS,
+      getCacheRoot: () => "/cache/root",
+    };
+    const backend = new OpencodeBackend(deps);
+    await backend.buildSpawnDescriptor({ vaultBasePath: "/vault/abs" });
+    expect(logWarn).toHaveBeenCalledWith(
+      expect.stringContaining("external_directory allow rule is dropped")
+    );
+  });
+
+  it("treats a blank getCacheRoot result as unavailable (no allow rule, no warn)", async () => {
+    updateSetting("agentMode", {
+      byok: {},
+      mcpServers: [],
+      activeBackend: "opencode",
+      debugFullFrames: false,
+      welcomeDismissed: false,
+      skills: { folder: "copilot/skills" },
+      backends: { opencode: { binaryPath: "/path/to/opencode" } },
+    });
+    const deps: OpencodeModelDeps = {
+      ...NO_MODELS_DEPS,
+      getCacheRoot: () => "   ",
+    };
+    const backend = new OpencodeBackend(deps);
+    const desc = await backend.buildSpawnDescriptor({ vaultBasePath: "/vault/abs" });
+    const cfg = JSON.parse(desc.env.OPENCODE_CONFIG_CONTENT as string);
+    expect(cfg.agent.build.permission).toBeUndefined();
+    expect(cfg.agent["copilot-build"].permission).toEqual({ bash: "ask", edit: "ask" });
+    expect(logWarn).not.toHaveBeenCalled();
+  });
+
+  it("does not warn about the override when no cacheRoot is resolved", async () => {
+    updateSetting("agentMode", {
+      byok: {},
+      mcpServers: [],
+      activeBackend: "opencode",
+      debugFullFrames: false,
+      welcomeDismissed: false,
+      skills: { folder: "copilot/skills" },
+      backends: {
+        opencode: {
+          binaryPath: "/path/to/opencode",
+          envOverrides: { OPENCODE_CONFIG_CONTENT: "{}" },
+        },
+      },
+    });
+    const backend = new OpencodeBackend(NO_MODELS_DEPS);
+    await backend.buildSpawnDescriptor({ vaultBasePath: "/vault/abs" });
+    expect(logWarn).not.toHaveBeenCalled();
   });
 });
 

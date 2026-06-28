@@ -8,11 +8,27 @@ import { AgentSession } from "./AgentSession";
 import { buildNativeChatId } from "@/utils/nativeChatId";
 import { AgentSessionIndex } from "./AgentSessionIndex";
 import { AgentSessionManager } from "./AgentSessionManager";
+import { GLOBAL_SCOPE } from "./scope";
 import {
   getSettings as mockedGetSettings,
   setSettings as mockedSetSettings,
 } from "@/settings/model";
+import * as projectsState from "@/projects/state";
+import {
+  ensureProjectContextMaterialized,
+  type ContextMaterializeProgress,
+} from "@/context/projectContextMaterializer";
+import { ProjectFileManager } from "@/projects/ProjectFileManager";
+import {
+  agentProjectContextLoadAtom,
+  type AgentProjectContextLoadState,
+  type ProjectConfig,
+} from "@/aiParams";
+import type { ProjectFileRecord } from "@/projects/type";
+import { getProjectContextSignature } from "@/projects/projectContextSignature";
 import type { BackendDescriptor } from "./types";
+
+const mockEnsureMaterialized = ensureProjectContextMaterialized as jest.Mock;
 
 jest.mock("@/logger", () => ({
   logInfo: jest.fn(),
@@ -26,6 +42,39 @@ const settingsChangeCallbacks = new Set<
   (prev: { agentMode: unknown }, next: { agentMode: unknown }) => void
 >();
 
+// Stub the project-folder mirror so a non-global spawn never touches the vault.
+jest.mock("@/projects/ensureAgentsMirror", () => ({
+  ensureAgentsMirror: jest.fn(async () => undefined),
+}));
+
+// MRU touch is fire-and-forget through the singleton; mock it so enterProject
+// tests assert the call without real frontmatter IO.
+const mockTouchProjectLastUsed = jest.fn(async () => undefined);
+jest.mock("@/projects/ProjectFileManager", () => ({
+  ProjectFileManager: {
+    getInstance: jest.fn(() => ({ touchProjectLastUsed: mockTouchProjectLastUsed })),
+  },
+}));
+
+// Stub context materialization so a non-global create / background warm never
+// hits brevilabs or the disk. The result faithfully carries the CAPTURED
+// signature of the live record (what the real materializer returns), so the
+// dirty-clear path behaves realistically; a spy so warm calls can be asserted.
+jest.mock("@/context/projectContextMaterializer", () => {
+  const { getProjectContextSignature } = jest.requireActual("@/projects/projectContextSignature");
+  const { getCachedProjectRecordById } = jest.requireActual("@/projects/state");
+  return {
+    ensureProjectContextMaterialized: jest.fn(async (_app: unknown, projectId: string) => {
+      const record = getCachedProjectRecordById(projectId);
+      return {
+        additionalDirectories: [],
+        contextSignature: record ? getProjectContextSignature(record) : undefined,
+      };
+    }),
+    EMPTY_CONTEXT_MATERIALIZATION_RESULT: { additionalDirectories: [] },
+  };
+});
+
 jest.mock("@/settings/model", () => ({
   getSettings: jest.fn(() => ({
     agentMode: { activeBackend: "opencode", backends: {} },
@@ -37,6 +86,10 @@ jest.mock("@/settings/model", () => ({
       return () => settingsChangeCallbacks.delete(cb);
     }
   ),
+  // Minimal jotai-store shim: a non-global spawn publishes context-load state
+  // through it (beginContextMaterialization). `get` returns an empty map so the
+  // first publish "owns" the flight; `set` is a no-op spy.
+  settingsStore: { get: jest.fn(() => ({})), set: jest.fn() },
 }));
 
 /** Fire the manager's settings subscription with a before/after pair. */
@@ -75,6 +128,10 @@ interface MockSessionTestHandle {
   setStatus(
     status: "starting" | "idle" | "running" | "awaiting_permission" | "error" | "closed"
   ): void;
+  /** Seed the display messages so a manual save writes a file (and a path). */
+  setMessages(messages: { message: string }[]): void;
+  /** Toggle whether the session reports user-visible messages (detach gating). */
+  setHasUserVisibleMessages(value: boolean): void;
 }
 
 const sessionTestHandles = new Map<string, MockSessionTestHandle>();
@@ -89,11 +146,14 @@ function makeMockSession(overrides: {
   internalId: string;
   backendSessionId?: string;
   backendId: string;
+  projectId?: string;
   ready?: Promise<void>;
 }): AgentSession {
   const sessionId = overrides.backendSessionId ?? `backend-${nextBackendSessionId++}`;
   let status: "starting" | "idle" | "running" | "awaiting_permission" | "error" | "closed" = "idle";
   let needsAttention = false;
+  let displayMessages: { message: string }[] = [];
+  let hasUserVisibleMessages = false;
   const listeners = new Set<{
     onStatusChanged?: (s: typeof status) => void;
     onNeedsAttentionChanged?: (v: boolean) => void;
@@ -101,9 +161,11 @@ function makeMockSession(overrides: {
   const session = {
     internalId: overrides.internalId,
     backendId: overrides.backendId,
+    projectId: overrides.projectId ?? GLOBAL_SCOPE,
     ready: overrides.ready ?? Promise.resolve(),
     getBackendSessionId: () => sessionId,
     getStatus: () => status,
+    store: { getDisplayMessages: () => displayMessages },
     cancel: mockSessionCancel,
     dispose: mockSessionDispose,
     setModel: jest.fn(),
@@ -115,7 +177,7 @@ function makeMockSession(overrides: {
       listeners.add(l);
       return () => listeners.delete(l);
     },
-    hasUserVisibleMessages: () => false,
+    hasUserVisibleMessages: () => hasUserVisibleMessages,
     getState: () => null,
     getRawSnapshot: () => ({ models: null, modes: null, configOptions: null }),
     getNeedsAttention: () => needsAttention,
@@ -136,15 +198,23 @@ function makeMockSession(overrides: {
       status = next;
       for (const l of listeners) l.onStatusChanged?.(next);
     },
+    setMessages: (messages) => {
+      displayMessages = messages;
+    },
+    setHasUserVisibleMessages: (value) => {
+      hasUserVisibleMessages = value;
+    },
   });
   return session;
 }
 
-const sessionCreateSpy = jest
-  .spyOn(AgentSession, "start")
-  .mockImplementation((opts) =>
-    makeMockSession({ internalId: opts.internalId, backendId: opts.backendId })
-  );
+const sessionCreateSpy = jest.spyOn(AgentSession, "start").mockImplementation((opts) =>
+  makeMockSession({
+    internalId: opts.internalId,
+    backendId: opts.backendId,
+    projectId: opts.projectId,
+  })
+);
 
 function buildApp(basePath = "/vault"): App {
   const adapter = new (FileSystemAdapter as unknown as new (basePath: string) => unknown)(basePath);
@@ -946,6 +1016,165 @@ describe("AgentSessionManager attention tracking", () => {
   });
 });
 
+describe("AgentSessionManager.getRunningChatIds", () => {
+  // A manager whose saveSession returns a stable on-disk path, so we can drive
+  // a session into the "saved" (markdown path) recent-list identity.
+  function buildManagerWithPersistence(): AgentSessionManager {
+    const descriptor = buildDescriptor();
+    const persistence = {
+      saveSession: jest.fn(async () => ({ path: "chats/agent__saved.md" })),
+    };
+    return new AgentSessionManager(
+      buildApp(),
+      buildPlugin() as unknown as ConstructorParameters<typeof AgentSessionManager>[1],
+      {
+        permissionPrompter: jest.fn(),
+        resolveDescriptor: (id) => (id === descriptor.id ? descriptor : undefined),
+        modelPreloader: {
+          getCachedBackendState: jest.fn(() => null),
+          preload: jest.fn(async () => undefined),
+          refresh: jest.fn(() => null),
+          subscribe: jest.fn(() => () => {}),
+          shutdown: jest.fn(),
+          setCached: jest.fn(),
+          clearCached: jest.fn(),
+          takeWarm: jest.fn(() => null),
+          getWarmProcs: jest.fn(() => []),
+        } as unknown as ConstructorParameters<typeof AgentSessionManager>[2]["modelPreloader"],
+        persistenceManager: persistence as unknown as ConstructorParameters<
+          typeof AgentSessionManager
+        >[2]["persistenceManager"],
+      }
+    );
+  }
+
+  it("returns the same frozen empty set when nothing is running", async () => {
+    const mgr = buildManager();
+    const a = await mgr.createSession();
+    getSessionTestHandle(a).setStatus("idle");
+    const first = mgr.getRunningChatIds();
+    expect(first.size).toBe(0);
+    // Referential stability: an empty result must reuse the module constant.
+    expect(mgr.getRunningChatIds()).toBe(first);
+  });
+
+  it("keys a running saved session by its markdown path", async () => {
+    const mgr = buildManagerWithPersistence();
+    const a = await mgr.createSession();
+    getSessionTestHandle(a).setMessages([{ message: "hi" }]);
+    await mgr.saveActiveSession();
+    getSessionTestHandle(a).setStatus("running");
+    expect(mgr.getRunningChatIds().has("chats/agent__saved.md")).toBe(true);
+  });
+
+  it("keys a running native session by its native chat id", async () => {
+    const mgr = buildManager();
+    const a = await mgr.createSession();
+    getSessionTestHandle(a).setStatus("running");
+    const expected = buildNativeChatId(a.backendId, a.getBackendSessionId()!);
+    expect(mgr.getRunningChatIds().has(expected)).toBe(true);
+  });
+
+  it("excludes idle / starting / closed sessions", async () => {
+    const mgr = buildManager();
+    const a = await mgr.createSession();
+    const b = await mgr.createSession();
+    getSessionTestHandle(a).setStatus("running");
+    getSessionTestHandle(b).setStatus("starting");
+    const ids = mgr.getRunningChatIds();
+    expect(ids.has(buildNativeChatId(a.backendId, a.getBackendSessionId()!))).toBe(true);
+    expect(ids.has(buildNativeChatId(b.backendId, b.getBackendSessionId()!))).toBe(false);
+  });
+
+  it("notifies subscribers when a session's running membership flips", async () => {
+    const mgr = buildManager();
+    const a = await mgr.createSession();
+    const listener = jest.fn();
+    mgr.subscribe(listener);
+    getSessionTestHandle(a).setStatus("running");
+    expect(listener).toHaveBeenCalledTimes(1);
+    listener.mockClear();
+    getSessionTestHandle(a).setStatus("idle");
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps both ids when a running session's first save re-keys it (dual-id)", async () => {
+    const mgr = buildManagerWithPersistence();
+    const a = await mgr.createSession();
+    getSessionTestHandle(a).setMessages([{ message: "hi" }]);
+    getSessionTestHandle(a).setStatus("running");
+    // Before the save the running session is keyed by its native id.
+    const nativeId = buildNativeChatId(a.backendId, a.getBackendSessionId()!);
+    expect(mgr.getRunningChatIds().has(nativeId)).toBe(true);
+
+    const listener = jest.fn();
+    mgr.subscribe(listener);
+    await mgr.saveActiveSession();
+
+    // The save itself must not notify (autosave stays decoupled from row
+    // visibility). Instead the set now carries BOTH ids, so whichever id the
+    // mounted list rendered the row under, `.has()` still hits.
+    expect(listener).not.toHaveBeenCalled();
+    const ids = mgr.getRunningChatIds();
+    expect(ids.has("chats/agent__saved.md")).toBe(true);
+    expect(ids.has(nativeId)).toBe(true);
+  });
+});
+
+describe("AgentSessionManager.getAttentionChatIds", () => {
+  it("returns the same frozen empty set when nothing needs attention", async () => {
+    const mgr = buildManager();
+    await mgr.createSession();
+    const first = mgr.getAttentionChatIds();
+    expect(first.size).toBe(0);
+    expect(mgr.getAttentionChatIds()).toBe(first);
+  });
+
+  it("hands a backgrounded finished session over from running to attention", async () => {
+    const mgr = buildManager();
+    const a = await mgr.createSession();
+    const b = await mgr.createSession();
+    // b is active by default; switch to a so b runs in the background.
+    mgr.setActiveSession(a.internalId);
+    const bHandle = getSessionTestHandle(b);
+    const nativeId = buildNativeChatId(b.backendId, b.getBackendSessionId()!);
+
+    bHandle.setStatus("running");
+    expect(mgr.getRunningChatIds().has(nativeId)).toBe(true);
+    expect(mgr.getAttentionChatIds().has(nativeId)).toBe(false);
+
+    // Finishing in the background: the id must leave the running set and
+    // enter the attention set in the same status flip — the row's spinner
+    // hands off to the live done-dot without a history reload.
+    bHandle.setStatus("idle");
+    expect(mgr.getRunningChatIds().has(nativeId)).toBe(false);
+    expect(mgr.getAttentionChatIds().has(nativeId)).toBe(true);
+  });
+
+  it("does not include the active session (it never flags attention)", async () => {
+    const mgr = buildManager();
+    const a = await mgr.createSession();
+    const aHandle = getSessionTestHandle(a);
+    aHandle.setStatus("running");
+    aHandle.setStatus("idle");
+    expect(mgr.getAttentionChatIds().size).toBe(0);
+  });
+
+  it("drops the id once the user activates the flagged tab", async () => {
+    const mgr = buildManager();
+    const a = await mgr.createSession();
+    const b = await mgr.createSession();
+    mgr.setActiveSession(a.internalId);
+    const bHandle = getSessionTestHandle(b);
+    bHandle.setStatus("running");
+    bHandle.setStatus("idle");
+    const nativeId = buildNativeChatId(b.backendId, b.getBackendSessionId()!);
+    expect(mgr.getAttentionChatIds().has(nativeId)).toBe(true);
+    mgr.setActiveSession(b.internalId);
+    expect(mgr.getAttentionChatIds().has(nativeId)).toBe(false);
+  });
+});
+
 describe("AgentSessionManager.replaceSessionInPlace", () => {
   // Drains the fire-and-forget `closeSession` chain that
   // replaceSessionInPlace kicks off, so assertions about pool removal
@@ -1562,6 +1791,7 @@ describe("AgentSessionManager chat history aggregation", () => {
     backendId?: string;
     sessionId?: string;
     lastAccessedAt?: number;
+    projectId?: string;
   }
 
   function makeIndexStorage() {
@@ -1750,6 +1980,34 @@ describe("AgentSessionManager chat history aggregation", () => {
     expect(items[0]?.id).toBe(buildNativeChatId("codex", "s9"));
   });
 
+  it("scopes a project view's native entries by the index's recorded projectId", async () => {
+    // Autosave-off project chats have no markdown frontmatter — the index's
+    // recorded scope is the only thing that can place them in a project list.
+    const { manager, index } = buildHistoryHarness();
+    await index.recordSession({
+      backendId: "codex",
+      sessionId: "in-project",
+      title: "Project chat",
+      createdAtMs: 1_000,
+      lastAccessedAtMs: 2_000,
+      projectId: "proj-1",
+    });
+    await index.recordSession({
+      backendId: "codex",
+      sessionId: "global-chat",
+      title: "Global chat",
+      createdAtMs: 1_000,
+      lastAccessedAtMs: 2_000,
+    });
+
+    const projectItems = await manager.getChatHistoryItems("proj-1");
+    expect(projectItems).toHaveLength(1);
+    expect(projectItems[0]?.id).toBe(buildNativeChatId("codex", "in-project"));
+
+    // The global view stays the flat all-scopes list.
+    expect(await manager.getChatHistoryItems()).toHaveLength(2);
+  });
+
   it("deleting a native entry tombstones it without touching persistence", async () => {
     const { manager, index, persistence } = buildHistoryHarness();
     await index.recordSession({
@@ -1863,6 +2121,137 @@ describe("AgentSessionManager chat history aggregation", () => {
     expect(titles).toContain("Made here");
     expect(titles).not.toContain("Made elsewhere");
     expect(sessionExistsLocally).toHaveBeenCalledWith({ sessionId: "foreign", cwd: "/vault" });
+  });
+
+  it("probes a project chat's resumability with its project cwd, not the vault root", async () => {
+    // Regression: a backend that keys its transcript store by cwd (Claude) stores
+    // a project chat's transcript under the PROJECT folder. Probing it with the
+    // vault root would report a perfectly resumable local project chat as absent
+    // and hide it. The locality probe must use the chat's own scope cwd.
+    projectsState.updateCachedProjectRecords([
+      {
+        project: { id: "proj-1" },
+        filePath: "Projects/proj-1/project.md",
+        folderName: "proj-1",
+      } as unknown as ProjectFileRecord,
+    ]);
+    try {
+      const sessionExistsLocally = jest.fn(
+        async ({ cwd }: { cwd: string }) => cwd === "/vault/Projects/proj-1"
+      );
+      const { manager } = buildHistoryHarness({
+        files: {
+          "chats/agent__p.md": {
+            epoch: 2_000,
+            topic: "Project chat",
+            backendId: "opencode",
+            sessionId: "proj-sess",
+            projectId: "proj-1",
+          },
+        },
+        warmSessionExistsLocally: sessionExistsLocally,
+      });
+
+      const titles = (await manager.getChatHistoryItems("proj-1")).map((i) => i.title);
+      expect(titles).toContain("Project chat");
+      expect(sessionExistsLocally).toHaveBeenCalledWith({
+        sessionId: "proj-sess",
+        cwd: "/vault/Projects/proj-1",
+      });
+    } finally {
+      projectsState.updateCachedProjectRecords([]);
+    }
+  });
+
+  it("probes each chat with its own scope cwd in the global flat view", async () => {
+    // The global Recent Chats view is a flat all-scopes list, so it must probe a
+    // global chat against the vault root AND a project chat against its project
+    // folder in the same pass — otherwise the project row gets wrongly hidden.
+    projectsState.updateCachedProjectRecords([
+      {
+        project: { id: "proj-1" },
+        filePath: "Projects/proj-1/project.md",
+        folderName: "proj-1",
+      } as unknown as ProjectFileRecord,
+    ]);
+    try {
+      const sessionExistsLocally = jest.fn(async () => true);
+      const { manager } = buildHistoryHarness({
+        files: {
+          "chats/agent__g.md": {
+            epoch: 2_000,
+            topic: "Global chat",
+            backendId: "opencode",
+            sessionId: "g-sess",
+          },
+          "chats/agent__p.md": {
+            epoch: 1_000,
+            topic: "Project chat",
+            backendId: "opencode",
+            sessionId: "p-sess",
+            projectId: "proj-1",
+          },
+        },
+        warmSessionExistsLocally: sessionExistsLocally,
+      });
+
+      const titles = (await manager.getChatHistoryItems()).map((i) => i.title);
+      expect(titles).toEqual(expect.arrayContaining(["Global chat", "Project chat"]));
+      expect(sessionExistsLocally).toHaveBeenCalledWith({ sessionId: "g-sess", cwd: "/vault" });
+      expect(sessionExistsLocally).toHaveBeenCalledWith({
+        sessionId: "p-sess",
+        cwd: "/vault/Projects/proj-1",
+      });
+    } finally {
+      projectsState.updateCachedProjectRecords([]);
+    }
+  });
+
+  it("still hides a genuinely non-resumable project chat (probed against its project cwd)", async () => {
+    // The fix must not over-correct: a project chat synced from another machine
+    // is absent under its OWN project cwd too, so it stays hidden + tombstoned —
+    // identical behavior to a non-resumable global chat, just with the right cwd.
+    projectsState.updateCachedProjectRecords([
+      {
+        project: { id: "proj-1" },
+        filePath: "Projects/proj-1/project.md",
+        folderName: "proj-1",
+      } as unknown as ProjectFileRecord,
+    ]);
+    try {
+      const sessionExistsLocally = jest.fn(async () => false);
+      const { manager, index } = buildHistoryHarness({
+        files: {
+          "chats/agent__p.md": {
+            epoch: 2_000,
+            topic: "Foreign project chat",
+            backendId: "opencode",
+            sessionId: "foreign-proj",
+            projectId: "proj-1",
+          },
+        },
+        warmSessionExistsLocally: sessionExistsLocally,
+      });
+      await index.recordSession({
+        backendId: "opencode",
+        sessionId: "foreign-proj",
+        title: "Twin",
+        createdAtMs: 1_000,
+        lastAccessedAtMs: 2_000,
+        projectId: "proj-1",
+      });
+
+      const titles = (await manager.getChatHistoryItems("proj-1")).map((i) => i.title);
+      expect(titles).not.toContain("Foreign project chat");
+      expect(sessionExistsLocally).toHaveBeenCalledWith({
+        sessionId: "foreign-proj",
+        cwd: "/vault/Projects/proj-1",
+      });
+      // The native twin is tombstoned, same as the global non-resumable path.
+      expect(await index.isTombstoned("opencode", "foreign-proj")).toBe(true);
+    } finally {
+      projectsState.updateCachedProjectRecords([]);
+    }
   });
 
   it("tombstones the native twin of a dropped non-local markdown chat", async () => {
@@ -1982,5 +2371,601 @@ describe("AgentSessionManager chat history aggregation", () => {
     const items = await manager.getChatHistoryItems();
     expect(listSessions).not.toHaveBeenCalled();
     expect(items.filter((i) => i.id.startsWith("copilot-agent-session://"))).toHaveLength(0);
+  });
+});
+
+describe("AgentSessionManager.enterProject MRU touch", () => {
+  const PROJECT_ID = "proj-mru";
+  let recordSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    mockTouchProjectLastUsed.mockClear();
+    (ProjectFileManager.getInstance as jest.Mock).mockClear();
+    // Make the scope resolvable: enterProject's orphan guard and resolveScopeCwd
+    // both read this, so a known id must return a record with a folder.
+    recordSpy = jest
+      .spyOn(projectsState, "getCachedProjectRecordById")
+      .mockImplementation((id: string) =>
+        id === PROJECT_ID
+          ? ({
+              filePath: "Projects/proj-mru/project.md",
+              project: { id: PROJECT_ID },
+            } as unknown as ReturnType<typeof projectsState.getCachedProjectRecordById>)
+          : undefined
+      );
+  });
+
+  afterEach(() => recordSpy.mockRestore());
+
+  it("touches last-used after a successful enter that spawns a session", async () => {
+    const mgr = buildManager();
+    await mgr.enterProject(PROJECT_ID);
+    expect(ProjectFileManager.getInstance).toHaveBeenCalled();
+    expect(mockTouchProjectLastUsed).toHaveBeenCalledWith(PROJECT_ID);
+  });
+
+  it("touches last-used on the restored-session path (no re-spawn)", async () => {
+    const mgr = buildManager();
+    // First enter spawns the scope's session; leaving and re-entering reuses it.
+    await mgr.enterProject(PROJECT_ID);
+    await mgr.exitProject();
+    mockTouchProjectLastUsed.mockClear();
+    sessionCreateSpy.mockClear();
+
+    await mgr.enterProject(PROJECT_ID);
+
+    expect(sessionCreateSpy).not.toHaveBeenCalled();
+    expect(mockTouchProjectLastUsed).toHaveBeenCalledWith(PROJECT_ID);
+  });
+
+  it("does not touch when returning to the global scope", async () => {
+    const mgr = buildManager();
+    await mgr.enterProject(PROJECT_ID);
+    mockTouchProjectLastUsed.mockClear();
+
+    await mgr.exitProject();
+
+    expect(mockTouchProjectLastUsed).not.toHaveBeenCalled();
+  });
+
+  it("does not touch a re-click of the already-active project", async () => {
+    const mgr = buildManager();
+    await mgr.enterProject(PROJECT_ID);
+    mockTouchProjectLastUsed.mockClear();
+
+    // Same scope, live session — the early return must not count as a new use.
+    await mgr.enterProject(PROJECT_ID);
+
+    expect(mockTouchProjectLastUsed).not.toHaveBeenCalled();
+  });
+
+  it("does not touch when the spawn fails", async () => {
+    const mgr = buildManager();
+    // A rejected backend start makes getOrCreateActiveSession throw before the
+    // touch runs — a failed enter must not bump MRU.
+    mockBackendStart.mockRejectedValueOnce(new Error("spawn boom"));
+
+    await expect(mgr.enterProject(PROJECT_ID)).rejects.toThrow();
+
+    expect(mockTouchProjectLastUsed).not.toHaveBeenCalled();
+  });
+
+  it("touches only the current scope when another enter wins the spawn race", async () => {
+    const OTHER_ID = "proj-other";
+    recordSpy.mockImplementation((id: string) =>
+      id === PROJECT_ID || id === OTHER_ID
+        ? { filePath: `Projects/${id}/project.md`, project: { id } }
+        : undefined
+    );
+    const mgr = buildManager();
+
+    // Both enters set `activeProjectId` synchronously in call order, so the
+    // second call wins the active scope before either spawn's post-await touch
+    // runs (a later microtask). The first enter's touch must observe the moved
+    // scope and skip, crediting only the winner.
+    const enterStale = mgr.enterProject(PROJECT_ID);
+    const enterWinner = mgr.enterProject(OTHER_ID);
+    await Promise.all([enterStale, enterWinner]);
+
+    expect(mockTouchProjectLastUsed).toHaveBeenCalledWith(OTHER_ID);
+    expect(mockTouchProjectLastUsed).not.toHaveBeenCalledWith(PROJECT_ID);
+  });
+
+  it("rolls the active scope back when a cross-scope history load fails to resume", async () => {
+    const mgr = buildManager();
+    // The active session lives in the project scope.
+    await mgr.enterProject(PROJECT_ID);
+    const projectSession = mgr.getActiveSession();
+    expect(mgr.getActiveProjectId()).toBe(PROJECT_ID);
+
+    // Opening a global native chat on an unresolvable backend switches the
+    // active scope to global first, then rejects because the resume can't
+    // start. The failure must restore the project scope — otherwise the active
+    // scope and the (unchanged) active session would disagree.
+    await expect(mgr.loadNativeSessionFromHistory("codex", "missing")).rejects.toThrow();
+
+    expect(mgr.getActiveProjectId()).toBe(PROJECT_ID);
+    expect(mgr.getActiveSession()).toBe(projectSession);
+  });
+
+  it("rolls the entered scope back when its auto-spawn fails", async () => {
+    const OTHER_ID = "proj-other-fail";
+    recordSpy.mockImplementation((id: string) =>
+      id === PROJECT_ID || id === OTHER_ID
+        ? { filePath: `Projects/${id}/project.md`, project: { id } }
+        : undefined
+    );
+    const mgr = buildManager();
+    // Land in a project scope with a live session — the exact state a failed
+    // entry into a DIFFERENT project must restore.
+    await mgr.enterProject(PROJECT_ID);
+    const projectSession = mgr.getActiveSession();
+    expect(mgr.getActiveProjectId()).toBe(PROJECT_ID);
+
+    // Entering OTHER_ID switches the active scope and nulls the active session
+    // before awaiting the fresh spawn; the spawn then rejects. (Inject at
+    // AgentSession.start, which createSession always calls even on a warm proc —
+    // the prior enter left the backend running, so a cold-start reject wouldn't
+    // fire here.) The rollback must restore the prior scope + session rather than
+    // strand the manager in a chatless OTHER_ID scope (callers only show a Notice).
+    sessionCreateSpy.mockImplementationOnce(() => {
+      throw new Error("spawn boom");
+    });
+    await expect(mgr.enterProject(OTHER_ID)).rejects.toThrow();
+
+    expect(mgr.getActiveProjectId()).toBe(PROJECT_ID);
+    expect(mgr.getActiveSession()).toBe(projectSession);
+  });
+});
+
+describe("AgentSessionManager fresh-visit tab detach", () => {
+  const PROJECT_ID = "proj-detach";
+  let recordSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    sessionCreateSpy.mockClear();
+    recordSpy = jest
+      .spyOn(projectsState, "getCachedProjectRecordById")
+      .mockImplementation((id: string) =>
+        id === PROJECT_ID
+          ? ({
+              filePath: "Projects/proj-detach/project.md",
+              project: { id: PROJECT_ID },
+            } as unknown as ReturnType<typeof projectsState.getCachedProjectRecordById>)
+          : undefined
+      );
+  });
+
+  afterEach(() => recordSpy.mockRestore());
+
+  /** Enter the project, mark its active session conversational, then leave. */
+  async function enterWithConversation(mgr: AgentSessionManager): Promise<AgentSession> {
+    await mgr.enterProject(PROJECT_ID);
+    const session = mgr.getActiveSession();
+    if (!session) throw new Error("expected an active session after enter");
+    getSessionTestHandle(session).setHasUserVisibleMessages(true);
+    await mgr.exitProject();
+    return session;
+  }
+
+  it("detaches a conversational session on re-entry and spawns a fresh one", async () => {
+    const mgr = buildManager();
+    const old = await enterWithConversation(mgr);
+
+    sessionCreateSpy.mockClear();
+    await mgr.enterProject(PROJECT_ID);
+
+    // A fresh session was spawned and is the only tab shown for the scope.
+    expect(sessionCreateSpy).toHaveBeenCalledTimes(1);
+    const visible = mgr.getSessionsForScope(PROJECT_ID);
+    expect(visible).toHaveLength(1);
+    expect(visible[0].internalId).not.toBe(old.internalId);
+    // The old session is hidden from the strip but still alive in the pool.
+    expect(mgr.getSessionsForScope(PROJECT_ID)).not.toContain(old);
+    expect(mgr.getSessions()).toContain(old);
+  });
+
+  it("does not reuse an error-state landing; spawns a fresh session instead", async () => {
+    const mgr = buildManager();
+    await mgr.enterProject(PROJECT_ID);
+    const landing = mgr.getActiveSession();
+    if (!landing) throw new Error("expected a landing session");
+    // Its backend never opened — not a clean slate to adopt.
+    getSessionTestHandle(landing).setStatus("error");
+    await mgr.exitProject();
+
+    sessionCreateSpy.mockClear();
+    await mgr.enterProject(PROJECT_ID);
+
+    expect(sessionCreateSpy).toHaveBeenCalledTimes(1);
+    expect(mgr.getActiveSession()).not.toBe(landing);
+  });
+
+  it("reuses an empty landing session instead of stacking a blank tab", async () => {
+    const mgr = buildManager();
+    await mgr.enterProject(PROJECT_ID);
+    const landing = mgr.getActiveSession();
+    await mgr.exitProject();
+
+    sessionCreateSpy.mockClear();
+    await mgr.enterProject(PROJECT_ID);
+
+    expect(sessionCreateSpy).not.toHaveBeenCalled();
+    expect(mgr.getActiveSession()).toBe(landing);
+    expect(mgr.getSessionsForScope(PROJECT_ID)).toHaveLength(1);
+  });
+
+  it("keeps a detached running session in getRunningChatIds (history spinner)", async () => {
+    const mgr = buildManager();
+    const old = await enterWithConversation(mgr);
+    getSessionTestHandle(old).setStatus("running");
+
+    await mgr.enterProject(PROJECT_ID);
+
+    expect(mgr.getSessionsForScope(PROJECT_ID)).not.toContain(old);
+    expect(mgr.getRunningChatIds().size).toBeGreaterThan(0);
+  });
+
+  it("keeps a detached needs-attention session in getAttentionChatIds (history dot)", async () => {
+    const mgr = buildManager();
+    const old = await enterWithConversation(mgr);
+    old.markNeedsAttention();
+
+    await mgr.enterProject(PROJECT_ID);
+
+    expect(mgr.getSessionsForScope(PROJECT_ID)).not.toContain(old);
+    expect(mgr.getAttentionChatIds().size).toBeGreaterThan(0);
+  });
+
+  it("re-attaches a detached session when it is surfaced via setActiveSession", async () => {
+    const mgr = buildManager();
+    const old = await enterWithConversation(mgr);
+    await mgr.enterProject(PROJECT_ID);
+    expect(mgr.getSessionsForScope(PROJECT_ID)).not.toContain(old);
+
+    mgr.setActiveSession(old.internalId);
+
+    expect(mgr.getSessionsForScope(PROJECT_ID)).toContain(old);
+    expect(mgr.getActiveSession()).toBe(old);
+  });
+
+  it("closeSession picks a visible neighbor, never a detached session", async () => {
+    const mgr = buildManager();
+    const old = await enterWithConversation(mgr);
+    await mgr.enterProject(PROJECT_ID);
+    const fresh = mgr.getActiveSession();
+    if (!fresh) throw new Error("expected a fresh active session");
+
+    await mgr.closeSession(fresh.internalId);
+
+    // The only other in-scope session is detached, so there is no visible
+    // neighbor to fall back to — the active pointer must not resurrect `old`.
+    expect(mgr.getActiveSession()).not.toBe(old);
+  });
+});
+
+describe("AgentSessionManager context-source dirty tracking", () => {
+  const PID = "proj-dirty";
+
+  function makeRecord(
+    contextSource: ProjectConfig["contextSource"],
+    usageTimestamps = 0,
+    systemPrompt = ""
+  ): ProjectFileRecord {
+    return {
+      project: {
+        id: PID,
+        name: PID,
+        systemPrompt,
+        projectModelKey: "",
+        modelConfigs: {},
+        contextSource,
+        created: 0,
+        UsageTimestamps: usageTimestamps,
+      },
+      filePath: `Projects/${PID}/project.md`,
+      folderName: PID,
+    };
+  }
+
+  /** Publish a record set to the real store (drives subscribeToProjectRecords). */
+  function publish(record: ProjectFileRecord): void {
+    projectsState.updateCachedProjectRecords([record]);
+  }
+
+  // Dirty-clearing is chained off the (resolved) contextReady promise, so let
+  // the microtask queue drain before asserting the dirty flag's effect.
+  const flushAsync = () => new Promise((resolve) => window.setTimeout(resolve, 0));
+
+  // Track managers so each is shut down (unsubscribed) after its test —
+  // otherwise a prior test's still-subscribed manager would react to the next
+  // test's `publish()` and warm again, contaminating the call counts.
+  const builtManagers: AgentSessionManager[] = [];
+  function buildTrackedManager(): AgentSessionManager {
+    const mgr = buildManager();
+    builtManagers.push(mgr);
+    return mgr;
+  }
+
+  beforeEach(() => {
+    mockEnsureMaterialized.mockClear();
+    sessionCreateSpy.mockClear();
+    projectsState.updateCachedProjectRecords([]);
+  });
+
+  afterEach(async () => {
+    await Promise.all(builtManagers.splice(0).map((mgr) => mgr.shutdown().catch(() => {})));
+    projectsState.updateCachedProjectRecords([]);
+  });
+
+  it("marks an inactive project dirty so re-entry detaches the stale empty landing and respawns", async () => {
+    publish(makeRecord({ webUrls: "https://a.com" }));
+    const mgr = buildTrackedManager();
+
+    await mgr.enterProject(PID);
+    const landing = mgr.getActiveSession();
+    if (!landing) throw new Error("expected a landing session");
+    await mgr.exitProject();
+
+    // Source edit for the (now inactive) project: marks it dirty.
+    publish(makeRecord({ webUrls: "https://a.com\nhttps://b.com" }));
+
+    sessionCreateSpy.mockClear();
+    await mgr.enterProject(PID);
+
+    // The stale empty landing is gone from the strip; a fresh session took over.
+    expect(sessionCreateSpy).toHaveBeenCalledTimes(1);
+    const visible = mgr.getSessionsForScope(PID);
+    expect(visible).toHaveLength(1);
+    expect(visible[0]).not.toBe(landing);
+    expect(mgr.getSessionsForScope(PID)).not.toContain(landing);
+  });
+
+  it("clears dirty once a fresh session captured the new sources (later re-entry reuses)", async () => {
+    publish(makeRecord({ webUrls: "https://a.com" }));
+    const mgr = buildTrackedManager();
+    await mgr.enterProject(PID);
+    await mgr.exitProject();
+
+    publish(makeRecord({ webUrls: "https://a.com\nhttps://b.com" }));
+    await mgr.enterProject(PID); // dirty → fresh spawn
+    await flushAsync(); // let the post-materialization dirty-clear run
+    const fresh = mgr.getActiveSession();
+    await mgr.exitProject();
+
+    sessionCreateSpy.mockClear();
+    await mgr.enterProject(PID); // no longer dirty → reuse the empty landing
+
+    expect(sessionCreateSpy).not.toHaveBeenCalled();
+    expect(mgr.getActiveSession()).toBe(fresh);
+  });
+
+  it("keeps a project dirty when the fresh session fails to start (ready rejects)", async () => {
+    publish(makeRecord({ webUrls: "https://a.com" }));
+    const mgr = buildTrackedManager();
+    await mgr.enterProject(PID);
+    await flushAsync();
+    await mgr.exitProject();
+
+    publish(makeRecord({ webUrls: "https://a.com\nhttps://b.com" })); // dirty = v2
+
+    // The dirty re-entry's fresh session fails to start: ready rejects, so the
+    // ready-success dirty-clear never runs.
+    sessionCreateSpy.mockImplementationOnce((opts) => {
+      const rejected = Promise.reject(new Error("startup boom"));
+      rejected.catch(() => {}); // swallow the unhandled-rejection warning
+      return makeMockSession({
+        internalId: opts.internalId,
+        backendId: opts.backendId,
+        projectId: opts.projectId,
+        ready: rejected,
+      });
+    });
+    await mgr.enterProject(PID);
+    await flushAsync();
+    await mgr.exitProject();
+
+    // dirty must SURVIVE (no session captured the new sources) → re-entry respawns.
+    sessionCreateSpy.mockClear();
+    await mgr.enterProject(PID);
+    expect(sessionCreateSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a project dirty when the create captured an older signature (single-flight race)", async () => {
+    publish(makeRecord({ webUrls: "https://a.com" }));
+    const mgr = buildTrackedManager();
+    await mgr.enterProject(PID);
+    await mgr.exitProject();
+
+    // Source advances to v2 → dirty = signature(v2).
+    publish(makeRecord({ webUrls: "https://a.com\nhttps://b.com" }));
+
+    // Simulate the next create JOINING an in-flight run that materialized the
+    // OLDER v1 record: the result carries v1's signature, not the live v2.
+    const v1Signature = getProjectContextSignature(makeRecord({ webUrls: "https://a.com" }));
+    mockEnsureMaterialized.mockImplementationOnce(async () => ({
+      additionalDirectories: [],
+      contextSignature: v1Signature,
+    }));
+
+    await mgr.enterProject(PID); // dirty → fresh spawn capturing stale v1
+    await flushAsync();
+    await mgr.exitProject();
+
+    // v1 ≠ dirty(v2), so the flag must SURVIVE — the stale landing is not reused.
+    sessionCreateSpy.mockClear();
+    await mgr.enterProject(PID);
+    expect(sessionCreateSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores a usage-timestamp-only touch (no dirty, empty landing still reused)", async () => {
+    publish(makeRecord({ webUrls: "https://a.com" }));
+    const mgr = buildTrackedManager();
+    await mgr.enterProject(PID);
+    const landing = mgr.getActiveSession();
+    await mgr.exitProject();
+
+    // Same context source, only the MRU timestamp moved — must NOT dirty.
+    publish(makeRecord({ webUrls: "https://a.com" }, 12345));
+
+    sessionCreateSpy.mockClear();
+    await mgr.enterProject(PID);
+
+    expect(sessionCreateSpy).not.toHaveBeenCalled();
+    expect(mgr.getActiveSession()).toBe(landing);
+  });
+
+  it("does not reuse an empty landing after a System-Prompt-only edit", async () => {
+    publish(makeRecord({ webUrls: "https://a.com" }, 0, "old instructions"));
+    const mgr = buildTrackedManager();
+    await mgr.enterProject(PID);
+    const landing = mgr.getActiveSession();
+    if (!landing) throw new Error("expected a landing session");
+    await mgr.exitProject();
+
+    // The materialization signature is unchanged (sources identical), so the
+    // project is NOT dirty — but the landing-capture signature changed, so the
+    // stale landing (which baked in the old instructions) must not be reused.
+    publish(makeRecord({ webUrls: "https://a.com" }, 0, "new instructions"));
+
+    sessionCreateSpy.mockClear();
+    await mgr.enterProject(PID);
+
+    expect(sessionCreateSpy).toHaveBeenCalledTimes(1);
+    expect(mgr.getActiveSession()).not.toBe(landing);
+  });
+
+  it("rematerializeContext forces a retry of known-bad sources", async () => {
+    publish(makeRecord({ webUrls: "https://a.com" }));
+    const mgr = buildTrackedManager();
+    await mgr.enterProject(PID);
+    await flushAsync();
+    mockEnsureMaterialized.mockClear();
+
+    const started = mgr.rematerializeContext(PID);
+    await flushAsync();
+
+    expect(started).toBe(true);
+    expect(mockEnsureMaterialized).toHaveBeenCalledTimes(1);
+    // The 5th arg (forceRetryFailed) is forwarded as true so the materializer
+    // re-fetches sources whose failure markers the automatic path would honor.
+    expect(mockEnsureMaterialized.mock.calls[0][4]).toBe(true);
+  });
+
+  it("rematerializeContext early-exits while a run already owns the load atom", async () => {
+    publish(makeRecord({ webUrls: "https://a.com" }));
+    const mgr = buildTrackedManager();
+    await mgr.enterProject(PID);
+    await flushAsync();
+    mockEnsureMaterialized.mockClear();
+
+    // A full run is blocking the atom: the forced retry would otherwise join it
+    // and have its force swallowed, so it must early-exit instead.
+    const getMock = jest.requireMock("@/settings/model").settingsStore.get as jest.Mock;
+    getMock.mockReturnValueOnce({ [PID]: { phase: "prefetch", blocking: true } });
+
+    const started = mgr.rematerializeContext(PID);
+
+    expect(started).toBe(false);
+    expect(mockEnsureMaterialized).not.toHaveBeenCalled();
+  });
+
+  it("warms the active project's cache on a source edit without gating the composer", async () => {
+    publish(makeRecord({ webUrls: "https://a.com" }));
+    const mgr = buildTrackedManager();
+    await mgr.enterProject(PID); // active = PID
+    await flushAsync(); // let create-time materialization + atom writes settle
+
+    // Clear create-time materialization + atom writes, isolate the warm.
+    mockEnsureMaterialized.mockClear();
+    const settingsStoreSet = jest.requireMock("@/settings/model").settingsStore.set as jest.Mock;
+    settingsStoreSet.mockClear();
+
+    publish(makeRecord({ webUrls: "https://a.com\nhttps://b.com" }));
+
+    // Background warm ran (disk refresh) but never published a blocking load
+    // state — the composer of the session that won't consume it stays ungated.
+    expect(mockEnsureMaterialized).toHaveBeenCalledTimes(1);
+    expect(settingsStoreSet).not.toHaveBeenCalled();
+  });
+
+  it("stops reacting to record changes after shutdown", async () => {
+    publish(makeRecord({ webUrls: "https://a.com" }));
+    const mgr = buildTrackedManager();
+    await mgr.enterProject(PID);
+    await mgr.shutdown();
+
+    mockEnsureMaterialized.mockClear();
+    // A post-shutdown edit must not warm or throw.
+    expect(() => publish(makeRecord({ webUrls: "https://a.com\nhttps://b.com" }))).not.toThrow();
+    expect(mockEnsureMaterialized).not.toHaveBeenCalled();
+  });
+
+  it("publishes processingSources + incremental failedSources during a run, clears at done", async () => {
+    publish(makeRecord({ webUrls: "https://a.com" }));
+    const mgr = buildTrackedManager();
+    const setMock = jest.requireMock("@/settings/model").settingsStore.set as jest.Mock;
+    // Reconstruct the latest published load-state by replaying the most recent
+    // `settingsStore.set(agentProjectContextLoadAtom, updater)` call (the store is
+    // mocked, so there is no live atom to read back).
+    const latest = (): AgentProjectContextLoadState | undefined => {
+      for (let i = setMock.mock.calls.length - 1; i >= 0; i--) {
+        const [atom, updater] = setMock.mock.calls[i];
+        if (atom !== agentProjectContextLoadAtom || typeof updater !== "function") continue;
+        const next = updater({}) as Record<string, AgentProjectContextLoadState>;
+        if (next[PID]) return next[PID];
+      }
+      return undefined;
+    };
+
+    let drive!: (p: ContextMaterializeProgress) => void;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    mockEnsureMaterialized.mockImplementationOnce(
+      async (
+        _app: unknown,
+        _pid: string,
+        _cwd: string,
+        onProgress: (p: ContextMaterializeProgress) => void
+      ) => {
+        drive = onProgress;
+        onProgress({ phase: "prefetch", done: 0, total: 1 });
+        onProgress({ phase: "itemStart", item: { kind: "web", source: "https://a.com" } });
+        await gate;
+        return { additionalDirectories: [] };
+      }
+    );
+
+    const entering = mgr.enterProject(PID);
+    await flushAsync();
+
+    // Mid-flight: the source being fetched is published in `processingSources`.
+    expect(latest()).toMatchObject({
+      phase: "prefetch",
+      blocking: true,
+      processingSources: [{ kind: "web", source: "https://a.com" }],
+    });
+
+    // Settle as a failure: it leaves `processingSources` and lands in
+    // `failedSources` immediately — not deferred to the end of the run.
+    drive({
+      phase: "itemFailed",
+      item: { kind: "web", source: "https://a.com" },
+      failure: { kind: "web", source: "https://a.com", error: "boom", usedStaleSnapshot: false },
+    });
+    const afterFail = latest()!;
+    expect(afterFail.processingSources).toBeUndefined();
+    expect(afterFail.failedSources).toEqual([
+      { path: "https://a.com", type: "web", error: "boom", usedStaleSnapshot: false },
+    ]);
+
+    release();
+    await entering;
+    await flushAsync(); // let the materialize `.then()` publish the terminal "done"
+    // Done: nothing is processing.
+    expect(latest()).toMatchObject({ phase: "done", blocking: false });
+    expect(latest()!.processingSources).toBeUndefined();
   });
 });

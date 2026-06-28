@@ -1,4 +1,5 @@
 import { CustomError } from "@/error";
+import { AGENTS_MIRROR_FILE, PROJECT_CONFIG_FILE_NAME } from "@/projects/constants";
 import EmbeddingsManager from "@/LLMProviders/embeddingManager";
 import { logError, logInfo, logWarn } from "@/logger";
 import { getSettings } from "@/settings/model";
@@ -448,8 +449,14 @@ function isInternalExcludedPath(filePath: string): boolean {
     if (!filePath.startsWith(prefix)) continue;
     const relativePath = filePath.slice(prefix.length);
     const parts = relativePath.split("/");
-    // Exact match: <folderName>/project.md (2 segments, second is "project.md")
-    if (parts.length === 2 && parts[1] === "project.md") return true;
+    // Exact match: <folderName>/<config> (2 segments). Exclude both the `project.md`
+    // config and its generated `AGENTS.md` mirror by name (path-level mechanism — the
+    // mirror's marker isn't visible here) so neither instruction file leaks into the index.
+    if (
+      parts.length === 2 &&
+      (parts[1] === PROJECT_CONFIG_FILE_NAME || parts[1] === AGENTS_MIRROR_FILE)
+    )
+      return true;
     if (relativePath.startsWith("unsupported/") || relativePath === "unsupported") return true;
   }
   return false;

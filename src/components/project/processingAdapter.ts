@@ -113,6 +113,35 @@ function inferUrlFileType(url: string): ProcessingItem["fileType"] {
   return detectUrlType(url);
 }
 
+/**
+ * Build the display envelope of a {@link ProcessingItem} — everything derivable
+ * from the source identity alone (`id`, `name`, `source`, `fileType`). Status,
+ * error, and contentEmpty are resolved separately by each pipeline and spread
+ * on top by the caller. Shared by the CAG adapter and the agent adapter so the
+ * two stay structurally identical; only their status resolution differs.
+ *
+ * `cacheKind` is the source's storage bucket; for a "web" kind the URL is still
+ * re-sniffed (a YouTube link pasted into the web list renders as a video).
+ */
+export function processingItemEnvelope(
+  cacheKind: ProcessingItem["cacheKind"],
+  key: string
+): Pick<ProcessingItem, "id" | "name" | "source" | "fileType" | "cacheKind"> {
+  const fileType =
+    cacheKind === "file"
+      ? inferFileType(key)
+      : cacheKind === "youtube"
+        ? "youtube"
+        : inferUrlFileType(key);
+  return {
+    id: key,
+    name: extractName(key),
+    source: cacheKind === "file" ? "file" : "url",
+    fileType,
+    cacheKind,
+  };
+}
+
 /** Extract a human-readable name from a file path or URL. */
 function extractName(key: string): string {
   // Reason: URLs should show domain + path + query; file paths should show just the filename.
@@ -289,12 +318,8 @@ export function buildProcessingItems(
     // which looks like a stalled queue to the user.
     if (!supportedExtensions.has(ext)) {
       items.push({
-        id: key,
-        name: extractName(key),
-        source: "file",
-        fileType: inferFileType(key),
+        ...processingItemEnvelope("file", key),
         status: "unsupported",
-        cacheKind: "file",
       });
       continue;
     }
@@ -314,13 +339,9 @@ export function buildProcessingItems(
     }
 
     items.push({
-      id: key,
-      name: extractName(key),
-      source: "file",
-      fileType: inferFileType(key),
+      ...processingItemEnvelope("file", key),
       status,
       error,
-      cacheKind: "file",
     });
   }
 
@@ -330,7 +351,6 @@ export function buildProcessingItems(
   for (const url of parseUrlConfig(project.contextSource?.webUrls)) {
     if (seenIds.has(url)) continue;
     seenIds.add(url);
-    const fileType = inferUrlFileType(url);
     let status: ProcessingItem["status"];
     let error: string | undefined;
     let contentEmpty: boolean | undefined;
@@ -351,14 +371,10 @@ export function buildProcessingItems(
     }
 
     items.push({
-      id: url,
-      name: extractName(url),
-      source: "url",
-      fileType,
+      ...processingItemEnvelope("web", url),
       status,
       error,
       contentEmpty,
-      cacheKind: "web",
     });
   }
 
@@ -368,7 +384,6 @@ export function buildProcessingItems(
   for (const url of parseUrlConfig(project.contextSource?.youtubeUrls)) {
     if (seenIds.has(url)) continue;
     seenIds.add(url);
-    const fileType: ProcessingItem["fileType"] = "youtube";
     let status: ProcessingItem["status"];
     let error: string | undefined;
     let contentEmpty: boolean | undefined;
@@ -388,14 +403,10 @@ export function buildProcessingItems(
     }
 
     items.push({
-      id: url,
-      name: extractName(url),
-      source: "url",
-      fileType,
+      ...processingItemEnvelope("youtube", url),
       status,
       error,
       contentEmpty,
-      cacheKind: "youtube",
     });
   }
 

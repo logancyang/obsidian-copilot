@@ -17,6 +17,12 @@ const loadCriticalFiles = [
   "src/components/chat-components/plugins/slashMenuItems.ts",
 ];
 
+const contextCacheConsumerFiles = [
+  "src/commands/index.ts",
+  "src/components/project/agentProcessingAdapter.ts",
+  "src/utils/cacheFileOpener.ts",
+];
+
 const nodeModuleIds = new Set([
   "async_hooks",
   "buffer",
@@ -106,6 +112,24 @@ function checkAgentModeImportBoundaries() {
         `${relativePath}: dynamic Agent Mode import must be gated by isDesktopRuntime() ` +
           `— Platform.isDesktopApp is true under app.emulateMobile(true).`
       );
+    }
+  }
+}
+
+function checkContextCacheImportBoundaries() {
+  const desktopOnlyImports =
+    /import\s+(?:type\s+)?[^;]+?\s+from\s+["']@\/context\/(?:conversionsLocation|contextCacheFs)["']\s*;?/g;
+
+  for (const relativePath of contextCacheConsumerFiles) {
+    const source = readRepoFile(relativePath);
+    for (const match of source.matchAll(desktopOnlyImports)) {
+      const statement = match[0];
+      if (!isTypeOnlyImport(statement)) {
+        fail(
+          `${relativePath}: value import from ${statement.match(/["']([^"']+)["']/)?.[1]} ` +
+            "is on the mobile load path; use a desktop-gated dynamic import."
+        );
+      }
     }
   }
 }
@@ -357,6 +381,7 @@ function runBundleEvaluationSmoke() {
 }
 
 checkAgentModeImportBoundaries();
+checkContextCacheImportBoundaries();
 runBundleEvaluationSmoke();
 
 if (failures.length > 0) {

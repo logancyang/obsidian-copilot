@@ -23,6 +23,15 @@ export interface AgentSessionIndexEntry {
   titleSource?: "user" | "agent";
   createdAtMs: number;
   lastAccessedAtMs: number;
+  /**
+   * Owning Agent Projects scope. Absent ≙ the global workspace — including
+   * every entry written before this field existed, so old index files keep
+   * working without a version bump. The project id (not the folder path) is
+   * stored because ids survive a project folder rename; live write-through is
+   * the authoritative source (each `AgentSession` is scope-immutable), with
+   * native sweeps falling back to cwd→project-folder attribution.
+   */
+  projectId?: string;
 }
 
 interface AgentSessionIndexFile {
@@ -76,6 +85,7 @@ function sanitizeEntry(raw: unknown): AgentSessionIndexEntry | null {
       title && (r.titleSource === "user" || r.titleSource === "agent") ? r.titleSource : undefined,
     createdAtMs: createdAtMs ?? lastAccessedAtMs!,
     lastAccessedAtMs: lastAccessedAtMs ?? createdAtMs!,
+    projectId: typeof r.projectId === "string" && r.projectId.trim() ? r.projectId : undefined,
   };
 }
 
@@ -134,6 +144,10 @@ export class AgentSessionIndex {
         entry.lastAccessedAtMs,
         existing?.lastAccessedAtMs ?? entry.lastAccessedAtMs
       ),
+      // A session's scope is immutable, so live and recorded values can only
+      // agree — keep whichever side knows it (an absent incoming value must
+      // not strip a previously recorded scope).
+      projectId: entry.projectId ?? existing?.projectId,
     });
     this.scheduleSave();
   }
@@ -163,12 +177,16 @@ export class AgentSessionIndex {
           entry.lastAccessedAtMs,
           existing?.lastAccessedAtMs ?? entry.lastAccessedAtMs
         ),
+        // Write-through knows the scope authoritatively; a sweep's cwd-derived
+        // attribution only fills gaps, never overrides.
+        projectId: existing?.projectId ?? entry.projectId,
       };
       if (
         !existing ||
         existing.title !== next.title ||
         existing.createdAtMs !== next.createdAtMs ||
-        existing.lastAccessedAtMs !== next.lastAccessedAtMs
+        existing.lastAccessedAtMs !== next.lastAccessedAtMs ||
+        existing.projectId !== next.projectId
       ) {
         this.entries.set(key, next);
         changed = true;

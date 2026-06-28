@@ -266,6 +266,13 @@ export interface CopilotSettings {
      */
     debugFullFrames: boolean;
     /**
+     * One-shot dismissal of the Agent Home "Try a project" welcome card. The card
+     * only shows on the global landing while no projects exist; once dismissed it
+     * stays hidden regardless of project count. Persisted so the nudge doesn't
+     * reappear across reloads. Defaults to `false`.
+     */
+    welcomeDismissed: boolean;
+    /**
      * Skills management — canonical-store discovery, symlink lifecycle,
      * reconciliation. See `designdocs/SKILLS_MANAGEMENT.md` and
      * `designdocs/SKILLS_DISCOVERY_REDESIGN.md`.
@@ -909,6 +916,11 @@ function sanitizeAgentMode(raw: unknown): CopilotSettings["agentMode"] {
       ? r.debugFullFrames
       : DEFAULT_SETTINGS.agentMode.debugFullFrames;
 
+  const welcomeDismissed =
+    typeof r.welcomeDismissed === "boolean"
+      ? r.welcomeDismissed
+      : DEFAULT_SETTINGS.agentMode.welcomeDismissed;
+
   const claudeCliRaw =
     r.claudeCli && typeof r.claudeCli === "object"
       ? (r.claudeCli as Record<string, unknown>)
@@ -941,6 +953,7 @@ function sanitizeAgentMode(raw: unknown): CopilotSettings["agentMode"] {
     activeBackend,
     backends,
     debugFullFrames,
+    welcomeDismissed,
     skills,
     ...(claudeCli ? { claudeCli } : {}),
     ...(deviceProfiles ? { deviceProfiles } : {}),

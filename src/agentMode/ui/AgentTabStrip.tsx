@@ -126,7 +126,10 @@ export const AgentTabStrip: React.FC<Props> = ({ manager }) => {
   const [, setTick] = React.useState(0);
   React.useEffect(() => manager.subscribe(() => setTick((v) => v + 1)), [manager]);
 
-  const sessions = manager.getSessions();
+  // Scope the strip to the active workspace: a project shows only its own
+  // sessions, the global workspace shows the global ones. `getSessions()` stays
+  // reserved for whole-pool consumers (draft prune / auto-spawn), per §2.4.
+  const sessions = manager.getSessionsForScope(manager.getActiveProjectId());
   const activeId = manager.getActiveSession()?.internalId ?? null;
   const isCreating = manager.getIsStarting();
   const [renamingId, setRenamingId] = React.useState<string | null>(null);

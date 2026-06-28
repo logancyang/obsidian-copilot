@@ -94,7 +94,19 @@ function partsEqual(a: AgentMessagePart, b: AgentMessagePart): boolean {
   }
 }
 
-/** Compare plan entries without stringifying the whole part object. */
+/**
+ * Compare plan entries without stringifying the whole part object.
+ *
+ * Layer 3 of 3 in the todo-plan dedup chain — the RENDER layer: stops an
+ * unchanged plan part from re-triggering a React notify on `upsertAgentPart`.
+ * The other two layers guard different things and are NOT redundant with this:
+ *  1. emit layer (`claudeTodoPlan.emitIfChanged`): collapses the SDK
+ *     translator's multiple injection points (stream delta / block stop /
+ *     assistant fallback) that observe the same final tool input.
+ *  2. snapshot layer (`AgentSession.applyCurrentTodoList`): suppresses
+ *     no-op `onCurrentTodoListChanged` ticks for the live Progress section.
+ * This layer is the only one that also dedups the plan MESSAGE part.
+ */
 function planEntriesEqual(
   a: Extract<AgentMessagePart, { kind: "plan" }>["entries"],
   b: Extract<AgentMessagePart, { kind: "plan" }>["entries"]

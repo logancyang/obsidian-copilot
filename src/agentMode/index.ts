@@ -1,4 +1,4 @@
-import { type App, FileSystemAdapter, Platform } from "obsidian";
+import { type App, Platform } from "obsidian";
 import os from "node:os";
 import * as path from "node:path";
 import type CopilotPlugin from "@/main";
@@ -6,8 +6,7 @@ import { logError } from "@/logger";
 import { DEFAULT_SKILLS_FOLDER } from "@/constants";
 import { getSettings, subscribeToSettingsChange, type CopilotSettings } from "@/settings/model";
 import { subscribeToSystemPromptChange } from "@/system-prompts/state";
-import { copilotAppDataDir } from "@/utils/appPaths";
-import { md5 } from "@/utils/hash";
+import { copilotAppDataDir, getVaultId } from "@/utils/appPaths";
 import { buildAgentSystemPrompt } from "./backends/shared/agentSystemPrompt";
 import { backendRegistry, listBackendDescriptors } from "./backends/registry";
 import type { BackendId } from "./session/types";
@@ -165,9 +164,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
   // entries and write conflicts across synced devices (iCloud/Syncthing/
   // Obsidian Sync). Scoped by a vault id (hash of the vault path) so vaults
   // don't share one file. Agent Mode is desktop-only, so Node fs is fine.
-  const vaultAdapter = app.vault.adapter;
-  const vaultBasePath = vaultAdapter instanceof FileSystemAdapter ? vaultAdapter.getBasePath() : "";
-  const vaultId = vaultBasePath ? md5(vaultBasePath).slice(0, 8) : "default";
+  const vaultId = getVaultId(app);
   const indexPath = path.join(
     copilotAppDataDir(os.homedir()),
     "vaults",

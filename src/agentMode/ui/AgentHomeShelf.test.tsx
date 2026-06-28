@@ -9,13 +9,24 @@ beforeAll(() => {
   (window as unknown as { activeDocument: Document }).activeDocument = window.document;
 });
 
-function renderShelf(sections: AgentHomeShelfSection[]) {
+function renderShelf(
+  sections: AgentHomeShelfSection[],
+  controlled?: { activeSectionId: string | null; onSectionSelect?: (id: string) => void }
+) {
   return render(
     <TooltipProvider>
-      <AgentHomeShelf sections={sections} />
+      <AgentHomeShelf sections={sections} {...controlled} />
     </TooltipProvider>
   );
 }
+
+const projectsEnabled: AgentHomeShelfSection = {
+  id: "projects",
+  icon: <span />,
+  title: "Projects",
+  count: 5,
+  renderBody: () => <div>PROJECTS BODY</div>,
+};
 
 const chats: AgentHomeShelfSection = {
   id: "chats",
@@ -55,5 +66,28 @@ describe("AgentHomeShelf with a disabled section", () => {
     fireEvent.click(screen.getByRole("tab", { name: /Projects/ }));
     expect(screen.queryByText("PROJECTS BODY")).toBeNull();
     expect(screen.queryByText("CHATS BODY")).not.toBeNull();
+  });
+});
+
+describe("AgentHomeShelf controlled mode", () => {
+  it("renders the parent-selected section's body", () => {
+    renderShelf([chats, projectsEnabled], { activeSectionId: "projects" });
+    expect(screen.queryByText("PROJECTS BODY")).not.toBeNull();
+    expect(screen.queryByText("CHATS BODY")).toBeNull();
+  });
+
+  it("falls back to the first selectable section when nothing is picked yet (null)", () => {
+    renderShelf([chats, projectsEnabled], { activeSectionId: null });
+    expect(screen.queryByText("CHATS BODY")).not.toBeNull();
+  });
+
+  it("reports clicks via onSectionSelect instead of switching on its own", () => {
+    const onSectionSelect = jest.fn();
+    renderShelf([chats, projectsEnabled], { activeSectionId: "chats", onSectionSelect });
+    fireEvent.click(screen.getByRole("tab", { name: /Projects/ }));
+    expect(onSectionSelect).toHaveBeenCalledWith("projects");
+    // Controlled: the body only changes when the parent updates the prop.
+    expect(screen.queryByText("CHATS BODY")).not.toBeNull();
+    expect(screen.queryByText("PROJECTS BODY")).toBeNull();
   });
 });

@@ -48,6 +48,7 @@ module.exports = {
         yellow: "var(--color-yellow)",
         orange: "var(--color-orange)",
         purple: "var(--color-purple)",
+        cyan: "var(--color-cyan)",
       },
       // Per-project accent hues (Agent Home project tiles). Theme-aware via
       // Obsidian's named color vars; paired with the matching `bg.project` tints.
@@ -122,6 +123,7 @@ module.exports = {
       "border-hover": "var(--background-modifier-border-hover)",
       "border-focus": "var(--background-modifier-border-focus)",
       "interactive-accent": "var(--interactive-accent)",
+      error: "var(--text-error)",
     },
     ringColor: {
       ring: "var(--interactive-accent)",

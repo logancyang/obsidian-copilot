@@ -48,6 +48,11 @@ interface ProjectContextBadgeListProps {
   maxExpandedHeight?: number;
   /** Optional action element rendered on the right of the control bar (e.g. "Manage Context" button). */
   actionSlot?: React.ReactNode;
+  /**
+   * Drop the content container's own border/padding so the list can embed in a
+   * caller-owned box (e.g. the agent landing's combined chips-and-drop area).
+   */
+  borderless?: boolean;
 }
 
 /** Decode, deduplicate, and categorize a pattern string into badge items */
@@ -87,6 +92,7 @@ export const ProjectContextBadgeList: React.FC<ProjectContextBadgeListProps> = (
   maxCollapsedHeight = 84,
   maxExpandedHeight = 200,
   actionSlot,
+  borderless = false,
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isOverflowing, setIsOverflowing] = useState(false);
@@ -183,7 +189,12 @@ export const ProjectContextBadgeList: React.FC<ProjectContextBadgeListProps> = (
   return (
     <div className="tw-flex tw-flex-col tw-gap-2">
       {/* Content container */}
-      <div className="tw-relative tw-rounded-md tw-border tw-border-solid tw-border-border tw-p-2">
+      <div
+        className={cn(
+          "tw-relative",
+          !borderless && "tw-rounded-md tw-border tw-border-solid tw-border-border tw-p-2"
+        )}
+      >
         <div
           ref={contentRef}
           className={cn(

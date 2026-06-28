@@ -631,7 +631,10 @@ describe("buildModelOnChange", () => {
     // Allow the IIFE to run.
     await new Promise((r) => window.setTimeout(r, 0));
     expect(persistDefaultSelection).not.toHaveBeenCalled();
-    expect(createSession).toHaveBeenCalledWith("claude", { baseModelId: "opus", effort: "low" });
+    expect(createSession).toHaveBeenCalledWith("claude", undefined, {
+      baseModelId: "opus",
+      effort: "low",
+    });
     expect(setDefaultBackend).toHaveBeenCalledWith("claude");
     expect(closeSession).toHaveBeenCalledWith("tab-1");
   });

@@ -1,6 +1,11 @@
-import { App, TFile } from "obsidian";
-import { parseProjectConfigFile, sanitizeVaultPathSegment } from "@/projects/projectUtils";
-import { mockTFile } from "@/__tests__/mockObsidian";
+import { App, TFile, TFolder } from "obsidian";
+import {
+  parseProjectConfigFile,
+  sanitizeVaultPathSegment,
+  scanAllProjectConfigFiles,
+} from "@/projects/projectUtils";
+import { getProjectFolderNameFromConfigPath, isProjectConfigFile } from "@/projects/projectPaths";
+import { mockTFile, mockTFolder } from "@/__tests__/mockObsidian";
 
 // Mock deep dependencies to avoid transitive import chains
 jest.mock("@/settings/model", () => ({
@@ -228,5 +233,120 @@ describe("sanitizeVaultPathSegment", () => {
     // Reason: "." and ".." have trailing dots stripped first, then become empty → fallback "_"
     expect(sanitizeVaultPathSegment(".")).toBe("_");
     expect(sanitizeVaultPathSegment("..")).toBe("_");
+  });
+});
+
+// Helper: build a project config TFile mock under the mocked projects folder.
+function makeConfigFile(folderName: string, fileName: string): TFile {
+  const path = `copilot-projects/${folderName}/${fileName}`;
+  return mockTFile({
+    path,
+    name: fileName,
+    basename: fileName.replace(/\.md$/, ""),
+    extension: "md",
+  });
+}
+
+describe("isProjectConfigFile (project.md only)", () => {
+  it("recognizes project.md but not the generated AGENTS.md mirror", () => {
+    expect(isProjectConfigFile(makeConfigFile("my-project", "project.md"))).toBe(true);
+    expect(isProjectConfigFile(makeConfigFile("my-project", "AGENTS.md"))).toBe(false);
+  });
+
+  it("rejects other markdown names in a project folder", () => {
+    expect(isProjectConfigFile(makeConfigFile("my-project", "notes.md"))).toBe(false);
+    expect(isProjectConfigFile(makeConfigFile("my-project", "readme.md"))).toBe(false);
+  });
+
+  it("rejects config files inside the unsupported/ backup folder", () => {
+    expect(isProjectConfigFile(makeConfigFile("unsupported", "project.md"))).toBe(false);
+  });
+
+  it("rejects files that are not exactly two levels deep", () => {
+    expect(isProjectConfigFile(makeConfigFile("nested/deeper", "project.md"))).toBe(false);
+    const shallow = mockTFile({
+      path: "copilot-projects/project.md",
+      name: "project.md",
+      basename: "project",
+      extension: "md",
+    });
+    expect(isProjectConfigFile(shallow)).toBe(false);
+  });
+});
+
+describe("getProjectFolderNameFromConfigPath (project.md only)", () => {
+  it("extracts the folder name from a project.md path", () => {
+    expect(getProjectFolderNameFromConfigPath("copilot-projects/foo/project.md")).toBe("foo");
+  });
+
+  it("returns null for unrecognized names (incl. AGENTS.md) or wrong depth", () => {
+    expect(getProjectFolderNameFromConfigPath("copilot-projects/foo/AGENTS.md")).toBeNull();
+    expect(getProjectFolderNameFromConfigPath("copilot-projects/foo/notes.md")).toBeNull();
+    expect(getProjectFolderNameFromConfigPath("copilot-projects/project.md")).toBeNull();
+    expect(getProjectFolderNameFromConfigPath("other/foo/project.md")).toBeNull();
+  });
+});
+
+describe("scanAllProjectConfigFiles (project.md only)", () => {
+  const PROJECTS_FOLDER = "copilot-projects";
+
+  // Build an app whose projects folder contains the given folders, each mapping a config
+  // file name to its raw content. metadataCache is empty so the YAML fallback parser runs.
+  function setupScanApp(folders: Record<string, Record<string, string>>): App {
+    const contentByPath = new Map<string, string>();
+    const children: TFolder[] = [];
+
+    for (const [folderName, configs] of Object.entries(folders)) {
+      const files: TFile[] = [];
+      for (const [fileName, content] of Object.entries(configs)) {
+        const file = makeConfigFile(folderName, fileName);
+        contentByPath.set(file.path, content);
+        files.push(file);
+      }
+      children.push(mockTFolder({ name: folderName, children: files }));
+    }
+
+    const rootFolder = mockTFolder({ name: PROJECTS_FOLDER, children });
+
+    return {
+      vault: {
+        getAbstractFileByPath: jest.fn((path: string) => {
+          if (path === PROJECTS_FOLDER) return rootFolder;
+          if (contentByPath.has(path)) {
+            return makeConfigFile(path.split("/")[1], path.split("/").pop() ?? "");
+          }
+          return null;
+        }),
+        read: jest.fn((file: TFile) => Promise.resolve(contentByPath.get(file.path) ?? "")),
+        adapter: { exists: jest.fn().mockResolvedValue(false), list: jest.fn() },
+      },
+      metadataCache: { getFileCache: jest.fn().mockReturnValue(null) },
+    } as unknown as App;
+  }
+
+  const validConfig = (id: string): string =>
+    ["---", `copilot-project-id: ${id}`, `copilot-project-name: ${id}`, "---", "body"].join("\n");
+
+  it("recognizes a project.md project", async () => {
+    const app = setupScanApp({ beta: { "project.md": validConfig("beta") } });
+    const { records } = await scanAllProjectConfigFiles(app);
+    expect(records).toHaveLength(1);
+    expect(records[0].project.id).toBe("beta");
+    expect(records[0].filePath).toBe("copilot-projects/beta/project.md");
+  });
+
+  it("does NOT recognize an AGENTS.md-only folder (mirror is not a config)", async () => {
+    const app = setupScanApp({ alpha: { "AGENTS.md": validConfig("alpha") } });
+    const { records } = await scanAllProjectConfigFiles(app);
+    expect(records).toHaveLength(0);
+  });
+
+  it("recognizes project.md and ignores a sibling AGENTS.md mirror in the same folder", async () => {
+    const app = setupScanApp({
+      gamma: { "AGENTS.md": validConfig("gamma"), "project.md": validConfig("gamma") },
+    });
+    const { records } = await scanAllProjectConfigFiles(app);
+    expect(records).toHaveLength(1);
+    expect(records[0].filePath).toBe("copilot-projects/gamma/project.md");
   });
 });
