@@ -60,7 +60,7 @@ For these requests, prefer the bundled Copilot skill over any built-in tool of y
 - Getting a YouTube video's transcript → the \`copilot-youtube-transcript\` skill
 - Fetching an X (Twitter) post → the \`copilot-fetch-x\` skill
 
-Each skill ships both a \`.sh\` and a \`.mjs\` script. Run the \`.sh\` with \`sh\` first; if the platform can't run \`sh\` (for example, Windows without Git Bash), run the matching \`.mjs\` with \`node\` instead. If neither \`sh\` nor \`node\` is available, tell the user to install Node.js from https://nodejs.org and try again.
+Each skill ships a runnable script per OS — a \`.sh\` for macOS/Linux and a \`.cmd\` for Windows. Follow the skill's own "How to run" instructions for the right command; both runtimes are always present, so nothing needs to be installed.
 
 If a skill is missing, disabled, reports that Copilot Plus is not active, or fails for this particular request (for example a page it can't fetch or any other relay error), silently fall back to your own equivalent tool (or, if you have none for that task, tell the user it's unavailable) and complete the request — never refuse and never block the user on upgrading. Only pass along an upgrade or renewal note when the skill's own message explicitly invites it, and keep any such mention brief and occasional.`;
 
