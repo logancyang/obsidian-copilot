@@ -4,6 +4,7 @@ import {
   PROTOCOL_VERSION,
   RequestError,
   ndJsonStream,
+  type NewSessionRequest,
   type RequestPermissionRequest,
   type RequestPermissionResponse,
   type SessionConfigOption,
@@ -39,7 +40,7 @@ import type {
 import { wrapStreamsForDebug } from "./debugTap";
 import { AcpBackend } from "./types";
 import {
-  acpNotificationToEvent,
+  acpNotificationToEvents,
   acpPermissionRequestToPrompt,
   acpStateToBackendState,
   cancelInputToAcp,
@@ -64,6 +65,7 @@ export type AcpCapability =
   | "session/set_model"
   | "session/set_mode"
   | "session/set_config_option"
+  | "session/additional_directories"
   | "mcp/http"
   | "mcp/sse";
 
@@ -135,6 +137,14 @@ export class AcpBackendProcess implements BackendProcess {
   private exitListeners = new Set<() => void>();
   private capabilities = new Map<AcpCapability, boolean>();
   private readonly sessionWireState = new Map<SessionId, SessionWireState>();
+  // Tool-call ids first seen as a `todowrite`-titled call, so later
+  // tool_call_updates for the same id keep synthesizing a plan update even
+  // after opencode renames the title (e.g. "3 todos"). See wireTranslate's
+  // todoToolPlanFromAcp. Keyed by session like every other per-session map on
+  // this shared (per-backend) process — a single backend instance serves all
+  // its sessions, so a bare Set would leak ids across sessions and grow
+  // unbounded for the process lifetime. Pruned on session teardown + shutdown.
+  private readonly todoToolCallIdsBySession = new Map<SessionId, Set<string>>();
 
   constructor(
     private readonly app: App,
@@ -175,6 +185,7 @@ export class AcpBackendProcess implements BackendProcess {
       this.domainHandlers.clear();
       this.pendingUpdates.clear();
       this.sessionWireState.clear();
+      this.todoToolCallIdsBySession.clear();
       this.permissionPrompter = null;
       this.capabilities.clear();
       for (const fn of this.exitListeners) {
@@ -219,8 +230,15 @@ export class AcpBackendProcess implements BackendProcess {
       if (init.agentCapabilities?.mcpCapabilities?.sse === true) {
         this.capabilities.set("mcp/sse", true);
       }
+      // Experimental ACP capability: presence of the (possibly empty) object
+      // means the agent honors `additionalDirectories` on session lifecycle
+      // requests. codex 0.135 / opencode 1.2.27 don't advertise it, so they
+      // receive no field. Gating here auto-enables future versions that do.
+      if (init.agentCapabilities?.sessionCapabilities?.additionalDirectories != null) {
+        this.capabilities.set("session/additional_directories", true);
+      }
       logInfo(
-        `[AgentMode] initialized backend ${this.backend.id} (negotiated protocol v${init.protocolVersion}, listSessions=${this.hasCapability("session/list")}, resumeSession=${this.hasCapability("session/resume")}, loadSession=${this.hasCapability("session/load")}, mcp.http=${this.hasCapability("mcp/http")}, mcp.sse=${this.hasCapability("mcp/sse")})`
+        `[AgentMode] initialized backend ${this.backend.id} (negotiated protocol v${init.protocolVersion}, listSessions=${this.hasCapability("session/list")}, resumeSession=${this.hasCapability("session/resume")}, loadSession=${this.hasCapability("session/load")}, mcp.http=${this.hasCapability("mcp/http")}, mcp.sse=${this.hasCapability("mcp/sse")}, additionalDirectories=${this.hasCapability("session/additional_directories")})`
       );
     } catch (err) {
       logError(
@@ -258,24 +276,33 @@ export class AcpBackendProcess implements BackendProcess {
       this.pendingUpdates.delete(sessionId);
       for (const wire of buffered) {
         try {
-          handler(acpNotificationToEvent(wire));
+          for (const event of acpNotificationToEvents(wire, this.todoToolCallIdsFor(sessionId)))
+            handler(event);
         } catch (e) {
           logWarn(`[AgentMode] replay of buffered session/update threw for ${sessionId}`, e);
         }
       }
     }
     return () => {
+      // Only tear down if THIS handler is still the registered one — a later
+      // re-register for the same sessionId (resume/reconnect) must not have its
+      // live tracker deleted by the stale unsubscribe.
       if (this.domainHandlers.get(sessionId) === handler) {
         this.domainHandlers.delete(sessionId);
+        // Teardown (not per-turn): the handler is unregistered only when the
+        // AgentSession disposes, so drop this session's todo-id tracker too.
+        this.todoToolCallIdsBySession.delete(sessionId);
       }
     };
   }
 
   async newSession(params: OpenSessionInput): Promise<OpenSessionOutput> {
-    const wireResp = await this.requireConnection().newSession({
+    const req: NewSessionRequest = {
       cwd: params.cwd,
       mcpServers: params.mcpServers.map(mcpServerSpecToAcp),
-    });
+      ...this.additionalDirectoriesField(params.additionalDirectories),
+    };
+    const wireResp = await this.requireConnection().newSession(req);
     this.recordWireState(wireResp.sessionId, {
       models: wireResp.models ?? null,
       modes: wireResp.modes ?? null,
@@ -305,6 +332,25 @@ export class AcpBackendProcess implements BackendProcess {
 
   supportsMcpTransport(transport: "http" | "sse"): boolean {
     return this.hasCapability(transport === "http" ? "mcp/http" : "mcp/sse");
+  }
+
+  supportsAdditionalDirectories(): boolean {
+    return this.hasCapability("session/additional_directories");
+  }
+
+  // Extra searchable roots ride on every session-lifecycle request (new, resume,
+  // load), but only when the agent advertises the experimental
+  // `additionalDirectories` capability — resume/load re-establish the roots just
+  // like `session/new`, so they must carry them too or a restored project chat
+  // loses its off-vault context roots. Agents that don't advertise the capability
+  // get no field at all; sending one they'll silently ignore would be misleading.
+  // Empty/absent roots also send nothing, so non-project sessions stay untouched.
+  private additionalDirectoriesField(roots: string[] | undefined): {
+    additionalDirectories?: string[];
+  } {
+    return this.supportsAdditionalDirectories() && roots?.length
+      ? { additionalDirectories: roots }
+      : {};
   }
 
   async setSessionModel(params: { sessionId: SessionId; modelId: string }): Promise<BackendState> {
@@ -433,6 +479,7 @@ export class AcpBackendProcess implements BackendProcess {
           sessionId: sessionIdToAcp(params.sessionId),
           cwd: params.cwd,
           mcpServers: params.mcpServers.map(mcpServerSpecToAcp),
+          ...this.additionalDirectoriesField(params.additionalDirectories),
         }),
       { mustBeAdvertised: true }
     );
@@ -455,6 +502,7 @@ export class AcpBackendProcess implements BackendProcess {
           sessionId: sessionIdToAcp(params.sessionId),
           cwd: params.cwd,
           mcpServers: params.mcpServers.map(mcpServerSpecToAcp),
+          ...this.additionalDirectoriesField(params.additionalDirectories),
         }),
       { mustBeAdvertised: true }
     );
@@ -474,6 +522,7 @@ export class AcpBackendProcess implements BackendProcess {
     this.domainHandlers.clear();
     this.pendingUpdates.clear();
     this.sessionWireState.clear();
+    this.todoToolCallIdsBySession.clear();
     this.permissionPrompter = null;
     this.capabilities.clear();
     if (this.process) {
@@ -499,6 +548,20 @@ export class AcpBackendProcess implements BackendProcess {
 
   private recordWireState(sessionId: AcpSessionId, wire: SessionWireState): void {
     this.sessionWireState.set(sessionIdFromAcp(sessionId), wire);
+  }
+
+  /**
+   * The todo-tool id tracker for one session, created on first use. Scoping it
+   * per session keeps one session's `todowrite` ids from being honored for
+   * another on this shared backend process (see the field's declaration).
+   */
+  private todoToolCallIdsFor(sessionId: SessionId): Set<string> {
+    let ids = this.todoToolCallIdsBySession.get(sessionId);
+    if (!ids) {
+      ids = new Set<string>();
+      this.todoToolCallIdsBySession.set(sessionId, ids);
+    }
+    return ids;
   }
 
   private computeState(sessionId: AcpSessionId): BackendState {
@@ -555,7 +618,8 @@ export class AcpBackendProcess implements BackendProcess {
       return;
     }
 
-    handler(acpNotificationToEvent(update));
+    for (const event of acpNotificationToEvents(update, this.todoToolCallIdsFor(sessionId)))
+      handler(event);
   }
 
   private async handlePermission(

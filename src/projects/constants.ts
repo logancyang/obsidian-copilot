@@ -30,5 +30,24 @@ export const COPILOT_PROJECT_WEB_URLS = "copilot-project-web-urls";
 export const COPILOT_PROJECT_YOUTUBE_URLS = "copilot-project-youtube-urls";
 
 // File structure conventions
+//
+// `project.md` is the single source of truth for a project: frontmatter config plus the
+// markdown instruction body. It is the only file the scanner/register recognize, and it is
+// never renamed. `AGENTS.md` is a one-way, plugin-generated mirror of the composed project
+// instructions — the built-in project policy layered ahead of the `project.md` body (see
+// {@link ensureAgentsMirror}) — that codex/opencode auto-discover from the session cwd. It is
+// derived output, never a config source, and is excluded from recognition here.
 export const PROJECT_CONFIG_FILE_NAME = "project.md";
+
+/** Bare file name of the generated, one-way instruction mirror read by codex/opencode from cwd. */
+export const AGENTS_MIRROR_FILE = "AGENTS.md";
+
+/**
+ * Folder, relative to a project's directory (the session cwd), where the agent is steered to
+ * write generated/intermediate files. A name, not a path: the built-in project system prompt
+ * (`projectSystemPrompt.ts`) and any future Outputs UI both reference this single constant
+ * instead of re-hardcoding the string.
+ */
+export const PROJECT_OUTPUTS_DIRNAME = "outputs";
+
 export const PROJECTS_UNSUPPORTED_FOLDER_NAME = "unsupported";

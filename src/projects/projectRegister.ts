@@ -29,9 +29,12 @@ import { App, Notice, TAbstractFile, Vault } from "obsidian";
  * Aligned with system-prompts Register pattern.
  *
  * Responsibilities:
- * - Auto-sync project.md create/modify/delete/rename to in-memory cache
+ * - Auto-sync project config (project.md) create/modify/delete/rename to cache
  * - Listen for projectsFolder setting changes with latest-wins reload
  * - Avoid event loops from pending file writes
+ *
+ * The generated AGENTS.md mirror is not a recognized config file, so none of these
+ * handlers react to it (no watcher regeneration loop).
  */
 export class ProjectRegister {
   private app: App;

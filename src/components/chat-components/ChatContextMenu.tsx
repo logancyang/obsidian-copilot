@@ -44,6 +44,16 @@ interface ChatContextMenuProps {
   ) => void;
   lexicalEditorRef?: React.RefObject<{ focus: () => void }>;
   hideAddContextButton?: boolean;
+  /**
+   * Agent Mode passes its project-context status icon here; it renders at the
+   * right of the badge row. Legacy Chat leaves it undefined.
+   */
+  statusIndicator?: React.ReactNode;
+  /**
+   * True in Agent Mode. Suppresses the legacy CAG project-status icon (Agent Mode
+   * owns its own via {@link statusIndicator}); keeps the two from ever co-existing.
+   */
+  isAgentMode?: boolean;
 }
 
 export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
@@ -62,6 +72,8 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
   onTypeaheadSelect,
   lexicalEditorRef,
   hideAddContextButton = false,
+  statusIndicator,
+  isAgentMode = false,
 }) => {
   const app = useApp();
   const [currentChain] = useChainType();
@@ -216,7 +228,7 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
         ))}
       </div>
 
-      {currentChain === ChainType.PROJECT_CHAIN && (
+      {!isAgentMode && currentChain === ChainType.PROJECT_CHAIN && (
         <>
           <Separator orientation="vertical" />
           <div className="">
@@ -229,6 +241,13 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
               {getContextStatusIcon()}
             </Button>
           </div>
+        </>
+      )}
+
+      {statusIndicator && (
+        <>
+          <Separator orientation="vertical" />
+          {statusIndicator}
         </>
       )}
 

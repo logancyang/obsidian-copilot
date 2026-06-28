@@ -53,7 +53,14 @@ export const AgentModeChat: React.FC<Props> = ({
   React.useEffect(() => {
     if (!manager) return;
     if (!preloadReady) return;
-    if (manager.getSessions().length > 0) return;
+    // Gate on the *current scope's* sessions, not the whole pool: closing the
+    // last session in a scope (project or global) nulls the active session but
+    // keeps `activeProjectId` put, so we must re-spawn that scope's landing even
+    // when another scope still holds sessions. A whole-pool guard would leave the
+    // pane on the no-session fallback instead of the scope's landing.
+    // `getOrCreateActiveSession` is scope-aware and the manager de-dupes per
+    // scope, so this can't double-spawn.
+    if (manager.getSessionsForScope(manager.getActiveProjectId()).length > 0) return;
     if (manager.getIsStarting()) return;
     if (manager.getLastError()) return;
     if (installState.kind === "absent") return;

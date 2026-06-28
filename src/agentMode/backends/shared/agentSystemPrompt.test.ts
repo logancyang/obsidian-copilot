@@ -146,6 +146,54 @@ describe("buildAgentSystemPrompt", () => {
     const prompt = buildAgentSystemPrompt();
     expect(prompt).not.toContain(COPILOT_MIYO_SEARCH_STEERING);
   });
+
+  describe("project instructions (global parity gate)", () => {
+    it("is byte-identical to the no-arg form when projectInstructions is absent/empty/blank", () => {
+      const baseline = buildAgentSystemPrompt();
+      // The global (no-project) parity guarantee: every "no instructions"
+      // spelling must produce the exact same payload as today's no-arg call.
+      expect(buildAgentSystemPrompt({})).toBe(baseline);
+      expect(buildAgentSystemPrompt({ projectInstructions: undefined })).toBe(baseline);
+      expect(buildAgentSystemPrompt({ projectInstructions: "" })).toBe(baseline);
+      expect(buildAgentSystemPrompt({ projectInstructions: "   \n\t " })).toBe(baseline);
+    });
+
+    it("wraps the trimmed project instructions in <project_instructions> as the final section", () => {
+      const baseline = buildAgentSystemPrompt();
+      const prompt = buildAgentSystemPrompt({
+        projectInstructions: "  Only cite notes tagged #verified.  ",
+      });
+      // Existing payload is untouched and stays the prefix; the project body is
+      // appended after a blank-line delimiter, wrapped like the user block.
+      expect(prompt).toBe(
+        `${baseline}\n\n<project_instructions>\nOnly cite notes tagged #verified.\n</project_instructions>`
+      );
+    });
+
+    it("appends project instructions even when the builtin prompt is disabled", () => {
+      setDisableBuiltinSystemPrompt(true);
+      const baseline = buildAgentSystemPrompt();
+      const prompt = buildAgentSystemPrompt({ projectInstructions: "project body" });
+      expect(prompt).toBe(
+        `${baseline}\n\n<project_instructions>\nproject body\n</project_instructions>`
+      );
+      expect(prompt.endsWith("</project_instructions>")).toBe(true);
+    });
+
+    it("places project instructions after the user custom prompt", () => {
+      updateCachedSystemPrompts([makePrompt("Haiku", "respond in haiku")]);
+      setSelectedPromptTitle("Haiku");
+      const prompt = buildAgentSystemPrompt({ projectInstructions: "PROJECT BODY" });
+      expect(prompt.indexOf("</user_custom_instructions>")).toBeLessThan(
+        prompt.indexOf("<project_instructions>")
+      );
+    });
+
+    it("never emits a <project_context> block in the system prompt (it rides the first user prompt now)", () => {
+      const prompt = buildAgentSystemPrompt({ projectInstructions: "PROJECT BODY" });
+      expect(prompt).not.toContain("<project_context>");
+    });
+  });
 });
 
 describe("COPILOT_PROMPT_BASE", () => {

@@ -1067,6 +1067,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
     // disclosure lives in the Report-issue modal, shown only when the user
     // chooses to share the log.
     debugFullFrames: true,
+    welcomeDismissed: false,
     skills: {
       folder: DEFAULT_SKILLS_FOLDER,
     },

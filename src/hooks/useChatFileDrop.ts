@@ -109,6 +109,16 @@ export function useChatFileDrop(props: UseChatFileDropProps): UseChatFileDropRet
      * Handle dragover event to show visual feedback
      */
     const handleDragOver = (e: DragEvent) => {
+      // An inner element can own its own drop semantics (e.g. the project
+      // context section persists an inclusion instead of attaching to the
+      // draft). Yield there: clear our overlay and let the zone's handlers
+      // run. Registered in the CAPTURE phase below, since such zones
+      // stopPropagation() in the bubble phase and we'd never see the event.
+      const target = e.target instanceof HTMLElement ? e.target : null;
+      if (target?.closest("[data-copilot-drop-zone]")) {
+        setIsDragActive(false);
+        return;
+      }
       e.preventDefault();
       if (e.dataTransfer) {
         e.dataTransfer.dropEffect = "copy";
@@ -150,6 +160,11 @@ export function useChatFileDrop(props: UseChatFileDropProps): UseChatFileDropRet
      */
     const handleDrop = async (e: DragEvent) => {
       if (!e.dataTransfer) return;
+      // Symmetric with the dragover yield: a drop inside a marked inner zone
+      // belongs to that zone — never also attach it to the draft, even if the
+      // zone's own handler forgot to stopPropagation().
+      const target = e.target instanceof HTMLElement ? e.target : null;
+      if (target?.closest("[data-copilot-drop-zone]")) return;
       e.preventDefault();
 
       // Clear drag state
@@ -254,16 +269,30 @@ export function useChatFileDrop(props: UseChatFileDropProps): UseChatFileDropRet
       void handleDrop(e);
     };
 
-    // Attach event listeners
-    container.addEventListener("dragover", handleDragOver);
+    // Always clear our overlay on ANY drop, even one that lands in an inner
+    // drop zone. Such a zone stops propagation in the BUBBLE phase, so the
+    // bubble-phase handleDrop above never runs to clear `isDragActive` — leaving
+    // a stuck overlay after a drop that grazed the outer area first. This
+    // capture-phase listener fires before the zone's stopPropagation, so the
+    // overlay always clears. State cleanup only — it never preventDefaults or
+    // handles the drop, so the bubble handler still owns draft injection.
+    const handleDropCaptureCleanup = () => setIsDragActive(false);
+
+    // Attach event listeners. dragover uses the capture phase so the
+    // inner-zone yield above runs even when a nested drop zone stops
+    // propagation in the bubble phase; drop stays on bubble so a zone's
+    // stopPropagation() keeps its drop from also landing in the draft.
+    container.addEventListener("dragover", handleDragOver, true);
     container.addEventListener("dragleave", handleDragLeave);
     container.addEventListener("drop", handleDropEvent);
+    container.addEventListener("drop", handleDropCaptureCleanup, true);
 
     // Cleanup
     return () => {
-      container.removeEventListener("dragover", handleDragOver);
+      container.removeEventListener("dragover", handleDragOver, true);
       container.removeEventListener("dragleave", handleDragLeave);
       container.removeEventListener("drop", handleDropEvent);
+      container.removeEventListener("drop", handleDropCaptureCleanup, true);
     };
   }, [app, contextNotes, selectedImages, onAddImage, setContextNotes, containerRef]);
 

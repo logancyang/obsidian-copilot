@@ -53,6 +53,7 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
         mcpServers: [],
         activeBackend: "codex",
         debugFullFrames: false,
+        welcomeDismissed: false,
         skills: { folder: "copilot/skills" },
         backends: {
           codex: { binaryPath: "/usr/local/bin/codex-acp" },
@@ -114,6 +115,7 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
         mcpServers: [],
         activeBackend: "codex",
         debugFullFrames: false,
+        welcomeDismissed: false,
         skills: { folder: "team-skills" },
         backends: { codex: { binaryPath: "/usr/local/bin/codex-acp" } },
       },
@@ -179,6 +181,15 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
     );
   });
 
+  it("does not add a project.md fallback to the codex spawn args", async () => {
+    // Session-start ensureAgentsMirror supersedes the spawn-level fallback for project scopes;
+    // omitting it also prevents a GLOBAL session from treating a vault-root project.md note as
+    // codex instructions (the spawn descriptor has no scope to gate on).
+    const backend = new CodexBackend();
+    const desc = await backend.buildSpawnDescriptor({ vaultBasePath: "/vault" });
+    expect(desc.args).not.toContainEqual(expect.stringContaining("project_doc_fallback_filenames"));
+  });
+
   it("throws when the codex binary path is unset", async () => {
     setSettings({
       agentMode: {
@@ -186,6 +197,7 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
         mcpServers: [],
         activeBackend: "codex",
         debugFullFrames: false,
+        welcomeDismissed: false,
         skills: { folder: "copilot/skills" },
         backends: {},
       },

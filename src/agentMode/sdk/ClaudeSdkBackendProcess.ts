@@ -46,6 +46,7 @@ import type {
   OpenSessionOutput,
   PermissionDecision,
   PermissionPrompt,
+  ProjectProfile,
   PromptInput,
   PromptOutput,
   ResumeSessionInput,
@@ -55,7 +56,9 @@ import type {
   SessionUpdateHandler,
   StopReason,
 } from "@/agentMode/session/types";
+import type { ProjectScopeId } from "@/agentMode/session/scope";
 import { AuthRequiredError, MethodUnsupportedError } from "@/agentMode/session/errors";
+import { createClaudeTaskPlanState, type ClaudeTaskPlanState } from "./claudeTodoPlan";
 import { createTranslatorState, mapStopReason, translateSdkMessage } from "./sdkMessageTranslator";
 import { PermissionBridge, type AskUserQuestionPrompter } from "./permissionBridge";
 import {
@@ -76,6 +79,14 @@ import { guardSdkStreamStall } from "./sdkStreamStallGuard";
 interface SessionState {
   cwd: string | null;
   /**
+   * Scope this session belongs to, captured from the Open/Resume input so the
+   * SDK can resolve the owning project's instructions. One claude process can
+   * host many sessions across different projects; the projectId lives per
+   * session (not process-global) so each resolves its own instructions.
+   * `undefined` / `GLOBAL_SCOPE` means the implicit global workspace.
+   */
+  projectId?: ProjectScopeId;
+  /**
    * Drives whether the next `query()` passes `resume: <sessionId>` (continue
    * the persisted conversation) or `sessionId: <ourId>` (mint a new SDK-side
    * session with our pre-allocated id).
@@ -91,6 +102,18 @@ interface SessionState {
    */
   effort?: EffortLevel;
   mcpServers: Record<string, McpServerConfig>;
+  /**
+   * Absolute extra workspace roots captured from the Open/Resume input,
+   * forwarded into `options.additionalDirectories` on every `query()` for this
+   * session. The SDK option is stable (`sdk.d.ts`), so unlike the ACP backends
+   * this needs no capability gate. Absent / empty means cwd is the only root.
+   */
+  additionalDirectories?: string[];
+  /**
+   * Session-lived todo/Task accumulator shared across this session's queries
+   * (translator state is per-query; Task ids must survive turns).
+   */
+  claudeTaskPlan: ClaudeTaskPlanState;
   active?: Query;
   /**
    * Snapshot of the composed Copilot system prompt (base framing + pill-syntax
@@ -131,8 +154,14 @@ export interface ClaudeSdkBackendProcessOptions {
    * + user custom prompt). Read once per `newSession()` so a settings change
    * applies to the next session rather than mid-turn. Empty string / undefined
    * disables the append.
+   *
+   * `projectInstructions` is the owning project's resolved instruction body
+   * (from {@link setProjectProfileProvider}); the descriptor composes it into
+   * the append. An omitted object, or one whose `projectInstructions` is
+   * `undefined` (no project / GLOBAL_SCOPE / unset provider), yields the
+   * byte-identical global prompt.
    */
-  getSystemPromptAppend?: () => string | undefined;
+  getSystemPromptAppend?: (opts?: { projectInstructions?: string }) => string | undefined;
   /**
    * User-defined env vars merged onto `process.env` for the spawned `claude`
    * CLI. Read per `prompt()` so settings edits apply on the next turn.
@@ -176,6 +205,15 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     null;
   private askUserQuestionPrompter: AskUserQuestionPrompter | null = null;
   private isReadOnlySession: ((sessionId: SessionId) => boolean) | null = null;
+  /**
+   * Resolves a session's owning-project instructions by scope id. Injected by
+   * the manager via {@link setProjectProfileProvider} (mirrors the prompter
+   * setters). Null until wired, and returns `undefined` for `GLOBAL_SCOPE` /
+   * unknown projects — both paths fall back to the global prompt.
+   */
+  private projectProfileProvider:
+    | ((projectId: ProjectScopeId) => ProjectProfile | undefined)
+    | null = null;
   private exitListeners = new Set<() => void>();
   private shuttingDown = false;
   private readonly bridge: PermissionBridge;
@@ -225,6 +263,24 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     this.askUserQuestionPrompter = fn;
   }
 
+  setProjectProfileProvider(fn: (projectId: ProjectScopeId) => ProjectProfile | undefined): void {
+    this.projectProfileProvider = fn;
+  }
+
+  /**
+   * Compose this session's system-prompt append, resolving the owning
+   * project's instructions (if any). A defined non-global `projectId` consults
+   * the injected provider; `undefined` projectId, an unset provider, or a
+   * provider that returns `undefined` (GLOBAL_SCOPE / unknown project) all
+   * yield no project instructions → the append is byte-identical to the global
+   * (no-project) prompt. Captured at `newSession`/`resumeSession` time so a
+   * settings change applies to the next session, not mid-conversation.
+   */
+  private resolveSystemPromptAppend(projectId: ProjectScopeId | undefined): string {
+    const profile = projectId !== undefined ? this.projectProfileProvider?.(projectId) : undefined;
+    return this.opts.getSystemPromptAppend?.({ projectInstructions: profile?.systemPrompt }) ?? "";
+  }
+
   registerSessionHandler(sessionId: SessionId, handler: SessionUpdateHandler): () => void {
     this.sessionHandlers.set(sessionId, handler);
     const buffered = this.pendingUpdates.get(sessionId);
@@ -246,7 +302,11 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
   }
 
   async newSession(params: OpenSessionInput): Promise<OpenSessionOutput> {
-    logSdkOutbound("newSession", { cwd: params.cwd, mcpServers: params.mcpServers });
+    logSdkOutbound("newSession", {
+      cwd: params.cwd,
+      mcpServers: params.mcpServers,
+      projectId: params.projectId ?? null,
+    });
     const sessionId = uuidv4();
     const cwd = params.cwd ?? null;
     const mcp: Record<string, McpServerConfig> = {};
@@ -263,10 +323,13 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
 
     this.sessions.set(sessionId, {
       cwd,
+      projectId: params.projectId,
       firstPromptStarted: false,
       mcpServers: mcp,
       model: seedModelId,
-      systemPromptAppend: this.opts.getSystemPromptAppend?.() ?? "",
+      additionalDirectories: params.additionalDirectories,
+      systemPromptAppend: this.resolveSystemPromptAppend(params.projectId),
+      claudeTaskPlan: createClaudeTaskPlanState(),
     });
 
     const state = this.computeState(sessionId);
@@ -337,6 +400,12 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     if (session.model) options.model = session.model;
     if (session.permissionMode) options.permissionMode = session.permissionMode;
     if (session.effort) options.effort = session.effort;
+    // Widen the agent's searchable roots beyond cwd. The SDK option is stable,
+    // so this is forwarded unconditionally (no capability gate) whenever the
+    // session captured extra roots at open/resume.
+    if (session.additionalDirectories?.length) {
+      options.additionalDirectories = session.additionalDirectories;
+    }
     // Keep the toggle authoritative. Leaving `thinking` unset when off lets the
     // model's default take over — Sonnet 4.6 / Opus 4.6 default to adaptive
     // "summarized", so reasoning keeps streaming — so disable it explicitly.
@@ -390,7 +459,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       onStall: (idleMs) => logSdkError("←", "stream:stalled", { idleMs }, params.sessionId),
     });
 
-    const translatorState = createTranslatorState();
+    const translatorState = createTranslatorState(session.claudeTaskPlan);
     let stopReason: StopReason = "end_turn";
     let resultErrorMessage: string | null = null;
     try {
@@ -635,7 +704,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
   async resumeSession(params: ResumeSessionInput): Promise<ResumeSessionOutput> {
     logSdkOutbound(
       "resumeSession",
-      { cwd: params.cwd, mcpServers: params.mcpServers },
+      { cwd: params.cwd, mcpServers: params.mcpServers, projectId: params.projectId ?? null },
       params.sessionId
     );
     const cwd = params.cwd ?? null;
@@ -650,10 +719,13 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
 
     this.sessions.set(params.sessionId, {
       cwd,
+      projectId: params.projectId,
       firstPromptStarted: true,
       mcpServers: mcp,
       model: seedModelId,
-      systemPromptAppend: this.opts.getSystemPromptAppend?.() ?? "",
+      additionalDirectories: params.additionalDirectories,
+      systemPromptAppend: this.resolveSystemPromptAppend(params.projectId),
+      claudeTaskPlan: createClaudeTaskPlanState(),
     });
 
     const state = this.computeState(params.sessionId);
@@ -673,6 +745,15 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
   }
 
   supportsMcpTransport(_transport: "http" | "sse"): boolean {
+    return true;
+  }
+
+  /**
+   * The SDK's `options.additionalDirectories` is a stable option (`sdk.d.ts`),
+   * so the Claude backend always honors widened roots — no capability probe is
+   * needed (unlike the ACP backends, which gate on an experimental wire field).
+   */
+  supportsAdditionalDirectories(): boolean {
     return true;
   }
 

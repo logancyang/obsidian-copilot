@@ -6,6 +6,7 @@ import { SearchBar } from "@/components/ui/SearchBar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
+import { ChatIconWithAttention } from "@/components/chat-components/ChatIconWithAttention";
 import { logError } from "@/logger";
 import { useSettingsValue } from "@/settings/model";
 import { sortByStrategy } from "@/utils/recentUsageManager";
@@ -22,6 +23,15 @@ export interface ChatHistoryItem {
   /** Backend that produced this chat (Agent Mode only). Used to resolve a
    * brand icon in the popover via the caller-supplied `getIcon` resolver. */
   backendId?: string;
+  /** Raw `projectId` from frontmatter, or `undefined` when absent. The
+   * GLOBAL_SCOPE default is applied in the Agent Mode session layer, not here,
+   * to keep this generic helper free of cross-layer scope imports. */
+  projectId?: string;
+  /** A live in-memory session bound to this chat is flagging for attention
+   * (finished / errored / paused while backgrounded). In-memory only and valid
+   * for the app's lifetime — purely-on-disk chats never carry it. Populated by
+   * the Agent Mode session layer; absent on plain conversation history. */
+  needsAttention?: boolean;
 }
 
 type ChatHistoryIconResolver = (
@@ -402,7 +412,11 @@ function ChatHistoryItem({
   if (isEditing) {
     return (
       <div className="tw-flex tw-items-center tw-gap-2 tw-rounded-md tw-p-2">
-        <RowIcon className="tw-size-3 tw-shrink-0 tw-text-muted" />
+        <ChatIconWithAttention
+          icon={RowIcon}
+          needsAttention={chat.needsAttention}
+          iconClassName="tw-size-3 tw-text-muted"
+        />
         <Input
           value={editingTitle}
           onChange={(e) => onEditingTitleChange(e.target.value)}
@@ -433,7 +447,11 @@ function ChatHistoryItem({
       )}
       onClick={() => onLoadChat(chat.id)}
     >
-      <RowIcon className="tw-size-3 tw-shrink-0 tw-text-muted" />
+      <ChatIconWithAttention
+        icon={RowIcon}
+        needsAttention={chat.needsAttention}
+        iconClassName="tw-size-3 tw-text-muted"
+      />
 
       <div className="tw-min-w-0 tw-flex-1">
         <span className="tw-block tw-truncate tw-text-sm tw-font-medium tw-text-normal">

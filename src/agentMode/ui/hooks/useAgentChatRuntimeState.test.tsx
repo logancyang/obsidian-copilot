@@ -1,6 +1,7 @@
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type {
   AgentChatMessage,
+  AgentTodoListEntry,
   AskUserQuestionPrompt,
   CurrentPlan,
   PermissionPrompt,
@@ -13,6 +14,7 @@ interface FakeBackendState {
   isStarting: boolean;
   hasPendingPlanPermission: boolean;
   currentPlan: CurrentPlan | null;
+  currentTodoList?: AgentTodoListEntry[] | null;
   pendingToolPermissions: PermissionPrompt[];
   pendingAskUserQuestions: AskUserQuestionPrompt[];
 }
@@ -28,6 +30,7 @@ function makeFakeBackend(initial: Partial<FakeBackendState> = {}) {
     isStarting: initial.isStarting ?? false,
     hasPendingPlanPermission: initial.hasPendingPlanPermission ?? false,
     currentPlan: initial.currentPlan ?? null,
+    currentTodoList: initial.currentTodoList ?? null,
     pendingToolPermissions: initial.pendingToolPermissions ?? [],
     pendingAskUserQuestions: initial.pendingAskUserQuestions ?? [],
   };
@@ -42,6 +45,7 @@ function makeFakeBackend(initial: Partial<FakeBackendState> = {}) {
     isStarting: () => state.isStarting,
     hasPendingPlanPermission: () => state.hasPendingPlanPermission,
     getCurrentPlan: () => state.currentPlan,
+    getCurrentTodoList: () => state.currentTodoList ?? null,
     getPendingToolPermissions: () => state.pendingToolPermissions,
     getPendingAskUserQuestions: () => state.pendingAskUserQuestions,
   } as unknown as AgentChatBackend;

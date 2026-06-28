@@ -585,3 +585,202 @@ describe("mapStopReason", () => {
     expect(mapStopReason({ type: "result", subtype: "error_max_turns" } as any)).toBe("cancelled");
   });
 });
+
+describe("session todo-list normalization (TodoWrite / Task tools → plan)", () => {
+  function userMessage(content: unknown[], parent: string | null = null): SDKMessage {
+    return {
+      type: "user",
+      message: { content },
+      parent_tool_use_id: parent,
+      uuid: "uuid-u" as `${string}-${string}-${string}-${string}-${string}`,
+      session_id: SESSION_ID,
+    } as never;
+  }
+
+  it("emits a plan event alongside the tool events for a TodoWrite stream", () => {
+    const state = createTranslatorState();
+    translateSdkMessage(
+      streamEvent({
+        type: "content_block_start",
+        index: 0,
+        content_block: { type: "tool_use", id: "todo-1", name: "TodoWrite", input: {} },
+      }),
+      SESSION_ID,
+      state
+    );
+    const out = translateSdkMessage(
+      streamEvent({
+        type: "content_block_delta",
+        index: 0,
+        delta: {
+          type: "input_json_delta",
+          partial_json:
+            '{"todos":[{"content":"step A","status":"in_progress","activeForm":"Doing A"}]}',
+        },
+      }),
+      SESSION_ID,
+      state
+    );
+    expect(out).toHaveLength(2);
+    expect(out[1].update).toEqual({
+      sessionUpdate: "plan",
+      entries: [{ content: "step A", status: "in_progress", priority: "medium" }],
+    });
+    // The block-stop re-observation of the same final input must not re-emit.
+    const stop = translateSdkMessage(
+      streamEvent({ type: "content_block_stop", index: 0 }),
+      SESSION_ID,
+      state
+    );
+    expect(stop.filter((e) => e.update.sessionUpdate === "plan")).toHaveLength(0);
+  });
+
+  it("accumulates Task tools across messages: create → result id → update", () => {
+    const state = createTranslatorState();
+    translateSdkMessage(
+      streamEvent({
+        type: "content_block_start",
+        index: 0,
+        content_block: {
+          type: "tool_use",
+          id: "task-create-1",
+          name: "TaskCreate",
+          input: { subject: "Brainstorm imagery" },
+        },
+      }),
+      SESSION_ID,
+      state
+    );
+    const bound = translateSdkMessage(
+      userMessage([
+        {
+          type: "tool_result",
+          tool_use_id: "task-create-1",
+          // The real claude CLI string shape — id is the `#N` ordinal.
+          content: "Task #1 created successfully: Brainstorm imagery",
+          is_error: false,
+        },
+      ]),
+      SESSION_ID,
+      state
+    );
+    const boundPlan = bound.find((e) => e.update.sessionUpdate === "plan");
+    expect(boundPlan?.update).toEqual({
+      sessionUpdate: "plan",
+      entries: [{ content: "Brainstorm imagery", status: "pending", priority: "medium" }],
+    });
+
+    const updated = translateSdkMessage(
+      streamEvent({
+        type: "content_block_start",
+        index: 1,
+        content_block: {
+          type: "tool_use",
+          id: "task-upd-1",
+          name: "TaskUpdate",
+          input: { taskId: "1", status: "in_progress" },
+        },
+      }),
+      SESSION_ID,
+      state
+    );
+    const updatedPlan = updated.find((e) => e.update.sessionUpdate === "plan");
+    expect(updatedPlan?.update).toEqual({
+      sessionUpdate: "plan",
+      entries: [{ content: "Brainstorm imagery", status: "in_progress", priority: "medium" }],
+    });
+  });
+
+  it("ignores subagent calls (parent_tool_use_id set) and MCP tools sharing the name", () => {
+    const state = createTranslatorState();
+    const subagent = translateSdkMessage(
+      {
+        type: "stream_event",
+        event: {
+          type: "content_block_start",
+          index: 0,
+          content_block: {
+            type: "tool_use",
+            id: "sub-1",
+            name: "TodoWrite",
+            input: { todos: [{ content: "sub task", status: "pending" }] },
+          },
+        },
+        parent_tool_use_id: "parent-1",
+        uuid: "uuid-s" as `${string}-${string}-${string}-${string}-${string}`,
+        session_id: SESSION_ID,
+      } as never,
+      SESSION_ID,
+      state
+    );
+    expect(subagent.filter((e) => e.update.sessionUpdate === "plan")).toHaveLength(0);
+
+    const mcp = translateSdkMessage(
+      streamEvent({
+        type: "content_block_start",
+        index: 1,
+        content_block: {
+          type: "tool_use",
+          id: "mcp-1",
+          name: "mcp__tracker__TodoWrite",
+          input: { todos: [{ content: "mcp task", status: "pending" }] },
+        },
+      }),
+      SESSION_ID,
+      state
+    );
+    expect(mcp.filter((e) => e.update.sessionUpdate === "plan")).toHaveLength(0);
+  });
+
+  it("shares the accumulator across translator generations via createTranslatorState(shared)", () => {
+    const turn1 = createTranslatorState();
+    translateSdkMessage(
+      streamEvent({
+        type: "content_block_start",
+        index: 0,
+        content_block: {
+          type: "tool_use",
+          id: "c1",
+          name: "TaskCreate",
+          input: { subject: "persist me" },
+        },
+      }),
+      SESSION_ID,
+      turn1
+    );
+    translateSdkMessage(
+      userMessage([
+        {
+          type: "tool_result",
+          tool_use_id: "c1",
+          content: "Task #7 created successfully: persist me",
+          is_error: false,
+        },
+      ]),
+      SESSION_ID,
+      turn1
+    );
+
+    // Turn 2: fresh translator, same session-lived accumulator.
+    const turn2 = createTranslatorState(turn1.claudeTasks);
+    const out = translateSdkMessage(
+      streamEvent({
+        type: "content_block_start",
+        index: 0,
+        content_block: {
+          type: "tool_use",
+          id: "u1",
+          name: "TaskUpdate",
+          input: { taskId: "7", status: "completed" },
+        },
+      }),
+      SESSION_ID,
+      turn2
+    );
+    const plan = out.find((e) => e.update.sessionUpdate === "plan");
+    expect(plan?.update).toEqual({
+      sessionUpdate: "plan",
+      entries: [{ content: "persist me", status: "completed", priority: "medium" }],
+    });
+  });
+});

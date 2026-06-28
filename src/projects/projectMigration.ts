@@ -2,6 +2,7 @@ import { ProjectConfig } from "@/aiParams";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { logError, logInfo, logWarn } from "@/logger";
 import { COPILOT_PROJECT_ID, PROJECTS_UNSUPPORTED_FOLDER_NAME } from "@/projects/constants";
+import { reconcileLegacyAgentsResidue } from "@/projects/legacyAgentsResidue";
 import { deriveProjectFolderName, sanitizeVaultPathSegment } from "@/projects/projectPaths";
 import {
   ensureProjectFrontmatter,
@@ -542,6 +543,8 @@ async function migrateProjectFolderNames(app: App): Promise<void> {
     const newFolderPath = `${projectsFolder}/${safeFolderName}`;
     const oldFolderPath = getProjectFolderPath(record.folderName);
     const oldFilePath = record.filePath;
+    // Reason: a folder rename preserves the config basename (`project.md`), so the new path
+    // is just the same config name under the renamed folder.
     const newFilePath = getProjectConfigFilePath(safeFolderName);
 
     // Reason: case-insensitive collision guard — skip if another project already
@@ -610,6 +613,10 @@ export async function ensureProjectsMigratedIfNeeded(app: App): Promise<void> {
   if (legacyProjects.length > 0) {
     await migrateProjectsFromSettingsToVault(app);
   }
+
+  // Reason: dev-only — restore `project.md` from any unreleased PR2b-1 `AGENTS.md`-only config
+  // before scanning/renaming, so those projects are recognized again. No-op for real users.
+  await reconcileLegacyAgentsResidue(app);
 
   // Reason: run naming migration after data.json migration to rename id-based folders
   // to name-based folders. This also handles pre-existing projects from before the

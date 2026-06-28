@@ -1,5 +1,5 @@
 import { ChatModelProviders } from "@/constants";
-import { logInfo } from "@/logger";
+import { logInfo, logWarn } from "@/logger";
 import { getSettings } from "@/settings/model";
 import type { CopilotSettings } from "@/settings/model";
 import { isSelfHostedProvider } from "@/modelManagement";
@@ -57,6 +57,14 @@ export const OPENCODE_CANONICAL_MODE_AGENT_IDS: Partial<Record<CopilotMode, stri
 export interface OpencodeModelDeps {
   providerRegistry: ProviderRegistry;
   backendConfigRegistry: BackendConfigRegistry;
+  /**
+   * Resolves the off-vault shared conversions cache root (absolute path) for
+   * this vault, or `undefined` when unavailable. Injected so this backend never
+   * reimplements vaultId/path derivation — that lives in
+   * `context/conversionsLocation.ts`. When omitted, the opencode
+   * `external_directory` allow rule is simply not injected (feature dormant).
+   */
+  getCacheRoot?: () => string | undefined;
 }
 
 /**
@@ -75,15 +83,47 @@ export class OpencodeBackend implements AcpBackend {
   }
 
   async buildSpawnDescriptor(ctx: { vaultBasePath: string }): Promise<AcpSpawnDescriptor> {
-    const binaryPath = getSettings().agentMode?.backends?.opencode?.binaryPath;
+    const settings = getSettings();
+    const binaryPath = settings.agentMode?.backends?.opencode?.binaryPath;
     if (!binaryPath) {
       throw new Error(
         "opencode binary not installed. Open Agent Mode settings and install it before starting a session."
       );
     }
 
-    const config = await buildOpencodeConfig(getSettings(), this.#deps);
-    const envOverrides = getSettings().agentMode?.backends?.opencode?.envOverrides ?? {};
+    // DESIGN NOTE: opencode only auto-discovers `AGENTS.md` from the session cwd and has no
+    // `project_doc_fallback_filenames` equivalent. The plugin guarantees the file exists by
+    // materializing the generated `AGENTS.md` mirror from the project's `project.md` at session
+    // start (see `ensureAgentsMirror`, called before cwd resolution in AgentSessionManager) —
+    // the same session-start ensure codex now relies on as its sole guarantee (codex's
+    // `project.md` fallback was removed; see the matching note in CodexBackend). Hence opencode
+    // needs no instruction-specific code in this spawn.
+    // The off-vault conversions cache lives outside opencode's `--cwd <vault>`
+    // boundary, so opencode prompts (`external_directory` ask) on every snapshot
+    // read unless we pre-allow it (see `buildOpencodeConfig`). cacheRoot is a
+    // static path with no first-launch window, so resolving it here at spawn is
+    // unconditional. The resolver is injected (from `conversionsLocation`) so
+    // this backend never derives the vault path itself.
+    // Normalize before use: the allow rule is a security boundary, so a blank /
+    // whitespace-only resolver result is treated as "unavailable" explicitly
+    // rather than leaning on downstream truthiness.
+    const cacheRoot = normalizeCacheRoot(this.#deps.getCacheRoot?.());
+    const config = await buildOpencodeConfig(settings, this.#deps, cacheRoot);
+    const envOverrides = settings.agentMode?.backends?.opencode?.envOverrides ?? {};
+    // Accepted degradation: a user `OPENCODE_CONFIG_CONTENT` override (spread
+    // last below) replaces the whole generated config, dropping the allow rule.
+    // opencode then prompts on every snapshot read; the sources still appear in
+    // the manifest. Warn so the lost approval-suppression is diagnosable.
+    if (
+      cacheRoot &&
+      Object.prototype.hasOwnProperty.call(envOverrides, "OPENCODE_CONFIG_CONTENT")
+    ) {
+      logWarn(
+        "[AgentMode] opencode envOverrides.OPENCODE_CONFIG_CONTENT replaces the generated config; " +
+          "the context-cache external_directory allow rule is dropped — opencode will prompt on every " +
+          "snapshot read. Remove that override to restore silent cache access."
+      );
+    }
     // Builtin Copilot Plus skill scripts read the license from the env.
     const plusEnv = await buildCopilotPlusEnv();
 
@@ -100,6 +140,18 @@ export class OpencodeBackend implements AcpBackend {
       },
     };
   }
+}
+
+/**
+ * Trim the injected cache root to a non-empty path, or `undefined`. The resolver
+ * contract (`conversionsLocation.cacheRoot`) is to return an ABSOLUTE
+ * context-cache root; absoluteness is the resolver's guarantee, but we refuse to
+ * emit an `external_directory` grant for a blank value so the security boundary
+ * never depends on bare truthiness of an empty string.
+ */
+function normalizeCacheRoot(raw: string | undefined): string | undefined {
+  const trimmed = raw?.trim();
+  return trimmed ? trimmed : undefined;
 }
 
 /** Mutable opencode provider config entry built into `OPENCODE_CONFIG_CONTENT`. */
@@ -122,7 +174,8 @@ type ProviderConfig = {
  */
 export async function buildOpencodeConfig(
   s: CopilotSettings,
-  deps: OpencodeModelDeps
+  deps: OpencodeModelDeps,
+  cacheRoot?: string
 ): Promise<Record<string, unknown>> {
   const { providerRegistry, backendConfigRegistry } = deps;
 
@@ -249,13 +302,31 @@ export async function buildOpencodeConfig(
   // `restartOnSystemPromptChange`.
   const skillManagerReady = SkillManager.hasInstance();
   const prompt = buildAgentSystemPrompt();
+
+  // Pre-allow reads of the off-vault shared conversions cache so opencode
+  // doesn't fire an `external_directory` ask on every snapshot the manifest
+  // points at. The glob is matched against the requested absolute path;
+  // `/**` covers the nested `remotes/`, `files/`, and `markers/` subtrees.
+  // Scoped to cacheRoot only — never a broader grant. Injected on BOTH agents
+  // we ever spawn as (`copilot-build` = default, `build` = auto). For the
+  // native `build` agent this only adds the external_directory key — bash/edit
+  // stay at opencode's permissive defaults, so it does not start asking.
+  //
+  // NOTE (version-sensitive, pinned opencode 1.15.13): the `external_directory`
+  // permission key and the `{ "<glob>": "allow" }` shape are confirmed against
+  // 1.15.13; re-verify when the pinned opencode version changes.
+  const externalDirectoryPermission = cacheRoot
+    ? { external_directory: { [`${cacheRoot}/**`]: "allow" } }
+    : undefined;
+
   config.agent = {
     [OPENCODE_BUILTIN_BUILD_AGENT_ID]: {
+      ...(externalDirectoryPermission ? { permission: externalDirectoryPermission } : {}),
       prompt,
     },
     [OPENCODE_COPILOT_BUILD_AGENT_ID]: {
       mode: "primary",
-      permission: { bash: "ask", edit: "ask" },
+      permission: { bash: "ask", edit: "ask", ...externalDirectoryPermission },
       prompt,
     },
   };

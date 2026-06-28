@@ -53,9 +53,15 @@ module.exports = {
       this.write = jest.fn();
       this.exists = jest.fn().mockResolvedValue(true);
       this.mkdir = jest.fn().mockResolvedValue(undefined);
+      this.list = jest.fn().mockResolvedValue({ files: [], folders: [] });
+      this.remove = jest.fn().mockResolvedValue(undefined);
     }
     getBasePath() {
       return this._basePath;
+    }
+    getFullPath(p) {
+      const rel = String(p).replace(/\\/g, "/").replace(/^\/+/, "");
+      return rel ? `${this._basePath}/${rel}` : this._basePath;
     }
   },
   normalizePath: (p) => String(p).replace(/\\\\/g, "/").replace(/\/+/g, "/"),
@@ -68,6 +74,16 @@ module.exports = {
       this.close = jest.fn();
       this.onOpen = jest.fn();
       this.onClose = jest.fn();
+    }
+  },
+  // Base class for FolderSearchModal & friends; subclasses only need it to be
+  // constructable so suites that pull them into the module graph can load.
+  FuzzySuggestModal: class FuzzySuggestModal {
+    constructor(app) {
+      this.app = app;
+      this.open = jest.fn();
+      this.close = jest.fn();
+      this.setPlaceholder = jest.fn();
     }
   },
   App: jest.fn().mockImplementation(() => ({

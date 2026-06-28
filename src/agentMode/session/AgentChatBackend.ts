@@ -2,6 +2,7 @@ import type { MessageContext } from "@/types/message";
 import type {
   AgentChatMessage,
   AgentQuestionAnswers,
+  AgentTodoListEntry,
   AskUserQuestionPrompt,
   BackendId,
   BackendState,
@@ -85,6 +86,14 @@ export interface AgentChatBackend {
    * surface. The floating plan card and the editor preview tab read this.
    */
   getCurrentPlan(): CurrentPlan | null;
+
+  /**
+   * The session's live execution todo list (normalized from every backend's
+   * todo channel), or `null` when there is none. Live-only: a resumed session
+   * starts at `null` until the agent's next todo update. The project-info
+   * Progress section reads this.
+   */
+  getCurrentTodoList(): AgentTodoListEntry[] | null;
 
   /**
    * True when an ExitPlanMode permission is currently pending. The chat input

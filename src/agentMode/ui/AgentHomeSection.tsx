@@ -24,8 +24,14 @@ import React, {
  * primitives.
  */
 
-/** Rows shown inline before the rest collapse behind the "View all" popover. */
-export const INLINE_LIMIT = 3;
+/**
+ * Rows shown inline before the rest collapse behind the "View all" popover.
+ * Shared by the Projects and Recent Chats shelf tabs so both preview the same
+ * number of rows — full tabs then land within ~10px of each other, which is
+ * what keeps switching tabs from jumping (the shelf floor only covers the
+ * short/empty end; see AgentHomeShelf.SHELF_BODY_FLOOR_CLASS).
+ */
+export const INLINE_LIMIT = 5;
 
 /**
  * Rows rendered per page in the View-all popover. The list grows by this much
@@ -36,7 +42,8 @@ const VIEW_ALL_PAGE_SIZE = 50;
 
 interface AgentHomeCreateRowProps {
   label: string;
-  onClick: () => void;
+  /** Receives the row's button element so a caller can anchor a popover to it. */
+  onClick: (anchor: HTMLElement) => void;
 }
 
 /**
@@ -53,7 +60,7 @@ export const AgentHomeCreateRow = memo(function AgentHomeCreateRow({
     <Button
       type="button"
       variant="ghost2"
-      onClick={onClick}
+      onClick={(e) => onClick(e.currentTarget)}
       aria-label={label}
       className="tw-h-auto tw-min-h-9 tw-w-full tw-justify-start tw-gap-2 tw-rounded-md tw-px-2 tw-py-1.5 hover:tw-bg-modifier-hover"
     >
@@ -87,6 +94,19 @@ interface AgentHomeListRowProps {
    * tile (tinted square + colored folder). Takes precedence over `icon`.
    */
   leading?: React.ReactNode;
+  /**
+   * Optional control that **replaces** the relative time on hover / keyboard
+   * focus — e.g. a project row's inline action cluster — mirroring the
+   * chat-history rows (the time is the resting right-edge element; the control
+   * takes its slot when the row is active). The row carries `tw-group`, so the
+   * swap is pure CSS: the time hides and this slot shows on `group-hover` /
+   * `group-focus-within`, plus `group-has-[[data-state=open]]` so any portaled
+   * popover a slot control opens stays visible after the pointer leaves.
+   * Pointer/keyboard events inside the
+   * slot are kept from bubbling to the row's `onClick`, so opening the menu never
+   * also fires the row action.
+   */
+  trailing?: React.ReactNode;
 }
 
 /**
@@ -103,13 +123,14 @@ export const AgentHomeListRow = memo(function AgentHomeListRow({
   indent = false,
   icon: Icon,
   leading,
+  trailing,
 }: AgentHomeListRowProps): React.ReactElement {
   return (
     <div
       role="button"
       tabIndex={0}
       className={cn(
-        "tw-flex tw-min-h-9 tw-w-full tw-cursor-pointer tw-items-center tw-gap-2 tw-rounded-md tw-px-2 tw-py-1.5",
+        "tw-group tw-flex tw-min-h-9 tw-w-full tw-cursor-pointer tw-items-center tw-gap-2 tw-rounded-md tw-px-2 tw-py-1.5",
         "tw-text-left tw-transition-colors hover:tw-bg-modifier-hover"
       )}
       onClick={onClick}
@@ -131,11 +152,31 @@ export const AgentHomeListRow = memo(function AgentHomeListRow({
         {label}
       </span>
       <span
-        className="tw-shrink-0 tw-whitespace-nowrap tw-text-xs tw-text-muted"
+        className={cn(
+          "tw-shrink-0 tw-whitespace-nowrap tw-text-xs tw-text-muted",
+          // Reason: only when a `trailing` control exists does it replace the
+          // time on hover/focus — a row without one keeps the time always shown.
+          trailing &&
+            "group-focus-within:tw-hidden group-hover:tw-hidden group-has-[[data-state=open]]:tw-hidden"
+        )}
         title={new Date(timeMs).toLocaleString()}
       >
         {formatCompactRelativeTime(timeMs)}
       </span>
+      {trailing && (
+        // Reason: the slot owns an independent control (e.g. an overflow menu),
+        // so stop pointer/keyboard events from bubbling to the row's onClick —
+        // otherwise opening the menu would also trigger the row action. Hidden at
+        // rest; takes the time's slot on hover/focus (or while its dropdown is
+        // open) so the row's right edge never shows both at once.
+        <span
+          className="tw-hidden tw-shrink-0 tw-items-center group-focus-within:tw-flex group-hover:tw-flex group-has-[[data-state=open]]:tw-flex"
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+        >
+          {trailing}
+        </span>
+      )}
     </div>
   );
 });
