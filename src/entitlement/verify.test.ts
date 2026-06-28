@@ -1,12 +1,24 @@
-// Uses WebCrypto (ECDSA P-256) for key generation and signing. jest.setup forces
-// Node's complete WebCrypto onto globalThis because jsdom ships only a partial
-// SubtleCrypto; the verification logic itself is WebCrypto-spec behavior,
+// Uses Node's WebCrypto (imported explicitly, not the global) for ECDSA P-256 key
+// generation/signing, and injects it into verifyEntitlement via the `subtle`
+// option. This keeps the test independent of the environment's global WebCrypto —
+// jsdom ships only a partial SubtleCrypto (no generateKey/ECDSA), and patching it
+// proved unreliable across CI. The verification logic is WebCrypto-spec behavior,
 // identical between Node and the Obsidian webview.
-import type { EntitlementClaims } from "./types";
-import { verifyEntitlement } from "./verify";
+import { webcrypto } from "crypto";
 
+import type { EntitlementClaims } from "./types";
+import { verifyEntitlement, type VerifyEntitlementOptions } from "./verify";
+
+// Node's webcrypto.SubtleCrypto and the DOM SubtleCrypto differ only in unrelated
+// overloads (e.g. Ed25519); cast to the DOM type the API expects.
+const subtle = webcrypto.subtle as unknown as SubtleCrypto;
 const KID = "test-key";
 const USER_ID = "user-123";
+
+/** verifyEntitlement with Node's subtle injected; tests pass the rest of opts. */
+function verify(token: string, opts: Omit<VerifyEntitlementOptions, "subtle"> = {}) {
+  return verifyEntitlement(token, { subtle, ...opts });
+}
 
 function base64UrlEncode(input: string | Uint8Array): string {
   const bytes = typeof input === "string" ? new TextEncoder().encode(input) : input;
@@ -22,7 +34,7 @@ async function signToken(
 ): Promise<string> {
   const headerSegment = base64UrlEncode(JSON.stringify(header));
   const payloadSegment = base64UrlEncode(JSON.stringify(claims));
-  const signature = await crypto.subtle.sign(
+  const signature = await subtle.sign(
     { name: "ECDSA", hash: "SHA-256" },
     privateKey,
     new TextEncoder().encode(`${headerSegment}.${payloadSegment}`)
@@ -50,16 +62,16 @@ describe("verifyEntitlement", () => {
   let publicKeys: Record<string, JsonWebKey>;
 
   beforeAll(async () => {
-    keyPair = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, [
+    keyPair = await subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, [
       "sign",
       "verify",
     ]);
-    publicKeys = { [KID]: await crypto.subtle.exportKey("jwk", keyPair.publicKey) };
+    publicKeys = { [KID]: await subtle.exportKey("jwk", keyPair.publicKey) };
   });
 
   it("returns claims for a valid, correctly-signed token", async () => {
     const token = await signToken(keyPair.privateKey, plusClaims());
-    const claims = await verifyEntitlement(token, { publicKeys, expectedUserId: USER_ID });
+    const claims = await verify(token, { publicKeys, expectedUserId: USER_ID });
     expect(claims).not.toBeNull();
     expect(claims?.tier).toBe("plus");
     expect(claims?.features).toContain("multi_agent");
@@ -70,7 +82,7 @@ describe("verifyEntitlement", () => {
       keyPair.privateKey,
       plusClaims({ plan: "lite", tier: "lite", features: [] })
     );
-    const claims = await verifyEntitlement(token, { publicKeys });
+    const claims = await verify(token, { publicKeys });
     expect(claims?.tier).toBe("lite");
     expect(claims?.features).not.toContain("multi_agent");
   });
@@ -80,24 +92,21 @@ describe("verifyEntitlement", () => {
       keyPair.privateKey,
       plusClaims({ exp: Math.floor(Date.UTC(2020, 0, 1) / 1000) })
     );
-    expect(await verifyEntitlement(token, { publicKeys })).toBeNull();
+    expect(await verify(token, { publicKeys })).toBeNull();
   });
 
   it("rejects a token whose user_id does not match the local user", async () => {
     const token = await signToken(keyPair.privateKey, plusClaims());
-    expect(
-      await verifyEntitlement(token, { publicKeys, expectedUserId: "someone-else" })
-    ).toBeNull();
+    expect(await verify(token, { publicKeys, expectedUserId: "someone-else" })).toBeNull();
   });
 
   it("rejects a token signed by an unknown key (kid not in the trust set)", async () => {
-    const otherPair = await crypto.subtle.generateKey(
-      { name: "ECDSA", namedCurve: "P-256" },
-      true,
-      ["sign", "verify"]
-    );
+    const otherPair = await subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, [
+      "sign",
+      "verify",
+    ]);
     const token = await signToken(otherPair.privateKey, plusClaims());
-    expect(await verifyEntitlement(token, { publicKeys })).toBeNull();
+    expect(await verify(token, { publicKeys })).toBeNull();
   });
 
   it("rejects a token whose payload was tampered with after signing", async () => {
@@ -107,7 +116,7 @@ describe("verifyEntitlement", () => {
       JSON.stringify(plusClaims({ tier: "pro", features: ["multi_agent"] }))
     );
     const forged = `${header}.${forgedPayload}.${signature}`;
-    expect(await verifyEntitlement(forged, { publicKeys })).toBeNull();
+    expect(await verify(forged, { publicKeys })).toBeNull();
   });
 
   it("rejects a non-ES256 algorithm", async () => {
@@ -116,12 +125,12 @@ describe("verifyEntitlement", () => {
       typ: "JWT",
       kid: KID,
     });
-    expect(await verifyEntitlement(token, { publicKeys })).toBeNull();
+    expect(await verify(token, { publicKeys })).toBeNull();
   });
 
   it("rejects malformed tokens and the empty string", async () => {
-    expect(await verifyEntitlement("", { publicKeys })).toBeNull();
-    expect(await verifyEntitlement("not-a-jwt", { publicKeys })).toBeNull();
-    expect(await verifyEntitlement("only.two", { publicKeys })).toBeNull();
+    expect(await verify("", { publicKeys })).toBeNull();
+    expect(await verify("not-a-jwt", { publicKeys })).toBeNull();
+    expect(await verify("only.two", { publicKeys })).toBeNull();
   });
 });

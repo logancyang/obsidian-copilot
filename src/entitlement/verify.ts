@@ -8,6 +8,12 @@ export interface VerifyEntitlementOptions {
   publicKeys?: Record<string, JsonWebKey>;
   /** When set, the token's `user_id` must equal this or verification fails. */
   expectedUserId?: string;
+  /**
+   * SubtleCrypto implementation; defaults to the runtime's `crypto.subtle`
+   * (present in Obsidian desktop/Electron and mobile WebViews). Injected by tests
+   * so they don't depend on the environment's global WebCrypto.
+   */
+  subtle?: SubtleCrypto;
 }
 
 interface JwsHeader {
@@ -50,7 +56,12 @@ export async function verifyEntitlement(
   token: string,
   options: VerifyEntitlementOptions = {}
 ): Promise<EntitlementClaims | null> {
-  const { now = Date.now(), publicKeys = ENTITLEMENT_PUBLIC_KEYS, expectedUserId } = options;
+  const {
+    now = Date.now(),
+    publicKeys = ENTITLEMENT_PUBLIC_KEYS,
+    expectedUserId,
+    subtle = crypto.subtle,
+  } = options;
   if (!token) return null;
 
   const parts = token.split(".");
@@ -65,14 +76,10 @@ export async function verifyEntitlement(
 
   let verified = false;
   try {
-    const key = await crypto.subtle.importKey(
-      "jwk",
-      jwk,
-      { name: "ECDSA", namedCurve: "P-256" },
-      false,
-      ["verify"]
-    );
-    verified = await crypto.subtle.verify(
+    const key = await subtle.importKey("jwk", jwk, { name: "ECDSA", namedCurve: "P-256" }, false, [
+      "verify",
+    ]);
+    verified = await subtle.verify(
       { name: "ECDSA", hash: "SHA-256" },
       key,
       base64UrlToBytes(signatureSegment),
