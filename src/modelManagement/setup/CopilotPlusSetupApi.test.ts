@@ -390,6 +390,31 @@ describe("CopilotPlusSetupApi.registerPlusProvider", () => {
     expect(row.configuredModelId).toBe(idBefore);
     expect(row.info.displayName).toBe("Copilot Plus Flash 2");
   });
+
+  it("refreshes drifted capability fields (reasoning/modalities/toolCall) in place", async () => {
+    const h = makeHarness();
+    // Existing model registered WITHOUT reasoning/modalities (an older snapshot).
+    const first = await register(h, [{ id: "glm-5.2", displayName: "GLM-5.2", toolCall: false }]);
+    const idBefore = first.configuredModelIds[0];
+    expect(h.models.getByWireId(first.providerId, "glm-5.2")!.info.reasoning).toBeUndefined();
+
+    // Re-register the same id with new capabilities — e.g. reasoning effort support.
+    await register(h, [
+      {
+        id: "glm-5.2",
+        displayName: "GLM-5.2",
+        toolCall: true,
+        reasoning: true,
+        modalities: { input: ["text"], output: ["text"] },
+      },
+    ]);
+
+    const row = h.models.getByWireId(first.providerId, "glm-5.2")!;
+    expect(row.configuredModelId).toBe(idBefore); // no churn
+    expect(row.info.reasoning).toBe(true);
+    expect(row.info.toolCall).toBe(true);
+    expect(row.info.modalities).toEqual({ input: ["text"], output: ["text"] });
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -162,7 +162,7 @@ export class CopilotPlusSetupApi {
   /**
    * Diff-reconcile the Plus provider's ConfiguredModel set against `models`:
    * add new wire ids (auto-enrolling each eligible non-embedding model), refresh
-   * drifted display strings in place (no configuredModelId churn), and
+   * drifted display + capability fields in place (no configuredModelId churn), and
    * cascade-remove vanished ones. Returns the resulting ids in input order.
    * Mirrors `AgentSetupApi.#reconcileModels`; only real deltas write, so
    * re-syncing an unchanged list never resets user curation.
@@ -197,12 +197,26 @@ export class CopilotPlusSetupApi {
         }
         continue;
       }
+      // Refresh the curated snapshot in place when any field drifted — not just the
+      // display strings. Capability fields (modalities, reasoning, toolCall) must be
+      // re-synced too, otherwise an existing user keeps a stale snapshot and never
+      // picks up newly-advertised capabilities (e.g. reasoning effort) on re-sign-in.
+      // Plus models are server-curated, so there are no user overrides to clobber.
       if (
         current.info.displayName !== info.displayName ||
-        current.info.description !== info.description
+        current.info.description !== info.description ||
+        current.info.toolCall !== info.toolCall ||
+        current.info.reasoning !== info.reasoning ||
+        JSON.stringify(current.info.modalities) !== JSON.stringify(info.modalities)
       ) {
         await this.#models.update(current.configuredModelId, {
-          info: { displayName: info.displayName, description: info.description },
+          info: {
+            displayName: info.displayName,
+            description: info.description,
+            toolCall: info.toolCall,
+            reasoning: info.reasoning,
+            modalities: info.modalities,
+          },
         });
       }
     }
