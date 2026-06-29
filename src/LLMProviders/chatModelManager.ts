@@ -1117,6 +1117,22 @@ export default class ChatModelManager {
 
   findModelByName(modelName: string): CustomModel | undefined {
     const settings = getSettings();
-    return settings.activeModels.find((model) => model.name === modelName);
+    const legacy = settings.activeModels.find((model) => model.name === modelName);
+    if (legacy) return legacy;
+    // Chat-backend (bridged) models live in the Provider/ConfiguredModel
+    // registries, not in `activeModels`, so a name lookup misses them and any
+    // capability check (e.g. CopilotPlusChainRunner.isMultimodalModel) would
+    // read `false`. Fall back to the active bridged model when its name
+    // matches: it carries the capabilities derived from its modalities via
+    // `configuredModelToCustomModel`, so image-capable Plus models that exist
+    // only as ConfiguredModels (e.g. kimi-k2.7-code) are correctly treated as
+    // multimodal instead of silently dropping attached images.
+    if (
+      ChatModelManager.activeModelSource === "bridged" &&
+      ChatModelManager.activeModel?.name === modelName
+    ) {
+      return ChatModelManager.activeModel;
+    }
+    return undefined;
   }
 }

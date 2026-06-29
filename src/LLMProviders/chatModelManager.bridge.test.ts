@@ -1,5 +1,5 @@
 import type { CustomModel } from "@/aiParams";
-import { ChatModelProviders } from "@/constants";
+import { ChatModelProviders, ModelCapability } from "@/constants";
 import { MissingApiKeyError } from "@/error";
 import { getSettings, setSettings } from "@/settings/model";
 
@@ -49,6 +49,32 @@ describe("ChatModelManager bridged models", () => {
     await expect(
       ChatModelManager.getInstance().createModelInstanceFromBridged(bridgedModel())
     ).rejects.toBeInstanceOf(MissingApiKeyError);
+  });
+
+  it("findModelByName falls back to the active bridged model so its capabilities resolve", async () => {
+    const manager = ChatModelManager.getInstance();
+    // A vision-capable Plus model that exists only as a bridged ConfiguredModel
+    // (not in legacy activeModels) — e.g. kimi-k2.7-code.
+    const model = bridgedModel({
+      name: "kimi-k2.7-code",
+      provider: ChatModelProviders.COPILOT_PLUS,
+      apiKey: "bridge-key",
+      capabilities: [ModelCapability.VISION],
+    });
+
+    // Not findable before it's the active bridged model...
+    expect(manager.findModelByName("kimi-k2.7-code")).toBeUndefined();
+
+    await manager.setChatModelFromBridged(model);
+
+    // ...now resolvable by name, carrying its VISION capability so
+    // isMultimodalModel/hasCapability route images instead of dropping them.
+    const found = manager.findModelByName("kimi-k2.7-code");
+    expect(found).toBe(model);
+    expect(found?.capabilities).toContain(ModelCapability.VISION);
+
+    // A different name never resolves to the active bridged model.
+    expect(manager.findModelByName("some-other-model")).toBeUndefined();
   });
 
   it("retains the active bridged model for temperature overrides", async () => {
