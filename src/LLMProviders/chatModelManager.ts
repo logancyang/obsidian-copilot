@@ -467,11 +467,15 @@ export default class ChatModelManager {
           baseURL: BREVILABS_MODELS_BASE_URL,
           fetch: safeFetch,
         },
-        // Reasoning is opt-in: the relay's reasoning models only reason when an
-        // effort is sent, so flash stays fast by default. Forward the user's
-        // per-model effort pick (the relay reads reasoning_effort) only for models
-        // with the REASONING capability.
-        enableReasoning: customModel.capabilities?.includes(ModelCapability.REASONING) ?? false,
+        // Reasoning is opt-in: forward the user's per-model effort pick only for
+        // REASONING-capable models, and gate enableReasoning on an EXPLICIT effort.
+        // Without an effort, ChatOpenRouter.invocationParams falls back to
+        // `reasoning: { max_tokens: 1024 }`, which would make the default-on
+        // copilot-plus-flash spend reasoning budget/latency despite being the fast
+        // default. So flash stays fast until the user picks an effort.
+        enableReasoning:
+          (customModel.capabilities?.includes(ModelCapability.REASONING) ?? false) &&
+          !!customModel.reasoningEffort,
         reasoningEffort:
           customModel.capabilities?.includes(ModelCapability.REASONING) &&
           customModel.reasoningEffort
@@ -1126,23 +1130,23 @@ export default class ChatModelManager {
   }
 
   findModelByName(modelName: string): CustomModel | undefined {
-    const settings = getSettings();
-    const legacy = settings.activeModels.find((model) => model.name === modelName);
-    if (legacy) return legacy;
-    // Chat-backend (bridged) models live in the Provider/ConfiguredModel
-    // registries, not in `activeModels`, so a name lookup misses them and any
-    // capability check (e.g. CopilotPlusChainRunner.isMultimodalModel) would
-    // read `false`. Fall back to the active bridged model when its name
-    // matches: it carries the capabilities derived from its modalities via
-    // `configuredModelToCustomModel`, so image-capable Plus models that exist
-    // only as ConfiguredModels (e.g. kimi-k2.7-code) are correctly treated as
-    // multimodal instead of silently dropping attached images.
+    // Prefer the active bridged model on an exact name match, BEFORE the legacy
+    // lookup. Chat-backend (bridged) models live in the Provider/ConfiguredModel
+    // registries and carry the full capability set derived from their
+    // modalities/reasoning (`configuredModelToCustomModel`). A model whose wire id
+    // ALSO exists in legacy `settings.activeModels` — notably `copilot-plus-flash`,
+    // whose built-in entry advertises only VISION — would otherwise mask the
+    // bridged REASONING/VISION capabilities, so a capability check
+    // (CopilotPlusChainRunner.hasCapability / isMultimodalModel) reads `false` and
+    // reasoning/image content is dropped. The bridged model is the one actually
+    // running, so it wins.
     if (
       ChatModelManager.activeModelSource === "bridged" &&
       ChatModelManager.activeModel?.name === modelName
     ) {
       return ChatModelManager.activeModel;
     }
-    return undefined;
+    const settings = getSettings();
+    return settings.activeModels.find((model) => model.name === modelName);
   }
 }

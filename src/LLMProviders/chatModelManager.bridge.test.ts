@@ -77,6 +77,37 @@ describe("ChatModelManager bridged models", () => {
     expect(manager.findModelByName("some-other-model")).toBeUndefined();
   });
 
+  it("prefers the active bridged model over a legacy duplicate of the same id", async () => {
+    const manager = ChatModelManager.getInstance();
+    // copilot-plus-flash exists in legacy activeModels (built-in) advertising only
+    // VISION, AND as a bridged model now also carrying REASONING. The bridged one
+    // is what's running, so it must win — otherwise hasCapability(REASONING) reads
+    // the legacy entry and reasoning content is dropped.
+    const legacyFlash = {
+      name: "copilot-plus-flash",
+      provider: ChatModelProviders.COPILOT_PLUS,
+      enabled: true,
+      capabilities: [ModelCapability.VISION],
+    };
+    setSettings({ activeModels: [legacyFlash] });
+
+    const bridged = bridgedModel({
+      name: "copilot-plus-flash",
+      provider: ChatModelProviders.COPILOT_PLUS,
+      apiKey: "bridge-key",
+      capabilities: [ModelCapability.VISION, ModelCapability.REASONING],
+    });
+    await manager.setChatModelFromBridged(bridged);
+
+    const found = manager.findModelByName("copilot-plus-flash");
+    expect(found).toBe(bridged);
+    expect(found?.capabilities).toEqual(
+      expect.arrayContaining([ModelCapability.VISION, ModelCapability.REASONING])
+    );
+
+    setSettings({ activeModels: [] });
+  });
+
   it("retains the active bridged model for temperature overrides", async () => {
     const manager = ChatModelManager.getInstance();
     const model = bridgedModel({ apiKey: "bridge-key" });
