@@ -49,6 +49,10 @@ export {
 export type { ResolvedChatBackendEntry } from "./chatModel/chatModelSelection";
 export { resolveChatBackendModel } from "./chatModel/resolveChatBackendModel";
 export type { ChatBackendResolution } from "./chatModel/resolveChatBackendModel";
+export {
+  capabilityListFromModelInfo,
+  capabilitiesFromConfiguredInfo,
+} from "./chatModel/modelCapabilityFlags";
 
 // ---------------------------------------------------------------------------
 // Provider adapter contract

@@ -1,6 +1,7 @@
 import { agentOriginEnabledModelEntries } from "./agentEnabledModels";
 import type { CopilotSettings } from "@/settings/model";
 import type { ConfiguredModel } from "@/modelManagement";
+import { ModelCapability } from "@/constants";
 
 /** Bare descriptor-style decode (claude): the wire id IS the baseModelId. */
 const bareDecode = (wireId: string): { selection: { baseModelId: string } } => ({
@@ -72,6 +73,27 @@ describe("agentOriginEnabledModelEntries", () => {
     const settings = settingsWith("claude", ["cm1", "ghost"], [model("cm1", "claude-sonnet-4-5")]);
     const entries = agentOriginEnabledModelEntries(settings, "claude", bareDecode);
     expect(entries.map((e) => e.baseModelId)).toEqual(["claude-sonnet-4-5"]);
+  });
+
+  it("derives capabilities from info.modalities, and leaves them undefined when unknown", () => {
+    const visionModel: ConfiguredModel = {
+      configuredModelId: "cm1",
+      providerId: "p1",
+      info: {
+        id: "claude-sonnet-4-5",
+        displayName: "claude-sonnet-4-5",
+        modalities: { input: ["text", "image"] },
+      },
+      configuredAt: 0,
+    };
+    const settings = settingsWith("claude", ["cm1", "cm2"], [visionModel, model("cm2", "legacy")]);
+    const entries = agentOriginEnabledModelEntries(settings, "claude", bareDecode);
+    const vision = entries.find((e) => e.baseModelId === "claude-sonnet-4-5");
+    const unknown = entries.find((e) => e.baseModelId === "legacy");
+    expect(vision?.capabilities).toContain(ModelCapability.VISION);
+    // `model()` builds info without `modalities` → "unknown", so the picker can
+    // fall back to the catalog rather than asserting no vision.
+    expect(unknown?.capabilities).toBeUndefined();
   });
 
   it("only reads the requested agentType's enabledModels", () => {

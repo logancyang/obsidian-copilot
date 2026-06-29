@@ -73,6 +73,47 @@ describe("ByokGlobalTable", () => {
     expect(screen.getByText("Embedding")).toBeTruthy();
   });
 
+  it("badges the no-vision exception on text-only rows but not vision rows", () => {
+    const withModalities: ByokTableGroup = {
+      ...group,
+      models: [
+        {
+          configuredModelId: "text-only",
+          providerId: "p1",
+          info: {
+            id: "text-only",
+            displayName: "Text Only",
+            modalities: { input: ["text"] },
+          },
+          configuredAt: 0,
+        },
+        {
+          configuredModelId: "vision",
+          providerId: "p1",
+          info: {
+            id: "vision",
+            displayName: "Vision Model",
+            modalities: { input: ["text", "image"] },
+          },
+          configuredAt: 0,
+        },
+      ],
+    };
+    render(
+      <ByokGlobalTable groups={[withModalities]} onConfigure={jest.fn()} onRemove={jest.fn()} />
+    );
+    // A model KNOWN to lack image input shows the muted eye-off.
+    expect(
+      screen
+        .getByTestId("byok-model-text-only")
+        .querySelector('[data-testid="model-cap-no-vision"]')
+    ).not.toBeNull();
+    // A vision-capable model is the norm and shows no capability icon.
+    expect(
+      screen.getByTestId("byok-model-vision").querySelector('[data-testid="model-cap-no-vision"]')
+    ).toBeNull();
+  });
+
   it("collapses the model rows when the section header is clicked", () => {
     render(<ByokGlobalTable groups={[group]} onConfigure={jest.fn()} onRemove={jest.fn()} />);
     expect(screen.getByText("Claude Sonnet 4.5")).toBeTruthy();

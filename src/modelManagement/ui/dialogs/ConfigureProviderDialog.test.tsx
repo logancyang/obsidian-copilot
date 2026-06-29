@@ -29,7 +29,11 @@ jest.mock("@/modelManagement/ui/ModelManagementContext", () => ({
     configuredModelRegistry: { bulkSet: mockBulkSet },
     backendConfigRegistry: { enableModel: mockEnableModel, removeRefs: mockRemoveRefs },
     coordinator: { removeProvider: jest.fn() },
-    catalogService: { getProvider: mockGetProvider },
+    catalogService: {
+      getProvider: mockGetProvider,
+      ensureLoaded: jest.fn().mockResolvedValue(undefined),
+      onChange: jest.fn().mockReturnValue(() => {}),
+    },
   }),
 }));
 // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real `useApp` hook; the name must match the export

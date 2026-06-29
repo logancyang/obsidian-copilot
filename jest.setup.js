@@ -22,3 +22,15 @@ if (typeof Node !== "undefined" && !Object.prototype.hasOwnProperty.call(Node.pr
     configurable: true,
   });
 }
+
+// Obsidian exposes `activeDocument` / `activeWindow` globals pointing at the
+// focused popout's document/window. Under jsdom there's only one document, so
+// alias them onto `window` (the jsdom global object) — plugin code that portals
+// into `activeDocument.body` (e.g. the Radix tooltip) would otherwise throw
+// `activeDocument is not defined`.
+if (typeof window.activeDocument === "undefined") {
+  window.activeDocument = window.document;
+}
+if (typeof window.activeWindow === "undefined") {
+  window.activeWindow = window;
+}

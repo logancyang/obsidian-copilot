@@ -37,6 +37,8 @@ import {
   type SelectedTextContext,
   type WebTabContext,
 } from "@/types/message";
+import { getModelKeyFromModel } from "@/settings/model";
+import { modelSupportsVision } from "@/utils";
 import { arrayBufferToBase64 } from "@/utils/base64";
 import { mergeWebTabContexts } from "@/utils/urlNormalization";
 import { Clock, Sparkles, X } from "lucide-react";
@@ -344,6 +346,25 @@ export const AgentChatInput = memo(function AgentChatInput({
         shouldIncludeActiveWebTab
       );
 
+      // Hard-block sending images to a model that is KNOWN to lack vision. We
+      // only block when the active entry's capabilities are populated (an empty
+      // array still means "known"); undefined means "unknown" and must not
+      // block. An undefined `modelPickerOverride` (model switching disabled) can't
+      // resolve an active entry, so it's also treated as unknown. Inputs are left
+      // intact (guard precedes resetCompose) so the user can switch models.
+      if (selectedImages.length > 0) {
+        const activeEntry = modelPickerOverride?.models.find(
+          (m) => getModelKeyFromModel(m) === modelPickerOverride.value
+        );
+        if (Array.isArray(activeEntry?.capabilities) && !modelSupportsVision(activeEntry)) {
+          const modelLabel = activeEntry.displayName || activeEntry.name;
+          new Notice(
+            `${modelLabel} doesn't support images. Switch to a vision-capable model to send images.`
+          );
+          return;
+        }
+      }
+
       const content: PromptContent[] = [];
 
       // Convert attached images to base64 image content blocks.
@@ -404,6 +425,7 @@ export const AgentChatInput = memo(function AgentChatInput({
       selectedTextContexts,
       loading,
       isStarting,
+      modelPickerOverride,
       holdForContext,
       disabled,
       resetCompose,

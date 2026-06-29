@@ -1,5 +1,6 @@
 import { Notice } from "obsidian";
 import { logError } from "@/logger";
+import type { ModelCapability } from "@/constants";
 import type { ModelSelectorEntry } from "@/components/ui/ModelSelector";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type { AgentChatUIState } from "@/agentMode/session/AgentChatUIState";
@@ -130,12 +131,17 @@ function appendFromEnabledEntries(
     const reported = reportedById.get(enabled.baseModelId);
     const name = reported?.name || enabled.name || enabled.baseModelId;
     const subtitle = reported?.description ?? enabled.description;
+    // Capabilities come from the model's persisted `ConfiguredModel.info`
+    // modality snapshot. `undefined` (no snapshot) means "unknown" — no icon,
+    // and the image-send guard leaves the model unblocked.
+    const capabilities = enabled.capabilities;
     const entry = synthesizeAgentEntry(
       enabled.baseModelId,
       name,
       descriptor,
       subtitle,
-      enabled.isFree
+      enabled.isFree,
+      capabilities
     );
     const reason = credentialDisabledReason(enabled.credentialState, !!reported);
     if (reason) entry._disabledReason = reason;
@@ -147,7 +153,14 @@ function appendFromEnabledEntries(
     const reported = reportedById.get(keepBaseModelId);
     if (reported) {
       entries.push(
-        synthesizeAgentEntry(reported.baseModelId, reported.name, descriptor, reported.description)
+        synthesizeAgentEntry(
+          reported.baseModelId,
+          reported.name,
+          descriptor,
+          reported.description,
+          undefined,
+          undefined
+        )
       );
     }
   }
@@ -173,7 +186,14 @@ export function synthesizeAgentEntry(
   humanName: string,
   descriptor: BackendDescriptor,
   subtitle?: string,
-  isFree?: boolean
+  isFree?: boolean,
+  /**
+   * Capabilities from the model's persisted `ConfiguredModel.info` snapshot, or
+   * `undefined` when unknown (no snapshot). Left off the entry entirely when
+   * undefined so the image-send guard treats the model as "unknown" — never
+   * blocked.
+   */
+  capabilities?: ModelCapability[]
 ): ModelSelectorEntry {
   return {
     name: baseModelId,
@@ -181,6 +201,7 @@ export function synthesizeAgentEntry(
     enabled: true,
     isBuiltIn: false,
     displayName: humanName || baseModelId,
+    capabilities,
     _group: descriptor.displayName,
     _backendId: descriptor.id,
     _subtitle: subtitle,
@@ -312,7 +333,9 @@ export function buildPickerEntries(
         baseId,
         ctx.activeCurrentEntry.name,
         ctx.activeDescriptor,
-        ctx.activeCurrentEntry.description
+        ctx.activeCurrentEntry.description,
+        undefined,
+        undefined
       );
       entries.unshift(synth);
       valueKey = getModelKeyFromModel(synth);

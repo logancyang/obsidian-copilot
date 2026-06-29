@@ -1,4 +1,5 @@
 import type React from "react";
+import type { ModelCapability } from "@/constants";
 import type { FormattedDateTime, MessageContext } from "@/types/message";
 // `import type` keeps the cycle with `fanoutTypes` compile-time only.
 import type { FanoutTurn } from "@/agentMode/session/fanout/fanoutTypes";
@@ -141,6 +142,14 @@ export interface EnabledModelEntry {
   name: string;
   description?: string;
   credentialState: EnabledModelCredentialState;
+  /**
+   * Capabilities derived from the model's persisted `ConfiguredModel.info`
+   * (the modality snapshot taken at setup) — the reliable source the picker
+   * prefers over a live catalog lookup. `undefined` means "unknown" (the
+   * stored info carried no modality data), letting the picker fall back to the
+   * catalog rather than asserting a model has no vision.
+   */
+  capabilities?: ModelCapability[];
   /**
    * `true` for an opencode Zen model (opencode's self-hosted free tier). The
    * opencode backend computes this; the UI just renders a privacy warning, so

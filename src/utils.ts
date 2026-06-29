@@ -8,6 +8,7 @@ import {
   ALLOWED_NOTE_CONTEXT_EXTENSIONS,
   ChatModelProviders,
   EmbeddingModelProviders,
+  ModelCapability,
   NOMIC_EMBED_TEXT,
   Provider,
   ProviderInfo,
@@ -820,6 +821,12 @@ export function findCustomModel(modelKey: string, activeModels: CustomModel[]): 
     throw new Error(`No model configuration found for: ${modelKey}`);
   }
   return model;
+}
+
+// Capabilities can be undefined when a model's vision support is simply unknown;
+// callers that hard-block on missing vision must treat undefined as "unknown", not "no".
+export function modelSupportsVision(model: CustomModel): boolean {
+  return !!model.capabilities?.includes(ModelCapability.VISION);
 }
 
 export function getProviderInfo(provider: string): ProviderMetadata {

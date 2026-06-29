@@ -7,6 +7,7 @@ import {
   type Candidate,
 } from "./configuredModelGrouping";
 import type { ConfiguredModel, Provider } from "@/modelManagement";
+import { ModelCapability } from "@/constants";
 
 function byokProvider(id: string, displayName: string): Provider {
   return {
@@ -223,6 +224,70 @@ describe("toRow", () => {
     const row = toRow(candidate);
     expect(row.label).toBe("Default (recommended)");
     expect(row.description).toBe("Opus 4.7 with 1M context · Most capable for complex work");
+  });
+
+  it("derives the vision capability from info.modalities (for the row's icon)", () => {
+    const provider = agentProvider("claude", "claude", "Claude");
+    const visionRow = toRow({
+      configuredModel: {
+        configuredModelId: "cm",
+        providerId: "claude",
+        info: {
+          id: "claude-sonnet-4-5",
+          displayName: "Claude Sonnet 4.5",
+          modalities: { input: ["text", "image"] },
+        },
+        configuredAt: 0,
+      },
+      provider,
+      enabled: true,
+    });
+    expect(visionRow.capabilities).toContain(ModelCapability.VISION);
+
+    // A model whose snapshot lacks image input carries no vision icon.
+    const noVisionRow = toRow({
+      configuredModel: {
+        configuredModelId: "cm2",
+        providerId: "claude",
+        info: { id: "text-only", displayName: "Text Only", modalities: { input: ["text"] } },
+        configuredAt: 0,
+      },
+      provider,
+      enabled: true,
+    });
+    expect(noVisionRow.capabilities ?? []).not.toContain(ModelCapability.VISION);
+  });
+
+  it("leaves capabilities undefined for an unknown snapshot, defined for a known one", () => {
+    const provider = agentProvider("claude", "claude", "Claude");
+    // No `modalities` at all — we don't know, so the row stays "unknown"
+    // (undefined). The picker renders nothing rather than asserting no vision.
+    const unknownRow = toRow({
+      configuredModel: {
+        configuredModelId: "cm",
+        providerId: "claude",
+        info: { id: "claude-sonnet-4-5", displayName: "Claude Sonnet 4.5" },
+        configuredAt: 0,
+      },
+      provider,
+      enabled: true,
+    });
+    expect(unknownRow.capabilities).toBeUndefined();
+
+    // A snapshot WITH modalities but no image input is "known to lack vision" —
+    // a defined array, so the picker renders the eye-off rather than nothing.
+    const knownNoVisionRow = toRow({
+      configuredModel: {
+        configuredModelId: "cm2",
+        providerId: "claude",
+        info: { id: "text-only", displayName: "Text Only", modalities: { input: ["text"] } },
+        configuredAt: 0,
+      },
+      provider,
+      enabled: true,
+    });
+    expect(knownNoVisionRow.capabilities).toBeDefined();
+    expect(knownNoVisionRow.capabilities).not.toContain(ModelCapability.VISION);
   });
 
   it("flags opencode Zen models (opencode/ wire id) as free, others not", () => {
