@@ -77,6 +77,21 @@ describe("syncCopilotPlusProvider", () => {
     expect(COPILOT_PLUS_DEFAULT_ENABLED_MODELS).toEqual(["copilot-plus-flash"]);
   });
 
+  it("flags every reasoning-capable model except kimi-k2.6 so the effort picker shows", () => {
+    const reasoningById = Object.fromEntries(
+      COPILOT_PLUS_MODELS.map((m) => [m.id, m.reasoning === true])
+    );
+    expect(reasoningById).toEqual({
+      "copilot-plus-flash": true,
+      "kimi-k2.6": false, // Azure model without effort support (matches backend)
+      "glm-5.2": true,
+      "kimi-k2.7-code": true,
+      "deepseek-v4-pro": true,
+      "mimo-v2.5": true,
+      "minimax-m2.7": true,
+    });
+  });
+
   it("still registers (never tears down) when the stored key fails to decrypt, leaving the token untouched", async () => {
     // Decrypt failure: getDecryptedKey returns "" but the raw key is present
     // and the user is still a Plus user.

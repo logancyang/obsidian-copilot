@@ -24,6 +24,13 @@ import type { ModelInfo } from "@/modelManagement/types/catalog";
  * Only `copilot-plus-flash` is enabled by default (see
  * `COPILOT_PLUS_DEFAULT_ENABLED_MODELS`); the rest ship available-but-off in the
  * chat + opencode pickers for the user to toggle on.
+ *
+ * `reasoning: true` marks the models the relay accepts an effort level for (it
+ * matches the models service's `supports_reasoning`). The chat + agent pickers
+ * read this (via `configuredModelToCustomModel` → `ModelCapability.REASONING`)
+ * to surface the effort selector. These models do NOT reason unless the user
+ * picks an effort, so flash stays fast by default. Kimi K2.6 (Azure) is the one
+ * model without effort support, so it's left unflagged.
  */
 export const COPILOT_PLUS_MODELS: readonly ModelInfo[] = Object.freeze([
   {
@@ -31,6 +38,7 @@ export const COPILOT_PLUS_MODELS: readonly ModelInfo[] = Object.freeze([
     displayName: "Copilot Plus Flash",
     description: "The default model: fastest responses and the most quota.",
     toolCall: true,
+    reasoning: true,
     modalities: { input: ["text", "image"], output: ["text"] },
   },
   {
@@ -45,6 +53,7 @@ export const COPILOT_PLUS_MODELS: readonly ModelInfo[] = Object.freeze([
     displayName: "GLM-5.2",
     description: "A frontier open-weight model.",
     toolCall: true,
+    reasoning: true,
     modalities: { input: ["text"], output: ["text"] },
   },
   {
@@ -52,6 +61,7 @@ export const COPILOT_PLUS_MODELS: readonly ModelInfo[] = Object.freeze([
     displayName: "Kimi K2.7 Code",
     description: "Optimized for coding tasks.",
     toolCall: true,
+    reasoning: true,
     modalities: { input: ["text", "image"], output: ["text"] },
   },
   {
@@ -59,6 +69,7 @@ export const COPILOT_PLUS_MODELS: readonly ModelInfo[] = Object.freeze([
     displayName: "DeepSeek V4 Pro",
     description: "A top-tier model for the hardest reasoning and agentic tasks.",
     toolCall: true,
+    reasoning: true,
     modalities: { input: ["text"], output: ["text"] },
   },
   {
@@ -66,6 +77,7 @@ export const COPILOT_PLUS_MODELS: readonly ModelInfo[] = Object.freeze([
     displayName: "MiMo V2.5",
     description: "Cost-effective and capable for everyday use.",
     toolCall: true,
+    reasoning: true,
     modalities: { input: ["text"], output: ["text"] },
   },
   {
@@ -73,6 +85,7 @@ export const COPILOT_PLUS_MODELS: readonly ModelInfo[] = Object.freeze([
     displayName: "MiniMax M2.7",
     description: "A compact, efficient model for lightweight tasks.",
     toolCall: true,
+    reasoning: true,
     modalities: { input: ["text"], output: ["text"] },
   },
 ]);

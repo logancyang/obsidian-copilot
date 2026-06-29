@@ -25,6 +25,7 @@ import { DateTime } from "luxon";
 import { App, MarkdownView, Notice, TFile, Vault, normalizePath, requestUrl } from "obsidian";
 import { CustomModel } from "./aiParams";
 import { getApiKeyForProvider } from "@/utils/modelUtils";
+import { formatUsageCapError } from "@/utils/usageCapError";
 export { err2String } from "@/errorFormat";
 
 /**
@@ -91,10 +92,16 @@ function isLicenseKeyError(error: unknown): boolean {
 }
 
 export function getApiErrorMessage(error: unknown): string {
-  const errorDetail = extractErrorDetail(error);
   if (isLicenseKeyError(error)) {
     return ERROR_MESSAGES.INVALID_LICENSE_KEY_USER;
   }
+  // Usage-cap (plan limit) errors get a friendly, actionable message with a link to
+  // the usage dashboard to purchase credits, instead of the raw relay error text.
+  const capMessage = formatUsageCapError(error);
+  if (capMessage) {
+    return capMessage;
+  }
+  const errorDetail = extractErrorDetail(error);
   return (
     errorDetail.message ||
     (errorDetail.reason ? `Error: ${errorDetail.reason}` : ERROR_MESSAGES.UNKNOWN_ERROR)

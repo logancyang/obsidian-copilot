@@ -4,6 +4,10 @@ import { v4 as uuidv4 } from "uuid";
 import { ChainType } from "./chainType";
 import { PromptSortStrategy } from "./types";
 
+// Copilot website usage dashboard (view usage, purchase credits). Used as the
+// fallback link when a usage-cap error doesn't carry its own dashboard_url.
+export const USAGE_DASHBOARD_URL = "https://www.obsidiancopilot.com/en/dashboard/token-usage";
+
 export const BREVILABS_API_BASE_URL = "https://api.brevilabs.com/v1";
 export const BREVILABS_MODELS_BASE_URL = "https://models.brevilabs.com/v1";
 export const CHAT_VIEWTYPE = "copilot-chat-view";

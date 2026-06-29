@@ -467,6 +467,16 @@ export default class ChatModelManager {
           baseURL: BREVILABS_MODELS_BASE_URL,
           fetch: safeFetch,
         },
+        // Reasoning is opt-in: the relay's reasoning models only reason when an
+        // effort is sent, so flash stays fast by default. Forward the user's
+        // per-model effort pick (the relay reads reasoning_effort) only for models
+        // with the REASONING capability.
+        enableReasoning: customModel.capabilities?.includes(ModelCapability.REASONING) ?? false,
+        reasoningEffort:
+          customModel.capabilities?.includes(ModelCapability.REASONING) &&
+          customModel.reasoningEffort
+            ? customModel.reasoningEffort
+            : undefined,
       },
       [ChatModelProviders.MISTRAL]: {
         modelName,
