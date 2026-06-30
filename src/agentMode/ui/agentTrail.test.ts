@@ -27,6 +27,17 @@ function text(value: string): AgentMessagePart {
   return { kind: "text", text: value };
 }
 
+function plan(contents: string[]): AgentMessagePart {
+  return {
+    kind: "plan",
+    entries: contents.map((content) => ({
+      content,
+      priority: "medium" as const,
+      status: "pending" as const,
+    })),
+  };
+}
+
 /**
  * Wrap a list of tool_call parts as children of a sub-agent (Task) so the
  * trail builder treats them as depth-1 peers — the level where compaction
@@ -301,6 +312,65 @@ describe("buildAgentTrail", () => {
     const tree = buildAgentTrail(parts);
     expect(tree.map((n) => n.type)).toEqual(["reasoning", "plan"]);
   });
+
+  describe("coalesces a prose run split by a top-level-invisible part", () => {
+    it("merges text around a hidden ToolSearch into one block", () => {
+      const parts: AgentMessagePart[] = [
+        text("let the "),
+        tool("ts", { vendorToolName: "ToolSearch" }),
+        text("kid feel the change"),
+      ];
+      const tree = buildAgentTrail(parts);
+      expect(tree).toHaveLength(1);
+      expect(tree[0].type).toBe("text");
+      if (tree[0].type === "text") {
+        expect(tree[0].part.text).toBe("let the kid feel the change");
+      }
+    });
+
+    it("merges text around an empty plan into one block", () => {
+      const parts: AgentMessagePart[] = [text("let the "), plan([]), text("kid feel the change")];
+      const tree = buildAgentTrail(parts);
+      expect(tree).toHaveLength(1);
+      expect(tree[0].type).toBe("text");
+      if (tree[0].type === "text") {
+        expect(tree[0].part.text).toBe("let the kid feel the change");
+      }
+    });
+
+    it("merges text around a sub-agent child, keeping the sub-agent card", () => {
+      // A backgrounded sub-agent's child event lands between two prose deltas;
+      // it renders nested under the parent card (not a top-level peer), so the
+      // prose must stay one block — this is the real-world repro.
+      const parts = withSubagent("task1", [
+        text("let the "),
+        tool("c1", { vendorToolName: "Read" }),
+        text("kid feel the change"),
+      ]);
+      const tree = buildAgentTrail(parts);
+      expect(tree.map((n) => n.type)).toEqual(["subagent", "text"]);
+      const node = tree[1];
+      if (node.type === "text") {
+        expect(node.part.text).toBe("let the kid feel the change");
+      }
+    });
+
+    it("keeps two blocks when a VISIBLE tool splits the prose", () => {
+      const parts: AgentMessagePart[] = [
+        text("before "),
+        tool("x", { vendorToolName: "Read" }),
+        text("after"),
+      ];
+      const tree = buildAgentTrail(parts);
+      expect(tree.map((n) => n.type)).toEqual(["text", "action", "text"]);
+    });
+
+    it("keeps two blocks when a non-empty plan splits the prose", () => {
+      const parts: AgentMessagePart[] = [text("before "), plan(["step 1"]), text("after")];
+      const tree = buildAgentTrail(parts);
+      expect(tree.map((n) => n.type)).toEqual(["text", "plan", "text"]);
+    });
+  });
 });
 
 describe("splitTrailingText", () => {
@@ -344,6 +414,33 @@ describe("splitTrailingText", () => {
     expect(research).toHaveLength(2);
     expect(final).toEqual([]);
   });
+
+  it("keeps a sentence whole in final when an empty plan splits it", () => {
+    const parts: AgentMessagePart[] = [
+      tool("a"),
+      text("intro"),
+      tool("b"),
+      text("let the "),
+      plan([]),
+      text("kid feel the change"),
+    ];
+    const { research, final } = splitTrailingText(parts);
+    expect(final.map((p) => p.text)).toEqual(["let the ", "kid feel the change"]);
+    // The empty plan is invisible but stays in research; the visible `tool b`
+    // is the real boundary.
+    expect(research.map((p) => p.kind)).toEqual(["tool_call", "text", "tool_call", "plan"]);
+  });
+
+  it("a sub-agent child in the trailing run stays transparent", () => {
+    const parts = withSubagent("task1", [
+      text("let the "),
+      tool("c1"),
+      text("kid feel the change"),
+    ]);
+    const { research, final } = splitTrailingText(parts);
+    expect(final.map((p) => p.text)).toEqual(["let the ", "kid feel the change"]);
+    expect(research.map((p) => p.kind)).toEqual(["tool_call", "tool_call"]);
+  });
 });
 
 describe("agentResponseText", () => {
@@ -372,9 +469,34 @@ describe("agentResponseText", () => {
     expect(agentResponseText(parts)).toBe("A\n\nB");
   });
 
-  it("drops a whitespace-only text part without leaving a stray blank line", () => {
+  it("coalesces fragments separated only by a dropped whitespace part", () => {
     const parts: AgentMessagePart[] = [text("A"), text("   "), text("B")];
-    expect(agentResponseText(parts)).toBe("A\n\nB");
+    // The whitespace part renders nothing, so the fragments are one prose run —
+    // joined with no separator, not a blank-line paragraph break.
+    expect(agentResponseText(parts)).toBe("AB");
+  });
+
+  it("joins prose split by a hidden ToolSearch with no break", () => {
+    const parts: AgentMessagePart[] = [
+      text("let the "),
+      tool("ts", { vendorToolName: "ToolSearch" }),
+      text("kid feel the change"),
+    ];
+    expect(agentResponseText(parts)).toBe("let the kid feel the change");
+  });
+
+  it("joins prose split by an empty plan with no break", () => {
+    const parts: AgentMessagePart[] = [text("let the "), plan([]), text("kid feel the change")];
+    expect(agentResponseText(parts)).toBe("let the kid feel the change");
+  });
+
+  it("joins prose split by a concurrent sub-agent child with no break", () => {
+    const parts = withSubagent("task1", [
+      text("let the "),
+      tool("c1"),
+      text("kid feel the change"),
+    ]);
+    expect(agentResponseText(parts)).toBe("let the kid feel the change");
   });
 
   it("sanitizes the text the same way legacy chat copy does", () => {

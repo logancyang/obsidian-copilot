@@ -27,9 +27,13 @@ export interface BuildAgentTrailOptions {
 
 /**
  * Split a turn's parts into the trailing user-visible answer and everything
- * that came before (the "research"). The boundary is the last contiguous run
- * of `text` parts: any `tool_call`, `thought`, or `plan` part after a text
- * run reclassifies that run as research.
+ * that came before (the "research"). The boundary is the last run of `text`
+ * parts; a *visible* `tool_call`, `thought`, or non-empty `plan` after a text
+ * run reclassifies that run as research. Top-level-invisible parts (hidden
+ * ToolSearch, sub-agent children, an empty plan) are transparent: they stay in
+ * `research` but do not break the trailing run, so a sentence split by one (e.g.
+ * a background sub-agent event arriving mid-prose) stays whole in `final`. The
+ * caller renders `final` as a single coalesced block to match.
  *
  * Used by the trail UI to fold the research portion into a single
  * "Worked for X" block once a turn has cleanly ended (`stopReason: end_turn`).
@@ -40,39 +44,46 @@ export function splitTrailingText(parts: AgentMessagePart[]): {
   research: AgentMessagePart[];
   final: TextPart[];
 } {
-  const final: TextPart[] = [];
-  let boundary = parts.length;
+  const turnToolIds = toolCallIds(parts);
+  const finalIdx = new Set<number>();
   for (let i = parts.length - 1; i >= 0; i--) {
     const p = parts[i];
     if (p.kind === "text") {
-      final.unshift(p);
-      boundary = i;
+      finalIdx.add(i);
       continue;
     }
+    if (isTopLevelInvisible(p, turnToolIds)) continue;
     break;
   }
-  return { research: parts.slice(0, boundary), final };
+  const research: AgentMessagePart[] = [];
+  const final: TextPart[] = [];
+  parts.forEach((p, i) => {
+    if (finalIdx.has(i)) final.push(p as TextPart);
+    else research.push(p);
+  });
+  return { research, final };
 }
 
 /**
  * The agent's full textual response across the turn, ready for the clipboard
- * or the editor: every `text` part in stream order (not just the trailing run),
- * joined and run through the same sanitization legacy chat applies
- * (`cleanMessageForCopy`), so tool-call cards, reasoning, plans, and chat-only
- * artifacts never leak in. Interleaving research (a `thought` or `tool_call`
- * between two prose chunks) must not drop the earlier prose, so we collect all
- * text parts rather than only the trailing run. Empty/whitespace-only parts are
- * skipped so they don't leave stray blank lines.
+ * or the editor. Derived from the folded trail so Copy/Insert matches what the
+ * user sees: each top-level `text` node is one prose block — the trail coalesces
+ * a run split only by a top-level-invisible part (hidden ToolSearch, sub-agent
+ * child, empty plan) back into one — and distinct blocks (separated by a
+ * *visible* tool card, reasoning, or non-empty plan) join with a blank line.
+ * Interleaving research must not drop earlier prose, so every block is kept, not
+ * just the trailing run. Run through the same sanitization legacy chat applies
+ * (`cleanMessageForCopy`) so tool cards, reasoning, and chat-only artifacts
+ * never leak in.
  * Returns `""` when the turn produced no prose (a tool-only turn, or one
  * cancelled mid-tool) — the trail UI uses that to gate the Copy / Insert
  * affordances off so they never sit under an empty bubble.
  */
 export function agentResponseText(parts: AgentMessagePart[]): string {
-  const text = parts
-    .filter((p): p is TextPart => p.kind === "text" && p.text.trim().length > 0)
-    .map((p) => p.text)
-    .join("\n\n");
-  return cleanMessageForCopy(text);
+  const blocks = buildAgentTrail(parts)
+    .filter((n): n is Extract<RenderNode, { type: "text" }> => n.type === "text")
+    .map((n) => n.part.text);
+  return cleanMessageForCopy(blocks.join("\n\n"));
 }
 
 /**
@@ -97,6 +108,36 @@ export function toolKeyFor(part: ToolCallPart): string {
  */
 function isHiddenTool(part: AgentMessagePart): boolean {
   return part.kind === "tool_call" && part.vendorToolName === "ToolSearch";
+}
+
+/** Every `tool_call` id present in a turn — used to recognize sub-agent children
+ *  (a `tool_call` whose `parentToolCallId` names one of these). */
+function toolCallIds(parts: AgentMessagePart[]): Set<string> {
+  const ids = new Set<string>();
+  for (const p of parts) if (p.kind === "tool_call") ids.add(p.id);
+  return ids;
+}
+
+/**
+ * Parts that render to nothing at the *top level* of the trail: the hidden
+ * `ToolSearch` loader, an empty `plan` (`PlanPill` returns null), and sub-agent
+ * children (shown nested under their parent's card, never as a top-level peer).
+ *
+ * A prose run split only by these is one block: the store concatenates the
+ * streamed deltas into `displayText` with no separator, so a part that leaves no
+ * visible peer between two prose chunks must not turn them into two paragraphs.
+ * This is the difference between a real `\n\n` break (a visible tool card /
+ * reasoning / non-empty plan sits between the chunks) and a spurious one (e.g. a
+ * background sub-agent event arriving mid-sentence).
+ */
+function isTopLevelInvisible(part: AgentMessagePart, turnToolIds: Set<string>): boolean {
+  if (isHiddenTool(part)) return true;
+  if (part.kind === "plan") return part.entries.length === 0;
+  return (
+    part.kind === "tool_call" &&
+    part.parentToolCallId !== undefined &&
+    turnToolIds.has(part.parentToolCallId)
+  );
 }
 
 /**
@@ -169,16 +210,34 @@ function foldNodes(
     }
     if (p.kind === "text") {
       // Streamed prose breaks compaction (design doc §"Compaction"): a text
-      // part between two same-tool calls disqualifies grouping. Pushing
-      // straight to `out` here naturally enforces that — the next tool_call
-      // can't see a prior aggregate/action of the same key as `prev`.
+      // node between two same-tool calls disqualifies grouping. Keeping the
+      // text in `out` enforces that — the next tool_call can't see a prior
+      // aggregate/action of the same key as `prev`.
       // Skip empty/whitespace-only text parts so they don't become a flex
       // child contributing `gap-1` plus their own padding to the trail.
       if (p.text.trim().length === 0) continue;
-      out.push({ type: "text", part: p });
+      // Coalesce with the previous text node when one is adjacent. Two text
+      // parts only become adjacent after a top-level-invisible part (hidden
+      // ToolSearch, sub-agent child, empty plan) was dropped between them, so
+      // merging reconstructs the original prose run — byte-identical to the
+      // flat `displayText` the store saved — instead of two stacked blocks that
+      // read as a spurious mid-sentence line break.
+      const prevNode = out[out.length - 1];
+      if (prevNode && prevNode.type === "text") {
+        out[out.length - 1] = {
+          type: "text",
+          part: { kind: "text", text: prevNode.part.text + p.text },
+        };
+      } else {
+        out.push({ type: "text", part: p });
+      }
       continue;
     }
     if (p.kind === "plan") {
+      // An empty plan renders nothing (`PlanPill` returns null); emitting it as
+      // a node would wedge between two prose parts and block the coalescing
+      // above, leaving the spurious break. Drop it so the prose stays one block.
+      if (p.entries.length === 0) continue;
       out.push({ type: "plan", part: p });
       continue;
     }

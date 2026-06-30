@@ -78,10 +78,11 @@ export const AgentTrail: React.FC<AgentTrailProps> = ({
       return (
         <div className="tw-group tw-flex tw-flex-col tw-gap-1">
           <WorkedForBlock research={research} durationMs={turnDurationMs} app={app} />
-          {final.map((p, i) => (
-            // eslint-disable-next-line @eslint-react/no-array-index-key -- text parts are append-only and may contain duplicate text
-            <AgentMarkdownText key={`final-${i}`} text={p.text} app={app} />
-          ))}
+          {/* `final` may be several text parts only because a top-level-invisible
+              part (a background sub-agent event, a dropped ToolSearch, an empty
+              plan) split one prose run; join with "" to render the original
+              sentence as one block, not a broken-apart paragraph. */}
+          <AgentMarkdownText text={final.map((p) => p.text).join("")} app={app} />
           {actions}
         </div>
       );
