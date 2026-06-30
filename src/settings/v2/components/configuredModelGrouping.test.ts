@@ -439,7 +439,7 @@ describe("buildModelEnableGroups", () => {
     expect(groups.find((g) => g.label === "opencode")?.badge).toBe("Agent Provided");
   });
 
-  it("floats Copilot Plus to the top, highlights it, and gives it no redundant badge", () => {
+  it("floats Copilot Plus to the top, highlights it, and gives it the privacy badge + license tooltip", () => {
     const plusProvider: Provider = {
       providerId: "plus-1",
       providerType: "anthropic",
@@ -472,7 +472,8 @@ describe("buildModelEnableGroups", () => {
     // Copilot Plus is first regardless of candidate order.
     expect(groups[0].key).toBe("byok:plus-1");
     expect(groups[0].highlight).toBe(true);
-    expect(groups[0].badge).toBeUndefined();
+    expect(groups[0].badge).toBe("privacy");
+    expect(groups[0].tooltip).toBe("Copilot license required");
     // Non-Plus groups are not highlighted.
     expect(groups.find((g) => g.key === "byok:byok-1")?.highlight).toBeUndefined();
   });

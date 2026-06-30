@@ -467,6 +467,20 @@ export default class ChatModelManager {
           baseURL: BREVILABS_MODELS_BASE_URL,
           fetch: safeFetch,
         },
+        // Reasoning is opt-in: forward the user's per-model effort pick only for
+        // REASONING-capable models, and gate enableReasoning on an EXPLICIT effort.
+        // Without an effort, ChatOpenRouter.invocationParams falls back to
+        // `reasoning: { max_tokens: 1024 }`, which would make the default-on
+        // copilot-plus-flash spend reasoning budget/latency despite being the fast
+        // default. So flash stays fast until the user picks an effort.
+        enableReasoning:
+          (customModel.capabilities?.includes(ModelCapability.REASONING) ?? false) &&
+          !!customModel.reasoningEffort,
+        reasoningEffort:
+          customModel.capabilities?.includes(ModelCapability.REASONING) &&
+          customModel.reasoningEffort
+            ? customModel.reasoningEffort
+            : undefined,
       },
       [ChatModelProviders.MISTRAL]: {
         modelName,
@@ -1116,6 +1130,22 @@ export default class ChatModelManager {
   }
 
   findModelByName(modelName: string): CustomModel | undefined {
+    // Prefer the active bridged model on an exact name match, BEFORE the legacy
+    // lookup. Chat-backend (bridged) models live in the Provider/ConfiguredModel
+    // registries and carry the full capability set derived from their
+    // modalities/reasoning (`configuredModelToCustomModel`). A model whose wire id
+    // ALSO exists in legacy `settings.activeModels` — notably `copilot-plus-flash`,
+    // whose built-in entry advertises only VISION — would otherwise mask the
+    // bridged REASONING/VISION capabilities, so a capability check
+    // (CopilotPlusChainRunner.hasCapability / isMultimodalModel) reads `false` and
+    // reasoning/image content is dropped. The bridged model is the one actually
+    // running, so it wins.
+    if (
+      ChatModelManager.activeModelSource === "bridged" &&
+      ChatModelManager.activeModel?.name === modelName
+    ) {
+      return ChatModelManager.activeModel;
+    }
     const settings = getSettings();
     return settings.activeModels.find((model) => model.name === modelName);
   }

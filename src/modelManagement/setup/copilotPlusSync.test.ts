@@ -9,7 +9,11 @@
  * provider + user curation. These tests pin that down.
  */
 
-import { syncCopilotPlusProvider } from "./copilotPlusSync";
+import {
+  COPILOT_PLUS_DEFAULT_ENABLED_MODELS,
+  COPILOT_PLUS_MODELS,
+  syncCopilotPlusProvider,
+} from "./copilotPlusSync";
 
 import type { ModelManagementApi } from "@/modelManagement/createModelManagement";
 import type { RegisterPlusProviderInput } from "@/modelManagement/setup/CopilotPlusSetupApi";
@@ -51,7 +55,41 @@ describe("syncCopilotPlusProvider", () => {
     expect(getDecryptedKey).toHaveBeenCalledWith("enc_desk_raw");
     expect(unregisterPlusProvider).not.toHaveBeenCalled();
     expect(registerPlusProvider).toHaveBeenCalledTimes(1);
-    expect(registerPlusProvider.mock.calls[0][0]).toMatchObject({ apiKey: "decrypted-token" });
+    expect(registerPlusProvider.mock.calls[0][0]).toMatchObject({
+      apiKey: "decrypted-token",
+      models: COPILOT_PLUS_MODELS,
+      // Only the default-on subset (flash) auto-enrolls; the rest ship off.
+      autoEnrollModelIds: COPILOT_PLUS_DEFAULT_ENABLED_MODELS,
+    });
+  });
+
+  it("curated list ships the full lineup but defaults only copilot-plus-flash to on", () => {
+    const ids = COPILOT_PLUS_MODELS.map((m) => m.id);
+    expect(ids).toEqual([
+      "copilot-plus-flash",
+      "kimi-k2.6",
+      "glm-5.2",
+      "kimi-k2.7-code",
+      "deepseek-v4-pro",
+      "mimo-v2.5",
+      "minimax-m2.7",
+    ]);
+    expect(COPILOT_PLUS_DEFAULT_ENABLED_MODELS).toEqual(["copilot-plus-flash"]);
+  });
+
+  it("flags every reasoning-capable model except kimi-k2.6 so the effort picker shows", () => {
+    const reasoningById = Object.fromEntries(
+      COPILOT_PLUS_MODELS.map((m) => [m.id, m.reasoning === true])
+    );
+    expect(reasoningById).toEqual({
+      "copilot-plus-flash": true,
+      "kimi-k2.6": false, // Azure model without effort support (matches backend)
+      "glm-5.2": true,
+      "kimi-k2.7-code": true,
+      "deepseek-v4-pro": true,
+      "mimo-v2.5": true,
+      "minimax-m2.7": true,
+    });
   });
 
   it("still registers (never tears down) when the stored key fails to decrypt, leaving the token untouched", async () => {

@@ -4,6 +4,10 @@ import { v4 as uuidv4 } from "uuid";
 import { ChainType } from "./chainType";
 import { PromptSortStrategy } from "./types";
 
+// Copilot website usage dashboard (view usage, purchase credits). Used as the
+// fallback link when a usage-cap error doesn't carry its own dashboard_url.
+export const USAGE_DASHBOARD_URL = "https://www.obsidiancopilot.com/en/dashboard/token-usage";
+
 export const BREVILABS_API_BASE_URL = "https://api.brevilabs.com/v1";
 export const BREVILABS_MODELS_BASE_URL = "https://models.brevilabs.com/v1";
 export const CHAT_VIEWTYPE = "copilot-chat-view";
@@ -198,6 +202,13 @@ export const DEFAULT_OLLAMA_NUM_CTX = 131072;
 
 export enum ChatModels {
   COPILOT_PLUS_FLASH = "copilot-plus-flash",
+  // Additional Copilot Plus relay models (served via the brevilabs proxy).
+  COPILOT_PLUS_KIMI_K2_6 = "kimi-k2.6",
+  COPILOT_PLUS_GLM_5_2 = "glm-5.2",
+  COPILOT_PLUS_KIMI_K2_7_CODE = "kimi-k2.7-code",
+  COPILOT_PLUS_DEEPSEEK_V4_PRO = "deepseek-v4-pro",
+  COPILOT_PLUS_MIMO_V2_5 = "mimo-v2.5",
+  COPILOT_PLUS_MINIMAX_M2_7 = "minimax-m2.7",
   GPT_5_5 = "gpt-5.5",
   GPT_5_4_mini = "gpt-5.4-mini",
   GPT_41 = "gpt-4.1",

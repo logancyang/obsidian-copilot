@@ -246,6 +246,29 @@ describe("buildOpencodeConfig — provider/model injection", () => {
     });
   });
 
+  it("injects reasoning:true so opencode offers an effort option for reasoning models", async () => {
+    const provider = makeProvider("p-anthropic", {
+      kind: "byok",
+      catalogProviderId: "anthropic",
+    });
+    const model = makeModel("p-anthropic", "deepseek-v4-flash");
+    model.info.modalities = { input: ["text"], output: ["text"] };
+    model.info.reasoning = true;
+    const deps = makeDeps({
+      resolved: [okEntry(provider, model)],
+      keys: { "p-anthropic": "anth-123" },
+    });
+    const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
+      provider: Record<string, { models?: Record<string, unknown> }>;
+    };
+    expect(cfg.provider.anthropic.models).toEqual({
+      "deepseek-v4-flash": {
+        modalities: { input: ["text"], output: ["text"] },
+        reasoning: true,
+      },
+    });
+  });
+
   it("injects an empty config for a model with no modalities metadata", async () => {
     const provider = makeProvider("p-anthropic", {
       kind: "byok",

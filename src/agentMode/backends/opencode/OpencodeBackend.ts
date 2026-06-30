@@ -267,6 +267,11 @@ export async function buildOpencodeConfig(
       modelConfig.modalities = info.modalities;
       if (info.modalities.input?.includes("image")) modelConfig.attachment = true;
     }
+    // Declare reasoning support so opencode offers a thought-level (effort) option
+    // for the model. opencode has no catalog entry for Copilot Plus / self-hosted
+    // OpenAI-compatible providers, so without this it defaults to non-reasoning and
+    // the effort picker shows "na". Mirrors the modalities injection above.
+    if (info.reasoning) modelConfig.reasoning = true;
     providerConfig.models[info.id] = modelConfig;
     injected.push(`${mapping.id}/${info.id}`);
   }

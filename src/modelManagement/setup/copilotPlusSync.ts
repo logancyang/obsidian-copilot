@@ -16,18 +16,88 @@ import type { ModelManagementApi } from "@/modelManagement/createModelManagement
 import type { ModelInfo } from "@/modelManagement/types/catalog";
 
 /**
- * The Copilot Plus models the brevilabs relay exposes. Hardcoded — Plus offers
- * a single curated chat model today and there's no relay catalog to fetch. Wire
- * ids must match what the relay accepts; opencode routes them as
- * `copilot-plus/<id>` (see `mapProviderToOpencodeId`).
+ * The Copilot Plus models the brevilabs relay exposes. Hardcoded — there's no
+ * relay catalog to fetch, so this mirrors the curated public lineup served by
+ * `models.brevilabs.com/v1/models`. Wire ids must match what the relay accepts;
+ * opencode routes them as `copilot-plus/<id>` (see `mapProviderToOpencodeId`).
+ *
+ * Only `copilot-plus-flash` is enabled by default (see
+ * `COPILOT_PLUS_DEFAULT_ENABLED_MODELS`); the rest ship available-but-off in the
+ * chat + opencode pickers for the user to toggle on.
+ *
+ * `reasoning: true` marks the models the relay accepts an effort level for (it
+ * matches the models service's `supports_reasoning`). The chat + agent pickers
+ * read this (via `configuredModelToCustomModel` → `ModelCapability.REASONING`)
+ * to surface the effort selector. These models do NOT reason unless the user
+ * picks an effort, so flash stays fast by default. Kimi K2.6 (Azure) is the one
+ * model without effort support, so it's left unflagged.
  */
 export const COPILOT_PLUS_MODELS: readonly ModelInfo[] = Object.freeze([
   {
     id: ChatModels.COPILOT_PLUS_FLASH,
     displayName: "Copilot Plus Flash",
+    description: "The default model: fastest responses and the most quota.",
     toolCall: true,
+    reasoning: true,
     modalities: { input: ["text", "image"], output: ["text"] },
   },
+  {
+    id: ChatModels.COPILOT_PLUS_KIMI_K2_6,
+    displayName: "Kimi K2.6",
+    description: "Good for long-running reasoning tasks.",
+    toolCall: true,
+    modalities: { input: ["text"], output: ["text"] },
+  },
+  {
+    id: ChatModels.COPILOT_PLUS_GLM_5_2,
+    displayName: "GLM-5.2",
+    description: "A long-horizon frontier open model that beats some of the best closed models.",
+    toolCall: true,
+    reasoning: true,
+    modalities: { input: ["text"], output: ["text"] },
+  },
+  {
+    id: ChatModels.COPILOT_PLUS_KIMI_K2_7_CODE,
+    displayName: "Kimi K2.7 Code",
+    description: "Optimized for coding tasks.",
+    toolCall: true,
+    reasoning: true,
+    modalities: { input: ["text", "image"], output: ["text"] },
+  },
+  {
+    id: ChatModels.COPILOT_PLUS_DEEPSEEK_V4_PRO,
+    displayName: "DeepSeek V4 Pro",
+    description: "A top-tier model for the hardest reasoning and agentic tasks.",
+    toolCall: true,
+    reasoning: true,
+    modalities: { input: ["text"], output: ["text"] },
+  },
+  {
+    id: ChatModels.COPILOT_PLUS_MIMO_V2_5,
+    displayName: "MiMo V2.5",
+    description: "Cost-effective and capable for everyday use.",
+    toolCall: true,
+    reasoning: true,
+    modalities: { input: ["text"], output: ["text"] },
+  },
+  {
+    id: ChatModels.COPILOT_PLUS_MINIMAX_M2_7,
+    displayName: "MiniMax M2.7",
+    description: "A compact, efficient model for lightweight tasks.",
+    toolCall: true,
+    reasoning: true,
+    modalities: { input: ["text"], output: ["text"] },
+  },
+]);
+
+/**
+ * Wire ids auto-enrolled (toggled on) by default when the Plus provider is
+ * registered. Everything else in `COPILOT_PLUS_MODELS` is added but left
+ * unenrolled, so users opt into the extra models themselves. Passed to
+ * `registerPlusProvider` as `autoEnrollModelIds`.
+ */
+export const COPILOT_PLUS_DEFAULT_ENABLED_MODELS: readonly string[] = Object.freeze([
+  ChatModels.COPILOT_PLUS_FLASH,
 ]);
 
 /**
@@ -61,6 +131,7 @@ export async function syncCopilotPlusProvider(
         // `registerPlusProvider` leave the existing token in place.
         apiKey: token || undefined,
         models: COPILOT_PLUS_MODELS,
+        autoEnrollModelIds: COPILOT_PLUS_DEFAULT_ENABLED_MODELS,
       });
     } else {
       await api.setup.copilotPlus.unregisterPlusProvider();

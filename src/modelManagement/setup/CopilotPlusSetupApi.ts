@@ -11,9 +11,11 @@
  * `unregisterPlusProvider`, which cascade-removes through
  * `ModelManagementCoordinator`.
  *
- * Default auto-enrollment mirrors BYOK: Plus models surface in both
- * Simple Chat and the OpenCode agent picker
- * (`BYOK_DEFAULT_AUTO_ENROLL`).
+ * Auto-enrollment targets the BYOK backends (`BYOK_DEFAULT_AUTO_ENROLL`:
+ * Simple Chat + the OpenCode agent picker). `autoEnrollModelIds` narrows
+ * *which* models enroll on first add: Plus passes just the default-on
+ * subset (the flash model), so the rest of the lineup is created and shown
+ * in the pickers but left off for the user to toggle on.
  */
 
 import type { ModelManagementCoordinator } from "@/modelManagement/createModelManagement";
@@ -40,6 +42,13 @@ export interface RegisterPlusProviderInput {
   models: readonly ModelInfo[];
   /** Defaults to `BYOK_DEFAULT_AUTO_ENROLL` (= chat + opencode). */
   autoEnrollIn?: readonly BackendType[];
+  /** Wire ids (`ModelInfo.id`) eligible for default auto-enrollment. When
+   *  provided, only newly-added models whose id is in this set get enrolled
+   *  into `autoEnrollIn`; the rest are added available-but-off. When omitted,
+   *  every newly-added (non-embedding) model is enrolled — the prior behavior.
+   *  Lets Plus curate a default-on subset (just the flash model today) while
+   *  still surfacing the full lineup in the pickers. */
+  autoEnrollModelIds?: readonly string[];
 }
 
 export interface PlusSetupResult {
@@ -117,7 +126,8 @@ export class CopilotPlusSetupApi {
     const configuredModelIds = await this.#reconcileModels(
       providerId,
       input.models,
-      input.autoEnrollIn ?? BYOK_DEFAULT_AUTO_ENROLL
+      input.autoEnrollIn ?? BYOK_DEFAULT_AUTO_ENROLL,
+      input.autoEnrollModelIds
     );
 
     return { providerId, configuredModelIds };
@@ -151,20 +161,27 @@ export class CopilotPlusSetupApi {
 
   /**
    * Diff-reconcile the Plus provider's ConfiguredModel set against `models`:
-   * add new wire ids (auto-enrolling each non-embedding model), refresh drifted
-   * display strings in place (no configuredModelId churn), and cascade-remove
-   * vanished ones. Returns the resulting ids in input order. Mirrors
-   * `AgentSetupApi.#reconcileModels`; only real deltas write, so re-syncing an
-   * unchanged list never resets user curation.
+   * add new wire ids (auto-enrolling each eligible non-embedding model), refresh
+   * drifted display + capability fields in place (no configuredModelId churn), and
+   * cascade-remove vanished ones. Returns the resulting ids in input order.
+   * Mirrors `AgentSetupApi.#reconcileModels`; only real deltas write, so
+   * re-syncing an unchanged list never resets user curation.
+   *
+   * `autoEnrollModelIds`, when provided, restricts auto-enrollment to that set
+   * of wire ids — newly-added models outside it are still created (so they
+   * appear in the pickers) but left off. `undefined` means enroll every
+   * newly-added non-embedding model (the prior, unrestricted behavior).
    */
   async #reconcileModels(
     providerId: string,
     models: readonly ModelInfo[],
-    autoEnrollIn: readonly BackendType[]
+    autoEnrollIn: readonly BackendType[],
+    autoEnrollModelIds?: readonly string[]
   ): Promise<string[]> {
     const existing = this.#models.listByProvider(providerId);
     const existingByWireId = new Map(existing.map((m) => [m.info.id, m]));
     const desiredWireIds = new Set(models.map((info) => info.id));
+    const autoEnrollFilter = autoEnrollModelIds ? new Set(autoEnrollModelIds) : null;
 
     for (const info of models) {
       const current = existingByWireId.get(info.id);
@@ -172,19 +189,34 @@ export class CopilotPlusSetupApi {
         const configuredModelId = await this.#models.add({ providerId, info });
         // Embedding models aren't chat models — enrolling them into chat/agent
         // backends would surface them in completion pickers where they fail.
-        if (!info.isEmbedding) {
+        // A wire id outside `autoEnrollFilter` (when set) ships available-but-off.
+        if (!info.isEmbedding && (!autoEnrollFilter || autoEnrollFilter.has(info.id))) {
           for (const backend of autoEnrollIn) {
             await this.#backends.enableModel(backend, configuredModelId);
           }
         }
         continue;
       }
+      // Refresh the curated snapshot in place when any field drifted — not just the
+      // display strings. Capability fields (modalities, reasoning, toolCall) must be
+      // re-synced too, otherwise an existing user keeps a stale snapshot and never
+      // picks up newly-advertised capabilities (e.g. reasoning effort) on re-sign-in.
+      // Plus models are server-curated, so there are no user overrides to clobber.
       if (
         current.info.displayName !== info.displayName ||
-        current.info.description !== info.description
+        current.info.description !== info.description ||
+        current.info.toolCall !== info.toolCall ||
+        current.info.reasoning !== info.reasoning ||
+        JSON.stringify(current.info.modalities) !== JSON.stringify(info.modalities)
       ) {
         await this.#models.update(current.configuredModelId, {
-          info: { displayName: info.displayName, description: info.description },
+          info: {
+            displayName: info.displayName,
+            description: info.description,
+            toolCall: info.toolCall,
+            reasoning: info.reasoning,
+            modalities: info.modalities,
+          },
         });
       }
     }
