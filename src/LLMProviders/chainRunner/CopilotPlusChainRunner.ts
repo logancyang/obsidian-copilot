@@ -14,7 +14,7 @@ import {
   MessageContent,
 } from "@/imageProcessing/imageProcessor";
 import { logInfo, logWarn } from "@/logger";
-import { checkIsPlusUser } from "@/plusUtils";
+import { checkIsPaidUser } from "@/plusUtils";
 import { getSettings } from "@/settings/model";
 import { getSystemPromptWithMemory } from "@/system-prompts/systemPromptBuilder";
 import { createWriteFileTool } from "@/tools/ComposerTools";
@@ -767,10 +767,10 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
     const thinkStreamer = new ThinkBlockStreamer(updateCurrentAiMessage, excludeThinking);
     let sources: { title: string; path: string; score: number; explanation?: unknown }[] = [];
 
-    const isPlusUser = await checkIsPlusUser(this.chainManager.app, {
+    const isPaidUser = await checkIsPaidUser(this.chainManager.app, {
       isCopilotPlus: true,
     });
-    if (!isPlusUser) {
+    if (!isPaidUser) {
       await this.handleError(
         new Error("Invalid license key"),
         thinkStreamer.processErrorChunk.bind(thinkStreamer) as (message: string) => void

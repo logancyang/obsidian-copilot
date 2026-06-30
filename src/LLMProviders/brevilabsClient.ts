@@ -2,7 +2,7 @@ import { BREVILABS_API_BASE_URL } from "@/constants";
 import { getDecryptedKey } from "@/encryptionService";
 import { MissingPlusLicenseError } from "@/error";
 import { logInfo } from "@/logger";
-import { turnOffPlus, turnOnPlus } from "@/plusUtils";
+import { applyEntitlement, markPaidPendingEntitlement, turnOffPaid, turnOnPaid } from "@/plusUtils";
 import { getSettings } from "@/settings/model";
 import { arrayBufferToBase64 } from "@/utils/base64";
 import { App, requestUrl } from "obsidian";
@@ -81,7 +81,13 @@ function parseBrevilabsResponse<T>(
     }
     return { data: null, error: new Error(`HTTP error: ${response.status}`) };
   }
-  logInfo(`[API ${endpoint} request]:`, data);
+  // Redact the signed entitlement JWS so it never lands in the shared
+  // copilot-log.md when a license response is logged.
+  const loggable =
+    data && typeof data === "object" && "entitlement" in data
+      ? { ...(data as Record<string, unknown>), entitlement: "[redacted]" }
+      : data;
+  logInfo(`[API ${endpoint} request]:`, loggable);
   return { data: data as T };
 }
 
@@ -149,6 +155,8 @@ export interface Twitter4llmResponse {
 export interface LicenseResponse {
   is_valid: boolean;
   plan: string;
+  /** Signed entitlement token (JWS). Absent on servers that predate token issuance. */
+  entitlement?: string;
 }
 
 export class BrevilabsClient {
@@ -247,7 +255,10 @@ export class BrevilabsClient {
   }
 
   /**
-   * Validate the license key and update the isPlusUser setting.
+   * Validate the license key and update the entitlement flags (isPaidUser /
+   * isPlusUser). When the server returns a signed entitlement token, the tier is
+   * derived from it; otherwise the no-token fallback marks any valid license as
+   * paid + Plus (safe until Lite/Pro ship with tokens).
    * @param context Optional context object containing the features that the user is using to validate the license key.
    * @returns true if the license key is valid, false if the license key is invalid, and undefined if
    * unknown error.
@@ -290,13 +301,26 @@ export class BrevilabsClient {
 
     if (error) {
       if (error.message === "Invalid license key") {
-        turnOffPlus(app);
+        turnOffPaid(app);
         return { isValid: false };
       }
       // Do nothing if the error is not about the invalid license key
       return { isValid: undefined };
     }
-    turnOnPlus();
+    if (data?.entitlement) {
+      // Signed token present: derive tier (Plus vs Lite) from its claims. If it
+      // can't be verified (keys not shipped yet, kid rotation, clock skew), grant
+      // paid so general Plus features keep working, but withhold the strict gate —
+      // never grant multi-agent on an unverifiable token (an unverifiable Lite
+      // token must not bypass the gate), and never downgrade a confirmed license.
+      const verified = await applyEntitlement(data.entitlement);
+      if (!verified) {
+        markPaidPendingEntitlement();
+      }
+    } else {
+      // Pre-token server: any valid license is paid + Plus (no Lite tier yet).
+      turnOnPaid();
+    }
     return { isValid: true, plan: data?.plan };
   }
 

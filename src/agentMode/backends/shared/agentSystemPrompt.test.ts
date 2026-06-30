@@ -95,7 +95,7 @@ describe("buildAgentSystemPrompt", () => {
 
   it("steers toward the builtin Copilot Plus skills regardless of Plus status", () => {
     // Default settings → NOT a Plus user; steering must still be present so a
-    // self-host user (Plus-enabled but isPlusUser=false) gets it, and non-Plus
+    // self-host user (Plus-enabled but isPaidUser=false) gets it, and non-Plus
     // users fall back to their own tools via the steering's fallback clause.
     const nonPlus = buildAgentSystemPrompt();
     expect(nonPlus).toContain(COPILOT_PLUS_TOOLS_STEERING);
@@ -113,7 +113,7 @@ describe("buildAgentSystemPrompt", () => {
     expect(nonPlus).toMatch(/fails for this particular request/i);
 
     // A Plus user gets the same steering.
-    updateSetting("isPlusUser", true);
+    updateSetting("isPaidUser", true);
     expect(buildAgentSystemPrompt()).toContain(COPILOT_PLUS_TOOLS_STEERING);
   });
 

@@ -42,7 +42,7 @@ import ChainManager from "@/LLMProviders/chainManager";
 import { clearRecordedPromptPayload } from "@/LLMProviders/chainRunner/utils/promptPayloadRecorder";
 import { logFileManager } from "@/logFileManager";
 import CopilotPlugin from "@/main";
-import { useIsPlusUser } from "@/plusUtils";
+import { useIsPaidUser } from "@/plusUtils";
 import { ProjectFileManager } from "@/projects/ProjectFileManager";
 import { useProjects } from "@/projects/state";
 import { getModelKeyFromModel, useSettingsValue } from "@/settings/model";
@@ -265,7 +265,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
 
   const [previousMode, setPreviousMode] = useState<ChainType | null>(null);
   const [selectedChain, setSelectedChain] = useChainType();
-  const isPlusUser = useIsPlusUser();
+  const isPaidUser = useIsPaidUser();
 
   const appContext = useContext(AppContext);
   const app = plugin.app || appContext;
@@ -1015,7 +1015,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
                   } else {
                     // default back to chat or plus mode
                     setSelectedChain(
-                      isPlusUser ? ChainType.COPILOT_PLUS_CHAIN : ChainType.LLM_CHAIN
+                      isPaidUser ? ChainType.COPILOT_PLUS_CHAIN : ChainType.LLM_CHAIN
                     );
                   }
                 }}

@@ -2,12 +2,26 @@ import { DEFAULT_SETTINGS } from "@/constants";
 import type { CopilotSettings } from "@/settings/model";
 
 const mockGetSettings = jest.fn<CopilotSettings, []>();
+const mockSetSettings = jest.fn<void, [Partial<CopilotSettings>]>();
 
 jest.mock("@/settings/model", () => ({
   getSettings: () => mockGetSettings(),
+  setSettings: (partial: Partial<CopilotSettings>) => mockSetSettings(partial),
 }));
 
-import { canUseMultiAgent, isSelfHostAccessValid, isSelfHostModeValid } from "@/plusUtils";
+const mockVerifyEntitlement = jest.fn<Promise<unknown>, [string, unknown?]>();
+
+jest.mock("@/entitlement", () => ({
+  verifyEntitlement: (...args: [string, unknown?]) => mockVerifyEntitlement(...args),
+}));
+
+import {
+  applyEntitlement,
+  canUseMultiAgent,
+  isSelfHostAccessValid,
+  isSelfHostModeValid,
+  verifyCachedEntitlement,
+} from "@/plusUtils";
 
 const SELF_HOST_GRACE_PERIOD_MS = 15 * 24 * 60 * 60 * 1000;
 
@@ -52,6 +66,14 @@ describe("isSelfHostAccessValid", () => {
 });
 
 describe("canUseMultiAgent", () => {
+  // Reset the in-memory "verified this session" proof before each case so the
+  // strict gate's token-derived branch starts from a fail-closed state.
+  beforeEach(async () => {
+    mockVerifyEntitlement.mockReset();
+    mockGetSettings.mockReturnValue(buildSettings({ entitlementToken: "" }));
+    await verifyCachedEntitlement();
+  });
+
   it("returns false for a free user (no Plus, no self-host)", () => {
     mockGetSettings.mockReturnValue(
       buildSettings({ isPlusUser: false, enableSelfHostMode: false })
@@ -64,9 +86,141 @@ describe("canUseMultiAgent", () => {
     expect(canUseMultiAgent()).toBe(true);
   });
 
+  it("returns false for a Lite user (paid but below Plus)", () => {
+    mockGetSettings.mockReturnValue(
+      buildSettings({ isPaidUser: true, isPlusUser: false, enableSelfHostMode: false })
+    );
+    expect(canUseMultiAgent()).toBe(false);
+  });
+
   it("returns true when self-host mode is on (believer/supporter offline path)", () => {
     mockGetSettings.mockReturnValue(buildSettings({ isPlusUser: false, enableSelfHostMode: true }));
     expect(canUseMultiAgent()).toBe(true);
+  });
+
+  it("returns false when the entitlement token has expired (offline lock)", () => {
+    mockGetSettings.mockReturnValue(
+      buildSettings({
+        isPlusUser: true,
+        enableSelfHostMode: false,
+        entitlementExpiresAt: Date.now() - 1000,
+      })
+    );
+    expect(canUseMultiAgent()).toBe(false);
+  });
+
+  it("blocks token-derived Plus that was not verified this session (edited data.json)", () => {
+    // A persisted isPlusUser=true plus a future expiry, with no signature
+    // verified this process — the data.json-tampering case. Fails closed.
+    mockGetSettings.mockReturnValue(
+      buildSettings({
+        isPlusUser: true,
+        enableSelfHostMode: false,
+        entitlementToken: "forged-or-stale",
+        entitlementExpiresAt: Date.now() + 60_000,
+      })
+    );
+    expect(canUseMultiAgent()).toBe(false);
+  });
+
+  it("allows token-derived Plus once the signed token is verified this session", async () => {
+    // Re-verifying the cached token (offline) sets the in-memory proof, so the
+    // strict gate trusts the unexpired entitlement.
+    mockVerifyEntitlement.mockResolvedValue({
+      user_id: "user-123",
+      plan: "plus",
+      tier: "plus",
+      features: ["multi_agent"],
+      iat: 0,
+      exp: 9_999_999_999,
+    });
+    mockGetSettings.mockReturnValue(
+      buildSettings({ userId: "user-123", entitlementToken: "token" })
+    );
+    await verifyCachedEntitlement();
+
+    mockGetSettings.mockReturnValue(
+      buildSettings({
+        isPlusUser: true,
+        enableSelfHostMode: false,
+        entitlementToken: "token",
+        entitlementExpiresAt: Date.now() + 60_000,
+      })
+    );
+    expect(canUseMultiAgent()).toBe(true);
+  });
+});
+
+describe("applyEntitlement", () => {
+  beforeEach(() => {
+    mockSetSettings.mockClear();
+    mockVerifyEntitlement.mockReset();
+    mockGetSettings.mockReturnValue(buildSettings({ userId: "user-123" }));
+  });
+
+  it("grants Plus for a token carrying the multi_agent feature", async () => {
+    mockVerifyEntitlement.mockResolvedValue({
+      user_id: "user-123",
+      plan: "plus",
+      tier: "plus",
+      features: ["multi_agent", "self_host"],
+      iat: 0,
+      exp: 9_999_999_999,
+    });
+    expect(await applyEntitlement("token")).toBe(true);
+    expect(mockSetSettings).toHaveBeenCalledWith({
+      entitlementToken: "token",
+      entitlementExpiresAt: 9_999_999_999_000,
+      isPaidUser: true,
+      isPlusUser: true,
+    });
+  });
+
+  it("applies a Lite token as paid but not Plus", async () => {
+    mockVerifyEntitlement.mockResolvedValue({
+      user_id: "user-123",
+      plan: "lite",
+      tier: "lite",
+      features: [],
+      iat: 0,
+      exp: 9_999_999_999,
+    });
+    // Returns true (verified + applied); the tier shows in the flags, not the
+    // return value.
+    expect(await applyEntitlement("token")).toBe(true);
+    expect(mockSetSettings).toHaveBeenCalledWith({
+      entitlementToken: "token",
+      entitlementExpiresAt: 9_999_999_999_000,
+      isPaidUser: true,
+      isPlusUser: false,
+    });
+  });
+
+  it("grants Plus for a Pro token", async () => {
+    mockVerifyEntitlement.mockResolvedValue({
+      user_id: "user-123",
+      plan: "pro",
+      tier: "pro",
+      features: ["multi_agent"],
+      iat: 0,
+      exp: 9_999_999_999,
+    });
+    expect(await applyEntitlement("token")).toBe(true);
+    expect(mockSetSettings).toHaveBeenCalledWith({
+      entitlementToken: "token",
+      entitlementExpiresAt: 9_999_999_999_000,
+      isPaidUser: true,
+      isPlusUser: true,
+    });
+  });
+
+  it("does NOT change settings when the token cannot be verified", async () => {
+    // An unverifiable token (bad signature, expired, unknown kid, or empty key
+    // set during rollout) is not an authoritative negative, so flags are left
+    // untouched for the caller to decide the fallback. Only turnOffPaid clears.
+    mockVerifyEntitlement.mockResolvedValue(null);
+    expect(await applyEntitlement("bad")).toBe(false);
+    expect(mockSetSettings).not.toHaveBeenCalled();
   });
 });
 

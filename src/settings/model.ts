@@ -118,8 +118,19 @@ export interface CopilotSettings {
   showSuggestedPrompts: boolean;
   numPartitions: number;
   defaultConversationNoteName: string;
-  // undefined means never checked
+  // Any valid paid license (Lite and above). undefined means never checked.
+  isPaidUser: boolean | undefined;
+  // Tier >= Plus (Plus, Pro, Believer, Supporter; excludes Lite). Derived from
+  // the signed entitlement token when present, else mirrors isPaidUser as a
+  // safe fallback. undefined means never checked. See plusUtils + entitlement/.
   isPlusUser: boolean | undefined;
+  // Raw server-signed entitlement token (JWS). Tamper-evident, so safe to persist
+  // and trust offline until its `exp`. Empty when the server hasn't issued one.
+  entitlementToken: string;
+  // Epoch ms when the entitlement token expires (0 = none / tokenless fallback).
+  // The strict isPlusUser gate honors this so multi-agent locks at expiry even
+  // while offline. Derived from the token's `exp`.
+  entitlementExpiresAt: number;
   inlineEditCommands: LegacyCommandSettings[] | undefined;
   projectList: Array<ProjectConfig>;
   passMarkdownImages: boolean;
@@ -621,6 +632,19 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   // Migration: Rename legacy enableMiyoSearch to enableMiyo.
   if (legacyEnableMiyoSearch !== undefined && sanitizedSettings.enableMiyo === undefined) {
     sanitizedSettings.enableMiyo = legacyEnableMiyoSearch as boolean;
+  }
+
+  // Migration: the old `isPlusUser` ("any valid license") was split into
+  // `isPaidUser` (any paid, incl. Lite) + a new `isPlusUser` (tier >= Plus, used
+  // by the multi-agent gate). Backfill `isPaidUser` from the legacy value. The
+  // legacy value is also a correct seed for the new strict `isPlusUser` because
+  // no sub-Plus paid tier existed before this split, so the carried-over
+  // `isPlusUser` stays correct until the next license validation.
+  if (
+    typeof sanitizedSettings.isPaidUser !== "boolean" &&
+    typeof rawSettings.isPlusUser === "boolean"
+  ) {
+    sanitizedSettings.isPaidUser = rawSettings.isPlusUser;
   }
 
   // Stuff in settings are string even when the interface has number type!

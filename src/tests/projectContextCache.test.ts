@@ -49,6 +49,7 @@ jest.mock("@/utils/hash", () => ({
 
 // Mock plusUtils
 jest.mock("@/plusUtils", () => ({
+  useIsPaidUser: jest.fn(),
   useIsPlusUser: jest.fn(),
   navigateToPlusPage: jest.fn(),
 }));

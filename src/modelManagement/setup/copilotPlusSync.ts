@@ -107,7 +107,7 @@ export const COPILOT_PLUS_DEFAULT_ENABLED_MODELS: readonly string[] = Object.fre
  *
  * `licenseKey` is the RAW stored key (still encrypted on disk) — the same value
  * the rest of the plugin gates on (`brevilabsClient`, `plusUtils`). The
- * register/unregister decision keys on sign-in state (`isPlusUser` + a stored
+ * register/unregister decision keys on sign-in state (`isPaidUser` + a stored
  * key), NOT on whether that key happens to decrypt: a decrypt failure (Electron
  * `safeStorage` unavailable, a vault synced to another machine) must not tear
  * down the persisted provider + the user's curation. Decryption is only for the
@@ -116,11 +116,11 @@ export const COPILOT_PLUS_DEFAULT_ENABLED_MODELS: readonly string[] = Object.fre
  */
 export async function syncCopilotPlusProvider(
   api: ModelManagementApi,
-  isPlusUser: boolean,
+  isPaidUser: boolean,
   licenseKey: string | undefined
 ): Promise<void> {
   try {
-    if (isPlusUser && licenseKey) {
+    if (isPaidUser && licenseKey) {
       const token = await getDecryptedKey(licenseKey);
       await api.setup.copilotPlus.registerPlusProvider({
         providerType: "openai-compatible",

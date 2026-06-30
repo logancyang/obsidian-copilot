@@ -2,7 +2,7 @@
  * Tests for `syncCopilotPlusProvider` — the sign-in/sign-out bridge that
  * reconciles the singleton Copilot Plus provider.
  *
- * The register/unregister decision must key on Plus sign-in state (`isPlusUser`
+ * The register/unregister decision must key on paid sign-in state (`isPaidUser`
  * + a raw stored key), NOT on whether that key decrypts. A decrypt failure
  * (safeStorage unavailable, vault synced to another machine) returns "" from
  * `getDecryptedKey`; treating that as sign-out would tear down the persisted

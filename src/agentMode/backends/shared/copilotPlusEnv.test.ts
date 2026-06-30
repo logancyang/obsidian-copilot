@@ -25,7 +25,7 @@ beforeEach(() => {
 describe("buildCopilotPlusEnv", () => {
   it("returns the decrypted license + relay config for an active Plus user", async () => {
     mockGetSettings.mockReturnValue({
-      isPlusUser: true,
+      isPaidUser: true,
       plusLicenseKey: "encrypted-key",
       userId: "user-123",
     });
@@ -42,31 +42,31 @@ describe("buildCopilotPlusEnv", () => {
   });
 
   it("returns empty when the user is not a Plus subscriber", async () => {
-    mockGetSettings.mockReturnValue({ isPlusUser: false, plusLicenseKey: "encrypted-key" });
+    mockGetSettings.mockReturnValue({ isPaidUser: false, plusLicenseKey: "encrypted-key" });
     expect(await buildCopilotPlusEnv()).toEqual({});
     expect(mockGetDecryptedKey).not.toHaveBeenCalled();
   });
 
   it("returns empty when there is no license key on file", async () => {
-    mockGetSettings.mockReturnValue({ isPlusUser: true, plusLicenseKey: "" });
+    mockGetSettings.mockReturnValue({ isPaidUser: true, plusLicenseKey: "" });
     expect(await buildCopilotPlusEnv()).toEqual({});
     expect(mockGetDecryptedKey).not.toHaveBeenCalled();
   });
 
   it("returns empty (not a throw) when decryption fails", async () => {
-    mockGetSettings.mockReturnValue({ isPlusUser: true, plusLicenseKey: "encrypted-key" });
+    mockGetSettings.mockReturnValue({ isPaidUser: true, plusLicenseKey: "encrypted-key" });
     mockGetDecryptedKey.mockRejectedValue(new Error("bad key"));
     expect(await buildCopilotPlusEnv()).toEqual({});
   });
 
   it("returns empty when the decrypted key is blank", async () => {
-    mockGetSettings.mockReturnValue({ isPlusUser: true, plusLicenseKey: "encrypted-key" });
+    mockGetSettings.mockReturnValue({ isPaidUser: true, plusLicenseKey: "encrypted-key" });
     mockGetDecryptedKey.mockResolvedValue("");
     expect(await buildCopilotPlusEnv()).toEqual({});
   });
 
   it("injects MIYO_URL when a custom Miyo server URL is set, independent of Plus", async () => {
-    mockGetSettings.mockReturnValue({ isPlusUser: false });
+    mockGetSettings.mockReturnValue({ isPaidUser: false });
     mockGetMiyoCustomUrl.mockReturnValue("http://192.168.1.10:8742");
     expect(await buildCopilotPlusEnv()).toEqual({ MIYO_URL: "http://192.168.1.10:8742" });
     // Non-Plus: no relay env, and no decryption attempted.
@@ -75,7 +75,7 @@ describe("buildCopilotPlusEnv", () => {
 
   it("merges MIYO_URL with the Plus relay env for a Plus user with a custom Miyo URL", async () => {
     mockGetSettings.mockReturnValue({
-      isPlusUser: true,
+      isPaidUser: true,
       plusLicenseKey: "encrypted-key",
       userId: "user-123",
     });

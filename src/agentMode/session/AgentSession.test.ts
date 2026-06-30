@@ -1078,6 +1078,10 @@ describe("ensureMultiAgentEntitlement (paywall helper)", () => {
   // These exercise the REAL helper against mocked isPlusEnabled/BrevilabsClient,
   // verifying the fast path takes no network call and the slow path re-verifies.
   const validateLicenseKey = jest.fn();
+  // Mutable so the validateLicenseKey mock can simulate the real side effect of
+  // applying the entitlement (flipping the cached flags) that the slow path then
+  // re-reads via isPlusEnabled().
+  let settings: Record<string, unknown>;
 
   beforeEach(() => {
     jest.resetModules();
@@ -1087,6 +1091,7 @@ describe("ensureMultiAgentEntitlement (paywall helper)", () => {
   async function loadHelper(
     isPlus: boolean
   ): Promise<(app?: unknown, ctx?: Record<string, unknown>) => Promise<boolean>> {
+    settings = { isPlusUser: isPlus, isPaidUser: isPlus, enableSelfHostMode: false };
     jest.doMock("@/plusUtils", () => jest.requireActual("@/plusUtils"));
     jest.doMock("@/logger", () => ({
       logInfo: jest.fn(),
@@ -1094,8 +1099,8 @@ describe("ensureMultiAgentEntitlement (paywall helper)", () => {
       logError: jest.fn(),
     }));
     jest.doMock("@/settings/model", () => ({
-      getSettings: jest.fn().mockReturnValue({ isPlusUser: isPlus, enableSelfHostMode: false }),
-      setSettings: jest.fn(),
+      getSettings: jest.fn(() => settings),
+      setSettings: jest.fn((partial: Record<string, unknown>) => Object.assign(settings, partial)),
       updateSetting: jest.fn(),
       useSettingsValue: jest.fn(),
     }));
@@ -1112,13 +1117,30 @@ describe("ensureMultiAgentEntitlement (paywall helper)", () => {
     expect(validateLicenseKey).not.toHaveBeenCalled();
   });
 
-  it("slow path: a stale-false cache that the backend confirms paid is allowed", async () => {
-    validateLicenseKey.mockResolvedValue({ isValid: true });
+  it("slow path: a stale-false cache the backend confirms as Plus is allowed", async () => {
+    // The real validateLicenseKey applies the entitlement; simulate that.
+    validateLicenseKey.mockImplementation(async () => {
+      settings.isPaidUser = true;
+      settings.isPlusUser = true;
+      return { isValid: true };
+    });
     const ensure = await loadHelper(false);
     await expect(ensure()).resolves.toBe(true);
     expect(validateLicenseKey).toHaveBeenCalledTimes(1);
     // The feature context is forwarded for backend telemetry/upsell.
     expect(validateLicenseKey.mock.calls[0][1]).toMatchObject({ feature: "multi_agent_per_turn" });
+  });
+
+  it("slow path: a Lite user (paid but below Plus) is blocked", async () => {
+    // Backend confirms a paid license, but the entitlement is below Plus — the
+    // gate keys on Plus tier, not on isValid.
+    validateLicenseKey.mockImplementation(async () => {
+      settings.isPaidUser = true;
+      settings.isPlusUser = false;
+      return { isValid: true };
+    });
+    const ensure = await loadHelper(false);
+    await expect(ensure()).resolves.toBe(false);
   });
 
   it("slow path: a genuinely free user is blocked (isValid false)", async () => {

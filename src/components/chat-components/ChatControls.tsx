@@ -9,7 +9,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { PLUS_UTM_MEDIUMS } from "@/constants";
 import { logError } from "@/logger";
 import { shouldUseMiyo } from "@/miyo/miyoUtils";
-import { navigateToPlusPage, useIsPlusUser } from "@/plusUtils";
+import { navigateToPlusPage, useIsPaidUser } from "@/plusUtils";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import { Docs4LLMParser } from "@/tools/FileParserManager";
 import { isRateLimitError } from "@/utils/rateLimitUtils";
@@ -230,7 +230,7 @@ export function ChatControls({
   const app = useApp();
   const settings = useSettingsValue();
   const [selectedChain, setSelectedChain] = useChainType();
-  const isPlusUser = useIsPlusUser();
+  const isPaidUser = useIsPaidUser();
 
   const handleModeChange = async (chainType: ChainType) => {
     // If leaving project mode with autosave enabled, save chat BEFORE clearing project context
@@ -282,7 +282,7 @@ export function ChatControls({
             >
               vault QA (free)
             </DropdownMenuItem>
-            {isPlusUser ? (
+            {isPaidUser ? (
               <DropdownMenuItem
                 onSelect={() => {
                   void handleModeChange(ChainType.COPILOT_PLUS_CHAIN);
@@ -305,7 +305,7 @@ export function ChatControls({
               </DropdownMenuItem>
             )}
 
-            {isPlusUser ? (
+            {isPaidUser ? (
               <DropdownMenuItem
                 className="tw-flex tw-items-center tw-gap-1"
                 onSelect={() => {
