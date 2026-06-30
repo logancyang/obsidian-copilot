@@ -25,7 +25,8 @@ describe("formatUsageCapError", () => {
     const msg = formatUsageCapError(err);
     expect(msg).toContain("usage cap");
     expect(msg).toContain("purchase credits");
-    expect(msg).toContain(`(${DASH})`); // markdown link target
+    expect(msg).toContain(DASH); // bare URL (plain text, renders in ErrorBlock)
+    expect(msg).not.toContain("]("); // not Markdown link syntax
   });
 
   it("detects a cap error nested under other transport wrappers", () => {

@@ -66,8 +66,12 @@ export function formatUsageCapError(error: unknown): string | null {
   const fields = findCapFields(error);
   if (!fields) return null;
   const url = fields.dashboard_url || USAGE_DASHBOARD_URL;
+  // Plain text with a bare URL (no Markdown). The main streaming error path renders
+  // this via ErrorBlock as plain text (whitespace-pre-wrap), so Markdown link syntax
+  // would show literally; a bare URL stays readable there and still auto-links in any
+  // Markdown-rendered context.
   return (
-    `**You've reached your usage cap.** To keep going beyond your plan's limit, ` +
-    `[purchase credits on your usage dashboard](${url}).`
+    `You've reached your usage cap. To keep going beyond your plan's limit, ` +
+    `purchase credits on your usage dashboard: ${url}`
   );
 }
