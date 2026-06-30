@@ -51,7 +51,7 @@ export const COPILOT_PLUS_MODELS: readonly ModelInfo[] = Object.freeze([
   {
     id: ChatModels.COPILOT_PLUS_GLM_5_2,
     displayName: "GLM-5.2",
-    description: "A frontier open-weight model.",
+    description: "A long-horizon frontier open model that beats some of the best closed models.",
     toolCall: true,
     reasoning: true,
     modalities: { input: ["text"], output: ["text"] },
