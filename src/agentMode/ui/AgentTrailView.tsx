@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import {
+  agentResponseText,
   buildAgentTrail,
-  finalAnswerText,
   splitTrailingText,
   type RenderNode,
 } from "@/agentMode/ui/agentTrail";
@@ -58,10 +58,10 @@ export const AgentTrail: React.FC<AgentTrailProps> = ({
     typeof turnDurationMs === "number" &&
     parts.length > 0;
 
-  // Copy / Insert act on the turn's final answer only. Gate them off while the
-  // message is still streaming and on cancelled turns (treated as having no
-  // user-visible answer), plus whenever there is no trailing prose to act on.
-  const answer = finalAnswerText(parts);
+  // Copy / Insert act on the agent's full textual response. Gate them off while
+  // the message is still streaming and on cancelled turns (treated as having no
+  // user-visible answer), plus whenever there is no prose to act on.
+  const answer = agentResponseText(parts);
   const actions =
     !isStreaming && turnStopReason !== "cancelled" && answer.length > 0 ? (
       <AgentMessageActions text={answer} app={app} />

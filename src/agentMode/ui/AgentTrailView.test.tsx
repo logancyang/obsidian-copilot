@@ -13,7 +13,7 @@ jest.mock("@/agentMode/ui/AgentMarkdownText", () => ({
 
 // `insertAtCursor` is a spy (its selection→replace logic is covered by the
 // `insertAtCursor` unit test in utils.test.ts); `cleanMessageForCopy` is a thin
-// stand-in (real sanitization is covered by the `finalAnswerText` unit test) so
+// stand-in (real sanitization is covered by the `agentResponseText` unit test) so
 // the cleaned text the buttons act on is deterministic here.
 jest.mock("@/utils", () => ({
   cleanMessageForCopy: (s: string) => s.trim(),
