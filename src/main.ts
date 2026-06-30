@@ -52,7 +52,11 @@ import {
 } from "@/services/settingsPersistence";
 import { UserMemoryManager } from "@/memory/UserMemoryManager";
 import { clearRecordedPromptPayload } from "@/LLMProviders/chainRunner/utils/promptPayloadRecorder";
-import { checkIsPaidUser, refreshSelfHostModeValidation } from "@/plusUtils";
+import {
+  checkIsPaidUser,
+  refreshSelfHostModeValidation,
+  verifyCachedEntitlement,
+} from "@/plusUtils";
 import {
   getWebViewerService,
   startActiveWebTabTracking,
@@ -231,6 +235,10 @@ export default class CopilotPlugin extends Plugin {
     // Initialize BrevilabsClient
     this.brevilabsClient = BrevilabsClient.getInstance();
     this.brevilabsClient.setPluginVersion(this.manifest.version);
+    // Re-verify the cached entitlement token offline so the strict Plus gate
+    // fails closed against an edited data.json until the signature re-proves
+    // itself. The network re-validation below overrides with the server's token.
+    void verifyCachedEntitlement();
     void checkIsPaidUser(this.app);
     void refreshSelfHostModeValidation();
 

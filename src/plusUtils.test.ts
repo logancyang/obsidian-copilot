@@ -20,6 +20,7 @@ import {
   canUseMultiAgent,
   isSelfHostAccessValid,
   isSelfHostModeValid,
+  verifyCachedEntitlement,
 } from "@/plusUtils";
 
 const SELF_HOST_GRACE_PERIOD_MS = 15 * 24 * 60 * 60 * 1000;
@@ -65,6 +66,14 @@ describe("isSelfHostAccessValid", () => {
 });
 
 describe("canUseMultiAgent", () => {
+  // Reset the in-memory "verified this session" proof before each case so the
+  // strict gate's token-derived branch starts from a fail-closed state.
+  beforeEach(async () => {
+    mockVerifyEntitlement.mockReset();
+    mockGetSettings.mockReturnValue(buildSettings({ entitlementToken: "" }));
+    await verifyCachedEntitlement();
+  });
+
   it("returns false for a free user (no Plus, no self-host)", () => {
     mockGetSettings.mockReturnValue(
       buildSettings({ isPlusUser: false, enableSelfHostMode: false })
@@ -100,11 +109,41 @@ describe("canUseMultiAgent", () => {
     expect(canUseMultiAgent()).toBe(false);
   });
 
-  it("returns true for an unexpired entitlement token", () => {
+  it("blocks token-derived Plus that was not verified this session (edited data.json)", () => {
+    // A persisted isPlusUser=true plus a future expiry, with no signature
+    // verified this process — the data.json-tampering case. Fails closed.
     mockGetSettings.mockReturnValue(
       buildSettings({
         isPlusUser: true,
         enableSelfHostMode: false,
+        entitlementToken: "forged-or-stale",
+        entitlementExpiresAt: Date.now() + 60_000,
+      })
+    );
+    expect(canUseMultiAgent()).toBe(false);
+  });
+
+  it("allows token-derived Plus once the signed token is verified this session", async () => {
+    // Re-verifying the cached token (offline) sets the in-memory proof, so the
+    // strict gate trusts the unexpired entitlement.
+    mockVerifyEntitlement.mockResolvedValue({
+      user_id: "user-123",
+      plan: "plus",
+      tier: "plus",
+      features: ["multi_agent"],
+      iat: 0,
+      exp: 9_999_999_999,
+    });
+    mockGetSettings.mockReturnValue(
+      buildSettings({ userId: "user-123", entitlementToken: "token" })
+    );
+    await verifyCachedEntitlement();
+
+    mockGetSettings.mockReturnValue(
+      buildSettings({
+        isPlusUser: true,
+        enableSelfHostMode: false,
+        entitlementToken: "token",
         entitlementExpiresAt: Date.now() + 60_000,
       })
     );

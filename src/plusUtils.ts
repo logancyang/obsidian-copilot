@@ -125,18 +125,35 @@ function isEntitlementExpired(settings: CopilotSettings): boolean {
 }
 
 /**
+ * In-memory (never persisted) proof that a signed entitlement granting the
+ * `multi_agent` feature was cryptographically verified in THIS process — set by
+ * {@link applyEntitlement} (server response) or {@link verifyCachedEntitlement}
+ * (cached token re-checked at startup). The strict Plus gate requires it for
+ * token-derived state, so an edited `data.json` (which can flip persisted
+ * booleans and the expiry, but cannot forge an ES256 signature) fails closed.
+ */
+let strictEntitlementVerified = false;
+
+/**
  * Synchronous check for tier >= Plus (excludes Lite) — the gate for
  * Plus-and-above features such as multi-agent fan-out. Self-host plans
  * (Believer/Supporter) are >= Plus, so a valid self-host bypass grants this too.
- * Backed by the signed entitlement token via `settings.isPlusUser`, and locks
- * once the token's `exp` passes (even offline).
  */
 export function isPlusEnabled(): boolean {
   const settings = getSettings();
   if (isSelfHostModeValid()) {
     return true;
   }
-  return settings.isPlusUser === true && !isEntitlementExpired(settings);
+  // Token-derived Plus carries an expiry. Trust it only when the signed token
+  // was cryptographically verified this session (not merely a persisted
+  // `isPlusUser` boolean) and the `exp` has not passed — so editing data.json
+  // cannot unlock the strict gate, even offline.
+  if (settings.entitlementExpiresAt > 0) {
+    return strictEntitlementVerified && !isEntitlementExpired(settings);
+  }
+  // Tokenless fallback (server has not issued a signed entitlement yet): no
+  // artifact exists to verify, so honor the license-confirmed flag as before.
+  return settings.isPlusUser === true;
 }
 
 /**
@@ -587,11 +604,32 @@ export async function applyEntitlement(token: string): Promise<boolean> {
   if (!claims) {
     return false;
   }
+  const grantsMultiAgent = claims.features.includes("multi_agent");
   setSettings({
     entitlementToken: token,
     entitlementExpiresAt: claims.exp * 1000,
     isPaidUser: claims.tier !== "free",
-    isPlusUser: claims.features.includes("multi_agent"),
+    isPlusUser: grantsMultiAgent,
   });
+  strictEntitlementVerified = grantsMultiAgent;
   return true;
+}
+
+/**
+ * Re-verify the persisted entitlement token at startup so the strict Plus gate
+ * works offline WITHOUT trusting the persisted `isPlusUser` boolean. ES256
+ * verification is offline (WebCrypto against the embedded public key), so a
+ * genuine token re-proves itself with no network, while an edited data.json
+ * (flipped booleans, future expiry, but no valid signature) leaves the in-memory
+ * proof false and the strict gate closed. The online `/license` re-validation
+ * still runs separately and overrides this with the server's fresh token.
+ */
+export async function verifyCachedEntitlement(): Promise<void> {
+  const { entitlementToken, userId } = getSettings();
+  if (!entitlementToken) {
+    strictEntitlementVerified = false;
+    return;
+  }
+  const claims = await verifyEntitlement(entitlementToken, { expectedUserId: userId });
+  strictEntitlementVerified = claims?.features.includes("multi_agent") === true;
 }
