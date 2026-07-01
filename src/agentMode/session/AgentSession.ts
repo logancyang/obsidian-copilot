@@ -959,7 +959,6 @@ export class AgentSession {
   ): Promise<StopReason> {
     const placeholderId = this.placeholderId;
     const sessionId = this.backendSessionId!;
-    const turnStartedAt = Date.now();
     try {
       // Extract live Web Viewer content (reader-mode markdown, YouTube
       // transcripts) just before the prompt is built so it reflects the page
@@ -988,7 +987,7 @@ export class AgentSession {
         // gate can be bypassed (pasting a pill), so re-check entitlement here at
         // the session boundary. Paying users short-circuit; everyone else is hard-blocked.
         if (!(await this.ensureMultiAgentEntitlement())) {
-          return this.blockFanoutForEntitlement(placeholderId, turnStartedAt);
+          return this.blockFanoutForEntitlement(placeholderId);
         }
 
         // Give every fan-out agent the PRIOR visible transcript as a read-only
@@ -1012,7 +1011,7 @@ export class AgentSession {
         // the next normal turn skip the block, permanently stripping the project
         // manifest from the main chat. Leaving it unset lets that turn deliver it
         // (and each ephemeral fan-out, being memoryless, re-receives it meanwhile).
-        return await this.runFanoutPath(placeholderId, displayText, promptBlocks, turnStartedAt);
+        return await this.runFanoutPath(placeholderId, displayText, promptBlocks);
       }
 
       // Single-agent path: prepend any buffered fan-out turns as one labeled
@@ -1057,10 +1056,7 @@ export class AgentSession {
         );
         this.store.markMessageError(placeholderId, message);
       }
-      if (
-        placeholderId &&
-        this.store.markTurnComplete(placeholderId, resp.stopReason, Date.now() - turnStartedAt)
-      ) {
+      if (placeholderId && this.store.markTurnComplete(placeholderId, resp.stopReason)) {
         this.notifyMessages();
       }
       // Some backends flush the prompt result before the turn's last content
@@ -1110,13 +1106,13 @@ export class AgentSession {
    * Clean up a paywall-blocked fan-out turn: surface the upgrade prompt and
    * finalize the placeholder as an error so no dangling bubble remains.
    */
-  private blockFanoutForEntitlement(placeholderId: string, turnStartedAt: number): StopReason {
+  private blockFanoutForEntitlement(placeholderId: string): StopReason {
     showMultiAgentUpgradePrompt();
     this.store.markMessageError(
       placeholderId,
       "Multi-agent QA is a Copilot Plus feature. Upgrade to mention more than one agent in a turn."
     );
-    this.store.markTurnComplete(placeholderId, "refusal", Date.now() - turnStartedAt);
+    this.store.markTurnComplete(placeholderId, "refusal");
     this.currentMessageIds = new Set();
     if (this.placeholderId === placeholderId) this.placeholderId = null;
     this.notifyMessages();
@@ -1133,8 +1129,7 @@ export class AgentSession {
   private async runFanoutPath(
     placeholderId: string,
     originalPromptText: string,
-    promptBlocks: PromptContent[],
-    turnStartedAt: number
+    promptBlocks: PromptContent[]
   ): Promise<StopReason> {
     const signal = this.abortController?.signal ?? new AbortController().signal;
     const input: FanoutRunInput = {
@@ -1181,7 +1176,7 @@ export class AgentSession {
         this.pendingFanoutContext.push({ question: originalPromptText, summary: replay });
       }
     }
-    if (this.store.markTurnComplete(placeholderId, stopReason, Date.now() - turnStartedAt)) {
+    if (this.store.markTurnComplete(placeholderId, stopReason)) {
       this.notifyMessages();
     }
     if (this.placeholderId === placeholderId) this.placeholderId = null;

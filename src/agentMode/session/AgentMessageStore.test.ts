@@ -267,7 +267,7 @@ describe("AgentMessageStore", () => {
       const v2 = store.getDisplayMessages()[0];
       expect(v2).not.toBe(v1);
 
-      store.markTurnComplete(id, "end_turn", 10);
+      store.markTurnComplete(id, "end_turn");
       const v3 = store.getDisplayMessages()[0];
       expect(v3).not.toBe(v2);
       expect(v3.turnStopReason).toBe("end_turn");
