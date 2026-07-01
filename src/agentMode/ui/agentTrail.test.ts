@@ -1,9 +1,4 @@
-import {
-  agentResponseText,
-  buildAgentTrail,
-  splitTrailingText,
-  type RenderNode,
-} from "@/agentMode/ui/agentTrail";
+import { agentResponseText, buildAgentTrail, type RenderNode } from "@/agentMode/ui/agentTrail";
 import type { AgentMessagePart } from "@/agentMode/session/types";
 
 function tool(
@@ -300,49 +295,6 @@ describe("buildAgentTrail", () => {
     ];
     const tree = buildAgentTrail(parts);
     expect(tree.map((n) => n.type)).toEqual(["reasoning", "plan"]);
-  });
-});
-
-describe("splitTrailingText", () => {
-  it("returns empty final when there are no trailing text parts", () => {
-    const parts: AgentMessagePart[] = [tool("a"), thought("...")];
-    const { research, final } = splitTrailingText(parts);
-    expect(research).toEqual(parts);
-    expect(final).toEqual([]);
-  });
-
-  it("groups all trailing text parts as the final answer", () => {
-    const parts: AgentMessagePart[] = [
-      tool("a"),
-      text("intermediate"),
-      tool("b"),
-      text("final part 1"),
-      text("final part 2"),
-    ];
-    const { research, final } = splitTrailingText(parts);
-    expect(research.map((p) => p.kind)).toEqual(["tool_call", "text", "tool_call"]);
-    expect(final.map((p) => p.text)).toEqual(["final part 1", "final part 2"]);
-  });
-
-  it("treats a tool_call after text as research, not final", () => {
-    const parts: AgentMessagePart[] = [tool("a"), text("midway answer"), tool("b")];
-    const { research, final } = splitTrailingText(parts);
-    expect(research).toHaveLength(3);
-    expect(final).toEqual([]);
-  });
-
-  it("returns empty research when the whole turn is text", () => {
-    const parts: AgentMessagePart[] = [text("just"), text(" text")];
-    const { research, final } = splitTrailingText(parts);
-    expect(research).toEqual([]);
-    expect(final.map((p) => p.text)).toEqual(["just", " text"]);
-  });
-
-  it("trailing thought breaks the run (thought is research)", () => {
-    const parts: AgentMessagePart[] = [text("answer"), thought("post-hoc reasoning")];
-    const { research, final } = splitTrailingText(parts);
-    expect(research).toHaveLength(2);
-    expect(final).toEqual([]);
   });
 });
 

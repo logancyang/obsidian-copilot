@@ -107,3 +107,28 @@ describe("AgentTrail copy / insert actions", () => {
     expect(screen.queryByTitle("Insert / Replace at cursor")).toBeNull();
   });
 });
+
+describe("AgentTrail inline trail (no collapse)", () => {
+  beforeEach(() => {
+    (window as unknown as { activeDocument: Document }).activeDocument = window.document;
+  });
+
+  it("renders research inline with no 'Worked for' toggle on a completed research+answer turn", () => {
+    renderTrail({
+      parts: [
+        // Multi-word title with no vendorToolName renders verbatim as the
+        // ActionCard's collapsed line (GENERIC_SUMMARY → genericToolLabel).
+        { kind: "tool_call", id: "t1", title: "Search vault", status: "completed" },
+        text("The final answer."),
+      ],
+      turnStopReason: "end_turn",
+    });
+
+    // The "Worked for X" collapse is gone: the whole trail renders inline.
+    expect(screen.queryByText(/Worked for/i)).toBeNull();
+    // The trailing prose renders as the final answer.
+    expect(screen.getByText("The final answer.")).toBeTruthy();
+    // The research tool card renders inline (not folded behind a toggle).
+    expect(screen.getByText("Search vault")).toBeTruthy();
+  });
+});
