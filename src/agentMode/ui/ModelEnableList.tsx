@@ -170,9 +170,22 @@ export const ModelEnableList: React.FC<ModelEnableListProps> = ({
                         </Badge>
                       )}
                       {group.tooltip && (
-                        <HelpTooltip content={group.tooltip} side="top" buttonClassName="tw-size-4">
-                          <KeyRound className="tw-size-3.5 tw-shrink-0 tw-text-muted" />
-                        </HelpTooltip>
+                        // Stop pointer/click from bubbling to the CollapsibleTrigger so
+                        // tapping the hint (which opens the tooltip on mobile) doesn't
+                        // also collapse/expand the group.
+                        <span
+                          className="tw-flex tw-shrink-0 tw-items-center"
+                          onClick={(e) => e.stopPropagation()}
+                          onPointerDown={(e) => e.stopPropagation()}
+                        >
+                          <HelpTooltip
+                            content={group.tooltip}
+                            side="top"
+                            buttonClassName="tw-size-4"
+                          >
+                            <KeyRound className="tw-size-3.5 tw-shrink-0 tw-text-muted" />
+                          </HelpTooltip>
+                        </span>
                       )}
                     </div>
                   </CollapsibleTrigger>
