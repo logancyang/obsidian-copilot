@@ -33,7 +33,7 @@ const SettingSwitch = React.forwardRef<HTMLDivElement, SettingSwitchProps>(
         ref={ref}
         tabIndex={disabled ? -1 : 0}
         className={cn(
-          "tw-relative tw-inline-flex tw-h-5.5 tw-w-10 tw-shrink-0 tw-cursor-pointer tw-items-center tw-rounded-full tw-transition-colors",
+          "tw-relative tw-inline-flex tw-h-[calc(var(--toggle-s-thumb-height)_+_var(--toggle-s-border-width)*2)] tw-w-[var(--toggle-s-width)] tw-shrink-0 tw-cursor-pointer tw-items-center tw-rounded-[var(--toggle-radius)] tw-transition-colors",
           "focus-visible:tw-outline-none focus-visible:tw-ring-2 focus-visible:tw-ring-ring focus-visible:tw-ring-offset-2",
           checked ? "tw-bg-interactive-accent" : "tw-bg-[--background-modifier-border-hover]",
           disabled && "tw-cursor-not-allowed tw-opacity-50",
@@ -45,8 +45,10 @@ const SettingSwitch = React.forwardRef<HTMLDivElement, SettingSwitchProps>(
       >
         <div
           className={cn(
-            "tw-pointer-events-none tw-block tw-size-4 tw-rounded-full tw-bg-toggle-thumb tw-shadow-lg tw-ring-0 tw-transition-transform",
-            checked ? "tw-translate-x-5.5" : "tw-translate-x-0.5"
+            "tw-pointer-events-none tw-block tw-h-[var(--toggle-s-thumb-height)] tw-w-[var(--toggle-s-thumb-width)] tw-rounded-[var(--toggle-thumb-radius)] tw-bg-toggle-thumb tw-shadow-sm tw-ring-0 tw-transition-transform",
+            checked
+              ? "tw-translate-x-[calc(var(--toggle-s-width)_-_var(--toggle-s-thumb-width)_-_var(--toggle-s-border-width))]"
+              : "tw-translate-x-[var(--toggle-s-border-width)]"
           )}
         />
       </div>
