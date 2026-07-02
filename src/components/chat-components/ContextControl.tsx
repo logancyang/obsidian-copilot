@@ -24,6 +24,7 @@ interface ChatControlsProps {
 
   hideAddContextButton?: boolean;
   statusIndicator?: React.ReactNode;
+  usageIndicator?: React.ReactNode;
   isAgentMode?: boolean;
 }
 
@@ -44,6 +45,7 @@ export const ContextControl: React.FC<ChatControlsProps> = ({
   onRemoveFromContext,
   hideAddContextButton,
   statusIndicator,
+  usageIndicator,
   isAgentMode,
 }) => {
   const handleRemoveContext = (category: string, data: string) => {
@@ -79,6 +81,7 @@ export const ContextControl: React.FC<ChatControlsProps> = ({
       lexicalEditorRef={lexicalEditorRef}
       hideAddContextButton={hideAddContextButton}
       statusIndicator={statusIndicator}
+      usageIndicator={usageIndicator}
       isAgentMode={isAgentMode}
     />
   );

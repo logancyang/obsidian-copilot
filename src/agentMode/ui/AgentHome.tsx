@@ -1,6 +1,7 @@
 import AgentChatMessages from "@/agentMode/ui/AgentChatMessages";
 import { AgentChatControls } from "@/agentMode/ui/AgentChatControls";
 import { AgentChatInput } from "@/agentMode/ui/AgentChatInput";
+import AgentContextMeter from "@/agentMode/ui/AgentContextMeter";
 import AgentContextSection, { buildContextSummary } from "@/agentMode/ui/AgentContextSection";
 import AgentContextStatusIcon from "@/agentMode/ui/AgentContextStatusIcon";
 import { AgentLandingStack } from "@/agentMode/ui/AgentLandingStack";
@@ -686,6 +687,11 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       />
     ) : undefined;
 
+  // The context meter is unconditional for every agent session (not gated on
+  // project scope like the status icon): it self-renders `null` until the
+  // backend reports usage, and owns its own leading separator.
+  const usageIndicator = <AgentContextMeter backend={backend} />;
+
   const composerNode = (
     <AgentChatInput
       backend={backend}
@@ -703,6 +709,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       contextLoadBlocking={contextLoadBlocking}
       disabled={isOrphanedProject}
       contextStatusIndicator={contextStatusIndicator}
+      usageIndicator={usageIndicator}
     />
   );
 
