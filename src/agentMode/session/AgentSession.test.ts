@@ -385,6 +385,133 @@ describe("AgentSession.restoreLabel", () => {
   });
 });
 
+describe("AgentSession session usage", () => {
+  function makeSession(mock: ReturnType<typeof makeMockBackend>) {
+    return new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+    });
+  }
+
+  it("starts null and stores an incoming usage_update, notifying subscribers", () => {
+    const mock = makeMockBackend();
+    const session = makeSession(mock);
+    const onMessagesChanged = jest.fn();
+    session.subscribe({ onMessagesChanged, onStatusChanged: () => {} });
+    expect(session.getSessionUsage()).toBeNull();
+
+    mock.emit({
+      sessionId: "acp-1",
+      update: {
+        sessionUpdate: "usage_update",
+        usage: { usedTokens: 5000, contextWindow: 200_000, updatedAt: 1 },
+      },
+    });
+
+    expect(session.getSessionUsage()).toEqual({
+      usedTokens: 5000,
+      contextWindow: 200_000,
+      updatedAt: 1,
+    });
+    expect(onMessagesChanged).toHaveBeenCalled();
+  });
+
+  it("handles usage without a placeholder (session-scoped, no active turn)", () => {
+    const mock = makeMockBackend();
+    const session = makeSession(mock);
+    // No sendPrompt → no placeholder. A session-scoped usage must still land.
+    mock.emit({
+      sessionId: "acp-1",
+      update: {
+        sessionUpdate: "usage_update",
+        usage: { usedTokens: 42, updatedAt: 7 },
+      },
+    });
+    expect(session.getSessionUsage()?.usedTokens).toBe(42);
+  });
+
+  it("keeps a full snapshot's contextWindow when a used-only fallback follows", () => {
+    const mock = makeMockBackend();
+    const session = makeSession(mock);
+    mock.emit({
+      sessionId: "acp-1",
+      update: {
+        sessionUpdate: "usage_update",
+        usage: { usedTokens: 5000, contextWindow: 200_000, updatedAt: 1 },
+      },
+    });
+    // A later used-only snapshot (no contextWindow, e.g. ACP prompt-result
+    // fallback) must not wipe the window; it updates the counts and carries the
+    // prior window forward.
+    mock.emit({
+      sessionId: "acp-1",
+      update: {
+        sessionUpdate: "usage_update",
+        usage: { usedTokens: 6000, updatedAt: 2 },
+      },
+    });
+    expect(session.getSessionUsage()).toEqual({
+      usedTokens: 6000,
+      contextWindow: 200_000,
+      updatedAt: 2,
+    });
+  });
+
+  it("lets a fuller snapshot's contextWindow replace an earlier one", () => {
+    const mock = makeMockBackend();
+    const session = makeSession(mock);
+    mock.emit({
+      sessionId: "acp-1",
+      update: {
+        sessionUpdate: "usage_update",
+        usage: { usedTokens: 5000, contextWindow: 200_000, updatedAt: 1 },
+      },
+    });
+    mock.emit({
+      sessionId: "acp-1",
+      update: {
+        sessionUpdate: "usage_update",
+        usage: { usedTokens: 6000, contextWindow: 1_000_000, updatedAt: 2 },
+      },
+    });
+    expect(session.getSessionUsage()?.contextWindow).toBe(1_000_000);
+  });
+
+  it("seeds usage from persisted history and re-notifies", () => {
+    const mock = makeMockBackend();
+    const session = makeSession(mock);
+    const onMessagesChanged = jest.fn();
+    session.subscribe({ onMessagesChanged, onStatusChanged: () => {} });
+
+    session.seedSessionUsage({ usedTokens: 1234, contextWindow: 200_000, updatedAt: 9 });
+    expect(session.getSessionUsage()).toEqual({
+      usedTokens: 1234,
+      contextWindow: 200_000,
+      updatedAt: 9,
+    });
+    expect(onMessagesChanged).toHaveBeenCalled();
+
+    // A live full snapshot supersedes the seed.
+    mock.emit({
+      sessionId: "acp-1",
+      update: {
+        sessionUpdate: "usage_update",
+        usage: { usedTokens: 2000, contextWindow: 200_000, updatedAt: 10 },
+      },
+    });
+    expect(session.getSessionUsage()?.usedTokens).toBe(2000);
+  });
+
+  it("seedSessionUsage with undefined is a no-op", () => {
+    const mock = makeMockBackend();
+    const session = makeSession(mock);
+    session.seedSessionUsage(undefined);
+    expect(session.getSessionUsage()).toBeNull();
+  });
+});
+
 describe("buildUserDisplayContent", () => {
   it("returns undefined when there are no images", () => {
     expect(buildUserDisplayContent("hi")).toBeUndefined();

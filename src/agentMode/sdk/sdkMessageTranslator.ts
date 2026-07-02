@@ -11,6 +11,7 @@ import type {
   SessionEvent,
   SessionId,
   SessionUpdate,
+  SessionUsage,
   ToolCallContent,
 } from "@/agentMode/session/types";
 import { resolveToolName } from "@/agentMode/session/toolName";
@@ -77,9 +78,44 @@ export function translateSdkMessage(
     case "user":
       return translateUserMessage(msg, sessionId, state);
     case "result":
+      return translateResultMessage(msg, sessionId);
     default:
       return [];
   }
+}
+
+/**
+ * A `result` message closes a turn and carries the authoritative usage totals.
+ * `usedTokens` sums the current context occupancy (input + both cache buckets +
+ * output) — this matches Claude Code's own context bar and drops after
+ * auto-compaction. The context window comes from the `modelUsage` entry with
+ * the largest window (the main agent's model in a multi-model/subagent turn);
+ * it stays undefined when the result reports no per-model usage.
+ */
+function translateResultMessage(msg: SDKResultMessage, sessionId: SessionId): SessionEvent[] {
+  const usage = msg.usage;
+  const usedTokens =
+    usage.input_tokens +
+    usage.cache_read_input_tokens +
+    usage.cache_creation_input_tokens +
+    usage.output_tokens;
+
+  // Largest window across a multi-model/subagent turn; undefined when the
+  // result reports no per-model usage (Math.max() of nothing is -Infinity).
+  const windows = Object.values(msg.modelUsage).map((m) => m.contextWindow);
+  const contextWindow = windows.length > 0 ? Math.max(...windows) : undefined;
+
+  const sessionUsage: SessionUsage = {
+    usedTokens,
+    contextWindow,
+    inputTokens: usage.input_tokens,
+    outputTokens: usage.output_tokens,
+    cacheReadTokens: usage.cache_read_input_tokens,
+    cacheWriteTokens: usage.cache_creation_input_tokens,
+    costUsd: msg.total_cost_usd,
+    updatedAt: Date.now(),
+  };
+  return [event(sessionId, { sessionUpdate: "usage_update", usage: sessionUsage })];
 }
 
 export function mapStopReason(msg: SDKResultMessage): "end_turn" | "cancelled" | "refusal" {

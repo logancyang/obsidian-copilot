@@ -487,7 +487,28 @@ export type SessionUpdate =
   | { sessionUpdate: "session_info_update"; title?: string | null }
   | { sessionUpdate: "current_mode_update"; currentModeId: string }
   | { sessionUpdate: "config_option_update"; configOptions: BackendConfigOption[] }
-  | { sessionUpdate: "state_changed"; state: BackendState };
+  | { sessionUpdate: "state_changed"; state: BackendState }
+  | { sessionUpdate: "usage_update"; usage: SessionUsage };
+
+/**
+ * Backend-agnostic token-usage snapshot for a session. Every coding-agent
+ * backend emits its own usage shape (Claude SDK's `result` message, ACP's
+ * `usage_update` notification / prompt-result `usage`); translators normalize
+ * to this one type. `usedTokens` is current context occupancy — it can drop
+ * after auto-compaction. `contextWindow` is absent when the source couldn't
+ * report it (e.g. an ACP prompt-result `usage` with no window field); a
+ * used-only snapshot must not clobber a fuller one that carries the window.
+ */
+export interface SessionUsage {
+  usedTokens: number;
+  contextWindow?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
+  costUsd?: number;
+  updatedAt: number;
+}
 
 /** A SessionEvent is the demuxed pair `(sessionId, update)` consumed by handlers. */
 export interface SessionEvent {

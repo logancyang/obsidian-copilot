@@ -182,3 +182,50 @@ describe("acpNotificationToEvents — todowrite → synthesized plan", () => {
     });
   });
 });
+
+describe("acpNotificationToEvents — usage_update → SessionUsage", () => {
+  const FIXED_NOW = 1_700_000_000_000;
+  let nowSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    nowSpy = jest.spyOn(Date, "now").mockReturnValue(FIXED_NOW);
+  });
+  afterEach(() => nowSpy.mockRestore());
+
+  it("maps size→contextWindow, used→usedTokens, cost.amount→costUsd", () => {
+    const events = acpNotificationToEvents(
+      notification({
+        sessionUpdate: "usage_update",
+        size: 200_000,
+        used: 42_000,
+        cost: { amount: 0.1234, currency: "USD" },
+      })
+    );
+    expect(events).toHaveLength(1);
+    expect(events[0].sessionId).toBe(SESSION_ID);
+    expect(events[0].update).toEqual({
+      sessionUpdate: "usage_update",
+      usage: {
+        usedTokens: 42_000,
+        contextWindow: 200_000,
+        costUsd: 0.1234,
+        updatedAt: FIXED_NOW,
+      },
+    });
+  });
+
+  it("leaves costUsd undefined when the update carries no cost", () => {
+    const events = acpNotificationToEvents(
+      notification({ sessionUpdate: "usage_update", size: 128_000, used: 1_000 })
+    );
+    expect(events[0].update).toEqual({
+      sessionUpdate: "usage_update",
+      usage: {
+        usedTokens: 1_000,
+        contextWindow: 128_000,
+        costUsd: undefined,
+        updatedAt: FIXED_NOW,
+      },
+    });
+  });
+});

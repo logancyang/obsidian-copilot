@@ -1,9 +1,11 @@
 /* eslint-disable obsidianmd/no-tfile-tfolder-cast -- test fixtures; not real TFiles */
 import { AI_SENDER, USER_SENDER } from "@/constants";
+import { readFrontmatterViaAdapter } from "@/utils/vaultAdapterUtils";
 import { AgentChatPersistenceManager } from "./AgentChatPersistenceManager";
 import { GLOBAL_SCOPE } from "./scope";
 import type { AgentChatMessage } from "./types";
-import type { App, TFile } from "obsidian";
+import { TFile } from "obsidian";
+import type { App } from "obsidian";
 
 jest.mock("obsidian", () => ({
   Notice: jest.fn(),
@@ -280,6 +282,93 @@ describe("AgentChatPersistenceManager", () => {
       // path returns the frontmatter (a bare {path} fixture would read empty).
       const loaded = await manager.loadFile(app.files.get(path) as unknown as TFile);
       expect(loaded.projectId).toBe(GLOBAL_SCOPE);
+    });
+  });
+
+  describe("usage frontmatter", () => {
+    afterEach(() => {
+      // Restore the default no-metadata behavior for the adapter helper so a
+      // per-test override (round-trip-on-omit) doesn't leak into other suites.
+      (readFrontmatterViaAdapter as jest.Mock).mockResolvedValue(null);
+    });
+
+    it("round-trips a SessionUsage snapshot through save/load", async () => {
+      const messages = [makeMessage(USER_SENDER, "hi")];
+      const usage = {
+        usedTokens: 42_000,
+        contextWindow: 200_000,
+        inputTokens: 100,
+        outputTokens: 20,
+        cacheReadTokens: 5000,
+        cacheWriteTokens: 300,
+        costUsd: 0.42,
+        updatedAt: 1_700_000_000_000,
+      };
+      const saved = await manager.saveSession(messages, "claude", { usage });
+      const raw = app.files.get(saved!.path)!.contents!;
+      expect(raw).toContain(`usage: '${JSON.stringify(usage)}'`);
+
+      const loaded = await manager.loadFile(app.files.get(saved!.path) as unknown as TFile);
+      expect(loaded.usage).toEqual(usage);
+    });
+
+    it("round-trips the persisted usage when a later save omits it", async () => {
+      const messages = [makeMessage(USER_SENDER, "hi")];
+      const usage = { usedTokens: 5000, contextWindow: 200_000, updatedAt: 1 };
+      const first = await manager.saveSession(messages, "claude", { usage });
+      // `resolveExistingFile` gates on `instanceof TFile`; give the stored fake
+      // the mocked prototype so the resave takes the existing-file path (where
+      // usage round-trips) instead of treating it as a brand-new write.
+      Object.setPrototypeOf(app.files.get(first!.path)!, TFile.prototype);
+      // Mirror production: `readExistingMeta` reads the prior file's frontmatter
+      // to round-trip fields the caller didn't re-supply. The default mock
+      // returns null (no metadata), so parse the stored file here — quote-strip
+      // matches the real adapter helper so the JSON value comes back intact.
+      (readFrontmatterViaAdapter as jest.Mock).mockImplementation(async (_app, path: string) => {
+        const raw = app.files.get(path)?.contents ?? "";
+        const yaml = raw.match(/^---\n([\s\S]*?)\n---/)?.[1];
+        if (!yaml) return null;
+        const fm: Record<string, string> = {};
+        for (const line of yaml.split("\n")) {
+          const m = line.match(/^([\w-]+):\s*(.+)/);
+          if (m) fm[m[1]] = m[2].trim().replace(/^["']|["']$/g, "");
+        }
+        return fm;
+      });
+      // A save with no usage option must not drop the stored snapshot.
+      const second = await manager.saveSession(messages, "claude", {
+        existingPath: first!.path,
+      });
+      const loaded = await manager.loadFile(app.files.get(second!.path) as unknown as TFile);
+      expect(loaded.usage).toEqual(usage);
+    });
+
+    it("leaves usage undefined for a chat saved without it", async () => {
+      const saved = await manager.saveSession([makeMessage(USER_SENDER, "hi")], "claude");
+      const raw = app.files.get(saved!.path)!.contents!;
+      expect(raw).not.toContain("usage:");
+      const loaded = await manager.loadFile(app.files.get(saved!.path) as unknown as TFile);
+      expect(loaded.usage).toBeUndefined();
+    });
+
+    it("ignores malformed usage JSON instead of failing the load", async () => {
+      const path = "test-folder/agent__badusage.md";
+      await app.vault.adapter.write(
+        path,
+        [
+          "---",
+          "epoch: 1735732800000",
+          "mode: agent",
+          "backendId: claude",
+          "usage: 'not-json{'",
+          "---",
+          "",
+          "**user**: hi",
+        ].join("\n")
+      );
+      const loaded = await manager.loadFile(app.files.get(path) as unknown as TFile);
+      expect(loaded.usage).toBeUndefined();
+      expect(loaded.backendId).toBe("claude");
     });
   });
 });

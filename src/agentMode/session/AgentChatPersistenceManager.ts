@@ -22,10 +22,33 @@ import { TFile, type App } from "obsidian";
 import { Notice } from "obsidian";
 import { coerceProjectId, escapeYamlString, unescapeYamlString } from "./agentChatYaml";
 import { GLOBAL_SCOPE } from "./scope";
-import type { AgentChatMessage, BackendId } from "./types";
+import type { AgentChatMessage, BackendId, SessionUsage } from "./types";
 
 const SAFE_FILENAME_BYTE_LIMIT = 100;
 export const AGENT_FILENAME_PREFIX = "agent__";
+
+/**
+ * Parse the frontmatter `usage` field (a JSON string) back into a
+ * {@link SessionUsage}. Returns `undefined` for absent, non-string, malformed,
+ * or wrong-shaped values so a corrupt frontmatter never rejects the whole load.
+ */
+function parseUsageJson(raw: unknown): SessionUsage | undefined {
+  if (typeof raw !== "string" || raw.trim().length === 0) return undefined;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (
+      typeof parsed === "object" &&
+      parsed !== null &&
+      typeof (parsed as SessionUsage).usedTokens === "number" &&
+      typeof (parsed as SessionUsage).updatedAt === "number"
+    ) {
+      return parsed as SessionUsage;
+    }
+  } catch {
+    // Malformed JSON — fall through to undefined.
+  }
+  return undefined;
+}
 
 /**
  * Result of `loadFile` — restores display-only Agent Mode messages plus
@@ -51,6 +74,12 @@ export interface LoadedAgentChat {
    * authority.
    */
   projectId: string;
+  /**
+   * Latest token-usage snapshot captured at save time, or `undefined` for chats
+   * saved before usage was wired up (or with malformed usage frontmatter). Lets
+   * a resumed session show its last-known usage before the next turn.
+   */
+  usage?: SessionUsage;
 }
 
 interface ExistingMeta {
@@ -59,6 +88,7 @@ interface ExistingMeta {
   lastAccessedAt?: number;
   sessionId?: string;
   projectId?: string;
+  usage?: SessionUsage;
 }
 
 /**
@@ -102,6 +132,8 @@ export class AgentChatPersistenceManager {
        * global chats.
        */
       projectId?: string;
+      /** Latest token-usage snapshot to persist for resume. */
+      usage?: SessionUsage;
     }
   ): Promise<{ path: string } | null> {
     if (messages.length === 0) return null;
@@ -136,6 +168,9 @@ export class AgentChatPersistenceManager {
         // demotes itself to global on a later save. Coerce first so a blank
         // option falls through to the existing scope instead of clobbering it.
         projectId: coerceProjectId(options?.projectId) ?? existingMeta.projectId,
+        // Round-trip the persisted usage when the caller doesn't re-supply it,
+        // so a save that isn't triggered by a usage change keeps the snapshot.
+        usage: options?.usage ?? existingMeta.usage,
       });
 
       if (existingFile && isInVaultCache(this.app, existingFile.path)) {
@@ -205,12 +240,13 @@ export class AgentChatPersistenceManager {
     // HARD CONTRACT: absent/blank projectId → GLOBAL_SCOPE, so legacy `agent__`
     // chats stay in the global history. Never inferred from the filename.
     const projectId = frontmatter.projectId?.trim() || GLOBAL_SCOPE;
+    const usage = parseUsageJson(frontmatter.usage);
     const messages = this.parseChatBody(body);
 
     logInfo(
       `[AgentChatPersistenceManager] Loaded ${messages.length} messages from ${file.path} (backend=${backendId}, sessionId=${sessionId ?? "none"}, projectId=${projectId})`
     );
-    return { messages, backendId, topic, label, sessionId, projectId };
+    return { messages, backendId, topic, label, sessionId, projectId, usage };
   }
 
   /**
@@ -259,6 +295,7 @@ export class AgentChatPersistenceManager {
           typeof cached.lastAccessedAt === "number" ? cached.lastAccessedAt : undefined,
         sessionId: typeof cached.sessionId === "string" ? cached.sessionId : undefined,
         projectId: coerceProjectId(cached.projectId),
+        usage: parseUsageJson(cached.usage),
       };
     }
     try {
@@ -271,6 +308,7 @@ export class AgentChatPersistenceManager {
         lastAccessedAt: lastAccessed && Number.isFinite(lastAccessed) ? lastAccessed : undefined,
         sessionId: typeof fm.sessionId === "string" ? fm.sessionId : undefined,
         projectId: coerceProjectId(fm.projectId),
+        usage: parseUsageJson(fm.usage),
       };
     } catch {
       return {};
@@ -452,6 +490,7 @@ export class AgentChatPersistenceManager {
     lastAccessedAt?: number;
     sessionId?: string | null;
     projectId?: string;
+    usage?: SessionUsage;
   }): string {
     const settings = getSettings();
     const lines: string[] = [
@@ -472,6 +511,10 @@ export class AgentChatPersistenceManager {
     if (args.label) lines.push(`agentLabel: "${escapeYamlString(args.label)}"`);
     if (args.modelKey) lines.push(`modelKey: "${escapeYamlString(args.modelKey)}"`);
     if (args.lastAccessedAt) lines.push(`lastAccessedAt: ${args.lastAccessedAt}`);
+    // Serialized as a single-quoted JSON string: JSON.stringify emits no single
+    // quotes or raw control chars, so the value round-trips through the YAML
+    // parser (and our hand-rolled splitFrontmatter) verbatim.
+    if (args.usage) lines.push(`usage: '${JSON.stringify(args.usage)}'`);
     lines.push("tags:");
     lines.push(`  - ${settings.defaultConversationTag}`);
     lines.push("---");

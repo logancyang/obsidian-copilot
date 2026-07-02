@@ -2502,6 +2502,7 @@ export class AgentSessionManager {
     }
 
     session.loadDisplayMessages(loaded.messages);
+    session.seedSessionUsage(loaded.usage);
     if (loaded.label) session.setLabel(loaded.label);
     this.getSessionState(session.internalId).path = file.path;
     if (loaded.sessionId) {
@@ -2899,6 +2900,7 @@ export class AgentSessionManager {
 
     const label = session.getLabel();
     const sessionId = session.getBackendSessionId();
+    const usage = session.getSessionUsage();
     // Skip the write when nothing user-visible has changed since the last
     // save. Streaming token updates and idempotent label notifications
     // otherwise rewrite the entire file on every debounce tick. Include
@@ -2914,9 +2916,11 @@ export class AgentSessionManager {
           .map((a) => `${a.status}:${a.text.length}`)
           .join(",") + `|${last.fanout.summary.status}:${last.fanout.summary.text.length}`
       : "";
+    // Fold in the usage `updatedAt` so a turn that only changed token usage
+    // (message text/label/sessionId all unchanged) still writes through.
     const signature = `${label ?? ""}-${sessionId ?? ""}-${messages.length}-${
       last?.message ?? ""
-    }-${fanoutSig}`;
+    }-${fanoutSig}-${usage?.updatedAt ?? ""}`;
     const state = this.getSessionState(session.internalId);
     if (state.signature === signature) {
       return state.path ? { path: state.path } : null;
@@ -2929,6 +2933,7 @@ export class AgentSessionManager {
       // GLOBAL_SCOPE writes no frontmatter (byte-identical to legacy chats);
       // a real project id binds the chat to that scope on disk.
       projectId: session.projectId,
+      usage: usage ?? undefined,
     });
     if (result) {
       state.path = result.path;

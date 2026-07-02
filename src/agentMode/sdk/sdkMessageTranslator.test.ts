@@ -121,7 +121,7 @@ describe("translateSdkMessage", () => {
     expect(state.toolUseBlocks.size).toBe(0);
   });
 
-  it("returns [] for `result` (caller resolves the prompt promise separately)", () => {
+  it("emits a single usage_update for `result` (caller resolves the prompt promise separately)", () => {
     const state = createTranslatorState();
     const out = translateSdkMessage(
       {
@@ -134,8 +134,13 @@ describe("translateSdkMessage", () => {
         result: "ok",
         stop_reason: "end_turn",
         total_cost_usd: 0,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        usage: {} as any,
+        usage: {
+          input_tokens: 0,
+          output_tokens: 0,
+          cache_read_input_tokens: 0,
+          cache_creation_input_tokens: 0,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any,
         modelUsage: {},
         permission_denials: [],
         uuid: "uuid-2" as `${string}-${string}-${string}-${string}-${string}`,
@@ -144,7 +149,8 @@ describe("translateSdkMessage", () => {
       SESSION_ID,
       state
     );
-    expect(out).toEqual([]);
+    expect(out).toHaveLength(1);
+    expect(out[0].update.sessionUpdate).toBe("usage_update");
   });
 
   it("ignores assistant messages whose tool_use blocks were already streamed", () => {
@@ -782,5 +788,94 @@ describe("session todo-list normalization (TodoWrite / Task tools → plan)", ()
       sessionUpdate: "plan",
       entries: [{ content: "persist me", status: "completed", priority: "medium" }],
     });
+  });
+});
+
+function resultMessage(overrides: {
+  usage: {
+    input_tokens: number;
+    output_tokens: number;
+    cache_read_input_tokens: number;
+    cache_creation_input_tokens: number;
+  };
+  modelUsage?: Record<string, { contextWindow: number }>;
+  total_cost_usd?: number;
+}): SDKMessage {
+  return {
+    type: "result",
+    subtype: "success",
+    usage: overrides.usage,
+    modelUsage: overrides.modelUsage ?? {},
+    total_cost_usd: overrides.total_cost_usd ?? 0,
+    session_id: SESSION_ID,
+  } as unknown as SDKMessage;
+}
+
+describe("translateSdkMessage — result → usage_update", () => {
+  const FIXED_NOW = 1_700_000_000_000;
+  let nowSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    nowSpy = jest.spyOn(Date, "now").mockReturnValue(FIXED_NOW);
+  });
+  afterEach(() => nowSpy.mockRestore());
+
+  it("sums context occupancy and reads the largest modelUsage contextWindow", () => {
+    const out = translateSdkMessage(
+      resultMessage({
+        usage: {
+          input_tokens: 100,
+          output_tokens: 20,
+          cache_read_input_tokens: 5000,
+          cache_creation_input_tokens: 300,
+        },
+        // Multi-model turn (main + subagent): pick the LARGEST window.
+        modelUsage: {
+          "claude-haiku": { contextWindow: 200_000 },
+          "claude-sonnet": { contextWindow: 1_000_000 },
+        },
+        total_cost_usd: 0.42,
+      }),
+      SESSION_ID,
+      createTranslatorState()
+    );
+    expect(out).toEqual([
+      {
+        sessionId: SESSION_ID,
+        update: {
+          sessionUpdate: "usage_update",
+          usage: {
+            usedTokens: 5420,
+            contextWindow: 1_000_000,
+            inputTokens: 100,
+            outputTokens: 20,
+            cacheReadTokens: 5000,
+            cacheWriteTokens: 300,
+            costUsd: 0.42,
+            updatedAt: FIXED_NOW,
+          },
+        },
+      },
+    ]);
+  });
+
+  it("emits usedTokens with undefined contextWindow when modelUsage is empty", () => {
+    const out = translateSdkMessage(
+      resultMessage({
+        usage: {
+          input_tokens: 10,
+          output_tokens: 2,
+          cache_read_input_tokens: 0,
+          cache_creation_input_tokens: 0,
+        },
+      }),
+      SESSION_ID,
+      createTranslatorState()
+    );
+    expect(out).toHaveLength(1);
+    const update = out[0].update as { sessionUpdate: string; usage: Record<string, unknown> };
+    expect(update.sessionUpdate).toBe("usage_update");
+    expect(update.usage.usedTokens).toBe(12);
+    expect(update.usage.contextWindow).toBeUndefined();
   });
 });

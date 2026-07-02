@@ -12,6 +12,7 @@ import type {
   PermissionPrompt,
   PlanDecisionAction,
   PromptContent,
+  SessionUsage,
 } from "@/agentMode/session/types";
 import type { MessageContext } from "@/types/message";
 
@@ -156,6 +157,10 @@ export class AgentChatUIState implements AgentChatBackend {
 
   getCurrentTodoList(): AgentTodoListEntry[] | null {
     return this.session.getCurrentTodoList();
+  }
+
+  getSessionUsage(): SessionUsage | null {
+    return this.session.getSessionUsage();
   }
 
   async resolvePlanProposal(

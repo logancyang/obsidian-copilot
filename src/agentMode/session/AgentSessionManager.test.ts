@@ -173,6 +173,7 @@ function makeMockSession(overrides: {
     setConfigOption: jest.fn(),
     getLabel: () => null,
     setLabel: jest.fn(),
+    getSessionUsage: () => null,
     subscribe: (l: Parameters<typeof listeners.add>[0]) => {
       listeners.add(l);
       return () => listeners.delete(l);

@@ -471,4 +471,77 @@ describe("AcpBackendProcess", () => {
       expect(req.additionalDirectories).toEqual(["/abs/context-a", "/abs/context-b"]);
     });
   });
+
+  describe("prompt-result usage fallback", () => {
+    // Reach the mock connection's `prompt` jest.fn so a test can stub the
+    // turn-level `usage` the backend reads after `prompt()` resolves.
+    function promptMock(backend: AcpBackendProcess): jest.Mock {
+      return (backend as unknown as { connection: { prompt: jest.Mock } }).connection.prompt;
+    }
+
+    async function makeBackend(): Promise<AcpBackendProcess> {
+      const backend = new AcpBackendProcess(
+        buildApp(),
+        buildStubBackend(),
+        "1.0.0",
+        buildStubDescriptor()
+      );
+      await backend.start();
+      return backend;
+    }
+
+    it("emits a used-only usage_update from the prompt result when no live update was seen", async () => {
+      const backend = await makeBackend();
+      const handler = jest.fn();
+      backend.registerSessionHandler("s1", handler);
+      promptMock(backend).mockResolvedValueOnce({
+        stopReason: "end_turn",
+        usage: { totalTokens: 4200, inputTokens: 100, outputTokens: 20 },
+      });
+
+      await backend.prompt({ sessionId: "s1", prompt: [] });
+
+      const usageEvents = handler.mock.calls
+        .map(([e]) => e)
+        .filter((e) => e.update.sessionUpdate === "usage_update");
+      expect(usageEvents).toHaveLength(1);
+      expect(usageEvents[0].update.usage).toMatchObject({
+        usedTokens: 4200,
+        inputTokens: 100,
+        outputTokens: 20,
+      });
+      // Fallback carries no window — AgentSession keeps any prior one.
+      expect(usageEvents[0].update.usage.contextWindow).toBeUndefined();
+    });
+
+    it("suppresses the prompt-result fallback once a live usage_update has been seen", async () => {
+      const backend = await makeBackend();
+      const handler = jest.fn();
+      backend.registerSessionHandler("s1", handler);
+      const client = getVaultClient(backend);
+
+      // A live usage_update reports current context occupancy (used/size).
+      await client.sessionUpdate({
+        sessionId: "s1",
+        update: { sessionUpdate: "usage_update", used: 5000, size: 200_000 },
+      } as unknown as Parameters<typeof client.sessionUpdate>[0]);
+
+      // The prompt result carries a cumulative total; it must not overwrite the
+      // live occupancy figure, so no second usage_update should be emitted.
+      promptMock(backend).mockResolvedValueOnce({
+        stopReason: "end_turn",
+        usage: { totalTokens: 999_999, inputTokens: 1, outputTokens: 1 },
+      });
+      await backend.prompt({ sessionId: "s1", prompt: [] });
+
+      const usageEvents = handler.mock.calls
+        .map(([e]) => e)
+        .filter((e) => e.update.sessionUpdate === "usage_update");
+      expect(usageEvents).toHaveLength(1);
+      expect(usageEvents[0].update.usage).toMatchObject({
+        usedTokens: 5000,
+        contextWindow: 200_000,
+      });
+    });
+  });
 });
