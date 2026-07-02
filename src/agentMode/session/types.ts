@@ -889,12 +889,6 @@ export interface AgentChatMessage {
    */
   turnStopReason?: StopReason;
   /**
-   * Wall-clock ms the turn took, frozen at `prompt()` resolution. Stored
-   * so re-renders don't shift the "Worked for X" label. Absent until the
-   * turn ends.
-   */
-  turnDurationMs?: number;
-  /**
    * Per-agent fan-out state when this assistant message is a multi-agent QA turn.
    * LIVE in-memory only — persistence rides in the body as a composite
    * (`serializeFanoutComposite`) and is reconstructed here on load

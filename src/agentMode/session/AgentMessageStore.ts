@@ -31,7 +31,6 @@ interface StoredAgentMessage {
   context?: MessageContext;
   content?: unknown[];
   turnStopReason?: StopReason;
-  turnDurationMs?: number;
   // Live per-agent fan-out state. In-memory only; the persisted body carries the
   // composite that reconstructs it on load.
   fanout?: FanoutTurn;
@@ -234,7 +233,6 @@ export class AgentMessageStore {
       content: message.content,
       parts: message.parts,
       turnStopReason: message.turnStopReason,
-      turnDurationMs: message.turnDurationMs,
       version: 0,
     });
     this.lastDisplay = null;
@@ -242,16 +240,15 @@ export class AgentMessageStore {
   }
 
   /**
-   * Stamp a finished turn's `stopReason` and frozen `durationMs` onto its
-   * placeholder assistant message. Returns false if the message is missing or
-   * already marked complete — the latter lets callers skip notifying.
+   * Stamp a finished turn's `stopReason` onto its placeholder assistant message.
+   * Returns false if the message is missing or already marked complete — the
+   * latter lets callers skip notifying.
    */
-  markTurnComplete(id: string, stopReason: StopReason, durationMs: number): boolean {
+  markTurnComplete(id: string, stopReason: StopReason): boolean {
     const msg = this.messages.find((m) => m.id === id);
     if (!msg) return false;
     if (msg.turnStopReason !== undefined) return false;
     msg.turnStopReason = stopReason;
-    msg.turnDurationMs = durationMs;
     this.touch(msg);
     return true;
   }
@@ -461,7 +458,6 @@ export class AgentMessageStore {
         content: msg.content,
         parts: msg.parts,
         turnStopReason: msg.turnStopReason,
-        turnDurationMs: msg.turnDurationMs,
         fanout,
         version: 0,
       });
@@ -488,7 +484,6 @@ export class AgentMessageStore {
       content: m.content,
       parts: m.parts,
       turnStopReason: m.turnStopReason,
-      turnDurationMs: m.turnDurationMs,
       // Snapshot so each adapted view carries a fresh reference; the orchestrator
       // mutates one turn in place, so the same reference would freeze the dropdown.
       ...(m.fanout ? { fanout: snapshotFanoutTurn(m.fanout) } : {}),

@@ -26,35 +26,6 @@ export interface BuildAgentTrailOptions {
 }
 
 /**
- * Split a turn's parts into the trailing user-visible answer and everything
- * that came before (the "research"). The boundary is the last contiguous run
- * of `text` parts: any `tool_call`, `thought`, or `plan` part after a text
- * run reclassifies that run as research.
- *
- * Used by the trail UI to fold the research portion into a single
- * "Worked for X" block once a turn has cleanly ended (`stopReason: end_turn`).
- * Streaming turns and cancelled / refused / errored turns keep the trail
- * uncollapsed — that's the caller's responsibility, not this helper's.
- */
-export function splitTrailingText(parts: AgentMessagePart[]): {
-  research: AgentMessagePart[];
-  final: TextPart[];
-} {
-  const final: TextPart[] = [];
-  let boundary = parts.length;
-  for (let i = parts.length - 1; i >= 0; i--) {
-    const p = parts[i];
-    if (p.kind === "text") {
-      final.unshift(p);
-      boundary = i;
-      continue;
-    }
-    break;
-  }
-  return { research: parts.slice(0, boundary), final };
-}
-
-/**
  * The agent's full textual response across the turn, ready for the clipboard
  * or the editor: every `text` part in stream order (not just the trailing run),
  * joined and run through the same sanitization legacy chat applies
