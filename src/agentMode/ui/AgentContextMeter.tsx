@@ -4,7 +4,6 @@ import { useSessionUsage } from "@/agentMode/ui/hooks/useSessionUsage";
 import { TokenCounter } from "@/components/chat-components/TokenCounter";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import * as React from "react";
 
@@ -100,12 +99,11 @@ function RingMeter({ usage, contextWindow }: { usage: SessionUsage; contextWindo
       <PopoverTrigger asChild>
         <Button
           variant="ghost2"
-          size="fit"
-          className={cn("tw-gap-1", isWarning ? "tw-text-warning" : "tw-text-accent")}
+          size="icon"
+          className={cn(isWarning ? "tw-text-warning" : "tw-text-accent")}
           aria-label="Context usage"
         >
           <ContextRing fraction={fraction} />
-          <span className="tw-text-ui-smaller tw-tabular-nums">{percent}%</span>
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" side="top" className="tw-w-64">
@@ -129,14 +127,15 @@ function RingMeter({ usage, contextWindow }: { usage: SessionUsage; contextWindo
 }
 
 /**
- * Circular context-window meter for the agent composer. Renders the leading
- * `Separator` itself so the badge row has no dangling divider when it returns
- * `null`. Render ladder from the backend's {@link SessionUsage}:
+ * Circular context-window meter for the agent control bar. Renders as a single
+ * icon-sized button that sits alongside the other row controls (no separator of
+ * its own). Render ladder from the backend's {@link SessionUsage}:
  *
- *   - a positive `contextWindow` → the % ring + numbers popover (with cost);
+ *   - a positive `contextWindow` → the % ring popover (percentage, numbers, and
+ *     cost live inside the popover);
  *   - `usedTokens` known but no window → the legacy count-only `TokenCounter`
  *     chip (no cost);
- *   - no usage at all → `null` (renders nothing).
+ *   - no usage at all → `null` (renders nothing, so the row shows no control).
  */
 export default function AgentContextMeter({ backend }: AgentContextMeterProps) {
   const usage = useSessionUsage(backend);
@@ -144,21 +143,10 @@ export default function AgentContextMeter({ backend }: AgentContextMeterProps) {
 
   const window = usage.contextWindow;
   if (typeof window === "number" && Number.isFinite(window) && window > 0) {
-    return (
-      <>
-        <Separator orientation="vertical" />
-        <RingMeter usage={usage} contextWindow={window} />
-      </>
-    );
+    return <RingMeter usage={usage} contextWindow={window} />;
   }
 
-  // Count-only fallback: render nothing (no separator, no chip) when there is
-  // no usage to show, so the badge row keeps no dangling divider.
+  // Count-only fallback: render nothing when there is no usage to show.
   if (!(usage.usedTokens > 0)) return null;
-  return (
-    <>
-      <Separator orientation="vertical" />
-      <TokenCounter tokenCount={usage.usedTokens} />
-    </>
-  );
+  return <TokenCounter tokenCount={usage.usedTokens} />;
 }

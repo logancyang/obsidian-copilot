@@ -29,6 +29,12 @@ interface AgentChatControlsProps {
   onUpdateChatTitle?: (id: string, newTitle: string) => Promise<void>;
   onDeleteChat?: (id: string) => Promise<void>;
   onOpenSourceFile?: (id: string) => Promise<void>;
+  /**
+   * Context-window usage meter, rendered as the first item in the right-side
+   * control cluster (left of New Chat). Self-renders `null` until the backend
+   * reports usage. Omitted in the not-ready state, so nothing renders there.
+   */
+  usageMeter?: React.ReactNode;
 }
 
 /**
@@ -47,6 +53,7 @@ export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
   onUpdateChatTitle,
   onDeleteChat,
   onOpenSourceFile,
+  usageMeter,
 }) => {
   const settings = useSettingsValue();
   const historyAvailable = Boolean(
@@ -60,6 +67,7 @@ export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
         agent (alpha)
       </div>
       <div className="tw-flex tw-items-center tw-gap-1">
+        {usageMeter}
         {onNewChat && (
           <Tooltip>
             <TooltipTrigger asChild>

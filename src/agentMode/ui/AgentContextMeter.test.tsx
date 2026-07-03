@@ -32,12 +32,14 @@ describe("AgentContextMeter", () => {
     };
     render(<AgentContextMeter backend={makeBackend(usage)} />);
 
+    // The trigger is an icon-sized button with just the ring (no inline % text).
     const trigger = screen.getByLabelText("Context usage");
-    // 50k / 200k = 25%.
-    expect(trigger.textContent).toContain("25%");
+    expect(trigger.textContent).not.toContain("25%");
 
     fireEvent.click(trigger);
 
+    // 50k / 200k = 25%, shown in the popover headline.
+    expect(screen.getByText("25%")).toBeTruthy();
     // used / total headline numbers.
     expect(screen.getByText("50,000 / 200,000")).toBeTruthy();
     // input · output · cache(read+write) breakdown.
@@ -55,9 +57,13 @@ describe("AgentContextMeter", () => {
     render(<AgentContextMeter backend={makeBackend(usage)} />);
 
     const trigger = screen.getByLabelText("Context usage");
-    expect(trigger.textContent).toContain("85%");
+    // The warning accent lives on the trigger itself.
     expect(trigger.className).toContain("tw-text-warning");
     expect(trigger.className).not.toContain("tw-text-accent");
+
+    // 170k / 200k = 85%, surfaced in the popover.
+    fireEvent.click(trigger);
+    expect(screen.getByText("85%")).toBeTruthy();
   });
 
   it("stays on the accent color below the warning threshold", () => {

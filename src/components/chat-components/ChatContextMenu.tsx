@@ -50,14 +50,6 @@ interface ChatContextMenuProps {
    */
   statusIndicator?: React.ReactNode;
   /**
-   * Agent Mode passes its context-window usage meter here; it renders at the
-   * right of the badge row, after {@link statusIndicator}. The meter owns its
-   * own leading separator (so it can vanish cleanly when there's no usage), so
-   * it's rendered bare — never wrapped in a `Separator` here. Legacy Chat leaves
-   * it undefined.
-   */
-  usageIndicator?: React.ReactNode;
-  /**
    * True in Agent Mode. Suppresses the legacy CAG project-status icon (Agent Mode
    * owns its own via {@link statusIndicator}); keeps the two from ever co-existing.
    */
@@ -81,7 +73,6 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
   lexicalEditorRef,
   hideAddContextButton = false,
   statusIndicator,
-  usageIndicator,
   isAgentMode = false,
 }) => {
   const app = useApp();
@@ -259,10 +250,6 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
           {statusIndicator}
         </>
       )}
-
-      {/* The meter renders its own leading Separator, so it's placed bare here —
-          it returns null (separator and all) when there's no usage to show. */}
-      {usageIndicator}
 
       {currentChain !== ChainType.PROJECT_CHAIN && indexingState.isActive && showIndexingCard && (
         <>

@@ -687,11 +687,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       />
     ) : undefined;
 
-  // The context meter is unconditional for every agent session (not gated on
-  // project scope like the status icon): it self-renders `null` until the
-  // backend reports usage, and owns its own leading separator.
-  const usageIndicator = <AgentContextMeter backend={backend} />;
-
   const composerNode = (
     <AgentChatInput
       backend={backend}
@@ -709,7 +704,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       contextLoadBlocking={contextLoadBlocking}
       disabled={isOrphanedProject}
       contextStatusIndicator={contextStatusIndicator}
-      usageIndicator={usageIndicator}
     />
   );
 
@@ -912,6 +906,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                       onUpdateChatTitle={handleUpdateChatTitle}
                       onDeleteChat={handleDeleteChat}
                       onOpenSourceFile={handleOpenSourceFile}
+                      usageMeter={<AgentContextMeter backend={backend} />}
                     />
                     {composerNode}
                   </>

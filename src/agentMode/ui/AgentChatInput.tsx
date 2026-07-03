@@ -89,8 +89,6 @@ interface AgentChatInputProps {
   disabled?: boolean;
   /** Agent project-context status icon, rendered in the composer's badge row. */
   contextStatusIndicator?: React.ReactNode;
-  /** Agent context-window usage meter, rendered in the composer's badge row. */
-  usageIndicator?: React.ReactNode;
 }
 
 // Stable no-op handlers for ChatInput props that don't apply to Agent Mode
@@ -189,7 +187,6 @@ export const AgentChatInput = memo(function AgentChatInput({
   contextLoadBlocking = false,
   disabled = false,
   contextStatusIndicator,
-  usageIndicator,
 }: AgentChatInputProps) {
   const eventTarget = useContext(EventTargetContext);
   const settings = useSettingsValue();
@@ -541,7 +538,6 @@ export const AgentChatInput = memo(function AgentChatInput({
           showProgressCard={NOOP}
           showIndexingCard={NOOP}
           contextStatusIndicator={contextStatusIndicator}
-          usageIndicator={usageIndicator}
         />
       </div>
     </>
