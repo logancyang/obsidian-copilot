@@ -61,8 +61,10 @@ describe("lookupToolSummary", () => {
     });
     const s = lookupToolSummary(e1).aggregate([e1, e2]);
     expect(s.line).toBe("Edited 2 notes");
-    // e1: -3 / +2; e2: -0 / +4
-    expect(s.outcome).toBe("+6 / −3 lines");
+    // Real jsdiff line counts (not naive whole-block counts). e1 ("x\ny\nz" →
+    // "x\ny"): the un-terminated last line makes jsdiff drop "y\nz" and add
+    // "y" → +1 / −2. e2 ("" → "a\nb\nc\nd"): +4 / −0. Combined: +5 / −2.
+    expect(s.outcome).toBe("+5 / −2 lines");
   });
 
   it("surfaces mixed status in the aggregate line", () => {

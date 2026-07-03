@@ -2,6 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import { Bot, MessageCircleQuestion } from "lucide-react";
 import { pickToolIcon } from "@/agentMode/ui/toolIcons";
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
+import { diffStats as computeDiffStats, rawEditPath } from "@/agentMode/ui/editDiff";
 import { toVaultRelative } from "@/utils/vaultPath";
 
 /**
@@ -192,14 +193,8 @@ function verb(part: ToolCallPart, progressive: string, past: string): string {
 function targetFromPath(part: ToolCallPart, vaultBase: string | null): string | null {
   const loc = part.locations?.[0]?.path;
   if (typeof loc === "string" && loc.length > 0) return toVaultRelative(loc, vaultBase);
-  const input = part.input as
-    | { file_path?: unknown; filePath?: unknown; path?: unknown }
-    | null
-    | undefined;
-  if (typeof input?.file_path === "string") return toVaultRelative(input.file_path, vaultBase);
-  if (typeof input?.filePath === "string") return toVaultRelative(input.filePath, vaultBase);
-  if (typeof input?.path === "string") return toVaultRelative(input.path, vaultBase);
-  return null;
+  const raw = rawEditPath(part.input);
+  return raw !== null ? toVaultRelative(raw, vaultBase) : null;
 }
 
 /**
@@ -232,10 +227,9 @@ function diffStats(part: ToolCallPart): { added: number; removed: number } {
   let removed = 0;
   for (const o of part.output ?? []) {
     if (o.type !== "diff") continue;
-    if (o.oldText !== null) {
-      removed += o.oldText.split("\n").length;
-    }
-    added += o.newText.split("\n").length;
+    const s = computeDiffStats({ path: "", oldText: o.oldText ?? "", newText: o.newText });
+    added += s.added;
+    removed += s.removed;
   }
   return { added, removed };
 }
