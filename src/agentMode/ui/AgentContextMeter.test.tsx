@@ -36,7 +36,8 @@ describe("AgentContextMeter", () => {
     const trigger = screen.getByLabelText("Context usage");
     expect(trigger.textContent).not.toContain("25%");
 
-    fireEvent.click(trigger);
+    // The popover opens on hover, not click.
+    fireEvent.mouseEnter(trigger);
 
     // Popover: "Context window" label + used / total (percent) on one line.
     expect(screen.getByText("Context window")).toBeTruthy();
@@ -61,8 +62,8 @@ describe("AgentContextMeter", () => {
     expect(trigger.className).toContain("tw-text-warning");
     expect(trigger.className).not.toContain("tw-text-accent");
 
-    // 170k / 200k = 85%, surfaced in the popover stats line.
-    fireEvent.click(trigger);
+    // 170k / 200k = 85%, surfaced in the popover stats line (opens on hover).
+    fireEvent.mouseEnter(trigger);
     expect(screen.getByText("170.0k / 200.0k (85%)")).toBeTruthy();
   });
 

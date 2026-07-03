@@ -80,19 +80,51 @@ function RingMeter({ usage, contextWindow }: { usage: SessionUsage; contextWindo
   const percent = Math.round(fraction * 100);
   const isWarning = fraction >= WARNING_THRESHOLD;
 
+  // Open on hover/focus rather than click. The short close delay bridges the
+  // gap between trigger and content so moving the pointer onto the card (e.g.
+  // to select a number) doesn't dismiss it.
+  const [open, setOpen] = React.useState(false);
+  const closeTimer = React.useRef<number | null>(null);
+  const cancelClose = React.useCallback(() => {
+    if (closeTimer.current) {
+      window.clearTimeout(closeTimer.current);
+      closeTimer.current = null;
+    }
+  }, []);
+  const openNow = React.useCallback(() => {
+    cancelClose();
+    setOpen(true);
+  }, [cancelClose]);
+  const closeSoon = React.useCallback(() => {
+    cancelClose();
+    closeTimer.current = window.setTimeout(() => setOpen(false), 120);
+  }, [cancelClose]);
+  React.useEffect(() => cancelClose, [cancelClose]);
+
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
           variant="ghost2"
           size="icon"
           className={cn(isWarning ? "tw-text-warning" : "tw-text-accent")}
           aria-label="Context usage"
+          onMouseEnter={openNow}
+          onMouseLeave={closeSoon}
+          onFocus={openNow}
+          onBlur={closeSoon}
         >
           <ContextRing fraction={fraction} />
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" side="top" className="tw-w-80">
+      <PopoverContent
+        align="end"
+        side="top"
+        className="tw-w-80"
+        onOpenAutoFocus={(e) => e.preventDefault()}
+        onMouseEnter={openNow}
+        onMouseLeave={closeSoon}
+      >
         <div className="tw-flex tw-flex-col tw-gap-2">
           <div className="tw-flex tw-items-center tw-justify-between tw-gap-3 tw-text-ui-smaller">
             <span className="tw-whitespace-nowrap tw-text-muted">Context window</span>
