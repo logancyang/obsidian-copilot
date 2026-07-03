@@ -26,10 +26,7 @@ interface EditInput {
  * with `toolSummaries` so the alias list can't drift between the two.
  */
 export function rawEditPath(input: unknown): string | null {
-  const i = input as
-    | { file_path?: unknown; filePath?: unknown; path?: unknown }
-    | null
-    | undefined;
+  const i = input as { file_path?: unknown; filePath?: unknown; path?: unknown } | null | undefined;
   if (typeof i?.file_path === "string") return i.file_path;
   if (typeof i?.filePath === "string") return i.filePath;
   if (typeof i?.path === "string") return i.path;

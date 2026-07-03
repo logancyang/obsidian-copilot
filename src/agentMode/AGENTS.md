@@ -94,6 +94,12 @@ Then in either case:
 - "Knows about a specific binary, install path, BYOK keys, vendor models" → `backends/<id>/`
 - "React component or modal" → `ui/` (generic) or `backends/<id>/`
   (backend-specific)
+- "Read-only `AgentDiffView` (editor pane, view type
+  `copilot-agent-diff-view`, opened via `openAgentDiffView`) rendering an
+  agent edit diff — sourced from the Claude SDK's `tool_use_result`
+  (`structuredPatch`/`originalFile`, parsed in `sdk/sdkEditResult.ts`) for
+  completed edits, from ACP `{type:"diff"}` content otherwise, and
+  synthesized from tool input for permission-card previews" → `ui/`
 - "Canonical-store skill discovery, symlink lifecycle, SKILL.md
   parser/serializer, Skills settings tab (reads `backends/registry.ts`
   for the brand list)" → `skills/`

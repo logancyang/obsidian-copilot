@@ -52,7 +52,13 @@ describe("readSdkFileEditResult", () => {
       newString: "$& $$ $` $1",
       originalFile: "before TOKEN after",
       structuredPatch: [
-        { oldStart: 1, oldLines: 1, newStart: 1, newLines: 1, lines: ["-before TOKEN after", "+before $& $$ $` $1 after"] },
+        {
+          oldStart: 1,
+          oldLines: 1,
+          newStart: 1,
+          newLines: 1,
+          lines: ["-before TOKEN after", "+before $& $$ $` $1 after"],
+        },
       ],
       userModified: false,
       replaceAll: false,
@@ -71,7 +77,13 @@ describe("readSdkFileEditResult", () => {
       newString: "X",
       originalFile: "dup then dup",
       structuredPatch: [
-        { oldStart: 1, oldLines: 1, newStart: 1, newLines: 1, lines: ["-dup then dup", "+X then dup"] },
+        {
+          oldStart: 1,
+          oldLines: 1,
+          newStart: 1,
+          newLines: 1,
+          lines: ["-dup then dup", "+X then dup"],
+        },
       ],
       userModified: false,
       replaceAll: false,
@@ -106,7 +118,13 @@ describe("readSdkFileEditResult", () => {
       filePath: "/vault/note.md",
       content: "the full new file body",
       structuredPatch: [
-        { oldStart: 1, oldLines: 1, newStart: 1, newLines: 1, lines: ["-old", "+the full new file body"] },
+        {
+          oldStart: 1,
+          oldLines: 1,
+          newStart: 1,
+          newLines: 1,
+          lines: ["-old", "+the full new file body"],
+        },
       ],
       originalFile: "old",
     };

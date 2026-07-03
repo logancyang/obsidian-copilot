@@ -35,8 +35,7 @@ export const ActionCard: React.FC<ActionCardProps> = ({ part, inline }) => {
   // A completed edit whose before/after we can resolve gets the pane treatment:
   // an inline +/− chip and a whole-row click that opens the diff view. Non-edit
   // tools yield null here, so they keep the classic expand/file-open behavior.
-  const editDiff =
-    part.status === "completed" ? deriveEditDiff(part, summaryCtx) : null;
+  const editDiff = part.status === "completed" ? deriveEditDiff(part, summaryCtx) : null;
   const isEditWithDiff = editDiff !== null;
   const stats = editDiff ? diffStats(editDiff) : null;
 
@@ -57,9 +56,7 @@ export const ActionCard: React.FC<ActionCardProps> = ({ part, inline }) => {
       ? (summary.targetPath?.(part, summaryCtx) ?? null)
       : null;
 
-  const openDiff = editDiff
-    ? () => openAgentDiffView(app, editDiff)
-    : undefined;
+  const openDiff = editDiff ? () => openAgentDiffView(app, editDiff) : undefined;
   const rowInteractive = isEditWithDiff || expandable;
 
   const headerClasses = cn(
