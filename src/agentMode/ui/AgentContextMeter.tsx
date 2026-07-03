@@ -92,10 +92,10 @@ function RingMeter({ usage, contextWindow }: { usage: SessionUsage; contextWindo
           <ContextRing fraction={fraction} />
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" side="top" className="tw-w-72">
+      <PopoverContent align="end" side="top" className="tw-w-80">
         <div className="tw-flex tw-flex-col tw-gap-2">
-          <div className="tw-flex tw-items-center tw-justify-between tw-gap-3 tw-text-sm">
-            <span className="tw-text-muted">Context window</span>
+          <div className="tw-flex tw-items-center tw-justify-between tw-gap-3 tw-text-ui-smaller">
+            <span className="tw-whitespace-nowrap tw-text-muted">Context window</span>
             <div className="tw-flex tw-items-center tw-gap-2 tw-whitespace-nowrap tw-tabular-nums">
               <span className={cn(isWarning && "tw-text-warning")}>
                 {formatTokens(used)} / {formatTokens(contextWindow)} ({percent}%)
