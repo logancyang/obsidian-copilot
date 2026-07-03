@@ -68,6 +68,8 @@ export { ModelEnableList } from "./ui/ModelEnableList";
 export type { ModelEnableGroup, ModelEnableRow } from "./ui/ModelEnableList";
 export { PlanPreviewView, PLAN_PREVIEW_VIEW_TYPE } from "./ui/PlanPreviewView";
 export type { PlanPreviewViewState } from "./ui/PlanPreviewView";
+export { AgentDiffView, AGENT_DIFF_VIEW_TYPE, openAgentDiffView } from "./ui/AgentDiffView";
+export type { AgentDiffViewState } from "./ui/AgentDiffView";
 export { ReportIssueModal } from "./ui/ReportIssueModal";
 export type { ReportIssueModalParams } from "./ui/ReportIssueModal";
 export { getActiveBackendDescriptor, listBackendDescriptors } from "./backends/registry";

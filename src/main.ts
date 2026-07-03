@@ -135,6 +135,8 @@ export default class CopilotPlugin extends Plugin {
   private CopilotAgentView?: typeof import("@/agentMode").CopilotAgentView;
   private PlanPreviewView?: typeof import("@/agentMode").PlanPreviewView;
   private planPreviewViewType?: typeof import("@/agentMode").PLAN_PREVIEW_VIEW_TYPE;
+  private AgentDiffView?: typeof import("@/agentMode").AgentDiffView;
+  private agentDiffViewType?: typeof import("@/agentMode").AGENT_DIFF_VIEW_TYPE;
   private agentModelDiscoveryUnsubscriber?: () => void;
   modelManagement!: ModelManagementApi;
   private ribbonIconEl?: HTMLElement;
@@ -254,6 +256,8 @@ export default class CopilotPlugin extends Plugin {
         CopilotAgentView,
         PlanPreviewView,
         PLAN_PREVIEW_VIEW_TYPE,
+        AgentDiffView,
+        AGENT_DIFF_VIEW_TYPE,
         createAgentSessionManager,
         setFrameSinkVaultBasePath,
       } = await import("@/agentMode");
@@ -261,6 +265,8 @@ export default class CopilotPlugin extends Plugin {
       this.CopilotAgentView = CopilotAgentView;
       this.PlanPreviewView = PlanPreviewView;
       this.planPreviewViewType = PLAN_PREVIEW_VIEW_TYPE;
+      this.AgentDiffView = AgentDiffView;
+      this.agentDiffViewType = AGENT_DIFF_VIEW_TYPE;
 
       // Seed the frame-log sink with the vault base path (desktop FileSystemAdapter only).
       const adapter = this.app.vault.adapter;
@@ -331,10 +337,13 @@ export default class CopilotPlugin extends Plugin {
       isDesktopRuntime() &&
       this.CopilotAgentView &&
       this.PlanPreviewView &&
-      this.planPreviewViewType
+      this.planPreviewViewType &&
+      this.AgentDiffView &&
+      this.agentDiffViewType
     ) {
       const AgentView = this.CopilotAgentView;
       const PreviewView = this.PlanPreviewView;
+      const DiffView = this.AgentDiffView;
       this.safeRegisterView(
         CHAT_AGENT_VIEWTYPE,
         (leaf: WorkspaceLeaf) => new AgentView(leaf, this)
@@ -343,6 +352,7 @@ export default class CopilotPlugin extends Plugin {
         this.planPreviewViewType,
         (leaf: WorkspaceLeaf) => new PreviewView(leaf)
       );
+      this.safeRegisterView(this.agentDiffViewType, (leaf: WorkspaceLeaf) => new DiffView(leaf));
     }
 
     this.initActiveLeafChangeHandler();
