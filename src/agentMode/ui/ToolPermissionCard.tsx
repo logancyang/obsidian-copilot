@@ -1,13 +1,39 @@
 import { Button } from "@/components/ui/button";
-import { extractDiffContents, formatAgentInput, renderDiff } from "@/agentMode/ui/diffRender";
+import { formatAgentInput, renderDiff } from "@/agentMode/ui/diffRender";
 import type {
   PermissionOption,
   PermissionOptionKind,
   PermissionPrompt,
 } from "@/agentMode/session/types";
 import { PERMISSION_OPTION_KINDS } from "@/agentMode/session/types";
+import { diffStats, type EditDiff } from "@/agentMode/ui/editDiff";
+import { synthesizePermissionEditDiff } from "@/agentMode/ui/permissionEditPreview";
+import { openAgentDiffView } from "@/agentMode/ui/AgentDiffView";
+import { cn } from "@/lib/utils";
+import { useApp } from "@/context";
 import { ShieldQuestion } from "lucide-react";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+
+/**
+ * Cap the synthesized preview so a full-file Write doesn't flood the card: the
+ * unified `renderDiff` output is sliced to the first `PREVIEW_LINE_CAP` lines,
+ * with a muted "… N more lines" footer when truncated. The full diff is one
+ * click away via the diff pane.
+ */
+const PREVIEW_LINE_CAP = 12;
+
+interface CappedPreview {
+  lines: string[];
+  hidden: number;
+}
+
+function cappedDiffPreview(diff: EditDiff): CappedPreview {
+  const all = renderDiff(diff.oldText, diff.newText).split("\n");
+  return {
+    lines: all.slice(0, PREVIEW_LINE_CAP),
+    hidden: Math.max(0, all.length - PREVIEW_LINE_CAP),
+  };
+}
 
 interface ToolPermissionCardProps {
   request: PermissionPrompt;
@@ -28,12 +54,29 @@ interface ToolPermissionCardProps {
  * `mapDecisionToSdk` — this component just forwards the chosen `optionId`.
  */
 export const ToolPermissionCard: React.FC<ToolPermissionCardProps> = ({ request, onResolve }) => {
+  const app = useApp();
   const { toolCall, options } = request;
   const [busy, setBusy] = useState(false);
   const orderedOptions = useMemo(() => sortOptions(options), [options]);
-  const diffContents = useMemo(() => extractDiffContents(toolCall.content), [toolCall.content]);
   const inputJson = useMemo(() => formatAgentInput(toolCall.rawInput), [toolCall.rawInput]);
   const title = toolCall.title ?? "Tool call";
+
+  // Synthesized from the tool INPUT (the edit hasn't run, so there's no SDK
+  // result). Async because a Write reads the current file as its "before".
+  const [preview, setPreview] = useState<EditDiff | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void synthesizePermissionEditDiff(app, toolCall).then((d) => {
+      if (!cancelled) setPreview(d);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [app, toolCall]);
+
+  const stats = preview ? diffStats(preview) : null;
+  const capped = preview ? cappedDiffPreview(preview) : null;
+  const openPreview = preview ? () => openAgentDiffView(app, preview) : undefined;
 
   const choose = (optionId: string) => {
     if (busy) return;
@@ -58,20 +101,37 @@ export const ToolPermissionCard: React.FC<ToolPermissionCardProps> = ({ request,
           </p>
         ) : null}
 
-        {diffContents.length > 0 ? (
-          <div className="tw-flex tw-flex-col tw-gap-2">
-            {diffContents.map((d, i) => (
-              <div
-                // eslint-disable-next-line @eslint-react/no-array-index-key -- diff list is derived once per render from a snapshot; same path can appear multiple times
-                key={`diff-${i}-${d.path}`}
-                className="tw-rounded tw-border tw-border-solid tw-border-border tw-p-2"
-              >
-                <p className="tw-mb-1 tw-font-mono tw-text-xs tw-text-muted">{d.path}</p>
-                <pre className="tw-max-h-48 tw-overflow-auto tw-whitespace-pre-wrap tw-text-xs">
-                  {renderDiff(d.oldText, d.newText)}
-                </pre>
-              </div>
-            ))}
+        {preview && capped && stats ? (
+          <div
+            className={cn(
+              "tw-cursor-pointer tw-rounded tw-border tw-border-solid tw-border-border tw-p-2",
+              "hover:tw-border-interactive-accent"
+            )}
+            role="button"
+            tabIndex={0}
+            onClick={openPreview}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                openPreview?.();
+              }
+            }}
+          >
+            <div className="tw-mb-1 tw-flex tw-items-center tw-gap-2">
+              <span className="tw-flex-1 tw-truncate tw-font-mono tw-text-xs tw-text-muted">
+                {preview.path}
+              </span>
+              <span className="tw-flex tw-shrink-0 tw-items-center tw-gap-1 tw-text-xs tw-tabular-nums">
+                {stats.added > 0 ? <span className="tw-text-success">+{stats.added}</span> : null}
+                {stats.removed > 0 ? <span className="tw-text-error">−{stats.removed}</span> : null}
+              </span>
+            </div>
+            <pre className="tw-m-0 tw-max-h-48 tw-overflow-auto tw-whitespace-pre-wrap tw-text-xs">
+              {capped.lines.join("\n")}
+              {capped.hidden > 0 ? (
+                <span className="tw-text-muted">{`\n… ${capped.hidden} more lines`}</span>
+              ) : null}
+            </pre>
           </div>
         ) : inputJson ? (
           <details>
