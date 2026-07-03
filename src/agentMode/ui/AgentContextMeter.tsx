@@ -4,6 +4,7 @@ import { useSessionUsage } from "@/agentMode/ui/hooks/useSessionUsage";
 import { TokenCounter } from "@/components/chat-components/TokenCounter";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import * as React from "react";
 
@@ -18,10 +19,11 @@ const WARNING_THRESHOLD = 0.85;
 const RING_RADIUS = 6;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 
-/** Compact token count: `<1k`, `12k`, `128k`, or the bare number under 1000. */
+/** One-decimal token count with a k/M suffix (e.g. `248.0k`, `1.0M`). */
 function formatTokens(count: number): string {
-  if (count < 1000) return count.toLocaleString();
-  return `${Math.round(count / 1000)}k`;
+  if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
+  if (count >= 1000) return `${(count / 1000).toFixed(1)}k`;
+  return count.toLocaleString();
 }
 
 /** Session cost as USD; sub-cent values keep more precision so they read as non-zero. */
@@ -69,17 +71,7 @@ function ContextRing({ fraction }: { fraction: number }) {
   );
 }
 
-/** One label/value row in the popover breakdown. */
-function UsageRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="tw-flex tw-items-center tw-justify-between tw-gap-4">
-      <span className="tw-text-muted">{label}</span>
-      <span className="tw-tabular-nums">{value}</span>
-    </div>
-  );
-}
-
-/** Full % ring + numbers popover, used when the context window is known. */
+/** Full % ring trigger + a horizontal context-window bar popover. */
 function RingMeter({ usage, contextWindow }: { usage: SessionUsage; contextWindow: number }) {
   // Guard a non-finite `usedTokens` (e.g. NaN from a malformed upstream value)
   // so it can't propagate into the rendered percent or the SVG dashoffset.
@@ -87,12 +79,6 @@ function RingMeter({ usage, contextWindow }: { usage: SessionUsage; contextWindo
   const fraction = Math.min(1, Math.max(0, used / contextWindow));
   const percent = Math.round(fraction * 100);
   const isWarning = fraction >= WARNING_THRESHOLD;
-
-  const cacheTokens = (usage.cacheReadTokens ?? 0) + (usage.cacheWriteTokens ?? 0);
-  const breakdown: string[] = [];
-  if (usage.inputTokens !== undefined) breakdown.push(`${formatTokens(usage.inputTokens)} in`);
-  if (usage.outputTokens !== undefined) breakdown.push(`${formatTokens(usage.outputTokens)} out`);
-  if (cacheTokens > 0) breakdown.push(`${formatTokens(cacheTokens)} cache`);
 
   return (
     <Popover>
@@ -106,20 +92,20 @@ function RingMeter({ usage, contextWindow }: { usage: SessionUsage; contextWindo
           <ContextRing fraction={fraction} />
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" side="top" className="tw-w-64">
+      <PopoverContent align="end" side="top" className="tw-w-72">
         <div className="tw-flex tw-flex-col tw-gap-2">
-          <div className="tw-flex tw-items-baseline tw-justify-between tw-gap-2">
-            <span className="tw-font-medium">Context used</span>
-            <span className={cn("tw-font-medium", isWarning && "tw-text-warning")}>{percent}%</span>
+          <div className="tw-flex tw-items-center tw-justify-between tw-gap-3 tw-text-sm">
+            <span className="tw-text-muted">Context window</span>
+            <div className="tw-flex tw-items-center tw-gap-2 tw-whitespace-nowrap tw-tabular-nums">
+              <span className={cn(isWarning && "tw-text-warning")}>
+                {formatTokens(used)} / {formatTokens(contextWindow)} ({percent}%)
+              </span>
+              {usage.costUsd !== undefined && (
+                <span className="tw-text-muted">{formatUsd(usage.costUsd)}</span>
+              )}
+            </div>
           </div>
-          <UsageRow
-            label="Tokens"
-            value={`${usage.usedTokens.toLocaleString()} / ${contextWindow.toLocaleString()}`}
-          />
-          {breakdown.length > 0 && <UsageRow label="Breakdown" value={breakdown.join(" · ")} />}
-          {usage.costUsd !== undefined && (
-            <UsageRow label="Est. cost" value={formatUsd(usage.costUsd)} />
-          )}
+          <Progress value={percent} className="tw-h-1.5" />
         </div>
       </PopoverContent>
     </Popover>

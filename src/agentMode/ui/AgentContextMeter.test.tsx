@@ -38,14 +38,14 @@ describe("AgentContextMeter", () => {
 
     fireEvent.click(trigger);
 
-    // 50k / 200k = 25%, shown in the popover headline.
-    expect(screen.getByText("25%")).toBeTruthy();
-    // used / total headline numbers.
-    expect(screen.getByText("50,000 / 200,000")).toBeTruthy();
-    // input · output · cache(read+write) breakdown.
-    expect(screen.getByText("40k in · 8k out · 2k cache")).toBeTruthy();
-    // Estimated session cost, USD-formatted (ring branch only).
+    // Popover: "Context window" label + used / total (percent) on one line.
+    expect(screen.getByText("Context window")).toBeTruthy();
+    // 50k / 200k = 25%, formatted with k/M suffixes.
+    expect(screen.getByText("50.0k / 200.0k (25%)")).toBeTruthy();
+    // Estimated session cost, USD-formatted, on the same line (right edge).
     expect(screen.getByText("$0.42")).toBeTruthy();
+    // The technical breakdown was intentionally dropped.
+    expect(screen.queryByText(/in ·|out ·| cache/)).toBeNull();
   });
 
   it("applies the warning color once usage reaches 85%", () => {
@@ -61,9 +61,9 @@ describe("AgentContextMeter", () => {
     expect(trigger.className).toContain("tw-text-warning");
     expect(trigger.className).not.toContain("tw-text-accent");
 
-    // 170k / 200k = 85%, surfaced in the popover.
+    // 170k / 200k = 85%, surfaced in the popover stats line.
     fireEvent.click(trigger);
-    expect(screen.getByText("85%")).toBeTruthy();
+    expect(screen.getByText("170.0k / 200.0k (85%)")).toBeTruthy();
   });
 
   it("stays on the accent color below the warning threshold", () => {
