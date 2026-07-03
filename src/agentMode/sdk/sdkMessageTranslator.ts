@@ -20,6 +20,7 @@ import {
   planUpdateFromClaudeToolUse,
   type ClaudeTaskPlanState,
 } from "./claudeTodoPlan";
+import { readSdkFileEditResult } from "./sdkEditResult";
 import { deriveToolKind, deriveToolTitle, vendorMetaFields } from "./toolMeta";
 
 /**
@@ -300,6 +301,11 @@ function translateUserMessage(
 ): SessionEvent[] {
   const content = (msg.message as { content?: unknown }).content;
   if (!Array.isArray(content)) return [];
+  // The completed Edit/Write's structured result rides at the message level
+  // (one per SDKUserMessage, paired with its single tool_result block), typed
+  // `unknown` — guard-parse it into a diff and attach it to the non-error
+  // result found below so SDK edits carry the same structured diff as ACP.
+  const editDiff = readSdkFileEditResult((msg as { tool_use_result?: unknown }).tool_use_result);
   const out: SessionEvent[] = [];
   for (const block of content) {
     const b = block as {
@@ -311,12 +317,24 @@ function translateUserMessage(
     if (b.type !== "tool_result" || !b.tool_use_id) continue;
     const status: AgentToolStatus = b.is_error ? "failed" : "completed";
     const outputs = toolResultContent(b.content);
+    const withDiff: ToolCallContent[] | undefined =
+      !b.is_error && editDiff
+        ? [
+            ...(outputs ?? []),
+            {
+              type: "diff",
+              path: editDiff.path,
+              oldText: editDiff.oldText,
+              newText: editDiff.newText,
+            },
+          ]
+        : outputs;
     out.push(
       event(sessionId, {
         sessionUpdate: "tool_call_update",
         toolCallId: b.tool_use_id,
         status,
-        content: outputs,
+        content: withDiff,
       })
     );
     // A TaskCreate's result carries the task id; only ids pending in the
