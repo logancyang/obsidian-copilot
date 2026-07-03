@@ -24,6 +24,10 @@ jest.mock("obsidian", () => {
   class MarkdownView {}
   return {
     MarkdownView,
+    // `ItemView` is stubbed only so the transitive `AgentDiffView` import (via
+    // ActionCard) can `extends ItemView` at module load; the trail tests never
+    // instantiate the diff view.
+    ItemView: class {},
     Component: class {
       load() {}
       unload() {}

@@ -4,6 +4,8 @@ import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
 import type { AgentToolStatus } from "@/agentMode/session/types";
 import { lookupToolSummary } from "@/agentMode/ui/toolSummaries";
 import { renderDiff } from "@/agentMode/ui/diffRender";
+import { deriveEditDiff, diffStats } from "@/agentMode/ui/editDiff";
+import { openAgentDiffView } from "@/agentMode/ui/AgentDiffView";
 import { getVaultBase } from "@/utils/vaultPath";
 import { openVaultPath } from "@/utils/openVaultPath";
 import { cn } from "@/lib/utils";
@@ -29,16 +31,40 @@ export const ActionCard: React.FC<ActionCardProps> = ({ part, inline }) => {
   const outcome = summary.outcome(part);
   const outputs = part.output ?? [];
   const details = summary.expandedDetails?.(part) ?? null;
-  const expandable = outputs.length > 0 || details !== null;
+
+  // A completed edit whose before/after we can resolve gets the pane treatment:
+  // an inline +/− chip and a whole-row click that opens the diff view. Non-edit
+  // tools yield null here, so they keep the classic expand/file-open behavior.
+  const editDiff =
+    part.status === "completed" ? deriveEditDiff(part, summaryCtx) : null;
+  const isEditWithDiff = editDiff !== null;
+  const stats = editDiff ? diffStats(editDiff) : null;
+
+  // An edit-with-diff row is pane-only: the whole row opens the diff view and
+  // there is no chevron. Making it also expandable would render a chevron whose
+  // click bubbles to the row's pane-open handler (the chevron has no handler of
+  // its own), so the toggle could never fire — a dead affordance. Suppressing
+  // expandability keeps one unambiguous interaction per row and, like the
+  // inline `{type:"diff"}` pre, drops the redundant edit result text (e.g. "The
+  // file … has been updated"), which the +/− chip and the pane already convey.
+  const expandable = !isEditWithDiff && (outputs.length > 0 || details !== null);
   // Only expose a clickable target once the call has completed — opening a
   // half-written file mid-Edit would race with the tool, and an in-progress
-  // Read has nothing to show yet.
+  // Read has nothing to show yet. Edits route through the diff pane instead of
+  // opening the file, so they don't use `targetPath`.
   const targetPath =
-    part.status === "completed" ? (summary.targetPath?.(part, summaryCtx) ?? null) : null;
+    part.status === "completed" && !isEditWithDiff
+      ? (summary.targetPath?.(part, summaryCtx) ?? null)
+      : null;
+
+  const openDiff = editDiff
+    ? () => openAgentDiffView(app, editDiff)
+    : undefined;
+  const rowInteractive = isEditWithDiff || expandable;
 
   const headerClasses = cn(
     "tw-flex tw-items-center tw-gap-1.5 tw-text-sm tw-text-muted",
-    expandable && "tw-cursor-pointer hover:tw-text-normal"
+    rowInteractive && "tw-cursor-pointer hover:tw-text-normal"
   );
 
   const wrapperClasses = cn("tw-flex tw-flex-col tw-gap-0.5", inline ? "tw-py-1" : "tw-my-1");
@@ -47,8 +73,19 @@ export const ActionCard: React.FC<ActionCardProps> = ({ part, inline }) => {
     <div className={wrapperClasses}>
       <div
         className={headerClasses}
-        onClick={expandable ? () => setOpen((v) => !v) : undefined}
-        role={expandable ? "button" : undefined}
+        onClick={openDiff ?? (expandable ? () => setOpen((v) => !v) : undefined)}
+        role={rowInteractive ? "button" : undefined}
+        tabIndex={isEditWithDiff ? 0 : undefined}
+        onKeyDown={
+          openDiff
+            ? (e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  openDiff();
+                }
+              }
+            : undefined
+        }
       >
         <Icon className="tw-size-3.5 tw-shrink-0 tw-text-muted" />
         {targetPath ? (
@@ -70,6 +107,12 @@ export const ActionCard: React.FC<ActionCardProps> = ({ part, inline }) => {
         ) : (
           <span className="tw-flex-1 tw-truncate tw-font-medium">{line}</span>
         )}
+        {stats ? (
+          <span className="tw-flex tw-shrink-0 tw-items-center tw-gap-1 tw-text-xs tw-tabular-nums">
+            {stats.added > 0 ? <span className="tw-text-success">+{stats.added}</span> : null}
+            {stats.removed > 0 ? <span className="tw-text-error">−{stats.removed}</span> : null}
+          </span>
+        ) : null}
         <StatusBadge status={part.status} />
         {expandable &&
           (open ? (
