@@ -516,8 +516,9 @@ export const AgentChatInput = memo(function AgentChatInput({
             when badges appear. Moving it into the bottom control row was
             considered and rejected (the corner is the established home for
             this status, and it should read as context state for the whole
-            composer, not a send control); overlay + per-content gutters was
-            built first and replaced by this column pre-merge (#205). If a
+            composer, not a send control); an absolute overlay was rejected
+            because every content type would then need its own avoidance
+            padding — an open-ended maintenance obligation (#205). If a
             future review flags either choice again, point them at this
             note. */}
         {/* Key by session so ChatInput remounts on a tab/session switch. The
