@@ -496,8 +496,9 @@ export type SessionUpdate =
  * `usage_update` notification / prompt-result `usage`); translators normalize
  * to this one type. `usedTokens` is current context occupancy — it can drop
  * after auto-compaction. `contextWindow` is absent when the source couldn't
- * report it (e.g. an ACP prompt-result `usage` with no window field); a
- * used-only snapshot must not clobber a fuller one that carries the window.
+ * report it (e.g. an ACP prompt-result `usage`, whose totals are cumulative,
+ * not occupancy); such a windowless snapshot is treated as count-only and never
+ * overrides an occupancy snapshot that carries a window.
  */
 export interface SessionUsage {
   usedTokens: number;

@@ -432,7 +432,7 @@ describe("AgentSession session usage", () => {
     expect(session.getSessionUsage()?.usedTokens).toBe(42);
   });
 
-  it("keeps a full snapshot's contextWindow when a used-only fallback follows", () => {
+  it("ignores a used-only fallback once an occupancy snapshot exists", () => {
     const mock = makeMockBackend();
     const session = makeSession(mock);
     mock.emit({
@@ -442,9 +442,10 @@ describe("AgentSession session usage", () => {
         usage: { usedTokens: 5000, contextWindow: 200_000, updatedAt: 1 },
       },
     });
-    // A later used-only snapshot (no contextWindow, e.g. ACP prompt-result
-    // fallback) must not wipe the window; it updates the counts and carries the
-    // prior window forward.
+    // A later used-only snapshot (no contextWindow) is an ACP prompt-result
+    // fallback carrying cumulative lifetime totals, not occupancy. It must not
+    // override the occupancy snapshot — pairing its tokens with the window would
+    // show a bogus ring. A later live occupancy update would supersede it.
     mock.emit({
       sessionId: "acp-1",
       update: {
@@ -453,9 +454,9 @@ describe("AgentSession session usage", () => {
       },
     });
     expect(session.getSessionUsage()).toEqual({
-      usedTokens: 6000,
+      usedTokens: 5000,
       contextWindow: 200_000,
-      updatedAt: 2,
+      updatedAt: 1,
     });
   });
 

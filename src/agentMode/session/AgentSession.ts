@@ -1345,17 +1345,18 @@ export class AgentSession {
   }
 
   /**
-   * Apply an incoming usage snapshot. Precedence: a used-only snapshot (no
-   * `contextWindow`, e.g. an ACP prompt-result fallback) must not wipe the
-   * window a fuller live snapshot already reported — carry the prior window
-   * forward while updating the token counts.
+   * Apply an incoming usage snapshot. A snapshot without a `contextWindow` is a
+   * cumulative/count-only fallback (e.g. ACP's prompt-result totals, which count
+   * lifetime tokens across the session), not current-context occupancy. Once we
+   * already hold an occupancy snapshot (one that carries a window), ignore the
+   * windowless one rather than pair its lifetime tokens with that window and
+   * render a bogus percentage ring. A later live occupancy update supersedes it.
    */
   private applyUsageUpdate(usage: SessionUsage): void {
     if (usage.contextWindow === undefined && this.currentUsage?.contextWindow !== undefined) {
-      this.currentUsage = { ...usage, contextWindow: this.currentUsage.contextWindow };
-    } else {
-      this.currentUsage = usage;
+      return;
     }
+    this.currentUsage = usage;
     this.notifyMessages();
   }
 

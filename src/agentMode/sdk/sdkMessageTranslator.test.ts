@@ -1,16 +1,73 @@
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import type { SessionUsage } from "@/agentMode/session/types";
 import { createTranslatorState, mapStopReason, translateSdkMessage } from "./sdkMessageTranslator";
 
 const SESSION_ID = "session-test-1";
+type Uuid = `${string}-${string}-${string}-${string}-${string}`;
 
 function streamEvent(event: object): SDKMessage {
   return {
     type: "stream_event",
     event,
     parent_tool_use_id: null,
-    uuid: "uuid-1" as `${string}-${string}-${string}-${string}-${string}`,
+    uuid: "uuid-1" as Uuid,
     session_id: SESSION_ID,
   } as SDKMessage;
+}
+
+interface CallUsage {
+  input_tokens?: number;
+  output_tokens?: number;
+  cache_read_input_tokens?: number;
+  cache_creation_input_tokens?: number;
+}
+
+function assistantMsg(
+  usage: CallUsage,
+  opts: { model?: string; parentToolUseId?: string | null } = {}
+): SDKMessage {
+  return {
+    type: "assistant",
+    message: { content: [], usage, model: opts.model ?? "claude-test" },
+    parent_tool_use_id: opts.parentToolUseId ?? null,
+    uuid: "uuid-assistant" as Uuid,
+    session_id: SESSION_ID,
+  } as unknown as SDKMessage;
+}
+
+interface ModelUsageEntry {
+  contextWindow: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  cacheReadInputTokens?: number;
+  cacheCreationInputTokens?: number;
+}
+
+function resultMsg(opts: {
+  usage?: CallUsage;
+  modelUsage?: Record<string, ModelUsageEntry>;
+  total_cost_usd?: number;
+}): SDKMessage {
+  return {
+    type: "result",
+    subtype: "success",
+    duration_ms: 0,
+    duration_api_ms: 0,
+    is_error: false,
+    num_turns: 1,
+    result: "ok",
+    stop_reason: "end_turn",
+    total_cost_usd: opts.total_cost_usd ?? 0,
+    usage: opts.usage ?? {},
+    modelUsage: opts.modelUsage ?? {},
+    permission_denials: [],
+    uuid: "uuid-result" as Uuid,
+    session_id: SESSION_ID,
+  } as unknown as SDKMessage;
+}
+
+function usageOf(out: ReturnType<typeof translateSdkMessage>): SessionUsage {
+  return (out[0].update as { usage: SessionUsage }).usage;
 }
 
 describe("translateSdkMessage", () => {
@@ -121,36 +178,131 @@ describe("translateSdkMessage", () => {
     expect(state.toolUseBlocks.size).toBe(0);
   });
 
-  it("emits a single usage_update for `result` (caller resolves the prompt promise separately)", () => {
+  it("reports occupancy from the last assistant message, not the cumulative result total", () => {
     const state = createTranslatorState();
+    // Two tool-loop iterations. The SDK result SUMS these across the turn, but
+    // occupancy is only the final call's own prompt + reply.
+    translateSdkMessage(
+      assistantMsg({ input_tokens: 100, cache_creation_input_tokens: 10_000, output_tokens: 50 }),
+      SESSION_ID,
+      state
+    );
+    translateSdkMessage(
+      assistantMsg({ input_tokens: 200, cache_read_input_tokens: 10_050, output_tokens: 80 }),
+      SESSION_ID,
+      state
+    );
     const out = translateSdkMessage(
-      {
-        type: "result",
-        subtype: "success",
-        duration_ms: 0,
-        duration_api_ms: 0,
-        is_error: false,
-        num_turns: 1,
-        result: "ok",
-        stop_reason: "end_turn",
-        total_cost_usd: 0,
+      resultMsg({
+        // Cumulative aggregate — deliberately larger than occupancy.
         usage: {
-          input_tokens: 0,
-          output_tokens: 0,
-          cache_read_input_tokens: 0,
-          cache_creation_input_tokens: 0,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        } as any,
-        modelUsage: {},
-        permission_denials: [],
-        uuid: "uuid-2" as `${string}-${string}-${string}-${string}-${string}`,
-        session_id: SESSION_ID,
-      },
+          input_tokens: 300,
+          cache_read_input_tokens: 10_050,
+          cache_creation_input_tokens: 10_000,
+          output_tokens: 130,
+        },
+        modelUsage: { "claude-test": { contextWindow: 200_000 } },
+        total_cost_usd: 0.42,
+      }),
       SESSION_ID,
       state
     );
     expect(out).toHaveLength(1);
     expect(out[0].update.sessionUpdate).toBe("usage_update");
+    const usage = usageOf(out);
+    // Final call: 200 + 10_050 + 0 + 80 = 10_330 (occupancy), NOT the cumulative
+    // 300 + 10_050 + 10_000 + 130 = 20_480.
+    expect(usage.usedTokens).toBe(10_330);
+    expect(usage.contextWindow).toBe(200_000);
+    expect(usage.costUsd).toBe(0.42);
+  });
+
+  it("uses the active model's context window, not the largest in a multi-model turn", () => {
+    const state = createTranslatorState();
+    translateSdkMessage(
+      assistantMsg({ input_tokens: 1000, output_tokens: 50 }, { model: "main" }),
+      SESSION_ID,
+      state
+    );
+    const out = translateSdkMessage(
+      resultMsg({
+        modelUsage: {
+          // A subagent used a larger window; the ring must divide by the MAIN
+          // model's window, not the max across the turn.
+          main: { contextWindow: 200_000 },
+          sub: { contextWindow: 1_000_000 },
+        },
+      }),
+      SESSION_ID,
+      state
+    );
+    expect(usageOf(out).contextWindow).toBe(200_000);
+  });
+
+  it("ignores subagent assistant usage when sampling occupancy", () => {
+    const state = createTranslatorState();
+    // Subagent turn (parent_tool_use_id set) — a different context; must not
+    // become the occupancy sample.
+    translateSdkMessage(
+      assistantMsg({ input_tokens: 99_999, output_tokens: 0 }, { parentToolUseId: "t1" }),
+      SESSION_ID,
+      state
+    );
+    translateSdkMessage(
+      assistantMsg({ input_tokens: 1000, output_tokens: 20 }, { model: "main" }),
+      SESSION_ID,
+      state
+    );
+    const out = translateSdkMessage(
+      resultMsg({ modelUsage: { main: { contextWindow: 200_000 } } }),
+      SESSION_ID,
+      state
+    );
+    expect(usageOf(out).usedTokens).toBe(1020);
+  });
+
+  it("emits no usage_update when the turn produced no top-level assistant message", () => {
+    const state = createTranslatorState();
+    const out = translateSdkMessage(resultMsg({}), SESSION_ID, state);
+    expect(out).toEqual([]);
+  });
+
+  it("falls back to the dominant model's window for a synthetic assistant turn", () => {
+    const state = createTranslatorState();
+    // A "<synthetic>" model id keys into no modelUsage entry; the window comes
+    // from the model that carried the conversation (most tokens), never an aux
+    // model that happens to have a different window.
+    translateSdkMessage(
+      assistantMsg(
+        { input_tokens: 500, cache_read_input_tokens: 4000, output_tokens: 40 },
+        { model: "<synthetic>" }
+      ),
+      SESSION_ID,
+      state
+    );
+    const out = translateSdkMessage(
+      resultMsg({
+        modelUsage: {
+          "claude-opus-4-8[1m]": {
+            contextWindow: 1_000_000,
+            inputTokens: 5000,
+            cacheReadInputTokens: 400_000,
+            cacheCreationInputTokens: 100_000,
+            outputTokens: 6000,
+          },
+          "claude-haiku-4-5-20251001": {
+            contextWindow: 200_000,
+            inputTokens: 300,
+            cacheReadInputTokens: 0,
+            cacheCreationInputTokens: 0,
+            outputTokens: 12,
+          },
+        },
+      }),
+      SESSION_ID,
+      state
+    );
+    expect(usageOf(out).contextWindow).toBe(1_000_000);
   });
 
   it("ignores assistant messages whose tool_use blocks were already streamed", () => {
@@ -820,24 +972,43 @@ describe("translateSdkMessage — result → usage_update", () => {
   });
   afterEach(() => nowSpy.mockRestore());
 
-  it("sums context occupancy and reads the largest modelUsage contextWindow", () => {
-    const out = translateSdkMessage(
-      resultMessage({
-        usage: {
+  it("matches the bare assistant model id to the suffixed modelUsage key", () => {
+    const state = createTranslatorState();
+    // Real runtime shape: the assistant message reports the bare id
+    // "claude-opus-4-8" while the result keys it "claude-opus-4-8[1m]". An exact
+    // lookup misses — a prefix match must recover the main model's 1M window and
+    // NOT fall to the smaller-windowed aux model. Final call occupancy:
+    // 100 + 5000 + 300 + 20 = 5420.
+    translateSdkMessage(
+      assistantMsg(
+        {
           input_tokens: 100,
           output_tokens: 20,
           cache_read_input_tokens: 5000,
           cache_creation_input_tokens: 300,
         },
-        // Multi-model turn (main + subagent): pick the LARGEST window.
+        { model: "claude-opus-4-8" }
+      ),
+      SESSION_ID,
+      state
+    );
+    const out = translateSdkMessage(
+      resultMessage({
+        // Cumulative result usage — deliberately huge; now ignored for occupancy.
+        usage: {
+          input_tokens: 9999,
+          output_tokens: 9999,
+          cache_read_input_tokens: 9999,
+          cache_creation_input_tokens: 9999,
+        },
         modelUsage: {
-          "claude-haiku": { contextWindow: 200_000 },
-          "claude-sonnet": { contextWindow: 1_000_000 },
+          "claude-opus-4-8[1m]": { contextWindow: 1_000_000 },
+          "claude-haiku-4-5-20251001": { contextWindow: 200_000 },
         },
         total_cost_usd: 0.42,
       }),
       SESSION_ID,
-      createTranslatorState()
+      state
     );
     expect(out).toEqual([
       {
@@ -859,18 +1030,21 @@ describe("translateSdkMessage — result → usage_update", () => {
     ]);
   });
 
-  it("emits usedTokens with undefined contextWindow when modelUsage is empty", () => {
+  it("emits usedTokens with undefined contextWindow when modelUsage lacks the model", () => {
+    const state = createTranslatorState();
+    translateSdkMessage(assistantMsg({ input_tokens: 10, output_tokens: 2 }), SESSION_ID, state);
     const out = translateSdkMessage(
       resultMessage({
         usage: {
-          input_tokens: 10,
-          output_tokens: 2,
+          input_tokens: 0,
+          output_tokens: 0,
           cache_read_input_tokens: 0,
           cache_creation_input_tokens: 0,
         },
+        // No matching model entry → no window: count-only, never a wrong ring.
       }),
       SESSION_ID,
-      createTranslatorState()
+      state
     );
     expect(out).toHaveLength(1);
     const update = out[0].update as { sessionUpdate: string; usage: Record<string, unknown> };

@@ -45,6 +45,25 @@ export interface TranslatorState {
   emittedToolUseIds: Set<string>;
   /** Session-lived todo/Task accumulator (see claudeTodoPlan.ts). */
   claudeTasks: ClaudeTaskPlanState;
+  /**
+   * Occupancy sample from the most recent TOP-LEVEL assistant message this turn
+   * (subagent messages excluded). The `result` message's aggregate `usage` sums
+   * every API call in the turn — tool loops re-read the whole context from cache
+   * each iteration — so it overstates current context; the last main-model
+   * response's own per-call usage is the true occupancy. Reset per query.
+   */
+  lastAssistantUsage?: AssistantUsageSample;
+}
+
+/** Per-call token occupancy captured from one assistant message. */
+interface AssistantUsageSample {
+  usedTokens: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  /** Model that produced this turn — keys into the result's `modelUsage` for the window. */
+  model: string;
 }
 
 export function createTranslatorState(claudeTasks?: ClaudeTaskPlanState): TranslatorState {
@@ -78,44 +97,73 @@ export function translateSdkMessage(
     case "user":
       return translateUserMessage(msg, sessionId, state);
     case "result":
-      return translateResultMessage(msg, sessionId);
+      return translateResultMessage(msg, sessionId, state);
     default:
       return [];
   }
 }
 
 /**
- * A `result` message closes a turn and carries the authoritative usage totals.
- * `usedTokens` sums the current context occupancy (input + both cache buckets +
- * output) — this matches Claude Code's own context bar and drops after
- * auto-compaction. The context window comes from the `modelUsage` entry with
- * the largest window (the main agent's model in a multi-model/subagent turn);
- * it stays undefined when the result reports no per-model usage.
+ * A `result` closes a turn. Its aggregate `usage` sums every API call in the
+ * turn (each tool-loop iteration re-reads the whole context from cache), so it
+ * is a cumulative bill, not current context occupancy — dividing it by the
+ * window would peg the meter to 100% after a tool-heavy turn even when the live
+ * context still fits. We instead report the last top-level assistant message's
+ * own per-call usage ({@link TranslatorState.lastAssistantUsage}) as occupancy,
+ * paired with THAT model's window from `modelUsage`. `total_cost_usd` stays as
+ * the cumulative session cost — that figure is legitimately a running total.
  */
-function translateResultMessage(msg: SDKResultMessage, sessionId: SessionId): SessionEvent[] {
-  const usage = msg.usage;
-  const usedTokens =
-    usage.input_tokens +
-    usage.cache_read_input_tokens +
-    usage.cache_creation_input_tokens +
-    usage.output_tokens;
-
-  // Largest window across a multi-model/subagent turn; undefined when the
-  // result reports no per-model usage (Math.max() of nothing is -Infinity).
-  const windows = Object.values(msg.modelUsage).map((m) => m.contextWindow);
-  const contextWindow = windows.length > 0 ? Math.max(...windows) : undefined;
+function translateResultMessage(
+  msg: SDKResultMessage,
+  sessionId: SessionId,
+  state: TranslatorState
+): SessionEvent[] {
+  const sample = state.lastAssistantUsage;
+  // No main-model turn to measure (e.g. an errored/empty result): leave the
+  // meter on its prior occupancy rather than invent a cumulative number.
+  if (!sample) return [];
 
   const sessionUsage: SessionUsage = {
-    usedTokens,
-    contextWindow,
-    inputTokens: usage.input_tokens,
-    outputTokens: usage.output_tokens,
-    cacheReadTokens: usage.cache_read_input_tokens,
-    cacheWriteTokens: usage.cache_creation_input_tokens,
+    usedTokens: sample.usedTokens,
+    contextWindow: windowForModel(msg.modelUsage, sample.model),
+    inputTokens: sample.inputTokens,
+    outputTokens: sample.outputTokens,
+    cacheReadTokens: sample.cacheReadTokens,
+    cacheWriteTokens: sample.cacheWriteTokens,
     costUsd: msg.total_cost_usd,
     updatedAt: Date.now(),
   };
   return [event(sessionId, { sessionUpdate: "usage_update", usage: sessionUsage })];
+}
+
+/**
+ * The active model's context window — the one that produced the occupancy
+ * sample. The result keys `modelUsage` with a context-variant/date suffix (e.g.
+ * `claude-opus-4-8[1m]`, `claude-haiku-4-5-20251001`) while the assistant
+ * message reports the bare id (`claude-opus-4-8`), so an exact lookup misses on
+ * real data — match on prefix too. Falling back to the model that accumulated
+ * the most tokens keeps this correct for a bare `<synthetic>` turn and avoids
+ * ever taking the max window (a larger-windowed aux/subagent model would
+ * otherwise deflate the main conversation's percentage).
+ */
+function windowForModel(
+  modelUsage: SDKResultMessage["modelUsage"],
+  sampleModel: string
+): number | undefined {
+  const entries = Object.entries(modelUsage);
+  if (entries.length === 0) return undefined;
+  if (sampleModel) {
+    const exact = modelUsage[sampleModel];
+    if (exact) return exact.contextWindow;
+    const prefixed = entries.find(([id]) => id.startsWith(sampleModel));
+    if (prefixed) return prefixed[1].contextWindow;
+  }
+  const dominant = entries.reduce((a, b) => (modelTokens(b[1]) > modelTokens(a[1]) ? b : a));
+  return dominant[1].contextWindow;
+}
+
+function modelTokens(m: SDKResultMessage["modelUsage"][string]): number {
+  return m.inputTokens + m.outputTokens + m.cacheReadInputTokens + m.cacheCreationInputTokens;
 }
 
 export function mapStopReason(msg: SDKResultMessage): "end_turn" | "cancelled" | "refusal" {
@@ -291,9 +339,24 @@ function translateAssistantMessage(
   state: TranslatorState
 ): SessionEvent[] {
   const out: SessionEvent[] = [];
-  const content = (msg.message as { content?: unknown }).content;
-  if (!Array.isArray(content)) return out;
+  const message = msg.message as {
+    content?: unknown;
+    model?: string;
+    usage?: {
+      input_tokens?: number;
+      output_tokens?: number;
+      cache_read_input_tokens?: number;
+      cache_creation_input_tokens?: number;
+    };
+  };
   const parentToolUseId = msg.parent_tool_use_id ?? undefined;
+  // Sample occupancy from the main agent's own response only; a subagent's
+  // per-call usage measures a different context and must not drive the meter.
+  if (parentToolUseId === undefined && message.usage) {
+    state.lastAssistantUsage = assistantUsageSample(message.usage, message.model);
+  }
+  const content = message.content;
+  if (!Array.isArray(content)) return out;
   for (const block of content) {
     const b = block as { type?: string; id?: string; name?: string; input?: unknown };
     if (b.type !== "tool_use" || !b.id || !b.name) continue;
@@ -306,6 +369,36 @@ function translateAssistantMessage(
     );
   }
   return out;
+}
+
+/**
+ * Occupancy for one API call = its full prompt (fresh input + both cache buckets)
+ * plus the reply it generated. On a cached turn most input arrives as
+ * `cache_read`, so all three input buckets must be summed to recover the prompt
+ * size. This is the same formula the SDK result uses — the fix is the *source*:
+ * one call's usage (occupancy), not the turn's summed total (cumulative).
+ */
+function assistantUsageSample(
+  usage: {
+    input_tokens?: number;
+    output_tokens?: number;
+    cache_read_input_tokens?: number;
+    cache_creation_input_tokens?: number;
+  },
+  model: string | undefined
+): AssistantUsageSample {
+  const inputTokens = usage.input_tokens ?? 0;
+  const outputTokens = usage.output_tokens ?? 0;
+  const cacheReadTokens = usage.cache_read_input_tokens ?? 0;
+  const cacheWriteTokens = usage.cache_creation_input_tokens ?? 0;
+  return {
+    usedTokens: inputTokens + cacheReadTokens + cacheWriteTokens + outputTokens,
+    inputTokens,
+    outputTokens,
+    cacheReadTokens,
+    cacheWriteTokens,
+    model: model ?? "",
+  };
 }
 
 /**
