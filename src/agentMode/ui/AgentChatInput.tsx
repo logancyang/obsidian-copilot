@@ -87,12 +87,17 @@ interface AgentChatInputProps {
    * {@link contextLoadBlocking}, which only defers sends.
    */
   disabled?: boolean;
-  /** Agent project-context status icon, rendered in the composer's badge row. */
+  /**
+   * Agent project-context status icon, rendered through ChatInput's
+   * top-right accessory column (see the DESIGN NOTE at the mount point).
+   */
   contextStatusIndicator?: React.ReactNode;
 }
 
-// Stable no-op handlers for ChatInput props that don't apply to Agent Mode
-// (project progress card, vault indexing card).
+// Stable no-op handler for required ChatInput props that don't apply to
+// Agent Mode (project progress card). Optional props with no Agent Mode
+// surface (e.g. showIndexingCard) are omitted instead, so their `&& prop`
+// render guards stay effective.
 const NOOP = () => {};
 
 const dedupeBy = <T,>(items: Iterable<T>, key: (item: T) => string): T[] => {
@@ -407,9 +412,14 @@ export const AgentChatInput = memo(function AgentChatInput({
 
       // Queue-and-hold: while a turn is in flight, starting, or the project's
       // context is still materializing, park the message instead of sending.
-      // The flush effect below drains it once all three clear.
+      // The flush effect below drains it once all three clear. Context-held
+      // rows get an amber "Waiting for context" label; the reason is an
+      // enqueue-time snapshot, not re-derived as blockers evolve.
       if (loading || isStarting || holdForContext) {
-        setQueuedMessages((q) => [...q, item]);
+        setQueuedMessages((q) => [
+          ...q,
+          { ...item, queueReason: holdForContext ? "context" : "busy" },
+        ]);
         return;
       }
 
@@ -497,6 +507,20 @@ export const AgentChatInput = memo(function AgentChatInput({
         }
         aria-disabled={hasPendingPlanPermission || disabled || undefined}
       >
+        {/* DESIGN NOTE: the project-context status trigger renders through
+            ChatInput's structural top-right accessory column — a real layout
+            column, not an overlay — so badges, images, placeholder, and
+            editor text stay clear of it without avoidance padding (up to the
+            column's small deliberate negative-margin overlap, documented at
+            the ChatInput mount point). One mount point, no layout jump
+            when badges appear. Moving it into the bottom control row was
+            considered and rejected (the corner is the established home for
+            this status, and it should read as context state for the whole
+            composer, not a send control); an absolute overlay was rejected
+            because every content type would then need its own avoidance
+            padding — an open-ended maintenance obligation (#205). If a
+            future review flags either choice again, point them at this
+            note. */}
         {/* Key by session so ChatInput remounts on a tab/session switch. The
             per-session draft store (input/images/contextNotes/include flags)
             lives up in AgentHome and is threaded back as controlled props, so
@@ -536,8 +560,16 @@ export const AgentChatInput = memo(function AgentChatInput({
           agentBrands={agentBrands}
           onMentionedAgentsChange={handleMentionedAgentsChange}
           showProgressCard={NOOP}
-          showIndexingCard={NOOP}
-          contextStatusIndicator={contextStatusIndicator}
+          // showIndexingCard is deliberately NOT passed: the vault-indexing
+          // chip is not an Agent Mode surface (a NOOP here used to defeat
+          // ChatContextMenu's `&& showIndexingCard` guard and leak a chip
+          // whose click did nothing).
+          // No placeholder swap while context is loading, on purpose: loads
+          // often clear in ~hundreds of ms, so any transient placeholder (text
+          // or color) flickers in and out and reads as a glitch. The status
+          // icon covers the loading state; the queued-row "Waiting for
+          // context" prefix explains an actually-held send.
+          topRightAccessory={contextStatusIndicator}
         />
       </div>
     </>
@@ -578,8 +610,16 @@ const QueuedMessageList: React.FC<QueuedMessageListProps> = ({ messages, onRemov
           className="tw-flex tw-min-w-0 tw-items-center tw-gap-2 tw-rounded-md tw-bg-secondary-alt tw-px-2 tw-py-1 tw-text-ui-smaller"
           title={m.text}
         >
-          <Clock className="tw-size-3 tw-shrink-0 tw-text-muted" />
+          <Clock
+            className={cn(
+              "tw-size-3 tw-shrink-0",
+              m.queueReason === "context" ? "tw-text-warning" : "tw-text-muted"
+            )}
+          />
           <span className="tw-min-w-0 tw-flex-1 tw-truncate tw-whitespace-nowrap tw-text-normal">
+            {m.queueReason === "context" && (
+              <span className="tw-font-semibold tw-text-warning">Waiting for context · </span>
+            )}
             {m.text}
           </span>
           <Button
