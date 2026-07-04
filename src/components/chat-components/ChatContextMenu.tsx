@@ -45,13 +45,10 @@ interface ChatContextMenuProps {
   lexicalEditorRef?: React.RefObject<{ focus: () => void }>;
   hideAddContextButton?: boolean;
   /**
-   * Agent Mode passes its project-context status icon here; it renders at the
-   * right of the badge row. Legacy Chat leaves it undefined.
-   */
-  statusIndicator?: React.ReactNode;
-  /**
-   * True in Agent Mode. Suppresses the legacy CAG project-status icon (Agent Mode
-   * owns its own via {@link statusIndicator}); keeps the two from ever co-existing.
+   * True in Agent Mode. Suppresses the legacy CAG project-status icon (Agent
+   * Mode mounts its own status trigger outside this row) and collapses the row
+   * entirely when there are no badges — Agent Mode has no "@ Add context"
+   * button here, so an empty row would just push the editor down (#205).
    */
   isAgentMode?: boolean;
 }
@@ -72,7 +69,6 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
   onTypeaheadSelect,
   lexicalEditorRef,
   hideAddContextButton = false,
-  statusIndicator,
   isAgentMode = false,
 }) => {
   const app = useApp();
@@ -135,6 +131,13 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
     uniqueWebTabs.length > 0 ||
     activeNoteVisible ||
     activeWebTabVisible;
+
+  // Agent Mode only: with no "@ Add context" button and the status trigger
+  // living outside this row, an empty row is pure dead height above the
+  // editor — drop it. Legacy Chat must keep rendering (the "@" button below).
+  if (isAgentMode && !hasContext) {
+    return null;
+  }
 
   // Get contextStatus from the shared hook
   const getContextStatusIcon = () => {
@@ -241,13 +244,6 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
               {getContextStatusIcon()}
             </Button>
           </div>
-        </>
-      )}
-
-      {statusIndicator && (
-        <>
-          <Separator orientation="vertical" />
-          {statusIndicator}
         </>
       )}
 

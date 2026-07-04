@@ -53,6 +53,16 @@ const ACCENT_CIRCLE_BUTTON_CLASS =
   "tw-rounded-full tw-bg-interactive-accent tw-text-on-accent hover:tw-bg-interactive-accent-hover";
 
 export interface ChatInputProps {
+  /**
+   * Accessory rendered in a structural column to the right of the
+   * badge/image/editor stack (top-aligned). Being a real layout column — not
+   * an overlay — no content needs open-ended avoidance padding; the only
+   * deliberate exception is the column's own negative margin at the mount
+   * point (a few px of top-corner proximity, documented there). Kept as a
+   * single flat slot on purpose; if a second accessory ever appears,
+   * consolidate into a config object, not more props.
+   */
+  topRightAccessory?: React.ReactNode;
   inputMessage: string;
   setInputMessage: (message: string) => void;
   handleSendMessage: (metadata?: {
@@ -129,8 +139,6 @@ export interface ChatInputProps {
   onRemoveSelectedText?: (id: string) => void;
   showProgressCard: () => void;
   showIndexingCard?: () => void;
-  /** Agent Mode project-context status icon, rendered in the context badge row. */
-  contextStatusIndicator?: React.ReactNode;
 
   /**
    * Render slot for the toggle row that sits next to the send button.
@@ -203,6 +211,7 @@ export interface ChatInputHandle {
 
 const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput(
   {
+    topRightAccessory,
     inputMessage,
     setInputMessage,
     handleSendMessage,
@@ -226,7 +235,6 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
     onRemoveSelectedText,
     showProgressCard,
     showIndexingCard,
-    contextStatusIndicator,
     toolControls,
     onToolPillsChange,
     onTagSelected,
@@ -781,89 +789,113 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
       )}
       ref={containerRef}
     >
-      {/* Hide context controls in edit mode - editing only changes text, not context */}
-      {!editMode && (
-        <ContextControl
-          contextNotes={contextNotes}
-          includeActiveNote={includeActiveNote}
-          activeNote={currentActiveNote}
-          includeActiveWebTab={includeActiveWebTab}
-          activeWebTab={activeWebTab}
-          contextUrls={contextUrls}
-          contextFolders={contextFolders}
-          contextWebTabs={mergedContextWebTabs}
-          selectedTextContexts={selectedTextContexts}
-          showProgressCard={showProgressCard}
-          showIndexingCard={showIndexingCard}
-          onAddToContext={handleAddToContext}
-          onRemoveFromContext={handleRemoveFromContext}
-          hideAddContextButton={isAgentMode}
-          statusIndicator={contextStatusIndicator}
-          isAgentMode={isAgentMode}
-        />
-      )}
+      {/* Two columns: the content stack, and (when provided) a structural
+          accessory column. A column, not an overlay, so badges, images,
+          placeholder, and editor text stay clear of the accessory without
+          any of them knowing to avoid it — except for the column's own
+          deliberate negative-margin nibble, documented below. */}
+      <div className="tw-flex tw-gap-1">
+        <div className="tw-flex tw-min-w-0 tw-flex-1 tw-flex-col tw-gap-0.5">
+          {/* Hide context controls in edit mode - editing only changes text, not context */}
+          {!editMode && (
+            <ContextControl
+              contextNotes={contextNotes}
+              includeActiveNote={includeActiveNote}
+              activeNote={currentActiveNote}
+              includeActiveWebTab={includeActiveWebTab}
+              activeWebTab={activeWebTab}
+              contextUrls={contextUrls}
+              contextFolders={contextFolders}
+              contextWebTabs={mergedContextWebTabs}
+              selectedTextContexts={selectedTextContexts}
+              showProgressCard={showProgressCard}
+              showIndexingCard={showIndexingCard}
+              onAddToContext={handleAddToContext}
+              onRemoveFromContext={handleRemoveFromContext}
+              hideAddContextButton={isAgentMode}
+              isAgentMode={isAgentMode}
+            />
+          )}
 
-      {selectedImages.length > 0 && (
-        <div className="selected-images">
-          {selectedImages.map((file, index) => (
-            <div key={getFileIdentityKey(file)} className="image-preview-container">
-              <img
-                src={URL.createObjectURL(file)}
-                alt={file.name}
-                className="selected-image-preview"
-              />
-              <button
-                type="button"
-                className="remove-image-button"
-                onClick={() => setSelectedImages((prev) => prev.filter((_, i) => i !== index))}
-                title="Remove image"
-              >
-                <X className="tw-size-4" />
-              </button>
+          {selectedImages.length > 0 && (
+            <div className="selected-images">
+              {selectedImages.map((file, index) => (
+                <div key={getFileIdentityKey(file)} className="image-preview-container">
+                  <img
+                    src={URL.createObjectURL(file)}
+                    alt={file.name}
+                    className="selected-image-preview"
+                  />
+                  <button
+                    type="button"
+                    className="remove-image-button"
+                    onClick={() => setSelectedImages((prev) => prev.filter((_, i) => i !== index))}
+                    title="Remove image"
+                  >
+                    <X className="tw-size-4" />
+                  </button>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-      )}
+          )}
 
-      <div className="tw-relative">
-        {isProjectLoading && (
-          <div className="tw-absolute tw-inset-0 tw-z-modal tw-flex tw-items-center tw-justify-center tw-bg-primary tw-opacity-80 tw-backdrop-blur-sm">
-            <div className="tw-flex tw-items-center tw-gap-2">
-              <Loader2 className="tw-size-4 tw-animate-spin" />
-              <span className="tw-text-sm">{loadingMessages[loadingMessageIndex]}</span>
-            </div>
+          <div className="tw-relative">
+            {isProjectLoading && (
+              <div className="tw-absolute tw-inset-0 tw-z-modal tw-flex tw-items-center tw-justify-center tw-bg-primary tw-opacity-80 tw-backdrop-blur-sm">
+                <div className="tw-flex tw-items-center tw-gap-2">
+                  <Loader2 className="tw-size-4 tw-animate-spin" />
+                  <span className="tw-text-sm">{loadingMessages[loadingMessageIndex]}</span>
+                </div>
+              </div>
+            )}
+            <LexicalEditor
+              value={inputMessage}
+              onChange={(value) => setInputMessage(value)}
+              onSubmit={onSendMessage}
+              onNotesChange={setNotesFromPills}
+              onNotesRemoved={handleNotePillsRemoved}
+              onActiveNoteAdded={handleActiveNoteAdded}
+              onActiveNoteRemoved={handleActiveNoteRemoved}
+              onURLsChange={isCopilotPlus ? setUrlsFromPills : undefined}
+              onURLsRemoved={isCopilotPlus ? handleURLPillsRemoved : undefined}
+              onToolsChange={isCopilotPlus ? onToolPillsChange : undefined}
+              onFoldersChange={setFoldersFromPills}
+              onFoldersRemoved={handleFolderPillsRemoved}
+              onWebTabsChange={setWebTabsFromPills}
+              onActiveWebTabAdded={handleActiveWebTabAdded}
+              onActiveWebTabRemoved={handleActiveWebTabRemoved}
+              agentBrands={agentBrands}
+              onAgentsChange={handleAgentsChange}
+              onEditorReady={onEditorReady}
+              onImagePaste={onAddImage}
+              onTagSelected={onTagSelected}
+              placeholder={
+                "Your AI assistant for Obsidian • @ to add context • / for custom prompts"
+              }
+              disabled={isProjectLoading}
+              isCopilotPlus={isCopilotPlus}
+              showTools={showAtMentionTools}
+              currentActiveFile={currentActiveNote}
+              currentChain={currentChain}
+              onEscape={onEscape}
+              onShiftTab={onShiftTab}
+            />
           </div>
+        </div>
+
+        {topRightAccessory && (
+          // -ml-4 pulls the column 16px left: across the 4px flex gap, the
+          // editor's own 8px right-padding strip (px-2, permanently
+          // text-free), and 4px into the nominal text box — the trigger's
+          // inner padding keeps its glyph clear of that last strip (value
+          // eyeballed against the live vault). Accepted trade-offs, both
+          // confined to the top-right 24px corner: a click there hits the
+          // status trigger instead of the underlying composer content
+          // (reasonable for a click that close to the icon), and a scrolling editor's
+          // scrollbar top briefly passes under the accessory. If a future
+          // review flags this geometry again, point them at this note.
+          <div className="-tw-ml-4 tw-w-6 tw-shrink-0 tw-self-start">{topRightAccessory}</div>
         )}
-        <LexicalEditor
-          value={inputMessage}
-          onChange={(value) => setInputMessage(value)}
-          onSubmit={onSendMessage}
-          onNotesChange={setNotesFromPills}
-          onNotesRemoved={handleNotePillsRemoved}
-          onActiveNoteAdded={handleActiveNoteAdded}
-          onActiveNoteRemoved={handleActiveNoteRemoved}
-          onURLsChange={isCopilotPlus ? setUrlsFromPills : undefined}
-          onURLsRemoved={isCopilotPlus ? handleURLPillsRemoved : undefined}
-          onToolsChange={isCopilotPlus ? onToolPillsChange : undefined}
-          onFoldersChange={setFoldersFromPills}
-          onFoldersRemoved={handleFolderPillsRemoved}
-          onWebTabsChange={setWebTabsFromPills}
-          onActiveWebTabAdded={handleActiveWebTabAdded}
-          onActiveWebTabRemoved={handleActiveWebTabRemoved}
-          agentBrands={agentBrands}
-          onAgentsChange={handleAgentsChange}
-          onEditorReady={onEditorReady}
-          onImagePaste={onAddImage}
-          onTagSelected={onTagSelected}
-          placeholder={"Your AI assistant for Obsidian • @ to add context • / for custom prompts"}
-          disabled={isProjectLoading}
-          isCopilotPlus={isCopilotPlus}
-          showTools={showAtMentionTools}
-          currentActiveFile={currentActiveNote}
-          currentChain={currentChain}
-          onEscape={onEscape}
-          onShiftTab={onShiftTab}
-        />
       </div>
 
       <div className="tw-flex tw-h-7 tw-justify-between tw-gap-1 tw-px-1">

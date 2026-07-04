@@ -4,6 +4,9 @@ import { SelectedTextContext, WebTabContext } from "@/types/message";
 import { TFile, TFolder } from "obsidian";
 import { ChatContextMenu } from "./ChatContextMenu";
 
+// Pass-through shell over ChatContextMenu (predates this file's props; kept
+// as-is — inlining it into ChatInput is a standalone refactor, not something
+// to piggyback on feature work).
 interface ChatControlsProps {
   contextNotes: TFile[];
   includeActiveNote: boolean;
@@ -23,7 +26,6 @@ interface ChatControlsProps {
   onRemoveFromContext: (category: string, data: string) => void;
 
   hideAddContextButton?: boolean;
-  statusIndicator?: React.ReactNode;
   isAgentMode?: boolean;
 }
 
@@ -43,7 +45,6 @@ export const ContextControl: React.FC<ChatControlsProps> = ({
   onAddToContext,
   onRemoveFromContext,
   hideAddContextButton,
-  statusIndicator,
   isAgentMode,
 }) => {
   const handleRemoveContext = (category: string, data: string) => {
@@ -78,7 +79,6 @@ export const ContextControl: React.FC<ChatControlsProps> = ({
       onTypeaheadSelect={handleTypeaheadSelect}
       lexicalEditorRef={lexicalEditorRef}
       hideAddContextButton={hideAddContextButton}
-      statusIndicator={statusIndicator}
       isAgentMode={isAgentMode}
     />
   );

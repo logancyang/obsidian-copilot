@@ -10,6 +10,14 @@ export interface QueuedAgentMessage {
   text: string;
   rawInput: string;
   context?: MessageContext;
+  /**
+   * Why the message entered the queue, snapshotted at enqueue time — an
+   * enqueue reason, not a live "what's blocking now" (the blockers can evolve
+   * before the queue drains; the label deliberately doesn't chase them).
+   * Absent on combined flush items, which are sent immediately and never
+   * rendered as queue rows.
+   */
+  queueReason?: "context" | "busy";
   /** Image blocks for the backend prompt. */
   promptContent?: PromptContent[];
   /**

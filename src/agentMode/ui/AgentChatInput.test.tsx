@@ -32,14 +32,23 @@ jest.mock("@/agentMode/ui/mentionedAgents", () => ({
 // through `handleSendMessage` — the same entry the real Lexical editor's Enter
 // key hits (send-flow regression tests).
 let capturedAgentBrands: ReadonlyArray<unknown> | undefined;
+let capturedTopRightAccessory: React.ReactNode | undefined;
 jest.mock("@/components/chat-components/ChatInput", () => ({
   __esModule: true,
-  default: (props: { agentBrands?: ReadonlyArray<unknown>; handleSendMessage?: () => void }) => {
+  default: (props: {
+    agentBrands?: ReadonlyArray<unknown>;
+    topRightAccessory?: React.ReactNode;
+    handleSendMessage?: () => void;
+  }) => {
     capturedAgentBrands = props.agentBrands;
+    capturedTopRightAccessory = props.topRightAccessory;
     return (
-      <button type="button" onClick={() => props.handleSendMessage?.()}>
-        send
-      </button>
+      <>
+        {props.topRightAccessory}
+        <button type="button" onClick={() => props.handleSendMessage?.()}>
+          send
+        </button>
+      </>
     );
   },
 }));
@@ -171,6 +180,96 @@ describe("AgentChatInput turn-completion loading reset", () => {
     });
 
     await waitFor(() => expect(draft.setLoading).toHaveBeenCalledWith(false));
+  });
+});
+
+describe("AgentChatInput queue reason", () => {
+  const makeBackend = () =>
+    ({
+      sendMessage: jest.fn(() => ({ turn: Promise.resolve() })),
+      cancel: jest.fn(),
+    }) as unknown as AgentChatBackend;
+
+  /** Apply the functional updater handed to setQueue and return the enqueued item. */
+  const enqueuedItem = (setQueue: jest.Mock) => {
+    const updater = setQueue.mock.calls[0][0] as (
+      q: readonly unknown[]
+    ) => { queueReason?: string }[];
+    return updater([])[0];
+  };
+
+  beforeEach(() => {
+    mockUseCanUseMultiAgent.mockReturnValue(true);
+  });
+
+  it("snapshots 'context' when the send is held for project-context materialization", async () => {
+    const backend = makeBackend();
+    const draft = makeDraft();
+
+    renderInput(backend, draft, { activeProjectId: "proj-1", contextLoadBlocking: true });
+    fireEvent.click(screen.getByText("send"));
+    await waitFor(() => expect(draft.setQueue).toHaveBeenCalled());
+
+    expect(backend.sendMessage).not.toHaveBeenCalled();
+    expect(enqueuedItem(draft.setQueue as jest.Mock).queueReason).toBe("context");
+  });
+
+  it("snapshots 'busy' when queued behind an in-flight turn", async () => {
+    const backend = makeBackend();
+    const draft = makeDraft({ loading: true });
+
+    renderInput(backend, draft);
+    fireEvent.click(screen.getByText("send"));
+    await waitFor(() => expect(draft.setQueue).toHaveBeenCalled());
+
+    expect(backend.sendMessage).not.toHaveBeenCalled();
+    expect(enqueuedItem(draft.setQueue as jest.Mock).queueReason).toBe("busy");
+  });
+
+  it("labels only context-held rows with the amber waiting prefix", () => {
+    const draft = makeDraft({
+      queue: [
+        {
+          id: "q1",
+          text: "held for context",
+          rawInput: "held for context",
+          queueReason: "context",
+        },
+        { id: "q2", text: "held while busy", rawInput: "held while busy", queueReason: "busy" },
+      ],
+    });
+
+    renderInput(makeBackend(), draft);
+
+    const rows = screen.getAllByTitle(/held/);
+    expect(rows[0].textContent).toContain("Waiting for context · held for context");
+    expect(rows[1].textContent).toContain("held while busy");
+    expect(rows[1].textContent).not.toContain("Waiting for context");
+  });
+});
+
+describe("AgentChatInput status-icon boundary", () => {
+  // Locks the #205 layering decision: AgentChatInput owns the project-context
+  // status node and hands it to the shared ChatInput only through the neutral
+  // topRightAccessory slot — the shared component never learns what it is.
+  beforeEach(() => {
+    capturedTopRightAccessory = undefined;
+    mockUseCanUseMultiAgent.mockReturnValue(true);
+  });
+
+  it("passes the indicator through the accessory slot when mounted", () => {
+    const backend = { sendMessage: jest.fn(), cancel: jest.fn() } as unknown as AgentChatBackend;
+
+    renderInput(backend, makeDraft(), { contextStatusIndicator: <span>status</span> });
+    expect(capturedTopRightAccessory).toBeTruthy();
+    expect(screen.getByText("status")).toBeTruthy();
+  });
+
+  it("passes no accessory when there is no indicator (global scope)", () => {
+    const backend = { sendMessage: jest.fn(), cancel: jest.fn() } as unknown as AgentChatBackend;
+
+    renderInput(backend, makeDraft());
+    expect(capturedTopRightAccessory).toBeUndefined();
   });
 });
 
