@@ -130,6 +130,7 @@ export const AgentTabStrip: React.FC<Props> = ({ manager }) => {
   // sessions, the global workspace shows the global ones. `getSessions()` stays
   // reserved for whole-pool consumers (draft prune / auto-spawn), per §2.4.
   const sessions = manager.getSessionsForScope(manager.getActiveProjectId());
+  const sessionCount = sessions.length;
   const activeId = manager.getActiveSession()?.internalId ?? null;
   const isCreating = manager.getIsStarting();
   const [renamingId, setRenamingId] = React.useState<string | null>(null);
@@ -137,22 +138,40 @@ export const AgentTabStrip: React.FC<Props> = ({ manager }) => {
   const stripRef = React.useRef<HTMLDivElement | null>(null);
   const [stripWidth, setStripWidth] = React.useState(0);
 
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
+    // An empty scope renders no strip (see the `return null` below), so depend
+    // on `sessionCount` to re-run and measure once the strip mounts on 0 -> N.
+    if (sessionCount === 0) return;
     const strip = stripRef.current;
     if (!strip) return;
-    // ResizeObserver fires once on observe() with the initial size, so no
-    // synchronous primer is needed.
-    const ro = new ResizeObserver(() => {
+
+    const measure = () => {
       const nextWidth = strip.clientWidth;
       setStripWidth((currentWidth) => (currentWidth === nextWidth ? currentWidth : nextWidth));
-    });
+    };
+
+    // Prime synchronously so a remount can't paint with stripWidth stuck at 0,
+    // which collapses tabs into overflow despite available space (#206).
+    measure();
+
+    // Guard for test/JSDOM environments where ResizeObserver may not exist.
+    if (typeof ResizeObserver === "undefined") return;
+    // DESIGN NOTE: uses the bare global ResizeObserver rather than
+    // strip.win.ResizeObserver, which is technically the popout-unsafe pattern
+    // PLUGIN_DEV_GUIDE warns about.
+    // Left as-is deliberately: cross-realm observation still delivers in practice,
+    // this was not #206's root cause, and all 6 ResizeObserver call sites use the
+    // bare global — fixing only this one breaks that consistency. Tracked for a
+    // codebase-wide sweep in #206's open questions; if a future review flags this,
+    // point them here.
+    const ro = new ResizeObserver(measure);
     ro.observe(strip);
     return () => ro.disconnect();
-  }, []);
+  }, [sessionCount]);
 
   const visibleCount = React.useMemo(
-    () => computeVisibleCount(stripWidth, sessions.length),
-    [stripWidth, sessions.length]
+    () => computeVisibleCount(stripWidth, sessionCount),
+    [stripWidth, sessionCount]
   );
 
   const { visibleSessions, overflowSessions } = React.useMemo(
@@ -172,7 +191,7 @@ export const AgentTabStrip: React.FC<Props> = ({ manager }) => {
     [manager]
   );
 
-  if (sessions.length === 0) return null;
+  if (sessionCount === 0) return null;
 
   return (
     <div
