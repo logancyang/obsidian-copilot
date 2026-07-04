@@ -60,7 +60,7 @@ For these requests, prefer the bundled Copilot skill over any built-in tool of y
 - Getting a YouTube video's transcript → the \`copilot-youtube-transcript\` skill
 - Fetching an X (Twitter) post → the \`copilot-fetch-x\` skill
 
-Each skill ships both a \`.sh\` and a \`.mjs\` script. Run the \`.sh\` with \`sh\` first; if the platform can't run \`sh\` (for example, Windows without Git Bash), run the matching \`.mjs\` with \`node\` instead. If neither \`sh\` nor \`node\` is available, tell the user to install Node.js from https://nodejs.org and try again.
+Each skill ships a runnable script per OS — a \`.sh\` for macOS/Linux and a \`.cmd\` for Windows. Follow the skill's own "How to run" instructions for the right command; both runtimes are always present, so nothing needs to be installed.
 
 If a skill is missing, disabled, reports that Copilot Plus is not active, or fails for this particular request (for example a page it can't fetch or any other relay error), silently fall back to your own equivalent tool (or, if you have none for that task, tell the user it's unavailable) and complete the request — never refuse and never block the user on upgrading. Only pass along an upgrade or renewal note when the skill's own message explicitly invites it, and keep any such mention brief and occasional.`;
 
@@ -124,8 +124,25 @@ export const COPILOT_PROMPT_BASE = `You are Obsidian Copilot, an AI assistant th
  * `getEffectiveUserPrompt`) at call time. Backends call this at their natural
  * prompt-injection point — spawn time for opencode/codex, `newSession()` for
  * the Claude SDK — so a settings change applies to the next session.
+ *
+ * `opts.projectInstructions` is the owning project's composed instruction
+ * body — the built-in project policy layered ahead of the user's `project.md`
+ * body (an opaque string the caller resolves via
+ * `getComposedProjectInstructions`; this module never touches the `projects/`
+ * layer). When absent or blank the output is byte-identical to the no-project
+ * prompt — the global (no-project) parity guarantee. When present it is
+ * wrapped in `<project_instructions>` (mirroring `<user_custom_instructions>`)
+ * as the final section, after the user's custom prompt. codex/opencode get the
+ * same composed body for free via native `AGENTS.md` discovery from the
+ * session cwd; this append is the Claude SDK's equivalent, since it has no
+ * cwd-discovery channel.
+ *
+ * Project *file context* (folders/notes/URLs) is NOT part of the system prompt:
+ * it is delivered as a `<project_context>` block inlined into the session's
+ * first user message (reachable by all three backends), built by the context
+ * materializer's `buildProjectContextBlock`.
  */
-export function buildAgentSystemPrompt(): string {
+export function buildAgentSystemPrompt(opts?: { projectInstructions?: string }): string {
   const parts: string[] = [];
 
   // The "Disable builtin system prompt" toggle suppresses only the Copilot
@@ -136,8 +153,8 @@ export function buildAgentSystemPrompt(): string {
   if (!getDisableBuiltinSystemPrompt()) {
     parts.push(COPILOT_PROMPT_BASE);
     // Always steer toward the builtin Copilot Plus skills, regardless of Plus
-    // status. Gating on `isPlusUser` would be wrong anyway — valid self-host
-    // mode is Plus-enabled but reports `isPlusUser: false` — and if a skill
+    // status. Gating on `isPaidUser` would be wrong anyway — valid self-host
+    // mode is Plus-enabled but reports `isPaidUser: false` — and if a skill
     // can't run, its script exits telling the agent to use its own equivalent
     // tools and the fallback clause routes it there. Never blocks free users.
     parts.push(COPILOT_PLUS_TOOLS_STEERING);
@@ -147,6 +164,15 @@ export function buildAgentSystemPrompt(): string {
     if (shouldUseMiyo(getSettings())) {
       parts.push(COPILOT_MIYO_SEARCH_STEERING);
     }
+    // Extensibility seam — todo/plan steering. Today `AGENT_TODO_PLANNING_STEERING`
+    // is injected ONLY in Project scope (via `composeProjectInstructions`), so this
+    // global prompt stays byte-identical for no-project sessions. To make todo
+    // planning global: push it here AND remove it from `composeProjectInstructions`
+    // — otherwise a Project session receives the section twice (once globally, once
+    // via `<project_instructions>` / AGENTS.md). Note the placement decision: pushing
+    // it INSIDE this `!getDisableBuiltinSystemPrompt()` branch ties it to the "Disable
+    // builtin system prompt" toggle (so those users lose Project todo steering too);
+    // push it OUTSIDE the branch if todo planning should survive that toggle.
   }
 
   parts.push(buildPillSyntaxDirective());
@@ -154,6 +180,15 @@ export function buildAgentSystemPrompt(): string {
   const userPrompt = getEffectiveUserPrompt().trim();
   if (userPrompt) {
     parts.push(`<user_custom_instructions>\n${userPrompt}\n</user_custom_instructions>`);
+  }
+
+  // Optional project-instructions block, last. Absent/blank → nothing pushed,
+  // so the global (no-project) prompt stays byte-identical. Wrapped in
+  // `<project_instructions>`, mirroring the `<user_custom_instructions>` block
+  // above — the plugin's convention for tagging opaque user content.
+  const projectInstructions = opts?.projectInstructions?.trim();
+  if (projectInstructions) {
+    parts.push(`<project_instructions>\n${projectInstructions}\n</project_instructions>`);
   }
 
   return parts.join("\n\n");

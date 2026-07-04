@@ -9,9 +9,16 @@ import {
   PLUS_UTM_MEDIUMS,
   PlusUtmMedium,
 } from "@/constants";
+import { verifyEntitlement } from "@/entitlement";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import { logError, logInfo } from "@/logger";
-import { getSettings, setSettings, updateSetting, useSettingsValue } from "@/settings/model";
+import {
+  CopilotSettings,
+  getSettings,
+  setSettings,
+  updateSetting,
+  useSettingsValue,
+} from "@/settings/model";
 import { App, Notice } from "obsidian";
 import React from "react";
 
@@ -94,47 +101,110 @@ export function isPlusModel(modelKey: string): boolean {
 }
 
 /**
- * Synchronous check if Plus features should be enabled.
- * Returns true when self-host mode is valid OR user has valid Plus subscription.
- * Use this for synchronous checks (e.g., model validation, UI state).
+ * Synchronous check for paid (any valid license, incl. Lite) feature access.
+ * Returns true when self-host mode is valid OR the user has any valid paid
+ * subscription. Use this for the broad Plus-feature gates (model validation, UI
+ * state) that should remain available to every paying user.
  */
-export function isPlusEnabled(): boolean {
+export function isPaidEnabled(): boolean {
   const settings = getSettings();
-  // Self-host mode with valid plan validation bypasses Plus requirements
+  // Self-host mode with valid plan validation bypasses subscription requirements
   if (isSelfHostModeValid()) {
     return true;
   }
+  return settings.isPaidUser === true;
+}
+
+/**
+ * True once the entitlement token's expiry has passed. Only token-derived state
+ * carries an expiry (tokenless fallback leaves it 0), so this honors the JWS
+ * `exp` for the strict gate even offline, without affecting the broad paid gate.
+ */
+function isEntitlementExpired(settings: CopilotSettings): boolean {
+  return settings.entitlementExpiresAt > 0 && Date.now() >= settings.entitlementExpiresAt;
+}
+
+/**
+ * In-memory (never persisted) proof that a signed entitlement granting the
+ * `multi_agent` feature was cryptographically verified in THIS process — set by
+ * {@link applyEntitlement} (server response) or {@link verifyCachedEntitlement}
+ * (cached token re-checked at startup). The strict Plus gate requires it for
+ * token-derived state, so an edited `data.json` (which can flip persisted
+ * booleans and the expiry, but cannot forge an ES256 signature) fails closed.
+ */
+let strictEntitlementVerified = false;
+
+/**
+ * Synchronous check for tier >= Plus (excludes Lite) — the gate for
+ * Plus-and-above features such as multi-agent fan-out. Self-host plans
+ * (Believer/Supporter) are >= Plus, so a valid self-host bypass grants this too.
+ */
+export function isPlusEnabled(): boolean {
+  const settings = getSettings();
+  if (isSelfHostModeValid()) {
+    return true;
+  }
+  // Token-derived Plus carries an expiry. Trust it only when the signed token
+  // was cryptographically verified this session (not merely a persisted
+  // `isPlusUser` boolean) and the `exp` has not passed — so editing data.json
+  // cannot unlock the strict gate, even offline.
+  if (settings.entitlementExpiresAt > 0) {
+    return strictEntitlementVerified && !isEntitlementExpired(settings);
+  }
+  // Tokenless fallback (server has not issued a signed entitlement yet): no
+  // artifact exists to verify, so honor the license-confirmed flag as before.
   return settings.isPlusUser === true;
 }
 
 /**
- * Hook to get the isPlusUser setting.
- * Returns true when self-host mode is valid to allow offline usage.
+ * Self-host bypass for the reactive hooks: a license-keyed self-host user with a
+ * still-valid validation receipt (permanent or within grace) is treated as
+ * entitled offline. Mirrors the offline allowance in `useIsSelfHostEligible`.
+ */
+function hasSelfHostHookBypass(settings: CopilotSettings): boolean {
+  if (
+    !settings.plusLicenseKey ||
+    !settings.enableSelfHostMode ||
+    settings.selfHostModeValidatedAt == null
+  ) {
+    return false;
+  }
+  if (settings.selfHostValidationCount >= SELF_HOST_PERMANENT_VALIDATION_COUNT) {
+    return true;
+  }
+  return Date.now() - settings.selfHostModeValidatedAt < SELF_HOST_GRACE_PERIOD_MS;
+}
+
+/**
+ * Hook for paid status (any valid license, incl. Lite). Returns true when
+ * self-host mode is valid to allow offline usage.
+ */
+export function useIsPaidUser(): boolean | undefined {
+  const settings = useSettingsValue();
+  if (hasSelfHostHookBypass(settings)) {
+    return true;
+  }
+  return settings.isPaidUser;
+}
+
+/**
+ * Hook for tier >= Plus (excludes Lite) — the reactive gate for Plus-and-above
+ * features. Self-host plans are >= Plus, so the self-host bypass grants this too.
  */
 export function useIsPlusUser(): boolean | undefined {
   const settings = useSettingsValue();
-  // Self-host mode with valid plan validation bypasses Plus requirements (requires license key)
-  if (
-    settings.plusLicenseKey &&
-    settings.enableSelfHostMode &&
-    settings.selfHostModeValidatedAt != null
-  ) {
-    // Permanently valid after 3 successful validations
-    if (settings.selfHostValidationCount >= SELF_HOST_PERMANENT_VALIDATION_COUNT) {
-      return true;
-    }
-    // Otherwise, check grace period
-    const isValid = Date.now() - settings.selfHostModeValidatedAt < SELF_HOST_GRACE_PERIOD_MS;
-    if (isValid) {
-      return true;
-    }
+  if (hasSelfHostHookBypass(settings)) {
+    return true;
+  }
+  if (isEntitlementExpired(settings)) {
+    return false;
   }
   return settings.isPlusUser;
 }
 
 /**
- * Synchronous entitlement check for the multi-agent fan-out feature. Reuses the
- * Plus entitlement (any paid plan) rather than a parallel notion of "paid".
+ * Synchronous entitlement check for the multi-agent fan-out feature. Gated on
+ * tier >= Plus (not merely "paid"), so Lite users are excluded.
  */
 export function canUseMultiAgent(): boolean {
   return isPlusEnabled();
@@ -145,9 +215,11 @@ export function canUseMultiAgent(): boolean {
  * single source of truth the non-React session calls before dispatching, so a UI
  * bypass can't evade the paywall.
  *
- * Fast path: a paying user (cached `isPlusEnabled()`) is allowed with no network
- * call. Slow path: re-verify against `/license` so a stale-false cache still gets
- * through; anything not confirmed valid is a HARD block (no single-agent fallback).
+ * Fast path: a Plus-tier user (cached `isPlusEnabled()`) is allowed with no
+ * network call. Slow path: re-verify against `/license` so a stale-false cache
+ * still gets through; we then re-read the freshly-applied entitlement (never the
+ * broad `isValid`) so Lite stays blocked. Anything not confirmed >= Plus is a
+ * HARD block (no single-agent fallback).
  */
 export async function ensureMultiAgentEntitlement(
   app?: App,
@@ -156,13 +228,13 @@ export async function ensureMultiAgentEntitlement(
   if (isPlusEnabled()) {
     return true;
   }
-  // Re-verify so a stale-false cache for a real paid user still gets through;
-  // `validateLicenseKey` flips the cached flag itself.
-  const result = await BrevilabsClient.getInstance().validateLicenseKey(app, {
+  // Re-verify so a stale-false cache for a real Plus user still gets through;
+  // `validateLicenseKey` applies the signed entitlement (or fallback) to settings.
+  await BrevilabsClient.getInstance().validateLicenseKey(app, {
     feature: "multi_agent_per_turn",
     ...context,
   });
-  return result.isValid === true;
+  return isPlusEnabled();
 }
 
 /**
@@ -188,10 +260,10 @@ export function useCanUseMultiAgent(): boolean {
 }
 
 /**
- * Check if the user is a Plus user.
+ * Check if the user has a valid paid license (any tier, incl. Lite).
  * When self-host mode is valid, this returns true to allow offline usage.
  */
-export async function checkIsPlusUser(
+export async function checkIsPaidUser(
   app?: App,
   context?: Record<string, unknown>
 ): Promise<boolean | undefined> {
@@ -201,7 +273,7 @@ export async function checkIsPlusUser(
   }
 
   if (!getSettings().plusLicenseKey) {
-    turnOffPlus(app);
+    turnOffPaid(app);
     return false;
   }
   const brevilabsClient = BrevilabsClient.getInstance();
@@ -453,23 +525,111 @@ export function navigateToPlusPage(medium: PlusUtmMedium): void {
   window.open(createPlusPageUrl(medium), "_blank");
 }
 
-export function turnOnPlus(): void {
-  updateSetting("isPlusUser", true);
+/**
+ * Mark the user as paid via the no-token fallback path (valid license, but the
+ * server didn't issue a signed entitlement yet). Sets both flags true and clears
+ * any stale token. `isPlusUser` mirrors `isPaidUser` here because no sub-Plus
+ * paid tier exists until the server ships tokens + Lite/Pro together — so this is
+ * safe and preserves today's behavior. See "Copilot Entitlement Token Design".
+ */
+export function turnOnPaid(): void {
+  setSettings({
+    isPaidUser: true,
+    isPlusUser: true,
+    entitlementToken: "",
+    entitlementExpiresAt: 0,
+  });
 }
 
 /**
- * Turn off Plus user status.
- * IMPORTANT: This is called on every plugin start for users without a Plus license key (see checkIsPlusUser).
- * DO NOT reset model settings here - it will cause free users to lose their model selections on every app restart.
- * Only update the isPlusUser flag.
+ * Paid license confirmed by the server, but its entitlement token could not be
+ * verified (verifying key not shipped yet / kid rotation). Grant paid so general
+ * Plus features keep working, but WITHHOLD the strict gate — otherwise an
+ * unverifiable Lite token would bypass the multi-agent gate. Fails closed for
+ * multi-agent until the matching public key ships.
  */
-export function turnOffPlus(app?: App): void {
-  const previousIsPlusUser = getSettings().isPlusUser;
-  updateSetting("isPlusUser", false);
+export function markPaidPendingEntitlement(): void {
+  setSettings({
+    isPaidUser: true,
+    isPlusUser: false,
+    entitlementToken: "",
+    entitlementExpiresAt: 0,
+  });
+}
+
+/**
+ * Clear all entitlement state silently (no modal). Only invoked on an
+ * authoritative negative (invalid license / no license key) via turnOffPaid.
+ */
+function clearEntitlement(): void {
+  setSettings({
+    isPaidUser: false,
+    isPlusUser: false,
+    entitlementToken: "",
+    entitlementExpiresAt: 0,
+  });
+}
+
+/**
+ * Turn off paid status.
+ * IMPORTANT: This is called on every plugin start for users without a license key (see checkIsPaidUser).
+ * DO NOT reset model settings here - it will cause free users to lose their model selections on every app restart.
+ * Only update the entitlement flags.
+ */
+export function turnOffPaid(app?: App): void {
+  const previousIsPaidUser = getSettings().isPaidUser;
+  clearEntitlement();
   // The expiry modal needs `app`; interactive callers (load, settings, chat)
-  // pass it. Rare background paths (believer-model checks) flip the flag without
-  // a modal — they surface their own Notice instead.
-  if (previousIsPlusUser && app) {
+  // pass it. Rare background paths flip the flag without a modal — they surface
+  // their own Notice instead.
+  if (previousIsPaidUser && app) {
     new CopilotPlusExpiredModal(app).open();
   }
+}
+
+/**
+ * Verify a signed entitlement token and, when valid, apply its claims to
+ * settings: `isPaidUser` = tier is not free, `isPlusUser` = the `multi_agent`
+ * capability is granted (tier >= Plus).
+ *
+ * Returns true when the token verified and was applied, false when it could NOT
+ * be verified (bad signature, expired, unknown `kid`, or — during rollout — an
+ * empty public-key set). An unverifiable token is NOT an authoritative "not
+ * entitled" signal, so this never clears flags; the caller decides the fallback
+ * (e.g. a license the server already confirmed valid stays paid). Only an
+ * authoritative negative (invalid license / no key) downgrades, via turnOffPaid.
+ */
+export async function applyEntitlement(token: string): Promise<boolean> {
+  const claims = await verifyEntitlement(token, { expectedUserId: getSettings().userId });
+  if (!claims) {
+    return false;
+  }
+  const grantsMultiAgent = claims.features.includes("multi_agent");
+  setSettings({
+    entitlementToken: token,
+    entitlementExpiresAt: claims.exp * 1000,
+    isPaidUser: claims.tier !== "free",
+    isPlusUser: grantsMultiAgent,
+  });
+  strictEntitlementVerified = grantsMultiAgent;
+  return true;
+}
+
+/**
+ * Re-verify the persisted entitlement token at startup so the strict Plus gate
+ * works offline WITHOUT trusting the persisted `isPlusUser` boolean. ES256
+ * verification is offline (WebCrypto against the embedded public key), so a
+ * genuine token re-proves itself with no network, while an edited data.json
+ * (flipped booleans, future expiry, but no valid signature) leaves the in-memory
+ * proof false and the strict gate closed. The online `/license` re-validation
+ * still runs separately and overrides this with the server's fresh token.
+ */
+export async function verifyCachedEntitlement(): Promise<void> {
+  const { entitlementToken, userId } = getSettings();
+  if (!entitlementToken) {
+    strictEntitlementVerified = false;
+    return;
+  }
+  const claims = await verifyEntitlement(entitlementToken, { expectedUserId: userId });
+  strictEntitlementVerified = claims?.features.includes("multi_agent") === true;
 }

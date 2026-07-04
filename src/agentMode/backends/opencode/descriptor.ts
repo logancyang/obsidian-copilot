@@ -26,6 +26,7 @@ import { OpencodeSettingsPanel } from "./OpencodeSettingsPanel";
 import { resolveOpencodeBinary } from "./opencodeBinaryResolver";
 import { mapNodeArch, mapNodePlatform } from "./platformResolver";
 import { detectBinary } from "@/utils/detectBinary";
+import { cacheRoot } from "@/context/conversionsLocation";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import { simpleBinaryBackendProcess } from "@/agentMode/backends/shared/simpleBinaryBackend";
 import type {
@@ -295,7 +296,14 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
     const { providerRegistry, backendConfigRegistry } = args.plugin.modelManagement;
     return simpleBinaryBackendProcess(
       args,
-      new OpencodeBackend({ providerRegistry, backendConfigRegistry })
+      new OpencodeBackend({
+        providerRegistry,
+        backendConfigRegistry,
+        // Activates the opencode external_directory allow rule for the off-vault
+        // shared conversions cache. vaultId/path derivation lives entirely in
+        // conversionsLocation — this backend never duplicates it.
+        getCacheRoot: () => cacheRoot(args.plugin.app),
+      })
     );
   },
 

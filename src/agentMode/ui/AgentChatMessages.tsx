@@ -181,7 +181,6 @@ const AgentChatMessages = memo(
                       showThinkingTail={message.id === streamingMessageId && showBottomLoader}
                       app={app}
                       turnStopReason={message.turnStopReason}
-                      turnDurationMs={message.turnDurationMs}
                     />
                   </div>
                 ) : (

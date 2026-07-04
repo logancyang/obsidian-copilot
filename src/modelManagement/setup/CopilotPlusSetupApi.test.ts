@@ -172,6 +172,11 @@ const EMBEDDING: ModelInfo = {
   displayName: "Copilot Plus Small",
   isEmbedding: true,
 };
+const EXTRA: ModelInfo = {
+  id: "glm-5.2",
+  displayName: "GLM-5.2",
+  toolCall: true,
+};
 
 interface Harness {
   api: CopilotPlusSetupApi;
@@ -253,6 +258,68 @@ describe("CopilotPlusSetupApi.registerPlusProvider", () => {
     expect(h.backends.enabledFor("chat")).not.toContain(embeddingId);
   });
 
+  it("with autoEnrollModelIds, enrolls only the listed models; the rest are created but off", async () => {
+    const h = makeHarness();
+    const result = await h.api.registerPlusProvider({
+      providerType: "openai-compatible",
+      displayName: "Copilot Plus",
+      baseUrl: "https://models.brevilabs.com/v1",
+      apiKey: "lic-key",
+      models: [FLASH, EXTRA],
+      autoEnrollModelIds: [FLASH.id],
+    });
+
+    // Both models exist as ConfiguredModels...
+    expect(result.configuredModelIds).toHaveLength(2);
+    const flashId = h.models.getByWireId(result.providerId, FLASH.id)!.configuredModelId;
+    const extraId = h.models.getByWireId(result.providerId, EXTRA.id)!.configuredModelId;
+    expect(extraId).toBeDefined();
+
+    // ...but only the listed flash model is enrolled into the pickers.
+    expect(h.backends.enabledFor("chat")).toEqual([flashId]);
+    expect(h.backends.enabledFor("opencode")).toEqual([flashId]);
+    expect(h.backends.enabledFor("chat")).not.toContain(extraId);
+    expect(h.backends.enabledFor("opencode")).not.toContain(extraId);
+  });
+
+  it("with autoEnrollModelIds, a newly-added model on re-sync stays off (existing curation preserved)", async () => {
+    const h = makeHarness();
+    // First sync: only flash exists and is enrolled.
+    const first = await h.api.registerPlusProvider({
+      providerType: "openai-compatible",
+      displayName: "Copilot Plus",
+      baseUrl: "https://models.brevilabs.com/v1",
+      apiKey: "lic-key",
+      models: [FLASH],
+      autoEnrollModelIds: [FLASH.id],
+    });
+    const flashId = first.configuredModelIds[0];
+
+    // Second sync introduces EXTRA, still not in the default-enabled set.
+    await h.api.registerPlusProvider({
+      providerType: "openai-compatible",
+      displayName: "Copilot Plus",
+      baseUrl: "https://models.brevilabs.com/v1",
+      apiKey: "lic-key",
+      models: [FLASH, EXTRA],
+      autoEnrollModelIds: [FLASH.id],
+    });
+
+    const extraId = h.models.getByWireId(first.providerId, EXTRA.id)!.configuredModelId;
+    expect(h.backends.enabledFor("opencode")).toEqual([flashId]);
+    expect(h.backends.enabledFor("opencode")).not.toContain(extraId);
+  });
+
+  it("without autoEnrollModelIds, every non-embedding model auto-enrolls (prior behavior)", async () => {
+    const h = makeHarness();
+    const result = await register(h, [FLASH, EXTRA]);
+
+    const flashId = h.models.getByWireId(result.providerId, FLASH.id)!.configuredModelId;
+    const extraId = h.models.getByWireId(result.providerId, EXTRA.id)!.configuredModelId;
+    expect(h.backends.enabledFor("opencode")).toEqual([flashId, extraId]);
+    expect(h.backends.enabledFor("chat")).toEqual([flashId, extraId]);
+  });
+
   it("does not call setApiKey when no key is supplied", async () => {
     const h = makeHarness();
     const result = await h.api.registerPlusProvider({
@@ -322,6 +389,31 @@ describe("CopilotPlusSetupApi.registerPlusProvider", () => {
     const row = h.models.getByWireId(first.providerId, "copilot-plus-flash")!;
     expect(row.configuredModelId).toBe(idBefore);
     expect(row.info.displayName).toBe("Copilot Plus Flash 2");
+  });
+
+  it("refreshes drifted capability fields (reasoning/modalities/toolCall) in place", async () => {
+    const h = makeHarness();
+    // Existing model registered WITHOUT reasoning/modalities (an older snapshot).
+    const first = await register(h, [{ id: "glm-5.2", displayName: "GLM-5.2", toolCall: false }]);
+    const idBefore = first.configuredModelIds[0];
+    expect(h.models.getByWireId(first.providerId, "glm-5.2")!.info.reasoning).toBeUndefined();
+
+    // Re-register the same id with new capabilities — e.g. reasoning effort support.
+    await register(h, [
+      {
+        id: "glm-5.2",
+        displayName: "GLM-5.2",
+        toolCall: true,
+        reasoning: true,
+        modalities: { input: ["text"], output: ["text"] },
+      },
+    ]);
+
+    const row = h.models.getByWireId(first.providerId, "glm-5.2")!;
+    expect(row.configuredModelId).toBe(idBefore); // no churn
+    expect(row.info.reasoning).toBe(true);
+    expect(row.info.toolCall).toBe(true);
+    expect(row.info.modalities).toEqual({ input: ["text"], output: ["text"] });
   });
 });
 

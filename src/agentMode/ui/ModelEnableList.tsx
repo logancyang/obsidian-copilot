@@ -1,10 +1,13 @@
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { FreeModelWarningIcon } from "@/components/ui/FreeModelWarningIcon";
+import { HelpTooltip } from "@/components/ui/help-tooltip";
+import { ModelCapabilityIcons, hasCapabilityIcons } from "@/components/ui/model-display";
 import { SearchBar } from "@/components/ui/SearchBar";
 import { SettingSwitch } from "@/components/ui/setting-switch";
+import type { ModelCapability } from "@/constants";
 import { cn } from "@/lib/utils";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, KeyRound } from "lucide-react";
 import React from "react";
 
 /** A single toggleable model row. */
@@ -19,6 +22,8 @@ export interface ModelEnableRow {
   wireId?: string;
   /** Whether the model is currently enabled. */
   enabled: boolean;
+  /** Modality icons (vision/websearch) shown beside the label; reasoning is not rendered. */
+  capabilities?: ModelCapability[];
   /**
    * `true` for a free model (zero catalog cost) routed through a third party.
    * Renders a privacy-warning icon + tooltip beside the label, since such
@@ -35,11 +40,17 @@ export interface ModelEnableGroup {
   /** Group heading — a provider display name (no glyphs/avatars). */
   label: string;
   /**
-   * Origin badge (e.g. "BYOK", "Agent Provided"). Set only when the list spans
-   * multiple origins, so it actually disambiguates. Copilot Plus carries no
-   * badge — its label already reads "Copilot Plus".
+   * Short badge shown after the label. For most origins it's an origin tag
+   * (e.g. "BYOK", "Agent Provided") set only when the list spans multiple
+   * origins, so it actually disambiguates. Copilot Plus instead carries a
+   * "privacy" badge.
    */
   badge?: string;
+  /**
+   * Optional hover hint rendered as a small icon after the badge (e.g.
+   * "Copilot license required" for the Copilot Plus group).
+   */
+  tooltip?: string;
   /**
    * Visually emphasize the group header (accent color). Set for Copilot Plus,
    * which the caller also floats to the top of the list.
@@ -100,6 +111,11 @@ export const ModelEnableList: React.FC<ModelEnableListProps> = ({
             <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-1">
               <span className="tw-truncate">{row.label}</span>
               {row.isFree && <FreeModelWarningIcon />}
+              {hasCapabilityIcons(row.capabilities) && (
+                <span className="tw-flex tw-shrink-0 tw-items-center tw-gap-0.5">
+                  <ModelCapabilityIcons capabilities={row.capabilities} iconSize={14} />
+                </span>
+              )}
             </div>
             {row.description && (
               <div className="tw-truncate tw-text-xs tw-text-muted">{row.description}</div>
@@ -117,7 +133,7 @@ export const ModelEnableList: React.FC<ModelEnableListProps> = ({
     <div className="tw-flex tw-flex-col tw-gap-2">
       <SearchBar value={query} onChange={onQueryChange} placeholder={searchPlaceholder} />
 
-      <div className="tw-max-h-80 tw-overflow-y-auto tw-pr-1">
+      <div className="tw-max-h-[36rem] tw-overflow-y-auto tw-pr-1">
         {!hasRows ? (
           <div className="tw-py-6 tw-text-center tw-text-sm tw-text-muted">
             {emptyState ?? (searching ? `No models match “${query.trim()}”.` : "No models.")}
@@ -152,6 +168,24 @@ export const ModelEnableList: React.FC<ModelEnableListProps> = ({
                         <Badge variant="secondary" className="tw-shrink-0 tw-font-normal">
                           {group.badge}
                         </Badge>
+                      )}
+                      {group.tooltip && (
+                        // Stop pointer/click from bubbling to the CollapsibleTrigger so
+                        // tapping the hint (which opens the tooltip on mobile) doesn't
+                        // also collapse/expand the group.
+                        <span
+                          className="tw-flex tw-shrink-0 tw-items-center"
+                          onClick={(e) => e.stopPropagation()}
+                          onPointerDown={(e) => e.stopPropagation()}
+                        >
+                          <HelpTooltip
+                            content={group.tooltip}
+                            side="top"
+                            buttonClassName="tw-size-4"
+                          >
+                            <KeyRound className="tw-size-3.5 tw-shrink-0 tw-text-muted" />
+                          </HelpTooltip>
+                        </span>
                       )}
                     </div>
                   </CollapsibleTrigger>

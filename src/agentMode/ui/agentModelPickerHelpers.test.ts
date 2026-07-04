@@ -7,6 +7,7 @@ import {
   resolveActiveDisplayState,
   synthesizeAgentEntry,
 } from "./agentModelPickerHelpers";
+import { ModelCapability } from "@/constants";
 import { getModelKeyFromModel } from "@/settings/model";
 import type { ModelSelectorEntry } from "@/components/ui/ModelSelector";
 import type {
@@ -631,7 +632,10 @@ describe("buildModelOnChange", () => {
     // Allow the IIFE to run.
     await new Promise((r) => window.setTimeout(r, 0));
     expect(persistDefaultSelection).not.toHaveBeenCalled();
-    expect(createSession).toHaveBeenCalledWith("claude", { baseModelId: "opus", effort: "low" });
+    expect(createSession).toHaveBeenCalledWith("claude", undefined, {
+      baseModelId: "opus",
+      effort: "low",
+    });
     expect(setDefaultBackend).toHaveBeenCalledWith("claude");
     expect(closeSession).toHaveBeenCalledWith("tab-1");
   });
@@ -718,5 +722,70 @@ describe("buildEffortOptionsByModelKey", () => {
     const entries = [synthesizeAgentEntry(OTHER, OTHER, opencode)];
     const out = buildEffortOptionsByModelKey(manager, entries);
     expect(out[getModelKeyFromModel(entries[0])]).toEqual([]);
+  });
+});
+
+// ---- capability propagation --------------------------------------------
+
+describe("buildPickerEntries — persisted capability propagation", () => {
+  function reported(baseModelId: string, provider: string | null): ModelEntry {
+    return { baseModelId, name: baseModelId, provider, effortOptions: [] };
+  }
+
+  function ctxFor(backendId: "codex" | "claude" | "opencode"): ModelActiveContext {
+    return {
+      activeSession: { backendId } as unknown as AgentSession,
+      activeChatUIState: null,
+      activeBackendId: backendId,
+      activeDescriptor: makeDescriptor(backendId),
+      activeSessionHasHistory: false,
+      activeModelState: null,
+      activeCurrentEntry: undefined,
+    };
+  }
+
+  it("surfaces an enabled model's persisted capabilities on its picker entry", () => {
+    const claude = {
+      ...makeDescriptor("claude"),
+      getEnabledModelEntries: () => [
+        {
+          baseModelId: "claude-sonnet-4-5",
+          name: "Sonnet",
+          credentialState: "ok" as const,
+          capabilities: [ModelCapability.VISION, ModelCapability.REASONING],
+        },
+      ],
+    } as unknown as BackendDescriptor;
+    const manager = makeManager({
+      cachedStateById: {
+        claude: {
+          model: makeModelState("claude-sonnet-4-5", [reported("claude-sonnet-4-5", "anthropic")]),
+          mode: null,
+        },
+      },
+    });
+    const { entries } = buildPickerEntries(manager, [claude], ctxFor("claude"), emptySettings);
+    const entry = entries.find((e) => e.name === "claude-sonnet-4-5");
+    expect(entry?.capabilities).toEqual([ModelCapability.VISION, ModelCapability.REASONING]);
+  });
+
+  it("leaves capabilities undefined when the enabled entry carries none", () => {
+    const claude = {
+      ...makeDescriptor("claude"),
+      getEnabledModelEntries: () => [
+        { baseModelId: "claude-sonnet-4-5", name: "Sonnet", credentialState: "ok" as const },
+      ],
+    } as unknown as BackendDescriptor;
+    const manager = makeManager({
+      cachedStateById: {
+        claude: {
+          model: makeModelState("claude-sonnet-4-5", [reported("claude-sonnet-4-5", "anthropic")]),
+          mode: null,
+        },
+      },
+    });
+    const { entries } = buildPickerEntries(manager, [claude], ctxFor("claude"), emptySettings);
+    const entry = entries.find((e) => e.name === "claude-sonnet-4-5");
+    expect(entry?.capabilities).toBeUndefined();
   });
 });

@@ -100,7 +100,7 @@ export function useAgentModelPicker(
   const descriptors = useMemo(() => listBackendDescriptors(), []);
   const signal = useAgentModelSignal(manager, descriptors);
   return useMemo(() => {
-    // `signal` is the memo invalidator — referenced here so
+    // `signal` is a memo invalidator — referenced here so
     // react-hooks/exhaustive-deps accepts it in the dep array.
     void signal;
     return buildAgentModelPicker({ manager, descriptors, settings });

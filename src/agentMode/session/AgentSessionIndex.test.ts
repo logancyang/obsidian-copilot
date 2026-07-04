@@ -155,6 +155,36 @@ describe("AgentSessionIndex", () => {
     expect((await second.getEntry("opencode", "s1"))?.title).toBe("My rename");
   });
 
+  it("scopes entries to a project; sweeps fill a missing scope but never strip a known one", async () => {
+    // Reason: project views filter native entries by the recorded projectId.
+    // Write-through (live sessions) is authoritative; a `listSessions` sweep
+    // re-discovering the same session arrives without (or with weaker)
+    // attribution and must not detach the chat from its project.
+    const index = new AgentSessionIndex(makeStorage(), INDEX_PATH);
+    await index.recordSession(entry({ projectId: "proj-1" }));
+    await index.mergeDiscoveredSessions([entry({ title: "Sweep title", lastAccessedAtMs: 9_000 })]);
+    expect((await index.getEntry("opencode", "s1"))?.projectId).toBe("proj-1");
+
+    // A sweep CAN attribute a session the index never saw live (CLI-created
+    // inside a project folder).
+    await index.mergeDiscoveredSessions([
+      entry({ sessionId: "s2", projectId: "proj-2", lastAccessedAtMs: 9_000 }),
+    ]);
+    expect((await index.getEntry("opencode", "s2"))?.projectId).toBe("proj-2");
+  });
+
+  it("the project scope round-trips through persistence", async () => {
+    const storage = makeStorage();
+    const first = new AgentSessionIndex(storage, INDEX_PATH);
+    await first.recordSession(entry({ projectId: "proj-1" }));
+    await first.recordSession(entry({ sessionId: "global-chat" }));
+    await first.flush();
+    const second = new AgentSessionIndex(storage, INDEX_PATH);
+    expect((await second.getEntry("opencode", "s1"))?.projectId).toBe("proj-1");
+    // Absent scope (a pre-projectId or global entry) stays absent ≙ global.
+    expect((await second.getEntry("opencode", "global-chat"))?.projectId).toBeUndefined();
+  });
+
   it("persists across instances via flush and ignores corrupt files", async () => {
     const storage = makeStorage();
     const first = new AgentSessionIndex(storage, INDEX_PATH);

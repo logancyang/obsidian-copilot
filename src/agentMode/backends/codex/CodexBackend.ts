@@ -51,6 +51,14 @@ export class CodexBackend implements AcpBackend {
       "-c",
       'sandbox_mode="workspace-write"',
     ];
+    // DESIGN NOTE: deliberately no `project_doc_fallback_filenames=["project.md"]`.
+    // Post-Phase-2 the session-start `ensureAgentsMirror` (AgentSessionManager, run before
+    // `resolveSessionCwd` for codex/opencode project sessions) guarantees the marker'd
+    // `AGENTS.md` mirror exists in the project cwd, so a `project.md` fallback is redundant.
+    // This descriptor only knows `vaultBasePath`, not the session scope: a spawn-level fallback
+    // would also apply to GLOBAL sessions and let codex read a user's vault-root `project.md`
+    // note as instructions. On the rare ensure failure a project session gets no instructions
+    // (ensure never throws and re-runs next session) rather than the frontmatter-laden source.
     return descriptor;
   }
 }

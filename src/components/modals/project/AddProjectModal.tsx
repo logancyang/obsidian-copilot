@@ -17,6 +17,7 @@ import { UrlTagInput } from "@/components/ui/url-tag-input";
 import { SystemPromptSyntaxInstruction } from "@/components/SystemPromptSyntaxInstruction";
 import { DEFAULT_MODEL_SETTING } from "@/constants";
 import { ProjectContextBadgeList } from "@/components/project/ProjectContextBadgeList";
+import { ProjectContextSourceEditor } from "@/components/project/ProjectContextSourceEditor";
 import { err2String, randomUUID } from "@/utils";
 import { Settings } from "lucide-react";
 import { type UrlItem, parseProjectUrls, serializeProjectUrls } from "@/utils/urlTagUtils";
@@ -32,6 +33,26 @@ interface AddProjectModalContentProps {
   onSave: (project: ProjectConfig) => Promise<void>;
   onCancel: () => void;
   plugin?: CopilotPlugin;
+  /**
+   * Agent Mode variant: hides the Model Configuration card and the CAG
+   * processing/cache status (Agent projects have no model selector — see
+   * `ProjectConfig.projectModelKey` — and materialize context at session start
+   * rather than via the CAG vector pipeline), and drops the model from the
+   * required-field validation. Existing `projectModelKey`/`modelConfigs` values
+   * are preserved untouched for CAG compatibility.
+   *
+   * DESIGN NOTE — one flagged shell, not two modals. CAG and Agent share the
+   * same project shape (name, context source, URLs, save/validate flow); the
+   * only divergence is the model card and which status surface is shown. A
+   * dedicated Agent modal would duplicate the save/validate/context-editor
+   * plumbing to fork two render branches, so the shared shell is intentional.
+   * If Agent grows project fields CAG never has (forking the save/validate
+   * shape itself), split then.
+   */
+  agentMode?: boolean;
+  /** Portal target for the context editor's +URL popover — the modal's own
+   * `contentEl`, so the popover (layer 30) stacks above this modal (layer 50). */
+  popoverContainer?: HTMLElement | null;
 }
 
 function AddProjectModalContent({
@@ -39,6 +60,8 @@ function AddProjectModalContent({
   onSave,
   onCancel,
   plugin,
+  agentMode = false,
+  popoverContainer,
 }: AddProjectModalContentProps) {
   const app = useApp();
   // Project model options come from the model-management "chat" backend
@@ -56,8 +79,11 @@ function AddProjectModalContent({
     initialProject
       ? {
           ...initialProject,
-          projectModelKey:
-            resolveSelectionId(initialProject.projectModelKey) || initialProject.projectModelKey,
+          // Agent Mode hides the model card, so don't resolve/migrate the
+          // (invisible) projectModelKey — preserve it verbatim. CAG still resolves.
+          projectModelKey: agentMode
+            ? initialProject.projectModelKey
+            : resolveSelectionId(initialProject.projectModelKey) || initialProject.projectModelKey,
         }
       : {
           id: randomUUID(),
@@ -92,35 +118,45 @@ function AddProjectModalContent({
 
   // Reason: Shared hook handles cache loading, file enumeration, and processingData construction.
   // contextSource draft is passed so newly added (unsaved) URLs appear as "Pending".
+  // Agent Mode hides the CAG processing/cache UI, so skip the cache read + vault
+  // file enumeration entirely (null cacheProject no-ops the expensive work).
   const { processingData, projectCache, isCurrentProject } = useProjectProcessingData({
-    cacheProject: initialProject ?? null,
-    contextSource: formData.contextSource,
+    cacheProject: agentMode ? null : (initialProject ?? null),
+    contextSource: agentMode ? undefined : formData.contextSource,
   });
 
   const handleEditProjectContext = (projectDraft: ProjectConfig) => {
     const modal = new ContextManageModal(
       app,
       (updatedProject: ProjectConfig) => {
-        // Reason: Only merge inclusions/exclusions (what ContextManageModal edits).
-        // Don't replace the entire contextSource — that would overwrite any
-        // webUrls/youtubeUrls changes the user made in AddProjectModal while
-        // the child modal was open.
+        // Merge back what the modal edited. CAG (enableLinks off) edits only
+        // inclusions/exclusions, so URLs are left to the parent's own editor and
+        // not clobbered. Agent Mode (enableLinks on) also edits URLs, so merge
+        // those too — otherwise the user's Manage URL changes would be dropped.
         setFormData((prev) => ({
           ...prev,
           contextSource: {
             ...prev.contextSource,
             inclusions: updatedProject.contextSource?.inclusions,
             exclusions: updatedProject.contextSource?.exclusions,
+            ...(agentMode
+              ? {
+                  webUrls: updatedProject.contextSource?.webUrls,
+                  youtubeUrls: updatedProject.contextSource?.youtubeUrls,
+                }
+              : {}),
           },
         }));
       },
-      projectDraft
+      projectDraft,
+      { enableLinks: agentMode }
     );
     modal.open();
   };
 
   const isFormValid = () => {
-    return formData.name && formData.projectModelKey;
+    // Agent projects have no model selector, so only the name is required.
+    return formData.name && (agentMode || formData.projectModelKey);
   };
 
   const handleInputChange = (
@@ -175,6 +211,16 @@ function AddProjectModalContent({
     handleInputChange("contextSource.youtubeUrls", youtubeUrls);
   };
 
+  /** Agent Mode: apply a context-source patch from the shared editor into the
+   * form draft. Persisted only on Save — the modal keeps draft (Cancel/Save)
+   * semantics, unlike the home section's immediate write. */
+  const handleContextChange = (patch: Partial<NonNullable<ProjectConfig["contextSource"]>>) => {
+    setFormData((prev) => ({
+      ...prev,
+      contextSource: { ...prev.contextSource, ...patch },
+    }));
+  };
+
   /** Handle inclusions pattern changes from badge list deletion */
   const handleInclusionsChange = (value: string) => {
     handleInputChange("contextSource.inclusions", value);
@@ -212,9 +258,19 @@ function AddProjectModalContent({
 
   const handleSave = async () => {
     const trimmedName = formData.name?.trim() ?? "";
-    const saveData = { ...formData, name: trimmedName };
+    // Agent Mode hides the model card; never let an Agent edit persist a changed
+    // projectModelKey/modelConfigs the user couldn't see — restore them verbatim.
+    const saveData =
+      agentMode && initialProject
+        ? {
+            ...formData,
+            name: trimmedName,
+            projectModelKey: initialProject.projectModelKey,
+            modelConfigs: initialProject.modelConfigs,
+          }
+        : { ...formData, name: trimmedName };
 
-    const requiredFields = ["name", "projectModelKey"];
+    const requiredFields = agentMode ? ["name"] : ["name", "projectModelKey"];
     const missingFields = requiredFields.filter((field) => !saveData[field as keyof ProjectConfig]);
 
     if (missingFields.length > 0) {
@@ -290,132 +346,158 @@ function AddProjectModalContent({
                 label="Project System Prompt"
                 description="Custom instructions for how the AI should behave in this project context"
               >
-                <SystemPromptSyntaxInstruction />
+                {/* Template variables ({activeNote}, {[[Note]]}, …) are expanded by
+                    legacy chat's prompt processor only; agent backends receive the
+                    prompt verbatim, so the hints would mislead in Agent Mode. */}
+                {!agentMode && <SystemPromptSyntaxInstruction />}
                 <Textarea
                   value={formData.systemPrompt}
                   onChange={(e) => handleInputChange("systemPrompt", e.target.value)}
                   onBlur={() => setTouched((prev) => ({ ...prev, systemPrompt: true }))}
-                  placeholder="Enter your project system prompt here... Use {[[Note Name]]} to include note contents."
+                  placeholder={
+                    agentMode
+                      ? "Enter your project system prompt here..."
+                      : "Enter your project system prompt here... Use {[[Note Name]]} to include note contents."
+                  }
                   className="tw-min-h-32"
                 />
               </FormField>
             </div>
           </div>
 
-          {/* Model Configuration Card */}
-          <div className="tw-rounded-lg tw-border tw-border-border tw-p-4 tw-bg-secondary/50">
-            <h3 className="tw-mb-3 tw-text-sm tw-font-medium tw-text-normal">
-              Model Configuration
-            </h3>
-            <div className="tw-flex tw-flex-col tw-gap-3">
-              <FormField
-                label="Default Model"
-                required
-                error={touched.projectModelKey && !formData.projectModelKey}
-                errorMessage="Default model is required"
-              >
-                <ObsidianNativeSelect
-                  value={formData.projectModelKey}
-                  onChange={(e) => handleInputChange("projectModelKey", e.target.value)}
-                  onBlur={() => setTouched((prev) => ({ ...prev, projectModelKey: true }))}
-                  placeholder="Select a model"
-                  options={chatModelOptions}
-                />
-              </FormField>
+          {/* Model Configuration Card — hidden in Agent Mode (no model selector). */}
+          {!agentMode && (
+            <div className="tw-rounded-lg tw-border tw-border-border tw-p-4 tw-bg-secondary/50">
+              <h3 className="tw-mb-3 tw-text-sm tw-font-medium tw-text-normal">
+                Model Configuration
+              </h3>
+              <div className="tw-flex tw-flex-col tw-gap-3">
+                <FormField
+                  label="Default Model"
+                  required
+                  error={touched.projectModelKey && !formData.projectModelKey}
+                  errorMessage="Default model is required"
+                >
+                  <ObsidianNativeSelect
+                    value={formData.projectModelKey}
+                    onChange={(e) => handleInputChange("projectModelKey", e.target.value)}
+                    onBlur={() => setTouched((prev) => ({ ...prev, projectModelKey: true }))}
+                    placeholder="Select a model"
+                    options={chatModelOptions}
+                  />
+                </FormField>
 
-              <FormField label="Temperature">
-                <SettingSlider
-                  value={formData.modelConfigs?.temperature ?? DEFAULT_MODEL_SETTING.TEMPERATURE}
-                  onChange={(value) => handleInputChange("modelConfigs.temperature", value)}
-                  min={0}
-                  max={2}
-                  step={0.01}
-                  className="tw-w-full"
-                />
-              </FormField>
+                <FormField label="Temperature">
+                  <SettingSlider
+                    value={formData.modelConfigs?.temperature ?? DEFAULT_MODEL_SETTING.TEMPERATURE}
+                    onChange={(value) => handleInputChange("modelConfigs.temperature", value)}
+                    min={0}
+                    max={2}
+                    step={0.01}
+                    className="tw-w-full"
+                  />
+                </FormField>
 
-              <FormField label="Token Limit">
-                <SettingSlider
-                  value={formData.modelConfigs?.maxTokens ?? DEFAULT_MODEL_SETTING.MAX_TOKENS}
-                  onChange={(value) => handleInputChange("modelConfigs.maxTokens", value)}
-                  min={1}
-                  max={65000}
-                  step={1}
-                  className="tw-w-full"
-                />
-              </FormField>
+                <FormField label="Token Limit">
+                  <SettingSlider
+                    value={formData.modelConfigs?.maxTokens ?? DEFAULT_MODEL_SETTING.MAX_TOKENS}
+                    onChange={(value) => handleInputChange("modelConfigs.maxTokens", value)}
+                    min={1}
+                    max={65000}
+                    step={1}
+                    className="tw-w-full"
+                  />
+                </FormField>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Context Sources Card */}
           <div className="tw-rounded-lg tw-border tw-border-border tw-p-4 tw-bg-secondary/50">
             <h3 className="tw-mb-3 tw-text-sm tw-font-medium tw-text-normal">Context Sources</h3>
-            <div className="tw-flex tw-flex-col tw-gap-4">
-              {/* File Context Sub-card */}
-              <div className="tw-rounded-lg tw-border tw-border-border tw-p-4">
-                <FormField
-                  label={
-                    <div className="tw-flex tw-items-center tw-gap-2">
-                      <span>File Context</span>
-                      <HelpTooltip
-                        buttonClassName="tw-size-4 tw-text-muted"
-                        content={
-                          <div className="tw-max-w-80">
-                            <strong>Supported File Types:</strong>
-                            <br />
-                            <strong>• Documents:</strong> pdf, doc, docx, ppt, pptx, epub, txt, rtf
-                            and many more
-                            <br />
-                            <strong>• Images:</strong> jpg, png, svg, gif, bmp, webp, tiff
-                            <br />
-                            <strong>• Spreadsheets:</strong> xlsx, xls, csv, numbers
-                            <br />
-                            <br />
-                            Non-markdown files are converted to markdown in the background.
-                            <br />
-                            <strong>Rate limit:</strong> 50 files or 100MB per 3 hours, whichever is
-                            reached first.
-                          </div>
-                        }
-                      />
-                    </div>
-                  }
-                  description="Define patterns to include specific files, folders or tags (specified in the note property) in the project context."
-                >
-                  <ProjectContextBadgeList
-                    inclusions={formData.contextSource?.inclusions}
-                    exclusions={formData.contextSource?.exclusions}
-                    onInclusionsChange={handleInclusionsChange}
-                    onExclusionsChange={handleExclusionsChange}
-                    actionSlot={
-                      <Button
-                        size="lg"
-                        className="tw-h-9 tw-gap-1 tw-px-3 sm:tw-h-auto sm:tw-px-2"
-                        onClick={() => handleEditProjectContext(formData)}
-                      >
-                        <Settings className="tw-size-4 sm:tw-size-3.5" />
-                        Manage Context
-                      </Button>
+            {agentMode ? (
+              // Agent Mode: the same mixed file+URL editor as the project landing,
+              // wired to the form draft (Save commits). CAG keeps its split sub-cards.
+              <ProjectContextSourceEditor
+                contextSource={formData.contextSource}
+                onChange={handleContextChange}
+                onManage={() => handleEditProjectContext(formData)}
+                popoverContainer={popoverContainer}
+                droppable={false}
+                solidManageButton
+                showHelperText
+              />
+            ) : (
+              <div className="tw-flex tw-flex-col tw-gap-4">
+                {/* File Context Sub-card */}
+                <div className="tw-rounded-lg tw-border tw-border-border tw-p-4">
+                  <FormField
+                    label={
+                      <div className="tw-flex tw-items-center tw-gap-2">
+                        <span>File Context</span>
+                        <HelpTooltip
+                          buttonClassName="tw-size-4 tw-text-muted"
+                          content={
+                            <div className="tw-max-w-80">
+                              <strong>Supported File Types:</strong>
+                              <br />
+                              <strong>• Documents:</strong> pdf, doc, docx, ppt, pptx, epub, txt,
+                              rtf and many more
+                              <br />
+                              <strong>• Images:</strong> jpg, png, svg, gif, bmp, webp, tiff
+                              <br />
+                              <strong>• Spreadsheets:</strong> xlsx, xls, csv, numbers
+                              <br />
+                              <br />
+                              Non-markdown files are converted to markdown in the background.
+                              <br />
+                              <strong>Rate limit:</strong> 50 files or 100MB per 3 hours, whichever
+                              is reached first.
+                            </div>
+                          }
+                        />
+                      </div>
                     }
-                  />
-                </FormField>
-              </div>
-
-              {/* URLs Sub-card */}
-              <div className="tw-rounded-lg tw-border tw-border-border tw-p-4">
-                <div className="tw-mb-3">
-                  <span className="tw-text-sm tw-font-medium tw-text-normal">URLs</span>
-                  <p className="tw-mt-1 tw-text-ui-smaller tw-text-muted">
-                    Add web pages or YouTube videos as context sources
-                  </p>
+                    description="Define patterns to include specific files, folders or tags (specified in the note property) in the project context."
+                  >
+                    <ProjectContextBadgeList
+                      inclusions={formData.contextSource?.inclusions}
+                      exclusions={formData.contextSource?.exclusions}
+                      onInclusionsChange={handleInclusionsChange}
+                      onExclusionsChange={handleExclusionsChange}
+                      actionSlot={
+                        <Button
+                          size="lg"
+                          className="tw-h-9 tw-gap-1 tw-px-3 sm:tw-h-auto sm:tw-px-2"
+                          onClick={() => handleEditProjectContext(formData)}
+                        >
+                          <Settings className="tw-size-4 sm:tw-size-3.5" />
+                          Manage Context
+                        </Button>
+                      }
+                    />
+                  </FormField>
                 </div>
-                <UrlTagInput urls={urlItems} onAdd={handleUrlAdd} onRemove={handleUrlRemove} />
+
+                {/* URLs Sub-card */}
+                <div className="tw-rounded-lg tw-border tw-border-border tw-p-4">
+                  <div className="tw-mb-3">
+                    <span className="tw-text-sm tw-font-medium tw-text-normal">URLs</span>
+                    <p className="tw-mt-1 tw-text-ui-smaller tw-text-muted">
+                      Add web pages or YouTube videos as context sources
+                    </p>
+                  </div>
+                  <UrlTagInput urls={urlItems} onAdd={handleUrlAdd} onRemove={handleUrlRemove} />
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
-          {/* Processing Status - show for any project in edit mode (active: live state; others: cache state) */}
-          {initialProject && processingData && (
+          {/* Processing Status — the CAG variant reads the CAG cache; the agent
+              variant reads the agent pipeline's own data (load atom + off-vault
+              conversion cache). Retry/open-cache stay CAG-only here: the agent
+              variant's retry lives in the composer's context status popover. */}
+          {!agentMode && initialProject && processingData && (
             <ProcessingStatus
               items={processingData.items}
               onRetry={isCurrentProject ? handleRetry : undefined}
@@ -450,7 +532,9 @@ export class AddProjectModal extends Modal {
     app: App,
     private onSave: (project: ProjectConfig) => Promise<void>,
     private initialProject?: ProjectConfig,
-    private plugin?: CopilotPlugin
+    private plugin?: CopilotPlugin,
+    /** Agent Mode variant — see {@link AddProjectModalContentProps.agentMode}. */
+    private agentMode: boolean = false
   ) {
     super(app);
   }
@@ -478,6 +562,8 @@ export class AddProjectModal extends Modal {
         onSave={handleSave}
         onCancel={handleCancel}
         plugin={this.plugin}
+        agentMode={this.agentMode}
+        popoverContainer={contentEl}
       />
     );
   }

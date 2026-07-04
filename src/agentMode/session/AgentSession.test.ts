@@ -8,6 +8,7 @@ import {
   withReadOnlyPreamble,
 } from "./AgentSession";
 import { ensureMultiAgentEntitlement, showMultiAgentUpgradePrompt } from "@/plusUtils";
+import { GLOBAL_SCOPE } from "./scope";
 import { AuthRequiredError, MethodUnsupportedError } from "./errors";
 import type { FanoutRunInput } from "./fanout/FanoutOrchestrator";
 import { FANOUT_READONLY_PREAMBLE, type FanoutTurn } from "./fanout/fanoutTypes";
@@ -263,6 +264,30 @@ describe("buildPromptBlocks", () => {
     expect(selectionPos).toBeLessThan(webTabPos);
     expect(webTabPos).toBeLessThan(messagePos);
   });
+
+  it("prepends the project-context block ahead of the attached context and message", () => {
+    const projectContextBlock =
+      "<project_context>\n## Included folders\n- `/vault/Papers`\n</project_context>";
+    const blocks = buildPromptBlocks(
+      "go",
+      { notes: [makeFile("a.md")], urls: [] },
+      undefined,
+      undefined,
+      projectContextBlock
+    );
+    const text = (blocks[0] as { type: "text"; text: string }).text;
+    expect(text).toContain("<project_context>");
+    expect(text).toContain("`/vault/Papers`");
+    // Project context leads, then the per-message attached context, then the message.
+    expect(text.indexOf("<project_context>")).toBeLessThan(text.indexOf("<copilot-context>"));
+    expect(text.indexOf("<copilot-context>")).toBeLessThan(text.indexOf("<user-message>"));
+  });
+
+  it("omits the project-context block when none is provided (later turns)", () => {
+    const blocks = buildPromptBlocks("go", { notes: [makeFile("a.md")], urls: [] });
+    const text = (blocks[0] as { type: "text"; text: string }).text;
+    expect(text).not.toContain("<project_context>");
+  });
 });
 
 describe("AgentSession.loadDisplayMessages", () => {
@@ -296,6 +321,31 @@ describe("AgentSession.loadDisplayMessages", () => {
       "earlier prompt",
       "earlier reply",
     ]);
+  });
+});
+
+describe("AgentSession.projectId", () => {
+  it("defaults to GLOBAL_SCOPE when no projectId option is given", () => {
+    const mock = makeMockBackend();
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+    });
+    expect(session.projectId).toBe(GLOBAL_SCOPE);
+  });
+
+  it("binds the provided projectId (immutable, like backendId)", () => {
+    const mock = makeMockBackend();
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+      projectId: "proj-42",
+    });
+    expect(session.projectId).toBe("proj-42");
   });
 });
 
@@ -874,6 +924,46 @@ describe("AgentSession fan-out branching", () => {
     // The live turn rides on the message itself for the UI.
     expect(placeholder?.fanout?.summary.text).toBe("the narrative summary");
   });
+
+  it("does not let a first-turn fan-out consume the visible session's project context", async () => {
+    const mock = makeMockBackend();
+    const runFanoutTurn = jest.fn(async (input: FanoutRunInput): Promise<FanoutTurn> => {
+      const turn: FanoutTurn = {
+        answers: {
+          opencode: { backendId: "opencode", status: "done", text: "a" },
+          claude: { backendId: "claude", status: "done", text: "b" },
+        },
+        summary: { status: "done", text: "summary" },
+      };
+      input.onChange(turn);
+      return turn;
+    });
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+      runFanoutTurn,
+    });
+    // Stand in for the block the initializer captures for the first prompt.
+    (session as unknown as { projectContextBlock: string | null }).projectContextBlock =
+      "<project_context>\n## Included folders\n- `/vault/Papers`\n</project_context>";
+
+    // Turn 1 is a fan-out: only the ephemeral sub-sessions receive the block,
+    // and the visible backend is never prompted.
+    await session.sendPrompt("review", undefined, undefined, ["opencode", "claude"]).turn;
+    const fanoutPrompt = runFanoutTurn.mock.calls[0][0].prompt[0] as { type: "text"; text: string };
+    expect(fanoutPrompt.text).toContain("<project_context>");
+    expect(mock.prompt).not.toHaveBeenCalled();
+
+    // Turn 2 is a normal turn: the visible backend must finally receive the
+    // first-turn project context (regression — a fan-out turn used to burn it).
+    await session.sendPrompt("now you").turn;
+    expect(mock.prompt).toHaveBeenCalledTimes(1);
+    const req = mock.prompt.mock.calls[0][0] as { prompt: Array<{ type: string; text?: string }> };
+    const visibleText = (req.prompt[0] as { type: "text"; text: string }).text;
+    expect(visibleText).toContain("<project_context>");
+  });
 });
 
 describe("AgentSession fan-out paywall (send-boundary entitlement)", () => {
@@ -988,6 +1078,10 @@ describe("ensureMultiAgentEntitlement (paywall helper)", () => {
   // These exercise the REAL helper against mocked isPlusEnabled/BrevilabsClient,
   // verifying the fast path takes no network call and the slow path re-verifies.
   const validateLicenseKey = jest.fn();
+  // Mutable so the validateLicenseKey mock can simulate the real side effect of
+  // applying the entitlement (flipping the cached flags) that the slow path then
+  // re-reads via isPlusEnabled().
+  let settings: Record<string, unknown>;
 
   beforeEach(() => {
     jest.resetModules();
@@ -997,6 +1091,7 @@ describe("ensureMultiAgentEntitlement (paywall helper)", () => {
   async function loadHelper(
     isPlus: boolean
   ): Promise<(app?: unknown, ctx?: Record<string, unknown>) => Promise<boolean>> {
+    settings = { isPlusUser: isPlus, isPaidUser: isPlus, enableSelfHostMode: false };
     jest.doMock("@/plusUtils", () => jest.requireActual("@/plusUtils"));
     jest.doMock("@/logger", () => ({
       logInfo: jest.fn(),
@@ -1004,8 +1099,8 @@ describe("ensureMultiAgentEntitlement (paywall helper)", () => {
       logError: jest.fn(),
     }));
     jest.doMock("@/settings/model", () => ({
-      getSettings: jest.fn().mockReturnValue({ isPlusUser: isPlus, enableSelfHostMode: false }),
-      setSettings: jest.fn(),
+      getSettings: jest.fn(() => settings),
+      setSettings: jest.fn((partial: Record<string, unknown>) => Object.assign(settings, partial)),
       updateSetting: jest.fn(),
       useSettingsValue: jest.fn(),
     }));
@@ -1022,13 +1117,30 @@ describe("ensureMultiAgentEntitlement (paywall helper)", () => {
     expect(validateLicenseKey).not.toHaveBeenCalled();
   });
 
-  it("slow path: a stale-false cache that the backend confirms paid is allowed", async () => {
-    validateLicenseKey.mockResolvedValue({ isValid: true });
+  it("slow path: a stale-false cache the backend confirms as Plus is allowed", async () => {
+    // The real validateLicenseKey applies the entitlement; simulate that.
+    validateLicenseKey.mockImplementation(async () => {
+      settings.isPaidUser = true;
+      settings.isPlusUser = true;
+      return { isValid: true };
+    });
     const ensure = await loadHelper(false);
     await expect(ensure()).resolves.toBe(true);
     expect(validateLicenseKey).toHaveBeenCalledTimes(1);
     // The feature context is forwarded for backend telemetry/upsell.
     expect(validateLicenseKey.mock.calls[0][1]).toMatchObject({ feature: "multi_agent_per_turn" });
+  });
+
+  it("slow path: a Lite user (paid but below Plus) is blocked", async () => {
+    // Backend confirms a paid license, but the entitlement is below Plus — the
+    // gate keys on Plus tier, not on isValid.
+    validateLicenseKey.mockImplementation(async () => {
+      settings.isPaidUser = true;
+      settings.isPlusUser = false;
+      return { isValid: true };
+    });
+    const ensure = await loadHelper(false);
+    await expect(ensure()).resolves.toBe(false);
   });
 
   it("slow path: a genuinely free user is blocked (isValid false)", async () => {
@@ -1223,6 +1335,164 @@ describe("AgentSession.create (via start)", () => {
     });
     await session.ready;
     expect(session.getState()?.model).toBeNull();
+  });
+
+  it("passes the session's projectId into the newSession payload", async () => {
+    const mock = makeMockBackend();
+    mock.newSession.mockResolvedValueOnce({ sessionId: "acp-1", state: emptyState() });
+    const session = AgentSession.start({
+      backend: mock.asBackend,
+      cwd: "/vault/Projects/p",
+      internalId: "internal-1",
+      backendId: "opencode",
+      projectId: "proj-7",
+    });
+    await session.ready;
+    expect(mock.newSession).toHaveBeenCalledWith(
+      expect.objectContaining({ cwd: "/vault/Projects/p", projectId: "proj-7" })
+    );
+  });
+
+  it("defaults the newSession projectId to GLOBAL_SCOPE when no scope is given", async () => {
+    const mock = makeMockBackend();
+    mock.newSession.mockResolvedValueOnce({ sessionId: "acp-1", state: emptyState() });
+    const session = AgentSession.start({
+      backend: mock.asBackend,
+      cwd: "/vault",
+      internalId: "internal-1",
+      backendId: "opencode",
+    });
+    await session.ready;
+    expect(mock.newSession).toHaveBeenCalledWith(
+      expect.objectContaining({ projectId: GLOBAL_SCOPE })
+    );
+  });
+
+  it("awaits contextReady and forwards its roots into the newSession payload", async () => {
+    const mock = makeMockBackend();
+    mock.newSession.mockResolvedValueOnce({ sessionId: "acp-1", state: emptyState() });
+    const session = AgentSession.start({
+      backend: mock.asBackend,
+      cwd: "/vault/Projects/p",
+      internalId: "internal-1",
+      backendId: "opencode",
+      projectId: "proj-7",
+      contextReady: Promise.resolve({
+        additionalDirectories: ["/vault/SharedResearch"],
+      }),
+    });
+    await session.ready;
+    expect(mock.newSession).toHaveBeenCalledWith(
+      expect.objectContaining({ additionalDirectories: ["/vault/SharedResearch"] })
+    );
+  });
+
+  it("injects the <project_context> block into the first user prompt only", async () => {
+    const mock = makeMockBackend();
+    mock.newSession.mockResolvedValueOnce({ sessionId: "acp-1", state: emptyState() });
+    const session = AgentSession.start({
+      backend: mock.asBackend,
+      cwd: "/vault/Projects/p",
+      internalId: "internal-1",
+      backendId: "opencode",
+      projectId: "proj-7",
+      contextReady: Promise.resolve({
+        additionalDirectories: [],
+        projectContextBlock:
+          "<project_context>\n## Included folders\n- `/vault/Papers`\n</project_context>",
+      }),
+    });
+    await session.ready;
+
+    await session.sendPrompt("first").turn;
+    await session.sendPrompt("second").turn;
+
+    const promptText = (call: number): string => {
+      const input = mock.prompt.mock.calls[call][0] as {
+        prompt: Array<{ type: string; text?: string }>;
+      };
+      return input.prompt.map((b) => b.text ?? "").join("\n");
+    };
+    expect(promptText(0)).toContain("<project_context>");
+    expect(promptText(0)).toContain("`/vault/Papers`");
+    expect(promptText(0)).toContain("<user-message>\nfirst\n</user-message>");
+    // The block rides the first message only; the second turn is clean.
+    expect(promptText(1)).not.toContain("<project_context>");
+  });
+
+  it("re-injects the <project_context> block on retry when the first prompt fails", async () => {
+    const mock = makeMockBackend();
+    mock.newSession.mockResolvedValueOnce({ sessionId: "acp-1", state: emptyState() });
+    // First delivery fails hard (transport) before the backend accepts the turn.
+    mock.prompt.mockRejectedValueOnce(new Error("transport down"));
+    const session = AgentSession.start({
+      backend: mock.asBackend,
+      cwd: "/vault/Projects/p",
+      internalId: "internal-1",
+      backendId: "opencode",
+      projectId: "proj-7",
+      contextReady: Promise.resolve({
+        additionalDirectories: [],
+        projectContextBlock:
+          "<project_context>\n## Included folders\n- `/vault/Papers`\n</project_context>",
+      }),
+    });
+    await session.ready;
+
+    await expect(session.sendPrompt("first").turn).rejects.toThrow("transport down");
+    await session.sendPrompt("retry").turn;
+
+    const promptText = (call: number): string => {
+      const input = mock.prompt.mock.calls[call][0] as {
+        prompt: Array<{ type: string; text?: string }>;
+      };
+      return input.prompt.map((b) => b.text ?? "").join("\n");
+    };
+    // The failed attempt carried it; since the backend never accepted the turn,
+    // the retry carries it again rather than dropping the context permanently.
+    expect(promptText(0)).toContain("<project_context>");
+    expect(promptText(1)).toContain("<project_context>");
+  });
+
+  it("forwards an empty roots array when no contextReady is supplied", async () => {
+    const mock = makeMockBackend();
+    mock.newSession.mockResolvedValueOnce({ sessionId: "acp-1", state: emptyState() });
+    const session = AgentSession.start({
+      backend: mock.asBackend,
+      cwd: "/vault",
+      internalId: "internal-1",
+      backendId: "opencode",
+    });
+    await session.ready;
+    expect(mock.newSession).toHaveBeenCalledWith(
+      expect.objectContaining({ additionalDirectories: [] })
+    );
+  });
+
+  it("does not call newSession until contextReady resolves (non-blocking visibility)", async () => {
+    const mock = makeMockBackend();
+    mock.newSession.mockResolvedValueOnce({ sessionId: "acp-1", state: emptyState() });
+    let release!: (result: { additionalDirectories: string[] }) => void;
+    const contextReady = new Promise<{ additionalDirectories: string[] }>((resolve) => {
+      release = resolve;
+    });
+    const session = AgentSession.start({
+      backend: mock.asBackend,
+      cwd: "/vault/Projects/p",
+      internalId: "internal-1",
+      backendId: "opencode",
+      projectId: "proj-7",
+      contextReady,
+    });
+    // Session exists immediately; newSession is gated on contextReady.
+    await Promise.resolve();
+    expect(mock.newSession).not.toHaveBeenCalled();
+    expect(session.getStatus()).toBe("starting");
+    release({ additionalDirectories: ["/vault/SharedResearch"] });
+    await session.ready;
+    expect(mock.newSession).toHaveBeenCalledWith(
+      expect.objectContaining({ additionalDirectories: ["/vault/SharedResearch"] })
+    );
   });
 
   it("attempts setModel when defaultModelSelection is set", async () => {
@@ -3222,5 +3492,76 @@ describe("AgentSession streamed-token notification coalescing", () => {
     const placeholder = session.store.getDisplayMessages().find((m) => m.sender === AI_SENDER);
     expect(placeholder?.message).toBe("partial");
     expect(placeholder?.turnStopReason).toBe("end_turn");
+  });
+});
+
+describe("AgentSession.getCurrentTodoList", () => {
+  function makeSession(mock: ReturnType<typeof makeMockBackend>) {
+    return new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+    });
+  }
+  const planUpdate = (entries: { content: string; status: string; priority?: string }[]) => ({
+    sessionId: "acp-1",
+    update: { sessionUpdate: "plan", entries } as never,
+  });
+
+  it("starts null, snapshots plan entries, and notifies the dedicated channel", () => {
+    const mock = makeMockBackend();
+    const session = makeSession(mock);
+    expect(session.getCurrentTodoList()).toBeNull();
+
+    let notified = 0;
+    session.subscribe({
+      onMessagesChanged: () => {},
+      onStatusChanged: () => {},
+      onCurrentTodoListChanged: () => notified++,
+    });
+    mock.emit(
+      planUpdate([
+        { content: "step A", status: "in_progress", priority: "medium" },
+        { content: "step B", status: "pending", priority: "medium" },
+      ])
+    );
+    expect(notified).toBe(1);
+    expect(session.getCurrentTodoList()).toEqual([
+      { content: "step A", status: "in_progress" },
+      { content: "step B", status: "pending" },
+    ]);
+  });
+
+  it("dedupes identical lists (synthesized + real plan channel) by content signature", () => {
+    const mock = makeMockBackend();
+    const session = makeSession(mock);
+    let notified = 0;
+    session.subscribe({
+      onMessagesChanged: () => {},
+      onStatusChanged: () => {},
+      onCurrentTodoListChanged: () => notified++,
+    });
+    const entries = [{ content: "same", status: "pending", priority: "high" }];
+    mock.emit(planUpdate(entries));
+    const snapshot = session.getCurrentTodoList();
+    mock.emit(planUpdate([{ content: "same", status: "pending", priority: "low" }]));
+    expect(notified).toBe(1);
+    // Held reference stays stable across the deduped update.
+    expect(session.getCurrentTodoList()).toBe(snapshot);
+  });
+
+  it("clears to null on an empty plan and on dispose", async () => {
+    const mock = makeMockBackend();
+    const session = makeSession(mock);
+    mock.emit(planUpdate([{ content: "only", status: "pending" }]));
+    expect(session.getCurrentTodoList()).not.toBeNull();
+
+    mock.emit(planUpdate([]));
+    expect(session.getCurrentTodoList()).toBeNull();
+
+    mock.emit(planUpdate([{ content: "again", status: "pending" }]));
+    await session.dispose();
+    expect(session.getCurrentTodoList()).toBeNull();
   });
 });

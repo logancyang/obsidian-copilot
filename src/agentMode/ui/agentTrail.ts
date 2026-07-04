@@ -26,46 +26,24 @@ export interface BuildAgentTrailOptions {
 }
 
 /**
- * Split a turn's parts into the trailing user-visible answer and everything
- * that came before (the "research"). The boundary is the last contiguous run
- * of `text` parts: any `tool_call`, `thought`, or `plan` part after a text
- * run reclassifies that run as research.
- *
- * Used by the trail UI to fold the research portion into a single
- * "Worked for X" block once a turn has cleanly ended (`stopReason: end_turn`).
- * Streaming turns and cancelled / refused / errored turns keep the trail
- * uncollapsed — that's the caller's responsibility, not this helper's.
- */
-export function splitTrailingText(parts: AgentMessagePart[]): {
-  research: AgentMessagePart[];
-  final: TextPart[];
-} {
-  const final: TextPart[] = [];
-  let boundary = parts.length;
-  for (let i = parts.length - 1; i >= 0; i--) {
-    const p = parts[i];
-    if (p.kind === "text") {
-      final.unshift(p);
-      boundary = i;
-      continue;
-    }
-    break;
-  }
-  return { research: parts.slice(0, boundary), final };
-}
-
-/**
- * The turn's user-visible final answer, ready for the clipboard or the editor:
- * the trailing run of `text` parts (per `splitTrailingText`) joined and run
- * through the same sanitization legacy chat applies (`cleanMessageForCopy`),
- * so tool-call cards, reasoning, plans, and chat-only artifacts never leak in.
- * Returns `""` when the turn produced no trailing prose (a tool-only turn, or
- * one cancelled mid-tool) — the trail UI uses that to gate the Copy / Insert
+ * The agent's full textual response across the turn, ready for the clipboard
+ * or the editor: every `text` part in stream order (not just the trailing run),
+ * joined and run through the same sanitization legacy chat applies
+ * (`cleanMessageForCopy`), so tool-call cards, reasoning, plans, and chat-only
+ * artifacts never leak in. Interleaving research (a `thought` or `tool_call`
+ * between two prose chunks) must not drop the earlier prose, so we collect all
+ * text parts rather than only the trailing run. Empty/whitespace-only parts are
+ * skipped so they don't leave stray blank lines.
+ * Returns `""` when the turn produced no prose (a tool-only turn, or one
+ * cancelled mid-tool) — the trail UI uses that to gate the Copy / Insert
  * affordances off so they never sit under an empty bubble.
  */
-export function finalAnswerText(parts: AgentMessagePart[]): string {
-  const { final } = splitTrailingText(parts);
-  return cleanMessageForCopy(final.map((p) => p.text).join("\n\n"));
+export function agentResponseText(parts: AgentMessagePart[]): string {
+  const text = parts
+    .filter((p): p is TextPart => p.kind === "text" && p.text.trim().length > 0)
+    .map((p) => p.text)
+    .join("\n\n");
+  return cleanMessageForCopy(text);
 }
 
 /**

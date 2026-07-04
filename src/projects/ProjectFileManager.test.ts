@@ -40,6 +40,11 @@ jest.mock("@/projects/projectUtils", () => ({
   getProjectConfigFilePath: jest.fn((name: string) => `copilot-projects/${name}/project.md`),
 }));
 
+jest.mock("@/projects/ensureAgentsMirror", () => ({
+  ensureAgentsMirror: jest.fn(async () => {}),
+  removeAgentsMirror: jest.fn(async () => {}),
+}));
+
 jest.mock("@/utils", () => ({
   ensureFolderExists: jest.fn(async () => {}),
 }));

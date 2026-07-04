@@ -20,6 +20,8 @@ import {
 } from "@/utils/vaultAdapterUtils";
 import { TFile, type App } from "obsidian";
 import { Notice } from "obsidian";
+import { coerceProjectId, escapeYamlString, unescapeYamlString } from "./agentChatYaml";
+import { GLOBAL_SCOPE } from "./scope";
 import type { AgentChatMessage, BackendId } from "./types";
 
 const SAFE_FILENAME_BYTE_LIMIT = 100;
@@ -41,6 +43,14 @@ export interface LoadedAgentChat {
    * resume was wired up — those fall back to a fresh session.
    */
   sessionId?: string;
+  /**
+   * Scope this chat belongs to: a real project id, or {@link GLOBAL_SCOPE}.
+   * HARD CONTRACT: a chat with no `projectId` frontmatter (every legacy
+   * `agent__` chat) resolves to `GLOBAL_SCOPE`, so it keeps appearing in the
+   * global history. Never inferred from the filename — frontmatter is the only
+   * authority.
+   */
+  projectId: string;
 }
 
 interface ExistingMeta {
@@ -48,42 +58,7 @@ interface ExistingMeta {
   label?: string;
   lastAccessedAt?: number;
   sessionId?: string;
-}
-
-/**
- * Escape a string for safe YAML double-quoted string value. Strips control
- * chars (including newlines) up front — a stray `\n` in the user's topic
- * would otherwise terminate the line and corrupt the rest of the frontmatter.
- */
-function escapeYamlString(str: string): string {
-  return (
-    str
-      // eslint-disable-next-line no-control-regex
-      .replace(/[\x00-\x1F\x7F]/g, " ")
-      .replace(/\\/g, "\\\\")
-      .replace(/"/g, '\\"')
-  );
-}
-
-/**
- * Inverse of `escapeYamlString` for the values our hand-rolled frontmatter
- * parser extracts. Only handles the two escapes we emit (`\\` and `\"`).
- */
-function unescapeYamlString(str: string): string {
-  let out = "";
-  for (let i = 0; i < str.length; i++) {
-    const c = str[i];
-    if (c === "\\" && i + 1 < str.length) {
-      const next = str[i + 1];
-      if (next === "\\" || next === '"') {
-        out += next;
-        i++;
-        continue;
-      }
-    }
-    out += c;
-  }
-  return out;
+  projectId?: string;
 }
 
 /**
@@ -120,6 +95,13 @@ export class AgentChatPersistenceManager {
       modelKey?: string;
       existingPath?: string;
       sessionId?: string | null;
+      /**
+       * Scope to record in frontmatter. Pass a real project id to bind the
+       * chat to that project; omit (or pass `GLOBAL_SCOPE`) for a global chat,
+       * which writes no `projectId` so it stays indistinguishable from legacy
+       * global chats.
+       */
+      projectId?: string;
     }
   ): Promise<{ path: string } | null> {
     if (messages.length === 0) return null;
@@ -149,6 +131,11 @@ export class AgentChatPersistenceManager {
         modelKey: options?.modelKey,
         lastAccessedAt: existingMeta.lastAccessedAt,
         sessionId: options?.sessionId ?? existingMeta.sessionId,
+        // Reason: round-trip an existing chat's scope when the caller doesn't
+        // re-supply it (e.g. autosave updates), so a project chat never silently
+        // demotes itself to global on a later save. Coerce first so a blank
+        // option falls through to the existing scope instead of clobbering it.
+        projectId: coerceProjectId(options?.projectId) ?? existingMeta.projectId,
       });
 
       if (existingFile && isInVaultCache(this.app, existingFile.path)) {
@@ -215,12 +202,15 @@ export class AgentChatPersistenceManager {
     const topic = frontmatter.topic?.trim() || undefined;
     const label = frontmatter.agentLabel?.trim() || undefined;
     const sessionId = frontmatter.sessionId?.trim() || undefined;
+    // HARD CONTRACT: absent/blank projectId → GLOBAL_SCOPE, so legacy `agent__`
+    // chats stay in the global history. Never inferred from the filename.
+    const projectId = frontmatter.projectId?.trim() || GLOBAL_SCOPE;
     const messages = this.parseChatBody(body);
 
     logInfo(
-      `[AgentChatPersistenceManager] Loaded ${messages.length} messages from ${file.path} (backend=${backendId}, sessionId=${sessionId ?? "none"})`
+      `[AgentChatPersistenceManager] Loaded ${messages.length} messages from ${file.path} (backend=${backendId}, sessionId=${sessionId ?? "none"}, projectId=${projectId})`
     );
-    return { messages, backendId, topic, label, sessionId };
+    return { messages, backendId, topic, label, sessionId, projectId };
   }
 
   /**
@@ -268,6 +258,7 @@ export class AgentChatPersistenceManager {
         lastAccessedAt:
           typeof cached.lastAccessedAt === "number" ? cached.lastAccessedAt : undefined,
         sessionId: typeof cached.sessionId === "string" ? cached.sessionId : undefined,
+        projectId: coerceProjectId(cached.projectId),
       };
     }
     try {
@@ -279,6 +270,7 @@ export class AgentChatPersistenceManager {
         label: fm.agentLabel,
         lastAccessedAt: lastAccessed && Number.isFinite(lastAccessed) ? lastAccessed : undefined,
         sessionId: typeof fm.sessionId === "string" ? fm.sessionId : undefined,
+        projectId: coerceProjectId(fm.projectId),
       };
     } catch {
       return {};
@@ -459,6 +451,7 @@ export class AgentChatPersistenceManager {
     modelKey?: string;
     lastAccessedAt?: number;
     sessionId?: string | null;
+    projectId?: string;
   }): string {
     const settings = getSettings();
     const lines: string[] = [
@@ -467,6 +460,13 @@ export class AgentChatPersistenceManager {
       `mode: ${AGENT_CHAT_MODE}`,
       `backendId: ${args.backendId}`,
     ];
+    // Reason: global chats write no projectId, staying byte-identical to legacy
+    // `agent__` chats (which loadFile maps back to GLOBAL_SCOPE). Coerce so a
+    // blank/whitespace id never leaks a stray frontmatter line.
+    const projectId = coerceProjectId(args.projectId);
+    if (projectId && projectId !== GLOBAL_SCOPE) {
+      lines.push(`projectId: "${escapeYamlString(projectId)}"`);
+    }
     if (args.sessionId) lines.push(`sessionId: "${escapeYamlString(args.sessionId)}"`);
     if (args.topic) lines.push(`topic: "${escapeYamlString(args.topic)}"`);
     if (args.label) lines.push(`agentLabel: "${escapeYamlString(args.label)}"`);

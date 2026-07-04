@@ -38,7 +38,7 @@ export async function buildCopilotPlusEnv(
   if (miyoUrl) env[MIYO_URL_ENV] = miyoUrl;
 
   // Copilot Plus relay env — gated on an active subscription with a usable key.
-  if (settings.isPlusUser && settings.plusLicenseKey) {
+  if (settings.isPaidUser && settings.plusLicenseKey) {
     try {
       const licenseKey = await getDecryptedKey(settings.plusLicenseKey);
       if (licenseKey) {

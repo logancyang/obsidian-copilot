@@ -19,7 +19,7 @@ import { cn } from "@/lib/utils";
 import { logError, logWarn } from "@/logger";
 import { ProjectFileManager } from "@/projects/ProjectFileManager";
 import { useSettingsValue } from "@/settings/model";
-import { RecentUsageManager, sortByStrategy } from "@/utils/recentUsageManager";
+import { sortByStrategy } from "@/utils/recentUsageManager";
 import {
   ArrowUpRight,
   ChevronDown,
@@ -34,32 +34,10 @@ import {
 } from "lucide-react";
 import { getCachedProjectRecordById } from "@/projects/state";
 import { App, Notice } from "obsidian";
-import React, {
-  memo,
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-  useSyncExternalStore,
-} from "react";
+import React, { memo, useEffect, useMemo, useState } from "react";
 import { filterProjects } from "@/utils/projectUtils";
+import { useRecentUsageManagerRevision } from "@/hooks/useRecentUsageManagerRevision";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-
-/**
- * Subscribe to a {@link RecentUsageManager} revision so in-memory touches can trigger
- * re-sorting even when the backing list reference stays unchanged (e.g. when persistence
- * is throttled).
- */
-function useRecentUsageManagerRevision<Key extends string>(
-  manager: RecentUsageManager<Key> | null | undefined
-): number {
-  const subscribe = useCallback(
-    (cb: () => void) => manager?.subscribe(cb) ?? (() => {}),
-    [manager]
-  );
-  const getSnapshot = useCallback(() => manager?.getRevision() ?? 0, [manager]);
-  return useSyncExternalStore(subscribe, getSnapshot);
-}
 
 function ProjectItem({
   project,

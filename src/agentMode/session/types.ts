@@ -1,7 +1,9 @@
 import type React from "react";
+import type { ModelCapability } from "@/constants";
 import type { FormattedDateTime, MessageContext } from "@/types/message";
 // `import type` keeps the cycle with `fanoutTypes` compile-time only.
 import type { FanoutTurn } from "@/agentMode/session/fanout/fanoutTypes";
+import type { ProjectScopeId } from "./scope";
 
 export type {
   BackendAuth,
@@ -140,6 +142,14 @@ export interface EnabledModelEntry {
   name: string;
   description?: string;
   credentialState: EnabledModelCredentialState;
+  /**
+   * Capabilities derived from the model's persisted `ConfiguredModel.info`
+   * (the modality snapshot taken at setup) — the reliable source the picker
+   * prefers over a live catalog lookup. `undefined` means "unknown" (the
+   * stored info carried no modality data), letting the picker fall back to the
+   * catalog rather than asserting a model has no vision.
+   */
+  capabilities?: ModelCapability[];
   /**
    * `true` for an opencode Zen model (opencode's self-hosted free tier). The
    * opencode backend computes this; the UI just renders a privacy warning, so
@@ -393,6 +403,16 @@ export interface AgentPlanEntry {
 }
 
 /**
+ * One entry of the session's live execution todo list — the consumer-facing
+ * projection of `plan` updates (priority dropped; no surface renders it).
+ * Read via `AgentChatBackend.getCurrentTodoList()`.
+ */
+export interface AgentTodoListEntry {
+  content: string;
+  status: AgentPlanEntry["status"];
+}
+
+/**
  * Initial / updated state for an in-flight tool call. Mirrors ACP `ToolCall`
  * (initial form) — emitted by backends in the `tool_call` `SessionUpdate`.
  */
@@ -588,11 +608,41 @@ export type McpServerSpec =
       headers: Array<{ name: string; value: string }>;
     };
 
+// ---- Project scope ------------------------------------------------------
+
+/**
+ * Minimal per-session view of a project's instruction payload. Deliberately
+ * decoupled from `aiParams.ProjectConfig` (which still carries legacy CAG
+ * fields like `projectModelKey`): a backend that injects project instructions
+ * needs only the scope id and the already-parsed, frontmatter-stripped system
+ * prompt. The manager maps `ProjectConfig → ProjectProfile` so `backends/`
+ * never imports the `projects/` layer.
+ */
+export interface ProjectProfile {
+  id: string;
+  systemPrompt: string;
+}
+
 // ---- Session-creation I/O shapes ---------------------------------------
 
 export interface OpenSessionInput {
   cwd: string;
   mcpServers: McpServerSpec[];
+  /**
+   * Scope this session belongs to ({@link ProjectScopeId}); captured like
+   * `cwd` so the backend can resolve the owning project's instructions.
+   * Absent / `GLOBAL_SCOPE` means the implicit global workspace.
+   */
+  projectId?: ProjectScopeId;
+  /**
+   * Absolute paths to widen the agent's searchable roots beyond `cwd` (the
+   * project's materialized context directories). Forwarded on every
+   * session-lifecycle request (new / resume / load) — resume and load
+   * re-establish the complete root list — and only by backends that report
+   * {@link BackendProcess.supportsAdditionalDirectories}. Absent / empty means
+   * no extra roots.
+   */
+  additionalDirectories?: string[];
 }
 
 export interface OpenSessionOutput {
@@ -604,6 +654,10 @@ export interface ResumeSessionInput {
   sessionId: SessionId;
   cwd: string;
   mcpServers: McpServerSpec[];
+  /** Scope this session belongs to. See {@link OpenSessionInput.projectId}. */
+  projectId?: ProjectScopeId;
+  /** Extra searchable roots. See {@link OpenSessionInput.additionalDirectories}. */
+  additionalDirectories?: string[];
 }
 
 export type ResumeSessionOutput = OpenSessionOutput;
@@ -612,6 +666,10 @@ export interface LoadSessionInput {
   sessionId: SessionId;
   cwd: string;
   mcpServers: McpServerSpec[];
+  /** Scope this session belongs to. See {@link OpenSessionInput.projectId}. */
+  projectId?: ProjectScopeId;
+  /** Extra searchable roots. See {@link OpenSessionInput.additionalDirectories}. */
+  additionalDirectories?: string[];
 }
 
 export type LoadSessionOutput = OpenSessionOutput;
@@ -685,6 +743,16 @@ export interface BackendProcess {
    * sessions; ACP backends governed by the shared prompter omit it.
    */
   setReadOnlySessionPredicate?(fn: (sessionId: SessionId) => boolean): void;
+  /**
+   * Optional: register the resolver a backend calls to look up a session's
+   * project instructions by scope id. Mirrors the prompter setters; the
+   * manager supplies a resolver that maps the cached project record to a
+   * minimal {@link ProjectProfile}. Returns `undefined` for `GLOBAL_SCOPE`
+   * or an unknown project. Only backends that inject project instructions
+   * implement it (Claude SDK in PR2b-1); codex/opencode discover AGENTS.md
+   * from the session cwd and omit it.
+   */
+  setProjectProfileProvider?(fn: (projectId: ProjectScopeId) => ProjectProfile | undefined): void;
   registerSessionHandler(sessionId: SessionId, handler: SessionUpdateHandler): () => void;
   newSession(params: OpenSessionInput): Promise<OpenSessionOutput>;
   prompt(params: PromptInput): Promise<PromptOutput>;
@@ -730,6 +798,16 @@ export interface BackendProcess {
    * Claude SDK adapter accepts http/sse natively.
    */
   supportsMcpTransport(transport: "http" | "sse"): boolean;
+  /**
+   * Whether the backend honors {@link OpenSessionInput.additionalDirectories}
+   * (widening the agent's searchable roots on every session-lifecycle request:
+   * new / resume / load). Optional like the
+   * other incrementally-added capability hooks (`setProjectProfileProvider`):
+   * the manager always forwards `additionalDirectories` and each backend gates
+   * internally on this before passing them to its wire/SDK. Backends that
+   * cannot widen roots omit it or return `false`.
+   */
+  supportsAdditionalDirectories?(): boolean;
   shutdown(): Promise<void>;
 }
 
@@ -810,12 +888,6 @@ export interface AgentChatMessage {
    * leave the trail uncollapsed so the user sees what happened.
    */
   turnStopReason?: StopReason;
-  /**
-   * Wall-clock ms the turn took, frozen at `prompt()` resolution. Stored
-   * so re-renders don't shift the "Worked for X" label. Absent until the
-   * turn ends.
-   */
-  turnDurationMs?: number;
   /**
    * Per-agent fan-out state when this assistant message is a multi-agent QA turn.
    * LIVE in-memory only — persistence rides in the body as a composite

@@ -17,6 +17,7 @@ import {
   PROJECTS_UNSUPPORTED_FOLDER_NAME,
 } from "@/projects/constants";
 import { ProjectFileRecord } from "@/projects/type";
+import { ensureAgentsMirror, removeAgentsMirror } from "@/projects/ensureAgentsMirror";
 import {
   fetchAllProjects,
   getProjectConfigFilePath,
@@ -37,6 +38,7 @@ import {
   upsertCachedProjectRecord,
 } from "@/projects/state";
 import { ensureFolderExists } from "@/utils";
+import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { RecentUsageManager } from "@/utils/recentUsageManager";
 import {
   isInVaultCache,
@@ -88,7 +90,16 @@ export class ProjectFileManager {
   public async initialize(): Promise<void> {
     logInfo("[Projects] Initializing ProjectFileManager");
     await ensureProjectsMigratedIfNeeded(this.app);
-    await loadAllProjects(this.app);
+    const records = await loadAllProjects(this.app);
+    // Best-effort UX: pre-generate the AGENTS.md mirror for already-loaded projects so
+    // codex/opencode discover instructions even before a per-project session-start ensure.
+    // Runs here (after load), NOT in the settings-migration layer. Never blocks startup.
+    await this.ensureAgentsMirrorsForAll(records);
+  }
+
+  /** Generate/refresh the AGENTS.md mirror for every loaded project (best-effort batch). */
+  private async ensureAgentsMirrorsForAll(records: ProjectFileRecord[]): Promise<void> {
+    await Promise.all(records.map((record) => ensureAgentsMirror(this.app, record)));
   }
 
   /**
@@ -225,7 +236,8 @@ export class ProjectFileManager {
   }
 
   /**
-   * Create a new project file (\<projectsFolder\>/\<id\>/project.md).
+   * Create a new project file at \<projectsFolder\>/\<folderName\>/project.md (the single
+   * source of truth), then generate its one-way AGENTS.md mirror for codex/opencode.
    * @param project - ProjectConfig to create
    * @returns Newly created ProjectFileRecord
    */
@@ -316,6 +328,8 @@ export class ProjectFileManager {
 
       upsertCachedProjectRecord(record);
       logInfo(`[Projects] Created project: ${projectId} -> ${filePath}`);
+      // Best-effort: generate the one-way AGENTS.md mirror from the new instruction body.
+      await ensureAgentsMirror(this.app, record);
       return record;
     } finally {
       removePendingFileWrite(filePath);
@@ -363,6 +377,8 @@ export class ProjectFileManager {
 
     if (nextFolderName !== existing.folderName) {
       const newFolderPath = getProjectFolderPath(nextFolderName);
+      // Reason: a folder rename keeps the config basename (`project.md`), so the new config
+      // path is just `project.md` under the renamed folder.
       const newFilePath = getProjectConfigFilePath(nextFolderName);
 
       // Check collision: cache (case-insensitive) + filesystem
@@ -495,6 +511,10 @@ export class ProjectFileManager {
 
       upsertCachedProjectRecord(updated);
 
+      // Best-effort: refresh the one-way AGENTS.md mirror. When only context/url/last-used
+      // changed (instruction body unchanged), ensureAgentsMirror cheap-skips the write.
+      await ensureAgentsMirror(this.app, updated);
+
       logInfo(`[Projects] Updated project: ${normalizedId} -> ${filePath}`);
       return updated;
     } catch (writeError) {
@@ -533,8 +553,9 @@ export class ProjectFileManager {
   }
 
   /**
-   * Delete a project by id. Deletes only the managed project.md file, then removes
-   * the folder if it is empty (to avoid deleting user-created files).
+   * Delete a project by id. Deletes the managed project.md file and its generated AGENTS.md
+   * mirror (only when the mirror carries the marker — a user's own AGENTS.md is left alone),
+   * then removes the folder if it is empty (to avoid deleting user-created files).
    * @param projectId - Project id to delete
    */
   public async deleteProject(projectId: string): Promise<void> {
@@ -566,6 +587,10 @@ export class ProjectFileManager {
       // state if the subsequent folder cleanup fails.
       deleteCachedProjectRecordById(normalizedId);
 
+      // Reason: drop the generated mirror (marker-gated) so the folder can be emptied and a
+      // stale AGENTS.md doesn't linger. A user-authored AGENTS.md is preserved (no marker).
+      await removeAgentsMirror(this.app, existing);
+
       // Cleanup: remove the folder only if it is empty after deleting project.md.
       // Best-effort: the project file is already gone, so cleanup failure
       // must not leave a phantom project in memory.
@@ -588,6 +613,18 @@ export class ProjectFileManager {
       await ProjectContextCache.getInstance()
         .clearForProject(existing.project)
         .catch((err) => logError("[Projects] Failed to clear context cache on delete", err));
+
+      // Reason: the vault-level cache above leaves the off-vault failure-marker
+      // bucket (markers/<md5(projectId)>) behind. Clearing it stops a project
+      // recreated under the same id from inheriting stale negative-cache state.
+      // Desktop-gated + dynamically imported so node-backed cache modules never
+      // load on mobile; best-effort so a cleanup failure can't strand the delete.
+      if (isDesktopRuntime()) {
+        const { clearProjectMarkers } = await import("@/context/projectMarkerCleanup");
+        await clearProjectMarkers(this.app, normalizedId).catch((err) =>
+          logError(`[Projects] Failed to clear off-vault failure markers on delete`, err)
+        );
+      }
 
       logInfo(`[Projects] Deleted project: ${normalizedId} -> ${folderPath}`);
 

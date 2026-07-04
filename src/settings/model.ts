@@ -118,8 +118,19 @@ export interface CopilotSettings {
   showSuggestedPrompts: boolean;
   numPartitions: number;
   defaultConversationNoteName: string;
-  // undefined means never checked
+  // Any valid paid license (Lite and above). undefined means never checked.
+  isPaidUser: boolean | undefined;
+  // Tier >= Plus (Plus, Pro, Believer, Supporter; excludes Lite). Derived from
+  // the signed entitlement token when present, else mirrors isPaidUser as a
+  // safe fallback. undefined means never checked. See plusUtils + entitlement/.
   isPlusUser: boolean | undefined;
+  // Raw server-signed entitlement token (JWS). Tamper-evident, so safe to persist
+  // and trust offline until its `exp`. Empty when the server hasn't issued one.
+  entitlementToken: string;
+  // Epoch ms when the entitlement token expires (0 = none / tokenless fallback).
+  // The strict isPlusUser gate honors this so multi-agent locks at expiry even
+  // while offline. Derived from the token's `exp`.
+  entitlementExpiresAt: number;
   inlineEditCommands: LegacyCommandSettings[] | undefined;
   projectList: Array<ProjectConfig>;
   passMarkdownImages: boolean;
@@ -265,6 +276,13 @@ export interface CopilotSettings {
      * 400-char summary log unchanged.
      */
     debugFullFrames: boolean;
+    /**
+     * One-shot dismissal of the Agent Home "Try a project" welcome card. The card
+     * only shows on the global landing while no projects exist; once dismissed it
+     * stays hidden regardless of project count. Persisted so the nudge doesn't
+     * reappear across reloads. Defaults to `false`.
+     */
+    welcomeDismissed: boolean;
     /**
      * Skills management — canonical-store discovery, symlink lifecycle,
      * reconciliation. See `designdocs/SKILLS_MANAGEMENT.md` and
@@ -616,6 +634,19 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
     sanitizedSettings.enableMiyo = legacyEnableMiyoSearch as boolean;
   }
 
+  // Migration: the old `isPlusUser` ("any valid license") was split into
+  // `isPaidUser` (any paid, incl. Lite) + a new `isPlusUser` (tier >= Plus, used
+  // by the multi-agent gate). Backfill `isPaidUser` from the legacy value. The
+  // legacy value is also a correct seed for the new strict `isPlusUser` because
+  // no sub-Plus paid tier existed before this split, so the carried-over
+  // `isPlusUser` stays correct until the next license validation.
+  if (
+    typeof sanitizedSettings.isPaidUser !== "boolean" &&
+    typeof rawSettings.isPlusUser === "boolean"
+  ) {
+    sanitizedSettings.isPaidUser = rawSettings.isPlusUser;
+  }
+
   // Stuff in settings are string even when the interface has number type!
   const temperature = Number(settingsToSanitize.temperature);
   sanitizedSettings.temperature = isNaN(temperature) ? DEFAULT_SETTINGS.temperature : temperature;
@@ -909,6 +940,11 @@ function sanitizeAgentMode(raw: unknown): CopilotSettings["agentMode"] {
       ? r.debugFullFrames
       : DEFAULT_SETTINGS.agentMode.debugFullFrames;
 
+  const welcomeDismissed =
+    typeof r.welcomeDismissed === "boolean"
+      ? r.welcomeDismissed
+      : DEFAULT_SETTINGS.agentMode.welcomeDismissed;
+
   const claudeCliRaw =
     r.claudeCli && typeof r.claudeCli === "object"
       ? (r.claudeCli as Record<string, unknown>)
@@ -941,6 +977,7 @@ function sanitizeAgentMode(raw: unknown): CopilotSettings["agentMode"] {
     activeBackend,
     backends,
     debugFullFrames,
+    welcomeDismissed,
     skills,
     ...(claudeCli ? { claudeCli } : {}),
     ...(deviceProfiles ? { deviceProfiles } : {}),

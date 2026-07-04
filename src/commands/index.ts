@@ -20,7 +20,7 @@ import { CustomCommandChatModal } from "@/commands/CustomCommandChatModal";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { ApplyCustomCommandModal } from "@/components/modals/ApplyCustomCommandModal";
 import { YoutubeTranscriptModal } from "@/components/modals/YoutubeTranscriptModal";
-import { checkIsPlusUser } from "@/plusUtils";
+import { checkIsPaidUser } from "@/plusUtils";
 // Debug modals removed with search v3
 import CopilotPlugin from "@/main";
 import { shouldUseMiyo } from "@/miyo/miyoUtils";
@@ -505,6 +505,17 @@ export function registerCommands(plugin: CopilotPlugin) {
       const fileCache = FileCache.getInstance<string>();
       await fileCache.clear(plugin.app.vault);
 
+      // Clear the off-vault shared conversion cache (Agent Mode snapshots +
+      // markers). Desktop-gated + dynamic import so node:fs / conversionsLocation
+      // never load on mobile (this command module is registered on all platforms).
+      // clear() is root-confined to `context-cache/` — it never ascends to the
+      // parent `vaults/<id>/`, so `agent-chat-index.json` is untouched.
+      if (isDesktopRuntime()) {
+        const { cacheRoot } = await import("@/context/conversionsLocation");
+        const { createNodeContextCacheFs } = await import("@/context/contextCacheFs");
+        await createNodeContextCacheFs(cacheRoot(plugin.app)).clear();
+      }
+
       new Notice("All Copilot caches cleared successfully");
     } catch (error) {
       logError("Error clearing Copilot caches:", error);
@@ -647,8 +658,8 @@ export function registerCommands(plugin: CopilotPlugin) {
 
   // Add command to download YouTube script (Copilot Plus only)
   addCommand(plugin, COMMAND_IDS.DOWNLOAD_YOUTUBE_SCRIPT, async () => {
-    const isPlusUser = await checkIsPlusUser(plugin.app);
-    if (!isPlusUser) {
+    const isPaidUser = await checkIsPaidUser(plugin.app);
+    if (!isPaidUser) {
       new Notice("Download YouTube Script (plus) is a Copilot Plus feature");
       return;
     }

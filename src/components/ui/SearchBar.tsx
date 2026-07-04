@@ -1,18 +1,26 @@
 import React from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { XCircle, Search } from "lucide-react";
 
 interface SearchBarProps {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
+  /**
+   * Extra classes for the inner Input — e.g. a height override (`!tw-h-7`) for
+   * compact list contexts. The Input's base height is `!`-important, so an
+   * override must be `!`-important too (cn/tailwind-merge resolves the conflict).
+   */
+  inputClassName?: string;
 }
 
 export const SearchBar: React.FC<SearchBarProps> = ({
   value,
   onChange,
   placeholder = "Search...",
+  inputClassName,
 }) => {
   return (
     <div className="tw-relative">
@@ -21,7 +29,8 @@ export const SearchBar: React.FC<SearchBarProps> = ({
         placeholder={placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="tw-pr-10" // Add padding to prevent text overlap with icons
+        // tw-pr-10 prevents text overlap with the trailing icons
+        className={cn("tw-pr-10", inputClassName)}
       />
       {value && (
         <Button

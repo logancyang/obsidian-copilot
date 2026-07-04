@@ -1,10 +1,5 @@
-import React, { useState } from "react";
-import {
-  buildAgentTrail,
-  finalAnswerText,
-  splitTrailingText,
-  type RenderNode,
-} from "@/agentMode/ui/agentTrail";
+import React from "react";
+import { agentResponseText, buildAgentTrail, type RenderNode } from "@/agentMode/ui/agentTrail";
 import type { AgentMessagePart, StopReason } from "@/agentMode/session/types";
 import { ActionCard } from "@/agentMode/ui/ActionCard";
 import { AgentMessageActions } from "@/agentMode/ui/AgentMessageActions";
@@ -14,10 +9,6 @@ import { ReasoningBlock } from "@/agentMode/ui/ReasoningBlock";
 import { AgentMarkdownText } from "@/agentMode/ui/AgentMarkdownText";
 import { planEntryClass, planEntryIcon } from "@/agentMode/ui/planEntryStyles";
 import { BottomLoadingIndicator } from "@/components/chat-components/BottomLoadingIndicator";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { formatDuration } from "@/lib/duration";
-import { cn } from "@/lib/utils";
-import { Sparkles, ChevronRight } from "lucide-react";
 import { App } from "obsidian";
 
 interface AgentTrailProps {
@@ -32,13 +23,9 @@ interface AgentTrailProps {
   showThinkingTail?: boolean;
   /** Obsidian `App` for the markdown renderer used by `text` parts. */
   app: App;
-  /** Backend stopReason once the turn has ended. Only `end_turn` triggers
-   *  collapsing — cancelled / refusal / max_tokens leave the trail expanded
-   *  so the user can see exactly where things stopped. */
+  /** Backend stopReason once the turn has ended. Only `cancelled` suppresses
+   *  the Copy / Insert affordances (treated as having no user-visible answer). */
   turnStopReason?: StopReason;
-  /** Frozen wall-clock duration of the turn, in ms. Drives the
-   *  "Worked for X" label on a collapsed turn. */
-  turnDurationMs?: number;
 }
 
 export const AgentTrail: React.FC<AgentTrailProps> = ({
@@ -47,46 +34,15 @@ export const AgentTrail: React.FC<AgentTrailProps> = ({
   showThinkingTail,
   app,
   turnStopReason,
-  turnDurationMs,
 }) => {
-  // Decide whether the turn qualifies for the "Worked for X" collapse. The
-  // collapse is post-stream only — while events are still arriving the user
-  // sees every tool call land in real time.
-  const canCollapse =
-    !isStreaming &&
-    turnStopReason === "end_turn" &&
-    typeof turnDurationMs === "number" &&
-    parts.length > 0;
-
-  // Copy / Insert act on the turn's final answer only. Gate them off while the
-  // message is still streaming and on cancelled turns (treated as having no
-  // user-visible answer), plus whenever there is no trailing prose to act on.
-  const answer = finalAnswerText(parts);
+  // Copy / Insert act on the agent's full textual response. Gate them off while
+  // the message is still streaming and on cancelled turns (treated as having no
+  // user-visible answer), plus whenever there is no prose to act on.
+  const answer = agentResponseText(parts);
   const actions =
     !isStreaming && turnStopReason !== "cancelled" && answer.length > 0 ? (
       <AgentMessageActions text={answer} app={app} />
     ) : null;
-
-  if (canCollapse) {
-    const { research, final } = splitTrailingText(parts);
-    // Both halves must be non-empty for a collapse to be meaningful: research
-    // gives the user something to hide, and final gives them something to read
-    // inline. If either is missing, fall through to the linear render.
-    const researchHasContent = research.some((p) => p.kind !== "text" || p.text.trim().length > 0);
-    const finalHasContent = final.some((p) => p.text.trim().length > 0);
-    if (researchHasContent && finalHasContent) {
-      return (
-        <div className="tw-group tw-flex tw-flex-col tw-gap-1">
-          <WorkedForBlock research={research} durationMs={turnDurationMs} app={app} />
-          {final.map((p, i) => (
-            // eslint-disable-next-line @eslint-react/no-array-index-key -- text parts are append-only and may contain duplicate text
-            <AgentMarkdownText key={`final-${i}`} text={p.text} app={app} />
-          ))}
-          {actions}
-        </div>
-      );
-    }
-  }
 
   return (
     <div className="tw-group tw-flex tw-flex-col tw-gap-1">
@@ -123,49 +79,6 @@ const LinearTrail: React.FC<{
       {tree.map((node, i) => renderNode(node, i, isStreaming, app, lastPart))}
       {showThinkingTail ? <BottomLoadingIndicator /> : null}
     </div>
-  );
-};
-
-interface WorkedForBlockProps {
-  research: AgentMessagePart[];
-  durationMs: number;
-  app: App;
-}
-
-/**
- * Collapsed-by-default "Worked for X" header that wraps the research portion
- * of a completed turn. Clicking expands the original trail inline — same
- * components as the linear path, no streaming spinners (the turn has ended).
- */
-const WorkedForBlock: React.FC<WorkedForBlockProps> = ({ research, durationMs, app }) => {
-  const [isExpanded, setIsExpanded] = useState(false);
-  return (
-    <Collapsible
-      open={isExpanded}
-      onOpenChange={setIsExpanded}
-      className="tw-mb-2 tw-mt-1 tw-w-full max-md:tw-mb-1.5 max-md:tw-mt-0.5"
-    >
-      <CollapsibleTrigger asChild>
-        <div className="copilot-divider-b tw-flex tw-w-full tw-cursor-pointer tw-items-center tw-gap-1.5 tw-pb-2 tw-text-left tw-text-sm tw-text-muted hover:tw-text-normal">
-          <span className="tw-flex tw-size-icon-xs tw-shrink-0 tw-items-center tw-justify-center">
-            <Sparkles className="tw-size-3 tw-text-muted" />
-          </span>
-          <span className="tw-font-medium">Worked for</span>
-          <span className="tw-text-muted">{formatDuration(durationMs)}</span>
-          <ChevronRight
-            className={cn(
-              "tw-ml-auto tw-size-3 tw-text-muted tw-transition-transform",
-              isExpanded && "tw-rotate-90"
-            )}
-          />
-        </div>
-      </CollapsibleTrigger>
-      <CollapsibleContent>
-        <div className="tw-mt-2">
-          <LinearTrail parts={research} isStreaming={false} app={app} />
-        </div>
-      </CollapsibleContent>
-    </Collapsible>
   );
 };
 
@@ -208,20 +121,23 @@ interface PlanPillProps {
 }
 
 // Inline plan-checklist pill for `kind: "plan"` parts. Permission-gated
-// plan proposals are handled separately by `PlanProposalCard`.
-const PlanPill: React.FC<PlanPillProps> = ({ entries }) => (
-  <div className="tw-my-1 tw-rounded tw-border tw-border-border tw-bg-secondary tw-px-2 tw-py-1">
-    <p className="tw-mb-1 tw-text-xs tw-text-muted">Plan</p>
-    <ul className="tw-flex tw-flex-col tw-gap-0.5 tw-text-sm">
-      {entries.map((e, i) => (
-        // eslint-disable-next-line @eslint-react/no-array-index-key -- plan entries are positional and may share content
-        <li key={`plan-${i}`} className="tw-flex tw-items-start tw-gap-2">
-          <span aria-hidden="true">{planEntryIcon(e.status)}</span>
-          <span className={planEntryClass(e.status)}>{e.content}</span>
-        </li>
-      ))}
-    </ul>
-  </div>
-);
+// plan proposals are handled separately by `PlanProposalCard`. An empty
+// entries list (the agent deleted every task) renders nothing, not an
+// empty shell.
+const PlanPill: React.FC<PlanPillProps> = ({ entries }) =>
+  entries.length === 0 ? null : (
+    <div className="tw-my-1 tw-rounded tw-border tw-border-border tw-bg-secondary tw-px-2 tw-py-1">
+      <p className="tw-mb-1 tw-text-xs tw-text-muted">Plan</p>
+      <ul className="tw-flex tw-flex-col tw-gap-0.5 tw-text-sm">
+        {entries.map((e, i) => (
+          // eslint-disable-next-line @eslint-react/no-array-index-key -- plan entries are positional and may share content
+          <li key={`plan-${i}`} className="tw-flex tw-items-start tw-gap-2">
+            <span aria-hidden="true">{planEntryIcon(e.status)}</span>
+            <span className={planEntryClass(e.status)}>{e.content}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 
 export default AgentTrail;

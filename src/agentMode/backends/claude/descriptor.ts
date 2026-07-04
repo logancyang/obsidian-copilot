@@ -248,12 +248,17 @@ export const ClaudeBackendDescriptor: BackendDescriptor = {
         (await getClaudeAuthStatus(claudePath, claudeChildEnv(getSettings()))).loggedIn,
       isPlanModePlanFilePath: isClaudePlanModePlanFilePath,
       getDefaultModelId: () => getSettings().agentMode?.backends?.claude?.defaultModel?.baseModelId,
-      // Forward the shared composed system prompt — the Copilot base framing
-      // (unless the user disabled it), the pill-syntax directive, and the
-      // user's custom prompt. The SDK appends it to its `claude_code` preset
-      // (see `ClaudeSdkBackendProcess`), so Claude keeps its tool/planning
-      // framing while gaining the Obsidian-vault identity. Re-read per
-      // `newSession()`, so a prompt change applies to the next session.
+      // Compose the shared system prompt — the Copilot base framing (unless the
+      // user disabled it), the pill-syntax directive, and the user's custom
+      // prompt — plus the owning project's instructions when the session is
+      // project-scoped. The SDK resolves the project instructions per session
+      // (via the manager-injected profile provider) and passes the opaque body
+      // here; `backends/shared` never imports the `projects/` layer. The
+      // result appends to Claude's `claude_code` preset (see
+      // `ClaudeSdkBackendProcess`), so Claude keeps its tool/planning framing
+      // while gaining the Obsidian-vault identity. Re-read per `newSession()`,
+      // so a prompt change applies to the next session. A global (no-project)
+      // session passes `undefined`, yielding the byte-identical global prompt.
       //
       // Claude discovers skills natively from `.claude/skills/`, so the payload
       // carries no SKILL.md authoring instructions. Claude has no
@@ -261,7 +266,7 @@ export const ClaudeBackendDescriptor: BackendDescriptor = {
       // symlink fanout already enforces visibility (no link = not seen). If the
       // Claude Agent SDK ever grows a per-skill deny hook, wire
       // `composeDenyList(getManagedSkills(), "claude")` in here.
-      getSystemPromptAppend: () => buildAgentSystemPrompt(),
+      getSystemPromptAppend: (opts) => buildAgentSystemPrompt(opts),
     });
   },
 

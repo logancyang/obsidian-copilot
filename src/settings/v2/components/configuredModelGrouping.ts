@@ -1,7 +1,11 @@
 /** Pure grouping logic for `ConfiguredModelEnableList`, split from the React container so it's testable with plain data. */
 
 import { isOpencodeZenWireId, type ModelEnableGroup, type ModelEnableRow } from "@/agentMode";
-import type { ConfiguredModel, Provider } from "@/modelManagement";
+import {
+  capabilitiesFromConfiguredInfo,
+  type ConfiguredModel,
+  type Provider,
+} from "@/modelManagement";
 
 /** One candidate model joined to its provider, plus current enabled state. */
 export interface Candidate {
@@ -119,6 +123,7 @@ export function toRow(candidate: Candidate): ModelEnableRow {
     wireId: id,
     enabled,
     isFree: isOpencodeZenWireId(id),
+    capabilities: capabilitiesFromConfiguredInfo(configuredModel.info),
   };
 }
 
@@ -209,12 +214,15 @@ export function buildModelEnableGroups(
   }
 
   // Copilot Plus is highlighted and floated to the top; its provider name
-  // already reads "Copilot Plus", so it carries no disambiguating badge. Every
-  // other origin gets a badge only when the list actually mixes origins.
+  // already reads "Copilot Plus", so instead of a disambiguating origin badge
+  // it carries a "privacy" badge plus a license-required hover hint. Every
+  // other origin gets an origin badge only when the list mixes origins.
   const mixed = new Set(out.map((o) => o.kind)).size > 1;
   for (const o of out) {
     if (o.kind === "copilot-plus") {
       o.group.highlight = true;
+      o.group.badge = "privacy";
+      o.group.tooltip = "Copilot license required";
     } else if (mixed) {
       o.group.badge = originBadgeLabel(o.kind);
     }

@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PasswordInput } from "@/components/ui/password-input";
 import { PLUS_UTM_MEDIUMS } from "@/constants";
-import { checkIsPlusUser, navigateToPlusPage, useIsPlusUser } from "@/plusUtils";
+import { checkIsPaidUser, navigateToPlusPage, useIsPaidUser } from "@/plusUtils";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import { ExternalLink, Loader2 } from "lucide-react";
 import React, { useState } from "react";
@@ -14,14 +14,14 @@ export function PlusSettings() {
   const settings = useSettingsValue();
   const [error, setError] = useState<string | null>(null);
   const [isChecking, setIsChecking] = useState(false);
-  const isPlusUser = useIsPlusUser();
+  const isPaidUser = useIsPaidUser();
   const [localLicenseKey, setLocalLicenseKey] = useState(settings.plusLicenseKey);
 
   return (
     <section className="tw-flex tw-flex-col tw-gap-4 tw-rounded-lg tw-bg-secondary tw-p-4">
       <div className="tw-flex tw-items-center tw-justify-between tw-gap-2 tw-text-xl tw-font-bold">
         <span>Copilot Plus</span>
-        {isPlusUser && (
+        {isPaidUser && (
           <Badge variant="outline" className="tw-text-success">
             Active
           </Badge>
@@ -56,7 +56,7 @@ export function PlusSettings() {
           onClick={async () => {
             updateSetting("plusLicenseKey", localLicenseKey);
             setIsChecking(true);
-            const result = await checkIsPlusUser(app);
+            const result = await checkIsPaidUser(app);
             setIsChecking(false);
             if (!result) {
               setError("Invalid license key");

@@ -15,6 +15,8 @@ module.exports = {
     "^yaml$": "<rootDir>/node_modules/yaml/dist/index.js",
     "^@agentclientprotocol/sdk$": "<rootDir>/__mocks__/@agentclientprotocol/sdk.js",
     "^@anthropic-ai/claude-agent-sdk$": "<rootDir>/__mocks__/@anthropic-ai/claude-agent-sdk.js",
+    // react-resizable-panels is ESM-only with no CJS build to point at; stub it.
+    "^react-resizable-panels$": "<rootDir>/__mocks__/react-resizable-panels.js",
   },
   testRegex: ".*\\.test\\.(jsx?|tsx?)$",
   moduleFileExtensions: ["ts", "tsx", "js", "jsx", "json", "node"],

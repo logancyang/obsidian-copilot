@@ -192,6 +192,7 @@ describe("sanitizeSettings - agentMode shape migration", () => {
       activeBackend: "opencode",
       backends: {},
       debugFullFrames: true,
+      welcomeDismissed: false,
       skills: { folder: "copilot/skills" },
     });
   });

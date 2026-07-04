@@ -6,25 +6,25 @@ import type { BackendId } from "@/agentMode/session/types";
  * skills, these are seeded into the canonical skills folder by the plugin (see
  * `seedBuiltinSkills`) and refreshed when `version` bumps.
  *
- * Each skill ships a `SKILL.md` (instructions the agent reads) plus two
- * runnable scripts: a POSIX `sh` script (run with `curl`) and an equivalent
- * Node `.mjs` script. Both read the Copilot Plus license + relay base URL from
- * env vars the plugin injects at spawn time (see `buildCopilotPlusEnv`) and call
- * the Brevilabs relay directly — no key is embedded in the skill files. When no
- * license is configured (free user) or the relay rejects it, the script exits
- * non-zero with a message that tells the agent to fall back to its own
- * equivalent built-in capability — never to block the user — with only an
- * occasional, gentle upsell.
+ * Each skill ships a `SKILL.md` (instructions the agent reads) plus one
+ * runnable script per OS: a POSIX `sh` script for macOS/Linux and a Windows
+ * `.cmd` wrapper that drives an adjacent PowerShell `.ps1`. All read the Copilot
+ * Plus license + relay base URL from env vars the plugin injects at spawn time
+ * (see `buildCopilotPlusEnv`) and call the Brevilabs relay directly — no key is
+ * embedded in the skill files. When no license is configured (free user) or the
+ * relay rejects it, the script exits non-zero with a message that tells the
+ * agent to fall back to its own equivalent built-in capability — never to block
+ * the user — with only an occasional, gentle upsell.
  *
- * Why ship both an `sh` and a Node script: `sh` + `curl` is preferred because
- * the script runs in the *agent's* shell, where `sh`, `curl`, `sed`, and
- * `base64` live in `/usr/bin` and are reachable regardless of the user's node
- * setup (Obsidian launches with a minimal PATH that usually excludes nvm/Volta/
- * Homebrew node). But Windows has no `sh` unless Git Bash is installed, so each
- * skill also ships a Node fallback. SKILL.md tells the agent to try `sh` first,
- * fall back to `node <script>.mjs`, and — if neither runtime exists — prompt the
- * user to install Node.js. Scripts need neither extra imports nor an executable
- * bit.
+ * Why one script per OS (and no Node): every runtime here is guaranteed present
+ * without any install. On macOS/Linux the agent's shell has `sh`, `curl`, `sed`,
+ * and `base64` in `/usr/bin`. On Windows, `cmd` and Windows PowerShell 5.1 ship
+ * with the OS, so the `.cmd` → `.ps1` pair runs in a bare PowerShell with no Git
+ * Bash and no Node. This matters because Obsidian launches with a reduced PATH
+ * that usually excludes nvm/Volta/Homebrew node — a managed-opencode Windows
+ * session frequently has neither `sh` nor `node`, which is why the earlier
+ * `sh` → `node` fallback dead-ended (see the PDF report in #2634). Scripts need
+ * no extra imports and no executable bit.
  */
 export interface BuiltinSkill {
   /** Folder name + SKILL.md `name`. Kebab-case, Copilot-branded. */
@@ -159,113 +159,145 @@ relay() {
 `;
 }
 
+/** Wrap a string as a single-quoted PowerShell literal (`'` doubled to escape). */
+function psSingleQuote(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
 /**
- * Node equivalent of {@link scriptPreamble}, shipped alongside each `.sh` so
- * Windows users (no `sh` unless Git Bash is installed) still have a runnable
- * script. Uses Node's global `fetch` (Node 18+) and the built-in `node:` core
- * modules only — no npm deps, so it runs from a bare vault folder. The `.mjs`
- * extension forces ESM regardless of any ambient `package.json`, which lets the
- * per-skill tail use top-level `await`.
+ * Windows (PowerShell) equivalent of {@link scriptPreamble}, run by the `.cmd`
+ * launcher each skill ships. Targets Windows PowerShell 5.1 — which ships with
+ * the OS, so it needs no Git Bash and no Node, the two runtimes a reduced-PATH
+ * managed-opencode session often lacks. Uses only the .NET BCL + built-in
+ * cmdlets (`Invoke-WebRequest`, `[System.Convert]`), so it runs from a bare
+ * vault folder.
  *
  * Behaviour mirrors the shell script exactly: same env vars, same relay call,
  * same no-license / 401/403 → fall-back-to-your-own-tools mapping, same
- * non-zero exits. If the runtime is older than Node 18 (`fetch` undefined) it
- * exits with a "update Node" message rather than failing obscurely.
+ * non-zero exits.
  */
-function nodeScriptPreamble(): string {
-  return `#!/usr/bin/env node
-// Node fallback for the matching .sh script — for platforms that can't run sh
-// (e.g. Windows without Git Bash). Calls the Brevilabs relay and prints the
-// JSON result to stdout. Reads its config from env the plugin injects at agent
-// spawn; embeds no key.
-const BASE = process.env.${PLUS_ENV.baseUrl} || "";
-const KEY = process.env.${PLUS_ENV.licenseKey} || "";
-const USER_ID = process.env.${PLUS_ENV.userId} || "";
-const CLIENT_VERSION = process.env.${PLUS_ENV.clientVersion} || "";
-const NO_LICENSE = ${JSON.stringify(NO_LICENSE_MESSAGE)};
-const NO_LICENSE_UPSELL = ${JSON.stringify(NO_LICENSE_UPSELL)};
-const LICENSE_INVALID = ${JSON.stringify(LICENSE_INVALID_MESSAGE)};
-const RELAY_FAILED_FALLBACK = ${JSON.stringify(RELAY_FAILED_FALLBACK)};
+function powershellPreamble(): string {
+  return `# Windows (PowerShell) sibling of the matching .sh script, launched by the .cmd
+# wrapper next to it. Calls the Brevilabs relay and prints the JSON result to
+# stdout. Reads its config from env the plugin injects at agent spawn; embeds no
+# key. Targets Windows PowerShell 5.1 (.NET BCL only) so it needs no Node.
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+# Emit stdout/stderr as UTF-8: Windows PowerShell 5.1 defaults Console.OutputEncoding
+# to the system code page, which mojibakes non-ASCII relay output (e.g. Japanese
+# results, fetched pages, transcripts) before the agent reads it. The removed Node
+# fallback wrote UTF-8; match that. $OutputEncoding governs the pipeline too.
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
+$BASE = [Environment]::GetEnvironmentVariable('${PLUS_ENV.baseUrl}')
+$KEY = [Environment]::GetEnvironmentVariable('${PLUS_ENV.licenseKey}')
+$USER_ID = [Environment]::GetEnvironmentVariable('${PLUS_ENV.userId}')
+$CLIENT_VERSION = [Environment]::GetEnvironmentVariable('${PLUS_ENV.clientVersion}')
+if ($null -eq $USER_ID) { $USER_ID = '' }
+if ($null -eq $CLIENT_VERSION) { $CLIENT_VERSION = '' }
+$NO_LICENSE = ${psSingleQuote(NO_LICENSE_MESSAGE)}
+$NO_LICENSE_UPSELL = ${psSingleQuote(NO_LICENSE_UPSELL)}
+$LICENSE_INVALID = ${psSingleQuote(LICENSE_INVALID_MESSAGE)}
+$RELAY_FAILED_FALLBACK = ${psSingleQuote(RELAY_FAILED_FALLBACK)}
 
-function die(message, code = 2) {
-  process.stderr.write(String(message) + "\\n");
-  process.exit(code);
+function Die($message, $code = 2) {
+  [Console]::Error.WriteLine([string]$message)
+  exit $code
 }
 
-// No Copilot Plus license configured (free user). Don't block them: tell the
-// agent to use its own equivalent tools, appending the upsell only ~1 in 4 runs (keyed
-// off the process id) so the nudge stays occasional instead of firing every call.
-function noLicense() {
-  let msg = NO_LICENSE;
-  if (process.pid % 4 === 0) msg += " " + NO_LICENSE_UPSELL;
-  die(msg);
+# No Copilot Plus license configured (free user). Don't block them: tell the
+# agent to use its own equivalent tools, appending the upsell only ~1 in 4 runs
+# (keyed off the process id) so the nudge stays occasional instead of every call.
+function NoLicense {
+  $msg = $NO_LICENSE
+  if (($PID % 4) -eq 0) { $msg = "$msg $NO_LICENSE_UPSELL" }
+  Die $msg
 }
 
-if (!KEY || !BASE) noLicense();
+if (-not $KEY -or -not $BASE) { NoLicense }
 
-// relay(endpoint, body) -> prints the response body, mapping HTTP status.
-async function relay(endpoint, body) {
-  if (typeof fetch !== "function") {
-    die("This fallback needs Node 18 or newer (global fetch). Ask the user to update Node.js.", 1);
-  }
-  let resp;
+# Invoke-Relay endpoint body -> prints the response body, mapping HTTP status.
+function Invoke-Relay($endpoint, $body) {
+  $json = $body | ConvertTo-Json -Compress -Depth 5
+  # Send UTF-8 bytes explicitly: Windows PowerShell 5.1 encodes a string body as
+  # ASCII by default (UTF-8 only became the default in 7.4), which would corrupt
+  # non-ASCII queries/URLs. A byte[] body is sent verbatim, matching curl.
+  $bytes = [System.Text.Encoding]::UTF8.GetBytes($json)
   try {
-    resp = await fetch(BASE + endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: "Bearer " + KEY,
-        "X-Client-Version": CLIENT_VERSION,
-      },
-      body: JSON.stringify(body),
-    });
+    $resp = Invoke-WebRequest -Uri "$BASE$endpoint" -Method Post -ContentType 'application/json; charset=utf-8' \`
+      -Headers @{ Authorization = "Bearer $KEY"; 'X-Client-Version' = $CLIENT_VERSION } \`
+      -Body $bytes -UseBasicParsing
+    $code = [int]$resp.StatusCode
+    $out = $resp.Content
   } catch {
-    die("Could not reach the Copilot relay. " + RELAY_FAILED_FALLBACK, 1);
+    # A non-2xx makes Invoke-WebRequest throw; recover the response to map status.
+    $r = $null
+    try { $r = $_.Exception.Response } catch {}
+    if (-not $r) { Die "Could not reach the Copilot relay. $RELAY_FAILED_FALLBACK" 1 }
+    $code = [int]$r.StatusCode
+    $reader = New-Object System.IO.StreamReader($r.GetResponseStream())
+    $out = $reader.ReadToEnd()
   }
-  const out = await resp.text();
-  if (resp.status === 401 || resp.status === 403) die(LICENSE_INVALID);
-  if (resp.status >= 200 && resp.status < 300) {
-    process.stdout.write(out + "\\n");
-  } else {
-    die("Request failed (HTTP " + resp.status + "): " + out + ". " + RELAY_FAILED_FALLBACK, 1);
-  }
+  if ($code -eq 401 -or $code -eq 403) { Die $LICENSE_INVALID }
+  elseif ($code -ge 200 -and $code -lt 300) { [Console]::Out.WriteLine($out) }
+  else { Die "Request failed (HTTP $code): $out. $RELAY_FAILED_FALLBACK" 1 }
 }
 `;
 }
 
 /**
- * The SKILL.md "How to run" section shared by every builtin skill. Documents
- * the `sh` → `node` → install-Node fallback chain so the agent never dead-ends
- * on a platform that lacks one runtime. `extraNote` appends a skill-specific
- * sentence (e.g. PDF's "pass an absolute path") before the trailing line.
+ * The Windows `.cmd` entry point each relay skill ships. A bare quoted path is a
+ * string (not a command) in PowerShell, so the agent runs this `.cmd`, which in
+ * turn launches the adjacent `.ps1` with an absolute `powershell.exe` path
+ * (System32 stays on PATH even in the reduced shells where `node` is missing)
+ * and `-ExecutionPolicy Bypass` so an unsigned script still runs. `%~dp0`
+ * resolves the script's own folder, so the `.ps1` is found wherever the skill
+ * dir is symlinked. `%*` forwards every argument verbatim.
+ */
+function cmdLauncher(ps1File: string): string {
+  return `@echo off
+setlocal
+set "PS=%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+if not exist "%PS%" set "PS=powershell"
+"%PS%" -NoProfile -ExecutionPolicy Bypass -File "%~dp0${ps1File}" %*
+exit /b %errorlevel%
+`;
+}
+
+/**
+ * The SKILL.md "How to run" section shared by every builtin skill. Ships one
+ * runnable script per OS — `sh` for macOS/Linux, a `.cmd` wrapper for Windows —
+ * each backed by a runtime that is always present (no Git Bash, no Node), so the
+ * agent never dead-ends on a missing runtime. `extraNote` appends a
+ * skill-specific sentence (e.g. PDF's "pass an absolute path") at the end.
  */
 function howToRunSection(opts: {
   shFile: string;
-  nodeFile: string;
+  cmdFile: string;
   argPlaceholder: string;
   extraNote?: string;
 }): string {
   const dir = "/absolute/path/to/this/skill/directory";
   return `## How to run
 
-Find the absolute path to this SKILL.md file on disk, then run the script that
-sits next to it. Prefer the POSIX shell version:
+Find the absolute path to this SKILL.md file on disk, then run the script next
+to it that matches the operating system. No extra runtime is needed — \`sh\`
+(macOS/Linux) and \`cmd\`/PowerShell (Windows) are always present.
+
+On macOS or Linux:
 
 \`\`\`bash
 sh "${dir}/${opts.shFile}" "${opts.argPlaceholder}"
 \`\`\`
 
-If your platform can't run \`sh\` (for example, Windows without Git Bash), run
-the Node version that sits in the same folder instead:
+On Windows, run the \`.cmd\` wrapper. In PowerShell you must prefix it with the
+call operator \`&\` (PowerShell treats a quoted path on its own as a string and
+won't run it); from cmd, run the quoted path without the \`&\`:
 
-\`\`\`bash
-node "${dir}/${opts.nodeFile}" "${opts.argPlaceholder}"
+\`\`\`powershell
+& "${dir}/${opts.cmdFile}" "${opts.argPlaceholder}"
 \`\`\`
-
-If neither \`sh\` nor \`node\` is available, tell the user to install Node.js
-from https://nodejs.org and run the command again.${opts.extraNote ? ` ${opts.extraNote}` : ""}
-
-Both scripts print the result to stdout.`;
+${opts.extraNote ? `\n${opts.extraNote}\n` : ""}
+Both print the result to stdout.`;
 }
 
 /**
@@ -302,8 +334,9 @@ function relaySkill(opts: {
   scriptFile: string;
 }): BuiltinSkill {
   const [argKey, argPlaceholder] = opts.arg;
-  const nodeScriptFile = opts.scriptFile.replace(/\.sh$/, ".mjs");
-  const version = 4;
+  const cmdFile = opts.scriptFile.replace(/\.sh$/, ".cmd");
+  const ps1File = opts.scriptFile.replace(/\.sh$/, ".ps1");
+  const version = 5;
   return {
     name: opts.name,
     version,
@@ -321,7 +354,7 @@ metadata:
 
 ${opts.intro}
 
-${howToRunSection({ shFile: opts.scriptFile, nodeFile: nodeScriptFile, argPlaceholder })}
+${howToRunSection({ shFile: opts.scriptFile, cmdFile, argPlaceholder })}
 
 ${LICENSE_PROBLEM_SECTION}
 `,
@@ -335,11 +368,15 @@ relay "${opts.endpoint}" "{\\"${argKey}\\":\\"$(json_escape "$ARG")\\",\\"user_i
 `,
       },
       {
-        path: nodeScriptFile,
-        content: `${nodeScriptPreamble()}
-const ARG = process.argv.slice(2).join(" ");
-if (!ARG) die("Usage: node ${nodeScriptFile} <${argKey}>", 1);
-await relay("${opts.endpoint}", { ${argKey}: ARG, user_id: USER_ID });
+        path: cmdFile,
+        content: cmdLauncher(ps1File),
+      },
+      {
+        path: ps1File,
+        content: `${powershellPreamble()}
+$ARG = ($args -join ' ')
+if (-not $ARG) { Die "Usage: ${ps1File} <${argKey}>" 1 }
+Invoke-Relay "${opts.endpoint}" @{ ${argKey} = $ARG; user_id = $USER_ID }
 `,
       },
     ],
@@ -368,7 +405,7 @@ const WEB_FETCH = relaySkill({
   scriptFile: "web-fetch.sh",
 });
 
-const READ_PDF_VERSION = 5;
+const READ_PDF_VERSION = 6;
 const READ_PDF: BuiltinSkill = {
   name: "copilot-read-pdf",
   version: READ_PDF_VERSION,
@@ -389,7 +426,7 @@ summarize, or quote it.
 
 ${howToRunSection({
   shFile: "read-pdf.sh",
-  nodeFile: "read-pdf.mjs",
+  cmdFile: "read-pdf.cmd",
   argPlaceholder: "<path-to-file.pdf>",
   extraNote: "Pass an absolute path to the PDF file.",
 })}
@@ -410,19 +447,22 @@ relay "/pdf4llm" "{\\"pdf\\":\\"$PDF\\",\\"user_id\\":\\"$(json_escape "$USER_ID
 `,
     },
     {
-      path: "read-pdf.mjs",
-      content: `${nodeScriptPreamble()}
-const FILE = process.argv[2] || "";
-if (!FILE) die("Usage: node read-pdf.mjs <path-to-file.pdf>", 1);
-let PDF;
+      path: "read-pdf.cmd",
+      content: cmdLauncher("read-pdf.ps1"),
+    },
+    {
+      path: "read-pdf.ps1",
+      content: `${powershellPreamble()}
+$FILE = if ($args.Count -ge 1) { $args[0] } else { '' }
+if (-not $FILE) { Die "Usage: read-pdf.ps1 <path-to-file.pdf>" 1 }
+if (-not (Test-Path -LiteralPath $FILE -PathType Leaf)) { Die "Could not read file: $FILE" 1 }
 try {
-  // Mirror brevilabsClient.ts pdf4llm: JSON body with base64-encoded pdf field.
-  const { readFileSync } = await import("node:fs");
-  PDF = readFileSync(FILE).toString("base64");
+  # Mirror brevilabsClient.ts pdf4llm: JSON body with base64-encoded pdf field.
+  $PDF = [System.Convert]::ToBase64String([System.IO.File]::ReadAllBytes($FILE))
 } catch {
-  die("Could not read file: " + FILE, 1);
+  Die "Could not read file: $FILE" 1
 }
-await relay("/pdf4llm", { pdf: PDF, user_id: USER_ID });
+Invoke-Relay "/pdf4llm" @{ pdf = $PDF; user_id = $USER_ID }
 `,
     },
   ],

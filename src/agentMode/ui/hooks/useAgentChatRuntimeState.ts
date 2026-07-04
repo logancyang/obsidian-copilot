@@ -1,6 +1,7 @@
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type {
   AgentChatMessage,
+  AgentTodoListEntry,
   AskUserQuestionPrompt,
   CurrentPlan,
   PermissionPrompt,
@@ -19,6 +20,7 @@ export interface AgentChatRuntimeState {
   isStarting: boolean;
   hasPendingPlanPermission: boolean;
   currentPlan: CurrentPlan | null;
+  currentTodoList: AgentTodoListEntry[] | null;
   pendingToolPermissions: PermissionPrompt[];
   pendingAskUserQuestions: AskUserQuestionPrompt[];
 }
@@ -31,6 +33,9 @@ export function useAgentChatRuntimeState(backend: AgentChatBackend): AgentChatRu
   );
   const [currentPlan, setCurrentPlan] = useState<CurrentPlan | null>(() =>
     backend.getCurrentPlan()
+  );
+  const [currentTodoList, setCurrentTodoList] = useState<AgentTodoListEntry[] | null>(() =>
+    backend.getCurrentTodoList()
   );
   const [pendingToolPermissions, setPendingToolPermissions] = useState<PermissionPrompt[]>(() =>
     backend.getPendingToolPermissions()
@@ -59,6 +64,7 @@ export function useAgentChatRuntimeState(backend: AgentChatBackend): AgentChatRu
       setIsStarting(backend.isStarting());
       setHasPendingPlanPermission(backend.hasPendingPlanPermission());
       setCurrentPlan(backend.getCurrentPlan());
+      setCurrentTodoList(backend.getCurrentTodoList());
       setPendingToolPermissions(backend.getPendingToolPermissions());
       setPendingAskUserQuestions(backend.getPendingAskUserQuestions());
     };
@@ -74,6 +80,7 @@ export function useAgentChatRuntimeState(backend: AgentChatBackend): AgentChatRu
     isStarting,
     hasPendingPlanPermission,
     currentPlan,
+    currentTodoList,
     pendingToolPermissions,
     pendingAskUserQuestions,
   };

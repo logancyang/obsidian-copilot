@@ -239,10 +239,12 @@ export function useModelCandidatePool({
     [existingByWireId]
   );
 
-  // Resolved `ModelInfo`s for the selected ids — same precedence the picker
-  // rendered, so what gets persisted matches what the user saw.
+  // Resolved `ModelInfo`s for the selected ids — same catalog → snapshot →
+  // synthesize precedence the picker rendered, so what gets persisted matches
+  // what the user saw. Capabilities ride along on each `ModelInfo` (its
+  // `modalities` / `reasoning`); there's no separate overlay.
   const buildSelectedModelInfos = useCallback(
-    (): ModelInfo[] => [...selectedWireIds].map(resolveModelInfo),
+    (): ModelInfo[] => [...selectedWireIds].map((id) => resolveModelInfo(id)),
     [selectedWireIds, resolveModelInfo]
   );
 

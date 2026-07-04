@@ -13,7 +13,7 @@ jest.mock("@/agentMode/ui/AgentMarkdownText", () => ({
 
 // `insertAtCursor` is a spy (its selection→replace logic is covered by the
 // `insertAtCursor` unit test in utils.test.ts); `cleanMessageForCopy` is a thin
-// stand-in (real sanitization is covered by the `finalAnswerText` unit test) so
+// stand-in (real sanitization is covered by the `agentResponseText` unit test) so
 // the cleaned text the buttons act on is deterministic here.
 jest.mock("@/utils", () => ({
   cleanMessageForCopy: (s: string) => s.trim(),
@@ -105,5 +105,30 @@ describe("AgentTrail copy / insert actions", () => {
     renderTrail({ parts: [{ kind: "tool_call", id: "t1", title: "Read", status: "completed" }] });
     expect(screen.queryByTitle("Copy")).toBeNull();
     expect(screen.queryByTitle("Insert / Replace at cursor")).toBeNull();
+  });
+});
+
+describe("AgentTrail inline trail (no collapse)", () => {
+  beforeEach(() => {
+    (window as unknown as { activeDocument: Document }).activeDocument = window.document;
+  });
+
+  it("renders research inline with no 'Worked for' toggle on a completed research+answer turn", () => {
+    renderTrail({
+      parts: [
+        // Multi-word title with no vendorToolName renders verbatim as the
+        // ActionCard's collapsed line (GENERIC_SUMMARY → genericToolLabel).
+        { kind: "tool_call", id: "t1", title: "Search vault", status: "completed" },
+        text("The final answer."),
+      ],
+      turnStopReason: "end_turn",
+    });
+
+    // The "Worked for X" collapse is gone: the whole trail renders inline.
+    expect(screen.queryByText(/Worked for/i)).toBeNull();
+    // The trailing prose renders as the final answer.
+    expect(screen.getByText("The final answer.")).toBeTruthy();
+    // The research tool card renders inline (not folded behind a toggle).
+    expect(screen.getByText("Search vault")).toBeTruthy();
   });
 });

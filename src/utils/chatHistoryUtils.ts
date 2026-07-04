@@ -237,15 +237,21 @@ export function fileToHistoryItem(
     file.path,
     persistedLastAccessedAtMs ?? createdAt.getTime()
   );
-  const rawBackendId = app.metadataCache.getFileCache(file)?.frontmatter?.backendId;
+  const frontmatter = app.metadataCache.getFileCache(file)?.frontmatter;
+  const rawBackendId = frontmatter?.backendId;
   const backendId =
     typeof rawBackendId === "string" && rawBackendId.trim() ? rawBackendId.trim() : undefined;
+  // Reason: expose the raw frontmatter projectId (undefined when absent). The
+  // GLOBAL_SCOPE default for unscoped chats is applied by the Agent Mode session
+  // layer, keeping this util free of a cross-layer scope import.
+  const projectId = coerceProjectId(frontmatter?.projectId);
   return {
     id: file.path,
     title: extractChatTitle(app, file),
     createdAt,
     lastAccessedAt: new Date(effectiveLastAccessedAtMs),
     backendId,
+    projectId,
   };
 }
 

@@ -3,22 +3,30 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 
-// Shared test key for storageKey tests.
-const TEST_STORAGE_KEY = "test:shelf-tab";
-
 // The tooltip portal targets Obsidian's `activeDocument` global (popout-safe);
 // jsdom has no such global, so point it at the test document.
 beforeAll(() => {
   (window as unknown as { activeDocument: Document }).activeDocument = window.document;
 });
 
-function renderShelf(sections: AgentHomeShelfSection[], storageKey?: string) {
+function renderShelf(
+  sections: AgentHomeShelfSection[],
+  controlled?: { activeSectionId: string | null; onSectionSelect?: (id: string) => void }
+) {
   return render(
     <TooltipProvider>
-      <AgentHomeShelf sections={sections} storageKey={storageKey} />
+      <AgentHomeShelf sections={sections} {...controlled} />
     </TooltipProvider>
   );
 }
+
+const projectsEnabled: AgentHomeShelfSection = {
+  id: "projects",
+  icon: <span />,
+  title: "Projects",
+  count: 5,
+  renderBody: () => <div>PROJECTS BODY</div>,
+};
 
 const chats: AgentHomeShelfSection = {
   id: "chats",
@@ -61,71 +69,50 @@ describe("AgentHomeShelf with a disabled section", () => {
   });
 });
 
-describe("AgentHomeTab count badge", () => {
-  const noCount: AgentHomeShelfSection = {
-    id: "nocnt",
-    icon: <span />,
-    title: "No Count",
-    renderBody: () => <div>NO COUNT BODY</div>,
-  };
-  const zeroCount: AgentHomeShelfSection = {
-    id: "zerocnt",
-    icon: <span />,
-    title: "Zero Count",
-    count: 0,
-    renderBody: () => <div>ZERO COUNT BODY</div>,
-  };
-
-  it("shows no badge when count is undefined", () => {
-    renderShelf([noCount]);
-    const tab = screen.getByRole("tab", { name: /No Count/ });
-    // Only the icon + title text — no numeric suffix.
-    expect(tab.textContent?.trim()).toBe("No Count");
-  });
-
-  it("shows no badge when count is 0", () => {
-    renderShelf([zeroCount]);
-    const tab = screen.getByRole("tab", { name: /Zero Count/ });
-    expect(tab.textContent?.trim()).toBe("Zero Count");
-  });
-
-  it("shows the badge when count is positive", () => {
-    renderShelf([chats]);
-    const tab = screen.getByRole("tab", { name: /Recent Chats/ });
-    expect(tab.textContent).toContain("2");
-  });
-});
-
-describe("AgentHomeShelf storageKey persistence and fallback", () => {
-  const notes: AgentHomeShelfSection = {
-    id: "notes",
-    icon: <span />,
-    title: "Notes",
-    renderBody: () => <div>NOTES BODY</div>,
-  };
-
-  beforeEach(() => {
-    window.localStorage.removeItem(TEST_STORAGE_KEY);
-  });
-
-  it("persists the selected tab id to localStorage on click", () => {
-    renderShelf([chats, notes], TEST_STORAGE_KEY);
-    fireEvent.click(screen.getByRole("tab", { name: /Notes/ }));
-    expect(window.localStorage.getItem(TEST_STORAGE_KEY)).toBe("notes");
-  });
-
-  it("restores the persisted tab on mount", () => {
-    window.localStorage.setItem(TEST_STORAGE_KEY, "notes");
-    renderShelf([chats, notes], TEST_STORAGE_KEY);
-    expect(screen.queryByText("NOTES BODY")).not.toBeNull();
+describe("AgentHomeShelf controlled mode", () => {
+  it("renders the parent-selected section's body", () => {
+    renderShelf([chats, projectsEnabled], { activeSectionId: "projects" });
+    expect(screen.queryByText("PROJECTS BODY")).not.toBeNull();
     expect(screen.queryByText("CHATS BODY")).toBeNull();
   });
 
-  it("falls back to the first selectable tab when the persisted id is absent", () => {
-    // "relevant-notes" was persisted but that section is no longer in the list.
-    window.localStorage.setItem(TEST_STORAGE_KEY, "relevant-notes");
-    renderShelf([chats, notes], TEST_STORAGE_KEY);
+  it("falls back to the first selectable section when nothing is picked yet (null)", () => {
+    renderShelf([chats, projectsEnabled], { activeSectionId: null });
     expect(screen.queryByText("CHATS BODY")).not.toBeNull();
-    expect(screen.queryByText("NOTES BODY")).toBeNull();
+  });
+
+  it("reports clicks via onSectionSelect instead of switching on its own", () => {
+    const onSectionSelect = jest.fn();
+    renderShelf([chats, projectsEnabled], { activeSectionId: "chats", onSectionSelect });
+    fireEvent.click(screen.getByRole("tab", { name: /Projects/ }));
+    expect(onSectionSelect).toHaveBeenCalledWith("projects");
+    // Controlled: the body only changes when the parent updates the prop.
+    expect(screen.queryByText("CHATS BODY")).not.toBeNull();
+    expect(screen.queryByText("PROJECTS BODY")).toBeNull();
+  });
+});
+
+describe("AgentHomeTab count badge (via the shelf)", () => {
+  const withCount = (count?: number): AgentHomeShelfSection => ({
+    id: "chats",
+    icon: <span />,
+    title: "Recent Chats",
+    count,
+    renderBody: () => <div>CHATS BODY</div>,
+  });
+
+  it("shows no badge when count is undefined (e.g. the Relevant Notes tab)", () => {
+    renderShelf([withCount(undefined)]);
+    expect(screen.getByRole("tab", { name: /Recent Chats/ }).textContent ?? "").not.toMatch(/\d/);
+  });
+
+  it("shows no badge when count is 0", () => {
+    renderShelf([withCount(0)]);
+    expect(screen.getByRole("tab", { name: /Recent Chats/ }).textContent ?? "").not.toContain("0");
+  });
+
+  it("shows the badge when count is positive", () => {
+    renderShelf([withCount(3)]);
+    expect(screen.getByRole("tab", { name: /Recent Chats/ }).textContent ?? "").toContain("3");
   });
 });
