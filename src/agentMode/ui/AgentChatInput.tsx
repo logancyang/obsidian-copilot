@@ -94,8 +94,10 @@ interface AgentChatInputProps {
   contextStatusIndicator?: React.ReactNode;
 }
 
-// Stable no-op handlers for ChatInput props that don't apply to Agent Mode
-// (project progress card, vault indexing card).
+// Stable no-op handler for required ChatInput props that don't apply to
+// Agent Mode (project progress card). Optional props with no Agent Mode
+// surface (e.g. showIndexingCard) are omitted instead, so their `&& prop`
+// render guards stay effective.
 const NOOP = () => {};
 
 const dedupeBy = <T,>(items: Iterable<T>, key: (item: T) => string): T[] => {
@@ -557,7 +559,10 @@ export const AgentChatInput = memo(function AgentChatInput({
           agentBrands={agentBrands}
           onMentionedAgentsChange={handleMentionedAgentsChange}
           showProgressCard={NOOP}
-          showIndexingCard={NOOP}
+          // showIndexingCard is deliberately NOT passed: the vault-indexing
+          // chip is not an Agent Mode surface (a NOOP here used to defeat
+          // ChatContextMenu's `&& showIndexingCard` guard and leak a chip
+          // whose click did nothing).
           // No placeholder swap while context is loading, on purpose: loads
           // often clear in ~hundreds of ms, so any transient placeholder (text
           // or color) flickers in and out and reads as a glitch. The status
