@@ -1317,6 +1317,7 @@ describe("AgentSession.create (via start)", () => {
       backend: mock.asBackend,
       cwd: "/vault",
       internalId: "internal-1",
+      composeLaneId: "lane-1",
       backendId: "opencode",
     });
     await session.ready;
@@ -1331,6 +1332,7 @@ describe("AgentSession.create (via start)", () => {
       backend: mock.asBackend,
       cwd: "/vault",
       internalId: "internal-1",
+      composeLaneId: "lane-1",
       backendId: "opencode",
     });
     await session.ready;
@@ -1344,6 +1346,7 @@ describe("AgentSession.create (via start)", () => {
       backend: mock.asBackend,
       cwd: "/vault/Projects/p",
       internalId: "internal-1",
+      composeLaneId: "lane-1",
       backendId: "opencode",
       projectId: "proj-7",
     });
@@ -1360,6 +1363,7 @@ describe("AgentSession.create (via start)", () => {
       backend: mock.asBackend,
       cwd: "/vault",
       internalId: "internal-1",
+      composeLaneId: "lane-1",
       backendId: "opencode",
     });
     await session.ready;
@@ -1375,6 +1379,7 @@ describe("AgentSession.create (via start)", () => {
       backend: mock.asBackend,
       cwd: "/vault/Projects/p",
       internalId: "internal-1",
+      composeLaneId: "lane-1",
       backendId: "opencode",
       projectId: "proj-7",
       contextReady: Promise.resolve({
@@ -1394,6 +1399,7 @@ describe("AgentSession.create (via start)", () => {
       backend: mock.asBackend,
       cwd: "/vault/Projects/p",
       internalId: "internal-1",
+      composeLaneId: "lane-1",
       backendId: "opencode",
       projectId: "proj-7",
       contextReady: Promise.resolve({
@@ -1429,6 +1435,7 @@ describe("AgentSession.create (via start)", () => {
       backend: mock.asBackend,
       cwd: "/vault/Projects/p",
       internalId: "internal-1",
+      composeLaneId: "lane-1",
       backendId: "opencode",
       projectId: "proj-7",
       contextReady: Promise.resolve({
@@ -1461,6 +1468,7 @@ describe("AgentSession.create (via start)", () => {
       backend: mock.asBackend,
       cwd: "/vault",
       internalId: "internal-1",
+      composeLaneId: "lane-1",
       backendId: "opencode",
     });
     await session.ready;
@@ -1480,6 +1488,7 @@ describe("AgentSession.create (via start)", () => {
       backend: mock.asBackend,
       cwd: "/vault/Projects/p",
       internalId: "internal-1",
+      composeLaneId: "lane-1",
       backendId: "opencode",
       projectId: "proj-7",
       contextReady,
@@ -1518,6 +1527,7 @@ describe("AgentSession.create (via start)", () => {
       backend: mock.asBackend,
       cwd: "/vault",
       internalId: "internal-1",
+      composeLaneId: "lane-1",
       backendId: "opencode",
       defaultModelSelection: { baseModelId: "openai/gpt-5", effort: null },
       getDescriptor: () => makeWireOnlyDescriptor(),
@@ -1544,6 +1554,7 @@ describe("AgentSession.create (via start)", () => {
       backend: mock.asBackend,
       cwd: "/vault",
       internalId: "internal-1",
+      composeLaneId: "lane-1",
       backendId: "opencode",
     });
     await session.ready;
@@ -1573,6 +1584,7 @@ describe("AgentSession.create (via start)", () => {
       backend: mock.asBackend,
       cwd: "/vault",
       internalId: "internal-1",
+      composeLaneId: "lane-1",
       backendId: "codex",
     });
     await session.ready;
@@ -1610,6 +1622,7 @@ describe("AgentSession.create (via start)", () => {
       backend: mock.asBackend,
       cwd: "/vault",
       internalId: "internal-1",
+      composeLaneId: "lane-1",
       backendId: "opencode",
       defaultModelSelection: { baseModelId: "openai/gpt-5", effort: null },
       getDescriptor: () => makeWireOnlyDescriptor(),
@@ -1661,6 +1674,7 @@ describe("AgentSession.create (via start)", () => {
       backend: mock.asBackend,
       cwd: "/vault",
       internalId: "internal-1",
+      composeLaneId: "lane-1",
       backendId: "opencode",
       defaultModelSelection: { baseModelId: "big-pickle", effort: null },
       initialCachedState: cachedState,
@@ -1711,6 +1725,7 @@ describe("AgentSession.create (via start)", () => {
       backend: mock.asBackend,
       cwd: "/vault",
       internalId: "internal-1",
+      composeLaneId: "lane-1",
       backendId: "claude",
       defaultModelSelection: { baseModelId: "anthropic/sonnet", effort: "high" },
       // Descriptor whose wire encoding ignores effort (Claude-style).
@@ -1752,6 +1767,7 @@ describe("AgentSession.create (via start)", () => {
       backend: mock.asBackend,
       cwd: "/vault",
       internalId: "internal-1",
+      composeLaneId: "lane-1",
       backendId: "opencode",
       defaultModelSelection: { baseModelId: "openai/gpt-5", effort: null },
       getDescriptor: () => makeWireOnlyDescriptor(),
@@ -1815,6 +1831,7 @@ describe("AgentSession.create (via start)", () => {
       backend: mock.asBackend,
       cwd: "/vault",
       internalId: "internal-1",
+      composeLaneId: "lane-1",
       backendId: "opencode",
       defaultModelSelection: { baseModelId: "openai/gpt-5", effort: "high" },
       getDescriptor: () => makeConfigOptionDescriptor(),
@@ -1871,6 +1888,7 @@ describe("AgentSession.create (via start)", () => {
       backend: mock.asBackend,
       cwd: "/vault",
       internalId: "internal-1",
+      composeLaneId: "lane-1",
       backendId: "opencode",
       // Cleared effort → agent default (null), same model as the stale report.
       defaultModelSelection: { baseModelId: "openai/gpt-5", effort: null },
@@ -2397,6 +2415,7 @@ describe("AgentSession intent capabilities", () => {
       backend: mock.asBackend,
       cwd: "/vault",
       internalId: "internal-1",
+      composeLaneId: "lane-1",
       backendId: "test-backend",
       getDescriptor: () => undefined,
     });

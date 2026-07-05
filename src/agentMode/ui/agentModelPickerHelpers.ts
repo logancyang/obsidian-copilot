@@ -388,14 +388,23 @@ function runCrossBackendPick(
 ): void {
   void (async () => {
     try {
-      // projectId left default (active scope); the transient pick only seeds the model.
-      await manager.createSession(targetBackendId, undefined, { baseModelId, effort });
-      manager.setDefaultBackend(targetBackendId);
+      const seedSelection = { baseModelId, effort };
+      // With an existing tab, swap in place so the replacement inherits the old
+      // session's composer lane (preserving the composer) and takes the same tab
+      // slot; replaceSessionInPlace closes the old session itself. With no old
+      // session (e.g. the empty landing) fall back to a plain seeded create.
       if (oldSessionId) {
-        void manager
-          .closeSession(oldSessionId)
-          .catch((e) => logError("[AgentMode] closeSession of empty tab failed", e));
+        await manager.replaceSessionInPlace(oldSessionId, targetBackendId, {
+          inheritLane: true,
+          seedSelection,
+        });
+      } else {
+        // projectId left default (active scope); the transient pick only seeds the model.
+        await manager.createSession(targetBackendId, undefined, seedSelection);
       }
+      // Keep the default backend in sync so backend-scoped UI (the "/" skill
+      // menu) follows the swap.
+      manager.setDefaultBackend(targetBackendId);
     } catch (err) {
       logError("[AgentMode] cross-backend pick failed", err);
       new Notice(`Failed to start ${targetDescriptor.displayName}. See console for details.`);

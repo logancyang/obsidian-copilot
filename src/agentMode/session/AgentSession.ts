@@ -185,6 +185,13 @@ export interface AgentSessionStartOptions {
   backend: BackendProcess;
   cwd: string;
   internalId: string;
+  /**
+   * Stable identity of the composer lane this session occupies. A replacement
+   * session created by an in-place swap INHERITS the old session's lane id so
+   * the composer keyed by lane survives a cross-backend model pick. Passed in
+   * by the caller (like `internalId`); the session never generates it.
+   */
+  composeLaneId: string;
   backendId: BackendId;
   /**
    * Scope this session belongs to. Immutable like `backendId`; defaults to
@@ -284,6 +291,9 @@ export interface AgentSessionStateOptions {
 export class AgentSession {
   readonly store = new AgentMessageStore();
   readonly internalId: string;
+  // Stable composer-lane identity; inherited across an in-place backend swap so
+  // the lane-keyed composer is preserved (see `AgentSessionStartOptions`).
+  readonly composeLaneId: string;
   readonly backendId: BackendId;
   /** Immutable scope binding ({@link GLOBAL_SCOPE} or a project id). */
   readonly projectId: ProjectScopeId;
@@ -420,6 +430,10 @@ export class AgentSession {
   constructor(opts: AgentSessionStateOptions | AgentSessionStartOptions) {
     this.backend = opts.backend;
     this.internalId = opts.internalId;
+    // Only the start path carries a lane id (a new/replacement composer lane);
+    // adopted/resumed sessions (state options) reuse `internalId` as the lane
+    // since they aren't spawned by an in-place swap.
+    this.composeLaneId = "composeLaneId" in opts ? opts.composeLaneId : opts.internalId;
     this.backendId = opts.backendId;
     this.projectId = opts.projectId ?? GLOBAL_SCOPE;
     this.cwd = opts.cwd ?? null;

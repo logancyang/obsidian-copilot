@@ -1053,7 +1053,8 @@ export class AgentSessionManager {
   async createSession(
     backendId?: BackendId,
     projectId: ProjectScopeId = this.activeProjectId,
-    seedSelection?: ModelSelection
+    seedSelection?: ModelSelection,
+    opts?: { inheritLaneId?: string }
   ): Promise<AgentSession> {
     if (this.disposed) {
       throw new Error("AgentSessionManager has been shut down");
@@ -1141,10 +1142,15 @@ export class AgentSessionManager {
     // (warm or cold) proc at the resolved scope cwd, threading the project
     // scope + context roots; the probe's state still seeds the picker so it
     // doesn't blink while that round-trip is in flight.
+    // A replacement session from an in-place backend swap inherits the old
+    // session's composer lane so the lane-keyed composer survives; a plain
+    // create mints a fresh lane.
+    const composeLaneId = opts?.inheritLaneId ?? uuidv4();
     const session = AgentSession.start({
       backend,
       cwd,
       internalId: uuidv4(),
+      composeLaneId,
       backendId: resolvedId,
       projectId,
       defaultModelSelection: resolvedSeed,
@@ -2236,12 +2242,21 @@ export class AgentSessionManager {
    * jumped to a sibling tab). `backendId` defaults to the same fallback as
    * `createSession`.
    */
-  async replaceSessionInPlace(oldId: string, backendId?: BackendId): Promise<AgentSession> {
+  async replaceSessionInPlace(
+    oldId: string,
+    backendId?: BackendId,
+    opts?: { inheritLane?: boolean; seedSelection?: ModelSelection }
+  ): Promise<AgentSession> {
     const oldIdx = Array.from(this.sessions.keys()).indexOf(oldId);
     // The replacement inherits the REPLACED session's scope, not the active
     // scope (they can differ if the old tab wasn't the active one).
     const replacedProjectId = this.sessions.get(oldId)?.projectId ?? this.activeProjectId;
-    const created = await this.createSession(backendId, replacedProjectId);
+    // A cross-backend model pick hands the replacement the old session's
+    // composer lane so the composer keyed by lane survives the swap.
+    const inheritLaneId = opts?.inheritLane ? this.sessions.get(oldId)?.composeLaneId : undefined;
+    const created = await this.createSession(backendId, replacedProjectId, opts?.seedSelection, {
+      inheritLaneId,
+    });
     if (oldIdx >= 0) {
       this.moveMapEntry(this.sessions, created.internalId, oldIdx);
       this.moveMapEntry(this.chatUIStates, created.internalId, oldIdx);
