@@ -3,8 +3,8 @@ import type { SessionUsage } from "@/agentMode/session/types";
 import { useSessionUsage } from "@/agentMode/ui/hooks/useSessionUsage";
 import { TokenCounter } from "@/components/chat-components/TokenCounter";
 import { Button } from "@/components/ui/button";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Progress } from "@/components/ui/progress";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import * as React from "react";
 
@@ -71,7 +71,7 @@ function ContextRing({ fraction }: { fraction: number }) {
   );
 }
 
-/** Full % ring trigger + a horizontal context-window bar popover. */
+/** Full % ring trigger + a horizontal context-window bar in a hover tooltip. */
 function RingMeter({ usage, contextWindow }: { usage: SessionUsage; contextWindow: number }) {
   // Guard a non-finite `usedTokens` (e.g. NaN from a malformed upstream value)
   // so it can't propagate into the rendered percent or the SVG dashoffset.
@@ -80,51 +80,21 @@ function RingMeter({ usage, contextWindow }: { usage: SessionUsage; contextWindo
   const percent = Math.round(fraction * 100);
   const isWarning = fraction >= WARNING_THRESHOLD;
 
-  // Open on hover/focus rather than click. The short close delay bridges the
-  // gap between trigger and content so moving the pointer onto the card (e.g.
-  // to select a number) doesn't dismiss it.
-  const [open, setOpen] = React.useState(false);
-  const closeTimer = React.useRef<number | null>(null);
-  const cancelClose = React.useCallback(() => {
-    if (closeTimer.current) {
-      window.clearTimeout(closeTimer.current);
-      closeTimer.current = null;
-    }
-  }, []);
-  const openNow = React.useCallback(() => {
-    cancelClose();
-    setOpen(true);
-  }, [cancelClose]);
-  const closeSoon = React.useCallback(() => {
-    cancelClose();
-    closeTimer.current = window.setTimeout(() => setOpen(false), 120);
-  }, [cancelClose]);
-  React.useEffect(() => cancelClose, [cancelClose]);
-
+  // Radix Tooltip handles hover/focus open/close and hoverable content natively,
+  // so no manual open state or close timer is needed.
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
+    <Tooltip>
+      <TooltipTrigger asChild>
         <Button
           variant="ghost2"
           size="icon"
           className={cn(isWarning ? "tw-text-warning" : "tw-text-accent")}
           aria-label="Context usage"
-          onMouseEnter={openNow}
-          onMouseLeave={closeSoon}
-          onFocus={openNow}
-          onBlur={closeSoon}
         >
           <ContextRing fraction={fraction} />
         </Button>
-      </PopoverTrigger>
-      <PopoverContent
-        align="end"
-        side="top"
-        className="tw-w-80"
-        onOpenAutoFocus={(e) => e.preventDefault()}
-        onMouseEnter={openNow}
-        onMouseLeave={closeSoon}
-      >
+      </TooltipTrigger>
+      <TooltipContent align="end" side="top" className="tw-w-80">
         <div className="tw-flex tw-flex-col tw-gap-2">
           <div className="tw-flex tw-items-center tw-justify-between tw-gap-3 tw-text-ui-smaller">
             <span className="tw-whitespace-nowrap tw-text-muted">Context window</span>
@@ -139,8 +109,8 @@ function RingMeter({ usage, contextWindow }: { usage: SessionUsage; contextWindo
           </div>
           <Progress value={percent} className="tw-h-1.5" />
         </div>
-      </PopoverContent>
-    </Popover>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -149,8 +119,8 @@ function RingMeter({ usage, contextWindow }: { usage: SessionUsage; contextWindo
  * icon-sized button that sits alongside the other row controls (no separator of
  * its own). Render ladder from the backend's {@link SessionUsage}:
  *
- *   - a positive `contextWindow` → the % ring popover (percentage, numbers, and
- *     cost live inside the popover);
+ *   - a positive `contextWindow` → the % ring with a hover tooltip (percentage,
+ *     numbers, and cost live inside the tooltip);
  *   - `usedTokens` known but no window → the legacy count-only `TokenCounter`
  *     chip (no cost);
  *   - no usage at all → `null` (renders nothing, so the row shows no control).

@@ -5,7 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { fireEvent, render, screen } from "@testing-library/react";
 import * as React from "react";
 
-// Radix Popover portals into Obsidian's `activeDocument`; jsdom lacks it.
+// Radix Tooltip portals into Obsidian's `activeDocument`; jsdom lacks it.
 beforeAll(() => {
   (window as unknown as { activeDocument: Document }).activeDocument = window.document;
 });
@@ -18,8 +18,18 @@ function makeBackend(usage: SessionUsage | null): AgentChatBackend {
   } as unknown as AgentChatBackend;
 }
 
+/** The meter's tooltip needs a Radix `TooltipProvider` ancestor (the app mounts
+ * one at the chat-view root, alongside the sibling control buttons). */
+function renderMeter(backend: AgentChatBackend) {
+  return render(
+    <TooltipProvider>
+      <AgentContextMeter backend={backend} />
+    </TooltipProvider>
+  );
+}
+
 describe("AgentContextMeter", () => {
-  it("renders the % ring plus popover numbers when contextWindow is known", () => {
+  it("renders the % ring plus tooltip numbers when contextWindow is known", () => {
     const usage: SessionUsage = {
       usedTokens: 50_000,
       contextWindow: 200_000,
@@ -30,21 +40,23 @@ describe("AgentContextMeter", () => {
       costUsd: 0.42,
       updatedAt: 1,
     };
-    render(<AgentContextMeter backend={makeBackend(usage)} />);
+    renderMeter(makeBackend(usage));
 
     // The trigger is an icon-sized button with just the ring (no inline % text).
     const trigger = screen.getByLabelText("Context usage");
     expect(trigger.textContent).not.toContain("25%");
 
-    // The popover opens on hover, not click.
-    fireEvent.mouseEnter(trigger);
+    // The tooltip opens on hover/focus, not click.
+    fireEvent.focus(trigger);
 
-    // Popover: "Context window" label + used / total (percent) on one line.
-    expect(screen.getByText("Context window")).toBeTruthy();
+    // Tooltip: "Context window" label + used / total (percent) on one line.
+    // Radix Tooltip renders the content twice (visible + a visually-hidden a11y
+    // copy), so assert on all matches rather than a single node.
+    expect(screen.getAllByText("Context window").length).toBeGreaterThan(0);
     // 50k / 200k = 25%, formatted with k/M suffixes.
-    expect(screen.getByText("50.0k / 200.0k (25%)")).toBeTruthy();
+    expect(screen.getAllByText("50.0k / 200.0k (25%)").length).toBeGreaterThan(0);
     // Estimated session cost, USD-formatted, on the same line (right edge).
-    expect(screen.getByText("$0.42")).toBeTruthy();
+    expect(screen.getAllByText("$0.42").length).toBeGreaterThan(0);
     // The technical breakdown was intentionally dropped.
     expect(screen.queryByText(/in ·|out ·| cache/)).toBeNull();
   });
@@ -55,16 +67,16 @@ describe("AgentContextMeter", () => {
       contextWindow: 200_000,
       updatedAt: 1,
     };
-    render(<AgentContextMeter backend={makeBackend(usage)} />);
+    renderMeter(makeBackend(usage));
 
     const trigger = screen.getByLabelText("Context usage");
     // The warning accent lives on the trigger itself.
     expect(trigger.className).toContain("tw-text-warning");
     expect(trigger.className).not.toContain("tw-text-accent");
 
-    // 170k / 200k = 85%, surfaced in the popover stats line (opens on hover).
-    fireEvent.mouseEnter(trigger);
-    expect(screen.getByText("170.0k / 200.0k (85%)")).toBeTruthy();
+    // 170k / 200k = 85%, surfaced in the tooltip stats line (opens on focus).
+    fireEvent.focus(trigger);
+    expect(screen.getAllByText("170.0k / 200.0k (85%)").length).toBeGreaterThan(0);
   });
 
   it("stays on the accent color below the warning threshold", () => {
@@ -73,7 +85,7 @@ describe("AgentContextMeter", () => {
       contextWindow: 200_000,
       updatedAt: 1,
     };
-    render(<AgentContextMeter backend={makeBackend(usage)} />);
+    renderMeter(makeBackend(usage));
 
     const trigger = screen.getByLabelText("Context usage");
     expect(trigger.className).toContain("tw-text-accent");
@@ -87,13 +99,8 @@ describe("AgentContextMeter", () => {
       costUsd: 1.23,
       updatedAt: 1,
     };
-    // TokenCounter renders a Radix Tooltip, which the app mounts under a
-    // TooltipProvider at the root; provide one here.
-    const { container } = render(
-      <TooltipProvider>
-        <AgentContextMeter backend={makeBackend(usage)} />
-      </TooltipProvider>
-    );
+    // TokenCounter also renders a Radix Tooltip, so it needs the provider too.
+    const { container } = renderMeter(makeBackend(usage));
 
     // No ring meter — the fallback chip has no "Context usage" trigger.
     expect(screen.queryByLabelText("Context usage")).toBeNull();
