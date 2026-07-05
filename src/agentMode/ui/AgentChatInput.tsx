@@ -48,8 +48,13 @@ import { v4 as uuidv4 } from "uuid";
 
 interface AgentChatInputProps {
   backend: AgentChatBackend;
-  /** Active session's internal id; selects which per-session draft is shown. */
-  sessionId: string;
+  /**
+   * The active tab's compose-lane id. Stable across an in-place session swap
+   * (the replacement inherits the lane), so the editor keys on this rather than
+   * the session id: a swap keeps the same lane and does NOT remount/clear, while
+   * a real tab switch (a different lane) still remounts for per-tab isolation.
+   */
+  composeLaneId: string;
   /**
    * Per-session draft controls, owned by AgentHome (the common owner of the
    * transcript spinner and drop overlay that also read this draft's `loading`
@@ -173,7 +178,7 @@ async function fileToImageBlock(file: File): Promise<PromptContent | null> {
  */
 export const AgentChatInput = memo(function AgentChatInput({
   backend,
-  sessionId,
+  composeLaneId,
   draft,
   app,
   mainAgentId,
@@ -202,7 +207,7 @@ export const AgentChatInput = memo(function AgentChatInput({
   // webTabs at send time below.
   const { activeWebTabForMentions } = useActiveWebTabState();
 
-  const previousSessionIdRef = useRef(sessionId);
+  const previousLaneIdRef = useRef(composeLaneId);
 
   // The `@agent` typeahead group + pills are paid-only. Reactive so a settings
   // change flips the gate live; the authoritative send-time check is separate.
@@ -247,15 +252,17 @@ export const AgentChatInput = memo(function AgentChatInput({
     resetCompose,
   } = draft;
 
-  // Clear cross-session ephemeral state on a session switch: the global
-  // selected-text atom and the mentioned-agent ref (neither is reset by the
-  // editor remount), so a selection or `@agent` pill can't ride into the next session.
+  // Clear cross-tab ephemeral state on a real tab switch (a different compose
+  // lane): the global selected-text atom and the mentioned-agent ref (neither is
+  // reset by the editor remount), so a selection or `@agent` pill can't ride into
+  // the next tab. Keyed on the lane, not the session id, so an in-place swap
+  // (same lane, new session) does NOT clear — the user's selection/pills survive.
   useEffect(() => {
-    if (previousSessionIdRef.current === sessionId) return;
-    previousSessionIdRef.current = sessionId;
+    if (previousLaneIdRef.current === composeLaneId) return;
+    previousLaneIdRef.current = composeLaneId;
     clearSelectedTextContexts();
     mentionedAgentIdsRef.current = [];
-  }, [sessionId]);
+  }, [composeLaneId]);
 
   const handleStopGenerating = useCallback(async () => {
     try {
@@ -497,18 +504,19 @@ export const AgentChatInput = memo(function AgentChatInput({
         }
         aria-disabled={hasPendingPlanPermission || disabled || undefined}
       >
-        {/* Key by session so ChatInput remounts on a tab/session switch. The
-            per-session draft store (input/images/contextNotes/include flags)
-            lives up in AgentHome and is threaded back as controlled props, so
-            those survive the remount — but ChatInput's own internal-only state
-            (contextUrls/contextFolders/contextWebTabs, the @-mention pills, the
-            Lexical editor) is NOT in the draft, and would otherwise bleed from
-            the previous session into a fresh one. The remount restores the
-            per-session isolation the old `key={internalId}` AgentChat gave us.
-            sessionId is stable across the landing→conversation flip (same
-            session), so this never remounts during that transition. */}
+        {/* Key by compose lane so ChatInput remounts on a real tab switch (a
+            different lane). The per-lane draft store (input/images/contextNotes/
+            include flags) lives up in AgentHome and is threaded back as
+            controlled props, so those survive the remount — but ChatInput's own
+            internal-only state (contextUrls/contextFolders/contextWebTabs, the
+            @-mention pills, the Lexical editor) is NOT in the draft, and would
+            otherwise bleed from the previous tab into a fresh one. The remount
+            restores per-tab isolation. An in-place session swap (same lane, new
+            session id) does NOT remount, so those live pills/URLs/folders survive
+            the swap. The lane is also stable across the landing→conversation flip
+            (same session), so that transition never remounts either. */}
         <ChatInput
-          key={sessionId}
+          key={composeLaneId}
           isAgentMode
           inputMessage={inputMessage}
           setInputMessage={setInputMessage}

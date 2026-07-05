@@ -341,23 +341,36 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     if (next.value !== value) onChange(next.value);
   }, [modePickerOverride]);
 
-  // Stable list of live session ids so the draft store's pruning and memo
+  // Stable list of live compose-lane ids so the draft store's pruning and memo
   // don't churn on every manager notify (getSessions() returns a fresh array).
   // The "\0" delimiter (matching useAgentInputDrafts' own signature key) can't
-  // appear in a session id, so distinct id sets always produce distinct keys.
+  // appear in a lane id, so distinct lane sets always produce distinct keys.
+  // Deduped: during an in-place swap the old + new session momentarily share a
+  // lane (the replacement inherits it), and the draft store keys by lane.
   const sessions = manager.getSessions();
-  const liveKey = sessions.map((s) => s.internalId).join("\0");
-  const liveSessionIds = useMemo(() => sessions.map((s) => s.internalId), [liveKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const laneKey = sessions.map((s) => s.composeLaneId).join("\0");
+  const liveLaneIds = useMemo(
+    () => Array.from(new Set(sessions.map((s) => s.composeLaneId))),
+    // sessions is re-derived each render; gate on its stable join key instead.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [laneKey]
+  );
 
-  // Per-session compose drafts live in the shell (the common owner) so the
+  // The active tab's compose lane — the draft store's selection key. Stable
+  // across an in-place swap (the replacement inherits the lane), so a swap
+  // preserves the typed input/pills/queue natively. Falls back to the sessionId
+  // prop before any active session exists (mirrors today's null handling).
+  const activeLaneId = manager.getActiveSession()?.composeLaneId ?? sessionId;
+
+  // Per-lane compose drafts live in the shell (the common owner) so the
   // active turn's `loading` (transcript spinner) and the drop overlay's drag
   // state can be read directly here, instead of being mirrored up from the
   // composer via effect callbacks. The hook returns a referentially stable
   // controls object, so passing it down to the memoized AgentChatInput doesn't
   // re-render the composer on per-token stream updates.
   const draft = useAgentInputDrafts({
-    activeSessionId: sessionId,
-    liveSessionIds,
+    activeLaneId,
+    liveLaneIds,
     defaultIncludeActiveNote: settings.autoAddActiveContentToContext === true,
   });
 
@@ -386,12 +399,12 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   // pattern) so its fresh `initialize()` re-captures the new context — createSession
   // joins the just-started materialization (single-flight by project) on Retry, or
   // re-materializes the updated config on Edit. Guarded on an EMPTY draft so a
-  // refresh never interrupts a draft already in progress. The replace mints a new
-  // session id and prunes the old draft, so to honor "never discard text the user
-  // has started typing" we also migrate any draft typed during the async startup
-  // window onto the new id (the pre-await check can't see those late keystrokes).
-  // Returns whether a swap actually happened (false = guarded no-op), so the
-  // context-source observer advances its baseline only on a real capture.
+  // refresh never interrupts a draft already in progress. The replacement INHERITS
+  // the compose lane, so any draft typed during the async startup window (which the
+  // pre-await check can't see) persists natively — the draft store keys by lane,
+  // not session id, so there's nothing to migrate. Returns whether a swap actually
+  // happened (false = guarded no-op), so the context-source observer advances its
+  // baseline only on a real capture.
   const refreshContextForEmptyLanding = useCallback(async (): Promise<boolean> => {
     const active = manager.getActiveSession();
     if (!active || active.hasUserVisibleMessages()) return false;
@@ -402,8 +415,9 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       draft.queue.length === 0;
     if (!draftEmpty) return false;
     try {
-      const replacement = await manager.replaceSessionInPlace(active.internalId, active.backendId);
-      draft.migrateDraft(active.internalId, replacement.internalId);
+      await manager.replaceSessionInPlace(active.internalId, active.backendId, {
+        inheritLane: true,
+      });
       return true;
     } catch (e) {
       logError("[AgentMode] refresh landing context failed", e);
@@ -489,7 +503,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   // landing open gets a new line) but stable across the stream re-renders within
   // a session, so it doesn't flicker as tokens arrive. sessionId is the
   // intentional re-roll trigger — not read inside the factory, so exhaustive-deps
-  // flags it; the dep is deliberate (same as the liveSessionIds memo above).
+  // flags it; the dep is deliberate (same as the liveLaneIds memo above).
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const greeting = useMemo(() => pickRandomGreeting(), [sessionId]);
 
@@ -689,7 +703,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   const composerNode = (
     <AgentChatInput
       backend={backend}
-      sessionId={sessionId}
+      composeLaneId={activeLaneId}
       draft={draft}
       app={app}
       mainAgentId={mainAgentId}

@@ -86,7 +86,6 @@ const makeDraft = (overrides: Partial<AgentInputDraftControls> = {}): AgentInput
   setIncludeActiveWebTab: jest.fn(),
   setLoading: jest.fn(),
   setQueue: jest.fn(),
-  migrateDraft: jest.fn(),
   resetCompose: jest.fn(),
   ...overrides,
 });
@@ -99,7 +98,7 @@ function renderInput(
   return render(
     <AgentChatInput
       backend={backend}
-      sessionId="session-1"
+      composeLaneId="lane-1"
       draft={draft}
       app={makeApp()}
       mainAgentId={null}

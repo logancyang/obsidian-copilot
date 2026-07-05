@@ -44,9 +44,9 @@ export interface AgentInputDraft {
 }
 
 interface UseAgentInputDraftsArgs {
-  activeSessionId: string;
-  /** Internal ids of all live sessions; drafts for ids not here are pruned. */
-  liveSessionIds: readonly string[];
+  activeLaneId: string;
+  /** Compose-lane ids of all live sessions; drafts for lanes not here are pruned. */
+  liveLaneIds: readonly string[];
   /** Seed for a fresh draft's include-active-note toggle (the user setting). */
   defaultIncludeActiveNote: boolean;
 }
@@ -60,13 +60,6 @@ export interface AgentInputDraftControls extends AgentInputDraft {
   setIncludeActiveWebTab: (include: boolean) => void;
   setLoading: (loading: boolean) => void;
   setQueue: React.Dispatch<React.SetStateAction<QueuedAgentMessage[]>>;
-  /**
-   * Carry a compose draft from a replaced session onto its replacement, so text
-   * typed during an in-place session swap (e.g. the empty-landing context
-   * refresh) survives the old session's pruning. No-op when the source draft is
-   * empty or the target already holds user input. See {@link migrateDraft}.
-   */
-  migrateDraft: (fromSessionId: string, toSessionId: string) => void;
   /** Clear the compose fields after a send; leaves loading/queue untouched. */
   resetCompose: () => void;
 }
@@ -90,66 +83,56 @@ const createDraft = (includeActiveNote: boolean): AgentInputDraft => ({
 const applyArrayState = <T>(value: React.SetStateAction<T[]>, previous: T[]): T[] =>
   typeof value === "function" ? value(previous) : value;
 
-/**
- * Whether a draft carries anything worth preserving across a session swap —
- * any composed text/attachments/queue, or a toggle the user moved off its seed.
- * An untouched draft migrates to nothing, so the swap stays a clean reset.
- */
-const hasDraftPayload = (draft: AgentInputDraft, defaultIncludeActiveNote: boolean): boolean =>
-  draft.input.length > 0 ||
-  draft.images.length > 0 ||
-  draft.contextNotes.length > 0 ||
-  draft.queue.length > 0 ||
-  draft.includeActiveNote !== defaultIncludeActiveNote ||
-  draft.includeActiveWebTab;
-
 export function useAgentInputDrafts({
-  activeSessionId,
-  liveSessionIds,
+  activeLaneId,
+  liveLaneIds,
   defaultIncludeActiveNote,
 }: UseAgentInputDraftsArgs): AgentInputDraftControls {
   const [drafts, setDrafts] = useState<Record<string, AgentInputDraft>>({});
 
-  // Stable key so the prune effect only fires when the set of live sessions
+  // Stable key so the prune effect only fires when the set of live lanes
   // actually changes, not on every parent re-render (the array prop is a
-  // fresh reference each render).
-  const liveKey = liveSessionIds.join("\0");
-  const liveSetRef = useRef<Set<string>>(new Set(liveSessionIds));
+  // fresh reference each render). `liveLaneIds` may briefly contain DUPLICATES
+  // during an in-place swap (old + new session momentarily share one lane);
+  // `new Set(...)` collapses them, so the prune below is duplicate-safe and
+  // order-independent — it only ever tests membership, never uniqueness.
+  const liveKey = liveLaneIds.join("\0");
+  const liveSetRef = useRef<Set<string>>(new Set(liveLaneIds));
 
   useEffect(() => {
-    const live = new Set(liveSessionIds);
+    const live = new Set(liveLaneIds);
     liveSetRef.current = live;
     setDrafts((prev) => {
       let changed = false;
       const next: Record<string, AgentInputDraft> = {};
-      for (const [sessionId, draft] of Object.entries(prev)) {
-        if (live.has(sessionId)) next[sessionId] = draft;
+      for (const [laneId, draft] of Object.entries(prev)) {
+        if (live.has(laneId)) next[laneId] = draft;
         else changed = true;
       }
       return changed ? next : prev;
     });
-    // liveSessionIds is re-derived each render; gate on its stable join key.
+    // liveLaneIds is re-derived each render; gate on its stable join key.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [liveKey]);
 
   const updateDraft = useCallback(
-    (sessionId: string, updater: (draft: AgentInputDraft) => AgentInputDraft) => {
+    (laneId: string, updater: (draft: AgentInputDraft) => AgentInputDraft) => {
       setDrafts((prev) => {
-        // A turn can resolve after its session was closed/replaced; don't let
-        // that late update resurrect a pruned draft.
-        if (!liveSetRef.current.has(sessionId)) return prev;
-        const current = prev[sessionId] ?? createDraft(defaultIncludeActiveNote);
+        // A turn can resolve after its lane went away (session closed with no
+        // replacement); don't let that late update resurrect a pruned draft.
+        if (!liveSetRef.current.has(laneId)) return prev;
+        const current = prev[laneId] ?? createDraft(defaultIncludeActiveNote);
         const next = updater(current);
         if (next === current) return prev;
-        return { ...prev, [sessionId]: next };
+        return { ...prev, [laneId]: next };
       });
     },
     [defaultIncludeActiveNote]
   );
 
   const updateActive = useCallback(
-    (updater: (draft: AgentInputDraft) => AgentInputDraft) => updateDraft(activeSessionId, updater),
-    [activeSessionId, updateDraft]
+    (updater: (draft: AgentInputDraft) => AgentInputDraft) => updateDraft(activeLaneId, updater),
+    [activeLaneId, updateDraft]
   );
 
   const setInput = useCallback(
@@ -197,39 +180,6 @@ export function useAgentInputDrafts({
     [updateActive]
   );
 
-  // Move a draft onto a replacement session id during an in-place swap. Writes
-  // `setDrafts` DIRECTLY (not via `updateDraft`) on purpose: the new id isn't in
-  // `liveSetRef` yet — React hasn't observed the manager's new session list when
-  // the swap resolves — so `updateDraft`'s live-guard would drop the write. The
-  // caller runs this synchronously the moment `replaceSessionInPlace` resolves,
-  // while the old session's `closeSession` is still suspended at `await cancel()`
-  // (it deletes the session only afterwards), so the source draft is still
-  // present here and the prune effect only fires later. `loading` resets — the
-  // replacement starts its own turn.
-  const migrateDraft = useCallback(
-    (fromSessionId: string, toSessionId: string) => {
-      if (fromSessionId === toSessionId) return;
-      setDrafts((prev) => {
-        const source = prev[fromSessionId];
-        if (!source || !hasDraftPayload(source, defaultIncludeActiveNote)) return prev;
-        // Never clobber input the user already started on the replacement.
-        const target = prev[toSessionId];
-        if (target && hasDraftPayload(target, defaultIncludeActiveNote)) return prev;
-        const next = { ...prev };
-        delete next[fromSessionId];
-        next[toSessionId] = {
-          ...source,
-          images: [...source.images],
-          contextNotes: [...source.contextNotes],
-          queue: [...source.queue],
-          loading: false,
-        };
-        return next;
-      });
-    },
-    [defaultIncludeActiveNote]
-  );
-
   // DESIGN NOTE: resetCompose hard-clears includeActiveNote to false after a
   // send, so within one session the active note auto-attaches only to the
   // FIRST message. Two scenarios, only one of which matches the legacy
@@ -263,7 +213,7 @@ export function useAgentInputDrafts({
     [updateActive]
   );
 
-  const active = drafts[activeSessionId];
+  const active = drafts[activeLaneId];
   const fields = useMemo<AgentInputDraft>(
     () =>
       active ?? {
@@ -294,7 +244,6 @@ export function useAgentInputDrafts({
       setIncludeActiveWebTab,
       setLoading,
       setQueue,
-      migrateDraft,
       resetCompose,
     }),
     [
@@ -307,7 +256,6 @@ export function useAgentInputDrafts({
       setIncludeActiveWebTab,
       setLoading,
       setQueue,
-      migrateDraft,
       resetCompose,
     ]
   );
