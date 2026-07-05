@@ -48,5 +48,6 @@ Read the matching guide when your task touches that area — they aren't loaded 
 - Local model support via Ollama / LM Studio.
 - Rate limiting is implemented for all API calls.
 - Message & chat architecture (Repository → Manager → UIState → UI; single `MessageRepository`; per-project isolation) → [`designdocs/MESSAGE_ARCHITECTURE.md`](./designdocs/MESSAGE_ARCHITECTURE.md).
+- A tab's compose lane (`AgentSession.composeLaneId`) is stable across in-place session swaps; the Agent Mode composer keys by lane, while the transcript/token-meter/persistence key by session.
 - Tech debt and known issues → [`designdocs/todo/TECHDEBT.md`](./designdocs/todo/TECHDEBT.md). Current session plan → [`TODO.md`](./TODO.md).
 - Available Tailwind tokens/classes → [`tailwind.config.js`](./tailwind.config.js).

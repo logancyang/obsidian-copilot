@@ -152,6 +152,7 @@ function makeManager(opts: {
   persistDefaultSelection?: jest.Mock;
   createSession?: jest.Mock;
   closeSession?: jest.Mock;
+  replaceSessionInPlace?: jest.Mock;
 }): AgentSessionManager {
   return {
     getCachedBackendState: (id: string) => opts.cachedStateById?.[id] ?? null,
@@ -162,6 +163,7 @@ function makeManager(opts: {
     persistDefaultSelection: opts.persistDefaultSelection ?? jest.fn().mockResolvedValue(undefined),
     createSession: opts.createSession ?? jest.fn().mockResolvedValue(undefined),
     closeSession: opts.closeSession ?? jest.fn().mockResolvedValue(undefined),
+    replaceSessionInPlace: opts.replaceSessionInPlace ?? jest.fn().mockResolvedValue(undefined),
   } as unknown as AgentSessionManager;
 }
 
@@ -612,14 +614,14 @@ describe("buildModelOnChange", () => {
     expect(applySelection).not.toHaveBeenCalled();
   });
 
-  it("cross-backend pick seeds the new session transiently without persisting the default", async () => {
+  it("cross-backend pick swaps the tab in place, seeding transiently without persisting the default", async () => {
     const persistDefaultSelection = jest.fn().mockResolvedValue(undefined);
-    const createSession = jest.fn().mockResolvedValue(undefined);
+    const replaceSessionInPlace = jest.fn().mockResolvedValue(undefined);
     const setDefaultBackend = jest.fn();
     const closeSession = jest.fn().mockResolvedValue(undefined);
     const manager = makeManager({
       persistDefaultSelection,
-      createSession,
+      replaceSessionInPlace,
       setDefaultBackend,
       closeSession,
       // The legacy single-arg path seeds effort from the target's persisted
@@ -632,12 +634,14 @@ describe("buildModelOnChange", () => {
     // Allow the IIFE to run.
     await new Promise((r) => window.setTimeout(r, 0));
     expect(persistDefaultSelection).not.toHaveBeenCalled();
-    expect(createSession).toHaveBeenCalledWith("claude", undefined, {
-      baseModelId: "opus",
-      effort: "low",
+    // With an existing tab the pick swaps in place, inheriting the old session's
+    // composer lane and seeding the model — it does NOT mint+close a new tab.
+    expect(replaceSessionInPlace).toHaveBeenCalledWith("tab-1", "claude", {
+      inheritLane: true,
+      seedSelection: { baseModelId: "opus", effort: "low" },
     });
     expect(setDefaultBackend).toHaveBeenCalledWith("claude");
-    expect(closeSession).toHaveBeenCalledWith("tab-1");
+    expect(closeSession).not.toHaveBeenCalled();
   });
 
   it("ignores entries with no _backendId or unresolvable baseModelId", () => {
