@@ -667,17 +667,17 @@ export class AgentSession {
       : null;
     const originalEffort = originalState.model?.current.effort ?? null;
     if (encoded === originalEncoded && selection.effort === originalEffort) return;
-    // Config-option backends (opencode ≥1.15.13) guard their model switch on
-    // the *current* state, and the optimistic baseModelId seed already shows
-    // the target — which would skip the real switch and strand the backend on
-    // its originally-reported model. Drop the seed first so `applySelection`
-    // sees the true state and issues the switch. setModel-style backends always
-    // issue the round-trip regardless of current, so their optimistic seed can
-    // stand and the picker doesn't blink.
     const configOptionBacked = originalState.model?.apply?.kind === "setConfigOption";
-    if (configOptionBacked) {
-      this.currentState = originalState;
-    }
+    // Drop the optimistic baseModelId seed before delegating to applySelection.
+    // Descriptor applySelection impls may guard their model write on the session's
+    // *current* model (Claude via setModel guards on getState().current; config-
+    // option opencode guards on the current option value). The seed already shows
+    // the target, so without this they'd see "already there" and skip the real
+    // switch, stranding the backend on its startup default. Restoring the true
+    // reported state makes the guard fire; no blink results because no notify
+    // fires between this reset and the confirming setModel below. Guard-less
+    // setModel backends round-trip regardless, so they're unaffected.
+    this.currentState = originalState;
     try {
       // Clearing effort to the agent default on a config-option backend whose
       // process baked a concrete effort: the base already matches, so

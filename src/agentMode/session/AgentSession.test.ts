@@ -2236,6 +2236,42 @@ describe("AgentSession.create (via start)", () => {
     expect(session.getState()?.model?.current.baseModelId).toBe("anthropic/sonnet");
   });
 
+  it("cross-backend seed to a guard-on-current setModel backend still issues the real switch", async () => {
+    // Regression: Claude-style backends guard their setModel on getState().current.
+    // The optimistic display seed already shows the target, so without dropping it
+    // confirmSeededSelection would fool the guard into skipping the real switch,
+    // stranding the backend on its startup default. The seed must be dropped so the
+    // guard sees the true reported model and fires setSessionModel.
+    const mock = makeMockBackend();
+    const reported: BackendState = {
+      model: {
+        current: { baseModelId: "opus", effort: null },
+        apply: { kind: "setModel" },
+        availableModels: [
+          { baseModelId: "opus", name: "Opus", provider: "anthropic", effortOptions: [] },
+          { baseModelId: "sonnet", name: "Sonnet", provider: "anthropic", effortOptions: [] },
+        ],
+      },
+      mode: null,
+    };
+    mock.newSession.mockResolvedValueOnce({ sessionId: "acp-1", state: reported });
+    mock.setSessionModel.mockResolvedValueOnce({
+      model: { ...reported.model!, current: { baseModelId: "sonnet", effort: null } },
+      mode: null,
+    });
+    const session = AgentSession.start({
+      backend: mock.asBackend,
+      cwd: "/vault",
+      internalId: "internal-1",
+      backendId: "claude",
+      defaultModelSelection: { baseModelId: "sonnet", effort: null },
+      getDescriptor: () => makeDescriptorWireWithoutEffort(),
+    });
+    await session.ready;
+    expect(mock.setSessionModel).toHaveBeenCalledWith({ sessionId: "acp-1", modelId: "sonnet" });
+    expect(session.getState()?.model?.current.baseModelId).toBe("sonnet");
+  });
+
   it("seeds config-option opencode effort via the effort option, not the model id", async () => {
     // Regression: a cross-backend pick to config-option opencode (≥1.15.13)
     // must set the bare model on the model config option and the effort on the
