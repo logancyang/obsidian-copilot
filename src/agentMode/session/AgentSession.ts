@@ -400,6 +400,12 @@ export class AgentSession {
    * `setSession*` responses.
    */
   private currentState: BackendState | null = null;
+  /**
+   * The model base id the user/seed last explicitly applied via setModel /
+   * setConfigOption. Used to reject a stale `state_changed` push that would
+   * silently revert it (these backends never self-switch the model).
+   */
+  private lastAppliedModelBaseId: string | null = null;
   private label: string | null = null;
   // Tracks who set the current label so an agent-pushed `session_info_update`
   // can't clobber a label the user explicitly chose via Rename.
@@ -617,7 +623,37 @@ export class AgentSession {
       modelId,
     });
     this.currentState = next;
+    this.rememberAppliedModel(next);
     this.notifyModelChanged();
+  }
+
+  /** Record the model just applied so a stale backend push can't revert it. */
+  private rememberAppliedModel(state: BackendState): void {
+    const base = state.model?.current.baseModelId;
+    if (base) this.lastAppliedModelBaseId = base;
+  }
+
+  /**
+   * A `state_changed` push must not silently revert the user's just-applied
+   * model. opencode broadcasts config_option_update notifications (synthesized
+   * into state_changed by the ACP layer) that can race a model switch and carry
+   * the pre-switch default. These backends never self-switch the model, so when
+   * an incoming state regresses the model away from the last applied selection —
+   * and the backend still offers that model — keep it. Every other dimension
+   * (effort, mode, availableModels) stays authoritative.
+   */
+  private reconcileAppliedModel(incoming: BackendState): BackendState {
+    const applied = this.lastAppliedModelBaseId;
+    if (applied === null || !incoming.model) return incoming;
+    if (incoming.model.current.baseModelId === applied) return incoming;
+    if (!incoming.model.availableModels.some((m) => m.baseModelId === applied)) return incoming;
+    return {
+      ...incoming,
+      model: {
+        ...incoming.model,
+        current: { ...incoming.model.current, baseModelId: applied },
+      },
+    };
   }
 
   /**
@@ -710,6 +746,7 @@ export class AgentSession {
       value,
     });
     this.currentState = next;
+    this.rememberAppliedModel(next);
     this.notifyModelChanged();
     this.clearCurrentPlanIfModeLeft();
   }
@@ -1739,7 +1776,7 @@ export class AgentSession {
       return;
     }
     if (update.sessionUpdate === "state_changed") {
-      this.currentState = update.state;
+      this.currentState = this.reconcileAppliedModel(update.state);
       this.notifyModelChanged();
       this.clearCurrentPlanIfModeLeft();
       return;

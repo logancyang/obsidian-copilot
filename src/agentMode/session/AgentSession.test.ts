@@ -2272,6 +2272,87 @@ describe("AgentSession.create (via start)", () => {
     expect(session.getState()?.model?.current.baseModelId).toBe("sonnet");
   });
 
+  it("keeps the user-applied model when a late state_changed would revert it", async () => {
+    // Regression: opencode's config_option_update broadcasts (synthesized into
+    // state_changed) can race a switch and carry the pre-switch default; the old
+    // unconditional overwrite clobbered the user's pick back to the default.
+    const mock = makeMockBackend();
+    const reported: BackendState = {
+      model: {
+        current: { baseModelId: "gpt-5", effort: null },
+        apply: { kind: "setModel" },
+        availableModels: [
+          { baseModelId: "gpt-5", name: "GPT-5", provider: "openai", effortOptions: [] },
+          { baseModelId: "sonnet", name: "Sonnet", provider: "anthropic", effortOptions: [] },
+        ],
+      },
+      mode: null,
+    };
+    const switched: BackendState = {
+      model: { ...reported.model!, current: { baseModelId: "sonnet", effort: null } },
+      mode: null,
+    };
+    mock.newSession.mockResolvedValueOnce({ sessionId: "acp-1", state: reported });
+    mock.setSessionModel.mockResolvedValueOnce(switched);
+    const session = AgentSession.start({
+      backend: mock.asBackend,
+      cwd: "/vault",
+      internalId: "internal-1",
+      backendId: "opencode",
+      defaultModelSelection: { baseModelId: "sonnet", effort: null },
+      getDescriptor: () => makeWireOnlyDescriptor(),
+    });
+    await session.ready;
+    expect(session.getState()?.model?.current.baseModelId).toBe("sonnet");
+    mock.emit({ sessionId: "acp-1", update: { sessionUpdate: "state_changed", state: reported } });
+    expect(session.getState()?.model?.current.baseModelId).toBe("sonnet");
+  });
+
+  it("honors a state_changed that keeps the applied model but changes effort", async () => {
+    const mock = makeMockBackend();
+    const reported: BackendState = {
+      model: {
+        current: { baseModelId: "gpt-5", effort: null },
+        apply: { kind: "setModel" },
+        availableModels: [
+          { baseModelId: "gpt-5", name: "GPT-5", provider: "openai", effortOptions: [] },
+          {
+            baseModelId: "sonnet",
+            name: "Sonnet",
+            provider: "anthropic",
+            effortOptions: [{ value: "high", label: "High" }],
+          },
+        ],
+      },
+      mode: null,
+    };
+    const switched: BackendState = {
+      model: { ...reported.model!, current: { baseModelId: "sonnet", effort: null } },
+      mode: null,
+    };
+    mock.newSession.mockResolvedValueOnce({ sessionId: "acp-1", state: reported });
+    mock.setSessionModel.mockResolvedValueOnce(switched);
+    const session = AgentSession.start({
+      backend: mock.asBackend,
+      cwd: "/vault",
+      internalId: "internal-1",
+      backendId: "opencode",
+      defaultModelSelection: { baseModelId: "sonnet", effort: null },
+      getDescriptor: () => makeWireOnlyDescriptor(),
+    });
+    await session.ready;
+    const withEffort: BackendState = {
+      model: { ...switched.model!, current: { baseModelId: "sonnet", effort: "high" } },
+      mode: null,
+    };
+    mock.emit({
+      sessionId: "acp-1",
+      update: { sessionUpdate: "state_changed", state: withEffort },
+    });
+    expect(session.getState()?.model?.current.baseModelId).toBe("sonnet");
+    expect(session.getState()?.model?.current.effort).toBe("high");
+  });
+
   it("seeds config-option opencode effort via the effort option, not the model id", async () => {
     // Regression: a cross-backend pick to config-option opencode (≥1.15.13)
     // must set the bare model on the model config option and the effort on the
