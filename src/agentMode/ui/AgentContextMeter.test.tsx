@@ -37,7 +37,6 @@ describe("AgentContextMeter", () => {
       outputTokens: 8_000,
       cacheReadTokens: 1_500,
       cacheWriteTokens: 500,
-      costUsd: 0.42,
       updatedAt: 1,
     };
     renderMeter(makeBackend(usage));
@@ -55,8 +54,6 @@ describe("AgentContextMeter", () => {
     expect(screen.getAllByText("Context window").length).toBeGreaterThan(0);
     // 50k / 200k = 25%, formatted with k/M suffixes.
     expect(screen.getAllByText("50.0k / 200.0k (25%)").length).toBeGreaterThan(0);
-    // Estimated session cost, USD-formatted, on the same line (right edge).
-    expect(screen.getAllByText("$0.42").length).toBeGreaterThan(0);
     // The technical breakdown was intentionally dropped.
     expect(screen.queryByText(/in ·|out ·| cache/)).toBeNull();
   });
@@ -92,11 +89,10 @@ describe("AgentContextMeter", () => {
     expect(trigger.className).not.toContain("tw-text-warning");
   });
 
-  it("falls back to the count-only TokenCounter (no cost) when there is no contextWindow", () => {
+  it("falls back to the count-only TokenCounter when there is no contextWindow", () => {
     const usage: SessionUsage = {
       usedTokens: 12_000,
       inputTokens: 10_000,
-      costUsd: 1.23,
       updatedAt: 1,
     };
     // TokenCounter also renders a Radix Tooltip, so it needs the provider too.
@@ -106,8 +102,6 @@ describe("AgentContextMeter", () => {
     expect(screen.queryByLabelText("Context usage")).toBeNull();
     // TokenCounter shows the rounded-thousands chip.
     expect(container.textContent).toContain("12k");
-    // Fallback must NOT surface a cost, even though costUsd is present.
-    expect(container.textContent).not.toContain("$1.23");
   });
 
   it("renders nothing (no separator) when usage is null", () => {

@@ -507,7 +507,6 @@ export interface SessionUsage {
   outputTokens?: number;
   cacheReadTokens?: number;
   cacheWriteTokens?: number;
-  costUsd?: number;
   updatedAt: number;
 }
 

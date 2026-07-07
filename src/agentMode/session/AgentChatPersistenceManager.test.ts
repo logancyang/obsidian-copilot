@@ -301,7 +301,6 @@ describe("AgentChatPersistenceManager", () => {
         outputTokens: 20,
         cacheReadTokens: 5000,
         cacheWriteTokens: 300,
-        costUsd: 0.42,
         updatedAt: 1_700_000_000_000,
       };
       const saved = await manager.saveSession(messages, "claude", { usage });

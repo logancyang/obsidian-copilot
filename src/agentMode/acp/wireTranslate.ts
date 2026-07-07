@@ -415,7 +415,6 @@ function acpUpdateToSessionUpdate(update: SessionNotification["update"]): Sessio
         usage: {
           usedTokens: usage.used,
           contextWindow: usage.size,
-          costUsd: usage.cost?.amount,
           updatedAt: Date.now(),
         },
       };

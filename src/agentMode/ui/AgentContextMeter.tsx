@@ -26,17 +26,6 @@ function formatTokens(count: number): string {
   return count.toLocaleString();
 }
 
-/** Session cost as USD; sub-cent values keep more precision so they read as non-zero. */
-function formatUsd(costUsd: number): string {
-  const fractionDigits = costUsd > 0 && costUsd < 0.01 ? 4 : 2;
-  return costUsd.toLocaleString(undefined, {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: fractionDigits,
-    maximumFractionDigits: fractionDigits,
-  });
-}
-
 /** SVG donut whose arc fills to `fraction` (0–1). Color comes from `currentColor`. */
 function ContextRing({ fraction }: { fraction: number }) {
   const dashOffset = RING_CIRCUMFERENCE * (1 - fraction);
@@ -98,14 +87,11 @@ function RingMeter({ usage, contextWindow }: { usage: SessionUsage; contextWindo
         <div className="tw-flex tw-flex-col tw-gap-2">
           <div className="tw-flex tw-items-center tw-justify-between tw-gap-3 tw-text-ui-smaller">
             <span className="tw-whitespace-nowrap tw-text-muted">Context window</span>
-            <div className="tw-flex tw-items-center tw-gap-2 tw-whitespace-nowrap tw-tabular-nums">
-              <span className={cn(isWarning && "tw-text-warning")}>
-                {formatTokens(used)} / {formatTokens(contextWindow)} ({percent}%)
-              </span>
-              {usage.costUsd !== undefined && (
-                <span className="tw-text-muted">{formatUsd(usage.costUsd)}</span>
-              )}
-            </div>
+            <span
+              className={cn("tw-whitespace-nowrap tw-tabular-nums", isWarning && "tw-text-warning")}
+            >
+              {formatTokens(used)} / {formatTokens(contextWindow)} ({percent}%)
+            </span>
           </div>
           <Progress value={percent} className="tw-h-1.5" />
         </div>
@@ -119,10 +105,10 @@ function RingMeter({ usage, contextWindow }: { usage: SessionUsage; contextWindo
  * icon-sized button that sits alongside the other row controls (no separator of
  * its own). Render ladder from the backend's {@link SessionUsage}:
  *
- *   - a positive `contextWindow` → the % ring with a hover tooltip (percentage,
- *     numbers, and cost live inside the tooltip);
+ *   - a positive `contextWindow` → the % ring with a hover tooltip (the
+ *     percentage and token numbers live inside the tooltip);
  *   - `usedTokens` known but no window → the legacy count-only `TokenCounter`
- *     chip (no cost);
+ *     chip;
  *   - no usage at all → `null` (renders nothing, so the row shows no control).
  */
 export default function AgentContextMeter({ backend }: AgentContextMeterProps) {

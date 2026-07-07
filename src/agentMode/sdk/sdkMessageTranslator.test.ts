@@ -202,7 +202,6 @@ describe("translateSdkMessage", () => {
           output_tokens: 130,
         },
         modelUsage: { "claude-test": { contextWindow: 200_000 } },
-        total_cost_usd: 0.42,
       }),
       SESSION_ID,
       state
@@ -214,7 +213,6 @@ describe("translateSdkMessage", () => {
     // 300 + 10_050 + 10_000 + 130 = 20_480.
     expect(usage.usedTokens).toBe(10_330);
     expect(usage.contextWindow).toBe(200_000);
-    expect(usage.costUsd).toBe(0.42);
   });
 
   it("uses the active model's context window, not the largest in a multi-model turn", () => {
@@ -1005,7 +1003,6 @@ describe("translateSdkMessage — result → usage_update", () => {
           "claude-opus-4-8[1m]": { contextWindow: 1_000_000 },
           "claude-haiku-4-5-20251001": { contextWindow: 200_000 },
         },
-        total_cost_usd: 0.42,
       }),
       SESSION_ID,
       state
@@ -1022,7 +1019,6 @@ describe("translateSdkMessage — result → usage_update", () => {
             outputTokens: 20,
             cacheReadTokens: 5000,
             cacheWriteTokens: 300,
-            costUsd: 0.42,
             updatedAt: FIXED_NOW,
           },
         },

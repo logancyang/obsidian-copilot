@@ -110,8 +110,7 @@ export function translateSdkMessage(
  * window would peg the meter to 100% after a tool-heavy turn even when the live
  * context still fits. We instead report the last top-level assistant message's
  * own per-call usage ({@link TranslatorState.lastAssistantUsage}) as occupancy,
- * paired with THAT model's window from `modelUsage`. `total_cost_usd` stays as
- * the cumulative session cost — that figure is legitimately a running total.
+ * paired with THAT model's window from `modelUsage`.
  */
 function translateResultMessage(
   msg: SDKResultMessage,
@@ -130,7 +129,6 @@ function translateResultMessage(
     outputTokens: sample.outputTokens,
     cacheReadTokens: sample.cacheReadTokens,
     cacheWriteTokens: sample.cacheWriteTokens,
-    costUsd: msg.total_cost_usd,
     updatedAt: Date.now(),
   };
   return [event(sessionId, { sessionUpdate: "usage_update", usage: sessionUsage })];

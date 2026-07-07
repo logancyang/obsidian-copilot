@@ -192,12 +192,13 @@ describe("acpNotificationToEvents — usage_update → SessionUsage", () => {
   });
   afterEach(() => nowSpy.mockRestore());
 
-  it("maps size→contextWindow, used→usedTokens, cost.amount→costUsd", () => {
+  it("maps size→contextWindow and used→usedTokens, ignoring any cost", () => {
     const events = acpNotificationToEvents(
       notification({
         sessionUpdate: "usage_update",
         size: 200_000,
         used: 42_000,
+        // cost is no longer part of the usage model — it must be dropped.
         cost: { amount: 0.1234, currency: "USD" },
       })
     );
@@ -208,22 +209,6 @@ describe("acpNotificationToEvents — usage_update → SessionUsage", () => {
       usage: {
         usedTokens: 42_000,
         contextWindow: 200_000,
-        costUsd: 0.1234,
-        updatedAt: FIXED_NOW,
-      },
-    });
-  });
-
-  it("leaves costUsd undefined when the update carries no cost", () => {
-    const events = acpNotificationToEvents(
-      notification({ sessionUpdate: "usage_update", size: 128_000, used: 1_000 })
-    );
-    expect(events[0].update).toEqual({
-      sessionUpdate: "usage_update",
-      usage: {
-        usedTokens: 1_000,
-        contextWindow: 128_000,
-        costUsd: undefined,
         updatedAt: FIXED_NOW,
       },
     });
