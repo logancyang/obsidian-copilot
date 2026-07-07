@@ -3,6 +3,7 @@ import { attachChatViewLayoutObservers } from "@/components/chat-components/atta
 import { CHAT_AGENT_VIEWTYPE, COPILOT_AGENT_ICON_ID } from "@/constants";
 import { ChatViewEventTarget, EventTargetContext } from "@/context";
 import CopilotPlugin from "@/main";
+import { registerActiveLeafChangeBridge } from "@/utils/registerActiveLeafChangeBridge";
 import { mountPluginViewRoot, type PluginViewRootHandle } from "@/utils/react/mountPluginViewRoot";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { ItemView, WorkspaceLeaf } from "obsidian";
@@ -45,6 +46,8 @@ export default class CopilotAgentView extends ItemView {
 
     const observers = attachChatViewLayoutObservers(this.containerEl);
     this.disposeLayoutObservers = observers.dispose;
+
+    registerActiveLeafChangeBridge(this, this.eventTarget);
 
     this.registerEvent(
       this.app.workspace.on("layout-change", () => {
