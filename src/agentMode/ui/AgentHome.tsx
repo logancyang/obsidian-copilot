@@ -13,14 +13,7 @@ import { AgentWelcomeCard } from "@/agentMode/ui/AgentWelcomeCard";
 import { CopilotBrandIcon } from "@/agentMode/ui/CopilotBrandIcon";
 import { AgentHomeShelf, type AgentHomeShelfSection } from "@/agentMode/ui/AgentHomeShelf";
 import { GlobalRecentChatsSection } from "@/agentMode/ui/GlobalRecentChatsSection";
-import {
-  getHomeShelfTab,
-  setHomeShelfTab,
-  HOME_SHELF_TAB_STORAGE_KEY,
-} from "@/agentMode/ui/homeShelfPrefs";
 import { ProjectPickerList } from "@/agentMode/ui/ProjectPickerList";
-import { RelevantNotesShelfPanel } from "@/agentMode/ui/RelevantNotesShelfPanel";
-import { useRelevantNotesPaneOpen } from "@/agentMode/ui/useRelevantNotesPaneOpen";
 import { useAgentChatRuntimeState } from "@/agentMode/ui/hooks/useAgentChatRuntimeState";
 import { useAgentHistoryControls } from "@/agentMode/ui/hooks/useAgentHistoryControls";
 import { useAgentInputDrafts } from "@/agentMode/ui/hooks/useAgentInputDrafts";
@@ -51,7 +44,7 @@ import { getProjectLandingCaptureSignature } from "@/projects/projectContextSign
 import { getCachedProjectRecordById, useProjects } from "@/projects/state";
 import { getSettings, settingsStore, updateSetting, useSettingsValue } from "@/settings/model";
 import { useAtomValue } from "jotai";
-import { FileSearch, Files, Folder, MessageSquare } from "lucide-react";
+import { Files, Folder, MessageSquare } from "lucide-react";
 import { Notice } from "obsidian";
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
@@ -92,7 +85,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   const settings = useSettingsValue();
   const eventTarget = useContext(EventTargetContext);
   const chatInput = useChatInput();
-  const isRelevantNotesPaneOpen = useRelevantNotesPaneOpen(app);
 
   // Place the caret in the composer when the agent view opens so the user can
   // type immediately. AgentHome only mounts once preload settles and a session
@@ -515,17 +507,9 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   // instance-level UI memory: wherever the user left the global shelf, they
   // return to it (entering a project from the Projects tab and backing out
   // lands on Projects again instead of snapping to Recent Chats). AgentHome
-  // stays mounted across those switches, so the state survives. On top of that
-  // in-instance memory we seed from (and write back to) device-local storage so
-  // the choice also survives a full remount / reload. null = nothing picked yet
-  // → the shelf resolves to its first selectable tab.
-  const [globalShelfTab, setGlobalShelfTabState] = useState<string | null>(() =>
-    getHomeShelfTab(HOME_SHELF_TAB_STORAGE_KEY)
-  );
-  const setGlobalShelfTab = useCallback((id: string) => {
-    setGlobalShelfTabState(id);
-    setHomeShelfTab(HOME_SHELF_TAB_STORAGE_KEY, id);
-  }, []);
+  // stays mounted across those switches, so the state survives. null = nothing
+  // picked yet → the shelf resolves to its first selectable tab.
+  const [globalShelfTab, setGlobalShelfTab] = useState<string | null>(null);
 
   // Chip-shelf sections for the landing. Each body renders lazily (only the open
   // section is mounted), so these render closures are cheap to recreate.
@@ -549,23 +533,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
           />
         ),
       },
-      // Hidden while the dedicated Relevant Notes pane is open, so the shelf
-      // doesn't duplicate a surface the user already has pinned alongside chat.
-      ...(isRelevantNotesPaneOpen
-        ? []
-        : [
-            {
-              id: "relevant-notes",
-              icon: <FileSearch className="tw-size-4" />,
-              title: "Relevant Notes",
-              renderBody: () => (
-                <RelevantNotesShelfPanel
-                  onPopOut={() => void plugin.activateRelevantNotesView()}
-                  onAddToChat={(text) => void plugin.insertTextIntoActiveChat(text)}
-                />
-              ),
-            },
-          ]),
       {
         id: "projects",
         icon: <Folder className="tw-size-4" />,
@@ -598,8 +565,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       handleLoadChatHistory,
       runningChatIds,
       attentionChatIds,
-      isRelevantNotesPaneOpen,
-      plugin,
     ]
   );
 

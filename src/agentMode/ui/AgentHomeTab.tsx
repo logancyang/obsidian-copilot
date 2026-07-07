@@ -9,7 +9,7 @@ interface AgentHomeTabProps {
   /** Leading type icon (sized by the caller, typically `tw-size-4`). */
   icon: React.ReactNode;
   title: string;
-  count?: number;
+  count: number;
   /** Whether this tab is the selected one. */
   active: boolean;
   onClick: () => void;
@@ -68,7 +68,7 @@ export const AgentHomeTab = memo(function AgentHomeTab({
     >
       <span className="tw-flex tw-shrink-0 tw-items-center tw-text-muted">{icon}</span>
       <span>{title}</span>
-      {!disabled && typeof count === "number" && count > 0 && (
+      {!disabled && (
         <span className={cn("tw-text-ui-smaller", active ? "tw-text-muted" : "tw-text-faint")}>
           {count}
         </span>
