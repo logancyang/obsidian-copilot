@@ -91,28 +91,3 @@ describe("AgentHomeShelf controlled mode", () => {
     expect(screen.queryByText("PROJECTS BODY")).toBeNull();
   });
 });
-
-describe("AgentHomeTab count badge (via the shelf)", () => {
-  const withCount = (count?: number): AgentHomeShelfSection => ({
-    id: "chats",
-    icon: <span />,
-    title: "Recent Chats",
-    count,
-    renderBody: () => <div>CHATS BODY</div>,
-  });
-
-  it("shows no badge when count is undefined (e.g. the Relevant Notes tab)", () => {
-    renderShelf([withCount(undefined)]);
-    expect(screen.getByRole("tab", { name: /Recent Chats/ }).textContent ?? "").not.toMatch(/\d/);
-  });
-
-  it("shows no badge when count is 0", () => {
-    renderShelf([withCount(0)]);
-    expect(screen.getByRole("tab", { name: /Recent Chats/ }).textContent ?? "").not.toContain("0");
-  });
-
-  it("shows the badge when count is positive", () => {
-    renderShelf([withCount(3)]);
-    expect(screen.getByRole("tab", { name: /Recent Chats/ }).textContent ?? "").toContain("3");
-  });
-});

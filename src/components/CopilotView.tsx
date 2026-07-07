@@ -4,7 +4,6 @@ import { CHAT_VIEWTYPE } from "@/constants";
 import { ChatViewEventTarget, EventTargetContext } from "@/context";
 import CopilotPlugin from "@/main";
 import { FileParserManager } from "@/tools/FileParserManager";
-import { registerActiveLeafChangeBridge } from "@/utils/registerActiveLeafChangeBridge";
 import { mountPluginViewRoot, type PluginViewRootHandle } from "@/utils/react/mountPluginViewRoot";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { ItemView, Platform, WorkspaceLeaf } from "obsidian";
@@ -56,8 +55,6 @@ export default class CopilotView extends ItemView {
     this.viewRoot = mountPluginViewRoot(this.containerEl, this.app, () => this.renderTree());
     this.setupMobileKeyboardObserver();
     this.setupDrawerHideObserver();
-
-    registerActiveLeafChangeBridge(this, this.eventTarget);
 
     // Reason: The view can move between containers (e.g. editor tab → drawer)
     // without onOpen firing again. Re-bind the drawer observer on layout changes

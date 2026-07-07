@@ -18,8 +18,7 @@ export interface AgentHomeShelfSection {
   /** Leading type icon for the tab. */
   icon: React.ReactNode;
   title: string;
-  /** Optional tally shown next to the title; the badge renders only when > 0. */
-  count?: number;
+  count: number;
   /** Rendered into the panel while this tab is the selected one. */
   renderBody: () => React.ReactNode;
   /**

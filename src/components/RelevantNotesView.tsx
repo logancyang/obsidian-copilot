@@ -1,10 +1,9 @@
 import { RelevantNotes } from "@/components/chat-components/RelevantNotes";
-import { RELEVANT_NOTES_VIEWTYPE } from "@/constants";
+import { EVENT_NAMES, RELEVANT_NOTES_VIEWTYPE } from "@/constants";
 import { EventTargetContext } from "@/context";
 import CopilotPlugin from "@/main";
 import { createPluginRoot } from "@/utils/react/createPluginRoot";
-import { registerActiveLeafChangeBridge } from "@/utils/registerActiveLeafChangeBridge";
-import { ItemView, WorkspaceLeaf } from "obsidian";
+import { ItemView, MarkdownView, WorkspaceLeaf } from "obsidian";
 import * as React from "react";
 import { Root } from "react-dom/client";
 
@@ -13,9 +12,9 @@ import { Root } from "react-dom/client";
  *
  * `RelevantNotes` reads the active file via `useActiveFile`, which seeds from
  * the current active file on mount and then updates on the `ACTIVE_LEAF_CHANGE`
- * event on this view's own `eventTarget`. This view bridges that event itself
- * via `registerActiveLeafChangeBridge` since no other component feeds its
- * `eventTarget`.
+ * event on this view's own `eventTarget`. The plugin's global handler dispatches
+ * that event only to the legacy chat view, so this view feeds its own
+ * `eventTarget` (mirroring that handler's condition) on subsequent leaf changes.
  */
 export default class RelevantNotesView extends ItemView {
   private root: Root | null = null;
@@ -50,7 +49,13 @@ export default class RelevantNotesView extends ItemView {
     this.root = createPluginRoot(this.containerEl.children[1], this.app);
     this.renderView();
 
-    registerActiveLeafChangeBridge(this, this.eventTarget);
+    this.registerEvent(
+      this.app.workspace.on("active-leaf-change", (leaf) => {
+        if (leaf?.view instanceof MarkdownView && leaf.view.file) {
+          this.eventTarget.dispatchEvent(new CustomEvent(EVENT_NAMES.ACTIVE_LEAF_CHANGE));
+        }
+      })
+    );
   }
 
   private renderView(): void {
