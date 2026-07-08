@@ -145,6 +145,13 @@ export class AcpBackendProcess implements BackendProcess {
   // its sessions, so a bare Set would leak ids across sessions and grow
   // unbounded for the process lifetime. Pruned on session teardown + shutdown.
   private readonly todoToolCallIdsBySession = new Map<SessionId, Set<string>>();
+  // Sessions that pushed at least one live `usage_update` notification. Its
+  // `used` is current context occupancy; the prompt-result `usage.totalTokens`
+  // is a cumulative session total. Once a live update has been seen we suppress
+  // the coarser prompt-result fallback so it can't overwrite occupancy with the
+  // cumulative figure. Keyed by session like the other per-session maps; pruned
+  // on session teardown + shutdown.
+  private readonly sawLiveUsage = new Set<SessionId>();
 
   constructor(
     private readonly app: App,
@@ -186,6 +193,7 @@ export class AcpBackendProcess implements BackendProcess {
       this.pendingUpdates.clear();
       this.sessionWireState.clear();
       this.todoToolCallIdsBySession.clear();
+      this.sawLiveUsage.clear();
       this.permissionPrompter = null;
       this.capabilities.clear();
       for (const fn of this.exitListeners) {
@@ -290,8 +298,9 @@ export class AcpBackendProcess implements BackendProcess {
       if (this.domainHandlers.get(sessionId) === handler) {
         this.domainHandlers.delete(sessionId);
         // Teardown (not per-turn): the handler is unregistered only when the
-        // AgentSession disposes, so drop this session's todo-id tracker too.
+        // AgentSession disposes, so drop this session's per-session trackers too.
         this.todoToolCallIdsBySession.delete(sessionId);
+        this.sawLiveUsage.delete(sessionId);
       }
     };
   }
@@ -319,6 +328,32 @@ export class AcpBackendProcess implements BackendProcess {
       sessionId: sessionIdToAcp(params.sessionId),
       prompt: promptContentToAcp(params.prompt),
     });
+    // Fallback usage source for agents that never push a live `usage_update`
+    // notification: the prompt result may carry a turn `usage` with no context
+    // window. `usage.totalTokens` is a cumulative session total (not current
+    // context occupancy), so once a live `usage_update` has reported occupancy
+    // for this session we skip the fallback rather than overwrite the finer
+    // value. AgentSession's precedence rule then keeps the live window too.
+    const usage = resp.usage;
+    if (usage && !this.sawLiveUsage.has(params.sessionId)) {
+      const handler = this.domainHandlers.get(params.sessionId);
+      if (handler) {
+        handler({
+          sessionId: params.sessionId,
+          update: {
+            sessionUpdate: "usage_update",
+            usage: {
+              usedTokens: usage.totalTokens,
+              inputTokens: usage.inputTokens,
+              outputTokens: usage.outputTokens,
+              cacheReadTokens: usage.cachedReadTokens ?? undefined,
+              cacheWriteTokens: usage.cachedWriteTokens ?? undefined,
+              updatedAt: Date.now(),
+            },
+          },
+        });
+      }
+    }
     return { stopReason: stopReasonFromAcp(resp.stopReason) };
   }
 
@@ -523,6 +558,7 @@ export class AcpBackendProcess implements BackendProcess {
     this.pendingUpdates.clear();
     this.sessionWireState.clear();
     this.todoToolCallIdsBySession.clear();
+    this.sawLiveUsage.clear();
     this.permissionPrompter = null;
     this.capabilities.clear();
     if (this.process) {
@@ -586,6 +622,10 @@ export class AcpBackendProcess implements BackendProcess {
       } else if (u.sessionUpdate === "config_option_update") {
         wire.configOptions = u.configOptions;
       }
+    }
+    // Record a live occupancy source so the prompt-result fallback stays quiet.
+    if (update.update.sessionUpdate === "usage_update") {
+      this.sawLiveUsage.add(sessionId);
     }
 
     const handler = this.domainHandlers.get(sessionId);

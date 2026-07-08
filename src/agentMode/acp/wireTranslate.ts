@@ -25,6 +25,7 @@ import type {
   ToolCallContent as AcpToolCallContent,
   ToolCallUpdate,
   ToolKind as AcpToolKind,
+  UsageUpdate,
 } from "@agentclientprotocol/sdk";
 import type {
   AgentPlanEntry,
@@ -407,6 +408,17 @@ function acpUpdateToSessionUpdate(update: SessionNotification["update"]): Sessio
         sessionUpdate: "config_option_update",
         configOptions: configOptionsFromAcp(update.configOptions) ?? [],
       };
+    case "usage_update": {
+      const usage = update as UsageUpdate;
+      return {
+        sessionUpdate: "usage_update",
+        usage: {
+          usedTokens: usage.used,
+          contextWindow: usage.size,
+          updatedAt: Date.now(),
+        },
+      };
+    }
     default:
       // Unknown discriminant — fall back to a benign session_info_update with no title.
       return { sessionUpdate: "session_info_update", title: null };

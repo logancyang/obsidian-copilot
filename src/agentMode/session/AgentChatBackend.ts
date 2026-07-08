@@ -10,6 +10,7 @@ import type {
   PermissionPrompt,
   PlanDecisionAction,
   PromptContent,
+  SessionUsage,
 } from "./types";
 
 /**
@@ -94,6 +95,13 @@ export interface AgentChatBackend {
    * Progress section reads this.
    */
   getCurrentTodoList(): AgentTodoListEntry[] | null;
+
+  /**
+   * Latest backend-agnostic token-usage snapshot for the session, or `null`
+   * when none has been reported yet (fresh session, or a resumed chat with no
+   * persisted usage). The UI renders this as a context-window indicator.
+   */
+  getSessionUsage(): SessionUsage | null;
 
   /**
    * True when an ExitPlanMode permission is currently pending. The chat input

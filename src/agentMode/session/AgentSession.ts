@@ -27,6 +27,7 @@ import {
   PromptInput,
   SessionEvent,
   SessionId,
+  SessionUsage,
   StopReason,
   ToolCallContent,
   ToolCallDelta,
@@ -398,6 +399,10 @@ export class AgentSession {
   // Signature of the last applied list — multiple equal plan updates (e.g.
   // opencode's synthesized + occasional real plan channel) must not re-notify.
   private currentTodoListSignature: string | null = null;
+  // Latest backend-agnostic token-usage snapshot, or null until the first
+  // `usage_update` (or a persisted snapshot seeded on resume). Session-scoped:
+  // not tied to any turn placeholder.
+  private currentUsage: SessionUsage | null = null;
   // Monotonic counter for `currentPlan.id` so the React tree can detect a
   // *new* plan-mode review (vs. an in-place revision that bumps `revision`).
   private planSeq = 0;
@@ -1318,6 +1323,38 @@ export class AgentSession {
     return this.currentTodoList;
   }
 
+  /** Latest token-usage snapshot, or `null` when the session has none yet. */
+  getSessionUsage(): SessionUsage | null {
+    return this.currentUsage;
+  }
+
+  /**
+   * Seed the usage snapshot from persisted frontmatter on resume, so a reopened
+   * chat shows its last-known usage immediately instead of blank-until-next-turn.
+   * A live `usage_update` later supersedes it via {@link applyUsageUpdate}.
+   */
+  seedSessionUsage(usage: SessionUsage | undefined): void {
+    if (!usage) return;
+    this.currentUsage = usage;
+    this.notifyMessages();
+  }
+
+  /**
+   * Apply an incoming usage snapshot. A snapshot without a `contextWindow` is a
+   * cumulative/count-only fallback (e.g. ACP's prompt-result totals, which count
+   * lifetime tokens across the session), not current-context occupancy. Once we
+   * already hold an occupancy snapshot (one that carries a window), ignore the
+   * windowless one rather than pair its lifetime tokens with that window and
+   * render a bogus percentage ring. A later live occupancy update supersedes it.
+   */
+  private applyUsageUpdate(usage: SessionUsage): void {
+    if (usage.contextWindow === undefined && this.currentUsage?.contextWindow !== undefined) {
+      return;
+    }
+    this.currentUsage = usage;
+    this.notifyMessages();
+  }
+
   /**
    * Drop the current plan once the user has decided. The UI gates the card
    * render on `decision === "pending"`, so a terminal state is never visible
@@ -1553,6 +1590,10 @@ export class AgentSession {
     }
     if (update.sessionUpdate === "config_option_update") {
       // Same — the `state_changed` follow-up carries the recomputed state.
+      return;
+    }
+    if (update.sessionUpdate === "usage_update") {
+      this.applyUsageUpdate(update.usage);
       return;
     }
 

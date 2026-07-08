@@ -182,3 +182,35 @@ describe("acpNotificationToEvents — todowrite → synthesized plan", () => {
     });
   });
 });
+
+describe("acpNotificationToEvents — usage_update → SessionUsage", () => {
+  const FIXED_NOW = 1_700_000_000_000;
+  let nowSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    nowSpy = jest.spyOn(Date, "now").mockReturnValue(FIXED_NOW);
+  });
+  afterEach(() => nowSpy.mockRestore());
+
+  it("maps size→contextWindow and used→usedTokens, ignoring any cost", () => {
+    const events = acpNotificationToEvents(
+      notification({
+        sessionUpdate: "usage_update",
+        size: 200_000,
+        used: 42_000,
+        // cost is no longer part of the usage model — it must be dropped.
+        cost: { amount: 0.1234, currency: "USD" },
+      })
+    );
+    expect(events).toHaveLength(1);
+    expect(events[0].sessionId).toBe(SESSION_ID);
+    expect(events[0].update).toEqual({
+      sessionUpdate: "usage_update",
+      usage: {
+        usedTokens: 42_000,
+        contextWindow: 200_000,
+        updatedAt: FIXED_NOW,
+      },
+    });
+  });
+});

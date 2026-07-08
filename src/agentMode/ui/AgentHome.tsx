@@ -1,6 +1,7 @@
 import AgentChatMessages from "@/agentMode/ui/AgentChatMessages";
 import { AgentChatControls } from "@/agentMode/ui/AgentChatControls";
 import { AgentChatInput } from "@/agentMode/ui/AgentChatInput";
+import AgentContextMeter from "@/agentMode/ui/AgentContextMeter";
 import AgentContextSection, { buildContextSummary } from "@/agentMode/ui/AgentContextSection";
 import AgentContextStatusIcon from "@/agentMode/ui/AgentContextStatusIcon";
 import { AgentLandingStack } from "@/agentMode/ui/AgentLandingStack";
@@ -905,6 +906,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                       onUpdateChatTitle={handleUpdateChatTitle}
                       onDeleteChat={handleDeleteChat}
                       onOpenSourceFile={handleOpenSourceFile}
+                      usageMeter={<AgentContextMeter backend={backend} />}
                     />
                     {composerNode}
                   </>
