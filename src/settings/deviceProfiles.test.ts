@@ -29,7 +29,19 @@ describe("dehydrateDeviceProfile", () => {
       makeAgentMode({
         claudeCli: { path: "/a/claude" },
         backends: {
-          codex: { binaryPath: "/a/codex", envOverrides: { FOO: "1" } },
+          codex: {
+            binaryPath: "/a/codex",
+            envOverrides: { FOO: "1" },
+            probe: {
+              kind: "supported",
+              adapterVersion: "1.2.0",
+              cliVersion: "0.150.0",
+              cliSource: "bundled",
+              launcherKind: "executable",
+              launcherPath: "/a/codex",
+              probedAt: "2026-07-10T12:00:00.000Z",
+            },
+          },
           opencode: {
             binaryPath: "/a/opencode",
             binaryVersion: "1.2.3",
@@ -48,9 +60,12 @@ describe("dehydrateDeviceProfile", () => {
     expect(out.agentMode.backends.opencode?.binaryPath).toBeUndefined();
 
     // Moved into this device's segment.
-    expect(out.agentMode.deviceProfiles?.[DEVICE_A]).toEqual({
+    expect(out.agentMode.deviceProfiles?.[DEVICE_A]).toMatchObject({
       claudeCliPath: "/a/claude",
-      codex: { binaryPath: "/a/codex", envOverrides: { FOO: "1" } },
+      codex: {
+        binaryPath: "/a/codex",
+        envOverrides: { FOO: "1" },
+      },
       opencode: {
         binaryPath: "/a/opencode",
         binaryVersion: "1.2.3",
@@ -58,6 +73,8 @@ describe("dehydrateDeviceProfile", () => {
         probeSessionId: "sess-1",
       },
     });
+    expect(out.agentMode.deviceProfiles?.[DEVICE_A]?.codex?.probe?.kind).toBe("supported");
+    expect(out.agentMode.deviceProfiles?.[DEVICE_A]?.codex?.probe?.adapterVersion).toBe("1.2.0");
   });
 
   it("keeps synced (non-device) prefs like defaultModel in the flat backends slice", () => {
@@ -224,7 +241,20 @@ describe("sanitizeSettings round-trips deviceProfiles", () => {
           [DEVICE_A]: {
             claudeCliPath: "/a/claude",
             opencode: { binaryPath: "/a/oc", binaryVersion: "1", binarySource: "custom" },
-            codex: { envOverrides: { GOOD: "1", "bad-key": "x" } },
+            codex: {
+              envOverrides: { GOOD: "1", "bad-key": "x" },
+              probe: {
+                kind: "supported",
+                adapterVersion: "1.2.0",
+                cliVersion: "0.150.0",
+                cliSource: "bundled",
+                launcherPath: "/a/codex",
+                launcherKind: "executable",
+                settingsFingerprint: "abc123",
+                probedAt: "2026-07-10T12:00:00.000Z",
+                ignored: "value",
+              },
+            },
           },
           [DEVICE_B]: {}, // empty → dropped
           "": { claudeCliPath: "/x" }, // empty key → dropped
@@ -239,6 +269,18 @@ describe("sanitizeSettings round-trips deviceProfiles", () => {
     expect(profiles[DEVICE_A]?.opencode?.binarySource).toBe("custom");
     // Invalid env key dropped, valid kept.
     expect(profiles[DEVICE_A]?.codex?.envOverrides).toEqual({ GOOD: "1" });
+    expect(profiles[DEVICE_A]?.codex?.probe).toEqual({
+      kind: "supported",
+      adapterVersion: "1.2.0",
+      cliVersion: "0.150.0",
+      cliSource: "bundled",
+      cliPath: undefined,
+      launcherPath: "/a/codex",
+      launcherKind: "executable",
+      settingsFingerprint: "abc123",
+      probedAt: "2026-07-10T12:00:00.000Z",
+      reason: undefined,
+    });
     expect(profiles[DEVICE_B]).toBeUndefined();
     expect(profiles[""]).toBeUndefined();
   });

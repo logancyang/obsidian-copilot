@@ -943,6 +943,15 @@ export const OPENCODE_RELEASE_TAG = `v${OPENCODE_PINNED_VERSION}`;
  * backing turn so a stopped session remains reusable.
  */
 export const OPENCODE_MIN_ACP_VERSION = "1.16.0";
+
+/** Codex adapter release that introduced the App Server contract used by Agent Mode. */
+export const CODEX_ACP_MIN_VERSION = "1.1.2";
+/** Codex CLI floor bundled by the minimum supported adapter release. */
+export const CODEX_CLI_MIN_VERSION = "0.144.0";
+export const CODEX_ACP_PACKAGE = "@agentclientprotocol/codex-acp";
+export const CODEX_ACP_LEGACY_PACKAGE = "@zed-industries/codex-acp";
+export const CODEX_ACP_INSTALL_COMMAND = `npm install -g ${CODEX_ACP_PACKAGE}`;
+export const CODEX_ACP_MIGRATION_COMMAND = `npm uninstall -g ${CODEX_ACP_LEGACY_PACKAGE} && ${CODEX_ACP_INSTALL_COMMAND}`;
 export const OPENCODE_RELEASE_URL_TEMPLATE =
   "https://github.com/sst/opencode/releases/download/v{version}/{asset}";
 export const OPENCODE_RELEASE_API_URL_TEMPLATE =

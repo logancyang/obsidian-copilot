@@ -338,6 +338,27 @@ export interface ClaudeBackendSettings {
 }
 
 /** Settings slice owned by the Codex backend. */
+export type CodexInstallHealthKind =
+  | "absent"
+  | "supported"
+  | "legacy"
+  | "below-minimum"
+  | "invalid";
+
+export interface CodexProbeMetadata {
+  kind: CodexInstallHealthKind;
+  adapterVersion?: string;
+  cliVersion?: string;
+  cliSource?: "bundled" | "override";
+  cliPath?: string;
+  launcherKind?: "executable" | "node";
+  launcherPath?: string;
+  /** Hash of launch-affecting Codex settings at probe time; contains no raw env values. */
+  settingsFingerprint?: string;
+  probedAt: string;
+  reason?: string;
+}
+
 export interface CodexBackendSettings {
   /** Path to the user-provided `codex-acp` binary. */
   binaryPath?: string;
@@ -347,6 +368,8 @@ export interface CodexBackendSettings {
   defaultMode?: CopilotMode | null;
   /** See `ClaudeBackendSettings.envOverrides`. Applied to the spawned `codex-acp` subprocess. */
   envOverrides?: Record<string, string>;
+  /** Last shell-free launcher probe. Device-local because it describes a local executable. */
+  probe?: CodexProbeMetadata;
 }
 
 /** Settings slice owned by the OpenCode backend. */
@@ -393,6 +416,7 @@ export interface DeviceAgentProfile {
   codex?: {
     binaryPath?: string;
     envOverrides?: Record<string, string>;
+    probe?: CodexProbeMetadata;
   };
   opencode?: {
     binaryPath?: string;
@@ -1131,6 +1155,38 @@ function sanitizeCodexBackendSettings(raw: unknown): CodexBackendSettings {
     defaultModel: sanitizeDefaultModel(r.defaultModel),
     defaultMode: sanitizeDefaultMode(r.defaultMode),
     envOverrides: sanitizeEnvOverrides(r.envOverrides),
+    probe: sanitizeCodexProbeMetadata(r.probe),
+  };
+}
+
+function sanitizeCodexProbeMetadata(raw: unknown): CodexProbeMetadata | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const r = raw as Record<string, unknown>;
+  const validKinds = new Set<CodexInstallHealthKind>([
+    "absent",
+    "supported",
+    "legacy",
+    "below-minimum",
+    "invalid",
+  ]);
+  const kind = typeof r.kind === "string" ? (r.kind as CodexInstallHealthKind) : undefined;
+  const probedAt = nonEmptyString(r.probedAt);
+  if (!kind || !validKinds.has(kind) || !probedAt) return undefined;
+  const cliSource =
+    r.cliSource === "bundled" || r.cliSource === "override" ? r.cliSource : undefined;
+  const launcherKind =
+    r.launcherKind === "executable" || r.launcherKind === "node" ? r.launcherKind : undefined;
+  return {
+    kind,
+    adapterVersion: nonEmptyString(r.adapterVersion),
+    cliVersion: nonEmptyString(r.cliVersion),
+    cliSource,
+    cliPath: nonEmptyString(r.cliPath),
+    launcherKind,
+    launcherPath: nonEmptyString(r.launcherPath),
+    settingsFingerprint: nonEmptyString(r.settingsFingerprint),
+    probedAt,
+    reason: nonEmptyString(r.reason),
   };
 }
 
@@ -1174,6 +1230,8 @@ function sanitizeDeviceAgentProfile(raw: unknown): DeviceAgentProfile | undefine
     if (binaryPath) codex.binaryPath = binaryPath;
     const envOverrides = sanitizeEnvOverrides(codexRaw.envOverrides);
     if (envOverrides) codex.envOverrides = envOverrides;
+    const probe = sanitizeCodexProbeMetadata(codexRaw.probe);
+    if (probe) codex.probe = probe;
     if (Object.keys(codex).length > 0) out.codex = codex;
   }
 

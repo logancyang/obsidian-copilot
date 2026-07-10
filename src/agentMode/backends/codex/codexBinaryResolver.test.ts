@@ -1,6 +1,11 @@
 import * as path from "node:path";
 
-import { codexAcpSearchDirs, resolveCodexAcpBinary } from "./codexBinaryResolver";
+import {
+  codexAcpSearchDirs,
+  legacyCodexAcpCandidates,
+  resolveCodexAcpBinary,
+  resolveCodexAcpLauncher,
+} from "./codexBinaryResolver";
 
 function fsWith(paths: string[]) {
   const existing = new Set(paths);
@@ -11,87 +16,84 @@ function fsWith(paths: string[]) {
   };
 }
 
-describe("resolveCodexAcpBinary", () => {
-  it("finds the Windows helper-script install path", () => {
-    const expected = path.win32.join(
-      "C:\\Users\\me",
-      "AppData",
-      "Local",
-      "Programs",
-      "codex-acp",
-      "codex-acp.exe"
-    );
+describe("resolveCodexAcpLauncher", () => {
+  it("selects a supported POSIX executable entry directly", () => {
+    const expected = "/Users/me/.npm-global/bin/codex-acp";
+    const launcher = resolveCodexAcpLauncher({
+      homeDir: "/Users/me",
+      platform: "darwin",
+      env: { npm_config_prefix: "/Users/me/.npm-global" },
+      fs: fsWith([expected]),
+    });
 
+    expect(launcher).toEqual({
+      command: expected,
+      args: [],
+      adapterPath: expected,
+      kind: "executable",
+    });
     expect(
       resolveCodexAcpBinary({
-        homeDir: "C:\\Users\\me",
-        platform: "win32",
-        env: { LOCALAPPDATA: path.win32.join("C:\\Users\\me", "AppData", "Local") },
+        homeDir: "/Users/me",
+        platform: "darwin",
+        env: { npm_config_prefix: "/Users/me/.npm-global" },
         fs: fsWith([expected]),
       })
     ).toBe(expected);
   });
 
-  it("finds the direct npm platform tarball extraction path", () => {
-    const expected = path.win32.join(
-      "C:\\Users\\me",
-      "AppData",
-      "Local",
+  it("launches the supported Windows npm entry through Node without a cmd shim", () => {
+    const npmDir = "C:\\Users\\me\\AppData\\Roaming\\npm";
+    const node = "C:\\Program Files\\nodejs\\node.exe";
+    const entry = path.win32.join(
+      npmDir,
+      "node_modules",
+      "@agentclientprotocol",
       "codex-acp",
-      "package",
-      "bin",
-      "codex-acp.exe"
+      "dist",
+      "index.js"
     );
+    const launcher = resolveCodexAcpLauncher({
+      homeDir: "C:\\Users\\me",
+      platform: "win32",
+      env: { APPDATA: "C:\\Users\\me\\AppData\\Roaming" },
+      nodePath: node,
+      fs: fsWith([entry, node, path.win32.join(npmDir, "codex-acp.cmd")]),
+    });
 
-    expect(
-      resolveCodexAcpBinary({
-        homeDir: "C:\\Users\\me",
-        platform: "win32",
-        env: { LOCALAPPDATA: path.win32.join("C:\\Users\\me", "AppData", "Local") },
-        fs: fsWith([expected]),
-      })
-    ).toBe(expected);
+    expect(launcher).toEqual({ command: node, args: [entry], adapterPath: entry, kind: "node" });
   });
 
-  it("finds native npm optional-dependency binaries without selecting cmd shims", () => {
-    const expected = path.win32.join(
-      "C:\\Users\\me",
-      "AppData",
-      "Roaming",
-      "npm",
-      "node_modules",
-      "@zed-industries",
-      "codex-acp",
-      "node_modules",
-      "@zed-industries",
-      "codex-acp-win32-x64",
-      "bin",
-      "codex-acp.exe"
-    );
+  it("does not resolve a legacy package binary, but retains it for diagnostics", () => {
+    const input = {
+      homeDir: "C:\\Users\\me",
+      platform: "win32" as const,
+      env: { APPDATA: "C:\\Users\\me\\AppData\\Roaming" },
+      fs: fsWith([]),
+    };
+    const legacy = legacyCodexAcpCandidates(input)[0];
+    input.fs = fsWith([legacy]);
 
-    expect(
-      resolveCodexAcpBinary({
-        homeDir: "C:\\Users\\me",
-        platform: "win32",
-        env: { APPDATA: path.win32.join("C:\\Users\\me", "AppData", "Roaming") },
-        fs: fsWith([
-          path.win32.join("C:\\Users\\me", "AppData", "Roaming", "npm", "codex-acp.cmd"),
-          expected,
-        ]),
-      })
-    ).toBe(expected);
+    expect(resolveCodexAcpLauncher(input)).toBeNull();
+    expect(legacyCodexAcpCandidates(input)).toContain(legacy);
   });
 
-  it("reports the Windows helper install directory in searched dirs", () => {
+  it("reports the supported npm package directory in searched dirs", () => {
     const dirs = codexAcpSearchDirs({
       homeDir: "C:\\Users\\me",
       platform: "win32",
-      env: { LOCALAPPDATA: path.win32.join("C:\\Users\\me", "AppData", "Local") },
+      env: { APPDATA: "C:\\Users\\me\\AppData\\Roaming" },
       fs: fsWith([]),
     });
 
     expect(dirs).toContain(
-      path.win32.join("C:\\Users\\me", "AppData", "Local", "Programs", "codex-acp")
+      path.win32.join(
+        "C:\\Users\\me\\AppData\\Roaming\\npm",
+        "node_modules",
+        "@agentclientprotocol",
+        "codex-acp",
+        "dist"
+      )
     );
   });
 });

@@ -21,7 +21,7 @@ import type {
 export type InstallState =
   | { kind: "absent" }
   | { kind: "checking"; source: "managed" | "custom" }
-  | { kind: "ready"; source: "managed" | "custom" }
+  | { kind: "ready"; source: "managed" | "custom"; details?: BackendInstallDetails }
   | {
       kind: "incompatible";
       source: "managed" | "custom";
@@ -29,7 +29,16 @@ export type InstallState =
       minVersion: string;
       message: string;
     }
+  | { kind: "blocked"; reason: string; remediation: string; details?: BackendInstallDetails }
   | { kind: "error"; message: string };
+
+/** Read-only support data attached to install health for settings and recovery UIs. */
+export interface BackendInstallDetails {
+  adapterVersion?: string;
+  cliVersion?: string;
+  cliSource?: "bundled" | "override";
+  warning?: string;
+}
 
 /** Sign-in state for backends that authenticate via a CLI / external account. */
 export interface BackendAuthStatus {

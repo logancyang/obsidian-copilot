@@ -12,8 +12,11 @@ function installStateSignature(state: InstallState): string {
     case "absent":
       return "absent";
     case "checking":
-    case "ready":
       return `${state.kind}:${state.source}`;
+    case "ready":
+      return JSON.stringify([state.kind, state.source, state.details]);
+    case "blocked":
+      return JSON.stringify([state.kind, state.reason, state.remediation, state.details]);
     case "incompatible":
       return JSON.stringify([
         state.kind,

@@ -9,6 +9,7 @@ export type {
   BackendAuth,
   BackendAuthStatus,
   BackendDescriptor,
+  BackendInstallDetails,
   BackendSignInHandlers,
   InstallState,
 } from "./descriptor";
