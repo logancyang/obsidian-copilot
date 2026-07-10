@@ -188,14 +188,18 @@ function changeAffectsProject(change: PendingChange, record: ProjectFileRecord):
   }
 
   if (change.isFolder) {
-    // DESIGN NOTE — a folder CREATE/MODIFY is a deliberate no-op, INCLUDING when the
-    // created folder exactly equals a declared `folderPattern` (e.g. a project
-    // includes `External`, which didn't exist, and the user creates it). An empty
-    // folder has nothing to materialize, so the manifest is unchanged; an ongoing
-    // session doesn't re-mount searchable roots mid-conversation in v1 regardless;
-    // and an empty landing's captured (empty) manifest equals a fresh one's, so
-    // reuse is harmless. The moment any FILE lands inside it, the file event dirties
-    // and self-heals. If a future review flags this again, point them here.
+    // A folder CREATE matters ONLY when the created folder IS an exactly-declared
+    // folder pattern: `resolveFolderPaths` (projectContextMaterializer) then turns
+    // that previously-unresolved source into a real manifest entry (absPath) and,
+    // when it's out-of-cwd, a mounted `additionalDirectories` search root — so a
+    // stale empty landing must not be reused. A parent/child create resolves no
+    // DIFFERENT pattern (an unrelated declared subfolder stays unresolved; an
+    // already-existing declared root is unaffected) and changes no tag/note/
+    // extension membership, so the broad fallbacks stay OFF for CREATE.
+    if (change.kind === "create") {
+      return (inclusions.folderPatterns ?? []).some((p) => normalizeVaultPath(p) === change.path);
+    }
+    // A folder MODIFY changes nothing; only RENAME/DELETE move existing members.
     if (!folderMembershipEvent) return false;
     // Obsidian doesn't guarantee child events on a folder op, so match the folder
     // path against folder patterns in BOTH directions (the event path may be an

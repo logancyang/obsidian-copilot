@@ -214,7 +214,9 @@ describe("ProjectContentTracker", () => {
     tracker.dispose();
   });
 
-  it("does NOT dirty on a folder CREATE (an empty new folder has no members)", () => {
+  it("does NOT dirty on a folder CREATE that is a DESCENDANT of a declared folder", () => {
+    // The declared root `Notes` already exists, so a child folder appearing under
+    // it doesn't change how the root resolves — no manifest change, no dirty.
     mockRecords(
       record("tag", { inclusions: "#important" }),
       record("folder", { inclusions: "Notes" })
@@ -227,6 +229,21 @@ describe("ProjectContentTracker", () => {
 
     expect(tracker.getEpoch("tag")).toBe(0);
     expect(tracker.getEpoch("folder")).toBe(0);
+    tracker.dispose();
+  });
+
+  it("dirties when a folder CREATE IS an exactly-declared folder pattern", () => {
+    // A project declares `External` (out of its folder), which didn't exist. Once
+    // created, resolveFolderPaths turns it into a real manifest entry + search root,
+    // so a stale empty landing must not be reused.
+    mockRecords(record("a", { inclusions: "External" }));
+    const { app, fire } = makeApp();
+    const tracker = new ProjectContentTracker(app);
+
+    fire("create", folder("External"));
+    tracker.flushNow();
+
+    expect(tracker.getEpoch("a")).toBe(1);
     tracker.dispose();
   });
 
