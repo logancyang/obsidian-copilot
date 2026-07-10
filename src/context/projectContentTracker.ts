@@ -18,7 +18,10 @@ const DEBOUNCE_MS = 2000;
  * a queued pre-rename event. Snapshotting the strings at enqueue time keeps the
  * old/new paths correct.
  */
+type VaultEventKind = "create" | "modify" | "delete" | "rename";
+
 interface PendingChange {
+  kind: VaultEventKind;
   isFolder: boolean;
   isMarkdown: boolean;
   path: string;
@@ -51,15 +54,14 @@ export class ProjectContentTracker {
     debounceMs: number = DEBOUNCE_MS
   ) {
     this.debouncedDrain = debounce(() => this.drain(), debounceMs, { trailing: true });
-    const onEvent = (file: TAbstractFile) => this.enqueue(file);
-    this.vaultRefs.push(this.app.vault.on("create", onEvent));
-    this.vaultRefs.push(this.app.vault.on("modify", onEvent));
-    this.vaultRefs.push(this.app.vault.on("delete", onEvent));
+    this.vaultRefs.push(this.app.vault.on("create", (file) => this.enqueue("create", file)));
+    this.vaultRefs.push(this.app.vault.on("modify", (file) => this.enqueue("modify", file)));
+    this.vaultRefs.push(this.app.vault.on("delete", (file) => this.enqueue("delete", file)));
     // Rename carries the previous path; snapshot both sides so a move out of or
     // into a project's scope is detected.
     this.vaultRefs.push(
       this.app.vault.on("rename", (file: TAbstractFile, oldPath: string) =>
-        this.enqueue(file, oldPath)
+        this.enqueue("rename", file, oldPath)
       )
     );
   }
@@ -107,11 +109,12 @@ export class ProjectContentTracker {
     this.epochs.clear();
   }
 
-  private enqueue(file: TAbstractFile, oldPath?: string): void {
+  private enqueue(kind: VaultEventKind, file: TAbstractFile, oldPath?: string): void {
     // Guard against an event delivered after teardown (offref should prevent this,
     // but a queued microtask could still arrive) so a disposed tracker stays inert.
     if (this.disposed) return;
     this.pending.push({
+      kind,
       isFolder: file instanceof TFolder,
       isMarkdown: file instanceof TFile && file.extension === "md",
       path: normalizeVaultPath(file.path),
@@ -167,20 +170,25 @@ function changeAffectsProject(change: PendingChange, record: ProjectFileRecord):
   if (!inclusions) return false;
 
   const paths = change.oldPath ? [change.path, change.oldPath] : [change.path];
+  // Only a folder RENAME or DELETE can change which files exist under a scope; a
+  // folder CREATE is an empty directory with no members, so it can't dirty anything.
+  const folderMembershipEvent =
+    change.isFolder && (change.kind === "rename" || change.kind === "delete");
 
   // Tag membership can't be recovered from a path (and the metadata cache may not
   // have parsed a just-edited file yet), so conservatively dirty a tag-declaring
   // project on ANY event that could change which files carry a tag: a markdown
   // change (checked on BOTH rename sides — a `.md → .txt` rename leaves tag scope)
-  // or a folder op that could move tagged notes. Skip when every side is an
-  // internal Copilot file (a `project.md` edit must not spray notes) — but keep it
-  // when one side is a user path (an internal ↔ user rename still counts).
+  // or a folder rename/delete that could move tagged notes. Skip when every side is
+  // an internal Copilot file (a `project.md` edit must not spray notes) — but keep
+  // it when one side is a user path (an internal ↔ user rename still counts).
   if (declaresTagPattern(inclusions, exclusions) && paths.some((p) => !isInternalExcludedPath(p))) {
     const touchesMarkdown = change.isMarkdown || paths.some((p) => p.toLowerCase().endsWith(".md"));
-    if (touchesMarkdown || change.isFolder) return true;
+    if (touchesMarkdown || folderMembershipEvent) return true;
   }
 
   if (change.isFolder) {
+    if (!folderMembershipEvent) return false;
     // Obsidian doesn't guarantee child events on a folder op, so match the folder
     // path against folder patterns in BOTH directions (the event path may be an
     // ancestor OR a descendant of a pattern), and conservatively dirty projects

@@ -214,6 +214,22 @@ describe("ProjectContentTracker", () => {
     tracker.dispose();
   });
 
+  it("does NOT dirty on a folder CREATE (an empty new folder has no members)", () => {
+    mockRecords(
+      record("tag", { inclusions: "#important" }),
+      record("folder", { inclusions: "Notes" })
+    );
+    const { app, fire } = makeApp();
+    const tracker = new ProjectContentTracker(app);
+
+    fire("create", folder("Notes/NewEmpty"));
+    tracker.flushNow();
+
+    expect(tracker.getEpoch("tag")).toBe(0);
+    expect(tracker.getEpoch("folder")).toBe(0);
+    tracker.dispose();
+  });
+
   it("flushNow drains synchronously and does not double-bump on a later timer", () => {
     jest.useFakeTimers();
     mockRecords(record("a", { inclusions: "Notes" }));

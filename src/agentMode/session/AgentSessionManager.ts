@@ -1324,6 +1324,27 @@ export class AgentSessionManager {
     this.attachAttentionTracking(session);
     this.notify();
 
+    // Seed the delivery cursor as soon as the project's context is MATERIALIZED —
+    // before the session becomes sendable (which only happens once `initialize`
+    // opens the backend session, after `contextReady` resolves). Piggybacking on
+    // `session.ready` instead would leave a window during the post-`newSession`
+    // `confirmSeededSelection` await where a first send could emit a redundant note.
+    // Only acts while this exact session is still pooled, and never regresses a
+    // higher already-acked epoch. (The dirty CLEAR stays on `session.ready` below —
+    // a failed backend startup must leave the project dirty so a re-entry re-spawns.)
+    if (contextReady) {
+      void contextReady
+        .then((result) => {
+          if (this.disposed || this.sessions.get(internalId) !== session) return;
+          if (result.contextSignature === undefined) return;
+          const seen = this.lastSeenProjectContentEpochBySession.get(internalId);
+          if (seen === undefined || capturedContentEpoch > seen) {
+            this.lastSeenProjectContentEpochBySession.set(internalId, capturedContentEpoch);
+          }
+        })
+        .catch(() => {});
+    }
+
     // Once the ACP session is ready, apply backend-specific persisted state
     // (claude's effort, future config-option preferences) and clear the
     // "starting" pill. On failure, capture into `lastError` so the status
@@ -1333,35 +1354,21 @@ export class AgentSessionManager {
     void session.ready
       .then(async () => {
         // Reaching here means the session is fully ready — it captured its context
-        // and opened its backend session (a failed startup rejects into `.catch`
-        // and never runs this). A fresh session's `ready` resolves only after
-        // `initialize()` has already awaited `contextReady`, so the await below is
-        // an already-settled microtask, not a fresh network wait — it can't stall
-        // `finishPendingCreate`. Clear the project's dirty flag FIRST, before any
-        // optional backend config that could hang and stall it. Clear only when the
-        // captured dirty key still matches (a newer edit/content bump superseded it,
-        // so it stays dirty — lost-update guard) and the materializer captured a
-        // signature (a failed materialize carries none). The same success path seeds
-        // the session's delivery cursor to the epoch it captured, so its FRESH
-        // first-turn manifest isn't immediately followed by a redundant note; a
-        // change during materialization bumped the epoch past this and still notes.
+        // and opened its backend session (a failed startup rejects into `.catch` and
+        // never runs this, so the project stays dirty and a re-entry re-spawns).
+        // Clear the dirty flag FIRST, before any optional backend config that could
+        // hang and stall `finishPendingCreate`. Clear only when the captured dirty
+        // key still matches (a newer edit/content bump superseded it — lost-update
+        // guard) and the materializer captured a signature (a failed materialize
+        // carries none). The cursor SEED already ran off `contextReady` above.
         if (contextReady) {
           const result = await contextReady;
-          if (!this.disposed && this.sessions.get(internalId) === session) {
-            if (result.contextSignature !== undefined) {
-              this.clearContextDirtyIfCaptured(
-                projectId,
-                capturedDirtyKey,
-                result.contextSignature
-              );
-              // Seed the cursor to the captured epoch, but NEVER regress it: if a
-              // turn already acked a newer epoch before this settled, keep the
-              // higher value so the note isn't re-emitted.
-              const seen = this.lastSeenProjectContentEpochBySession.get(internalId);
-              if (seen === undefined || capturedContentEpoch > seen) {
-                this.lastSeenProjectContentEpochBySession.set(internalId, capturedContentEpoch);
-              }
-            }
+          if (
+            !this.disposed &&
+            this.sessions.get(internalId) === session &&
+            result.contextSignature !== undefined
+          ) {
+            this.clearContextDirtyIfCaptured(projectId, capturedDirtyKey, result.contextSignature);
           }
         }
         if (descriptor.applyInitialSessionConfig) {
@@ -2853,6 +2860,11 @@ export class AgentSessionManager {
       if (record) await ensureAgentsMirror(this.app, record);
     }
     const cwd = this.resolveSessionCwd(projectId);
+    // Settle queued vault events so the revision key below reflects a just-edited
+    // source — otherwise resume could join an in-flight run reading the old content
+    // and rehydrate the backend with stale searchable roots (the forced coarse note
+    // can't add a root the backend never mounted).
+    if (projectId !== GLOBAL_SCOPE) this.contentTracker.flushNow();
     // Kick off materialization in parallel (publishes the blocking load state up
     // front), overlapping with `ensureBackend`. Unlike a fresh create, a resumed
     // session can't appear before the backend rehydrates it, so we await the
