@@ -69,6 +69,18 @@ export class ProjectContentTracker {
     return this.epochs.get(projectId) ?? 0;
   }
 
+  /**
+   * Advance a project's content epoch by one and return the new value. Used both
+   * internally (a matched vault change) and by the session manager for a config
+   * source edit, so a config change and a content change advance the SAME epoch —
+   * an ongoing session then gets the coarse note in either case.
+   */
+  bumpEpoch(projectId: string): number {
+    const next = this.getEpoch(projectId) + 1;
+    this.epochs.set(projectId, next);
+    return next;
+  }
+
   /** Subscribe to per-project content-change notifications; returns an unsubscribe. */
   onContentChanged(callback: (projectId: string) => void): () => void {
     this.listeners.add(callback);
@@ -126,7 +138,7 @@ export class ProjectContentTracker {
     }
 
     for (const projectId of affected) {
-      this.epochs.set(projectId, this.getEpoch(projectId) + 1);
+      this.bumpEpoch(projectId);
       for (const listener of this.listeners) {
         try {
           listener(projectId);
@@ -154,12 +166,19 @@ function changeAffectsProject(change: PendingChange, record: ProjectFileRecord):
   // A project with no inclusions materializes nothing, so nothing can dirty it.
   if (!inclusions) return false;
 
-  // Tag membership can't be recovered from a path (and the metadata cache may
-  // not have parsed a just-edited file yet), so ANY markdown change conservatively
-  // dirties a project that declares a tag pattern on either side.
-  if (change.isMarkdown && declaresTagPattern(inclusions, exclusions)) return true;
-
   const paths = change.oldPath ? [change.path, change.oldPath] : [change.path];
+
+  // Tag membership can't be recovered from a path (and the metadata cache may not
+  // have parsed a just-edited file yet), so conservatively dirty a tag-declaring
+  // project on ANY event that could change which files carry a tag: a markdown
+  // change (checked on BOTH rename sides — a `.md → .txt` rename leaves tag scope)
+  // or a folder op that could move tagged notes. Skip when every side is an
+  // internal Copilot file (a `project.md` edit must not spray notes) — but keep it
+  // when one side is a user path (an internal ↔ user rename still counts).
+  if (declaresTagPattern(inclusions, exclusions) && paths.some((p) => !isInternalExcludedPath(p))) {
+    const touchesMarkdown = change.isMarkdown || paths.some((p) => p.toLowerCase().endsWith(".md"));
+    if (touchesMarkdown || change.isFolder) return true;
+  }
 
   if (change.isFolder) {
     // Obsidian doesn't guarantee child events on a folder op, so match the folder

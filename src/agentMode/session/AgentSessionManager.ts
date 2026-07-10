@@ -557,9 +557,13 @@ export class AgentSessionManager {
       if (getProjectContextSignature(prevRecord) === nextSignature) continue;
 
       const projectId = nextRecord.project.id;
-      // Same epoch-salted dirty key shape as a content change, so the clear guard
-      // treats both uniformly. A config edit keeps the baseline warm of the active
-      // project (its sources may have genuinely changed — a new URL/PDF).
+      // Advance the SAME content epoch a file change uses, so an ongoing session
+      // gets the coarse note when a config edit adds a source it can't otherwise
+      // see (a new URL/PDF/folder). Bump BEFORE marking dirty so the dirty key
+      // carries the new epoch; same key shape as a content change, so the clear
+      // guard treats both uniformly. A config edit also keeps the baseline warm of
+      // the active project (its sources may have genuinely changed).
+      this.contentTracker.bumpEpoch(projectId);
       this.markProjectContextDirty(projectId, nextRecord);
       if (projectId === this.activeProjectId) this.warmProjectContext(projectId);
     }
@@ -1191,6 +1195,10 @@ export class AgentSessionManager {
     // threaded into the session, which awaits it right before `newSession`.
     // Skipped for GLOBAL_SCOPE — no promise, no atom write, byte-identical to a
     // context-free create. Never rejects (degrades to empty roots).
+    // Settle queued vault events first so a just-edited source is reflected in the
+    // epoch/dirty snapshot below (a `+`-click create doesn't go through
+    // `enterProject`'s flush). No-op when nothing is pending.
+    if (projectId !== GLOBAL_SCOPE) this.contentTracker.flushNow();
     // Snapshot the content epoch + dirty key BEFORE kicking materialization, so
     // the delivery-cursor seed and the dirty-clear guard both reference the exact
     // revision this session is about to capture. A content change that lands while
@@ -1346,7 +1354,13 @@ export class AgentSessionManager {
                 capturedDirtyKey,
                 result.contextSignature
               );
-              this.lastSeenProjectContentEpochBySession.set(internalId, capturedContentEpoch);
+              // Seed the cursor to the captured epoch, but NEVER regress it: if a
+              // turn already acked a newer epoch before this settled, keep the
+              // higher value so the note isn't re-emitted.
+              const seen = this.lastSeenProjectContentEpochBySession.get(internalId);
+              if (seen === undefined || capturedContentEpoch > seen) {
+                this.lastSeenProjectContentEpochBySession.set(internalId, capturedContentEpoch);
+              }
             }
           }
         }
@@ -1737,6 +1751,11 @@ export class AgentSessionManager {
     // restore-the-last-tab behavior (it's the implicit scope `exitProject`
     // returns to, not a project the user deliberately re-opens).
     if (projectId !== GLOBAL_SCOPE) {
+      // Settle any queued vault events NOW so the reuse decision below sees a file
+      // the user edited moments ago (within the tracker's debounce window). Without
+      // this, an edit-then-immediately-reopen would read `dirty=false` and reuse the
+      // stale empty landing — violating "don't reuse a stale empty landing".
+      this.contentTracker.flushNow();
       // Reuse an empty landing only when it's safe: not dirty (its
       // `<project_context>` would be stale — materialization-only, see
       // `contextDirtySignatures`) AND its creation-time capture still matches the

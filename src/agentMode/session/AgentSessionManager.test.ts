@@ -3045,4 +3045,30 @@ describe("AgentSessionManager context-source dirty tracking", () => {
     // A GLOBAL session never gets a note, regardless of epoch.
     expect(m.getProjectContextUpdates("s2", GLOBAL_SCOPE)).toBeNull();
   });
+
+  it("advances the epoch on a config-source change so an ongoing session gets the note", async () => {
+    publish(makeRecord({ webUrls: "https://a.com" }));
+    const mgr = buildTrackedManager();
+    await mgr.enterProject(PID);
+    const session = mgr.getActiveSession();
+    if (!session) throw new Error("expected a landing session");
+    await flushAsync(); // let the create-time cursor seed settle
+
+    const m = mgr as unknown as {
+      getProjectContextUpdates: (
+        id: string,
+        pid: string
+      ) => { epoch: number; block: string } | null;
+    };
+    // Caught up right after creation.
+    expect(m.getProjectContextUpdates(session.internalId, PID)).toBeNull();
+
+    // A config edit adds a source the ongoing session can't otherwise see → the
+    // epoch advances → its next send carries the coarse note.
+    publish(makeRecord({ webUrls: "https://a.com\nhttps://b.com" }));
+
+    expect(m.getProjectContextUpdates(session.internalId, PID)?.block).toContain(
+      "<project_context_updates>"
+    );
+  });
 });

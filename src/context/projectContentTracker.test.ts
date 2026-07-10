@@ -176,6 +176,44 @@ describe("ProjectContentTracker", () => {
     tracker.dispose();
   });
 
+  it("dirties a tag-declaring project on a FOLDER delete (tagged notes may be inside)", () => {
+    mockRecords(record("a", { inclusions: "#important" }));
+    const { app, fire } = makeApp();
+    const tracker = new ProjectContentTracker(app);
+
+    fire("delete", folder("SomeFolder"));
+    tracker.flushNow();
+
+    expect(tracker.getEpoch("a")).toBe(1);
+    tracker.dispose();
+  });
+
+  it("dirties a tag-declaring project when a note LEAVES markdown scope (.md → .txt)", () => {
+    mockRecords(record("a", { inclusions: "#important" }));
+    const { app, fire } = makeApp();
+    const tracker = new ProjectContentTracker(app);
+
+    // New file is .txt (not markdown), but the old path was .md — it left tag scope.
+    fire("rename", file("Notes/note.txt"), "Notes/note.md");
+    tracker.flushNow();
+
+    expect(tracker.getEpoch("a")).toBe(1);
+    tracker.dispose();
+  });
+
+  it("does NOT let an internal markdown file dirty a tag-declaring project", () => {
+    mockRecords(record("a", { inclusions: "#important" }));
+    const { app, fire } = makeApp();
+    const tracker = new ProjectContentTracker(app);
+
+    // Editing the internal log (a markdown file) must not spray tag-project notes.
+    fire("modify", file("copilot/copilot-log.md"));
+    tracker.flushNow();
+
+    expect(tracker.getEpoch("a")).toBe(0);
+    tracker.dispose();
+  });
+
   it("flushNow drains synchronously and does not double-bump on a later timer", () => {
     jest.useFakeTimers();
     mockRecords(record("a", { inclusions: "Notes" }));
