@@ -188,6 +188,14 @@ function changeAffectsProject(change: PendingChange, record: ProjectFileRecord):
   }
 
   if (change.isFolder) {
+    // DESIGN NOTE — a folder CREATE/MODIFY is a deliberate no-op, INCLUDING when the
+    // created folder exactly equals a declared `folderPattern` (e.g. a project
+    // includes `External`, which didn't exist, and the user creates it). An empty
+    // folder has nothing to materialize, so the manifest is unchanged; an ongoing
+    // session doesn't re-mount searchable roots mid-conversation in v1 regardless;
+    // and an empty landing's captured (empty) manifest equals a fresh one's, so
+    // reuse is harmless. The moment any FILE lands inside it, the file event dirties
+    // and self-heals. If a future review flags this again, point them here.
     if (!folderMembershipEvent) return false;
     // Obsidian doesn't guarantee child events on a folder op, so match the folder
     // path against folder patterns in BOTH directions (the event path may be an
