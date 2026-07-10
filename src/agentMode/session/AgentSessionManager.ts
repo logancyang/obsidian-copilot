@@ -67,9 +67,13 @@ import {
 } from "@/projects/state";
 import type { ProjectFileRecord } from "@/projects/type";
 import {
+  composeContextDirtyKey,
+  contextDirtyKeyMatchesConfig,
   getProjectContextSignature,
   getProjectLandingCaptureSignature,
 } from "@/projects/projectContextSignature";
+import { ProjectContentTracker } from "@/context/projectContentTracker";
+import { buildProjectContextUpdatesBlock } from "@/context/contextUpdatesBlockBuilder";
 import { ProjectFileManager } from "@/projects/ProjectFileManager";
 import { ensureAgentsMirror } from "@/projects/ensureAgentsMirror";
 import { getComposedProjectInstructions } from "@/projects/projectSystemPrompt";
@@ -147,6 +151,11 @@ const EMPTY_RECENT_CHAT_IDS: ReadonlySet<string> = new Set();
 // (claude instead has `project.md` parsed and injected in-process via setProjectProfileProvider,
 // so it needs no file.) Only these require the generated mirror to exist before cwd is read.
 const CWD_INSTRUCTION_BACKENDS: ReadonlySet<BackendId> = new Set(["codex", "opencode"]);
+
+// Delivery-cursor seed for a resumed session: BEHIND any real content epoch
+// (which starts at 0), so its first send always emits the coarse freshness note
+// regardless of whether a change was observed this plugin session.
+const RESUMED_SESSION_BEHIND_EPOCH = -1;
 
 /**
  * Map a materializer {@link SourceFailure} to the atom's {@link FailedItem}. The
@@ -282,6 +291,18 @@ export class AgentSessionManager {
   // entry, but only landing-shaped ones (idle/empty) are ever consulted for
   // reuse. A missing entry means "not reusable as a project landing".
   private readonly landingCaptureSignatures = new Map<string, string>();
+  // Watches the vault for changes to files a project's declared sources point at
+  // and bumps a per-project content epoch; a bump marks the project dirty (via
+  // `markProjectContextDirty`) and lets ongoing/resumed sessions surface a coarse
+  // "sources may have changed" note. Constructed/subscribed in the constructor,
+  // disposed in `dispose`.
+  private readonly contentTracker: ProjectContentTracker;
+  private contentTrackerUnsubscribe?: () => void;
+  // The content epoch each session has already been shown (via the coarse note or
+  // its fresh first-turn manifest). A session whose project's epoch has advanced
+  // past this value gets the note on its next send. Keyed by internal session id;
+  // a resumed session seeds a "behind" sentinel so its first send always notes.
+  private readonly lastSeenProjectContentEpochBySession = new Map<string, number>();
   // Snapshot of project records from the previous change notification, diffed
   // against the next to detect context-source edits. Seeded in the constructor.
   private previousProjectRecords: ProjectFileRecord[] = [];
@@ -366,6 +387,10 @@ export class AgentSessionManager {
     this.fanoutOrchestrator = new FanoutOrchestrator(this.createFanoutHost());
     this.settingsUnsub = subscribeToSettingsChange((prev, next) =>
       this.onDefaultSelectionsChanged(prev, next)
+    );
+    this.contentTracker = new ProjectContentTracker(this.app);
+    this.contentTrackerUnsubscribe = this.contentTracker.onContentChanged((projectId) =>
+      this.markProjectContextDirty(projectId)
     );
     this.setupProjectRecordChangeMonitor();
   }
@@ -532,9 +557,32 @@ export class AgentSessionManager {
       if (getProjectContextSignature(prevRecord) === nextSignature) continue;
 
       const projectId = nextRecord.project.id;
-      this.contextDirtySignatures.set(projectId, nextSignature);
+      // Same epoch-salted dirty key shape as a content change, so the clear guard
+      // treats both uniformly. A config edit keeps the baseline warm of the active
+      // project (its sources may have genuinely changed — a new URL/PDF).
+      this.markProjectContextDirty(projectId, nextRecord);
       if (projectId === this.activeProjectId) this.warmProjectContext(projectId);
     }
+  }
+
+  /**
+   * Flag a project's materialized context as stale under an epoch-salted dirty
+   * key (config signature + the tracker's current content epoch). A pure content
+   * edit doesn't move the config signature, so the epoch salt is what lets it read
+   * as a distinct dirty revision and gate empty-landing reuse. Unlike a config
+   * change this does NOT warm — freshness is recovered lazily when the next
+   * session for the project materializes (the empty-landing gate forces that).
+   */
+  private markProjectContextDirty(
+    projectId: ProjectScopeId,
+    record = getCachedProjectRecordById(projectId)
+  ): void {
+    if (this.disposed || projectId === GLOBAL_SCOPE || !record) return;
+    const key = composeContextDirtyKey(
+      getProjectContextSignature(record),
+      this.contentTracker.getEpoch(projectId)
+    );
+    this.contextDirtySignatures.set(projectId, key);
   }
 
   /**
@@ -552,8 +600,29 @@ export class AgentSessionManager {
     } catch {
       return; // off-desktop: no FileSystemAdapter, nothing to warm
     }
-    void ensureProjectContextMaterialized(this.app, projectId, cwd).catch((err) =>
-      logWarn(`[AgentMode] background context warm failed for ${projectId}`, err)
+    void ensureProjectContextMaterialized(
+      this.app,
+      projectId,
+      cwd,
+      undefined,
+      undefined,
+      this.currentContextRevisionKey(projectId)
+    ).catch((err) => logWarn(`[AgentMode] background context warm failed for ${projectId}`, err));
+  }
+
+  /**
+   * The epoch-salted revision key for a project's CURRENT config + content epoch,
+   * passed to the materializer's single-flight so a run reading stale content is
+   * superseded rather than joined once the content epoch advances. `undefined`
+   * when no record is cached (the materializer then falls back to the config
+   * signature, its prior behavior).
+   */
+  private currentContextRevisionKey(projectId: ProjectScopeId): string | undefined {
+    const record = getCachedProjectRecordById(projectId);
+    if (!record) return undefined;
+    return composeContextDirtyKey(
+      getProjectContextSignature(record),
+      this.contentTracker.getEpoch(projectId)
     );
   }
 
@@ -564,16 +633,48 @@ export class AgentSessionManager {
 
   /**
    * Clear a project's dirty flag once a freshly-created session has captured its
-   * context — but ONLY if the signature the session actually captured (passed in,
-   * read synchronously at materialization kickoff) still equals the dirty one. A
-   * newer edit that landed after this session started materializing bumps the
-   * dirty signature, so it won't match and the project stays dirty (this session
-   * captured the OLDER sources). The lost-update guard for edit/create races.
+   * context — but ONLY if the dirty key still EXACTLY equals the one captured at
+   * this session's materialization kickoff (a newer config edit or content bump
+   * replaces the key, so it won't match and the project stays dirty — the
+   * lost-update guard), AND the materializer result's config signature belongs to
+   * that captured key's config. The exact-key check is what makes the epoch-salted
+   * content revision safe: paired with the materializer's `revisionKey`, the run
+   * that resolved actually read the captured epoch's content.
    */
-  private clearContextDirtyIfCaptured(projectId: ProjectScopeId, capturedSignature: string): void {
-    if (this.contextDirtySignatures.get(projectId) === capturedSignature) {
+  private clearContextDirtyIfCaptured(
+    projectId: ProjectScopeId,
+    capturedKey: string | undefined,
+    resultContextSignature: string | undefined
+  ): void {
+    if (capturedKey === undefined || resultContextSignature === undefined) return;
+    if (this.contextDirtySignatures.get(projectId) !== capturedKey) return;
+    if (contextDirtyKeyMatchesConfig(capturedKey, resultContextSignature)) {
       this.contextDirtySignatures.delete(projectId);
     }
+  }
+
+  /**
+   * Sync accessor wired into a project session (see `ProjectContextUpdatesHooks`):
+   * flush pending vault events so this send sees a just-made edit, then return the
+   * coarse note iff the project's content epoch has advanced past what this session
+   * last saw. GLOBAL sessions never get the hook, so this is a project-only path.
+   */
+  private getProjectContextUpdates(
+    internalId: string,
+    projectId: ProjectScopeId
+  ): { epoch: number; block: string } | null {
+    if (projectId === GLOBAL_SCOPE) return null;
+    this.contentTracker.flushNow();
+    const epoch = this.contentTracker.getEpoch(projectId);
+    const lastSeen = this.lastSeenProjectContentEpochBySession.get(internalId) ?? 0;
+    if (epoch <= lastSeen) return null;
+    return { epoch, block: buildProjectContextUpdatesBlock() };
+  }
+
+  /** Advance a session's content-epoch cursor once its note rode an accepted turn. */
+  private markProjectContextUpdatesDelivered(internalId: string, epoch: number): void {
+    const lastSeen = this.lastSeenProjectContentEpochBySession.get(internalId) ?? 0;
+    if (epoch > lastSeen) this.lastSeenProjectContentEpochBySession.set(internalId, epoch);
   }
 
   /**
@@ -1090,8 +1191,25 @@ export class AgentSessionManager {
     // threaded into the session, which awaits it right before `newSession`.
     // Skipped for GLOBAL_SCOPE — no promise, no atom write, byte-identical to a
     // context-free create. Never rejects (degrades to empty roots).
+    // Snapshot the content epoch + dirty key BEFORE kicking materialization, so
+    // the delivery-cursor seed and the dirty-clear guard both reference the exact
+    // revision this session is about to capture. A content change that lands while
+    // materialization is in flight bumps the epoch past `capturedContentEpoch`, so
+    // it still surfaces as a note on a later send (and supersedes the run via the
+    // revision key rather than being silently absorbed).
+    const capturedContentEpoch =
+      projectId === GLOBAL_SCOPE ? 0 : this.contentTracker.getEpoch(projectId);
+    const capturedDirtyKey =
+      projectId === GLOBAL_SCOPE ? undefined : this.contextDirtySignatures.get(projectId);
     const contextReady =
-      projectId === GLOBAL_SCOPE ? undefined : this.beginContextMaterialization(projectId, cwd);
+      projectId === GLOBAL_SCOPE
+        ? undefined
+        : this.beginContextMaterialization(
+            projectId,
+            cwd,
+            undefined,
+            this.currentContextRevisionKey(projectId)
+          );
 
     const descriptor = this.resolveDescriptor(resolvedId);
 
@@ -1141,10 +1259,11 @@ export class AgentSessionManager {
     // (warm or cold) proc at the resolved scope cwd, threading the project
     // scope + context roots; the probe's state still seeds the picker so it
     // doesn't blink while that round-trip is in flight.
+    const internalId = uuidv4();
     const session = AgentSession.start({
       backend,
       cwd,
-      internalId: uuidv4(),
+      internalId,
       backendId: resolvedId,
       projectId,
       defaultModelSelection: resolvedSeed,
@@ -1154,6 +1273,15 @@ export class AgentSessionManager {
       getDisplayName: (backendId) => this.resolveDescriptor(backendId).displayName,
       getApp: () => this.app,
       contextReady,
+      // Project sessions only — leaving these absent keeps a GLOBAL session's
+      // turn path byte-identical to before this feature (no hook, no note).
+      ...(projectId !== GLOBAL_SCOPE
+        ? {
+            getProjectContextUpdates: () => this.getProjectContextUpdates(internalId, projectId),
+            markProjectContextUpdatesDelivered: (epoch: number) =>
+              this.markProjectContextUpdatesDelivered(internalId, epoch),
+          }
+        : {}),
     });
     if (warm) {
       logInfo(
@@ -1202,14 +1330,24 @@ export class AgentSessionManager {
         // `initialize()` has already awaited `contextReady`, so the await below is
         // an already-settled microtask, not a fresh network wait — it can't stall
         // `finishPendingCreate`. Clear the project's dirty flag FIRST, before any
-        // optional backend config that could hang and stall it. Clear only for the
-        // source revision the materializer actually captured (`contextSignature`):
-        // a newer edit mid-flight bumped the dirty signature, so it won't match and
-        // stays dirty (lost-update guard); a failed materialize carries no signature.
+        // optional backend config that could hang and stall it. Clear only when the
+        // captured dirty key still matches (a newer edit/content bump superseded it,
+        // so it stays dirty — lost-update guard) and the materializer captured a
+        // signature (a failed materialize carries none). The same success path seeds
+        // the session's delivery cursor to the epoch it captured, so its FRESH
+        // first-turn manifest isn't immediately followed by a redundant note; a
+        // change during materialization bumped the epoch past this and still notes.
         if (contextReady) {
           const result = await contextReady;
-          if (!this.disposed && result.contextSignature !== undefined) {
-            this.clearContextDirtyIfCaptured(projectId, result.contextSignature);
+          if (!this.disposed && this.sessions.get(internalId) === session) {
+            if (result.contextSignature !== undefined) {
+              this.clearContextDirtyIfCaptured(
+                projectId,
+                capturedDirtyKey,
+                result.contextSignature
+              );
+              this.lastSeenProjectContentEpochBySession.set(internalId, capturedContentEpoch);
+            }
           }
         }
         if (descriptor.applyInitialSessionConfig) {
@@ -1288,7 +1426,8 @@ export class AgentSessionManager {
   private beginContextMaterialization(
     projectId: ProjectScopeId,
     cwd: string,
-    forceRetryFailed?: boolean
+    forceRetryFailed?: boolean,
+    revisionKey?: string
   ): Promise<ContextMaterializationResult> {
     // Accumulate counts so every publish carries the latest of all three steps
     // (resolve / prefetch / parse), not just the one that fired last.
@@ -1375,7 +1514,14 @@ export class AgentSessionManager {
         }
       : undefined;
 
-    return ensureProjectContextMaterialized(this.app, projectId, cwd, onProgress, forceRetryFailed)
+    return ensureProjectContextMaterialized(
+      this.app,
+      projectId,
+      cwd,
+      onProgress,
+      forceRetryFailed,
+      revisionKey
+    )
       .then((ctx) => {
         if (ownsPublish) {
           // Always carry `failedSources` (empty when clean) so a prior run's
@@ -1447,7 +1593,12 @@ export class AgentSessionManager {
     // above can't see it — but the forced run supersedes it (see
     // {@link ensureProjectContextMaterialized}), and any landing refresh the
     // returned `true` triggers then joins THIS forced run, not the stale warm.
-    void this.beginContextMaterialization(projectId, cwd, true);
+    void this.beginContextMaterialization(
+      projectId,
+      cwd,
+      true,
+      this.currentContextRevisionKey(projectId)
+    );
     // Reason: report whether a real run started so the caller can defer the
     // post-retry landing refresh (skipped for the no-op scopes above).
     return true;
@@ -1676,12 +1827,19 @@ export class AgentSessionManager {
    * signature); one that baked in stale config is skipped. Prefers the scope's
    * MRU; falls back to the most recent matching session. `null` means the caller
    * should spawn fresh.
+   *
+   * A DETACHED landing is never reusable: it was pushed out of the strip because a
+   * fresh visit spawned past it (e.g. it was content-dirty at the time), so its
+   * captured `<project_context>` may predate a change the landing-capture signature
+   * — which tracks config, not file contents — cannot see. Re-adopting it would
+   * violate "don't reuse a stale empty landing"; spawn fresh instead.
    */
   private pickReusableLandingSession(projectId: ProjectScopeId): AgentSession | null {
     const expected = this.currentLandingCaptureSignature(projectId);
     if (!expected) return null;
     const isReusable = (session: AgentSession): boolean =>
       this.isReusableLandingShell(session, projectId) &&
+      !this.detachedFromTabIds.has(session.internalId) &&
       this.landingCaptureSignatures.get(session.internalId) === expected;
 
     const mruId = this.lastActiveByScope.get(projectId);
@@ -2183,6 +2341,7 @@ export class AgentSessionManager {
     this.sessions.delete(id);
     this.chatUIStates.delete(id);
     this.landingCaptureSignatures.delete(id);
+    this.lastSeenProjectContentEpochBySession.delete(id);
     this.detachedFromTabIds.delete(id);
     // Drop the closed session from its scope's MRU so a later enter can't
     // resurrect a dead id.
@@ -2378,6 +2537,11 @@ export class AgentSessionManager {
     // on a half-disposed manager.
     this.projectRecordsUnsubscriber?.();
     this.projectRecordsUnsubscriber = undefined;
+    // Stop the vault watcher and drop its listener before the awaited teardown so
+    // a late vault event can't bump an epoch on a half-disposed manager.
+    this.contentTrackerUnsubscribe?.();
+    this.contentTrackerUnsubscribe = undefined;
+    this.contentTracker.dispose();
     logInfo(
       `[AgentMode] shutdown (pool size=${this.sessions.size}, backends=${this.backends.size})`
     );
@@ -2408,6 +2572,7 @@ export class AgentSessionManager {
     this.sessions.clear();
     this.chatUIStates.clear();
     this.landingCaptureSignatures.clear();
+    this.lastSeenProjectContentEpochBySession.clear();
     this.activeSessionId = null;
     this.activeProjectId = GLOBAL_SCOPE;
     this.lastActiveByScope.clear();
@@ -2674,7 +2839,14 @@ export class AgentSessionManager {
     // session can't appear before the backend rehydrates it, so we await the
     // roots just before `loadSession`. Never rejects → resume is never blocked.
     const contextReady =
-      projectId === GLOBAL_SCOPE ? undefined : this.beginContextMaterialization(projectId, cwd);
+      projectId === GLOBAL_SCOPE
+        ? undefined
+        : this.beginContextMaterialization(
+            projectId,
+            cwd,
+            undefined,
+            this.currentContextRevisionKey(projectId)
+          );
     const descriptor = this.resolveDescriptor(backendId);
 
     this.pendingCreates++;
@@ -2758,10 +2930,11 @@ export class AgentSessionManager {
       return null;
     }
 
+    const internalId = uuidv4();
     const session = new AgentSession({
       backend,
       backendSessionId: resumeResult.sessionId,
-      internalId: uuidv4(),
+      internalId,
       backendId,
       projectId,
       initialState: resumeResult.state,
@@ -2770,7 +2943,22 @@ export class AgentSessionManager {
       runFanoutTurn: (input) => this.runFanoutTurn(input),
       getDisplayName: (id) => this.resolveDescriptor(id).displayName,
       getApp: () => this.app,
+      // Project sessions only. A resumed conversation was closed for a while, so
+      // its sources may well have changed — seed the cursor BEHIND the current
+      // epoch so its first send always emits the coarse note (the maintainer's
+      // "resumed-session note"), independent of whether a change was observed this
+      // plugin session. Deferred fresh-manifest re-delivery is a separate feature.
+      ...(projectId !== GLOBAL_SCOPE
+        ? {
+            getProjectContextUpdates: () => this.getProjectContextUpdates(internalId, projectId),
+            markProjectContextUpdatesDelivered: (epoch: number) =>
+              this.markProjectContextUpdatesDelivered(internalId, epoch),
+          }
+        : {}),
     });
+    if (projectId !== GLOBAL_SCOPE) {
+      this.lastSeenProjectContentEpochBySession.set(internalId, RESUMED_SESSION_BEHIND_EPOCH);
+    }
     this.sessions.set(session.internalId, session);
     this.chatUIStates.set(session.internalId, new AgentChatUIState(session));
     this.detachedFromTabIds.delete(session.internalId);
@@ -3155,6 +3343,7 @@ export class AgentSessionManager {
         this.sessions.delete(s.internalId);
         this.chatUIStates.delete(s.internalId);
         this.landingCaptureSignatures.delete(s.internalId);
+        this.lastSeenProjectContentEpochBySession.delete(s.internalId);
         this.detachedFromTabIds.delete(s.internalId);
         // Drop the dead session from its scope's MRU so a later enter can't
         // resurrect a dead id.

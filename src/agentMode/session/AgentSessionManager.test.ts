@@ -8,6 +8,7 @@ import { AgentSession } from "./AgentSession";
 import { buildNativeChatId } from "@/utils/nativeChatId";
 import { AgentSessionIndex } from "./AgentSessionIndex";
 import { AgentSessionManager } from "./AgentSessionManager";
+import { ProjectContentTracker } from "@/context/projectContentTracker";
 import { GLOBAL_SCOPE } from "./scope";
 import {
   getSettings as mockedGetSettings,
@@ -219,7 +220,13 @@ const sessionCreateSpy = jest.spyOn(AgentSession, "start").mockImplementation((o
 
 function buildApp(basePath = "/vault"): App {
   const adapter = new (FileSystemAdapter as unknown as new (basePath: string) => unknown)(basePath);
-  return { vault: { adapter } } as unknown as App;
+  // The ProjectContentTracker registers vault event listeners at construction;
+  // provide no-op `on`/`offref` so a manager can be built in tests.
+  const vaultEvents = {
+    on: jest.fn(() => ({}) as never),
+    offref: jest.fn(),
+  };
+  return { vault: { adapter, ...vaultEvents } } as unknown as App;
 }
 
 function buildPlugin(): { manifest: { version: string } } {
@@ -1843,6 +1850,9 @@ describe("AgentSessionManager chat history aggregation", () => {
         adapter,
         getAbstractFileByPath: (p: string) =>
           tfiles.find((f: { path: string }) => f.path === p) ?? null,
+        // ProjectContentTracker registers vault listeners at construction.
+        on: jest.fn(() => ({}) as never),
+        offref: jest.fn(),
       },
       metadataCache: {
         getFileCache: (file: { path: string }) => {
@@ -2968,5 +2978,71 @@ describe("AgentSessionManager context-source dirty tracking", () => {
     // Done: nothing is processing.
     expect(latest()).toMatchObject({ phase: "done", blocking: false });
     expect(latest()!.processingSources).toBeUndefined();
+  });
+
+  it("a content change marks the project dirty and blocks empty-landing reuse", async () => {
+    publish(makeRecord({ webUrls: "https://a.com" }));
+    const mgr = buildTrackedManager();
+    await mgr.enterProject(PID);
+    const landing = mgr.getActiveSession();
+    if (!landing) throw new Error("expected a landing session");
+    await flushAsync(); // let the create-time dirty-clear settle
+    await mgr.exitProject();
+
+    // Simulate the content tracker's callback firing for an in-scope file edit
+    // (the tracker itself is unit-tested; here we assert the manager wiring).
+    (mgr as unknown as { markProjectContextDirty: (id: string) => void }).markProjectContextDirty(
+      PID
+    );
+
+    sessionCreateSpy.mockClear();
+    await mgr.enterProject(PID);
+
+    expect(sessionCreateSpy).toHaveBeenCalledTimes(1);
+    expect(mgr.getActiveSession()).not.toBe(landing);
+  });
+
+  it("wires the update hooks into a PROJECT session but not a GLOBAL one", async () => {
+    publish(makeRecord({ webUrls: "https://a.com" }));
+    const mgr = buildTrackedManager();
+
+    sessionCreateSpy.mockClear();
+    await mgr.enterProject(PID);
+    const projectOpts = sessionCreateSpy.mock.calls[0][0];
+    expect(typeof projectOpts.getProjectContextUpdates).toBe("function");
+    expect(typeof projectOpts.markProjectContextUpdatesDelivered).toBe("function");
+
+    // Back to the global scope (createSession defaults to the active scope).
+    await mgr.exitProject();
+    sessionCreateSpy.mockClear();
+    await mgr.createSession();
+    const globalOpts = sessionCreateSpy.mock.calls[0][0];
+    expect(globalOpts.getProjectContextUpdates).toBeUndefined();
+    expect(globalOpts.markProjectContextUpdatesDelivered).toBeUndefined();
+  });
+
+  it("getProjectContextUpdates flushes, returns the note when behind, then null once acked", () => {
+    const mgr = buildTrackedManager();
+    const tracker = (mgr as unknown as { contentTracker: ProjectContentTracker }).contentTracker;
+    const flushSpy = jest.spyOn(tracker, "flushNow");
+    jest.spyOn(tracker, "getEpoch").mockReturnValue(3);
+    const m = mgr as unknown as {
+      getProjectContextUpdates: (
+        id: string,
+        pid: string
+      ) => { epoch: number; block: string } | null;
+      markProjectContextUpdatesDelivered: (id: string, epoch: number) => void;
+    };
+
+    const first = m.getProjectContextUpdates("s1", PID);
+    expect(flushSpy).toHaveBeenCalled(); // send-time flush of pending vault events
+    expect(first?.epoch).toBe(3);
+    expect(first?.block).toContain("<project_context_updates>");
+
+    m.markProjectContextUpdatesDelivered("s1", 3);
+    expect(m.getProjectContextUpdates("s1", PID)).toBeNull();
+
+    // A GLOBAL session never gets a note, regardless of epoch.
+    expect(m.getProjectContextUpdates("s2", GLOBAL_SCOPE)).toBeNull();
   });
 });

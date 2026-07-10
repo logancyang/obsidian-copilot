@@ -87,3 +87,37 @@ export function getProjectLandingCaptureSignature(record: ProjectFileRecord): st
     systemPrompt: record.project.systemPrompt ?? "",
   });
 }
+
+/**
+ * Compose a content-aware dirty key from a config signature and a content
+ * revision epoch. The config signature (see {@link getProjectContextSignature})
+ * only moves when the project's declared sources change; edits to the FILES
+ * those sources point at do not touch it. Salting it with the tracker's
+ * per-project epoch lets a pure content change still read as a distinct dirty
+ * revision, so it can gate empty-landing reuse and drive re-materialization
+ * through the same machinery a config edit uses.
+ */
+export function composeContextDirtyKey(configSignature: string, epoch: number): string {
+  return `${configSignature}#${epoch}`;
+}
+
+/**
+ * Whether a dirty key (possibly epoch-salted by {@link composeContextDirtyKey})
+ * belongs to the given config signature. True when the key is the bare config
+ * signature, or the config signature followed by `#<digits>`. The dirty-clear
+ * guard uses this to confirm a materialization result (which carries only the
+ * config signature) corresponds to the captured dirty key's config — the exact
+ * epoch is enforced separately by comparing the whole captured key.
+ */
+export function contextDirtyKeyMatchesConfig(
+  key: string | undefined,
+  configSignature: string
+): boolean {
+  if (key === undefined) return false;
+  if (key === configSignature) return true;
+  // Reason: the salt is appended as `#<epoch>`; split on the LAST `#` so a `#`
+  // inside the JSON signature itself can't cause a false prefix match.
+  const lastHash = key.lastIndexOf("#");
+  if (lastHash < 0) return false;
+  return key.slice(0, lastHash) === configSignature && /^\d+$/.test(key.slice(lastHash + 1));
+}
