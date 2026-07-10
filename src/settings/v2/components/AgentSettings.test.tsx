@@ -1,10 +1,16 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import React from "react";
 import { AgentSettings } from "./AgentSettings";
 
 jest.mock("@/logger", () => ({ logInfo: jest.fn(), logWarn: jest.fn(), logError: jest.fn() }));
 
-jest.mock("obsidian", () => ({ Platform: { isMobile: false } }));
+jest.mock("obsidian", () => ({ Notice: jest.fn(), Platform: { isMobile: false } }));
+
+jest.mock("@/components/ui/copyable-command", () => ({
+  CopyableCommand: ({ command }: { command: string }) => (
+    <code data-testid="replacement-command">{command}</code>
+  ),
+}));
 
 jest.mock("@/settings/model", () => ({
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook; name must match the export
@@ -36,6 +42,7 @@ function makeDescriptor(id: string, displayName: string) {
     getInstallState: () => installStates[id],
     getResolvedBinaryPath: () => null,
     openInstallUI: jest.fn(),
+    onPluginLoad: jest.fn().mockResolvedValue(undefined),
     SettingsPanel: () => <div data-testid={`panel-${id}`}>settings panel</div>,
   };
 }
@@ -48,7 +55,11 @@ const DESCRIPTORS = [
 
 jest.mock("@/agentMode", () => ({
   listBackendDescriptors: () => DESCRIPTORS,
-  InstallBadge: () => <span data-testid="install-badge" />,
+  InstallBadge: ({ state }: { state: { kind: string } }) => (
+    <span data-testid="install-badge">
+      {state.kind === "blocked" ? "Update required" : "Ready"}
+    </span>
+  ),
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook export
   useBackendInstallState: (descriptor: { getInstallState: () => unknown }) =>
     descriptor.getInstallState(),
@@ -84,6 +95,7 @@ describe("AgentSettings", () => {
     installStates.opencode = { kind: "ready", source: "managed" };
     installStates.claude = { kind: "ready", source: "custom" };
     installStates.codex = { kind: "ready", source: "custom" };
+    for (const descriptor of DESCRIPTORS) descriptor.onPluginLoad.mockClear();
   });
 
   it("renders the four sub-tabs in order: OpenCode, Claude, Codex, Quick Chat", () => {
@@ -145,5 +157,30 @@ describe("AgentSettings", () => {
     expect(screen.getByText(message)).toBeTruthy();
     expect(screen.queryByTestId("default-model-claude")).toBeNull();
     expect(screen.queryByTestId("model-list-claude")).toBeNull();
+  });
+
+  it("shows blocked Codex migration details and supports re-detection", async () => {
+    installStates.codex = {
+      kind: "blocked",
+      reason: "The superseded adapter is installed.",
+      remediation: "npm uninstall legacy && npm install replacement",
+      details: { adapterVersion: "0.8.1", cliVersion: "0.143.0", cliSource: "bundled" },
+    };
+
+    render(<AgentSettings />);
+    fireEvent.click(screen.getByRole("tab", { name: "Codex" }));
+
+    expect(screen.getAllByText("Update required")).not.toHaveLength(0);
+    expect(screen.getByText("The superseded adapter is installed.")).not.toBeNull();
+    expect(screen.getByText(/Adapter 0\.8\.1/).textContent).toBe(
+      "Adapter 0.8.1 · Effective CLI 0.143.0 (bundled)"
+    );
+    expect(screen.getByTestId("replacement-command").textContent).toBe(
+      "npm uninstall legacy && npm install replacement"
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Re-detect" }));
+    expect(DESCRIPTORS[2].onPluginLoad).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Re-detect" })).not.toBeNull());
   });
 });

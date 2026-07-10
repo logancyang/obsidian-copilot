@@ -6,8 +6,10 @@ import {
   useBackendInstallState,
   type BackendDescriptor,
   type BackendId,
+  type InstallState,
 } from "@/agentMode";
 import { Button } from "@/components/ui/button";
+import { CopyableCommand } from "@/components/ui/copyable-command";
 import { SettingItem } from "@/components/ui/setting-item";
 import { TabContent, TabItem, type TabItem as TabItemType } from "@/components/ui/setting-tabs";
 import { TruncatedText } from "@/components/TruncatedText";
@@ -17,7 +19,7 @@ import { logError } from "@/logger";
 import { setSettings, updateSetting, useSettingsValue } from "@/settings/model";
 import { formatBinaryPathForDisplay } from "@/utils/binaryPath";
 import { MessageCircle } from "lucide-react";
-import { Platform } from "obsidian";
+import { Notice, Platform } from "obsidian";
 import React from "react";
 import { ChatModelEnableList } from "./ChatModelEnableList";
 import { ConfiguredModelEnableList } from "./ConfiguredModelEnableList";
@@ -257,7 +259,86 @@ const BackendPanel: React.FC<{
 
       {installState.kind === "ready" && <ConfiguredModelEnableList descriptor={descriptor} />}
 
+      {installState.kind === "blocked" && (
+        <BlockedBackendInstallDetails
+          displayName={descriptor.displayName}
+          state={installState}
+          onRedetect={
+            descriptor.onPluginLoad
+              ? async () => {
+                  await descriptor.onPluginLoad?.(plugin);
+                }
+              : undefined
+          }
+        />
+      )}
+
       {Panel && <Panel plugin={plugin} app={plugin.app} />}
+    </div>
+  );
+};
+
+interface BlockedBackendInstallDetailsProps {
+  displayName: string;
+  state: Extract<InstallState, { kind: "blocked" }>;
+  onRedetect?: () => Promise<void>;
+}
+
+const BlockedBackendInstallDetails: React.FC<BlockedBackendInstallDetailsProps> = ({
+  displayName,
+  state,
+  onRedetect,
+}) => {
+  const [detecting, setDetecting] = React.useState(false);
+  const details = state.details;
+
+  const redetect = React.useCallback((): void => {
+    if (!onRedetect || detecting) return;
+    setDetecting(true);
+    onRedetect()
+      .then(() => new Notice(`${displayName} installation re-detected.`))
+      .catch((error) => {
+        logError(`[AgentMode] ${displayName} installation re-detect failed`, error);
+        new Notice(`Could not re-detect the ${displayName} installation. See console for details.`);
+      })
+      .finally(() => setDetecting(false));
+  }, [detecting, displayName, onRedetect]);
+
+  return (
+    <div
+      className="tw-flex tw-flex-col tw-gap-2 tw-rounded tw-border tw-border-border tw-bg-callout-warning/20 tw-p-3"
+      role="alert"
+    >
+      <div className="tw-flex tw-items-start tw-justify-between tw-gap-2">
+        <div className="tw-flex tw-flex-col tw-gap-1">
+          <span className="tw-text-sm tw-font-semibold tw-text-warning">Update required</span>
+          <span className="tw-text-xs tw-text-muted">{state.reason}</span>
+          {(details?.adapterVersion || details?.cliVersion) && (
+            <span className="tw-text-xs tw-text-muted">
+              {details.adapterVersion && <>Adapter {details.adapterVersion}</>}
+              {details.adapterVersion && details.cliVersion && " · "}
+              {details.cliVersion && (
+                <>
+                  Effective CLI {details.cliVersion}
+                  {details.cliSource ? ` (${details.cliSource})` : ""}
+                </>
+              )}
+            </span>
+          )}
+        </div>
+        {onRedetect && (
+          <Button
+            className="tw-shrink-0"
+            variant="secondary"
+            size="sm"
+            disabled={detecting}
+            onClick={redetect}
+          >
+            {detecting ? "Re-detecting…" : "Re-detect"}
+          </Button>
+        )}
+      </div>
+      <CopyableCommand command={state.remediation} label="Replacement command" />
     </div>
   );
 };

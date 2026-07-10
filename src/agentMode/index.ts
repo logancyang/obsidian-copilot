@@ -400,20 +400,40 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
       logError("[Skills] Initial discovery pass failed", error);
     }
   );
-  // Non-blocking — plugin load should not wait on disk reconcile.
+  // Backend reconciliation stays non-blocking for plugin load, but a backend's
+  // model probe must wait for its own reconciliation. In particular, Codex
+  // re-validates persisted adapter health here; preloading from last run's
+  // "supported" result first would allow an in-place downgrade to spawn before
+  // the fresh probe can block it.
+  const backendLoadPromises = new Map<BackendId, Promise<void>>();
   for (const descriptor of listBackendDescriptors()) {
-    descriptor
-      .onPluginLoad?.(plugin)
-      .catch((e) => logError(`[AgentMode] backend ${descriptor.id} onPluginLoad failed`, e));
+    if (!descriptor.onPluginLoad) continue;
+    const promise = descriptor.onPluginLoad(plugin);
+    backendLoadPromises.set(descriptor.id, promise);
+    promise.catch((e) => logError(`[AgentMode] backend ${descriptor.id} onPluginLoad failed`, e));
   }
 
-  const settings = getSettings();
   if (!isAgentModeEnabled()) return manager;
   // Per-backend preload registration: each backend's status flips
   // independently. The chat UI gates on the active backend's status; the
   // picker reads every backend's status to render per-backend loading rows.
   for (const descriptor of listBackendDescriptors()) {
-    if (descriptor.getInstallState(settings).kind !== "ready") continue;
+    const backendLoad = backendLoadPromises.get(descriptor.id);
+    if (backendLoad) {
+      const promise = backendLoad.then(async () => {
+        if (descriptor.getInstallState(getSettings()).kind !== "ready") return;
+        await manager.preloadModels(descriptor.id);
+      });
+      manager.registerPreload(
+        descriptor.id,
+        promise.catch((e) => {
+          logError(`[AgentMode] preload ${descriptor.id} failed`, e);
+          throw e;
+        })
+      );
+      continue;
+    }
+    if (descriptor.getInstallState(getSettings()).kind !== "ready") continue;
     const promise = manager.preloadModels(descriptor.id);
     manager.registerPreload(
       descriptor.id,

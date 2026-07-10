@@ -2,17 +2,18 @@ import { BinaryPathSetting } from "@/agentMode/backends/shared/BinaryPathSetting
 import { ConfigDialogShell, ConfigSection } from "@/agentMode/backends/shared/ConfigDialogShell";
 import { InstallCommandRow } from "@/agentMode/backends/shared/InstallCommandRow";
 import { InstallStatusLine } from "@/agentMode/backends/shared/installStatus";
-import { binaryPathInstallState } from "@/agentMode/backends/shared/simpleBinaryBackend";
 import { ReactModal } from "@/components/modals/ReactModal";
 import { useSettingsValue } from "@/settings/model";
 import { validateExecutableFile } from "@/utils/detectBinary";
 import { App, Notice } from "obsidian";
 import React from "react";
+import { codexInstallState } from "./CodexBinaryManager";
 import {
   CODEX_BINARY_NAME,
   CODEX_INSTALL_COMMAND,
   codexAcpDetectionSearchDirs,
   detectCodexAcpPath,
+  getCodexBinaryManager,
   updateCodexFields,
 } from "./descriptor";
 
@@ -21,18 +22,36 @@ import {
  * `codex-acp` ACP adapter. The dialog configures the codex-acp path
  * and gives auth guidance; `codex login` owns the user's auth state.
  */
-const CodexConfigBody: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+export const CodexConfigBody: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const settings = useSettingsValue();
   const binaryPath = settings.agentMode?.backends?.codex?.binaryPath ?? "";
-  // Existence-checked (same as descriptor.getInstallState): a synced-but-missing
-  // path reads "absent" here too, not a stale "Ready", so the dialog guides the
-  // user to re-detect or clear the dead path instead of looking configured.
-  const sessionState = binaryPathInstallState(binaryPath);
+  const sessionState = codexInstallState(settings.agentMode?.backends?.codex);
+  const details =
+    sessionState.kind === "ready" || sessionState.kind === "blocked"
+      ? sessionState.details
+      : undefined;
+  const versionDetail =
+    details?.adapterVersion || details?.cliVersion ? (
+      <>
+        {details.adapterVersion && <>Adapter {details.adapterVersion}</>}
+        {details.adapterVersion && details.cliVersion && " · "}
+        {details.cliVersion && (
+          <>
+            Effective CLI {details.cliVersion}
+            {details.cliSource ? ` (${details.cliSource})` : ""}
+          </>
+        )}
+      </>
+    ) : undefined;
 
   const onSavePath = React.useCallback(async (path: string): Promise<string | null> => {
     const err = await validateExecutableFile(path);
     if (err) return err;
     updateCodexFields({ binaryPath: path });
+    // Re-probe even when auto-detection resolves to the already-saved path:
+    // replacing an unsupported package normally changes the executable in
+    // place, so the path fingerprint alone cannot observe the migration.
+    await getCodexBinaryManager().refreshInstallState();
     new Notice("Codex binary path saved.");
     return null;
   }, []);
@@ -43,10 +62,26 @@ const CodexConfigBody: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   }, []);
 
   return (
-    <ConfigDialogShell status={<InstallStatusLine state={sessionState} />} onClose={onClose}>
-      <ConfigSection title="Install codex-acp">
-        <InstallCommandRow command={CODEX_INSTALL_COMMAND} />
-      </ConfigSection>
+    <ConfigDialogShell
+      status={<InstallStatusLine state={sessionState} detail={versionDetail} />}
+      onClose={onClose}
+    >
+      {sessionState.kind === "blocked" ? (
+        <ConfigSection title="Replace the unsupported adapter">
+          <p className="tw-my-0 tw-text-sm tw-text-warning">{sessionState.reason}</p>
+          <InstallCommandRow command={sessionState.remediation} label="Replacement command" />
+        </ConfigSection>
+      ) : (
+        <ConfigSection title="Install codex-acp">
+          <InstallCommandRow command={CODEX_INSTALL_COMMAND} />
+        </ConfigSection>
+      )}
+
+      {details?.warning && (
+        <div className="tw-rounded tw-bg-callout-warning/20 tw-p-2 tw-text-xs tw-text-warning">
+          {details.warning}
+        </div>
+      )}
 
       <ConfigSection title="Use your own binary">
         <p className="tw-my-0 tw-text-sm tw-text-muted">

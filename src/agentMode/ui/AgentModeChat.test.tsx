@@ -6,6 +6,8 @@ import type CopilotPlugin from "@/main";
 import { render, waitFor } from "@testing-library/react";
 import React from "react";
 
+let mockInstallState: { kind: "ready" | "blocked" } = { kind: "ready" };
+
 // Stub the descriptor hooks so the effect's `preloadReady`/install gates are
 // satisfied without the real backend registry / jotai atoms. The mock factory
 // names must match the real `use*` exports, so the no-hook `use` prefix is
@@ -13,7 +15,7 @@ import React from "react";
 /* eslint-disable @eslint-react/hooks-extra/no-unnecessary-use-prefix */
 jest.mock("@/agentMode/ui/useBackendDescriptor", () => ({
   useActiveBackendDescriptor: () => ({ id: "claude", openInstallUI: jest.fn() }),
-  useBackendInstallState: () => ({ kind: "ready", source: "custom" }),
+  useBackendInstallState: () => mockInstallState,
 }));
 /* eslint-enable @eslint-react/hooks-extra/no-unnecessary-use-prefix */
 
@@ -55,6 +57,9 @@ function renderChat(manager: AgentSessionManager) {
 }
 
 describe("AgentModeChat auto-spawn guard (scope-aware)", () => {
+  beforeEach(() => {
+    mockInstallState = { kind: "ready" };
+  });
   it("regression: spawns the current project scope's session even when another scope still has sessions", async () => {
     // The closed scope (project-1) is empty, but the global pool still holds a
     // session. A whole-pool guard would skip the spawn and strand the pane on
@@ -92,6 +97,20 @@ describe("AgentModeChat auto-spawn guard (scope-aware)", () => {
     renderChat(manager);
 
     // Flush effects, then assert the guard short-circuited.
+    await waitFor(() => expect(manager.getSessionsForScope).toHaveBeenCalled());
+    expect(getOrCreateActiveSession).not.toHaveBeenCalled();
+  });
+
+  it("does not spawn when the selected backend requires migration", async () => {
+    mockInstallState = { kind: "blocked" };
+    const { manager, getOrCreateActiveSession } = makeManager({
+      activeProjectId: GLOBAL_SCOPE,
+      scopeSessions: [],
+      poolSessions: [],
+    });
+
+    renderChat(manager);
+
     await waitFor(() => expect(manager.getSessionsForScope).toHaveBeenCalled());
     expect(getOrCreateActiveSession).not.toHaveBeenCalled();
   });

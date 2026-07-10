@@ -11,7 +11,7 @@ interface InstallBadgeSpec {
   className?: string;
   /** Render a leading check glyph (ready state). */
   showCheck?: boolean;
-  /** Tooltip text (error message). */
+  /** Tooltip text (error or blocking reason). */
   title?: string;
 }
 
@@ -31,6 +31,9 @@ export function installBadge(state: InstallState): InstallBadgeSpec | null {
   }
   if (state.kind === "error") {
     return { label: "Error", variant: "destructive", title: state.message };
+  }
+  if (state.kind === "blocked") {
+    return { label: "Update required", variant: "destructive", title: state.reason };
   }
   // absent → no badge.
   return null;

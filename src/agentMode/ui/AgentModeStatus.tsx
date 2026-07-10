@@ -1,10 +1,11 @@
-import { Button } from "@/components/ui/button";
 import {
   useBackendAuthState,
   useBackendInstallState,
   useSessionBackendDescriptor,
 } from "@/agentMode/ui/useBackendDescriptor";
 import { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
+import { Button } from "@/components/ui/button";
+import { CopyableCommand } from "@/components/ui/copyable-command";
 import { cn } from "@/lib/utils";
 import { logError } from "@/logger";
 import type CopilotPlugin from "@/main";
@@ -73,6 +74,31 @@ export const AgentModeStatus: React.FC<Props> = ({ manager, plugin, onInstallCli
         )}
       >
         <span>Checking {descriptor.displayName} version…</span>
+      </div>
+    );
+  }
+
+  if (installState.kind === "blocked") {
+    return (
+      <div
+        className={cn(
+          "tw-flex tw-flex-col tw-gap-2 tw-rounded tw-border tw-border-border",
+          "tw-bg-callout-warning/20 tw-px-3 tw-py-2 tw-text-xs"
+        )}
+        role="alert"
+      >
+        <div className="tw-flex tw-items-start tw-justify-between tw-gap-2">
+          <div className="tw-flex tw-min-w-0 tw-flex-col tw-gap-1">
+            <span className="tw-font-semibold tw-text-warning">
+              {descriptor.displayName} update required
+            </span>
+            <span className="tw-text-muted">{installState.reason}</span>
+          </div>
+          <Button className="tw-shrink-0" variant="default" size="sm" onClick={onInstallClick}>
+            Configure
+          </Button>
+        </div>
+        <CopyableCommand command={installState.remediation} label="Replacement command" />
       </div>
     );
   }

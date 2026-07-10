@@ -30,6 +30,22 @@ jest.mock("@/settings/model", () => ({
   useSettingsValue: () => ({}),
 }));
 
+jest.mock("@/components/ui/copyable-command", () => ({
+  CopyableCommand: ({ command }: { command: string }) => (
+    <button type="button" aria-label="Copy replacement command" data-command={command}>
+      Copy
+    </button>
+  ),
+}));
+
+function makeQuietManager(): AgentSessionManager {
+  return {
+    subscribe: jest.fn(() => () => {}),
+    getLastError: jest.fn(() => null),
+    getOrCreateActiveSession: jest.fn(),
+  } as unknown as AgentSessionManager;
+}
+
 describe("AgentModeStatus", () => {
   describe("AgentModeStatus()", () => {
     beforeEach(() => {
@@ -76,6 +92,69 @@ describe("AgentModeStatus", () => {
 
       expect(screen.getByText(message)).toBeTruthy();
       expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Configure Claude" }));
+      expect(descriptor.openInstallUI).toHaveBeenCalledWith(plugin);
+    });
+
+    it("blocks a superseded adapter with configure and copyable migration actions", () => {
+      const onInstallClick = jest.fn();
+      installState = {
+        kind: "blocked",
+        reason: "The superseded adapter is installed.",
+        remediation: "npm uninstall legacy && npm install replacement",
+      };
+      const plugin = { app: {} } as unknown as CopilotPlugin;
+
+      render(
+        <AgentModeStatus
+          manager={makeQuietManager()}
+          plugin={plugin}
+          onInstallClick={onInstallClick}
+        />
+      );
+
+      expect(screen.getByRole("alert").textContent).toContain("Claude update required");
+      expect(screen.getByText("The superseded adapter is installed.")).toBeTruthy();
+      expect(
+        screen
+          .getByRole("button", { name: "Copy replacement command" })
+          .getAttribute("data-command")
+      ).toBe("npm uninstall legacy && npm install replacement");
+      fireEvent.click(screen.getByRole("button", { name: "Configure" }));
+      expect(onInstallClick).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps a healthy chat uncluttered even when install details carry a warning", () => {
+      installState = {
+        kind: "ready",
+        source: "custom",
+        details: {
+          adapterVersion: "1.1.2",
+          cliVersion: "0.144.0",
+          cliSource: "override",
+          warning: "Custom CLI compatibility warning.",
+        },
+      };
+      const plugin = { app: {} } as unknown as CopilotPlugin;
+
+      const { container } = render(
+        <AgentModeStatus manager={makeQuietManager()} plugin={plugin} onInstallClick={jest.fn()} />
+      );
+
+      expect(container.childElementCount).toBe(0);
+    });
+
+    it("keeps an invalid installation recoverable without starting it", () => {
+      const message = "The configured launcher returned an unrecognized adapter version.";
+      installState = { kind: "error", message };
+      const plugin = { app: {} } as unknown as CopilotPlugin;
+
+      render(
+        <AgentModeStatus manager={makeQuietManager()} plugin={plugin} onInstallClick={jest.fn()} />
+      );
+
+      expect(screen.getByRole("alert")).toBeTruthy();
+      expect(screen.getByText(message)).toBeTruthy();
       fireEvent.click(screen.getByRole("button", { name: "Configure Claude" }));
       expect(descriptor.openInstallUI).toHaveBeenCalledWith(plugin);
     });

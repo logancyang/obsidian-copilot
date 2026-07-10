@@ -53,4 +53,17 @@ describe("installStatus", () => {
       });
     });
   });
+
+  it("never labels a blocked installation as ready", () => {
+    const state: InstallState = {
+      kind: "blocked",
+      reason: "Replace the legacy adapter.",
+      remediation: "npm install replacement",
+    };
+    expect(installBadge(state)).toEqual({
+      label: "Update required",
+      variant: "destructive",
+      title: "Replace the legacy adapter.",
+    });
+  });
 });
