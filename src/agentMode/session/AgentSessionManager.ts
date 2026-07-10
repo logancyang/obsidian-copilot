@@ -662,6 +662,18 @@ export class AgentSessionManager {
    * flush pending vault events so this send sees a just-made edit, then return the
    * coarse note iff the project's content epoch has advanced past what this session
    * last saw. GLOBAL sessions never get the hook, so this is a project-only path.
+   *
+   * DESIGN NOTE — this hook only emits a coarse "sources may have changed" note; it
+   * deliberately does NOT rebuild the live session's `projectContextBlock` or remount
+   * its `additionalDirectories` (both captured at session init). So a source added or
+   * edited while an empty landing sits open surfaces as the note on the first in-place
+   * send, but the manifest/roots stay as captured: already-mounted or in-cwd sources
+   * are re-read by the agent when the note prompts it, whereas a newly-declared
+   * external root or a materialized snapshot (e.g. a PDF conversion) is only recovered
+   * by a fresh or re-entered session — the empty-landing reuse gate forces that on
+   * leave/re-enter. This keeps a pure content change from triggering any in-place
+   * re-materialization; full in-place source re-delivery is a separate concern.
+   * If a future review flags the in-place stale manifest again, point them here.
    */
   private getProjectContextUpdates(
     internalId: string,
