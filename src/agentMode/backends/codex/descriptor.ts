@@ -1,5 +1,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
+import { CODEX_ACP_INSTALL_COMMAND, CODEX_ACP_MIGRATION_COMMAND } from "@/constants";
+import { logError } from "@/logger";
 import type CopilotPlugin from "@/main";
 import {
   subscribeToSettingsChange,
@@ -13,10 +15,7 @@ import CodexLogo from "./logo.svg";
 import { CodexSettingsPanel } from "./CodexSettingsPanel";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import { agentOriginEnabledModelEntries } from "@/agentMode/backends/shared/agentEnabledModels";
-import {
-  binaryPathInstallState,
-  simpleBinaryBackendProcess,
-} from "@/agentMode/backends/shared/simpleBinaryBackend";
+import { simpleBinaryBackendProcess } from "@/agentMode/backends/shared/simpleBinaryBackend";
 import type {
   EnabledModelEntry,
   ModeMapping,
@@ -25,13 +24,20 @@ import type {
 } from "@/agentMode/session/types";
 import type { BackendDescriptor, BackendProcess, InstallState } from "@/agentMode/session/types";
 import { detectBinary } from "@/utils/detectBinary";
-import { codexAcpSearchDirs, resolveCodexAcpBinary } from "./codexBinaryResolver";
+import { CodexBinaryManager, codexProbeSettingsFingerprint } from "./CodexBinaryManager";
+import {
+  codexAcpSearchDirs,
+  resolveCodexAcpBinary,
+  resolveCodexAcpLauncher,
+  type CodexAcpBinaryResolverInput,
+} from "./codexBinaryResolver";
 
 export const CODEX_BINARY_NAME = "codex-acp";
-export const CODEX_INSTALL_COMMAND =
-  process.platform === "win32"
-    ? "irm https://gist.githubusercontent.com/logancyang/380ef4dbf9f98900771da76eca3d21e6/raw/install-codex-agent-mode-windows.ps1 | iex"
-    : "npm install -g @zed-industries/codex-acp";
+export const CODEX_INSTALL_COMMAND = CODEX_ACP_INSTALL_COMMAND;
+export const CODEX_MIGRATION_COMMAND = CODEX_ACP_MIGRATION_COMMAND;
+
+let managerRef: CodexBinaryManager | null = null;
+let managerNodePath: string | undefined;
 
 /**
  * Vocabulary mirrors codex-acp's advertised efforts. `minimal` is included
@@ -44,7 +50,7 @@ export function updateCodexFields(partial: Partial<CodexBackendSettings>): void 
   updateAgentModeBackendFields("codex", partial);
 }
 
-function codexAcpResolverEnv(): Parameters<typeof resolveCodexAcpBinary>[0] {
+function codexAcpResolverEnv(): CodexAcpBinaryResolverInput {
   return {
     homeDir: os.homedir(),
     platform: process.platform,
@@ -57,9 +63,45 @@ function codexAcpResolverEnv(): Parameters<typeof resolveCodexAcpBinary>[0] {
   };
 }
 
+export function resolveCodexNodePath(input: CodexAcpBinaryResolverInput): string | undefined {
+  const launcher = resolveCodexAcpLauncher(input);
+  return launcher?.kind === "node" ? launcher.command : undefined;
+}
+
+export function getCodexBinaryManager(): CodexBinaryManager {
+  const resolverEnv = codexAcpResolverEnv();
+  const nodePath = resolveCodexNodePath(resolverEnv);
+  if (!managerRef || managerNodePath !== nodePath) {
+    managerRef = new CodexBinaryManager({
+      platform: resolverEnv.platform,
+      nodePath,
+    });
+    managerNodePath = nodePath;
+  }
+  return managerRef;
+}
+
+export function subscribeCodexInstallState(
+  getManager: () => Pick<CodexBinaryManager, "refreshInstallState">,
+  cb: () => void
+): () => void {
+  return subscribeToSettingsChange((prev, next) => {
+    const previous = prev.agentMode?.backends?.codex;
+    const current = next.agentMode?.backends?.codex;
+    if (codexProbeSettingsFingerprint(previous) !== codexProbeSettingsFingerprint(current)) {
+      void getManager()
+        .refreshInstallState(current)
+        .catch((error) => logError("[AgentMode] Codex install-state refresh failed", error));
+      return;
+    }
+    if (previous?.probe !== current?.probe) cb();
+  });
+}
+
 export async function detectCodexAcpPath(): Promise<string | null> {
   const fromResolver = resolveCodexAcpBinary(codexAcpResolverEnv());
   if (fromResolver) return fromResolver;
+  if (process.platform === "win32") return null;
   return detectBinary(CODEX_BINARY_NAME);
 }
 
@@ -92,7 +134,7 @@ const codexWire: ModelWireCodec = {
 };
 
 /**
- * Codex backend — wraps `@zed-industries/codex-acp`, which inherits auth
+ * Codex backend — wraps `@agentclientprotocol/codex-acp`, which inherits auth
  * from the local `codex` CLI login. Auth is CLI-owned (no Copilot-side keys),
  * so the candidate models come entirely from the CLI's live `availableModels`
  * (active session or preloader cache); curation is the model-management
@@ -135,7 +177,7 @@ export const CodexBackendDescriptor: BackendDescriptor = {
   },
 
   getInstallState(settings: CopilotSettings): InstallState {
-    return binaryPathInstallState(settings.agentMode?.backends?.codex?.binaryPath);
+    return getCodexBinaryManager().getInstallState(settings.agentMode?.backends?.codex);
   },
 
   getResolvedBinaryPath(settings: CopilotSettings): string | null {
@@ -143,13 +185,7 @@ export const CodexBackendDescriptor: BackendDescriptor = {
   },
 
   subscribeInstallState(_plugin: CopilotPlugin, cb: () => void): () => void {
-    return subscribeToSettingsChange((prev, next) => {
-      if (
-        prev.agentMode?.backends?.codex?.binaryPath !== next.agentMode?.backends?.codex?.binaryPath
-      ) {
-        cb();
-      }
-    });
+    return subscribeCodexInstallState(getCodexBinaryManager, cb);
   },
 
   openInstallUI(plugin: CopilotPlugin): void {
@@ -165,32 +201,30 @@ export const CodexBackendDescriptor: BackendDescriptor = {
     // symlink. The per-agent toggle drives whether the symlink exists; no
     // deny synthesis is needed because Codex does not cross-discover from
     // `.claude/skills/` or `.opencode/skills/`.
-    return simpleBinaryBackendProcess(args, new CodexBackend());
+    return simpleBinaryBackendProcess(
+      args,
+      new CodexBackend({
+        platform: process.platform,
+        nodePath: resolveCodexNodePath(codexAcpResolverEnv()),
+      })
+    );
   },
 
   SettingsPanel: CodexSettingsPanel,
 
+  async onPluginLoad(_plugin: CopilotPlugin): Promise<void> {
+    await getCodexBinaryManager().refreshInstallState();
+  },
+
   /**
-   * Codex exposes sandbox/approval presets via ACP setMode: `read-only`,
-   * `auto`, and `full-access`. We surface all three:
-   *   - build       → "auto"           (workspace-write, on-request approvals)
-   *   - plan        → "read-only"      (no writes, no exec; closest ACP analog)
-   *   - auto-build  → "full-access"    (no sandbox, no approvals)
-   *
-   * Note: this is a sandbox restriction, not Codex CLI's real `ModeKind::Plan`
-   * (which would draft a plan artifact). That mode lives behind the app-server
-   * `turn/start.collaborationMode` field, which `@zed-industries/codex-acp`
-   * does not forward — it translates ACP modes to
-   * `Op::OverrideTurnContext { approval_policy, sandbox_policy }` only.
-   * Read-only is the closest available analog: the agent can read and reason
-   * but cannot mutate the vault, which matches user intent for "Plan".
+   * The replacement adapter exposes three approval/sandbox presets via ACP
+   * setMode. Read-only remains the closest available Plan behavior; the
+   * adapter's mode controls permissions rather than Codex collaboration mode.
    */
   getModeMapping(): ModeMapping {
     return {
       kind: "setMode",
-      canonical: { default: "auto", plan: "read-only", auto: "full-access" },
-      // Codex's `read-only` preset is a genuine no-write/no-exec sandbox, so it
-      // doubles as the fan-out read-only sandbox mode.
+      canonical: { default: "agent", plan: "read-only", auto: "agent-full-access" },
       readOnlyModeId: "read-only",
     };
   },

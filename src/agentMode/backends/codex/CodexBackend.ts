@@ -1,94 +1,64 @@
-import { getSettings } from "@/settings/model";
 import { AcpBackend, AcpSpawnDescriptor } from "@/agentMode/acp/types";
-import { buildSimpleSpawnDescriptor } from "@/agentMode/backends/shared/simpleBinaryBackend";
 import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemPrompt";
 import { buildCopilotPlusEnv } from "@/agentMode/backends/shared/copilotPlusEnv";
+import { buildSimpleSpawnDescriptor } from "@/agentMode/backends/shared/simpleBinaryBackend";
+import { getSettings } from "@/settings/model";
+import { launcherForConfiguredPath } from "./CodexBinaryManager";
+
+const DEFAULT_AGENT_MODE = "agent";
+
+export interface CodexBackendDependencies {
+  platform?: NodeJS.Platform;
+  nodePath?: string;
+}
 
 /**
- * Spawns the user-provided `codex-acp` binary
- * (`@zed-industries/codex-acp`). The package wraps the local `codex` CLI
- * and exposes it as an ACP server over stdio. Authentication is inherited
- * from the user's existing `codex login` (`~/.codex/auth.json`) or
- * `OPENAI_API_KEY` / `CODEX_API_KEY` exported in the user's shell — we
- * deliberately do not inject keys so ChatGPT-login subscriptions work
- * transparently.
+ * Spawns the user-provided `@agentclientprotocol/codex-acp` launcher. The
+ * adapter inherits ChatGPT login and API-key authentication from Codex's
+ * normal environment; Copilot only supplies its session configuration and
+ * initial permission preset.
  */
 export class CodexBackend implements AcpBackend {
   readonly id = "codex" as const;
   readonly displayName = "Codex";
 
+  private readonly platform: NodeJS.Platform;
+  private readonly nodePath: string | undefined;
+
+  constructor(deps: CodexBackendDependencies = {}) {
+    this.platform = deps.platform ?? process.platform;
+    this.nodePath = deps.nodePath;
+  }
+
   async buildSpawnDescriptor(_ctx: { vaultBasePath: string }): Promise<AcpSpawnDescriptor> {
+    const settings = getSettings().agentMode?.backends?.codex;
     const descriptor = buildSimpleSpawnDescriptor(
-      getSettings().agentMode?.backends?.codex?.binaryPath,
+      settings?.binaryPath,
       "Codex binary path not configured. Open Agent Mode settings and set the path to codex-acp.",
-      getSettings().agentMode?.backends?.codex?.envOverrides,
-      // Builtin Copilot Plus skill scripts read the license from the env.
+      settings?.envOverrides,
       await buildCopilotPlusEnv()
     );
-    // Forward the shared composed system prompt — the Copilot base framing
-    // (unless the user disabled it), the pill-syntax directive, and the user's
-    // custom prompt — via codex's `developer_instructions` config field as a
-    // TOML 1.0 basic string. codex appends `developer_instructions` to its own
-    // base prompt, so this adds the Obsidian-vault framing on top. Read at
-    // spawn time; the host restarts codex on prompt changes via
-    // `restartOnSystemPromptChange`.
-    const directive = buildAgentSystemPrompt();
-    descriptor.args = [
-      ...descriptor.args,
-      "-c",
-      `developer_instructions=${toTomlBasicString(directive)}`,
-      // Pin spawn-time approval/sandbox so codex-acp's first
-      // `currentModeId` report matches the canonical `auto` preset
-      // (workspace-write + on-request), which Agent Mode surfaces as
-      // canonical `default` (ask mode). Without this, codex-acp derives
-      // the initial mode from the user's `~/.codex/config.toml` defaults
-      // (often `read-only` for untrusted projects), causing the picker
-      // to briefly show "Plan" before our post-spawn coerce switches it
-      // — see the matching `auto` preset in codex-utils-approval-presets
-      // and `Thread::modes()` in codex-acp/src/thread.rs.
-      "-c",
-      'approval_policy="on-request"',
-      "-c",
-      'sandbox_mode="workspace-write"',
-    ];
-    // DESIGN NOTE: deliberately no `project_doc_fallback_filenames=["project.md"]`.
-    // Post-Phase-2 the session-start `ensureAgentsMirror` (AgentSessionManager, run before
-    // `resolveSessionCwd` for codex/opencode project sessions) guarantees the marker'd
-    // `AGENTS.md` mirror exists in the project cwd, so a `project.md` fallback is redundant.
-    // This descriptor only knows `vaultBasePath`, not the session scope: a spawn-level fallback
-    // would also apply to GLOBAL sessions and let codex read a user's vault-root `project.md`
-    // note as instructions. On the rare ensure failure a project session gets no instructions
-    // (ensure never throws and re-runs next session) rather than the frontmatter-laden source.
+    const launcher = launcherForConfiguredPath(descriptor.command, this.platform, this.nodePath);
+
+    descriptor.command = launcher.command;
+    descriptor.args = launcher.args;
+    descriptor.env.CODEX_CONFIG = buildCodexConfig(
+      descriptor.env.CODEX_CONFIG,
+      buildAgentSystemPrompt()
+    );
+    descriptor.env.INITIAL_AGENT_MODE = DEFAULT_AGENT_MODE;
     return descriptor;
   }
 }
 
-/**
- * Encode `value` as a TOML 1.0 basic string (double-quoted). Escapes:
- *   - `\` and `"`
- *   - named escapes `\b \t \n \f \r`
- *   - any other byte in 0x00–0x1F and 0x7F as `\uXXXX`
- *
- * Non-ASCII characters above 0x7F are valid in basic strings and pass
- * through unescaped. Exported for unit testing.
- */
-export function toTomlBasicString(value: string): string {
-  let out = '"';
-  for (let i = 0; i < value.length; i++) {
-    const ch = value.charCodeAt(i);
-    if (ch === 0x5c) out += "\\\\";
-    else if (ch === 0x22) out += '\\"';
-    else if (ch === 0x08) out += "\\b";
-    else if (ch === 0x09) out += "\\t";
-    else if (ch === 0x0a) out += "\\n";
-    else if (ch === 0x0c) out += "\\f";
-    else if (ch === 0x0d) out += "\\r";
-    else if (ch < 0x20 || ch === 0x7f) {
-      out += "\\u" + ch.toString(16).padStart(4, "0");
-    } else {
-      out += value[i];
+function buildCodexConfig(existing: string | undefined, developerInstructions: string): string {
+  let config: Record<string, unknown> = {};
+  if (existing) {
+    const parsed: unknown = JSON.parse(existing);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("CODEX_CONFIG must be a JSON object.");
     }
+    config = parsed as Record<string, unknown>;
   }
-  out += '"';
-  return out;
+  return JSON.stringify({ ...config, developer_instructions: developerInstructions });
 }
