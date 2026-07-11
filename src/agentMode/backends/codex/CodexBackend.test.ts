@@ -181,6 +181,34 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
     );
   });
 
+  it("starts current codex-acp adapters in their canonical default mode", async () => {
+    const backend = new CodexBackend();
+    const desc = await backend.buildSpawnDescriptor({ vaultBasePath: "/vault" });
+    expect(desc.env.INITIAL_AGENT_MODE).toBe("agent");
+  });
+
+  it("lets a user override the initial codex-acp mode", async () => {
+    setSettings({
+      agentMode: {
+        byok: {},
+        mcpServers: [],
+        activeBackend: "codex",
+        debugFullFrames: false,
+        welcomeDismissed: false,
+        skills: { folder: "copilot/skills" },
+        backends: {
+          codex: {
+            binaryPath: "/usr/local/bin/codex-acp",
+            envOverrides: { INITIAL_AGENT_MODE: "read-only" },
+          },
+        },
+      },
+    });
+    const backend = new CodexBackend();
+    const desc = await backend.buildSpawnDescriptor({ vaultBasePath: "/vault" });
+    expect(desc.env.INITIAL_AGENT_MODE).toBe("read-only");
+  });
+
   it("does not add a project.md fallback to the codex spawn args", async () => {
     // Session-start ensureAgentsMirror supersedes the spawn-level fallback for project scopes;
     // omitting it also prevents a GLOBAL session from treating a vault-root project.md note as

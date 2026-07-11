@@ -17,21 +17,17 @@ import {
   binaryPathInstallState,
   simpleBinaryBackendProcess,
 } from "@/agentMode/backends/shared/simpleBinaryBackend";
-import type {
-  EnabledModelEntry,
-  ModeMapping,
-  ModelSelection,
-  ModelWireCodec,
-} from "@/agentMode/session/types";
+import type { EnabledModelEntry, ModelSelection, ModelWireCodec } from "@/agentMode/session/types";
 import type { BackendDescriptor, BackendProcess, InstallState } from "@/agentMode/session/types";
 import { detectBinary } from "@/utils/detectBinary";
 import { codexAcpSearchDirs, resolveCodexAcpBinary } from "./codexBinaryResolver";
+import { buildCodexModeMapping } from "./codexModeMapping";
 
 export const CODEX_BINARY_NAME = "codex-acp";
 export const CODEX_INSTALL_COMMAND =
   process.platform === "win32"
     ? "irm https://gist.githubusercontent.com/logancyang/380ef4dbf9f98900771da76eca3d21e6/raw/install-codex-agent-mode-windows.ps1 | iex"
-    : "npm install -g @zed-industries/codex-acp";
+    : "npm install -g @agentclientprotocol/codex-acp";
 
 /**
  * Vocabulary mirrors codex-acp's advertised efforts. `minimal` is included
@@ -92,8 +88,8 @@ const codexWire: ModelWireCodec = {
 };
 
 /**
- * Codex backend — wraps `@zed-industries/codex-acp`, which inherits auth
- * from the local `codex` CLI login. Auth is CLI-owned (no Copilot-side keys),
+ * Codex backend — wraps the configured `codex-acp`, which inherits auth from
+ * the Codex CLI login. Auth is CLI-owned (no Copilot-side keys),
  * so the candidate models come entirely from the CLI's live `availableModels`
  * (active session or preloader cache); curation is the model-management
  * `backends.codex.enabledModels` set surfaced via `getEnabledModelEntries`.
@@ -170,28 +166,7 @@ export const CodexBackendDescriptor: BackendDescriptor = {
 
   SettingsPanel: CodexSettingsPanel,
 
-  /**
-   * Codex exposes sandbox/approval presets via ACP setMode: `read-only`,
-   * `auto`, and `full-access`. We surface all three:
-   *   - build       → "auto"           (workspace-write, on-request approvals)
-   *   - plan        → "read-only"      (no writes, no exec; closest ACP analog)
-   *   - auto-build  → "full-access"    (no sandbox, no approvals)
-   *
-   * Note: this is a sandbox restriction, not Codex CLI's real `ModeKind::Plan`
-   * (which would draft a plan artifact). That mode lives behind the app-server
-   * `turn/start.collaborationMode` field, which `@zed-industries/codex-acp`
-   * does not forward — it translates ACP modes to
-   * `Op::OverrideTurnContext { approval_policy, sandbox_policy }` only.
-   * Read-only is the closest available analog: the agent can read and reason
-   * but cannot mutate the vault, which matches user intent for "Plan".
-   */
-  getModeMapping(): ModeMapping {
-    return {
-      kind: "setMode",
-      canonical: { default: "auto", plan: "read-only", auto: "full-access" },
-      // Codex's `read-only` preset is a genuine no-write/no-exec sandbox, so it
-      // doubles as the fan-out read-only sandbox mode.
-      readOnlyModeId: "read-only",
-    };
+  getModeMapping(modeState) {
+    return buildCodexModeMapping(modeState);
   },
 };

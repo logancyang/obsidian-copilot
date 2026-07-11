@@ -5,9 +5,8 @@ import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemP
 import { buildCopilotPlusEnv } from "@/agentMode/backends/shared/copilotPlusEnv";
 
 /**
- * Spawns the user-provided `codex-acp` binary
- * (`@zed-industries/codex-acp`). The package wraps the local `codex` CLI
- * and exposes it as an ACP server over stdio. Authentication is inherited
+ * Spawns the user-provided `codex-acp` binary. The package exposes Codex as
+ * an ACP server over stdio. Authentication is inherited
  * from the user's existing `codex login` (`~/.codex/auth.json`) or
  * `OPENAI_API_KEY` / `CODEX_API_KEY` exported in the user's shell — we
  * deliberately do not inject keys so ChatGPT-login subscriptions work
@@ -22,8 +21,13 @@ export class CodexBackend implements AcpBackend {
       getSettings().agentMode?.backends?.codex?.binaryPath,
       "Codex binary path not configured. Open Agent Mode settings and set the path to codex-acp.",
       getSettings().agentMode?.backends?.codex?.envOverrides,
-      // Builtin Copilot Plus skill scripts read the license from the env.
-      await buildCopilotPlusEnv()
+      {
+        // Builtin Copilot Plus skill scripts read the license from the env.
+        ...(await buildCopilotPlusEnv()),
+        // Newer adapters derive the initial ACP mode from this variable rather
+        // than Codex's approval/sandbox config. User env overrides still win.
+        INITIAL_AGENT_MODE: "agent",
+      }
     );
     // Forward the shared composed system prompt — the Copilot base framing
     // (unless the user disabled it), the pill-syntax directive, and the user's
@@ -37,8 +41,8 @@ export class CodexBackend implements AcpBackend {
       ...descriptor.args,
       "-c",
       `developer_instructions=${toTomlBasicString(directive)}`,
-      // Pin spawn-time approval/sandbox so codex-acp's first
-      // `currentModeId` report matches the canonical `auto` preset
+      // Pin spawn-time approval/sandbox so legacy codex-acp's first
+      // `currentModeId` report matches its canonical `auto` preset
       // (workspace-write + on-request), which Agent Mode surfaces as
       // canonical `default` (ask mode). Without this, codex-acp derives
       // the initial mode from the user's `~/.codex/config.toml` defaults
