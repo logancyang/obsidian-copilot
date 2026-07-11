@@ -47,10 +47,19 @@ jest.mock("@/agentMode/backends/shared/InstallCommandRow", () => ({
 }));
 
 jest.mock("@/agentMode/backends/shared/BinaryPathSetting", () => ({
-  BinaryPathSetting: ({ onSave }: { onSave: (path: string) => Promise<string | null> }) => (
-    <button type="button" onClick={() => void onSave("/replacement/codex-acp")}>
-      Auto-detect
-    </button>
+  BinaryPathSetting: ({
+    onSave,
+    placeholder,
+  }: {
+    onSave: (path: string) => Promise<string | null>;
+    placeholder: string;
+  }) => (
+    <div>
+      <span data-testid="binary-placeholder">{placeholder}</span>
+      <button type="button" onClick={() => void onSave("/replacement/codex-acp")}>
+        Auto-detect
+      </button>
+    </div>
   ),
 }));
 
@@ -92,6 +101,11 @@ describe("CodexConfigBody", () => {
       "npm install -g @agentclientprotocol/codex-acp"
     );
     expect(screen.getByRole("button", { name: "Auto-detect" })).not.toBeNull();
+    expect(screen.getByRole("heading", { name: "Choose adapter path" })).not.toBeNull();
+    expect(screen.getByTestId("binary-placeholder").textContent).toBe(
+      "/absolute/path/to/codex-acp"
+    );
+    expect(screen.queryByText(/codex-acp\.exe/)).toBeNull();
     expect(screen.queryByText("Replacement command")).toBeNull();
   });
 

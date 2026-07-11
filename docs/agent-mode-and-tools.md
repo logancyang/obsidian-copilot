@@ -214,6 +214,37 @@ This feature is available on desktop only.
 
 ---
 
+## Codex installation and model troubleshooting
+
+Copilot connects to Codex through the `@agentclientprotocol/codex-acp` adapter. That adapter includes a compatible `@openai/codex` CLI, so updating the adapter normally updates both pieces together:
+
+```sh
+npm install -g @agentclientprotocol/codex-acp
+```
+
+A separately installed `codex` command on PATH is unrelated to Agent Mode. Copilot uses the CLI bundled with the configured adapter unless you explicitly set a `CODEX_PATH` environment override. An override is intended for advanced setups and can leave the adapter paired with an older or incompatible CLI.
+
+In **Settings → Copilot → Agents → Codex**, the support readout identifies the adapter version, the effective CLI version, and whether that CLI is bundled or supplied by `CODEX_PATH`. Include this readout when reporting a Codex issue.
+
+If Copilot reports the superseded adapter, run the replacement command shown in the app, then clear any saved old path and use **Auto-detect** again:
+
+```sh
+npm uninstall -g @zed-industries/codex-acp && npm install -g @agentclientprotocol/codex-acp
+```
+
+If a model is still missing after the adapter and effective CLI pass their checks, work through these causes:
+
+1. Remove a stale `CODEX_PATH` override so the adapter returns to its bundled CLI.
+2. Check for duplicate global npm installs and confirm Copilot is configured with the same adapter you just updated. On Windows, the selected path should end in `@agentclientprotocol\codex-acp\dist\index.js`.
+3. Close Obsidian and any other Codex clients, remove the stale `models_cache.json` file from your Codex home folder (normally `.codex` in your home folder, or the folder set by `CODEX_HOME`), then reopen Obsidian so Codex can rebuild the catalog.
+4. Sign out and back in with the intended ChatGPT account. Model access can differ by account, plan, workspace, and administrator settings.
+5. Review advanced Codex provider settings and environment variables. A custom model provider or OpenAI-compatible endpoint may publish a different catalog.
+6. Allow for a staged model rollout. A newly announced model may not be available to every eligible account at the same time.
+
+Passing the binary checks confirms that Copilot can start a supported adapter/CLI pair; it does not guarantee that a particular account or provider will advertise every model.
+
+---
+
 ## Related
 
 - [Copilot Plus and Self-Host](copilot-plus-and-self-host.md) — Licensing and memory

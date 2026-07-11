@@ -18,9 +18,8 @@ import {
 } from "./descriptor";
 
 /**
- * Configure dialog for the Codex backend. Copilot spawns the native
- * `codex-acp` ACP adapter. The dialog configures the codex-acp path
- * and gives auth guidance; `codex login` owns the user's auth state.
+ * Configure dialog for the Codex backend. Copilot spawns the configured
+ * `codex-acp` ACP adapter launcher and relies on Codex's local auth state.
  */
 export const CodexConfigBody: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const settings = useSettingsValue();
@@ -83,13 +82,14 @@ export const CodexConfigBody: React.FC<{ onClose: () => void }> = ({ onClose }) 
         </div>
       )}
 
-      <ConfigSection title="Use your own binary">
+      <ConfigSection title="Choose adapter path">
         <p className="tw-my-0 tw-text-sm tw-text-muted">
-          Use an existing <code>{CODEX_BINARY_NAME}</code> binary you have on disk.
+          Choose the installed <code>{CODEX_BINARY_NAME}</code> launcher. On Windows, select the
+          package's <code>dist\index.js</code> file.
         </p>
         <BinaryPathSetting
           binaryName={CODEX_BINARY_NAME}
-          placeholder="/absolute/path/to/codex-acp.exe"
+          placeholder="/absolute/path/to/codex-acp"
           initialPath={binaryPath}
           notFoundHint={`${CODEX_BINARY_NAME} not found in known install locations or PATH. Run the install command above, then click Auto-detect again.`}
           detect={detectCodexAcpPath}
@@ -102,7 +102,7 @@ export const CodexConfigBody: React.FC<{ onClose: () => void }> = ({ onClose }) 
 
       <ConfigSection title="Authentication">
         <p className="tw-my-0 tw-text-sm tw-text-muted">
-          Codex inherits auth from your local <code>codex login</code> credentials.
+          Codex uses your existing local credentials and offers ChatGPT sign-in when needed.
         </p>
       </ConfigSection>
     </ConfigDialogShell>
