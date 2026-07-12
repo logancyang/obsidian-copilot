@@ -3,6 +3,7 @@ import { AcpBackend, AcpSpawnDescriptor } from "@/agentMode/acp/types";
 import { buildSimpleSpawnDescriptor } from "@/agentMode/backends/shared/simpleBinaryBackend";
 import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemPrompt";
 import { buildCopilotPlusEnv } from "@/agentMode/backends/shared/copilotPlusEnv";
+import { mergeCodexConfigEnv } from "./codexConfigEnv";
 
 /**
  * Spawns the user-provided `codex-acp` binary. The package exposes Codex as
@@ -37,6 +38,10 @@ export class CodexBackend implements AcpBackend {
     // spawn time; the host restarts codex on prompt changes via
     // `restartOnSystemPromptChange`.
     const directive = buildAgentSystemPrompt();
+    // Current @agentclientprotocol/codex-acp server mode ignores arbitrary
+    // argv and merges CODEX_CONFIG into every session. Keep the argv path
+    // below for legacy @zed-industries/codex-acp versions.
+    descriptor.env.CODEX_CONFIG = mergeCodexConfigEnv(descriptor.env.CODEX_CONFIG, directive);
     descriptor.args = [
       ...descriptor.args,
       "-c",
