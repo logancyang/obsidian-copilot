@@ -434,9 +434,11 @@ function getInternalExcludeFolderPrefixes(): string[] {
 /**
  * Check whether a file path is an internal Copilot file that should be excluded from searches.
  * Checks both exact path matches (log file) and folder prefix matches (projects folder).
+ * Exported so callers that only have a vault path (e.g. a delete/rename event whose `TFile`
+ * no longer resolves) can apply the same internal-file exclusion as {@link isInternalExcludedFile}.
  * @param filePath - Full path to the file in the vault
  */
-function isInternalExcludedPath(filePath: string): boolean {
+export function isInternalExcludedPath(filePath: string): boolean {
   const excludes = new Set(getInternalExcludePaths());
   if (excludes.has(filePath)) return true;
 

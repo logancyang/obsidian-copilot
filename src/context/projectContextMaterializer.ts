@@ -118,13 +118,15 @@ interface InFlightMaterialization {
   /** True when this run bypasses failure markers (a user-initiated retry). */
   forceRetryFailed: boolean;
   /**
-   * Context signature ({@link getProjectContextSignature}) of the project record
-   * this run is materializing, captured when the run was queued. A later caller
-   * whose record signature differs supersedes rather than joins — otherwise it
-   * would receive the pre-edit `<project_context>` / `additionalDirectories`.
-   * `undefined` when no record was cached at queue time.
+   * The source REVISION this run is materializing, captured when queued. Defaults
+   * to the config signature ({@link getProjectContextSignature}), but a caller may
+   * pass an epoch-salted key ({@link composeContextDirtyKey}) so that a pure
+   * CONTENT edit — which does not move the config signature — still reads as a
+   * newer revision and SUPERSEDES a run holding the old content, instead of
+   * joining it and receiving a stale `<project_context>` / `additionalDirectories`.
+   * `undefined` when no record was cached at queue time and no key was passed.
    */
-  contextSignature: string | undefined;
+  revision: string | undefined;
 }
 
 const inFlightMaterializations = new Map<string, InFlightMaterialization>();
@@ -209,13 +211,19 @@ export async function ensureProjectContextMaterialized(
   projectId: string,
   cwd: string,
   onProgress?: ContextMaterializeProgressFn,
-  forceRetryFailed?: boolean
+  forceRetryFailed?: boolean,
+  revisionKey?: string
 ): Promise<ContextMaterializationResult> {
   const force = forceRetryFailed ?? false;
   // Captured synchronously so an incoming caller can tell whether the in-flight
   // run is materializing the source revision it actually wants.
   const record = getCachedProjectRecordById(projectId);
   const currentSignature = record ? getProjectContextSignature(record) : undefined;
+  // The revision this caller wants. Defaults to the config signature so callers
+  // that don't track content epochs behave exactly as before; the session manager
+  // passes an epoch-salted key so a mid-flight content edit supersedes a run that
+  // read the pre-edit content (see {@link InFlightMaterialization.revision}).
+  const currentRevision = revisionKey ?? currentSignature;
   const existing = inFlightMaterializations.get(projectId);
   // Single-flight: a second concurrent caller joins the in-flight run and its
   // `onProgress` is intentionally dropped — the flight owner's sink already
@@ -233,11 +241,7 @@ export async function ensureProjectContextMaterialized(
   // (e.g. a background warm, invisible to the manager's early-exit check) must NOT
   // join it — that would cheap-skip the known-bad sources the user explicitly
   // asked to re-fetch. Instead it SUPERSEDES below.
-  if (
-    existing &&
-    existing.contextSignature === currentSignature &&
-    (!force || existing.forceRetryFailed)
-  ) {
+  if (existing && existing.revision === currentRevision && (!force || existing.forceRetryFailed)) {
     return existing.promise;
   }
 
@@ -260,7 +264,7 @@ export async function ensureProjectContextMaterialized(
   inFlightMaterializations.set(projectId, {
     promise,
     forceRetryFailed: force,
-    contextSignature: currentSignature,
+    revision: currentRevision,
   });
   return promise;
 }

@@ -344,6 +344,51 @@ describe("ensureProjectContextMaterialized — single-flight", () => {
     expect(bRes).not.toBe(aRes);
     expect(url4llm).toHaveBeenCalledWith("https://b.com");
   });
+
+  it("supersedes an in-flight run when a caller passes a NEWER revisionKey (same config signature)", async () => {
+    const app = fakeApp();
+    // The config signature never changes here (same sources); only the content
+    // revision key differs — the case a pure file edit produces.
+    getRecord.mockReturnValue(record({ webUrls: "https://a.com" }));
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const url4llm = jest.fn(async (url: string) => {
+      await gate;
+      return { response: `${url} text` };
+    });
+    getClient.mockReturnValue({ url4llm, youtube4llm: jest.fn(), docs4llm: jest.fn() });
+
+    // A runs at revision epoch 0; hold it in flight.
+    const a = ensureProjectContextMaterialized(app, "p1", CWD, undefined, undefined, "sig#0");
+    await flushMicrotasks();
+    // A content edit bumped the epoch → B wants revision epoch 1 and must NOT join A.
+    const b = ensureProjectContextMaterialized(app, "p1", CWD, undefined, undefined, "sig#1");
+
+    release();
+    const [aRes, bRes] = await Promise.all([a, b]);
+
+    // Distinct result objects prove B ran its OWN materialization (superseded)
+    // rather than joining A's in-flight promise, which would return the same
+    // object. (The URL's snapshot is fingerprint cheap-skipped, so the count of
+    // fetches isn't the signal here — the separate run is.)
+    expect(bRes).not.toBe(aRes);
+  });
+
+  it("still dedupes concurrent callers that share the same revisionKey", async () => {
+    getRecord.mockReturnValue(record({ webUrls: "https://a.com" }));
+    const app = fakeApp();
+
+    const [r1, r2] = await Promise.all([
+      ensureProjectContextMaterialized(app, "p1", CWD, undefined, undefined, "sig#7"),
+      ensureProjectContextMaterialized(app, "p1", CWD, undefined, undefined, "sig#7"),
+    ]);
+
+    const client = getClient.mock.results[0].value as { url4llm: jest.Mock };
+    expect(client.url4llm).toHaveBeenCalledTimes(1); // one run, joined
+    expect(r1).toBe(r2);
+  });
 });
 
 describe("Option D — failure markers, forced retry, single-source reconcile", () => {

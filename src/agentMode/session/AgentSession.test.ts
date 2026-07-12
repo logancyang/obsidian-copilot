@@ -288,6 +288,32 @@ describe("buildPromptBlocks", () => {
     const text = (blocks[0] as { type: "text"; text: string }).text;
     expect(text).not.toContain("<project_context>");
   });
+
+  it("injects the project-context-updates note after the manifest, before the message", () => {
+    const updatesBlock =
+      "<project_context_updates>\nsources may have changed\n</project_context_updates>";
+    const blocks = buildPromptBlocks(
+      "go",
+      { notes: [makeFile("a.md")], urls: [] },
+      undefined,
+      undefined,
+      "<project_context>\nmanifest\n</project_context>",
+      undefined,
+      updatesBlock
+    );
+    const text = (blocks[0] as { type: "text"; text: string }).text;
+    expect(text).toContain("<project_context_updates>");
+    expect(text.indexOf("<project_context>")).toBeLessThan(
+      text.indexOf("<project_context_updates>")
+    );
+    expect(text.indexOf("<project_context_updates>")).toBeLessThan(text.indexOf("<user-message>"));
+  });
+
+  it("omits the updates note when none is provided", () => {
+    const blocks = buildPromptBlocks("go", { notes: [makeFile("a.md")], urls: [] });
+    const text = (blocks[0] as { type: "text"; text: string }).text;
+    expect(text).not.toContain("<project_context_updates>");
+  });
 });
 
 describe("AgentSession.loadDisplayMessages", () => {
@@ -621,6 +647,51 @@ describe("AgentSession.sendPrompt", () => {
     });
     session.sendPrompt("first");
     expect(() => session.sendPrompt("second")).toThrow(/in flight/);
+  });
+
+  it("injects the project-context-updates note and acks its epoch after acceptance", async () => {
+    const mock = makeMockBackend();
+    const markDelivered = jest.fn();
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+      projectId: "proj-1",
+      getProjectContextUpdates: () => ({
+        epoch: 5,
+        block: "<project_context_updates>changed</project_context_updates>",
+      }),
+      markProjectContextUpdatesDelivered: markDelivered,
+    });
+
+    await session.sendPrompt("hi").turn;
+
+    const promptArg = mock.prompt.mock.calls[0][0] as { prompt: Array<{ text?: string }> };
+    expect(promptArg.prompt[0].text).toContain(
+      "<project_context_updates>changed</project_context_updates>"
+    );
+    expect(markDelivered).toHaveBeenCalledWith(5);
+  });
+
+  it("does not ack when the updates getter returns null", async () => {
+    const mock = makeMockBackend();
+    const markDelivered = jest.fn();
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+      projectId: "proj-1",
+      getProjectContextUpdates: () => null,
+      markProjectContextUpdatesDelivered: markDelivered,
+    });
+
+    await session.sendPrompt("hi").turn;
+
+    const promptArg = mock.prompt.mock.calls[0][0] as { prompt: Array<{ text?: string }> };
+    expect(promptArg.prompt[0].text).not.toContain("<project_context_updates>");
+    expect(markDelivered).not.toHaveBeenCalled();
   });
 
   it("marks an empty completed turn as a visible error message", async () => {

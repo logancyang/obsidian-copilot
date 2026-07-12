@@ -182,7 +182,39 @@ export interface AgentSessionListener {
   onNeedsAttentionChanged?(needsAttention: boolean): void;
 }
 
-export interface AgentSessionStartOptions {
+/**
+ * A pending project-context-updates note for a session: the coarse "sources may
+ * have changed" nudge (`block`) plus the content `epoch` it covers. The epoch is
+ * echoed back via {@link ProjectContextUpdatesHooks.markProjectContextUpdatesDelivered}
+ * once the turn is accepted, so the manager can advance the session's cursor.
+ */
+export interface ProjectContextUpdates {
+  epoch: number;
+  block: string;
+}
+
+/**
+ * Optional per-turn freshness hooks the manager wires into a PROJECT session (a
+ * conditional spread leaves them absent for GLOBAL / context-free sessions, so
+ * their turn path stays byte-identical to before this feature).
+ */
+export interface ProjectContextUpdatesHooks {
+  /**
+   * Sync accessor for a pending updates note for THIS session, or null when the
+   * session has already seen the latest content epoch. Called each turn just
+   * before the prompt is assembled (the manager flushes pending vault events
+   * inside it, so a change made moments before send is seen).
+   */
+  getProjectContextUpdates?: () => ProjectContextUpdates | null;
+  /**
+   * Acknowledge that the note for `epoch` rode an ACCEPTED turn so it isn't
+   * re-injected next turn. Called only after the backend accepts the prompt
+   * (mirrors `firstPromptSent`); the fan-out path never calls it.
+   */
+  markProjectContextUpdatesDelivered?: (epoch: number) => void;
+}
+
+export interface AgentSessionStartOptions extends ProjectContextUpdatesHooks {
   backend: BackendProcess;
   cwd: string;
   internalId: string;
@@ -248,7 +280,7 @@ export interface AgentSessionStartOptions {
  * Pre-resolved state used by tests and by `loadSessionFromHistory` to
  * construct a session that bypasses the async backend startup.
  */
-export interface AgentSessionStateOptions {
+export interface AgentSessionStateOptions extends ProjectContextUpdatesHooks {
   backend: BackendProcess;
   backendSessionId: SessionId;
   internalId: string;
@@ -308,6 +340,10 @@ export class AgentSession {
   private readonly runFanoutTurn: RunFanoutTurn | null;
   private readonly getDisplayName: ((backendId: BackendId) => string) | null;
   private readonly getApp: (() => App) | null;
+  // Per-turn project-context freshness hooks (see `ProjectContextUpdatesHooks`).
+  // Null for GLOBAL / context-free sessions, so their turn path is unchanged.
+  private readonly getProjectContextUpdatesFn: (() => ProjectContextUpdates | null) | null;
+  private readonly markProjectContextUpdatesDeliveredFn: ((epoch: number) => void) | null;
   // `status` is derived from the primitives below — see `getStatus()`.
   // `cachedStatus` is a memo of the last value we fired through
   // `onStatusChanged`, used purely for change detection. It is not the
@@ -432,6 +468,8 @@ export class AgentSession {
     this.runFanoutTurn = opts.runFanoutTurn ?? null;
     this.getDisplayName = opts.getDisplayName ?? null;
     this.getApp = opts.getApp ?? null;
+    this.getProjectContextUpdatesFn = opts.getProjectContextUpdates ?? null;
+    this.markProjectContextUpdatesDeliveredFn = opts.markProjectContextUpdatesDelivered ?? null;
     // Only the start path (newSession) awaits context roots; adopted/resumed
     // sessions had theirs forwarded by the manager's resume/load call already.
     this.contextReady = "contextReady" in opts ? (opts.contextReady ?? null) : null;
@@ -976,6 +1014,12 @@ export class AgentSession {
       // up front so both the fan-out and single-agent paths can inject it.
       const isFirstTurn = !this.firstPromptSent;
       const projectContextBlock = isFirstTurn ? this.projectContextBlock : null;
+      // The coarse "sources may have changed" note for an ongoing/resumed project
+      // session. Read once here (the manager flushes pending vault events inside
+      // the getter) so both paths inject the same value; acked only after the
+      // single-agent backend accepts the turn. Null for GLOBAL / current sessions.
+      const projectContextUpdates = this.getProjectContextUpdatesFn?.() ?? null;
+      const projectContextUpdatesBlock = projectContextUpdates?.block ?? null;
 
       // Fan-out path: the `@`-mentioned answerers dispatch the identical prompt in
       // parallel ephemeral read-only sub-sessions and the main agent summarizes.
@@ -1008,7 +1052,8 @@ export class AgentSession {
           promptContent,
           webTabBlock,
           projectContextBlock,
-          historyBlock
+          historyBlock,
+          projectContextUpdatesBlock
         );
         // Deliberately do NOT mark `firstPromptSent` here. Fan-out delivers the
         // first-turn project-context block only to the ephemeral sub-sessions; the
@@ -1030,7 +1075,8 @@ export class AgentSession {
         promptContent,
         webTabBlock,
         projectContextBlock,
-        leadingContextBlock
+        leadingContextBlock,
+        projectContextUpdatesBlock
       );
 
       const req: PromptInput = {
@@ -1050,6 +1096,14 @@ export class AgentSession {
       // unset and the user's retry re-delivers the context (a user cancel still
       // resolves here, and the prompt did reach the backend, so it counts as delivered).
       if (isFirstTurn) this.firstPromptSent = true;
+      // Same delivery contract as `firstPromptSent`: the note reached the backend
+      // in this accepted (possibly cancelled) prompt, so advance the session's
+      // cursor. A hard `prompt()` failure throws before here, leaving the cursor
+      // unmoved so the retry re-delivers the note. Fan-out returns earlier and
+      // never reaches this ack.
+      if (projectContextUpdates) {
+        this.markProjectContextUpdatesDeliveredFn?.(projectContextUpdates.epoch);
+      }
       if (
         placeholderId &&
         resp.stopReason !== "cancelled" &&
@@ -1996,16 +2050,19 @@ export function buildPromptBlocks(
   content?: PromptContent[],
   webTabBlock?: string,
   projectContextBlock?: string | null,
-  leadingContextBlock?: string | null
+  leadingContextBlock?: string | null,
+  projectContextUpdatesBlock?: string | null
 ): PromptContent[] {
   // Context sections precede the user message: the project-context block (first
-  // user prompt only — the project's folders/notes/URLs), then an optional
-  // prior-turn block (buffered fan-out turns the backend never saw), the vault
-  // envelope (attached notes + note excerpts), web-selection excerpts, then live
-  // web-tab content. Web tab/selection blocks reuse the legacy `<web_*>` tags so
-  // the model reads the same shapes it does in the non-agent chat.
+  // user prompt only — the project's folders/notes/URLs), then the coarse
+  // "sources may have changed" updates note (ongoing/resumed turns), then an
+  // optional prior-turn block (buffered fan-out turns the backend never saw), the
+  // vault envelope (attached notes + note excerpts), web-selection excerpts, then
+  // live web-tab content. Web tab/selection blocks reuse the legacy `<web_*>` tags
+  // so the model reads the same shapes it does in the non-agent chat.
   const sections = [
     projectContextBlock?.trim() || null,
+    projectContextUpdatesBlock?.trim() || null,
     leadingContextBlock?.trim() || null,
     buildContextEnvelope(context),
     buildWebSelectionBlocks(context),

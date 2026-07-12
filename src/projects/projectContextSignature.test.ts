@@ -1,6 +1,8 @@
 import type { ProjectConfig } from "@/aiParams";
 import type { ProjectFileRecord } from "@/projects/type";
 import {
+  composeContextDirtyKey,
+  contextDirtyKeyMatchesConfig,
   getProjectContextSignature,
   getProjectLandingCaptureSignature,
   normalizeProjectContextSource,
@@ -108,5 +110,29 @@ describe("getProjectLandingCaptureSignature", () => {
     expect(getProjectLandingCaptureSignature(before)).toBe(
       getProjectLandingCaptureSignature(after)
     );
+  });
+});
+
+describe("composeContextDirtyKey / contextDirtyKeyMatchesConfig", () => {
+  const sig = getProjectContextSignature(makeRecord(makeProject()));
+
+  it("salts a config signature with an epoch", () => {
+    expect(composeContextDirtyKey(sig, 3)).toBe(`${sig}#3`);
+  });
+
+  it("matches the bare signature and any epoch-salted form of it", () => {
+    expect(contextDirtyKeyMatchesConfig(sig, sig)).toBe(true);
+    expect(contextDirtyKeyMatchesConfig(composeContextDirtyKey(sig, 0), sig)).toBe(true);
+    expect(contextDirtyKeyMatchesConfig(composeContextDirtyKey(sig, 42), sig)).toBe(true);
+  });
+
+  it("does NOT match a different config signature", () => {
+    const other = getProjectContextSignature(makeRecord(makeProject({ id: "p2" }), "Other/p.md"));
+    expect(contextDirtyKeyMatchesConfig(composeContextDirtyKey(sig, 1), other)).toBe(false);
+  });
+
+  it("is undefined-safe and rejects a non-numeric suffix", () => {
+    expect(contextDirtyKeyMatchesConfig(undefined, sig)).toBe(false);
+    expect(contextDirtyKeyMatchesConfig(`${sig}#abc`, sig)).toBe(false);
   });
 });
