@@ -37,6 +37,7 @@ const baseInput: ReportInput = {
   screenshotPng: new Uint8Array([1, 2, 3]),
   frameLogPath: "/tmp/acp-frames.ndjson",
   opencodeLogPath: "/tmp/opencode/log/session.log",
+  settingsJson: '{\n  "openAIApiKey": "[REDACTED]"\n}',
   reportsRootDir: "/tmp/reports",
   timestamp: "20260615-101500",
 };
@@ -54,12 +55,16 @@ describe("assembleReportBundle", () => {
       // Bundled with a `.txt` suffix so GitHub accepts the upload (it rejects `.ndjson`).
       "acp-frames.ndjson.txt",
       "opencode.log",
+      // Same `.txt` allowlist workaround as the frame log.
+      "data.json.txt",
     ]);
 
     expect(writes.map((w) => w.path)).toContain(
       "/tmp/reports/report-20260615-101500/screenshot.png"
     );
     expect(writes.map((w) => w.path)).toContain("/tmp/reports/report-20260615-101500/report.md");
+    const settingsWrite = writes.find((w) => w.path.endsWith("data.json.txt"));
+    expect(settingsWrite?.data).toBe(baseInput.settingsJson);
     expect(copies).toEqual([
       {
         src: "/tmp/acp-frames.ndjson",
@@ -105,10 +110,38 @@ describe("assembleReportBundle", () => {
     expect(result.files).toContain("opencode.log");
   });
 
+  it("omits the settings snapshot when it could not be loaded", async () => {
+    const { runtime, writes } = makeRuntime();
+    const result = await assembleReportBundle({ ...baseInput, settingsJson: null }, runtime);
+
+    expect(result.files).not.toContain("data.json.txt");
+    expect(writes.map((w) => w.path)).not.toContain(
+      "/tmp/reports/report-20260615-101500/data.json.txt"
+    );
+  });
+
+  it("skips a settings snapshot that fails to write instead of failing the whole report", async () => {
+    const { runtime } = makeRuntime({
+      writeFile: async (p) => {
+        if (p.endsWith("data.json.txt")) throw new Error("EACCES");
+      },
+    });
+    const result = await assembleReportBundle(baseInput, runtime);
+
+    expect(result.files).toContain("report.md");
+    expect(result.files).not.toContain("data.json.txt");
+  });
+
   it("always writes report.md even when nothing else is captured", async () => {
     const { runtime, writes } = makeRuntime();
     const result = await assembleReportBundle(
-      { ...baseInput, screenshotPng: null, frameLogPath: null, opencodeLogPath: null },
+      {
+        ...baseInput,
+        screenshotPng: null,
+        frameLogPath: null,
+        opencodeLogPath: null,
+        settingsJson: null,
+      },
       runtime
     );
 
@@ -128,6 +161,11 @@ describe("buildReportMarkdown", () => {
     expect(md).toContain("- Platform: darwin");
     expect(md).toContain("- Obsidian: 1.5.0");
     expect(md).toContain("- screenshot.png");
+  });
+
+  it("annotates the settings snapshot so readers know secrets were redacted", () => {
+    const md = buildReportMarkdown(baseInput, ["report.md", "data.json.txt"]);
+    expect(md).toContain("- data.json.txt (plugin settings; secrets redacted)");
   });
 
   it("falls back to a placeholder when the note is empty", () => {

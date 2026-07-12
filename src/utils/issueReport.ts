@@ -22,6 +22,10 @@ const SCREENSHOT_NAME = "screenshot.png";
 const FRAME_LOG_NAME = "acp-frames.ndjson.txt";
 const OPENCODE_LOG_NAME = "opencode.log";
 const REPORT_NOTE_NAME = "report.md";
+// Sanitized copy of the plugin settings (data.json with secrets masked).
+// Same allowlist workaround as the frame log: `.json` isn't accepted by
+// GitHub's issue attachments, so the file gets a trailing `.txt`.
+const SETTINGS_JSON_NAME = "data.json.txt";
 
 export interface ReportEnvInfo {
   pluginVersion: string;
@@ -40,6 +44,11 @@ export interface ReportInput {
   frameLogPath: string | null;
   /** Absolute path to the latest opencode log, included only when provided. */
   opencodeLogPath: string | null;
+  /**
+   * Pretty-printed plugin settings JSON, already sanitized (secrets masked)
+   * by the caller, or null when the settings could not be loaded.
+   */
+  settingsJson: string | null;
   /** Root dir bundles are written under (one timestamped subfolder per report). */
   reportsRootDir: string;
   /** Pre-formatted timestamp (e.g. `20260615-101500`) used for the subfolder. */
@@ -104,6 +113,15 @@ export async function assembleReportBundle(
     }
   }
 
+  if (input.settingsJson) {
+    try {
+      await runtime.writeFile(runtime.join(folderPath, SETTINGS_JSON_NAME), input.settingsJson);
+      files.push(SETTINGS_JSON_NAME);
+    } catch {
+      // Settings snapshot is optional; keep going without it.
+    }
+  }
+
   const noteMarkdown = buildReportMarkdown(input, files);
   await runtime.writeFile(runtime.join(folderPath, REPORT_NOTE_NAME), noteMarkdown);
   files.unshift(REPORT_NOTE_NAME);
@@ -133,7 +151,9 @@ export function buildReportMarkdown(input: ReportInput, attachedFiles: string[])
     "",
     "## Attached files",
     "",
-    ...attachments.map((f) => `- ${f}`),
+    ...attachments.map((f) =>
+      f === SETTINGS_JSON_NAME ? `- ${f} (plugin settings; secrets redacted)` : `- ${f}`
+    ),
     "",
     "> These files were saved to the bundle folder that just opened. Drag them",
     "> into the GitHub issue to attach them.",

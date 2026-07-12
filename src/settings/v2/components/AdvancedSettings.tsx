@@ -156,6 +156,7 @@ export const AdvancedSettings: React.FC = () => {
             getPlugin: (id: string) => {
               manifest?: { version?: string };
               agentSessionManager?: { getActiveSession?: () => { backendId?: string } | null };
+              loadData?: () => Promise<unknown>;
             } | null;
           };
         }
@@ -170,6 +171,13 @@ export const AdvancedSettings: React.FC = () => {
         app,
         activeBackend,
         pluginVersion: copilotPlugin?.manifest?.version ?? "unknown",
+        // Raw loadData() is the true on-disk data.json (the modal sanitizes
+        // it), so the report reflects what is actually persisted rather than
+        // the in-memory settings object.
+        loadSettingsData: async () => {
+          const raw = await copilotPlugin?.loadData?.();
+          return raw && typeof raw === "object" ? (raw as Record<string, unknown>) : null;
+        },
         // Resolve at capture time so we can close this Settings window and
         // reveal the agent pane first — the screenshot should be the chat
         // surface, not the settings dialog. Null when no agent pane is open.
@@ -531,7 +539,7 @@ export const AdvancedSettings: React.FC = () => {
         <SettingItem
           type="custom"
           title="Report an Issue"
-          description="Bundles a screenshot of the Agent Mode chat pane and a recent activity log into a folder, then opens a prefilled GitHub issue for you to attach them to."
+          description="Bundles a screenshot of the Agent Mode chat pane, a recent activity log, and a copy of your Copilot settings (with API keys and other secrets redacted) into a folder, then opens a prefilled GitHub issue for you to attach them to."
         >
           <Button variant="secondary" size="sm" onClick={handleReportIssue}>
             Report an Issue

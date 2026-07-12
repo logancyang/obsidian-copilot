@@ -191,12 +191,13 @@ Clicking it opens a short form where you describe what happened. When you submit
 
 1. Saves a screenshot of the **Agent Mode chat pane** (just the agent panel, not your whole screen).
 2. Saves a recent **Agent Mode log** of the behind-the-scenes messages between Copilot and the agent. This log is captured automatically so a report always has recent activity to include; you can turn it off under **Settings → Copilot → Advanced → Keep an Agent Mode activity log**.
-3. Opens the folder containing those files in your file manager.
-4. Opens a prefilled GitHub issue in your browser.
+3. Saves a copy of your **Copilot settings** (the plugin's `data.json`), which helps maintainers reproduce configuration-dependent problems. All secrets — API keys, license keys, tokens, and backend environment variable values — are automatically replaced with `[REDACTED]` before the copy is written.
+4. Opens the folder containing those files in your file manager.
+5. Opens a prefilled GitHub issue in your browser.
 
 The files are **not uploaded for you** — drag them from the opened folder into the GitHub issue to attach them.
 
-> **Privacy note:** The Agent Mode log can contain your prompts, note contents, and tool inputs/outputs in plaintext. Review the saved files before sharing them publicly.
+> **Privacy note:** The Agent Mode log can contain your prompts, note contents, and tool inputs/outputs in plaintext, and the settings copy still describes your configuration (model names, folder names, feature toggles) even though secrets are redacted. Review the saved files before sharing them publicly.
 
 ### Including the OpenCode log
 

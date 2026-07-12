@@ -7,6 +7,7 @@ import { captureViewScreenshot } from "@/utils/captureViewScreenshot";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { assembleReportBundle, type ReportEnvInfo } from "@/utils/issueReport";
 import { findLatestOpencodeLog } from "@/utils/opencodeLog";
+import { sanitizeSettingsDataForReport } from "@/utils/sanitizeSettingsData";
 import { createPluginRoot } from "@/utils/react/createPluginRoot";
 import { cn } from "@/lib/utils";
 import { getSettings } from "@/settings/model";
@@ -30,6 +31,13 @@ export interface ReportIssueModalParams {
   activeBackend: string;
   /** Plugin version for the report's environment block. */
   pluginVersion: string;
+  /**
+   * Loads the raw persisted plugin settings (the on-disk `data.json`, e.g. via
+   * `Plugin.loadData()`). The modal sanitizes the result (masks API keys,
+   * license keys, and other secrets) before bundling it into the report.
+   * Returns null when the data cannot be loaded; the report then skips it.
+   */
+  loadSettingsData: () => Promise<Record<string, unknown> | null>;
 }
 
 interface ElectronShell {
@@ -119,6 +127,11 @@ function ReportIssueContent({ showOpencodeOption, onSubmit, onCancel }: ReportIs
             (not your whole screen) and a recent activity log are saved to a folder on your
             computer.
           </li>
+          <li>
+            A copy of your <strong className="tw-text-normal">Copilot settings</strong> (data.json)
+            is included, with API keys, license keys, and other secrets replaced by{" "}
+            <code>[REDACTED]</code>.
+          </li>
           <li>That folder opens, and a pre-filled GitHub issue opens in your browser.</li>
           <li>Drag the saved files into the issue to attach them, then submit.</li>
         </ul>
@@ -136,8 +149,9 @@ function ReportIssueContent({ showOpencodeOption, onSubmit, onCancel }: ReportIs
           <span className="tw-block tw-font-semibold">Before you share these files</span>
           <span className="tw-mt-0.5 tw-block tw-text-normal">
             The activity log can include your prompts, note contents, and tool inputs/outputs in
-            plain text. Review the saved files and remove anything sensitive before posting them
-            publicly.
+            plain text. The settings copy has API keys and other secrets automatically redacted, but
+            still describes your configuration. Review the saved files and remove anything sensitive
+            before posting them publicly.
           </span>
         </div>
       </div>
@@ -226,6 +240,8 @@ export class ReportIssueModal extends Modal {
           ? await resolveOpencodeLogPath()
           : null;
 
+      const settingsJson = await this.buildSanitizedSettingsJson();
+
       const env: ReportEnvInfo = {
         pluginVersion: this.params.pluginVersion,
         platform: process.platform,
@@ -239,6 +255,7 @@ export class ReportIssueModal extends Modal {
         screenshotPng,
         frameLogPath,
         opencodeLogPath,
+        settingsJson,
         reportsRootDir: root,
         timestamp: formatTimestamp(new Date()),
       });
@@ -252,6 +269,22 @@ export class ReportIssueModal extends Modal {
     } catch (err) {
       logError("[ReportIssue] failed to prepare report:", err);
       new Notice("Failed to prepare the issue report. See the console for details.");
+    }
+  }
+
+  /**
+   * Load the raw persisted settings and return a pretty-printed, sanitized
+   * JSON string for the bundle, or null when loading fails (the report is
+   * still produced without it).
+   */
+  private async buildSanitizedSettingsJson(): Promise<string | null> {
+    try {
+      const raw = await this.params.loadSettingsData();
+      if (!raw) return null;
+      return JSON.stringify(sanitizeSettingsDataForReport(raw), null, 2);
+    } catch (err) {
+      logError("[ReportIssue] failed to load settings for the report:", err);
+      return null;
     }
   }
 }
