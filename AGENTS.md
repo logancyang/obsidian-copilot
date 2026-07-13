@@ -50,3 +50,56 @@ Read the matching guide when your task touches that area — they aren't loaded 
 - Message & chat architecture (Repository → Manager → UIState → UI; single `MessageRepository`; per-project isolation) → [`designdocs/MESSAGE_ARCHITECTURE.md`](./designdocs/MESSAGE_ARCHITECTURE.md).
 - Tech debt and known issues → [`designdocs/todo/TECHDEBT.md`](./designdocs/todo/TECHDEBT.md). Current session plan → [`TODO.md`](./TODO.md).
 - Available Tailwind tokens/classes → [`tailwind.config.js`](./tailwind.config.js).
+
+<!-- brevilabs-review-guidelines:start (synced from Brevilabs/brevilabs-skills — edit there, not here) -->
+
+## Review guidelines
+
+Apply these in addition to the built-in review. Report only problems
+introduced or exposed by this pull request, and describe the concrete failure
+scenario for each finding rather than giving general advice.
+
+Priorities, in order:
+
+1. **Correctness** — logic errors, data loss, unhandled failure paths,
+   concurrency hazards.
+2. **Security** — authorization bypass, injection, secrets or private data
+   leaving the codebase.
+3. **Breaking changes and migrations** — changed function signatures, renamed
+   or removed exports, altered return shapes, changed defaults, tightened
+   validation; persisted schemas, settings files, and serialized formats that
+   already-written data must still load. A change that needs a migration and
+   ships without one is a defect. When a migration exists, check that it
+   handles already-in-the-wild states, not just the happy path.
+4. **Code budget** — added lines are spend, not progress. A change that
+   solves the problem in fewer concepts beats one that solves it in more; the
+   best diff is the smallest one that does the job.
+5. **Tests** — changed behavior, failure paths, and boundary cases are
+   covered, and tests assert behavior rather than implementation detail.
+
+Severity calibration:
+
+- Treat as P1: an unhandled breaking change to a public API, plugin interface,
+  CLI flag, or wire format; a change requiring a migration that ships without
+  one; a data-corrupting or destructive operation; an authorization bypass; a
+  reproducible crash.
+- Also treat as P1: a diff carrying substantial code the problem does not
+  require — a speculative abstraction with a single caller, configurability
+  nothing asks for, premature optimization without a measurement showing the
+  need, defensive branches guarding states that cannot occur, or a
+  reimplementation of a helper that already exists in the codebase. Rank
+  smaller instances of the same problems P2/P3 rather than dropping them. An
+  over-engineering finding must name the simpler shape that solves the same
+  problem; a bare "consider simplifying" is not a finding.
+- Never report naming, formatting, or style that automated checks enforce, at
+  any priority.
+
+Code-budget checks:
+
+- Prefer fixes that remove code; say so when a net-negative diff is available.
+- Flag dead code the change itself creates — superseded branches, obsolete
+  fallbacks, stale tests — deletion belongs in the same PR.
+- Do not suggest broad refactors of pre-existing code unless required to fix
+  a reported defect; the budget applies to what this PR adds, not to what was
+  already there.
+<!-- brevilabs-review-guidelines:end -->
