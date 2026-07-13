@@ -70,6 +70,8 @@ export interface CopilotSettings {
   githubCopilotAccessToken: string;
   githubCopilotToken: string;
   githubCopilotTokenExpiresAt: number;
+  githubCopilotEnterpriseHostname: string;
+  githubCopilotApiUrl: string;
   defaultChainType: ChainType;
   defaultModelKey: string;
   embeddingModelKey: string;

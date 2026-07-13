@@ -1,5 +1,5 @@
 import { ChatOpenAI } from "@langchain/openai";
-import { COPILOT_API_BASE, GitHubCopilotProvider } from "./GitHubCopilotProvider";
+import { GitHubCopilotProvider } from "./GitHubCopilotProvider";
 import type { FetchImplementation } from "@/utils";
 
 /** Extract the constructor fields type from ChatOpenAI. */
@@ -102,7 +102,7 @@ export class GitHubCopilotResponsesModel extends ChatOpenAI {
       streamUsage: false,
       configuration: {
         ...(configuration ?? {}),
-        baseURL: configuration?.baseURL ?? COPILOT_API_BASE,
+        baseURL: configuration?.baseURL ?? provider.getCopilotApiUrl().base,
         fetch: authedFetch,
       },
     });

@@ -11,11 +11,8 @@ import { AuthCancelledError } from "./errors";
  * This integration is unofficial and provided "as-is" without guarantees.
  */
 const CLIENT_ID = "Iv1.b507a08c87ecfe98";
-const DEVICE_CODE_URL = "https://github.com/login/device/code";
-const ACCESS_TOKEN_URL = "https://github.com/login/oauth/access_token";
-const COPILOT_TOKEN_URL = "https://api.github.com/copilot_internal/v2/token";
-export const COPILOT_API_BASE = "https://api.githubcopilot.com";
-const MODELS_URL = `${COPILOT_API_BASE}/models`;
+const DEFAULT_HOSTNAME = "github.com";
+const DEFAULT_GITHUB_COPILOT_URL = "https://api.githubcopilot.com";
 
 // Token refresh buffer: refresh 1 minute before expiration
 const TOKEN_REFRESH_BUFFER_MS = 60 * 1000;
@@ -45,6 +42,10 @@ interface CopilotTokenApiResponse {
   token?: string;
   expires_at?: number | string;
   expires_in?: number | string;
+  endpoints?: {
+    api?: string;
+    [key: string]: unknown;
+  };
   error?: string;
   message?: string;
 }
@@ -80,6 +81,7 @@ export class GitHubCopilotProvider {
   private abortController: AbortController | null = null;
   private refreshPromise: Promise<string> | null = null;
   private refreshAttempts = 0;
+
   /**
    * Cache of model policy terms keyed by model ID.
    * Populated after each listModels() call. Used to surface helpful
@@ -92,6 +94,8 @@ export class GitHubCopilotProvider {
    * and accidentally writes back tokens.
    */
   private authGeneration = 0;
+
+  private hostname = "";
 
   private constructor() {}
 
@@ -139,7 +143,10 @@ export class GitHubCopilotProvider {
    * Step 1: Start device code flow
    * Returns device code info for user to authorize
    */
-  async startDeviceCodeFlow(): Promise<DeviceCodeResponse> {
+  async startDeviceCodeFlow(hostname: string): Promise<DeviceCodeResponse> {
+    // Save hostname which can be altered via the settings dialog to allow specifing other URLs such as github.com for enterprise hosted instances
+    setSettings({ githubCopilotEnterpriseHostname: hostname });
+
     // GitHub OAuth requires application/x-www-form-urlencoded
     const body = new URLSearchParams({
       client_id: CLIENT_ID,
@@ -147,7 +154,7 @@ export class GitHubCopilotProvider {
     }).toString();
 
     const res = await requestUrl({
-      url: DEVICE_CODE_URL,
+      url: this.getDeviceCodeUrl(),
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
@@ -250,7 +257,7 @@ export class GitHubCopilotProvider {
         }).toString();
 
         const res = await requestUrl({
-          url: ACCESS_TOKEN_URL,
+          url: this.getAccessTokenUrl(),
           method: "POST",
           headers: {
             "Content-Type": "application/x-www-form-urlencoded",
@@ -341,7 +348,7 @@ export class GitHubCopilotProvider {
     token = await getDecryptedKey(token);
 
     const res = await requestUrl({
-      url: COPILOT_TOKEN_URL,
+      url: this.getCopilotTokenUrl(),
       method: "GET",
       headers: {
         Authorization: `Bearer ${token}`,
@@ -378,6 +385,9 @@ export class GitHubCopilotProvider {
       throw new Error("Invalid response from Copilot API: missing or invalid token");
     }
 
+    // Dynamic endpoints resolution using the centralized helper!
+    const copilotApiUrl = this.resolveCopilotApiUrl(data.endpoints?.api);
+
     // Handle expires_at: support numeric seconds/millis, ISO string, and expires_in fallback.
     const expiresAt = this.parseCopilotTokenExpiresAt(data);
 
@@ -386,10 +396,11 @@ export class GitHubCopilotProvider {
       throw new AuthCancelledError("Authentication was reset during token refresh.");
     }
 
-    // Store copilot token and expiration
+    // Store copilot token, expiration and correct API endpoints
     setSettings({
       githubCopilotToken: copilotToken,
       githubCopilotTokenExpiresAt: expiresAt,
+      githubCopilotApiUrl: copilotApiUrl,
     });
 
     return copilotToken;
@@ -480,6 +491,8 @@ export class GitHubCopilotProvider {
       githubCopilotAccessToken: "",
       githubCopilotToken: "",
       githubCopilotTokenExpiresAt: 0,
+      githubCopilotEnterpriseHostname: DEFAULT_HOSTNAME,
+      githubCopilotApiUrl: DEFAULT_GITHUB_COPILOT_URL,
     });
   }
 
@@ -489,7 +502,7 @@ export class GitHubCopilotProvider {
   async listModels(): Promise<GitHubCopilotModelResponse> {
     const doRequest = async (token: string): Promise<RequestUrlResponse> => {
       return await requestUrl({
-        url: MODELS_URL,
+        url: this.getCopilotApiUrl().models,
         method: "GET",
         headers: {
           ...this.buildCopilotHeaders(token),
@@ -527,6 +540,56 @@ export class GitHubCopilotProvider {
     });
 
     return result;
+  }
+
+  getDeviceCodeUrl(): string {
+    const hostname = getSettings().githubCopilotEnterpriseHostname || DEFAULT_HOSTNAME;
+    return `https://${hostname}/login/device/code`;
+  }
+
+  getAccessTokenUrl(): string {
+    const hostname = getSettings().githubCopilotEnterpriseHostname || DEFAULT_HOSTNAME;
+    return `https://${hostname}/login/oauth/access_token`;
+  }
+
+  getCopilotTokenUrl(): string {
+    const hostname = getSettings().githubCopilotEnterpriseHostname || DEFAULT_HOSTNAME;
+    // Check if it is a GitHub Enterprise Server (GHES) vs GitHub Enterprise Cloud / Standard
+    if (hostname !== DEFAULT_HOSTNAME && !hostname.endsWith(".ghe.com")) {
+      // GHES on-premises endpoint requires /api/v3 prefix
+      return `https://${hostname}/api/v3/copilot_internal/v2/token`;
+    }
+    // GHEC and standard cloud
+    return `https://api.${hostname}/copilot_internal/v2/token`;
+  }
+
+  getCopilotApiUrl(): { base: string; models: string } {
+    const copilotApiUrl = this.resolveCopilotApiUrl();
+    return { base: copilotApiUrl, models: `${copilotApiUrl}/models` };
+  }
+
+  /**
+   * Resolves the primary Copilot API Base URL based on stored data and the hostname.
+   * Preferring the dynamically received API endpoint if available.
+   */
+  private resolveCopilotApiUrl(receivedApiUrl?: string): string {
+    if (receivedApiUrl) {
+      return receivedApiUrl;
+    }
+
+    const settings = getSettings();
+    if (settings.githubCopilotApiUrl) {
+      return settings.githubCopilotApiUrl;
+    }
+
+    const hostname = settings.githubCopilotEnterpriseHostname || DEFAULT_HOSTNAME;
+    if (hostname !== DEFAULT_HOSTNAME) {
+      return hostname.endsWith(".ghe.com")
+        ? DEFAULT_GITHUB_COPILOT_URL
+        : "https://copilot-proxy.githubusercontent.com";
+    }
+
+    return DEFAULT_GITHUB_COPILOT_URL;
   }
 
   /**
