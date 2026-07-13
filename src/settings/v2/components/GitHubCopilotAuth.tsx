@@ -7,11 +7,12 @@ import {
   DeviceCodeResponse,
 } from "@/LLMProviders/githubCopilot/GitHubCopilotProvider";
 import { isAuthCancelledError } from "@/LLMProviders/githubCopilot/errors";
-import { useSettingsValue } from "@/settings/model";
+import { useSettingsValue, setSettings } from "@/settings/model";
 import { ModelImporter } from "@/settings/v2/components/ModelImporter";
 import { ChevronDown, ChevronUp, Loader2, Copy } from "lucide-react";
 import { Notice } from "obsidian";
 import React, { useEffect, useRef, useState } from "react";
+import { Input } from "@/components/ui/input";
 
 type AuthStep = "idle" | "pending" | "polling" | "done" | "error";
 
@@ -31,6 +32,10 @@ export function GitHubCopilotAuth() {
   const [expanded, setExpanded] = useState(false);
   const authRequestIdRef = useRef(0);
   const isMountedRef = useRef(true);
+  const [hostname, setHostname] = useState(
+    () => settings.githubCopilotEnterpriseHostname || "github.com"
+  );
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   // Render-phase reset: re-derive authStep when the underlying auth tokens change.
   // GitHubCopilotProvider has no subscribe API, so we track the token tuple instead.
@@ -111,7 +116,7 @@ export function GitHubCopilotAuth() {
     setPollCount(0);
 
     try {
-      const deviceCodeResponse = await copilotProvider.startDeviceCodeFlow();
+      const deviceCodeResponse = await copilotProvider.startDeviceCodeFlow(hostname);
 
       // Check if request was cancelled or component unmounted
       if (!isMountedRef.current || requestId !== authRequestIdRef.current) {
@@ -216,6 +221,45 @@ export function GitHubCopilotAuth() {
     }
   };
 
+  /**
+   * Sanitizes input to extract a valid hostname format.
+   * Strips protocols, www, paths, ports, query strings, and invalid characters.
+   */
+  function sanitizeCopilotHostname(input: string): string {
+    let cleaned = input.trim();
+    // Remove protocol (http:// or https://) and optional www.
+    cleaned = cleaned.replace(/^(https?:\/\/)?(www\.)?/i, "");
+    // Strip anything starting from port (:) or path (/) or query (?)
+    cleaned = cleaned.split("/")[0].split(":")[0].split("?")[0];
+    // Allow only alphanumeric characters, dots, and hyphens
+    cleaned = cleaned.replace(/[^a-zA-Z0-9.-]/g, "");
+    return cleaned;
+  }
+
+  /**
+   * Validates whether the given string is a valid GitHub, GHEC, or corporate GHES hostname.
+   */
+  function isValidCopilotHostname(host: string): boolean {
+    if (!host) return false;
+    if (host === "github.com") return true;
+
+    // Hostnames must have at least one dot separating labels (e.g., domain.tld)
+    if (!host.includes(".")) return false;
+
+    const hostParts = host.split(".");
+    const labelRegex = /^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$/;
+
+    for (const part of hostParts) {
+      if (!part || !labelRegex.test(part)) return false;
+    }
+
+    // TLD (last part) must be at least 2 characters long (e.g., api.siemens.ghe.com -> com)
+    const tld = hostParts[hostParts.length - 1];
+    if (tld.length < 2) return false;
+
+    return true;
+  }
+
   return (
     <>
       <div className="tw-flex tw-flex-col tw-gap-2">
@@ -236,6 +280,30 @@ export function GitHubCopilotAuth() {
             <span className="tw-cursor-help tw-text-warning">⚠️</span>
           </HelpTooltip>
         </div>
+        <div className="tw-flex tw-flex-row tw-items-center tw-gap-2">
+          <div className="tw-flex-1">
+            <Input
+              className={`tw-max-w-full ${validationError ? "tw-border-error" : ""}`}
+              readOnly={isAuthenticated}
+              value={hostname}
+              placeholder="github.com"
+              onChange={(e) => {
+                const sanitized = sanitizeCopilotHostname(e.target.value);
+                setHostname(sanitized);
+
+                if (!sanitized) {
+                  setValidationError("Hostname is required");
+                } else if (!isValidCopilotHostname(sanitized)) {
+                  setValidationError("Invalid host format (must be a valid domain)");
+                } else {
+                  setValidationError(null);
+                  setSettings({ githubCopilotEnterpriseHostname: sanitized });
+                }
+              }}
+            />
+          </div>
+        </div>
+        {validationError && <div className="tw-mt-0.5 tw-text-error">{validationError}</div>}
         <div className="tw-flex tw-flex-col tw-gap-2 sm:tw-flex-row sm:tw-items-center">
           {/* Status display */}
           <div
@@ -276,7 +344,7 @@ export function GitHubCopilotAuth() {
                   setExpanded(!expanded);
                 }
               }}
-              disabled={isAuthenticating}
+              disabled={isAuthenticating || (!isAuthenticated && !!validationError)}
               variant="secondary"
               className="tw-flex tw-flex-1 tw-items-center tw-justify-center tw-gap-2 tw-whitespace-nowrap tw-px-4 tw-py-2 sm:tw-flex-none"
             >

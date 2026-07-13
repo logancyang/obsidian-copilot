@@ -1,6 +1,6 @@
 import type { BaseMessageChunk, MessageContent } from "@langchain/core/messages";
 import { ChatOpenAICompletions } from "@langchain/openai";
-import { COPILOT_API_BASE, GitHubCopilotProvider } from "./GitHubCopilotProvider";
+import { GitHubCopilotProvider } from "./GitHubCopilotProvider";
 import { buildGitHubCopilotAuthedFetch } from "./GitHubCopilotResponsesModel";
 import type { FetchImplementation } from "@/utils";
 import { extractTextFromChunk } from "@/utils";
@@ -119,7 +119,7 @@ export class GitHubCopilotChatModel extends ChatOpenAICompletions {
       configuration: {
         ...(configuration ?? {}),
         // Reason: OpenAI SDK appends "/chat/completions" to baseURL automatically
-        baseURL: configuration?.baseURL ?? COPILOT_API_BASE,
+        baseURL: configuration?.baseURL ?? provider.getCopilotApiUrl().base,
         fetch: authedFetch,
       },
     });
