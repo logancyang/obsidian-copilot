@@ -14,6 +14,7 @@ import type { AgentSession } from "@/agentMode/session/AgentSession";
 import { MethodUnsupportedError } from "@/agentMode/session/errors";
 import { claudeBinarySearchDirs, resolveClaudeBinary } from "./claudeBinaryResolver";
 import { getClaudeAuthStatus, signInToClaude } from "./claudeAuth";
+import { assertClaudeVersionSupported } from "./claudeVersion";
 import { agentOriginEnabledModelEntries } from "@/agentMode/backends/shared/agentEnabledModels";
 import { ClaudeSdkBackendProcess } from "@/agentMode/sdk/ClaudeSdkBackendProcess";
 import { getCachedSdkCatalog, synthesizeEffortConfigOption } from "@/agentMode/sdk/effortOption";
@@ -30,11 +31,17 @@ import type { BackendDescriptor, BackendProcess, InstallState } from "@/agentMod
 import { ClaudeInstallModal } from "./ClaudeInstallModal";
 import ClaudeLogo from "./logo.svg";
 import { ClaudeSettingsPanel } from "./ClaudeSettingsPanel";
+import {
+  claudeCompatibilityStore,
+  type ClaudeCompatibilityInput,
+} from "./claudeCompatibilityStore";
 
 export const CLAUDE_INSTALL_COMMAND =
   process.platform === "win32"
     ? "irm https://gist.githubusercontent.com/logancyang/7a87eb38d91015eac567521f8cc9c729/raw/install-claude-agent-mode-windows.ps1 | iex"
     : "npm install -g @anthropic-ai/claude-code";
+
+const ABSENT_INSTALL_STATE: InstallState = Object.freeze({ kind: "absent" });
 
 export function updateClaudeFields(partial: Partial<ClaudeBackendSettings>): void {
   updateAgentModeBackendFields("claude", partial);
@@ -91,6 +98,23 @@ function claudeChildEnv(settings: CopilotSettings): NodeJS.ProcessEnv {
     : process.env;
 }
 
+function claudeCompatibilityInput(
+  settings: CopilotSettings,
+  claudePath: string
+): ClaudeCompatibilityInput {
+  const overrides = settings.agentMode?.backends?.claude?.envOverrides;
+  const environmentKey = JSON.stringify(
+    Object.entries(overrides ?? {}).sort(([a], [b]) => a.localeCompare(b))
+  );
+  const source = settings.agentMode?.claudeCli?.path ? "custom" : "managed";
+  return {
+    cacheKey: `${source}\u0000${claudePath}\u0000${environmentKey}`,
+    path: claudePath,
+    source,
+    env: claudeChildEnv(settings),
+  };
+}
+
 /**
  * Resolve the `claude` CLI path from settings + auto-detection. Mirrors the
  * `getInstallState` logic: explicit override wins, otherwise the resolver
@@ -115,6 +139,32 @@ export function detectClaudeCliPath(): string | null {
 
 export function claudeCliDetectionSearchDirs(): string[] {
   return claudeBinarySearchDirs({ override: undefined, ...claudeResolverEnv() });
+}
+
+export function getClaudeInstallState(settings: CopilotSettings): InstallState {
+  const claudePath = resolveClaudeCliPath(settings);
+  if (!claudePath) return ABSENT_INSTALL_STATE;
+  return claudeCompatibilityStore.get(claudeCompatibilityInput(settings, claudePath));
+}
+
+/**
+ * Refreshes compatibility knowledge after runtime configuration changes so readiness does not remain stale.
+ * @param settings - The settings that select the executable and its runtime environment.
+ * @param force - Whether an already-settled compatibility result should be checked again.
+ */
+export async function refreshClaudeInstallState(
+  settings: CopilotSettings,
+  force = false
+): Promise<InstallState> {
+  const claudePath = resolveClaudeCliPath(settings);
+  if (!claudePath) return ABSENT_INSTALL_STATE;
+  return claudeCompatibilityStore.refresh(claudeCompatibilityInput(settings, claudePath), {
+    force,
+  });
+}
+
+export function subscribeClaudeInstallState(listener: () => void): () => void {
+  return claudeCompatibilityStore.subscribe(listener);
 }
 
 /**
@@ -164,12 +214,7 @@ export const ClaudeBackendDescriptor: BackendDescriptor = {
   },
 
   getInstallState(settings: CopilotSettings): InstallState {
-    const path = resolveClaudeCliPath(settings);
-    if (!path) return { kind: "absent" };
-    return {
-      kind: "ready",
-      source: settings.agentMode?.claudeCli?.path ? "custom" : "managed",
-    };
+    return getClaudeInstallState(settings);
   },
 
   getResolvedBinaryPath(settings: CopilotSettings): string | null {
@@ -177,11 +222,25 @@ export const ClaudeBackendDescriptor: BackendDescriptor = {
   },
 
   subscribeInstallState(_plugin: CopilotPlugin, cb: () => void): () => void {
-    return subscribeToSettingsChange((prev, next) => {
-      if (prev.agentMode?.claudeCli?.path !== next.agentMode?.claudeCli?.path) {
+    const unsubscribeSettings = subscribeToSettingsChange((prev, next) => {
+      if (
+        prev.agentMode?.claudeCli?.path !== next.agentMode?.claudeCli?.path ||
+        prev.agentMode?.backends?.claude?.envOverrides !==
+          next.agentMode?.backends?.claude?.envOverrides
+      ) {
         cb();
+        void refreshClaudeInstallState(next, true);
       }
     });
+    const unsubscribeCompatibility = subscribeClaudeInstallState(cb);
+    return () => {
+      unsubscribeSettings();
+      unsubscribeCompatibility();
+    };
+  },
+
+  async onPluginLoad(): Promise<void> {
+    await refreshClaudeInstallState(getSettings(), true);
   },
 
   openInstallUI(plugin: CopilotPlugin): void {
@@ -246,6 +305,8 @@ export const ClaudeBackendDescriptor: BackendDescriptor = {
       getManagedEnv: () => buildCopilotPlusEnv(args.clientVersion),
       checkAuth: async () =>
         (await getClaudeAuthStatus(claudePath, claudeChildEnv(getSettings()))).loggedIn,
+      checkCompatibility: () =>
+        assertClaudeVersionSupported(claudePath, claudeChildEnv(getSettings())),
       isPlanModePlanFilePath: isClaudePlanModePlanFilePath,
       getDefaultModelId: () => getSettings().agentMode?.backends?.claude?.defaultModel?.baseModelId,
       // Compose the shared system prompt — the Copilot base framing (unless the

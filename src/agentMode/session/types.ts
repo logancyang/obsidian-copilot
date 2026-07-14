@@ -10,7 +10,6 @@ export type {
   BackendAuthStatus,
   BackendDescriptor,
   BackendSignInHandlers,
-  BackendUpgradeInfo,
   InstallState,
 } from "./descriptor";
 export type { CurrentPlan, PlanDecisionAction, PlanProposalDecision } from "./plan";

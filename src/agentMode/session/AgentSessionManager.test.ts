@@ -27,7 +27,7 @@ import {
 } from "@/aiParams";
 import type { ProjectFileRecord } from "@/projects/type";
 import { getProjectContextSignature } from "@/projects/projectContextSignature";
-import type { BackendDescriptor } from "./types";
+import type { BackendDescriptor, InstallState } from "./types";
 
 const mockEnsureMaterialized = ensureProjectContextMaterialized as jest.Mock;
 
@@ -1669,11 +1669,11 @@ describe("AgentSessionManager.onInstallStateChanged", () => {
   // Builds a manager whose install state is mutable mid-test (mirrors a user
   // applying/clearing a binary path) and exposes the preloader spies.
   function buildInstallStateManager(opts: {
-    installed: boolean;
+    installState: InstallState;
     cachedState?: unknown;
     refreshResult?: Promise<void> | null;
   }) {
-    let installed = opts.installed;
+    let installState = opts.installState;
     const preloader = {
       getCachedBackendState: jest.fn(() => opts.cachedState ?? null),
       preload: jest.fn(async () => undefined),
@@ -1687,7 +1687,7 @@ describe("AgentSessionManager.onInstallStateChanged", () => {
     };
     const descriptor = {
       ...buildDescriptor(),
-      getInstallState: jest.fn(() => ({ kind: installed ? "ready" : "absent" })),
+      getInstallState: jest.fn(() => installState),
     } as unknown as BackendDescriptor;
     const mgr = new AgentSessionManager(
       buildApp(),
@@ -1700,14 +1700,16 @@ describe("AgentSessionManager.onInstallStateChanged", () => {
         >[2]["modelPreloader"],
       }
     );
-    return { mgr, preloader, setInstalled: (v: boolean) => (installed = v) };
+    return { mgr, preloader, setInstallState: (state: InstallState) => (installState = state) };
   }
 
   it("preloads a freshly-installed backend that was never probed", async () => {
     // Newly installed: nothing warm, nothing live. `restartBackend` returns
     // false, so the manager must kick a first preload — without it the picker
     // would stay empty until a plugin reload.
-    const { mgr, preloader } = buildInstallStateManager({ installed: true });
+    const { mgr, preloader } = buildInstallStateManager({
+      installState: { kind: "ready", source: "custom" },
+    });
 
     await mgr.onInstallStateChanged("opencode");
 
@@ -1720,7 +1722,7 @@ describe("AgentSessionManager.onInstallStateChanged", () => {
     // A warm probe (from load-time preload) carries the old binary; re-probe
     // it rather than spinning up a second one.
     const { mgr, preloader } = buildInstallStateManager({
-      installed: true,
+      installState: { kind: "ready", source: "custom" },
       cachedState: { model: null, mode: null },
       refreshResult: Promise.resolve(),
     });
@@ -1732,7 +1734,9 @@ describe("AgentSessionManager.onInstallStateChanged", () => {
   });
 
   it("restarts a live backend against the new binary", async () => {
-    const { mgr, preloader } = buildInstallStateManager({ installed: true });
+    const { mgr, preloader } = buildInstallStateManager({
+      installState: { kind: "ready", source: "custom" },
+    });
     await mgr.createSession();
     mockBackendShutdown.mockClear();
     preloader.preload.mockClear();
@@ -1747,19 +1751,37 @@ describe("AgentSessionManager.onInstallStateChanged", () => {
   });
 
   it("tears down and drops the warm probe when the binary is no longer available", async () => {
-    const { mgr, preloader, setInstalled } = buildInstallStateManager({ installed: true });
+    const { mgr, preloader, setInstallState } = buildInstallStateManager({
+      installState: { kind: "ready", source: "custom" },
+    });
     await mgr.createSession();
     mockBackendShutdown.mockClear();
     sessionCreateSpy.mockClear();
 
     // Path cleared / binary removed.
-    setInstalled(false);
+    setInstallState({ kind: "absent" });
     await mgr.onInstallStateChanged("opencode");
 
     expect(mockBackendShutdown).toHaveBeenCalled();
     // No replacement session is spawned for an uninstalled backend.
     expect(sessionCreateSpy).not.toHaveBeenCalled();
     expect(preloader.clearCached).toHaveBeenCalledWith("opencode");
+    expect(preloader.preload).not.toHaveBeenCalled();
+  });
+
+  it("keeps live and warm backend state while a compatibility check is in flight", async () => {
+    const { mgr, preloader } = buildInstallStateManager({
+      installState: { kind: "checking", source: "custom" },
+      cachedState: { model: null, mode: null },
+    });
+    await mgr.createSession();
+    mockBackendShutdown.mockClear();
+
+    await mgr.onInstallStateChanged("opencode");
+
+    expect(mockBackendShutdown).not.toHaveBeenCalled();
+    expect(preloader.clearCached).not.toHaveBeenCalled();
+    expect(preloader.refresh).not.toHaveBeenCalled();
     expect(preloader.preload).not.toHaveBeenCalled();
   });
 });

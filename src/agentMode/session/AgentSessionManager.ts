@@ -2202,7 +2202,12 @@ export class AgentSessionManager {
    */
   async onInstallStateChanged(backendId: BackendId): Promise<void> {
     if (this.disposed) return;
-    if (!this.isBackendInstalled(backendId)) {
+    const installState = this.opts.resolveDescriptor(backendId)?.getInstallState(getSettings());
+    // Compatibility probes publish a transient checking state before their
+    // authoritative result. Keep live and warm processes intact until that
+    // result says whether the configured runtime is actually usable.
+    if (installState?.kind === "checking") return;
+    if (installState?.kind !== "ready") {
       // Tears down a live proc (the install guard in `restartBackendNow` keeps
       // it from respawning); `clearCached` then drops any warm probe.
       await this.restartBackend(backendId, "binary no longer available");

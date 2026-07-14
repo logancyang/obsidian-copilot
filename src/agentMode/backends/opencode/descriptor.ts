@@ -3,7 +3,6 @@ import * as os from "node:os";
 import { OpencodeInstallModal } from "@/agentMode/backends/opencode/OpencodeInstallModal";
 import OpencodeLogo from "@/agentMode/backends/opencode/logo.svg";
 import type CopilotPlugin from "@/main";
-import { OPENCODE_MIN_ACP_VERSION } from "@/constants";
 import { logWarn } from "@/logger";
 import {
   getSettings,
@@ -18,8 +17,8 @@ import {
 } from "./OpencodeBackend";
 import {
   computeInstallState,
-  isOpencodeVersionOutdated,
   OpencodeBinaryManager,
+  toOpencodeInstallState,
 } from "./OpencodeBinaryManager";
 import { opencodeEnabledModelEntries } from "./opencodeModelResolve";
 import { OpencodeSettingsPanel } from "./OpencodeSettingsPanel";
@@ -38,12 +37,7 @@ import type {
   ModelWireCodec,
   SessionId,
 } from "@/agentMode/session/types";
-import type {
-  BackendDescriptor,
-  BackendProcess,
-  BackendUpgradeInfo,
-  InstallState,
-} from "@/agentMode/session/types";
+import type { BackendDescriptor, BackendProcess, InstallState } from "@/agentMode/session/types";
 
 /** Config option id OpenCode uses to switch the active agent at runtime. */
 const OPENCODE_MODE_CONFIG_OPTION_ID = "mode";
@@ -158,9 +152,7 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
   },
 
   getInstallState(settings: CopilotSettings): InstallState {
-    const raw = computeInstallState(settings.agentMode?.backends?.opencode);
-    if (raw.kind === "absent") return { kind: "absent" };
-    return { kind: "ready", source: raw.source };
+    return toOpencodeInstallState(computeInstallState(settings.agentMode?.backends?.opencode));
   },
 
   getResolvedBinaryPath(settings: CopilotSettings): string | null {
@@ -188,16 +180,6 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
       platform: mapNodePlatform(process.platform) ?? process.platform,
       arch: mapNodeArch(process.arch) ?? process.arch,
     }).open();
-  },
-
-  getUpgradeInfo(settings: CopilotSettings): BackendUpgradeInfo | null {
-    const state = computeInstallState(settings.agentMode?.backends?.opencode);
-    if (state.kind !== "installed" || !isOpencodeVersionOutdated(state.version)) return null;
-    return {
-      currentVersion: state.version,
-      minVersion: OPENCODE_MIN_ACP_VERSION,
-      source: state.source,
-    };
   },
 
   async upgrade(plugin: CopilotPlugin): Promise<void> {

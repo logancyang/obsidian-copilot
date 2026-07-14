@@ -181,6 +181,11 @@ export interface ClaudeSdkBackendProcessOptions {
    * ends without output, which forces a re-check (covers mid-session expiry).
    */
   checkAuth?: () => Promise<boolean>;
+  /**
+   * Rejects when the external Claude Code CLI cannot provide the protocol
+   * guarantees this adapter relies on. Checked before opening any session.
+   */
+  checkCompatibility?: () => Promise<void>;
 }
 
 /**
@@ -229,6 +234,8 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
    * sign-in state; set true once `checkAuth` confirms the CLI is signed in.
    */
   private authConfirmed = false;
+  private compatibilityConfirmed = false;
+  private compatibilityProbe: Promise<void> | null = null;
 
   constructor(private readonly opts: ClaudeSdkBackendProcessOptions) {
     this.bridge = new PermissionBridge({
@@ -307,6 +314,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       mcpServers: params.mcpServers,
       projectId: params.projectId ?? null,
     });
+    await this.ensureCompatible();
     const sessionId = uuidv4();
     const cwd = params.cwd ?? null;
     const mcp: Record<string, McpServerConfig> = {};
@@ -707,6 +715,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       { cwd: params.cwd, mcpServers: params.mcpServers, projectId: params.projectId ?? null },
       params.sessionId
     );
+    await this.ensureCompatible();
     const cwd = params.cwd ?? null;
     const mcp: Record<string, McpServerConfig> = {};
     for (const server of params.mcpServers ?? []) {
@@ -806,6 +815,23 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     });
     this.cachedModelsProbe = probePromise;
     return probePromise;
+  }
+
+  private ensureCompatible(): Promise<void> {
+    if (this.compatibilityConfirmed || !this.opts.checkCompatibility) return Promise.resolve();
+    if (this.compatibilityProbe) return this.compatibilityProbe;
+    const probe = this.opts.checkCompatibility().then(
+      () => {
+        this.compatibilityConfirmed = true;
+        this.compatibilityProbe = null;
+      },
+      (error: unknown) => {
+        this.compatibilityProbe = null;
+        throw error;
+      }
+    );
+    this.compatibilityProbe = probe;
+    return probe;
   }
 
   private computeState(sessionId: SessionId): BackendState {

@@ -13,7 +13,7 @@ import React from "react";
 /* eslint-disable @eslint-react/hooks-extra/no-unnecessary-use-prefix */
 jest.mock("@/agentMode/ui/useBackendDescriptor", () => ({
   useActiveBackendDescriptor: () => ({ id: "claude", openInstallUI: jest.fn() }),
-  useBackendInstallState: () => ({ kind: "installed" }),
+  useBackendInstallState: () => ({ kind: "ready", source: "custom" }),
 }));
 /* eslint-enable @eslint-react/hooks-extra/no-unnecessary-use-prefix */
 

@@ -16,15 +16,18 @@ interface InstallBadgeSpec {
 }
 
 /**
- * Derive the card status badge from an {@link InstallState}.
- *
- * Returns `null` when the agent is not configured — the *absence* of a badge
- * is the "not configured" signal; the CTA-styled Configure button carries the
- * call to action, so no "Setup required" pill is shown on the card.
+ * Gives agent cards one status vocabulary while leaving the configure action as the missing-install signal.
+ * @param state - The backend readiness state the card needs to communicate.
  */
 export function installBadge(state: InstallState): InstallBadgeSpec | null {
   if (state.kind === "ready") {
     return { label: "Ready", variant: "outline", className: "tw-text-success", showCheck: true };
+  }
+  if (state.kind === "checking") {
+    return { label: "Checking…", variant: "outline" };
+  }
+  if (state.kind === "incompatible") {
+    return { label: "Incompatible version", variant: "destructive", title: state.message };
   }
   if (state.kind === "error") {
     return { label: "Error", variant: "destructive", title: state.message };
@@ -48,11 +51,9 @@ export const InstallBadge: React.FC<{ state: InstallState }> = ({ state }) => {
 };
 
 /**
- * Status line shown at the top of a Configure dialog: the badge plus an
- * optional verbose detail line (resolved path / version) the caller supplies,
- * since {@link InstallState} does not carry the path. Unlike the card, the
- * unconfigured state reads explicitly here ("Not configured") because the
- * dialog is where setup happens.
+ * Gives configuration dialogs a shared readiness summary so users can understand whether setup action is required.
+ * @param state - The backend readiness state the dialog needs to explain.
+ * @param detail - Optional runtime context that helps the user identify the configured installation.
  */
 export const InstallStatusLine: React.FC<{
   state: InstallState;
@@ -65,5 +66,8 @@ export const InstallStatusLine: React.FC<{
       <InstallBadge state={state} />
     )}
     {detail && <div className="tw-break-all tw-font-mono tw-text-xs tw-text-muted">{detail}</div>}
+    {(state.kind === "incompatible" || state.kind === "error") && (
+      <div className="tw-text-sm tw-text-error">{state.message}</div>
+    )}
   </div>
 );

@@ -5,6 +5,27 @@ import { logError } from "@/logger";
 import { useSettingsValue } from "@/settings/model";
 import { Notice } from "obsidian";
 import React from "react";
+import type CopilotPlugin from "@/main";
+
+function installStateSignature(state: InstallState): string {
+  switch (state.kind) {
+    case "absent":
+      return "absent";
+    case "checking":
+    case "ready":
+      return `${state.kind}:${state.source}`;
+    case "incompatible":
+      return JSON.stringify([
+        state.kind,
+        state.source,
+        state.currentVersion,
+        state.minVersion,
+        state.message,
+      ]);
+    case "error":
+      return JSON.stringify([state.kind, state.message]);
+  }
+}
 
 /** Resolve the active (default) backend descriptor from settings. */
 export function useActiveBackendDescriptor(): BackendDescriptor {
@@ -25,13 +46,15 @@ export function useSessionBackendDescriptor(
   manager: AgentSessionManager | null | undefined
 ): BackendDescriptor {
   const settings = useSettingsValue();
-  const [, forceRender] = React.useState(0);
-  React.useEffect(() => {
-    if (!manager) return;
-    return manager.subscribe(() => forceRender((n) => n + 1));
-  }, [manager]);
-  const sessionBackendId =
-    manager?.getStartingBackendId() ?? manager?.getActiveSession()?.backendId;
+  const subscribe = React.useCallback(
+    (listener: () => void) => manager?.subscribe(listener) ?? (() => {}),
+    [manager]
+  );
+  const getSnapshot = React.useCallback(
+    () => manager?.getStartingBackendId() ?? manager?.getActiveSession()?.backendId ?? null,
+    [manager]
+  );
+  const sessionBackendId = React.useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
   if (sessionBackendId) {
     const desc = backendRegistry[sessionBackendId];
     if (desc) return desc;
@@ -39,9 +62,31 @@ export function useSessionBackendDescriptor(
   return getActiveBackendDescriptor(settings);
 }
 
-/** Compute the descriptor's current install state. Recomputes each render. */
-export function useBackendInstallState(descriptor: BackendDescriptor): InstallState {
-  return descriptor.getInstallState(useSettingsValue());
+/**
+ * Keeps backend readiness UI synchronized with settings and asynchronous runtime checks.
+ * A semantic signature is the external-store snapshot because some descriptors allocate
+ * a new state object on every read even when its value has not changed.
+ * @param descriptor - The backend whose readiness should be observed.
+ * @param plugin - The plugin instance used to subscribe to backend-specific readiness changes.
+ */
+export function useBackendInstallState(
+  descriptor: BackendDescriptor,
+  plugin: CopilotPlugin
+): InstallState {
+  const settings = useSettingsValue();
+  const subscribe = React.useCallback(
+    (listener: () => void) => descriptor.subscribeInstallState(plugin, listener),
+    [descriptor, plugin]
+  );
+  const getSnapshot = React.useCallback(
+    () => installStateSignature(descriptor.getInstallState(settings)),
+    [descriptor, settings]
+  );
+  const signature = React.useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  return React.useMemo(() => {
+    void signature;
+    return descriptor.getInstallState(settings);
+  }, [descriptor, settings, signature]);
 }
 
 export interface BackendAuthUiState {

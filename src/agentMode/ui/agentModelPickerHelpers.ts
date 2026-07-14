@@ -66,22 +66,10 @@ export function handlePickerSwitchError(err: unknown, action: "model" | "effort"
 export const AGENT_PROVIDER = "agent";
 
 /**
- * Append one backend's section to the picker.
- *
- * One policy for every backend, via `getEnabledModelEntries`: iterate the
- * backend's *enabled* models, enriched by the reported catalog when present.
- * Every enabled model appears — one the agent dropped for a missing key, or
- * no longer reports at all, is shown non-selectable with a flag
- * (`"Add API key"`, `"Not offered by agent"`, …) rather than silently hidden.
- * Agent-native backends (claude, codex) report `credentialState: "ok"`, so
- * their only flag is `"Not offered by agent"` for a stale enabled id.
- *
- * The active session's selection (and an inactive backend's persisted default)
- * is always kept via `keepBaseModelId`. A descriptor that implements no
- * `getEnabledModelEntries` opts out entirely; `buildPickerEntries` still re-adds
- * the active selection if curation stranded it. During preload (no reported
- * catalog yet) we defer to the "Loading…" placeholder `buildPickerEntries`
- * adds, so we don't flag "Not offered by agent" before the catalog loads.
+ * Preserves usable and stranded choices for one backend so credential or catalog drift never hides recovery paths.
+ * @param entries - The picker entries being assembled across backends.
+ * @param descriptor - The backend whose model choices and selection policy should be represented.
+ * @param ctx - The catalog, settings, and active-selection context for this backend.
  */
 export function appendBackendSection(
   entries: ModelSelectorEntry[],
@@ -93,13 +81,17 @@ export function appendBackendSection(
     keepBaseModelId: string | null;
     /** Current settings — read by `getEnabledModelEntries`. */
     settings: CopilotSettings;
+    /** Preload settled without a catalog, so persisted enabled models are the only recovery path. */
+    useEnabledFallback?: boolean;
   }
 ): void {
   const enabledEntries = descriptor.getEnabledModelEntries?.(ctx.settings) ?? null;
   if (!enabledEntries) return;
-  // Preload still pending → no reported catalog yet; let buildPickerEntries
-  // render the Loading placeholder instead of flagging prematurely.
-  if (!ctx.backendModels) return;
+  if (!ctx.backendModels) {
+    if (!ctx.useEnabledFallback) return;
+    appendEnabledFallbackEntries(entries, descriptor, enabledEntries);
+    return;
+  }
   appendFromEnabledEntries(
     entries,
     descriptor,
@@ -107,6 +99,25 @@ export function appendBackendSection(
     ctx.backendModels,
     ctx.keepBaseModelId
   );
+}
+
+function appendEnabledFallbackEntries(
+  entries: ModelSelectorEntry[],
+  descriptor: BackendDescriptor,
+  enabledEntries: ReadonlyArray<EnabledModelEntry>
+): void {
+  for (const enabled of enabledEntries) {
+    const entry = synthesizeAgentEntry(
+      enabled.baseModelId,
+      enabled.name || enabled.baseModelId,
+      descriptor,
+      enabled.description,
+      enabled.isFree,
+      enabled.capabilities
+    );
+    if (enabled.credentialState === "missing_key") entry._disabledReason = MISSING_KEY_LABEL;
+    entries.push(entry);
+  }
 }
 
 /**
@@ -276,11 +287,11 @@ export function collectModelActiveContext(manager: AgentSessionManager): ModelAc
 }
 
 /**
- * Build one entry per registered backend (filtered by overrides and
- * sticky-selection preservation), then locate the active selection. If
- * curation stranded the user's current model, prepend a synthesized entry
- * so it remains visible. Returns the entries array and the resolved
- * `valueKey`.
+ * Builds a cross-backend picker that keeps the active choice visible through preload gaps and catalog changes.
+ * @param manager - The session manager that owns live and cached backend selection state.
+ * @param descriptors - The registered backends that may contribute picker choices.
+ * @param ctx - The active session and model context that must remain stable in the picker.
+ * @param settings - The persisted configuration used to determine enabled choices.
  */
 export function buildPickerEntries(
   manager: AgentSessionManager,
@@ -297,20 +308,26 @@ export function buildPickerEntries(
       ? (ctx.activeModelState?.current.baseModelId ?? null)
       : (manager.getDefaultSelection(descriptor.id)?.baseModelId ?? null);
     const backendModels = cached?.model?.availableModels ?? null;
+    const hasNoCachedState = cached === null;
+    const preloadStatus = manager.getPreloadStatus(descriptor.id);
+    const sectionStart = entries.length;
     appendBackendSection(entries, descriptor, {
       backendModels,
       keepBaseModelId,
       settings,
+      useEnabledFallback:
+        hasNoCachedState && (preloadStatus === "ready" || preloadStatus === "error"),
     });
     // No catalog cached yet (and not because the agent intentionally
     // omitted a model state). Show a per-backend loading / failure row so
     // the user can see every installed backend immediately — important
     // because the chat now unblocks on just the *active* backend's
     // preload, not the global preload.
-    if (!backendModels) {
-      const status = manager.getPreloadStatus(descriptor.id);
-      if (status === "pending" || status === "error") {
-        entries.push(synthesizePreloadPlaceholder(descriptor, status));
+    if (hasNoCachedState && entries.length === sectionStart) {
+      if (preloadStatus === "pending") {
+        entries.push(synthesizePreloadPlaceholder(descriptor, "pending"));
+      } else if (preloadStatus === "ready" || preloadStatus === "error") {
+        entries.push(synthesizePreloadPlaceholder(descriptor, "error"));
       }
     }
   }

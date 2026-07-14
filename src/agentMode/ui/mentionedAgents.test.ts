@@ -30,11 +30,19 @@ function descriptor(id: string, install: InstallState): BackendDescriptor {
 const settings = {} as CopilotSettings;
 
 describe("listInstalledAgentBrands", () => {
-  it("offers only installed (ready) backends projected to brands; excludes absent/errored", () => {
+  it("offers only ready backends; excludes absent, checking, incompatible, and errored", () => {
     mockedList.mockReturnValue([
       descriptor("opencode", { kind: "ready", source: "managed" }),
       descriptor("claude", { kind: "absent" }),
       descriptor("codex", { kind: "error", message: "boom" }),
+      descriptor("checking", { kind: "checking", source: "custom" }),
+      descriptor("old", {
+        kind: "incompatible",
+        source: "custom",
+        currentVersion: "1.0.0",
+        minVersion: "2.0.0",
+        message: "too old",
+      }),
     ]);
 
     const brands = listInstalledAgentBrands(settings);

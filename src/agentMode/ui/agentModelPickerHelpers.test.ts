@@ -145,6 +145,7 @@ function makeUIState(opts: {
 
 function makeManager(opts: {
   cachedStateById?: Record<string, BackendState | null>;
+  preloadStatusById?: Record<string, "pending" | "ready" | "error" | "absent">;
   effortCatalogById?: Record<string, Record<string, EffortOption[]>>;
   defaultSelectionById?: Record<string, { baseModelId: string; effort: string | null } | null>;
   setDefaultBackend?: jest.Mock;
@@ -155,6 +156,7 @@ function makeManager(opts: {
 }): AgentSessionManager {
   return {
     getCachedBackendState: (id: string) => opts.cachedStateById?.[id] ?? null,
+    getPreloadStatus: (id: string) => opts.preloadStatusById?.[id] ?? "absent",
     getEffortCatalog: (id: string) => opts.effortCatalogById?.[id] ?? null,
     getDefaultSelection: (id: string) => opts.defaultSelectionById?.[id] ?? null,
     setDefaultBackend: opts.setDefaultBackend ?? jest.fn(),
@@ -170,6 +172,65 @@ const emptySettings = {} as CopilotSettings;
 // ---- buildPickerEntries ----
 
 describe("buildPickerEntries", () => {
+  it("keeps enabled models selectable when a settled preload has no live catalog", () => {
+    const claude = {
+      ...makeDescriptor("claude"),
+      getEnabledModelEntries: () => [
+        { baseModelId: "default", name: "Default", credentialState: "ok" as const },
+        { baseModelId: "sonnet", name: "Sonnet", credentialState: "ok" as const },
+      ],
+    } as unknown as BackendDescriptor;
+    const manager = makeManager({
+      cachedStateById: { claude: null },
+      preloadStatusById: { claude: "ready" },
+    });
+    const ctx: ModelActiveContext = {
+      activeSession: null,
+      activeChatUIState: null,
+      activeBackendId: null,
+      activeDescriptor: undefined,
+      activeSessionHasHistory: false,
+      activeModelState: null,
+      activeCurrentEntry: undefined,
+    };
+
+    const { entries } = buildPickerEntries(manager, [claude], ctx, emptySettings);
+
+    expect(entries.map((entry) => entry.name)).toEqual(["default", "sonnet"]);
+    expect(entries.every((entry) => entry._disabledReason === undefined)).toBe(true);
+  });
+
+  it("does not invent model rows when the backend intentionally reports mode-only state", () => {
+    const descriptor = {
+      ...makeDescriptor("claude"),
+      getEnabledModelEntries: () => [
+        { baseModelId: "stale", name: "Stale", credentialState: "ok" as const },
+      ],
+    } as unknown as BackendDescriptor;
+    const manager = makeManager({
+      cachedStateById: {
+        claude: {
+          model: null,
+          mode: { current: null, options: [], apply: {} },
+        },
+      },
+      preloadStatusById: { claude: "ready" },
+    });
+    const ctx: ModelActiveContext = {
+      activeSession: null,
+      activeChatUIState: null,
+      activeBackendId: null,
+      activeDescriptor: undefined,
+      activeSessionHasHistory: false,
+      activeModelState: null,
+      activeCurrentEntry: undefined,
+    };
+
+    const { entries } = buildPickerEntries(manager, [descriptor], ctx, emptySettings);
+
+    expect(entries).toHaveLength(0);
+  });
+
   it("hides non-active backend sections once the active session has history", () => {
     const codex = makeDescriptor("codex");
     const claude = makeDescriptor("claude");

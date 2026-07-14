@@ -7,16 +7,16 @@ import {
   InstallOptions,
   isOpencodeVersionOutdated,
   ProgressEvent,
+  toOpencodeInstallState,
 } from "@/agentMode/backends/opencode/OpencodeBinaryManager";
 import type { OpencodeBinaryManager } from "@/agentMode/backends/opencode/OpencodeBinaryManager";
 import { detectOpencodeCliPath } from "@/agentMode/backends/opencode/descriptor";
-import type { InstallState } from "@/agentMode/session/types";
 import { ReactModal } from "@/components/modals/ReactModal";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { formatBinaryPathForDisplay } from "@/utils/binaryPath";
-import { OPENCODE_MIN_ACP_VERSION, OPENCODE_PINNED_VERSION } from "@/constants";
+import { OPENCODE_PINNED_VERSION } from "@/constants";
 import { cn } from "@/lib/utils";
 import { logError } from "@/logger";
 import { useSettingsValue } from "@/settings/model";
@@ -207,8 +207,7 @@ const OpencodeConfigBody: React.FC<{
   const isCustom = customInstall !== null;
   const customPath = customInstall?.path ?? "";
 
-  const sessionState: InstallState =
-    local.kind === "installed" ? { kind: "ready", source: local.source } : { kind: "absent" };
+  const sessionState = toOpencodeInstallState(local);
   const detail = local.kind === "installed" ? `opencode v${local.version}` : undefined;
 
   const installedVersion = local.kind === "installed" ? local.version : null;
@@ -263,10 +262,6 @@ const OpencodeConfigBody: React.FC<{
           )}
           role="alert"
         >
-          <span>
-            opencode v{installedVersion} is out of date. Update to v{OPENCODE_MIN_ACP_VERSION}+ —
-            older versions can&apos;t report their models to the picker.
-          </span>
           {upgradeRun.kind === "running" ? (
             <>
               <p className="tw-my-0 tw-text-xs">{phaseLabel(upgradeRun.progress)}</p>
