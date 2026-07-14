@@ -102,4 +102,22 @@ Code-budget checks:
 - Do not suggest broad refactors of pre-existing code unless required to fix
   a reported defect; the budget applies to what this PR adds, not to what was
   already there.
+
+## Responding to review comments
+
+Reply with the endpoint that publishes immediately, where `ROOT_COMMENT_ID` is
+the thread's top-level comment:
+
+```bash
+gh api -X POST repos/OWNER/REPO/pulls/PR/comments/ROOT_COMMENT_ID/replies -f body="..."
+```
+
+Never open a review draft: `POST /pulls/PR/reviews` without an `event` (and the
+UI's "Start a review") leaves the reply *pending*, which means invisible — it
+never reaches the reviewer, it is absent from the comments API, and its thread
+still reads as unanswered. Before finishing, confirm none exists:
+
+```bash
+gh api repos/OWNER/REPO/pulls/PR/reviews --jq '[.[]|select(.state=="PENDING")]|length'   # must be 0
+```
 <!-- brevilabs-review-guidelines:end -->
