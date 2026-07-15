@@ -15,6 +15,11 @@ language, comment, styling, and code-structure rules.
 
 - Custom hooks for reusable logic
 - Props interfaces defined above components
+- Prefer `useSyncExternalStore` for mutable external sources that expose a
+  snapshot and subscription. Do not subscribe and increment dummy state solely
+  to force a render. Snapshots must remain referentially stable while their
+  semantic value is unchanged; continue to use `useState` for component-owned
+  UI state.
 
 ## Comments
 
@@ -24,14 +29,21 @@ carry the **why** — the things a reader cannot recover by reading the code.
 - **Comment the why, not the what.** Document non-obvious constraints,
   invariants, gotchas, and "why this exists / why not the obvious alternative".
   If a comment only restates what the next line plainly says, delete it.
-- **Default to minimal comments — JSDoc is not required on every function.** A
-  function with a clear name and signature needs no doc block. Add one only when
-  there's a why worth recording. When you do write a "what", keep it to one
-  short line.
-- **Drop redundant `@param`/`@returns`.** Keep a tag only when it adds
-  information the type and name don't already convey (e.g. "`null` means the
-  agent is CLI-managed, so no key is stored"). Don't write a `@param` line that
-  just echoes the parameter name and type.
+- **Document exported functions and public methods of exported classes when the
+  contract is not self-evident.** JSDoc is optional for a simple callable whose
+  purpose and parameters are already unambiguous. When JSDoc is needed, explain
+  why the callable exists and the goal it serves without narrating its concrete
+  implementation. Internal functions and non-public methods still default to
+  no doc block unless they carry a non-obvious constraint or invariant.
+- **Document every parameter in an included JSDoc block by meaning, not type.**
+  Include one `@param` tag per parameter and explain its role or relevant
+  semantics. TypeScript owns the type information, so never repeat it in
+  JSDoc. Add `@returns` only when the return value has semantics the signature
+  cannot express.
+- **Document every exported class with JSDoc.** Describe the state or lifecycle
+  the class owns, the responsibility it coordinates, and the boundary it does
+  not cross. The goal is to make the class's duty clear without requiring a
+  reader to inspect its methods or private fields.
 - **No milestone or plan-step references in code.** Never write `M1`/`M3`,
   `§4.3`, "step 3 of the plan", "after milestone X lands", or similar. These are
   scaffolding for whoever is _writing_ a branch and are meaningless to whoever _reviews or maintains_ the code later.
