@@ -478,7 +478,9 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
         for (const e of events) this.dispatchEvent(e);
         if (sdkMsg.type === "result") {
           stopReason = mapStopReason(sdkMsg);
-          if (stopReason !== "end_turn" && sdkMsg.subtype !== "success") {
+          if (sdkMsg.subtype === "success" && sdkMsg.is_error && sdkMsg.result.trim()) {
+            resultErrorMessage = sdkMsg.result;
+          } else if (stopReason !== "end_turn" && sdkMsg.subtype !== "success") {
             const errs = "errors" in sdkMsg ? sdkMsg.errors : undefined;
             if (errs && errs.length > 0) {
               resultErrorMessage = errs.join("; ");
