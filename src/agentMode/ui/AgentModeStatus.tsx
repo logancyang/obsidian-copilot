@@ -8,7 +8,6 @@ import { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import { cn } from "@/lib/utils";
 import { logError } from "@/logger";
 import type CopilotPlugin from "@/main";
-import { useSettingsValue } from "@/settings/model";
 import { Notice } from "obsidian";
 import React from "react";
 
@@ -22,17 +21,15 @@ interface Props {
 }
 
 /**
- * Inline status pill rendered above the chat input in Agent Mode. Only
- * surfaces actionable states: install gap (binary missing) and boot error
- * (Retry). Every healthy state renders nothing — the chat input already
- * conveys readiness.
+ * Leads users from Agent Mode failures to the relevant recovery action without adding noise to healthy sessions.
+ * @param manager - The session manager that exposes startup failures and retry behavior.
+ * @param plugin - The plugin instance needed to run backend recovery actions.
+ * @param onInstallClick - The action to start setup when the selected backend is absent.
  */
 export const AgentModeStatus: React.FC<Props> = ({ manager, plugin, onInstallClick }) => {
   const descriptor = useSessionBackendDescriptor(manager);
-  const installState = useBackendInstallState(descriptor);
+  const installState = useBackendInstallState(descriptor, plugin);
   const auth = useBackendAuthState(descriptor);
-  const settings = useSettingsValue();
-  const upgradeInfo = descriptor.getUpgradeInfo?.(settings) ?? null;
   const [upgrading, setUpgrading] = React.useState(false);
 
   // Re-render on manager notify so `lastError` flips are picked up.
@@ -67,9 +64,21 @@ export const AgentModeStatus: React.FC<Props> = ({ manager, plugin, onInstallCli
     );
   }
 
-  // An outdated binary can't drive the model picker (opencode < 1.15.13 lost the
-  // model API), so prompt an upgrade before auth or anything else.
-  if (upgradeInfo) {
+  if (installState.kind === "checking") {
+    return (
+      <div
+        className={cn(
+          "tw-flex tw-items-center tw-justify-between tw-gap-2 tw-rounded",
+          "tw-bg-secondary tw-px-3 tw-py-2 tw-text-xs tw-text-muted"
+        )}
+      >
+        <span>Checking {descriptor.displayName} version…</span>
+      </div>
+    );
+  }
+
+  if (installState.kind === "incompatible") {
+    const canUpgrade = descriptor.upgrade !== undefined;
     return (
       <div
         className={cn(
@@ -78,12 +87,40 @@ export const AgentModeStatus: React.FC<Props> = ({ manager, plugin, onInstallCli
         )}
         role="alert"
       >
-        <span>
-          {descriptor.displayName} {upgradeInfo.currentVersion} is out of date — update to{" "}
-          {upgradeInfo.minVersion}+ to choose models.
+        <span>{installState.message}</span>
+        <Button
+          className="tw-shrink-0"
+          variant="default"
+          size="sm"
+          disabled={canUpgrade && upgrading}
+          onClick={canUpgrade ? handleUpgrade : () => descriptor.openInstallUI(plugin)}
+        >
+          {canUpgrade
+            ? upgrading
+              ? "Upgrading…"
+              : "Upgrade"
+            : `Configure ${descriptor.displayName}`}
+        </Button>
+      </div>
+    );
+  }
+
+  if (installState.kind === "error") {
+    return (
+      <div
+        className="tw-flex tw-items-center tw-justify-between tw-gap-2 tw-rounded tw-bg-secondary tw-px-3 tw-py-2 tw-text-xs"
+        role="alert"
+      >
+        <span className="tw-min-w-0 tw-flex-1 tw-break-words tw-text-error">
+          {installState.message}
         </span>
-        <Button variant="default" size="sm" disabled={upgrading} onClick={handleUpgrade}>
-          {upgrading ? "Upgrading…" : "Upgrade"}
+        <Button
+          className="tw-shrink-0"
+          variant="ghost"
+          size="sm"
+          onClick={() => descriptor.openInstallUI(plugin)}
+        >
+          Configure {descriptor.displayName}
         </Button>
       </div>
     );
@@ -132,9 +169,12 @@ export const AgentModeStatus: React.FC<Props> = ({ manager, plugin, onInstallCli
   };
 
   return (
-    <div className="tw-flex tw-items-center tw-justify-between tw-rounded tw-bg-secondary tw-px-3 tw-py-2 tw-text-xs">
-      <span className="tw-text-error">Error — click Retry</span>
-      <Button variant="ghost" size="sm" onClick={handleRetry}>
+    <div
+      className="tw-flex tw-items-center tw-justify-between tw-gap-2 tw-rounded tw-bg-secondary tw-px-3 tw-py-2 tw-text-xs"
+      role="alert"
+    >
+      <span className="tw-min-w-0 tw-flex-1 tw-break-words tw-text-error">{bootError}</span>
+      <Button className="tw-shrink-0" variant="ghost" size="sm" onClick={handleRetry}>
         Retry
       </Button>
     </div>

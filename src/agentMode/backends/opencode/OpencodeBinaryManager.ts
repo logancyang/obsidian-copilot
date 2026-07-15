@@ -19,6 +19,7 @@ import { promisify } from "node:util";
 import { renameWithRetry } from "@/agentMode/skills/renameWithRetry";
 import { copilotAppDataDir } from "@/utils/appPaths";
 import { expectedBinaryName, resolveOpencodeTarget } from "./platformResolver";
+import type { InstallState as BackendInstallState } from "@/agentMode/session/types";
 
 const execFileAsync = promisify(execFile);
 const DOWNLOAD_INACTIVITY_TIMEOUT_MS = 30_000;
@@ -135,6 +136,24 @@ export function readOpencodeSettings(): OpencodeBackendSettings {
 export function isOpencodeVersionOutdated(version: string | undefined): boolean {
   if (!version) return false;
   return compareSemver(version, OPENCODE_MIN_ACP_VERSION) < 0;
+}
+
+/**
+ * Gives every OpenCode entry point one readiness policy so outdated installs are handled consistently.
+ * @param state - The detected OpenCode installation state to interpret for backend use.
+ */
+export function toOpencodeInstallState(state: InstallState): BackendInstallState {
+  if (state.kind === "absent") return state;
+  if (!isOpencodeVersionOutdated(state.version)) {
+    return { kind: "ready", source: state.source };
+  }
+  return {
+    kind: "incompatible",
+    source: state.source,
+    currentVersion: state.version,
+    minVersion: OPENCODE_MIN_ACP_VERSION,
+    message: `opencode v${state.version} is not supported. Copilot requires opencode v${OPENCODE_MIN_ACP_VERSION} or newer.`,
+  };
 }
 
 function updateOpencodeFields(partial: Partial<OpencodeBackendSettings>): void {

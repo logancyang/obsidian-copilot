@@ -16,10 +16,10 @@ interface Props {
 }
 
 /**
- * Agent Mode chat surface. Owns session-manager subscription, auto-spawn of the
- * first session on mount, and the no-session fallback (status pill + minimal
- * controls). Mounted by `CopilotAgentView` (the dedicated agent pane), so this
- * component is only rendered when the agent view is open.
+ * Keeps the dedicated Agent Mode pane synchronized with the active scope and backend throughout session startup.
+ * @param plugin - The plugin instance that owns Agent Mode runtime services.
+ * @param onSaveChat - The callback that exposes the current conversation's save action.
+ * @param updateUserMessageHistory - The callback that records submitted messages for input history.
  */
 export const AgentModeChat: React.FC<Props> = ({
   plugin,
@@ -28,7 +28,7 @@ export const AgentModeChat: React.FC<Props> = ({
 }) => {
   const manager = plugin.agentSessionManager;
   const descriptor = useActiveBackendDescriptor();
-  const installState = useBackendInstallState(descriptor);
+  const installState = useBackendInstallState(descriptor, plugin);
   const [tick, setTick] = React.useState(0);
 
   React.useEffect(() => {
@@ -63,7 +63,7 @@ export const AgentModeChat: React.FC<Props> = ({
     if (manager.getSessionsForScope(manager.getActiveProjectId()).length > 0) return;
     if (manager.getIsStarting()) return;
     if (manager.getLastError()) return;
-    if (installState.kind === "absent") return;
+    if (installState.kind !== "ready") return;
     manager.getOrCreateActiveSession().catch((e) => {
       logError("[AgentMode] auto-start failed", e);
     });

@@ -549,6 +549,65 @@ describe("ClaudeSdkBackendProcess.newSession dynamic catalog", () => {
     const call = getPromptQueryCalls()[0][0] as { options: { thinking?: unknown } };
     expect(call.options.thinking).toEqual({ type: "adaptive", display: "summarized" });
   });
+
+  it("does not open a session when Claude Code is unsupported", async () => {
+    const checkCompatibility = jest
+      .fn()
+      .mockRejectedValue(new Error("Claude Code 2.1.205 is not supported"));
+    const proc = new ClaudeSdkBackendProcess({
+      pathToClaudeCodeExecutable: "/usr/local/bin/claude",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      app: { vault: {} } as any,
+      clientVersion: "1.2.3",
+      descriptor: fakeDescriptor(),
+      checkCompatibility,
+    });
+
+    await expect(proc.newSession({ cwd: "/vault", mcpServers: [] })).rejects.toThrow(
+      "Claude Code 2.1.205 is not supported"
+    );
+    expect(queryMock).not.toHaveBeenCalled();
+  });
+
+  it("shares a successful compatibility check across sessions", async () => {
+    const checkCompatibility = jest.fn().mockResolvedValue(undefined);
+    const proc = new ClaudeSdkBackendProcess({
+      pathToClaudeCodeExecutable: "/usr/local/bin/claude",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      app: { vault: {} } as any,
+      clientVersion: "1.2.3",
+      descriptor: fakeDescriptor(),
+      checkCompatibility,
+    });
+
+    await Promise.all([
+      proc.newSession({ cwd: "/vault-a", mcpServers: [] }),
+      proc.newSession({ cwd: "/vault-b", mcpServers: [] }),
+    ]);
+
+    expect(checkCompatibility).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries compatibility after a failed check", async () => {
+    const checkCompatibility = jest
+      .fn()
+      .mockRejectedValueOnce(new Error("upgrade required"))
+      .mockResolvedValueOnce(undefined);
+    const proc = new ClaudeSdkBackendProcess({
+      pathToClaudeCodeExecutable: "/usr/local/bin/claude",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      app: { vault: {} } as any,
+      clientVersion: "1.2.3",
+      descriptor: fakeDescriptor(),
+      checkCompatibility,
+    });
+
+    await expect(proc.newSession({ cwd: "/vault", mcpServers: [] })).rejects.toThrow(
+      "upgrade required"
+    );
+    await expect(proc.newSession({ cwd: "/vault", mcpServers: [] })).resolves.toBeDefined();
+    expect(checkCompatibility).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe("ANTHROPIC_MODEL env override reaches the catalog probe", () => {

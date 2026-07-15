@@ -690,6 +690,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   const composerNode = (
     <AgentChatInput
       backend={backend}
+      plugin={plugin}
       sessionId={sessionId}
       draft={draft}
       app={app}

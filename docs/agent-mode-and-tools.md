@@ -160,6 +160,12 @@ While the agent is working, the chat shows status indicators for each tool call:
 
 This lets you see what the agent is doing as it works.
 
+### Parallel Subagents
+
+Claude can delegate independent work to background subagents. Agent Mode keeps the turn active while those subagents run, shows the current step, tool count, and elapsed time on each subagent card, then keeps the final report under the card that launched it. Internal result-collection calls stay out of the trail once their report is attached; if Copilot cannot safely match one to its launch, it leaves that result visible instead of risking lost output. Background shell commands and other non-agent tasks do not delay the turn.
+
+This requires Claude Code 2.1.206 or newer. Copilot checks the installed version when it starts and whenever you apply or auto-detect a Claude binary. An older binary is marked **Incompatible version** in Settings → Copilot → Agents → Claude and cannot start a session. If you select Claude in chat, Copilot shows the required version and a **Configure Claude** button that opens the same setup dialog; installation guidance stays in that dialog.
+
 ---
 
 ## File Editing: Preview and Diff

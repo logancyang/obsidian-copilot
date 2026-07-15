@@ -22,12 +22,18 @@ jest.mock("@/hooks/useChatBackendModelOptions", () => ({
 
 const Icon: React.FC<{ className?: string }> = () => <svg data-testid="icon" />;
 
+const installStates: Record<string, { kind: string; [key: string]: unknown }> = {
+  opencode: { kind: "ready", source: "managed" },
+  claude: { kind: "ready", source: "custom" },
+  codex: { kind: "ready", source: "custom" },
+};
+
 function makeDescriptor(id: string, displayName: string) {
   return {
     id,
     displayName,
     Icon,
-    getInstallState: () => ({ kind: "ready" as const }),
+    getInstallState: () => installStates[id],
     getResolvedBinaryPath: () => null,
     openInstallUI: jest.fn(),
     SettingsPanel: () => <div data-testid={`panel-${id}`}>settings panel</div>,
@@ -43,6 +49,9 @@ const DESCRIPTORS = [
 jest.mock("@/agentMode", () => ({
   listBackendDescriptors: () => DESCRIPTORS,
   InstallBadge: () => <span data-testid="install-badge" />,
+  // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook export
+  useBackendInstallState: (descriptor: { getInstallState: () => unknown }) =>
+    descriptor.getInstallState(),
   McpServersPanel: () => <div data-testid="mcp-panel">mcp</div>,
   AgentDefaultModelSetting: ({ descriptor }: { descriptor: { id: string } }) => (
     <div data-testid={`default-model-${descriptor.id}`}>default model</div>
@@ -71,6 +80,12 @@ jest.mock("./ConfiguredModelEnableList", () => ({
 }));
 
 describe("AgentSettings", () => {
+  beforeEach(() => {
+    installStates.opencode = { kind: "ready", source: "managed" };
+    installStates.claude = { kind: "ready", source: "custom" };
+    installStates.codex = { kind: "ready", source: "custom" };
+  });
+
   it("renders the four sub-tabs in order: OpenCode, Claude, Codex, Quick Chat", () => {
     render(<AgentSettings />);
     const tabs = screen.getAllByRole("tab").map((t) => t.textContent);
@@ -111,5 +126,24 @@ describe("AgentSettings", () => {
     expect(screen.queryByTestId("chat-model-list")).toBeNull();
     fireEvent.click(screen.getByText("Quick Chat"));
     expect(screen.getByTestId("chat-model-list")).not.toBeNull();
+  });
+
+  it("shows an incompatible-version message and hides ready-only model controls", () => {
+    const message =
+      "Claude Code 2.1.205 is not supported. Copilot requires Claude Code 2.1.206 or newer.";
+    installStates.claude = {
+      kind: "incompatible",
+      source: "custom",
+      currentVersion: "2.1.205",
+      minVersion: "2.1.206",
+      message,
+    };
+
+    render(<AgentSettings />);
+    fireEvent.click(screen.getByRole("tab", { name: "Claude" }));
+
+    expect(screen.getByText(message)).toBeTruthy();
+    expect(screen.queryByTestId("default-model-claude")).toBeNull();
+    expect(screen.queryByTestId("model-list-claude")).toBeNull();
   });
 });
