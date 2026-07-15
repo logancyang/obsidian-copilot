@@ -37,6 +37,8 @@ export type Prompter = (req: PermissionPrompt) => Promise<PermissionDecision>;
  */
 export type AskUserQuestionPrompter = (req: AskUserQuestionPrompt) => Promise<AgentQuestionAnswers>;
 
+type InProcessCanUseTool = (...args: Parameters<CanUseTool>) => Promise<PermissionResult>;
+
 /** SDK-side shape of the `AskUserQuestion` tool input. */
 export interface AskUserQuestionInput {
   questions: AgentQuestion[];
@@ -89,7 +91,9 @@ export class PermissionBridge {
     this.currentSessionId = null;
   }
 
-  canUseTool: CanUseTool = async (toolName, input, ctx) => {
+  // This bridge always sends its response through the SDK. The upstream
+  // nullable return is reserved for hosts that answered out of band.
+  canUseTool: InProcessCanUseTool = async (toolName, input, ctx) => {
     if (toolName === "AskUserQuestion") {
       return this.handleAskUserQuestion(input as unknown as AskUserQuestionInput, ctx);
     }

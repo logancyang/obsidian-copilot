@@ -1,4 +1,9 @@
-import type { ModelInfo, SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import type {
+  BackgroundTaskSummary,
+  HookCallback,
+  ModelInfo,
+  SDKMessage,
+} from "@anthropic-ai/claude-agent-sdk";
 import type { BackendDescriptor, SessionEvent } from "@/agentMode/session/types";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
@@ -54,7 +59,12 @@ jest.mock("./effortOption", () => ({
   getCachedSdkCatalog: jest.fn(),
 }));
 
-import { ClaudeSdkBackendProcess, promptInputToAnthropicContent } from "./ClaudeSdkBackendProcess";
+import {
+  ClaudeSdkBackendProcess,
+  createStopHook,
+  promptInputToAnthropicContent,
+  STOP_BLOCK_REASON,
+} from "./ClaudeSdkBackendProcess";
 import { getCachedSdkCatalog } from "./effortOption";
 import { AuthRequiredError } from "@/agentMode/session/errors";
 
@@ -274,7 +284,15 @@ describe("ClaudeSdkBackendProcess", () => {
       const call = promptCalls[0][0] as { options: Record<string, unknown> };
       expect(call.options.pathToClaudeCodeExecutable).toBe("/usr/local/bin/claude");
       expect(Object.keys(call.options.mcpServers as object)).not.toContain("obsidian-vault");
-      expect(call.options.allowedTools).toEqual(["Read", "Write", "Edit", "Glob", "Grep", "LS"]);
+      expect(call.options.allowedTools).toEqual([
+        "Read",
+        "Write",
+        "Edit",
+        "Glob",
+        "Grep",
+        "LS",
+        "TaskOutput",
+      ]);
       expect(call.options.disallowedTools).toBeUndefined();
       // First turn → sessionId is seeded, no resume.
       expect(call.options.sessionId).toBe(sessionId);
@@ -1022,6 +1040,95 @@ describe("ClaudeSdkBackendProcess", () => {
       await expect(
         makeProc().sessionExistsLocally({ sessionId: "absent-session-id", cwd })
       ).resolves.toBe(false);
+    });
+  });
+
+  describe("createStopHook()", () => {
+    const abort = { signal: new AbortController().signal };
+    const stopInput = (stopHookActive: boolean, backgroundTasks?: BackgroundTaskSummary[]) =>
+      ({
+        hook_event_name: "Stop",
+        stop_hook_active: stopHookActive,
+        ...(backgroundTasks ? { background_tasks: backgroundTasks } : {}),
+      }) as unknown as Parameters<HookCallback>[0];
+    it("allows the turn to end when no background subagents are running", async () => {
+      const hook = createStopHook();
+      await expect(hook(stopInput(false), undefined, abort)).resolves.toEqual({});
+    });
+
+    it("blocks for a subagent in the SDK background-task snapshot", async () => {
+      const hook = createStopHook();
+
+      await expect(
+        hook(
+          stopInput(false, [
+            {
+              id: "agent-1",
+              type: "subagent",
+              status: "running",
+              description: "Review the implementation",
+            },
+          ]),
+          undefined,
+          abort
+        )
+      ).resolves.toEqual({ decision: "block", reason: STOP_BLOCK_REASON });
+    });
+
+    it("blocks for a workflow in the SDK background-task snapshot", async () => {
+      const hook = createStopHook();
+
+      await expect(
+        hook(
+          stopInput(false, [
+            {
+              id: "workflow-1",
+              type: "workflow",
+              status: "running",
+              description: "Run the release workflow",
+            },
+          ]),
+          undefined,
+          abort
+        )
+      ).resolves.toEqual({ decision: "block", reason: STOP_BLOCK_REASON });
+    });
+
+    it("does not block for background work that cannot be collected with TaskOutput", async () => {
+      const hook = createStopHook();
+
+      await expect(
+        hook(
+          stopInput(false, [
+            {
+              id: "shell-1",
+              type: "shell",
+              status: "running",
+              description: "npm test",
+            },
+          ]),
+          undefined,
+          abort
+        )
+      ).resolves.toEqual({});
+    });
+
+    it("does not block when the SDK flags stop_hook_active (re-entry guard)", async () => {
+      const hook = createStopHook();
+      await expect(
+        hook(
+          stopInput(true, [
+            {
+              id: "agent-1",
+              type: "subagent",
+              status: "running",
+              description: "Review the implementation",
+            },
+          ]),
+          undefined,
+          abort
+        )
+      ).resolves.toEqual({});
     });
   });
 });

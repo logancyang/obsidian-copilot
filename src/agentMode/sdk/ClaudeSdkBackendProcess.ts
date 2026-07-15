@@ -14,11 +14,13 @@ import { err2String } from "@/utils";
 import {
   query,
   type EffortLevel,
+  type HookCallback,
   type McpServerConfig,
   type ModelInfo,
   type Options,
   type PermissionMode,
   type Query,
+  type StopHookInput,
   type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 import { App } from "obsidian";
@@ -123,6 +125,31 @@ interface SessionState {
    * `claude_code` preset via `options.systemPrompt.append`.
    */
   systemPromptAppend: string;
+}
+
+/**
+ * Fed back to the model when it tries to end a turn with background subagents
+ * still running — steers it to collect their results in-turn instead of
+ * vanishing with an "I'll report back" message.
+ */
+export const STOP_BLOCK_REASON =
+  "Background subagents are still running. Before ending your turn, call the " +
+  "TaskOutput tool with block=true for each running task to wait for and " +
+  "collect its result, then fold those results into your reply.";
+
+/**
+ * Prevents a turn from ending before collectible background reports are available, keeping the final answer complete.
+ */
+export function createStopHook(): HookCallback {
+  return async (input) => {
+    const stopInput = input as StopHookInput;
+    const hasCollectibleTask = stopInput.background_tasks?.some(
+      (task) => task.type === "subagent" || task.type === "workflow"
+    );
+    if (!hasCollectibleTask) return {};
+    if (stopInput.stop_hook_active) return {};
+    return { decision: "block", reason: STOP_BLOCK_REASON };
+  };
 }
 
 export interface ClaudeSdkBackendProcessOptions {
@@ -383,7 +410,11 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       cwd: session.cwd ?? undefined,
       includePartialMessages: true,
       mcpServers: session.mcpServers,
-      allowedTools: ["Read", "Write", "Edit", "Glob", "Grep", "LS"],
+      // `TaskOutput` is the read-only collection call the Stop hook steers the
+      // model to make to gather a background subagent's result. Auto-approve it
+      // so the recovery path never pauses on a permission card and wedges an
+      // unattended turn (unlisted tools otherwise fall through to `canUseTool`).
+      allowedTools: ["Read", "Write", "Edit", "Glob", "Grep", "LS", "TaskOutput"],
       canUseTool: this.bridge.canUseTool,
     };
     // Append the composed Copilot system prompt (captured at newSession time)
@@ -433,6 +464,11 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       // process.env to preserve PATH and friends.
       options.env = { ...process.env, ...extraEnv };
     }
+
+    // Claude Code v2.1.198+ backgrounds subagents by default. The Stop hook
+    // reads the CLI's background-task snapshot and steers the model to collect
+    // subagent results in-turn before this adapter stops at `result`.
+    options.hooks = { Stop: [{ hooks: [createStopHook()] }] };
 
     logSdkOutbound(
       "prompt",
