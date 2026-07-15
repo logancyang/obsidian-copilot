@@ -147,7 +147,8 @@ export function createStopHook(): HookCallback {
       (task) => task.type === "subagent" || task.type === "workflow"
     );
     if (!hasCollectibleTask) return {};
-    if (stopInput.stop_hook_active) return {};
+    // Re-entry means a previous block kept Claude running, not that the task
+    // finished. Claude Code bounds this continuation loop at eight blocks.
     return { decision: "block", reason: STOP_BLOCK_REASON };
   };
 }

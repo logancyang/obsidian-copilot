@@ -1113,22 +1113,25 @@ describe("ClaudeSdkBackendProcess", () => {
       ).resolves.toEqual({});
     });
 
-    it("does not block when the SDK flags stop_hook_active (re-entry guard)", async () => {
+    it("keeps blocking a re-entered Stop hook while a collectible task remains", async () => {
       const hook = createStopHook();
-      await expect(
-        hook(
-          stopInput(true, [
-            {
-              id: "agent-1",
-              type: "subagent",
-              status: "running",
-              description: "Review the implementation",
-            },
-          ]),
-          undefined,
-          abort
-        )
-      ).resolves.toEqual({});
+      const runningSubagent: BackgroundTaskSummary[] = [
+        {
+          id: "agent-1",
+          type: "subagent",
+          status: "running",
+          description: "Review the implementation",
+        },
+      ];
+
+      await expect(hook(stopInput(false, runningSubagent), undefined, abort)).resolves.toEqual({
+        decision: "block",
+        reason: STOP_BLOCK_REASON,
+      });
+      await expect(hook(stopInput(true, runningSubagent), undefined, abort)).resolves.toEqual({
+        decision: "block",
+        reason: STOP_BLOCK_REASON,
+      });
     });
   });
 });
