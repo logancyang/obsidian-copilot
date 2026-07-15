@@ -177,6 +177,16 @@ describe("buildAgentTrail", () => {
     }
   });
 
+  it.each(["Agent", "Task"])(
+    "renders an MCP tool named %s as an action rather than a subagent",
+    (vendorToolName) => {
+      const tree = buildAgentTrail([
+        tool("mcp-tool", { vendorToolName, mcpServer: "srv", toolKind: "think" }),
+      ]);
+      expect(tree[0].type).toBe("action");
+    }
+  );
+
   it("recognizes an opencode task tool (subagent_type input) as a subagent group", () => {
     const parts = [tool("t", { input: { subagent_type: "general" } })];
     const tree = buildAgentTrail(parts);

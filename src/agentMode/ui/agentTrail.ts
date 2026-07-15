@@ -75,7 +75,9 @@ function isHiddenTool(part: AgentMessagePart): boolean {
  * its final report has a home.
  */
 function isSubAgentLaunch(part: ToolCallPart): boolean {
-  if (part.vendorToolName === "Agent" || part.vendorToolName === "Task") return true;
+  if (!part.mcpServer && (part.vendorToolName === "Agent" || part.vendorToolName === "Task")) {
+    return true;
+  }
   if (part.vendorToolName || part.mcpServer) return false;
   if (part.toolKind && part.toolKind !== "other") return false;
   const input = part.input as { subagent_type?: unknown } | null | undefined;
