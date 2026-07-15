@@ -132,6 +132,46 @@ function resultMessage(): SDKMessage {
   };
 }
 
+const USAGE_LIMIT_MESSAGE = "You've hit your session limit · resets 6:30pm (America/New_York)";
+
+function usageLimitMessages(): SDKMessage[] {
+  return [
+    {
+      type: "rate_limit_event",
+      rate_limit_info: {
+        status: "rejected",
+        resetsAt: 1_784_154_600,
+        rateLimitType: "five_hour",
+        overageStatus: "rejected",
+        overageDisabledReason: "org_level_disabled",
+        isUsingOverage: false,
+      },
+      uuid: "uuid-limit" as `${string}-${string}-${string}-${string}-${string}`,
+      session_id: "irrelevant",
+    },
+    {
+      type: "assistant",
+      error: "rate_limit",
+      message: {
+        model: "<synthetic>",
+        role: "assistant",
+        stop_reason: "stop_sequence",
+        content: [{ type: "text", text: USAGE_LIMIT_MESSAGE }],
+      },
+      parent_tool_use_id: null,
+      uuid: "uuid-assistant" as `${string}-${string}-${string}-${string}-${string}`,
+      session_id: "irrelevant",
+    },
+    {
+      ...resultMessage(),
+      is_error: true,
+      api_error_status: 429,
+      result: USAGE_LIMIT_MESSAGE,
+      stop_reason: "stop_sequence",
+    },
+  ] as SDKMessage[];
+}
+
 function getPromptQueryCalls(): unknown[][] {
   return queryMock.mock.calls.filter((c) => {
     const opts = (c[0] as { options?: { cwd?: unknown } } | undefined)?.options;
@@ -281,6 +321,25 @@ describe("ClaudeSdkBackendProcess", () => {
       expect(call.options.resume).toBeUndefined();
       // No skill-creation directive opt passed → no systemPrompt override.
       expect(call.options.systemPrompt).toBeUndefined();
+    });
+
+    it("rejects with Claude's reset message when a success-shaped result reports usage exhaustion", async () => {
+      queryMock.mockImplementation(() => makeQuery(usageLimitMessages()));
+
+      const proc = new ClaudeSdkBackendProcess({
+        pathToClaudeCodeExecutable: "/usr/local/bin/claude",
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        app: { vault: {} } as any,
+        clientVersion: "1.2.3",
+        descriptor: fakeDescriptor(),
+      });
+
+      const { sessionId } = await proc.newSession({ cwd: "/vault", mcpServers: [] });
+      proc.registerSessionHandler(sessionId, () => {});
+
+      await expect(
+        proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] })
+      ).rejects.toThrow(new Error(USAGE_LIMIT_MESSAGE));
     });
 
     it("forwards the composed system prompt via systemPrompt append on the claude_code preset", async () => {

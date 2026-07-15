@@ -166,6 +166,8 @@ Claude can delegate independent work to background subagents. Agent Mode keeps t
 
 This requires Claude Code 2.1.206 or newer. Copilot checks the installed version when it starts and whenever you apply or auto-detect a Claude binary. An older binary is marked **Incompatible version** in Settings → Copilot → Agents → Claude and cannot start a session. If you select Claude in chat, Copilot shows the required version and a **Configure Claude** button that opens the same setup dialog; installation guidance stays in that dialog.
 
+If Claude's usage is exhausted, Copilot shows Claude's own error in chat, including the reset time when Claude provides one. You can wait until the limit resets or switch to another agent.
+
 ---
 
 ## File Editing: Preview and Diff
