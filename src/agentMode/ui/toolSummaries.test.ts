@@ -201,7 +201,7 @@ describe("lookupToolSummary", () => {
       vendorToolName: "Agent",
       status: "in_progress",
       progress: {
-        description: "Count markdown files and subfolders",
+        description: "Running Count markdown files and subfolders",
         toolUses: 3,
         durationMs: 9851,
       },

@@ -407,8 +407,10 @@ const TASK_SUMMARY: ToolSummary = {
     const progress = p.progress;
     if (!progress) return null;
     const bits: string[] = [];
+    // The SDK's task_progress descriptions are already verb-prefixed status
+    // lines ("Running X", "Reading Y") — don't stack another verb on top.
     if ((p.status === "pending" || p.status === "in_progress") && progress.description?.trim()) {
-      bits.push(`Running ${progress.description.trim()}`);
+      bits.push(progress.description.trim());
     }
     if (progress.toolUses !== undefined) {
       bits.push(pluralize(progress.toolUses, "tool"));

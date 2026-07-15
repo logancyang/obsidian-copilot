@@ -143,7 +143,7 @@ describe("AgentTrail inline trail (no collapse)", () => {
           status: "in_progress",
           input: { subagent_type: "Explore", description: "Analyze notes" },
           progress: {
-            description: "Count markdown files",
+            description: "Running Count markdown files",
             toolUses: 3,
             durationMs: 9851,
           },
