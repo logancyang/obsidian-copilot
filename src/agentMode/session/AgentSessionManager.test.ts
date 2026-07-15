@@ -1769,6 +1769,44 @@ describe("AgentSessionManager.onInstallStateChanged", () => {
     expect(preloader.preload).not.toHaveBeenCalled();
   });
 
+  it("clears a settled preload status when the backend becomes absent", async () => {
+    const { mgr, setInstallState } = buildInstallStateManager({
+      installState: { kind: "ready", source: "custom" },
+    });
+    mgr.registerPreload("opencode", Promise.resolve());
+    await Promise.resolve();
+    expect(mgr.getPreloadStatus("opencode")).toBe("ready");
+
+    setInstallState({ kind: "absent" });
+    await mgr.onInstallStateChanged("opencode");
+
+    // "absent" is the picker's silent-omit contract — without this, the stale
+    // "ready" status keeps synthesizing selectable rows for an uninstalled
+    // backend.
+    expect(mgr.getPreloadStatus("opencode")).toBe("absent");
+  });
+
+  it("keeps the preload status when the backend becomes incompatible", async () => {
+    const { mgr, setInstallState } = buildInstallStateManager({
+      installState: { kind: "ready", source: "custom" },
+    });
+    mgr.registerPreload("opencode", Promise.resolve());
+    await Promise.resolve();
+
+    setInstallState({
+      kind: "incompatible",
+      source: "custom",
+      currentVersion: "1.0.0",
+      minVersion: "2.0.0",
+      message: "too old",
+    });
+    await mgr.onInstallStateChanged("opencode");
+
+    // Incompatible installs stay visible in the picker so a pick routes the
+    // user to the Upgrade/Configure pill.
+    expect(mgr.getPreloadStatus("opencode")).toBe("ready");
+  });
+
   it("keeps live and warm backend state while a compatibility check is in flight", async () => {
     const { mgr, preloader } = buildInstallStateManager({
       installState: { kind: "checking", source: "custom" },

@@ -25,11 +25,11 @@ import { EventTargetContext } from "@/context";
 import { logError, logWarn } from "@/logger";
 import {
   isFanout,
-  listInstalledAgentBrands,
   resolveAnswerers,
+  useInstalledAgentBrands,
 } from "@/agentMode/ui/mentionedAgents";
 import type { BackendId } from "@/agentMode/session/types";
-import { useSettingsValue } from "@/settings/model";
+import type CopilotPlugin from "@/main";
 import { buildWebTabsWithActiveSnapshot } from "@/services/webViewerService/activeWebTabSnapshot";
 import {
   isNoteSelectedTextContext,
@@ -48,6 +48,8 @@ import { v4 as uuidv4 } from "uuid";
 
 interface AgentChatInputProps {
   backend: AgentChatBackend;
+  /** Plugin instance — descriptors need it to observe backend readiness changes. */
+  plugin: CopilotPlugin;
   /** Active session's internal id; selects which per-session draft is shown. */
   sessionId: string;
   /**
@@ -178,6 +180,7 @@ async function fileToImageBlock(file: File): Promise<PromptContent | null> {
  */
 export const AgentChatInput = memo(function AgentChatInput({
   backend,
+  plugin,
   sessionId,
   draft,
   app,
@@ -194,7 +197,6 @@ export const AgentChatInput = memo(function AgentChatInput({
   contextStatusIndicator,
 }: AgentChatInputProps) {
   const eventTarget = useContext(EventTargetContext);
-  const settings = useSettingsValue();
 
   // Hold sends only while a *real* project's context is materializing. Global
   // scope never holds, so the global landing's send path is byte-identical.
@@ -213,8 +215,9 @@ export const AgentChatInput = memo(function AgentChatInput({
   // change flips the gate live; the authoritative send-time check is separate.
   const canUseMultiAgent = useCanUseMultiAgent();
 
-  // Installed agents the user can `@`-mention, recomputed only on settings change.
-  const installedAgentBrands = useMemo(() => listInstalledAgentBrands(settings), [settings]);
+  // Installed agents the user can `@`-mention; tracks settings *and* async
+  // readiness (compatibility probes settle without a settings write).
+  const installedAgentBrands = useInstalledAgentBrands(plugin);
   // Entitlement-gated typeahead list: free users get the frozen empty list so the
   // "Agents" group never renders. Both operands are stable refs (no memo needed).
   const agentBrands = canUseMultiAgent ? installedAgentBrands : EMPTY_AGENT_MENTION_BRANDS;

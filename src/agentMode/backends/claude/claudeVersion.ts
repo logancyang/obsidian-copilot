@@ -13,6 +13,28 @@ export type ClaudeVersionRunner = (
   options: { env: NodeJS.ProcessEnv; timeout: number }
 ) => Promise<{ stdout: string }>;
 
+/**
+ * The resolver's npm-package fallbacks (`cli.js` / `cli-wrapper.cjs`) are Node
+ * scripts, not native executables — invoking them directly fails outright on
+ * Windows and on Unix depends on a `node` shebang resolvable from Obsidian's
+ * minimal PATH. Launch them through Electron's own binary running as Node
+ * (`ELECTRON_RUN_AS_NODE`), which always exists, so a resolver-supported
+ * install can't get misclassified as broken.
+ */
+function buildVersionInvocation(
+  claudePath: string,
+  env: NodeJS.ProcessEnv
+): { command: string; args: string[]; env: NodeJS.ProcessEnv } {
+  if (!/\.[cm]?js$/i.test(claudePath)) {
+    return { command: claudePath, args: ["--version"], env };
+  }
+  return {
+    command: process.execPath,
+    args: [claudePath, "--version"],
+    env: { ...env, ELECTRON_RUN_AS_NODE: "1" },
+  };
+}
+
 export function parseClaudeVersionOutput(stdout: string): string | null {
   return stdout.match(/\b(\d+\.\d+\.\d+)\b/)?.[1] ?? null;
 }
@@ -37,10 +59,11 @@ export async function probeClaudeVersion(
   env: NodeJS.ProcessEnv,
   run: ClaudeVersionRunner = execFileAsync
 ): Promise<ClaudeVersionCompatibility> {
+  const invocation = buildVersionInvocation(claudePath, env);
   let stdout: string;
   try {
-    ({ stdout } = await run(claudePath, ["--version"], {
-      env,
+    ({ stdout } = await run(invocation.command, invocation.args, {
+      env: invocation.env,
       timeout: VERSION_TIMEOUT_MS,
     }));
   } catch {

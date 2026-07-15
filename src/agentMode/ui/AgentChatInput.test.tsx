@@ -24,7 +24,7 @@ jest.mock("@/agentMode/ui/mentionedAgents", () => ({
   EMPTY_ANSWERERS: Object.freeze([]),
   isFanout: () => false,
   resolveAnswerers: () => [],
-  listInstalledAgentBrands: () => FAKE_BRANDS,
+  useInstalledAgentBrands: () => FAKE_BRANDS,
 }));
 
 // One ChatInput mock serves both suites: it captures the brands handed to the
@@ -108,6 +108,7 @@ function renderInput(
   return render(
     <AgentChatInput
       backend={backend}
+      plugin={{} as never}
       sessionId="session-1"
       draft={draft}
       app={makeApp()}

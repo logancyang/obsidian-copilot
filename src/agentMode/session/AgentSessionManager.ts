@@ -2212,6 +2212,13 @@ export class AgentSessionManager {
       // it from respawning); `clearCached` then drops any warm probe.
       await this.restartBackend(backendId, "binary no longer available");
       this.preloader.clearCached(backendId);
+      // An uninstalled backend must vanish from the picker, so its settled
+      // preload status can't keep vouching for enabled-model fallback rows.
+      // Incompatible/error installs keep their status: their rows stay
+      // visible so a pick routes the user to the Upgrade/Configure pill.
+      if (!installState || installState.kind === "absent") {
+        if (this.preloadStatus.delete(backendId)) this.notify();
+      }
       return;
     }
     const refreshed = await this.restartBackend(backendId, "binary path changed");

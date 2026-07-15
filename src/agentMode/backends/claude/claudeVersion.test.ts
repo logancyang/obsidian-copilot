@@ -14,6 +14,33 @@ describe("claudeVersion", () => {
   });
 
   describe("probeClaudeVersion()", () => {
+    it.each([
+      "/usr/local/lib/node_modules/@anthropic-ai/claude-code/cli.js",
+      "C:\\nvm\\node_modules\\@anthropic-ai\\claude-code\\cli-wrapper.cjs",
+    ])("runs script fallback %s through Node instead of executing it directly", async (script) => {
+      const run = jest.fn().mockResolvedValue({ stdout: `${CLAUDE_MIN_VERSION} (Claude Code)` });
+
+      await expect(probeClaudeVersion(script, process.env, run)).resolves.toEqual({
+        kind: "supported",
+        version: CLAUDE_MIN_VERSION,
+      });
+      expect(run).toHaveBeenCalledWith(process.execPath, [script, "--version"], {
+        env: expect.objectContaining({ ELECTRON_RUN_AS_NODE: "1" }),
+        timeout: 10_000,
+      });
+    });
+
+    it("executes native binaries directly without the Node launcher", async () => {
+      const run = jest.fn().mockResolvedValue({ stdout: `${CLAUDE_MIN_VERSION} (Claude Code)` });
+
+      await probeClaudeVersion("/usr/local/bin/claude", process.env, run);
+
+      expect(run).toHaveBeenCalledWith("/usr/local/bin/claude", ["--version"], {
+        env: process.env,
+        timeout: 10_000,
+      });
+    });
+
     it("returns incompatible metadata for an older Claude Code version", async () => {
       const run = jest.fn().mockResolvedValue({ stdout: "2.1.205 (Claude Code)" });
 

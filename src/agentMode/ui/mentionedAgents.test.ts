@@ -4,14 +4,21 @@ import {
   isFanout,
   listInstalledAgentBrands,
   resolveAnswerers,
+  useInstalledAgentBrands,
 } from "@/agentMode/ui/mentionedAgents";
 import type { BackendDescriptor, InstallState } from "@/agentMode/session/types";
+import type CopilotPlugin from "@/main";
 import type { CopilotSettings } from "@/settings/model";
+import { act, renderHook } from "@testing-library/react";
 
 const Icon = () => null;
 
 jest.mock("@/agentMode/backends/registry", () => ({
   listBackendDescriptors: jest.fn(),
+}));
+
+jest.mock("@/settings/model", () => ({
+  useSettingsValue: () => ({}),
 }));
 
 import { listBackendDescriptors } from "@/agentMode/backends/registry";
@@ -53,6 +60,38 @@ describe("listInstalledAgentBrands", () => {
   it("returns the frozen empty constant when nothing is installed", () => {
     mockedList.mockReturnValue([descriptor("opencode", { kind: "absent" })]);
     expect(listInstalledAgentBrands(settings)).toBe(EMPTY_AGENT_BRANDS);
+  });
+});
+
+describe("useInstalledAgentBrands", () => {
+  it("re-lists a backend whose readiness settles without a settings write", () => {
+    let install: InstallState = { kind: "checking", source: "managed" };
+    const listeners = new Set<() => void>();
+    mockedList.mockReturnValue([
+      {
+        id: "claude",
+        displayName: "Claude",
+        Icon,
+        getInstallState: () => install,
+        subscribeInstallState: (_plugin: CopilotPlugin, cb: () => void) => {
+          listeners.add(cb);
+          return () => listeners.delete(cb);
+        },
+      } as unknown as BackendDescriptor,
+    ]);
+
+    const { result, unmount } = renderHook(() => useInstalledAgentBrands({} as CopilotPlugin));
+    expect(result.current).toBe(EMPTY_AGENT_BRANDS);
+
+    // The compatibility probe settles ready — no settings write involved.
+    act(() => {
+      install = { kind: "ready", source: "managed" };
+      listeners.forEach((cb) => cb());
+    });
+    expect(result.current.map((b) => b.id)).toEqual(["claude"]);
+
+    unmount();
+    expect(listeners.size).toBe(0);
   });
 });
 
