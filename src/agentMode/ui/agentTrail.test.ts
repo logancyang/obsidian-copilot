@@ -183,6 +183,20 @@ describe("buildAgentTrail", () => {
     expect(tree[0].type).toBe("subagent");
   });
 
+  it.each([
+    ["a named vendor tool", { vendorToolName: "RunAnalysis" }],
+    ["an anonymous MCP tool", { mcpServer: "analysis-server", toolKind: "other" }],
+    ["a typed native tool", { toolKind: "execute" }],
+  ] as const)(
+    "does not classify %s with a subagent_type parameter as a subagent",
+    (_label, identity) => {
+      const tree = buildAgentTrail([
+        tool("ordinary", { ...identity, input: { subagent_type: "worker" } }),
+      ]);
+      expect(tree[0].type).toBe("action");
+    }
+  );
+
   it("a sub-agent breaks the run; same-tool peers around it compact independently", () => {
     const parts = [
       tool("e1", { vendorToolName: "Edit" }),

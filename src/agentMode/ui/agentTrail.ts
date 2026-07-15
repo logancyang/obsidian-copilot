@@ -67,14 +67,17 @@ function isHiddenTool(part: AgentMessagePart): boolean {
 }
 
 /**
- * A sub-agent invocation (Claude's `Agent`/`Task`, or opencode's `task` tool,
- * which surfaces no vendor name but carries a `subagent_type` input). Background
- * Claude background subagents do not emit partial stream events, but current
- * SDK versions do forward their complete nested assistant/user frames. A
- * childless launch still renders as a group so its final report has a home.
+ * A sub-agent invocation (Claude's `Agent`/`Task`, or opencode's anonymous
+ * `task` tool, which has no vendor/MCP provenance, maps to missing/other kind,
+ * and carries a `subagent_type` input). Background Claude subagents do not emit
+ * partial stream events, but current SDK versions do forward their complete
+ * nested assistant/user frames. A childless launch still renders as a group so
+ * its final report has a home.
  */
 function isSubAgentLaunch(part: ToolCallPart): boolean {
   if (part.vendorToolName === "Agent" || part.vendorToolName === "Task") return true;
+  if (part.vendorToolName || part.mcpServer) return false;
+  if (part.toolKind && part.toolKind !== "other") return false;
   const input = part.input as { subagent_type?: unknown } | null | undefined;
   return typeof input?.subagent_type === "string";
 }

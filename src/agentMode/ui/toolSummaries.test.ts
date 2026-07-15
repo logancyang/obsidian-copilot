@@ -431,6 +431,12 @@ describe("extractSubAgentReturnText", () => {
     });
     expect(extractSubAgentReturnText(t)).toBeNull();
   });
+
+  it("keeps a legitimate report that begins with the launch acknowledgment wording", () => {
+    const report = "Async agent launched successfully after the retry, then completed the audit.";
+    const t = tool({ output: [{ type: "text", text: report }] });
+    expect(extractSubAgentReturnText(t)).toBe(report);
+  });
 });
 
 describe("extractSubAgentInputPrompt", () => {
