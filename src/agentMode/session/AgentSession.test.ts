@@ -1033,6 +1033,7 @@ describe("AgentSession.sendPrompt", () => {
   it("settles locally and drops retry output when backend cancellation fails", async () => {
     const mock = makeMockBackend();
     let resolveBackingPrompt: ((value: { stopReason: "cancelled" }) => void) | null = null;
+    let resolveSecondPrompt: ((value: { stopReason: "end_turn" }) => void) | null = null;
     mock.prompt
       .mockImplementationOnce(
         () =>
@@ -1040,7 +1041,12 @@ describe("AgentSession.sendPrompt", () => {
             resolveBackingPrompt = resolve;
           })
       )
-      .mockResolvedValueOnce({ stopReason: "end_turn" });
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveSecondPrompt = resolve;
+          })
+      );
     const session = new AgentSession({
       backend: mock.asBackend,
       backendSessionId: "acp-1",
@@ -1062,6 +1068,15 @@ describe("AgentSession.sendPrompt", () => {
     emitChunk("agent_message_chunk", "partial answer");
     mock.cancel.mockImplementation(() => {
       emitChunk("agent_thought_chunk", " retry during cancel");
+      mock.emit({
+        sessionId: "acp-1",
+        update: {
+          sessionUpdate: "tool_call",
+          toolCallId: "tc-stale",
+          title: "Stale retry tool",
+          status: "pending",
+        },
+      });
       return Promise.reject(new Error("cancel unsupported"));
     });
 
@@ -1079,11 +1094,19 @@ describe("AgentSession.sendPrompt", () => {
         expect.objectContaining({ kind: "thought", text: "initial thought" }),
       ])
     );
+    expect(firstAnswer?.parts?.some((part) => part.kind === "tool_call")).toBe(false);
     expect(firstAnswer?.turnStopReason).toBe("cancelled");
 
-    resolveBackingPrompt!({ stopReason: "cancelled" });
     const next = session.sendPrompt("second");
+    expect(mock.prompt).toHaveBeenCalledTimes(1);
+    emitChunk("agent_message_chunk", " stale retry", "msg-retry");
+
+    resolveBackingPrompt!({ stopReason: "cancelled" });
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    expect(mock.prompt).toHaveBeenCalledTimes(2);
+    emitChunk("agent_message_chunk", " stale trailing chunk", "msg-retry");
     emitChunk("agent_message_chunk", "recovered", "msg-second");
+    resolveSecondPrompt!({ stopReason: "end_turn" });
     await expect(next.turn).resolves.toBe("end_turn");
     expect(session.store.getDisplayMessages().at(-1)?.message).toBe("recovered");
   });
