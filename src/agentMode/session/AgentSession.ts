@@ -25,6 +25,7 @@ import {
   PlanSummary,
   PromptContent,
   PromptInput,
+  PromptOutput,
   SessionEvent,
   SessionId,
   SessionUsage,
@@ -1002,6 +1003,7 @@ export class AgentSession {
   ): Promise<StopReason> {
     const placeholderId = this.placeholderId;
     const sessionId = this.backendSessionId!;
+    const signal = this.abortController!.signal;
     try {
       // Extract live Web Viewer content (reader-mode markdown, YouTube
       // transcripts) just before the prompt is built so it reflects the page
@@ -1083,7 +1085,17 @@ export class AgentSession {
         sessionId,
         prompt: promptBlocks,
       };
-      const resp = await this.backend.prompt(req);
+      const promptStarted = !signal.aborted;
+      const resp: PromptOutput = promptStarted
+        ? await Promise.race([
+            this.backend.prompt(req),
+            new Promise<PromptOutput>((resolve) => {
+              signal.addEventListener("abort", () => resolve({ stopReason: "cancelled" }), {
+                once: true,
+              });
+            }),
+          ])
+        : { stopReason: "cancelled" };
       // Flush the buffer only on a non-cancelled completion — only then has the
       // backend durably ingested the `<prior_turns>` block. A cancelled prompt may
       // have stopped before ingesting it, so keep and re-inject (a duplicate is
@@ -1095,13 +1107,13 @@ export class AgentSession {
       // the turn, so a hard `prompt()` failure (transport/auth) leaves the flag
       // unset and the user's retry re-delivers the context (a user cancel still
       // resolves here, and the prompt did reach the backend, so it counts as delivered).
-      if (isFirstTurn) this.firstPromptSent = true;
+      if (isFirstTurn && promptStarted) this.firstPromptSent = true;
       // Same delivery contract as `firstPromptSent`: the note reached the backend
       // in this accepted (possibly cancelled) prompt, so advance the session's
       // cursor. A hard `prompt()` failure throws before here, leaving the cursor
       // unmoved so the retry re-delivers the note. Fan-out returns earlier and
       // never reaches this ack.
-      if (projectContextUpdates) {
+      if (projectContextUpdates && promptStarted) {
         this.markProjectContextUpdatesDeliveredFn?.(projectContextUpdates.epoch);
       }
       if (
@@ -1266,9 +1278,9 @@ export class AgentSession {
   }
 
   /**
-   * Cancel any in-flight turn. The backend may still emit a few trailing
-   * session events before the prompt promise resolves with
-   * `stopReason: "cancelled"` — that's expected.
+   * Cancel any in-flight turn. Local cancellation settles the prompt even if
+   * the backend ignores ACP `session/cancel`; the backend notification still
+   * runs so a compliant agent can stop work and keep its session reusable.
    *
    * Flushes any pending tool-permission and AskUserQuestion resolvers (rejects
    * / empty answers respectively) so the inline cards disappear immediately
@@ -1279,6 +1291,9 @@ export class AgentSession {
     const status = this.getStatus();
     if (status !== "running" && status !== "awaiting_permission") return;
     if (!this.backendSessionId) return;
+    this.abortController?.abort();
+    this.settledStream = null;
+    this.currentMessageIds = new Set();
     if (this.pendingToolResolvers.size > 0) {
       this.flushResolvers(this.pendingToolResolvers);
       this.notifyMessages();
@@ -1292,7 +1307,6 @@ export class AgentSession {
     } catch (e) {
       logWarn(`[AgentMode] cancel notification failed`, e);
     }
-    this.abortController?.abort();
   }
 
   /** Detach from the backend. Does not cancel — call `cancel()` first. */
@@ -1742,6 +1756,7 @@ export class AgentSession {
    * when there's no message to append to (a genuinely stray update).
    */
   private resolveContentTarget(messageId: string | undefined): string | null {
+    if (this.abortController?.signal.aborted) return null;
     if (messageId && this.settledStream?.messageIds.has(messageId)) {
       return this.settledStream.placeholderId;
     }

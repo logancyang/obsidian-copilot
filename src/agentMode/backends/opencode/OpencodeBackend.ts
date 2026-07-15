@@ -317,9 +317,9 @@ export async function buildOpencodeConfig(
   // native `build` agent this only adds the external_directory key — bash/edit
   // stay at opencode's permissive defaults, so it does not start asking.
   //
-  // NOTE (version-sensitive, pinned opencode 1.15.13): the `external_directory`
+  // NOTE (version-sensitive, pinned opencode 1.16.0): the `external_directory`
   // permission key and the `{ "<glob>": "allow" }` shape are confirmed against
-  // 1.15.13; re-verify when the pinned opencode version changes.
+  // 1.16.0; re-verify when the pinned opencode version changes.
   const externalDirectoryPermission = cacheRoot
     ? { external_directory: { [`${cacheRoot}/**`]: "allow" } }
     : undefined;

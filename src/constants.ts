@@ -935,15 +935,14 @@ export const RESTRICTION_MESSAGES = {
     `${extension.toUpperCase()} files are not supported in the current mode.`,
 } as const;
 
-export const OPENCODE_PINNED_VERSION = "1.15.13";
+export const OPENCODE_PINNED_VERSION = "1.16.0";
 export const OPENCODE_RELEASE_TAG = `v${OPENCODE_PINNED_VERSION}`;
 /**
- * Minimum opencode the plugin supports. v1.15.13 (PR sst/opencode#29929,
- * "promote next ACP implementation") dropped the dedicated ACP `models` state
- * and moved the model catalog to a `category:"model"` config option; older
- * binaries report no models to our picker, so we force an upgrade.
+ * Minimum opencode the plugin supports. v1.15.13 introduced the config-option
+ * model catalog we consume, and v1.16.0 made ACP `session/cancel` abort the
+ * backing turn so a stopped session remains reusable.
  */
-export const OPENCODE_MIN_ACP_VERSION = "1.15.13";
+export const OPENCODE_MIN_ACP_VERSION = "1.16.0";
 export const OPENCODE_RELEASE_URL_TEMPLATE =
   "https://github.com/sst/opencode/releases/download/v{version}/{asset}";
 export const OPENCODE_RELEASE_API_URL_TEMPLATE =

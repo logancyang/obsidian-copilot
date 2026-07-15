@@ -1029,6 +1029,64 @@ describe("AgentSession.sendPrompt", () => {
     resolvePrompt!({ stopReason: "cancelled" });
     expect(await turn).toBe("cancelled");
   });
+
+  it("settles locally and drops retry output when backend cancellation fails", async () => {
+    const mock = makeMockBackend();
+    let resolveBackingPrompt: ((value: { stopReason: "cancelled" }) => void) | null = null;
+    mock.prompt
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveBackingPrompt = resolve;
+          })
+      )
+      .mockResolvedValueOnce({ stopReason: "end_turn" });
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+    });
+    const emitChunk = (
+      sessionUpdate: "agent_thought_chunk" | "agent_message_chunk",
+      text: string,
+      messageId = "msg-first"
+    ) =>
+      mock.emit({
+        sessionId: "acp-1",
+        update: { sessionUpdate, messageId, content: { type: "text", text } },
+      });
+    const { turn } = session.sendPrompt("first");
+
+    emitChunk("agent_thought_chunk", "initial thought");
+    emitChunk("agent_message_chunk", "partial answer");
+    mock.cancel.mockImplementation(() => {
+      emitChunk("agent_thought_chunk", " retry during cancel");
+      return Promise.reject(new Error("cancel unsupported"));
+    });
+
+    await session.cancel();
+    await expect(turn).resolves.toBe("cancelled");
+    expect(session.getStatus()).toBe("idle");
+
+    emitChunk("agent_message_chunk", " retry after cancel");
+    const firstAnswer = session.store
+      .getDisplayMessages()
+      .find((message) => message.sender === AI_SENDER);
+    expect(firstAnswer?.message).toBe("partial answer");
+    expect(firstAnswer?.parts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: "thought", text: "initial thought" }),
+      ])
+    );
+    expect(firstAnswer?.turnStopReason).toBe("cancelled");
+
+    resolveBackingPrompt!({ stopReason: "cancelled" });
+    const next = session.sendPrompt("second");
+    emitChunk("agent_message_chunk", "recovered", "msg-second");
+    await expect(next.turn).resolves.toBe("end_turn");
+    expect(session.store.getDisplayMessages().at(-1)?.message).toBe("recovered");
+  });
 });
 
 describe("withReadOnlyPreamble", () => {
