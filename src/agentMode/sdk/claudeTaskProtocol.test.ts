@@ -257,7 +257,7 @@ describe("claudeTaskProtocol", () => {
         expect(conflictingFailure.updates).toEqual([]);
       });
 
-      it("omits only a uniquely attributable asynchronous launch acknowledgement", () => {
+      it("retains ambiguous launch candidates until an explicit task frame selects the owner", () => {
         const unique = new ClaudeBackgroundTaskStateMachine();
         observeTool(unique, "launch", "Agent");
         const uniqueDecision = acceptMessage(unique, launchAck("task-a", "launch"));
@@ -281,10 +281,20 @@ describe("claudeTaskProtocol", () => {
             tool_use_id: "launch-a",
           })
         );
-        expect(lateFrame.updates).toEqual([]);
+        const rejectedSibling = acceptMessage(
+          ambiguous,
+          systemMessage({
+            subtype: "task_started",
+            task_id: "task-a",
+            tool_use_id: "launch-b",
+          })
+        );
+
+        expect(lateFrame.updates).toEqual([{ toolCallId: "launch-a", status: "in_progress" }]);
+        expect(rejectedSibling.updates).toEqual([]);
       });
 
-      it("clears query-owned identity when the query finishes", () => {
+      it("retains terminal identity until a delayed output frame completes the card", () => {
         const protocol = new ClaudeBackgroundTaskStateMachine();
         observeTool(protocol, "launch", "Agent");
         acceptMessage(
@@ -295,19 +305,42 @@ describe("claudeTaskProtocol", () => {
             tool_use_id: "launch",
           })
         );
-        protocol.accept({ kind: "query_finished" });
-
-        const lateTerminal = acceptMessage(
+        const terminalStatus = acceptMessage(
           protocol,
           systemMessage({
             subtype: "task_notification",
             task_id: "task-a",
-            tool_use_id: "launch",
+            status: "completed",
+          })
+        );
+
+        const terminalOutput = acceptMessage(
+          protocol,
+          systemMessage({
+            subtype: "task_notification",
+            task_id: "task-a",
             status: "completed",
             summary: "late",
           })
         );
-        expect(lateTerminal.updates).toEqual([]);
+        const afterCompletion = acceptMessage(
+          protocol,
+          systemMessage({
+            subtype: "task_progress",
+            task_id: "task-a",
+            description: "too late",
+          })
+        );
+
+        expect(terminalStatus.updates).toEqual([{ toolCallId: "launch", status: "completed" }]);
+        expect(terminalOutput.updates).toEqual([
+          {
+            toolCallId: "launch",
+            status: "completed",
+            content: [{ type: "content", content: { type: "text", text: "late" } }],
+          },
+        ]);
+        expect(afterCompletion.updates).toEqual([]);
       });
     });
   });

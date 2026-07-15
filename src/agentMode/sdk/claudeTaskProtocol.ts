@@ -3,9 +3,10 @@
  *
  * One logical task has two identities whose carriers may arrive out of order:
  * `L`, the Agent/Task launch tool-call ID, and `T`, Claude's task ID. The launch
- * moves through awaiting identity, active, terminal without output, and terminal
- * with output. Identity remains one-to-one and terminal status never regresses.
- * Keeping those rules behind one query-owned interface prevents the translator
+ * moves through awaiting identity, active, and terminal without output; a
+ * launch is pruned after its final output arrives. Identity remains one-to-one
+ * and terminal status never regresses.
+ * Keeping those rules behind one session-owned interface prevents the translator
  * from coordinating maps whose invariants can drift apart.
  */
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
@@ -18,6 +19,7 @@ import type {
 interface AwaitingBackgroundTaskIdentity {
   phase: "awaiting_identity";
   toolCallId: string;
+  candidateTaskId?: string;
 }
 
 interface ActiveBackgroundTaskLaunch {
@@ -33,18 +35,9 @@ interface TerminalBackgroundTaskWithoutOutput {
   terminalStatus: TerminalTaskStatus;
 }
 
-interface TerminalBackgroundTaskWithOutput {
-  phase: "terminal_with_output";
-  toolCallId: string;
-  taskId: string;
-  terminalStatus: TerminalTaskStatus;
-  output: string;
-}
-
 type IdentifiedBackgroundTaskLaunch =
   | ActiveBackgroundTaskLaunch
-  | TerminalBackgroundTaskWithoutOutput
-  | TerminalBackgroundTaskWithOutput;
+  | TerminalBackgroundTaskWithoutOutput;
 
 type BackgroundTaskLaunch = AwaitingBackgroundTaskIdentity | IdentifiedBackgroundTaskLaunch;
 
@@ -55,8 +48,7 @@ export type ClaudeTaskCarrier =
       nativeToolName?: string;
       input: unknown;
     }
-  | { kind: "sdk_message"; message: SDKMessage }
-  | { kind: "query_finished" };
+  | { kind: "sdk_message"; message: SDKMessage };
 
 export interface ClaudeTaskToolUpdate {
   toolCallId: string;
@@ -94,8 +86,7 @@ type ClaudeTaskProtocolEvent =
       kind: "result_batch";
       resultIds: readonly string[];
       launchTaskId?: string;
-    }
-  | { kind: "query_finished" };
+    };
 
 const EMPTY_TASK_UPDATES: readonly ClaudeTaskToolUpdate[] = Object.freeze([]);
 const EMPTY_RESULT_ACTIONS: ReadonlyMap<string, ClaudeTaskResultAction> = new Map();
@@ -105,11 +96,11 @@ const NO_TASK_DECISION: ClaudeTaskDecision = Object.freeze({
 });
 
 /**
- * Reconciles Claude's background-task carriers into decisions for one SDK query.
+ * Reconciles Claude's background-task carriers for one SDK session.
  *
  * Callers submit carrier snapshots without coordinating their order. The
- * protocol owns identity correlation and monotonic transitions; callers only
- * project its decisions to session events.
+ * protocol owns identity correlation across query boundaries and monotonic
+ * transitions; callers only project its decisions to session events.
  */
 export class ClaudeBackgroundTaskStateMachine {
   private readonly launchesByToolCallId = new Map<string, BackgroundTaskLaunch>();
@@ -118,7 +109,7 @@ export class ClaudeBackgroundTaskStateMachine {
   /**
    * Applies one carrier atomically and returns every resulting protocol decision.
    *
-   * @param carrier A tool snapshot, SDK message, or query-lifecycle signal.
+   * @param carrier A tool snapshot or SDK message from the owning session.
    */
   accept(carrier: ClaudeTaskCarrier): ClaudeTaskDecision {
     const protocolEvent = protocolEventFromCarrier(carrier);
@@ -141,10 +132,6 @@ export class ClaudeBackgroundTaskStateMachine {
         return this.transitionTerminalTask(protocolEvent);
       case "result_batch":
         return this.transitionResultBatch(protocolEvent);
-      case "query_finished":
-        this.launchesByToolCallId.clear();
-        this.launchToolCallIdByTaskId.clear();
-        return NO_TASK_DECISION;
     }
   }
 
@@ -183,11 +170,28 @@ export class ClaudeBackgroundTaskStateMachine {
       : undefined;
     if (launchAckToolCallId) resultActions.set(launchAckToolCallId, { kind: "omit" });
 
+    const ambiguousTaskId =
+      protocolEvent.launchTaskId &&
+      !launchAckToolCallId &&
+      !this.launchToolCallIdByTaskId.has(protocolEvent.launchTaskId) &&
+      protocolEvent.resultIds.filter(
+        (toolCallId) => this.launchesByToolCallId.get(toolCallId)?.phase === "awaiting_identity"
+      ).length > 1
+        ? protocolEvent.launchTaskId
+        : undefined;
+
     // Foreground Agent/Task results cannot receive future background frames.
     for (const toolCallId of protocolEvent.resultIds) {
       const launch = this.launchesByToolCallId.get(toolCallId);
       if (launch?.phase === "awaiting_identity" && toolCallId !== launchAckToolCallId) {
-        this.launchesByToolCallId.delete(toolCallId);
+        if (ambiguousTaskId) {
+          this.launchesByToolCallId.set(toolCallId, {
+            ...launch,
+            candidateTaskId: ambiguousTaskId,
+          });
+        } else {
+          this.launchesByToolCallId.delete(toolCallId);
+        }
       }
     }
 
@@ -205,6 +209,10 @@ export class ClaudeBackgroundTaskStateMachine {
     if (launch.phase !== "awaiting_identity" && launch.taskId !== taskId) return undefined;
     const existing = this.launchToolCallIdByTaskId.get(taskId);
     if (existing && existing !== toolCallId) return undefined;
+    if (launch.phase === "awaiting_identity" && launch.candidateTaskId !== undefined) {
+      if (launch.candidateTaskId !== taskId) return undefined;
+      this.pruneAmbiguousCandidates(taskId, toolCallId);
+    }
     const identified =
       launch.phase === "awaiting_identity"
         ? ({ phase: "active", toolCallId, taskId } satisfies ActiveBackgroundTaskLaunch)
@@ -225,9 +233,28 @@ export class ClaudeBackgroundTaskStateMachine {
   private launchAckOwner(agentId: string, resultIds: readonly string[]): string | undefined {
     const known = this.launchToolCallIdByTaskId.get(agentId);
     if (known) return resultIds.includes(known) ? known : undefined;
-    const candidates = resultIds.filter((toolCallId) => this.launchesByToolCallId.has(toolCallId));
+    const candidates = resultIds.filter(
+      (toolCallId) => this.launchesByToolCallId.get(toolCallId)?.phase === "awaiting_identity"
+    );
     if (candidates.length !== 1) return undefined;
     return this.bindLaunch(candidates[0], agentId)?.toolCallId;
+  }
+
+  private pruneAmbiguousCandidates(taskId: string, ownerToolCallId: string): void {
+    for (const [toolCallId, launch] of this.launchesByToolCallId) {
+      if (
+        toolCallId !== ownerToolCallId &&
+        launch.phase === "awaiting_identity" &&
+        launch.candidateTaskId === taskId
+      ) {
+        this.launchesByToolCallId.delete(toolCallId);
+      }
+    }
+  }
+
+  private forgetLaunch(launch: IdentifiedBackgroundTaskLaunch): void {
+    this.launchesByToolCallId.delete(launch.toolCallId);
+    this.launchToolCallIdByTaskId.delete(launch.taskId);
   }
 
   private mergeTerminal(
@@ -236,14 +263,9 @@ export class ClaudeBackgroundTaskStateMachine {
     output?: string,
     progress?: AgentToolProgress
   ): ClaudeTaskToolUpdate | undefined {
-    if (launch.phase === "terminal_with_output") return undefined;
     if (launch.phase === "terminal_without_output") {
       if (!output) return undefined;
-      this.launchesByToolCallId.set(launch.toolCallId, {
-        ...launch,
-        phase: "terminal_with_output",
-        output,
-      });
+      this.forgetLaunch(launch);
       return {
         toolCallId: launch.toolCallId,
         status: launch.terminalStatus,
@@ -252,11 +274,15 @@ export class ClaudeBackgroundTaskStateMachine {
       };
     }
 
-    const terminalLaunch: TerminalBackgroundTaskWithoutOutput | TerminalBackgroundTaskWithOutput =
-      output
-        ? { ...launch, phase: "terminal_with_output", terminalStatus: status, output }
-        : { ...launch, phase: "terminal_without_output", terminalStatus: status };
-    this.launchesByToolCallId.set(launch.toolCallId, terminalLaunch);
+    if (output) {
+      this.forgetLaunch(launch);
+    } else {
+      this.launchesByToolCallId.set(launch.toolCallId, {
+        ...launch,
+        phase: "terminal_without_output",
+        terminalStatus: status,
+      });
+    }
     return {
       toolCallId: launch.toolCallId,
       status,
@@ -267,8 +293,6 @@ export class ClaudeBackgroundTaskStateMachine {
 }
 
 function protocolEventFromCarrier(carrier: ClaudeTaskCarrier): ClaudeTaskProtocolEvent | undefined {
-  if (carrier.kind === "query_finished") return carrier;
-
   if (carrier.kind === "tool_snapshot") {
     if (carrier.nativeToolName === "Agent" || carrier.nativeToolName === "Task") {
       return { kind: "launch_observed", toolCallId: carrier.toolCallId };
@@ -334,8 +358,8 @@ function taskDecision(update: ClaudeTaskToolUpdate): ClaudeTaskDecision {
 
 function isTerminalLaunch(
   launch: IdentifiedBackgroundTaskLaunch
-): launch is TerminalBackgroundTaskWithoutOutput | TerminalBackgroundTaskWithOutput {
-  return launch.phase === "terminal_without_output" || launch.phase === "terminal_with_output";
+): launch is TerminalBackgroundTaskWithoutOutput {
+  return launch.phase === "terminal_without_output";
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {

@@ -28,9 +28,9 @@ import { ClaudeBackgroundTaskStateMachine, type ClaudeTaskToolUpdate } from "./c
 type SDKSystemLike = Extract<SDKMessage, { type: "system" }>;
 
 /**
- * Mutable per-query translator state. One instance lives for the duration of
- * a single `query()` call; reset whenever a new turn starts. Only
- * `claudeTasks` is deliberately shared across queries.
+ * Mutable translator state. One instance lives for a single `query()` call;
+ * stream parsing fields reset with each turn, while the Claude task owners are
+ * deliberately shared across queries in the same session.
  */
 export interface TranslatorState {
   toolUseBlocks: Map<
@@ -45,7 +45,7 @@ export interface TranslatorState {
   >;
   /** Tool-use ids already emitted in this turn — used to dedupe in the assistant-message fallback path. */
   emittedToolUseIds: Set<string>;
-  /** Opaque owner of Claude launch/push/pull correlation for this query. */
+  /** Session-lived owner of Claude background-task identity and lifecycle. */
   backgroundTasks: ClaudeBackgroundTaskStateMachine;
   /** Session-lived todo/Task accumulator (see claudeTodoPlan.ts). */
   claudeTasks: ClaudeTaskPlanState;
@@ -71,14 +71,18 @@ interface AssistantUsageSample {
 }
 
 /**
- * Creates isolated correlation state so SDK messages can be translated without leaking task or tool identity across sessions.
+ * Creates query-local parsing state backed by the owning session's Claude task state.
  * @param claudeTasks - The task-plan state to preserve when translator generations share one conversation.
+ * @param backgroundTasks - The background-task state to preserve across queries in one session.
  */
-export function createTranslatorState(claudeTasks?: ClaudeTaskPlanState): TranslatorState {
+export function createTranslatorState(
+  claudeTasks?: ClaudeTaskPlanState,
+  backgroundTasks?: ClaudeBackgroundTaskStateMachine
+): TranslatorState {
   return {
     toolUseBlocks: new Map(),
     emittedToolUseIds: new Set(),
-    backgroundTasks: new ClaudeBackgroundTaskStateMachine(),
+    backgroundTasks: backgroundTasks ?? new ClaudeBackgroundTaskStateMachine(),
     claudeTasks: claudeTasks ?? createClaudeTaskPlanState(),
   };
 }
@@ -128,7 +132,6 @@ function translateResultMessage(
   sessionId: SessionId,
   state: TranslatorState
 ): SessionEvent[] {
-  state.backgroundTasks.accept({ kind: "query_finished" });
   const sample = state.lastAssistantUsage;
   // No main-model turn to measure (e.g. an errored/empty result): leave the
   // meter on its prior occupancy rather than invent a cumulative number.
