@@ -62,6 +62,7 @@ import {
   OpencodeBinaryManager,
   parseVersionFromStdout,
   pickMatchingAsset,
+  toOpencodeInstallState,
   verifyOpencodeBinary,
 } from "./OpencodeBinaryManager";
 
@@ -217,6 +218,39 @@ describe("computeInstallState", () => {
     // vault synced from another device where opencode was installed (#123).
     expect(computeInstallState({ binaryPath: "/p", binaryVersion: "1.2.3" }, () => false)).toEqual({
       kind: "absent",
+    });
+  });
+});
+
+describe("OpencodeBinaryManager", () => {
+  describe("toOpencodeInstallState()", () => {
+    it("maps absent and supported installs to backend readiness", () => {
+      expect(toOpencodeInstallState({ kind: "absent" })).toEqual({ kind: "absent" });
+      expect(
+        toOpencodeInstallState({
+          kind: "installed",
+          version: OPENCODE_MIN_ACP_VERSION,
+          path: "/p",
+          source: "managed",
+        })
+      ).toEqual({ kind: "ready", source: "managed" });
+    });
+
+    it("returns the shared incompatible state for an outdated install", () => {
+      expect(
+        toOpencodeInstallState({
+          kind: "installed",
+          version: "1.15.12",
+          path: "/p",
+          source: "custom",
+        })
+      ).toEqual({
+        kind: "incompatible",
+        source: "custom",
+        currentVersion: "1.15.12",
+        minVersion: OPENCODE_MIN_ACP_VERSION,
+        message: `opencode v1.15.12 is not supported. Copilot requires opencode v${OPENCODE_MIN_ACP_VERSION} or newer.`,
+      });
     });
   });
 });

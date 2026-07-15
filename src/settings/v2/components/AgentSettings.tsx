@@ -3,6 +3,7 @@ import {
   InstallBadge,
   listBackendDescriptors,
   McpServersPanel,
+  useBackendInstallState,
   type BackendDescriptor,
   type BackendId,
 } from "@/agentMode";
@@ -204,7 +205,7 @@ const BackendPanel: React.FC<{
   const Panel = descriptor.SettingsPanel;
   const manager = plugin.agentSessionManager;
 
-  const installState = descriptor.getInstallState(settings);
+  const installState = useBackendInstallState(descriptor, plugin);
   const resolvedPath = descriptor.getResolvedBinaryPath?.(settings) ?? null;
 
   // Probe when ready but uncached — the load-time preload may have skipped this
@@ -234,6 +235,9 @@ const BackendPanel: React.FC<{
               <TruncatedText className="tw-max-w-[90%] tw-font-mono tw-text-xs tw-text-muted">
                 {formatBinaryPathForDisplay(resolvedPath)}
               </TruncatedText>
+            )}
+            {(installState.kind === "incompatible" || installState.kind === "error") && (
+              <span className="tw-text-xs tw-text-error">{installState.message}</span>
             )}
           </div>
         </div>

@@ -2,9 +2,8 @@ import { BinaryPathSetting } from "@/agentMode/backends/shared/BinaryPathSetting
 import { ConfigDialogShell, ConfigSection } from "@/agentMode/backends/shared/ConfigDialogShell";
 import { InstallCommandRow } from "@/agentMode/backends/shared/InstallCommandRow";
 import { InstallStatusLine } from "@/agentMode/backends/shared/installStatus";
-import type { InstallState } from "@/agentMode/session/types";
 import { ReactModal } from "@/components/modals/ReactModal";
-import { setSettings, useSettingsValue } from "@/settings/model";
+import { getSettings, setSettings, useSettingsValue } from "@/settings/model";
 import { validateExecutableFile } from "@/utils/detectBinary";
 import { App, Notice } from "obsidian";
 import React from "react";
@@ -12,7 +11,9 @@ import {
   CLAUDE_INSTALL_COMMAND,
   claudeCliDetectionSearchDirs,
   detectClaudeCliPath,
-  resolveClaudeCliPath,
+  getClaudeInstallState,
+  refreshClaudeInstallState,
+  subscribeClaudeInstallState,
 } from "./descriptor";
 
 /**
@@ -23,19 +24,26 @@ import {
  */
 const ClaudeConfigBody: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const settings = useSettingsValue();
+  const getInstallStateSnapshot = React.useCallback(
+    () => getClaudeInstallState(settings),
+    [settings]
+  );
+  const sessionState = React.useSyncExternalStore(
+    subscribeClaudeInstallState,
+    getInstallStateSnapshot
+  );
+
+  React.useEffect(() => {
+    void refreshClaudeInstallState(getSettings(), true);
+  }, []);
 
   const overridePath = settings.agentMode?.claudeCli?.path ?? "";
-  const resolvedPath = resolveClaudeCliPath(settings);
-  const isCustom = Boolean(overridePath);
-
-  const sessionState: InstallState = resolvedPath
-    ? { kind: "ready", source: isCustom ? "custom" : "managed" }
-    : { kind: "absent" };
 
   const onSaveCustomPath = React.useCallback(async (path: string): Promise<string | null> => {
     const err = await validateExecutableFile(path);
     if (err) return err;
     setSettings((cur) => ({ agentMode: { ...cur.agentMode, claudeCli: { path } } }));
+    await refreshClaudeInstallState(getSettings(), true);
     new Notice("Claude CLI path saved.");
     return null;
   }, []);

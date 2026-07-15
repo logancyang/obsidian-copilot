@@ -21,6 +21,10 @@ Copilot for Obsidian is an AI-powered assistant plugin that integrates various L
 - **Always write generalizable solutions.** No hardcoded folder names, file patterns, or special-case logic (no "piano notes" / "daily notes" branches). Make varying behavior configurable, not hardcoded.
 - **Never modify AI prompt content** — system prompts, model adapter prompts, etc. — unless the user explicitly asks.
 - **Referential stability.** Never return a freshly-allocated `[]` / `{}` for an "empty" slice; return a frozen module-level constant (canonical examples: `EMPTY_PROVIDERS` / `EMPTY_CONFIGURED_MODELS` / `EMPTY_BACKENDS` in `src/settings/model.ts`).
+- **Structure unit tests by module, class, and callable.** Use exactly one top-level `describe("moduleName", ...)` for the module under test; do not split the same subject across multiple top-level `describe` blocks. Within that module suite, wrap each class's tests in exactly one `describe("ClassName", ...)` so method ownership remains visible, then give each method exactly one nested `describe("methodName()", ...)` group. Keep module-level functions directly under the module suite, with exactly one `describe("functionName()", ...)` group per function. Merge cases that exercise the same callable. Separate same-callable groups only when a material test-lifecycle constraint makes merging misleading, and document that reason next to the groups. Write `it(...)` descriptions that state the observable behavior without requiring the reader to inspect the test body.
+- **Pair every production TypeScript function and method with unit coverage.** Directly test exported and public callables; cover private and module-local helpers through their observable public contract unless direct isolation materially improves clarity. Test-only helper functions are exempt.
+- **Document exported functions and public methods of exported classes when their purpose, contract, or parameters are not self-evident.** Simple functions and methods with unambiguous names and parameters may omit JSDoc. When JSDoc is needed, explain why the callable exists and the goal it serves without repeating its implementation, and add an `@param` entry for every parameter that explains its meaning without repeating its TypeScript type.
+- **Document every exported class with JSDoc.** State what the class is responsible for managing and where its boundary ends so readers can understand its duty without reading the implementation.
 - **Never use `console.log`** — use `logInfo()` / `logWarn()` / `logError()` from `@/logger`.
 - **Comment the why, not the what;** minimal comments, no milestone/plan-step refs. → [`STYLE_GUIDE.md`](./designdocs/agents/STYLE_GUIDE.md)
 - **Never edit `styles.css`** (generated); edit `src/styles/tailwind.css`, no inline `style`, no arbitrary font sizes, wrap class strings in `cn()`. → [`STYLE_GUIDE.md`](./designdocs/agents/STYLE_GUIDE.md)
@@ -113,11 +117,12 @@ gh api -X POST repos/OWNER/REPO/pulls/PR/comments/ROOT_COMMENT_ID/replies -f bod
 ```
 
 Never open a review draft: `POST /pulls/PR/reviews` without an `event` (and the
-UI's "Start a review") leaves the reply *pending*, which means invisible — it
+UI's "Start a review") leaves the reply _pending_, which means invisible — it
 never reaches the reviewer, it is absent from the comments API, and its thread
 still reads as unanswered. Before finishing, confirm none exists:
 
 ```bash
 gh api repos/OWNER/REPO/pulls/PR/reviews --jq '[.[]|select(.state=="PENDING")]|length'   # must be 0
 ```
+
 <!-- brevilabs-review-guidelines:end -->
