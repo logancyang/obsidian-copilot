@@ -61,13 +61,22 @@ export function toolKeyFor(part: ToolCallPart): string {
   return part.mcpServer ? `mcp:${part.mcpServer}:${base}` : base;
 }
 
-/**
- * `ToolSearch` is Claude Code's deferred-tool schema loader — invoked
- * before every `ExitPlanMode` to fetch its schema. Hiding it removes
- * meaningless "tool calls" cards at the end of plan mode.
- */
+/** Claude Code's deferred-tool schema loader has no standalone user meaning. */
 function isHiddenTool(part: AgentMessagePart): boolean {
   return part.kind === "tool_call" && part.vendorToolName === "ToolSearch";
+}
+
+/**
+ * A sub-agent invocation (Claude's `Agent`/`Task`, or opencode's `task` tool,
+ * which surfaces no vendor name but carries a `subagent_type` input). Background
+ * Claude background subagents do not emit partial stream events, but current
+ * SDK versions do forward their complete nested assistant/user frames. A
+ * childless launch still renders as a group so its final report has a home.
+ */
+function isSubAgentLaunch(part: ToolCallPart): boolean {
+  if (part.vendorToolName === "Agent" || part.vendorToolName === "Task") return true;
+  const input = part.input as { subagent_type?: unknown } | null | undefined;
+  return typeof input?.subagent_type === "string";
 }
 
 /**
@@ -155,11 +164,14 @@ function foldNodes(
     }
     // tool_call
     const children = childrenByParent.get(p.id);
-    if (children && children.length > 0) {
+    if ((children && children.length > 0) || isSubAgentLaunch(p)) {
       // Sub-agent: flush any pending compaction first (sub-agent boundary
-      // breaks compaction), then emit the subagent node.
+      // breaks compaction), then emit the subagent node. A background launch
+      // has no streamed children but still groups so its report renders inside.
       const childNodes =
-        depth + 1 >= maxDepth ? [] : foldNodes(children, childrenByParent, maxDepth, depth + 1);
+        depth + 1 >= maxDepth
+          ? []
+          : foldNodes(children ?? [], childrenByParent, maxDepth, depth + 1);
       out.push({
         type: "subagent",
         parent: p,

@@ -2261,6 +2261,7 @@ function toolCallToPart(
     vendorToolName: call.vendorToolName,
     mcpServer: call.mcpServer,
     parentToolCallId: call.parentToolCallId,
+    progress: call.progress,
   };
 }
 
@@ -2322,6 +2323,7 @@ function mergeToolCallUpdate(
     vendorToolName: upd.vendorToolName ?? base.vendorToolName,
     mcpServer: upd.mcpServer ?? base.mcpServer,
     parentToolCallId: upd.parentToolCallId ?? base.parentToolCallId,
+    progress: upd.progress === undefined ? base.progress : { ...base.progress, ...upd.progress },
   };
 }
 

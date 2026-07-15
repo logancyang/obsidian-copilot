@@ -22,12 +22,15 @@ import {
   type ClaudeTaskPlanState,
 } from "./claudeTodoPlan";
 import { deriveToolKind, deriveToolTitle, vendorMetaFields } from "./toolMeta";
+import { ClaudeBackgroundTaskStateMachine, type ClaudeTaskToolUpdate } from "./claudeTaskProtocol";
+
+/** Every SDK `system` frame — the `type: "system"` slice of the message union. */
+type SDKSystemLike = Extract<SDKMessage, { type: "system" }>;
 
 /**
  * Mutable per-query translator state. One instance lives for the duration of
- * a single `query()` call; reset whenever a new turn starts — EXCEPT
- * `claudeTasks`, which the caller shares across a session's queries (Task ids
- * created in one turn must resolve when a later turn updates them).
+ * a single `query()` call; reset whenever a new turn starts. Only
+ * `claudeTasks` is deliberately shared across queries.
  */
 export interface TranslatorState {
   toolUseBlocks: Map<
@@ -38,11 +41,12 @@ export interface TranslatorState {
       mcpServer?: string;
       inputJsonAcc: string;
       lastParsedInput: unknown;
-      emittedToolCall: boolean;
     }
   >;
   /** Tool-use ids already emitted in this turn — used to dedupe in the assistant-message fallback path. */
   emittedToolUseIds: Set<string>;
+  /** Opaque owner of Claude launch/push/pull correlation for this query. */
+  backgroundTasks: ClaudeBackgroundTaskStateMachine;
   /** Session-lived todo/Task accumulator (see claudeTodoPlan.ts). */
   claudeTasks: ClaudeTaskPlanState;
   /**
@@ -66,10 +70,15 @@ interface AssistantUsageSample {
   model: string;
 }
 
+/**
+ * Creates isolated correlation state so SDK messages can be translated without leaking task or tool identity across sessions.
+ * @param claudeTasks - The task-plan state to preserve when translator generations share one conversation.
+ */
 export function createTranslatorState(claudeTasks?: ClaudeTaskPlanState): TranslatorState {
   return {
     toolUseBlocks: new Map(),
     emittedToolUseIds: new Set(),
+    backgroundTasks: new ClaudeBackgroundTaskStateMachine(),
     claudeTasks: claudeTasks ?? createClaudeTaskPlanState(),
   };
 }
@@ -79,10 +88,10 @@ function event(sessionId: SessionId, update: SessionUpdate): SessionEvent {
 }
 
 /**
- * Translate one SDK message to zero or more session-domain events. Returning
- * an array (rather than firing a callback) keeps the function pure and
- * trivially testable; the caller decides what to do with the events and when
- * to terminate the prompt promise.
+ * Preserves the SDK boundary by turning vendor messages into session-domain events for backend-independent consumers.
+ * @param msg - The vendor message to translate.
+ * @param sessionId - The session that should receive the translated events.
+ * @param state - The cross-message correlation state for the active translation stream.
  */
 export function translateSdkMessage(
   msg: SDKMessage,
@@ -96,6 +105,8 @@ export function translateSdkMessage(
       return translateAssistantMessage(msg, sessionId, state);
     case "user":
       return translateUserMessage(msg, sessionId, state);
+    case "system":
+      return translateSystemMessage(msg, sessionId, state);
     case "result":
       return translateResultMessage(msg, sessionId, state);
     default:
@@ -117,6 +128,7 @@ function translateResultMessage(
   sessionId: SessionId,
   state: TranslatorState
 ): SessionEvent[] {
+  state.backgroundTasks.accept({ kind: "query_finished" });
   const sample = state.lastAssistantUsage;
   // No main-model turn to measure (e.g. an errored/empty result): leave the
   // meter on its prior occupancy rather than invent a cumulative number.
@@ -164,6 +176,19 @@ function modelTokens(m: SDKResultMessage["modelUsage"][string]): number {
   return m.inputTokens + m.outputTokens + m.cacheReadInputTokens + m.cacheCreationInputTokens;
 }
 
+/**
+ * Delegates Claude's out-of-order task protocol to the background-task state machine and
+ * converts its normalized decision into the session event vocabulary.
+ */
+function translateSystemMessage(
+  msg: SDKSystemLike,
+  sessionId: SessionId,
+  state: TranslatorState
+): SessionEvent[] {
+  const decision = state.backgroundTasks.accept({ kind: "sdk_message", message: msg });
+  return taskUpdateEvents(sessionId, decision.updates);
+}
+
 export function mapStopReason(msg: SDKResultMessage): "end_turn" | "cancelled" | "refusal" {
   if (msg.subtype === "success") return "end_turn";
   return "cancelled";
@@ -208,13 +233,13 @@ function translateStreamEvent(
       const block = sdkEvent.content_block;
       if (block.type === "tool_use") {
         const { tool: name, mcpServer } = resolveToolName(block.name);
+        acceptBackgroundTaskToolSnapshot(state, block.id, name, mcpServer, block.input);
         state.toolUseBlocks.set(sdkEvent.index, {
           id: block.id,
           name,
           mcpServer,
           inputJsonAcc: "",
           lastParsedInput: block.input ?? {},
-          emittedToolCall: true,
         });
         state.emittedToolUseIds.add(block.id);
         const out: SessionEvent[] = [
@@ -305,6 +330,7 @@ function translateStreamEvent(
       const parsed = tryParseJson(block.inputJsonAcc);
       const finalInput = parsed.ok ? parsed.value : block.lastParsedInput;
       block.lastParsedInput = finalInput;
+      acceptBackgroundTaskToolSnapshot(state, block.id, block.name, block.mcpServer, finalInput);
       return [
         event(sessionId, {
           sessionUpdate: "tool_call_update",
@@ -358,10 +384,11 @@ function translateAssistantMessage(
   for (const block of content) {
     const b = block as { type?: string; id?: string; name?: string; input?: unknown };
     if (b.type !== "tool_use" || !b.id || !b.name) continue;
+    const { tool: name, mcpServer } = resolveToolName(b.name);
+    acceptBackgroundTaskToolSnapshot(state, b.id, name, mcpServer, b.input);
     if (state.emittedToolUseIds.has(b.id)) continue;
     state.emittedToolUseIds.add(b.id);
     out.push(event(sessionId, makeToolCallUpdate(b.id, b.name, b.input ?? {}, parentToolUseId)));
-    const { tool: name, mcpServer } = resolveToolName(b.name);
     out.push(
       ...todoPlanEvents(sessionId, state, b.id, name, mcpServer, parentToolUseId, b.input ?? {})
     );
@@ -427,6 +454,8 @@ function translateUserMessage(
 ): SessionEvent[] {
   const content = (msg.message as { content?: unknown }).content;
   if (!Array.isArray(content)) return [];
+  const decision = state.backgroundTasks.accept({ kind: "sdk_message", message: msg });
+
   const out: SessionEvent[] = [];
   for (const block of content) {
     const b = block as {
@@ -436,6 +465,10 @@ function translateUserMessage(
       is_error?: boolean;
     };
     if (b.type !== "tool_result" || !b.tool_use_id) continue;
+
+    const resultAction = decision.resultActions.get(b.tool_use_id);
+    if (resultAction?.kind === "omit") continue;
+
     const status: AgentToolStatus = b.is_error ? "failed" : "completed";
     const outputs = toolResultContent(b.content);
     out.push(
@@ -457,6 +490,7 @@ function translateUserMessage(
     );
     if (!b.is_error && planUpdate) out.push(event(sessionId, planUpdate));
   }
+  out.push(...taskUpdateEvents(sessionId, decision.updates));
   return out;
 }
 
@@ -477,6 +511,30 @@ function makeToolCallUpdate(
     mcpServer,
     ...vendorMetaFields(name, parentToolUseId, mcpServer),
   };
+}
+
+function acceptBackgroundTaskToolSnapshot(
+  state: TranslatorState,
+  toolUseId: string,
+  name: string,
+  mcpServer: string | undefined,
+  rawInput: unknown
+): void {
+  state.backgroundTasks.accept({
+    kind: "tool_snapshot",
+    toolCallId: toolUseId,
+    nativeToolName: mcpServer ? undefined : name,
+    input: rawInput,
+  });
+}
+
+function taskUpdateEvents(
+  sessionId: SessionId,
+  updates: readonly ClaudeTaskToolUpdate[]
+): SessionEvent[] {
+  return updates.map((update) =>
+    event(sessionId, { sessionUpdate: "tool_call_update", ...update })
+  );
 }
 
 function toolResultContent(content: unknown): ToolCallContent[] | undefined {

@@ -967,6 +967,50 @@ describe("AgentSession.sendPrompt", () => {
     await turn;
   });
 
+  it("merges partial tool progress", async () => {
+    const mock = makeMockBackend();
+    let resolvePrompt: ((v: { stopReason: "end_turn" }) => void) | null = null;
+    mock.prompt.mockImplementation(
+      () => new Promise((resolve) => (resolvePrompt = resolve as typeof resolvePrompt))
+    );
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "claude-code",
+    });
+    const { turn } = session.sendPrompt("hi");
+
+    mock.emit({
+      sessionId: "acp-1",
+      update: {
+        sessionUpdate: "tool_call",
+        toolCallId: "tc1",
+        title: "Agent",
+        status: "in_progress",
+        progress: { description: "Inspect vault", toolUses: 1 },
+      },
+    });
+    mock.emit({
+      sessionId: "acp-1",
+      update: {
+        sessionUpdate: "tool_call_update",
+        toolCallId: "tc1",
+        progress: { toolUses: 3, durationMs: 9851 },
+      },
+    });
+
+    const part = session.store.getDisplayMessages().find((message) => message.sender === AI_SENDER)
+      ?.parts?.[0];
+    expect(part).toMatchObject({
+      kind: "tool_call",
+      progress: { description: "Inspect vault", toolUses: 3, durationMs: 9851 },
+    });
+
+    resolvePrompt!({ stopReason: "end_turn" });
+    await turn;
+  });
+
   // Emit one completed tool call with `text` output and return the stored output.
   const storedToolOutput = async (text: string): Promise<AgentToolCallOutput | undefined> => {
     const mock = makeMockBackend();

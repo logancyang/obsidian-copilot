@@ -130,6 +130,27 @@ describe("AgentMessageStore", () => {
     expect(store.upsertAgentPart(id, { ...part })).toBe(false);
   });
 
+  it("notifies for progress changes but skips identical progress", () => {
+    const store = new AgentMessageStore();
+    const id = store.addMessage(placeholder());
+    const part: AgentMessagePart = {
+      kind: "tool_call",
+      id: "tc1",
+      title: "Agent",
+      status: "in_progress",
+      progress: { description: "Inspect vault", toolUses: 1, durationMs: 1000 },
+    };
+
+    expect(store.upsertAgentPart(id, part)).toBe(true);
+    expect(store.upsertAgentPart(id, { ...part, progress: { ...part.progress } })).toBe(false);
+    expect(
+      store.upsertAgentPart(id, {
+        ...part,
+        progress: { ...part.progress, toolUses: 2 },
+      })
+    ).toBe(true);
+  });
+
   it("upsertAgentPart compares large repeated tool outputs without duplicating", () => {
     const store = new AgentMessageStore();
     const id = store.addMessage(placeholder());

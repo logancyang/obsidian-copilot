@@ -20,6 +20,14 @@ interface SubAgentCardProps {
   renderNode: (node: RenderNode, key: string | number) => React.ReactNode;
 }
 
+/**
+ * Keeps delegated work attached to its launch so the prompt, progress, and report remain one traceable unit.
+ * @param parent - The tool call that launched the delegated work.
+ * @param childNodes - The nested activity produced by the delegated work.
+ * @param truncated - Whether omitted activity should be disclosed to the user.
+ * @param app - The Obsidian application used to render note-aware content.
+ * @param renderNode - The renderer for nested agent-trail nodes.
+ */
 export const SubAgentCard: React.FC<SubAgentCardProps> = ({
   parent,
   childNodes,
@@ -32,6 +40,7 @@ export const SubAgentCard: React.FC<SubAgentCardProps> = ({
   const summary = lookupToolSummary(parent);
   const Icon = summary.icon;
   const line = summary.collapsedLine(parent);
+  const outcome = summary.outcome(parent);
   const childCounts = countChildren(childNodes);
   const inputPrompt = extractSubAgentInputPrompt(parent);
   const returnText = extractSubAgentReturnText(parent);
@@ -52,9 +61,12 @@ export const SubAgentCard: React.FC<SubAgentCardProps> = ({
           <ChevronRight className="tw-size-3 tw-text-muted" />
         )}
       </div>
+      {outcome ? <div className="tw-pl-5 tw-text-xs tw-text-muted">{outcome}</div> : null}
       {open ? (
         <div className="tw-mt-2 tw-flex tw-flex-col tw-gap-1 tw-border-l tw-border-border tw-pl-3">
-          <div className="tw-text-xs tw-text-muted">{describeCounts(childCounts, truncated)}</div>
+          {childCounts.tools > 0 || childCounts.reasoning > 0 || truncated ? (
+            <div className="tw-text-xs tw-text-muted">{describeCounts(childCounts, truncated)}</div>
+          ) : null}
           {inputPrompt ? (
             <div className="tw-my-1">
               <div

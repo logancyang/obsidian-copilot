@@ -2,6 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import { Bot, MessageCircleQuestion } from "lucide-react";
 import { pickToolIcon } from "@/agentMode/ui/toolIcons";
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
+import { formatDuration } from "@/lib/duration";
 import { isAbsolutePath, toVaultRelative } from "@/utils/vaultPath";
 
 /**
@@ -402,7 +403,19 @@ const TASK_SUMMARY: ToolSummary = {
           : targetFromTitle(p);
     return agent ? `${agent} · "${desc}"` : `Sub-agent · "${desc}"`;
   },
-  outcome: () => null,
+  outcome: (p) => {
+    const progress = p.progress;
+    if (!progress) return null;
+    const bits: string[] = [];
+    if ((p.status === "pending" || p.status === "in_progress") && progress.description?.trim()) {
+      bits.push(`Running ${progress.description.trim()}`);
+    }
+    if (progress.toolUses !== undefined) {
+      bits.push(pluralize(progress.toolUses, "tool"));
+    }
+    if (progress.durationMs !== undefined) bits.push(formatDuration(progress.durationMs));
+    return bits.length > 0 ? bits.join(" · ") : null;
+  },
   aggregate: (parts) => ({
     line: `Ran ${pluralize(parts.length, "sub-agent")}${statusSuffix(parts)}`,
     outcome: "",
@@ -585,13 +598,8 @@ export function extractSubAgentInputPrompt(part: ToolCallPart): string | null {
 }
 
 /**
- * Extract the sub-agent return value from a Task / sub-agent tool call's
- * output. Strips `<task_result>…</task_result>` markers (opencode wraps
- * the result this way) and returns the inner text. Returns null when
- * the part has no text output, or when the output is identical to the
- * input prompt — Claude Code initially echoes the prompt as the Agent
- * tool's `content` before the sub-agent has produced anything, and that
- * echoed prompt would otherwise render in the "response" slot.
+ * Selects the user-visible delegated-work report so internal acknowledgments and echoed prompts are not mistaken for results.
+ * @param part - The subagent tool call whose displayable report is needed.
  */
 export function extractSubAgentReturnText(part: ToolCallPart): string | null {
   if (!part.output) return null;
@@ -601,6 +609,11 @@ export function extractSubAgentReturnText(part: ToolCallPart): string | null {
   const m = joined.match(/<task_result>([\s\S]*?)<\/task_result>/);
   const result = m ? m[1].trim() : joined.trim();
   if (!result) return null;
+  // A background subagent's launch ack ("Async agent launched…") is internal
+  // metadata explicitly marked "never quote to the user" — never render it as
+  // the return value. The live path suppresses it upstream (SDK translator);
+  // this also covers a resumed transcript that reconstructs the ack as output.
+  if (result.startsWith("Async agent launched")) return null;
   const prompt = extractSubAgentInputPrompt(part);
   if (prompt && prompt === result) return null;
   return result;

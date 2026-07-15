@@ -86,11 +86,28 @@ function partsEqual(a: AgentMessagePart, b: AgentMessagePart): boolean {
         a.status === b.status &&
         a.vendorToolName === b.vendorToolName &&
         a.parentToolCallId === b.parentToolCallId &&
+        toolProgressEqual(a.progress, b.progress) &&
         boundedValueEqual(a.input, b.input) &&
         locationsEqual(a.locations, b.locations) &&
         toolOutputsEqual(a.output, b.output)
       );
   }
+}
+
+/** Compare normalized progress without serializing the surrounding tool input/output. */
+function toolProgressEqual(
+  a: Extract<AgentMessagePart, { kind: "tool_call" }>["progress"],
+  b: Extract<AgentMessagePart, { kind: "tool_call" }>["progress"]
+): boolean {
+  if (a === b) return true;
+  if (!a || !b) return a === b;
+  return (
+    a.description === b.description &&
+    a.toolName === b.toolName &&
+    a.toolUses === b.toolUses &&
+    a.durationMs === b.durationMs &&
+    a.totalTokens === b.totalTokens
+  );
 }
 
 /**

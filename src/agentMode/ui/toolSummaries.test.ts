@@ -196,6 +196,28 @@ describe("lookupToolSummary", () => {
     expect(lookupToolSummary(t).collapsedLine(t, CTX)).toBe("Tool call");
   });
 
+  it("summarizes live subagent progress and omits stale descriptions after completion", () => {
+    const running = tool({
+      vendorToolName: "Agent",
+      status: "in_progress",
+      progress: {
+        description: "Count markdown files and subfolders",
+        toolUses: 3,
+        durationMs: 9851,
+      },
+    });
+    const done = tool({
+      ...running,
+      status: "completed",
+      progress: { ...running.progress, toolUses: 19, durationMs: 66_000 },
+    });
+
+    expect(lookupToolSummary(running).outcome(running)).toBe(
+      "Running Count markdown files and subfolders · 3 tools · 9s"
+    );
+    expect(lookupToolSummary(done).outcome(done)).toBe("19 tools · 1m 6s");
+  });
+
   it("summarizes AskUserQuestion with the question header", () => {
     const t = tool({
       vendorToolName: "AskUserQuestion",
@@ -396,6 +418,18 @@ describe("extractSubAgentReturnText", () => {
       output: [{ type: "text", text: "Here is what I found: …" }],
     });
     expect(extractSubAgentReturnText(t)).toBe("Here is what I found: …");
+  });
+
+  it("never surfaces a background subagent's launch ack as the return value", () => {
+    // Internal metadata explicitly marked "never quote to the user" — a resumed
+    // transcript could reconstruct it as the launch card's output.
+    const t = tool({
+      input: { prompt: "analyze notes" },
+      output: [
+        { type: "text", text: "Async agent launched successfully.\nagentId: abc123 (internal ID)" },
+      ],
+    });
+    expect(extractSubAgentReturnText(t)).toBeNull();
   });
 });
 

@@ -172,7 +172,6 @@ describe("translateSdkMessage", () => {
       name: "Tool",
       inputJsonAcc: "",
       lastParsedInput: {},
-      emittedToolCall: false,
     });
     translateSdkMessage(streamEvent({ type: "message_start", message: {} }), SESSION_ID, state);
     expect(state.toolUseBlocks.size).toBe(0);
@@ -724,6 +723,396 @@ describe("translateSdkMessage", () => {
       state
     );
     expect(out).toEqual([]);
+  });
+});
+
+describe("sdkMessageTranslator", () => {
+  describe("translateSdkMessage()", () => {
+    describe("background subagent system frames", () => {
+      const UUID = "uuid-1" as `${string}-${string}-${string}-${string}-${string}`;
+
+      function systemMessage(fields: Record<string, unknown>): SDKMessage {
+        return {
+          type: "system",
+          uuid: UUID,
+          session_id: SESSION_ID,
+          ...fields,
+        } as unknown as SDKMessage;
+      }
+
+      function launchAckResult(toolUseId: string, agentId = "abc123"): SDKMessage {
+        return {
+          type: "user",
+          tool_use_result: { isAsync: true, status: "async_launched", agentId },
+          message: {
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: toolUseId,
+                is_error: false,
+                content: [{ type: "text", text: "Async agent launched successfully." }],
+              },
+            ],
+          },
+          parent_tool_use_id: null,
+          session_id: SESSION_ID,
+        } as unknown as SDKMessage;
+      }
+
+      function trackToolUse(
+        state: ReturnType<typeof createTranslatorState>,
+        id: string,
+        name: string,
+        input: Record<string, unknown> = {}
+      ): void {
+        translateSdkMessage(
+          streamEvent({
+            type: "content_block_start",
+            index: state.emittedToolUseIds.size,
+            content_block: { type: "tool_use", id, name, input },
+          }),
+          SESSION_ID,
+          state
+        );
+      }
+
+      // Task frames only apply once we've tracked the launch (agentId "abc123" →
+      // card "tu-launch"); seed that so the gate lets them through.
+      function seedLaunch(state: ReturnType<typeof createTranslatorState>): void {
+        trackToolUse(state, "tu-launch", "Agent");
+        translateSdkMessage(launchAckResult("tu-launch"), SESSION_ID, state);
+      }
+
+      it("binds task_started before the async acknowledgement arrives", () => {
+        const state = createTranslatorState();
+        trackToolUse(state, "tu-launch", "Agent");
+
+        const started = translateSdkMessage(
+          systemMessage({
+            subtype: "task_started",
+            task_id: "abc123",
+            tool_use_id: "tu-launch",
+            description: "Analyze vault",
+          }),
+          SESSION_ID,
+          state
+        );
+
+        expect(started[0].update).toMatchObject({
+          toolCallId: "tu-launch",
+          status: "in_progress",
+        });
+        expect(translateSdkMessage(launchAckResult("tu-launch"), SESSION_ID, state)).toEqual([]);
+      });
+
+      it("folds task_notification onto the launch card as its output + terminal status", () => {
+        const state = createTranslatorState();
+        seedLaunch(state);
+        const out = translateSdkMessage(
+          systemMessage({
+            subtype: "task_notification",
+            task_id: "abc123",
+            tool_use_id: "tu-launch",
+            status: "completed",
+            summary: "Most prominent category: AI/agents (16 notes).",
+          }),
+          SESSION_ID,
+          state
+        );
+        expect(out).toEqual([
+          {
+            sessionId: SESSION_ID,
+            update: {
+              sessionUpdate: "tool_call_update",
+              toolCallId: "tu-launch",
+              status: "completed",
+              content: [
+                {
+                  type: "content",
+                  content: { type: "text", text: "Most prominent category: AI/agents (16 notes)." },
+                },
+              ],
+            },
+          },
+        ]);
+      });
+
+      it("maps a non-completed task_notification status to failed", () => {
+        const state = createTranslatorState();
+        seedLaunch(state);
+        const out = translateSdkMessage(
+          systemMessage({
+            subtype: "task_notification",
+            task_id: "abc123",
+            tool_use_id: "tu-launch",
+            status: "stopped",
+            summary: "",
+          }),
+          SESSION_ID,
+          state
+        );
+        expect(out).toHaveLength(1);
+        expect(out[0].update).toMatchObject({ toolCallId: "tu-launch", status: "failed" });
+        // Empty summary contributes no content field (nothing to render).
+        expect((out[0].update as { content?: unknown }).content).toBeUndefined();
+      });
+
+      it.each([
+        ["completed", "completed"],
+        ["stopped", "failed"],
+      ])("uses the shared terminal mapping for task_notification status %s", (status, expected) => {
+        const state = createTranslatorState();
+        seedLaunch(state);
+        const out = translateSdkMessage(
+          systemMessage({
+            subtype: "task_notification",
+            task_id: "abc123",
+            tool_use_id: "tu-launch",
+            status,
+          }),
+          SESSION_ID,
+          state
+        );
+        expect(out[0].update).toMatchObject({ toolCallId: "tu-launch", status: expected });
+      });
+
+      it("keeps task_started in progress and normalizes meaningful task_progress", () => {
+        const state = createTranslatorState();
+        seedLaunch(state);
+        expect(
+          translateSdkMessage(
+            systemMessage({
+              subtype: "task_started",
+              task_id: "abc123",
+              tool_use_id: "tu-launch",
+              description: "started",
+            }),
+            SESSION_ID,
+            state
+          )[0].update
+        ).toEqual({
+          sessionUpdate: "tool_call_update",
+          toolCallId: "tu-launch",
+          status: "in_progress",
+        });
+        expect(
+          translateSdkMessage(
+            systemMessage({
+              subtype: "task_progress",
+              task_id: "abc123",
+              tool_use_id: "tu-launch",
+              description: "Count markdown files",
+              last_tool_name: "Read",
+              usage: { tool_uses: 3, duration_ms: 9851, total_tokens: 4210 },
+            }),
+            SESSION_ID,
+            state
+          )[0].update
+        ).toEqual({
+          sessionUpdate: "tool_call_update",
+          toolCallId: "tu-launch",
+          status: "in_progress",
+          progress: {
+            description: "Count markdown files",
+            toolName: "Read",
+            toolUses: 3,
+            durationMs: 9851,
+            totalTokens: 4210,
+          },
+        });
+      });
+
+      it("ignores a straggling task_progress after the notification settled the card", () => {
+        const state = createTranslatorState();
+        seedLaunch(state);
+        translateSdkMessage(
+          systemMessage({
+            subtype: "task_notification",
+            task_id: "abc123",
+            tool_use_id: "tu-launch",
+            status: "completed",
+            summary: "done",
+          }),
+          SESSION_ID,
+          state
+        );
+        const out = translateSdkMessage(
+          systemMessage({
+            subtype: "task_progress",
+            task_id: "abc123",
+            tool_use_id: "tu-launch",
+            description: "…",
+          }),
+          SESSION_ID,
+          state
+        );
+        expect(out).toEqual([]);
+      });
+
+      it("ignores a task_notification that is not a tracked subagent launch (background Bash/Monitor)", () => {
+        const state = createTranslatorState();
+        seedLaunch(state); // tracks agentId "abc123" → "tu-launch"
+        // A background Bash finishing: task_id/tool_use_id don't match the tracked
+        // launch, so it must NOT clobber that (or any) card.
+        expect(
+          translateSdkMessage(
+            systemMessage({
+              subtype: "task_notification",
+              task_id: "bash-task",
+              tool_use_id: "tu-bash",
+              status: "completed",
+              summary: "done",
+            }),
+            SESSION_ID,
+            state
+          )
+        ).toEqual([]);
+        // Right task_id but a different tool_use_id (stale/other card) is also ignored.
+        expect(
+          translateSdkMessage(
+            systemMessage({
+              subtype: "task_notification",
+              task_id: "abc123",
+              tool_use_id: "tu-other",
+              status: "completed",
+              summary: "done",
+            }),
+            SESSION_ID,
+            state
+          )
+        ).toEqual([]);
+      });
+
+      it("correlates task frames with no tool_use_id after acknowledgement", () => {
+        const state = createTranslatorState();
+        seedLaunch(state);
+
+        const progress = translateSdkMessage(
+          systemMessage({
+            subtype: "task_progress",
+            task_id: "abc123",
+            description: "Count notes",
+          }),
+          SESSION_ID,
+          state
+        );
+        const completed = translateSdkMessage(
+          systemMessage({
+            subtype: "task_notification",
+            task_id: "abc123",
+            status: "completed",
+            summary: "done",
+          }),
+          SESSION_ID,
+          state
+        );
+
+        expect(progress[0].update).toMatchObject({
+          toolCallId: "tu-launch",
+          status: "in_progress",
+          progress: { description: "Count notes" },
+        });
+        expect(completed[0].update).toMatchObject({
+          toolCallId: "tu-launch",
+          status: "completed",
+        });
+      });
+
+      it("ignores task_updated frames", () => {
+        const state = createTranslatorState();
+        seedLaunch(state);
+
+        expect(
+          translateSdkMessage(
+            systemMessage({
+              subtype: "task_updated",
+              task_id: "abc123",
+              patch: { status: "completed" },
+            }),
+            SESSION_ID,
+            state
+          )
+        ).toEqual([]);
+      });
+
+      it("suppresses the async-launch ack tool_result so the launch stays in_progress", () => {
+        const state = createTranslatorState();
+        trackToolUse(state, "tu-launch", "Agent");
+        expect(translateSdkMessage(launchAckResult("tu-launch"), SESSION_ID, state)).toEqual([]);
+      });
+
+      it("suppresses only the launch-ack block, still translating a batched sibling result", () => {
+        const state = createTranslatorState();
+        trackToolUse(state, "tu-launch", "Agent");
+        trackToolUse(state, "tu-read", "Read");
+        const batched = {
+          type: "user",
+          tool_use_result: { isAsync: true, status: "async_launched", agentId: "abc123" },
+          message: {
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: "tu-launch",
+                content: [{ type: "text", text: "Async agent launched successfully." }],
+              },
+              { type: "tool_result", tool_use_id: "tu-read", content: "file contents" },
+            ],
+          },
+          parent_tool_use_id: null,
+          session_id: SESSION_ID,
+        } as unknown as SDKMessage;
+        const out = translateSdkMessage(batched, SESSION_ID, state);
+        // Only the sibling Read is translated; the launch ack is suppressed.
+        expect(out).toHaveLength(1);
+        expect(out[0].update).toMatchObject({ toolCallId: "tu-read", status: "completed" });
+      });
+
+      it("matches a batched launch ack to the Agent result when it is not the first block", () => {
+        const state = createTranslatorState();
+        trackToolUse(state, "tu-read", "Read");
+        trackToolUse(state, "tu-launch", "Agent");
+        const batched = {
+          type: "user",
+          tool_use_result: { isAsync: true, status: "async_launched", agentId: "abc123" },
+          message: {
+            content: [
+              { type: "tool_result", tool_use_id: "tu-read", content: "file contents" },
+              {
+                type: "tool_result",
+                tool_use_id: "tu-launch",
+                content: [{ type: "text", text: "Async agent launched successfully." }],
+              },
+            ],
+          },
+          parent_tool_use_id: null,
+          session_id: SESSION_ID,
+        } as unknown as SDKMessage;
+
+        const out = translateSdkMessage(batched, SESSION_ID, state);
+
+        expect(out).toHaveLength(1);
+        expect(out[0].update).toMatchObject({ toolCallId: "tu-read", status: "completed" });
+      });
+
+      it("still completes a genuine (non-launch) tool_result", () => {
+        const state = createTranslatorState();
+        const out = translateSdkMessage(
+          {
+            type: "user",
+            message: {
+              content: [
+                { type: "tool_result", tool_use_id: "tu-real", content: "done", is_error: false },
+              ],
+            },
+            parent_tool_use_id: null,
+            session_id: SESSION_ID,
+          } as unknown as SDKMessage,
+          SESSION_ID,
+          state
+        );
+        expect(out[0].update).toMatchObject({ toolCallId: "tu-real", status: "completed" });
+      });
+    });
   });
 });
 
