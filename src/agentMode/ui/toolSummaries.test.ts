@@ -41,13 +41,26 @@ describe("lookupToolSummary", () => {
     expect(lookupToolSummary(t).collapsedLine(t, CTX)).toBe("Read notes/music-theory.md");
   });
 
-  it("falls back to the original path when the file is outside the vault", () => {
+  it("hides parent directories outside the vault without changing the navigation target", () => {
     const t = tool({
       vendorToolName: "Read",
       title: "read",
       locations: [{ path: "/etc/passwd" }],
     });
-    expect(lookupToolSummary(t).collapsedLine(t, CTX)).toBe("Read /etc/passwd");
+    const summary = lookupToolSummary(t);
+    expect(summary.collapsedLine(t, CTX)).toBe("Read …/passwd");
+    expect(summary.targetPath?.(t, CTX)).toBe("/etc/passwd");
+  });
+
+  it("hides parent directories for ACP read paths without vault context", () => {
+    const t = tool({
+      toolKind: "read",
+      title: "Read",
+      input: { filePath: "/Users/me/private/draft.md" },
+    });
+    expect(lookupToolSummary(t).collapsedLine(t, { vaultBase: null })).toBe("Read …/draft.md");
+    const windows = { ...t, input: { filePath: "C:\\Users\\me\\private\\draft.md" } };
+    expect(lookupToolSummary(windows).collapsedLine(windows, CTX)).toBe("Read …/draft.md");
   });
 
   it("aggregates Edits with combined +/- line counts and counts notes", () => {
