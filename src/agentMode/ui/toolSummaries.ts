@@ -2,7 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import { Bot, MessageCircleQuestion } from "lucide-react";
 import { pickToolIcon } from "@/agentMode/ui/toolIcons";
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
-import { toVaultRelative } from "@/utils/vaultPath";
+import { isAbsolutePath, toVaultRelative } from "@/utils/vaultPath";
 
 /**
  * Render-time context passed through to the summary callbacks that need
@@ -202,6 +202,13 @@ function targetFromPath(part: ToolCallPart, vaultBase: string | null): string | 
   return null;
 }
 
+function displayTargetFromPath(part: ToolCallPart, vaultBase: string | null): string | null {
+  const path = targetFromPath(part, vaultBase);
+  if (!path || !isAbsolutePath(path)) return path;
+  const leaf = path.replace(/\\/g, "/").replace(/\/+$/, "").split("/").pop();
+  return leaf ? `…/${leaf}` : "…";
+}
+
 /**
  * The skill identifier from a `Skill` tool call's input (Claude Code logs the
  * slash-command name as `input.skill`, e.g. "copilot-read-pdf"). Returns the
@@ -253,7 +260,7 @@ function approxTokens(part: ToolCallPart): number {
 const READ_SUMMARY: ToolSummary = {
   icon: pickToolIcon({ vendorToolName: "Read" }),
   collapsedLine: (p, ctx) =>
-    `${verb(p, "Reading", "Read")} ${targetFromPath(p, ctx?.vaultBase ?? null) ?? targetFromTitle(p)}`,
+    `${verb(p, "Reading", "Read")} ${displayTargetFromPath(p, ctx?.vaultBase ?? null) ?? targetFromTitle(p)}`,
   outcome: (p) => {
     const t = approxTokens(p);
     return t > 0 ? `~${formatTokens(t)} tokens` : null;
@@ -272,7 +279,7 @@ const LIST_SUMMARY: ToolSummary = {
   icon: pickToolIcon({ vendorToolName: "LS" }),
   collapsedLine: (p, ctx) => {
     const v = verb(p, "Listing", "Listed");
-    const path = targetFromPath(p, ctx?.vaultBase ?? null);
+    const path = displayTargetFromPath(p, ctx?.vaultBase ?? null);
     return path ? `${v} ${path}` : `${v} vault root`;
   },
   outcome: () => null,
@@ -285,7 +292,7 @@ const LIST_SUMMARY: ToolSummary = {
 const EDIT_SUMMARY: ToolSummary = {
   icon: pickToolIcon({ vendorToolName: "Edit" }),
   collapsedLine: (p, ctx) =>
-    `${verb(p, "Editing", "Edited")} ${targetFromPath(p, ctx?.vaultBase ?? null) ?? targetFromTitle(p)}`,
+    `${verb(p, "Editing", "Edited")} ${displayTargetFromPath(p, ctx?.vaultBase ?? null) ?? targetFromTitle(p)}`,
   outcome: (p) => {
     const { added, removed } = diffStats(p);
     if (added === 0 && removed === 0) return null;
@@ -506,7 +513,7 @@ const KIND_FETCH_SUMMARY: ToolSummary = {
 const KIND_DELETE_SUMMARY: ToolSummary = {
   icon: pickToolIcon({ toolKind: "delete" }),
   collapsedLine: (p, ctx) =>
-    `${verb(p, "Deleting", "Deleted")} ${targetFromPath(p, ctx?.vaultBase ?? null) ?? targetFromTitle(p)}`,
+    `${verb(p, "Deleting", "Deleted")} ${displayTargetFromPath(p, ctx?.vaultBase ?? null) ?? targetFromTitle(p)}`,
   outcome: () => null,
   aggregate: (parts) => ({
     line: `Deleted ${pluralize(parts.length, "item")}${statusSuffix(parts)}`,
@@ -516,7 +523,7 @@ const KIND_DELETE_SUMMARY: ToolSummary = {
 const KIND_MOVE_SUMMARY: ToolSummary = {
   icon: pickToolIcon({ toolKind: "move" }),
   collapsedLine: (p, ctx) =>
-    `${verb(p, "Moving", "Moved")} ${targetFromPath(p, ctx?.vaultBase ?? null) ?? targetFromTitle(p)}`,
+    `${verb(p, "Moving", "Moved")} ${displayTargetFromPath(p, ctx?.vaultBase ?? null) ?? targetFromTitle(p)}`,
   outcome: () => null,
   aggregate: (parts) => ({
     line: `Moved ${pluralize(parts.length, "item")}${statusSuffix(parts)}`,
