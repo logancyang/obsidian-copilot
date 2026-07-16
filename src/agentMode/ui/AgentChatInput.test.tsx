@@ -274,6 +274,52 @@ describe("AgentChatInput status-icon boundary", () => {
   });
 });
 
+describe("AgentChatInput compose reset ordering", () => {
+  beforeEach(() => {
+    mockUseCanUseMultiAgent.mockReturnValue(true);
+  });
+
+  it("regression: clears the composer before awaiting attached-image conversion (#211)", async () => {
+    // Hold the image read open so ordering is observable. The composer must
+    // clear the instant the user sends, not after every File.arrayBuffer()
+    // resolves — leaving the draft populated across those awaits let the
+    // Lexical editor race resetCompose and strand the just-sent text in the
+    // input when text was sent alongside images.
+    let resolveRead!: (buf: ArrayBuffer) => void;
+    const image = {
+      type: "image/png",
+      arrayBuffer: () =>
+        new Promise<ArrayBuffer>((resolve) => {
+          resolveRead = resolve;
+        }),
+    } as unknown as File;
+
+    const backend = {
+      sendMessage: jest.fn(() => ({ turn: Promise.resolve() })),
+      cancel: jest.fn(),
+    } as unknown as AgentChatBackend;
+    const draft = makeDraft({ images: [image] });
+
+    renderInput(backend, draft);
+    fireEvent.click(screen.getByText("send"));
+
+    // Composer is cleared while the image read is still pending, before the
+    // turn is dispatched.
+    await waitFor(() => expect(draft.resetCompose).toHaveBeenCalledTimes(1));
+    expect(backend.sendMessage).not.toHaveBeenCalled();
+
+    // Finishing the read lets the turn fire with the converted image attached.
+    await act(async () => {
+      resolveRead(new ArrayBuffer(1));
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(1));
+    const promptContent = (backend.sendMessage as jest.Mock).mock.calls[0][2];
+    expect(promptContent).toHaveLength(1);
+    expect(promptContent[0].type).toBe("image");
+  });
+});
+
 describe("AgentChatInput hard-disable", () => {
   it("drops a send when the composer is disabled (orphaned project)", async () => {
     // The mocked ChatInput's send button routes through handleSendMessage — the
