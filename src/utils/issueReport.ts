@@ -7,7 +7,13 @@
  *
  * Pure of singletons: the Node runtime is injectable so the assembler is
  * unit-testable without touching the real filesystem.
+ *
+ * The frame and opencode logs are redacted (see `redactLog`) before they are
+ * written into the bundle — they are never copied verbatim, because they carry
+ * absolute home paths and may carry tokens or emails.
  */
+
+import { redactLogText } from "./redactLog";
 
 /**
  * End-user reports go to the PUBLIC repo. The private `obsidian-copilot-preview`
@@ -59,7 +65,7 @@ export interface ReportRuntime {
   join: (...parts: string[]) => string;
   mkdir: (path: string, opts: { recursive: boolean }) => Promise<void>;
   writeFile: (path: string, data: string | Uint8Array) => Promise<void>;
-  copyFile: (src: string, dest: string) => Promise<void>;
+  readFile: (path: string) => Promise<string>;
 }
 
 /**
@@ -86,21 +92,21 @@ export async function assembleReportBundle(
     }
   }
 
-  if (input.frameLogPath) {
+  // Logs are read, redacted, and written — never copied verbatim. They contain
+  // absolute home paths, and can contain tokens or emails, none of which may
+  // leave the machine in a bug report.
+  for (const log of [
+    { path: input.frameLogPath, name: FRAME_LOG_NAME },
+    { path: input.opencodeLogPath, name: OPENCODE_LOG_NAME },
+  ]) {
+    if (!log.path) continue;
     try {
-      await runtime.copyFile(input.frameLogPath, runtime.join(folderPath, FRAME_LOG_NAME));
-      files.push(FRAME_LOG_NAME);
+      const redacted = redactLogText(await runtime.readFile(log.path));
+      await runtime.writeFile(runtime.join(folderPath, log.name), redacted);
+      files.push(log.name);
     } catch {
-      // Frame log may not exist yet (logging just enabled); skip it.
-    }
-  }
-
-  if (input.opencodeLogPath) {
-    try {
-      await runtime.copyFile(input.opencodeLogPath, runtime.join(folderPath, OPENCODE_LOG_NAME));
-      files.push(OPENCODE_LOG_NAME);
-    } catch {
-      // opencode log may be absent; skip it.
+      // A log may not exist yet (frame logging just enabled) or be unreadable;
+      // skip it rather than failing the whole report.
     }
   }
 
@@ -191,6 +197,6 @@ function getNodeReportRuntime(): ReportRuntime {
       await fs.mkdir(p, opts);
     },
     writeFile: (p, data) => fs.writeFile(p, data),
-    copyFile: (src, dest) => fs.copyFile(src, dest),
+    readFile: (p) => fs.readFile(p, "utf8"),
   };
 }

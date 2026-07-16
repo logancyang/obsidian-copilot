@@ -8,8 +8,9 @@ import {
 
 function makeRuntime(overrides: Partial<ReportRuntime> = {}) {
   const writes: Array<{ path: string; data: string | Uint8Array }> = [];
-  const copies: Array<{ src: string; dest: string }> = [];
   const mkdirs: string[] = [];
+  // Every log read carries a home path and a secret so tests can assert the
+  // written bundle copy is redacted rather than verbatim.
   const runtime: ReportRuntime = {
     join: (...parts) => parts.join("/"),
     mkdir: async (p) => {
@@ -18,12 +19,14 @@ function makeRuntime(overrides: Partial<ReportRuntime> = {}) {
     writeFile: async (p, data) => {
       writes.push({ path: p, data });
     },
-    copyFile: async (src, dest) => {
-      copies.push({ src, dest });
-    },
+    readFile: async (p) => `log from ${p} for /Users/alice/vault key sk-abcdef0123456789`,
     ...overrides,
   };
-  return { runtime, writes, copies, mkdirs };
+  return { runtime, writes, mkdirs };
+}
+
+function writtenText(writes: Array<{ path: string; data: string | Uint8Array }>, suffix: string) {
+  return String(writes.find((w) => w.path.endsWith(suffix))?.data ?? "");
 }
 
 const baseInput: ReportInput = {
@@ -43,7 +46,7 @@ const baseInput: ReportInput = {
 
 describe("assembleReportBundle", () => {
   it("creates a timestamped folder and writes all files when everything is present", async () => {
-    const { runtime, writes, copies, mkdirs } = makeRuntime();
+    const { runtime, writes, mkdirs } = makeRuntime();
     const result = await assembleReportBundle(baseInput, runtime);
 
     expect(result.folderPath).toBe("/tmp/reports/report-20260615-101500");
@@ -60,16 +63,19 @@ describe("assembleReportBundle", () => {
       "/tmp/reports/report-20260615-101500/screenshot.png"
     );
     expect(writes.map((w) => w.path)).toContain("/tmp/reports/report-20260615-101500/report.md");
-    expect(copies).toEqual([
-      {
-        src: "/tmp/acp-frames.ndjson",
-        dest: "/tmp/reports/report-20260615-101500/acp-frames.ndjson.txt",
-      },
-      {
-        src: "/tmp/opencode/log/session.log",
-        dest: "/tmp/reports/report-20260615-101500/opencode.log",
-      },
-    ]);
+  });
+
+  it("redacts the frame and opencode logs it writes rather than copying them verbatim", async () => {
+    const { runtime, writes } = makeRuntime();
+    await assembleReportBundle(baseInput, runtime);
+
+    for (const name of ["acp-frames.ndjson.txt", "opencode.log"]) {
+      const text = writtenText(writes, name);
+      expect(text).toContain("/Users/<user>/vault");
+      expect(text).toContain("<secret>");
+      expect(text).not.toContain("/Users/alice");
+      expect(text).not.toContain("sk-abcdef0123456789");
+    }
   });
 
   it("skips the screenshot when none was captured", async () => {
@@ -83,19 +89,20 @@ describe("assembleReportBundle", () => {
   });
 
   it("omits the opencode log when not provided", async () => {
-    const { runtime, copies } = makeRuntime();
+    const { runtime, writes } = makeRuntime();
     const result = await assembleReportBundle({ ...baseInput, opencodeLogPath: null }, runtime);
 
     expect(result.files).not.toContain("opencode.log");
-    expect(copies.map((c) => c.dest)).not.toContain(
+    expect(writes.map((w) => w.path)).not.toContain(
       "/tmp/reports/report-20260615-101500/opencode.log"
     );
   });
 
-  it("skips a frame log that fails to copy instead of failing the whole report", async () => {
+  it("skips a frame log that fails to read instead of failing the whole report", async () => {
     const { runtime } = makeRuntime({
-      copyFile: async (src) => {
-        if (src.includes("acp-frames")) throw new Error("ENOENT");
+      readFile: async (p) => {
+        if (p.includes("acp-frames")) throw new Error("ENOENT");
+        return "log for /Users/alice";
       },
     });
     const result = await assembleReportBundle(baseInput, runtime);
