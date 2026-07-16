@@ -23,7 +23,7 @@ import { YoutubeTranscriptModal } from "@/components/modals/YoutubeTranscriptMod
 import { checkIsPaidUser } from "@/plusUtils";
 // Debug modals removed with search v3
 import CopilotPlugin from "@/main";
-import { shouldUseMiyo } from "@/miyo/miyoUtils";
+import { getSearchBackend } from "@/miyo/miyoUtils";
 import { getAllQAMarkdownContent } from "@/search/searchUtils";
 import { NoteSelectedTextContext, WebSelectedTextContext } from "@/types/message";
 import { ensureFolderExists, isSourceModeOn } from "@/utils";
@@ -206,7 +206,7 @@ export function registerCommands(plugin: CopilotPlugin) {
   addCommand(plugin, COMMAND_IDS.CLEAR_LOCAL_COPILOT_INDEX, async () => {
     const { getSettings } = await import("@/settings/model");
     const settings = getSettings();
-    const isMiyoEnabled = shouldUseMiyo(settings);
+    const isMiyoEnabled = getSearchBackend(settings) === "miyo";
     if (isMiyoEnabled) {
       new Notice(
         "Miyo folders are managed in Miyo. Remove the folder there if you want to clear it."
@@ -240,7 +240,7 @@ export function registerCommands(plugin: CopilotPlugin) {
   addCommand(plugin, COMMAND_IDS.GARBAGE_COLLECT_COPILOT_INDEX, async () => {
     try {
       const { getSettings } = await import("@/settings/model");
-      if (shouldUseMiyo(getSettings())) {
+      if (getSearchBackend(getSettings()) === "miyo") {
         new Notice(
           "Miyo manages file cleanup automatically. Run Index (refresh) vault to trigger a scan if needed."
         );
@@ -268,7 +268,7 @@ export function registerCommands(plugin: CopilotPlugin) {
         const count = await VectorStoreManager.getInstance().indexVaultToVectorStore(false, {
           userInitiated: true,
         });
-        if (shouldUseMiyo(settings)) {
+        if (getSearchBackend(settings) === "miyo") {
           new Notice("Miyo folder index refresh started. Open the Miyo app to check details.");
         } else {
           new Notice(`Semantic search index refreshed with ${count} documents.`);
@@ -306,7 +306,7 @@ export function registerCommands(plugin: CopilotPlugin) {
         const count = await VectorStoreManager.getInstance().indexVaultToVectorStore(true, {
           userInitiated: true,
         });
-        if (shouldUseMiyo(settings)) {
+        if (getSearchBackend(settings) === "miyo") {
           new Notice("Miyo folder index refresh started. Open the Miyo app to check details.");
         } else {
           new Notice(`Semantic search index rebuilt with ${count} documents.`);

@@ -142,6 +142,12 @@ export interface CopilotSettings {
   enableSelfHostMode: boolean;
   /** Enable Miyo-backed indexing and semantic search when self-host mode is active */
   enableMiyo: boolean;
+  /**
+   * User-controlled install of the `miyo-search` agent skill (path B: agent tool +
+   * system-prompt steering). Independent of `enableSemanticSearchV3` (path A: the
+   * Copilot chat/QA vector retrieval), which stays owned by Miyo Connect/Disconnect.
+   */
+  enableMiyoSearchSkill: boolean;
   /** When true, omit folder_name from Miyo search requests so all indexed content is searched */
   miyoSearchAll: boolean;
   /** Timestamp of last successful Believer validation for self-host mode (null if never validated) */
@@ -162,6 +168,11 @@ export interface CopilotSettings {
   perplexityApiKey: string;
   /** Supadata API key for self-host YouTube transcripts */
   supadataApiKey: string;
+  /**
+   * Document-processor backend (settings v6). Seeded from `enableSelfHostMode &&
+   * enableMiyo`; read via `getDocProcessorBackend()`.
+   */
+  docProcessorBackend: "plus" | "miyo";
   /** Enable lexical boosts (folder and graph) in search - default: true */
   enableLexicalBoosts: boolean;
   /**
@@ -696,6 +707,11 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
     sanitizedSettings.enableMiyo = DEFAULT_SETTINGS.enableMiyo;
   }
 
+  // Ensure enableMiyoSearchSkill has a default value
+  if (typeof sanitizedSettings.enableMiyoSearchSkill !== "boolean") {
+    sanitizedSettings.enableMiyoSearchSkill = DEFAULT_SETTINGS.enableMiyoSearchSkill;
+  }
+
   // Ensure miyoSearchAll has a default value
   if (typeof sanitizedSettings.miyoSearchAll !== "boolean") {
     sanitizedSettings.miyoSearchAll = DEFAULT_SETTINGS.miyoSearchAll;
@@ -710,6 +726,12 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   const validSearchProviders = ["firecrawl", "perplexity"] as const;
   if (!validSearchProviders.includes(sanitizedSettings.selfHostSearchProvider)) {
     sanitizedSettings.selfHostSearchProvider = DEFAULT_SETTINGS.selfHostSearchProvider;
+  }
+
+  // Ensure docProcessorBackend is a valid value (settings v6)
+  const validDocProcessorBackends = ["plus", "miyo"] as const;
+  if (!validDocProcessorBackends.includes(sanitizedSettings.docProcessorBackend)) {
+    sanitizedSettings.docProcessorBackend = DEFAULT_SETTINGS.docProcessorBackend;
   }
 
   // Ensure passMarkdownImages has a default value

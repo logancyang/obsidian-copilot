@@ -97,6 +97,9 @@ export function useAgentModelPicker(
   manager: AgentSessionManager | null
 ): AgentModelPickerOverride | null {
   const settings = useSettingsValue();
+  // Every registered backend shows in the picker; Self-Host Mode marks cloud
+  // agents (via `settings` in `buildAgentModelPicker`) rather than hiding them.
+  // The registry is static, so the descriptor list is a stable module constant.
   const descriptors = useMemo(() => listBackendDescriptors(), []);
   const signal = useAgentModelSignal(manager, descriptors);
   return useMemo(() => {

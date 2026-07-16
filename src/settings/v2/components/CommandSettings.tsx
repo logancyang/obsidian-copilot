@@ -1,10 +1,11 @@
-import React, { useMemo, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useCustomCommands } from "@/commands/state";
 import { MobileCard, MobileCardDropdownAction } from "@/components/ui/mobile-card";
-import { CopyPlus, GripVertical, Lightbulb, PenLine, Plus, Trash2 } from "lucide-react";
+import { CopyPlus, Folder, GripVertical, Info, PenLine, Plus, Trash2 } from "lucide-react";
 
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -46,8 +47,10 @@ import {
 import { generateDefaultCommands } from "@/commands/migrator";
 import { CustomCommand } from "@/commands/type";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
+import { FolderSearchModal } from "@/components/modals/FolderSearchModal";
 import { useApp } from "@/context";
 import { SettingItem } from "@/components/ui/setting-item";
+import { SettingSection } from "@/components/ui/setting-section";
 import { Notice } from "obsidian";
 
 const MobileCommandCard: React.FC<{
@@ -311,6 +314,33 @@ export const CommandSettings: React.FC = () => {
     await CustomCommandManager.getInstance().updateCommand(newCommand, prevCommandTitle);
   };
 
+  // Draft + blur-commit for the custom-prompts folder field. Reason: persisting
+  // on every keystroke would fire updateSetting + a full command reload per
+  // character. Mirrors the draft/blur pattern used by other folder inputs.
+  const persistedPromptsFolder = settings.customPromptsFolder;
+  const [promptsFolderDraft, setPromptsFolderDraft] = useState(persistedPromptsFolder);
+
+  useEffect(() => {
+    /* eslint-disable @eslint-react/hooks-extra/no-direct-set-state-in-use-effect -- resync the local draft when the persisted folder changes underneath us (e.g. Reset Settings) */
+    setPromptsFolderDraft(persistedPromptsFolder);
+    /* eslint-enable @eslint-react/hooks-extra/no-direct-set-state-in-use-effect */
+  }, [persistedPromptsFolder]);
+
+  // Persist the custom-prompts folder and reload commands from the new location.
+  // Shared by the blur-commit on the text input and the folder-picker button.
+  const commitPromptsFolder = (value: string) => {
+    if (value === persistedPromptsFolder) return;
+    updateSetting("customPromptsFolder", value);
+    void loadAllCustomCommands(app).catch((err) => logError("loadAllCustomCommands failed", err));
+  };
+
+  const handlePickPromptsFolder = () => {
+    new FolderSearchModal(app, (folder) => {
+      setPromptsFolderDraft(folder);
+      commitPromptsFolder(folder);
+    }).open();
+  };
+
   const handleCreate = async (newCommand: CustomCommand) => {
     await CustomCommandManager.getInstance().createCommand(newCommand);
   };
@@ -410,55 +440,75 @@ export const CommandSettings: React.FC = () => {
         <div className="tw-mb-4 tw-flex tw-flex-col tw-gap-2">
           <div className="tw-text-xl tw-font-bold">Custom Commands</div>
           <div className="tw-text-sm tw-text-muted">
-            Custom commands are preset prompts that you can trigger in the editor by right-clicking
-            and selecting them from the context menu or by using a <code>/</code> command in the
-            chat to load them into your chat input.
+            Preset prompts you trigger from the editor right-click menu or with a <code>/</code>{" "}
+            command in chat.
           </div>
         </div>
 
-        <SettingItem
-          type="text"
-          title="Custom Prompts Folder Name"
-          description="Folder where custom prompts are stored"
-          value={settings.customPromptsFolder}
-          onChange={(value) => {
-            updateSetting("customPromptsFolder", value);
-            void loadAllCustomCommands(app).catch((err) =>
-              logError("loadAllCustomCommands failed", err)
-            );
-          }}
-          placeholder="copilot/copilot-custom-prompts"
-        />
-        <SettingItem
-          type="switch"
-          title="Custom Prompt Templating"
-          description="Process variables like {activenote}, {foldername}, or {#tag} in prompts. Disable for raw prompts."
-          checked={settings.enableCustomPromptTemplating}
-          onCheckedChange={(checked) => {
-            updateSetting("enableCustomPromptTemplating", checked);
-          }}
-        />
-        <SettingItem
-          type="select"
-          title="Custom Prompts Sort Strategy"
-          description="Sort order for slash command menu prompts"
-          value={settings.promptSortStrategy}
-          onChange={(value) => updateSetting("promptSortStrategy", value)}
-          options={[
-            { label: "Recency", value: PromptSortStrategy.TIMESTAMP },
-            { label: "Alphabetical", value: PromptSortStrategy.ALPHABETICAL },
-            { label: "Manual", value: PromptSortStrategy.MANUAL },
-          ]}
-        />
-
-        <div className="tw-mb-4 tw-flex tw-items-start tw-gap-2 tw-rounded-md tw-border tw-border-solid tw-border-border tw-p-4 tw-text-muted">
-          <Lightbulb className="tw-size-5" />{" "}
+        <div className="tw-flex tw-items-start tw-gap-2 tw-rounded-md tw-border tw-border-solid tw-border-border tw-p-4 tw-text-muted tw-bg-interactive-accent/10">
+          <Info className="tw-size-5 tw-shrink-0 tw-text-accent" />{" "}
           <div>
             Commands are automatically loaded from .md files in your custom prompts folder{" "}
             <strong>{settings.customPromptsFolder}</strong>. Modifying the files will also update
             the command settings.
           </div>
         </div>
+
+        <SettingSection>
+          <SettingItem
+            type="custom"
+            title="Custom Prompts Folder Name"
+            description="Folder where custom prompts are stored"
+          >
+            <div className="tw-flex tw-items-center tw-gap-2">
+              <Input
+                value={promptsFolderDraft}
+                onChange={(e) => setPromptsFolderDraft(e.target.value)}
+                onBlur={(e) => commitPromptsFolder(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    commitPromptsFolder(promptsFolderDraft);
+                    (e.target as HTMLInputElement).blur();
+                  }
+                }}
+                placeholder="copilot/copilot-custom-prompts"
+                className="!tw-w-56"
+                aria-label="Custom prompts folder"
+              />
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handlePickPromptsFolder}
+                title="Pick folder"
+                aria-label="Pick folder"
+              >
+                <Folder className="tw-size-4" />
+              </Button>
+            </div>
+          </SettingItem>
+          <SettingItem
+            type="switch"
+            title="Custom Prompt Templating"
+            description="Process variables like {activenote}, {foldername}, or {#tag} in prompts. Disable for raw prompts."
+            checked={settings.enableCustomPromptTemplating}
+            onCheckedChange={(checked) => {
+              updateSetting("enableCustomPromptTemplating", checked);
+            }}
+          />
+          <SettingItem
+            type="select"
+            title="Custom Prompts Sort Strategy"
+            description="Sort order for slash command menu prompts"
+            value={settings.promptSortStrategy}
+            onChange={(value) => updateSetting("promptSortStrategy", value)}
+            options={[
+              { label: "Recency", value: PromptSortStrategy.TIMESTAMP },
+              { label: "Alphabetical", value: PromptSortStrategy.ALPHABETICAL },
+              { label: "Manual", value: PromptSortStrategy.MANUAL },
+            ]}
+          />
+        </SettingSection>
 
         <div className="tw-flex tw-flex-col tw-gap-4">
           <div className="tw-flex tw-w-full tw-justify-between tw-gap-2 md:tw-justify-end">

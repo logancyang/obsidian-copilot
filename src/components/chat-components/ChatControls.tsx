@@ -8,7 +8,7 @@ import { SettingSwitch } from "@/components/ui/setting-switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { PLUS_UTM_MEDIUMS } from "@/constants";
 import { logError } from "@/logger";
-import { shouldUseMiyo } from "@/miyo/miyoUtils";
+import { getSearchBackend } from "@/miyo/miyoUtils";
 import { navigateToPlusPage, useIsPaidUser } from "@/plusUtils";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import { Docs4LLMParser } from "@/tools/FileParserManager";
@@ -62,7 +62,7 @@ async function refreshVaultIndex() {
       const count = await VectorStoreManager.getInstance().indexVaultToVectorStore(false, {
         userInitiated: true,
       });
-      if (shouldUseMiyo(settings)) {
+      if (getSearchBackend(settings) === "miyo") {
         new Notice("Miyo folder index refresh started. Open the Miyo app to check details.");
       } else {
         new Notice(`Semantic search index refreshed with ${count} documents.`);
@@ -88,7 +88,7 @@ async function forceReindexVault() {
       const count = await VectorStoreManager.getInstance().indexVaultToVectorStore(true, {
         userInitiated: true,
       });
-      if (shouldUseMiyo(settings)) {
+      if (getSearchBackend(settings) === "miyo") {
         new Notice("Miyo folder index refresh started. Open the Miyo app to check details.");
       } else {
         new Notice(`Semantic search index rebuilt with ${count} documents.`);

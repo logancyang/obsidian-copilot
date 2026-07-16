@@ -4,8 +4,7 @@ import { PDFCache } from "@/cache/pdfCache";
 import { ProjectContextCache } from "@/cache/projectContextCache";
 import { logError, logInfo, logWarn } from "@/logger";
 import { MiyoClient } from "@/miyo/MiyoClient";
-import { getMiyoCustomUrl } from "@/miyo/miyoUtils";
-import { isSelfHostModeValid } from "@/plusUtils";
+import { getMiyoCustomUrl, resolveDocProcessorBackend } from "@/miyo/miyoUtils";
 import { getSettings } from "@/settings/model";
 import { saveConvertedDocOutput as saveConvertedDocOutputCore } from "@/utils/convertedDocOutput";
 import { extractRetryTime, isRateLimitError } from "@/utils/rateLimitUtils";
@@ -54,7 +53,15 @@ class SelfHostPdfParser {
    */
   public async parsePdf(file: TFile, vault: Vault): Promise<MiyoParseResult> {
     const settings = getSettings();
-    if (!settings.enableMiyo || file.extension.toLowerCase() !== "pdf") {
+    // Callers own the backend decision: they resolve it once at the parse boundary
+    // (resolveDocProcessorBackend, which probes) and only reach here when it's
+    // "miyo". We must NOT re-read the backend with the synchronous accessor — the
+    // status can cross the stale horizon between the two reads (it degrades by
+    // wall-clock), so a second check could return "plus", hand back null, and let
+    // the caller silently fall through to the cloud — the exact privacy leak the
+    // fail-closed resolver exists to prevent. So parsePdf only guards the file type
+    // and otherwise commits to Miyo, returning `{ error }` on any Miyo failure.
+    if (file.extension.toLowerCase() !== "pdf") {
       return null;
     }
 
@@ -84,7 +91,7 @@ class MarkdownParser implements FileParser {
   }
 }
 
-class PDFParser implements FileParser {
+export class PDFParser implements FileParser {
   supportedExtensions = ["pdf"];
   private brevilabsClient: BrevilabsClient;
   private pdfCache: PDFCache;
@@ -110,7 +117,24 @@ class PDFParser implements FileParser {
       }
 
       const settings = getSettings();
-      if (isSelfHostModeValid() && settings.enableMiyo && file.extension.toLowerCase() === "pdf") {
+      // Refresh Miyo status at the parse boundary (only when it's unconclusive)
+      // so a persisted "miyo" preference isn't silently downgraded to Plus just
+      // because the settings page was never opened to trigger a health check.
+      const backend =
+        file.extension.toLowerCase() === "pdf"
+          ? await resolveDocProcessorBackend(settings)
+          : "plus";
+
+      // The user explicitly chose local Miyo processing but Miyo can't be
+      // confirmed reachable: fail closed. Uploading to the cloud here would leak a
+      // document the user asked to keep local — the same privacy guarantee applied
+      // to a Miyo parse failure below.
+      if (backend === "miyo-unavailable") {
+        logWarn(`[PDFParser] Miyo unavailable for ${file.path}; not falling back to cloud`);
+        return `[Error: Could not extract content from PDF ${file.basename}. Miyo (local document processor) is unavailable — reconnect it or switch the Document Processor to Plus in settings.]`;
+      }
+
+      if (backend === "miyo") {
         const miyoResult = await this.selfHostPdfParser.parsePdf(file, vault);
         if (miyoResult && "content" in miyoResult) {
           await this.pdfCache.set(vault, file, {
@@ -327,12 +351,22 @@ export class Docs4LLMParser implements FileParser {
         `[Docs4LLMParser] Project ${this.currentProject.name}: Cache miss for: ${file.path}. Proceeding to API call.`
       );
 
-      // For PDFs, try Miyo first when self-host mode is active
-      if (
-        isSelfHostModeValid() &&
-        getSettings().enableMiyo &&
-        file.extension.toLowerCase() === "pdf"
-      ) {
+      // For PDFs, try Miyo first when self-host mode is active. Resolve at the
+      // parse boundary so an unconclusive (unknown/stale) status gets one health
+      // check before routing, rather than silently defaulting to cloud.
+      const backend =
+        file.extension.toLowerCase() === "pdf" ? await resolveDocProcessorBackend() : "plus";
+
+      // Explicit local Miyo choice, but Miyo can't be confirmed: fail closed.
+      // Throw so the batch runner marks this file failed/retriable — never upload
+      // a document the user asked to keep local to the cloud.
+      if (backend === "miyo-unavailable") {
+        throw new Error(
+          `Miyo (local document processor) is unavailable for ${file.basename}; not falling back to cloud. Reconnect Miyo or switch the Document Processor to Plus.`
+        );
+      }
+
+      if (backend === "miyo") {
         const miyoResult = await this.selfHostPdfParser.parsePdf(file, vault);
         if (miyoResult && "content" in miyoResult) {
           await this.projectContextCache.setFileContext(

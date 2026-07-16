@@ -1,6 +1,10 @@
 import type { CopilotSettings } from "@/settings/model";
 import type { ConfiguredModel, Provider } from "@/modelManagement";
-import { capabilitiesFromConfiguredInfo, providerRequiresApiKey } from "@/modelManagement";
+import {
+  capabilitiesFromConfiguredInfo,
+  providerNeedsSelfHostWarning,
+  providerRequiresApiKey,
+} from "@/modelManagement";
 import type { EnabledModelCredentialState, EnabledModelEntry } from "@/agentMode/session/types";
 
 export interface OpencodeProviderMapping {
@@ -125,6 +129,7 @@ export function opencodeEnabledModelEntries(
       credentialState: credentialStateFor(provider, mapping.native),
       isFree: isOpencodeZenWireId(baseModelId),
       capabilities: capabilitiesFromConfiguredInfo(configuredModel.info),
+      needsSelfHostWarning: providerNeedsSelfHostWarning(provider, settings),
     });
   }
   return out.length === 0 ? EMPTY_ENABLED_ENTRIES : out;

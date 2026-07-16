@@ -1,26 +1,21 @@
-import { ChainType } from "@/chainType";
 import { Button } from "@/components/ui/button";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { Input } from "@/components/ui/input";
 import { SettingItem } from "@/components/ui/setting-item";
-import { DEFAULT_OPEN_AREA, PLUS_UTM_MEDIUMS, SEND_SHORTCUT } from "@/constants";
+import { SettingSection } from "@/components/ui/setting-section";
+import { DEFAULT_OPEN_AREA, SEND_SHORTCUT } from "@/constants";
 import { cn } from "@/lib/utils";
-import { createPlusPageUrl } from "@/plusUtils";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import { PlusSettings } from "@/settings/v2/components/PlusSettings";
 import { formatDateTime } from "@/utils";
-import { isSortStrategy } from "@/utils/recentUsageManager";
-import { useChatBackendModelOptions } from "@/hooks/useChatBackendModelOptions";
 import { Loader2 } from "lucide-react";
 import { Notice } from "obsidian";
 import React, { useState } from "react";
 
-const ChainType2Label: Record<ChainType, string> = {
-  [ChainType.LLM_CHAIN]: "Chat",
-  [ChainType.VAULT_QA_CHAIN]: "Vault QA (Basic)",
-  [ChainType.COPILOT_PLUS_CHAIN]: "Copilot Plus",
-  [ChainType.PROJECT_CHAIN]: "Projects (alpha)",
-};
+// Read-only preview of the unified Copilot folder (PR-3 makes it editable and
+// wires the real setting). Sub-folders derive from this root. The row is hidden
+// until PR-3 lands — see the commented block in the render below.
+// const COPILOT_FOLDER_PLACEHOLDER = "copilot";
 
 export const BasicSettings: React.FC = () => {
   const settings = useSettingsValue();
@@ -79,322 +74,182 @@ export const BasicSettings: React.FC = () => {
     }
   };
 
-  // Default chat model now comes from the model-management "chat" backend
-  // (the Quick Chat list under Agents), keyed by configuredModelId.
-  const { options: chatModelOptions, resolveSelectionId } = useChatBackendModelOptions();
-  const resolvedDefaultModelId = resolveSelectionId(settings.defaultModelKey);
-  const defaultModelActivated = resolvedDefaultModelId !== undefined;
-
   return (
     <div className="tw-space-y-4">
       <PlusSettings />
 
       {/* General Section */}
-      <section>
-        <div className="tw-mb-3 tw-text-xl tw-font-bold">General</div>
-        <div className="tw-space-y-4">
-          <SettingItem
-            type="select"
-            title="Default Chat Model"
-            description={
-              <div className="tw-flex tw-items-center tw-gap-1.5">
-                <span className="tw-leading-none">Select the Chat model to use</span>
-                <HelpTooltip
-                  content={
-                    <div className="tw-flex tw-max-w-96 tw-flex-col tw-gap-2 tw-py-4">
-                      <div className="tw-text-xs tw-text-muted">
-                        Chat models are curated in the Quick Chat list under the Agents tab. Add
-                        providers on the Models (BYOK) tab to populate it.
-                      </div>
+      <SettingSection label="General">
+        <SettingItem
+          type="select"
+          title="Open Plugin In"
+          description="Choose where to open the plugin."
+          value={settings.defaultOpenArea}
+          onChange={(value) => updateSetting("defaultOpenArea", value as DEFAULT_OPEN_AREA)}
+          options={[
+            { label: "Sidebar View", value: DEFAULT_OPEN_AREA.VIEW },
+            { label: "Editor", value: DEFAULT_OPEN_AREA.EDITOR },
+          ]}
+        />
+
+        {/* Copilot folder location — hidden until the next phase (PR-3) makes it
+            editable and wires the real `copilotFolder` setting + migration.
+            Shipping a disabled read-only preview now would just confuse users, so
+            keep it out of the UI until it does something. Restore this block when
+            PR-3 lands. */}
+        {/*
+        <SettingItem
+          type="custom"
+          title="Copilot folder location"
+          description="Where Copilot keeps conversations, prompts, memory and more. All sub-folders derive from this."
+        >
+          <div className="tw-flex tw-items-center tw-gap-2">
+            <Input
+              type="text"
+              value={COPILOT_FOLDER_PLACEHOLDER}
+              disabled
+              readOnly
+              className="tw-w-full sm:tw-w-[160px]"
+            />
+            <Button
+              variant="secondary"
+              size="icon"
+              disabled
+              aria-label="Open Copilot folder"
+              title="Open Copilot folder"
+            >
+              <Folder className="tw-size-4" />
+            </Button>
+          </div>
+        </SettingItem>
+        */}
+
+        <SettingItem
+          type="select"
+          title="Send Shortcut"
+          description={
+            <div className="tw-flex tw-items-center tw-gap-1.5">
+              <span className="tw-leading-none">Keyboard shortcut to send messages.</span>
+              <HelpTooltip
+                content={
+                  <div className="tw-flex tw-max-w-96 tw-flex-col tw-gap-2 tw-py-4">
+                    <div className="tw-text-xs tw-text-muted">
+                      If your selected shortcut doesn&#39;t work, check{" "}
+                      <strong>Obsidian → Hotkeys</strong> to see if another command is using the
+                      same key combination.
                     </div>
-                  }
-                />
-              </div>
-            }
-            value={resolvedDefaultModelId ?? "Select Model"}
-            onChange={(value) => {
-              if (value === "Select Model") return;
-              updateSetting("defaultModelKey", value);
-            }}
-            options={
-              defaultModelActivated
-                ? chatModelOptions
-                : [{ label: "Select Model", value: "Select Model" }, ...chatModelOptions]
-            }
-            placeholder="Model"
-          />
-
-          {/* Basic Configuration Group */}
-          <SettingItem
-            type="select"
-            title="Default Mode"
-            description={
-              <div className="tw-flex tw-items-center tw-gap-1.5">
-                <span className="tw-leading-none">Select the default chat mode</span>
-                <HelpTooltip
-                  content={
-                    <div className="tw-flex tw-max-w-96 tw-flex-col tw-gap-2">
-                      <ul className="tw-pl-4 tw-text-sm tw-text-muted">
-                        <li>
-                          <strong>Chat:</strong> Regular chat mode for general conversations and
-                          tasks. <i>Free to use with your own API key.</i>
-                        </li>
-                        <li>
-                          <strong>Vault QA (Basic):</strong> Ask questions about your vault content
-                          with semantic search. <i>Free to use with your own API key.</i>
-                        </li>
-                        <li>
-                          <strong>Copilot Plus:</strong> Covers all features of the 2 free modes,
-                          plus advanced paid features including chat context menu, advanced search,
-                          AI agents, and more. Check out{" "}
-                          <a
-                            href={createPlusPageUrl(PLUS_UTM_MEDIUMS.MODE_SELECT_TOOLTIP)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="tw-text-accent hover:tw-text-accent-hover"
-                          >
-                            obsidiancopilot.com
-                          </a>{" "}
-                          for more details.
-                        </li>
-                      </ul>
-                    </div>
-                  }
-                />
-              </div>
-            }
-            value={settings.defaultChainType}
-            onChange={(value) => updateSetting("defaultChainType", value as ChainType)}
-            options={Object.entries(ChainType2Label).map(([key, value]) => ({
-              label: value,
-              value: key,
-            }))}
-          />
-
-          <SettingItem
-            type="select"
-            title="Open Plugin In"
-            description="Choose where to open the plugin"
-            value={settings.defaultOpenArea}
-            onChange={(value) => updateSetting("defaultOpenArea", value as DEFAULT_OPEN_AREA)}
-            options={[
-              { label: "Sidebar View", value: DEFAULT_OPEN_AREA.VIEW },
-              { label: "Editor", value: DEFAULT_OPEN_AREA.EDITOR },
-            ]}
-          />
-
-          <SettingItem
-            type="select"
-            title="Send Shortcut"
-            description={
-              <div className="tw-flex tw-items-center tw-gap-1.5">
-                <span className="tw-leading-none">Choose keyboard shortcut to send messages</span>
-                <HelpTooltip
-                  content={
-                    <div className="tw-flex tw-max-w-96 tw-flex-col tw-gap-2 tw-py-4">
-                      <div className="tw-text-sm tw-font-medium tw-text-accent">
-                        Shortcut not working?
-                      </div>
-                      <div className="tw-text-xs tw-text-muted">
-                        If your selected shortcut doesn&#39;t work, check
-                        <strong> Obsidian&#39;s Settings → Hotkeys</strong> to see if another
-                        command is using the same key combination. <br />
-                        You may need to remove or change the conflicting hotkey first.
-                      </div>
-                    </div>
-                  }
-                />
-              </div>
-            }
-            value={settings.defaultSendShortcut}
-            onChange={(value) => updateSetting("defaultSendShortcut", value as SEND_SHORTCUT)}
-            options={[
-              { label: "Enter", value: SEND_SHORTCUT.ENTER },
-              { label: "Shift + Enter", value: SEND_SHORTCUT.SHIFT_ENTER },
-            ]}
-          />
-
-          <SettingItem
-            type="switch"
-            title="Auto-Add Active Content to Context"
-            description="Automatically add the active note or Web Viewer tab (Desktop only) to chat context when sending messages."
-            checked={settings.autoAddActiveContentToContext}
-            onCheckedChange={(checked) => {
-              updateSetting("autoAddActiveContentToContext", checked);
-            }}
-          />
-
-          <SettingItem
-            type="switch"
-            title="Auto-Add Selection to Context"
-            description="Automatically add selected text from notes or Web Viewer (Desktop only) to chat context. Disable to use manual command instead."
-            checked={settings.autoAddSelectionToContext}
-            onCheckedChange={(checked) => {
-              updateSetting("autoAddSelectionToContext", checked);
-            }}
-          />
-
-          <SettingItem
-            type="switch"
-            title="Images in Markdown"
-            description="Pass embedded images in markdown to the AI along with the text. Only works with multimodal models."
-            checked={settings.passMarkdownImages}
-            onCheckedChange={(checked) => {
-              updateSetting("passMarkdownImages", checked);
-            }}
-          />
-
-          <SettingItem
-            type="switch"
-            title="Suggested Prompts"
-            description="Show suggested prompts in the chat view"
-            checked={settings.showSuggestedPrompts}
-            onCheckedChange={(checked) => updateSetting("showSuggestedPrompts", checked)}
-          />
-        </div>
-      </section>
+                  </div>
+                }
+              />
+            </div>
+          }
+          value={settings.defaultSendShortcut}
+          onChange={(value) => updateSetting("defaultSendShortcut", value as SEND_SHORTCUT)}
+          options={[
+            { label: "Enter", value: SEND_SHORTCUT.ENTER },
+            { label: "Shift + Enter", value: SEND_SHORTCUT.SHIFT_ENTER },
+          ]}
+        />
+      </SettingSection>
 
       {/* Saving Conversations Section */}
-      <section>
-        <div className="tw-mb-3 tw-text-xl tw-font-bold">Saving Conversations</div>
-        <div className="tw-space-y-4">
-          <SettingItem
-            type="switch"
-            title="Autosave Chat as Markdown"
-            description="Writes each chat to a Markdown note in your vault after every user message and AI response. With this off, agent chats still appear in Recent Chats from session history; only the Markdown note is skipped."
-            checked={settings.autosaveChat}
-            onCheckedChange={(checked) => updateSetting("autosaveChat", checked)}
-          />
+      <SettingSection label="Saving conversations">
+        <SettingItem
+          type="switch"
+          title="Autosave Chat as Markdown"
+          description="Writes each chat to a Markdown note in your vault after every user message and AI response. With this off, agent chats still appear in Recent Chats from session history; only the Markdown note is skipped."
+          checked={settings.autosaveChat}
+          onCheckedChange={(checked) => updateSetting("autosaveChat", checked)}
+        />
 
-          <SettingItem
-            type="text"
-            title="Default Conversation Folder Name"
-            description="The default folder name where chat conversations will be saved. Default is 'copilot/copilot-conversations'"
-            value={settings.defaultSaveFolder}
-            onChange={(value) => updateSetting("defaultSaveFolder", value)}
-            placeholder="copilot/copilot-conversations"
-          />
+        <SettingItem
+          type="text"
+          title="Default Conversation Folder Name"
+          description="The default folder name where chat conversations will be saved. Default is 'copilot/copilot-conversations'"
+          value={settings.defaultSaveFolder}
+          onChange={(value) => updateSetting("defaultSaveFolder", value)}
+          placeholder="copilot/copilot-conversations"
+        />
 
-          <SettingItem
-            type="text"
-            title="Default Conversation Tag"
-            description="The default tag to be used when saving a conversation. Default is 'ai-conversations'"
-            value={settings.defaultConversationTag}
-            onChange={(value) => updateSetting("defaultConversationTag", value)}
-            placeholder="ai-conversations"
-          />
+        <SettingItem
+          type="text"
+          title="Default Conversation Tag"
+          description="The default tag to be used when saving a conversation. Default is 'ai-conversations'"
+          value={settings.defaultConversationTag}
+          onChange={(value) => updateSetting("defaultConversationTag", value)}
+          placeholder="ai-conversations"
+        />
 
-          <SettingItem
-            type="custom"
-            title="Conversation Filename Template"
-            description={
-              <div className="tw-flex tw-items-start tw-gap-1.5 ">
-                <span className="tw-leading-none">
-                  Customize the format of saved conversation note names.
-                </span>
-                <HelpTooltip
-                  content={
-                    <div className="tw-flex tw-max-w-96 tw-flex-col tw-gap-2 tw-py-4">
-                      <div className="tw-text-sm tw-font-medium tw-text-accent">
-                        Note: All the following variables must be included in the template.
-                      </div>
-                      <div>
-                        <div className="tw-text-sm tw-font-medium tw-text-muted">
-                          Available variables:
-                        </div>
-                        <ul className="tw-pl-4 tw-text-sm tw-text-muted">
-                          <li>
-                            <strong>{"{$date}"}</strong>: Date in YYYYMMDD format
-                          </li>
-                          <li>
-                            <strong>{"{$time}"}</strong>: Time in HHMMSS format
-                          </li>
-                          <li>
-                            <strong>{"{$topic}"}</strong>: Chat conversation topic
-                          </li>
-                        </ul>
-                        <i className="tw-mt-2 tw-text-sm tw-text-muted">
-                          Example: {"{$date}_{$time}__{$topic}"} →
-                          20250114_153232__polish_this_article_[[Readme]]
-                        </i>
-                      </div>
+        <SettingItem
+          type="custom"
+          title="Conversation Filename Template"
+          description={
+            <div className="tw-flex tw-items-start tw-gap-1.5 ">
+              <span className="tw-leading-none">
+                Customize the format of saved conversation note names.
+              </span>
+              <HelpTooltip
+                content={
+                  <div className="tw-flex tw-max-w-96 tw-flex-col tw-gap-2 tw-py-4">
+                    <div className="tw-text-sm tw-font-medium tw-text-accent">
+                      Note: All the following variables must be included in the template.
                     </div>
-                  }
-                />
-              </div>
-            }
-          >
-            <div className="tw-flex tw-w-[320px] tw-items-center tw-gap-1.5">
-              <Input
-                type="text"
-                className={cn(
-                  "tw-min-w-[80px] tw-grow tw-transition-all tw-duration-200",
-                  isChecking ? "tw-w-[80px]" : "tw-w-[120px]"
-                )}
-                placeholder="{$date}_{$time}__{$topic}"
-                value={conversationNoteName}
-                onChange={(e) => setConversationNoteName(e.target.value)}
-                disabled={isChecking}
+                    <div>
+                      <div className="tw-text-sm tw-font-medium tw-text-muted">
+                        Available variables:
+                      </div>
+                      <ul className="tw-pl-4 tw-text-sm tw-text-muted">
+                        <li>
+                          <strong>{"{$date}"}</strong>: Date in YYYYMMDD format
+                        </li>
+                        <li>
+                          <strong>{"{$time}"}</strong>: Time in HHMMSS format
+                        </li>
+                        <li>
+                          <strong>{"{$topic}"}</strong>: Chat conversation topic
+                        </li>
+                      </ul>
+                      <i className="tw-mt-2 tw-text-sm tw-text-muted">
+                        Example: {"{$date}_{$time}__{$topic}"} →
+                        20250114_153232__polish_this_article_[[Readme]]
+                      </i>
+                    </div>
+                  </div>
+                }
               />
-
-              <Button
-                onClick={() => applyCustomNoteFormat()}
-                disabled={isChecking}
-                variant="secondary"
-              >
-                {isChecking ? (
-                  <>
-                    <Loader2 className="tw-mr-2 tw-size-4 tw-animate-spin" />
-                    Apply
-                  </>
-                ) : (
-                  "Apply"
-                )}
-              </Button>
             </div>
-          </SettingItem>
-        </div>
-      </section>
+          }
+        >
+          <div className="tw-flex tw-w-[320px] tw-items-center tw-gap-1.5">
+            <Input
+              type="text"
+              className={cn(
+                "tw-min-w-[80px] tw-grow tw-transition-all tw-duration-200",
+                isChecking ? "tw-w-[80px]" : "tw-w-[120px]"
+              )}
+              placeholder="{$date}_{$time}__{$topic}"
+              value={conversationNoteName}
+              onChange={(e) => setConversationNoteName(e.target.value)}
+              disabled={isChecking}
+            />
 
-      {/* Sorting Section */}
-      <section>
-        <div className="tw-mb-3 tw-text-xl tw-font-bold">Sorting</div>
-        <div className="tw-space-y-4">
-          <SettingItem
-            type="select"
-            title="Chat History Sort Strategy"
-            description="Sort order for the chat history list"
-            value={settings.chatHistorySortStrategy}
-            onChange={(value) => {
-              if (isSortStrategy(value)) {
-                updateSetting("chatHistorySortStrategy", value);
-              }
-            }}
-            options={[
-              { label: "Recency", value: "recent" },
-              { label: "Created", value: "created" },
-              { label: "Alphabetical", value: "name" },
-            ]}
-          />
-
-          <SettingItem
-            type="select"
-            title="Project List Sort Strategy"
-            description="Sort order for the project list"
-            value={settings.projectListSortStrategy}
-            onChange={(value) => {
-              if (isSortStrategy(value)) {
-                updateSetting("projectListSortStrategy", value);
-              }
-            }}
-            options={[
-              { label: "Recency", value: "recent" },
-              { label: "Created", value: "created" },
-              { label: "Alphabetical", value: "name" },
-            ]}
-          />
-        </div>
-      </section>
+            <Button
+              onClick={() => applyCustomNoteFormat()}
+              disabled={isChecking}
+              variant="secondary"
+            >
+              {isChecking ? (
+                <>
+                  <Loader2 className="tw-mr-2 tw-size-4 tw-animate-spin" />
+                  Apply
+                </>
+              ) : (
+                "Apply"
+              )}
+            </Button>
+          </div>
+        </SettingItem>
+      </SettingSection>
     </div>
   );
 };

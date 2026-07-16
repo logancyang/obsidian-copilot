@@ -17,6 +17,7 @@ import {
   EMPTY_AGENT_MENTION_BRANDS,
 } from "./useAtMentionCategories";
 import { getSettings } from "@/settings/model";
+import { SelfHostCloudWarningIcon } from "@/components/ui/SelfHostCloudWarningIcon";
 
 // Maximum number of results to show in @ mention search
 const MAX_SEARCH_RESULTS = 30;
@@ -131,6 +132,11 @@ export function useAtMentionSearch(
         data: brand.id,
         content: undefined,
         icon: React.createElement(brand.Icon, { className: "tw-size-4" }),
+        // Cloud agents keep their mention option but get a cloud-egress warning
+        // beside the name while Self-Host Mode is on.
+        trailingContent: brand.needsSelfHostWarning
+          ? React.createElement(SelfHostCloudWarningIcon)
+          : undefined,
         searchKeyword: `${brand.displayName} ${brand.id}`,
       })),
     [agentBrands]

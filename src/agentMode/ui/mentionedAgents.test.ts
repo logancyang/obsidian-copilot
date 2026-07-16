@@ -15,6 +15,10 @@ const Icon = () => null;
 
 jest.mock("@/agentMode/backends/registry", () => ({
   listBackendDescriptors: jest.fn(),
+  backendNeedsSelfHostWarning: (
+    descriptor: { selfHostable?: boolean },
+    settings: { enableSelfHostMode?: boolean }
+  ) => Boolean(settings.enableSelfHostMode) && !descriptor.selfHostable,
 }));
 
 jest.mock("@/settings/model", () => ({
@@ -25,16 +29,18 @@ import { listBackendDescriptors } from "@/agentMode/backends/registry";
 
 const mockedList = listBackendDescriptors as jest.MockedFunction<typeof listBackendDescriptors>;
 
-function descriptor(id: string, install: InstallState): BackendDescriptor {
+function descriptor(id: string, install: InstallState, selfHostable = true): BackendDescriptor {
   return {
     id,
     displayName: id[0].toUpperCase() + id.slice(1),
     Icon,
+    selfHostable,
     getInstallState: () => install,
   } as unknown as BackendDescriptor;
 }
 
 const settings = {} as CopilotSettings;
+const selfHostSettings = { enableSelfHostMode: true } as CopilotSettings;
 
 describe("listInstalledAgentBrands", () => {
   it("offers only ready backends; excludes absent, checking, incompatible, and errored", () => {
@@ -60,6 +66,28 @@ describe("listInstalledAgentBrands", () => {
   it("returns the frozen empty constant when nothing is installed", () => {
     mockedList.mockReturnValue([descriptor("opencode", { kind: "absent" })]);
     expect(listInstalledAgentBrands(settings)).toBe(EMPTY_AGENT_BRANDS);
+  });
+
+  it("does not flag any brand when Self-Host Mode is off", () => {
+    mockedList.mockReturnValue([
+      descriptor("opencode", { kind: "ready", source: "managed" }, true),
+      descriptor("claude", { kind: "ready", source: "managed" }, false),
+    ]);
+    const byId = new Map(listInstalledAgentBrands(settings).map((b) => [b.id, b]));
+    expect(byId.get("opencode")?.needsSelfHostWarning).toBe(false);
+    expect(byId.get("claude")?.needsSelfHostWarning).toBe(false);
+  });
+
+  it("flags cloud agents (not opencode) when Self-Host Mode is on", () => {
+    mockedList.mockReturnValue([
+      descriptor("opencode", { kind: "ready", source: "managed" }, true),
+      descriptor("claude", { kind: "ready", source: "managed" }, false),
+      descriptor("codex", { kind: "ready", source: "managed" }, false),
+    ]);
+    const byId = new Map(listInstalledAgentBrands(selfHostSettings).map((b) => [b.id, b]));
+    expect(byId.get("opencode")?.needsSelfHostWarning).toBe(false);
+    expect(byId.get("claude")?.needsSelfHostWarning).toBe(true);
+    expect(byId.get("codex")?.needsSelfHostWarning).toBe(true);
   });
 });
 

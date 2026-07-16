@@ -27,6 +27,12 @@ export interface AgentBrand {
   readonly id: BackendId;
   readonly displayName: string;
   readonly Icon: React.ComponentType<{ className?: string }>;
+  /**
+   * `true` when Self-Host Mode is on and this is a cloud agent — the mention
+   * menu flags it with a cloud-egress warning. A read-time projection (see
+   * `backendNeedsSelfHostWarning`); never persisted.
+   */
+  readonly needsSelfHostWarning?: boolean;
 }
 
 /**
@@ -155,6 +161,13 @@ export interface EnabledModelEntry {
    * it never needs to know what "Zen" means (`ui` can't import the backend).
    */
   isFree?: boolean;
+  /**
+   * `true` when Self-Host Mode is on and this model's provider is cloud. A
+   * self-hostable backend (opencode) can still host cloud BYOK/Plus providers,
+   * so the warning is decided per model here, not by the backend's own
+   * `selfHostable`. The backend computes it; the UI renders the marker.
+   */
+  needsSelfHostWarning?: boolean;
 }
 
 /**

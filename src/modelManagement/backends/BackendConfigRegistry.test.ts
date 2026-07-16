@@ -6,12 +6,13 @@
  * APIs are touched.
  */
 
-import { getSettings, resetSettings } from "@/settings/model";
+import { getSettings, resetSettings, updateSetting } from "@/settings/model";
 
 import { ConfiguredModelRegistry } from "@/modelManagement/models/ConfiguredModelRegistry";
 import { ProviderRegistry } from "@/modelManagement/providers/ProviderRegistry";
 import { ProviderAdapterRegistry } from "@/modelManagement/providers/adapters/ProviderAdapterRegistry";
 import type { BackendType } from "@/modelManagement/types/persisted";
+import type { EnabledBackendEntry } from "@/modelManagement/types/runtime";
 
 import { BackendConfigRegistry } from "./BackendConfigRegistry";
 
@@ -160,5 +161,103 @@ describe("BackendConfigRegistry", () => {
     expect(resolved).toHaveLength(2);
     expect(resolved[0].state).toBe("ok");
     expect(resolved[1].state).toBe("broken");
+  });
+
+  describe("resolveEnabled() Self-Host Mode marking", () => {
+    /**
+     * Enroll a cloud BYOK, a self-hosted BYOK, and a broken ref on `backend`.
+     * Returns the two configured-model ids so callers can assert on order.
+     */
+    async function seedMixedBackend(backend: BackendType): Promise<{
+      cloudId: string;
+      localId: string;
+    }> {
+      const cloudProviderId = await providers.add({
+        providerType: "anthropic",
+        displayName: "Anthropic Cloud",
+        baseUrl: "https://api.anthropic.com",
+        origin: { kind: "byok" },
+      });
+      const localProviderId = await providers.add({
+        providerType: "openai-compatible",
+        displayName: "Local Ollama",
+        baseUrl: "http://localhost:11434/v1",
+        origin: { kind: "byok" },
+      });
+      const cloudId = await models.add({
+        providerId: cloudProviderId,
+        info: { id: "claude-sonnet-4-5", displayName: "Claude" },
+      });
+      const localId = await models.add({
+        providerId: localProviderId,
+        info: { id: "llama3", displayName: "Llama 3" },
+      });
+      await registry.setEnabledModels(backend, [cloudId, localId, "missing-id"]);
+      return { cloudId, localId };
+    }
+
+    /** Map each ok entry's id → its `needsSelfHostWarning` flag. */
+    function warnings(resolved: readonly EnabledBackendEntry[]): Record<string, boolean> {
+      const out: Record<string, boolean> = {};
+      for (const e of resolved) {
+        if (e.state === "ok") out[e.configuredModelId] = Boolean(e.needsSelfHostWarning);
+      }
+      return out;
+    }
+
+    it("keeps everything unflagged when Self-Host Mode is off", async () => {
+      const { cloudId, localId } = await seedMixedBackend(CHAT);
+      const resolved = registry.resolveEnabled(CHAT);
+      expect(resolved.map((e) => e.configuredModelId)).toEqual([cloudId, localId, "missing-id"]);
+      expect(warnings(resolved)).toEqual({ [cloudId]: false, [localId]: false });
+    });
+
+    it("keeps every entry in order, flags cloud BYOK only, when on", async () => {
+      const { cloudId, localId } = await seedMixedBackend(CHAT);
+      updateSetting("enableSelfHostMode", true);
+
+      const resolved = registry.resolveEnabled(CHAT);
+      // Order preserved (nothing dropped); cloud flagged, self-hosted + broken not.
+      expect(resolved.map((e) => e.configuredModelId)).toEqual([cloudId, localId, "missing-id"]);
+      expect(warnings(resolved)).toEqual({ [cloudId]: true, [localId]: false });
+    });
+
+    // #4 no-bypass INVERTED: Self-Host Mode is a presentation label, not a
+    // technical egress block. The opencode runtime injection reads
+    // resolveEnabled("opencode"), and a cloud provider now DOES reach the
+    // spawned config (still in order) — only flagged for the UI, not filtered.
+    it("keeps cloud providers reachable for the opencode runtime injection", async () => {
+      const { cloudId, localId } = await seedMixedBackend(OPENCODE);
+      updateSetting("enableSelfHostMode", true);
+
+      const resolved = registry.resolveEnabled(OPENCODE);
+      expect(resolved.map((e) => e.configuredModelId)).toEqual([cloudId, localId, "missing-id"]);
+      expect(warnings(resolved)).toEqual({ [cloudId]: true, [localId]: false });
+    });
+
+    it("clears the flags when Self-Host Mode is turned back off (no writeback)", async () => {
+      const { cloudId, localId } = await seedMixedBackend(CHAT);
+
+      updateSetting("enableSelfHostMode", true);
+      expect(warnings(registry.resolveEnabled(CHAT))[cloudId]).toBe(true);
+
+      // View-layer only: the persisted enabledModels was never rewritten.
+      expect(registry.get(CHAT).enabledModels).toEqual([cloudId, localId, "missing-id"]);
+
+      updateSetting("enableSelfHostMode", false);
+      const resolved = registry.resolveEnabled(CHAT);
+      expect(resolved.map((e) => e.configuredModelId)).toEqual([cloudId, localId, "missing-id"]);
+      expect(warnings(resolved)[cloudId]).toBe(false);
+    });
+
+    it("returns the frozen empty constant when no models are enabled", async () => {
+      await registry.setEnabledModels(CHAT, []);
+      updateSetting("enableSelfHostMode", true);
+
+      const a = registry.resolveEnabled(CHAT);
+      const b = registry.resolveEnabled(CHAT);
+      expect(a).toHaveLength(0);
+      expect(a).toBe(b); // Same frozen reference (referential stability).
+    });
   });
 });

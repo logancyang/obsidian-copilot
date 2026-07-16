@@ -1,64 +1,97 @@
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { ObsidianNativeSelect } from "@/components/ui/obsidian-native-select";
-import { SettingSwitch } from "@/components/ui/setting-switch";
-import { Textarea } from "@/components/ui/textarea";
-import { setSettings, useSettingsValue } from "@/settings/model";
+import { McpServerModal } from "@/agentMode/ui/McpServerModal";
 import { type StoredMcpServer, sanitizeStoredMcpServers } from "@/agentMode/session/mcpResolver";
-import { Plus, Trash2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { SettingSwitch } from "@/components/ui/setting-switch";
+import { useApp } from "@/context";
+import { cn } from "@/lib/utils";
+import { setSettings, useSettingsValue } from "@/settings/model";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 import React from "react";
 import { v4 as uuidv4 } from "uuid";
 
-const TRANSPORT_OPTIONS = [
-  { label: "stdio (local command)", value: "stdio" },
-  { label: "http", value: "http" },
-  { label: "sse", value: "sse" },
-];
+/** A fresh, unpersisted draft used to seed the "Add MCP server" modal. */
+function blankServer(): StoredMcpServer {
+  return {
+    id: uuidv4(),
+    enabled: true,
+    name: "",
+    transport: "stdio",
+    command: "",
+    args: [],
+    env: [],
+  };
+}
 
 /**
  * Settings UI for managing user-configured MCP servers. Servers are sent to
  * the agent on `session/new` (and resume/load); changes only affect newly
  * started sessions.
+ *
+ * The list renders read-only rows. Add/Edit happen in a native Obsidian modal
+ * that edits a local draft and only persists on Save, so cancelling never
+ * leaves a half-configured server behind. Enable/disable and delete act
+ * directly from the row.
  */
 export const McpServersPanel: React.FC = () => {
+  const app = useApp();
   const settings = useSettingsValue();
   const servers = React.useMemo(
     () => sanitizeStoredMcpServers(settings.agentMode.mcpServers),
     [settings.agentMode.mcpServers]
   );
 
-  const persist = (next: StoredMcpServer[]) => {
-    setSettings((cur) => ({ agentMode: { ...cur.agentMode, mcpServers: next } }));
+  // Always reduce against the freshest persisted list (re-sanitized inside the
+  // updater), never a render-time snapshot. The modal captures `upsert` when it
+  // opens; if the user toggles or deletes another row while it's open, a
+  // snapshot-based write would silently clobber that change on Save.
+  const persist = (reduce: (current: StoredMcpServer[]) => StoredMcpServer[]) => {
+    setSettings((cur) => ({
+      agentMode: {
+        ...cur.agentMode,
+        mcpServers: reduce(sanitizeStoredMcpServers(cur.agentMode.mcpServers)),
+      },
+    }));
   };
 
-  const update = (id: string, patch: Partial<StoredMcpServer>) => {
-    persist(servers.map((s) => (s.id === id ? { ...s, ...patch } : s)));
+  // Add (new id) or replace (existing id) in one path — the modal owns both.
+  const upsert = (server: StoredMcpServer) => {
+    persist((current) =>
+      current.some((s) => s.id === server.id)
+        ? current.map((s) => (s.id === server.id ? server : s))
+        : [...current, server]
+    );
+  };
+
+  const setEnabled = (id: string, enabled: boolean) => {
+    persist((current) => current.map((s) => (s.id === id ? { ...s, enabled } : s)));
   };
 
   const remove = (id: string) => {
-    persist(servers.filter((s) => s.id !== id));
+    persist((current) => current.filter((s) => s.id !== id));
   };
 
-  const add = () => {
-    const fresh: StoredMcpServer = {
-      id: uuidv4(),
-      enabled: true,
-      name: "",
-      transport: "stdio",
-      command: "",
-      args: [],
-      env: [],
-    };
-    persist([...servers, fresh]);
+  const openAdd = () => {
+    new McpServerModal(app, blankServer(), "add", upsert).open();
+  };
+
+  const openEdit = (server: StoredMcpServer) => {
+    new McpServerModal(app, server, "edit", upsert).open();
   };
 
   return (
     <div className="tw-space-y-3">
-      <div>
-        <div className="tw-text-base tw-font-semibold">MCP servers</div>
-        <div className="tw-text-sm tw-text-muted">
-          Tools the agent can call via the Model Context Protocol. Changes apply to new sessions.
+      <div className="tw-flex tw-items-start tw-justify-between tw-gap-3">
+        <div className="tw-space-y-1">
+          <div className="tw-text-xs tw-font-semibold tw-text-muted">MCP servers</div>
+          <div className="tw-text-sm tw-text-muted">
+            Tools the agent can call via the Model Context Protocol. Changes apply to new sessions.
+          </div>
         </div>
+        <Button variant="secondary" size="sm" onClick={openAdd} className="tw-shrink-0">
+          <Plus className="tw-size-4" />
+          Add server
+        </Button>
       </div>
 
       {servers.length === 0 ? (
@@ -66,206 +99,74 @@ export const McpServersPanel: React.FC = () => {
           No MCP servers configured.
         </div>
       ) : (
-        <div className="tw-space-y-3">
+        <div className="tw-space-y-2">
           {servers.map((server) => (
-            <McpServerCard
+            <McpServerRow
               key={server.id}
               server={server}
-              onChange={(patch) => update(server.id, patch)}
+              onToggle={(enabled) => setEnabled(server.id, enabled)}
+              onEdit={() => openEdit(server)}
               onRemove={() => remove(server.id)}
             />
           ))}
         </div>
       )}
-
-      <Button variant="secondary" size="sm" onClick={add}>
-        <Plus className="tw-size-4" />
-        Add MCP server
-      </Button>
     </div>
   );
 };
 
-interface McpServerCardProps {
+interface McpServerRowProps {
   server: StoredMcpServer;
-  onChange: (patch: Partial<StoredMcpServer>) => void;
+  onToggle: (enabled: boolean) => void;
+  onEdit: () => void;
   onRemove: () => void;
 }
 
-/** Card row for a single MCP server: header (toggle/name/transport/remove) + transport-specific fields. */
-const McpServerCard: React.FC<McpServerCardProps> = ({ server, onChange, onRemove }) => {
+/** Read-only summary row for one MCP server. Edits go through the modal. */
+const McpServerRow: React.FC<McpServerRowProps> = ({ server, onToggle, onEdit, onRemove }) => {
+  const subtitle =
+    server.transport === "stdio"
+      ? [server.command ?? "", ...(server.args ?? [])].join(" ").trim()
+      : (server.url ?? "");
+
   return (
-    <div className="tw-space-y-3 tw-rounded-md tw-border tw-border-border tw-bg-secondary tw-p-3">
-      <div className="tw-flex tw-items-center tw-gap-2">
-        <SettingSwitch
-          checked={server.enabled}
-          onCheckedChange={(checked) => onChange({ enabled: checked })}
-        />
-        <Input
-          className="!tw-flex-1"
-          placeholder="Server name (e.g. filesystem)"
-          value={server.name}
-          onChange={(e) => onChange({ name: e.target.value })}
-        />
-        <div className="tw-w-40">
-          <ObsidianNativeSelect
-            options={TRANSPORT_OPTIONS}
-            value={server.transport}
-            onChange={(e) =>
-              onChange({ transport: e.target.value as StoredMcpServer["transport"] })
-            }
-          />
+    <div className="tw-flex tw-items-center tw-gap-3 tw-rounded-lg tw-border tw-border-solid tw-border-border tw-bg-primary tw-p-3 tw-shadow-sm">
+      {/* Toggle stays full-opacity and interactive even when the server is disabled. */}
+      <SettingSwitch
+        checked={server.enabled}
+        onCheckedChange={onToggle}
+        aria-label={`Enable ${server.name || "server"}`}
+      />
+
+      <div
+        className={cn(
+          "tw-flex tw-min-w-0 tw-flex-1 tw-items-center tw-gap-3",
+          !server.enabled && "tw-opacity-50"
+        )}
+      >
+        <div className="tw-min-w-0 tw-flex-1">
+          <div className="tw-flex tw-items-center tw-gap-2">
+            <span className="tw-truncate tw-font-medium tw-text-normal">
+              {server.name || "Unnamed server"}
+            </span>
+            <Badge variant="outline" className="tw-shrink-0">
+              {server.transport}
+            </Badge>
+          </div>
+          {subtitle && (
+            <div className="tw-truncate tw-font-mono tw-text-xs tw-text-muted">{subtitle}</div>
+          )}
         </div>
-        <Button variant="ghost2" size="icon" onClick={onRemove} title="Remove server">
-          <Trash2 className="tw-size-4" />
-        </Button>
-      </div>
 
-      {server.transport === "stdio" ? (
-        <StdioFields server={server} onChange={onChange} />
-      ) : (
-        <HttpFields server={server} onChange={onChange} />
-      )}
-    </div>
-  );
-};
-
-/** Inputs specific to the stdio transport: command, newline-delimited args, env key/value pairs. */
-const StdioFields: React.FC<{
-  server: StoredMcpServer;
-  onChange: (patch: Partial<StoredMcpServer>) => void;
-}> = ({ server, onChange }) => {
-  const argsText = (server.args ?? []).join("\n");
-  return (
-    <div className="tw-space-y-2">
-      <FieldRow label="Command">
-        <Input
-          placeholder="npx"
-          value={server.command ?? ""}
-          onChange={(e) => onChange({ command: e.target.value })}
-        />
-      </FieldRow>
-      <FieldRow label="Arguments" hint="One per line">
-        <Textarea
-          rows={3}
-          placeholder={"-y\n@modelcontextprotocol/server-filesystem\n/path/to/dir"}
-          value={argsText}
-          onChange={(e) =>
-            onChange({
-              args: e.target.value
-                .split("\n")
-                .map((line) => line.trim())
-                .filter((line) => line.length > 0),
-            })
-          }
-        />
-      </FieldRow>
-      <FieldRow label="Environment">
-        <KeyValueEditor
-          rows={server.env ?? []}
-          onChange={(env) => onChange({ env })}
-          keyPlaceholder="VAR_NAME"
-          valuePlaceholder="value"
-        />
-      </FieldRow>
-    </div>
-  );
-};
-
-/** Inputs specific to the http/sse transport: URL and request headers. */
-const HttpFields: React.FC<{
-  server: StoredMcpServer;
-  onChange: (patch: Partial<StoredMcpServer>) => void;
-}> = ({ server, onChange }) => {
-  return (
-    <div className="tw-space-y-2">
-      <FieldRow label="URL">
-        <Input
-          placeholder="https://example.com/mcp"
-          value={server.url ?? ""}
-          onChange={(e) => onChange({ url: e.target.value })}
-        />
-      </FieldRow>
-      <FieldRow label="Headers">
-        <KeyValueEditor
-          rows={server.headers ?? []}
-          onChange={(headers) => onChange({ headers })}
-          keyPlaceholder="Authorization"
-          valuePlaceholder="Bearer …"
-        />
-      </FieldRow>
-    </div>
-  );
-};
-
-/** Two-column layout helper: left-aligned label (with optional hint) and right-side editor. */
-const FieldRow: React.FC<{
-  label: string;
-  hint?: string;
-  children: React.ReactNode;
-}> = ({ label, hint, children }) => (
-  <div className="tw-grid tw-grid-cols-[120px_1fr] tw-items-start tw-gap-2">
-    <div className="tw-pt-2">
-      <div className="tw-text-sm tw-font-medium">{label}</div>
-      {hint && <div className="tw-text-xs tw-text-muted">{hint}</div>}
-    </div>
-    <div>{children}</div>
-  </div>
-);
-
-interface KeyValueRow {
-  name: string;
-  value: string;
-}
-
-/** Generic editable list of `{name, value}` rows used for env vars and HTTP headers. */
-const KeyValueEditor: React.FC<{
-  rows: KeyValueRow[];
-  onChange: (rows: KeyValueRow[]) => void;
-  keyPlaceholder: string;
-  valuePlaceholder: string;
-}> = ({ rows, onChange, keyPlaceholder, valuePlaceholder }) => {
-  const updateRow = (index: number, patch: Partial<KeyValueRow>) => {
-    onChange(rows.map((row, i) => (i === index ? { ...row, ...patch } : row)));
-  };
-  const removeRow = (index: number) => {
-    onChange(rows.filter((_, i) => i !== index));
-  };
-  const addRow = () => {
-    onChange([...rows, { name: "", value: "" }]);
-  };
-
-  return (
-    <div className="tw-space-y-2">
-      {rows.map((row, index) => (
-        // eslint-disable-next-line @eslint-react/no-array-index-key -- rows lack stable ids; name may be empty/duplicate while editing
-        <div key={`row-${index}`} className="tw-flex tw-items-center tw-gap-2">
-          <Input
-            className="!tw-flex-1"
-            placeholder={keyPlaceholder}
-            value={row.name}
-            onChange={(e) => updateRow(index, { name: e.target.value })}
-          />
-          <Input
-            className="!tw-flex-1"
-            placeholder={valuePlaceholder}
-            value={row.value}
-            onChange={(e) => updateRow(index, { value: e.target.value })}
-          />
-          <Button
-            variant="ghost2"
-            size="icon"
-            onClick={() => removeRow(index)}
-            title="Remove entry"
-          >
+        <div className="tw-flex tw-shrink-0 tw-items-center tw-gap-1">
+          <Button variant="ghost2" size="icon" onClick={onEdit} title="Edit server">
+            <Pencil className="tw-size-4" />
+          </Button>
+          <Button variant="ghost2" size="icon" onClick={onRemove} title="Delete server">
             <Trash2 className="tw-size-4" />
           </Button>
         </div>
-      ))}
-      <Button variant="ghost2" size="sm" onClick={addRow}>
-        <Plus className="tw-size-3" />
-        Add
-      </Button>
+      </div>
     </div>
   );
 };

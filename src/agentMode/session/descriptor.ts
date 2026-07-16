@@ -83,6 +83,19 @@ export interface BackendDescriptor {
   readonly Icon: React.ComponentType<{ className?: string }>;
 
   /**
+   * Whether this backend routes through infrastructure the user controls.
+   * `true` for self-hostable backends (opencode); `false` for cloud agents
+   * (Claude, Codex). Required — not optional — so every new backend makes an
+   * explicit privacy decision.
+   *
+   * Self-Host Mode is a presentation label: cloud backends stay visible and
+   * selectable, but `backendNeedsSelfHostWarning` uses this flag to mark them
+   * with a cloud-egress warning (and the UI sorts them last). It never gates
+   * spawning or rewrites settings.
+   */
+  readonly selfHostable: boolean;
+
+  /**
    * Project-relative POSIX path of the directory this backend reads skills
    * from. No leading slash. The symlink fanout writes
    * `<vault>/<skillsProjectDir>/<skill-name>` for every enabled skill.

@@ -8,7 +8,7 @@ import { useActiveFile } from "@/hooks/useActiveFile";
 import { useNoteDrag } from "@/hooks/useNoteDrag";
 import { cn } from "@/lib/utils";
 import { logError, logWarn } from "@/logger";
-import { shouldUseMiyo } from "@/miyo/miyoUtils";
+import { getSearchBackend } from "@/miyo/miyoUtils";
 import { findRelevantNotes, RelevantNoteEntry } from "@/search/findRelevantNotes";
 import { onIndexChanged } from "@/search/indexSignal";
 import { getMatchingPatterns, shouldIndexFile } from "@/search/searchUtils";
@@ -67,7 +67,7 @@ function useHasIndex(notePath: string, refresher: number) {
         const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
         const { getSettings } = await import("@/settings/model");
         const settings = getSettings();
-        const useMiyo = shouldUseMiyo(settings);
+        const useMiyo = getSearchBackend(settings) === "miyo";
 
         if (useMiyo) {
           const isEmpty = await VectorStoreManager.getInstance().isIndexEmpty();

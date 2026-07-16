@@ -16,7 +16,8 @@ import {
   CUSTOM_OPENAI_DEFINITION,
   LOCAL_PROVIDER_DEFINITIONS,
 } from "@/modelManagement/catalog/builtinDefinitions";
-import { byokProvidersAtom, configuredModelsAtom } from "@/modelManagement/state/atoms";
+import { configuredModelsAtom, visibleByokProvidersAtom } from "@/modelManagement/state/atoms";
+import { providerNeedsSelfHostWarning } from "@/modelManagement/providers/selfHostPolicy";
 import type { CatalogProvider } from "@/modelManagement/types/catalog";
 import type { ConfiguredModel } from "@/modelManagement/types/persisted";
 import { useModelManagement } from "@/modelManagement/ui/ModelManagementContext";
@@ -26,9 +27,9 @@ import {
 } from "@/modelManagement/ui/components/ByokGlobalTable";
 import { AddProviderModal } from "@/modelManagement/ui/dialogs/AddProviderDialog";
 import { ConfigureProviderModal } from "@/modelManagement/ui/dialogs/ConfigureProviderDialog";
-import { settingsStore } from "@/settings/model";
+import { settingsStore, useSettingsValue } from "@/settings/model";
 import { useAtomValue } from "jotai";
-import { Plus } from "lucide-react";
+import { Plus, ShieldCheck } from "lucide-react";
 import { Notice } from "obsidian";
 import React, { useEffect, useMemo, useState } from "react";
 
@@ -42,8 +43,12 @@ export const ByokPanel: React.FC = () => {
   const api = useModelManagement();
   const app = useApp();
 
-  const providers = useAtomValue(byokProvidersAtom, { store: settingsStore });
+  // Self-Host Mode keeps cloud BYOK providers listed but sorts them below
+  // self-hosted / local endpoints (each is flagged in-row). Projection only —
+  // nothing is removed from disk or reordered in settings.
+  const providers = useAtomValue(visibleByokProvidersAtom, { store: settingsStore });
   const configuredModels = useAtomValue(configuredModelsAtom, { store: settingsStore });
+  const selfHostOn = useSettingsValue().enableSelfHostMode;
 
   const [catalogProviders, setCatalogProviders] =
     useState<readonly CatalogProvider[]>(EMPTY_CATALOG);
@@ -86,17 +91,19 @@ export const ByokPanel: React.FC = () => {
     const q = query.trim().toLowerCase();
     return providers
       .map((provider) => {
+        const needsSelfHostWarning =
+          selfHostOn && providerNeedsSelfHostWarning(provider, { enableSelfHostMode: selfHostOn });
         const all = byProvider.get(provider.providerId) ?? (EMPTY_MODELS as ConfiguredModel[]);
         if (!q || provider.displayName.toLowerCase().includes(q)) {
-          return { provider, models: all };
+          return { provider, models: all, needsSelfHostWarning };
         }
         const models = all.filter(
           (m) => m.info.displayName.toLowerCase().includes(q) || m.info.id.toLowerCase().includes(q)
         );
-        return { provider, models };
+        return { provider, models, needsSelfHostWarning };
       })
       .filter((g) => !q || g.models.length > 0 || g.provider.displayName.toLowerCase().includes(q));
-  }, [providers, configuredModels, query]);
+  }, [providers, configuredModels, query, selfHostOn]);
 
   const handleAddProvider = (): void => {
     new AddProviderModal(app, {
@@ -133,7 +140,7 @@ export const ByokPanel: React.FC = () => {
     <div className="tw-flex tw-flex-col tw-gap-4 tw-py-4">
       <div className="tw-flex tw-items-start tw-justify-between tw-gap-4">
         <div className="tw-flex tw-flex-col tw-gap-1">
-          <div className="tw-text-base tw-font-semibold tw-text-normal">Bring Your Own Key</div>
+          <div className="tw-text-xl tw-font-bold tw-text-normal">Bring Your Own Key</div>
           <div className="tw-max-w-xl tw-text-sm tw-text-muted">
             Set up your own providers and models to use in Copilot.
           </div>
@@ -143,6 +150,17 @@ export const ByokPanel: React.FC = () => {
           Add a provider
         </Button>
       </div>
+
+      {selfHostOn && (
+        <div className="tw-flex tw-items-start tw-gap-2 tw-rounded-lg tw-border tw-border-solid tw-px-3 tw-py-2.5 tw-text-xs tw-text-normal tw-bg-interactive-accent/10 tw-border-interactive-accent/30">
+          <ShieldCheck className="tw-mt-0.5 tw-size-4 tw-shrink-0 tw-text-accent" />
+          <div className="tw-leading-relaxed">
+            <span className="tw-font-semibold">Self-Host Mode is on.</span> Cloud providers stay
+            available but are flagged and listed below your local and self-hosted endpoints — their
+            prompts leave your machine. You decide whether to use them.
+          </div>
+        </div>
+      )}
 
       <SearchBar value={query} onChange={setQuery} placeholder="Search providers…" />
 

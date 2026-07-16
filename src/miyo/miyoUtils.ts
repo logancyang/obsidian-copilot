@@ -1,6 +1,19 @@
-import { isSelfHostAccessValid } from "@/plusUtils";
-import { CopilotSettings } from "@/settings/model";
-import { App, Platform } from "obsidian";
+import type { MiyoAddFolderRequest } from "@/miyo/MiyoClient";
+import {
+  getMiyoStatusSnapshot,
+  isMiyoAvailableForCapability,
+  refreshMiyoStatus,
+} from "@/miyo/miyoStatusStore";
+import { shouldUseMiyo } from "@/miyo/miyoRuntimePolicy";
+import { isSelfHostModeValidFor } from "@/plusUtils";
+import { categorizePatterns, getDecodedPatterns } from "@/search/searchUtils";
+import { CopilotSettings, getSettings } from "@/settings/model";
+import { App } from "obsidian";
+
+// Re-exported from miyoRuntimePolicy so callers keep importing these from
+// `@/miyo/miyoUtils`. They live in the policy module to break the
+// miyoUtils ↔ miyoStatusStore import cycle.
+export { getMiyoCustomUrl, shouldUseMiyo } from "@/miyo/miyoRuntimePolicy";
 
 /**
  * Deeplink that launches (or focuses) the Miyo desktop app via its registered
@@ -8,6 +21,201 @@ import { App, Platform } from "obsidian";
  * folder instead of asking them to open the app manually.
  */
 export const MIYO_DEEPLINK_URL = "miyo://";
+
+/**
+ * Deeplink into Miyo's "add folder" screen. Used as the fallback for a remote
+ * Miyo (which can't see this machine's local vault path) or when we otherwise
+ * can't auto-register: it drops the user straight onto the add-folder flow in
+ * the desktop app instead of the generic launch.
+ */
+export const MIYO_ADD_FOLDER_DEEPLINK_URL = `${MIYO_DEEPLINK_URL}add-folder`;
+
+/**
+ * Deeplink into Miyo's Relay (Connector) setup screen — the "Set up in Miyo"
+ * action on the Relay capability row lands the user there directly rather than
+ * on Miyo's generic landing.
+ */
+export const MIYO_CONNECT_DEEPLINK_URL = `${MIYO_DEEPLINK_URL}connect`;
+
+/**
+ * Deeplink into Miyo's chat-sources / indexing screen — the "Manage in Miyo"
+ * action on the Search-chat capability row lands the user straight on chat sync.
+ */
+export const MIYO_CHATS_DEEPLINK_URL = `${MIYO_DEEPLINK_URL}chats`;
+
+/**
+ * Whether a configured Miyo endpoint points at THIS machine, so an absolute
+ * local vault path is meaningful to it.
+ *
+ * An empty custom URL means local discovery (Miyo found on localhost) → local.
+ * An explicit URL is local only when its host is loopback; a LAN/public host is
+ * treated as remote so we never POST a local filesystem path a remote server
+ * can't resolve. An unparseable URL is treated as remote — the safe default,
+ * since the worst case is falling back to the manual add flow.
+ *
+ * @param customUrl - The configured Miyo server URL (may be empty).
+ * @returns True when Miyo runs locally and can index a local absolute path.
+ */
+export function isLocalMiyoUrl(customUrl: string): boolean {
+  if (!customUrl.trim()) {
+    return true;
+  }
+  try {
+    // Strip IPv6 brackets so "[::1]" compares as "::1".
+    const hostname = new URL(customUrl).hostname.replace(/^\[|\]$/g, "").toLowerCase();
+    return (
+      hostname === "localhost" ||
+      hostname.endsWith(".localhost") ||
+      hostname === "::1" ||
+      /^127(?:\.\d{1,3}){3}$/.test(hostname)
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Frozen empty exclusions so an unfiltered vault never allocates a fresh object
+ * (referential-stability rule).
+ */
+const EMPTY_MIYO_FOLDER_EXCLUSIONS: MiyoFolderExclusions = Object.freeze({});
+
+/** Frozen empty ignore-folder list — referential stability for the default arg. */
+const EMPTY_IGNORE_FOLDERS: readonly string[] = Object.freeze([]);
+
+/** The exclude-only subset of {@link MiyoAddFolderRequest} we derive from settings. */
+type MiyoFolderExclusions = Pick<MiyoAddFolderRequest, "exclude_folders" | "exclude_patterns">;
+
+/**
+ * Translate Copilot's `qaExclusions` into Miyo folder-registration excludes.
+ *
+ * `qaExclusions` is a comma-encoded mix of `#tags`, `*.ext`, `[[notes]]` and
+ * folder paths. Miyo's folder API only models folder- and glob-based excludes,
+ * so we translate the two that map cleanly and drop the rest rather than
+ * approximate them:
+ * - folder paths → `exclude_folders` (literal subfolders, relative to root)
+ * - `*.ext`      → `exclude_patterns` globs prefixed with a recursive wildcard
+ *
+ * Tag- and note-scoped exclusions have no Miyo equivalent; Miyo will still index
+ * those files, and Copilot's own filters continue to hide them from its own
+ * results. Excludes always win in Miyo, so we bias the mapping toward
+ * under-excluding (Miyo indexes a little extra) rather than over-excluding, which
+ * would drop content from search.
+ *
+ * @param qaExclusions - The raw `qaExclusions` settings string.
+ * @returns Exclude fields to merge into the add-folder request; frozen-empty
+ *          when nothing maps.
+ */
+export function getMiyoFolderExclusions(
+  qaExclusions: string,
+  obsidianIgnoreFolders: readonly string[] = EMPTY_IGNORE_FOLDERS
+): MiyoFolderExclusions {
+  const { extensionPatterns, folderPatterns } = qaExclusions.trim()
+    ? categorizePatterns(getDecodedPatterns(qaExclusions))
+    : { extensionPatterns: [] as string[], folderPatterns: [] as string[] };
+
+  // Mirror Copilot's own folder matcher exactly (matchFilePathWithFolders):
+  // forward slashes, strip only a trailing slash. We deliberately DON'T strip a
+  // leading "/" or "./" — those are dead patterns in Copilot (they never match a
+  // vault-relative path), and "activating" them here would make Miyo over-exclude
+  // folders Copilot still indexes (missing search results — the harmful direction).
+  //
+  // Drop entries that normalize to exactly "." or ".." (e.g. "./" → "."): Miyo
+  // would read those as the vault root / its parent and exclude the ENTIRE vault
+  // from indexing. "./foo" and friends stay — Copilot doesn't match them either,
+  // so at worst they under-exclude, which is the safe direction.
+  //
+  // `obsidianIgnoreFolders` is Obsidian's own "Excluded files" (userIgnoreFilters):
+  // literal folder/file paths the user hid at the vault level, so registration
+  // honors them too — both exclude the same kind of thing. A userIgnoreFilters
+  // regex ("/pattern/") reaches us with its trailing slash already stripped, so it
+  // can't be told apart from a path and stays a literal "/pattern" Miyo won't match
+  // — that under-excludes (the safe direction) rather than dropping intended files.
+  const normalize = (p: string) => p.replace(/\\/g, "/").replace(/\/+$/, "");
+  const excludeFolders = [
+    ...new Set(
+      [...folderPatterns, ...obsidianIgnoreFolders]
+        .map(normalize)
+        .filter((pattern) => pattern.length > 0 && pattern !== "." && pattern !== "..")
+    ),
+  ];
+
+  if (excludeFolders.length === 0 && extensionPatterns.length === 0) {
+    return EMPTY_MIYO_FOLDER_EXCLUSIONS;
+  }
+
+  return {
+    ...(excludeFolders.length > 0 ? { exclude_folders: excludeFolders } : {}),
+    ...(extensionPatterns.length > 0
+      ? { exclude_patterns: extensionPatterns.map((pattern) => `**/${pattern}`) }
+      : {}),
+  };
+}
+
+/** The include-only subset of {@link MiyoAddFolderRequest} we derive from settings. */
+type MiyoFolderInclusions = Pick<
+  MiyoAddFolderRequest,
+  "include_folders" | "include_patterns" | "include_extensions"
+>;
+
+/** Frozen empty inclusions — no include filter (Miyo indexes everything). */
+const EMPTY_MIYO_FOLDER_INCLUSIONS: MiyoFolderInclusions = Object.freeze({});
+
+/**
+ * Translate Copilot's `qaInclusions` into Miyo folder-registration includes.
+ *
+ * CRITICAL — the safe direction is the OPPOSITE of exclusions. Miyo's include
+ * filter is a whitelist: per the folder API, if `include_folders` OR
+ * `include_patterns` is non-empty, a file is in scope ONLY if it's under an
+ * include folder or matches an include pattern. So dropping an un-mappable
+ * inclusion (a `#tag` / `[[note]]`, which Miyo can't express) while still sending
+ * the mappable ones would OVER-restrict — Miyo would index only the folders we
+ * mapped and silently drop everything the tag/note inclusion was meant to keep.
+ * That is the harmful direction (missing search results).
+ *
+ * So we send includes ONLY when `qaInclusions` maps CLEANLY AND COMPLETELY to
+ * folder/extension terms (no tag or note components). If any tag/note pattern is
+ * present, we send NO include filter at all — Miyo indexes the whole vault and
+ * Copilot\'s own filters narrow results at query time. Under-indexing never
+ * happens; at worst Miyo indexes a little extra, matching the exclusions bias.
+ *
+ * @param qaInclusions - The raw `qaInclusions` settings string.
+ * @returns Include fields to merge into the add-folder request; frozen-empty when
+ *          nothing maps or when a tag/note pattern forces the whole-vault fallback.
+ */
+export function getMiyoFolderInclusions(qaInclusions: string): MiyoFolderInclusions {
+  if (!qaInclusions.trim()) {
+    return EMPTY_MIYO_FOLDER_INCLUSIONS;
+  }
+
+  const { tagPatterns, notePatterns, extensionPatterns, folderPatterns } = categorizePatterns(
+    getDecodedPatterns(qaInclusions)
+  );
+
+  // Any tag/note inclusion → whitelist can\'t represent it → fall back to
+  // no-filter (index everything) rather than over-restrict.
+  if (tagPatterns.length > 0 || notePatterns.length > 0) {
+    return EMPTY_MIYO_FOLDER_INCLUSIONS;
+  }
+
+  // Same folder normalization as excludes. Drop entries that normalize to "." /
+  // ".." — as an INCLUDE, "." would pin scope to the vault root but also read as
+  // a degenerate whitelist entry; excluding it keeps the mapping to real
+  // subfolders. "*.ext" → include_extensions (bare extension, no glob wildcard).
+  const includeFolders = folderPatterns
+    .map((pattern) => pattern.replace(/\\/g, "/").replace(/\/+$/, ""))
+    .filter((pattern) => pattern.length > 0 && pattern !== "." && pattern !== "..");
+  const includeExtensions = extensionPatterns.map((pattern) => pattern.replace(/^\*\./, ""));
+
+  if (includeFolders.length === 0 && includeExtensions.length === 0) {
+    return EMPTY_MIYO_FOLDER_INCLUSIONS;
+  }
+
+  return {
+    ...(includeFolders.length > 0 ? { include_folders: includeFolders } : {}),
+    ...(includeExtensions.length > 0 ? { include_extensions: includeExtensions } : {}),
+  };
+}
 
 /**
  * Convert backslashes to forward slashes and trim trailing slashes.
@@ -20,36 +228,118 @@ function normalizeFilesystemPath(path: string): string {
 }
 
 /**
- * Return the user-configured Miyo server URL, or "" to fall back to local service discovery.
- * Uses `|| ""` to guard against undefined when loaded from older saved settings.
+ * Per-capability accessor: which engine backs vault search.
  *
- * @param settings - Current Copilot settings.
- * @returns Trimmed URL string like "http://192.168.1.10:8742", or "" when not configured.
+ * Derives from the live {@link shouldUseMiyo} predicate, so every read-site
+ * stays behavior-neutral. Keyword search is agent-native; Miyo is an
+ * enhancement, so there is no persisted engine field to read.
  */
-export function getMiyoCustomUrl(settings: CopilotSettings): string {
-  return (settings.miyoServerUrl || "").trim();
+export function getSearchBackend(settings: CopilotSettings = getSettings()): "keyword" | "miyo" {
+  return shouldUseMiyo(settings) ? "miyo" : "keyword";
 }
 
 /**
- * Single source of truth for whether Miyo should be used.
+ * Compute the doc-processor backend to persist when seeding the field during a
+ * settings migration.
  *
- * Returns false when:
- * - `enableMiyo` is off, or
- * - self-host access is invalid, or
- * - running on mobile without a remote server URL (local service discovery
- *   is unavailable on mobile, so Miyo can only work via an explicit URL).
+ * Kept separate from {@link getDocProcessorBackend}: the seed must be a pure,
+ * deterministic function of the vault's old fields (its result is written into
+ * `docProcessorBackend`), whereas the runtime accessor now reads that field and
+ * layers on live Miyo availability. Reusing the accessor to seed would be
+ * circular (it would read the very field being computed) and non-deterministic
+ * (it would depend on runtime connectivity at migration time).
  *
- * Note: `enableSemanticSearchV3` need not be checked — the UI enforces that
- * enabling Miyo also enables semantic search, and disabling semantic search
- * also disables Miyo.
+ * Both inputs are read from the passed `settings` (via the pure
+ * {@link isSelfHostModeValidFor}), so the result depends only on that snapshot.
  *
- * @param settings - Current Copilot settings.
+ * @param settings - Settings being migrated.
+ * @returns "miyo" when self-host mode is valid and Miyo is enabled, else "plus".
  */
-export function shouldUseMiyo(settings: CopilotSettings): boolean {
-  if (!settings.enableMiyo || !isSelfHostAccessValid()) {
-    return false;
+export function seedDocProcessorBackend(
+  settings: CopilotSettings = getSettings()
+): "plus" | "miyo" {
+  return isSelfHostModeValidFor(settings) && settings.enableMiyo ? "miyo" : "plus";
+}
+
+/**
+ * Per-capability accessor: which backend converts documents to markdown.
+ *
+ * The persisted `docProcessorBackend` field is the source of truth, but a stale
+ * `"miyo"` value must not route documents (PDFs) to an unreachable Miyo — a dead
+ * path with no output. So we honor `"miyo"` only when Miyo is actually available
+ * for document processing; otherwise we fall back to the plus cloud parser.
+ *
+ * This is a COARSE synchronous signal (plus/miyo) for read-sites that don't parse
+ * documents — it collapses "unavailable" to "plus" without probing. The PDF parse
+ * boundary does NOT use this directly: it uses {@link resolveDocProcessorBackend},
+ * which probes and fails closed (miyo-unavailable) rather than silently routing an
+ * explicit local choice to the cloud. See that function's DESIGN NOTE.
+ */
+export function getDocProcessorBackend(settings: CopilotSettings = getSettings()): "plus" | "miyo" {
+  if (settings.docProcessorBackend !== "miyo") {
+    return "plus";
   }
-  return !Platform.isMobile || !!getMiyoCustomUrl(settings);
+  return isMiyoAvailableForCapability("documentProcessor") ? "miyo" : "plus";
+}
+
+/**
+ * Outcome of resolving the doc-processor backend at a parse boundary.
+ *
+ * `"miyo-unavailable"` is distinct from `"plus"`: it means the user EXPLICITLY
+ * chose local Miyo processing but Miyo can't be confirmed reachable right now.
+ * Callers must NOT silently route these documents to the cloud — see
+ * {@link resolveDocProcessorBackend}.
+ */
+export type ResolvedDocProcessorBackend = "plus" | "miyo" | "miyo-unavailable";
+
+/**
+ * Async parse-boundary resolver for the document-processor backend.
+ *
+ * `getDocProcessorBackend` is a pure synchronous read of the current status
+ * snapshot, but that snapshot is only refreshed while the Miyo settings page is
+ * open — it starts `unknown` and lazily degrades to `stale` after the horizon.
+ * So a user who picked `"miyo"` but never opened settings (e.g. right after an
+ * Obsidian restart) would have their documents routed by a not-yet-confirmed
+ * status.
+ *
+ * This resolver closes that lifecycle gap by probing once (single-flight +
+ * TTL-gated in the store, so the hot path isn't spammed) when the persisted
+ * preference is `"miyo"` and the live status is inconclusive (`unknown`/`stale`),
+ * then applies a THREE-way decision that keeps an explicit local choice private:
+ *
+ *   - `docProcessorBackend !== "miyo"` → `"plus"` (user chose cloud).
+ *   - `docProcessorBackend === "miyo"` but Miyo isn't actually in use
+ *     (`shouldUseMiyo` false — a stale preference left over after Disconnect, or
+ *     mobile without a remote URL) → `"plus"`. The user is not currently on Miyo,
+ *     so cloud is the correct and expected processor.
+ *   - `docProcessorBackend === "miyo"` AND Miyo is in use, probe, then:
+ *       - confirmed `available` → `"miyo"`.
+ *       - still not available → `"miyo-unavailable"` — FAIL CLOSED. The user
+ *         explicitly chose local processing; a transient Miyo outage must NOT
+ *         silently upload their document to the cloud. The caller surfaces an
+ *         error instead (matching the privacy guarantee already applied to a
+ *         Miyo parse failure in `FileParserManager`).
+ *
+ * DESIGN NOTE (locked): an EXPLICIT `docProcessorBackend === "miyo"` never falls
+ * back to cloud on unavailability — it fails closed. Cloud is only used when the
+ * user's effective choice is Plus (field is plus, or Miyo isn't in use). Do NOT
+ * "recover" a miyo-unavailable outcome by routing to Plus to avoid an error —
+ * that reintroduces the silent cloud-egress this guard exists to prevent.
+ *
+ * The synchronous `getDocProcessorBackend` (which collapses unavailable→plus)
+ * stays for non-parse read-sites that only need a coarse plus/miyo signal.
+ */
+export async function resolveDocProcessorBackend(
+  settings: CopilotSettings = getSettings()
+): Promise<ResolvedDocProcessorBackend> {
+  if (settings.docProcessorBackend !== "miyo" || !shouldUseMiyo(settings)) {
+    return "plus";
+  }
+  const status = getMiyoStatusSnapshot().documentProcessor;
+  if (status === "unknown" || status === "stale") {
+    await refreshMiyoStatus();
+  }
+  return isMiyoAvailableForCapability("documentProcessor") ? "miyo" : "miyo-unavailable";
 }
 
 /**
