@@ -29,7 +29,7 @@ function userMessage(
 
 function launchAck(agentId: string, ...toolCallIds: string[]): SDKMessage {
   return userMessage(
-    toolCallIds.map((id) => ({ id })),
+    toolCallIds.map((id) => ({ id, content: "Async agent launched successfully." })),
     { isAsync: true, status: "async_launched", agentId }
   );
 }
@@ -128,6 +128,35 @@ describe("claudeTaskProtocol", () => {
             content: [{ type: "content", content: { type: "text", text: "done" } }],
           },
         ]);
+      });
+
+      it("retires foreground task identity after its ordinary result", () => {
+        const protocol = new ClaudeBackgroundTaskStateMachine();
+        observeTool(protocol, "launch", "Agent");
+        acceptMessage(
+          protocol,
+          systemMessage({
+            subtype: "task_started",
+            task_id: "task-a",
+            tool_use_id: "launch",
+          })
+        );
+
+        const result = acceptMessage(
+          protocol,
+          userMessage([{ id: "launch", content: "foreground report" }])
+        );
+        const lateProgress = acceptMessage(
+          protocol,
+          systemMessage({
+            subtype: "task_progress",
+            task_id: "task-a",
+            description: "too late",
+          })
+        );
+
+        expect(result).toEqual({ updates: [], resultActions: new Map() });
+        expect(lateProgress.updates).toEqual([]);
       });
 
       it("ignores task-only frames without an unambiguous launch binding", () => {
@@ -257,41 +286,51 @@ describe("claudeTaskProtocol", () => {
         expect(conflictingFailure.updates).toEqual([]);
       });
 
-      it("retains ambiguous launch candidates until an explicit task frame selects the owner", () => {
-        const unique = new ClaudeBackgroundTaskStateMachine();
-        observeTool(unique, "launch", "Agent");
-        const uniqueDecision = acceptMessage(unique, launchAck("task-a", "launch"));
+      it("binds the exact asynchronous acknowledgement in a batched Agent result", () => {
+        const protocol = new ClaudeBackgroundTaskStateMachine();
+        observeTool(protocol, "foreground", "Agent");
+        observeTool(protocol, "background", "Task");
 
-        const ambiguous = new ClaudeBackgroundTaskStateMachine();
-        observeTool(ambiguous, "launch-a", "Agent");
-        observeTool(ambiguous, "launch-b", "Task");
-        const ambiguousDecision = acceptMessage(
-          ambiguous,
-          launchAck("task-a", "launch-a", "launch-b")
+        const acknowledged = acceptMessage(
+          protocol,
+          userMessage(
+            [
+              { id: "foreground", content: "foreground report" },
+              {
+                id: "background",
+                content: [{ type: "text", text: "Async agent launched successfully." }],
+              },
+            ],
+            { isAsync: true, status: "async_launched", agentId: "task-a" }
+          )
         );
-
-        expect(uniqueDecision.resultActions.get("launch")).toEqual({ kind: "omit" });
-        expect(ambiguousDecision.resultActions.size).toBe(0);
-
-        const lateFrame = acceptMessage(
-          ambiguous,
+        const progress = acceptMessage(
+          protocol,
           systemMessage({
-            subtype: "task_started",
+            subtype: "task_progress",
             task_id: "task-a",
-            tool_use_id: "launch-a",
-          })
-        );
-        const rejectedSibling = acceptMessage(
-          ambiguous,
-          systemMessage({
-            subtype: "task_started",
-            task_id: "task-a",
-            tool_use_id: "launch-b",
+            description: "Count notes",
           })
         );
 
-        expect(lateFrame.updates).toEqual([{ toolCallId: "launch-a", status: "in_progress" }]);
-        expect(rejectedSibling.updates).toEqual([]);
+        expect(acknowledged.resultActions).toEqual(new Map([["background", { kind: "omit" }]]));
+        expect(progress.updates).toEqual([
+          {
+            toolCallId: "background",
+            status: "in_progress",
+            progress: { description: "Count notes" },
+          },
+        ]);
+        expect(
+          acceptMessage(
+            protocol,
+            systemMessage({
+              subtype: "task_started",
+              task_id: "task-a",
+              tool_use_id: "foreground",
+            })
+          ).updates
+        ).toEqual([]);
       });
 
       it("retains terminal identity until a delayed output frame completes the card", () => {

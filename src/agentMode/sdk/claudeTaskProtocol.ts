@@ -66,6 +66,11 @@ export interface ClaudeTaskDecision {
 
 type TerminalTaskStatus = "completed" | "failed";
 
+interface ClaudeToolResultBlock {
+  toolCallId: string;
+  content: unknown;
+}
+
 type ClaudeTaskProtocolEvent =
   | { kind: "launch_observed"; toolCallId: string }
   | {
@@ -84,7 +89,7 @@ type ClaudeTaskProtocolEvent =
     }
   | {
       kind: "result_batch";
-      resultIds: readonly string[];
+      results: readonly ClaudeToolResultBlock[];
       launchTaskId?: string;
     };
 
@@ -166,7 +171,7 @@ export class ClaudeBackgroundTaskStateMachine {
   ): ClaudeTaskDecision {
     const resultActions = new Map<string, ClaudeTaskResultAction>();
     const launchAckToolCallId = protocolEvent.launchTaskId
-      ? this.launchAckOwner(protocolEvent.launchTaskId, protocolEvent.resultIds)
+      ? this.launchAckOwner(protocolEvent.launchTaskId, protocolEvent.results)
       : undefined;
     if (launchAckToolCallId) resultActions.set(launchAckToolCallId, { kind: "omit" });
 
@@ -174,23 +179,23 @@ export class ClaudeBackgroundTaskStateMachine {
       protocolEvent.launchTaskId &&
       !launchAckToolCallId &&
       !this.launchToolCallIdByTaskId.has(protocolEvent.launchTaskId) &&
-      protocolEvent.resultIds.filter(
-        (toolCallId) => this.launchesByToolCallId.get(toolCallId)?.phase === "awaiting_identity"
+      protocolEvent.results.filter(
+        ({ toolCallId }) => this.launchesByToolCallId.get(toolCallId)?.phase === "awaiting_identity"
       ).length > 1
         ? protocolEvent.launchTaskId
         : undefined;
 
     // Foreground Agent/Task results cannot receive future background frames.
-    for (const toolCallId of protocolEvent.resultIds) {
+    for (const { toolCallId } of protocolEvent.results) {
       const launch = this.launchesByToolCallId.get(toolCallId);
-      if (launch?.phase === "awaiting_identity" && toolCallId !== launchAckToolCallId) {
-        if (ambiguousTaskId) {
+      if (launch && toolCallId !== launchAckToolCallId) {
+        if (launch.phase === "awaiting_identity" && ambiguousTaskId) {
           this.launchesByToolCallId.set(toolCallId, {
             ...launch,
             candidateTaskId: ambiguousTaskId,
           });
         } else {
-          this.launchesByToolCallId.delete(toolCallId);
+          this.forgetLaunch(launch);
         }
       }
     }
@@ -230,14 +235,28 @@ export class ClaudeBackgroundTaskStateMachine {
     return resolvedToolCallId ? this.bindLaunch(resolvedToolCallId, taskId) : undefined;
   }
 
-  private launchAckOwner(agentId: string, resultIds: readonly string[]): string | undefined {
+  private launchAckOwner(
+    agentId: string,
+    results: readonly ClaudeToolResultBlock[]
+  ): string | undefined {
     const known = this.launchToolCallIdByTaskId.get(agentId);
-    if (known) return resultIds.includes(known) ? known : undefined;
-    const candidates = resultIds.filter(
-      (toolCallId) => this.launchesByToolCallId.get(toolCallId)?.phase === "awaiting_identity"
+    if (known) {
+      return results.some(({ toolCallId }) => toolCallId === known) ? known : undefined;
+    }
+    const acknowledgementCandidates = results.filter(
+      ({ toolCallId, content }) =>
+        this.launchesByToolCallId.get(toolCallId)?.phase === "awaiting_identity" &&
+        isAsyncLaunchAcknowledgement(content)
+    );
+    if (acknowledgementCandidates.length === 1) {
+      const [{ toolCallId }] = acknowledgementCandidates;
+      return this.bindLaunch(toolCallId, agentId)?.toolCallId;
+    }
+    const candidates = results.filter(
+      ({ toolCallId }) => this.launchesByToolCallId.get(toolCallId)?.phase === "awaiting_identity"
     );
     if (candidates.length !== 1) return undefined;
-    return this.bindLaunch(candidates[0], agentId)?.toolCallId;
+    return this.bindLaunch(candidates[0].toolCallId, agentId)?.toolCallId;
   }
 
   private pruneAmbiguousCandidates(taskId: string, ownerToolCallId: string): void {
@@ -252,9 +271,11 @@ export class ClaudeBackgroundTaskStateMachine {
     }
   }
 
-  private forgetLaunch(launch: IdentifiedBackgroundTaskLaunch): void {
+  private forgetLaunch(launch: BackgroundTaskLaunch): void {
     this.launchesByToolCallId.delete(launch.toolCallId);
-    this.launchToolCallIdByTaskId.delete(launch.taskId);
+    if (launch.phase !== "awaiting_identity") {
+      this.launchToolCallIdByTaskId.delete(launch.taskId);
+    }
   }
 
   private mergeTerminal(
@@ -304,7 +325,7 @@ function protocolEventFromCarrier(carrier: ClaudeTaskCarrier): ClaudeTaskProtoco
   if (message.type === "user") {
     return {
       kind: "result_batch",
-      resultIds: toolResultIds(message),
+      results: toolResultBlocks(message),
       launchTaskId: readAsyncLaunchAgentId(message),
     };
   }
@@ -376,17 +397,32 @@ function finiteNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
-function toolResultIds(msg: SDKMessage): string[] {
+function toolResultBlocks(msg: SDKMessage): ClaudeToolResultBlock[] {
   const content = asRecord((msg as { message?: unknown }).message)?.content;
   if (!Array.isArray(content)) return [];
-  const ids: string[] = [];
+  const results: ClaudeToolResultBlock[] = [];
   for (const block of content) {
     const record = asRecord(block);
     if (record?.type !== "tool_result") continue;
-    const id = nonEmptyString(record.tool_use_id);
-    if (id) ids.push(id);
+    const toolCallId = nonEmptyString(record.tool_use_id);
+    if (toolCallId) results.push({ toolCallId, content: record.content });
   }
-  return ids;
+  return results;
+}
+
+function isAsyncLaunchAcknowledgement(content: unknown): boolean {
+  const text = toolResultText(content)?.trim();
+  return (
+    text !== undefined &&
+    /^Async agent launched successfully\.(?:\r?\nagentId: [^\r\n]+ \(internal ID\))?$/.test(text)
+  );
+}
+
+function toolResultText(content: unknown): string | undefined {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content) || content.length !== 1) return undefined;
+  const block = asRecord(content[0]);
+  return block?.type === "text" ? nonEmptyString(block.text) : undefined;
 }
 
 function readTaskProgress(msg: {

@@ -1123,11 +1123,11 @@ describe("translateSdkMessage", () => {
       expect(out[0].update).toMatchObject({ toolCallId: "tu-read", status: "completed" });
     });
 
-    it("keeps batched Agent candidates until task_started identifies the async launch", () => {
+    it("suppresses the exact batched launch acknowledgement and binds task-only frames", () => {
       const state = createTranslatorState();
       trackToolUse(state, "tu-foreground", "Agent");
       trackToolUse(state, "tu-background", "Task");
-      translateSdkMessage(
+      const acknowledged = translateSdkMessage(
         {
           type: "user",
           tool_use_result: { isAsync: true, status: "async_launched", agentId: "abc123" },
@@ -1148,30 +1148,32 @@ describe("translateSdkMessage", () => {
         state
       );
 
-      const selected = translateSdkMessage(
+      const progress = translateSdkMessage(
         systemMessage({
-          subtype: "task_started",
+          subtype: "task_progress",
           task_id: "abc123",
-          tool_use_id: "tu-background",
-        }),
-        SESSION_ID,
-        state
-      );
-      const rejected = translateSdkMessage(
-        systemMessage({
-          subtype: "task_started",
-          task_id: "abc123",
-          tool_use_id: "tu-foreground",
+          description: "Count notes",
         }),
         SESSION_ID,
         state
       );
 
-      expect(selected[0].update).toMatchObject({
+      expect(acknowledged).toEqual([
+        {
+          sessionId: SESSION_ID,
+          update: {
+            sessionUpdate: "tool_call_update",
+            toolCallId: "tu-foreground",
+            status: "completed",
+            content: [{ type: "content", content: { type: "text", text: "done" } }],
+          },
+        },
+      ]);
+      expect(progress[0].update).toMatchObject({
         toolCallId: "tu-background",
         status: "in_progress",
+        progress: { description: "Count notes" },
       });
-      expect(rejected).toEqual([]);
     });
 
     it("still completes a genuine (non-launch) tool_result", () => {
