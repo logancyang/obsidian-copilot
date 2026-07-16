@@ -85,6 +85,10 @@ export const DEFAULT_TITLE_PREFIX = "New session";
  * agent's own context always receives the full output regardless.
  */
 const MAX_TOOL_OUTPUT_TEXT_CHARS = 256_000;
+// ACP prompt results can arrive before the last session/update frames. Require
+// a quiet interval after a cancelled backing prompt settles before dispatching
+// a follow-up on the same session.
+const CANCELLED_TURN_QUIET_MS = 1_000;
 // Shared sentinel so `getPendingToolPermissions()` returns a stable reference
 // when nothing is pending — preserves React `useState` setter bail-out
 // behavior on idle subscription ticks.
@@ -381,6 +385,7 @@ export class AgentSession {
   // follow-up may be composed immediately, but its backend prompt waits on this
   // barrier so output from the cancelled generation cannot target the new turn.
   private cancelledPromptDrain: Promise<void> | null = null;
+  private cancelledTurnActivity = 0;
   private cancelledMessageIds = new Set<string>();
   private abortController: AbortController | null = null;
   private listeners = new Set<AgentSessionListener>();
@@ -1113,10 +1118,19 @@ export class AgentSession {
           }),
         ]);
         if (signal.aborted) {
-          const drain = backingPrompt.then(
+          const settledPrompt = backingPrompt.then(
             () => undefined,
             () => undefined
           );
+          const drain = settledPrompt.then(async () => {
+            let activity: number;
+            do {
+              activity = this.cancelledTurnActivity;
+              await new Promise<void>((resolve) =>
+                window.setTimeout(resolve, CANCELLED_TURN_QUIET_MS)
+              );
+            } while (activity !== this.cancelledTurnActivity);
+          });
           this.cancelledPromptDrain = drain;
           void drain.then(() => {
             if (this.cancelledPromptDrain === drain) this.cancelledPromptDrain = null;
@@ -1667,6 +1681,7 @@ export class AgentSession {
       switch (update.sessionUpdate) {
         case "agent_message_chunk":
         case "agent_thought_chunk":
+          this.cancelledTurnActivity += 1;
           if (update.messageId) this.cancelledMessageIds.add(update.messageId);
           logWarn(
             `[AgentMode] dropping ${update.sessionUpdate} from cancelled turn ${this.internalId}`
@@ -1675,6 +1690,7 @@ export class AgentSession {
         case "tool_call":
         case "tool_call_update":
         case "plan":
+          this.cancelledTurnActivity += 1;
           logWarn(
             `[AgentMode] dropping ${update.sessionUpdate} from cancelled turn ${this.internalId}`
           );

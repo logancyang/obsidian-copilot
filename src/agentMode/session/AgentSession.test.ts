@@ -1101,14 +1101,24 @@ describe("AgentSession.sendPrompt", () => {
     expect(mock.prompt).toHaveBeenCalledTimes(1);
     emitChunk("agent_message_chunk", " stale retry", "msg-retry");
 
-    resolveBackingPrompt!({ stopReason: "cancelled" });
-    await new Promise((resolve) => window.setTimeout(resolve, 0));
-    expect(mock.prompt).toHaveBeenCalledTimes(2);
-    emitChunk("agent_message_chunk", " stale trailing chunk", "msg-retry");
-    emitChunk("agent_message_chunk", "recovered", "msg-second");
-    resolveSecondPrompt!({ stopReason: "end_turn" });
-    await expect(next.turn).resolves.toBe("end_turn");
-    expect(session.store.getDisplayMessages().at(-1)?.message).toBe("recovered");
+    jest.useFakeTimers();
+    try {
+      resolveBackingPrompt!({ stopReason: "cancelled" });
+      await jest.advanceTimersByTimeAsync(500);
+      emitChunk("agent_message_chunk", " delayed stale retry", "msg-retry");
+      await jest.advanceTimersByTimeAsync(500);
+      expect(mock.prompt).toHaveBeenCalledTimes(1);
+
+      await jest.advanceTimersByTimeAsync(1_000);
+      expect(mock.prompt).toHaveBeenCalledTimes(2);
+      emitChunk("agent_message_chunk", " stale trailing chunk", "msg-retry");
+      emitChunk("agent_message_chunk", "recovered", "msg-second");
+      resolveSecondPrompt!({ stopReason: "end_turn" });
+      await expect(next.turn).resolves.toBe("end_turn");
+      expect(session.store.getDisplayMessages().at(-1)?.message).toBe("recovered");
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });
 
