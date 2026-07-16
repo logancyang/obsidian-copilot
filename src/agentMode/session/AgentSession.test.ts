@@ -1029,6 +1029,97 @@ describe("AgentSession.sendPrompt", () => {
     resolvePrompt!({ stopReason: "cancelled" });
     expect(await turn).toBe("cancelled");
   });
+
+  it("settles locally and drops retry output when backend cancellation fails", async () => {
+    const mock = makeMockBackend();
+    let resolveBackingPrompt: ((value: { stopReason: "cancelled" }) => void) | null = null;
+    let resolveSecondPrompt: ((value: { stopReason: "end_turn" }) => void) | null = null;
+    mock.prompt
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveBackingPrompt = resolve;
+          })
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveSecondPrompt = resolve;
+          })
+      );
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+    });
+    const emitChunk = (
+      sessionUpdate: "agent_thought_chunk" | "agent_message_chunk",
+      text: string,
+      messageId = "msg-first"
+    ) =>
+      mock.emit({
+        sessionId: "acp-1",
+        update: { sessionUpdate, messageId, content: { type: "text", text } },
+      });
+    const { turn } = session.sendPrompt("first");
+
+    emitChunk("agent_thought_chunk", "initial thought");
+    emitChunk("agent_message_chunk", "partial answer");
+    mock.cancel.mockImplementation(() => {
+      emitChunk("agent_thought_chunk", " retry during cancel");
+      mock.emit({
+        sessionId: "acp-1",
+        update: {
+          sessionUpdate: "tool_call",
+          toolCallId: "tc-stale",
+          title: "Stale retry tool",
+          status: "pending",
+        },
+      });
+      return Promise.reject(new Error("cancel unsupported"));
+    });
+
+    await session.cancel();
+    await expect(turn).resolves.toBe("cancelled");
+    expect(session.getStatus()).toBe("idle");
+
+    emitChunk("agent_message_chunk", " retry after cancel");
+    const firstAnswer = session.store
+      .getDisplayMessages()
+      .find((message) => message.sender === AI_SENDER);
+    expect(firstAnswer?.message).toBe("partial answer");
+    expect(firstAnswer?.parts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: "thought", text: "initial thought" }),
+      ])
+    );
+    expect(firstAnswer?.parts?.some((part) => part.kind === "tool_call")).toBe(false);
+    expect(firstAnswer?.turnStopReason).toBe("cancelled");
+
+    const next = session.sendPrompt("second");
+    expect(mock.prompt).toHaveBeenCalledTimes(1);
+    emitChunk("agent_message_chunk", " stale retry", "msg-retry");
+
+    jest.useFakeTimers();
+    try {
+      resolveBackingPrompt!({ stopReason: "cancelled" });
+      await jest.advanceTimersByTimeAsync(500);
+      emitChunk("agent_message_chunk", " delayed stale retry", "msg-retry");
+      await jest.advanceTimersByTimeAsync(500);
+      expect(mock.prompt).toHaveBeenCalledTimes(1);
+
+      await jest.advanceTimersByTimeAsync(1_000);
+      expect(mock.prompt).toHaveBeenCalledTimes(2);
+      emitChunk("agent_message_chunk", " stale trailing chunk", "msg-retry");
+      emitChunk("agent_message_chunk", "recovered", "msg-second");
+      resolveSecondPrompt!({ stopReason: "end_turn" });
+      await expect(next.turn).resolves.toBe("end_turn");
+      expect(session.store.getDisplayMessages().at(-1)?.message).toBe("recovered");
+    } finally {
+      jest.useRealTimers();
+    }
+  });
 });
 
 describe("withReadOnlyPreamble", () => {

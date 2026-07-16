@@ -128,10 +128,10 @@ export function readOpencodeSettings(): OpencodeBackendSettings {
 
 /**
  * Whether an installed opencode version predates the minimum the plugin
- * supports ({@link OPENCODE_MIN_ACP_VERSION}). Older binaries advertise models
- * through the now-removed ACP `models` state, so the picker can't surface them.
- * An unknown version isn't flagged — we can't prove it's old, and a missing
- * install is handled by the install prompt instead.
+ * supports ({@link OPENCODE_MIN_ACP_VERSION}). Older binaries either predate
+ * the current model catalog or leave the backing turn running after ACP
+ * cancellation. An unknown version isn't flagged — we can't prove it's old,
+ * and a missing install is handled by the install prompt instead.
  */
 export function isOpencodeVersionOutdated(version: string | undefined): boolean {
   if (!version) return false;

@@ -25,6 +25,7 @@ import {
   PlanSummary,
   PromptContent,
   PromptInput,
+  PromptOutput,
   SessionEvent,
   SessionId,
   SessionUsage,
@@ -84,6 +85,10 @@ export const DEFAULT_TITLE_PREFIX = "New session";
  * agent's own context always receives the full output regardless.
  */
 const MAX_TOOL_OUTPUT_TEXT_CHARS = 256_000;
+// ACP prompt results can arrive before the last session/update frames. Require
+// a quiet interval after a cancelled backing prompt settles before dispatching
+// a follow-up on the same session.
+const CANCELLED_TURN_QUIET_MS = 1_000;
 // Shared sentinel so `getPendingToolPermissions()` returns a stable reference
 // when nothing is pending — preserves React `useState` setter bail-out
 // behavior on idle subscription ticks.
@@ -376,6 +381,12 @@ export class AgentSession {
   // a newer turn's placeholder. Replaced on the next completion, cleared on
   // cancel/dispose.
   private settledStream: { placeholderId: string; messageIds: Set<string> } | null = null;
+  // A locally-cancelled prompt whose backend promise has not settled yet. A
+  // follow-up may be composed immediately, but its backend prompt waits on this
+  // barrier so output from the cancelled generation cannot target the new turn.
+  private cancelledPromptDrain: Promise<void> | null = null;
+  private cancelledTurnActivity = 0;
+  private cancelledMessageIds = new Set<string>();
   private abortController: AbortController | null = null;
   private listeners = new Set<AgentSessionListener>();
   private unregisterSessionHandler: (() => void) | null = null;
@@ -1002,7 +1013,18 @@ export class AgentSession {
   ): Promise<StopReason> {
     const placeholderId = this.placeholderId;
     const sessionId = this.backendSessionId!;
+    const signal = this.abortController!.signal;
     try {
+      const priorPromptDrain = this.cancelledPromptDrain;
+      if (priorPromptDrain) {
+        await Promise.race([
+          priorPromptDrain,
+          new Promise<void>((resolve) => {
+            signal.addEventListener("abort", () => resolve(), { once: true });
+          }),
+        ]);
+      }
+
       // Extract live Web Viewer content (reader-mode markdown, YouTube
       // transcripts) just before the prompt is built so it reflects the page
       // at send/flush time, not at compose time. Only take the async hop when
@@ -1083,7 +1105,39 @@ export class AgentSession {
         sessionId,
         prompt: promptBlocks,
       };
-      const resp = await this.backend.prompt(req);
+      const promptStarted = !signal.aborted;
+      let resp: PromptOutput = { stopReason: "cancelled" };
+      if (promptStarted) {
+        const backingPrompt = this.backend.prompt(req);
+        resp = await Promise.race([
+          backingPrompt,
+          new Promise<PromptOutput>((resolve) => {
+            signal.addEventListener("abort", () => resolve({ stopReason: "cancelled" }), {
+              once: true,
+            });
+          }),
+        ]);
+        if (signal.aborted) {
+          const settledPrompt = backingPrompt.then(
+            () => undefined,
+            () => undefined
+          );
+          const drain = settledPrompt.then(async () => {
+            let activity: number;
+            do {
+              activity = this.cancelledTurnActivity;
+              await new Promise<void>((resolve) =>
+                window.setTimeout(resolve, CANCELLED_TURN_QUIET_MS)
+              );
+            } while (activity !== this.cancelledTurnActivity);
+          });
+          this.cancelledPromptDrain = drain;
+          void drain.then(() => {
+            if (this.cancelledPromptDrain === drain) this.cancelledPromptDrain = null;
+          });
+          resp = { stopReason: "cancelled" };
+        }
+      }
       // Flush the buffer only on a non-cancelled completion — only then has the
       // backend durably ingested the `<prior_turns>` block. A cancelled prompt may
       // have stopped before ingesting it, so keep and re-inject (a duplicate is
@@ -1095,13 +1149,13 @@ export class AgentSession {
       // the turn, so a hard `prompt()` failure (transport/auth) leaves the flag
       // unset and the user's retry re-delivers the context (a user cancel still
       // resolves here, and the prompt did reach the backend, so it counts as delivered).
-      if (isFirstTurn) this.firstPromptSent = true;
+      if (isFirstTurn && promptStarted) this.firstPromptSent = true;
       // Same delivery contract as `firstPromptSent`: the note reached the backend
       // in this accepted (possibly cancelled) prompt, so advance the session's
       // cursor. A hard `prompt()` failure throws before here, leaving the cursor
       // unmoved so the retry re-delivers the note. Fan-out returns earlier and
       // never reaches this ack.
-      if (projectContextUpdates) {
+      if (projectContextUpdates && promptStarted) {
         this.markProjectContextUpdatesDeliveredFn?.(projectContextUpdates.epoch);
       }
       if (
@@ -1266,9 +1320,9 @@ export class AgentSession {
   }
 
   /**
-   * Cancel any in-flight turn. The backend may still emit a few trailing
-   * session events before the prompt promise resolves with
-   * `stopReason: "cancelled"` — that's expected.
+   * Cancel any in-flight turn. Local cancellation settles the prompt even if
+   * the backend ignores ACP `session/cancel`; the backend notification still
+   * runs so a compliant agent can stop work and keep its session reusable.
    *
    * Flushes any pending tool-permission and AskUserQuestion resolvers (rejects
    * / empty answers respectively) so the inline cards disappear immediately
@@ -1279,6 +1333,10 @@ export class AgentSession {
     const status = this.getStatus();
     if (status !== "running" && status !== "awaiting_permission") return;
     if (!this.backendSessionId) return;
+    this.abortController?.abort();
+    this.settledStream = null;
+    for (const messageId of this.currentMessageIds) this.cancelledMessageIds.add(messageId);
+    this.currentMessageIds = new Set();
     if (this.pendingToolResolvers.size > 0) {
       this.flushResolvers(this.pendingToolResolvers);
       this.notifyMessages();
@@ -1292,7 +1350,6 @@ export class AgentSession {
     } catch (e) {
       logWarn(`[AgentMode] cancel notification failed`, e);
     }
-    this.abortController?.abort();
   }
 
   /** Detach from the backend. Does not cancel — call `cancel()` first. */
@@ -1308,6 +1365,8 @@ export class AgentSession {
     this.currentTodoList = null;
     this.currentTodoListSignature = null;
     this.settledStream = null;
+    this.cancelledPromptDrain = null;
+    this.cancelledMessageIds.clear();
     this.currentMessageIds = new Set();
     // Fire the `"closed"` transition before clearing listeners so
     // subscribers still observe it. `disposed = true` above guarantees
@@ -1618,6 +1677,27 @@ export class AgentSession {
   private handleSessionEvent(event: SessionEvent): void {
     const update = event.update;
 
+    if (this.cancelledPromptDrain || this.abortController?.signal.aborted) {
+      switch (update.sessionUpdate) {
+        case "agent_message_chunk":
+        case "agent_thought_chunk":
+          this.cancelledTurnActivity += 1;
+          if (update.messageId) this.cancelledMessageIds.add(update.messageId);
+          logWarn(
+            `[AgentMode] dropping ${update.sessionUpdate} from cancelled turn ${this.internalId}`
+          );
+          return;
+        case "tool_call":
+        case "tool_call_update":
+        case "plan":
+          this.cancelledTurnActivity += 1;
+          logWarn(
+            `[AgentMode] dropping ${update.sessionUpdate} from cancelled turn ${this.internalId}`
+          );
+          return;
+      }
+    }
+
     // Refresh the live todo snapshot before any placeholder gating — the
     // snapshot is session-scoped state, not part of the message trail.
     if (update.sessionUpdate === "plan" && this.applyCurrentTodoList(update.entries)) {
@@ -1742,6 +1822,13 @@ export class AgentSession {
    * when there's no message to append to (a genuinely stray update).
    */
   private resolveContentTarget(messageId: string | undefined): string | null {
+    if (
+      this.cancelledPromptDrain ||
+      this.abortController?.signal.aborted ||
+      (messageId !== undefined && this.cancelledMessageIds.has(messageId))
+    ) {
+      return null;
+    }
     if (messageId && this.settledStream?.messageIds.has(messageId)) {
       return this.settledStream.placeholderId;
     }

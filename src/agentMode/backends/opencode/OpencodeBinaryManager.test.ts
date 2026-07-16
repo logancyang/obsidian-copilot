@@ -56,6 +56,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import {
   computeInstallState,
+  isOpencodeVersionOutdated,
   legacyVaultDataDir,
   opencodeManagedDataDir,
   OpencodeBinaryManager,
@@ -64,6 +65,13 @@ import {
   toOpencodeInstallState,
   verifyOpencodeBinary,
 } from "./OpencodeBinaryManager";
+
+describe("isOpencodeVersionOutdated", () => {
+  it("requires the ACP cancellation fix shipped in 1.16.0", () => {
+    expect(isOpencodeVersionOutdated("1.15.13")).toBe(true);
+    expect(isOpencodeVersionOutdated("1.16.0")).toBe(false);
+  });
+});
 
 // Pull the mock helpers off the mocked module without TS complaints.
 const settingsMock = jest.requireMock("@/settings/model");
