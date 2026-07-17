@@ -73,6 +73,12 @@ interface ClaudeToolResultBlock {
   status: TerminalTaskStatus;
 }
 
+interface PendingTerminalFrame {
+  status: TerminalTaskStatus;
+  output?: string;
+  progress?: AgentToolProgress;
+}
+
 type ClaudeTaskProtocolEvent =
   | { kind: "launch_observed"; toolCallId: string }
   | {
@@ -113,6 +119,11 @@ const NO_TASK_DECISION: ClaudeTaskDecision = Object.freeze({
 export class ClaudeBackgroundTaskStateMachine {
   private readonly launchesByToolCallId = new Map<string, TaskLaunch>();
   private readonly launchToolCallIdByTaskId = new Map<string, string>();
+  // A fast task can settle with only its task id before the launch
+  // acknowledgement supplies the binding; the frame is parked here and
+  // replayed by `bindLaunch` the moment the identity arrives.
+  private readonly pendingTerminalsByTaskId = new Map<string, PendingTerminalFrame>();
+  private readonly replayedUpdates: ClaudeTaskToolUpdate[] = [];
 
   /**
    * Applies one carrier atomically and returns every resulting protocol decision.
@@ -121,7 +132,14 @@ export class ClaudeBackgroundTaskStateMachine {
    */
   accept(carrier: ClaudeTaskCarrier): ClaudeTaskDecision {
     const protocolEvent = protocolEventFromCarrier(carrier);
-    return protocolEvent ? this.transition(protocolEvent) : NO_TASK_DECISION;
+    if (!protocolEvent) return NO_TASK_DECISION;
+    const decision = this.transition(protocolEvent);
+    if (this.replayedUpdates.length === 0) return decision;
+    const replays = this.replayedUpdates.splice(0);
+    return {
+      updates: [...replays, ...decision.updates],
+      resultActions: decision.resultActions,
+    };
   }
 
   private transition(protocolEvent: ClaudeTaskProtocolEvent): ClaudeTaskDecision {
@@ -159,7 +177,20 @@ export class ClaudeBackgroundTaskStateMachine {
     protocolEvent: Extract<ClaudeTaskProtocolEvent, { kind: "task_terminal" }>
   ): ClaudeTaskDecision {
     const launch = this.resolveLaunch(protocolEvent.toolCallId, protocolEvent.taskId);
-    if (!launch) return NO_TASK_DECISION;
+    if (!launch) {
+      // Park only task-only frames: a frame carrying an explicit tool_use_id
+      // that still fails to resolve refers to a launch this session never
+      // observed (or a conflicting identity), and replaying it later would
+      // fabricate a card.
+      if (protocolEvent.toolCallId === undefined) {
+        this.pendingTerminalsByTaskId.set(protocolEvent.taskId, {
+          status: protocolEvent.status,
+          output: protocolEvent.output,
+          progress: protocolEvent.progress,
+        });
+      }
+      return NO_TASK_DECISION;
+    }
     const update = this.mergeTerminal(
       launch,
       protocolEvent.status,
@@ -236,7 +267,14 @@ export class ClaudeBackgroundTaskStateMachine {
     }
     this.launchesByToolCallId.set(toolCallId, identified);
     this.launchToolCallIdByTaskId.set(taskId, toolCallId);
-    return identified;
+    const pending = this.pendingTerminalsByTaskId.get(taskId);
+    if (!pending) return identified;
+    this.pendingTerminalsByTaskId.delete(taskId);
+    const replay = this.mergeTerminal(identified, pending.status, pending.output, pending.progress);
+    if (replay) this.replayedUpdates.push(replay);
+    // mergeTerminal advanced the stored launch; return the settled record so
+    // the caller's phase checks see the terminal state.
+    return this.launchesByToolCallId.get(toolCallId) as IdentifiedTaskLaunch;
   }
 
   private resolveLaunch(
@@ -365,7 +403,24 @@ function protocolEventFromCarrier(carrier: ClaudeTaskCarrier): ClaudeTaskProtoco
     description?: unknown;
     last_tool_name?: unknown;
     usage?: unknown;
+    patch?: unknown;
   };
+  if (frame.subtype === "task_updated") {
+    // `task_updated` carries a partial TaskState patch and no tool_use_id. A
+    // subagent may report its terminal transition only here, so map terminal
+    // patch statuses through the state machine; non-terminal patches carry
+    // nothing the launch card renders.
+    const taskId = nonEmptyString(frame.task_id);
+    const patch = asRecord(frame.patch);
+    const status = mapTerminalTaskStatus(patch?.status);
+    if (!taskId || !status) return undefined;
+    return {
+      kind: "task_terminal",
+      taskId,
+      status,
+      output: nonEmptyString(patch?.error),
+    };
+  }
   if (
     frame.subtype !== "task_started" &&
     frame.subtype !== "task_progress" &&
@@ -442,11 +497,10 @@ function toolResultBlocks(msg: SDKMessage): ClaudeToolResultBlock[] {
 }
 
 function isAsyncLaunchAcknowledgement(content: unknown): boolean {
-  const text = toolResultText(content)?.trim();
-  return (
-    text !== undefined &&
-    /^Async agent launched successfully\.(?:\r?\nagentId: [^\r\n]+ \(internal ID\))?$/.test(text)
-  );
+  // Only the leading sentence is stable across CLI versions — the trailing
+  // metadata warning and agentId instructions vary — so match the prefix.
+  const text = toolResultText(content)?.trimStart();
+  return text !== undefined && text.startsWith("Async agent launched successfully.");
 }
 
 function toolResultText(content: unknown): string | undefined {
@@ -503,6 +557,7 @@ function mapTerminalTaskStatus(status: unknown): TerminalTaskStatus | undefined 
       return "completed";
     case "failed":
     case "stopped":
+    case "killed":
       return "failed";
     default:
       return undefined;

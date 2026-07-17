@@ -1047,7 +1047,28 @@ describe("translateSdkMessage", () => {
       expect(lateProgress).toEqual([]);
     });
 
-    it("ignores task_updated frames", () => {
+    it("settles the launch when task_updated carries a terminal patch status", () => {
+      const state = createTranslatorState();
+      seedLaunch(state);
+
+      const settled = translateSdkMessage(
+        systemMessage({
+          subtype: "task_updated",
+          task_id: "abc123",
+          patch: { status: "completed" },
+        }),
+        SESSION_ID,
+        state
+      );
+
+      expect(settled[0].update).toMatchObject({
+        sessionUpdate: "tool_call_update",
+        toolCallId: "tu-launch",
+        status: "completed",
+      });
+    });
+
+    it("ignores task_updated frames whose patch is not terminal", () => {
       const state = createTranslatorState();
       seedLaunch(state);
 
@@ -1056,7 +1077,7 @@ describe("translateSdkMessage", () => {
           systemMessage({
             subtype: "task_updated",
             task_id: "abc123",
-            patch: { status: "completed" },
+            patch: { status: "running" },
           }),
           SESSION_ID,
           state

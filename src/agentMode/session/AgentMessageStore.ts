@@ -364,6 +364,20 @@ export class AgentMessageStore {
   }
 
   /**
+   * Locate the message that already renders a tool call, searching newest
+   * first. Lets a late update for a long-running tool (e.g. a background
+   * subagent settling during a later turn) land on its original card instead
+   * of the current placeholder. Returns undefined when no message has it.
+   */
+  findMessageIdWithToolCall(toolCallId: string): string | undefined {
+    for (let i = this.messages.length - 1; i >= 0; i--) {
+      const msg = this.messages[i];
+      if (msg.parts?.some((p) => p.kind === "tool_call" && p.id === toolCallId)) return msg.id;
+    }
+    return undefined;
+  }
+
+  /**
    * Mark a message as an error and append the error text to its display body.
    * Used when a turn rejects mid-stream so the partial placeholder gets a
    * visible error instead of looking like a normal truncated reply.

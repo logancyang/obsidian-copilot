@@ -209,6 +209,28 @@ describe("AgentMessageStore", () => {
     expect(msg?.parts).toHaveLength(1);
   });
 
+  it("findMessageIdWithToolCall returns the message owning a tool call, or undefined", () => {
+    const store = new AgentMessageStore();
+    const first = store.addMessage(placeholder());
+    const second = store.addMessage(placeholder());
+    store.upsertAgentPart(first, {
+      kind: "tool_call",
+      id: "tc-old",
+      title: "Agent",
+      status: "in_progress",
+    });
+    store.upsertAgentPart(second, {
+      kind: "tool_call",
+      id: "tc-new",
+      title: "Read README",
+      status: "completed",
+    });
+
+    expect(store.findMessageIdWithToolCall("tc-old")).toBe(first);
+    expect(store.findMessageIdWithToolCall("tc-new")).toBe(second);
+    expect(store.findMessageIdWithToolCall("tc-missing")).toBeUndefined();
+  });
+
   it("markMessageError flags the message and appends formatted error text", () => {
     const store = new AgentMessageStore();
     const id = store.addMessage({

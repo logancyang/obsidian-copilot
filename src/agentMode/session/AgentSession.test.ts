@@ -967,6 +967,58 @@ describe("AgentSession.sendPrompt", () => {
     await turn;
   });
 
+  it("routes a tool_call_update for a prior turn's tool call to its original message", async () => {
+    const mock = makeMockBackend();
+    let resolvePrompt: ((v: { stopReason: "end_turn" }) => void) | null = null;
+    mock.prompt.mockImplementation(
+      () => new Promise((resolve) => (resolvePrompt = resolve as typeof resolvePrompt))
+    );
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "claude-code",
+    });
+
+    const first = session.sendPrompt("launch a background agent");
+    mock.emit({
+      sessionId: "acp-1",
+      update: {
+        sessionUpdate: "tool_call",
+        toolCallId: "tc-agent",
+        title: "Agent",
+        status: "in_progress",
+      },
+    });
+    resolvePrompt!({ stopReason: "end_turn" });
+    await first.turn;
+
+    const second = session.sendPrompt("meanwhile");
+    mock.emit({
+      sessionId: "acp-1",
+      update: {
+        sessionUpdate: "tool_call_update",
+        toolCallId: "tc-agent",
+        status: "completed",
+        content: [{ type: "content", content: { type: "text", text: "agent report" } }],
+      },
+    });
+
+    const ai = session.store.getDisplayMessages().filter((m) => m.sender === AI_SENDER);
+    // The first turn's launch card settles in place…
+    expect(ai[0]?.parts?.[0]).toMatchObject({
+      kind: "tool_call",
+      id: "tc-agent",
+      status: "completed",
+      output: [{ type: "text", text: "agent report" }],
+    });
+    // …and no duplicate card appears on the new turn's placeholder.
+    expect(ai[1]?.parts ?? []).toHaveLength(0);
+
+    resolvePrompt!({ stopReason: "end_turn" });
+    await second.turn;
+  });
+
   it("merges partial tool progress", async () => {
     const mock = makeMockBackend();
     let resolvePrompt: ((v: { stopReason: "end_turn" }) => void) | null = null;

@@ -1781,7 +1781,12 @@ export class AgentSession {
         return;
       }
       case "tool_call_update": {
-        const existing = this.findToolCallPart(placeholderId, update.toolCallId);
+        // A background launch can settle during a later prompt; route the
+        // update to the message that owns the tool call so the original card
+        // settles instead of a duplicate appearing on the current turn.
+        const owningMessageId =
+          this.store.findMessageIdWithToolCall(update.toolCallId) ?? placeholderId;
+        const existing = this.findToolCallPart(owningMessageId, update.toolCallId);
         const merged = mergeToolCallUpdate(existing, update);
         if (merged.kind === "tool_call") {
           const exitPlan = tryReadExitPlanModeCall({
@@ -1793,7 +1798,7 @@ export class AgentSession {
             this.publishGatedPlan(merged.id, exitPlan);
           }
         }
-        if (this.store.upsertAgentPart(placeholderId, merged)) {
+        if (this.store.upsertAgentPart(owningMessageId, merged)) {
           this.scheduleNotifyMessages();
         }
         return;
