@@ -1017,6 +1017,10 @@ describe("AgentSession.sendPrompt", () => {
 
     resolvePrompt!({ stopReason: "end_turn" });
     await second.turn;
+
+    const laterTurn = session.store.getDisplayMessages().filter((m) => m.sender === AI_SENDER)[1];
+    expect(laterTurn).toMatchObject({ message: "", turnStopReason: "end_turn" });
+    expect(laterTurn?.isErrorMessage).not.toBe(true);
   });
 
   it("merges partial tool progress", async () => {

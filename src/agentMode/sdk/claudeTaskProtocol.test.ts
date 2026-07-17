@@ -356,36 +356,101 @@ describe("claudeTaskProtocol", () => {
         expect(acknowledged.resultActions.get("launch")).toEqual({ kind: "omit" });
       });
 
-      it("recognizes the verbose asynchronous acknowledgement text of newer CLIs", () => {
+      it("uses structured launch metadata when acknowledgement text changes", () => {
         const protocol = new ClaudeBackgroundTaskStateMachine();
-        observeTool(protocol, "other", "Agent");
-        observeTool(protocol, "background", "Task");
+        observeTool(protocol, "other", "Agent", {
+          prompt: "foreground prompt",
+          description: "Foreground task",
+        });
+        observeTool(protocol, "background", "Task", {
+          prompt: "background prompt",
+          description: "Background task",
+        });
 
         const acknowledged = acceptMessage(
           protocol,
           userMessage(
             [
               { id: "other", content: "foreground report" },
-              {
-                id: "background",
-                content: [
-                  {
-                    type: "text",
-                    text:
-                      "Async agent launched successfully. (This tool result is internal " +
-                      "metadata — never quote or paste any part of it, including the agentId " +
-                      "below, into a user-facing reply.)\n" +
-                      "agentId: task-a (internal ID - do not mention to user. Use SendMessage " +
-                      "with to: 'task-a', summary: '<5-10 word recap>' to continue this agent.)",
-                  },
-                ],
-              },
+              { id: "background", content: "opaque internal acknowledgement" },
             ],
-            { isAsync: true, status: "async_launched", agentId: "task-a" }
+            {
+              isAsync: true,
+              status: "async_launched",
+              agentId: "task-a",
+              prompt: "background prompt",
+              description: "Background task",
+            }
           )
         );
 
         expect(acknowledged.resultActions).toEqual(new Map([["background", { kind: "omit" }]]));
+      });
+
+      it("keeps duplicate structured launch metadata ambiguous until an explicit frame binds it", () => {
+        const protocol = new ClaudeBackgroundTaskStateMachine();
+        observeTool(protocol, "launch-a", "Agent", { prompt: "same prompt" });
+        observeTool(protocol, "launch-b", "Task", { prompt: "same prompt" });
+
+        const acknowledged = acceptMessage(
+          protocol,
+          userMessage(
+            [
+              { id: "launch-a", content: "first result" },
+              { id: "launch-b", content: "second result" },
+            ],
+            {
+              isAsync: true,
+              status: "async_launched",
+              agentId: "task-a",
+              prompt: "same prompt",
+            }
+          )
+        );
+        const started = acceptMessage(
+          protocol,
+          systemMessage({
+            subtype: "task_started",
+            task_id: "task-a",
+            tool_use_id: "launch-b",
+          })
+        );
+
+        expect(acknowledged.resultActions).toEqual(new Map());
+        expect(started.updates).toEqual([{ toolCallId: "launch-b", status: "in_progress" }]);
+      });
+
+      it("preserves an earlier pending terminal report when a later patch has no output", () => {
+        const protocol = new ClaudeBackgroundTaskStateMachine();
+        observeTool(protocol, "launch", "Agent");
+
+        acceptMessage(
+          protocol,
+          systemMessage({
+            subtype: "task_notification",
+            task_id: "task-a",
+            status: "completed",
+            summary: "done",
+          })
+        );
+        acceptMessage(
+          protocol,
+          systemMessage({
+            subtype: "task_updated",
+            task_id: "task-a",
+            patch: { status: "completed" },
+          })
+        );
+
+        const acknowledged = acceptMessage(protocol, launchAck("task-a", "launch"));
+
+        expect(acknowledged.updates).toEqual([
+          {
+            toolCallId: "launch",
+            status: "completed",
+            content: [{ type: "content", content: { type: "text", text: "done" } }],
+          },
+        ]);
       });
 
       it("normalizes progress and never regresses a terminal launch", () => {
@@ -459,20 +524,25 @@ describe("claudeTaskProtocol", () => {
         expect(conflictingFailure.updates).toEqual([]);
       });
 
-      it("binds the exact asynchronous acknowledgement in a batched Agent result", () => {
+      it("uses a prior task binding to suppress a batched asynchronous acknowledgement", () => {
         const protocol = new ClaudeBackgroundTaskStateMachine();
         observeTool(protocol, "foreground", "Agent");
         observeTool(protocol, "background", "Task");
+        acceptMessage(
+          protocol,
+          systemMessage({
+            subtype: "task_started",
+            task_id: "task-a",
+            tool_use_id: "background",
+          })
+        );
 
         const acknowledged = acceptMessage(
           protocol,
           userMessage(
             [
               { id: "foreground", content: "foreground report" },
-              {
-                id: "background",
-                content: [{ type: "text", text: "Async agent launched successfully." }],
-              },
+              { id: "background", content: "opaque internal acknowledgement" },
             ],
             { isAsync: true, status: "async_launched", agentId: "task-a" }
           )

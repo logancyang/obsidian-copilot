@@ -419,24 +419,6 @@ describe("extractSubAgentReturnText", () => {
     });
     expect(extractSubAgentReturnText(t)).toBe("Here is what I found: …");
   });
-
-  it("never surfaces a background subagent's launch ack as the return value", () => {
-    // Internal metadata explicitly marked "never quote to the user" — a resumed
-    // transcript could reconstruct it as the launch card's output.
-    const t = tool({
-      input: { prompt: "analyze notes" },
-      output: [
-        { type: "text", text: "Async agent launched successfully.\nagentId: abc123 (internal ID)" },
-      ],
-    });
-    expect(extractSubAgentReturnText(t)).toBeNull();
-  });
-
-  it("keeps a legitimate report that begins with the launch acknowledgment wording", () => {
-    const report = "Async agent launched successfully after the retry, then completed the audit.";
-    const t = tool({ output: [{ type: "text", text: report }] });
-    expect(extractSubAgentReturnText(t)).toBe(report);
-  });
 });
 
 describe("extractSubAgentInputPrompt", () => {

@@ -600,7 +600,7 @@ export function extractSubAgentInputPrompt(part: ToolCallPart): string | null {
 }
 
 /**
- * Selects the user-visible delegated-work report so internal acknowledgments and echoed prompts are not mistaken for results.
+ * Selects the user-visible delegated-work report without repeating an echoed prompt.
  * @param part - The subagent tool call whose displayable report is needed.
  */
 export function extractSubAgentReturnText(part: ToolCallPart): string | null {
@@ -611,15 +611,6 @@ export function extractSubAgentReturnText(part: ToolCallPart): string | null {
   const m = joined.match(/<task_result>([\s\S]*?)<\/task_result>/);
   const result = m ? m[1].trim() : joined.trim();
   if (!result) return null;
-  // A background subagent's launch ack is internal
-  // metadata explicitly marked "never quote to the user" — never render it as
-  // the return value. The live path suppresses it upstream (SDK translator);
-  // this also covers a resumed transcript that reconstructs the ack as output.
-  if (
-    /^Async agent launched successfully\.(?:\r?\nagentId: [^\r\n]+ \(internal ID\))?$/.test(result)
-  ) {
-    return null;
-  }
   const prompt = extractSubAgentInputPrompt(part);
   if (prompt && prompt === result) return null;
   return result;

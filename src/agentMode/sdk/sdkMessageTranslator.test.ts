@@ -1144,21 +1144,26 @@ describe("translateSdkMessage", () => {
       expect(out[0].update).toMatchObject({ toolCallId: "tu-read", status: "completed" });
     });
 
-    it("suppresses the exact batched launch acknowledgement and binds task-only frames", () => {
+    it("uses structured launch metadata to suppress a batched acknowledgement", () => {
       const state = createTranslatorState();
-      trackToolUse(state, "tu-foreground", "Agent");
-      trackToolUse(state, "tu-background", "Task");
+      trackToolUse(state, "tu-foreground", "Agent", { prompt: "foreground prompt" });
+      trackToolUse(state, "tu-background", "Task", { prompt: "background prompt" });
       const acknowledged = translateSdkMessage(
         {
           type: "user",
-          tool_use_result: { isAsync: true, status: "async_launched", agentId: "abc123" },
+          tool_use_result: {
+            isAsync: true,
+            status: "async_launched",
+            agentId: "abc123",
+            prompt: "background prompt",
+          },
           message: {
             content: [
               { type: "tool_result", tool_use_id: "tu-foreground", content: "done" },
               {
                 type: "tool_result",
                 tool_use_id: "tu-background",
-                content: "Async agent launched successfully.",
+                content: "opaque internal acknowledgement",
               },
             ],
           },

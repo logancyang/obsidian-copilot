@@ -371,6 +371,10 @@ export class AgentSession {
   // keep the QA context. LIVE-ONLY — never persisted.
   private pendingFanoutContext: PendingFanoutContext[] = [];
   private placeholderId: string | null = null;
+  // A task update routed to an earlier turn still counts as activity consumed
+  // by the current backend prompt, even though it adds nothing to this turn's
+  // placeholder.
+  private currentTurnHadRoutedToolActivity = false;
   // ACP `messageId`s seen on this turn's content chunks. Used to re-route
   // trailing chunks that a backend flushes *after* the `session/prompt` result
   // (observed with opencode + fast DeepSeek models) to the right message.
@@ -976,6 +980,7 @@ export class AgentSession {
     };
     this.placeholderId = this.store.addMessage(placeholder);
     this.currentMessageIds = new Set();
+    this.currentTurnHadRoutedToolActivity = false;
     this.notifyMessages();
 
     // Backends without a title summarizer (codex, Claude Code) have no usable
@@ -1161,6 +1166,7 @@ export class AgentSession {
       if (
         placeholderId &&
         resp.stopReason !== "cancelled" &&
+        !this.currentTurnHadRoutedToolActivity &&
         !this.store.hasAssistantActivity(placeholderId)
       ) {
         const message = buildEmptyTurnMessage(this.backendId, resp.stopReason);
@@ -1786,6 +1792,7 @@ export class AgentSession {
         // settles instead of a duplicate appearing on the current turn.
         const owningMessageId =
           this.store.findMessageIdWithToolCall(update.toolCallId) ?? placeholderId;
+        if (owningMessageId !== placeholderId) this.currentTurnHadRoutedToolActivity = true;
         const existing = this.findToolCallPart(owningMessageId, update.toolCallId);
         const merged = mergeToolCallUpdate(existing, update);
         if (merged.kind === "tool_call") {
