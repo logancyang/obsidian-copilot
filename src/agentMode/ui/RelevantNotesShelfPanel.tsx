@@ -27,7 +27,7 @@ export function RelevantNotesShelfPanel({ onPopOut, onAddToChat }: RelevantNotes
   };
 
   return (
-    <div className={cn("tw-flex tw-size-full tw-flex-col tw-overflow-hidden")}>
+    <div className={cn("tw-flex tw-min-h-0 tw-w-full tw-flex-1 tw-flex-col tw-overflow-hidden")}>
       {!hintDismissed && (
         <div
           className={cn(
@@ -58,8 +58,11 @@ export function RelevantNotesShelfPanel({ onPopOut, onAddToChat }: RelevantNotes
           </Button>
         </div>
       )}
-      <div className={cn("tw-min-h-0 tw-flex-1")}>
-        <RelevantNotes onAddToChat={onAddToChat} />
+      <div className={cn("tw-flex tw-min-h-0 tw-flex-1 tw-flex-col")}>
+        <RelevantNotes
+          className={cn("[&>[data-relevant-notes-empty-state]]:tw-py-6")}
+          onAddToChat={onAddToChat}
+        />
       </div>
     </div>
   );

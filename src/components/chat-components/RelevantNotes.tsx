@@ -470,7 +470,10 @@ export const RelevantNotes = memo(
     return (
       <div className={cn("tw-flex tw-min-h-full tw-w-full tw-flex-1 tw-flex-col", className)}>
         {isActiveFileExcluded && (
-          <div className="tw-flex tw-flex-1 tw-flex-col tw-items-center tw-justify-center tw-px-6">
+          <div
+            data-relevant-notes-empty-state
+            className="tw-flex tw-flex-1 tw-flex-col tw-items-center tw-justify-center tw-px-6"
+          >
             <div className="tw-flex tw-w-full tw-max-w-xs tw-flex-col tw-items-center tw-gap-6 tw-text-center">
               <div className="tw-flex tw-size-16 tw-items-center tw-justify-center tw-rounded-xl tw-border tw-border-solid tw-border-border tw-bg-secondary">
                 <EyeOff className="tw-size-7 tw-text-muted" />
@@ -489,7 +492,10 @@ export const RelevantNotes = memo(
         )}
 
         {!isActiveFileExcluded && !hasIndex && (
-          <div className="tw-flex tw-flex-1 tw-flex-col tw-items-center tw-justify-center tw-px-6">
+          <div
+            data-relevant-notes-empty-state
+            className="tw-flex tw-flex-1 tw-flex-col tw-items-center tw-justify-center tw-px-6"
+          >
             <div className="tw-flex tw-w-full tw-max-w-xs tw-flex-col tw-items-center tw-gap-6 tw-text-center">
               <div className="tw-flex tw-size-16 tw-items-center tw-justify-center tw-rounded-xl tw-border tw-border-solid tw-border-border tw-bg-secondary">
                 <GitFork className="tw-size-7 tw-text-accent" />
