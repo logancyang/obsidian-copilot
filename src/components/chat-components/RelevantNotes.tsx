@@ -399,15 +399,16 @@ function BuildOverlay({ indexedCount, totalFiles }: { indexedCount: number; tota
   );
 }
 
+interface RelevantNotesProps {
+  className?: string;
+  /** Insert text (a `[[wikilink]]`) into the target chat input. */
+  onAddToChat: (text: string) => void;
+  /** Keep the host view open by navigating notes in a separate leaf. */
+  openNotesInNewLeaf?: boolean;
+}
+
 export const RelevantNotes = memo(
-  ({
-    className,
-    onAddToChat,
-  }: {
-    className?: string;
-    /** Insert text (a `[[wikilink]]`) into the target chat input. */
-    onAddToChat: (text: string) => void;
-  }) => {
+  ({ className, onAddToChat, openNotesInNewLeaf = false }: RelevantNotesProps) => {
     const app = useApp();
     const [refresher, setRefresher] = useState(0);
     const relevantNotes = useRelevantNotes(refresher);
@@ -431,7 +432,7 @@ export const RelevantNotes = memo(
     const navigateToNote = (notePath: string, openInNewLeaf = false) => {
       const file = app.vault.getAbstractFileByPath(notePath);
       if (file instanceof TFile) {
-        const leaf = app.workspace.getLeaf(openInNewLeaf);
+        const leaf = app.workspace.getLeaf(openNotesInNewLeaf || openInNewLeaf);
         void leaf.openFile(file).catch((err) => logError("openFile failed", err));
       }
     };

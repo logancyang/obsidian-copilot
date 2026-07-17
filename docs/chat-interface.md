@@ -141,7 +141,7 @@ When starting a new chat, Copilot may show suggested prompts based on your activ
 
 Copilot can display a list of notes related to your currently active note. This helps surface notes you might want to reference without manually searching. Each note can be opened, dragged in as a wikilink, or sent to the open chat with **Add to Chat**.
 
-Relevant Notes lives in its own pane. Open it from the command palette: **Open Relevant Notes**. The pane tracks whichever note you're viewing.
+On Agent Home, Relevant Notes appears as a shelf tab when the dedicated pane is closed. Notes opened from this shelf use a separate tab so Agent Home and its chat stay available. You can also select **Open pane** in the shelf or run **Open Relevant Notes** from the command palette to keep Relevant Notes beside your conversation. While that pane is open, the duplicate Agent Home tab is hidden. Both surfaces track whichever note you're viewing.
 
 ## Saving a Chat Manually
 

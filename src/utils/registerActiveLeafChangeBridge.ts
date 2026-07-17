@@ -1,5 +1,5 @@
 import { EVENT_NAMES } from "@/constants";
-import { ItemView, MarkdownView } from "obsidian";
+import { MarkdownView, type ItemView } from "obsidian";
 
 /**
  * Bridge Obsidian's workspace `active-leaf-change` onto a view-local

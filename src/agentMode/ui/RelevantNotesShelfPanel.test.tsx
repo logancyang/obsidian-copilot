@@ -8,8 +8,18 @@ jest.mock("@/agentMode/ui/homeShelfPrefs", () => ({
 }));
 
 jest.mock("@/components/chat-components/RelevantNotes", () => ({
-  RelevantNotes: ({ className }: { className?: string }) => (
-    <div data-testid="relevant-notes" className={className} />
+  RelevantNotes: ({
+    className,
+    openNotesInNewLeaf,
+  }: {
+    className?: string;
+    openNotesInNewLeaf?: boolean;
+  }) => (
+    <div
+      data-testid="relevant-notes"
+      data-open-notes-in-new-leaf={openNotesInNewLeaf}
+      className={className}
+    />
   ),
 }));
 
@@ -29,6 +39,7 @@ describe("RelevantNotesShelfPanel", () => {
       expect(content.classList.contains("tw-flex")).toBe(true);
       expect(content.classList.contains("tw-flex-col")).toBe(true);
       expect(relevantNotes.className).toContain("[&>[data-relevant-notes-empty-state]]:tw-py-6");
+      expect(relevantNotes.dataset.openNotesInNewLeaf).toBe("true");
     });
   });
 });

@@ -46,73 +46,73 @@ const projectsDisabled: AgentHomeShelfSection = {
   renderBody: () => <div>PROJECTS BODY</div>,
 };
 
-describe("AgentHomeShelf with a disabled section", () => {
-  it("activates the first selectable section, not the disabled one", () => {
-    renderShelf([chats, projectsDisabled]);
-    expect(screen.queryByText("CHATS BODY")).not.toBeNull();
-    // The disabled section's body never mounts.
-    expect(screen.queryByText("PROJECTS BODY")).toBeNull();
-  });
+describe("AgentHomeShelf", () => {
+  describe("AgentHomeShelf()", () => {
+    it("activates the first selectable section when another section is disabled", () => {
+      renderShelf([chats, projectsDisabled]);
+      expect(screen.queryByText("CHATS BODY")).not.toBeNull();
+      expect(screen.queryByText("PROJECTS BODY")).toBeNull();
+    });
 
-  it("marks the disabled tab aria-disabled and hides its count", () => {
-    renderShelf([chats, projectsDisabled]);
-    const projectsTab = screen.getByRole("tab", { name: /Projects/ });
-    expect(projectsTab.getAttribute("aria-disabled")).toBe("true");
-    expect(projectsTab.textContent ?? "").not.toContain("5");
-  });
+    it("marks a disabled tab aria-disabled and hides its count", () => {
+      renderShelf([chats, projectsDisabled]);
+      const projectsTab = screen.getByRole("tab", { name: /Projects/ });
+      expect(projectsTab.getAttribute("aria-disabled")).toBe("true");
+      expect(projectsTab.textContent ?? "").not.toContain("5");
+    });
 
-  it("does not activate the disabled tab on click", () => {
-    renderShelf([chats, projectsDisabled]);
-    fireEvent.click(screen.getByRole("tab", { name: /Projects/ }));
-    expect(screen.queryByText("PROJECTS BODY")).toBeNull();
-    expect(screen.queryByText("CHATS BODY")).not.toBeNull();
+    it("keeps the current section active when a disabled tab is clicked", () => {
+      renderShelf([chats, projectsDisabled]);
+      fireEvent.click(screen.getByRole("tab", { name: /Projects/ }));
+      expect(screen.queryByText("PROJECTS BODY")).toBeNull();
+      expect(screen.queryByText("CHATS BODY")).not.toBeNull();
+    });
+
+    it("renders the parent-selected section in controlled mode", () => {
+      renderShelf([chats, projectsEnabled], { activeSectionId: "projects" });
+      expect(screen.queryByText("PROJECTS BODY")).not.toBeNull();
+      expect(screen.queryByText("CHATS BODY")).toBeNull();
+    });
+
+    it("falls back to the first selectable section when controlled mode has no selection", () => {
+      renderShelf([chats, projectsEnabled], { activeSectionId: null });
+      expect(screen.queryByText("CHATS BODY")).not.toBeNull();
+    });
+
+    it("reports controlled clicks without switching sections until the parent updates", () => {
+      const onSectionSelect = jest.fn();
+      renderShelf([chats, projectsEnabled], { activeSectionId: "chats", onSectionSelect });
+      fireEvent.click(screen.getByRole("tab", { name: /Projects/ }));
+      expect(onSectionSelect).toHaveBeenCalledWith("projects");
+      expect(screen.queryByText("CHATS BODY")).not.toBeNull();
+      expect(screen.queryByText("PROJECTS BODY")).toBeNull();
+    });
+
+    it("hides the count badge when the count is undefined", () => {
+      renderShelf([withCount(undefined)]);
+      expect(screen.getByRole("tab", { name: /Recent Chats/ }).textContent ?? "").not.toMatch(/\d/);
+    });
+
+    it("hides the count badge when the count is zero", () => {
+      renderShelf([withCount(0)]);
+      expect(screen.getByRole("tab", { name: /Recent Chats/ }).textContent ?? "").not.toContain(
+        "0"
+      );
+    });
+
+    it("shows the count badge when the count is positive", () => {
+      renderShelf([withCount(3)]);
+      expect(screen.getByRole("tab", { name: /Recent Chats/ }).textContent ?? "").toContain("3");
+    });
   });
 });
 
-describe("AgentHomeShelf controlled mode", () => {
-  it("renders the parent-selected section's body", () => {
-    renderShelf([chats, projectsEnabled], { activeSectionId: "projects" });
-    expect(screen.queryByText("PROJECTS BODY")).not.toBeNull();
-    expect(screen.queryByText("CHATS BODY")).toBeNull();
-  });
-
-  it("falls back to the first selectable section when nothing is picked yet (null)", () => {
-    renderShelf([chats, projectsEnabled], { activeSectionId: null });
-    expect(screen.queryByText("CHATS BODY")).not.toBeNull();
-  });
-
-  it("reports clicks via onSectionSelect instead of switching on its own", () => {
-    const onSectionSelect = jest.fn();
-    renderShelf([chats, projectsEnabled], { activeSectionId: "chats", onSectionSelect });
-    fireEvent.click(screen.getByRole("tab", { name: /Projects/ }));
-    expect(onSectionSelect).toHaveBeenCalledWith("projects");
-    // Controlled: the body only changes when the parent updates the prop.
-    expect(screen.queryByText("CHATS BODY")).not.toBeNull();
-    expect(screen.queryByText("PROJECTS BODY")).toBeNull();
-  });
-});
-
-describe("AgentHomeTab count badge (via the shelf)", () => {
-  const withCount = (count?: number): AgentHomeShelfSection => ({
+function withCount(count?: number): AgentHomeShelfSection {
+  return {
     id: "chats",
     icon: <span />,
     title: "Recent Chats",
     count,
     renderBody: () => <div>CHATS BODY</div>,
-  });
-
-  it("shows no badge when count is undefined (e.g. the Relevant Notes tab)", () => {
-    renderShelf([withCount(undefined)]);
-    expect(screen.getByRole("tab", { name: /Recent Chats/ }).textContent ?? "").not.toMatch(/\d/);
-  });
-
-  it("shows no badge when count is 0", () => {
-    renderShelf([withCount(0)]);
-    expect(screen.getByRole("tab", { name: /Recent Chats/ }).textContent ?? "").not.toContain("0");
-  });
-
-  it("shows the badge when count is positive", () => {
-    renderShelf([withCount(3)]);
-    expect(screen.getByRole("tab", { name: /Recent Chats/ }).textContent ?? "").toContain("3");
-  });
-});
+  };
+}
