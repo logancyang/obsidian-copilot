@@ -195,7 +195,11 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
             }
             ErrorBoundary={LexicalErrorBoundary}
           />
-          <OnChangePlugin onChange={handleEditorChange} />
+          {/* ignoreSelectionChange: only text edits should push into `value`.
+              Selection/focus-only changes carry the same text, and firing
+              onChange for them lets stale editor text race a just-issued
+              external clear back into the controlled value (#211). */}
+          <OnChangePlugin onChange={handleEditorChange} ignoreSelectionChange />
           <HistoryPlugin />
           <KeyboardPlugin
             onSubmit={onSubmit}

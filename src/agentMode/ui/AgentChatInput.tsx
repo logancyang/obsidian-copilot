@@ -373,17 +373,10 @@ export const AgentChatInput = memo(function AgentChatInput({
         }
       }
 
-      const content: PromptContent[] = [];
-
-      // Convert attached images to base64 image content blocks.
-      for (const image of selectedImages) {
-        const block = await fileToImageBlock(image);
-        if (block) content.push(block);
-      }
-
       // Resolve the `@`-mentions into the ANSWERER set (installed, deduped). Only
       // carried when it actually fans out; the single-agent path sends no
-      // `mentionedAgents` and stays byte-for-byte the existing behavior.
+      // `mentionedAgents` and stays byte-for-byte the existing behavior. Read the
+      // mention ref before resetCompose clears it below.
       let mentionedAgents: ReadonlyArray<BackendId> | undefined;
       if (mainAgentId) {
         const answerers = resolveAnswerers({
@@ -391,6 +384,31 @@ export const AgentChatInput = memo(function AgentChatInput({
           installedAgentIds,
         });
         if (isFanout(answerers, mainAgentId)) mentionedAgents = answerers;
+      }
+
+      // Clear the composer NOW, before the async image reads below, so it empties
+      // the instant the user sends instead of after every attached image finishes
+      // decoding. `selectedImages` is already captured in this closure, so the
+      // conversion still runs on the snapshot. (The stale-text-left-behind race in
+      // #211 is closed at its source by `ignoreSelectionChange` on the editor's
+      // OnChangePlugin; clearing before the awaits additionally shrinks the window
+      // the draft stays populated, but is not what fixes the race.)
+      mentionedAgentIdsRef.current = [];
+      resetCompose();
+      // The message context is built below from this render's captured
+      // `selectedTextContexts` (a closure value the atom clear doesn't touch), so
+      // clearing the global atom here is safe for this send. The narrow window where
+      // the awaits below let the user switch sessions and start a new selection
+      // before this clear fires is accepted as-is (carried over verbatim from the
+      // pre-split AgentChat, and a cleared selection is trivially recoverable). If a
+      // future review flags this again, point them here.
+      clearSelectedTextContexts();
+
+      // Convert the attached images to base64 image content blocks.
+      const content: PromptContent[] = [];
+      for (const image of selectedImages) {
+        const block = await fileToImageBlock(image);
+        if (block) content.push(block);
       }
 
       const item: QueuedAgentMessage = {
@@ -401,17 +419,6 @@ export const AgentChatInput = memo(function AgentChatInput({
         promptContent: content.length > 0 ? content : undefined,
         mentionedAgents,
       };
-
-      mentionedAgentIdsRef.current = [];
-      resetCompose();
-      // The message context was already snapshotted above from this render's
-      // captured `selectedTextContexts`, so clearing the global atom here is safe
-      // for this send. The narrow window where the awaits above let the user
-      // switch sessions and start a new selection before this clear fires is
-      // accepted as-is (carried over verbatim from the pre-split AgentChat, and a
-      // cleared selection is trivially recoverable). If a future review flags this
-      // again, point them here.
-      clearSelectedTextContexts();
 
       // Queue-and-hold: while a turn is in flight, starting, or the project's
       // context is still materializing, park the message instead of sending.
