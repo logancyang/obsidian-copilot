@@ -6,6 +6,7 @@ import { ClaudeBackgroundTaskStateMachine } from "./claudeTaskProtocol";
 interface ToolResultFixture {
   id: string;
   content?: unknown;
+  isError?: boolean;
 }
 
 function userMessage(
@@ -20,6 +21,7 @@ function userMessage(
         type: "tool_result",
         tool_use_id: result.id,
         content: result.content ?? "done",
+        ...(result.isError ? { is_error: true } : {}),
       })),
     },
     parent_tool_use_id: null,
@@ -130,7 +132,7 @@ describe("claudeTaskProtocol", () => {
         ]);
       });
 
-      it("retires foreground task identity after its ordinary result", () => {
+      it("keeps identified foreground task identity terminal after its ordinary result", () => {
         const protocol = new ClaudeBackgroundTaskStateMachine();
         observeTool(protocol, "launch", "Agent");
         acceptMessage(
@@ -154,9 +156,58 @@ describe("claudeTaskProtocol", () => {
             description: "too late",
           })
         );
+        observeTool(protocol, "replacement", "Agent");
+        const duplicateIdentity = acceptMessage(
+          protocol,
+          systemMessage({
+            subtype: "task_started",
+            task_id: "task-a",
+            tool_use_id: "replacement",
+          })
+        );
 
         expect(result).toEqual({ updates: [], resultActions: new Map() });
         expect(lateProgress.updates).toEqual([]);
+        expect(duplicateIdentity.updates).toEqual([]);
+      });
+
+      it("binds late foreground task identity without reopening a terminal launch", () => {
+        const protocol = new ClaudeBackgroundTaskStateMachine();
+        observeTool(protocol, "launch", "Agent");
+        acceptMessage(
+          protocol,
+          userMessage([{ id: "launch", content: "foreground report", isError: true }])
+        );
+
+        const lateStart = acceptMessage(
+          protocol,
+          systemMessage({
+            subtype: "task_started",
+            task_id: "task-a",
+            tool_use_id: "launch",
+          })
+        );
+        const lateProgress = acceptMessage(
+          protocol,
+          systemMessage({
+            subtype: "task_progress",
+            task_id: "task-a",
+            description: "too late",
+          })
+        );
+        observeTool(protocol, "replacement", "Task");
+        const duplicateIdentity = acceptMessage(
+          protocol,
+          systemMessage({
+            subtype: "task_started",
+            task_id: "task-a",
+            tool_use_id: "replacement",
+          })
+        );
+
+        expect(lateStart.updates).toEqual([]);
+        expect(lateProgress.updates).toEqual([]);
+        expect(duplicateIdentity.updates).toEqual([]);
       });
 
       it("ignores task-only frames without an unambiguous launch binding", () => {
@@ -370,6 +421,15 @@ describe("claudeTaskProtocol", () => {
             description: "too late",
           })
         );
+        observeTool(protocol, "replacement", "Task");
+        const duplicateIdentity = acceptMessage(
+          protocol,
+          systemMessage({
+            subtype: "task_started",
+            task_id: "task-a",
+            tool_use_id: "replacement",
+          })
+        );
 
         expect(terminalStatus.updates).toEqual([{ toolCallId: "launch", status: "completed" }]);
         expect(terminalOutput.updates).toEqual([
@@ -380,6 +440,31 @@ describe("claudeTaskProtocol", () => {
           },
         ]);
         expect(afterCompletion.updates).toEqual([]);
+        expect(duplicateIdentity.updates).toEqual([]);
+      });
+
+      it("preserves the first terminal status when an ordinary result supplies late output", () => {
+        const protocol = new ClaudeBackgroundTaskStateMachine();
+        observeTool(protocol, "launch", "Agent");
+        acceptMessage(protocol, launchAck("task-a", "launch"));
+        acceptMessage(
+          protocol,
+          systemMessage({
+            subtype: "task_notification",
+            task_id: "task-a",
+            status: "completed",
+          })
+        );
+
+        const lateOutput = acceptMessage(
+          protocol,
+          userMessage([{ id: "launch", content: "late output", isError: true }])
+        );
+
+        expect(lateOutput.resultActions.get("launch")).toEqual({
+          kind: "preserve_status",
+          status: "completed",
+        });
       });
     });
   });

@@ -1176,6 +1176,53 @@ describe("translateSdkMessage", () => {
       });
     });
 
+    it("keeps the first terminal status when an ordinary result supplies late output", () => {
+      const state = createTranslatorState();
+      trackToolUse(state, "tu-launch", "Agent");
+      translateSdkMessage(launchAckResult("tu-launch"), SESSION_ID, state);
+      translateSdkMessage(
+        systemMessage({
+          subtype: "task_notification",
+          task_id: "abc123",
+          status: "completed",
+        }),
+        SESSION_ID,
+        state
+      );
+
+      const lateOutput = translateSdkMessage(
+        {
+          type: "user",
+          message: {
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: "tu-launch",
+                content: "late output",
+                is_error: true,
+              },
+            ],
+          },
+          parent_tool_use_id: null,
+          session_id: SESSION_ID,
+        } as unknown as SDKMessage,
+        SESSION_ID,
+        state
+      );
+
+      expect(lateOutput).toEqual([
+        {
+          sessionId: SESSION_ID,
+          update: {
+            sessionUpdate: "tool_call_update",
+            toolCallId: "tu-launch",
+            status: "completed",
+            content: [{ type: "content", content: { type: "text", text: "late output" } }],
+          },
+        },
+      ]);
+    });
+
     it("still completes a genuine (non-launch) tool_result", () => {
       const state = createTranslatorState();
       const out = translateSdkMessage(

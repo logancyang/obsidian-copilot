@@ -472,7 +472,12 @@ function translateUserMessage(
     const resultAction = decision.resultActions.get(b.tool_use_id);
     if (resultAction?.kind === "omit") continue;
 
-    const status: AgentToolStatus = b.is_error ? "failed" : "completed";
+    let status: AgentToolStatus;
+    if (resultAction?.kind === "preserve_status") {
+      status = resultAction.status;
+    } else {
+      status = b.is_error ? "failed" : "completed";
+    }
     const outputs = toolResultContent(b.content);
     out.push(
       event(sessionId, {

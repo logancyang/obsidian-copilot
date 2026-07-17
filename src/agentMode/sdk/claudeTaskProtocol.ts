@@ -1,11 +1,11 @@
 /**
- * @fileoverview Owns Claude background-task identity, correlation, and terminal merging.
+ * @fileoverview Owns Claude Agent/Task identity, lifecycle, and terminal output merging.
  *
  * One logical task has two identities whose carriers may arrive out of order:
  * `L`, the Agent/Task launch tool-call ID, and `T`, Claude's task ID. The launch
- * moves through awaiting identity, active, and terminal without output; a
- * launch is pruned after its final output arrives. Identity remains one-to-one
- * and terminal status never regresses.
+ * moves through awaiting identity, active, and terminal. Execution state and
+ * output availability remain separate, identified correlation lasts for the
+ * SDK session, and terminal status never regresses.
  * Keeping those rules behind one session-owned interface prevents the translator
  * from coordinating maps whose invariants can drift apart.
  */
@@ -16,30 +16,29 @@ import type {
   ToolCallContent,
 } from "@/agentMode/session/types";
 
-interface AwaitingBackgroundTaskIdentity {
+interface AwaitingTaskIdentity {
   phase: "awaiting_identity";
   toolCallId: string;
   candidateTaskId?: string;
 }
 
-interface ActiveBackgroundTaskLaunch {
+interface ActiveTaskLaunch {
   phase: "active";
   toolCallId: string;
   taskId: string;
 }
 
-interface TerminalBackgroundTaskWithoutOutput {
-  phase: "terminal_without_output";
+interface TerminalTaskLaunch {
+  phase: "terminal";
   toolCallId: string;
-  taskId: string;
+  taskId?: string;
   terminalStatus: TerminalTaskStatus;
+  outputAvailable: boolean;
 }
 
-type IdentifiedBackgroundTaskLaunch =
-  | ActiveBackgroundTaskLaunch
-  | TerminalBackgroundTaskWithoutOutput;
+type IdentifiedTaskLaunch = ActiveTaskLaunch | (TerminalTaskLaunch & { taskId: string });
 
-type BackgroundTaskLaunch = AwaitingBackgroundTaskIdentity | IdentifiedBackgroundTaskLaunch;
+type TaskLaunch = AwaitingTaskIdentity | ActiveTaskLaunch | TerminalTaskLaunch;
 
 export type ClaudeTaskCarrier =
   | {
@@ -57,18 +56,21 @@ export interface ClaudeTaskToolUpdate {
   progress?: AgentToolProgress;
 }
 
-export type ClaudeTaskResultAction = { kind: "omit" };
+type TerminalTaskStatus = "completed" | "failed";
+
+export type ClaudeTaskResultAction =
+  | { kind: "omit" }
+  | { kind: "preserve_status"; status: TerminalTaskStatus };
 
 export interface ClaudeTaskDecision {
   updates: readonly ClaudeTaskToolUpdate[];
   resultActions: ReadonlyMap<string, ClaudeTaskResultAction>;
 }
 
-type TerminalTaskStatus = "completed" | "failed";
-
 interface ClaudeToolResultBlock {
   toolCallId: string;
   content: unknown;
+  status: TerminalTaskStatus;
 }
 
 type ClaudeTaskProtocolEvent =
@@ -101,14 +103,15 @@ const NO_TASK_DECISION: ClaudeTaskDecision = Object.freeze({
 });
 
 /**
- * Reconciles Claude's background-task carriers for one SDK session.
+ * Reconciles Claude Agent/Task carriers for one SDK session.
  *
  * Callers submit carrier snapshots without coordinating their order. The
- * protocol owns identity correlation across query boundaries and monotonic
- * transitions; callers only project its decisions to session events.
+ * protocol owns foreground and background identity correlation across query
+ * boundaries plus monotonic execution state; callers only project its decisions
+ * to session events.
  */
 export class ClaudeBackgroundTaskStateMachine {
-  private readonly launchesByToolCallId = new Map<string, BackgroundTaskLaunch>();
+  private readonly launchesByToolCallId = new Map<string, TaskLaunch>();
   private readonly launchToolCallIdByTaskId = new Map<string, string>();
 
   /**
@@ -185,8 +188,9 @@ export class ClaudeBackgroundTaskStateMachine {
         ? protocolEvent.launchTaskId
         : undefined;
 
-    // Foreground Agent/Task results cannot receive future background frames.
-    for (const { toolCallId } of protocolEvent.results) {
+    // Async acknowledgements stay active; every unambiguous ordinary result is
+    // terminal because the normal result pipeline already owns its final output.
+    for (const { toolCallId, status } of protocolEvent.results) {
       const launch = this.launchesByToolCallId.get(toolCallId);
       if (launch && toolCallId !== launchAckToolCallId) {
         if (launch.phase === "awaiting_identity" && ambiguousTaskId) {
@@ -195,7 +199,13 @@ export class ClaudeBackgroundTaskStateMachine {
             candidateTaskId: ambiguousTaskId,
           });
         } else {
-          this.forgetLaunch(launch);
+          if (launch.phase === "terminal") {
+            resultActions.set(toolCallId, {
+              kind: "preserve_status",
+              status: launch.terminalStatus,
+            });
+          }
+          this.markForegroundResult(launch, status);
         }
       }
     }
@@ -205,23 +215,25 @@ export class ClaudeBackgroundTaskStateMachine {
       : { updates: EMPTY_TASK_UPDATES, resultActions };
   }
 
-  private bindLaunch(
-    toolCallId: string,
-    taskId: string
-  ): IdentifiedBackgroundTaskLaunch | undefined {
+  private bindLaunch(toolCallId: string, taskId: string): IdentifiedTaskLaunch | undefined {
     const launch = this.launchesByToolCallId.get(toolCallId);
     if (!launch) return undefined;
-    if (launch.phase !== "awaiting_identity" && launch.taskId !== taskId) return undefined;
+    if (launch.phase === "active" && launch.taskId !== taskId) return undefined;
+    if (launch.phase === "terminal" && launch.taskId && launch.taskId !== taskId) return undefined;
     const existing = this.launchToolCallIdByTaskId.get(taskId);
     if (existing && existing !== toolCallId) return undefined;
     if (launch.phase === "awaiting_identity" && launch.candidateTaskId !== undefined) {
       if (launch.candidateTaskId !== taskId) return undefined;
       this.pruneAmbiguousCandidates(taskId, toolCallId);
     }
-    const identified =
-      launch.phase === "awaiting_identity"
-        ? ({ phase: "active", toolCallId, taskId } satisfies ActiveBackgroundTaskLaunch)
-        : launch;
+    let identified: IdentifiedTaskLaunch;
+    if (launch.phase === "awaiting_identity") {
+      identified = { phase: "active", toolCallId, taskId };
+    } else if (launch.phase === "terminal") {
+      identified = { ...launch, taskId };
+    } else {
+      identified = launch;
+    }
     this.launchesByToolCallId.set(toolCallId, identified);
     this.launchToolCallIdByTaskId.set(taskId, toolCallId);
     return identified;
@@ -230,7 +242,7 @@ export class ClaudeBackgroundTaskStateMachine {
   private resolveLaunch(
     toolCallId: string | undefined,
     taskId: string
-  ): IdentifiedBackgroundTaskLaunch | undefined {
+  ): IdentifiedTaskLaunch | undefined {
     const resolvedToolCallId = toolCallId ?? this.launchToolCallIdByTaskId.get(taskId);
     return resolvedToolCallId ? this.bindLaunch(resolvedToolCallId, taskId) : undefined;
   }
@@ -271,22 +283,37 @@ export class ClaudeBackgroundTaskStateMachine {
     }
   }
 
-  private forgetLaunch(launch: BackgroundTaskLaunch): void {
-    this.launchesByToolCallId.delete(launch.toolCallId);
-    if (launch.phase !== "awaiting_identity") {
-      this.launchToolCallIdByTaskId.delete(launch.taskId);
+  private markForegroundResult(launch: TaskLaunch, status: TerminalTaskStatus): void {
+    if (launch.phase === "terminal") {
+      if (!launch.outputAvailable) {
+        this.launchesByToolCallId.set(launch.toolCallId, {
+          ...launch,
+          outputAvailable: true,
+        });
+      }
+      return;
     }
+    this.launchesByToolCallId.set(launch.toolCallId, {
+      phase: "terminal",
+      toolCallId: launch.toolCallId,
+      ...(launch.phase === "active" ? { taskId: launch.taskId } : {}),
+      terminalStatus: status,
+      outputAvailable: true,
+    });
   }
 
   private mergeTerminal(
-    launch: IdentifiedBackgroundTaskLaunch,
+    launch: IdentifiedTaskLaunch,
     status: TerminalTaskStatus,
     output?: string,
     progress?: AgentToolProgress
   ): ClaudeTaskToolUpdate | undefined {
-    if (launch.phase === "terminal_without_output") {
-      if (!output) return undefined;
-      this.forgetLaunch(launch);
+    if (launch.phase === "terminal") {
+      if (!output || launch.outputAvailable) return undefined;
+      this.launchesByToolCallId.set(launch.toolCallId, {
+        ...launch,
+        outputAvailable: true,
+      });
       return {
         toolCallId: launch.toolCallId,
         status: launch.terminalStatus,
@@ -295,15 +322,13 @@ export class ClaudeBackgroundTaskStateMachine {
       };
     }
 
-    if (output) {
-      this.forgetLaunch(launch);
-    } else {
-      this.launchesByToolCallId.set(launch.toolCallId, {
-        ...launch,
-        phase: "terminal_without_output",
-        terminalStatus: status,
-      });
-    }
+    this.launchesByToolCallId.set(launch.toolCallId, {
+      phase: "terminal",
+      toolCallId: launch.toolCallId,
+      taskId: launch.taskId,
+      terminalStatus: status,
+      outputAvailable: output !== undefined,
+    });
     return {
       toolCallId: launch.toolCallId,
       status,
@@ -377,10 +402,10 @@ function taskDecision(update: ClaudeTaskToolUpdate): ClaudeTaskDecision {
   return { updates: [update], resultActions: EMPTY_RESULT_ACTIONS };
 }
 
-function isTerminalLaunch(
-  launch: IdentifiedBackgroundTaskLaunch
-): launch is TerminalBackgroundTaskWithoutOutput {
-  return launch.phase === "terminal_without_output";
+function isTerminalLaunch(launch: IdentifiedTaskLaunch): launch is TerminalTaskLaunch & {
+  taskId: string;
+} {
+  return launch.phase === "terminal";
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
@@ -405,7 +430,13 @@ function toolResultBlocks(msg: SDKMessage): ClaudeToolResultBlock[] {
     const record = asRecord(block);
     if (record?.type !== "tool_result") continue;
     const toolCallId = nonEmptyString(record.tool_use_id);
-    if (toolCallId) results.push({ toolCallId, content: record.content });
+    if (toolCallId) {
+      results.push({
+        toolCallId,
+        content: record.content,
+        status: record.is_error === true ? "failed" : "completed",
+      });
+    }
   }
   return results;
 }
