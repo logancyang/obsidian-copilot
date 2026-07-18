@@ -1023,6 +1023,90 @@ describe("AgentSession.sendPrompt", () => {
     expect(laterTurn?.isErrorMessage).not.toBe(true);
   });
 
+  it("routes a prior turn's tool update after the current turn is cancelled", async () => {
+    jest.useFakeTimers();
+    try {
+      const mock = makeMockBackend();
+      const resolvePrompts: Array<(value: { stopReason: "end_turn" | "cancelled" }) => void> = [];
+      mock.prompt.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            resolvePrompts.push(resolve);
+          })
+      );
+      const session = new AgentSession({
+        backend: mock.asBackend,
+        backendSessionId: "acp-1",
+        internalId: "internal-1",
+        backendId: "claude-code",
+      });
+
+      const first = session.sendPrompt("launch a background agent");
+      mock.emit({
+        sessionId: "acp-1",
+        update: {
+          sessionUpdate: "tool_call",
+          toolCallId: "tc-agent",
+          title: "Agent",
+          status: "in_progress",
+        },
+      });
+      resolvePrompts[0]({ stopReason: "end_turn" });
+      await first.turn;
+
+      const second = session.sendPrompt("do something else");
+      mock.emit({
+        sessionId: "acp-1",
+        update: {
+          sessionUpdate: "tool_call",
+          toolCallId: "tc-cancelled",
+          title: "Current turn tool",
+          status: "in_progress",
+        },
+      });
+      await session.cancel();
+      await expect(second.turn).resolves.toBe("cancelled");
+
+      mock.emit({
+        sessionId: "acp-1",
+        update: {
+          sessionUpdate: "tool_call_update",
+          toolCallId: "tc-agent",
+          status: "completed",
+          content: [{ type: "content", content: { type: "text", text: "agent report" } }],
+        },
+      });
+      mock.emit({
+        sessionId: "acp-1",
+        update: {
+          sessionUpdate: "tool_call_update",
+          toolCallId: "tc-cancelled",
+          status: "completed",
+        },
+      });
+
+      const ai = session.store
+        .getDisplayMessages()
+        .filter((message) => message.sender === AI_SENDER);
+      expect(ai[0]?.parts?.[0]).toMatchObject({
+        kind: "tool_call",
+        id: "tc-agent",
+        status: "completed",
+        output: [{ type: "text", text: "agent report" }],
+      });
+      expect(ai[1]?.parts?.[0]).toMatchObject({
+        kind: "tool_call",
+        id: "tc-cancelled",
+        status: "in_progress",
+      });
+
+      resolvePrompts[1]({ stopReason: "cancelled" });
+      await jest.advanceTimersByTimeAsync(500);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it("merges partial tool progress", async () => {
     const mock = makeMockBackend();
     let resolvePrompt: ((v: { stopReason: "end_turn" }) => void) | null = null;
