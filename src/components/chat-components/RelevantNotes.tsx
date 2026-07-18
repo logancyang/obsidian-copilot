@@ -139,7 +139,7 @@ function RelevantNoteHoverCard({
 }: {
   note: RelevantNoteEntry;
   onAddToChat: () => void;
-  onNavigateToNote: (openInNewLeaf: boolean) => void;
+  onNavigateToNote: () => void;
   children: React.ReactNode;
 }) {
   const app = useApp();
@@ -242,7 +242,7 @@ function RelevantNoteHoverCard({
           <Button
             variant="default"
             size="sm"
-            onClick={(e) => onNavigateToNote(e.metaKey || e.ctrlKey)}
+            onClick={onNavigateToNote}
             className="tw-flex-1 tw-gap-1.5"
           >
             Open note
@@ -261,7 +261,7 @@ function RelevantNoteRow({
 }: {
   note: RelevantNoteEntry;
   onAddToChat: () => void;
-  onNavigateToNote: (openInNewLeaf: boolean) => void;
+  onNavigateToNote: () => void;
 }) {
   const app = useApp();
   const handleDragStart = useNoteDrag();
@@ -285,13 +285,12 @@ function RelevantNoteRow({
             }}
             onClick={(e) => {
               e.preventDefault();
-              onNavigateToNote(e.metaKey || e.ctrlKey);
+              onNavigateToNote();
             }}
             onAuxClick={(e) => {
               if (e.button === 1) {
-                // Middle click opens in a new leaf
                 e.preventDefault();
-                onNavigateToNote(true);
+                onNavigateToNote();
               }
             }}
             className="tw-min-w-0 tw-flex-1 tw-cursor-pointer tw-truncate tw-text-sm tw-font-medium tw-text-normal !tw-no-underline"
@@ -333,7 +332,7 @@ function RelevantNoteRow({
               className="tw-size-6 tw-p-0"
               onClick={(e) => {
                 e.stopPropagation();
-                onNavigateToNote(e.metaKey || e.ctrlKey);
+                onNavigateToNote();
               }}
             >
               <ArrowRight className="tw-size-4" />
@@ -403,12 +402,10 @@ interface RelevantNotesProps {
   className?: string;
   /** Insert text (a `[[wikilink]]`) into the target chat input. */
   onAddToChat: (text: string) => void;
-  /** Keep the host view open by navigating notes in a separate leaf. */
-  openNotesInNewLeaf?: boolean;
 }
 
 export const RelevantNotes = memo(
-  ({ className, onAddToChat, openNotesInNewLeaf = false }: RelevantNotesProps) => {
+  ({ className, onAddToChat }: RelevantNotesProps): React.ReactElement => {
     const app = useApp();
     const [refresher, setRefresher] = useState(0);
     const relevantNotes = useRelevantNotes(refresher);
@@ -429,10 +426,10 @@ export const RelevantNotes = memo(
       });
       return !shouldIndexFile(app, activeFile, inclusions, exclusions);
     }, [app, activeFile, settings.qaInclusions, settings.qaExclusions]);
-    const navigateToNote = (notePath: string, openInNewLeaf = false) => {
+    const navigateToNote = (notePath: string) => {
       const file = app.vault.getAbstractFileByPath(notePath);
       if (file instanceof TFile) {
-        const leaf = app.workspace.getLeaf(openNotesInNewLeaf || openInNewLeaf);
+        const leaf = app.workspace.getLeaf(true);
         void leaf.openFile(file).catch((err) => logError("openFile failed", err));
       }
     };
@@ -543,9 +540,7 @@ export const RelevantNotes = memo(
                         key={note.note.path}
                         note={note}
                         onAddToChat={() => addToChat(note.note.title)}
-                        onNavigateToNote={(openInNewLeaf: boolean) =>
-                          navigateToNote(note.note.path, openInNewLeaf)
-                        }
+                        onNavigateToNote={() => navigateToNote(note.note.path)}
                       />
                     ))}
                   </div>

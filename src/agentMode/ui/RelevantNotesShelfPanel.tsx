@@ -62,7 +62,6 @@ export function RelevantNotesShelfPanel({ onPopOut, onAddToChat }: RelevantNotes
         <RelevantNotes
           className={cn("[&>[data-relevant-notes-empty-state]]:tw-py-6")}
           onAddToChat={onAddToChat}
-          openNotesInNewLeaf
         />
       </div>
     </div>

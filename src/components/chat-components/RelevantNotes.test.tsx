@@ -102,29 +102,13 @@ describe("RelevantNotes", () => {
   });
 
   describe("RelevantNotes()", () => {
-    it("opens a shelf result in a new leaf to preserve the host view", async () => {
-      render(<RelevantNotes onAddToChat={jest.fn()} openNotesInNewLeaf />);
+    it("opens a result in a new leaf", async () => {
+      render(<RelevantNotes onAddToChat={jest.fn()} />);
 
       fireEvent.click(await screen.findByText("Target"));
 
       expect(mockGetLeaf).toHaveBeenCalledWith(true);
       expect(mockOpenFile).toHaveBeenCalledWith(expect.objectContaining({ path: "Target.md" }));
-    });
-
-    it("reuses the current leaf for an unmodified click in existing hosts", async () => {
-      render(<RelevantNotes onAddToChat={jest.fn()} />);
-
-      fireEvent.click(await screen.findByText("Target"));
-
-      expect(mockGetLeaf).toHaveBeenCalledWith(false);
-    });
-
-    it("opens a new leaf for a modified click in existing hosts", async () => {
-      render(<RelevantNotes onAddToChat={jest.fn()} />);
-
-      fireEvent.click(await screen.findByText("Target"), { metaKey: true });
-
-      expect(mockGetLeaf).toHaveBeenCalledWith(true);
     });
   });
 });
