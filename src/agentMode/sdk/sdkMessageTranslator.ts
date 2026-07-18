@@ -236,7 +236,7 @@ function translateStreamEvent(
       const block = sdkEvent.content_block;
       if (block.type === "tool_use") {
         const { tool: name, mcpServer } = resolveToolName(block.name);
-        acceptBackgroundTaskToolSnapshot(state, block.id, name, mcpServer, block.input);
+        observeBackgroundTaskLaunch(state, block.id, name, mcpServer);
         state.toolUseBlocks.set(sdkEvent.index, {
           id: block.id,
           name,
@@ -333,7 +333,6 @@ function translateStreamEvent(
       const parsed = tryParseJson(block.inputJsonAcc);
       const finalInput = parsed.ok ? parsed.value : block.lastParsedInput;
       block.lastParsedInput = finalInput;
-      acceptBackgroundTaskToolSnapshot(state, block.id, block.name, block.mcpServer, finalInput);
       return [
         event(sessionId, {
           sessionUpdate: "tool_call_update",
@@ -388,7 +387,7 @@ function translateAssistantMessage(
     const b = block as { type?: string; id?: string; name?: string; input?: unknown };
     if (b.type !== "tool_use" || !b.id || !b.name) continue;
     const { tool: name, mcpServer } = resolveToolName(b.name);
-    acceptBackgroundTaskToolSnapshot(state, b.id, name, mcpServer, b.input);
+    observeBackgroundTaskLaunch(state, b.id, name, mcpServer);
     if (state.emittedToolUseIds.has(b.id)) continue;
     state.emittedToolUseIds.add(b.id);
     out.push(event(sessionId, makeToolCallUpdate(b.id, b.name, b.input ?? {}, parentToolUseId)));
@@ -521,18 +520,16 @@ function makeToolCallUpdate(
   };
 }
 
-function acceptBackgroundTaskToolSnapshot(
+function observeBackgroundTaskLaunch(
   state: TranslatorState,
   toolUseId: string,
   name: string,
-  mcpServer: string | undefined,
-  rawInput: unknown
+  mcpServer: string | undefined
 ): void {
   state.backgroundTasks.accept({
     kind: "tool_snapshot",
     toolCallId: toolUseId,
     nativeToolName: mcpServer ? undefined : name,
-    input: rawInput,
   });
 }
 

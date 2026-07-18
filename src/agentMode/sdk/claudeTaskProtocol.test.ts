@@ -43,10 +43,9 @@ function systemMessage(frame: Record<string, unknown>): SDKMessage {
 function observeTool(
   protocol: ClaudeBackgroundTaskStateMachine,
   toolCallId: string,
-  nativeToolName: string,
-  input: unknown = {}
+  nativeToolName: string
 ): void {
-  protocol.accept({ kind: "tool_snapshot", toolCallId, nativeToolName, input });
+  protocol.accept({ kind: "tool_snapshot", toolCallId, nativeToolName });
 }
 
 function acceptMessage(protocol: ClaudeBackgroundTaskStateMachine, message: SDKMessage) {
@@ -63,12 +62,10 @@ describe("claudeTaskProtocol", () => {
           kind: "tool_snapshot",
           toolCallId: "read-a",
           nativeToolName: "Read",
-          input: {},
         });
         const second = protocol.accept({
           kind: "tool_snapshot",
           toolCallId: "mcp-task",
-          input: {},
         });
 
         expect(first).toEqual({ updates: [], resultActions: new Map() });
@@ -356,16 +353,10 @@ describe("claudeTaskProtocol", () => {
         expect(acknowledged.resultActions.get("launch")).toEqual({ kind: "omit" });
       });
 
-      it("uses structured launch metadata when acknowledgement text changes", () => {
+      it("does not infer task identity from prompt or description", () => {
         const protocol = new ClaudeBackgroundTaskStateMachine();
-        observeTool(protocol, "other", "Agent", {
-          prompt: "foreground prompt",
-          description: "Foreground task",
-        });
-        observeTool(protocol, "background", "Task", {
-          prompt: "background prompt",
-          description: "Background task",
-        });
+        observeTool(protocol, "other", "Agent");
+        observeTool(protocol, "background", "Task");
 
         const acknowledged = acceptMessage(
           protocol,
@@ -383,14 +374,41 @@ describe("claudeTaskProtocol", () => {
             }
           )
         );
+        const taskOnlyProgress = acceptMessage(
+          protocol,
+          systemMessage({
+            subtype: "task_progress",
+            task_id: "task-a",
+            description: "working",
+          })
+        );
+        const started = acceptMessage(
+          protocol,
+          systemMessage({
+            subtype: "task_started",
+            task_id: "task-a",
+            tool_use_id: "background",
+          })
+        );
 
-        expect(acknowledged.resultActions).toEqual(new Map([["background", { kind: "omit" }]]));
+        expect(acknowledged.resultActions).toEqual(new Map());
+        expect(taskOnlyProgress.updates).toEqual([]);
+        expect(started.updates).toEqual([{ toolCallId: "background", status: "in_progress" }]);
       });
 
-      it("keeps duplicate structured launch metadata ambiguous until an explicit frame binds it", () => {
+      it("uses an explicit task binding to select an acknowledgement from multiple launches", () => {
         const protocol = new ClaudeBackgroundTaskStateMachine();
-        observeTool(protocol, "launch-a", "Agent", { prompt: "same prompt" });
-        observeTool(protocol, "launch-b", "Task", { prompt: "same prompt" });
+        observeTool(protocol, "launch-a", "Agent");
+        observeTool(protocol, "launch-b", "Task");
+
+        const started = acceptMessage(
+          protocol,
+          systemMessage({
+            subtype: "task_started",
+            task_id: "task-a",
+            tool_use_id: "launch-b",
+          })
+        );
 
         const acknowledged = acceptMessage(
           protocol,
@@ -403,21 +421,12 @@ describe("claudeTaskProtocol", () => {
               isAsync: true,
               status: "async_launched",
               agentId: "task-a",
-              prompt: "same prompt",
             }
           )
         );
-        const started = acceptMessage(
-          protocol,
-          systemMessage({
-            subtype: "task_started",
-            task_id: "task-a",
-            tool_use_id: "launch-b",
-          })
-        );
 
-        expect(acknowledged.resultActions).toEqual(new Map());
         expect(started.updates).toEqual([{ toolCallId: "launch-b", status: "in_progress" }]);
+        expect(acknowledged.resultActions).toEqual(new Map([["launch-b", { kind: "omit" }]]));
       });
 
       it("preserves an earlier pending terminal report when a later patch has no output", () => {

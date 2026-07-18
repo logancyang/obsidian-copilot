@@ -19,8 +19,6 @@ import type {
 interface AwaitingTaskIdentity {
   phase: "awaiting_identity";
   toolCallId: string;
-  prompt?: string;
-  description?: string;
   candidateTaskId?: string;
 }
 
@@ -47,7 +45,6 @@ export type ClaudeTaskCarrier =
       kind: "tool_snapshot";
       toolCallId: string;
       nativeToolName?: string;
-      input: unknown;
     }
   | { kind: "sdk_message"; message: SDKMessage };
 
@@ -74,12 +71,6 @@ interface ClaudeToolResultBlock {
   status: TerminalTaskStatus;
 }
 
-interface AsyncLaunchMetadata {
-  taskId: string;
-  prompt?: string;
-  description?: string;
-}
-
 interface PendingTerminalFrame {
   status: TerminalTaskStatus;
   output?: string;
@@ -90,8 +81,6 @@ type ClaudeTaskProtocolEvent =
   | {
       kind: "launch_observed";
       toolCallId: string;
-      prompt?: string;
-      description?: string;
     }
   | {
       kind: "task_active";
@@ -110,7 +99,7 @@ type ClaudeTaskProtocolEvent =
   | {
       kind: "result_batch";
       results: readonly ClaudeToolResultBlock[];
-      asyncLaunch?: AsyncLaunchMetadata;
+      asyncLaunchTaskId?: string;
     };
 
 const EMPTY_TASK_UPDATES: readonly ClaudeTaskToolUpdate[] = Object.freeze([]);
@@ -161,8 +150,6 @@ export class ClaudeBackgroundTaskStateMachine {
           this.launchesByToolCallId.set(protocolEvent.toolCallId, {
             phase: "awaiting_identity",
             toolCallId: protocolEvent.toolCallId,
-            prompt: protocolEvent.prompt,
-            description: protocolEvent.description,
           });
         }
         return NO_TASK_DECISION;
@@ -222,19 +209,19 @@ export class ClaudeBackgroundTaskStateMachine {
     protocolEvent: Extract<ClaudeTaskProtocolEvent, { kind: "result_batch" }>
   ): ClaudeTaskDecision {
     const resultActions = new Map<string, ClaudeTaskResultAction>();
-    const launchAckToolCallId = protocolEvent.asyncLaunch
-      ? this.launchAckOwner(protocolEvent.asyncLaunch, protocolEvent.results)
+    const launchAckToolCallId = protocolEvent.asyncLaunchTaskId
+      ? this.launchAckOwner(protocolEvent.asyncLaunchTaskId, protocolEvent.results)
       : undefined;
     if (launchAckToolCallId) resultActions.set(launchAckToolCallId, { kind: "omit" });
 
     const ambiguousTaskId =
-      protocolEvent.asyncLaunch &&
+      protocolEvent.asyncLaunchTaskId &&
       !launchAckToolCallId &&
-      !this.launchToolCallIdByTaskId.has(protocolEvent.asyncLaunch.taskId) &&
+      !this.launchToolCallIdByTaskId.has(protocolEvent.asyncLaunchTaskId) &&
       protocolEvent.results.filter(
         ({ toolCallId }) => this.launchesByToolCallId.get(toolCallId)?.phase === "awaiting_identity"
       ).length > 1
-        ? protocolEvent.asyncLaunch.taskId
+        ? protocolEvent.asyncLaunchTaskId
         : undefined;
 
     // Async acknowledgements stay active; every unambiguous ordinary result is
@@ -304,30 +291,20 @@ export class ClaudeBackgroundTaskStateMachine {
   }
 
   private launchAckOwner(
-    asyncLaunch: AsyncLaunchMetadata,
+    taskId: string,
     results: readonly ClaudeToolResultBlock[]
   ): string | undefined {
-    const known = this.launchToolCallIdByTaskId.get(asyncLaunch.taskId);
+    const known = this.launchToolCallIdByTaskId.get(taskId);
     if (known) {
       return results.some(({ toolCallId }) => toolCallId === known) ? known : undefined;
     }
+    // Prompt and description describe work rather than identity. An explicit
+    // task binding or one pending launch is required before ownership is safe.
     const candidates = results.filter(
       ({ toolCallId }) => this.launchesByToolCallId.get(toolCallId)?.phase === "awaiting_identity"
     );
-    const metadataMatches = candidates.filter(({ toolCallId }) => {
-      const launch = this.launchesByToolCallId.get(toolCallId);
-      if (!launch || launch.phase !== "awaiting_identity") return false;
-      const hasMetadata = asyncLaunch.prompt !== undefined || asyncLaunch.description !== undefined;
-      return (
-        hasMetadata &&
-        (asyncLaunch.prompt === undefined || launch.prompt === asyncLaunch.prompt) &&
-        (asyncLaunch.description === undefined || launch.description === asyncLaunch.description)
-      );
-    });
-    if (metadataMatches.length > 1) return undefined;
-    const owner = metadataMatches[0] ?? (candidates.length === 1 ? candidates[0] : undefined);
-    if (!owner) return undefined;
-    return this.bindLaunch(owner.toolCallId, asyncLaunch.taskId)?.toolCallId;
+    if (candidates.length !== 1) return undefined;
+    return this.bindLaunch(candidates[0].toolCallId, taskId)?.toolCallId;
   }
 
   private pruneAmbiguousCandidates(taskId: string, ownerToolCallId: string): void {
@@ -400,12 +377,9 @@ export class ClaudeBackgroundTaskStateMachine {
 function protocolEventFromCarrier(carrier: ClaudeTaskCarrier): ClaudeTaskProtocolEvent | undefined {
   if (carrier.kind === "tool_snapshot") {
     if (carrier.nativeToolName === "Agent" || carrier.nativeToolName === "Task") {
-      const input = asRecord(carrier.input);
       return {
         kind: "launch_observed",
         toolCallId: carrier.toolCallId,
-        prompt: nonEmptyString(input?.prompt),
-        description: nonEmptyString(input?.description),
       };
     }
     return undefined;
@@ -416,7 +390,7 @@ function protocolEventFromCarrier(carrier: ClaudeTaskCarrier): ClaudeTaskProtoco
     return {
       kind: "result_batch",
       results: toolResultBlocks(message),
-      asyncLaunch: readAsyncLaunchMetadata(message),
+      asyncLaunchTaskId: readAsyncLaunchTaskId(message),
     };
   }
   if (message.type !== "system") return undefined;
@@ -555,18 +529,12 @@ function textContent(text: string): ToolCallContent[] {
   return [{ type: "content", content: { type: "text", text } }];
 }
 
-function readAsyncLaunchMetadata(msg: SDKMessage): AsyncLaunchMetadata | undefined {
+function readAsyncLaunchTaskId(msg: SDKMessage): string | undefined {
   const result = asRecord((msg as { tool_use_result?: unknown }).tool_use_result);
   if (!result) return undefined;
   const isAsync = result.isAsync === true || nonEmptyString(result.status) === "async_launched";
   if (!isAsync) return undefined;
-  const taskId = nonEmptyString(result.agentId);
-  if (!taskId) return undefined;
-  return {
-    taskId,
-    prompt: nonEmptyString(result.prompt),
-    description: nonEmptyString(result.description),
-  };
+  return nonEmptyString(result.agentId);
 }
 
 function mapTerminalTaskStatus(status: unknown): TerminalTaskStatus | undefined {

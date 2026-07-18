@@ -772,6 +772,34 @@ describe("translateSdkMessage", () => {
       );
     }
 
+    function trackStreamedToolUse(
+      state: ReturnType<typeof createTranslatorState>,
+      index: number,
+      id: string,
+      name: string,
+      input: Record<string, unknown>
+    ): void {
+      translateSdkMessage(
+        streamEvent({
+          type: "content_block_start",
+          index,
+          content_block: { type: "tool_use", id, name, input: {} },
+        }),
+        SESSION_ID,
+        state
+      );
+      translateSdkMessage(
+        streamEvent({
+          type: "content_block_delta",
+          index,
+          delta: { type: "input_json_delta", partial_json: JSON.stringify(input) },
+        }),
+        SESSION_ID,
+        state
+      );
+      translateSdkMessage(streamEvent({ type: "content_block_stop", index }), SESSION_ID, state);
+    }
+
     // Task frames only apply once we've tracked the launch (agentId "abc123" →
     // card "tu-launch"); seed that so the gate lets them through.
     function seedLaunch(state: ReturnType<typeof createTranslatorState>): void {
@@ -1144,10 +1172,24 @@ describe("translateSdkMessage", () => {
       expect(out[0].update).toMatchObject({ toolCallId: "tu-read", status: "completed" });
     });
 
-    it("uses structured launch metadata to suppress a batched acknowledgement", () => {
+    it("uses explicit task identity when launch inputs stream from empty snapshots", () => {
       const state = createTranslatorState();
-      trackToolUse(state, "tu-foreground", "Agent", { prompt: "foreground prompt" });
-      trackToolUse(state, "tu-background", "Task", { prompt: "background prompt" });
+      trackStreamedToolUse(state, 0, "tu-foreground", "Agent", {
+        prompt: "foreground prompt",
+      });
+      trackStreamedToolUse(state, 1, "tu-background", "Task", {
+        prompt: "background prompt",
+      });
+      translateSdkMessage(
+        systemMessage({
+          subtype: "task_started",
+          task_id: "abc123",
+          tool_use_id: "tu-background",
+          description: "Background task",
+        }),
+        SESSION_ID,
+        state
+      );
       const acknowledged = translateSdkMessage(
         {
           type: "user",
@@ -1155,7 +1197,7 @@ describe("translateSdkMessage", () => {
             isAsync: true,
             status: "async_launched",
             agentId: "abc123",
-            prompt: "background prompt",
+            prompt: "metadata is not an identity key",
           },
           message: {
             content: [
