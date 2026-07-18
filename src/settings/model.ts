@@ -170,7 +170,7 @@ export interface CopilotSettings {
   supadataApiKey: string;
   /**
    * Document-processor backend (settings v6). Seeded from `enableSelfHostMode &&
-   * enableMiyo`; read via `getDocProcessorBackend()`.
+   * enableMiyo`; read at the parse boundary via `resolveDocProcessorBackend()`.
    */
   docProcessorBackend: "plus" | "miyo";
   /** Enable lexical boosts (folder and graph) in search - default: true */

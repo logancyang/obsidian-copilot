@@ -242,10 +242,10 @@ export function getSearchBackend(settings: CopilotSettings = getSettings()): "ke
  * Compute the doc-processor backend to persist when seeding the field during a
  * settings migration.
  *
- * Kept separate from {@link getDocProcessorBackend}: the seed must be a pure,
+ * Kept separate from {@link resolveDocProcessorBackend}: the seed must be a pure,
  * deterministic function of the vault's old fields (its result is written into
- * `docProcessorBackend`), whereas the runtime accessor now reads that field and
- * layers on live Miyo availability. Reusing the accessor to seed would be
+ * `docProcessorBackend`), whereas the runtime resolver reads that field and
+ * layers on live Miyo availability. Reusing the resolver to seed would be
  * circular (it would read the very field being computed) and non-deterministic
  * (it would depend on runtime connectivity at migration time).
  *
@@ -262,27 +262,6 @@ export function seedDocProcessorBackend(
 }
 
 /**
- * Per-capability accessor: which backend converts documents to markdown.
- *
- * The persisted `docProcessorBackend` field is the source of truth, but a stale
- * `"miyo"` value must not route documents (PDFs) to an unreachable Miyo — a dead
- * path with no output. So we honor `"miyo"` only when Miyo is actually available
- * for document processing; otherwise we fall back to the plus cloud parser.
- *
- * This is a COARSE synchronous signal (plus/miyo) for read-sites that don't parse
- * documents — it collapses "unavailable" to "plus" without probing. The PDF parse
- * boundary does NOT use this directly: it uses {@link resolveDocProcessorBackend},
- * which probes and fails closed (miyo-unavailable) rather than silently routing an
- * explicit local choice to the cloud. See that function's DESIGN NOTE.
- */
-export function getDocProcessorBackend(settings: CopilotSettings = getSettings()): "plus" | "miyo" {
-  if (settings.docProcessorBackend !== "miyo") {
-    return "plus";
-  }
-  return isMiyoAvailableForCapability("documentProcessor") ? "miyo" : "plus";
-}
-
-/**
  * Outcome of resolving the doc-processor backend at a parse boundary.
  *
  * `"miyo-unavailable"` is distinct from `"plus"`: it means the user EXPLICITLY
@@ -295,45 +274,39 @@ export type ResolvedDocProcessorBackend = "plus" | "miyo" | "miyo-unavailable";
 /**
  * Async parse-boundary resolver for the document-processor backend.
  *
- * `getDocProcessorBackend` is a pure synchronous read of the current status
- * snapshot, but that snapshot is only refreshed while the Miyo settings page is
- * open — it starts `unknown` and lazily degrades to `stale` after the horizon.
- * So a user who picked `"miyo"` but never opened settings (e.g. right after an
- * Obsidian restart) would have their documents routed by a not-yet-confirmed
- * status.
- *
- * This resolver closes that lifecycle gap by probing once (single-flight +
- * TTL-gated in the store, so the hot path isn't spammed) when the persisted
- * preference is `"miyo"` and the live status is inconclusive (`unknown`/`stale`),
- * then applies a THREE-way decision that keeps an explicit local choice private:
+ * The Miyo status snapshot is only refreshed while the settings page is open — it
+ * starts `unknown` and lazily degrades to `stale` after the horizon. So a user
+ * who picked `"miyo"` but never opened settings (e.g. right after an Obsidian
+ * restart) would have their documents routed by a not-yet-confirmed status. This
+ * resolver closes that gap by probing once (single-flight + TTL-gated in the
+ * store, so the hot path isn't spammed) when the preference is `"miyo"` and the
+ * live status is inconclusive (`unknown`/`stale`), then applies a THREE-way
+ * decision that keeps an explicit local choice private:
  *
  *   - `docProcessorBackend !== "miyo"` → `"plus"` (user chose cloud).
- *   - `docProcessorBackend === "miyo"` but Miyo isn't actually in use
- *     (`shouldUseMiyo` false — a stale preference left over after Disconnect, or
- *     mobile without a remote URL) → `"plus"`. The user is not currently on Miyo,
- *     so cloud is the correct and expected processor.
+ *   - `docProcessorBackend === "miyo"` but Miyo isn't usable (`shouldUseMiyo`
+ *     false — disconnected, or mobile without a remote URL) → `"miyo-unavailable"`.
+ *     FAIL CLOSED: the user explicitly chose local processing, so a document is
+ *     never silently uploaded to the cloud just because Miyo went away. The picker
+ *     stays selectable so the user can switch to Plus to recover.
  *   - `docProcessorBackend === "miyo"` AND Miyo is in use, probe, then:
  *       - confirmed `available` → `"miyo"`.
- *       - still not available → `"miyo-unavailable"` — FAIL CLOSED. The user
- *         explicitly chose local processing; a transient Miyo outage must NOT
- *         silently upload their document to the cloud. The caller surfaces an
- *         error instead (matching the privacy guarantee already applied to a
- *         Miyo parse failure in `FileParserManager`).
+ *       - still not available → `"miyo-unavailable"` (fail closed, same reason).
  *
  * DESIGN NOTE (locked): an EXPLICIT `docProcessorBackend === "miyo"` never falls
  * back to cloud on unavailability — it fails closed. Cloud is only used when the
- * user's effective choice is Plus (field is plus, or Miyo isn't in use). Do NOT
- * "recover" a miyo-unavailable outcome by routing to Plus to avoid an error —
- * that reintroduces the silent cloud-egress this guard exists to prevent.
- *
- * The synchronous `getDocProcessorBackend` (which collapses unavailable→plus)
- * stays for non-parse read-sites that only need a coarse plus/miyo signal.
+ * user's effective choice is Plus (the field is `"plus"`). Do NOT "recover" a
+ * miyo-unavailable outcome by routing to Plus to avoid an error — that
+ * reintroduces the silent cloud-egress this guard exists to prevent.
  */
 export async function resolveDocProcessorBackend(
   settings: CopilotSettings = getSettings()
 ): Promise<ResolvedDocProcessorBackend> {
-  if (settings.docProcessorBackend !== "miyo" || !shouldUseMiyo(settings)) {
+  if (settings.docProcessorBackend !== "miyo") {
     return "plus";
+  }
+  if (!shouldUseMiyo(settings)) {
+    return "miyo-unavailable";
   }
   const status = getMiyoStatusSnapshot().documentProcessor;
   if (status === "unknown" || status === "stale") {

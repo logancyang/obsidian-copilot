@@ -148,9 +148,10 @@ export const MiyoSettings: React.FC = () => {
   // still the current owner, so a superseding enable's write is never clobbered.
   const enableTxnRef = useRef(0);
   // Reason: the search-skill install/remove is async disk I/O. Each flip bumps
-  // this token; a stale attempt (superseded by a newer flip or by unmount) must
-  // not persist the flag or fire a Notice. Independent of the connect guard —
-  // the two toggles are unrelated (path A vs path B).
+  // this token; only a newer flip supersedes an older one and skips its persist.
+  // Unmount does NOT bump the token — an in-flight op still reconciles its
+  // completed disk result to the flag, and only its Notice/UI updates are
+  // suppressed. Independent of the connect guard (path A vs path B).
   const skillAttemptRef = useRef(0);
   // Reason: while an install/remove is in flight, reflect the user's requested
   // state optimistically on the switch, but only COMMIT the flag once the disk
@@ -181,8 +182,11 @@ export const MiyoSettings: React.FC = () => {
       // Invalidate any in-flight connection attempt so it can't write settings
       // after the tab is gone.
       connectAttemptRef.current += 1;
-      // Same for an in-flight search-skill install/remove.
-      skillAttemptRef.current += 1;
+      // Deliberately DON'T advance skillAttemptRef here. An in-flight search-skill
+      // install/remove must still reconcile its completed disk result to the
+      // persisted flag after unmount (mountedRef gates only the UI updates);
+      // bumping the token would make it look superseded and skip that persist,
+      // leaving disk and flag divergent.
       connectModalRef.current?.close();
     };
   }, []);
@@ -478,7 +482,12 @@ export const MiyoSettings: React.FC = () => {
   const handleToggleSearchSkill = useCallback(
     async (next: boolean) => {
       const attempt = (skillAttemptRef.current += 1);
-      const superseded = () => skillAttemptRef.current !== attempt || !mountedRef.current;
+      // A newer toggle supersedes this one and owns the final state, so a
+      // superseded attempt must NOT persist. An unmount is separate: it only
+      // stops UI work (Notices / React state) — the completed disk result is
+      // still written to the persisted flag so the two can never diverge.
+      const superseded = () => skillAttemptRef.current !== attempt;
+      const unmounted = () => !mountedRef.current;
       setPendingSkillEnabled(next);
       const folder = settings.agentMode?.skills?.folder ?? DEFAULT_SKILLS_FOLDER;
       try {
@@ -487,18 +496,22 @@ export const MiyoSettings: React.FC = () => {
         // on desktop — the switch is disabled on `Platform.isMobile` — but the
         // dynamic import keeps the barrel out of the mobile-eager settings bundle.
         const { installMiyoSearchSkill, removeMiyoSearchSkill } = await import("@/agentMode");
-        if (superseded()) return;
+        // Nothing has touched disk yet, so bailing here can't diverge disk from flag.
+        if (superseded() || unmounted()) return;
         if (next) {
           const result = await installMiyoSearchSkill(app, folder);
           if (superseded()) return;
           if (result === "installed") {
+            // Persist regardless of unmount: the files ARE on disk now.
             updateSetting("enableMiyoSearchSkill", true);
-            new Notice("Miyo search skill installed");
+            if (!unmounted()) new Notice("Miyo search skill installed");
           } else if (result === "collision") {
-            new Notice(
-              "A skill named “miyo-search” already exists in your skills folder. Rename or remove it, then try again."
-            );
-          } else {
+            if (!unmounted()) {
+              new Notice(
+                "A skill named “miyo-search” already exists in your skills folder. Rename or remove it, then try again."
+              );
+            }
+          } else if (!unmounted()) {
             new Notice("Couldn't install the Miyo search skill. Please try again.");
           }
         } else {
@@ -507,22 +520,27 @@ export const MiyoSettings: React.FC = () => {
           if (result === "failed") {
             // The skill is still on disk — keep the flag on so UI and disk agree,
             // and surface the failure instead of a silent no-op.
-            new Notice("Couldn't remove the Miyo search skill. Please try again.");
+            if (!unmounted()) {
+              new Notice("Couldn't remove the Miyo search skill. Please try again.");
+            }
             return;
           }
           // Removed, or a markerless collision copy the user owns: honor the
-          // disable either way, only flagging the collision so they can clean up.
+          // disable either way (persist regardless of unmount), only flagging the
+          // collision so they can clean up.
           updateSetting("enableMiyoSearchSkill", false);
-          if (result === "collision") {
+          if (result === "collision" && !unmounted()) {
             new Notice(
               "Disabled. A user-created “miyo-search” skill was left in place — remove it manually if you don't want it."
             );
           }
         }
       } catch {
-        if (!superseded()) new Notice("Couldn't update the Miyo search skill. Please try again.");
+        if (!superseded() && !unmounted()) {
+          new Notice("Couldn't update the Miyo search skill. Please try again.");
+        }
       } finally {
-        if (!superseded()) setPendingSkillEnabled(null);
+        if (!superseded() && !unmounted()) setPendingSkillEnabled(null);
       }
     },
     [app, settings.agentMode?.skills?.folder]
@@ -800,13 +818,19 @@ export const MiyoSettings: React.FC = () => {
                 onAction={() => window.open(MIYO_CHATS_DEEPLINK_URL, "_blank")}
                 disabled={!capabilitiesEnabled}
               />
+            </div>
 
-              {/* Document Processor — bound to `docProcessorBackend`. The persisted
-                  field is honored by getDocProcessorBackend(), which still falls back
-                  to Plus when Miyo can't process; the picker only sets the preference. */}
+            {/* Document Processor — NOT connection-gated: it's a Plus-vs-Miyo
+                choice, not a Miyo-only capability, so it stays selectable even
+                when Miyo is unavailable. That lets a user switch back to Plus to
+                recover from a fail-closed parse error (resolveDocProcessorBackend
+                surfaces "reconnect Miyo or switch to Plus"). The persisted field
+                is honored at the parse boundary; the picker only sets the
+                preference. */}
+            <div className="tw-px-4">
               <CapabilityRow
                 title="Document Processor"
-                description="Converts PDFs and documents into markdown."
+                description="Processes PDF & EPUB locally via Miyo; other formats use Plus cloud."
                 control={
                   <SegmentedControl
                     aria-label="Document Processor backend"
@@ -816,7 +840,6 @@ export const MiyoSettings: React.FC = () => {
                     ]}
                     value={settings.docProcessorBackend}
                     onChange={(value) => updateSetting("docProcessorBackend", value)}
-                    disabled={!capabilitiesEnabled}
                   />
                 }
               />

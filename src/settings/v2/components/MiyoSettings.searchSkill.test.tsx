@@ -99,6 +99,15 @@ import { MiyoSettings } from "./MiyoSettings";
 
 const toggle = () => screen.getByLabelText("Enable Miyo semantic search skill");
 
+/** A promise whose resolution the test controls, to hold a disk op mid-flight. */
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((r) => {
+    resolve = r;
+  });
+  return { promise, resolve };
+}
+
 beforeEach(() => {
   jest.clearAllMocks();
   currentSettings = { ...DEFAULT_SETTINGS, enableMiyoSearchSkill: false };
@@ -142,6 +151,40 @@ it("leaves the flag off on a failed install", async () => {
 
   await waitFor(() => expect(installMiyoSearchSkill).toHaveBeenCalledTimes(1));
   expect(updateSetting).not.toHaveBeenCalledWith("enableMiyoSearchSkill", true);
+});
+
+it("reconciles the flag to an installed skill even when the tab unmounts mid-op", async () => {
+  const gate = deferred<string>();
+  installMiyoSearchSkill.mockReturnValue(gate.promise);
+  const { unmount } = render(<MiyoSettings />);
+
+  fireEvent.click(toggle());
+  await waitFor(() => expect(installMiyoSearchSkill).toHaveBeenCalledTimes(1));
+
+  // Tab closes while the install is still writing to disk, then the disk op
+  // completes: the flag must still be persisted so disk and settings agree.
+  unmount();
+  gate.resolve("installed");
+
+  await waitFor(() => expect(updateSetting).toHaveBeenCalledWith("enableMiyoSearchSkill", true));
+  // UI work is suppressed after unmount — no Notice fires.
+  expect(NoticeMock).not.toHaveBeenCalled();
+});
+
+it("reconciles the flag to a removed skill even when the tab unmounts mid-op", async () => {
+  currentSettings = { ...DEFAULT_SETTINGS, enableMiyoSearchSkill: true };
+  const gate = deferred<string>();
+  removeMiyoSearchSkill.mockReturnValue(gate.promise);
+  const { unmount } = render(<MiyoSettings />);
+
+  fireEvent.click(toggle());
+  await waitFor(() => expect(removeMiyoSearchSkill).toHaveBeenCalledTimes(1));
+
+  unmount();
+  gate.resolve("removed");
+
+  await waitFor(() => expect(updateSetting).toHaveBeenCalledWith("enableMiyoSearchSkill", false));
+  expect(NoticeMock).not.toHaveBeenCalled();
 });
 
 it("removes the skill and clears the flag on disable", async () => {

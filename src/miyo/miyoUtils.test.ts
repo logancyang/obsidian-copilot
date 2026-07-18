@@ -6,17 +6,18 @@ jest.mock("@/plusUtils", () => ({
     settings.enableSelfHostMode === true,
 }));
 
-// The status store is owned by another PR-2 workstream (contract stub in this
-// worktree). getDocProcessorBackend hard-gates on this predicate, so we mock it.
+// miyoUtils imports isMiyoAvailableForCapability (used by resolveDocProcessorBackend,
+// which is covered end-to-end in FileParserManager.test.ts). Stub the status store
+// so importing the module here doesn't pull in the real store.
 jest.mock("@/miyo/miyoStatusStore", () => ({
   isMiyoAvailableForCapability: jest.fn(),
+  getMiyoStatusSnapshot: jest.fn(),
+  refreshMiyoStatus: jest.fn(),
 }));
 
 import { Platform, type App } from "obsidian";
-import { isMiyoAvailableForCapability } from "@/miyo/miyoStatusStore";
 import type { CopilotSettings } from "@/settings/model";
 import {
-  getDocProcessorBackend,
   getMiyoFilePath,
   getMiyoFolderExclusions,
   getMiyoFolderInclusions,
@@ -26,10 +27,6 @@ import {
   isLocalMiyoUrl,
   seedDocProcessorBackend,
 } from "@/miyo/miyoUtils";
-
-const mockAvailable = isMiyoAvailableForCapability as jest.MockedFunction<
-  typeof isMiyoAvailableForCapability
->;
 
 /** Minimal settings stub; the accessors only read the fields set per-test. */
 const capSettings = (over: Partial<CopilotSettings>): CopilotSettings =>
@@ -123,9 +120,7 @@ describe("getMiyoFilePath", () => {
 });
 
 // getSearchBackend stays behavior-neutral: it derives from the live shouldUseMiyo
-// predicate (there is no persisted search-engine field). getDocProcessorBackend,
-// by contrast, has been flipped (Layer C) to read the persisted field plus live
-// availability — its tests live in a separate block below.
+// predicate (there is no persisted search-engine field).
 describe("getSearchBackend", () => {
   // Miyo is free (Layer C): the search backend keys off enableMiyo only, plus the
   // mobile guard (local discovery is desktop-only, so mobile needs a server URL).
@@ -174,29 +169,6 @@ describe("seedDocProcessorBackend", () => {
     expect(
       seedDocProcessorBackend(capSettings({ enableSelfHostMode: true, enableMiyo: false }))
     ).toBe("plus");
-  });
-});
-
-describe("getDocProcessorBackend", () => {
-  beforeEach(() => jest.clearAllMocks());
-
-  it("returns 'plus' when the field is 'plus', without consulting availability", () => {
-    mockAvailable.mockReturnValue(true);
-    expect(getDocProcessorBackend(capSettings({ docProcessorBackend: "plus" }))).toBe("plus");
-    // Field short-circuits: no need to probe Miyo when the user isn't on it.
-    expect(mockAvailable).not.toHaveBeenCalled();
-  });
-
-  it("returns 'miyo' when the field is 'miyo' and Miyo is available", () => {
-    mockAvailable.mockReturnValue(true);
-    expect(getDocProcessorBackend(capSettings({ docProcessorBackend: "miyo" }))).toBe("miyo");
-    expect(mockAvailable).toHaveBeenCalledWith("documentProcessor");
-  });
-
-  it("falls back to 'plus' when the field is 'miyo' but Miyo is unavailable", () => {
-    // Dead-path guard: a stale "miyo" field must not route PDFs to unreachable Miyo.
-    mockAvailable.mockReturnValue(false);
-    expect(getDocProcessorBackend(capSettings({ docProcessorBackend: "miyo" }))).toBe("plus");
   });
 });
 

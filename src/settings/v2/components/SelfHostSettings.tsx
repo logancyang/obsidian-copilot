@@ -14,6 +14,7 @@ const BYOK_TAB_ID = "byok";
 
 const FIRECRAWL_SIGNUP_URL = "https://firecrawl.link/logan-yang";
 const SUPADATA_SIGNUP_URL = "https://supadata.ai/?ref=obcopilot";
+const PERPLEXITY_API_KEY_URL = "https://docs.perplexity.ai";
 
 /** Small "Sign up ↗" affordance appended to a provider key description. */
 const SignUpLink: React.FC<{ href: string }> = ({ href }) => (
@@ -23,14 +24,15 @@ const SignUpLink: React.FC<{ href: string }> = ({ href }) => (
 );
 
 /**
- * Self-Host tab. The Enable toggle now writes the persisted `enableSelfHostMode`
+ * Self-Host tab. The Enable toggle writes the persisted `enableSelfHostMode`
  * flag — the truth source the cross-tab gating (Agents / BYOK model
  * enumeration, the agent spawn boundary) reads. Enabling requires a successful
  * plan validation; the toggle is disabled for ineligible plans.
  *
- * The sub-sections below (web-search keys, self-hosted endpoint) remain visually
- * gated on the flag and stay `disabled` — wiring their edits is a separate
- * follow-up; this PR owns only the flag and the gating it drives.
+ * The sub-sections below (web-search providers/keys, self-hosted endpoint) are
+ * editable while Self-Host Mode is on and disabled while it's off — the ancestor
+ * wrapper only dims/blocks the mouse, so each control carries its own
+ * `disabled={!selfHostOn}` to also block keyboard editing when the mode is off.
  */
 export const SelfHostSettings: React.FC = () => {
   const settings = useSettingsValue();
@@ -107,22 +109,47 @@ export const SelfHostSettings: React.FC = () => {
             title="Web Search Provider"
             description="Your key turns this into an agent skill parameter."
             value={settings.selfHostSearchProvider}
-            options={[{ label: "Firecrawl", value: "firecrawl" }]}
-            disabled
+            onChange={(value) =>
+              updateSetting("selfHostSearchProvider", value as "firecrawl" | "perplexity")
+            }
+            options={[
+              { label: "Firecrawl", value: "firecrawl" },
+              { label: "Perplexity Sonar", value: "perplexity" },
+            ]}
+            disabled={!selfHostOn}
           />
 
-          <SettingItem
-            type="password"
-            title="Firecrawl API Key"
-            description={
-              <span>
-                Web search &amp; fetch via Firecrawl. <SignUpLink href={FIRECRAWL_SIGNUP_URL} />
-              </span>
-            }
-            value={settings.firecrawlApiKey}
-            placeholder="fc-…"
-            disabled
-          />
+          {settings.selfHostSearchProvider === "firecrawl" && (
+            <SettingItem
+              type="password"
+              title="Firecrawl API Key"
+              description={
+                <span>
+                  Web search &amp; fetch via Firecrawl. <SignUpLink href={FIRECRAWL_SIGNUP_URL} />
+                </span>
+              }
+              value={settings.firecrawlApiKey}
+              onChange={(value) => updateSetting("firecrawlApiKey", value)}
+              placeholder="fc-…"
+              disabled={!selfHostOn}
+            />
+          )}
+
+          {settings.selfHostSearchProvider === "perplexity" && (
+            <SettingItem
+              type="password"
+              title="Perplexity API Key"
+              description={
+                <span>
+                  Web search via Perplexity Sonar. <SignUpLink href={PERPLEXITY_API_KEY_URL} />
+                </span>
+              }
+              value={settings.perplexityApiKey}
+              onChange={(value) => updateSetting("perplexityApiKey", value)}
+              placeholder="pplx-…"
+              disabled={!selfHostOn}
+            />
+          )}
 
           <SettingItem
             type="password"
@@ -133,21 +160,21 @@ export const SelfHostSettings: React.FC = () => {
               </span>
             }
             value={settings.supadataApiKey}
+            onChange={(value) => updateSetting("supadataApiKey", value)}
             placeholder="sd-…"
-            disabled
+            disabled={!selfHostOn}
           />
         </SettingSection>
 
         <SettingSection label="Self-hosted models">
-          {/* Bound to the existing `selfHostUrl` field but read-only in PR-1:
-              editing/writes land with the persisted self-host flag in PR-2. */}
           <SettingItem
             type="text"
             title="Self-hosted search endpoint"
             description="Point vault search at your own server instead of Copilot cloud."
             value={settings.selfHostUrl}
+            onChange={(value) => updateSetting("selfHostUrl", value)}
             placeholder="https://localhost:8000"
-            disabled
+            disabled={!selfHostOn}
           />
 
           <SettingItem
