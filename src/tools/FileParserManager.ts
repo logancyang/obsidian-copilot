@@ -337,36 +337,37 @@ export class Docs4LLMParser implements FileParser {
   }
 
   async parseFile(file: TFile, vault: Vault): Promise<string> {
+    const projectName = this.currentProject?.name ?? "no project";
     try {
       logInfo(
-        `[Docs4LLMParser] Project ${this.currentProject?.name}: Parsing ${file.extension} file: ${file.path}`
+        `[Docs4LLMParser] Project ${projectName}: Parsing ${file.extension} file: ${file.path}`
       );
 
-      if (!this.currentProject) {
-        logError("[Docs4LLMParser] No project context for parsing file: ", file.path);
-        throw new Error("No project context provided for file parsing");
-      }
-
-      const cachedContent = await this.projectContextCache.getOrReuseFileContext(
-        this.currentProject,
-        file.path
-      );
-      if (cachedContent) {
-        logInfo(
-          `[Docs4LLMParser] Project ${this.currentProject.name}: Using cached content for: ${file.path}`
+      // Project-scoped cache reuse — only in project mode. Normal chat has no
+      // project cache, so this is skipped there.
+      if (this.currentProject) {
+        const cachedContent = await this.projectContextCache.getOrReuseFileContext(
+          this.currentProject,
+          file.path
         );
-        // Ensure output file exists even on cache hit (user may have just enabled the setting)
-        await saveConvertedDocOutput(file, cachedContent, vault);
-        return cachedContent;
+        if (cachedContent) {
+          logInfo(
+            `[Docs4LLMParser] Project ${projectName}: Using cached content for: ${file.path}`
+          );
+          // Ensure output file exists even on cache hit (user may have just enabled the setting)
+          await saveConvertedDocOutput(file, cachedContent, vault);
+          return cachedContent;
+        }
+        logInfo(
+          `[Docs4LLMParser] Project ${projectName}: Cache miss for: ${file.path}. Proceeding to API call.`
+        );
       }
-      logInfo(
-        `[Docs4LLMParser] Project ${this.currentProject.name}: Cache miss for: ${file.path}. Proceeding to API call.`
-      );
 
       // For local formats (PDF/EPUB), try Miyo first when self-host mode is
       // active. Resolve at the parse boundary so an unconclusive (unknown/stale)
-      // status gets one health check before routing, rather than silently
-      // defaulting to cloud.
+      // status gets one health check before routing. This runs BEFORE the cloud
+      // path's project requirement, so an EPUB parses locally in normal chat too
+      // (PDFs use PDFParser there; EPUB only ever reaches this parser).
       const backend = isMiyoLocalExtension(file) ? await resolveDocProcessorBackend() : "plus";
 
       // Explicit local Miyo choice, but Miyo can't be confirmed: fail closed.
@@ -381,14 +382,17 @@ export class Docs4LLMParser implements FileParser {
       if (backend === "miyo") {
         const miyoResult = await this.selfHostDocParser.parseDoc(file, vault);
         if (miyoResult && "content" in miyoResult) {
-          await this.projectContextCache.setFileContext(
-            this.currentProject,
-            file.path,
-            miyoResult.content
-          );
+          // Cache the result only when we have a project to key it against.
+          if (this.currentProject) {
+            await this.projectContextCache.setFileContext(
+              this.currentProject,
+              file.path,
+              miyoResult.content
+            );
+          }
           await saveConvertedDocOutput(file, miyoResult.content, vault);
           logInfo(
-            `[Docs4LLMParser] Project ${this.currentProject.name}: Parsed document via Miyo: ${file.path}`
+            `[Docs4LLMParser] Project ${projectName}: Parsed document via Miyo: ${file.path}`
           );
           return miyoResult.content;
         }
@@ -399,11 +403,18 @@ export class Docs4LLMParser implements FileParser {
         }
       }
 
+      // Cloud path (docs4llm) is project-scoped: its cache reuse and batch
+      // materialization key off the project. Normal chat only reaches here for
+      // non-local formats (or a Plus-selected doc), preserving the pre-existing
+      // project requirement for the cloud route.
+      if (!this.currentProject) {
+        logError("[Docs4LLMParser] No project context for parsing file: ", file.path);
+        throw new Error("No project context provided for file parsing");
+      }
+
       const binaryContent = await vault.readBinary(file);
 
-      logInfo(
-        `[Docs4LLMParser] Project ${this.currentProject.name}: Calling docs4llm API for: ${file.path}`
-      );
+      logInfo(`[Docs4LLMParser] Project ${projectName}: Calling docs4llm API for: ${file.path}`);
       const docs4llmResponse = await this.brevilabsClient.docs4llm(binaryContent, file.extension);
 
       if (!docs4llmResponse || !docs4llmResponse.response) {
@@ -451,12 +462,12 @@ export class Docs4LLMParser implements FileParser {
       await saveConvertedDocOutput(file, content, vault);
 
       logInfo(
-        `[Docs4LLMParser] Project ${this.currentProject.name}: Successfully processed and cached: ${file.path}`
+        `[Docs4LLMParser] Project ${projectName}: Successfully processed and cached: ${file.path}`
       );
       return content;
     } catch (error) {
       logError(
-        `[Docs4LLMParser] Project ${this.currentProject?.name}: Error processing file ${file.path}:`,
+        `[Docs4LLMParser] Project ${projectName}: Error processing file ${file.path}:`,
         error
       );
 

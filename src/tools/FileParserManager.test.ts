@@ -343,3 +343,49 @@ describe("Docs4LLMParser — EPUB routes locally like PDF", () => {
     expect(docs4llm).toHaveBeenCalledTimes(1);
   });
 });
+
+// Normal chat builds Docs4LLMParser with project=null. EPUB has no PDFParser-style
+// non-project fallback, so it must route through Miyo BEFORE the cloud path's
+// project requirement — otherwise "add an EPUB in ordinary chat" throws.
+describe("Docs4LLMParser — normal chat (no project)", () => {
+  it("parses an EPUB via Miyo without a project, never throwing 'No project context'", async () => {
+    mockGetSettings.mockReturnValue(settings({ docProcessorBackend: "miyo" }));
+    mockAvailable.mockReturnValue(true);
+    mockParseDoc.mockResolvedValue({ text: "epub text" });
+    const docs4llm = jest.fn();
+
+    const parser = new Docs4LLMParser(cloudClient(docs4llm), null);
+    const result = await parser.parseFile(epub("book"), asVault);
+
+    expect(result).toBe("epub text");
+    expect(mockParseDoc).toHaveBeenCalledWith(
+      "http://localhost:8742",
+      "MyVault",
+      "books/book.epub"
+    );
+    expect(docs4llm).not.toHaveBeenCalled();
+    // No project → nothing to key a project cache write against.
+    expect(mockSetFileContext).not.toHaveBeenCalled();
+  });
+
+  it("fails closed for an EPUB when Miyo is unavailable, even without a project", async () => {
+    mockGetSettings.mockReturnValue(settings({ docProcessorBackend: "miyo" }));
+    mockAvailable.mockReturnValue(false);
+    const docs4llm = jest.fn().mockResolvedValue({ response: "cloud epub" });
+
+    const parser = new Docs4LLMParser(cloudClient(docs4llm), null);
+
+    await expect(parser.parseFile(epub("book"), asVault)).rejects.toThrow(/Miyo.*is unavailable/);
+    expect(docs4llm).not.toHaveBeenCalled();
+  });
+
+  it("still requires a project for the cloud path (non-local format)", async () => {
+    mockGetSettings.mockReturnValue(settings({ docProcessorBackend: "plus" }));
+    const docs4llm = jest.fn();
+
+    const parser = new Docs4LLMParser(cloudClient(docs4llm), null);
+
+    await expect(parser.parseFile(docx("report"), asVault)).rejects.toThrow(/No project context/);
+    expect(docs4llm).not.toHaveBeenCalled();
+  });
+});
