@@ -6,7 +6,6 @@ import {
   updateCachedSystemPrompts,
 } from "@/system-prompts/state";
 import type { UserSystemPrompt } from "@/system-prompts/type";
-import { shouldUseMiyo } from "@/miyo/miyoUtils";
 import {
   buildAgentSystemPrompt,
   COPILOT_MIYO_SEARCH_STEERING,
@@ -19,14 +18,6 @@ jest.mock("@/logger", () => ({
   logWarn: jest.fn(),
   logError: jest.fn(),
 }));
-
-// The Miyo steering is gated on `shouldUseMiyo`; mock it so tests can flip the
-// gate without standing up self-host validation state.
-jest.mock("@/miyo/miyoUtils", () => ({
-  shouldUseMiyo: jest.fn(() => false),
-}));
-
-const mockShouldUseMiyo = shouldUseMiyo as jest.MockedFunction<typeof shouldUseMiyo>;
 
 function makePrompt(title: string, content: string): UserSystemPrompt {
   return { title, content, createdMs: 0, modifiedMs: 0, lastUsedMs: 0 };
@@ -44,7 +35,6 @@ describe("buildAgentSystemPrompt", () => {
   beforeEach(() => {
     resetSettings();
     resetPromptState();
-    mockShouldUseMiyo.mockReturnValue(false);
   });
 
   it("includes the Copilot base prompt and the pill-syntax directive by default", () => {
@@ -123,15 +113,15 @@ describe("buildAgentSystemPrompt", () => {
     expect(prompt).not.toContain(COPILOT_PLUS_TOOLS_STEERING);
   });
 
-  it("omits the Miyo steering when Miyo is not in use", () => {
-    mockShouldUseMiyo.mockReturnValue(false);
+  it("omits the Miyo steering when the search skill is not installed", () => {
+    updateSetting("enableMiyoSearchSkill", false);
     const prompt = buildAgentSystemPrompt();
     expect(prompt).not.toContain(COPILOT_MIYO_SEARCH_STEERING);
     expect(prompt).not.toContain("miyo-search");
   });
 
-  it("appends the Miyo steering only when Miyo is in use", () => {
-    mockShouldUseMiyo.mockReturnValue(true);
+  it("appends the Miyo steering only when the search skill is enabled", () => {
+    updateSetting("enableMiyoSearchSkill", true);
     const prompt = buildAgentSystemPrompt();
     expect(prompt).toContain(COPILOT_MIYO_SEARCH_STEERING);
     // Names the skill and gives concrete triggers for when to call it.
@@ -140,8 +130,8 @@ describe("buildAgentSystemPrompt", () => {
     expect(prompt).toMatch(/explicitly asks/i);
   });
 
-  it("suppresses the Miyo steering when the builtin prompt is disabled, even if Miyo is in use", () => {
-    mockShouldUseMiyo.mockReturnValue(true);
+  it("suppresses the Miyo steering when the builtin prompt is disabled, even if the skill is enabled", () => {
+    updateSetting("enableMiyoSearchSkill", true);
     setDisableBuiltinSystemPrompt(true);
     const prompt = buildAgentSystemPrompt();
     expect(prompt).not.toContain(COPILOT_MIYO_SEARCH_STEERING);

@@ -10,13 +10,15 @@ import {
 function makeProvider(
   providerId: string,
   origin: ProviderOrigin,
-  providerType: ProviderType = "anthropic"
+  providerType: ProviderType = "anthropic",
+  baseUrl?: string
 ): Provider {
   return {
     providerId,
     providerType,
     displayName: providerId,
     origin,
+    baseUrl,
     addedAt: 0,
   };
 }
@@ -40,12 +42,14 @@ function makeSettings(args: {
   enabledModels?: string[];
   configuredModels?: ConfiguredModel[];
   providers?: Record<string, Provider>;
+  enableSelfHostMode?: boolean;
 }): CopilotSettings {
   return {
     backends:
       args.enabledModels === undefined ? {} : { opencode: { enabledModels: args.enabledModels } },
     configuredModels: args.configuredModels ?? [],
     providers: args.providers ?? {},
+    enableSelfHostMode: args.enableSelfHostMode ?? false,
   } as unknown as CopilotSettings;
 }
 
@@ -159,6 +163,50 @@ describe("opencodeEnabledModelEntries", () => {
     const byId = new Map(opencodeEnabledModelEntries(settings).map((e) => [e.baseModelId, e]));
     expect(byId.get("opencode/big-pickle")?.isFree).toBe(true);
     expect(byId.get("lmstudio/gpt-oss-20b")?.isFree).toBe(false);
+  });
+
+  it("flags cloud-hosted models with needsSelfHostWarning when Self-Host Mode is on", () => {
+    // opencode is self-hostable, but it can host cloud BYOK providers — those
+    // models must still carry the cloud-egress warning; local ones must not.
+    const settings = makeSettings({
+      enableSelfHostMode: true,
+      enabledModels: ["cloud", "local"],
+      providers: {
+        pc: makeProvider(
+          "pc",
+          { kind: "byok", catalogProviderId: "openai" },
+          "anthropic",
+          "https://api.openai.com/v1"
+        ),
+        pl: makeProvider(
+          "pl",
+          { kind: "byok", catalogProviderId: "ollama" },
+          "anthropic",
+          "http://localhost:11434/v1"
+        ),
+      },
+      configuredModels: [makeModel("cloud", "pc", "gpt-4o"), makeModel("local", "pl", "llama3")],
+    });
+    const byId = new Map(opencodeEnabledModelEntries(settings).map((e) => [e.baseModelId, e]));
+    expect(byId.get("openai/gpt-4o")?.needsSelfHostWarning).toBe(true);
+    expect(byId.get("ollama/llama3")?.needsSelfHostWarning).toBe(false);
+  });
+
+  it("does not flag cloud models when Self-Host Mode is off", () => {
+    const settings = makeSettings({
+      enableSelfHostMode: false,
+      enabledModels: ["cloud"],
+      providers: {
+        pc: makeProvider(
+          "pc",
+          { kind: "byok", catalogProviderId: "openai" },
+          "anthropic",
+          "https://api.openai.com/v1"
+        ),
+      },
+      configuredModels: [makeModel("cloud", "pc", "gpt-4o")],
+    });
+    expect(opencodeEnabledModelEntries(settings)[0].needsSelfHostWarning).toBe(false);
   });
 
   it("returns the shared frozen empty array when nothing is enabled", () => {

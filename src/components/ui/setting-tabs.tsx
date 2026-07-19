@@ -22,7 +22,18 @@ export const TabItem: React.FC<TabItemProps> = ({ tab, isSelected, onClick, isFi
       id={`tab-${tab.id}`}
       aria-controls={`tabpanel-${tab.id}`}
       aria-selected={isSelected}
+      tabIndex={0}
       onClick={onClick}
+      // Reason: a `role="tab"` div is not focusable or keyboard-operable on its
+      // own. We add tabIndex + Enter/Space activation for a11y, but deliberately
+      // skip arrow-key roving — mirrors the locked decision in AgentHomeShelf.tsx
+      // (don't reimplement roving tablist navigation here).
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
+      }}
       className={cn(
         "tw-flex tw-flex-row tw-items-center",
         "tw-h-8",
@@ -37,6 +48,7 @@ export const TabItem: React.FC<TabItemProps> = ({ tab, isSelected, onClick, isFi
         "tw-bg-primary",
         "tw-transition-all tw-duration-300 tw-ease-in-out",
         "hover:tw-border-interactive-accent",
+        "focus-visible:tw-outline-none focus-visible:tw-ring-1 focus-visible:tw-ring-ring",
         isSelected && [
           "!tw-bg-interactive-accent",
           "tw-text-on-accent",
@@ -90,7 +102,10 @@ export const TabContent: React.FC<TabContentProps> = ({ id, children, isSelected
       id={`tabpanel-${id}`}
       aria-labelledby={`tab-${id}`}
       className={cn(
-        "tw-pt-4",
+        // Grey backdrop so the white section cards visually separate (design:
+        // grey content area + white cards). Without it the cards blend into the
+        // modal background and only their borders show, reading as boxed rows.
+        "tw-mt-4 tw-rounded-lg tw-bg-secondary tw-p-4",
         "tw-transition-all tw-duration-200 tw-ease-in-out",
         isSelected ? "tw-translate-y-0 tw-opacity-100" : "tw-translate-y-2 tw-opacity-0"
       )}

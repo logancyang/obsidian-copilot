@@ -180,4 +180,171 @@ describe("MiyoClient", () => {
       "Miyo request failed with status 404: folder not registered"
     );
   });
+
+  describe("checkFolderRegistration", () => {
+    it("returns 'registered' on HTTP 200 and queries /v0/folder with the folder path", async () => {
+      mockedRequestUrl.mockResolvedValue({
+        status: 200,
+        json: { path: "MyVault" },
+        text: "",
+      } as RequestUrlResponse);
+
+      const client = new MiyoClient();
+      const result = await client.checkFolderRegistration("MyVault");
+
+      expect(result).toBe("registered");
+      expect(mockedRequestUrl).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: "http://127.0.0.1:8742/v0/folder?path=MyVault",
+          method: "GET",
+          throw: false,
+        })
+      );
+    });
+
+    it("returns 'unregistered' on HTTP 404", async () => {
+      mockedRequestUrl.mockResolvedValue({
+        status: 404,
+        json: { detail: "folder not registered" },
+        text: "",
+      } as RequestUrlResponse);
+
+      const client = new MiyoClient();
+      await expect(client.checkFolderRegistration("MyVault")).resolves.toBe("unregistered");
+    });
+
+    it("returns 'error' on a 5xx status (not misread as unregistered)", async () => {
+      mockedRequestUrl.mockResolvedValue({
+        status: 500,
+        json: {},
+        text: "",
+      } as RequestUrlResponse);
+
+      const client = new MiyoClient();
+      await expect(client.checkFolderRegistration("MyVault")).resolves.toBe("error");
+    });
+
+    it("returns 'error' when the request throws (network failure)", async () => {
+      mockedRequestUrl.mockRejectedValue(new Error("network down"));
+
+      const client = new MiyoClient();
+      await expect(client.checkFolderRegistration("MyVault")).resolves.toBe("error");
+    });
+
+    it("returns 'error' when the base URL can't be resolved", async () => {
+      mockResolveBaseUrl.mockResolvedValue(null);
+
+      const client = new MiyoClient();
+      await expect(client.checkFolderRegistration("MyVault")).resolves.toBe("error");
+      expect(mockedRequestUrl).not.toHaveBeenCalled();
+    });
+
+    it("honors an explicit override URL", async () => {
+      mockedRequestUrl.mockResolvedValue({
+        status: 200,
+        json: { path: "MyVault" },
+        text: "",
+      } as RequestUrlResponse);
+
+      const client = new MiyoClient();
+      await client.checkFolderRegistration("MyVault", "http://192.168.1.10:8742");
+
+      expect(mockResolveBaseUrl).toHaveBeenCalledWith({ overrideUrl: "http://192.168.1.10:8742" });
+    });
+  });
+
+  describe("addFolder", () => {
+    it("POSTs the request to /v0/folder and returns the created record on 201", async () => {
+      const folderRecord = { path: "/Users/me/vault", exclude_folders: ["copilot"] };
+      mockedRequestUrl.mockResolvedValue({
+        status: 201,
+        json: folderRecord,
+        text: "",
+      } as RequestUrlResponse);
+
+      const client = new MiyoClient();
+      const result = await client.addFolder({
+        path: "/Users/me/vault",
+        exclude_folders: ["copilot"],
+      });
+
+      expect(result).toEqual(folderRecord);
+      expect(mockedRequestUrl).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: "http://127.0.0.1:8742/v0/folder",
+          method: "POST",
+          contentType: "application/json",
+          body: JSON.stringify({ path: "/Users/me/vault", exclude_folders: ["copilot"] }),
+          throw: false,
+        })
+      );
+    });
+
+    it("treats 409 already-registered as success and returns null", async () => {
+      mockedRequestUrl.mockResolvedValue({
+        status: 409,
+        json: { detail: "folder already registered" },
+        text: "",
+      } as RequestUrlResponse);
+
+      const client = new MiyoClient();
+      await expect(client.addFolder({ path: "/Users/me/vault" })).resolves.toBeNull();
+    });
+
+    it("throws a detailed validation error on 400", async () => {
+      mockedRequestUrl.mockResolvedValue({
+        status: 400,
+        json: { detail: "path must be absolute" },
+        text: "",
+      } as RequestUrlResponse);
+
+      const client = new MiyoClient();
+      await expect(client.addFolder({ path: "relative/path" })).rejects.toThrow(
+        "Miyo add-folder failed with status 400: path must be absolute"
+      );
+    });
+
+    it("throws when the request fails at the network level", async () => {
+      mockedRequestUrl.mockRejectedValue(new Error("network down"));
+
+      const client = new MiyoClient();
+      await expect(client.addFolder({ path: "/Users/me/vault" })).rejects.toThrow("network down");
+    });
+
+    it("honors an explicit override URL", async () => {
+      mockedRequestUrl.mockResolvedValue({
+        status: 201,
+        json: { path: "/Users/me/vault" },
+        text: "",
+      } as RequestUrlResponse);
+
+      const client = new MiyoClient();
+      await client.addFolder({ path: "/Users/me/vault" }, "http://127.0.0.1:9999");
+
+      expect(mockResolveBaseUrl).toHaveBeenCalledWith({ overrideUrl: "http://127.0.0.1:9999" });
+    });
+  });
+
+  describe("fetchHealth()", () => {
+    it("resolves null once the probe timeout elapses when the request never responds", async () => {
+      jest.useFakeTimers();
+      try {
+        // A connection that opens but never sends a response: requestUrl (which
+        // ignores abort) stays pending forever, so only the timeout can settle it.
+        mockedRequestUrl.mockReturnValue(new Promise<never>(() => {}) as never);
+
+        const client = new MiyoClient();
+        const resultPromise = client.fetchHealth("http://127.0.0.1:8742");
+
+        // Advance past the 8s health bound; the timeout must resolve the probe to
+        // null instead of leaving it pending (which would wedge the status store's
+        // single-flight refresh forever).
+        await jest.advanceTimersByTimeAsync(8001);
+
+        await expect(resultPromise).resolves.toBeNull();
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+  });
 });

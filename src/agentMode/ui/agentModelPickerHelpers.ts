@@ -6,7 +6,7 @@ import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type { AgentChatUIState } from "@/agentMode/session/AgentChatUIState";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import { MethodUnsupportedError } from "@/agentMode/session/errors";
-import { backendRegistry } from "@/agentMode/backends/registry";
+import { backendNeedsSelfHostWarning, backendRegistry } from "@/agentMode/backends/registry";
 import { getModelKeyFromModel } from "@/settings/model";
 import type { CopilotSettings } from "@/settings/model";
 import type {
@@ -156,6 +156,10 @@ function appendFromEnabledEntries(
     );
     const reason = credentialDisabledReason(enabled.credentialState, !!reported);
     if (reason) entry._disabledReason = reason;
+    // Per-model cloud-egress flag: a self-hostable backend (opencode) can host
+    // cloud BYOK/Plus providers, so the warning is decided per model here, not
+    // only by the backend's own `selfHostable` in `buildPickerEntries`.
+    if (enabled.needsSelfHostWarning) entry._needsSelfHostWarning = true;
     entries.push(entry);
     emitted.add(enabled.baseModelId);
   }
@@ -163,6 +167,12 @@ function appendFromEnabledEntries(
   if (keepBaseModelId && !emitted.has(keepBaseModelId)) {
     const reported = reportedById.get(keepBaseModelId);
     if (reported) {
+      // This reported-but-not-enabled row carries no per-model cloud-egress flag.
+      // For a cloud agent (claude/codex) the section-level pass in
+      // `buildPickerEntries` still marks it. For opencode it can only be a
+      // native/Zen model (opencode reports solely providers injected from the
+      // enabled set, so a cloud BYOK model can't be reported-but-unenabled) —
+      // Zen already warns via `_isFree`, so no provider-level flag is needed here.
       entries.push(
         synthesizeAgentEntry(
           reported.baseModelId,
@@ -330,6 +340,14 @@ export function buildPickerEntries(
         entries.push(synthesizePreloadPlaceholder(descriptor, "error"));
       }
     }
+    // Flag this backend's rows when Self-Host Mode marks it as cloud. Registry
+    // order already places self-hostable backends (opencode) first, so warned
+    // sections naturally sort last — no reordering needed here.
+    if (backendNeedsSelfHostWarning(descriptor, settings)) {
+      for (let i = sectionStart; i < entries.length; i++) {
+        entries[i]._needsSelfHostWarning = true;
+      }
+    }
   }
 
   let valueKey = "";
@@ -354,6 +372,11 @@ export function buildPickerEntries(
         undefined,
         undefined
       );
+      // The stranded active row is created after the per-section marking above,
+      // so flag it here when its backend is a cloud agent under Self-Host Mode.
+      if (backendNeedsSelfHostWarning(ctx.activeDescriptor, settings)) {
+        synth._needsSelfHostWarning = true;
+      }
       entries.unshift(synth);
       valueKey = getModelKeyFromModel(synth);
     }

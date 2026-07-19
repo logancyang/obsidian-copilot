@@ -20,6 +20,7 @@ import { type Skill } from "@/agentMode/skills/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SettingItem } from "@/components/ui/setting-item";
+import { SettingSection } from "@/components/ui/setting-section";
 import { cn } from "@/lib/utils";
 import { logError, logWarn } from "@/logger";
 import { openWithSystemDefault } from "@/utils/openWithSystemDefault";
@@ -263,51 +264,55 @@ export const SkillsSettings: React.FC = () => {
           </div>
         </div>
 
-        <SettingItem
-          type="custom"
-          title="Skills folder"
-          description={
-            <div className="tw-flex tw-flex-col tw-gap-1">
-              <span>
-                Where Copilot keeps the shared copy of every skill. Agent shortcuts point here.
-                Changing this moves the folder and rewrites all shortcuts.
-              </span>
-              {validationError !== null && <span className="tw-text-error">{validationError}</span>}
+        <SettingSection>
+          <SettingItem
+            type="custom"
+            title="Skills folder"
+            description={
+              <div className="tw-flex tw-flex-col tw-gap-1">
+                <span>
+                  Where Copilot keeps the shared copy of every skill. Agent shortcuts point here.
+                  Changing this moves the folder and rewrites all shortcuts.
+                </span>
+                {validationError !== null && (
+                  <span className="tw-text-error">{validationError}</span>
+                )}
+              </div>
+            }
+          >
+            <div className="tw-flex tw-items-center tw-gap-2">
+              <Input
+                value={draft}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setDraft(next);
+                  validate(next);
+                }}
+                onBlur={(e) => commit(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    commit(draft);
+                    (e.target as HTMLInputElement).blur();
+                  }
+                }}
+                placeholder="copilot/skills"
+                className="!tw-w-56"
+                aria-label="Skills folder"
+                aria-invalid={validationError !== null}
+              />
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handlePickFolder}
+                title="Pick folder"
+                aria-label="Pick folder"
+              >
+                <Folder className="tw-size-4" />
+              </Button>
             </div>
-          }
-        >
-          <div className="tw-flex tw-items-center tw-gap-2">
-            <Input
-              value={draft}
-              onChange={(e) => {
-                const next = e.target.value;
-                setDraft(next);
-                validate(next);
-              }}
-              onBlur={(e) => commit(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  commit(draft);
-                  (e.target as HTMLInputElement).blur();
-                }
-              }}
-              placeholder="copilot/skills"
-              className="!tw-w-56"
-              aria-label="Skills folder"
-              aria-invalid={validationError !== null}
-            />
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handlePickFolder}
-              title="Pick folder"
-              aria-label="Pick folder"
-            >
-              <Folder className="tw-size-4" />
-            </Button>
-          </div>
-        </SettingItem>
+          </SettingItem>
+        </SettingSection>
 
         {/* Durable banners — stack at the top of the tab body, above the toolbar. */}
         {(epermSeen || (syncBrand !== null && !syncBannerDismissed)) && (

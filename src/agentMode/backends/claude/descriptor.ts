@@ -193,6 +193,8 @@ export const ClaudeBackendDescriptor: BackendDescriptor = {
   id: "claude",
   displayName: "Claude",
   Icon: ClaudeLogo,
+  // Cloud agent — flagged with a cloud-egress warning while Self-Host Mode is on.
+  selfHostable: false,
   skillsProjectDir: ".claude/skills",
   crossDiscoveredAgents: [],
   restartOnManagedSkillsChange: false,

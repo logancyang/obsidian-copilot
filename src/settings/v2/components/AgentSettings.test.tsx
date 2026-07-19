@@ -6,9 +6,13 @@ jest.mock("@/logger", () => ({ logInfo: jest.fn(), logWarn: jest.fn(), logError:
 
 jest.mock("obsidian", () => ({ Platform: { isMobile: false } }));
 
+let mockSettings: {
+  agentMode: { activeBackend: string; backends: Record<string, unknown> };
+  enableSelfHostMode: boolean;
+};
 jest.mock("@/settings/model", () => ({
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook; name must match the export
-  useSettingsValue: () => ({ agentMode: { activeBackend: "opencode", backends: {} } }),
+  useSettingsValue: () => mockSettings,
   setSettings: jest.fn(),
   updateSetting: jest.fn(),
 }));
@@ -28,10 +32,11 @@ const installStates: Record<string, { kind: string; [key: string]: unknown }> = 
   codex: { kind: "ready", source: "custom" },
 };
 
-function makeDescriptor(id: string, displayName: string) {
+function makeDescriptor(id: string, displayName: string, selfHostable = false) {
   return {
     id,
     displayName,
+    selfHostable,
     Icon,
     getInstallState: () => installStates[id],
     getResolvedBinaryPath: () => null,
@@ -41,13 +46,17 @@ function makeDescriptor(id: string, displayName: string) {
 }
 
 const DESCRIPTORS = [
-  makeDescriptor("opencode", "OpenCode"),
-  makeDescriptor("claude", "Claude"),
-  makeDescriptor("codex", "Codex"),
+  makeDescriptor("opencode", "OpenCode", true),
+  makeDescriptor("claude", "Claude", false),
+  makeDescriptor("codex", "Codex", false),
 ];
 
 jest.mock("@/agentMode", () => ({
   listBackendDescriptors: () => DESCRIPTORS,
+  backendNeedsSelfHostWarning: (
+    descriptor: { selfHostable?: boolean },
+    settings: { enableSelfHostMode?: boolean }
+  ) => Boolean(settings.enableSelfHostMode) && !descriptor.selfHostable,
   InstallBadge: () => <span data-testid="install-badge" />,
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook export
   useBackendInstallState: (descriptor: { getInstallState: () => unknown }) =>
@@ -81,6 +90,10 @@ jest.mock("./ConfiguredModelEnableList", () => ({
 
 describe("AgentSettings", () => {
   beforeEach(() => {
+    mockSettings = {
+      agentMode: { activeBackend: "opencode", backends: {} },
+      enableSelfHostMode: false,
+    };
     installStates.opencode = { kind: "ready", source: "managed" };
     installStates.claude = { kind: "ready", source: "custom" };
     installStates.codex = { kind: "ready", source: "custom" };
@@ -145,5 +158,15 @@ describe("AgentSettings", () => {
     expect(screen.getByText(message)).toBeTruthy();
     expect(screen.queryByTestId("default-model-claude")).toBeNull();
     expect(screen.queryByTestId("model-list-claude")).toBeNull();
+  });
+
+  it("shows a cloud-egress banner on a cloud backend under Self-Host Mode, not on a self-hostable one", () => {
+    mockSettings.enableSelfHostMode = true;
+    render(<AgentSettings />);
+    // OpenCode (self-hostable) is the default tab — no banner.
+    expect(screen.queryByText("Cloud service.")).toBeNull();
+    // Claude runs in the cloud — the banner appears while Self-Host Mode is on.
+    fireEvent.click(screen.getByRole("tab", { name: "Claude" }));
+    expect(screen.getByText("Cloud service.")).toBeTruthy();
   });
 });

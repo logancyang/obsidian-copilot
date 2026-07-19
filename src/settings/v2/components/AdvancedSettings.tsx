@@ -1,6 +1,7 @@
 import { CHAT_AGENT_VIEWTYPE } from "@/constants";
 import { Button } from "@/components/ui/button";
 import { SettingItem } from "@/components/ui/setting-item";
+import { SettingSection } from "@/components/ui/setting-section";
 import { ObsidianNativeSelect } from "@/components/ui/obsidian-native-select";
 import { useApp } from "@/context";
 import { logFileManager } from "@/logFileManager";
@@ -316,9 +317,7 @@ export const AdvancedSettings: React.FC = () => {
   return (
     <div className="tw-space-y-4">
       {/* User System Prompt Section */}
-      <section className="tw-space-y-4 tw-rounded-lg tw-border tw-p-4">
-        <div className="tw-text-xl tw-font-bold">User System Prompt</div>
-
+      <SettingSection label="User system prompt">
         <SettingItem
           type="custom"
           title="Default System Prompt"
@@ -364,12 +363,10 @@ export const AdvancedSettings: React.FC = () => {
           onChange={(value) => updateSetting("userSystemPromptsFolder", value)}
           placeholder="copilot/system-prompts"
         />
-      </section>
+      </SettingSection>
 
       {/* Others Section */}
-      <section className="tw-space-y-4 tw-rounded-lg tw-border tw-p-4">
-        <div className="tw-text-xl tw-font-bold">Others</div>
-
+      <SettingSection label="Others">
         {/* API Key Storage — five-state UI driven by storageStatus.
             Right column stacks pill + buttons vertically. Blocked state reuses
             standard's visual shape but disables Migrate and exposes the reason
@@ -518,16 +515,13 @@ export const AdvancedSettings: React.FC = () => {
             Create Log File
           </Button>
         </SettingItem>
-      </section>
+      </SettingSection>
 
       {/* Agent Mode debugging Section */}
-      <section className="tw-space-y-4 tw-rounded-lg tw-border tw-p-4">
-        <div className="tw-text-xl tw-font-bold">Agent Mode debugging</div>
-        <div className="tw-text-sm tw-text-muted">
-          Tools for diagnosing Agent Mode problems, separate from the regular Copilot chat logs
-          above.
-        </div>
-
+      <SettingSection
+        label="Agent Mode debugging"
+        description="Tools for diagnosing Agent Mode problems, separate from the regular Copilot chat logs above."
+      >
         <SettingItem
           type="custom"
           title="Report an Issue"
@@ -597,7 +591,7 @@ export const AdvancedSettings: React.FC = () => {
             </Button>
           </div>
         </SettingItem>
-      </section>
+      </SettingSection>
     </div>
   );
 };

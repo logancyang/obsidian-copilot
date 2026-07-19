@@ -1,4 +1,9 @@
-import { removeSeededBuiltin, seedBuiltinSkills, type BuiltinSeedFs } from "./seedBuiltinSkills";
+import {
+  inspectBuiltinSkill,
+  removeSeededBuiltin,
+  seedBuiltinSkills,
+  type BuiltinSeedFs,
+} from "./seedBuiltinSkills";
 import type { BuiltinSkill } from "./builtinSkills";
 
 jest.mock("@/logger", () => ({ logError: jest.fn(), logInfo: jest.fn() }));
@@ -177,5 +182,47 @@ describe("removeSeededBuiltin", () => {
 
     expect(removed).toBe(false);
     expect(fs.files.get(MD)).toBe(userContent);
+  });
+});
+
+describe("inspectBuiltinSkill", () => {
+  it("reports 'absent' when no SKILL.md exists", async () => {
+    const fs = memFs();
+    expect(await inspectBuiltinSkill(FOLDER, "copilot-web-search", fs)).toBe("absent");
+  });
+
+  it("reports 'seeded' when the builtin version marker is present", async () => {
+    const fs = memFs({ [MD]: skill(1).skillMd });
+    expect(await inspectBuiltinSkill(FOLDER, "copilot-web-search", fs)).toBe("seeded");
+  });
+
+  it("reports 'collision' for a same-named folder without the marker", async () => {
+    const fs = memFs({
+      [MD]: "---\nname: copilot-web-search\ndescription: mine\n---\ncustom body",
+    });
+    expect(await inspectBuiltinSkill(FOLDER, "copilot-web-search", fs)).toBe("collision");
+  });
+
+  it("reports 'failed' when the SKILL.md can't be read", async () => {
+    const fs = memFs();
+    // Path claims to exist but read throws — a torn/permission-denied file.
+    fs.exists = async () => true;
+    fs.read = async () => {
+      throw new Error("EACCES");
+    };
+    expect(await inspectBuiltinSkill(FOLDER, "copilot-web-search", fs)).toBe("failed");
+  });
+
+  it("reports 'stale' when the on-disk marker is older than the expected version", async () => {
+    const fs = memFs({ [MD]: skill(1).skillMd });
+    expect(await inspectBuiltinSkill(FOLDER, "copilot-web-search", fs, 2)).toBe("stale");
+  });
+
+  it("reports 'seeded' when the on-disk marker meets or exceeds the expected version", async () => {
+    const fs = memFs({ [MD]: skill(2).skillMd });
+    expect(await inspectBuiltinSkill(FOLDER, "copilot-web-search", fs, 2)).toBe("seeded");
+    // A newer on-disk copy (e.g. a future plugin wrote it) is still ours.
+    const fsNewer = memFs({ [MD]: skill(3).skillMd });
+    expect(await inspectBuiltinSkill(FOLDER, "copilot-web-search", fsNewer, 2)).toBe("seeded");
   });
 });

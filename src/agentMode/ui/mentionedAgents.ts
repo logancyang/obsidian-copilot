@@ -1,5 +1,5 @@
 import React from "react";
-import { listBackendDescriptors } from "@/agentMode/backends/registry";
+import { backendNeedsSelfHostWarning, listBackendDescriptors } from "@/agentMode/backends/registry";
 import type { AgentBrand } from "@/agentMode/session/types";
 import type CopilotPlugin from "@/main";
 import { useSettingsValue, type CopilotSettings } from "@/settings/model";
@@ -14,11 +14,21 @@ export const EMPTY_AGENT_BRANDS: ReadonlyArray<AgentBrand> = Object.freeze([]);
 /**
  * Brand projections of every installed (`ready`) backend, mentionable in the
  * composer. Registry-driven, so a new backend becomes mentionable automatically.
+ * Self-Host Mode marks cloud agents but keeps them mentionable — the user
+ * decides whether to fan out to one.
  */
 export function listInstalledAgentBrands(settings: CopilotSettings): ReadonlyArray<AgentBrand> {
   const brands = listBackendDescriptors()
     .filter((descriptor) => descriptor.getInstallState(settings).kind === "ready")
-    .map(({ id, displayName, Icon }) => ({ id, displayName, Icon }) satisfies AgentBrand);
+    .map(
+      (descriptor) =>
+        ({
+          id: descriptor.id,
+          displayName: descriptor.displayName,
+          Icon: descriptor.Icon,
+          needsSelfHostWarning: backendNeedsSelfHostWarning(descriptor, settings),
+        }) satisfies AgentBrand
+    );
   return brands.length > 0 ? brands : EMPTY_AGENT_BRANDS;
 }
 

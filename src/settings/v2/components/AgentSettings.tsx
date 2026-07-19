@@ -1,5 +1,6 @@
 import {
   AgentDefaultModelSetting,
+  backendNeedsSelfHostWarning,
   InstallBadge,
   listBackendDescriptors,
   McpServersPanel,
@@ -9,6 +10,7 @@ import {
 } from "@/agentMode";
 import { Button } from "@/components/ui/button";
 import { SettingItem } from "@/components/ui/setting-item";
+import { SettingSection } from "@/components/ui/setting-section";
 import { TabContent, TabItem, type TabItem as TabItemType } from "@/components/ui/setting-tabs";
 import { TruncatedText } from "@/components/TruncatedText";
 import { usePlugin } from "@/contexts/PluginContext";
@@ -16,7 +18,7 @@ import { useChatBackendModelOptions } from "@/hooks/useChatBackendModelOptions";
 import { logError } from "@/logger";
 import { setSettings, updateSetting, useSettingsValue } from "@/settings/model";
 import { formatBinaryPathForDisplay } from "@/utils/binaryPath";
-import { MessageCircle } from "lucide-react";
+import { AlertTriangle, MessageCircle } from "lucide-react";
 import { Platform } from "obsidian";
 import React from "react";
 import { ChatModelEnableList } from "./ChatModelEnableList";
@@ -86,6 +88,9 @@ export const AgentSettings: React.FC = () => {
     );
   }
 
+  // Every registered backend shows here — Self-Host Mode marks cloud agents
+  // (warning banner in their panel) rather than hiding them. Cloud agents sort
+  // last because `BACKEND_ORDER` lists the self-hostable opencode first.
   const allDescriptors = listBackendDescriptors();
   const orderedDescriptors = BACKEND_ORDER.map((id) =>
     allDescriptors.find((d) => d.id === id)
@@ -100,20 +105,33 @@ export const AgentSettings: React.FC = () => {
     { id: QUICK_CHAT_TAB_ID, icon: <MessageCircle className="tw-size-4" />, label: "Quick Chat" },
   ];
 
+  // Guard against a persisted selection naming a removed backend id (unrelated
+  // to Self-Host Mode, which no longer hides tabs): fall back to the first tab.
+  const selectedTabId = tabs.some((tab) => tab.id === selectedTab) ? selectedTab : tabs[0].id;
+
+  // Same unknown-id guard for the persisted `activeBackend`.
+  const activeBackendValue = orderedDescriptors.some(
+    (d) => d.id === settings.agentMode.activeBackend
+  )
+    ? settings.agentMode.activeBackend
+    : orderedDescriptors[0].id;
+
   return (
     <section>
       <div className="tw-mb-3 tw-text-xl tw-font-bold">Agents (alpha)</div>
       <div className="tw-space-y-4">
-        <SettingItem
-          type="select"
-          title="Default backend"
-          description="Used when you click + to start a new session and for auto-spawn on mount. Selecting a model from the model picker also updates this."
-          value={settings.agentMode.activeBackend}
-          onChange={(value) =>
-            setSettings((cur) => ({ agentMode: { ...cur.agentMode, activeBackend: value } }))
-          }
-          options={orderedDescriptors.map((d) => ({ label: d.displayName, value: d.id }))}
-        />
+        <SettingSection>
+          <SettingItem
+            type="select"
+            title="Default backend"
+            description="Used when you click + to start a new session and for auto-spawn on mount. Selecting a model from the model picker also updates this."
+            value={activeBackendValue}
+            onChange={(value) =>
+              setSettings((cur) => ({ agentMode: { ...cur.agentMode, activeBackend: value } }))
+            }
+            options={orderedDescriptors.map((d) => ({ label: d.displayName, value: d.id }))}
+          />
+        </SettingSection>
 
         <McpServersPanel />
 
@@ -123,7 +141,7 @@ export const AgentSettings: React.FC = () => {
               <TabItem
                 key={tab.id}
                 tab={tab}
-                isSelected={selectedTab === tab.id}
+                isSelected={selectedTabId === tab.id}
                 onClick={() => handleSelectTab(tab.id)}
                 isFirst={index === 0}
                 isLast={index === tabs.length - 1}
@@ -135,12 +153,12 @@ export const AgentSettings: React.FC = () => {
             <TabContent
               key={descriptor.id}
               id={descriptor.id}
-              isSelected={selectedTab === descriptor.id}
+              isSelected={selectedTabId === descriptor.id}
             >
               <BackendPanel descriptor={descriptor} plugin={plugin} />
             </TabContent>
           ))}
-          <TabContent id={QUICK_CHAT_TAB_ID} isSelected={selectedTab === QUICK_CHAT_TAB_ID}>
+          <TabContent id={QUICK_CHAT_TAB_ID} isSelected={selectedTabId === QUICK_CHAT_TAB_ID}>
             <QuickChatPanel />
           </TabContent>
         </div>
@@ -220,9 +238,20 @@ const BackendPanel: React.FC<{
   }, [manager, descriptor.id, installState.kind]);
 
   const Icon = descriptor.Icon;
+  const showCloudWarning = backendNeedsSelfHostWarning(descriptor, settings);
 
   return (
     <div className="tw-space-y-3">
+      {showCloudWarning && (
+        <div className="tw-flex tw-items-start tw-gap-2 tw-rounded-lg tw-border tw-border-solid tw-px-3 tw-py-2.5 tw-text-xs tw-text-normal tw-bg-warning/10 tw-border-warning/40">
+          <AlertTriangle className="tw-mt-0.5 tw-size-4 tw-shrink-0 tw-text-warning" />
+          <div className="tw-leading-relaxed">
+            <span className="tw-font-semibold">Cloud service.</span> Self-Host Mode is on, but{" "}
+            {descriptor.displayName} runs in the cloud — your prompts leave your machine for a third
+            party. It stays available; use it only if you're comfortable with that.
+          </div>
+        </div>
+      )}
       <div className="tw-flex tw-items-center tw-justify-between tw-gap-2">
         <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-2">
           <Icon className="tw-size-4 tw-shrink-0" />

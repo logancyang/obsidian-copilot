@@ -71,6 +71,14 @@ interface ModelEnableListProps {
   searchPlaceholder?: string;
   /** Rendered when there are no groups/rows to show (after filtering). */
   emptyState?: React.ReactNode;
+  /**
+   * When set, only the group with this key starts expanded; all others start
+   * collapsed. A user's explicit expand/collapse still wins (tracked per key),
+   * and search still forces every group open. Omit (default) to start every
+   * group open. Pass a stable scalar (e.g. `groups[0]?.key`), never a fresh
+   * array/object, so this doesn't churn the collapse state.
+   */
+  defaultOpenGroupKey?: string;
 }
 
 /**
@@ -86,16 +94,26 @@ export const ModelEnableList: React.FC<ModelEnableListProps> = ({
   onQueryChange,
   searchPlaceholder = "Search models…",
   emptyState,
+  defaultOpenGroupKey,
 }) => {
   const searching = query.trim().length > 0;
 
-  // Open by default — track only the keys the user explicitly collapsed. While
-  // searching, force every group open so matches are never hidden; the collapse
-  // intent is remembered and re-applies once the query clears.
-  const [collapsed, setCollapsed] = React.useState<Record<string, boolean>>({});
-  const isOpen = (key: string) => searching || !collapsed[key];
+  // Track only the groups the user explicitly toggled (key → user's open/closed
+  // intent); untouched groups fall back to the default. While searching, force
+  // every group open so matches are never hidden; the remembered intent
+  // re-applies once the query clears.
+  //
+  // Default when a key hasn't been touched:
+  //   - `defaultOpenGroupKey` set → only that group is open (first-group-open);
+  //   - otherwise → every group is open (legacy behavior, e.g. Quick Chat).
+  const [userOpen, setUserOpen] = React.useState<Record<string, boolean>>({});
+  const isOpen = (key: string) => {
+    if (searching) return true;
+    if (key in userOpen) return userOpen[key];
+    return defaultOpenGroupKey === undefined || key === defaultOpenGroupKey;
+  };
   const handleOpenChange = (key: string, open: boolean) =>
-    setCollapsed((prev) => ({ ...prev, [key]: !open }));
+    setUserOpen((prev) => ({ ...prev, [key]: open }));
 
   const renderRows = (rows: ModelEnableRow[]): React.ReactNode => (
     <div className="tw-space-y-1">

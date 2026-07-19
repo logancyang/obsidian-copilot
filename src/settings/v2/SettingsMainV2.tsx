@@ -8,15 +8,40 @@ import CopilotPlugin from "@/main";
 import { ByokPanel, ModelManagementProvider } from "@/modelManagement";
 import { resetSettings } from "@/settings/model";
 import { CommandSettings } from "@/settings/v2/components/CommandSettings";
-import { Bot, Cog, Command, Cpu, Database, Sparkle, Sparkles, Wrench } from "lucide-react";
+import { Bot, Cog, Command, Cpu, Server, ShieldCheck, Sparkle, Wrench } from "lucide-react";
 import React from "react";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { AdvancedSettings } from "./components/AdvancedSettings";
 import { BasicSettings } from "./components/BasicSettings";
-import { CopilotPlusSettings } from "./components/CopilotPlusSettings";
-import { QASettings } from "./components/QASettings";
+import { MiyoSettings } from "./components/MiyoSettings";
+import { SelfHostSettings } from "./components/SelfHostSettings";
 
-const TAB_IDS = ["basic", "byok", "agent", "QA", "command", "skills", "plus", "advanced"] as const;
+// DESIGN NOTE (settings-v4, part 1): there is intentionally no "QA"/"Search"
+// tab here. The legacy QASettings panel was removed as orphan-component cleanup
+// (see designdocs/SETTINGS_REDESIGN_V4.md and SETTINGS_V4_PR_PLAN.md); the
+// underlying fields are NOT dropped and stay runtime-honored for existing
+// vaults:
+//   - enableSemanticSearchV3 — now driven implicitly by the Miyo connect flow
+//     (MiyoSettings), not a manual toggle.
+//   - qaInclusions/qaExclusions — still consumed (Miyo registration snapshot);
+//     their edit UI is deferred per issue #195 ("defer include/exclude").
+//   - embeddingModelKey / maxSourceChunks / enableInlineCitations / indexing
+//     limits — still read at runtime (embeddingManager, SearchTools,
+//     VaultQAChainRunner, CopilotPlusChainRunner) with their defaults; a
+//     UI is deferred to a later part of the #195 redesign.
+// The relabeled "Keyword (built-in) vs Miyo (semantic search)" engine toggle
+// and honest embedding-caveat copy land in a follow-up PR, not here. If a review
+// flags the missing QA/search UI again, point them at this note.
+const TAB_IDS = [
+  "basic",
+  "byok",
+  "agent",
+  "miyo",
+  "selfhost",
+  "command",
+  "skills",
+  "advanced",
+] as const;
 type TabId = (typeof TAB_IDS)[number];
 
 const LazyAgentSettings = React.lazy(() =>
@@ -55,10 +80,10 @@ const icons: Record<TabId, JSX.Element> = {
   basic: <Cog className="tw-size-5" />,
   byok: <Cpu className="tw-size-5" />,
   agent: <Bot className="tw-size-5" />,
-  QA: <Database className="tw-size-5" />,
+  miyo: <Server className="tw-size-5" />,
+  selfhost: <ShieldCheck className="tw-size-5" />,
   command: <Command className="tw-size-5" />,
   skills: <Sparkle className="tw-size-5" />,
-  plus: <Sparkles className="tw-size-5" />,
   advanced: <Wrench className="tw-size-5" />,
 };
 
@@ -67,10 +92,10 @@ const components: Record<TabId, React.FC> = {
   basic: () => <BasicSettings />,
   byok: () => <ByokPanel />,
   agent: AgentSettingsPanel,
-  QA: () => <QASettings />,
+  miyo: () => <MiyoSettings />,
+  selfhost: () => <SelfHostSettings />,
   command: () => <CommandSettings />,
   skills: SkillsSettingsPanel,
-  plus: () => <CopilotPlusSettings />,
   advanced: () => <AdvancedSettings />,
 };
 
@@ -80,10 +105,10 @@ const TAB_LABELS: Record<TabId, string> = {
   basic: "Basic",
   byok: "BYOK",
   agent: "Agents",
-  QA: "QA",
+  miyo: "Miyo",
+  selfhost: "Self-Host",
   command: "Command",
   skills: "Skills",
-  plus: "Plus",
   advanced: "Advanced",
 };
 

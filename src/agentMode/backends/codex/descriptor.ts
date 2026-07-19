@@ -106,6 +106,8 @@ export const CodexBackendDescriptor: BackendDescriptor = {
   id: "codex",
   displayName: "Codex",
   Icon: CodexLogo,
+  // Cloud agent — flagged with a cloud-egress warning while Self-Host Mode is on.
+  selfHostable: false,
   skillsProjectDir: ".agents/skills",
   crossDiscoveredAgents: [],
   restartOnManagedSkillsChange: false,

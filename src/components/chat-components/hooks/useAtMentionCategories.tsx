@@ -30,6 +30,9 @@ export interface AgentMentionBrand {
   readonly id: string;
   readonly displayName: string;
   readonly Icon: React.ComponentType<{ className?: string }>;
+  /** `true` when Self-Host Mode is on and this is a cloud agent — the mention
+   *  option shows a cloud-egress warning icon. */
+  readonly needsSelfHostWarning?: boolean;
 }
 
 /** Frozen empty brand list — referential stability for the no-agents default. */

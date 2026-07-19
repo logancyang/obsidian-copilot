@@ -8,6 +8,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ModelDisplay } from "@/components/ui/model-display";
+import { SelfHostCloudWarningIcon } from "@/components/ui/SelfHostCloudWarningIcon";
 import { getModelKeyFromModel, useSettingsValue } from "@/settings/model";
 import { checkModelApiKey, err2String } from "@/utils";
 import type { CustomModel } from "@/aiParams";
@@ -51,6 +52,12 @@ export type ModelSelectorEntry = CustomModel & {
    * since prompts go to a third party that may retain or train on them.
    */
   _isFree?: boolean;
+  /**
+   * `true` when Self-Host Mode is on and this is a cloud provider/agent. The
+   * dropdown row renders a cloud-egress warning icon + tooltip beside the name;
+   * the model stays selectable (Self-Host Mode marks, it doesn't block).
+   */
+  _needsSelfHostWarning?: boolean;
 };
 
 interface ModelSelectorProps {
@@ -109,6 +116,12 @@ export function ModelSelector({
               <span className="tw-truncate">Select Model</span>
             )}
           </div>
+          {/* Persist the cloud-egress warning on the closed trigger too — otherwise a
+              selected cloud model under Self-Host Mode shows no warning until the menu
+              is opened. stopPropagation=false so a click still opens the picker. */}
+          {currentModel?._needsSelfHostWarning && (
+            <SelfHostCloudWarningIcon className="tw-mt-0.5" stopPropagation={false} />
+          )}
           {!disabled && <ChevronDown className="tw-mt-0.5 tw-size-5 tw-shrink-0" />}
         </Button>
       </DropdownMenuTrigger>
@@ -158,7 +171,10 @@ export function ModelSelector({
                 }}
                 className={itemDisabled ? "tw-cursor-not-allowed tw-opacity-50" : ""}
               >
-                <ModelDisplay model={model} iconSize={12} />
+                <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-1">
+                  <ModelDisplay model={model} iconSize={12} />
+                  {model._needsSelfHostWarning && <SelfHostCloudWarningIcon />}
+                </div>
                 {rightLabel && (
                   <span className="tw-ml-auto tw-text-smallest tw-text-faint">{rightLabel}</span>
                 )}

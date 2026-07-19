@@ -1,6 +1,6 @@
 import { logInfo, logWarn } from "@/logger";
 import { isSelfHostModeValid } from "@/plusUtils";
-import { shouldUseMiyo } from "@/miyo/miyoUtils";
+import { getSearchBackend } from "@/miyo/miyoUtils";
 import { getSettings, CopilotSettings } from "@/settings/model";
 import { App } from "obsidian";
 import { SelfHostRetriever, VectorSearchBackend } from "./selfHostRetriever";
@@ -323,7 +323,7 @@ export class RetrieverFactory {
    * @returns True when Miyo should be used for semantic retrieval.
    */
   private static shouldUseMiyo(settings: CopilotSettings): boolean {
-    return shouldUseMiyo(settings);
+    return getSearchBackend(settings) === "miyo";
   }
 
   /**

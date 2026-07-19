@@ -37,6 +37,7 @@ import { useChatInput } from "@/context/ChatInputContext";
 import { cn } from "@/lib/utils";
 import { logError } from "@/logger";
 import { ActiveFileProvider } from "./context/ActiveFileContext";
+import { CloudAgentProvider, EMPTY_CLOUD_AGENT_IDS } from "./context/CloudAgentContext";
 import { ChainType } from "@/chainType";
 import { useSettingsValue } from "@/settings/model";
 import { type AgentMentionBrand, EMPTY_AGENT_MENTION_BRANDS } from "./hooks/useAtMentionCategories";
@@ -65,6 +66,10 @@ interface LexicalEditorProps {
   onAgentsChange?: (backendIds: string[]) => void;
   /** Installed coding agents mentionable in the composer (Agent Mode only). */
   agentBrands?: ReadonlyArray<AgentMentionBrand>;
+  /** Cloud (non-self-hostable) agent backend ids — the full registry set, not
+   *  just installed ones, so a stale/pasted pill still resolves. Drives the
+   *  Self-Host cloud-egress warning on agent pills. */
+  cloudAgentIds?: ReadonlySet<string>;
   onEditorReady?: (editor: LexicalEditorType) => void;
   onImagePaste?: (files: File[]) => void;
   onTagSelected?: () => void;
@@ -100,6 +105,7 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
   onActiveWebTabRemoved,
   onAgentsChange,
   agentBrands = EMPTY_AGENT_MENTION_BRANDS,
+  cloudAgentIds = EMPTY_CLOUD_AGENT_IDS,
   onEditorReady,
   onImagePaste,
   onTagSelected,
@@ -180,70 +186,75 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
   return (
     <LexicalComposer initialConfig={initialConfig}>
       <ActiveFileProvider currentActiveFile={currentActiveFile}>
-        <div className={cn("tw-relative", className)}>
-          <PlainTextPlugin
-            contentEditable={
-              <ContentEditable
-                className="tw-max-h-60 tw-min-h-[60px] tw-w-full tw-resize-none tw-overflow-y-auto tw-rounded-md tw-border-none tw-bg-transparent tw-px-2 tw-text-sm tw-text-normal tw-outline-none focus-visible:tw-ring-0"
-                aria-label="Chat input"
-              />
-            }
-            placeholder={
-              <div className="tw-pointer-events-none tw-absolute tw-left-2 tw-top-0 tw-select-none tw-text-sm tw-text-muted/60">
-                {placeholder}
-              </div>
-            }
-            ErrorBoundary={LexicalErrorBoundary}
-          />
-          {/* ignoreSelectionChange: only text edits should push into `value`.
-              Selection/focus-only changes carry the same text, and firing
-              onChange for them lets stale editor text race a just-issued
-              external clear back into the controlled value (#211). */}
-          <OnChangePlugin onChange={handleEditorChange} ignoreSelectionChange />
-          <HistoryPlugin />
-          <KeyboardPlugin
-            onSubmit={onSubmit}
-            sendShortcut={settings.defaultSendShortcut}
-            onEscape={onEscape}
-            onShiftTab={onShiftTab}
-          />
-          <ValueSyncPlugin value={value} />
-          <FocusPlugin onFocus={handleFocusRegistration} onEditorReady={handleEditorReady} />
-          <NotePillSyncPlugin onNotesChange={onNotesChange} onNotesRemoved={onNotesRemoved} />
-          {onURLsChange && (
-            <URLPillSyncPlugin onURLsChange={onURLsChange} onURLsRemoved={onURLsRemoved} />
-          )}
-          <ToolPillSyncPlugin onToolsChange={onToolsChange} onToolsRemoved={onToolsRemoved} />
-          <FolderPillSyncPlugin
-            onFoldersChange={onFoldersChange}
-            onFoldersRemoved={onFoldersRemoved}
-          />
-          <ActiveNotePillSyncPlugin
-            onActiveNoteAdded={onActiveNoteAdded}
-            onActiveNoteRemoved={onActiveNoteRemoved}
-          />
-          <WebTabPillSyncPlugin
-            onWebTabsChange={onWebTabsChange}
-            onWebTabsRemoved={onWebTabsRemoved}
-            onActiveWebTabAdded={onActiveWebTabAdded}
-            onActiveWebTabRemoved={onActiveWebTabRemoved}
-          />
-          <AgentPillSyncPlugin onAgentsChange={onAgentsChange} />
-          <PillDeletionPlugin />
-          <PastePlugin enableURLPills={!!onURLsChange} onImagePaste={onImagePaste} />
-          <SlashCommandPlugin />
-          <NoteCommandPlugin isCopilotPlus={isCopilotPlus} currentActiveFile={currentActiveFile} />
-          {currentChain && currentChain !== ChainType.LLM_CHAIN && (
-            <TagCommandPlugin onTagSelected={onTagSelected} />
-          )}
-          <AtMentionCommandPlugin
-            isCopilotPlus={isCopilotPlus}
-            showTools={showTools}
-            currentActiveFile={currentActiveFile}
-            agentBrands={agentBrands}
-          />
-          <TextInsertionPlugin />
-        </div>
+        <CloudAgentProvider cloudAgentIds={cloudAgentIds}>
+          <div className={cn("tw-relative", className)}>
+            <PlainTextPlugin
+              contentEditable={
+                <ContentEditable
+                  className="tw-max-h-60 tw-min-h-[60px] tw-w-full tw-resize-none tw-overflow-y-auto tw-rounded-md tw-border-none tw-bg-transparent tw-px-2 tw-text-sm tw-text-normal tw-outline-none focus-visible:tw-ring-0"
+                  aria-label="Chat input"
+                />
+              }
+              placeholder={
+                <div className="tw-pointer-events-none tw-absolute tw-left-2 tw-top-0 tw-select-none tw-text-sm tw-text-muted/60">
+                  {placeholder}
+                </div>
+              }
+              ErrorBoundary={LexicalErrorBoundary}
+            />
+            {/* ignoreSelectionChange: only text edits should push into `value`.
+                Selection/focus-only changes carry the same text, and firing
+                onChange for them lets stale editor text race a just-issued
+                external clear back into the controlled value (#211). */}
+            <OnChangePlugin onChange={handleEditorChange} ignoreSelectionChange />
+            <HistoryPlugin />
+            <KeyboardPlugin
+              onSubmit={onSubmit}
+              sendShortcut={settings.defaultSendShortcut}
+              onEscape={onEscape}
+              onShiftTab={onShiftTab}
+            />
+            <ValueSyncPlugin value={value} />
+            <FocusPlugin onFocus={handleFocusRegistration} onEditorReady={handleEditorReady} />
+            <NotePillSyncPlugin onNotesChange={onNotesChange} onNotesRemoved={onNotesRemoved} />
+            {onURLsChange && (
+              <URLPillSyncPlugin onURLsChange={onURLsChange} onURLsRemoved={onURLsRemoved} />
+            )}
+            <ToolPillSyncPlugin onToolsChange={onToolsChange} onToolsRemoved={onToolsRemoved} />
+            <FolderPillSyncPlugin
+              onFoldersChange={onFoldersChange}
+              onFoldersRemoved={onFoldersRemoved}
+            />
+            <ActiveNotePillSyncPlugin
+              onActiveNoteAdded={onActiveNoteAdded}
+              onActiveNoteRemoved={onActiveNoteRemoved}
+            />
+            <WebTabPillSyncPlugin
+              onWebTabsChange={onWebTabsChange}
+              onWebTabsRemoved={onWebTabsRemoved}
+              onActiveWebTabAdded={onActiveWebTabAdded}
+              onActiveWebTabRemoved={onActiveWebTabRemoved}
+            />
+            <AgentPillSyncPlugin onAgentsChange={onAgentsChange} />
+            <PillDeletionPlugin />
+            <PastePlugin enableURLPills={!!onURLsChange} onImagePaste={onImagePaste} />
+            <SlashCommandPlugin />
+            <NoteCommandPlugin
+              isCopilotPlus={isCopilotPlus}
+              currentActiveFile={currentActiveFile}
+            />
+            {currentChain && currentChain !== ChainType.LLM_CHAIN && (
+              <TagCommandPlugin onTagSelected={onTagSelected} />
+            )}
+            <AtMentionCommandPlugin
+              isCopilotPlus={isCopilotPlus}
+              showTools={showTools}
+              currentActiveFile={currentActiveFile}
+              agentBrands={agentBrands}
+            />
+            <TextInsertionPlugin />
+          </div>
+        </CloudAgentProvider>
       </ActiveFileProvider>
     </LexicalComposer>
   );

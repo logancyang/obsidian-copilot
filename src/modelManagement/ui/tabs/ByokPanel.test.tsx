@@ -24,16 +24,20 @@ jest.mock("@/modelManagement/ui/ModelManagementContext", () => ({
 jest.mock("@/context", () => ({ useApp: () => ({}) }));
 jest.mock("@/modelManagement/state/atoms", () => {
   const jotai = jest.requireActual<typeof import("jotai")>("jotai");
+  const byokProviders = jotai.atom([
+    {
+      providerId: "p1",
+      providerType: "anthropic",
+      displayName: "Anthropic",
+      origin: { kind: "byok", catalogProviderId: "anthropic" },
+      addedAt: 0,
+    },
+  ]);
   return {
-    byokProvidersAtom: jotai.atom([
-      {
-        providerId: "p1",
-        providerType: "anthropic",
-        displayName: "Anthropic",
-        origin: { kind: "byok", catalogProviderId: "anthropic" },
-        addedAt: 0,
-      },
-    ]),
+    byokProvidersAtom: byokProviders,
+    // The panel renders the visible (Self-Host-filtered) set; with the mode off
+    // it's identical to the raw list.
+    visibleByokProvidersAtom: byokProviders,
     configuredModelsAtom: jotai.atom([
       {
         configuredModelId: "m1",
@@ -46,7 +50,11 @@ jest.mock("@/modelManagement/state/atoms", () => {
 });
 jest.mock("@/settings/model", () => {
   const jotai = jest.requireActual<typeof import("jotai")>("jotai");
-  return { settingsStore: jotai.createStore() };
+  return {
+    settingsStore: jotai.createStore(),
+    // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook; name must match the export
+    useSettingsValue: () => ({ enableSelfHostMode: false }),
+  };
 });
 // Stub the modals — exercised by their own tests. Keeps this test focused
 // on the panel's wiring and off the modals' heavy import chains.
@@ -67,8 +75,12 @@ beforeAll(() => {
 describe("ByokPanel", () => {
   it("renders configured providers and their models after the catalog loads", async () => {
     render(<ByokPanel />);
-    expect(await screen.findByText("Anthropic")).toBeTruthy();
-    expect(screen.getByText("Claude Sonnet 4.5")).toBeTruthy();
+    const providerCard = await screen.findByText("Anthropic");
+    expect(providerCard).toBeTruthy();
+
+    // Expand the provider card to see models (default collapsed)
+    fireEvent.click(providerCard);
+    expect(await screen.findByText("Claude Sonnet 4.5")).toBeTruthy();
   });
 
   it("opens the Add Provider modal from the add button", async () => {

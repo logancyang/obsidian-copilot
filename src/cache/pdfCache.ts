@@ -24,7 +24,19 @@ export class PDFCache {
   }
 
   private getCacheKey(file: TFile): string {
-    // Use file path, size and mtime for a unique but efficient cache key
+    // DESIGN NOTE: the key is keyed on the FILE only (path/size/mtime), NOT on the
+    // doc-processor backend (Plus vs Miyo) that produced the conversion. This is
+    // intentional. A PDF→markdown conversion is "the text of this file"; both
+    // backends target the same result, so a cached conversion is reusable
+    // regardless of which produced it. Users switch backend for COST (e.g. Plus
+    // credits ran out → switch to local Miyo), not because they distrust an
+    // existing conversion — so reusing a prior result is the desired behavior, and
+    // re-converting an unchanged PDF just to match the current backend would waste
+    // credits / local work. Privacy is unaffected: a cache hit returns the stored
+    // text and calls NO backend (see FileParserManager.parseFile — the cache read
+    // happens BEFORE the plus/miyo decision), so switching to Miyo and reusing a
+    // Plus-era cache entry produces no new cloud egress.
+    // If a future review flags "cache ignores the backend", point them at this note.
     const metadata = `${file.path}:${file.stat.size}:${file.stat.mtime}`;
     const key = md5(metadata);
     logInfo("Generated cache key for PDF:", { path: file.path, key });

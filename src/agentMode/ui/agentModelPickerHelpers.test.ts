@@ -31,7 +31,10 @@ jest.mock("obsidian", () => ({
 }));
 
 // Stub out the registry so the test doesn't pull in real backend descriptors
-// (which would drag in install modals and other unrelated UI).
+// (which would drag in install modals and other unrelated UI). Backends whose id
+// is in `mockSelfHostWarnIds` report a self-host cloud-egress warning; the set is
+// empty by default so every existing test sees the unwarned path.
+const mockSelfHostWarnIds = new Set<string>();
 jest.mock("@/agentMode/backends/registry", () => {
   const stub = (id: string) => ({
     id,
@@ -49,8 +52,12 @@ jest.mock("@/agentMode/backends/registry", () => {
     },
     listBackendDescriptors: () => [stub("codex"), stub("claude"), stub("opencode")],
     getActiveBackendDescriptor: () => stub("opencode"),
+    backendNeedsSelfHostWarning: (descriptor: { id: string }) =>
+      mockSelfHostWarnIds.has(descriptor.id),
   };
 });
+
+afterEach(() => mockSelfHostWarnIds.clear());
 
 function makeState(modelId: string): BackendState {
   const entry = {
@@ -453,6 +460,88 @@ describe("buildPickerEntries", () => {
     };
     const { entries } = buildPickerEntries(manager, [opencode], ctx, emptySettings);
     expect(entries.map((e) => e.name)).toEqual(["anthropic/claude-haiku"]);
+  });
+
+  it("flags every catalog row of a cloud backend the section marks under Self-Host Mode", () => {
+    mockSelfHostWarnIds.add("claude");
+    const claude = {
+      ...makeDescriptor("claude"),
+      getEnabledModelEntries: () => [
+        { baseModelId: "opus", name: "Opus", credentialState: "ok" as const },
+      ],
+    } as unknown as BackendDescriptor;
+    const manager = makeManager({
+      cachedStateById: {
+        claude: { model: makeModelState("opus", [makeModelEntry("opus")]), mode: null },
+      },
+    });
+    const ctx: ModelActiveContext = {
+      activeSession: null,
+      activeChatUIState: null,
+      activeBackendId: null,
+      activeDescriptor: undefined,
+      activeSessionHasHistory: false,
+      activeModelState: null,
+      activeCurrentEntry: undefined,
+    };
+    const { entries } = buildPickerEntries(manager, [claude], ctx, emptySettings);
+    expect(entries.length).toBeGreaterThan(0);
+    expect(entries.every((e) => e._needsSelfHostWarning === true)).toBe(true);
+  });
+
+  it("flags a warned cloud backend's preload placeholder row", () => {
+    // No cached catalog yet + a settled preload → the loop synthesizes a
+    // placeholder; the self-host pass must reach it too (it lives in the same
+    // section, after the placeholder push).
+    mockSelfHostWarnIds.add("claude");
+    const claude = {
+      ...makeDescriptor("claude"),
+      getEnabledModelEntries: () => [
+        { baseModelId: "opus", name: "Opus", credentialState: "ok" as const },
+      ],
+    } as unknown as BackendDescriptor;
+    const manager = makeManager({
+      cachedStateById: { claude: null },
+      preloadStatusById: { claude: "pending" },
+    });
+    const ctx: ModelActiveContext = {
+      activeSession: null,
+      activeChatUIState: null,
+      activeBackendId: null,
+      activeDescriptor: undefined,
+      activeSessionHasHistory: false,
+      activeModelState: null,
+      activeCurrentEntry: undefined,
+    };
+    const { entries } = buildPickerEntries(manager, [claude], ctx, emptySettings);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]._needsSelfHostWarning).toBe(true);
+  });
+
+  it("flags the stranded active row when its cloud backend is warned", () => {
+    // The synth row is created after per-section marking, so it carries its own
+    // self-host flag from `ctx.activeDescriptor`.
+    mockSelfHostWarnIds.add("codex");
+    const codex = makeDescriptor("codex");
+    const stranded = makeModelEntry("ghost-model", "Ghost");
+    const visible = makeModelEntry("real-model");
+    const manager = makeManager({
+      cachedStateById: {
+        codex: { model: makeModelState("real-model", [visible]), mode: null },
+      },
+    });
+    const ctx: ModelActiveContext = {
+      activeSession: { backendId: "codex" } as unknown as AgentSession,
+      activeChatUIState: null,
+      activeBackendId: "codex",
+      activeDescriptor: codex,
+      activeSessionHasHistory: false,
+      activeModelState: makeModelState("ghost-model", [stranded]),
+      activeCurrentEntry: stranded,
+    };
+    const { entries } = buildPickerEntries(manager, [codex], ctx, emptySettings);
+    expect(entries[0].name).toBe("ghost-model");
+    expect(entries[0]._needsSelfHostWarning).toBe(true);
   });
 });
 

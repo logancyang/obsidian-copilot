@@ -7,7 +7,15 @@ import globals from "globals";
 
 export default [
   {
-    ignores: ["node_modules/**", "main.js", "styles.css", "data.json", "designdocs/**", "docs/**"],
+    ignores: [
+      "node_modules/**",
+      "main.js",
+      "styles.css",
+      "data.json",
+      "designdocs/**",
+      "docs/**",
+      ".claude/**",
+    ],
   },
 
   // obsidianmd recommended brings:

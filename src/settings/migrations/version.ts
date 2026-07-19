@@ -13,5 +13,7 @@
  *
  *   ≤ 4 → legacy BYOK → model-management migration.
  *   5   → backfill `Provider.requiresApiKey` on flagless rows.
+ *   6   → seed `docProcessorBackend` from effective Miyo state.
+ *   7   → seed `enableMiyoSearchSkill` from persisted `enableMiyo` intent.
  */
-export const CURRENT_SETTINGS_VERSION = 5;
+export const CURRENT_SETTINGS_VERSION = 7;

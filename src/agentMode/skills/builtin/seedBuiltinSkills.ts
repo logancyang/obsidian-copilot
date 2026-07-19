@@ -38,6 +38,47 @@ function seededVersion(skillMd: string): number | null {
   return m ? Number.parseInt(m[1], 10) : null;
 }
 
+/**
+ * On-disk state of a builtin skill folder, as the seeder's ownership rules see
+ * it:
+ * - `seeded`    — our copy (a valid `copilot-builtin-version` marker is present,
+ *                 at or above `expectedVersion` when one is given).
+ * - `stale`     — our copy, but the marker is OLDER than `expectedVersion` — an
+ *                 upgrade the seeder tried but couldn't complete (its per-skill
+ *                 errors are swallowed). Only returned when `expectedVersion` is
+ *                 passed; callers that don't care about freshness never see it.
+ * - `collision` — a same-named folder exists WITHOUT the marker → user-authored;
+ *                 the seeder never overwrites and the remover never deletes it.
+ * - `absent`    — no SKILL.md at that path.
+ * - `failed`    — the SKILL.md exists but couldn't be read.
+ */
+export type BuiltinDiskState = "seeded" | "stale" | "collision" | "absent" | "failed";
+
+/**
+ * Classify a builtin skill folder from disk. Callers that need to report the
+ * real outcome of a seed/remove (e.g. the settings UI distinguishing a
+ * successful install from a user-authored collision) use this instead of
+ * re-deriving the marker format themselves. Pass `expectedVersion` to also catch
+ * a marker left behind by a failed upgrade (returned as `stale`).
+ */
+export async function inspectBuiltinSkill(
+  skillsFolderRelPath: string,
+  name: string,
+  fs: BuiltinSeedFs,
+  expectedVersion?: number
+): Promise<BuiltinDiskState> {
+  const skillMdPath = joinPosix(joinPosix(skillsFolderRelPath, name), "SKILL.md");
+  try {
+    if (!(await fs.exists(skillMdPath))) return "absent";
+    const version = seededVersion(await fs.read(skillMdPath));
+    if (version === null) return "collision";
+    if (expectedVersion !== undefined && version < expectedVersion) return "stale";
+    return "seeded";
+  } catch {
+    return "failed";
+  }
+}
+
 const ENABLED_AGENTS_RE = /^([ \t]*copilot-enabled-agents:[ \t]*)(.*)$/m;
 
 /**

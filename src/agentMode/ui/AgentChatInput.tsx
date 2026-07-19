@@ -30,6 +30,7 @@ import {
 } from "@/agentMode/ui/mentionedAgents";
 import type { BackendId } from "@/agentMode/session/types";
 import type CopilotPlugin from "@/main";
+import { getCloudAgentIds } from "@/agentMode/backends/registry";
 import { buildWebTabsWithActiveSnapshot } from "@/services/webViewerService/activeWebTabSnapshot";
 import {
   isNoteSelectedTextContext,
@@ -568,6 +569,7 @@ export const AgentChatInput = memo(function AgentChatInput({
           selectedTextContexts={selectedTextContexts}
           onRemoveSelectedText={removeSelectedTextContext}
           agentBrands={agentBrands}
+          cloudAgentIds={getCloudAgentIds()}
           onMentionedAgentsChange={handleMentionedAgentsChange}
           showProgressCard={NOOP}
           // showIndexingCard is deliberately NOT passed: the vault-indexing

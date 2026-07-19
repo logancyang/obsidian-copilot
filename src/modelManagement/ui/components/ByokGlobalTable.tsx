@@ -1,35 +1,39 @@
 /**
- * Single global table that renders every BYOK provider as a section row
- * with indented model rows beneath it.
+ * Single global table that renders every BYOK provider as a collapsible
+ * accordion card with model rows beneath it.
  *
- * Model rows are display-only. To edit which models a provider exposes,
- * use the Configure entry in the section's overflow menu. Model metadata
- * (context window, release date) is read from the persisted
- * `ConfiguredModel.info` snapshot — never a live catalog lookup.
+ * Each provider is a collapsible card (default collapsed). The header shows
+ * chevron, provider name, model count, status badge, and overflow menu. When
+ * expanded, model names appear in a vertical list with hover × remove.
  */
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ModelCapabilityIcons, hasCapabilityIcons } from "@/components/ui/model-display";
 import { cn } from "@/lib/utils";
-import { capabilitiesFromConfiguredInfo } from "@/modelManagement/chatModel/modelCapabilityFlags";
+import { SelfHostCloudWarningIcon } from "@/components/ui/SelfHostCloudWarningIcon";
 import type { ConfiguredModel, Provider } from "@/modelManagement/types/persisted";
-import {
-  formatContextWindow,
-  formatReleaseDate,
-} from "@/modelManagement/ui/utils/formatModelMetadata";
-import { ChevronDown, ChevronRight, MoreVertical, Settings2, Trash2 } from "lucide-react";
+import { useModelManagement } from "@/modelManagement/ui/ModelManagementContext";
+import { providerRequiresApiKey } from "@/modelManagement/providers/providerRequiresApiKey";
+import { ChevronRight, MoreVertical, Settings2, Trash2, XIcon } from "lucide-react";
+import { Notice } from "obsidian";
 import React, { useRef, useState } from "react";
+import { ConfirmModal } from "@/components/modals/ConfirmModal";
+import { useApp } from "@/context";
+import { logError } from "@/logger";
 
 /** One provider plus the configured models that belong to it. */
 export interface ByokTableGroup {
   provider: Provider;
   models: ConfiguredModel[];
+  /** `true` when Self-Host Mode is on and this is a cloud provider — the card
+   *  header shows a cloud-egress warning icon. */
+  needsSelfHostWarning?: boolean;
 }
 
 interface ByokGlobalTableProps {
@@ -44,8 +48,7 @@ interface ByokGlobalTableProps {
 }
 
 /**
- * `ByokGlobalTable` — a single CSS-grid "table" so model rows can sit
- * underneath provider section rows in the same column layout.
+ * `ByokGlobalTable` — accordion of provider cards, each collapsible.
  */
 export const ByokGlobalTable: React.FC<ByokGlobalTableProps> = ({
   groups,
@@ -53,15 +56,10 @@ export const ByokGlobalTable: React.FC<ByokGlobalTableProps> = ({
   onRemove,
   emptyMessage,
 }) => {
-  // Per-row collapse state, defaulting to open. Local only — no global tracking.
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   // Portal target for the per-row DropdownMenuContent. Without this, Radix
   // portals into `activeDocument.body` — outside the settings modal —
   // where pointer events don't reach the menu items.
   const containerRef = useRef<HTMLDivElement>(null);
-
-  const toggle = (providerId: string): void =>
-    setCollapsed((prev) => ({ ...prev, [providerId]: !prev[providerId] }));
 
   if (groups.length === 0) {
     return (
@@ -79,149 +77,238 @@ export const ByokGlobalTable: React.FC<ByokGlobalTableProps> = ({
   }
 
   return (
-    <div
-      ref={containerRef}
-      className={cn(
-        "tw-flex tw-w-full tw-flex-col tw-overflow-hidden",
-        "tw-rounded-md tw-border tw-border-solid tw-border-border"
-      )}
-      role="table"
-    >
-      <div>
-        {groups.map((group, idx) => (
-          <React.Fragment key={group.provider.providerId}>
-            {idx > 0 && <div role="separator" className="tw-h-px tw-bg-primary-alt" />}
-            <ProviderSection
-              group={group}
-              isOpen={!collapsed[group.provider.providerId]}
-              onToggle={() => toggle(group.provider.providerId)}
-              onConfigure={() => onConfigure(group.provider.providerId)}
-              onRemove={() => onRemove(group.provider.providerId)}
-              containerRef={containerRef}
-            />
-          </React.Fragment>
-        ))}
-      </div>
+    <div ref={containerRef} className="tw-flex tw-w-full tw-flex-col tw-gap-3" role="list">
+      {groups.map((group) => (
+        <ProviderCard
+          key={group.provider.providerId}
+          group={group}
+          onConfigure={() => onConfigure(group.provider.providerId)}
+          onRemove={() => onRemove(group.provider.providerId)}
+          containerRef={containerRef}
+        />
+      ))}
     </div>
   );
 };
 
-interface ProviderSectionProps {
+interface ProviderCardProps {
   group: ByokTableGroup;
-  isOpen: boolean;
-  onToggle: () => void;
   onConfigure: () => void;
   onRemove: () => void;
   containerRef: React.RefObject<HTMLDivElement>;
 }
 
-const ProviderSection: React.FC<ProviderSectionProps> = ({
+const ProviderCard: React.FC<ProviderCardProps> = ({
   group,
-  isOpen,
-  onToggle,
   onConfigure,
   onRemove,
   containerRef,
 }) => {
   const { provider, models } = group;
-  const Chevron = isOpen ? ChevronDown : ChevronRight;
+  const [isOpen, setIsOpen] = useState(false);
+  const api = useModelManagement();
+  const app = useApp();
+
+  const getStatusBadge = (): {
+    label: string;
+    variant: "default" | "secondary" | "destructive" | "outline";
+    /** Green tint for the "configured" states (key set / local running);
+     *  matches the repo's canonical success pill. `undefined` keeps the
+     *  neutral variant styling for the "No key" state. */
+    className?: string;
+  } => {
+    const requiresKey = providerRequiresApiKey(provider);
+    const successClassName = "tw-rounded-full tw-bg-success tw-text-success";
+    if (!requiresKey) {
+      return { label: "Running", variant: "default", className: successClassName };
+    }
+    if (provider.apiKeyKeychainId) {
+      return { label: "API key set", variant: "default", className: successClassName };
+    }
+    return { label: "No key", variant: "secondary", className: "tw-rounded-full" };
+  };
+
+  const handleRemoveModel = async (configuredModelId: string, modelName: string): Promise<void> => {
+    const modal = new ConfirmModal(
+      app,
+      async () => {
+        try {
+          await api.coordinator.removeConfiguredModel(configuredModelId);
+        } catch (err) {
+          logError("[ByokGlobalTable] removeConfiguredModel failed", err);
+          new Notice("Failed to remove model.");
+        }
+      },
+      `Remove ${modelName} from ${provider.displayName}?`,
+      "Remove model",
+      "Remove",
+      "Cancel"
+    );
+    modal.open();
+  };
+
+  const statusBadge = getStatusBadge();
+
+  // Sub-line under the provider name. Local providers describe themselves
+  // (their models aren't a curated count); key-based providers show the
+  // configured-model count, with a clearer phrasing for the empty case than
+  // a bare "0 models".
+  const getSubLine = (): string => {
+    if (!providerRequiresApiKey(provider)) {
+      return "Local models on your machine";
+    }
+    if (models.length === 0) {
+      return "No models added";
+    }
+    return `${models.length} ${models.length === 1 ? "model" : "models"}`;
+  };
 
   return (
-    <div role="rowgroup">
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
       <div
-        role="row"
         className={cn(
-          "tw-flex tw-items-center tw-gap-2 tw-px-3 tw-py-2 tw-text-sm",
-          "tw-cursor-pointer hover:tw-bg-primary-alt/50"
+          "tw-rounded-xl tw-border tw-border-solid tw-border-border tw-bg-primary",
+          "tw-overflow-hidden"
         )}
-        onClick={onToggle}
-        data-testid={`byok-section-${provider.providerId}`}
+        role="listitem"
+        data-testid={`byok-provider-${provider.providerId}`}
       >
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-expanded={isOpen}
-          aria-label={
-            isOpen ? `Collapse ${provider.displayName}` : `Expand ${provider.displayName}`
-          }
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggle();
-          }}
-        >
-          <Chevron className="tw-size-4" />
-        </Button>
-        <span className="tw-font-medium tw-text-normal">{provider.displayName}</span>
-        <span className="tw-flex-1" />
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={(e) => e.stopPropagation()}
-              aria-label={`More actions for ${provider.displayName}`}
+        <CollapsibleTrigger asChild>
+          <div
+            // role/tabIndex/onKeyDown make the header keyboard-operable: a bare
+            // clickable div is mouse-only. A real <button> can't be used here
+            // because the overflow-menu trigger button is nested inside.
+            role="button"
+            tabIndex={0}
+            aria-expanded={isOpen}
+            className={cn(
+              "tw-flex tw-w-full tw-cursor-pointer tw-items-center tw-gap-2 tw-p-3",
+              "tw-transition-colors hover:tw-bg-modifier-hover",
+              "focus-visible:tw-outline-none focus-visible:tw-ring-2 focus-visible:tw-ring-ring"
+            )}
+            onClick={() => setIsOpen(!isOpen)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                setIsOpen(!isOpen);
+              }
+            }}
+          >
+            <ChevronRight
+              className={cn(
+                "tw-size-4 tw-shrink-0 tw-text-muted tw-transition-transform tw-duration-200",
+                isOpen && "tw-rotate-90"
+              )}
+              aria-hidden="true"
+            />
+            <div className="tw-flex tw-min-w-0 tw-flex-col tw-gap-0.5">
+              <span className="tw-flex tw-min-w-0 tw-items-center tw-gap-1">
+                <span className="tw-truncate tw-text-sm tw-font-semibold tw-text-normal">
+                  {provider.displayName}
+                </span>
+                {group.needsSelfHostWarning && <SelfHostCloudWarningIcon />}
+              </span>
+              <span className="tw-text-xs tw-text-muted">{getSubLine()}</span>
+            </div>
+            <div className="tw-flex-1" />
+            <Badge
+              variant={statusBadge.variant}
+              className={cn("tw-shrink-0", statusBadge.className)}
             >
-              <MoreVertical className="tw-size-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" container={containerRef.current}>
-            <DropdownMenuItem
-              onClick={(e) => {
-                e.stopPropagation();
-                onConfigure();
-              }}
-            >
-              <Settings2 className="tw-mr-2 tw-size-4" />
-              Configure
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={(e) => {
-                e.stopPropagation();
-                onRemove();
-              }}
-              className="tw-text-error"
-            >
-              <Trash2 className="tw-mr-2 tw-size-4" />
-              Remove provider
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+              {statusBadge.label}
+            </Badge>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={(e) => e.stopPropagation()}
+                  aria-label={`More actions for ${provider.displayName}`}
+                  className="tw-shrink-0"
+                >
+                  <MoreVertical className="tw-size-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" container={containerRef.current}>
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onConfigure();
+                  }}
+                >
+                  <Settings2 className="tw-mr-2 tw-size-4" />
+                  Edit key
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRemove();
+                  }}
+                  className="tw-text-error"
+                >
+                  <Trash2 className="tw-mr-2 tw-size-4" />
+                  Remove
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="tw-overflow-hidden tw-transition-all tw-duration-200 data-[state=open]:tw-animate-in data-[state=closed]:tw-animate-out data-[state=closed]:tw-fade-out-0 data-[state=open]:tw-fade-in-0 data-[state=closed]:tw-slide-out-to-top-1 data-[state=open]:tw-slide-in-from-top-1">
+          {models.length > 0 && (
+            <div className="tw-flex tw-flex-col tw-pb-2">
+              {models.map((model) => (
+                <ModelRow
+                  key={model.configuredModelId}
+                  model={model}
+                  onRemove={() =>
+                    handleRemoveModel(model.configuredModelId, model.info.displayName)
+                  }
+                />
+              ))}
+            </div>
+          )}
+        </CollapsibleContent>
       </div>
-      {isOpen && models.map((model) => <ModelRow key={model.configuredModelId} model={model} />)}
-    </div>
+    </Collapsible>
   );
 };
 
-const ModelRow: React.FC<{ model: ConfiguredModel }> = ({ model }) => {
-  const contextLabel = formatContextWindow(model.info.limits?.context);
-  const releaseLabel = formatReleaseDate(model.info.releaseDate);
-  const capabilities = capabilitiesFromConfiguredInfo(model.info);
+const ModelRow: React.FC<{ model: ConfiguredModel; onRemove: () => void }> = ({
+  model,
+  onRemove,
+}) => {
   return (
     <div
-      role="row"
+      role="listitem"
       data-testid={`byok-model-${model.configuredModelId}`}
       className={cn(
-        "tw-grid tw-grid-cols-[1fr_auto_auto] tw-items-center tw-gap-3",
-        "tw-px-3 tw-pb-3 tw-pl-12 tw-pt-1.5 tw-text-sm"
+        "tw-group tw-relative tw-flex tw-items-center tw-gap-2",
+        "tw-px-3 tw-py-1.5 tw-pl-10 tw-text-sm tw-text-normal",
+        "tw-transition-colors hover:tw-bg-modifier-hover"
       )}
     >
-      <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-2">
-        <span className="tw-truncate tw-text-normal">{model.info.displayName}</span>
-        {model.info.isEmbedding && (
-          <Badge variant="secondary" className="tw-shrink-0 tw-text-ui-smaller">
-            Embedding
-          </Badge>
+      <span className="tw-flex-1 tw-truncate">{model.info.displayName}</span>
+      {/* Mirrors the context-manager modal's remove × (XIcon, size-4,
+          group-hover reveal, warning-on-hover) but stays a real focusable
+          Button so keyboard users can Tab to it. focus-visible keeps it
+          revealed when reached without a pointer. */}
+      <Button
+        variant="ghost"
+        size="icon"
+        className={cn(
+          "tw-size-6 tw-shrink-0 tw-text-muted hover:tw-text-warning",
+          "tw-opacity-0 tw-transition-opacity group-hover:tw-opacity-100",
+          "focus-visible:tw-opacity-100 focus-visible:tw-ring-2 focus-visible:tw-ring-ring"
         )}
-        {hasCapabilityIcons(capabilities) && (
-          <span className="tw-flex tw-shrink-0 tw-items-center tw-gap-0.5">
-            <ModelCapabilityIcons capabilities={capabilities} iconSize={14} />
-          </span>
-        )}
-      </div>
-      <span className="tw-shrink-0 tw-text-xs tw-text-muted">{contextLabel}</span>
-      <span className="tw-w-20 tw-shrink-0 tw-text-right tw-text-xs tw-text-muted">
-        {releaseLabel}
-      </span>
+        onClick={(e) => {
+          e.stopPropagation();
+          onRemove();
+        }}
+        aria-label={`Remove ${model.info.displayName}`}
+        tabIndex={0}
+      >
+        <XIcon className="tw-size-4" />
+      </Button>
     </div>
   );
 };

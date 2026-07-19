@@ -4,7 +4,7 @@ import { updateIndexingProgressState } from "@/aiParams";
 import { CustomError } from "@/error";
 import { logInfo, logWarn } from "@/logger";
 import EmbeddingsManager from "@/LLMProviders/embeddingManager";
-import { shouldUseMiyo } from "@/miyo/miyoUtils";
+import { getSearchBackend } from "@/miyo/miyoUtils";
 import { CopilotSettings, getSettings, subscribeToSettingsChange } from "@/settings/model";
 import { Orama } from "@orama/orama";
 import { App, Notice, Platform, TFile } from "obsidian";
@@ -229,7 +229,7 @@ export default class VectorStoreManager {
    * @returns True when Miyo should be the active backend.
    */
   private shouldUseMiyo(settings: CopilotSettings): boolean {
-    return shouldUseMiyo(settings);
+    return getSearchBackend(settings) === "miyo";
   }
 
   /**

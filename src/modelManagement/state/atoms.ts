@@ -21,6 +21,7 @@ import { atomFamily } from "jotai/utils";
 
 import { settingsAtom } from "@/settings/model";
 
+import { providerNeedsSelfHostWarning } from "@/modelManagement/providers/selfHostPolicy";
 import type {
   BackendConfig,
   BackendType,
@@ -29,6 +30,10 @@ import type {
   ProviderOrigin,
 } from "@/modelManagement/types/persisted";
 import type { EnabledBackendEntry } from "@/modelManagement/types/runtime";
+
+/** Frozen empty picker view — referential stability so a filtered-to-empty
+ *  backend keeps the same reference across reads. See "Referential stability". */
+const EMPTY_PICKER_ENTRIES: readonly EnabledBackendEntry[] = Object.freeze([]);
 
 // -----------------------------------------------------------------------------
 // Raw slice atoms — derived directly from settings.
@@ -46,6 +51,10 @@ export const backendsAtom = atom<Readonly<Partial<Record<BackendType, BackendCon
   (get) => get(settingsAtom).backends
 );
 
+/** Self-Host Mode toggle, isolated so the picker view recomputes only when the
+ *  flag flips — not on every unrelated settings write. */
+export const selfHostModeAtom = atom<boolean>((get) => get(settingsAtom).enableSelfHostMode);
+
 // -----------------------------------------------------------------------------
 // Common filtered views.
 // -----------------------------------------------------------------------------
@@ -57,11 +66,41 @@ function filterByOrigin(
   return Object.values(providers).filter((p) => p.origin.kind === kind);
 }
 
-/** All providers with `origin.kind === "byok"`. Used by the BYOK
- *  settings tab. */
+/** All providers with `origin.kind === "byok"`. The raw, unfiltered set —
+ *  used where the full BYOK inventory matters regardless of Self-Host Mode
+ *  (e.g. the Configure dialog's duplicate-provider check). */
 export const byokProvidersAtom = atom<readonly Provider[]>((get) =>
   filterByOrigin(get(providersAtom), "byok")
 );
+
+/** Frozen empty BYOK list — referential stability when no BYOK provider exists. */
+const EMPTY_BYOK_PROVIDERS: readonly Provider[] = Object.freeze([]);
+
+/**
+ * BYOK providers for the BYOK settings table, ordered for Self-Host Mode. Same
+ * as `byokProvidersAtom` when the mode is off; while on, cloud providers stay
+ * listed (never hidden) but sort below self-hosted / local endpoints so the
+ * warned options land at the bottom (`providerNeedsSelfHostWarning`). A stable
+ * sort preserves each group's original relative order. View-layer projection
+ * only — the raw `byokProvidersAtom` and the persisted providers are untouched,
+ * so the original order returns when the mode is turned off.
+ */
+export const visibleByokProvidersAtom = atom<readonly Provider[]>((get) => {
+  const providers = get(byokProvidersAtom);
+  const enableSelfHostMode = get(selfHostModeAtom);
+  if (!enableSelfHostMode || providers.length === 0) {
+    return providers.length === 0 ? EMPTY_BYOK_PROVIDERS : providers;
+  }
+  // Stable partition: self-hosted first, cloud (warned) last.
+  const selfHosted: Provider[] = [];
+  const cloud: Provider[] = [];
+  for (const p of providers) {
+    (providerNeedsSelfHostWarning(p, { enableSelfHostMode }) ? cloud : selfHosted).push(p);
+  }
+  // No cloud providers → order is unchanged; keep the original reference.
+  if (cloud.length === 0) return providers;
+  return [...selfHosted, ...cloud];
+});
 
 /** All providers with `origin.kind === "agent"`. Used by the agent
  *  setup panels (each panel filters further by `origin.agentType`). */
@@ -84,6 +123,13 @@ export const copilotPlusProvidersAtom = atom<readonly Provider[]>((get) =>
  * deleted) surface as `state: "broken"` rather than being silently
  * dropped — see data-model spec invariant #3.
  *
+ * While Self-Host Mode is on, cloud-provider entries are annotated with
+ * `needsSelfHostWarning` (not dropped): the UI flags them and sorts them last.
+ * Order is preserved here so selection-resolution and display stay aligned with
+ * the runtime's order-preserving fallback. View projection only — the persisted
+ * `enabledModels` is untouched, so the flags clear when the mode is turned off.
+ * Broken entries always survive (no provider to flag on).
+ *
  * Use as: `useAtomValue(backendPickerAtomFamily("chat"), { store: settingsStore })`.
  */
 export const backendPickerAtomFamily = atomFamily((backend: BackendType) =>
@@ -91,11 +137,15 @@ export const backendPickerAtomFamily = atomFamily((backend: BackendType) =>
     const config = get(backendsAtom)[backend] ?? { enabledModels: [] };
     const models = get(configuredModelsAtom);
     const providers = get(providersAtom);
+    const enableSelfHostMode = get(selfHostModeAtom);
+    if (config.enabledModels.length === 0) return EMPTY_PICKER_ENTRIES;
     return config.enabledModels.map<EnabledBackendEntry>((configuredModelId) => {
       const configuredModel = models.find((m) => m.configuredModelId === configuredModelId);
       const provider = configuredModel ? providers[configuredModel.providerId] : undefined;
       if (configuredModel && provider) {
-        return { configuredModelId, state: "ok", configuredModel, provider };
+        const needsSelfHostWarning =
+          enableSelfHostMode && providerNeedsSelfHostWarning(provider, { enableSelfHostMode });
+        return { configuredModelId, state: "ok", configuredModel, provider, needsSelfHostWarning };
       }
       return { configuredModelId, state: "broken" };
     });
