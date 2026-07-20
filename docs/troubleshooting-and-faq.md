@@ -259,7 +259,7 @@ Yes. You can have API keys configured for multiple providers simultaneously and 
 
 ### Where are my saved chats stored?
 
-Chat conversations are saved as markdown files in your vault, in the folder `copilot/copilot-conversations/` by default. You can change this folder in **Settings → Copilot → Basic → Default save folder**.
+Chat conversations are saved as markdown files in your vault, in the `copilot-conversations/` sub-folder of your Copilot folder (by default `copilot/copilot-conversations/`). To change where new chats are saved, change the root in **Settings → Copilot → Basic → Copilot folder location** — every Copilot sub-folder derives from it. Changing the root affects only new chats; conversations you have already saved stay in the old folder unless you move them yourself.
 
 ### How do I clear the Copilot cache?
 
@@ -267,13 +267,15 @@ Use **Command palette → Clear Copilot cache**. This clears cached responses an
 
 ### What is the `copilot/` folder in my vault?
 
-The `copilot/` folder is created by the plugin and stores:
+The `copilot/` folder is your Copilot folder — the default root the plugin uses to store its own files:
 - `copilot-conversations/` — Saved chat histories
 - `copilot-custom-prompts/` — Your custom commands
 - `system-prompts/` — Your custom system prompts
 - `memory/` — Saved AI memories (if enabled)
+- `skills/` — Agent skills
+- `projects/` — Project files
 
-This folder is automatically excluded from vault search to avoid cluttering results.
+You can rename this root in **Settings → Copilot → Basic → Copilot folder location**; all of the sub-folders above derive from it. The Copilot folder is automatically excluded from vault search to avoid cluttering results. If you change the root, the old folder is not moved for you and stays excluded from search permanently — any folder that has ever been your Copilot folder is kept out of search results even after you switch away from it.
 
 ### How do I switch modes?
 

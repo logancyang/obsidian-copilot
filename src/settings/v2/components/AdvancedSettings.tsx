@@ -354,15 +354,6 @@ export const AdvancedSettings: React.FC = () => {
             </Button>
           </div>
         </SettingItem>
-
-        <SettingItem
-          type="text"
-          title="System Prompts Folder Name"
-          description="Folder where system prompts are stored."
-          value={settings.userSystemPromptsFolder}
-          onChange={(value) => updateSetting("userSystemPromptsFolder", value)}
-          placeholder="copilot/system-prompts"
-        />
       </SettingSection>
 
       {/* Others Section */}

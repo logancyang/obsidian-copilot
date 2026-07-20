@@ -7,7 +7,7 @@ import {
 } from "@/system-prompts/constants";
 import { UserSystemPrompt } from "@/system-prompts/type";
 import { App, normalizePath, TAbstractFile, TFile } from "obsidian";
-import { getSettings } from "@/settings/model";
+import { getEffectiveSystemPromptsFolder } from "@/settings/copilotFolder";
 import { stripFrontmatter } from "@/utils";
 import {
   updateCachedSystemPrompts,
@@ -53,10 +53,10 @@ export function validatePromptName(
 }
 
 /**
- * Get the system prompts folder path from settings
+ * Get the system prompts folder path, derived from the configurable copilotFolder root.
  */
 export function getSystemPromptsFolder(): string {
-  return normalizePath(getSettings().userSystemPromptsFolder);
+  return getEffectiveSystemPromptsFolder();
 }
 
 /**

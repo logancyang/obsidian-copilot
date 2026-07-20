@@ -1,4 +1,5 @@
 import type { AgentSessionManager } from "@/agentMode";
+import React from "react";
 // Deep import (not the barrel): these run on the load path for every
 // platform, and the barrel pulls Node-only modules that crash mobile.
 import { isNativeChatId, parseNativeChatId } from "@/utils/nativeChatId";
@@ -15,6 +16,7 @@ import { registerCommands } from "@/commands";
 import CopilotView from "@/components/CopilotView";
 import RelevantNotesView from "@/components/RelevantNotesView";
 import { APPLY_VIEW_TYPE, ApplyView } from "@/components/composer/ApplyView";
+import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { LoadChatHistoryModal } from "@/components/modals/LoadChatHistoryModal";
 
 import { registerContextMenu, registerSymposiumFileMenu } from "@/commands/contextMenu";
@@ -71,7 +73,11 @@ import {
   getSettings,
   setSettings,
   subscribeToSettingsChange,
+  updateSetting,
 } from "@/settings/model";
+import { ensureCopilotSubfolders, getEffectiveConversationsFolder } from "@/settings/copilotFolder";
+import { buildUpgradeRelocationEntries } from "@/settings/upgradeNotice";
+import { UpgradeRelocationNotice } from "@/settings/UpgradeRelocationNotice";
 import { dehydrateDeviceProfile, hydrateDeviceProfile } from "@/settings/deviceProfiles";
 import { getDeviceId } from "@/utils/deviceId";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
@@ -418,6 +424,8 @@ export default class CopilotPlugin extends Plugin {
       void this.systemPromptRegister
         .initialize()
         .then(() => migrateSystemPromptsFromSettings(this.app));
+
+      void this.notifyLegacyUpgradeRelocation();
     });
 
     // Initialize automatic selection handler
@@ -425,6 +433,38 @@ export default class CopilotPlugin extends Plugin {
 
     // Initialize web selection watcher (Desktop only)
     this.initWebSelectionWatcher();
+  }
+
+  /**
+   * One-time guidance for users upgrading a legacy (v1-v7) vault whose Copilot
+   * data needs relocating (a sub-folder was customized, or the root itself
+   * moved). v4 consolidated every data folder under a single derived root, so
+   * Copilot now reads and writes the derived locations while their old files
+   * stay put. This shows them the old→new paths
+   * and asks them to move files manually; per the maintainer decision it never
+   * moves files itself. The flag is cleared afterwards (whether or not the notice
+   * is shown) so the check runs once. A failed clear-write only repeats the
+   * one-time check on the next restart, which is idempotent.
+   */
+  private async notifyLegacyUpgradeRelocation(): Promise<void> {
+    if (!getSettings().upgradedToV8FromLegacy) return;
+
+    const entries = buildUpgradeRelocationEntries(getSettings());
+    if (entries.length > 0) {
+      // Pre-create the derived sub-folders so the destinations the notice points
+      // at already exist when the user goes to move their files there.
+      await ensureCopilotSubfolders(this.app.vault, getSettings());
+      new ConfirmModal(
+        this.app,
+        () => {},
+        React.createElement(UpgradeRelocationNotice, { entries }),
+        "",
+        "OK",
+        ""
+      ).open();
+    }
+
+    updateSetting("upgradedToV8FromLegacy", false);
   }
 
   /**
@@ -1056,7 +1096,7 @@ export default class CopilotPlugin extends Plugin {
   }
 
   async getChatHistoryFiles(): Promise<TFile[]> {
-    const folderFiles = await listMarkdownFiles(this.app, getSettings().defaultSaveFolder);
+    const folderFiles = await listMarkdownFiles(this.app, getEffectiveConversationsFolder());
     if (folderFiles.length === 0) return [];
 
     const currentProject = getCurrentProject();

@@ -5,7 +5,7 @@
  */
 
 import type { CustomModel } from "@/aiParams";
-import { ChatModelProviders, DEFAULT_SETTINGS } from "@/constants";
+import { ChatModelProviders, DEFAULT_COPILOT_FOLDER, DEFAULT_SETTINGS } from "@/constants";
 import type { ModelManagementApi } from "@/modelManagement";
 import { getSettings, setSettings, type CopilotSettings } from "@/settings/model";
 import { Platform } from "obsidian";
@@ -246,4 +246,87 @@ it("v7: keys off persisted enableMiyo, not the mobile-sensitive search backend",
   } finally {
     (Platform as { isMobile: boolean }).isMobile = false;
   }
+});
+
+describe("runSettingsMigrations()", () => {
+  it("v8: seeds copilotFolder for a v7 vault", async () => {
+    // A v7 vault predates the configurable root and must be stamped with the
+    // historical default so the derived sub-folder accessors have a base.
+    mockGetSettings.mockReturnValue(settings({ settingsVersion: 7 }));
+    const { api } = makeApi();
+
+    await runSettingsMigrations(api);
+
+    expect(mockSetSettings).toHaveBeenCalledWith({ copilotFolder: DEFAULT_COPILOT_FOLDER });
+    expect(mockSetSettings).toHaveBeenCalledWith({ settingsVersion: CURRENT_SETTINGS_VERSION });
+  });
+
+  it("v8: seeds copilotFolder for a pre-versioned install", async () => {
+    mockGetSettings.mockReturnValue(settings({ settingsVersion: undefined }));
+    const { api } = makeApi();
+
+    await runSettingsMigrations(api);
+
+    expect(mockSetSettings).toHaveBeenCalledWith({ copilotFolder: DEFAULT_COPILOT_FOLDER });
+  });
+
+  it("v8: does not re-seed copilotFolder for a vault already at the current version", async () => {
+    mockGetSettings.mockReturnValue(settings({ settingsVersion: CURRENT_SETTINGS_VERSION }));
+    const { api } = makeApi();
+
+    await runSettingsMigrations(api);
+
+    const copilotFolderWrite = mockSetSettings.mock.calls.find(
+      (call) => "copilotFolder" in call[0]
+    );
+    expect(copilotFolderWrite).toBeUndefined();
+  });
+
+  it("v8: seeds copilotRootHistory with the legacy and current roots", async () => {
+    mockGetSettings.mockReturnValue(settings({ settingsVersion: 7 }));
+    const { api } = makeApi();
+
+    await runSettingsMigrations(api);
+
+    const historyWrite = mockSetSettings.mock.calls.find(
+      (call) => typeof call[0] === "object" && "copilotRootHistory" in call[0]
+    );
+    const seededHistory = (historyWrite?.[0] as Partial<CopilotSettings> | undefined)
+      ?.copilotRootHistory;
+    expect(seededHistory).toEqual([DEFAULT_COPILOT_FOLDER]);
+  });
+
+  it("v8: flags a legacy vault (v7) as upgraded so WS-D can prompt", async () => {
+    mockGetSettings.mockReturnValue(settings({ settingsVersion: 7 }));
+    const { api } = makeApi();
+
+    await runSettingsMigrations(api);
+
+    expect(mockSetSettings).toHaveBeenCalledWith({ upgradedToV8FromLegacy: true });
+  });
+
+  it("v8: flags a pre-versioned install (version 0) as upgraded so WS-D can prompt", async () => {
+    // A pre-versioned install (settingsVersion absent → `fromVersion === 0`) is a
+    // real user whose data.json predates the version field, not a fresh install:
+    // fresh installs are stamped to the current version at bootstrap and never
+    // reach this migration. So a `0` here IS a legacy vault and must be flagged.
+    mockGetSettings.mockReturnValue(settings({ settingsVersion: undefined }));
+    const { api } = makeApi();
+
+    await runSettingsMigrations(api);
+
+    expect(mockSetSettings).toHaveBeenCalledWith({ upgradedToV8FromLegacy: true });
+  });
+
+  it("v8: does not flag a vault already at the current version", async () => {
+    mockGetSettings.mockReturnValue(settings({ settingsVersion: CURRENT_SETTINGS_VERSION }));
+    const { api } = makeApi();
+
+    await runSettingsMigrations(api);
+
+    const flagWrite = mockSetSettings.mock.calls.find(
+      (call) => "upgradedToV8FromLegacy" in call[0]
+    );
+    expect(flagWrite).toBeUndefined();
+  });
 });

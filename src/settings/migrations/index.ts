@@ -10,10 +10,11 @@
  * for a v4 vault picking up the v5 backfill).
  */
 
+import { DEFAULT_COPILOT_FOLDER } from "@/constants";
 import { logInfo } from "@/logger";
 import { seedDocProcessorBackend } from "@/miyo/miyoUtils";
 import type { ModelManagementApi } from "@/modelManagement";
-import { getSettings, setSettings } from "@/settings/model";
+import { getSettings, normalizeRootFolders, setSettings } from "@/settings/model";
 
 import { executeByokMigration } from "./byokMigration";
 import { planRequiresApiKeyBackfill } from "./requiresApiKeyMigration";
@@ -62,6 +63,31 @@ export async function runSettingsMigrations(api: ModelManagementApi): Promise<vo
   // and Sync it to desktop before desktop ever migrates).
   if (fromVersion < 7 && getSettings().enableMiyo === true) {
     setSettings({ enableMiyoSearchSkill: true });
+  }
+
+  // v8: seed the configurable `copilotFolder` root so the derived sub-folder
+  // accessors have a concrete base to resolve against. Old vaults get the
+  // historical hardcoded root, preserving their on-disk layout.
+  if (fromVersion < 8) {
+    setSettings({ copilotFolder: DEFAULT_COPILOT_FOLDER });
+
+    // Seed the root-exclusion history with the legacy + current roots so both
+    // stay permanently excluded from QA indexing after any future root change.
+    const currentRoot = getSettings().copilotFolder;
+    setSettings({
+      copilotRootHistory: normalizeRootFolders([DEFAULT_COPILOT_FOLDER, currentRoot]),
+    });
+
+    // Capture, BEFORE the version bump below drops `fromVersion`, that this
+    // vault predates v8 so WS-D can show the one-time folder-relocation prompt.
+    // Every vault reaching this block is a pre-existing one: fresh installs are
+    // stamped to the current version at bootstrap (settingsPersistence) and
+    // never enter migration. That includes pre-versioned installs (real users
+    // whose data.json predates the `settingsVersion` field → `fromVersion === 0`),
+    // which are the oldest users and the most likely to have customized folders,
+    // so they must get the flag too. WS-D still only prompts users who actually
+    // customized a folder, so a default user is never shown the modal.
+    setSettings({ upgradedToV8FromLegacy: true });
   }
 
   // Bump unconditionally after the migrations so a per-provider failure can't

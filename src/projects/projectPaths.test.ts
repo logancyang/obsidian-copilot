@@ -5,8 +5,8 @@ import {
 } from "@/projects/projectPaths";
 import { mockTFile } from "@/__tests__/mockObsidian";
 
-jest.mock("@/settings/model", () => ({
-  getSettings: jest.fn(() => ({ projectsFolder: "copilot-projects" })),
+jest.mock("@/settings/copilotFolder", () => ({
+  getEffectiveProjectsFolder: jest.fn(() => "copilot-projects"),
 }));
 
 describe("getProjectConfigFilePath — single source of truth", () => {

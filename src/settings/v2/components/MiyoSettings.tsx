@@ -29,7 +29,7 @@ import {
 import { MiyoStatusRow } from "@/settings/v2/components/MiyoStatusRow";
 import { err2String } from "@/utils";
 import { getVaultBase } from "@/utils/vaultPath";
-import { extractAppIgnoreSettings } from "@/search/searchUtils";
+import { extractAppIgnoreSettings, getSystemExcludedFolders } from "@/search/searchUtils";
 import { ArrowUpRight, ChevronRight, CornerDownRight, TriangleAlert } from "lucide-react";
 import { Notice, Platform } from "obsidian";
 import React, { useCallback, useEffect, useRef, useState } from "react";
@@ -342,7 +342,16 @@ export const MiyoSettings: React.FC = () => {
           // vault kept out of Relay can flip allow_remote_read off per folder in Miyo.
           allow_remote_read: true,
           ...getMiyoFolderInclusions(settings.qaInclusions),
-          ...getMiyoFolderExclusions(settings.qaExclusions, extractAppIgnoreSettings(app)),
+          // Project the always-on system root exclusions (active + historical
+          // Copilot roots) alongside Obsidian's own ignore folders, so a former
+          // root's content isn't uploaded for indexing. This is a registration-
+          // time snapshot; MiyoSemanticRetriever re-applies the LIVE scope
+          // (createCopilotPatternFilter, which also enforces these roots) at
+          // query time, so correctness never depends on the snapshot.
+          ...getMiyoFolderExclusions(settings.qaExclusions, [
+            ...getSystemExcludedFolders(settings),
+            ...extractAppIgnoreSettings(app),
+          ]),
         },
         customUrl || undefined
       );

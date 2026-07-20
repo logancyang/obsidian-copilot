@@ -1,13 +1,13 @@
 import { PROJECT_CONFIG_FILE_NAME, PROJECTS_UNSUPPORTED_FOLDER_NAME } from "@/projects/constants";
-import { getSettings } from "@/settings/model";
+import { getEffectiveProjectsFolder } from "@/settings/copilotFolder";
 import { normalizePath, TAbstractFile, TFile, Vault } from "obsidian";
 
 /**
- * Get the projects root folder path from settings.
+ * Get the projects root folder path, derived from the configurable copilotFolder root.
  * @returns Normalized vault path
  */
 export function getProjectsFolder(): string {
-  return normalizePath(getSettings().projectsFolder);
+  return getEffectiveProjectsFolder();
 }
 
 /**

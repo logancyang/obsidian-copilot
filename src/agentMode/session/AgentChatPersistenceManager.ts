@@ -1,7 +1,8 @@
 import { serializeFanoutComposite } from "@/agentMode/session/fanout/fanoutTypes";
-import { AGENT_CHAT_MODE, AI_SENDER, USER_SENDER } from "@/constants";
+import { AGENT_CHAT_MODE, AI_SENDER, COPILOT_CONVERSATION_TAG, USER_SENDER } from "@/constants";
 import { logError, logInfo, logWarn } from "@/logger";
 import { getSettings } from "@/settings/model";
+import { getEffectiveConversationsFolder } from "@/settings/copilotFolder";
 import { FormattedDateTime } from "@/types/message";
 import {
   ensureFolderExists,
@@ -139,11 +140,10 @@ export class AgentChatPersistenceManager {
     if (messages.length === 0) return null;
 
     try {
-      const settings = getSettings();
       const chatContent = this.formatChatContent(messages);
       const firstMessageEpoch = messages[0].timestamp?.epoch ?? Date.now();
 
-      await ensureFolderExists(this.app.vault, settings.defaultSaveFolder);
+      await ensureFolderExists(this.app.vault, getEffectiveConversationsFolder());
 
       const existingFile = options?.existingPath
         ? this.resolveExistingFile(options.existingPath)
@@ -196,7 +196,7 @@ export class AgentChatPersistenceManager {
         }
         if (isNameTooLongError(err)) {
           logWarn("[AgentChatPersistenceManager] Filename too long, falling back to minimal name");
-          const fallback = `${settings.defaultSaveFolder}/${AGENT_FILENAME_PREFIX}chat-${firstMessageEpoch}.md`;
+          const fallback = `${getEffectiveConversationsFolder()}/${AGENT_FILENAME_PREFIX}chat-${firstMessageEpoch}.md`;
           try {
             const created = await this.app.vault.create(fallback, noteContent);
             return { path: created.path };
@@ -255,8 +255,7 @@ export class AgentChatPersistenceManager {
    * never collides with legacy or project chats.
    */
   async getAgentChatHistoryFiles(): Promise<TFile[]> {
-    const settings = getSettings();
-    const files = await listMarkdownFiles(this.app, settings.defaultSaveFolder);
+    const files = await listMarkdownFiles(this.app, getEffectiveConversationsFolder());
     return files.filter((file) => file.basename.startsWith(AGENT_FILENAME_PREFIX));
   }
 
@@ -474,10 +473,10 @@ export class AgentChatPersistenceManager {
     if (getUtf8ByteLength(baseNameWithPrefix) > SAFE_FILENAME_BYTE_LIMIT) {
       const availableForBasename = SAFE_FILENAME_BYTE_LIMIT - extensionBytes - filePrefixBytes;
       const truncatedBasename = truncateToByteLimit(sanitizedFileName, availableForBasename);
-      return `${settings.defaultSaveFolder}/${filePrefix}${truncatedBasename}.md`;
+      return `${getEffectiveConversationsFolder()}/${filePrefix}${truncatedBasename}.md`;
     }
 
-    return `${settings.defaultSaveFolder}/${baseNameWithPrefix}`;
+    return `${getEffectiveConversationsFolder()}/${baseNameWithPrefix}`;
   }
 
   private generateNoteContent(args: {
@@ -492,7 +491,6 @@ export class AgentChatPersistenceManager {
     projectId?: string;
     usage?: SessionUsage;
   }): string {
-    const settings = getSettings();
     const lines: string[] = [
       "---",
       `epoch: ${args.firstMessageEpoch}`,
@@ -516,7 +514,7 @@ export class AgentChatPersistenceManager {
     // parser (and our hand-rolled splitFrontmatter) verbatim.
     if (args.usage) lines.push(`usage: '${JSON.stringify(args.usage)}'`);
     lines.push("tags:");
-    lines.push(`  - ${settings.defaultConversationTag}`);
+    lines.push(`  - ${COPILOT_CONVERSATION_TAG}`);
     lines.push("---");
     lines.push("");
     lines.push(args.chatContent);

@@ -64,7 +64,7 @@ You can ask Copilot to explicitly remember specific facts about you:
 Copilot saves this to a memory file in your vault and references it in future conversations.
 
 - **Enable**: **Settings → Copilot → Plus → Reference Saved Memories** (on by default)
-- **Memory folder**: **Settings → Copilot → Plus → Memory Folder Name** — default: `copilot/memory`
+- **Memory folder**: memories are stored in the `memory/` sub-folder of your Copilot folder — default `copilot/memory`. It follows the Copilot folder location (**Settings → Copilot → Basic → Copilot folder location**).
 - **Update memory tool**: The AI can add, update, or remove memories when you ask
 
 ---

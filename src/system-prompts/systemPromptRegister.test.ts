@@ -10,6 +10,7 @@ jest.mock("obsidian", () => ({
   Plugin: jest.fn(),
   TFile: jest.fn(),
   Vault: jest.fn(),
+  normalizePath: (path: string) => path,
 }));
 
 // Mock logger
@@ -41,6 +42,7 @@ jest.mock("@/system-prompts/systemPromptUtils", () => ({
     lastUsedMs: 0,
   }),
   ensurePromptFrontmatter: jest.fn().mockResolvedValue(undefined),
+  updatePromptDefaultFlag: jest.fn().mockResolvedValue(undefined),
 }));
 
 // Mock settings
@@ -267,10 +269,7 @@ describe("SystemPromptRegister", () => {
       ]);
 
       // Trigger folder change
-      settingsChangeHandler(
-        { userSystemPromptsFolder: "OldFolder" },
-        { userSystemPromptsFolder: "NewFolder" }
-      );
+      settingsChangeHandler({ copilotFolder: "OldFolder" }, { copilotFolder: "NewFolder" });
 
       // Fast-forward debounce timer
       jest.advanceTimersByTime(300);
@@ -303,10 +302,7 @@ describe("SystemPromptRegister", () => {
       ]);
 
       // Trigger folder change
-      settingsChangeHandler(
-        { userSystemPromptsFolder: "OldFolder" },
-        { userSystemPromptsFolder: "NewFolder" }
-      );
+      settingsChangeHandler({ copilotFolder: "OldFolder" }, { copilotFolder: "NewFolder" });
 
       // Fast-forward debounce timer
       jest.advanceTimersByTime(300);
@@ -339,10 +335,7 @@ describe("SystemPromptRegister", () => {
       ]);
 
       // Trigger folder change
-      settingsChangeHandler(
-        { userSystemPromptsFolder: "OldFolder" },
-        { userSystemPromptsFolder: "NewFolder" }
-      );
+      settingsChangeHandler({ copilotFolder: "OldFolder" }, { copilotFolder: "NewFolder" });
 
       // Fast-forward debounce timer
       jest.advanceTimersByTime(300);
@@ -357,20 +350,41 @@ describe("SystemPromptRegister", () => {
       expect(Notice).not.toHaveBeenCalled();
     });
 
+    it("passes the OLD derived folder to the default flag update when the root also changes", async () => {
+      const { updatePromptDefaultFlag } = jest.requireMock<{
+        updatePromptDefaultFlag: jest.Mock;
+      }>("@/system-prompts/systemPromptUtils");
+      const { getSettings } = jest.requireMock<{ getSettings: jest.Mock }>("@/settings/model");
+      getSettings.mockReturnValue({
+        defaultSystemPromptTitle: "NewDefault",
+        copilotFolder: "team/ai",
+      });
+
+      // Root changes copilot -> team/ai AND the default title changes in the same tick.
+      settingsChangeHandler(
+        { copilotFolder: "copilot", defaultSystemPromptTitle: "OldDefault" },
+        { copilotFolder: "team/ai", defaultSystemPromptTitle: "NewDefault" }
+      );
+
+      await Promise.resolve();
+      await Promise.resolve();
+
+      // Old flag cleared using the OLD derived folder (copilot/system-prompts),
+      // new flag set in the current (new) folder.
+      expect(updatePromptDefaultFlag).toHaveBeenCalledWith(
+        expect.anything(),
+        "OldDefault",
+        false,
+        "copilot/system-prompts"
+      );
+      expect(updatePromptDefaultFlag).toHaveBeenCalledWith(expect.anything(), "NewDefault", true);
+    });
+
     it("debounces rapid folder changes", async () => {
       // Trigger multiple rapid folder changes
-      settingsChangeHandler(
-        { userSystemPromptsFolder: "Folder1" },
-        { userSystemPromptsFolder: "Folder2" }
-      );
-      settingsChangeHandler(
-        { userSystemPromptsFolder: "Folder2" },
-        { userSystemPromptsFolder: "Folder3" }
-      );
-      settingsChangeHandler(
-        { userSystemPromptsFolder: "Folder3" },
-        { userSystemPromptsFolder: "Folder4" }
-      );
+      settingsChangeHandler({ copilotFolder: "Folder1" }, { copilotFolder: "Folder2" });
+      settingsChangeHandler({ copilotFolder: "Folder2" }, { copilotFolder: "Folder3" });
+      settingsChangeHandler({ copilotFolder: "Folder3" }, { copilotFolder: "Folder4" });
 
       // Fast-forward debounce timer
       jest.advanceTimersByTime(300);
@@ -388,10 +402,7 @@ describe("SystemPromptRegister", () => {
       mockManager.fetchPrompts.mockRejectedValueOnce(new Error("Network error"));
 
       // Trigger folder change
-      settingsChangeHandler(
-        { userSystemPromptsFolder: "OldFolder" },
-        { userSystemPromptsFolder: "NewFolder" }
-      );
+      settingsChangeHandler({ copilotFolder: "OldFolder" }, { copilotFolder: "NewFolder" });
 
       // Fast-forward debounce timer
       jest.advanceTimersByTime(300);
@@ -435,18 +446,12 @@ describe("SystemPromptRegister", () => {
         .mockReturnValueOnce(promiseB); // Second call (request B)
 
       // Trigger first folder change (request A)
-      settingsChangeHandler(
-        { userSystemPromptsFolder: "Original" },
-        { userSystemPromptsFolder: "FolderA" }
-      );
+      settingsChangeHandler({ copilotFolder: "Original" }, { copilotFolder: "FolderA" });
       jest.advanceTimersByTime(300);
       await Promise.resolve();
 
       // Trigger second folder change (request B) before A completes
-      settingsChangeHandler(
-        { userSystemPromptsFolder: "FolderA" },
-        { userSystemPromptsFolder: "FolderB" }
-      );
+      settingsChangeHandler({ copilotFolder: "FolderA" }, { copilotFolder: "FolderB" });
       jest.advanceTimersByTime(300);
       await Promise.resolve();
 

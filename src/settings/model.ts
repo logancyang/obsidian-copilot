@@ -10,7 +10,6 @@ import {
   AGENT_MAX_ITERATIONS_LIMIT,
   BUILTIN_CHAT_MODELS,
   BUILTIN_EMBEDDING_MODELS,
-  COPILOT_FOLDER_ROOT,
   DEFAULT_OPEN_AREA,
   DEFAULT_QA_EXCLUSIONS_SETTING,
   DEFAULT_SETTINGS,
@@ -85,6 +84,33 @@ export interface CopilotSettings {
   openAIProxyBaseUrl: string;
   openAIEmbeddingProxyBaseUrl: string;
   stream: boolean;
+  /** Configurable root folder all Copilot sub-folders derive from (default: "copilot"). */
+  copilotFolder: string;
+  /**
+   * Every folder that has ever been the Copilot root (seeded with the legacy
+   * `copilot` root in the v8 migration). Append-only: once a folder has held
+   * Copilot data it stays here so it remains permanently excluded from QA
+   * indexing, even after the root is changed away from it.
+   *
+   * DESIGN NOTE — this list is best-effort under multi-device Sync. Two offline
+   * devices that each change to a different root can have one branch's history
+   * overwritten by a covering Sync merge; the startup union in
+   * {@link sanitizeSettings} only re-adds THIS device's current root, so a root
+   * that only ever existed on the overwritten device can't be recovered.
+   * Accepted as a residual because changing the root at all is rare, and two
+   * devices concurrently changing to different roots rarer still.
+   *
+   * A second residual — a local persist failure activating a new root in memory
+   * before its history lands on disk — is documented at the activation site in
+   * {@link applyCopilotRootChange}; see that note before re-litigating whether
+   * the switch should persist before activating.
+   */
+  copilotRootHistory: string[];
+  /**
+   * True only when a legacy (v1-v7) vault was migrated to v8. Consumed once by
+   * the v3->v4 upgrade prompt (WS-D), which clears it back to false.
+   */
+  upgradedToV8FromLegacy: boolean;
   defaultSaveFolder: string;
   defaultConversationTag: string;
   autosaveChat: boolean;
@@ -423,6 +449,56 @@ const EMPTY_PROVIDERS = Object.freeze({}) as unknown as Record<string, Provider>
 const EMPTY_CONFIGURED_MODELS = Object.freeze([]) as unknown as ConfiguredModel[];
 const EMPTY_BACKENDS = Object.freeze({}) as unknown as Partial<Record<BackendType, BackendConfig>>;
 
+/** Frozen fallback for an empty {@link CopilotSettings.copilotRootHistory}. */
+const EMPTY_COPILOT_ROOT_HISTORY = Object.freeze([]) as unknown as string[];
+
+/**
+ * Canonicalize Copilot root-folder paths into the form the QA folder matcher
+ * (`matchFilePathWithFolders`) compares against: forward slashes, collapsed
+ * duplicate separators, no `.` segments, no trailing slash, and case preserved
+ * (the matcher is case-sensitive, so lowercasing here would break exact-root
+ * matching). Collapsing `//` and dropping `.` segments matters because history
+ * entries can arrive from Obsidian Sync merges or hand-edited `data.json` in a
+ * non-`normalizePath` form (e.g. `a//b`, `a/./b`); real file paths are compared
+ * post-`normalizePath`, so an un-collapsed root would fail the prefix match and
+ * silently leak that root's notes into QA. Legitimate roots already pass through
+ * `validateCopilotFolder` free of `//`/`.` segments, so this is a no-op for them
+ * and only repairs anomalous entries. Entries that are empty or escape the vault
+ * root (parent traversal, drive-absolute, or root-absolute paths) are dropped
+ * rather than coerced to a default, and duplicates are removed preserving
+ * first-seen order.
+ *
+ * @param input - Raw root paths; non-string, empty, and unsafe entries are skipped.
+ * @returns A deduped, normalized list, or a frozen empty constant when none survive.
+ */
+export function normalizeRootFolders(input: readonly (string | undefined)[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const raw of input) {
+    if (typeof raw !== "string") continue;
+    // Reason: collapse `//` and strip `.` segments so anomalous history entries
+    // land in the same canonical form the QA matcher compares real paths against.
+    const normalized = raw
+      .trim()
+      .replace(/\\/g, "/")
+      .replace(/\/+/g, "/")
+      .split("/")
+      .filter((segment) => segment !== ".")
+      .join("/")
+      .replace(/\/+$/, "");
+    if (normalized.length === 0) continue;
+    const escapesVault =
+      /(^|\/)\.\.(\/|$)/.test(normalized) ||
+      /^[a-zA-Z]:/.test(normalized) ||
+      normalized.startsWith("/");
+    if (escapesVault) continue;
+    if (seen.has(normalized)) continue;
+    seen.add(normalized);
+    result.push(normalized);
+  }
+  return result.length > 0 ? result : EMPTY_COPILOT_ROOT_HISTORY;
+}
+
 /**
  * Resolve a valid embedding model key for the current settings.
  *
@@ -460,7 +536,15 @@ export function setSettings(
 }
 
 /**
- * Normalize QA exclusion patterns and guarantee the Copilot folder root is excluded.
+ * Normalize the user's QA exclusion patterns (dedupe by canonical path key,
+ * preserving a single trailing slash when the user wrote one).
+ *
+ * The Copilot root itself is NOT forced in here anymore: the always-on system
+ * exclusion ({@link getSystemExcludedFolders} in `searchUtils`) permanently
+ * excludes the `copilot` root plus the active and historical roots, so this
+ * function only has to canonicalize what the user typed. A user-supplied
+ * `copilot` entry is kept as-is and simply overlaps the system exclusion.
+ *
  * @param rawValue - Persisted QA exclusion setting value.
  * @returns Encoded QA exclusion patterns string.
  */
@@ -477,18 +561,12 @@ export function sanitizeQaExclusions(rawValue: unknown): string {
   decodedPatterns.forEach((pattern) => {
     const canonical = pattern.replace(/\/+$/, "");
     const canonicalKey = canonical.length > 0 ? canonical : pattern;
-    if (canonicalKey === COPILOT_FOLDER_ROOT) {
-      canonicalToOriginalPattern.set(COPILOT_FOLDER_ROOT, COPILOT_FOLDER_ROOT);
-      return;
-    }
     if (!canonicalToOriginalPattern.has(canonicalKey)) {
       const normalizedValue =
         canonical.length > 0 && pattern.endsWith("/") ? `${canonical}/` : pattern;
       canonicalToOriginalPattern.set(canonicalKey, normalizedValue);
     }
   });
-
-  canonicalToOriginalPattern.set(COPILOT_FOLDER_ROOT, COPILOT_FOLDER_ROOT);
 
   return Array.from(canonicalToOriginalPattern.values())
     .map((pattern) => encodeURIComponent(pattern))
@@ -541,10 +619,20 @@ export function getSettings(): Readonly<CopilotSettings> {
  * If a future review flags this again, point them at this note.
  */
 export function resetSettings(): void {
+  const current = getSettings();
+  // Reset is a deterministic path, not best-effort: preserve the root-exclusion
+  // history and fold in the pre-reset active root before it is replaced by the
+  // default. Otherwise a reset would drop every historical root and leave that
+  // still-on-disk content exposed to QA indexing.
+  const preservedRootHistory = normalizeRootFolders([
+    ...(Array.isArray(current.copilotRootHistory) ? current.copilotRootHistory : []),
+    current.copilotFolder,
+  ]);
   const defaultSettingsWithBuiltIns = {
     ...DEFAULT_SETTINGS,
     activeModels: BUILTIN_CHAT_MODELS.map((model) => ({ ...model, enabled: true })),
     activeEmbeddingModels: BUILTIN_EMBEDDING_MODELS.map((model) => ({ ...model, enabled: true })),
+    copilotRootHistory: preservedRootHistory,
   };
   setSettings(defaultSettingsWithBuiltIns);
 }
@@ -850,6 +938,34 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
     sanitizedSettings.defaultSendShortcut = DEFAULT_SETTINGS.defaultSendShortcut;
   }
 
+  // Coerce copilotFolder to a valid vault-relative path. validateCopilotFolder
+  // is the single source of truth for root syntax (empty, traversal, absolute,
+  // .obsidian, control/Windows-illegal chars) shared with the settings UI; an
+  // invalid persisted value falls back to the default rather than being trusted.
+  const copilotFolderValidation = validateCopilotFolder(
+    typeof settingsToSanitize.copilotFolder === "string" ? settingsToSanitize.copilotFolder : ""
+  );
+  sanitizedSettings.copilotFolder = copilotFolderValidation.ok
+    ? copilotFolderValidation.folder
+    : DEFAULT_SETTINGS.copilotFolder;
+
+  // Normalize the append-only root history and idempotently union in the
+  // active root, so this device's current root is always present in its own
+  // history (the load-time self-heal referenced in the field's DESIGN NOTE).
+  // These roots are excluded from QA indexing permanently — see
+  // getSystemExcludedFolders in searchUtils.
+  const rawRootHistory = Array.isArray(settingsToSanitize.copilotRootHistory)
+    ? settingsToSanitize.copilotRootHistory
+    : [];
+  sanitizedSettings.copilotRootHistory = normalizeRootFolders([
+    ...rawRootHistory,
+    sanitizedSettings.copilotFolder,
+  ]);
+
+  if (typeof sanitizedSettings.upgradedToV8FromLegacy !== "boolean") {
+    sanitizedSettings.upgradedToV8FromLegacy = DEFAULT_SETTINGS.upgradedToV8FromLegacy;
+  }
+
   // Ensure folder settings fall back to defaults when empty/whitespace
   const saveFolder = (settingsToSanitize.defaultSaveFolder || "").trim();
   sanitizedSettings.defaultSaveFolder =
@@ -1012,6 +1128,15 @@ function sanitizeAgentMode(raw: unknown): CopilotSettings["agentMode"] {
 const CONTROL_CHAR_RE = /[\u0000-\u001f\u007f]/;
 
 /**
+ * The conventional Obsidian config-folder name, rejected as a Copilot root so a
+ * misconfigured root can't collide with Obsidian's own config. This is a pure,
+ * Vault-less syntax check, so it can only guard the near-universal default —
+ * users who relocated their config dir get no false positive here.
+ */
+// eslint-disable-next-line obsidianmd/hardcoded-config-path -- pure validator has no Vault to read configDir; guard the conventional default
+const CONVENTIONAL_OBSIDIAN_CONFIG_DIR = ".obsidian";
+
+/**
  * Validate a user-entered "Skills folder" value against the rules in
  * `designdocs/SKILLS_MANAGEMENT.md` §Skills folder setting.
  *
@@ -1076,6 +1201,69 @@ export function validateSkillsFolder(
     }
   }
 
+  return { ok: true, folder: cleaned };
+}
+
+/**
+ * Validate a user-entered Copilot root folder (`copilotFolder`) for syntax
+ * only — the reusable check shared by `sanitizeSettings` (every load / Sync /
+ * hand-edited data.json passes through it) and the settings UI for early
+ * feedback before Apply. Vault-content checks that need App/Vault access
+ * (rejecting a root that already holds ordinary notes) live in
+ * `copilotRootChange`, not here.
+ *
+ * Unlike {@link validateSkillsFolder}, absolute and drive-letter paths are
+ * rejected rather than stripped: the root is the trust boundary every derived
+ * sub-folder inherits, so a leading-slash value is treated as a mistake to
+ * surface, not silently rewritten. The `.obsidian` config folder is rejected
+ * to keep Copilot data from colliding with Obsidian's own config.
+ *
+ * @param value Raw user input.
+ * @returns `{ ok: true, folder }` with the trimmed, trailing-slash-stripped
+ *   value, or `{ ok: false, reason }` carrying a UI-ready message.
+ */
+export function validateCopilotFolder(
+  value: string
+): { ok: true; folder: string } | { ok: false; reason: string } {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return { ok: false, reason: "Folder name cannot be empty." };
+  }
+  const trimmed = value.trim();
+  // Reject (do not strip) absolute and drive-letter paths so a root can never
+  // escape the vault; a stray leading slash is surfaced as an error instead.
+  if (/^[/\\]/.test(trimmed) || /^[a-zA-Z]:/.test(trimmed)) {
+    return { ok: false, reason: "Folder path must be relative to the vault root." };
+  }
+  const cleaned = trimmed.replace(/\\/g, "/").replace(/\/+$/, "");
+  if (cleaned.length === 0) {
+    return { ok: false, reason: "Folder name cannot be empty." };
+  }
+  for (const segment of cleaned.split("/")) {
+    if (segment.length === 0) {
+      return { ok: false, reason: "Folder path cannot contain empty segments (//)." };
+    }
+    if (segment === "..") {
+      return { ok: false, reason: 'Folder path cannot contain ".." segments.' };
+    }
+    if (segment === ".") {
+      return { ok: false, reason: 'Folder path cannot contain "." segments.' };
+    }
+    if (segment.toLowerCase() === CONVENTIONAL_OBSIDIAN_CONFIG_DIR) {
+      return {
+        ok: false,
+        reason: "Folder path cannot use the Obsidian config folder.",
+      };
+    }
+    if (CONTROL_CHAR_RE.test(segment)) {
+      return { ok: false, reason: "Folder path contains illegal control characters." };
+    }
+    if (/[<>:"|?*]/.test(segment)) {
+      return {
+        ok: false,
+        reason: 'Folder path contains characters not allowed in folder names (< > : " | ? *).',
+      };
+    }
+  }
   return { ok: true, folder: cleaned };
 }
 

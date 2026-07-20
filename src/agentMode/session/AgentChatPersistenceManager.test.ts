@@ -6,6 +6,7 @@ import { GLOBAL_SCOPE } from "./scope";
 import type { AgentChatMessage } from "./types";
 import { TFile } from "obsidian";
 import type { App } from "obsidian";
+import { getSettings } from "@/settings/model";
 
 jest.mock("obsidian", () => ({
   Notice: jest.fn(),
@@ -18,6 +19,9 @@ jest.mock("@/settings/model", () => ({
     defaultConversationTag: "copilot-conversation",
     defaultConversationNoteName: "{$date}_{$time}__{$topic}",
   }),
+}));
+jest.mock("@/settings/copilotFolder", () => ({
+  getEffectiveConversationsFolder: jest.fn(() => "test-folder"),
 }));
 jest.mock("@/utils", () => ({
   ensureFolderExists: jest.fn(async () => {}),
@@ -127,6 +131,19 @@ describe("AgentChatPersistenceManager", () => {
     expect(loaded.messages[0].message).toBe("hello world");
     expect(loaded.messages[1].sender).toBe(AI_SENDER);
     expect(loaded.messages[1].message).toBe("hi back");
+  });
+
+  it("writes the built-in conversation tag independent of the persisted setting", async () => {
+    // Freeze check: a custom/stale defaultConversationTag must not reach new notes.
+    (getSettings as jest.Mock).mockReturnValueOnce({
+      defaultSaveFolder: "test-folder",
+      defaultConversationTag: "user-custom-tag",
+      defaultConversationNoteName: "{$date}_{$time}__{$topic}",
+    });
+    const saved = await manager.saveSession([makeMessage(USER_SENDER, "hi")], "claude", {});
+    const contents = app.files.get(saved!.path)!.contents!;
+    expect(contents).toContain("tags:\n  - copilot-conversation");
+    expect(contents).not.toContain("user-custom-tag");
   });
 
   it("serializes a mid-stream fan-out turn so an interrupted autosave isn't blank", async () => {

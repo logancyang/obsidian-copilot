@@ -1,11 +1,12 @@
 import { getCurrentProject, ProjectConfig } from "@/aiParams";
-import { AI_SENDER, USER_SENDER } from "@/constants";
+import { AI_SENDER, COPILOT_CONVERSATION_TAG, USER_SENDER } from "@/constants";
 import ChainManager from "@/LLMProviders/chainManager";
 import { parseReasoningBlock } from "@/LLMProviders/chainRunner/utils/AgentReasoningState";
 import { logError, logInfo, logWarn } from "@/logger";
 import { sanitizeVaultPathSegment } from "@/projects/projectUtils";
 import { filterChatHistoryFiles, readChatPathProjectId } from "@/utils/chatHistoryUtils";
 import { getSettings } from "@/settings/model";
+import { getEffectiveConversationsFolder } from "@/settings/copilotFolder";
 import { ChatMessage, MessageContext } from "@/types/message";
 import {
   ensureFolderExists,
@@ -62,12 +63,11 @@ export class ChatPersistenceManager {
         return;
       }
 
-      const settings = getSettings();
       const chatContent = this.formatChatContent(messages);
       const firstMessageEpoch = messages[0].timestamp?.epoch || Date.now();
 
       // Ensure the save folder exists (supports nested paths) using utility helper.
-      await ensureFolderExists(this.app.vault, settings.defaultSaveFolder);
+      await ensureFolderExists(this.app.vault, getEffectiveConversationsFolder());
 
       // Check if a file with this epoch already exists
       const existingFile = await this.findFileByEpoch(firstMessageEpoch);
@@ -153,7 +153,7 @@ export class ChatPersistenceManager {
               const currentProjectId = currentProject?.id;
               if (currentProjectId && conflictProjectId !== currentProjectId) {
                 // Different project owns this file — generate a unique name instead
-                const rawUniqueName = `${settings.defaultSaveFolder}/${sanitizeVaultPathSegment(currentProjectId)}__chat-${firstMessageEpoch}.md`;
+                const rawUniqueName = `${getEffectiveConversationsFolder()}/${sanitizeVaultPathSegment(currentProjectId)}__chat-${firstMessageEpoch}.md`;
                 const uniqueName = await this.resolveChatSavePath(rawUniqueName, currentProject);
                 targetFile = await this.app.vault.create(uniqueName, noteContent);
                 new Notice(`Chat saved as note: ${uniqueName}`);
@@ -204,7 +204,7 @@ export class ChatPersistenceManager {
             const filePrefix = fallbackProject
               ? `${sanitizeVaultPathSegment(fallbackProject.id)}__`
               : "";
-            const rawFallbackName = `${settings.defaultSaveFolder}/${filePrefix}chat-${firstMessageEpoch}.md`;
+            const rawFallbackName = `${getEffectiveConversationsFolder()}/${filePrefix}chat-${firstMessageEpoch}.md`;
             // Reason: check ownership to prevent cross-project collision on fallback path
             const fallbackName = await this.resolveChatSavePath(rawFallbackName, currentProject);
 
@@ -325,8 +325,7 @@ export class ChatPersistenceManager {
    * Get all chat history files from the vault
    */
   async getChatHistoryFiles(): Promise<TFile[]> {
-    const settings = getSettings();
-    const folderFiles = await listMarkdownFiles(this.app, settings.defaultSaveFolder);
+    const folderFiles = await listMarkdownFiles(this.app, getEffectiveConversationsFolder());
     if (folderFiles.length === 0) return [];
 
     const currentProject = getCurrentProject();
@@ -776,10 +775,10 @@ ${conversationSummary}`;
       // If still too long, truncate the entire filename more aggressively
       const availableForBasename = SAFE_FILENAME_BYTE_LIMIT - extensionBytes - filePrefixBytes;
       const truncatedBasename = truncateToByteLimit(sanitizedFileName, availableForBasename);
-      return `${settings.defaultSaveFolder}/${filePrefix}${truncatedBasename}.md`;
+      return `${getEffectiveConversationsFolder()}/${filePrefix}${truncatedBasename}.md`;
     }
 
-    return `${settings.defaultSaveFolder}/${baseNameWithPrefix}`;
+    return `${getEffectiveConversationsFolder()}/${baseNameWithPrefix}`;
   }
 
   /**
@@ -792,7 +791,6 @@ ${conversationSummary}`;
     topic?: string,
     lastAccessedAt?: number
   ): string {
-    const settings = getSettings();
     const currentProject = getCurrentProject();
 
     return `---
@@ -803,7 +801,7 @@ ${lastAccessedAt ? `lastAccessedAt: ${lastAccessedAt}` : ""}
 ${currentProject ? `projectId: "${escapeYamlString(currentProject.id)}"` : ""}
 ${currentProject ? `projectName: "${escapeYamlString(currentProject.name)}"` : ""}
 tags:
-  - ${settings.defaultConversationTag}
+  - ${COPILOT_CONVERSATION_TAG}
 ---
 
 ${chatContent}`;
