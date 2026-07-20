@@ -21,6 +21,7 @@ import {
 import { loadAllProjects } from "@/projects/projectUtils";
 import { PROJECT_CONFIG_FILE_NAME, PROJECTS_UNSUPPORTED_FOLDER_NAME } from "@/projects/constants";
 import { getSettings, subscribeToSettingsChange } from "@/settings/model";
+import { deriveProjectsFolder } from "@/settings/copilotFolder";
 import { debounce } from "@/utils/debounce";
 import { App, Notice, TAbstractFile, Vault } from "obsidian";
 
@@ -100,8 +101,11 @@ export class ProjectRegister {
     prev: ReturnType<typeof getSettings>,
     next: ReturnType<typeof getSettings>
   ): void => {
-    if (prev.projectsFolder !== next.projectsFolder) {
-      this.debouncedFolderChange(next.projectsFolder);
+    // Reason: the folder is derived from the configurable copilotFolder root, so
+    // compare the derived paths rather than the retired projectsFolder field.
+    const nextFolder = deriveProjectsFolder(next);
+    if (deriveProjectsFolder(prev) !== nextFolder) {
+      this.debouncedFolderChange(nextFolder);
     }
   };
 

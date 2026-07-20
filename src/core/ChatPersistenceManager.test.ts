@@ -4,6 +4,7 @@ import { App, Notice, TFile } from "obsidian";
 import type { MessageRepository } from "./MessageRepository";
 import { ChatPersistenceManager } from "./ChatPersistenceManager";
 import { mockTFile } from "@/__tests__/mockObsidian";
+import { getSettings } from "@/settings/model";
 
 const USER_SENDER = "user";
 const AI_SENDER = "ai";
@@ -28,6 +29,9 @@ jest.mock("@/settings/model", () => ({
     defaultConversationTag: "copilot-conversation",
     defaultConversationNoteName: "{$topic}@{$date}_{$time}",
   }),
+}));
+jest.mock("@/settings/copilotFolder", () => ({
+  getEffectiveConversationsFolder: jest.fn(() => "test-folder"),
 }));
 jest.mock("@/aiParams", () => ({
   getCurrentProject: jest.fn().mockReturnValue(null),
@@ -1586,6 +1590,35 @@ tags:
       const lines = noteContent.split("\n");
       const modelKeyLine = lines.find((line: string) => line.startsWith("modelKey:"));
       expect(modelKeyLine).toBe('modelKey: "model\\\\with\\\\backslash|provider"');
+    });
+  });
+
+  describe("frozen conversation tag", () => {
+    it("writes the built-in tag independent of the persisted defaultConversationTag", () => {
+      // The tag is frozen to a constant. Feed a custom setting value: if a
+      // regression made generateNoteContent read the setting again, the custom
+      // value would leak into the note and fail the assertion below.
+      const gs = getSettings as jest.Mock;
+      gs.mockReturnValue({
+        defaultSaveFolder: "test-folder",
+        defaultConversationTag: "user-custom-tag",
+        defaultConversationNoteName: "{$topic}@{$date}_{$time}",
+      });
+      try {
+        const noteContent = asInternal(persistenceManager).generateNoteContent(
+          "**user**: hi",
+          1695513480000,
+          "gpt-4"
+        );
+        expect(noteContent).toContain("tags:\n  - copilot-conversation");
+        expect(noteContent).not.toContain("user-custom-tag");
+      } finally {
+        gs.mockReturnValue({
+          defaultSaveFolder: "test-folder",
+          defaultConversationTag: "copilot-conversation",
+          defaultConversationNoteName: "{$topic}@{$date}_{$time}",
+        });
+      }
     });
   });
 

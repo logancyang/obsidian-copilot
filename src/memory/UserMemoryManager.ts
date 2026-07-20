@@ -2,6 +2,7 @@ import { App, TFile } from "obsidian";
 import { ChatMessage } from "@/types/message";
 import { logInfo, logError, logWarn } from "@/logger";
 import { getSettings } from "@/settings/model";
+import { getEffectiveMemoryFolder } from "@/settings/copilotFolder";
 import { ensureFolderExists } from "@/utils";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
@@ -225,20 +226,15 @@ export class UserMemoryManager {
    * Ensure the user memory folder exists
    */
   private async ensureMemoryFolderExists(): Promise<void> {
-    const settings = getSettings();
-    const memoryFolderPath = settings.memoryFolderName;
-
-    await ensureFolderExists(this.app.vault, memoryFolderPath);
+    await ensureFolderExists(this.app.vault, getEffectiveMemoryFolder());
   }
 
   private getRecentConversationFilePath(): string {
-    const settings = getSettings();
-    return `${settings.memoryFolderName}/Recent Conversations.md`;
+    return `${getEffectiveMemoryFolder()}/Recent Conversations.md`;
   }
 
   public getSavedMemoriesFilePath(): string {
-    const settings = getSettings();
-    return `${settings.memoryFolderName}/Saved Memories.md`;
+    return `${getEffectiveMemoryFolder()}/Saved Memories.md`;
   }
 
   /**

@@ -1,4 +1,3 @@
-import { DEFAULT_SKILLS_FOLDER } from "@/agentMode/skills/agentPaths";
 import { formatSkillDisplayName } from "@/agentMode/skills/mergeDiscovery";
 import { listBackendDescriptors } from "@/agentMode/backends/registry";
 import type { AgentBrand } from "@/agentMode/session/types";
@@ -17,16 +16,14 @@ import {
 } from "@/agentMode/skills/SkillManager";
 import { SkillRow } from "./SkillRow";
 import { type Skill } from "@/agentMode/skills/types";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { SettingItem } from "@/components/ui/setting-item";
-import { SettingSection } from "@/components/ui/setting-section";
 import { cn } from "@/lib/utils";
-import { logError, logWarn } from "@/logger";
+import { logWarn } from "@/logger";
+import { deriveSkillsFolder } from "@/settings/copilotFolder";
 import { openWithSystemDefault } from "@/utils/openWithSystemDefault";
 import { getVaultBase, toVaultRelative } from "@/utils/vaultPath";
-import { updateSetting, useSettingsValue, validateSkillsFolder } from "@/settings/model";
-import { AlertTriangle, Folder, Search } from "lucide-react";
+import { useSettingsValue } from "@/settings/model";
+import { AlertTriangle, Search } from "lucide-react";
 import { App, FileSystemAdapter, Notice, TFile, TFolder } from "obsidian";
 import { useApp } from "@/context";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -45,9 +42,10 @@ const SYNC_BRANDS: ReadonlyArray<{ substr: string; brand: string }> = [
 /**
  * Skills tab.
  *
- * Renders the header copy, the Skills-folder setting row, the toolbar
- * (search + count), and either the empty placeholder or the Tidy list of
- * {@link SkillRow}s sourced from {@link SkillManager}.
+ * Renders the header copy, the toolbar (search + count), and either the
+ * empty placeholder or the Tidy list of {@link SkillRow}s sourced from
+ * {@link SkillManager}. The skills folder is root-derived and not editable
+ * here, so there is no folder-setting row.
  *
  * Discovery is fully automatic — the unified walker (canonical folder plus
  * every registered agent's project-skills directory) runs on every mount
@@ -62,6 +60,10 @@ const SYNC_BRANDS: ReadonlyArray<{ substr: string; brand: string }> = [
 export const SkillsSettings: React.FC = () => {
   const app = useApp();
   const settings = useSettingsValue();
+  // Skills live under the single configurable Copilot root. The derived path
+  // drives discovery (the effect below) and the empty-state hint; it is not
+  // user-editable here, so there is no folder-setting row.
+  const skillsFolder = deriveSkillsFolder(settings);
   // Brand projection of every registered backend. Sourced from the public
   // registry — descriptors are module-level constants so the list is stable
   // per session; the `useMemo` keeps the reference identity stable across
@@ -75,12 +77,9 @@ export const SkillsSettings: React.FC = () => {
       })),
     []
   );
-  const persistedFolder = settings.agentMode.skills.folder;
   const skills = useManagedSkills();
   const epermSeen = useEpermSeen();
 
-  const [draft, setDraft] = useState(persistedFolder);
-  const [validationError, setValidationError] = useState<string | null>(null);
   const [searchValue, setSearchValue] = useState("");
 
   // Anchor for Radix portals on this tab (e.g. SkillRow's overflow menu).
@@ -93,58 +92,13 @@ export const SkillsSettings: React.FC = () => {
   // EPERM banner. Neither persists across plugin reloads — by design.
   const [syncBannerDismissed, setSyncBannerDismissed] = useState(false);
 
-  // Keep the local draft in sync if persisted settings change underneath us
-  // (e.g. via Reset Settings). We don't want to clobber the user's in-flight
-  // typing, so only sync when the persisted value changes.
-  useEffect(() => {
-    /* eslint-disable @eslint-react/hooks-extra/no-direct-set-state-in-use-effect -- resync the local draft when persisted settings change underneath us (e.g. Reset Settings); see comment above */
-    setDraft(persistedFolder);
-    setValidationError(null);
-    /* eslint-enable @eslint-react/hooks-extra/no-direct-set-state-in-use-effect */
-  }, [persistedFolder]);
-
-  // Trigger a discovery pass on mount and on persisted-folder change so
-  // the list reflects whatever lives at the currently configured path.
-  // The unified walker pulls in canonical + every agent's project-skills
-  // dir in one pass.
+  // Trigger a discovery pass on mount and whenever the derived folder changes
+  // (e.g. the user moves the Copilot root) so the list reflects whatever lives
+  // at the currently configured path. The unified walker pulls in canonical +
+  // every agent's project-skills dir in one pass.
   useEffect(() => {
     void SkillManager.getInstance().refresh();
-  }, [persistedFolder]);
-
-  /** Validate the draft against `validateSkillsFolder`; updates inline error state. */
-  const validate = useCallback((value: string) => {
-    const result = validateSkillsFolder(value);
-    if (!result.ok) {
-      setValidationError(result.reason);
-      return null;
-    }
-    setValidationError(null);
-    return result.folder;
-  }, []);
-
-  /** Persist the draft when it is valid; called on blur and on Enter. */
-  const commit = useCallback(
-    (value: string) => {
-      const folder = validate(value);
-      if (folder === null) return;
-      if (folder === persistedFolder) return;
-      try {
-        updateSetting("agentMode", {
-          ...settings.agentMode,
-          skills: { ...settings.agentMode.skills, folder },
-        });
-      } catch (err) {
-        logError("Failed to persist skills folder", err);
-        new Notice("Failed to save skills folder. See console for details.");
-      }
-    },
-    [persistedFolder, settings.agentMode, validate]
-  );
-
-  /** Folder-picker icon button. Not wired yet — opens a notice telling the user to type the path. */
-  const handlePickFolder = useCallback(() => {
-    new Notice("Folder picker is not available yet — type the vault-relative path for now.");
-  }, []);
+  }, [skillsFolder]);
 
   /**
    * Open a SKILL.md (absolute path) for editing. Managed skills live inside
@@ -189,7 +143,7 @@ export const SkillsSettings: React.FC = () => {
 
   const filteredSkills = useMemo(() => filterSkills(skills, searchValue), [skills, searchValue]);
 
-  const displayFolder = persistedFolder.length > 0 ? persistedFolder : DEFAULT_SKILLS_FOLDER;
+  const displayFolder = skillsFolder;
 
   /**
    * Open the per-skill Properties modal. The modal owns its own save and
@@ -263,56 +217,6 @@ export const SkillsSettings: React.FC = () => {
             automatically.
           </div>
         </div>
-
-        <SettingSection>
-          <SettingItem
-            type="custom"
-            title="Skills folder"
-            description={
-              <div className="tw-flex tw-flex-col tw-gap-1">
-                <span>
-                  Where Copilot keeps the shared copy of every skill. Agent shortcuts point here.
-                  Changing this moves the folder and rewrites all shortcuts.
-                </span>
-                {validationError !== null && (
-                  <span className="tw-text-error">{validationError}</span>
-                )}
-              </div>
-            }
-          >
-            <div className="tw-flex tw-items-center tw-gap-2">
-              <Input
-                value={draft}
-                onChange={(e) => {
-                  const next = e.target.value;
-                  setDraft(next);
-                  validate(next);
-                }}
-                onBlur={(e) => commit(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    commit(draft);
-                    (e.target as HTMLInputElement).blur();
-                  }
-                }}
-                placeholder="copilot/skills"
-                className="!tw-w-56"
-                aria-label="Skills folder"
-                aria-invalid={validationError !== null}
-              />
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={handlePickFolder}
-                title="Pick folder"
-                aria-label="Pick folder"
-              >
-                <Folder className="tw-size-4" />
-              </Button>
-            </div>
-          </SettingItem>
-        </SettingSection>
 
         {/* Durable banners — stack at the top of the tab body, above the toolbar. */}
         {(epermSeen || (syncBrand !== null && !syncBannerDismissed)) && (

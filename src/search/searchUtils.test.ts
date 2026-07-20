@@ -3,15 +3,20 @@ import * as utils from "@/utils";
 import { TFile } from "obsidian";
 import {
   categorizePatterns,
+  createCopilotPatternFilter,
   createPatternSettingsValue,
   getDecodedPatterns,
   getMatchingPatterns,
+  getSystemExcludedFolders,
+  hasActiveCopilotPatterns,
+  isInternalExcludedPath,
   previewPatternValue,
   shouldIndexFile,
 } from "./searchUtils";
 
 // Mock Obsidian's TFile and Modal classes
 jest.mock("obsidian", () => ({
+  normalizePath: (path: string) => path.replace(/\/+/g, "/").replace(/^\/|\/$/g, ""),
   TFile: class TFile {
     path: string;
   },
@@ -479,6 +484,108 @@ describe("searchUtils", () => {
         extensionPatterns: [],
         notePatterns: [],
       });
+    });
+  });
+
+  describe("getSystemExcludedFolders", () => {
+    it("always includes the historical copilot root", () => {
+      const folders = getSystemExcludedFolders({
+        copilotFolder: "copilot",
+        copilotRootHistory: [],
+      } as unknown as Parameters<typeof getSystemExcludedFolders>[0]);
+      expect(folders).toContain("copilot");
+    });
+
+    it("includes the active root and every historical root", () => {
+      const folders = getSystemExcludedFolders({
+        copilotFolder: "team-ai",
+        copilotRootHistory: ["copilot", "ai"],
+      } as unknown as Parameters<typeof getSystemExcludedFolders>[0]);
+      expect(new Set(folders)).toEqual(new Set(["copilot", "ai", "team-ai"]));
+    });
+
+    it("normalizes and dedupes without lowercasing (matcher is case-sensitive)", () => {
+      const folders = getSystemExcludedFolders({
+        copilotFolder: "Copilot/",
+        copilotRootHistory: ["copilot", "Copilot"],
+      } as unknown as Parameters<typeof getSystemExcludedFolders>[0]);
+      // "Copilot" (trailing slash stripped) and "copilot" stay distinct entries.
+      expect(new Set(folders)).toEqual(new Set(["copilot", "Copilot"]));
+    });
+  });
+
+  describe("isInternalExcludedPath", () => {
+    it("excludes project-config files under the projects folder derived from the default root", () => {
+      (settingsModel.getSettings as jest.Mock).mockReturnValue({
+        qaInclusions: "",
+        qaExclusions: "",
+        copilotFolder: "copilot",
+      });
+      expect(isInternalExcludedPath("copilot/projects/my-project/project.md")).toBe(true);
+    });
+
+    it("derives the projects folder from a custom root, not the retired projectsFolder field", () => {
+      (settingsModel.getSettings as jest.Mock).mockReturnValue({
+        qaInclusions: "",
+        qaExclusions: "",
+        copilotFolder: "team-ai",
+        // Retired field left pointing at the stale default path; derivation must ignore it.
+        projectsFolder: "copilot/projects",
+      });
+      // Excluded under the derived custom-root path.
+      expect(isInternalExcludedPath("team-ai/projects/my-project/project.md")).toBe(true);
+      // NOT excluded under the stale retired path, proving derivation from the root.
+      expect(isInternalExcludedPath("copilot/projects/my-project/project.md")).toBe(false);
+    });
+
+    it("does not exclude ordinary user files that merely live under the projects folder", () => {
+      (settingsModel.getSettings as jest.Mock).mockReturnValue({
+        qaInclusions: "",
+        qaExclusions: "",
+        copilotFolder: "team-ai",
+      });
+      expect(isInternalExcludedPath("team-ai/projects/my-project/notes.md")).toBe(false);
+    });
+  });
+
+  describe("hasActiveCopilotPatterns", () => {
+    it("is always true because the system root exclusion is always active", () => {
+      (settingsModel.getSettings as jest.Mock).mockReturnValue({
+        qaInclusions: "",
+        qaExclusions: "",
+      });
+      expect(hasActiveCopilotPatterns()).toBe(true);
+    });
+  });
+
+  describe("createCopilotPatternFilter", () => {
+    it("excludes the active and historical roots even with no user patterns", () => {
+      (settingsModel.getSettings as jest.Mock).mockReturnValue({
+        qaInclusions: "",
+        qaExclusions: "",
+        copilotFolder: "ai",
+        copilotRootHistory: ["copilot", "ai"],
+      });
+      const filter = createCopilotPatternFilter(window.app);
+      // System roots dropped on the raw path — no TFile resolution required.
+      expect(filter("ai/memory/note.md")).toBe(false);
+      expect(filter("copilot/copilot-conversations/chat.md")).toBe(false);
+      expect(filter("notes/idea.md")).toBe(true);
+      expect(mockGetAbstractFileByPath).not.toHaveBeenCalledWith("ai/memory/note.md");
+    });
+
+    it("does not over-match sibling or differently-cased folders", () => {
+      (settingsModel.getSettings as jest.Mock).mockReturnValue({
+        qaInclusions: "",
+        qaExclusions: "",
+        copilotFolder: "copilot",
+        copilotRootHistory: ["copilot"],
+      });
+      const filter = createCopilotPatternFilter(window.app);
+      // Case-sensitive: "Copilot/" is a different folder and is kept.
+      expect(filter("Copilot/note.md")).toBe(true);
+      // Segment boundary: "mycopilot/" is not the "copilot" root.
+      expect(filter("mycopilot/note.md")).toBe(true);
     });
   });
 });

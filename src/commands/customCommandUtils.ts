@@ -9,8 +9,9 @@ import {
 } from "@/commands/constants";
 import { CustomCommand } from "@/commands/type";
 import { logWarn } from "@/logger";
-import { App, normalizePath, Notice, TAbstractFile, TFile, Vault } from "obsidian";
+import { App, Notice, TAbstractFile, TFile, Vault } from "obsidian";
 import { getSettings } from "@/settings/model";
+import { getEffectiveCustomPromptsFolder } from "@/settings/copilotFolder";
 import {
   updateCachedCommands,
   getCachedCustomCommands,
@@ -76,7 +77,7 @@ export function getCommandId(commandName: string) {
 }
 
 export function getCustomCommandsFolder(): string {
-  return normalizePath(getSettings().customPromptsFolder);
+  return getEffectiveCustomPromptsFolder();
 }
 
 export function getCommandFilePath(title: string): string {
@@ -129,11 +130,18 @@ export async function parseCustomCommandFile(app: App, file: TFile): Promise<Cus
   };
 }
 
-export async function loadAllCustomCommands(app: App): Promise<CustomCommand[]> {
+/**
+ * Fetch all custom commands from the vault WITHOUT writing the global cache.
+ * Use this when the caller must coordinate cache writes itself (e.g. latest-wins
+ * folder reloads) so a superseded async reload cannot clobber a newer result.
+ */
+export async function fetchAllCustomCommands(app: App): Promise<CustomCommand[]> {
   const files = app.vault.getFiles().filter((file) => isCustomCommandFile(file));
-  const commands: CustomCommand[] = await Promise.all(
-    files.map((file) => parseCustomCommandFile(app, file))
-  );
+  return await Promise.all(files.map((file) => parseCustomCommandFile(app, file)));
+}
+
+export async function loadAllCustomCommands(app: App): Promise<CustomCommand[]> {
+  const commands = await fetchAllCustomCommands(app);
   updateCachedCommands(commands);
   return commands;
 }

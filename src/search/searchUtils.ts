@@ -1,8 +1,10 @@
+import { COPILOT_FOLDER_ROOT } from "@/constants";
 import { CustomError } from "@/error";
 import { AGENTS_MIRROR_FILE, PROJECT_CONFIG_FILE_NAME } from "@/projects/constants";
 import EmbeddingsManager from "@/LLMProviders/embeddingManager";
 import { logError, logInfo, logWarn } from "@/logger";
-import { getSettings } from "@/settings/model";
+import { getSettings, normalizeRootFolders, type CopilotSettings } from "@/settings/model";
+import { getEffectiveProjectsFolder } from "@/settings/copilotFolder";
 import { logFileManager } from "@/logFileManager";
 import { getTagsFromNote, stripHash } from "@/utils";
 import { Embeddings } from "@langchain/core/embeddings";
@@ -138,6 +140,25 @@ export function getMatchingPatterns(options?: {
 }
 
 /**
+ * The Copilot root folders excluded from QA indexing independent of the user's
+ * patterns: `copilot`, the active root, and every root ever activated
+ * ({@link CopilotSettings.copilotRootHistory}). Always-on privacy invariant so
+ * content under any current OR former root never enters the index.
+ *
+ * @param settings - Current Copilot settings.
+ * @returns Normalized, deduped root folders to exclude (never empty).
+ */
+export function getSystemExcludedFolders(settings: CopilotSettings): string[] {
+  const history = Array.isArray(settings.copilotRootHistory) ? settings.copilotRootHistory : [];
+  return normalizeRootFolders([COPILOT_FOLDER_ROOT, settings.copilotFolder, ...history]);
+}
+
+/** Whether a vault-relative path falls under any live system-excluded Copilot root. */
+function isSystemExcludedPath(filePath: string): boolean {
+  return matchFilePathWithFolders(filePath, getSystemExcludedFolders(getSettings()));
+}
+
+/**
  * Should index the file based on the inclusions and exclusions patterns.
  * @param file - The file to check.
  * @param inclusions - The inclusions patterns.
@@ -156,6 +177,10 @@ export function shouldIndexFile(
   if (isInternalExcludedFile(file)) {
     return false;
   }
+  // Exclude the system Copilot roots (active + historical) before user patterns.
+  if (isSystemExcludedPath(file.path)) {
+    return false;
+  }
   if (exclusions && matchFilePathWithPatterns(app, file, exclusions)) {
     return false;
   }
@@ -172,20 +197,26 @@ export function shouldIndexFile(
 }
 
 /**
- * Build a predicate that decides whether a vault-relative path passes Copilot's
- * QA inclusion/exclusion rules. The active patterns are resolved once so the
- * predicate can be reused across many results. Paths that don't resolve to a
- * vault {@link TFile} are kept, since the rules can't be evaluated for them.
+ * Build a predicate deciding whether a vault-relative path passes Copilot's QA
+ * rules (resolved once for reuse). Unresolvable paths are kept, but the system
+ * root exclusion is applied to the raw path first, so a former root's content is
+ * dropped even with no user QA patterns configured.
  *
  * @param app - The Obsidian app instance.
  * @returns Predicate returning true when the path should be kept.
  */
 export function createCopilotPatternFilter(app: App): (path: string) => boolean {
+  const systemExcludedFolders = getSystemExcludedFolders(getSettings());
   const { inclusions, exclusions } = getMatchingPatterns();
-  if (!inclusions && !exclusions) {
-    return () => true;
-  }
   return (path: string) => {
+    // System root exclusion runs first on the raw path (no TFile), holding even
+    // in the no-user-pattern fast path below.
+    if (matchFilePathWithFolders(path, systemExcludedFolders)) {
+      return false;
+    }
+    if (!inclusions && !exclusions) {
+      return true;
+    }
     const file = app.vault.getAbstractFileByPath(path);
     if (!(file instanceof TFile)) {
       return true;
@@ -195,16 +226,12 @@ export function createCopilotPatternFilter(app: App): (path: string) => boolean 
 }
 
 /**
- * Whether any QA inclusion/exclusion pattern is currently configured. Callers
- * use this to decide whether {@link createCopilotPatternFilter} can actually
- * remove results — when nothing is configured the filter is a no-op, so there
- * is no point over-fetching candidates to compensate for it.
- *
- * @returns True when at least one inclusion or exclusion pattern is active.
+ * Whether {@link createCopilotPatternFilter} can remove results, so callers know
+ * whether to over-fetch to compensate. Always true: the system root exclusion is
+ * always active, so a candidate can be dropped even with no user patterns.
  */
 export function hasActiveCopilotPatterns(): boolean {
-  const { inclusions, exclusions } = getMatchingPatterns();
-  return Boolean(inclusions || exclusions);
+  return true;
 }
 
 /**
@@ -419,8 +446,10 @@ function getInternalExcludePaths(): string[] {
  * Any file whose path starts with one of these prefixes is considered internal.
  */
 function getInternalExcludeFolderPrefixes(): string[] {
-  const settings = getSettings();
-  const projectsFolder = (settings.projectsFolder || "").trim();
+  // Reason: derive the projects folder from the configurable root instead of the
+  // retired `settings.projectsFolder`, so a custom root excludes its own
+  // project-config files rather than the stale default path.
+  const projectsFolder = getEffectiveProjectsFolder().trim();
   if (projectsFolder) {
     // Reason: normalize to forward slashes, collapse duplicates, strip trailing slash,
     // then append exactly one "/" for prefix matching. Mirrors normalizePath behavior

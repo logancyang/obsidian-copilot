@@ -17,6 +17,10 @@ import { UserMemoryManager } from "./UserMemoryManager";
 import { App, TFile, Vault } from "obsidian";
 import { ChatMessage } from "@/types/message";
 import { logError, logWarn } from "@/logger";
+jest.mock("@/settings/copilotFolder", () => ({
+  getEffectiveMemoryFolder: jest.fn(() => "copilot/memory"),
+}));
+
 import { CopilotSettings, getSettings } from "@/settings/model";
 import { ensureFolderExists } from "@/utils";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";

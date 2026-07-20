@@ -11,6 +11,10 @@ const mockGetDocumentsByPath = jest.fn();
 jest.mock("@/logger");
 jest.mock("@/settings/model", () => ({
   getSettings: jest.fn(),
+  // searchUtils' getSystemExcludedFolders normalizes root paths through the real
+  // helper; keep it faithful so the pattern filter behaves as in production.
+  normalizeRootFolders:
+    jest.requireActual<typeof import("@/settings/model")>("@/settings/model").normalizeRootFolders,
 }));
 jest.mock("@/miyo/miyoUtils", () => ({
   getMiyoFolderName: jest.fn(),
@@ -90,11 +94,14 @@ describe("MiyoSemanticRetriever", () => {
     const retriever = createRetriever();
     const documents = await retriever.getRelevantDocuments("query with [[notes/a]] mention");
 
+    // Over-fetch is always on now: the system root exclusion is always active
+    // (hasActiveCopilotPatterns is unconditionally true), so the request uses
+    // RETURN_ALL_LIMIT so post-filtering still leaves enough to fill finalK.
     expect(mockSearch).toHaveBeenCalledWith(
       "http://miyo.local",
       "/vault",
       "query with [[notes/a]] mention",
-      10,
+      RETURN_ALL_LIMIT,
       undefined
     );
     expect(mockGetDocumentsByPath).not.toHaveBeenCalled();
@@ -194,15 +201,23 @@ describe("MiyoSemanticRetriever", () => {
     ]);
   });
 
-  it("bounds the request to the requested limit when no filter is active", async () => {
-    // With no inclusion/exclusion pattern and returnAll off, over-fetching only
-    // wastes transfer/processing, so the request is bounded to the cap.
+  it("over-fetches even with no user patterns because the system root exclusion is always active", async () => {
+    // The always-on system root exclusion (copilot + active + historical roots)
+    // can always drop a chunk, so the retriever must over-fetch to RETURN_ALL_LIMIT
+    // regardless of the user's QA patterns — otherwise post-filtering could leave
+    // fewer than finalK results.
     mockSearch.mockResolvedValue({ results: [] });
 
     const retriever = createRetriever({ maxK: 3 });
     await retriever.getRelevantDocuments("query");
 
-    expect(mockSearch).toHaveBeenCalledWith("http://miyo.local", "/vault", "query", 3, undefined);
+    expect(mockSearch).toHaveBeenCalledWith(
+      "http://miyo.local",
+      "/vault",
+      "query",
+      RETURN_ALL_LIMIT,
+      undefined
+    );
   });
 
   it("filters chunks by Copilot inclusion/exclusion rules", async () => {
