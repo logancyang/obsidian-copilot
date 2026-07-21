@@ -61,6 +61,7 @@ import type {
 import type { ProjectScopeId } from "@/agentMode/session/scope";
 import { AuthRequiredError, MethodUnsupportedError } from "@/agentMode/session/errors";
 import { createClaudeTaskPlanState, type ClaudeTaskPlanState } from "./claudeTodoPlan";
+import { ClaudeBackgroundTaskStateMachine } from "./claudeTaskProtocol";
 import { createTranslatorState, mapStopReason, translateSdkMessage } from "./sdkMessageTranslator";
 import { PermissionBridge, type AskUserQuestionPrompter } from "./permissionBridge";
 import {
@@ -116,6 +117,8 @@ interface SessionState {
    * (translator state is per-query; Task ids must survive turns).
    */
   claudeTaskPlan: ClaudeTaskPlanState;
+  /** Session-lived correlation for background launches that outlast one query. */
+  backgroundTasks: ClaudeBackgroundTaskStateMachine;
   active?: Query;
   /**
    * Snapshot of the composed Copilot system prompt (base framing + pill-syntax
@@ -366,6 +369,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       additionalDirectories: params.additionalDirectories,
       systemPromptAppend: this.resolveSystemPromptAppend(params.projectId),
       claudeTaskPlan: createClaudeTaskPlanState(),
+      backgroundTasks: new ClaudeBackgroundTaskStateMachine(),
     });
 
     const state = this.computeState(sessionId);
@@ -504,7 +508,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       onStall: (idleMs) => logSdkError("←", "stream:stalled", { idleMs }, params.sessionId),
     });
 
-    const translatorState = createTranslatorState(session.claudeTaskPlan);
+    const translatorState = createTranslatorState(session.claudeTaskPlan, session.backgroundTasks);
     let stopReason: StopReason = "end_turn";
     let resultErrorMessage: string | null = null;
     try {
@@ -774,6 +778,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       additionalDirectories: params.additionalDirectories,
       systemPromptAppend: this.resolveSystemPromptAppend(params.projectId),
       claudeTaskPlan: createClaudeTaskPlanState(),
+      backgroundTasks: new ClaudeBackgroundTaskStateMachine(),
     });
 
     const state = this.computeState(params.sessionId);

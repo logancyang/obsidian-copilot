@@ -196,6 +196,28 @@ describe("lookupToolSummary", () => {
     expect(lookupToolSummary(t).collapsedLine(t, CTX)).toBe("Tool call");
   });
 
+  it("summarizes live subagent progress and omits stale descriptions after completion", () => {
+    const running = tool({
+      vendorToolName: "Agent",
+      status: "in_progress",
+      progress: {
+        description: "Running Count markdown files and subfolders",
+        toolUses: 3,
+        durationMs: 9851,
+      },
+    });
+    const done = tool({
+      ...running,
+      status: "completed",
+      progress: { ...running.progress, toolUses: 19, durationMs: 66_000 },
+    });
+
+    expect(lookupToolSummary(running).outcome(running)).toBe(
+      "Running Count markdown files and subfolders · 3 tools · 9s"
+    );
+    expect(lookupToolSummary(done).outcome(done)).toBe("19 tools · 1m 6s");
+  });
+
   it("summarizes AskUserQuestion with the question header", () => {
     const t = tool({
       vendorToolName: "AskUserQuestion",

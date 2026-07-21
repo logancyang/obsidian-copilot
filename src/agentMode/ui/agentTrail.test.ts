@@ -158,6 +158,55 @@ describe("buildAgentTrail", () => {
     }
   });
 
+  it("groups a background (childless) sub-agent launch as a subagent node", () => {
+    // A launch can still be childless when no complete nested frame arrived;
+    // the card remains a group so the final report has a home.
+    const parts = [
+      tool("launch", {
+        vendorToolName: "Agent",
+        input: { subagent_type: "Explore", description: "Analyze notes" },
+        output: [{ type: "text", text: "Most prominent: AI/agents (16)." }],
+      }),
+    ];
+    const tree = buildAgentTrail(parts);
+    expect(tree).toHaveLength(1);
+    expect(tree[0].type).toBe("subagent");
+    if (tree[0].type === "subagent") {
+      expect(tree[0].parent.id).toBe("launch");
+      expect(tree[0].children).toHaveLength(0);
+    }
+  });
+
+  it.each(["Agent", "Task"])(
+    "renders an MCP tool named %s as an action rather than a subagent",
+    (vendorToolName) => {
+      const tree = buildAgentTrail([
+        tool("mcp-tool", { vendorToolName, mcpServer: "srv", toolKind: "think" }),
+      ]);
+      expect(tree[0].type).toBe("action");
+    }
+  );
+
+  it("recognizes an opencode task tool (subagent_type input) as a subagent group", () => {
+    const parts = [tool("t", { input: { subagent_type: "general" } })];
+    const tree = buildAgentTrail(parts);
+    expect(tree[0].type).toBe("subagent");
+  });
+
+  it.each([
+    ["a named vendor tool", { vendorToolName: "RunAnalysis" }],
+    ["an anonymous MCP tool", { mcpServer: "analysis-server", toolKind: "other" }],
+    ["a typed native tool", { toolKind: "execute" }],
+  ] as const)(
+    "does not classify %s with a subagent_type parameter as a subagent",
+    (_label, identity) => {
+      const tree = buildAgentTrail([
+        tool("ordinary", { ...identity, input: { subagent_type: "worker" } }),
+      ]);
+      expect(tree[0].type).toBe("action");
+    }
+  );
+
   it("a sub-agent breaks the run; same-tool peers around it compact independently", () => {
     const parts = [
       tool("e1", { vendorToolName: "Edit" }),

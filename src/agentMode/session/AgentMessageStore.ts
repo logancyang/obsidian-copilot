@@ -86,11 +86,28 @@ function partsEqual(a: AgentMessagePart, b: AgentMessagePart): boolean {
         a.status === b.status &&
         a.vendorToolName === b.vendorToolName &&
         a.parentToolCallId === b.parentToolCallId &&
+        toolProgressEqual(a.progress, b.progress) &&
         boundedValueEqual(a.input, b.input) &&
         locationsEqual(a.locations, b.locations) &&
         toolOutputsEqual(a.output, b.output)
       );
   }
+}
+
+/** Compare normalized progress without serializing the surrounding tool input/output. */
+function toolProgressEqual(
+  a: Extract<AgentMessagePart, { kind: "tool_call" }>["progress"],
+  b: Extract<AgentMessagePart, { kind: "tool_call" }>["progress"]
+): boolean {
+  if (a === b) return true;
+  if (!a || !b) return a === b;
+  return (
+    a.description === b.description &&
+    a.toolName === b.toolName &&
+    a.toolUses === b.toolUses &&
+    a.durationMs === b.durationMs &&
+    a.totalTokens === b.totalTokens
+  );
 }
 
 /**
@@ -344,6 +361,20 @@ export class AgentMessageStore {
     msg.parts.push(part);
     this.touch(msg);
     return true;
+  }
+
+  /**
+   * Locate the message that already renders a tool call, searching newest
+   * first. Lets a late update for a long-running tool (e.g. a background
+   * subagent settling during a later turn) land on its original card instead
+   * of the current placeholder. Returns undefined when no message has it.
+   */
+  findMessageIdWithToolCall(toolCallId: string): string | undefined {
+    for (let i = this.messages.length - 1; i >= 0; i--) {
+      const msg = this.messages[i];
+      if (msg.parts?.some((p) => p.kind === "tool_call" && p.id === toolCallId)) return msg.id;
+    }
+    return undefined;
   }
 
   /**

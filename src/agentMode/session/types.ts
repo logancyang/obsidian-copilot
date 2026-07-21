@@ -424,6 +424,15 @@ export interface AgentTodoListEntry {
   status: AgentPlanEntry["status"];
 }
 
+/** Backend-neutral progress reported by a long-running tool call. */
+export interface AgentToolProgress {
+  description?: string;
+  toolName?: string;
+  toolUses?: number;
+  durationMs?: number;
+  totalTokens?: number;
+}
+
 /**
  * Initial / updated state for an in-flight tool call. Mirrors ACP `ToolCall`
  * (initial form) — emitted by backends in the `tool_call` `SessionUpdate`.
@@ -446,6 +455,8 @@ export interface ToolCallSnapshot {
   mcpServer?: string;
   /** Parent tool-call id, for nested tools (e.g. Claude's Task subagents). */
   parentToolCallId?: string;
+  /** Latest backend-neutral progress for a long-running tool call. */
+  progress?: AgentToolProgress;
   /** True iff this tool call is the agent's plan-finalization signal. */
   isPlanProposal?: boolean;
 }
@@ -465,6 +476,7 @@ export interface ToolCallDelta {
   /** MCP server name; see `ToolCallSnapshot.mcpServer`. */
   mcpServer?: string;
   parentToolCallId?: string;
+  progress?: AgentToolProgress;
   isPlanProposal?: boolean;
 }
 
@@ -877,6 +889,8 @@ export type AgentMessagePart =
        * top-level.
        */
       parentToolCallId?: string;
+      /** Latest normalized progress for this tool call. */
+      progress?: AgentToolProgress;
     }
   | {
       kind: "thought";

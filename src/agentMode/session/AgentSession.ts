@@ -371,6 +371,10 @@ export class AgentSession {
   // keep the QA context. LIVE-ONLY — never persisted.
   private pendingFanoutContext: PendingFanoutContext[] = [];
   private placeholderId: string | null = null;
+  // A task update routed to an earlier turn still counts as activity consumed
+  // by the current backend prompt, even though it adds nothing to this turn's
+  // placeholder.
+  private currentTurnHadRoutedToolActivity = false;
   // ACP `messageId`s seen on this turn's content chunks. Used to re-route
   // trailing chunks that a backend flushes *after* the `session/prompt` result
   // (observed with opencode + fast DeepSeek models) to the right message.
@@ -976,6 +980,7 @@ export class AgentSession {
     };
     this.placeholderId = this.store.addMessage(placeholder);
     this.currentMessageIds = new Set();
+    this.currentTurnHadRoutedToolActivity = false;
     this.notifyMessages();
 
     // Backends without a title summarizer (codex, Claude Code) have no usable
@@ -1161,6 +1166,7 @@ export class AgentSession {
       if (
         placeholderId &&
         resp.stopReason !== "cancelled" &&
+        !this.currentTurnHadRoutedToolActivity &&
         !this.store.hasAssistantActivity(placeholderId)
       ) {
         const message = buildEmptyTurnMessage(this.backendId, resp.stopReason);
@@ -1676,6 +1682,21 @@ export class AgentSession {
 
   private handleSessionEvent(event: SessionEvent): void {
     const update = event.update;
+    const toolOwnerMessageId =
+      update.sessionUpdate === "tool_call_update"
+        ? this.store.findMessageIdWithToolCall(update.toolCallId)
+        : undefined;
+    const toolOwnerStopReason = toolOwnerMessageId
+      ? this.store.getMessage(toolOwnerMessageId)?.turnStopReason
+      : undefined;
+    // A completed non-cancelled message belongs to an earlier turn. Its
+    // background task may settle while a later prompt is being cancelled, so
+    // preserve that update while continuing to suppress the cancelled turn's
+    // own tool activity.
+    const isPriorToolUpdate =
+      toolOwnerMessageId !== undefined &&
+      toolOwnerStopReason !== undefined &&
+      toolOwnerStopReason !== "cancelled";
 
     if (this.cancelledPromptDrain || this.abortController?.signal.aborted) {
       switch (update.sessionUpdate) {
@@ -1688,8 +1709,14 @@ export class AgentSession {
           );
           return;
         case "tool_call":
-        case "tool_call_update":
         case "plan":
+          this.cancelledTurnActivity += 1;
+          logWarn(
+            `[AgentMode] dropping ${update.sessionUpdate} from cancelled turn ${this.internalId}`
+          );
+          return;
+        case "tool_call_update":
+          if (isPriorToolUpdate) break;
           this.cancelledTurnActivity += 1;
           logWarn(
             `[AgentMode] dropping ${update.sessionUpdate} from cancelled turn ${this.internalId}`
@@ -1756,7 +1783,8 @@ export class AgentSession {
     }
 
     const placeholderId = this.placeholderId;
-    if (!placeholderId) {
+    const targetMessageId = isPriorToolUpdate ? toolOwnerMessageId : placeholderId;
+    if (!targetMessageId) {
       logWarn(`[AgentMode] dropping session/update — no placeholder for ${this.internalId}`);
       return;
     }
@@ -1770,18 +1798,22 @@ export class AgentSession {
         });
         if (exitPlan) {
           this.publishGatedPlan(update.toolCallId, exitPlan);
-          if (this.store.upsertAgentPart(placeholderId, toolCallToPart(update))) {
+          if (this.store.upsertAgentPart(targetMessageId, toolCallToPart(update))) {
             this.scheduleNotifyMessages();
           }
           return;
         }
-        if (this.store.upsertAgentPart(placeholderId, toolCallToPart(update))) {
+        if (this.store.upsertAgentPart(targetMessageId, toolCallToPart(update))) {
           this.scheduleNotifyMessages();
         }
         return;
       }
       case "tool_call_update": {
-        const existing = this.findToolCallPart(placeholderId, update.toolCallId);
+        // A background launch can settle during a later prompt; route the
+        // update to the message that owns the tool call so the original card
+        // settles instead of a duplicate appearing on the current turn.
+        if (targetMessageId !== placeholderId) this.currentTurnHadRoutedToolActivity = true;
+        const existing = this.findToolCallPart(targetMessageId, update.toolCallId);
         const merged = mergeToolCallUpdate(existing, update);
         if (merged.kind === "tool_call") {
           const exitPlan = tryReadExitPlanModeCall({
@@ -1793,13 +1825,13 @@ export class AgentSession {
             this.publishGatedPlan(merged.id, exitPlan);
           }
         }
-        if (this.store.upsertAgentPart(placeholderId, merged)) {
+        if (this.store.upsertAgentPart(targetMessageId, merged)) {
           this.scheduleNotifyMessages();
         }
         return;
       }
       case "plan": {
-        if (this.store.upsertAgentPart(placeholderId, planToPart(update))) {
+        if (this.store.upsertAgentPart(targetMessageId, planToPart(update))) {
           this.scheduleNotifyMessages();
         }
         return;
@@ -2261,6 +2293,7 @@ function toolCallToPart(
     vendorToolName: call.vendorToolName,
     mcpServer: call.mcpServer,
     parentToolCallId: call.parentToolCallId,
+    progress: call.progress,
   };
 }
 
@@ -2322,6 +2355,7 @@ function mergeToolCallUpdate(
     vendorToolName: upd.vendorToolName ?? base.vendorToolName,
     mcpServer: upd.mcpServer ?? base.mcpServer,
     parentToolCallId: upd.parentToolCallId ?? base.parentToolCallId,
+    progress: upd.progress === undefined ? base.progress : { ...base.progress, ...upd.progress },
   };
 }
 

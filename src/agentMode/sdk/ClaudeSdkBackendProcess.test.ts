@@ -360,6 +360,75 @@ describe("ClaudeSdkBackendProcess", () => {
       ).rejects.toThrow(new Error(USAGE_LIMIT_MESSAGE));
     });
 
+    it("preserves background task identity across prompt queries", async () => {
+      queryMock
+        .mockImplementationOnce(() =>
+          makeQuery([
+            streamEvent({
+              type: "content_block_start",
+              index: 0,
+              content_block: { type: "tool_use", id: "tu-launch", name: "Agent", input: {} },
+            }),
+            {
+              type: "user",
+              tool_use_result: {
+                isAsync: true,
+                status: "async_launched",
+                agentId: "task-a",
+              },
+              message: {
+                content: [
+                  {
+                    type: "tool_result",
+                    tool_use_id: "tu-launch",
+                    content: "Async agent launched successfully.",
+                  },
+                ],
+              },
+              parent_tool_use_id: null,
+              session_id: "irrelevant",
+            } as unknown as SDKMessage,
+            resultMessage(),
+          ])
+        )
+        .mockImplementationOnce(() =>
+          makeQuery([
+            {
+              type: "system",
+              subtype: "task_notification",
+              task_id: "task-a",
+              status: "completed",
+              summary: "late report",
+            } as unknown as SDKMessage,
+            resultMessage(),
+          ])
+        );
+
+      const proc = new ClaudeSdkBackendProcess({
+        pathToClaudeCodeExecutable: "/usr/local/bin/claude",
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        app: { vault: {} } as any,
+        clientVersion: "1.2.3",
+        descriptor: fakeDescriptor(),
+      });
+      const { sessionId } = await proc.newSession({ cwd: "/vault", mcpServers: [] });
+      const events: SessionEvent[] = [];
+      proc.registerSessionHandler(sessionId, (event) => events.push(event));
+
+      await proc.prompt({ sessionId, prompt: [{ type: "text", text: "start" }] });
+      await proc.prompt({ sessionId, prompt: [{ type: "text", text: "continue" }] });
+
+      expect(events).toContainEqual({
+        sessionId,
+        update: {
+          sessionUpdate: "tool_call_update",
+          toolCallId: "tu-launch",
+          status: "completed",
+          content: [{ type: "content", content: { type: "text", text: "late report" } }],
+        },
+      });
+    });
+
     it("forwards the composed system prompt via systemPrompt append on the claude_code preset", async () => {
       queryMock.mockImplementation(() =>
         makeQuery([streamEvent({ type: "message_start", message: {} }), resultMessage()])
