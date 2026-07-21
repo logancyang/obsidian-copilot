@@ -39,6 +39,7 @@ jest.mock("@/hooks/useNoteDrag", () => ({
 }));
 
 jest.mock("@/miyo/miyoUtils", () => ({
+  getSearchBackend: () => "keyword",
   shouldUseMiyo: () => false,
 }));
 
