@@ -20,7 +20,6 @@ import {
   type Options,
   type PermissionMode,
   type Query,
-  type StopHookInput,
   type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 import { App } from "obsidian";
@@ -130,31 +129,43 @@ interface SessionState {
   systemPromptAppend: string;
 }
 
-/**
- * Fed back to the model when it tries to end a turn with background subagents
- * still running — steers it to collect their results in-turn instead of
- * vanishing with an "I'll report back" message.
- */
-export const STOP_BLOCK_REASON =
-  "Background subagents are still running. Before ending your turn, call the " +
-  "TaskOutput tool with block=true for each running task to wait for and " +
-  "collect its result, then fold those results into your reply.";
+const FOREGROUND_ONLY_TOOLS = new Set(["Agent", "Task", "Bash"]);
+const REMOTE_AGENT_DENIAL_REASON =
+  "Remote-isolated agents require background execution, which is temporarily unavailable in Copilot v4.";
 
 /**
- * Prevents a turn from ending before collectible background reports are available, keeping the final answer complete.
+ * Keeps v4 Claude turns on the query lifecycle that can deliver their complete result.
+ * Background work becomes safe again once the adapter owns a persistent response consumer.
  */
-export function createStopHook(): HookCallback {
-  return async (input) => {
-    const stopInput = input as StopHookInput;
-    const hasCollectibleTask = stopInput.background_tasks?.some(
-      (task) => task.type === "subagent" || task.type === "workflow"
-    );
-    if (!hasCollectibleTask) return {};
-    // Re-entry means a previous block kept Claude running, not that the task
-    // finished. Claude Code bounds this continuation loop at eight blocks.
-    return { decision: "block", reason: STOP_BLOCK_REASON };
+export const enforceForegroundToolUse: HookCallback = async (input) => {
+  if (input.hook_event_name !== "PreToolUse" || !FOREGROUND_ONLY_TOOLS.has(input.tool_name)) {
+    return {};
+  }
+  const toolInput =
+    typeof input.tool_input === "object" &&
+    input.tool_input !== null &&
+    !Array.isArray(input.tool_input)
+      ? (input.tool_input as Record<string, unknown>)
+      : {};
+  if (
+    (input.tool_name === "Agent" || input.tool_name === "Task") &&
+    toolInput.isolation === "remote"
+  ) {
+    return {
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: "deny",
+        permissionDecisionReason: REMOTE_AGENT_DENIAL_REASON,
+      },
+    };
+  }
+  return {
+    hookSpecificOutput: {
+      hookEventName: "PreToolUse",
+      updatedInput: { ...toolInput, run_in_background: false },
+    },
   };
-}
+};
 
 export interface ClaudeSdkBackendProcessOptions {
   pathToClaudeCodeExecutable: string;
@@ -415,11 +426,8 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       cwd: session.cwd ?? undefined,
       includePartialMessages: true,
       mcpServers: session.mcpServers,
-      // `TaskOutput` is the read-only collection call the Stop hook steers the
-      // model to make to gather a background subagent's result. Auto-approve it
-      // so the recovery path never pauses on a permission card and wedges an
-      // unattended turn (unlisted tools otherwise fall through to `canUseTool`).
-      allowedTools: ["Read", "Write", "Edit", "Glob", "Grep", "LS", "TaskOutput"],
+      allowedTools: ["Read", "Write", "Edit", "Glob", "Grep", "LS"],
+      disallowedTools: ["TaskOutput", "Workflow"],
       canUseTool: this.bridge.canUseTool,
     };
     // Append the composed Copilot system prompt (captured at newSession time)
@@ -470,10 +478,9 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       options.env = { ...process.env, ...extraEnv };
     }
 
-    // Claude Code v2.1.198+ backgrounds subagents by default. The Stop hook
-    // reads the CLI's background-task snapshot and steers the model to collect
-    // subagent results in-turn before this adapter stops at `result`.
-    options.hooks = { Stop: [{ hooks: [createStopHook()] }] };
+    // Each prompt currently owns one finite SDK query. Keep work foregrounded
+    // until a persistent consumer can receive results after that query returns.
+    options.hooks = { PreToolUse: [{ hooks: [enforceForegroundToolUse] }] };
 
     logSdkOutbound(
       "prompt",
@@ -486,6 +493,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
         effort: options.effort ?? null,
         mcpServers: Object.keys(options.mcpServers ?? {}),
         allowedTools: options.allowedTools,
+        disallowedTools: options.disallowedTools,
       },
       params.sessionId
     );
