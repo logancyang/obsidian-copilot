@@ -42,6 +42,21 @@ The agent also has a maximum runtime of 5 minutes per response, regardless of it
 
 Copilot Plus has 13 built-in tools. Some are always active; others can be enabled or disabled.
 
+### Built-in Obsidian skills
+
+Copilot also seeds four Obsidian-native skills for Claude, Codex, and OpenCode:
+
+- **Obsidian Markdown** — wikilinks, embeds, block references, callouts, properties, tags, and comments.
+- **Obsidian Bases** — valid `.base` schemas, filters, formulas, views, summaries, quoting, and date/duration behavior.
+- **JSON Canvas** — the `.canvas` schema, nodes, edges, groups, layout, colors, IDs, and link integrity.
+- **Obsidian CLI** — runtime and indexed operations such as currently open notes and tabs, workspace layout, daily notes, typed properties, tasks, backlinks, Bases queries, template resolution, link-aware moves, registered commands, and plugin debugging.
+
+These skills appear under **Settings → Copilot → Skills**, where each one can be enabled or disabled per agent. Existing choices are preserved when Copilot refreshes a built-in skill.
+
+The Obsidian CLI skill first verifies that `obsidian version` succeeds. The CLI requires a compatible Obsidian installer, registration, and a running Obsidian app; if it is unavailable, the agent falls back to normal filesystem operations where possible. Copilot does not change its minimum supported Obsidian version or attempt to install or repair the CLI.
+
+When inspecting open tabs, the agent preserves Markdown notes, other file-backed tabs, and non-file views as workspace context. It reads content only from explicit vault paths reported by Obsidian and never treats a tab title or ID as a filename.
+
 ### Always-Enabled Tools
 
 These tools are always available and cannot be disabled:

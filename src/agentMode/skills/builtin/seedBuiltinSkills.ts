@@ -1,5 +1,5 @@
 import { logError, logInfo } from "@/logger";
-import { joinPosix } from "@/utils/pathUtils";
+import { joinPosix, parentDir } from "@/utils/pathUtils";
 import { BUILTIN_SKILLS, type BuiltinSkill } from "./builtinSkills";
 
 /**
@@ -174,7 +174,9 @@ export async function seedBuiltinSkills(
       // leaves no SKILL.md (or a stale-version one), so the next startup
       // re-seeds the whole skill rather than skipping it as current.
       for (const file of skill.files) {
-        await fs.write(joinPosix(dir, file.path), file.content);
+        const filePath = joinPosix(dir, file.path);
+        await ensureDir(fs, parentDir(filePath));
+        await fs.write(filePath, file.content);
       }
       await fs.write(skillMdPath, skillMd);
       seeded.push(skill.name);
