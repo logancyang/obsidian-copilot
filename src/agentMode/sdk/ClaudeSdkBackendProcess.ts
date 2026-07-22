@@ -427,7 +427,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       includePartialMessages: true,
       mcpServers: session.mcpServers,
       allowedTools: ["Read", "Write", "Edit", "Glob", "Grep", "LS"],
-      disallowedTools: ["TaskOutput", "Workflow"],
+      disallowedTools: ["TaskOutput", "Workflow", "Monitor"],
       canUseTool: this.bridge.canUseTool,
     };
     // Append the composed Copilot system prompt (captured at newSession time)

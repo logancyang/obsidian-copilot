@@ -319,7 +319,7 @@ describe("ClaudeSdkBackendProcess", () => {
       expect(call.options.pathToClaudeCodeExecutable).toBe("/usr/local/bin/claude");
       expect(Object.keys(call.options.mcpServers as object)).not.toContain("obsidian-vault");
       expect(call.options.allowedTools).toEqual(["Read", "Write", "Edit", "Glob", "Grep", "LS"]);
-      expect(call.options.disallowedTools).toEqual(["TaskOutput", "Workflow"]);
+      expect(call.options.disallowedTools).toEqual(["TaskOutput", "Workflow", "Monitor"]);
       expect(call.options.hooks).toEqual({
         PreToolUse: [{ hooks: [enforceForegroundToolUse] }],
       });
