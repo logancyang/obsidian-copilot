@@ -1,9 +1,4 @@
-import type {
-  BackgroundTaskSummary,
-  HookCallback,
-  ModelInfo,
-  SDKMessage,
-} from "@anthropic-ai/claude-agent-sdk";
+import type { HookCallback, ModelInfo, SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { BackendDescriptor, SessionEvent } from "@/agentMode/session/types";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
@@ -61,9 +56,8 @@ jest.mock("./effortOption", () => ({
 
 import {
   ClaudeSdkBackendProcess,
-  createStopHook,
+  enforceForegroundToolUse,
   promptInputToAnthropicContent,
-  STOP_BLOCK_REASON,
 } from "./ClaudeSdkBackendProcess";
 import { getCachedSdkCatalog } from "./effortOption";
 import { AuthRequiredError } from "@/agentMode/session/errors";
@@ -324,16 +318,12 @@ describe("ClaudeSdkBackendProcess", () => {
       const call = promptCalls[0][0] as { options: Record<string, unknown> };
       expect(call.options.pathToClaudeCodeExecutable).toBe("/usr/local/bin/claude");
       expect(Object.keys(call.options.mcpServers as object)).not.toContain("obsidian-vault");
-      expect(call.options.allowedTools).toEqual([
-        "Read",
-        "Write",
-        "Edit",
-        "Glob",
-        "Grep",
-        "LS",
-        "TaskOutput",
-      ]);
-      expect(call.options.disallowedTools).toBeUndefined();
+      expect(call.options.allowedTools).toEqual(["Read", "Write", "Edit", "Glob", "Grep", "LS"]);
+      expect(call.options.disallowedTools).toEqual(["TaskOutput", "Workflow", "Monitor"]);
+      expect(call.options.hooks).toEqual({
+        PreToolUse: [{ hooks: [enforceForegroundToolUse] }],
+      });
+      expect((call.options.hooks as Record<string, unknown>).Stop).toBeUndefined();
       // First turn → sessionId is seeded, no resume.
       expect(call.options.sessionId).toBe(sessionId);
       expect(call.options.resume).toBeUndefined();
@@ -1171,95 +1161,68 @@ describe("ClaudeSdkBackendProcess", () => {
     });
   });
 
-  describe("createStopHook()", () => {
-    const abort = { signal: new AbortController().signal };
-    const stopInput = (stopHookActive: boolean, backgroundTasks?: BackgroundTaskSummary[]) =>
-      ({
-        hook_event_name: "Stop",
-        stop_hook_active: stopHookActive,
-        ...(backgroundTasks ? { background_tasks: backgroundTasks } : {}),
-      }) as unknown as Parameters<HookCallback>[0];
-    it("allows the turn to end when no background subagents are running", async () => {
-      const hook = createStopHook();
-      await expect(hook(stopInput(false), undefined, abort)).resolves.toEqual({});
-    });
-
-    it("blocks for a subagent in the SDK background-task snapshot", async () => {
-      const hook = createStopHook();
-
-      await expect(
-        hook(
-          stopInput(false, [
-            {
-              id: "agent-1",
-              type: "subagent",
-              status: "running",
-              description: "Review the implementation",
-            },
-          ]),
-          undefined,
-          abort
-        )
-      ).resolves.toEqual({ decision: "block", reason: STOP_BLOCK_REASON });
-    });
-
-    it("blocks for a workflow in the SDK background-task snapshot", async () => {
-      const hook = createStopHook();
-
-      await expect(
-        hook(
-          stopInput(false, [
-            {
-              id: "workflow-1",
-              type: "workflow",
-              status: "running",
-              description: "Run the release workflow",
-            },
-          ]),
-          undefined,
-          abort
-        )
-      ).resolves.toEqual({ decision: "block", reason: STOP_BLOCK_REASON });
-    });
-
-    it("does not block for background work that cannot be collected with TaskOutput", async () => {
-      const hook = createStopHook();
-
-      await expect(
-        hook(
-          stopInput(false, [
-            {
-              id: "shell-1",
-              type: "shell",
-              status: "running",
-              description: "npm test",
-            },
-          ]),
-          undefined,
-          abort
-        )
-      ).resolves.toEqual({});
-    });
-
-    it("keeps blocking a re-entered Stop hook while a collectible task remains", async () => {
-      const hook = createStopHook();
-      const runningSubagent: BackgroundTaskSummary[] = [
+  describe("enforceForegroundToolUse()", () => {
+    const invoke = (toolName: string, toolInput: unknown) =>
+      enforceForegroundToolUse(
         {
-          id: "agent-1",
-          type: "subagent",
-          status: "running",
-          description: "Review the implementation",
-        },
-      ];
+          hook_event_name: "PreToolUse",
+          tool_name: toolName,
+          tool_input: toolInput,
+          tool_use_id: "tool-1",
+        } as Parameters<HookCallback>[0],
+        "tool-1",
+        { signal: new AbortController().signal }
+      );
 
-      await expect(hook(stopInput(false, runningSubagent), undefined, abort)).resolves.toEqual({
-        decision: "block",
-        reason: STOP_BLOCK_REASON,
+    it.each(["Agent", "Task", "Bash"])(
+      "forces %s to the foreground while preserving its other input",
+      async (toolName) => {
+        await expect(
+          invoke(toolName, { description: "Inspect the vault", run_in_background: true })
+        ).resolves.toEqual({
+          hookSpecificOutput: {
+            hookEventName: "PreToolUse",
+            updatedInput: {
+              description: "Inspect the vault",
+              run_in_background: false,
+            },
+          },
+        });
+      }
+    );
+
+    it.each(["Agent", "Task"])("denies a remote-isolated %s", async (toolName) => {
+      await expect(
+        invoke(toolName, { description: "Inspect remotely", isolation: "remote" })
+      ).resolves.toEqual({
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: "deny",
+          permissionDecisionReason: expect.stringContaining("temporarily unavailable"),
+        },
       });
-      await expect(hook(stopInput(true, runningSubagent), undefined, abort)).resolves.toEqual({
-        decision: "block",
-        reason: STOP_BLOCK_REASON,
+    });
+
+    it("keeps worktree-isolated agents synchronous", async () => {
+      await expect(invoke("Agent", { isolation: "worktree" })).resolves.toEqual({
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          updatedInput: { isolation: "worktree", run_in_background: false },
+        },
       });
+    });
+
+    it("normalizes malformed foreground-tool input without throwing", async () => {
+      await expect(invoke("Bash", null)).resolves.toEqual({
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          updatedInput: { run_in_background: false },
+        },
+      });
+    });
+
+    it("leaves unrelated tools unchanged", async () => {
+      await expect(invoke("Read", { file_path: "note.md" })).resolves.toEqual({});
     });
   });
 });
