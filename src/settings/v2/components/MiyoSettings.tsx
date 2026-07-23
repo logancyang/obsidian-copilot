@@ -4,7 +4,7 @@ import { SegmentedControl } from "@/components/ui/segmented-control";
 import { SettingItem } from "@/components/ui/setting-item";
 import { SettingSection } from "@/components/ui/setting-section";
 import { SettingSwitch } from "@/components/ui/setting-switch";
-import { DEFAULT_SKILLS_FOLDER, MIYO_HOMEPAGE_URL } from "@/constants";
+import { MIYO_HOMEPAGE_URL } from "@/constants";
 import { useApp } from "@/context";
 import { cn } from "@/lib/utils";
 import { logWarn } from "@/logger";
@@ -20,6 +20,7 @@ import {
   MIYO_CONNECT_DEEPLINK_URL,
 } from "@/miyo/miyoUtils";
 import { useMiyoStatus } from "@/miyo/useMiyoStatus";
+import { deriveSkillsFolder } from "@/settings/copilotFolder";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import {
   type ConnectOutcome,
@@ -488,6 +489,11 @@ export const MiyoSettings: React.FC = () => {
   // `miyo-search` folder, or a write failure, must leave the toggle off rather
   // than claim success. A generation token drops a superseded flip (rapid
   // on/off, or unmount) so it can't commit stale state or fire a late Notice.
+  // Derive the skills folder from the configurable Copilot root rather than the
+  // retired `agentMode.skills.folder`, which no longer tracks the root: a
+  // non-default root would otherwise install/remove the skill in the wrong
+  // directory (and collide with the derived path the background seeder uses).
+  const skillsFolder = deriveSkillsFolder(settings);
   const handleToggleSearchSkill = useCallback(
     async (next: boolean) => {
       const attempt = (skillAttemptRef.current += 1);
@@ -498,7 +504,6 @@ export const MiyoSettings: React.FC = () => {
       const superseded = () => skillAttemptRef.current !== attempt;
       const unmounted = () => !mountedRef.current;
       setPendingSkillEnabled(next);
-      const folder = settings.agentMode?.skills?.folder ?? DEFAULT_SKILLS_FOLDER;
       try {
         // Import the agent-mode barrel lazily: it pulls in Node-only modules and
         // must never be evaluated on mobile (see main.ts). This handler only runs
@@ -508,7 +513,7 @@ export const MiyoSettings: React.FC = () => {
         // Nothing has touched disk yet, so bailing here can't diverge disk from flag.
         if (superseded() || unmounted()) return;
         if (next) {
-          const result = await installMiyoSearchSkill(app, folder);
+          const result = await installMiyoSearchSkill(app, skillsFolder);
           if (superseded()) return;
           if (result === "installed") {
             // Persist regardless of unmount: the files ARE on disk now.
@@ -524,7 +529,7 @@ export const MiyoSettings: React.FC = () => {
             new Notice("Couldn't install the Miyo search skill. Please try again.");
           }
         } else {
-          const result = await removeMiyoSearchSkill(app, folder);
+          const result = await removeMiyoSearchSkill(app, skillsFolder);
           if (superseded()) return;
           if (result === "failed") {
             // The skill is still on disk — keep the flag on so UI and disk agree,
@@ -552,7 +557,7 @@ export const MiyoSettings: React.FC = () => {
         if (!superseded() && !unmounted()) setPendingSkillEnabled(null);
       }
     },
-    [app, settings.agentMode?.skills?.folder]
+    [app, skillsFolder]
   );
 
   const commitUrl = useCallback(() => {
