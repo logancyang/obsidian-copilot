@@ -44,7 +44,7 @@ plugin loaded into a real vault. The CLI lives at
 npm run test:vault
 ```
 
-macOS only. Installs deps, builds, symlinks `main.js` / `manifest.json` /
+macOS only. Installs deps, builds, and copies `main.js` / `manifest.json` /
 `styles.css` from the current worktree into
 `$COPILOT_TEST_VAULT_PATH/.obsidian/plugins/copilot/`, then reloads the plugin
 via the Obsidian CLI. Requires `$COPILOT_TEST_VAULT_PATH` (user-level env var)
@@ -53,6 +53,10 @@ pointing at a vault that has been opened in Obsidian at least once.
 This is the canonical "get my changes running" step — don't hand-roll `npm run
 build && cp main.js …`. If the user has multiple Conductor worktrees, whichever
 one ran `test:vault` last wins; verify with the preflight in the next section.
+The copied manifest carries a development-only version suffix and visible tag
+with the commit, clean/dirty state, and bundle hash. A later build in the
+worktree does not mutate the deployed plugin; run `test:vault` again to deploy
+and reload the new build.
 
 ## Reset the test vault's settings
 
@@ -131,6 +135,7 @@ $OBS vault=$VAULT eval code='JSON.stringify({
   path:  app.vault.adapter.basePath,
   copilotLoaded: !!app.plugins.plugins.copilot,
   copilotVersion: app.plugins.manifests.copilot?.version,
+  buildTag: app.plugins.manifests.copilot?.description?.match(/dev build: ([^ |]+)/)?.[1],
   buildBranch: app.plugins.manifests.copilot?.description?.match(/branch: ([^ |]+)/)?.[1]
 })'
 ```
@@ -142,6 +147,8 @@ Check that:
   vault as a fresh renderer — silently. The plugin may not be ready yet; if
   `copilotLoaded` is `false`, call `app.plugins.loadPlugin("copilot")` via
   `eval` and re-probe.)
+- `buildTag` starts with the current worktree's short commit, reports the
+  expected clean/dirty state, and stays unchanged until the next deployment
 - `buildBranch` matches the worktree branch you actually built from. Multiple
   Conductor workspaces sharing one test vault means whichever ran
   `npm run test:vault` last wins — _verify_, don't assume.
