@@ -12,6 +12,14 @@ jest.mock("@/agentMode", () => ({
   removeMiyoSearchSkill: (...a: unknown[]) => removeMiyoSearchSkill(...a),
 }));
 
+// Skills folder derives from the configurable Copilot root. Mock the pure
+// deriver so a test can point the root anywhere and assert the toggle installs
+// to the derived path, without pulling in the real obsidian normalizePath.
+jest.mock("@/settings/copilotFolder", () => ({
+  deriveSkillsFolder: (s: { copilotFolder?: string }) =>
+    `${(s.copilotFolder || "copilot").replace(/\/+$/, "")}/skills`,
+}));
+
 // Persisted-settings surface: capture writes and feed a controllable snapshot.
 const updateSetting = jest.fn<void, unknown[]>();
 let currentSettings = { ...DEFAULT_SETTINGS };
@@ -128,6 +136,29 @@ it("installs the skill, commits the flag, and confirms with a Notice on enable",
   await waitFor(() => expect(installMiyoSearchSkill).toHaveBeenCalledTimes(1));
   expect(updateSetting).toHaveBeenCalledWith("enableMiyoSearchSkill", true);
   expect(NoticeMock).toHaveBeenCalledWith("Miyo search skill installed");
+});
+
+it("installs to the folder derived from a non-default Copilot root, not the retired field", async () => {
+  // Regression: a customized root must reach the derived skills folder. The
+  // retired agentMode.skills.folder no longer tracks the root, so installing
+  // against it would write to the wrong directory (and collide with the path
+  // the background seeder uses).
+  currentSettings = {
+    ...DEFAULT_SETTINGS,
+    enableMiyoSearchSkill: false,
+    copilotFolder: "team/copilot",
+    agentMode: {
+      ...DEFAULT_SETTINGS.agentMode,
+      skills: { ...DEFAULT_SETTINGS.agentMode.skills, folder: "copilot/skills" },
+    },
+  };
+  installMiyoSearchSkill.mockResolvedValue("installed");
+  render(<MiyoSettings />);
+
+  fireEvent.click(toggle());
+
+  await waitFor(() => expect(installMiyoSearchSkill).toHaveBeenCalledTimes(1));
+  expect(installMiyoSearchSkill).toHaveBeenCalledWith(expect.anything(), "team/copilot/skills");
 });
 
 it("does NOT commit the flag on a collision, and explains why", async () => {
