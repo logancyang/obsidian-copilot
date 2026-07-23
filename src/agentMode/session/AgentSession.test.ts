@@ -2434,6 +2434,47 @@ describe("AgentSession.create (via start)", () => {
     expect(session.getState()?.model?.current.effort).toBe("high");
   });
 
+  it("keeps the user-applied model when a setMode response carries a stale model", async () => {
+    // A mode-switch response is a full BackendState snapshot; if it was computed
+    // against pre-switch state it must not clobber the applied model. Only the
+    // model dimension is pinned — the mode change itself lands.
+    const mock = makeMockBackend();
+    const reported: BackendState = {
+      model: {
+        current: { baseModelId: "gpt-5", effort: null },
+        apply: { kind: "setModel" },
+        availableModels: [
+          { baseModelId: "gpt-5", name: "GPT-5", provider: "openai", effortOptions: [] },
+          { baseModelId: "sonnet", name: "Sonnet", provider: "anthropic", effortOptions: [] },
+        ],
+      },
+      mode: null,
+    };
+    const switched: BackendState = {
+      model: { ...reported.model!, current: { baseModelId: "sonnet", effort: null } },
+      mode: null,
+    };
+    mock.newSession.mockResolvedValueOnce({ sessionId: "acp-1", state: reported });
+    mock.setSessionModel.mockResolvedValueOnce(switched);
+    mock.setSessionMode.mockResolvedValueOnce({
+      model: reported.model,
+      mode: { current: "plan", options: [{ value: "plan", label: "Plan" }], apply: {} },
+    });
+    const session = AgentSession.start({
+      backend: mock.asBackend,
+      cwd: "/vault",
+      internalId: "internal-1",
+      backendId: "opencode",
+      defaultModelSelection: { baseModelId: "sonnet", effort: null },
+      getDescriptor: () => makeWireOnlyDescriptor(),
+    });
+    await session.ready;
+    expect(session.getState()?.model?.current.baseModelId).toBe("sonnet");
+    await session.setMode("plan");
+    expect(session.getState()?.model?.current.baseModelId).toBe("sonnet");
+    expect(session.getState()?.mode?.current).toBe("plan");
+  });
+
   it("seeds config-option opencode effort via the effort option, not the model id", async () => {
     // Regression: a cross-backend pick to config-option opencode (≥1.15.13)
     // must set the bare model on the model config option and the effort on the

@@ -308,6 +308,20 @@ export interface AgentSessionStateOptions extends ProjectContextUpdatesHooks {
 }
 
 /**
+ * Where a `BackendState` write originates; `applyState` derives its merge
+ * policy from this. The model dimension is user-owned — backends never
+ * self-switch it — so only a `"confirmed"` write may move the pinned model,
+ * and `"reported"` snapshots are reconciled against it.
+ */
+type StateProvenance =
+  /** Optimistic display seed, or a revert to the last reported state. */
+  | "seed"
+  /** Response to a user model apply (`setModel` / `setConfigOption`). */
+  | "confirmed"
+  /** Any other backend snapshot (`setMode` response, `state_changed` push). */
+  | "reported";
+
+/**
  * Per-chat Agent Mode session. Owns its `AgentMessageStore`, the lifecycle
  * of one backend session id, and the `AbortController` that cancels in-flight
  * turns.
@@ -497,7 +511,7 @@ export class AgentSession {
     if ("backendSessionId" in opts) {
       this.backendSessionId = opts.backendSessionId;
       const originalState = opts.initialState ?? null;
-      this.currentState = seedSelectionIntoState(originalState, opts.defaultModelSelection);
+      this.applyState(seedSelectionIntoState(originalState, opts.defaultModelSelection), "seed");
       this.unregisterSessionHandler = this.backend.registerSessionHandler(
         opts.backendSessionId,
         (event) => this.handleSessionEvent(event)
@@ -516,9 +530,9 @@ export class AgentSession {
       // Eagerly seed from the preloader cache so the picker doesn't fall
       // back to the prior session's `current` while `backend.newSession` is
       // in flight. `initialize()` replaces this with the agent's response.
-      this.currentState = seedSelectionIntoState(
-        opts.initialCachedState ?? null,
-        opts.defaultModelSelection
+      this.applyState(
+        seedSelectionIntoState(opts.initialCachedState ?? null, opts.defaultModelSelection),
+        "seed"
       );
       this.ready = this.initialize(opts);
     }
@@ -572,7 +586,7 @@ export class AgentSession {
         : "agent did not report model state";
       logInfo(`[AgentMode] session ${resp.sessionId} ${modelLog}`);
       this.backendSessionId = resp.sessionId;
-      this.currentState = seedSelectionIntoState(resp.state, defaultModelSelection);
+      this.applyState(seedSelectionIntoState(resp.state, defaultModelSelection), "seed");
       this.unregisterSessionHandler = this.backend.registerSessionHandler(resp.sessionId, (event) =>
         this.handleSessionEvent(event)
       );
@@ -622,9 +636,20 @@ export class AgentSession {
       sessionId: this.backendSessionId,
       modelId,
     });
-    this.currentState = next;
-    this.rememberAppliedModel(next);
+    this.applyState(next, "confirmed");
     this.notifyModelChanged();
+  }
+
+  /**
+   * Sole write path for `currentState`. Centralizes the per-dimension
+   * ownership policy so no call site can bypass it: a `"confirmed"` response
+   * re-pins the user-applied model, a `"reported"` snapshot has its model
+   * dimension reconciled against that pin (see `reconcileAppliedModel`), and
+   * a `"seed"` is trusted verbatim as transient display state.
+   */
+  private applyState(next: BackendState | null, provenance: StateProvenance): void {
+    if (next && provenance === "confirmed") this.rememberAppliedModel(next);
+    this.currentState = next && provenance === "reported" ? this.reconcileAppliedModel(next) : next;
   }
 
   /** Record the model just applied so a stale backend push can't revert it. */
@@ -713,7 +738,7 @@ export class AgentSession {
     // reported state makes the guard fire; no blink results because no notify
     // fires between this reset and the confirming setModel below. Guard-less
     // setModel backends round-trip regardless, so they're unaffected.
-    this.currentState = originalState;
+    this.applyState(originalState, "seed");
     try {
       // Clearing effort to the agent default on a config-option backend whose
       // process baked a concrete effort: the base already matches, so
@@ -727,7 +752,7 @@ export class AgentSession {
       await descriptor.applySelection(this, selection);
     } catch (e) {
       logWarn(`[AgentMode] could not apply seeded selection ${encoded}; reverting seed`, e);
-      this.currentState = originalState;
+      this.applyState(originalState, "seed");
       this.notifyModelChanged();
     }
   }
@@ -745,8 +770,7 @@ export class AgentSession {
       configId,
       value,
     });
-    this.currentState = next;
-    this.rememberAppliedModel(next);
+    this.applyState(next, "confirmed");
     this.notifyModelChanged();
     this.clearCurrentPlanIfModeLeft();
   }
@@ -766,7 +790,7 @@ export class AgentSession {
       sessionId: this.backendSessionId,
       modeId,
     });
-    this.currentState = next;
+    this.applyState(next, "reported");
     this.notifyModelChanged();
     this.clearCurrentPlanIfModeLeft();
   }
@@ -1776,7 +1800,7 @@ export class AgentSession {
       return;
     }
     if (update.sessionUpdate === "state_changed") {
-      this.currentState = this.reconcileAppliedModel(update.state);
+      this.applyState(update.state, "reported");
       this.notifyModelChanged();
       this.clearCurrentPlanIfModeLeft();
       return;
