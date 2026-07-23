@@ -1559,7 +1559,7 @@ describe("AgentSessionManager default-model settings subscription", () => {
       resolveReady = resolve;
     });
     // A session that is still starting (no backend session id yet) would throw
-    // from setModel/setConfigOption, so the re-apply must wait on `ready`.
+    // from setModel/applyConfigOption, so the re-apply must wait on `ready`.
     sessionCreateSpy.mockImplementationOnce((opts) => {
       const session = makeMockSession({ internalId: opts.internalId, backendId: opts.backendId });
       Object.defineProperty(session, "ready", { value: ready });
