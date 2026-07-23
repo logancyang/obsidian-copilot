@@ -313,7 +313,7 @@ export interface AgentSessionStateOptions extends ProjectContextUpdatesHooks {
  * self-switch it — so only a `"confirmed"` write may move the pinned model,
  * and `"reported"` snapshots are reconciled against it.
  */
-export type StateProvenance =
+type StateProvenance =
   /** Optimistic display seed, or a revert to the last reported state. */
   | "seed"
   /** Response to a user model apply (`setModel` / a confirmed config option). */

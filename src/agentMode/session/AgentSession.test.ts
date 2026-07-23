@@ -2873,7 +2873,7 @@ describe("AgentSession.setModel", () => {
   });
 });
 
-describe("AgentSession.setConfigOption", () => {
+describe("AgentSession.applyConfigOption", () => {
   it("forwards to backend and replaces state from response", async () => {
     const mock = makeMockBackend();
     mock.setSessionConfigOption.mockResolvedValueOnce(emptyState());

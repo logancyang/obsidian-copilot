@@ -171,7 +171,7 @@ function makeMockSession(overrides: {
     dispose: mockSessionDispose,
     setModel: jest.fn(),
     setMode: jest.fn(),
-    setConfigOption: jest.fn(),
+    applyConfigOption: jest.fn(),
     getLabel: () => null,
     setLabel: jest.fn(),
     getSessionUsage: () => null,

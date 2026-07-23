@@ -357,7 +357,7 @@ export class AgentSessionManager {
   // prompter consults this to hard-deny write/exec tools for them.
   private readonly readOnlyFanoutSessions = new Set<SessionId>();
   // Serializes per-session default-model re-applies so two rapid settings
-  // changes can't race their setModel/setConfigOption round-trips and leave
+  // changes can't race their setModel/applyConfigOption round-trips and leave
   // the session on a stale model. Each link re-reads the latest default, so
   // the final settings value always wins.
   private readonly defaultApplyChains = new Map<string, Promise<void>>();
