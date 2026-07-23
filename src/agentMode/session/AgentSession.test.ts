@@ -2705,7 +2705,8 @@ function makeConfigOptionDescriptor(): BackendDescriptor {
           const refreshed = session.getState()?.model?.apply;
           const effortConfigId =
             refreshed?.kind === "setConfigOption" ? refreshed.effortConfigId : undefined;
-          if (effortConfigId) await session.setConfigOption(effortConfigId, selection.effort);
+          if (effortConfigId)
+            await session.applyConfigOption(effortConfigId, selection.effort, "confirmed");
         }
         return;
       }
@@ -2811,7 +2812,8 @@ function makeDescriptorWireWithoutEffort(): BackendDescriptor {
       const currentBase = session.getState()?.model?.current.baseModelId;
       if (currentBase !== selection.baseModelId)
         await session.applyModelWireId(wire.encode(selection));
-      if (selection.effort !== null) await session.setConfigOption("effort", selection.effort);
+      if (selection.effort !== null)
+        await session.applyConfigOption("effort", selection.effort, "confirmed");
     },
   } as unknown as BackendDescriptor;
 }
@@ -2881,7 +2883,7 @@ describe("AgentSession.setConfigOption", () => {
       internalId: "internal-1",
       backendId: "claude",
     });
-    await session.setConfigOption("effort", "high");
+    await session.applyConfigOption("effort", "high", "confirmed");
     expect(mock.setSessionConfigOption).toHaveBeenCalledWith({
       sessionId: "acp-1",
       configId: "effort",
@@ -2903,7 +2905,7 @@ describe("AgentSession.setConfigOption", () => {
       onStatusChanged: jest.fn(),
       onModelChanged,
     });
-    await session.setConfigOption("effort", "low");
+    await session.applyConfigOption("effort", "low", "confirmed");
     expect(onModelChanged).toHaveBeenCalledTimes(1);
   });
 
@@ -2924,7 +2926,7 @@ describe("AgentSession.setConfigOption", () => {
       onStatusChanged: jest.fn(),
       onModelChanged,
     });
-    await expect(session.setConfigOption("effort", "high")).rejects.toBeInstanceOf(
+    await expect(session.applyConfigOption("effort", "high", "confirmed")).rejects.toBeInstanceOf(
       MethodUnsupportedError
     );
     expect(onModelChanged).not.toHaveBeenCalled();

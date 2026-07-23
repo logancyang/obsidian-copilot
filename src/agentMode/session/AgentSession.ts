@@ -110,7 +110,7 @@ const EMPTY_ADDITIONAL_DIRECTORIES: string[] = Object.freeze([]) as unknown as s
  *
  * Only `baseModelId` is seeded — `effort` is left as the backend reported.
  * For descriptor-style backends (Claude) effort lives out-of-band and is
- * applied via `applyInitialSessionConfig` → `setConfigOption`; seeding it
+ * applied via `applyInitialSessionConfig` → `applyConfigOption`; seeding it
  * here would make that step see a matching value and silently skip the
  * real config write. For wire-effort backends (opencode-style) the
  * subsequent `setModel` call carries the user's effort through the
@@ -233,7 +233,7 @@ export interface AgentSessionStartOptions extends ProjectContextUpdatesHooks {
    * Persisted user preference to apply after the backend's initial session
    * state. The session seeds it optimistically so the first picker paint
    * shows the user's pick, then confirms with the backend via setModel
-   * (and, for descriptor-style backends, setConfigOption — handled by the
+   * (and, for descriptor-style backends, applyConfigOption — handled by the
    * manager's `applyInitialSessionConfig` hook).
    */
   defaultModelSelection?: ModelSelection;
@@ -316,7 +316,7 @@ export interface AgentSessionStateOptions extends ProjectContextUpdatesHooks {
 export type StateProvenance =
   /** Optimistic display seed, or a revert to the last reported state. */
   | "seed"
-  /** Response to a user model apply (`setModel` / `setConfigOption`). */
+  /** Response to a user model apply (`setModel` / a confirmed config option). */
   | "confirmed"
   /** Any other backend snapshot (`setMode` response, `state_changed` push). */
   | "reported";
@@ -415,8 +415,8 @@ export class AgentSession {
    */
   private currentState: BackendState | null = null;
   /**
-   * The model base id the user/seed last explicitly applied via setModel /
-   * setConfigOption. Used to reject a stale "reported" snapshot (state_changed
+   * The model base id the user/seed last explicitly applied via setModel or
+   * a confirmed applyConfigOption. Used to reject a stale "reported" snapshot (state_changed
    * push, setMode response) that would silently revert it (these backends
    * never self-switch the model).
    */
@@ -692,7 +692,7 @@ export class AgentSession {
   async applyModelWireId(wireId: string): Promise<void> {
     const apply = this.currentState?.model?.apply;
     if (apply?.kind === "setConfigOption") {
-      await this.setConfigOption(apply.configId, wireId);
+      await this.applyConfigOption(apply.configId, wireId, "confirmed");
       return;
     }
     await this.setModel(wireId);
@@ -759,22 +759,15 @@ export class AgentSession {
   }
 
   /**
-   * Set a session configuration option carrying a user model/effort apply
-   * (effort, or the model option on config-option-backed catalogs). The
-   * response is a model confirmation, so it re-pins the applied model. Mode
-   * changes routed through a config option must call `applyConfigOption`
-   * with `"reported"` instead — their response snapshots are not model
-   * confirmations, and a stale one must neither clobber the applied model
-   * nor re-pin `lastAppliedModelBaseId` to the stale value.
-   */
-  async setConfigOption(configId: string, value: string): Promise<void> {
-    return this.applyConfigOption(configId, value, "confirmed");
-  }
-
-  /**
-   * Config-option round-trip; `provenance` carries the caller's intent.
-   * Reuses `notifyModelChanged` because the picker treats model and
-   * configOption changes as one channel.
+   * Config-option round-trip; `provenance` carries the caller's intent. A
+   * user model/effort apply (effort, or the model option on config-option-
+   * backed catalogs) passes `"confirmed"` — the response is a model
+   * confirmation and re-pins the applied model. A mode change routed through
+   * a config option passes `"reported"` — its response snapshot is not a
+   * model confirmation, and a stale one must neither clobber the applied
+   * model nor re-pin `lastAppliedModelBaseId` to the stale value. Reuses
+   * `notifyModelChanged` because the picker treats model and configOption
+   * changes as one channel.
    */
   async applyConfigOption(
     configId: string,

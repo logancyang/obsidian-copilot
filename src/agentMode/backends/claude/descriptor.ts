@@ -281,7 +281,7 @@ export const ClaudeBackendDescriptor: BackendDescriptor = {
     const cfgOpt = claudeWire.effortConfigFor?.(selection.baseModelId);
     if (!cfgOpt) return;
     try {
-      await session.setConfigOption(cfgOpt.id, selection.effort);
+      await session.applyConfigOption(cfgOpt.id, selection.effort, "confirmed");
     } catch (e) {
       if (!(e instanceof MethodUnsupportedError)) throw e;
     }
@@ -391,7 +391,7 @@ async function replayPersistedEffort(
     const cfgOpt = ClaudeBackendDescriptor.wire.effortConfigFor?.(current.baseModelId);
     if (!cfgOpt) return true;
     try {
-      await session.setConfigOption(cfgOpt.id, persistedEffort);
+      await session.applyConfigOption(cfgOpt.id, persistedEffort, "confirmed");
     } catch (e) {
       if (e instanceof MethodUnsupportedError) return true;
       logWarn(`[AgentMode] could not apply default effort ${persistedEffort}`, e);
