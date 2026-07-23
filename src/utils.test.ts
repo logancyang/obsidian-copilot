@@ -4,6 +4,7 @@ import {
   extractNoteFiles,
   extractTemplateNoteFiles,
   formatDateTime,
+  areEmbeddingModelsSame,
   getModelInfo,
   getNotesFromPath,
   getNotesFromTags,
@@ -19,6 +20,21 @@ import {
 } from "./utils";
 import { TimeoutError } from "./error";
 import { ChatModelProviders } from "./constants";
+import { EMBEDDING_MODEL_IDENTITY_PREFIX } from "./utils/embeddingDimensions";
+
+describe("areEmbeddingModelsSame", () => {
+  it("does not apply legacy Nomic aliases to configured dimension identities", () => {
+    const model512 = `${EMBEDDING_MODEL_IDENTITY_PREFIX}nomic-embed-text-v1.5|dimensions=512`;
+    const model1024 = `${EMBEDDING_MODEL_IDENTITY_PREFIX}nomic-embed-text-v1.5|dimensions=1024`;
+
+    expect(areEmbeddingModelsSame(model512, model1024)).toBe(false);
+  });
+
+  it("keeps legacy embedding aliases compatible when neither model has an identity prefix", () => {
+    expect(areEmbeddingModelsSame("nomic-embed-text-v1", "nomic-embed-text-v1.5")).toBe(true);
+    expect(areEmbeddingModelsSame("small", "cohereai")).toBe(true);
+  });
+});
 
 // Mock Obsidian's TFile class
 jest.mock("obsidian", () => {

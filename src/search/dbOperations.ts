@@ -515,7 +515,8 @@ export class DBOperations {
     }
 
     if (prevEmbeddingModel) {
-      const currEmbeddingModel = EmbeddingsManager.getModelName(embeddingInstance);
+      const currEmbeddingModel =
+        EmbeddingsManager.getInstance().getEmbeddingModelIdentity(embeddingInstance);
 
       if (!areEmbeddingModelsSame(prevEmbeddingModel, currEmbeddingModel)) {
         // Model has changed, notify user and rebuild DB

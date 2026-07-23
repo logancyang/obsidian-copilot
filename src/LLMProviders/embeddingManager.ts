@@ -5,6 +5,10 @@ import { CustomError } from "@/error";
 import { logInfo } from "@/logger";
 import { getModelKeyFromModel, getSettings, subscribeToSettingsChange } from "@/settings/model";
 import { err2String, safeFetch } from "@/utils";
+import {
+  getEmbeddingModelIdentity,
+  getValidEmbeddingDimensions,
+} from "@/utils/embeddingDimensions";
 import { Embeddings } from "@langchain/core/embeddings";
 import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
 import { OllamaEmbeddings } from "@langchain/ollama";
@@ -31,6 +35,13 @@ const EMBEDDING_PROVIDER_CONSTRUCTORS = {
 } as const;
 
 type EmbeddingProviderConstructorMap = typeof EMBEDDING_PROVIDER_CONSTRUCTORS;
+
+/** Returns whether an error was raised by the local embedding dimension validation. */
+function isEmbeddingDimensionMismatchError(error: unknown): error is Error {
+  return (
+    error instanceof Error && error.message.startsWith("Embedding dimension mismatch: configured ")
+  );
+}
 
 export default class EmbeddingManager {
   private activeEmbeddingModels: CustomModel[];
@@ -128,6 +139,27 @@ export default class EmbeddingManager {
     }
   }
 
+  /**
+   * Returns the internal identity for an embeddings instance and the selected model configuration.
+   *
+   * @param embeddingsInstance - The instantiated embeddings provider.
+   * @returns A dimension-aware identity for configured OpenAI-compatible models.
+   */
+  getEmbeddingModelIdentity(embeddingsInstance: Embeddings): string {
+    const modelName = EmbeddingManager.getModelName(embeddingsInstance);
+    const embeddingModelKey = getSettings().embeddingModelKey;
+    const currentModel = this.activeEmbeddingModels.find(
+      (model) => getModelKeyFromModel(model) === embeddingModelKey
+    );
+    const dimensions =
+      currentModel &&
+      (currentModel.provider as EmbeddingModelProviders) === EmbeddingModelProviders.OPENAI_FORMAT
+        ? currentModel.dimensions
+        : undefined;
+
+    return getEmbeddingModelIdentity(modelName, dimensions);
+  }
+
   // Get the custom model that matches the name and provider from the model key
   private getCustomModel(modelKey: string): CustomModel {
     return this.activeEmbeddingModels.filter((model) => {
@@ -183,6 +215,7 @@ export default class EmbeddingManager {
   private async getEmbeddingConfig(customModel: CustomModel): Promise<Record<string, unknown>> {
     const settings = getSettings();
     const modelName = customModel.name;
+    const validDimensions = getValidEmbeddingDimensions(customModel.dimensions);
 
     const baseConfig = {
       maxRetries: 3,
@@ -282,6 +315,7 @@ export default class EmbeddingManager {
         modelName,
         openAIApiKey: await getDecryptedKey(customModel.apiKey || ""),
         batchSize: getSettings().embeddingBatchSize,
+        ...(validDimensions === undefined ? {} : { dimensions: validDimensions }),
         configuration: {
           baseURL: customModel.baseUrl,
           fetch: customModel.enableCors ? safeFetch : undefined,
@@ -319,7 +353,19 @@ export default class EmbeddingManager {
       const modelToTest = { ...model, enableCors };
       const config = await this.getEmbeddingConfig(modelToTest);
       const testModel = new (this.getProviderConstructor(modelToTest))(config);
-      await testModel.embedQuery("test");
+      const embedding = await testModel.embedQuery("test");
+      const validDimensions = getValidEmbeddingDimensions(modelToTest.dimensions);
+
+      if (
+        (modelToTest.provider as EmbeddingModelProviders) ===
+          EmbeddingModelProviders.OPENAI_FORMAT &&
+        validDimensions !== undefined &&
+        embedding.length !== validDimensions
+      ) {
+        throw new Error(
+          `Embedding dimension mismatch: configured ${validDimensions}, but the provider returned ${embedding.length}.`
+        );
+      }
     };
 
     try {
@@ -327,6 +373,10 @@ export default class EmbeddingManager {
       await tryPing(false);
       return true;
     } catch (firstError) {
+      if (isEmbeddingDimensionMismatchError(firstError)) {
+        throw firstError;
+      }
+
       logInfo("First ping attempt failed, trying with CORS...");
       try {
         // Second try with CORS
@@ -336,6 +386,10 @@ export default class EmbeddingManager {
         );
         return true;
       } catch (error) {
+        if (isEmbeddingDimensionMismatchError(error)) {
+          throw error;
+        }
+
         const msg =
           "\nwithout CORS Error: " +
           err2String(firstError) +

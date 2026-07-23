@@ -166,7 +166,7 @@ export interface CustomModel {
   capabilities?: ModelCapability[];
   displayName?: string;
 
-  // Embedding models only (Jina at the moment)
+  // Embedding models only
   dimensions?: number;
   // OpenAI specific fields
   openAIOrgId?: string;

@@ -37,6 +37,7 @@ import { err2String, getProviderInfo, getProviderLabel, omit } from "@/utils";
 import { buildCurlCommandForModel } from "@/utils/curlCommand";
 import { CheckCircle2, ChevronDown, Loader2, XCircle } from "lucide-react";
 import { getApiKeyForProvider } from "@/utils/modelUtils";
+import { EmbeddingDimensionsField } from "./EmbeddingDimensionsField";
 import { Notice } from "obsidian";
 import React, { useState } from "react";
 
@@ -79,6 +80,7 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
   const [dialogElement, setDialogElement] = useState<HTMLDivElement | null>(null);
   const [isOpen, setIsOpen] = useState(() => hasRequiredExtraSettings(defaultProvider));
   const [isVerifying, setIsVerifying] = useState(false);
+  const [isEmbeddingDimensionsValid, setIsEmbeddingDimensionsValid] = useState(true);
   const [verifyStatus, setVerifyStatus] = useState<"idle" | "success" | "failed">("idle");
   const [errors, setErrors] = useState<FormErrors>({
     name: false,
@@ -218,7 +220,13 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
 
   // Check if buttons should be disabled
   const isButtonDisabled = (): boolean => {
-    return isVerifying || !isFormValid();
+    const showEmbeddingDimensions =
+      isEmbeddingModel &&
+      (model.provider as EmbeddingModelProviders) === EmbeddingModelProviders.OPENAI_FORMAT;
+
+    return (
+      isVerifying || !isFormValid() || (showEmbeddingDimensions && !isEmbeddingDimensionsValid)
+    );
   };
 
   const handleAdd = () => {
@@ -239,6 +247,7 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
   const handleProviderChange = (provider: ChatModelProviders) => {
     setProviderInfo(getProviderInfo(provider));
     setVerifyStatus("idle");
+    setIsEmbeddingDimensionsValid(true);
     setModel({
       ...model,
       provider,
@@ -633,6 +642,16 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
               </p>
             )}
           </FormField>
+
+          {isEmbeddingModel &&
+            (model.provider as EmbeddingModelProviders) ===
+              EmbeddingModelProviders.OPENAI_FORMAT && (
+              <EmbeddingDimensionsField
+                dimensions={model.dimensions}
+                onChange={(dimensions) => updateModelWithReset({ dimensions })}
+                onValidityChange={setIsEmbeddingDimensionsValid}
+              />
+            )}
 
           {!isEmbeddingModel && (
             <FormField
