@@ -22,6 +22,7 @@
     "prepare": "husky",
     "prompt:debug": "node scripts/printPromptDebug.js",
     "test:vault": "bash scripts/test-vault.sh",
+    "test:vault:script": "bash scripts/test-vault.test.sh",
     "test:reset-data": "bash scripts/test-reset-data.sh"
   },
   "keywords": [],
