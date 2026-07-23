@@ -759,11 +759,36 @@ export class AgentSession {
   }
 
   /**
-   * Set a session configuration option (e.g. effort). Reuses
-   * `notifyModelChanged` because the picker treats model and configOption
-   * changes as one channel.
+   * Set a session configuration option carrying a user model/effort apply
+   * (effort, or the model option on config-option-backed catalogs). The
+   * response is a model confirmation, so it re-pins the applied model. Mode
+   * changes routed through a config option must use `setModeConfigOption`
+   * instead — their response snapshots are not model confirmations.
    */
   async setConfigOption(configId: string, value: string): Promise<void> {
+    return this.applyConfigOption(configId, value, "confirmed");
+  }
+
+  /**
+   * Apply a config-option-backed mode change (opencode). The response is a
+   * whole-state snapshot, not a user model apply, so it lands as `"reported"`:
+   * a stale model in it can neither clobber the applied model nor re-pin
+   * `lastAppliedModelBaseId` to the stale value.
+   */
+  async setModeConfigOption(configId: string, value: string): Promise<void> {
+    return this.applyConfigOption(configId, value, "reported");
+  }
+
+  /**
+   * Shared config-option round-trip; `provenance` carries the caller's intent.
+   * Reuses `notifyModelChanged` because the picker treats model and
+   * configOption changes as one channel.
+   */
+  private async applyConfigOption(
+    configId: string,
+    value: string,
+    provenance: StateProvenance
+  ): Promise<void> {
     if (this.getStatus() === "closed") throw new Error("Session is closed");
     if (!this.backendSessionId) throw new Error("Session is still starting");
     const next = await this.backend.setSessionConfigOption({
@@ -771,7 +796,7 @@ export class AgentSession {
       configId,
       value,
     });
-    this.applyState(next, "confirmed");
+    this.applyState(next, provenance);
     this.notifyModelChanged();
     this.clearCurrentPlanIfModeLeft();
   }

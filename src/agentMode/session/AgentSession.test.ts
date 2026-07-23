@@ -2475,6 +2475,55 @@ describe("AgentSession.create (via start)", () => {
     expect(session.getState()?.mode?.current).toBe("plan");
   });
 
+  it("keeps the user-applied model when a config-option mode apply carries a stale model", async () => {
+    // opencode routes mode switches through setSessionConfigOption; the response
+    // is a whole-state snapshot that can be stale. It must not clobber the
+    // applied model, and it must not re-pin lastAppliedModelBaseId to the stale
+    // value — otherwise a later truthful state_changed would be "reconciled"
+    // back to the stale model.
+    const mock = makeMockBackend();
+    const reported: BackendState = {
+      model: {
+        current: { baseModelId: "gpt-5", effort: null },
+        apply: { kind: "setModel" },
+        availableModels: [
+          { baseModelId: "gpt-5", name: "GPT-5", provider: "openai", effortOptions: [] },
+          { baseModelId: "sonnet", name: "Sonnet", provider: "anthropic", effortOptions: [] },
+        ],
+      },
+      mode: null,
+    };
+    const switched: BackendState = {
+      model: { ...reported.model!, current: { baseModelId: "sonnet", effort: null } },
+      mode: null,
+    };
+    mock.newSession.mockResolvedValueOnce({ sessionId: "acp-1", state: reported });
+    mock.setSessionModel.mockResolvedValueOnce(switched);
+    mock.setSessionConfigOption.mockResolvedValueOnce({
+      model: reported.model,
+      mode: { current: "plan", options: [{ value: "plan", label: "Plan" }], apply: {} },
+    });
+    const session = AgentSession.start({
+      backend: mock.asBackend,
+      cwd: "/vault",
+      internalId: "internal-1",
+      backendId: "opencode",
+      defaultModelSelection: { baseModelId: "sonnet", effort: null },
+      getDescriptor: () => makeWireOnlyDescriptor(),
+    });
+    await session.ready;
+    expect(session.getState()?.model?.current.baseModelId).toBe("sonnet");
+    await session.setModeConfigOption("mode", "plan");
+    expect(session.getState()?.model?.current.baseModelId).toBe("sonnet");
+    expect(session.getState()?.mode?.current).toBe("plan");
+    // Pin uncorrupted: a truthful push carrying the pick is honored as-is.
+    mock.emit({
+      sessionId: "acp-1",
+      update: { sessionUpdate: "state_changed", state: switched },
+    });
+    expect(session.getState()?.model?.current.baseModelId).toBe("sonnet");
+  });
+
   it("seeds config-option opencode effort via the effort option, not the model id", async () => {
     // Regression: a cross-backend pick to config-option opencode (≥1.15.13)
     // must set the bare model on the model config option and the effort on the

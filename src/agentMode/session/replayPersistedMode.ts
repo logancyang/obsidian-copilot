@@ -32,7 +32,7 @@ export async function replayPersistedMode(
     if (spec.kind === "setMode") {
       await session.setMode(spec.nativeId);
     } else {
-      await session.setConfigOption(spec.configId, spec.value);
+      await session.setModeConfigOption(spec.configId, spec.value);
     }
   } catch (e) {
     if (e instanceof MethodUnsupportedError) return;
