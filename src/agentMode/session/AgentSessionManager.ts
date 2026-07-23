@@ -2119,7 +2119,7 @@ export class AgentSessionManager {
     if (spec.kind === "setMode") {
       await session.setMode(spec.nativeId);
     } else {
-      await session.setModeConfigOption(spec.configId, spec.value);
+      await session.applyConfigOption(spec.configId, spec.value, "reported");
     }
     await this.persistDefaultMode(backendId, mode);
   }

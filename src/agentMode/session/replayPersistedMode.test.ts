@@ -8,22 +8,22 @@ type ModeState = NonNullable<BackendState["mode"]>;
 interface MockSessionParts {
   mode: ModeState | null;
   setMode?: jest.Mock;
-  setModeConfigOption?: jest.Mock;
+  applyConfigOption?: jest.Mock;
 }
 
-function makeSession({ mode, setMode, setModeConfigOption }: MockSessionParts): {
+function makeSession({ mode, setMode, applyConfigOption }: MockSessionParts): {
   session: AgentSession;
   setMode: jest.Mock;
-  setModeConfigOption: jest.Mock;
+  applyConfigOption: jest.Mock;
 } {
   const setModeMock = setMode ?? jest.fn().mockResolvedValue(undefined);
-  const setModeConfigOptionMock = setModeConfigOption ?? jest.fn().mockResolvedValue(undefined);
+  const applyConfigOptionMock = applyConfigOption ?? jest.fn().mockResolvedValue(undefined);
   const session = {
     getState: (): BackendState => ({ model: null, mode }),
     setMode: setModeMock,
-    setModeConfigOption: setModeConfigOptionMock,
+    applyConfigOption: applyConfigOptionMock,
   } as unknown as AgentSession;
-  return { session, setMode: setModeMock, setModeConfigOption: setModeConfigOptionMock };
+  return { session, setMode: setModeMock, applyConfigOption: applyConfigOptionMock };
 }
 
 const modeState = (current: CopilotMode | null, apply: ModeState["apply"]): ModeState => ({
@@ -45,14 +45,14 @@ describe("replayPersistedMode", () => {
     expect(setMode).toHaveBeenCalledWith("bypassPermissions");
   });
 
-  it("applies the persisted mode via setModeConfigOption for configOption-style backends", async () => {
-    const { session, setModeConfigOption } = makeSession({
+  it("applies the persisted mode as a reported config-option apply for configOption-style backends", async () => {
+    const { session, applyConfigOption } = makeSession({
       mode: modeState("default", {
         plan: { kind: "setConfigOption", configId: "approval", value: "plan" },
       }),
     });
     await replayPersistedMode(session, "plan");
-    expect(setModeConfigOption).toHaveBeenCalledWith("approval", "plan");
+    expect(applyConfigOption).toHaveBeenCalledWith("approval", "plan", "reported");
   });
 
   it("is a no-op when no mode is persisted", async () => {
@@ -79,14 +79,14 @@ describe("replayPersistedMode", () => {
 
   it("falls back to a no-op when the backend doesn't offer the persisted mode", async () => {
     // Persisted "auto" but this backend only advertises an apply spec for "plan".
-    const { session, setMode, setModeConfigOption } = makeSession({
+    const { session, setMode, applyConfigOption } = makeSession({
       mode: modeState("default", {
         plan: { kind: "setConfigOption", configId: "approval", value: "plan" },
       }),
     });
     await replayPersistedMode(session, "auto");
     expect(setMode).not.toHaveBeenCalled();
-    expect(setModeConfigOption).not.toHaveBeenCalled();
+    expect(applyConfigOption).not.toHaveBeenCalled();
   });
 
   it("swallows MethodUnsupportedError without throwing", async () => {

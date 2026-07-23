@@ -313,7 +313,7 @@ export interface AgentSessionStateOptions extends ProjectContextUpdatesHooks {
  * self-switch it — so only a `"confirmed"` write may move the pinned model,
  * and `"reported"` snapshots are reconciled against it.
  */
-type StateProvenance =
+export type StateProvenance =
   /** Optimistic display seed, or a revert to the last reported state. */
   | "seed"
   /** Response to a user model apply (`setModel` / `setConfigOption`). */
@@ -762,29 +762,21 @@ export class AgentSession {
    * Set a session configuration option carrying a user model/effort apply
    * (effort, or the model option on config-option-backed catalogs). The
    * response is a model confirmation, so it re-pins the applied model. Mode
-   * changes routed through a config option must use `setModeConfigOption`
-   * instead — their response snapshots are not model confirmations.
+   * changes routed through a config option must call `applyConfigOption`
+   * with `"reported"` instead — their response snapshots are not model
+   * confirmations, and a stale one must neither clobber the applied model
+   * nor re-pin `lastAppliedModelBaseId` to the stale value.
    */
   async setConfigOption(configId: string, value: string): Promise<void> {
     return this.applyConfigOption(configId, value, "confirmed");
   }
 
   /**
-   * Apply a config-option-backed mode change (opencode). The response is a
-   * whole-state snapshot, not a user model apply, so it lands as `"reported"`:
-   * a stale model in it can neither clobber the applied model nor re-pin
-   * `lastAppliedModelBaseId` to the stale value.
-   */
-  async setModeConfigOption(configId: string, value: string): Promise<void> {
-    return this.applyConfigOption(configId, value, "reported");
-  }
-
-  /**
-   * Shared config-option round-trip; `provenance` carries the caller's intent.
+   * Config-option round-trip; `provenance` carries the caller's intent.
    * Reuses `notifyModelChanged` because the picker treats model and
    * configOption changes as one channel.
    */
-  private async applyConfigOption(
+  async applyConfigOption(
     configId: string,
     value: string,
     provenance: StateProvenance

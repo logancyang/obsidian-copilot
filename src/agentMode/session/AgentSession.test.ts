@@ -2513,7 +2513,7 @@ describe("AgentSession.create (via start)", () => {
     });
     await session.ready;
     expect(session.getState()?.model?.current.baseModelId).toBe("sonnet");
-    await session.setModeConfigOption("mode", "plan");
+    await session.applyConfigOption("mode", "plan", "reported");
     expect(session.getState()?.model?.current.baseModelId).toBe("sonnet");
     expect(session.getState()?.mode?.current).toBe("plan");
     // Pin uncorrupted: a truthful push carrying the pick is honored as-is.
