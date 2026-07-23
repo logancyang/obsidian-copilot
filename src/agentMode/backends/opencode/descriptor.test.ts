@@ -165,7 +165,7 @@ describe("OpencodeBackendDescriptor.applySelection", () => {
   function makeSession(state: BackendState): {
     session: AgentSession;
     applyModelWireId: jest.Mock;
-    applyConfigOption: jest.Mock;
+    setConfigOption: jest.Mock;
   } {
     let currentState = state;
     const applyModelWireId = jest.fn(async () => {
@@ -184,20 +184,20 @@ describe("OpencodeBackendDescriptor.applySelection", () => {
           : null,
       };
     });
-    const applyConfigOption = jest.fn(async () => undefined);
+    const setConfigOption = jest.fn(async () => undefined);
     return {
       session: {
         getState: () => currentState,
         applyModelWireId,
-        applyConfigOption,
+        setConfigOption,
       } as unknown as AgentSession,
       applyModelWireId,
-      applyConfigOption,
+      setConfigOption,
     };
   }
 
   it("routes config-option-backed effort through the thought-level option", async () => {
-    const { session, applyModelWireId, applyConfigOption } = makeSession({
+    const { session, applyModelWireId, setConfigOption } = makeSession({
       model: {
         current: { baseModelId: "openai/gpt-5", effort: "low" },
         availableModels: [],
@@ -210,11 +210,11 @@ describe("OpencodeBackendDescriptor.applySelection", () => {
       effort: "high",
     });
     expect(applyModelWireId).not.toHaveBeenCalled();
-    expect(applyConfigOption).toHaveBeenCalledWith("effort", "high", "confirmed");
+    expect(setConfigOption).toHaveBeenCalledWith("effort", "high", "confirmed");
   });
 
   it("switches the base model before applying its config-option-backed effort", async () => {
-    const { session, applyModelWireId, applyConfigOption } = makeSession({
+    const { session, applyModelWireId, setConfigOption } = makeSession({
       model: {
         current: { baseModelId: "anthropic/claude-sonnet", effort: "low" },
         availableModels: [],
@@ -227,9 +227,9 @@ describe("OpencodeBackendDescriptor.applySelection", () => {
       effort: "high",
     });
     expect(applyModelWireId).toHaveBeenCalledWith("openai/gpt-5");
-    expect(applyConfigOption).toHaveBeenCalledWith("effort", "high", "confirmed");
+    expect(setConfigOption).toHaveBeenCalledWith("effort", "high", "confirmed");
     expect(applyModelWireId.mock.invocationCallOrder[0]).toBeLessThan(
-      applyConfigOption.mock.invocationCallOrder[0]
+      setConfigOption.mock.invocationCallOrder[0]
     );
   });
 });

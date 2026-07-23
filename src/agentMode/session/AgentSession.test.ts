@@ -2513,7 +2513,7 @@ describe("AgentSession.create (via start)", () => {
     });
     await session.ready;
     expect(session.getState()?.model?.current.baseModelId).toBe("sonnet");
-    await session.applyConfigOption("mode", "plan", "reported");
+    await session.setConfigOption("mode", "plan", "reported");
     expect(session.getState()?.model?.current.baseModelId).toBe("sonnet");
     expect(session.getState()?.mode?.current).toBe("plan");
     // Pin uncorrupted: a truthful push carrying the pick is honored as-is.
@@ -2706,7 +2706,7 @@ function makeConfigOptionDescriptor(): BackendDescriptor {
           const effortConfigId =
             refreshed?.kind === "setConfigOption" ? refreshed.effortConfigId : undefined;
           if (effortConfigId)
-            await session.applyConfigOption(effortConfigId, selection.effort, "confirmed");
+            await session.setConfigOption(effortConfigId, selection.effort, "confirmed");
         }
         return;
       }
@@ -2813,7 +2813,7 @@ function makeDescriptorWireWithoutEffort(): BackendDescriptor {
       if (currentBase !== selection.baseModelId)
         await session.applyModelWireId(wire.encode(selection));
       if (selection.effort !== null)
-        await session.applyConfigOption("effort", selection.effort, "confirmed");
+        await session.setConfigOption("effort", selection.effort, "confirmed");
     },
   } as unknown as BackendDescriptor;
 }
@@ -2873,7 +2873,7 @@ describe("AgentSession.setModel", () => {
   });
 });
 
-describe("AgentSession.applyConfigOption", () => {
+describe("AgentSession.setConfigOption", () => {
   it("forwards to backend and replaces state from response", async () => {
     const mock = makeMockBackend();
     mock.setSessionConfigOption.mockResolvedValueOnce(emptyState());
@@ -2883,7 +2883,7 @@ describe("AgentSession.applyConfigOption", () => {
       internalId: "internal-1",
       backendId: "claude",
     });
-    await session.applyConfigOption("effort", "high", "confirmed");
+    await session.setConfigOption("effort", "high", "confirmed");
     expect(mock.setSessionConfigOption).toHaveBeenCalledWith({
       sessionId: "acp-1",
       configId: "effort",
@@ -2905,7 +2905,7 @@ describe("AgentSession.applyConfigOption", () => {
       onStatusChanged: jest.fn(),
       onModelChanged,
     });
-    await session.applyConfigOption("effort", "low", "confirmed");
+    await session.setConfigOption("effort", "low", "confirmed");
     expect(onModelChanged).toHaveBeenCalledTimes(1);
   });
 
@@ -2926,7 +2926,7 @@ describe("AgentSession.applyConfigOption", () => {
       onStatusChanged: jest.fn(),
       onModelChanged,
     });
-    await expect(session.applyConfigOption("effort", "high", "confirmed")).rejects.toBeInstanceOf(
+    await expect(session.setConfigOption("effort", "high", "confirmed")).rejects.toBeInstanceOf(
       MethodUnsupportedError
     );
     expect(onModelChanged).not.toHaveBeenCalled();

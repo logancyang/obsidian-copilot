@@ -270,7 +270,7 @@ export interface BackendDescriptor {
    * model id.
    *
    * Implementations are expected to swallow `MethodUnsupportedError` from
-   * the underlying `session.applyConfigOption` call (the backend may simply
+   * the underlying `session.setConfigOption` call (the backend may simply
    * lack the capability) and propagate everything else.
    */
   applySelection(session: AgentSession, selection: ModelSelection): Promise<void>;

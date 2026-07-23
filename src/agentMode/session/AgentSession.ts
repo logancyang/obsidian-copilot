@@ -110,7 +110,7 @@ const EMPTY_ADDITIONAL_DIRECTORIES: string[] = Object.freeze([]) as unknown as s
  *
  * Only `baseModelId` is seeded — `effort` is left as the backend reported.
  * For descriptor-style backends (Claude) effort lives out-of-band and is
- * applied via `applyInitialSessionConfig` → `applyConfigOption`; seeding it
+ * applied via `applyInitialSessionConfig` → `setConfigOption`; seeding it
  * here would make that step see a matching value and silently skip the
  * real config write. For wire-effort backends (opencode-style) the
  * subsequent `setModel` call carries the user's effort through the
@@ -233,7 +233,7 @@ export interface AgentSessionStartOptions extends ProjectContextUpdatesHooks {
    * Persisted user preference to apply after the backend's initial session
    * state. The session seeds it optimistically so the first picker paint
    * shows the user's pick, then confirms with the backend via setModel
-   * (and, for descriptor-style backends, applyConfigOption — handled by the
+   * (and, for descriptor-style backends, setConfigOption — handled by the
    * manager's `applyInitialSessionConfig` hook).
    */
   defaultModelSelection?: ModelSelection;
@@ -416,7 +416,7 @@ export class AgentSession {
   private currentState: BackendState | null = null;
   /**
    * The model base id the user/seed last explicitly applied via setModel or
-   * a confirmed applyConfigOption. Used to reject a stale "reported" snapshot (state_changed
+   * a confirmed setConfigOption. Used to reject a stale "reported" snapshot (state_changed
    * push, setMode response) that would silently revert it (these backends
    * never self-switch the model).
    */
@@ -692,7 +692,7 @@ export class AgentSession {
   async applyModelWireId(wireId: string): Promise<void> {
     const apply = this.currentState?.model?.apply;
     if (apply?.kind === "setConfigOption") {
-      await this.applyConfigOption(apply.configId, wireId, "confirmed");
+      await this.setConfigOption(apply.configId, wireId, "confirmed");
       return;
     }
     await this.setModel(wireId);
@@ -769,7 +769,7 @@ export class AgentSession {
    * `notifyModelChanged` because the picker treats model and configOption
    * changes as one channel.
    */
-  async applyConfigOption(
+  async setConfigOption(
     configId: string,
     value: string,
     provenance: StateProvenance

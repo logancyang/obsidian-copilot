@@ -212,7 +212,7 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
         const effortConfigId =
           refreshedApply?.kind === "setConfigOption" ? refreshedApply.effortConfigId : undefined;
         if (effortConfigId) {
-          await session.applyConfigOption(effortConfigId, selection.effort, "confirmed");
+          await session.setConfigOption(effortConfigId, selection.effort, "confirmed");
         }
       }
       return;
