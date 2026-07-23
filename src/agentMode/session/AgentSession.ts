@@ -416,8 +416,9 @@ export class AgentSession {
   private currentState: BackendState | null = null;
   /**
    * The model base id the user/seed last explicitly applied via setModel /
-   * setConfigOption. Used to reject a stale `state_changed` push that would
-   * silently revert it (these backends never self-switch the model).
+   * setConfigOption. Used to reject a stale "reported" snapshot (state_changed
+   * push, setMode response) that would silently revert it (these backends
+   * never self-switch the model).
    */
   private lastAppliedModelBaseId: string | null = null;
   private label: string | null = null;
