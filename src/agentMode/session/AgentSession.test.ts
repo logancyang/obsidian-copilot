@@ -2712,6 +2712,146 @@ describe("AgentSession.create (via start)", () => {
     expect(session.getState()?.model?.current).toEqual({ baseModelId: "sonnet", effort: "high" });
   });
 
+  it("clears the pin when the backend drops the applied model", async () => {
+    // Regression: a snapshot accepted because the applied model vanished from
+    // the catalog ends the pin's authority. If the catalog later re-offers
+    // the model while the backend stays on its fallback, the old pin must not
+    // be grafted back — the picker would disagree with the model in use.
+    const mock = makeMockBackend();
+    const catalogWithBoth = [
+      { baseModelId: "gpt-5", name: "GPT-5", provider: "openai", effortOptions: [] },
+      { baseModelId: "sonnet", name: "Sonnet", provider: "anthropic", effortOptions: [] },
+    ];
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+      initialState: {
+        model: {
+          current: { baseModelId: "gpt-5", effort: null },
+          apply: { kind: "setModel" },
+          availableModels: catalogWithBoth,
+        },
+        mode: null,
+      },
+    });
+    mock.setSessionModel.mockResolvedValueOnce({
+      model: {
+        current: { baseModelId: "sonnet", effort: null },
+        apply: { kind: "setModel" },
+        availableModels: catalogWithBoth,
+      },
+      mode: null,
+    });
+    await session.setModel("sonnet");
+    // The backend drops sonnet from the catalog and falls back.
+    mock.emit({
+      sessionId: "acp-1",
+      update: {
+        sessionUpdate: "state_changed",
+        state: {
+          model: {
+            current: { baseModelId: "gpt-5", effort: null },
+            apply: { kind: "setModel" },
+            availableModels: [catalogWithBoth[0]],
+          },
+          mode: null,
+        },
+      },
+    });
+    expect(session.getState()?.model?.current.baseModelId).toBe("gpt-5");
+    // Sonnet returns to the catalog while the backend still reports the
+    // fallback — that is not a stale echo of the old switch; it stands.
+    mock.emit({
+      sessionId: "acp-1",
+      update: {
+        sessionUpdate: "state_changed",
+        state: {
+          model: {
+            current: { baseModelId: "gpt-5", effort: null },
+            apply: { kind: "setModel" },
+            availableModels: catalogWithBoth,
+          },
+          mode: null,
+        },
+      },
+    });
+    expect(session.getState()?.model?.current.baseModelId).toBe("gpt-5");
+  });
+
+  it("carries the pinned model's effort metadata through a rejected stale revert", async () => {
+    // Regression: the translator attaches thought-level effortOptions and the
+    // apply spec's effortConfigId to a snapshot's *own* active model. Keeping
+    // the stale snapshot's catalog verbatim while grafting the pinned current
+    // would hide the pinned model's effort selector (empty effortOptions) and
+    // dispatch effort through the stale model's option id.
+    const mock = makeMockBackend();
+    const confirmedState: BackendState = {
+      model: {
+        current: { baseModelId: "sonnet", effort: "high" },
+        apply: { kind: "setConfigOption", configId: "model", effortConfigId: "thought-sonnet" },
+        availableModels: [
+          { baseModelId: "gpt-5", name: "GPT-5", provider: "openai", effortOptions: [] },
+          {
+            baseModelId: "sonnet",
+            name: "Sonnet",
+            provider: "anthropic",
+            effortOptions: [{ value: "high", label: "High" }],
+          },
+        ],
+      },
+      mode: null,
+    };
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+      initialState: emptyState(),
+    });
+    mock.setSessionConfigOption.mockResolvedValueOnce(confirmedState);
+    await session.setConfigOption("model", "sonnet", "confirmed");
+    // Stale pre-switch snapshot: gpt-5 active, so its entry carries the
+    // thought-level options and the apply spec points at gpt-5's option.
+    mock.emit({
+      sessionId: "acp-1",
+      update: {
+        sessionUpdate: "state_changed",
+        state: {
+          model: {
+            current: { baseModelId: "gpt-5", effort: "low" },
+            apply: { kind: "setConfigOption", configId: "model", effortConfigId: "thought-gpt5" },
+            availableModels: [
+              {
+                baseModelId: "gpt-5",
+                name: "GPT-5",
+                provider: "openai",
+                effortOptions: [{ value: "low", label: "Low" }],
+              },
+              { baseModelId: "sonnet", name: "Sonnet", provider: "anthropic", effortOptions: [] },
+            ],
+          },
+          mode: null,
+        },
+      },
+    });
+    const model = session.getState()?.model;
+    expect(model?.current).toEqual({ baseModelId: "sonnet", effort: "high" });
+    expect(model?.availableModels.find((m) => m.baseModelId === "sonnet")?.effortOptions).toEqual([
+      { value: "high", label: "High" },
+    ]);
+    expect(model?.apply).toEqual({
+      kind: "setConfigOption",
+      configId: "model",
+      effortConfigId: "thought-sonnet",
+    });
+    // The stale model's own catalog entry stays authoritative.
+    expect(model?.availableModels.find((m) => m.baseModelId === "gpt-5")?.effortOptions).toEqual([
+      { value: "low", label: "Low" },
+    ]);
+  });
+
   it("seeds config-option opencode effort via the effort option, not the model id", async () => {
     // Regression: a cross-backend pick to config-option opencode (≥1.15.13)
     // must set the bare model on the model config option and the effort on the

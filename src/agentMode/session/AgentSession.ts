@@ -677,6 +677,16 @@ export class AgentSession {
    * effort is refreshed to match so a later stale-model snapshot restores this
    * latest trusted selection rather than an obsolete effort. Mode and
    * availableModels stay authoritative either way.
+   *
+   * Two boundary rules keep the merged state honest. A snapshot accepted
+   * because the applied model vanished from the catalog also clears the pin —
+   * the backend abandoned that model, so re-offering it later must not graft
+   * it back over the fallback actually in use. And when a stale revert is
+   * rejected, the active-model-specific metadata (the pinned entry's
+   * effortOptions and the apply spec's effortConfigId, which the translator
+   * derives from the snapshot's *own* active model) is carried over from the
+   * previous state, so the picker's effort selector and dispatch target keep
+   * describing the model actually shown.
    */
   private reconcileAppliedModel(incoming: BackendState): BackendState {
     const applied = this.lastAppliedModel;
@@ -689,12 +699,39 @@ export class AgentSession {
       return incoming;
     }
     if (!incoming.model.availableModels.some((m) => m.baseModelId === applied.baseModelId)) {
+      this.lastAppliedModel = null;
       return incoming;
     }
+    const prevModel = this.currentState?.model;
+    const prevCoherent = prevModel?.current.baseModelId === applied.baseModelId ? prevModel : null;
+    const prevEntry = prevCoherent?.availableModels.find(
+      (m) => m.baseModelId === applied.baseModelId
+    );
+    const availableModels = incoming.model.availableModels.map((m) =>
+      m.baseModelId === applied.baseModelId &&
+      m.effortOptions.length === 0 &&
+      prevEntry &&
+      prevEntry.effortOptions.length > 0
+        ? { ...m, effortOptions: prevEntry.effortOptions }
+        : m
+    );
+    const apply =
+      incoming.model.apply.kind === "setConfigOption" &&
+      prevCoherent?.apply.kind === "setConfigOption"
+        ? {
+            kind: "setConfigOption" as const,
+            configId: incoming.model.apply.configId,
+            ...(prevCoherent.apply.effortConfigId
+              ? { effortConfigId: prevCoherent.apply.effortConfigId }
+              : {}),
+          }
+        : incoming.model.apply;
     return {
       ...incoming,
       model: {
         ...incoming.model,
+        apply,
+        availableModels,
         current: { ...incoming.model.current, ...applied },
       },
     };
