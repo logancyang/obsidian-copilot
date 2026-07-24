@@ -72,7 +72,7 @@ function toPiUsage(usage: Usage | undefined, contextWindow: number): PiUsage {
  */
 export function createPiEngine(options: PiEngineOptions): PiEngine {
   const harness = new AgentHarness<PiToolContext | undefined>({
-    session: new Session(new InMemorySessionStorage()),
+    session: options.session ?? new Session(new InMemorySessionStorage()),
     models: options.models,
     model: requireModel(options.models, options.modelId),
     systemPrompt: options.systemPrompt,

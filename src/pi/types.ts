@@ -1,4 +1,5 @@
 import type { PiTool, PiToolContext } from "@/pi/tools";
+import type { Session } from "@earendil-works/pi-agent-core";
 import type { Model, Models } from "@earendil-works/pi-ai";
 
 /**
@@ -66,6 +67,23 @@ export interface PiUsage {
   contextWindow: number;
 }
 
+/**
+ * Vault file operations the transcript store needs. Modelled on Obsidian's
+ * adapter rather than node's `fs` so the same code path works on a phone.
+ */
+export interface PiFileStore {
+  /**
+   * Folder transcripts are written to. Resolved by the host, because the
+   * Obsidian config folder is user-configurable and must never be hardcoded.
+   */
+  readonly dir: string;
+  read(path: string): Promise<string>;
+  write(path: string, content: string): Promise<void>;
+  append(path: string, content: string): Promise<void>;
+  mkdir(path: string): Promise<void>;
+  exists(path: string): Promise<boolean>;
+}
+
 export interface PiEngineOptions {
   models: Models;
   /** Model the first turn runs on; must exist in `models`. */
@@ -75,4 +93,9 @@ export interface PiEngineOptions {
   tools?: readonly PiTool[];
   /** Host dependencies the tools execute against. Required whenever `tools` is set. */
   toolContext?: PiToolContext;
+  /**
+   * Conversation store. Omitted for a throwaway conversation, which then lives
+   * only in memory.
+   */
+  session?: Session;
 }
