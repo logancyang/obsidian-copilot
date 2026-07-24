@@ -3018,6 +3018,109 @@ describe("AgentSession.create (via start)", () => {
     expect(mock.prompt).toHaveBeenCalled();
   });
 
+  it("holds a queued first prompt until a model re-pick made during startup lands", async () => {
+    // Regression (P1): the session reports "idle" during the seeded
+    // confirmation, so the user can pick another model; that apply queues on
+    // the serialization chain behind the seeded one, but `ready` only covers
+    // confirmSeededSelection — the first prompt must also drain the chain or
+    // it runs on the seed instead of the latest pick.
+    const mock = makeMockBackend();
+    const reported: BackendState = {
+      model: {
+        current: { baseModelId: "opus", effort: null },
+        apply: { kind: "setModel" },
+        availableModels: [
+          { baseModelId: "opus", name: "Opus", provider: "anthropic", effortOptions: [] },
+          { baseModelId: "sonnet", name: "Sonnet", provider: "anthropic", effortOptions: [] },
+          { baseModelId: "haiku", name: "Haiku", provider: "anthropic", effortOptions: [] },
+        ],
+      },
+      mode: null,
+    };
+    mock.newSession.mockResolvedValueOnce({ sessionId: "acp-1", state: reported });
+    let resolveSeeded!: (s: BackendState) => void;
+    let resolveRepick!: (s: BackendState) => void;
+    mock.setSessionModel
+      .mockImplementationOnce(() => new Promise<BackendState>((r) => (resolveSeeded = r)))
+      .mockImplementationOnce(() => new Promise<BackendState>((r) => (resolveRepick = r)));
+    const session = AgentSession.start({
+      backend: mock.asBackend,
+      cwd: "/vault",
+      internalId: "internal-1",
+      backendId: "claude",
+      defaultModelSelection: { baseModelId: "sonnet", effort: null },
+      getDescriptor: () => makeDescriptorWireWithoutEffort(),
+    });
+    await new Promise((r) => window.setTimeout(r, 0));
+    // The user re-picks while the seeded switch is still in flight…
+    const repick = session.setModel("haiku");
+    // …and immediately submits.
+    const { turn } = session.sendPrompt("hi");
+    resolveSeeded({
+      model: { ...reported.model!, current: { baseModelId: "sonnet", effort: null } },
+      mode: null,
+    });
+    await new Promise((r) => window.setTimeout(r, 0));
+    // ready has resolved, but the re-pick is still in flight — no prompt yet.
+    expect(mock.prompt).not.toHaveBeenCalled();
+    resolveRepick({
+      model: { ...reported.model!, current: { baseModelId: "haiku", effort: null } },
+      mode: null,
+    });
+    await repick;
+    await turn;
+    expect(mock.prompt).toHaveBeenCalled();
+    expect(session.getState()?.model?.current.baseModelId).toBe("haiku");
+  });
+
+  it("a cancel whose backend round-trip is slow still stops a queued first prompt", async () => {
+    // Regression: cancel() previously aborted the local controller only after
+    // `backend.cancel` resolved; a queued turn whose wait completed inside
+    // that window saw an unaborted signal and dispatched the prompt anyway.
+    const mock = makeMockBackend();
+    const reported: BackendState = {
+      model: {
+        current: { baseModelId: "opus", effort: null },
+        apply: { kind: "setModel" },
+        availableModels: [
+          { baseModelId: "opus", name: "Opus", provider: "anthropic", effortOptions: [] },
+          { baseModelId: "sonnet", name: "Sonnet", provider: "anthropic", effortOptions: [] },
+        ],
+      },
+      mode: null,
+    };
+    mock.newSession.mockResolvedValueOnce({ sessionId: "acp-1", state: reported });
+    let resolveSetModel!: (s: BackendState) => void;
+    mock.setSessionModel.mockImplementationOnce(
+      () => new Promise<BackendState>((resolve) => (resolveSetModel = resolve))
+    );
+    let resolveCancel!: () => void;
+    mock.cancel.mockImplementationOnce(
+      () => new Promise<undefined>((resolve) => (resolveCancel = () => resolve(undefined)))
+    );
+    const session = AgentSession.start({
+      backend: mock.asBackend,
+      cwd: "/vault",
+      internalId: "internal-1",
+      backendId: "claude",
+      defaultModelSelection: { baseModelId: "sonnet", effort: null },
+      getDescriptor: () => makeDescriptorWireWithoutEffort(),
+    });
+    await new Promise((r) => window.setTimeout(r, 0));
+    const { turn } = session.sendPrompt("hi");
+    const cancelled = session.cancel();
+    // The backend cancel round-trip is still in flight when the model
+    // confirmation lands — the queued turn must still see the abort.
+    resolveSetModel({
+      model: { ...reported.model!, current: { baseModelId: "sonnet", effort: null } },
+      mode: null,
+    });
+    await expect(turn).resolves.toBe("cancelled");
+    expect(mock.prompt).not.toHaveBeenCalled();
+    resolveCancel();
+    await cancelled;
+  });
+
   it("seeds config-option opencode effort via the effort option, not the model id", async () => {
     // Regression: a cross-backend pick to config-option opencode (≥1.15.13)
     // must set the bare model on the model config option and the effort on the

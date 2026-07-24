@@ -1211,6 +1211,17 @@ export class AgentSession {
       // already surfaced elsewhere — the prompt proceeds and fails as today.
       if (!this.startupConfirmed) {
         await this.ready.then(undefined, () => undefined);
+        // The session reports "idle" during the confirmation round-trip, so
+        // the user may have picked another model meanwhile; that apply rides
+        // `modelApplyChain` behind the seeded one, and `ready` doesn't cover
+        // it. Drain the chain (it never rejects) so the first prompt runs on
+        // the latest pick, re-checking in case a new apply landed while
+        // awaiting the previous tail.
+        let applies: Promise<unknown>;
+        do {
+          applies = this.modelApplyChain;
+          await applies;
+        } while (applies !== this.modelApplyChain);
         // The user may have cancelled or closed the chat while this turn was
         // queued — dispatching the prompt now would start a backend turn
         // nobody is watching.
@@ -1545,6 +1556,12 @@ export class AgentSession {
       this.flushQuestionResolvers();
       this.notifyMessages();
     }
+    // Abort locally before the backend round-trip so a turn queued behind the
+    // startup confirmation observes the cancellation synchronously — deferring
+    // it until `backend.cancel` resolves leaves a window where the queued
+    // turn's abort check passes and it dispatches a prompt that the earlier
+    // cancel notification doesn't cover.
+    this.abortController?.abort();
     try {
       await this.backend.cancel({ sessionId: this.backendSessionId });
     } catch (e) {
