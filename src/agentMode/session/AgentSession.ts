@@ -423,6 +423,21 @@ export class AgentSession {
    * stale model's effort onto the applied base.
    */
   private lastAppliedModel: ModelSelection | null = null;
+  /**
+   * Monotonic id of the newest in-flight user model apply. Concurrent applies
+   * are not serialized, so an older request's response can resolve after a
+   * newer one; only the newest generation's response is a model confirmation —
+   * a superseded response is demoted to a "reported" snapshot and reconciled,
+   * so it can't re-pin the older model over the user's latest pick.
+   */
+  private modelApplyGeneration = 0;
+  /**
+   * Flips true once `ready` settles. Lets `runTurn` gate only turns fired
+   * during the startup window on the seeded-model confirmation while keeping
+   * `backend.prompt` synchronously invoked for every later turn (callers rely
+   * on that timing).
+   */
+  private startupConfirmed = false;
   private label: string | null = null;
   // Tracks who set the current label so an agent-pushed `session_info_update`
   // can't clobber a label the user explicitly chose via Rename.
@@ -525,10 +540,14 @@ export class AgentSession {
       // Gate `ready` on the model confirmation round-trip so `sendPrompt`
       // can't fire on the probe's model before the user's persisted
       // selection is applied to the backend.
-      this.ready =
-        opts.defaultModelSelection && originalState
-          ? this.confirmSeededSelection(opts.defaultModelSelection, originalState)
-          : Promise.resolve();
+      if (opts.defaultModelSelection && originalState) {
+        this.ready = this.confirmSeededSelection(opts.defaultModelSelection, originalState);
+      } else {
+        this.ready = Promise.resolve();
+        // Already settled — flip synchronously so the first turn doesn't take
+        // the queued path (its callers rely on a synchronous prompt dispatch).
+        this.startupConfirmed = true;
+      }
     } else {
       // Eagerly seed from the preloader cache so the picker doesn't fall
       // back to the prior session's `current` while `backend.newSession` is
@@ -539,6 +558,10 @@ export class AgentSession {
       );
       this.ready = this.initialize(opts);
     }
+    const confirm = () => {
+      this.startupConfirmed = true;
+    };
+    void this.ready.then(confirm, confirm);
   }
 
   /**
@@ -635,11 +658,12 @@ export class AgentSession {
   async setModel(modelId: string): Promise<void> {
     if (this.getStatus() === "closed") throw new Error("Session is closed");
     if (!this.backendSessionId) throw new Error("Session is still starting");
+    const generation = ++this.modelApplyGeneration;
     const next = await this.backend.setSessionModel({
       sessionId: this.backendSessionId,
       modelId,
     });
-    this.applyState(next, "confirmed");
+    this.applyState(next, generation === this.modelApplyGeneration ? "confirmed" : "reported");
     this.notifyModelChanged();
   }
 
@@ -830,12 +854,14 @@ export class AgentSession {
   ): Promise<void> {
     if (this.getStatus() === "closed") throw new Error("Session is closed");
     if (!this.backendSessionId) throw new Error("Session is still starting");
+    const generation = provenance === "confirmed" ? ++this.modelApplyGeneration : null;
     const next = await this.backend.setSessionConfigOption({
       sessionId: this.backendSessionId,
       configId,
       value,
     });
-    this.applyState(next, provenance);
+    const superseded = generation !== null && generation !== this.modelApplyGeneration;
+    this.applyState(next, superseded ? "reported" : provenance);
     this.notifyModelChanged();
     this.clearCurrentPlanIfModeLeft();
   }
@@ -1156,6 +1182,14 @@ export class AgentSession {
         ]);
       }
 
+      // The status gate opens ("idle") before the seeded-model confirmation
+      // round-trip completes, so a fast first submit could otherwise race the
+      // switch and run on the backend default. Queue such a turn behind
+      // `ready`; the flag keeps every later turn on the synchronous path
+      // (a settled promise still costs a microtask, and callers rely on
+      // `backend.prompt` being invoked synchronously). A failed startup is
+      // already surfaced elsewhere — the prompt proceeds and fails as today.
+      if (!this.startupConfirmed) await this.ready.then(undefined, () => undefined);
       // Extract live Web Viewer content (reader-mode markdown, YouTube
       // transcripts) just before the prompt is built so it reflects the page
       // at send/flush time, not at compose time. Only take the async hop when

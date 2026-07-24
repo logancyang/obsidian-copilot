@@ -2852,6 +2852,106 @@ describe("AgentSession.create (via start)", () => {
     ]);
   });
 
+  it("a superseded model apply response cannot re-pin over the user's newer pick", async () => {
+    // Regression: rapid picks start unserialized applies; if the older
+    // request's response resolves after the newer one, treating it as a
+    // confirmation would re-pin the older model and make the guard rewrite
+    // later truthful pushes. A superseded response is demoted to a reported
+    // snapshot and reconciled against the newest pick instead.
+    const mock = makeMockBackend();
+    const base: BackendState = {
+      model: {
+        current: { baseModelId: "gpt-5", effort: null },
+        apply: { kind: "setModel" },
+        availableModels: [
+          { baseModelId: "gpt-5", name: "GPT-5", provider: "openai", effortOptions: [] },
+          { baseModelId: "sonnet", name: "Sonnet", provider: "anthropic", effortOptions: [] },
+          { baseModelId: "haiku", name: "Haiku", provider: "anthropic", effortOptions: [] },
+        ],
+      },
+      mode: null,
+    };
+    let resolveFirst!: (s: BackendState) => void;
+    mock.setSessionModel
+      .mockImplementationOnce(() => new Promise<BackendState>((r) => (resolveFirst = r)))
+      .mockResolvedValueOnce({
+        model: { ...base.model!, current: { baseModelId: "haiku", effort: null } },
+        mode: null,
+      });
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+      initialState: base,
+    });
+    const first = session.setModel("sonnet");
+    await session.setModel("haiku");
+    expect(session.getState()?.model?.current.baseModelId).toBe("haiku");
+    // The older apply's response arrives late, carrying its own (now stale) model.
+    resolveFirst({
+      model: { ...base.model!, current: { baseModelId: "sonnet", effort: null } },
+      mode: null,
+    });
+    await first;
+    expect(session.getState()?.model?.current.baseModelId).toBe("haiku");
+    // Pin uncorrupted: a stale push reverting the newest pick is still rejected.
+    mock.emit({
+      sessionId: "acp-1",
+      update: {
+        sessionUpdate: "state_changed",
+        state: {
+          model: { ...base.model!, current: { baseModelId: "gpt-5", effort: null } },
+          mode: null,
+        },
+      },
+    });
+    expect(session.getState()?.model?.current.baseModelId).toBe("haiku");
+  });
+
+  it("queues a first prompt fired during the seeded-switch round-trip behind the confirmation", async () => {
+    // Regression: the status gate opens ("idle") before confirmSeededSelection
+    // finishes, so a fast first submit could race the model switch and run on
+    // the backend default. The turn must wait for `ready` before prompting.
+    const mock = makeMockBackend();
+    const reported: BackendState = {
+      model: {
+        current: { baseModelId: "opus", effort: null },
+        apply: { kind: "setModel" },
+        availableModels: [
+          { baseModelId: "opus", name: "Opus", provider: "anthropic", effortOptions: [] },
+          { baseModelId: "sonnet", name: "Sonnet", provider: "anthropic", effortOptions: [] },
+        ],
+      },
+      mode: null,
+    };
+    mock.newSession.mockResolvedValueOnce({ sessionId: "acp-1", state: reported });
+    let resolveSetModel!: (s: BackendState) => void;
+    mock.setSessionModel.mockImplementationOnce(
+      () => new Promise<BackendState>((resolve) => (resolveSetModel = resolve))
+    );
+    const session = AgentSession.start({
+      backend: mock.asBackend,
+      cwd: "/vault",
+      internalId: "internal-1",
+      backendId: "claude",
+      defaultModelSelection: { baseModelId: "sonnet", effort: null },
+      getDescriptor: () => makeDescriptorWireWithoutEffort(),
+    });
+    await new Promise((r) => window.setTimeout(r, 0));
+    expect(session.getStatus()).toBe("idle");
+    const { turn } = session.sendPrompt("hi");
+    await new Promise((r) => window.setTimeout(r, 0));
+    // The prompt is queued behind the in-flight model confirmation.
+    expect(mock.prompt).not.toHaveBeenCalled();
+    resolveSetModel({
+      model: { ...reported.model!, current: { baseModelId: "sonnet", effort: null } },
+      mode: null,
+    });
+    await turn;
+    expect(mock.prompt).toHaveBeenCalled();
+  });
+
   it("seeds config-option opencode effort via the effort option, not the model id", async () => {
     // Regression: a cross-backend pick to config-option opencode (≥1.15.13)
     // must set the bare model on the model config option and the effort on the
