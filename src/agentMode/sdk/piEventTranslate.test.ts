@@ -1,6 +1,6 @@
 import type { PiUsage } from "@/pi/types";
 import type { AgentEvent } from "@earendil-works/pi-agent-core";
-import { toSessionUsage, translatePiEvent } from "./piEventTranslate";
+import { toSessionUsage, translatePiEvent, translatePiToolEvent } from "./piEventTranslate";
 
 /** Minimal stand-in for the partial assistant message pi attaches to every delta. */
 const PARTIAL = {} as never;
@@ -56,6 +56,72 @@ describe("piEventTranslate", () => {
       const second = translatePiEvent({ type: "agent_start" });
 
       expect(first).toBe(second);
+    });
+  });
+
+  describe("translatePiToolEvent()", () => {
+    it("opens an in-progress card carrying the tool's arguments", () => {
+      const updates = translatePiToolEvent({
+        type: "tool_execution_start",
+        toolCallId: "call-1",
+        toolName: "search_vault",
+        args: { query: "roadmap" },
+      });
+
+      expect(updates).toEqual([
+        {
+          sessionUpdate: "tool_call",
+          toolCallId: "call-1",
+          title: "Search vault",
+          kind: "search",
+          status: "in_progress",
+          rawInput: { query: "roadmap" },
+          vendorToolName: "search_vault",
+        },
+      ]);
+    });
+
+    it("settles the card as completed or failed when the tool returns", () => {
+      const ok = translatePiToolEvent({
+        type: "tool_execution_end",
+        toolCallId: "call-1",
+        toolName: "read_note",
+        result: {},
+        isError: false,
+      });
+      const failed = translatePiToolEvent({
+        type: "tool_execution_end",
+        toolCallId: "call-2",
+        toolName: "web_search",
+        result: {},
+        isError: true,
+      });
+
+      expect(ok).toEqual([
+        { sessionUpdate: "tool_call_update", toolCallId: "call-1", status: "completed" },
+      ]);
+      expect(failed).toEqual([
+        { sessionUpdate: "tool_call_update", toolCallId: "call-2", status: "failed" },
+      ]);
+    });
+
+    it("falls back to the raw name and a neutral kind for an unmapped tool", () => {
+      const [update] = translatePiToolEvent({
+        type: "tool_execution_start",
+        toolCallId: "call-3",
+        toolName: "future_tool",
+        args: {},
+      });
+
+      expect(update).toMatchObject({ title: "future_tool", kind: "other" });
+    });
+
+    it("emits nothing for conversation events", () => {
+      expect(
+        translatePiToolEvent(
+          messageUpdate({ type: "text_delta", contentIndex: 0, delta: "hi", partial: PARTIAL })
+        )
+      ).toHaveLength(0);
     });
   });
 

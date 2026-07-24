@@ -16,6 +16,7 @@ import { getSettings, subscribeToSettingsChange, type CopilotSettings } from "@/
 import PiLogo from "./logo.svg";
 import { PiSettingsPanel } from "./PiSettingsPanel";
 import { resolvePiProviderDeps } from "./piProviderDeps";
+import { createPiToolContext } from "./piToolContext";
 
 /** Ready only while the opt-in toggle is on — the backend is otherwise hidden everywhere. */
 const READY: InstallState = { kind: "ready", source: "managed" };
@@ -93,6 +94,7 @@ export const PiBackendDescriptor: BackendDescriptor = {
       getDefaultModelId: () =>
         getSettings().agentMode?.backends?.pi?.defaultModel?.baseModelId ?? undefined,
       getSystemPrompt: () => buildAgentSystemPrompt(),
+      toolContext: createPiToolContext(plugin),
     });
   },
 };

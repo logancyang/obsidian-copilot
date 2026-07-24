@@ -1,4 +1,5 @@
 import type { PiEngineOptions, PiUsage } from "@/pi/types";
+import type { PiToolContext } from "@/pi/tools";
 import {
   AgentHarness,
   InMemorySessionStorage,
@@ -70,11 +71,13 @@ function toPiUsage(usage: Usage | undefined, contextWindow: number): PiUsage {
  * so every turn sends byte-identical leading context and stays cacheable.
  */
 export function createPiEngine(options: PiEngineOptions): PiEngine {
-  const harness = new AgentHarness({
+  const harness = new AgentHarness<PiToolContext | undefined>({
     session: new Session(new InMemorySessionStorage()),
     models: options.models,
     model: requireModel(options.models, options.modelId),
     systemPrompt: options.systemPrompt,
+    tools: options.tools ? [...options.tools] : undefined,
+    toolContext: options.toolContext,
   });
 
   let lastUsage: Usage | undefined;

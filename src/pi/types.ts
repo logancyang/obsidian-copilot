@@ -1,3 +1,4 @@
+import type { PiTool, PiToolContext } from "@/pi/tools";
 import type { Model, Models } from "@earendil-works/pi-ai";
 
 /**
@@ -70,4 +71,8 @@ export interface PiEngineOptions {
   /** Model the first turn runs on; must exist in `models`. */
   modelId: string;
   systemPrompt?: string;
+  /** Tools offered to the model. Order is preserved so the tool block stays cacheable. */
+  tools?: readonly PiTool[];
+  /** Host dependencies the tools execute against. Required whenever `tools` is set. */
+  toolContext?: PiToolContext;
 }
