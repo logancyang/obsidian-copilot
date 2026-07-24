@@ -204,6 +204,8 @@ When the agent uses **Write to File** or **Replace in File**, it shows a preview
 - **Split view**: Before/after shown side by side
 - **Side-by-side view**: Changes highlighted inline
 
+In Agent Mode, the activity trail names the target of a single-file edit and shows a file count when one action changes multiple files.
+
 You can choose your preferred diff view in **Settings → Copilot → Plus → Diff View Mode**.
 
 Review the proposed change and click:

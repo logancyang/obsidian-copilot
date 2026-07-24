@@ -190,6 +190,14 @@ function verb(part: ToolCallPart, progressive: string, past: string): string {
   return part.status === "completed" || part.status === "failed" ? past : progressive;
 }
 
+function diffTargetPaths(part: ToolCallPart): string[] {
+  const paths = new Set<string>();
+  for (const output of part.output ?? []) {
+    if (output.type === "diff" && output.path.length > 0) paths.add(output.path);
+  }
+  return [...paths];
+}
+
 function targetFromPath(part: ToolCallPart, vaultBase: string | null): string | null {
   const loc = part.locations?.[0]?.path;
   if (typeof loc === "string" && loc.length > 0) return toVaultRelative(loc, vaultBase);
@@ -200,6 +208,8 @@ function targetFromPath(part: ToolCallPart, vaultBase: string | null): string | 
   if (typeof input?.file_path === "string") return toVaultRelative(input.file_path, vaultBase);
   if (typeof input?.filePath === "string") return toVaultRelative(input.filePath, vaultBase);
   if (typeof input?.path === "string") return toVaultRelative(input.path, vaultBase);
+  const diffPaths = diffTargetPaths(part);
+  if (diffPaths.length === 1) return toVaultRelative(diffPaths[0], vaultBase);
   return null;
 }
 
@@ -292,8 +302,14 @@ const LIST_SUMMARY: ToolSummary = {
 
 const EDIT_SUMMARY: ToolSummary = {
   icon: pickToolIcon({ vendorToolName: "Edit" }),
-  collapsedLine: (p, ctx) =>
-    `${verb(p, "Editing", "Edited")} ${displayTargetFromPath(p, ctx?.vaultBase ?? null) ?? targetFromTitle(p)}`,
+  collapsedLine: (p, ctx) => {
+    const diffPathCount = diffTargetPaths(p).length;
+    return `${verb(p, "Editing", "Edited")} ${
+      diffPathCount > 1
+        ? pluralize(diffPathCount, "file")
+        : (displayTargetFromPath(p, ctx?.vaultBase ?? null) ?? "files")
+    }`;
+  },
   outcome: (p) => {
     const { added, removed } = diffStats(p);
     if (added === 0 && removed === 0) return null;
@@ -312,7 +328,8 @@ const EDIT_SUMMARY: ToolSummary = {
       outcome: added + removed > 0 ? `+${added} / −${removed} lines` : "",
     };
   },
-  targetPath: (p, ctx) => targetFromPath(p, ctx?.vaultBase ?? null),
+  targetPath: (p, ctx) =>
+    diffTargetPaths(p).length > 1 ? null : targetFromPath(p, ctx?.vaultBase ?? null),
 };
 
 const BASH_SUMMARY: ToolSummary = {
