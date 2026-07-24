@@ -60,4 +60,18 @@ function createModels() {
   return collection;
 }
 
-module.exports = { createModels, createProvider };
+// `Type` is typebox, re-exported by pi-ai. typebox is ESM-only too, so the
+// mock supplies the two constructors our tool schemas use. The shapes are
+// JSON Schema, which is exactly what the real builders emit — enough for the
+// schema to be asserted on, and `tsc` still checks calls against real typebox.
+const Type = {
+  Object: (properties = {}, options = {}) => ({
+    type: "object",
+    properties,
+    required: Object.keys(properties),
+    ...options,
+  }),
+  String: (options = {}) => ({ type: "string", ...options }),
+};
+
+module.exports = { createModels, createProvider, Type };

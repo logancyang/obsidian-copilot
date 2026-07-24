@@ -25,10 +25,11 @@ import type {
 import { logError, logWarn } from "@/logger";
 import { createPiEngine, type PiEngine } from "@/pi/engine";
 import { createPiModels, listPiModels } from "@/pi/providers";
+import { PI_TOOLS, type PiToolContext } from "@/pi/tools";
 import type { PiModelEntry, PiProviderDeps } from "@/pi/types";
 import type { Models } from "@earendil-works/pi-ai";
 import { v4 as uuidv4 } from "uuid";
-import { toSessionUsage, translatePiEvent } from "./piEventTranslate";
+import { toSessionUsage, translatePiEvent, translatePiToolEvent } from "./piEventTranslate";
 
 /** Cap on events buffered for a session whose handler has not registered yet. */
 const PENDING_UPDATE_LIMIT = 32;
@@ -50,6 +51,8 @@ export interface PiBackendProcessOptions {
   getDefaultModelId?: () => string | undefined;
   /** Composed Copilot system prompt, read once per session so a turn never changes it. */
   getSystemPrompt?: () => string | undefined;
+  /** Host dependencies the read-only tools execute against. */
+  toolContext: PiToolContext;
 }
 
 interface PiSessionState {
@@ -128,9 +131,14 @@ export class PiBackendProcess implements BackendProcess {
       models,
       modelId,
       systemPrompt: this.opts.getSystemPrompt?.(),
+      tools: PI_TOOLS,
+      toolContext: this.opts.toolContext,
     });
     const unsubscribe = engine.subscribe((event) => {
       for (const update of translatePiEvent(event)) {
+        this.dispatchEvent({ sessionId, update });
+      }
+      for (const update of translatePiToolEvent(event)) {
         this.dispatchEvent({ sessionId, update });
       }
       if (event.type === "turn_end") {
