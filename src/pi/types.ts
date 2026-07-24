@@ -98,4 +98,10 @@ export interface PiEngineOptions {
    * only in memory.
    */
   session?: Session;
+  /**
+   * Stable per-conversation cache key. Sent with every provider request so
+   * repeat turns hit the provider's prompt cache; must not change between
+   * turns of the same conversation.
+   */
+  cacheKey?: string;
 }
