@@ -2852,12 +2852,13 @@ describe("AgentSession.create (via start)", () => {
     ]);
   });
 
-  it("a superseded model apply response cannot re-pin over the user's newer pick", async () => {
-    // Regression: rapid picks start unserialized applies; if the older
-    // request's response resolves after the newer one, treating it as a
-    // confirmation would re-pin the older model and make the guard rewrite
-    // later truthful pushes. A superseded response is demoted to a reported
-    // snapshot and reconciled against the newest pick instead.
+  it("serializes rapid model applies so the last pick is the last write", async () => {
+    // Regression: rapid picks dispatched concurrent requests whose responses
+    // could complete out of order — the ACP wire cache is overwritten by each
+    // completion, and a backend processing them out of order could genuinely
+    // end on the older pick while the display showed the newer one. Dispatch
+    // is now sequenced: the next request is sent only after the previous
+    // response lands, so the last pick is the last write everywhere.
     const mock = makeMockBackend();
     const base: BackendState = {
       model: {
@@ -2886,27 +2887,92 @@ describe("AgentSession.create (via start)", () => {
       initialState: base,
     });
     const first = session.setModel("sonnet");
-    await session.setModel("haiku");
-    expect(session.getState()?.model?.current.baseModelId).toBe("haiku");
-    // The older apply's response arrives late, carrying its own (now stale) model.
+    const second = session.setModel("haiku");
+    await new Promise((r) => window.setTimeout(r, 0));
+    // The second dispatch is held until the first response lands.
+    expect(mock.setSessionModel).toHaveBeenCalledTimes(1);
     resolveFirst({
       model: { ...base.model!, current: { baseModelId: "sonnet", effort: null } },
       mode: null,
     });
     await first;
-    expect(session.getState()?.model?.current.baseModelId).toBe("haiku");
-    // Pin uncorrupted: a stale push reverting the newest pick is still rejected.
-    mock.emit({
+    await second;
+    expect(mock.setSessionModel).toHaveBeenCalledTimes(2);
+    expect(mock.setSessionModel).toHaveBeenLastCalledWith({
       sessionId: "acp-1",
-      update: {
-        sessionUpdate: "state_changed",
-        state: {
-          model: { ...base.model!, current: { baseModelId: "gpt-5", effort: null } },
-          mode: null,
-        },
-      },
+      modelId: "haiku",
     });
     expect(session.getState()?.model?.current.baseModelId).toBe("haiku");
+  });
+
+  it("a failed model apply does not wedge the serialization chain", async () => {
+    const mock = makeMockBackend();
+    const base: BackendState = {
+      model: {
+        current: { baseModelId: "gpt-5", effort: null },
+        apply: { kind: "setModel" },
+        availableModels: [
+          { baseModelId: "gpt-5", name: "GPT-5", provider: "openai", effortOptions: [] },
+          { baseModelId: "sonnet", name: "Sonnet", provider: "anthropic", effortOptions: [] },
+        ],
+      },
+      mode: null,
+    };
+    mock.setSessionModel.mockRejectedValueOnce(new Error("boom")).mockResolvedValueOnce({
+      model: { ...base.model!, current: { baseModelId: "sonnet", effort: null } },
+      mode: null,
+    });
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+      initialState: base,
+    });
+    await expect(session.setModel("sonnet")).rejects.toThrow("boom");
+    await session.setModel("sonnet");
+    expect(session.getState()?.model?.current.baseModelId).toBe("sonnet");
+  });
+
+  it("does not dispatch a prompt whose turn was cancelled while queued behind startup", async () => {
+    // Regression: a turn queued behind the seeded-model confirmation must not
+    // start a backend turn if the user cancelled while it waited — the prompt
+    // would run with no one watching.
+    const mock = makeMockBackend();
+    const reported: BackendState = {
+      model: {
+        current: { baseModelId: "opus", effort: null },
+        apply: { kind: "setModel" },
+        availableModels: [
+          { baseModelId: "opus", name: "Opus", provider: "anthropic", effortOptions: [] },
+          { baseModelId: "sonnet", name: "Sonnet", provider: "anthropic", effortOptions: [] },
+        ],
+      },
+      mode: null,
+    };
+    mock.newSession.mockResolvedValueOnce({ sessionId: "acp-1", state: reported });
+    let resolveSetModel!: (s: BackendState) => void;
+    mock.setSessionModel.mockImplementationOnce(
+      () => new Promise<BackendState>((resolve) => (resolveSetModel = resolve))
+    );
+    const session = AgentSession.start({
+      backend: mock.asBackend,
+      cwd: "/vault",
+      internalId: "internal-1",
+      backendId: "claude",
+      defaultModelSelection: { baseModelId: "sonnet", effort: null },
+      getDescriptor: () => makeDescriptorWireWithoutEffort(),
+    });
+    await new Promise((r) => window.setTimeout(r, 0));
+    const { turn } = session.sendPrompt("hi");
+    await new Promise((r) => window.setTimeout(r, 0));
+    await session.cancel();
+    resolveSetModel({
+      model: { ...reported.model!, current: { baseModelId: "sonnet", effort: null } },
+      mode: null,
+    });
+    await expect(turn).resolves.toBe("cancelled");
+    expect(mock.prompt).not.toHaveBeenCalled();
   });
 
   it("queues a first prompt fired during the seeded-switch round-trip behind the confirmation", async () => {

@@ -424,13 +424,15 @@ export class AgentSession {
    */
   private lastAppliedModel: ModelSelection | null = null;
   /**
-   * Monotonic id of the newest in-flight user model apply. Concurrent applies
-   * are not serialized, so an older request's response can resolve after a
-   * newer one; only the newest generation's response is a model confirmation —
-   * a superseded response is demoted to a "reported" snapshot and reconciled,
-   * so it can't re-pin the older model over the user's latest pick.
+   * Serializes user model applies. Rapid picks previously dispatched
+   * concurrent requests whose responses could complete out of order — the
+   * ACP layer's wire cache is overwritten by each completion with its own
+   * modelId, and a backend processing them out of order could genuinely end
+   * on the older pick, so display, cache, and backend could all disagree.
+   * Sequencing dispatch (the next request is sent only after the previous
+   * response lands) makes the last pick the last write everywhere.
    */
-  private modelApplyGeneration = 0;
+  private modelApplyChain: Promise<unknown> = Promise.resolve();
   /**
    * Flips true once `ready` settles. Lets `runTurn` gate only turns fired
    * during the startup window on the seeded-model confirmation while keeping
@@ -658,13 +660,26 @@ export class AgentSession {
   async setModel(modelId: string): Promise<void> {
     if (this.getStatus() === "closed") throw new Error("Session is closed");
     if (!this.backendSessionId) throw new Error("Session is still starting");
-    const generation = ++this.modelApplyGeneration;
-    const next = await this.backend.setSessionModel({
-      sessionId: this.backendSessionId,
-      modelId,
+    const sessionId = this.backendSessionId;
+    await this.enqueueModelApply(async () => {
+      const next = await this.backend.setSessionModel({ sessionId, modelId });
+      this.applyState(next, "confirmed");
+      this.notifyModelChanged();
     });
-    this.applyState(next, generation === this.modelApplyGeneration ? "confirmed" : "reported");
-    this.notifyModelChanged();
+  }
+
+  /**
+   * Append a model apply to the serialization chain. The chain never rejects
+   * (each caller receives its own failure; the next apply runs regardless),
+   * so a failed switch can't wedge every later one.
+   */
+  private enqueueModelApply<T>(fn: () => Promise<T>): Promise<T> {
+    const run = this.modelApplyChain.then(fn, fn);
+    this.modelApplyChain = run.then(
+      () => undefined,
+      () => undefined
+    );
+    return run;
   }
 
   /**
@@ -854,16 +869,21 @@ export class AgentSession {
   ): Promise<void> {
     if (this.getStatus() === "closed") throw new Error("Session is closed");
     if (!this.backendSessionId) throw new Error("Session is still starting");
-    const generation = provenance === "confirmed" ? ++this.modelApplyGeneration : null;
-    const next = await this.backend.setSessionConfigOption({
-      sessionId: this.backendSessionId,
-      configId,
-      value,
-    });
-    const superseded = generation !== null && generation !== this.modelApplyGeneration;
-    this.applyState(next, superseded ? "reported" : provenance);
-    this.notifyModelChanged();
-    this.clearCurrentPlanIfModeLeft();
+    const sessionId = this.backendSessionId;
+    const dispatch = async () => {
+      const next = await this.backend.setSessionConfigOption({ sessionId, configId, value });
+      this.applyState(next, provenance);
+      this.notifyModelChanged();
+      this.clearCurrentPlanIfModeLeft();
+    };
+    // Model applies ("confirmed") ride the serialization chain — see
+    // `modelApplyChain`. Effort/mode writes ("reported") stay unserialized;
+    // their responses are reconciled snapshots either way.
+    if (provenance === "confirmed") {
+      await this.enqueueModelApply(dispatch);
+      return;
+    }
+    await dispatch();
   }
 
   /**
@@ -1189,7 +1209,21 @@ export class AgentSession {
       // (a settled promise still costs a microtask, and callers rely on
       // `backend.prompt` being invoked synchronously). A failed startup is
       // already surfaced elsewhere — the prompt proceeds and fails as today.
-      if (!this.startupConfirmed) await this.ready.then(undefined, () => undefined);
+      if (!this.startupConfirmed) {
+        await this.ready.then(undefined, () => undefined);
+        // The user may have cancelled or closed the chat while this turn was
+        // queued — dispatching the prompt now would start a backend turn
+        // nobody is watching.
+        if (this.disposed || this.abortController?.signal.aborted) {
+          if (placeholderId && this.store.markTurnComplete(placeholderId, "cancelled")) {
+            this.notifyMessages();
+          }
+          this.settledStream = null;
+          this.currentMessageIds = new Set();
+          if (this.placeholderId === placeholderId) this.placeholderId = null;
+          return "cancelled";
+        }
+      }
       // Extract live Web Viewer content (reader-mode markdown, YouTube
       // transcripts) just before the prompt is built so it reflects the page
       // at send/flush time, not at compose time. Only take the async hop when
