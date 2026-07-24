@@ -2,6 +2,7 @@ import type { CopilotSettings } from "@/settings/model";
 import { ClaudeBackendDescriptor } from "./claude/descriptor";
 import { CodexBackendDescriptor } from "./codex/descriptor";
 import { OpencodeBackendDescriptor } from "./opencode/descriptor";
+import { PiBackendDescriptor } from "./pi/descriptor";
 import type { BackendDescriptor, BackendId } from "@/agentMode/session/types";
 
 /**
@@ -18,6 +19,7 @@ export const backendRegistry: Record<BackendId, BackendDescriptor> = {
   opencode: OpencodeBackendDescriptor,
   claude: ClaudeBackendDescriptor,
   codex: CodexBackendDescriptor,
+  pi: PiBackendDescriptor,
 };
 
 /**
