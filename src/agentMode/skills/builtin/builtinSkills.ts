@@ -12,7 +12,7 @@ import { OBSIDIAN_SKILLS } from "./obsidianSkills";
  * OS: a POSIX `sh` script for macOS/Linux and a Windows `.cmd` wrapper that
  * drives an adjacent PowerShell `.ps1`. All read the Copilot Plus license +
  * relay base URL from env vars the plugin injects at spawn time (see
- * `buildCopilotPlusEnv`) and call the Brevilabs relay directly — no key is
+ * `buildBuiltinSkillEnv`) and call the Brevilabs relay directly — no key is
  * embedded in the skill files.
  *
  * Why one script per OS (and no Node): every runtime here is guaranteed present
@@ -51,7 +51,7 @@ export const PLUS_ENV = {
 
 /**
  * No Copilot Plus license is configured — the free-user case (a non-Plus user
- * gets an empty env from `buildCopilotPlusEnv`, so `KEY`/`BASE` are absent).
+ * gets no relay entries from `buildBuiltinSkillEnv`, so `KEY`/`BASE` are absent).
  * The skill simply isn't available; we must NOT block the user. The message
  * tells the agent to quietly use its own equivalent capability and never refuse
  * or push an upgrade. It stays generic about the fallback (the same message is

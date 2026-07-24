@@ -211,8 +211,8 @@ export interface ClaudeSdkBackendProcessOptions {
   getEnvOverrides?: () => Record<string, string> | undefined;
   /**
    * Plugin-managed env merged onto `process.env` before user overrides (e.g.
-   * the decrypted Copilot Plus license for builtin skill scripts). Supplied by
-   * the descriptor so `sdk/` need not import `backends/`. Read per `prompt()`.
+   * credentials and runtime paths for builtin skills). Supplied by the
+   * descriptor so `sdk/` need not import `backends/`. Read per `prompt()`.
    */
   getManagedEnv?: () => Promise<Readonly<Record<string, string>>>;
   /**
@@ -467,9 +467,9 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       ? { type: "adaptive", display: "summarized" }
       : { type: "disabled" };
     const envOverrides = this.opts.getEnvOverrides?.();
-    // Builtin Copilot Plus skill scripts read the license from the env. The
-    // descriptor supplies it via `getManagedEnv` (sdk/ can't import backends/);
-    // merged before user overrides so a user can still shadow it.
+    // Builtin skills consume plugin-managed credentials and runtime paths. The
+    // descriptor supplies them via `getManagedEnv` (sdk/ can't import
+    // backends/); user overrides are merged last so they can still shadow them.
     const managedEnv = (await this.opts.getManagedEnv?.()) ?? {};
     const extraEnv = { ...managedEnv, ...envOverrides };
     if (Object.keys(extraEnv).length > 0) {
@@ -733,9 +733,10 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
    * to `~/.claude`. Mirrors the `options.env` layering in {@link prompt}.
    *
    * Memoized after the first success: the config dir is fixed for a process's
-   * lifetime, and resolving it awaits `getManagedEnv`, which decrypts the Plus
-   * license key — needless to repeat per entry when the history list probes
-   * many sessions. A failure isn't cached, so a transient env error retries.
+   * lifetime, and resolving it awaits `getManagedEnv`, which may decrypt the
+   * Plus license key — needless to repeat per entry when the history list
+   * probes many sessions. A failure isn't cached, so a transient env error
+   * retries.
    */
   private async resolveClaudeConfigDir(): Promise<string> {
     if (this.resolvedConfigDir !== null) return this.resolvedConfigDir;

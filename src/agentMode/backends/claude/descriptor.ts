@@ -19,7 +19,7 @@ import { agentOriginEnabledModelEntries } from "@/agentMode/backends/shared/agen
 import { ClaudeSdkBackendProcess } from "@/agentMode/sdk/ClaudeSdkBackendProcess";
 import { getCachedSdkCatalog, synthesizeEffortConfigOption } from "@/agentMode/sdk/effortOption";
 import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemPrompt";
-import { buildCopilotPlusEnv } from "@/agentMode/backends/shared/copilotPlusEnv";
+import { buildBuiltinSkillEnv } from "@/agentMode/backends/shared/builtinSkillEnv";
 import type {
   BackendConfigOption,
   EnabledModelEntry,
@@ -302,9 +302,9 @@ export const ClaudeBackendDescriptor: BackendDescriptor = {
       descriptor: args.descriptor,
       getEnableThinking: () => Boolean(getSettings().agentMode?.backends?.claude?.enableThinking),
       getEnvOverrides: () => getSettings().agentMode?.backends?.claude?.envOverrides,
-      // Decrypted Copilot Plus license for builtin skill scripts. Passed as a
-      // callback so `sdk/` need not import `backends/` (lint boundary).
-      getManagedEnv: () => buildCopilotPlusEnv(args.clientVersion),
+      // Plugin-managed runtime paths and credentials for builtin skills.
+      // Passed as a callback so `sdk/` need not import `backends/` (lint boundary).
+      getManagedEnv: () => buildBuiltinSkillEnv(args.clientVersion),
       checkAuth: async () =>
         (await getClaudeAuthStatus(claudePath, claudeChildEnv(getSettings()))).loggedIn,
       checkCompatibility: () =>

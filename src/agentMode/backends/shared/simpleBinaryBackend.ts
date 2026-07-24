@@ -18,9 +18,9 @@ export function buildSimpleSpawnDescriptor(
   configErrorMessage: string,
   envOverrides?: Record<string, string>,
   /**
-   * Plugin-managed env (e.g. the decrypted Copilot Plus license for builtin
-   * skill scripts). Merged after `process.env` but BEFORE user `envOverrides`
-   * so a user can still intentionally shadow it.
+   * Plugin-managed env (e.g. runtime paths and credentials for builtin skills).
+   * Merged after `process.env` but BEFORE user `envOverrides` so a user can
+   * still intentionally shadow it.
    */
   managedEnv?: Readonly<Record<string, string>>
 ): AcpSpawnDescriptor {
