@@ -50,4 +50,51 @@ function calculateContextTokens(usage) {
   return usage.totalTokens || usage.input + usage.output + usage.cacheRead + usage.cacheWrite;
 }
 
-module.exports = { AgentHarness, InMemorySessionStorage, Session, calculateContextTokens };
+class FileError extends Error {
+  constructor(code, message, path) {
+    super(message);
+    this.code = code;
+    this.path = path;
+  }
+}
+
+/**
+ * JSONL session storage, faithful enough to exercise our filesystem shim:
+ * `create` writes a header through it and `open` reads the file back, so a
+ * missing transcript surfaces the same way the real one does.
+ */
+class JsonlSessionStorage {
+  constructor(fs, filePath, entries) {
+    this.fs = fs;
+    this.filePath = filePath;
+    this.entries = entries;
+  }
+
+  static async create(fs, filePath, options) {
+    const result = await fs.writeFile(
+      filePath,
+      JSON.stringify({ type: "header", ...options }) + "\n"
+    );
+    if (!result.ok) throw result.error;
+    return new JsonlSessionStorage(fs, filePath, []);
+  }
+
+  static async open(fs, filePath) {
+    const result = await fs.readTextLines(filePath);
+    if (!result.ok) throw result.error;
+    return new JsonlSessionStorage(fs, filePath, result.value.filter(Boolean));
+  }
+
+  async getEntries() {
+    return this.entries;
+  }
+}
+
+module.exports = {
+  AgentHarness,
+  FileError,
+  InMemorySessionStorage,
+  JsonlSessionStorage,
+  Session,
+  calculateContextTokens,
+};
