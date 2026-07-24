@@ -10,6 +10,7 @@ interface MockHarness {
   abort: jest.Mock;
   waitForIdle: jest.Mock;
   compact: jest.Mock;
+  hooks: Map<string, (event: { payload: unknown }) => { payload: unknown } | undefined>;
   emit(event: unknown): void;
 }
 
@@ -118,6 +119,58 @@ describe("engine", () => {
         'No pi model registered with id "nope"'
       );
       expect(engine.getModelId()).toBe("gpt-5");
+    });
+
+    it("summarizes the older conversation once a turn crowds the window", async () => {
+      const engine = createPiEngine({ models, modelId: "gpt-5" });
+      // 262144 - 16384 reserve = 245760; go past it.
+      lastHarness().prompt.mockImplementationOnce(() => {
+        lastHarness().emit(assistantUsageEvent({ totalTokens: 250_000 }));
+        return Promise.resolve({});
+      });
+
+      await engine.prompt("hi");
+
+      expect(lastHarness().compact).toHaveBeenCalledTimes(1);
+    });
+
+    it("leaves a comfortable conversation uncompacted", async () => {
+      const engine = createPiEngine({ models, modelId: "gpt-5" });
+      lastHarness().prompt.mockImplementationOnce(() => {
+        lastHarness().emit(assistantUsageEvent({ totalTokens: 1000 }));
+        return Promise.resolve({});
+      });
+
+      await engine.prompt("hi");
+
+      expect(lastHarness().compact).not.toHaveBeenCalled();
+    });
+
+    it("keeps answering when compaction itself fails", async () => {
+      const engine = createPiEngine({ models, modelId: "gpt-5" });
+      lastHarness().prompt.mockImplementationOnce(() => {
+        lastHarness().emit(assistantUsageEvent({ totalTokens: 250_000 }));
+        return Promise.resolve({});
+      });
+      lastHarness().compact.mockRejectedValueOnce(new Error("summary failed"));
+
+      await expect(engine.prompt("hi")).resolves.toBeUndefined();
+    });
+
+    it("stamps provider requests with the conversation's cache key when given one", () => {
+      createPiEngine({ models, modelId: "gpt-5", cacheKey: "session-7" });
+
+      const hook = lastHarness().hooks.get("before_provider_payload");
+
+      expect(hook?.({ payload: { messages: [] } })).toEqual({
+        payload: { messages: [], prompt_cache_key: "session-7" },
+      });
+    });
+
+    it("sends no cache key when the caller supplies none", () => {
+      createPiEngine({ models, modelId: "gpt-5" });
+
+      expect(lastHarness().hooks.has("before_provider_payload")).toBe(false);
     });
 
     it("delegates compaction to the harness", async () => {

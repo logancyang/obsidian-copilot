@@ -22,6 +22,7 @@ class AgentHarness {
     this.abort = jest.fn(async () => ({ aborted: true }));
     this.waitForIdle = jest.fn(async () => undefined);
     this.compact = jest.fn(async () => ({}));
+    this.hooks = new Map();
     AgentHarness.instances.push(this);
   }
 
@@ -31,6 +32,12 @@ class AgentHarness {
 
   async setModel(model) {
     this.model = model;
+  }
+
+  /** Mirrors the real hook registry: one handler per event type. */
+  on(type, handler) {
+    this.hooks.set(type, handler);
+    return () => this.hooks.delete(type);
   }
 
   subscribe(listener) {
@@ -45,6 +52,18 @@ class AgentHarness {
 }
 
 AgentHarness.instances = [];
+
+const DEFAULT_COMPACTION_SETTINGS = {
+  enabled: true,
+  reserveTokens: 16384,
+  keepRecentTokens: 20000,
+};
+
+/** Mirrors the real threshold check. */
+function shouldCompact(contextTokens, contextWindow, settings) {
+  if (!settings.enabled) return false;
+  return contextTokens > contextWindow - settings.reserveTokens;
+}
 
 function calculateContextTokens(usage) {
   return usage.totalTokens || usage.input + usage.output + usage.cacheRead + usage.cacheWrite;
@@ -92,6 +111,8 @@ class JsonlSessionStorage {
 
 module.exports = {
   AgentHarness,
+  DEFAULT_COMPACTION_SETTINGS,
+  shouldCompact,
   FileError,
   InMemorySessionStorage,
   JsonlSessionStorage,
