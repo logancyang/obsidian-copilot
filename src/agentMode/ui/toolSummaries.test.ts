@@ -138,7 +138,7 @@ describe("lookupToolSummary", () => {
   it("falls back to ACP toolKind when vendor is missing", () => {
     const t = tool({ toolKind: "edit", title: "wrote thing" });
     const s = lookupToolSummary(t);
-    expect(s.collapsedLine(t, CTX)).toMatch(/^Edited /);
+    expect(s.collapsedLine(t, CTX)).toBe("Edited files");
   });
 
   it("falls back to generic when both vendor and toolKind are unknown", () => {
@@ -313,6 +313,60 @@ describe("lookupToolSummary", () => {
     expect(lookupToolSummary(inflight).collapsedLine(inflight, CTX)).toBe("Editing draft.md");
     const done = tool({ ...inflight, status: "completed" });
     expect(lookupToolSummary(done).collapsedLine(done, CTX)).toBe("Edited draft.md");
+  });
+
+  it("uses a single Codex diff path as the edit target", () => {
+    const t = tool({
+      toolKind: "edit",
+      title: "Editing files",
+      output: [
+        {
+          type: "diff",
+          path: "/Users/me/vault/src/agentMode/ui/toolSummaries.ts",
+          oldText: "before",
+          newText: "after",
+        },
+      ],
+    });
+    const summary = lookupToolSummary(t);
+
+    expect(summary.collapsedLine(t, CTX)).toBe("Edited src/agentMode/ui/toolSummaries.ts");
+    expect(summary.targetPath?.(t, CTX)).toBe("src/agentMode/ui/toolSummaries.ts");
+
+    const outsideVault = {
+      ...t,
+      output: [{ ...t.output![0], path: "/Users/me/private/draft.md" }],
+    };
+    expect(summary.collapsedLine(outsideVault, CTX)).toBe("Edited …/draft.md");
+  });
+
+  it("counts unique Codex diff paths for multi-file edits", () => {
+    const inflight = tool({
+      toolKind: "edit",
+      title: "Editing files",
+      status: "in_progress",
+      output: [
+        { type: "diff", path: "src/a.ts", oldText: "a", newText: "A" },
+        { type: "diff", path: "src/a.ts", oldText: "A", newText: "AA" },
+        { type: "diff", path: "src/b.ts", oldText: null, newText: "B" },
+      ],
+    });
+    const summary = lookupToolSummary(inflight);
+
+    expect(summary.collapsedLine(inflight, CTX)).toBe("Editing 2 files");
+    const done = { ...inflight, status: "completed" as const };
+    expect(summary.collapsedLine(done, CTX)).toBe("Edited 2 files");
+    expect(summary.targetPath?.(done, CTX)).toBeNull();
+  });
+
+  it("preserves OpenCode filePath edit targets", () => {
+    const t = tool({
+      toolKind: "edit",
+      title: "draft.md",
+      input: { filePath: "/Users/me/vault/draft.md" },
+    });
+
+    expect(lookupToolSummary(t).collapsedLine(t, CTX)).toBe("Edited draft.md");
   });
 
   it("uses Fetching while WebFetch is in flight and Fetched when it completes", () => {
