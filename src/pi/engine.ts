@@ -1,3 +1,6 @@
+import { logWarn } from "@/logger";
+import { shouldCompactNow } from "@/pi/compaction";
+import { installPromptCacheKey } from "@/pi/promptCache";
 import type { PiEngineOptions, PiUsage } from "@/pi/types";
 import type { PiToolContext } from "@/pi/tools";
 import {
@@ -87,9 +90,29 @@ export function createPiEngine(options: PiEngineOptions): PiEngine {
     }
   });
 
+  if (options.cacheKey) installPromptCacheKey(harness, options.cacheKey);
+
+  const currentUsage = (): PiUsage => toPiUsage(lastUsage, harness.getModel().contextWindow);
+
+  /**
+   * Summarize the older part of the conversation once it crowds the model's
+   * window. Runs after the turn settles rather than during it, so the user
+   * never waits on a summary mid-answer; a failure is reported and the next
+   * turn simply tries again.
+   */
+  const compactIfNeeded = async (): Promise<void> => {
+    if (!shouldCompactNow(currentUsage())) return;
+    try {
+      await harness.compact();
+    } catch (error) {
+      logWarn("[Pi] compaction failed; continuing without it", error);
+    }
+  };
+
   return {
     prompt: async (text, images) => {
       await harness.prompt(text, { images });
+      await compactIfNeeded();
     },
     abort: async () => {
       await harness.abort();
@@ -106,6 +129,6 @@ export function createPiEngine(options: PiEngineOptions): PiEngine {
     compact: async () => {
       await harness.compact();
     },
-    usage: () => toPiUsage(lastUsage, harness.getModel().contextWindow),
+    usage: currentUsage,
   };
 }
