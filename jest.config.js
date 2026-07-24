@@ -21,6 +21,11 @@ module.exports = {
     "^@anthropic-ai/claude-agent-sdk$": "<rootDir>/__mocks__/@anthropic-ai/claude-agent-sdk.js",
     // react-resizable-panels is ESM-only with no CJS build to point at; stub it.
     "^react-resizable-panels$": "<rootDir>/__mocks__/react-resizable-panels.js",
+    // The pi packages publish only an ESM "import" export condition, which
+    // Jest's CJS resolver can't follow; point at hand-written stubs.
+    "^@earendil-works/pi-ai$": "<rootDir>/__mocks__/@earendil-works/pi-ai.js",
+    "^@earendil-works/pi-ai/(.*)$": "<rootDir>/__mocks__/@earendil-works/pi-ai/$1.js",
+    "^@earendil-works/pi-agent-core$": "<rootDir>/__mocks__/@earendil-works/pi-agent-core.js",
   },
   testRegex: ".*\\.test\\.(jsx?|tsx?)$",
   moduleFileExtensions: ["ts", "tsx", "js", "jsx", "json", "node"],
