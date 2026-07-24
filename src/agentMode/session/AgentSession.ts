@@ -673,13 +673,21 @@ export class AgentSession {
    * restoring only the base would graft the stale model's effort onto it (e.g.
    * `sonnet` + a leftover `gpt-5` "high"), a selection the backend never
    * confirmed. When the incoming model agrees with the applied one, the push is
-   * trusted verbatim — effort changes riding it are honored — and mode and
+   * trusted verbatim — effort changes riding it are honored, and the pin's
+   * effort is refreshed to match so a later stale-model snapshot restores this
+   * latest trusted selection rather than an obsolete effort. Mode and
    * availableModels stay authoritative either way.
    */
   private reconcileAppliedModel(incoming: BackendState): BackendState {
     const applied = this.lastAppliedModel;
     if (applied === null || !incoming.model) return incoming;
-    if (incoming.model.current.baseModelId === applied.baseModelId) return incoming;
+    if (incoming.model.current.baseModelId === applied.baseModelId) {
+      this.lastAppliedModel = {
+        baseModelId: applied.baseModelId,
+        effort: incoming.model.current.effort ?? null,
+      };
+      return incoming;
+    }
     if (!incoming.model.availableModels.some((m) => m.baseModelId === applied.baseModelId)) {
       return incoming;
     }
@@ -740,16 +748,14 @@ export class AgentSession {
     const originalEffort = originalState.model?.current.effort ?? null;
     if (encoded === originalEncoded && selection.effort === originalEffort) return;
     const configOptionBacked = originalState.model?.apply?.kind === "setConfigOption";
-    // Drop the optimistic baseModelId seed before delegating to applySelection.
-    // Descriptor applySelection impls may guard their model write on the session's
-    // *current* model (Claude via setModel guards on getState().current; config-
-    // option opencode guards on the current option value). The seed already shows
-    // the target, so without this they'd see "already there" and skip the real
-    // switch, stranding the backend on its startup default. Restoring the true
-    // reported state makes the guard fire; no blink results because no notify
-    // fires between this reset and the confirming setModel below. Guard-less
-    // setModel backends round-trip regardless, so they're unaffected.
-    this.applyState(originalState, "seed");
+    // The session state keeps the optimistic seed while the switch is in
+    // flight: initialize() has already flipped the status and notified, so any
+    // render during the round-trip reads whatever state is current — resetting
+    // it here would flash the backend default until the confirmation lands.
+    // Descriptor guards that skip redundant model writes must therefore not
+    // read the seeded session state (it already shows the target, so they'd
+    // see "already there" and skip the real switch); `originalState` is passed
+    // to applySelection below as the reported truth to compare against.
     try {
       // Clearing effort to the agent default on a config-option backend whose
       // process baked a concrete effort: the base already matches, so
@@ -760,7 +766,7 @@ export class AgentSession {
         await this.applyModelWireId(descriptor.wire.encode(selection));
         return;
       }
-      await descriptor.applySelection(this, selection);
+      await descriptor.applySelection(this, selection, originalState);
     } catch (e) {
       logWarn(`[AgentMode] could not apply seeded selection ${encoded}; reverting seed`, e);
       this.applyState(originalState, "seed");
@@ -769,15 +775,16 @@ export class AgentSession {
   }
 
   /**
-   * Config-option round-trip; `provenance` carries the caller's intent. A
-   * user model/effort apply (effort, or the model option on config-option-
-   * backed catalogs) passes `"confirmed"` — the response is a model
-   * confirmation and re-pins the applied model. A mode change routed through
-   * a config option passes `"reported"` — its response snapshot is not a
-   * model confirmation, and a stale one must neither clobber the applied
-   * model nor re-pin `lastAppliedModel` to the stale value. Reuses
-   * `notifyModelChanged` because the picker treats model and configOption
-   * changes as one channel.
+   * Config-option round-trip; `provenance` carries the caller's intent. Only
+   * a user *model* apply (the model option on config-option-backed catalogs)
+   * passes `"confirmed"` — its response is a model confirmation and re-pins
+   * the applied model. Effort and mode writes pass `"reported"`: their
+   * response snapshots are not model confirmations, and a stale one must
+   * neither clobber the applied model nor re-pin `lastAppliedModel` to the
+   * stale value. An effort response that agrees on the pinned base still
+   * lands verbatim and refreshes the pin's effort via `reconcileAppliedModel`.
+   * Reuses `notifyModelChanged` because the picker treats model and
+   * configOption changes as one channel.
    */
   async setConfigOption(
     configId: string,

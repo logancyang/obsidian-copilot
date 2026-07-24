@@ -7,6 +7,7 @@ import type {
   BackendConfigOption,
   BackendId,
   BackendProcess,
+  BackendState,
   EffortOption,
   EnabledModelEntry,
   ModelSelection,
@@ -272,8 +273,19 @@ export interface BackendDescriptor {
    * Implementations are expected to swallow `MethodUnsupportedError` from
    * the underlying `session.setConfigOption` call (the backend may simply
    * lack the capability) and propagate everything else.
+   *
+   * `reportedState`, when supplied, is the backend's true reported state and
+   * must be what any "skip the redundant model write" guard compares against.
+   * During startup seeding the session's cached state is an optimistic display
+   * seed that already shows the target model, so a guard reading
+   * `session.getState()` would conclude "already there" and skip the real
+   * switch. When absent, the session state is the reported truth.
    */
-  applySelection(session: AgentSession, selection: ModelSelection): Promise<void>;
+  applySelection(
+    session: AgentSession,
+    selection: ModelSelection,
+    reportedState?: BackendState | null
+  ): Promise<void>;
 
   /**
    * Optional: return the canonical → native mode mapping for this backend

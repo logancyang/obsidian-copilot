@@ -2237,11 +2237,11 @@ describe("AgentSession.create (via start)", () => {
   });
 
   it("cross-backend seed to a guard-on-current setModel backend still issues the real switch", async () => {
-    // Regression: Claude-style backends guard their setModel on getState().current.
-    // The optimistic display seed already shows the target, so without dropping it
-    // confirmSeededSelection would fool the guard into skipping the real switch,
-    // stranding the backend on its startup default. The seed must be dropped so the
-    // guard sees the true reported model and fires setSessionModel.
+    // Regression: Claude-style backends guard their setModel write on the current
+    // model. The optimistic display seed already shows the target, so a guard
+    // reading the seeded session state would skip the real switch, stranding the
+    // backend on its startup default. confirmSeededSelection passes the reported
+    // state to applySelection so the guard compares truth and fires setSessionModel.
     const mock = makeMockBackend();
     const reported: BackendState = {
       model: {
@@ -2565,6 +2565,153 @@ describe("AgentSession.create (via start)", () => {
     expect(session.getState()?.model?.current.baseModelId).toBe("sonnet");
   });
 
+  it("keeps the optimistic seed visible while the confirming switch is in flight", async () => {
+    // Regression: initialize() notifies before confirmSeededSelection runs, so
+    // React reads whatever state is current when it renders. Resetting the
+    // seed to make descriptor guards work would flash the backend default
+    // until the confirming setModel lands; instead the seed stays and the
+    // guard compares against the reported state passed to applySelection.
+    const mock = makeMockBackend();
+    const reported: BackendState = {
+      model: {
+        current: { baseModelId: "opus", effort: null },
+        apply: { kind: "setModel" },
+        availableModels: [
+          { baseModelId: "opus", name: "Opus", provider: "anthropic", effortOptions: [] },
+          { baseModelId: "sonnet", name: "Sonnet", provider: "anthropic", effortOptions: [] },
+        ],
+      },
+      mode: null,
+    };
+    mock.newSession.mockResolvedValueOnce({ sessionId: "acp-1", state: reported });
+    let resolveSetModel!: (s: BackendState) => void;
+    mock.setSessionModel.mockImplementationOnce(
+      () => new Promise<BackendState>((resolve) => (resolveSetModel = resolve))
+    );
+    const session = AgentSession.start({
+      backend: mock.asBackend,
+      cwd: "/vault",
+      internalId: "internal-1",
+      backendId: "claude",
+      defaultModelSelection: { baseModelId: "sonnet", effort: null },
+      getDescriptor: () => makeDescriptorWireWithoutEffort(),
+    });
+    // Let initialize reach the in-flight setSessionModel.
+    await new Promise((r) => window.setTimeout(r, 0));
+    expect(mock.setSessionModel).toHaveBeenCalledWith({ sessionId: "acp-1", modelId: "sonnet" });
+    // A render during the round-trip sees the pick, not the backend default.
+    expect(session.getState()?.model?.current.baseModelId).toBe("sonnet");
+    resolveSetModel({
+      model: { ...reported.model!, current: { baseModelId: "sonnet", effort: null } },
+      mode: null,
+    });
+    await session.ready;
+    expect(session.getState()?.model?.current.baseModelId).toBe("sonnet");
+  });
+
+  it("preserves a trusted same-model effort change when rejecting a later stale revert", async () => {
+    // Regression: a same-model push is trusted verbatim, so the effort it
+    // carries is the latest trusted selection. The pin must follow it —
+    // otherwise a later stale different-model snapshot is "reconciled" back
+    // to the pin's obsolete effort, silently undoing the accepted change.
+    const mock = makeMockBackend();
+    const reported: BackendState = {
+      model: {
+        current: { baseModelId: "gpt-5", effort: null },
+        apply: { kind: "setModel" },
+        availableModels: [
+          { baseModelId: "gpt-5", name: "GPT-5", provider: "openai", effortOptions: [] },
+          {
+            baseModelId: "sonnet",
+            name: "Sonnet",
+            provider: "anthropic",
+            effortOptions: [{ value: "high", label: "High" }],
+          },
+        ],
+      },
+      mode: null,
+    };
+    const switched: BackendState = {
+      model: { ...reported.model!, current: { baseModelId: "sonnet", effort: null } },
+      mode: null,
+    };
+    mock.newSession.mockResolvedValueOnce({ sessionId: "acp-1", state: reported });
+    mock.setSessionModel.mockResolvedValueOnce(switched);
+    const session = AgentSession.start({
+      backend: mock.asBackend,
+      cwd: "/vault",
+      internalId: "internal-1",
+      backendId: "opencode",
+      defaultModelSelection: { baseModelId: "sonnet", effort: null },
+      getDescriptor: () => makeWireOnlyDescriptor(),
+    });
+    await session.ready;
+    const withEffort: BackendState = {
+      model: { ...switched.model!, current: { baseModelId: "sonnet", effort: "high" } },
+      mode: null,
+    };
+    mock.emit({
+      sessionId: "acp-1",
+      update: { sessionUpdate: "state_changed", state: withEffort },
+    });
+    expect(session.getState()?.model?.current).toEqual({ baseModelId: "sonnet", effort: "high" });
+    // A stale pre-switch snapshot must restore the latest trusted selection,
+    // including the effort accepted above — not the effort pinned at apply time.
+    mock.emit({ sessionId: "acp-1", update: { sessionUpdate: "state_changed", state: reported } });
+    expect(session.getState()?.model?.current).toEqual({ baseModelId: "sonnet", effort: "high" });
+  });
+
+  it("keeps the applied model when an effort apply's response carries a stale model", async () => {
+    // Regression: effort writes are not model confirmations. When an effort
+    // response snapshot carries a stale pre-switch model, it must neither
+    // clobber the just-applied model nor re-pin lastAppliedModel to the stale
+    // value — otherwise a later truthful push is "reconciled" back to it.
+    const mock = makeMockBackend();
+    const reported: BackendState = {
+      model: {
+        current: { baseModelId: "opus", effort: null },
+        apply: { kind: "setModel" },
+        availableModels: [
+          { baseModelId: "opus", name: "Opus", provider: "anthropic", effortOptions: [] },
+          {
+            baseModelId: "sonnet",
+            name: "Sonnet",
+            provider: "anthropic",
+            effortOptions: [{ value: "high", label: "High" }],
+          },
+        ],
+      },
+      mode: null,
+    };
+    const switched: BackendState = {
+      model: { ...reported.model!, current: { baseModelId: "sonnet", effort: null } },
+      mode: null,
+    };
+    mock.newSession.mockResolvedValueOnce({ sessionId: "acp-1", state: reported });
+    mock.setSessionModel.mockResolvedValueOnce(switched);
+    // The effort write's response was computed against pre-switch state.
+    mock.setSessionConfigOption.mockResolvedValueOnce(reported);
+    const session = AgentSession.start({
+      backend: mock.asBackend,
+      cwd: "/vault",
+      internalId: "internal-1",
+      backendId: "claude",
+      defaultModelSelection: { baseModelId: "sonnet", effort: "high" },
+      getDescriptor: () => makeDescriptorWireWithoutEffort(),
+    });
+    await session.ready;
+    // The stale effort response did not revert the applied model.
+    expect(session.getState()?.model?.current.baseModelId).toBe("sonnet");
+    // Pin uncorrupted: a truthful push carrying the pick (with its effort
+    // landed backend-side) is honored as-is.
+    const confirmed: BackendState = {
+      model: { ...reported.model!, current: { baseModelId: "sonnet", effort: "high" } },
+      mode: null,
+    };
+    mock.emit({ sessionId: "acp-1", update: { sessionUpdate: "state_changed", state: confirmed } });
+    expect(session.getState()?.model?.current).toEqual({ baseModelId: "sonnet", effort: "high" });
+  });
+
   it("seeds config-option opencode effort via the effort option, not the model id", async () => {
     // Regression: a cross-backend pick to config-option opencode (≥1.15.13)
     // must set the bare model on the model config option and the effort on the
@@ -2732,11 +2879,13 @@ function makeConfigOptionDescriptor(): BackendDescriptor {
     wire,
     applySelection: async (
       session: AgentSession,
-      selection: { baseModelId: string; effort: string | null }
+      selection: { baseModelId: string; effort: string | null },
+      reportedState?: BackendState | null
     ) => {
-      const apply = session.getState()?.model?.apply;
+      const guardState = reportedState ?? session.getState();
+      const apply = guardState?.model?.apply;
       if (apply?.kind === "setConfigOption" && apply.effortConfigId) {
-        const currentBase = session.getState()?.model?.current.baseModelId;
+        const currentBase = guardState?.model?.current.baseModelId;
         if (currentBase !== selection.baseModelId) {
           await session.applyModelWireId(
             wire.encode({ baseModelId: selection.baseModelId, effort: null })
@@ -2747,7 +2896,7 @@ function makeConfigOptionDescriptor(): BackendDescriptor {
           const effortConfigId =
             refreshed?.kind === "setConfigOption" ? refreshed.effortConfigId : undefined;
           if (effortConfigId)
-            await session.setConfigOption(effortConfigId, selection.effort, "confirmed");
+            await session.setConfigOption(effortConfigId, selection.effort, "reported");
         }
         return;
       }
@@ -2845,16 +2994,19 @@ function makeDescriptorWireWithoutEffort(): BackendDescriptor {
   return {
     wire,
     // Claude-style: effort lives outside the wire id, so the model channel
-    // carries only the base id and effort goes through setConfigOption.
+    // carries only the base id and effort goes through setConfigOption. The
+    // guard compares against the reported state when given, mirroring the
+    // real descriptor.
     applySelection: async (
       session: AgentSession,
-      selection: { baseModelId: string; effort: string | null }
+      selection: { baseModelId: string; effort: string | null },
+      reportedState?: BackendState | null
     ) => {
-      const currentBase = session.getState()?.model?.current.baseModelId;
+      const currentBase = (reportedState ?? session.getState())?.model?.current.baseModelId;
       if (currentBase !== selection.baseModelId)
         await session.applyModelWireId(wire.encode(selection));
       if (selection.effort !== null)
-        await session.setConfigOption("effort", selection.effort, "confirmed");
+        await session.setConfigOption("effort", selection.effort, "reported");
     },
   } as unknown as BackendDescriptor;
 }

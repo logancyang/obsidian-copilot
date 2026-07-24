@@ -29,6 +29,7 @@ import { cacheRoot } from "@/context/conversionsLocation";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import { simpleBinaryBackendProcess } from "@/agentMode/backends/shared/simpleBinaryBackend";
 import type {
+  BackendState,
   EffortOption,
   EnabledModelEntry,
   ModeMapping,
@@ -196,12 +197,19 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
     }
   },
 
-  async applySelection(session: AgentSession, selection: ModelSelection): Promise<void> {
-    const apply = session.getState()?.model?.apply;
+  async applySelection(
+    session: AgentSession,
+    selection: ModelSelection,
+    reportedState?: BackendState | null
+  ): Promise<void> {
+    // Guard reads use the reported state when given — during startup seeding
+    // the session state optimistically shows the target already.
+    const guardState = reportedState ?? session.getState();
+    const apply = guardState?.model?.apply;
     if (apply?.kind === "setConfigOption" && apply.effortConfigId) {
       // The effort option is model-specific, so activate the bare model first
       // and use the option id from the refreshed state.
-      const currentBase = session.getState()?.model?.current.baseModelId;
+      const currentBase = guardState?.model?.current.baseModelId;
       if (currentBase !== selection.baseModelId) {
         await session.applyModelWireId(
           opencodeWire.encode({ baseModelId: selection.baseModelId, effort: null })
@@ -212,7 +220,7 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
         const effortConfigId =
           refreshedApply?.kind === "setConfigOption" ? refreshedApply.effortConfigId : undefined;
         if (effortConfigId) {
-          await session.setConfigOption(effortConfigId, selection.effort, "confirmed");
+          await session.setConfigOption(effortConfigId, selection.effort, "reported");
         }
       }
       return;

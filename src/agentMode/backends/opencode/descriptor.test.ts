@@ -210,7 +210,7 @@ describe("OpencodeBackendDescriptor.applySelection", () => {
       effort: "high",
     });
     expect(applyModelWireId).not.toHaveBeenCalled();
-    expect(setConfigOption).toHaveBeenCalledWith("effort", "high", "confirmed");
+    expect(setConfigOption).toHaveBeenCalledWith("effort", "high", "reported");
   });
 
   it("switches the base model before applying its config-option-backed effort", async () => {
@@ -227,7 +227,7 @@ describe("OpencodeBackendDescriptor.applySelection", () => {
       effort: "high",
     });
     expect(applyModelWireId).toHaveBeenCalledWith("openai/gpt-5");
-    expect(setConfigOption).toHaveBeenCalledWith("effort", "high", "confirmed");
+    expect(setConfigOption).toHaveBeenCalledWith("effort", "high", "reported");
     expect(applyModelWireId.mock.invocationCallOrder[0]).toBeLessThan(
       setConfigOption.mock.invocationCallOrder[0]
     );

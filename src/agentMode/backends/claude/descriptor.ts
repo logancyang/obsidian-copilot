@@ -22,6 +22,7 @@ import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemP
 import { buildBuiltinSkillEnv } from "@/agentMode/backends/shared/builtinSkillEnv";
 import type {
   BackendConfigOption,
+  BackendState,
   EnabledModelEntry,
   ModeMapping,
   ModelSelection,
@@ -268,12 +269,19 @@ export const ClaudeBackendDescriptor: BackendDescriptor = {
     return isClaudePlanModePlanFilePath(absolutePath);
   },
 
-  async applySelection(session: AgentSession, selection: ModelSelection): Promise<void> {
+  async applySelection(
+    session: AgentSession,
+    selection: ModelSelection,
+    reportedState?: BackendState | null
+  ): Promise<void> {
     // Claude's wire id is just the baseModelId — effort travels through
     // `setConfigOption`, not the model id. Skip the model round-trip when
     // the base hasn't changed, otherwise effort-only ticks would fire a
-    // pointless `setSessionModel` on every slider drag.
-    const currentBase = session.getState()?.model?.current.baseModelId;
+    // pointless `setSessionModel` on every slider drag. The guard compares
+    // against the reported state when given — during startup seeding the
+    // session state optimistically shows the target already.
+    const guardState = reportedState ?? session.getState();
+    const currentBase = guardState?.model?.current.baseModelId;
     if (currentBase !== selection.baseModelId) {
       await session.applyModelWireId(claudeWire.encode(selection));
     }
@@ -281,7 +289,7 @@ export const ClaudeBackendDescriptor: BackendDescriptor = {
     const cfgOpt = claudeWire.effortConfigFor?.(selection.baseModelId);
     if (!cfgOpt) return;
     try {
-      await session.setConfigOption(cfgOpt.id, selection.effort, "confirmed");
+      await session.setConfigOption(cfgOpt.id, selection.effort, "reported");
     } catch (e) {
       if (!(e instanceof MethodUnsupportedError)) throw e;
     }
@@ -391,7 +399,7 @@ async function replayPersistedEffort(
     const cfgOpt = ClaudeBackendDescriptor.wire.effortConfigFor?.(current.baseModelId);
     if (!cfgOpt) return true;
     try {
-      await session.setConfigOption(cfgOpt.id, persistedEffort, "confirmed");
+      await session.setConfigOption(cfgOpt.id, persistedEffort, "reported");
     } catch (e) {
       if (e instanceof MethodUnsupportedError) return true;
       logWarn(`[AgentMode] could not apply default effort ${persistedEffort}`, e);
