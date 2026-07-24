@@ -10,7 +10,7 @@ import type { ModelInfo, ProviderType } from "./catalog";
  * The three agent backends. Each can own its own `Provider`(s) and
  * reports a runtime model inventory.
  */
-export type AgentType = "opencode" | "claude" | "codex";
+export type AgentType = "opencode" | "claude" | "codex" | "pi";
 
 /**
  * The broader set used for per-backend model curation: the three agents
