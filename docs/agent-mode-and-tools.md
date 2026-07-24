@@ -26,6 +26,16 @@ When the autonomous agent is enabled, Copilot can:
 
 The agent activates automatically when you're in **Copilot Plus** mode. You don't need to do anything special — just ask your question.
 
+## Choosing an Operating Mode
+
+The mode picker beside the message box controls how much the active agent can do:
+
+- **Default** — the agent can work in your vault and asks before sensitive actions.
+- **Plan** — the agent reads and reasons without changing your vault.
+- **Auto** — the agent can work without individual approval prompts. Use it only when you trust the task and workspace.
+
+The available modes depend on the selected agent. Copilot normalizes equivalent modes across supported versions of Claude, Codex, and OpenCode.
+
 ### Max Iterations
 
 The agent works in iteration cycles (think → use a tool → think → use a tool → answer). You can control the maximum number of iterations before the agent stops:

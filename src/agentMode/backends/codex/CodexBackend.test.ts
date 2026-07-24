@@ -62,10 +62,21 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
     });
   });
 
-  it("forwards the Copilot base prompt + pill-syntax directive via -c developer_instructions", async () => {
+  it("forwards the Copilot prompt through both current and legacy adapter config paths", async () => {
     const backend = new CodexBackend();
     const desc = await backend.buildSpawnDescriptor({ vaultBasePath: "/vault" });
     expect(desc.command).toBe("/usr/local/bin/codex-acp");
+
+    const config = JSON.parse(desc.env.CODEX_CONFIG as string);
+    expect(config.developer_instructions).toContain("Obsidian Copilot");
+    expect(config.developer_instructions).toContain(
+      "NOT a software-engineering agent or CLI coding tool"
+    );
+    expect(config.developer_instructions).toContain("{folder_name}");
+    expect(config.developer_instructions).toContain("{activeNote}");
+    expect(config.developer_instructions).not.toContain("metadata.copilot-enabled-agents");
+    expect(config.developer_instructions).not.toContain("copilot/skills/<name>/SKILL.md");
+
     const cIdx = desc.args.indexOf("-c");
     expect(cIdx).toBeGreaterThanOrEqual(0);
     const value = desc.args[cIdx + 1];
@@ -179,6 +190,104 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
         'sandbox_mode="workspace-write"',
       ])
     );
+    expect(JSON.parse(desc.env.CODEX_CONFIG as string)).toEqual(
+      expect.objectContaining({
+        approval_policy: "on-request",
+        sandbox_mode: "workspace-write",
+      })
+    );
+  });
+
+  it("preserves user CODEX_CONFIG keys while enforcing Copilot-owned fields", async () => {
+    setSettings({
+      agentMode: {
+        byok: {},
+        mcpServers: [],
+        activeBackend: "codex",
+        debugFullFrames: false,
+        welcomeDismissed: false,
+        skills: { folder: "copilot/skills" },
+        backends: {
+          codex: {
+            binaryPath: "/usr/local/bin/codex-acp",
+            envOverrides: {
+              CODEX_CONFIG: JSON.stringify({
+                model: "custom-model",
+                developer_instructions: "drop Copilot prompt",
+                approval_policy: "never",
+                sandbox_mode: "danger-full-access",
+              }),
+            },
+          },
+        },
+      },
+    });
+
+    const desc = await new CodexBackend().buildSpawnDescriptor({ vaultBasePath: "/vault" });
+    const config = JSON.parse(desc.env.CODEX_CONFIG as string);
+    expect(config).toEqual(
+      expect.objectContaining({
+        model: "custom-model",
+        approval_policy: "on-request",
+        sandbox_mode: "workspace-write",
+      })
+    );
+    expect(config.developer_instructions).toContain("Obsidian Copilot");
+    expect(config.developer_instructions).not.toContain("drop Copilot prompt");
+  });
+
+  it.each(["not-json", "[]", "null"])(
+    "rejects an invalid CODEX_CONFIG override without echoing it (%s)",
+    async (CODEX_CONFIG) => {
+      setSettings({
+        agentMode: {
+          byok: {},
+          mcpServers: [],
+          activeBackend: "codex",
+          debugFullFrames: false,
+          welcomeDismissed: false,
+          skills: { folder: "copilot/skills" },
+          backends: {
+            codex: {
+              binaryPath: "/usr/local/bin/codex-acp",
+              envOverrides: { CODEX_CONFIG },
+            },
+          },
+        },
+      });
+
+      await expect(
+        new CodexBackend().buildSpawnDescriptor({ vaultBasePath: "/vault" })
+      ).rejects.toThrow("Codex CODEX_CONFIG must be a valid JSON object.");
+    }
+  );
+
+  it("starts current codex-acp adapters in their canonical default mode", async () => {
+    const backend = new CodexBackend();
+    const desc = await backend.buildSpawnDescriptor({ vaultBasePath: "/vault" });
+    expect(desc.env.INITIAL_AGENT_MODE).toBe("agent");
+  });
+
+  it("lets a user override the initial codex-acp mode", async () => {
+    setSettings({
+      agentMode: {
+        byok: {},
+        mcpServers: [],
+        activeBackend: "codex",
+        debugFullFrames: false,
+        welcomeDismissed: false,
+        skills: { folder: "copilot/skills" },
+        backends: {
+          codex: {
+            binaryPath: "/usr/local/bin/codex-acp",
+            envOverrides: { INITIAL_AGENT_MODE: "read-only" },
+          },
+        },
+      },
+    });
+    const backend = new CodexBackend();
+    const desc = await backend.buildSpawnDescriptor({ vaultBasePath: "/vault" });
+    expect(desc.env.INITIAL_AGENT_MODE).toBe("read-only");
   });
 
   it("does not add a project.md fallback to the codex spawn args", async () => {
