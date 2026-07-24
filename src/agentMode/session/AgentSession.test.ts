@@ -2389,6 +2389,47 @@ describe("AgentSession.create (via start)", () => {
     expect(session.getState()?.model?.current.baseModelId).toBe("sonnet");
   });
 
+  it("restores the applied effort along with the model when rejecting a stale revert", async () => {
+    // A stale push carries the pre-switch selection wholesale. Rejecting only
+    // its model would graft the stale effort onto the applied base (e.g.
+    // sonnet + gpt-5's "high"), a selection the backend never confirmed.
+    const mock = makeMockBackend();
+    const reported: BackendState = {
+      model: {
+        current: { baseModelId: "gpt-5", effort: "high" },
+        apply: { kind: "setModel" },
+        availableModels: [
+          {
+            baseModelId: "gpt-5",
+            name: "GPT-5",
+            provider: "openai",
+            effortOptions: [{ value: "high", label: "High" }],
+          },
+          { baseModelId: "sonnet", name: "Sonnet", provider: "anthropic", effortOptions: [] },
+        ],
+      },
+      mode: null,
+    };
+    const switched: BackendState = {
+      model: { ...reported.model!, current: { baseModelId: "sonnet", effort: null } },
+      mode: null,
+    };
+    mock.newSession.mockResolvedValueOnce({ sessionId: "acp-1", state: reported });
+    mock.setSessionModel.mockResolvedValueOnce(switched);
+    const session = AgentSession.start({
+      backend: mock.asBackend,
+      cwd: "/vault",
+      internalId: "internal-1",
+      backendId: "opencode",
+      defaultModelSelection: { baseModelId: "sonnet", effort: null },
+      getDescriptor: () => makeWireOnlyDescriptor(),
+    });
+    await session.ready;
+    expect(session.getState()?.model?.current).toEqual({ baseModelId: "sonnet", effort: null });
+    mock.emit({ sessionId: "acp-1", update: { sessionUpdate: "state_changed", state: reported } });
+    expect(session.getState()?.model?.current).toEqual({ baseModelId: "sonnet", effort: null });
+  });
+
   it("honors a state_changed that keeps the applied model but changes effort", async () => {
     const mock = makeMockBackend();
     const reported: BackendState = {
@@ -2478,7 +2519,7 @@ describe("AgentSession.create (via start)", () => {
   it("keeps the user-applied model when a config-option mode apply carries a stale model", async () => {
     // opencode routes mode switches through setSessionConfigOption; the response
     // is a whole-state snapshot that can be stale. It must not clobber the
-    // applied model, and it must not re-pin lastAppliedModelBaseId to the stale
+    // applied model, and it must not re-pin lastAppliedModel to the stale
     // value — otherwise a later truthful state_changed would be "reconciled"
     // back to the stale model.
     const mock = makeMockBackend();
