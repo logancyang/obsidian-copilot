@@ -22,6 +22,15 @@ describe("obsidianSkills", () => {
       }
     });
 
+    it("bumps only the changed CLI skill so existing vaults receive the safety update", () => {
+      expect(OBSIDIAN_SKILLS.map((skill) => [skill.name, skill.version])).toEqual([
+        ["obsidian-markdown", 1],
+        ["obsidian-bases", 1],
+        ["json-canvas", 1],
+        ["obsidian-cli", 2],
+      ]);
+    });
+
     it("parses each SKILL.md with the same validator used by discovery", () => {
       for (const skill of OBSIDIAN_SKILLS) {
         const parsed = parseSkillFile(skill.skillMd, skill.name);
@@ -134,14 +143,32 @@ describe("obsidianSkills", () => {
       );
       expect(md).toContain("commands filter=");
       expect(md).toContain("plugin:reload");
+      expect(md).toContain("For a plugin other than Copilot");
+      expect(md).toContain("Never reload the\n   Copilot plugin");
       expect(md).toContain("dev:errors");
       expect(md).toContain("dev:screenshot");
       expect(md).toContain("dev:dom");
       expect(md).toContain("dev:css");
       expect(md).toContain("dev:mobile");
+      expect(md).toContain("Preserve the host session");
+      expect(md).toContain("any CLI command that reloads or restarts the app");
+      expect(md).toContain("any plugin reload, disable, or uninstall operation targeting Copilot");
+      expect(md).toContain("any restricted-mode change");
+      expect(md).toContain("command ID, JavaScript expression, or CDP call");
+      expect(md).toContain("hard prohibition, not a confirmation-gated operation");
+      expect(md).toContain("manually after the agent session has ended");
       expect(md).toContain("Risky operations require explicit intent");
       expect(md).toContain("permanent deletion");
       expect(md).toContain("mutating JavaScript evaluation or CDP calls");
+      expect(md).toContain("Explicit intent does not override the host-session prohibition");
+      expect(md).not.toContain("- restarting Obsidian");
+      expect(md).not.toContain("- changing restricted mode");
+      expect(md).not.toContain("obsidian reload");
+      expect(md).not.toContain("obsidian restart");
+      expect(md).not.toContain("plugin:reload id=copilot");
+      expect(md).not.toContain("plugin:disable id=copilot");
+      expect(md).not.toContain("plugin:uninstall id=copilot");
+      expect(md).not.toContain("plugins:restrict on");
       expect(md).toContain("Use normal shell\nfilesystem tools");
       expect(md).not.toContain("obsidian read file=");
       expect(md).not.toContain("obsidian create name=");

@@ -67,6 +67,8 @@ The Obsidian CLI skill first verifies that `obsidian version` succeeds. The CLI 
 
 When inspecting open tabs, the agent preserves Markdown notes, other file-backed tabs, and non-file views as workspace context. It reads content only from explicit vault paths reported by Obsidian and never treats a tab title or ID as a filename.
 
+The agent never reloads or restarts Obsidian, nor does it reload, disable, or uninstall the Copilot plugin hosting its session. Those actions terminate in-flight agent work. When a reload is required to finish verification, the agent leaves it for you to perform after the session ends. Reloading a different plugin remains available for plugin development.
+
 ### Always-Enabled Tools
 
 These tools are always available and cannot be disabled:

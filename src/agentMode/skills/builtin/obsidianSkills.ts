@@ -4,7 +4,8 @@ import type { BuiltinSkill } from "./builtinSkills";
 export const OBSIDIAN_SKILLS_UPSTREAM_REVISION = "a1dc48e68138490d522c04cbf5822214c6eb1202";
 
 const ENABLED_AGENTS = ["claude", "codex", "opencode"] as const;
-const VERSION = 1;
+const FORMAT_SKILL_VERSION = 1;
+const OBSIDIAN_CLI_VERSION = 2;
 
 const UPSTREAM_LICENSE = String.raw`MIT License
 
@@ -35,7 +36,7 @@ description: Create and edit Obsidian-specific Markdown syntax, including wikili
 license: MIT
 metadata:
   copilot-enabled-agents: claude, codex, opencode
-  copilot-builtin-version: "${VERSION}"
+  copilot-builtin-version: "${FORMAT_SKILL_VERSION}"
   copilot-upstream-revision: "${OBSIDIAN_SKILLS_UPSTREAM_REVISION}"
 ---
 
@@ -209,7 +210,7 @@ description: Create and edit Obsidian Bases (.base files) with valid YAML schema
 license: MIT
 metadata:
   copilot-enabled-agents: claude, codex, opencode
-  copilot-builtin-version: "${VERSION}"
+  copilot-builtin-version: "${FORMAT_SKILL_VERSION}"
   copilot-upstream-revision: "${OBSIDIAN_SKILLS_UPSTREAM_REVISION}"
 ---
 
@@ -419,7 +420,7 @@ description: Create and edit JSON Canvas (.canvas) files with valid nodes, edges
 license: MIT
 metadata:
   copilot-enabled-agents: claude, codex, opencode
-  copilot-builtin-version: "${VERSION}"
+  copilot-builtin-version: "${FORMAT_SKILL_VERSION}"
   copilot-upstream-revision: "${OBSIDIAN_SKILLS_UPSTREAM_REVISION}"
 ---
 
@@ -590,7 +591,7 @@ description: Use the official Obsidian CLI when a task needs Obsidian's running 
 license: MIT
 metadata:
   copilot-enabled-agents: claude, codex, opencode
-  copilot-builtin-version: "${VERSION}"
+  copilot-builtin-version: "${OBSIDIAN_CLI_VERSION}"
   copilot-upstream-revision: "${OBSIDIAN_SKILLS_UPSTREAM_REVISION}"
 ---
 
@@ -723,7 +724,8 @@ paths or titles alone answer the request.
 <code>commands</code> lists registered command IDs, including commands provided
 by plugins. Filter by an ID prefix, then execute the selected command with
 <code>command id=&lt;command-id&gt;</code>. Never guess a command ID when it can be
-discovered.
+discovered. Do not execute a discovered command whose effect is prohibited by
+the host-session rules below.
 
 ~~~bash
 obsidian vault="My Vault" commands filter="my-plugin:"
@@ -735,7 +737,9 @@ obsidian vault="My Vault" command id="my-plugin:run-action"
 Use the CLI as the first choice for runtime verification after the normal build
 or test command has produced artifacts:
 
-1. Reload with <code>plugin:reload id=&lt;plugin-id&gt;</code>.
+1. For a plugin other than Copilot, reload with
+   <code>plugin:reload id=&lt;plugin-id&gt;</code> when needed. Never reload the
+   Copilot plugin from a Copilot-hosted agent session.
 2. Inspect <code>dev:errors</code> and <code>dev:console level=error</code>.
 3. Verify UI state with <code>dev:screenshot path=...</code>,
    <code>dev:dom selector=...</code>, and <code>dev:css selector=...</code>.
@@ -747,6 +751,23 @@ state that the documented inspection commands cannot expose. Keep expressions
 small and return serializable values. Treat any expression or CDP call that
 mutates application state as a risky operation requiring explicit user intent.
 
+## Preserve the host session
+
+Never reload or restart the Obsidian app or window from an agent session. Never
+reload, disable, or uninstall the Copilot plugin that is hosting the agent. In
+particular, do not use:
+
+- any CLI command that reloads or restarts the app, window, or renderer
+- any plugin reload, disable, or uninstall operation targeting Copilot
+- any restricted-mode change
+- a command ID, JavaScript expression, or CDP call that performs an equivalent
+  app, window, renderer, or Copilot-plugin teardown
+
+These actions terminate the in-flight agent and can discard its work. This is a
+hard prohibition, not a confirmation-gated operation. If verification requires
+one, finish all non-destructive checks and tell the user to perform the reload
+manually after the agent session has ended.
+
 ## Risky operations require explicit intent
 
 Do not perform the following merely because they are available:
@@ -755,13 +776,12 @@ Do not perform the following merely because they are available:
 - local-history or Sync restoration
 - publishing or unpublishing
 - plugin or theme installation/uninstallation
-- changing restricted mode
-- restarting Obsidian
 - mutating JavaScript evaluation or CDP calls
 
 Confirm that the user's request clearly authorizes the exact target and effect.
 Prefer reversible variants, such as trash-backed deletion, when they satisfy
-the request.
+the request. Explicit intent does not override the host-session prohibition
+above.
 
 ## Exclusions
 
@@ -779,7 +799,7 @@ const LICENSE_FILE = { path: "LICENSE", content: UPSTREAM_LICENSE } as const;
 
 const OBSIDIAN_MARKDOWN: BuiltinSkill = {
   name: "obsidian-markdown",
-  version: VERSION,
+  version: FORMAT_SKILL_VERSION,
   enabledAgents: ENABLED_AGENTS,
   skillMd: OBSIDIAN_MARKDOWN_SKILL_MD,
   files: [
@@ -792,7 +812,7 @@ const OBSIDIAN_MARKDOWN: BuiltinSkill = {
 
 const OBSIDIAN_BASES: BuiltinSkill = {
   name: "obsidian-bases",
-  version: VERSION,
+  version: FORMAT_SKILL_VERSION,
   enabledAgents: ENABLED_AGENTS,
   skillMd: OBSIDIAN_BASES_SKILL_MD,
   files: [
@@ -804,7 +824,7 @@ const OBSIDIAN_BASES: BuiltinSkill = {
 
 const JSON_CANVAS: BuiltinSkill = {
   name: "json-canvas",
-  version: VERSION,
+  version: FORMAT_SKILL_VERSION,
   enabledAgents: ENABLED_AGENTS,
   skillMd: JSON_CANVAS_SKILL_MD,
   files: [{ path: "references/EXAMPLES.md", content: JSON_CANVAS_EXAMPLES }, LICENSE_FILE],
@@ -812,7 +832,7 @@ const JSON_CANVAS: BuiltinSkill = {
 
 const OBSIDIAN_CLI: BuiltinSkill = {
   name: "obsidian-cli",
-  version: VERSION,
+  version: OBSIDIAN_CLI_VERSION,
   enabledAgents: ENABLED_AGENTS,
   skillMd: OBSIDIAN_CLI_SKILL_MD,
   files: [LICENSE_FILE],
