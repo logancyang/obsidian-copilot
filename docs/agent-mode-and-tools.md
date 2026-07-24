@@ -63,7 +63,7 @@ Copilot also seeds four Obsidian-native skills for Claude, Codex, and OpenCode:
 
 These skills appear under **Settings → Copilot → Skills**, where each one can be enabled or disabled per agent. Existing choices are preserved when Copilot refreshes a built-in skill.
 
-The Obsidian CLI skill first verifies that `obsidian version` succeeds. The CLI requires a compatible Obsidian installer, registration, and a running Obsidian app; if it is unavailable, the agent falls back to normal filesystem operations where possible. Copilot does not change its minimum supported Obsidian version or attempt to install or repair the CLI.
+The Obsidian CLI skill first verifies that the CLI's `version` command succeeds. When available, Copilot passes the platform-specific CLI executable from the running Obsidian installation directly to the agent, so this probe does not depend on the backend's `PATH`. The CLI still requires a compatible Obsidian installer and a running Obsidian app; if it is unavailable, the agent falls back to normal filesystem operations where possible. Copilot does not change its minimum supported Obsidian version or attempt to install or repair the CLI.
 
 When inspecting open tabs, the agent preserves Markdown notes, other file-backed tabs, and non-file views as workspace context. It reads content only from explicit vault paths reported by Obsidian and never treats a tab title or ID as a filename.
 

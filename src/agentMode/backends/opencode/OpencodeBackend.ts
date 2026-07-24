@@ -9,7 +9,7 @@ import { AcpBackend, AcpSpawnDescriptor } from "@/agentMode/acp/types";
 import type { CopilotMode } from "@/agentMode/session/types";
 import { composeDenyList, getManagedSkills, SkillManager } from "@/agentMode/skills";
 import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemPrompt";
-import { buildCopilotPlusEnv } from "@/agentMode/backends/shared/copilotPlusEnv";
+import { buildBuiltinSkillEnv } from "@/agentMode/backends/shared/builtinSkillEnv";
 import { OpencodeBackendDescriptor } from "./descriptor";
 import { mapProviderToOpencodeId } from "./opencodeModelResolve";
 
@@ -124,8 +124,8 @@ export class OpencodeBackend implements AcpBackend {
           "snapshot read. Remove that override to restore silent cache access."
       );
     }
-    // Builtin Copilot Plus skill scripts read the license from the env.
-    const plusEnv = await buildCopilotPlusEnv();
+    // Builtin skills consume plugin-managed runtime paths and credentials.
+    const builtinSkillEnv = await buildBuiltinSkillEnv();
 
     return {
       command: binaryPath,
@@ -133,7 +133,7 @@ export class OpencodeBackend implements AcpBackend {
       env: {
         ...process.env,
         OPENCODE_CONFIG_CONTENT: JSON.stringify(config),
-        ...plusEnv,
+        ...builtinSkillEnv,
         // User overrides last — they can replace OPENCODE_CONFIG_CONTENT
         // intentionally if they need to point opencode at a different config.
         ...envOverrides,

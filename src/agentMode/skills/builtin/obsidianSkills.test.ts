@@ -112,7 +112,12 @@ describe("obsidianSkills", () => {
     it("uses the CLI only for Obsidian runtime, index, and developer capabilities", () => {
       const md = skillMd("obsidian-cli");
       expect(md).toMatch(/description:[^\n]*currently open notes and tabs/);
-      expect(md).toContain("obsidian version");
+      expect(md).toContain("COPILOT_OBSIDIAN_CLI");
+      expect(md).toContain('obsidian_cli="${COPILOT_OBSIDIAN_CLI:-obsidian}"');
+      expect(md).toContain('"$obsidian_cli" version');
+      expect(md).toContain("& $obsidianCli version");
+      expect(md).toContain("always invoke it as a quoted executable");
+      expect(md).toContain("Use the selected executable in place");
       expect(md).toContain("probe must exit\nsuccessfully");
       expect(md).toContain("obsidian help <command>");
       expect(md).toContain("Settings → General → Command line\ninterface");

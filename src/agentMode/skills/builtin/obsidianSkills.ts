@@ -604,17 +604,29 @@ search.
 
 ## Capability probe and fallback
 
-Before relying on the CLI, run:
+Copilot exposes the terminal-capable executable from the running Obsidian
+installation as <code>COPILOT_OBSIDIAN_CLI</code> when it can resolve one.
+Prefer that exact path over <code>obsidian</code> from <code>PATH</code>, and
+always invoke it as a quoted executable rather than constructing a command
+string. Before relying on the CLI, probe it using the active shell:
 
 ~~~bash
-obsidian version
+obsidian_cli="${"${COPILOT_OBSIDIAN_CLI:-obsidian}"}"
+"$obsidian_cli" version
+~~~
+
+~~~powershell
+$obsidianCli = if ($env:COPILOT_OBSIDIAN_CLI) { $env:COPILOT_OBSIDIAN_CLI } else { "obsidian" }
+& $obsidianCli version
 ~~~
 
 A command being present on PATH is not sufficient: the probe must exit
-successfully. If it fails, continue with ordinary filesystem tools where they
-can satisfy the request. Briefly tell the user only when the missing runtime
-capability matters. Do not install Obsidian, change PATH, register the CLI, or
-raise the plugin's minimum Obsidian version on the user's behalf.
+successfully. Use the selected executable in place of <code>obsidian</code> in
+the examples below, resolving it again in a later shell call when necessary. If
+the probe fails, continue with ordinary filesystem tools where they can satisfy
+the request. Briefly tell the user only when the missing runtime capability
+matters. Do not install Obsidian, change PATH, register the CLI, or raise the
+plugin's minimum Obsidian version on the user's behalf.
 
 The CLI requires a compatible Obsidian installer and a running app. Commands
 can differ by version, so inspect live help before using a command whose syntax

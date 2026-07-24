@@ -2,7 +2,7 @@ import { getSettings } from "@/settings/model";
 import { AcpBackend, AcpSpawnDescriptor } from "@/agentMode/acp/types";
 import { buildSimpleSpawnDescriptor } from "@/agentMode/backends/shared/simpleBinaryBackend";
 import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemPrompt";
-import { buildCopilotPlusEnv } from "@/agentMode/backends/shared/copilotPlusEnv";
+import { buildBuiltinSkillEnv } from "@/agentMode/backends/shared/builtinSkillEnv";
 import { mergeCodexConfigEnv } from "./codexConfigEnv";
 
 /**
@@ -23,8 +23,8 @@ export class CodexBackend implements AcpBackend {
       "Codex binary path not configured. Open Agent Mode settings and set the path to codex-acp.",
       getSettings().agentMode?.backends?.codex?.envOverrides,
       {
-        // Builtin Copilot Plus skill scripts read the license from the env.
-        ...(await buildCopilotPlusEnv()),
+        // Builtin skills consume plugin-managed runtime paths and credentials.
+        ...(await buildBuiltinSkillEnv()),
         // Newer adapters derive the initial ACP mode from this variable rather
         // than Codex's approval/sandbox config. User env overrides still win.
         INITIAL_AGENT_MODE: "agent",
