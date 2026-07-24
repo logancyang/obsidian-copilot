@@ -76,14 +76,27 @@ export function isSelfHostAccessValid(): boolean {
 }
 
 /**
- * Check if self-host mode is valid and enabled.
+ * Pure predicate for self-host mode validity, derived solely from the passed
+ * settings. Prefer this at seed/migration sites that must be deterministic on a
+ * specific settings snapshot rather than reading whatever is globally current.
+ *
  * Gates on the toggle alone: an eligible user who turned self-host mode on may
  * use their own self-host tools (web search, YouTube) without a validation
  * receipt. The startup refreshSelfHostModeValidation() disables the toggle for
  * genuinely ineligible plans, so the toggle is a sufficient gate.
+ *
+ * @param settings - Settings snapshot to evaluate.
+ */
+export function isSelfHostModeValidFor(settings: CopilotSettings): boolean {
+  return settings.enableSelfHostMode === true;
+}
+
+/**
+ * Check if self-host mode is valid and enabled for the current global settings.
+ * Thin wrapper over {@link isSelfHostModeValidFor} for runtime read-sites.
  */
 export function isSelfHostModeValid(): boolean {
-  return getSettings().enableSelfHostMode === true;
+  return isSelfHostModeValidFor(getSettings());
 }
 
 /** Check if the model key is a Copilot Plus model. */

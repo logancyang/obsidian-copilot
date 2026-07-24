@@ -4,6 +4,7 @@ import { buildCopilotPlusEnv } from "@/agentMode/backends/shared/copilotPlusEnv"
 import { buildSimpleSpawnDescriptor } from "@/agentMode/backends/shared/simpleBinaryBackend";
 import { getSettings } from "@/settings/model";
 import { launcherForConfiguredPath } from "./CodexBinaryManager";
+import { mergeCodexConfigEnv } from "./codexConfigEnv";
 
 const DEFAULT_AGENT_MODE = "agent";
 
@@ -36,29 +37,19 @@ export class CodexBackend implements AcpBackend {
       settings?.binaryPath,
       "Codex binary path not configured. Open Agent Mode settings and set the path to codex-acp.",
       settings?.envOverrides,
-      await buildCopilotPlusEnv()
+      {
+        ...(await buildCopilotPlusEnv()),
+        INITIAL_AGENT_MODE: DEFAULT_AGENT_MODE,
+      }
     );
     const launcher = launcherForConfiguredPath(descriptor.command, this.platform, this.nodePath);
 
     descriptor.command = launcher.command;
     descriptor.args = launcher.args;
-    descriptor.env.CODEX_CONFIG = buildCodexConfig(
+    descriptor.env.CODEX_CONFIG = mergeCodexConfigEnv(
       descriptor.env.CODEX_CONFIG,
       buildAgentSystemPrompt()
     );
-    descriptor.env.INITIAL_AGENT_MODE = DEFAULT_AGENT_MODE;
     return descriptor;
   }
-}
-
-function buildCodexConfig(existing: string | undefined, developerInstructions: string): string {
-  let config: Record<string, unknown> = {};
-  if (existing) {
-    const parsed: unknown = JSON.parse(existing);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      throw new Error("CODEX_CONFIG must be a JSON object.");
-    }
-    config = parsed as Record<string, unknown>;
-  }
-  return JSON.stringify({ ...config, developer_instructions: developerInstructions });
 }

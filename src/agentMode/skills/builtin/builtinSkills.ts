@@ -1,20 +1,19 @@
 import type { BackendId } from "@/agentMode/session/types";
+import { OBSIDIAN_SKILLS } from "./obsidianSkills";
 
 /**
- * Plugin-shipped ("builtin") Agent Mode skills that wrap Copilot Plus relay
- * capabilities (web search, web fetch, PDF, YouTube, X). Unlike user-authored
- * skills, these are seeded into the canonical skills folder by the plugin (see
- * `seedBuiltinSkills`) and refreshed when `version` bumps.
+ * Plugin-shipped ("builtin") Agent Mode skills. Unlike user-authored skills,
+ * these are seeded into the canonical skills folder by the plugin (see
+ * `seedBuiltinSkills`) and refreshed when `version` bumps. A builtin may be
+ * executable (the Copilot Plus relay skills below) or knowledge-only (the
+ * Obsidian format and CLI skills).
  *
- * Each skill ships a `SKILL.md` (instructions the agent reads) plus one
- * runnable script per OS: a POSIX `sh` script for macOS/Linux and a Windows
- * `.cmd` wrapper that drives an adjacent PowerShell `.ps1`. All read the Copilot
- * Plus license + relay base URL from env vars the plugin injects at spawn time
- * (see `buildCopilotPlusEnv`) and call the Brevilabs relay directly — no key is
- * embedded in the skill files. When no license is configured (free user) or the
- * relay rejects it, the script exits non-zero with a message that tells the
- * agent to fall back to its own equivalent built-in capability — never to block
- * the user — with only an occasional, gentle upsell.
+ * The Copilot Plus skills each ship a `SKILL.md` plus one runnable script per
+ * OS: a POSIX `sh` script for macOS/Linux and a Windows `.cmd` wrapper that
+ * drives an adjacent PowerShell `.ps1`. All read the Copilot Plus license +
+ * relay base URL from env vars the plugin injects at spawn time (see
+ * `buildCopilotPlusEnv`) and call the Brevilabs relay directly — no key is
+ * embedded in the skill files.
  *
  * Why one script per OS (and no Node): every runtime here is guaranteed present
  * without any install. On macOS/Linux the agent's shell has `sh`, `curl`, `sed`,
@@ -27,10 +26,10 @@ import type { BackendId } from "@/agentMode/session/types";
  * no extra imports and no executable bit.
  */
 export interface BuiltinSkill {
-  /** Folder name + SKILL.md `name`. Kebab-case, Copilot-branded. */
+  /** Folder name + SKILL.md `name`. */
   readonly name: string;
   /**
-   * Bump when `skillMd` or any script changes so seeded copies refresh.
+   * Bump when `skillMd` or any support file changes so seeded copies refresh.
    * Stamped into `metadata.copilot-builtin-version` in the seeded SKILL.md.
    */
   readonly version: number;
@@ -38,7 +37,7 @@ export interface BuiltinSkill {
   readonly enabledAgents: readonly BackendId[];
   /** Full SKILL.md file contents (frontmatter + body). */
   readonly skillMd: string;
-  /** Supporting files written alongside SKILL.md (the runnable script). */
+  /** Supporting scripts, references, or notices written alongside SKILL.md. */
   readonly files: ReadonlyArray<{ readonly path: string; readonly content: string }>;
 }
 
@@ -490,13 +489,14 @@ const FETCH_X = relaySkill({
   scriptFile: "fetch-x.sh",
 });
 
-/** All plugin-shipped Copilot Plus relay skills, in display order. */
+/** All always-seeded plugin-shipped skills, in display order. */
 export const BUILTIN_SKILLS: readonly BuiltinSkill[] = [
   WEB_SEARCH,
   WEB_FETCH,
   READ_PDF,
   YOUTUBE_TRANSCRIPT,
   FETCH_X,
+  ...OBSIDIAN_SKILLS,
 ];
 
 const MIYO_SEARCH_VERSION = 2;

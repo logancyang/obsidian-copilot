@@ -63,6 +63,13 @@ export type EnabledBackendEntry =
       state: "ok";
       configuredModel: ConfiguredModel;
       provider: Provider;
+      /**
+       * `true` when Self-Host Mode is on and this is a cloud provider — the UI
+       * flags the row with a cloud-egress warning and sorts it below
+       * self-hosted options. Omitted (falsy) otherwise. A read-time projection
+       * only (see `providerNeedsSelfHostWarning`); never persisted.
+       */
+      needsSelfHostWarning?: boolean;
     }
   | {
       configuredModelId: string;

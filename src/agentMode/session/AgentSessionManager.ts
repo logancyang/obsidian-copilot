@@ -1176,7 +1176,14 @@ export class AgentSessionManager {
       throw new Error("AgentSessionManager has been shut down");
     }
 
-    const resolvedId = backendId ?? getSettings().agentMode?.activeBackend ?? "opencode";
+    // Resolve the backend to spawn: the explicit request, else the persisted
+    // default, else opencode. Held in one variable so the whole method — cwd
+    // mirror, descriptor, pending-create bookkeeping — uses the same id. Coerce
+    // an unknown id (corrupt persisted `activeBackend`, or a removed backend) to
+    // opencode so auto-spawn degrades gracefully instead of throwing — the same
+    // safety the removed Self-Host redirect used to provide as a side effect.
+    const requestedId = backendId ?? getSettings().agentMode?.activeBackend ?? "opencode";
+    const resolvedId = this.opts.resolveDescriptor(requestedId) ? requestedId : "opencode";
 
     // Read the live record once: it drives both the AGENTS.md mirror below and
     // the landing-capture signature recorded after the session is built, so the

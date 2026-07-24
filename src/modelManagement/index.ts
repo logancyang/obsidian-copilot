@@ -33,6 +33,8 @@ export type { CatalogDownloadDeps, CatalogRefreshResult } from "./catalog/Catalo
 
 export { ProviderRegistry } from "./providers/ProviderRegistry";
 export { isSelfHostedProvider, isSelfHostedUrl } from "./providers/isSelfHostedProvider";
+export { providerNeedsSelfHostWarning } from "./providers/selfHostPolicy";
+export type { SelfHostPolicyInput } from "./providers/selfHostPolicy";
 export { providerRequiresApiKey } from "./providers/providerRequiresApiKey";
 export { ConfiguredModelRegistry } from "./models/ConfiguredModelRegistry";
 export { BackendConfigRegistry } from "./backends/BackendConfigRegistry";
@@ -109,6 +111,8 @@ export {
   configuredModelsAtom,
   copilotPlusProvidersAtom,
   providersAtom,
+  selfHostModeAtom,
+  visibleByokProvidersAtom,
 } from "./state/atoms";
 
 // ---------------------------------------------------------------------------

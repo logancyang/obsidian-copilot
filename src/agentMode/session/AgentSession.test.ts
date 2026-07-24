@@ -967,6 +967,190 @@ describe("AgentSession.sendPrompt", () => {
     await turn;
   });
 
+  it("routes a tool_call_update for a prior turn's tool call to its original message", async () => {
+    const mock = makeMockBackend();
+    let resolvePrompt: ((v: { stopReason: "end_turn" }) => void) | null = null;
+    mock.prompt.mockImplementation(
+      () => new Promise((resolve) => (resolvePrompt = resolve as typeof resolvePrompt))
+    );
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "claude-code",
+    });
+
+    const first = session.sendPrompt("launch a background agent");
+    mock.emit({
+      sessionId: "acp-1",
+      update: {
+        sessionUpdate: "tool_call",
+        toolCallId: "tc-agent",
+        title: "Agent",
+        status: "in_progress",
+      },
+    });
+    resolvePrompt!({ stopReason: "end_turn" });
+    await first.turn;
+
+    const second = session.sendPrompt("meanwhile");
+    mock.emit({
+      sessionId: "acp-1",
+      update: {
+        sessionUpdate: "tool_call_update",
+        toolCallId: "tc-agent",
+        status: "completed",
+        content: [{ type: "content", content: { type: "text", text: "agent report" } }],
+      },
+    });
+
+    const ai = session.store.getDisplayMessages().filter((m) => m.sender === AI_SENDER);
+    // The first turn's launch card settles in place…
+    expect(ai[0]?.parts?.[0]).toMatchObject({
+      kind: "tool_call",
+      id: "tc-agent",
+      status: "completed",
+      output: [{ type: "text", text: "agent report" }],
+    });
+    // …and no duplicate card appears on the new turn's placeholder.
+    expect(ai[1]?.parts ?? []).toHaveLength(0);
+
+    resolvePrompt!({ stopReason: "end_turn" });
+    await second.turn;
+
+    const laterTurn = session.store.getDisplayMessages().filter((m) => m.sender === AI_SENDER)[1];
+    expect(laterTurn).toMatchObject({ message: "", turnStopReason: "end_turn" });
+    expect(laterTurn?.isErrorMessage).not.toBe(true);
+  });
+
+  it("routes a prior turn's tool update after the current turn is cancelled", async () => {
+    jest.useFakeTimers();
+    try {
+      const mock = makeMockBackend();
+      const resolvePrompts: Array<(value: { stopReason: "end_turn" | "cancelled" }) => void> = [];
+      mock.prompt.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            resolvePrompts.push(resolve);
+          })
+      );
+      const session = new AgentSession({
+        backend: mock.asBackend,
+        backendSessionId: "acp-1",
+        internalId: "internal-1",
+        backendId: "claude-code",
+      });
+
+      const first = session.sendPrompt("launch a background agent");
+      mock.emit({
+        sessionId: "acp-1",
+        update: {
+          sessionUpdate: "tool_call",
+          toolCallId: "tc-agent",
+          title: "Agent",
+          status: "in_progress",
+        },
+      });
+      resolvePrompts[0]({ stopReason: "end_turn" });
+      await first.turn;
+
+      const second = session.sendPrompt("do something else");
+      mock.emit({
+        sessionId: "acp-1",
+        update: {
+          sessionUpdate: "tool_call",
+          toolCallId: "tc-cancelled",
+          title: "Current turn tool",
+          status: "in_progress",
+        },
+      });
+      await session.cancel();
+      await expect(second.turn).resolves.toBe("cancelled");
+
+      mock.emit({
+        sessionId: "acp-1",
+        update: {
+          sessionUpdate: "tool_call_update",
+          toolCallId: "tc-agent",
+          status: "completed",
+          content: [{ type: "content", content: { type: "text", text: "agent report" } }],
+        },
+      });
+      mock.emit({
+        sessionId: "acp-1",
+        update: {
+          sessionUpdate: "tool_call_update",
+          toolCallId: "tc-cancelled",
+          status: "completed",
+        },
+      });
+
+      const ai = session.store
+        .getDisplayMessages()
+        .filter((message) => message.sender === AI_SENDER);
+      expect(ai[0]?.parts?.[0]).toMatchObject({
+        kind: "tool_call",
+        id: "tc-agent",
+        status: "completed",
+        output: [{ type: "text", text: "agent report" }],
+      });
+      expect(ai[1]?.parts?.[0]).toMatchObject({
+        kind: "tool_call",
+        id: "tc-cancelled",
+        status: "in_progress",
+      });
+
+      resolvePrompts[1]({ stopReason: "cancelled" });
+      await jest.advanceTimersByTimeAsync(500);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("merges partial tool progress", async () => {
+    const mock = makeMockBackend();
+    let resolvePrompt: ((v: { stopReason: "end_turn" }) => void) | null = null;
+    mock.prompt.mockImplementation(
+      () => new Promise((resolve) => (resolvePrompt = resolve as typeof resolvePrompt))
+    );
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "claude-code",
+    });
+    const { turn } = session.sendPrompt("hi");
+
+    mock.emit({
+      sessionId: "acp-1",
+      update: {
+        sessionUpdate: "tool_call",
+        toolCallId: "tc1",
+        title: "Agent",
+        status: "in_progress",
+        progress: { description: "Inspect vault", toolUses: 1 },
+      },
+    });
+    mock.emit({
+      sessionId: "acp-1",
+      update: {
+        sessionUpdate: "tool_call_update",
+        toolCallId: "tc1",
+        progress: { toolUses: 3, durationMs: 9851 },
+      },
+    });
+
+    const part = session.store.getDisplayMessages().find((message) => message.sender === AI_SENDER)
+      ?.parts?.[0];
+    expect(part).toMatchObject({
+      kind: "tool_call",
+      progress: { description: "Inspect vault", toolUses: 3, durationMs: 9851 },
+    });
+
+    resolvePrompt!({ stopReason: "end_turn" });
+    await turn;
+  });
+
   // Emit one completed tool call with `text` output and return the stored output.
   const storedToolOutput = async (text: string): Promise<AgentToolCallOutput | undefined> => {
     const mock = makeMockBackend();

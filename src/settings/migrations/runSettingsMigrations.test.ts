@@ -8,6 +8,7 @@ import type { CustomModel } from "@/aiParams";
 import { ChatModelProviders, DEFAULT_SETTINGS } from "@/constants";
 import type { ModelManagementApi } from "@/modelManagement";
 import { getSettings, setSettings, type CopilotSettings } from "@/settings/model";
+import { Platform } from "obsidian";
 
 import { CURRENT_SETTINGS_VERSION, runSettingsMigrations } from "./index";
 
@@ -16,6 +17,11 @@ jest.mock("@/logger", () => ({
   logWarn: jest.fn(),
   logError: jest.fn(),
 }));
+
+// The v6 seed pulls in miyoUtils, which now imports the status store (owned by a
+// parallel PR-2 workstream; contract stub in this worktree). The seed itself
+// never calls it, so an empty mock is enough to keep this suite isolated.
+jest.mock("@/miyo/miyoStatusStore", () => ({ isMiyoAvailableForCapability: jest.fn() }));
 
 jest.mock("@/settings/model", () => {
   const actual = jest.requireActual<typeof import("@/settings/model")>("@/settings/model");
@@ -132,4 +138,112 @@ it("skips a future version", async () => {
 
   expect(setupProvider).not.toHaveBeenCalled();
   expect(mockSetSettings).not.toHaveBeenCalled();
+});
+
+it("v6: seeds plus for a v5 vault with neither Miyo nor self-host", async () => {
+  mockGetSettings.mockReturnValue(settings({ settingsVersion: 5 }));
+  const { api, setupProvider } = makeApi();
+
+  await runSettingsMigrations(api);
+
+  // Only the v6 seed runs for a v5 vault (no BYOK/backfill).
+  expect(setupProvider).not.toHaveBeenCalled();
+  expect(mockSetSettings).toHaveBeenCalledWith({
+    docProcessorBackend: "plus",
+  });
+});
+
+it("v6: seeds miyo when Miyo and self-host mode are both on", async () => {
+  // Self-host mode being on (with Miyo enabled) is what makes the doc processor
+  // seed to miyo.
+  mockGetSettings.mockReturnValue(
+    settings({ settingsVersion: 5, enableMiyo: true, enableSelfHostMode: true })
+  );
+  const { api } = makeApi();
+
+  await runSettingsMigrations(api);
+
+  expect(mockSetSettings).toHaveBeenCalledWith({
+    docProcessorBackend: "miyo",
+  });
+});
+
+it("v6: seeds plus when semantic search is on but Miyo is off", async () => {
+  // enableSemanticSearchV3 must not influence the seed — the doc processor keys
+  // off Miyo/self-host state, not the legacy semantic flag.
+  mockGetSettings.mockReturnValue(
+    settings({ settingsVersion: 5, enableSemanticSearchV3: true, enableMiyo: false })
+  );
+  const { api } = makeApi();
+
+  await runSettingsMigrations(api);
+
+  expect(mockSetSettings).toHaveBeenCalledWith({
+    docProcessorBackend: "plus",
+  });
+});
+
+it("v6: seeds plus for a mobile vault with Miyo enabled but self-host off", async () => {
+  // enableSelfHostMode is off here, so the doc processor seeds to plus regardless
+  // of the mobile Miyo state.
+  (Platform as { isMobile: boolean }).isMobile = true;
+  try {
+    mockGetSettings.mockReturnValue(
+      settings({
+        settingsVersion: 5,
+        enableMiyo: true,
+        enableSelfHostMode: false,
+        miyoServerUrl: "",
+      })
+    );
+    const { api } = makeApi();
+
+    await runSettingsMigrations(api);
+
+    expect(mockSetSettings).toHaveBeenCalledWith({
+      docProcessorBackend: "plus",
+    });
+  } finally {
+    (Platform as { isMobile: boolean }).isMobile = false;
+  }
+});
+
+it("v7: seeds enableMiyoSearchSkill=true for an existing Miyo user", async () => {
+  // Existing Miyo user (persisted enableMiyo) must keep the search skill when the
+  // implicit auto-seed becomes an explicit toggle — no silent un-install.
+  mockGetSettings.mockReturnValue(settings({ settingsVersion: 6, enableMiyo: true }));
+  const { api } = makeApi();
+
+  await runSettingsMigrations(api);
+
+  expect(mockSetSettings).toHaveBeenCalledWith({ enableMiyoSearchSkill: true });
+  expect(mockSetSettings).toHaveBeenCalledWith({ settingsVersion: CURRENT_SETTINGS_VERSION });
+});
+
+it("v7: leaves the skill flag untouched when Miyo was never enabled", async () => {
+  mockGetSettings.mockReturnValue(settings({ settingsVersion: 6, enableMiyo: false }));
+  const { api } = makeApi();
+
+  await runSettingsMigrations(api);
+
+  const flagWrite = mockSetSettings.mock.calls.find((call) => "enableMiyoSearchSkill" in call[0]);
+  expect(flagWrite).toBeUndefined();
+  expect(mockSetSettings).toHaveBeenCalledWith({ settingsVersion: CURRENT_SETTINGS_VERSION });
+});
+
+it("v7: keys off persisted enableMiyo, not the mobile-sensitive search backend", async () => {
+  // A mobile-first upgrade: getSearchBackend() would fold in Platform.isMobile
+  // and could resolve to non-miyo, but the migration must read the raw persisted
+  // intent so it can't write false and Sync it to desktop.
+  (Platform as { isMobile: boolean }).isMobile = true;
+  try {
+    mockGetSettings.mockReturnValue(settings({ settingsVersion: 6, enableMiyo: true }));
+    const { api } = makeApi();
+
+    await runSettingsMigrations(api);
+
+    expect(mockSetSettings).toHaveBeenCalledWith({ enableMiyoSearchSkill: true });
+  } finally {
+    (Platform as { isMobile: boolean }).isMobile = false;
+  }
 });

@@ -2,6 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import { Bot, MessageCircleQuestion } from "lucide-react";
 import { pickToolIcon } from "@/agentMode/ui/toolIcons";
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
+import { formatDuration } from "@/lib/duration";
 import { isAbsolutePath, toVaultRelative } from "@/utils/vaultPath";
 
 /**
@@ -189,6 +190,14 @@ function verb(part: ToolCallPart, progressive: string, past: string): string {
   return part.status === "completed" || part.status === "failed" ? past : progressive;
 }
 
+function diffTargetPaths(part: ToolCallPart): string[] {
+  const paths = new Set<string>();
+  for (const output of part.output ?? []) {
+    if (output.type === "diff" && output.path.length > 0) paths.add(output.path);
+  }
+  return [...paths];
+}
+
 function targetFromPath(part: ToolCallPart, vaultBase: string | null): string | null {
   const loc = part.locations?.[0]?.path;
   if (typeof loc === "string" && loc.length > 0) return toVaultRelative(loc, vaultBase);
@@ -199,6 +208,8 @@ function targetFromPath(part: ToolCallPart, vaultBase: string | null): string | 
   if (typeof input?.file_path === "string") return toVaultRelative(input.file_path, vaultBase);
   if (typeof input?.filePath === "string") return toVaultRelative(input.filePath, vaultBase);
   if (typeof input?.path === "string") return toVaultRelative(input.path, vaultBase);
+  const diffPaths = diffTargetPaths(part);
+  if (diffPaths.length === 1) return toVaultRelative(diffPaths[0], vaultBase);
   return null;
 }
 
@@ -291,8 +302,14 @@ const LIST_SUMMARY: ToolSummary = {
 
 const EDIT_SUMMARY: ToolSummary = {
   icon: pickToolIcon({ vendorToolName: "Edit" }),
-  collapsedLine: (p, ctx) =>
-    `${verb(p, "Editing", "Edited")} ${displayTargetFromPath(p, ctx?.vaultBase ?? null) ?? targetFromTitle(p)}`,
+  collapsedLine: (p, ctx) => {
+    const diffPathCount = diffTargetPaths(p).length;
+    return `${verb(p, "Editing", "Edited")} ${
+      diffPathCount > 1
+        ? pluralize(diffPathCount, "file")
+        : (displayTargetFromPath(p, ctx?.vaultBase ?? null) ?? "files")
+    }`;
+  },
   outcome: (p) => {
     const { added, removed } = diffStats(p);
     if (added === 0 && removed === 0) return null;
@@ -311,7 +328,8 @@ const EDIT_SUMMARY: ToolSummary = {
       outcome: added + removed > 0 ? `+${added} / −${removed} lines` : "",
     };
   },
-  targetPath: (p, ctx) => targetFromPath(p, ctx?.vaultBase ?? null),
+  targetPath: (p, ctx) =>
+    diffTargetPaths(p).length > 1 ? null : targetFromPath(p, ctx?.vaultBase ?? null),
 };
 
 const BASH_SUMMARY: ToolSummary = {
@@ -402,7 +420,21 @@ const TASK_SUMMARY: ToolSummary = {
           : targetFromTitle(p);
     return agent ? `${agent} · "${desc}"` : `Sub-agent · "${desc}"`;
   },
-  outcome: () => null,
+  outcome: (p) => {
+    const progress = p.progress;
+    if (!progress) return null;
+    const bits: string[] = [];
+    // The SDK's task_progress descriptions are already verb-prefixed status
+    // lines ("Running X", "Reading Y") — don't stack another verb on top.
+    if ((p.status === "pending" || p.status === "in_progress") && progress.description?.trim()) {
+      bits.push(progress.description.trim());
+    }
+    if (progress.toolUses !== undefined) {
+      bits.push(pluralize(progress.toolUses, "tool"));
+    }
+    if (progress.durationMs !== undefined) bits.push(formatDuration(progress.durationMs));
+    return bits.length > 0 ? bits.join(" · ") : null;
+  },
   aggregate: (parts) => ({
     line: `Ran ${pluralize(parts.length, "sub-agent")}${statusSuffix(parts)}`,
     outcome: "",
@@ -585,13 +617,8 @@ export function extractSubAgentInputPrompt(part: ToolCallPart): string | null {
 }
 
 /**
- * Extract the sub-agent return value from a Task / sub-agent tool call's
- * output. Strips `<task_result>…</task_result>` markers (opencode wraps
- * the result this way) and returns the inner text. Returns null when
- * the part has no text output, or when the output is identical to the
- * input prompt — Claude Code initially echoes the prompt as the Agent
- * tool's `content` before the sub-agent has produced anything, and that
- * echoed prompt would otherwise render in the "response" slot.
+ * Selects the user-visible delegated-work report without repeating an echoed prompt.
+ * @param part - The subagent tool call whose displayable report is needed.
  */
 export function extractSubAgentReturnText(part: ToolCallPart): string | null {
   if (!part.output) return null;

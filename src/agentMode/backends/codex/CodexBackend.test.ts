@@ -105,7 +105,7 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
     expect(instructions).toContain("{folder_name}");
   });
 
-  it("merges user Codex config while keeping Copilot-owned instructions and initial mode", async () => {
+  it("merges user Codex config while enforcing Copilot-owned fields and preserving env overrides", async () => {
     setSettings({
       agentMode: {
         byok: {},
@@ -118,7 +118,12 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
           codex: {
             binaryPath: "/usr/local/bin/codex-acp",
             envOverrides: {
-              CODEX_CONFIG: JSON.stringify({ model: "gpt-custom", developer_instructions: "old" }),
+              CODEX_CONFIG: JSON.stringify({
+                model: "gpt-custom",
+                developer_instructions: "old",
+                approval_policy: "never",
+                sandbox_mode: "danger-full-access",
+              }),
               INITIAL_AGENT_MODE: "read-only",
               OPENAI_API_KEY: "test-key",
             },
@@ -132,8 +137,10 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
     expect(codexConfig(desc.env)).toMatchObject({
       model: "gpt-custom",
       developer_instructions: expect.stringContaining("Obsidian Copilot"),
+      approval_policy: "on-request",
+      sandbox_mode: "workspace-write",
     });
-    expect(desc.env.INITIAL_AGENT_MODE).toBe("agent");
+    expect(desc.env.INITIAL_AGENT_MODE).toBe("read-only");
     expect(desc.env.OPENAI_API_KEY).toBe("test-key");
   });
 
@@ -178,27 +185,36 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
     ).rejects.toThrow("Node executable is required");
   });
 
-  it("throws when CODEX_CONFIG is not a JSON object", async () => {
-    setSettings({
-      agentMode: {
-        byok: {},
-        mcpServers: [],
-        activeBackend: "codex",
-        debugFullFrames: false,
-        welcomeDismissed: false,
-        skills: { folder: "copilot/skills" },
-        backends: {
-          codex: {
-            binaryPath: "/usr/local/bin/codex-acp",
-            envOverrides: { CODEX_CONFIG: "[]" },
+  it.each(["not-json", "[]", "null"])(
+    "rejects an invalid CODEX_CONFIG override without echoing it (%s)",
+    async (CODEX_CONFIG) => {
+      setSettings({
+        agentMode: {
+          byok: {},
+          mcpServers: [],
+          activeBackend: "codex",
+          debugFullFrames: false,
+          welcomeDismissed: false,
+          skills: { folder: "copilot/skills" },
+          backends: {
+            codex: {
+              binaryPath: "/usr/local/bin/codex-acp",
+              envOverrides: { CODEX_CONFIG },
+            },
           },
         },
-      },
-    });
+      });
 
-    await expect(
-      new CodexBackend().buildSpawnDescriptor({ vaultBasePath: "/vault" })
-    ).rejects.toThrow("CODEX_CONFIG must be a JSON object");
+      await expect(
+        new CodexBackend().buildSpawnDescriptor({ vaultBasePath: "/vault" })
+      ).rejects.toThrow("Codex CODEX_CONFIG must be a valid JSON object.");
+    }
+  );
+
+  it("starts current codex-acp adapters in their canonical default mode", async () => {
+    const backend = new CodexBackend();
+    const desc = await backend.buildSpawnDescriptor({ vaultBasePath: "/vault" });
+    expect(desc.env.INITIAL_AGENT_MODE).toBe("agent");
   });
 
   it("does not add legacy -c arguments or a project.md fallback", async () => {

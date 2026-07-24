@@ -39,7 +39,6 @@
 // system-prompt builder needs only this one pure function, not SkillManager,
 // discovery, or the Skills UI the barrel also re-exports.
 import { buildPillSyntaxDirective } from "@/agentMode/skills/pillSyntaxDirective";
-import { shouldUseMiyo } from "@/miyo/miyoUtils";
 import { getSettings } from "@/settings/model";
 import { getDisableBuiltinSystemPrompt } from "@/system-prompts/state";
 import { getEffectiveUserPrompt } from "@/system-prompts/systemPromptBuilder";
@@ -158,10 +157,10 @@ export function buildAgentSystemPrompt(opts?: { projectInstructions?: string }):
     // can't run, its script exits telling the agent to use its own equivalent
     // tools and the fallback clause routes it there. Never blocks free users.
     parts.push(COPILOT_PLUS_TOOLS_STEERING);
-    // Miyo steering is gated on the same `shouldUseMiyo` check that seeds the
-    // skill, so we only point the agent at `miyo-search` when it's actually
-    // available — the prompt-side half of respecting the "Miyo enabled" setting.
-    if (shouldUseMiyo(getSettings())) {
+    // Miyo steering is gated on the same flag that seeds the skill, so we only
+    // point the agent at `miyo-search` when the user has installed it — the
+    // prompt-side half of respecting the "Miyo search skill" toggle.
+    if (getSettings().enableMiyoSearchSkill === true) {
       parts.push(COPILOT_MIYO_SEARCH_STEERING);
     }
     // Extensibility seam — todo/plan steering. Today `AGENT_TODO_PLANNING_STEERING`

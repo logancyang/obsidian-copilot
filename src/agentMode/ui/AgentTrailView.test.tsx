@@ -131,4 +131,28 @@ describe("AgentTrail inline trail (no collapse)", () => {
     // The research tool card renders inline (not folded behind a toggle).
     expect(screen.getByText("Search vault")).toBeTruthy();
   });
+
+  it("shows progress on a childless background subagent card", () => {
+    renderTrail({
+      parts: [
+        {
+          kind: "tool_call",
+          id: "launch",
+          title: "Agent",
+          vendorToolName: "Agent",
+          status: "in_progress",
+          input: { subagent_type: "Explore", description: "Analyze notes" },
+          progress: {
+            description: "Running Count markdown files",
+            toolUses: 3,
+            durationMs: 9851,
+          },
+        },
+      ],
+      isStreaming: true,
+      turnStopReason: undefined,
+    });
+
+    expect(screen.getByText("Running Count markdown files · 3 tools · 9s")).toBeTruthy();
+  });
 });

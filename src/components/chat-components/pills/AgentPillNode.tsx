@@ -8,6 +8,9 @@ import {
 } from "lexical";
 import { Bot } from "lucide-react";
 import React from "react";
+import { useSettingsValue } from "@/settings/model";
+import { useCloudAgentIds } from "@/components/chat-components/context/CloudAgentContext";
+import { SelfHostCloudWarningIcon } from "@/components/ui/SelfHostCloudWarningIcon";
 import { BasePillNode, SerializedBasePillNode } from "./BasePillNode";
 import { PillBadge } from "./PillBadge";
 
@@ -99,13 +102,27 @@ export class AgentPillNode extends BasePillNode {
   }
 
   decorate(): JSX.Element {
-    return (
-      <PillBadge>
-        <Bot className="tw-size-3" />
-        {this.__label || this.__value}
-      </PillBadge>
-    );
+    return <AgentPillContent backendId={this.__value} label={this.__label || this.__value} />;
   }
+}
+
+/**
+ * Pill body. A component (not inline JSX) so it can read the live Self-Host
+ * setting and the cloud-agent id set from context — a stale/pasted `@Claude`
+ * pill then lights up its cloud-egress warning the moment Self-Host Mode is
+ * toggled on, without the node needing any Agent Mode knowledge of its own.
+ */
+export function AgentPillContent({ backendId, label }: { backendId: string; label: string }) {
+  const { enableSelfHostMode } = useSettingsValue();
+  const cloudAgentIds = useCloudAgentIds();
+  const showWarning = enableSelfHostMode && cloudAgentIds.has(backendId);
+  return (
+    <PillBadge>
+      <Bot className="tw-size-3" />
+      {label}
+      {showWarning && <SelfHostCloudWarningIcon />}
+    </PillBadge>
+  );
 }
 
 function convertAgentPillElement(domNode: HTMLElement): DOMConversionOutput | null {

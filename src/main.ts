@@ -373,22 +373,6 @@ export default class CopilotPlugin extends Plugin {
         if (activeViewType === CHAT_VIEWTYPE || activeViewType === CHAT_AGENT_VIEWTYPE) {
           this.lastActiveChatViewType = activeViewType;
         }
-
-        if (leaf && leaf.view instanceof MarkdownView) {
-          const file = leaf.view.file;
-          if (file) {
-            // Note: File tracking and real-time reindexing removed for simplicity
-            // Semantic search indexes are rebuilt manually or on startup as needed
-            const activeCopilotView = this.app.workspace
-              .getLeavesOfType(CHAT_VIEWTYPE)
-              .find((leaf) => leaf.view instanceof CopilotView)?.view as CopilotView;
-
-            if (activeCopilotView) {
-              const event = new CustomEvent(EVENT_NAMES.ACTIVE_LEAF_CHANGE);
-              activeCopilotView.eventTarget.dispatchEvent(event);
-            }
-          }
-        }
       })
     );
 

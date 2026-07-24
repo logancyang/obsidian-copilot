@@ -138,6 +138,9 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
   id: "opencode",
   displayName: "opencode",
   Icon: OpencodeLogo,
+  // opencode routes through user-controlled / self-hosted endpoints, so it
+  // stays available in Self-Host Mode.
+  selfHostable: true,
   skillsProjectDir: ".opencode/skills",
   crossDiscoveredAgents: ["claude", "codex"],
   restartOnManagedSkillsChange: true,

@@ -28,6 +28,12 @@ export interface AgentBrand {
   readonly id: BackendId;
   readonly displayName: string;
   readonly Icon: React.ComponentType<{ className?: string }>;
+  /**
+   * `true` when Self-Host Mode is on and this is a cloud agent — the mention
+   * menu flags it with a cloud-egress warning. A read-time projection (see
+   * `backendNeedsSelfHostWarning`); never persisted.
+   */
+  readonly needsSelfHostWarning?: boolean;
 }
 
 /**
@@ -156,6 +162,13 @@ export interface EnabledModelEntry {
    * it never needs to know what "Zen" means (`ui` can't import the backend).
    */
   isFree?: boolean;
+  /**
+   * `true` when Self-Host Mode is on and this model's provider is cloud. A
+   * self-hostable backend (opencode) can still host cloud BYOK/Plus providers,
+   * so the warning is decided per model here, not by the backend's own
+   * `selfHostable`. The backend computes it; the UI renders the marker.
+   */
+  needsSelfHostWarning?: boolean;
 }
 
 /**
@@ -412,6 +425,15 @@ export interface AgentTodoListEntry {
   status: AgentPlanEntry["status"];
 }
 
+/** Backend-neutral progress reported by a long-running tool call. */
+export interface AgentToolProgress {
+  description?: string;
+  toolName?: string;
+  toolUses?: number;
+  durationMs?: number;
+  totalTokens?: number;
+}
+
 /**
  * Initial / updated state for an in-flight tool call. Mirrors ACP `ToolCall`
  * (initial form) — emitted by backends in the `tool_call` `SessionUpdate`.
@@ -434,6 +456,8 @@ export interface ToolCallSnapshot {
   mcpServer?: string;
   /** Parent tool-call id, for nested tools (e.g. Claude's Task subagents). */
   parentToolCallId?: string;
+  /** Latest backend-neutral progress for a long-running tool call. */
+  progress?: AgentToolProgress;
   /** True iff this tool call is the agent's plan-finalization signal. */
   isPlanProposal?: boolean;
 }
@@ -453,6 +477,7 @@ export interface ToolCallDelta {
   /** MCP server name; see `ToolCallSnapshot.mcpServer`. */
   mcpServer?: string;
   parentToolCallId?: string;
+  progress?: AgentToolProgress;
   isPlanProposal?: boolean;
 }
 
@@ -865,6 +890,8 @@ export type AgentMessagePart =
        * top-level.
        */
       parentToolCallId?: string;
+      /** Latest normalized progress for this tool call. */
+      progress?: AgentToolProgress;
     }
   | {
       kind: "thought";

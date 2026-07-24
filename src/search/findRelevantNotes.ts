@@ -5,7 +5,7 @@ import {
   getMiyoFilePath,
   getMiyoFolderName,
   getVaultRelativeMiyoPath,
-  shouldUseMiyo,
+  getSearchBackend,
 } from "@/miyo/miyoUtils";
 import { getBacklinkedNotes, getLinkedNotes } from "@/noteUtils";
 import { DBOperations } from "@/search/dbOperations";
@@ -23,7 +23,7 @@ const MAX_K = 20;
  * @returns True when Miyo mode and self-host access validation are active.
  */
 function shouldUseMiyoForRelevantNotes(): boolean {
-  return shouldUseMiyo(getSettings());
+  return getSearchBackend(getSettings()) === "miyo";
 }
 
 /**

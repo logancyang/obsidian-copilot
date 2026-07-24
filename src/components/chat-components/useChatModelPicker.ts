@@ -74,6 +74,7 @@ export function useChatModelPicker(params: {
         enabled: true,
         capabilities,
         _disabledReason: needsKey ? "Add API key" : undefined,
+        _needsSelfHostWarning: entry.needsSelfHostWarning,
       };
       const modelKey = getModelKeyFromModel(modelEntry);
       models.push(modelEntry);
@@ -87,9 +88,22 @@ export function useChatModelPicker(params: {
     const resolvedId = resolveChatModelSelectionId(entries, value);
     const current = resolvedId ? idToModelKey.get(resolvedId) : undefined;
     if (current) return current;
+    // Fallback must match the runtime's order-preserving "first enabled" pick
+    // (`resolveChatBackendModel`), so resolve against the unsorted list.
     const first = models[0];
     return first ? getModelKeyFromModel(first) : "";
   }, [entries, value, idToModelKey, models]);
+
+  // Display order only: Self-Host Mode sinks cloud (warned) models to the
+  // bottom via a stable partition. Selection/fallback stay on the unsorted
+  // `models` above, so this never shifts which model a stale selection lands on.
+  const displayModels = React.useMemo(() => {
+    if (!models.some((m) => m._needsSelfHostWarning)) return models;
+    const local: ModelSelectorEntry[] = [];
+    const cloud: ModelSelectorEntry[] = [];
+    for (const m of models) (m._needsSelfHostWarning ? cloud : local).push(m);
+    return [...local, ...cloud];
+  }, [models]);
 
   const handleChange = React.useCallback(
     (modelKey: string) => {
@@ -99,9 +113,9 @@ export function useChatModelPicker(params: {
     [byModelKey, onChange]
   );
 
-  if (models.length === 0) {
+  if (displayModels.length === 0) {
     return { models: [EMPTY_ENTRY], value: EMPTY_ENTRY_KEY, onChange: NOOP };
   }
 
-  return { models, value: resolvedValue, onChange: handleChange };
+  return { models: displayModels, value: resolvedValue, onChange: handleChange };
 }

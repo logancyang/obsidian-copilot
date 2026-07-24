@@ -15,14 +15,10 @@ import { AgentModelPreloader } from "./session/AgentModelPreloader";
 import { AgentSessionIndex } from "./session/AgentSessionIndex";
 import { createNodeFileStorage } from "./session/nodeFileStorage";
 import { AgentSessionManager } from "./session/AgentSessionManager";
-import { shouldUseMiyo } from "@/miyo/miyoUtils";
 import { SkillManager } from "./skills";
 import { managedBuiltinSkills, MIYO_SEARCH_SKILL } from "./skills/builtin/builtinSkills";
-import {
-  removeSeededBuiltin,
-  seedBuiltinSkills,
-  type BuiltinSeedFs,
-} from "./skills/builtin/seedBuiltinSkills";
+import { removeSeededBuiltin, seedBuiltinSkills } from "./skills/builtin/seedBuiltinSkills";
+import { buildBuiltinSeedFs } from "./skills/builtin/miyoSearchSeed";
 import {
   createDefaultAskUserQuestionPrompter,
   createDefaultPermissionPrompter,
@@ -70,10 +66,19 @@ export { PlanPreviewView, PLAN_PREVIEW_VIEW_TYPE } from "./ui/PlanPreviewView";
 export type { PlanPreviewViewState } from "./ui/PlanPreviewView";
 export { ReportIssueModal } from "./ui/ReportIssueModal";
 export type { ReportIssueModalParams } from "./ui/ReportIssueModal";
-export { getActiveBackendDescriptor, listBackendDescriptors } from "./backends/registry";
+export {
+  backendNeedsSelfHostWarning,
+  getActiveBackendDescriptor,
+  getCloudAgentIds,
+  listBackendDescriptors,
+} from "./backends/registry";
 export { frameSink as acpFrameSink, setFrameSinkVaultBasePath } from "./session/debugSink";
 export { getManagedSkills, SkillManager, SkillsSettings, useManagedSkills } from "./skills";
 export type { Skill } from "./skills";
+// The `miyo-search` install/remove surface, re-exported for the settings UI —
+// host code must enter the agent-mode module through this barrel, not deep
+// `skills/*` imports (`boundaries/dependencies`).
+export { installMiyoSearchSkill, removeMiyoSearchSkill } from "./skills/builtin/miyoSearchSeed";
 
 /**
  * True when the platform supports Agent Mode. Agent Mode is always on, but
@@ -288,32 +293,45 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
   // Seed the plugin-shipped builtin skills into the canonical folder, then run
   // discovery so the pass picks them up and fans them out to the agent dirs.
   // The Plus relay skills are always seeded; the Miyo vault-search skill is
-  // gated on Miyo being in use — seeded when on, and the seeded copy pruned
-  // when off — so it only surfaces while Miyo is available. Discovery runs even
-  // when seeding fails so existing skills still reconcile.
-  const seedManagedBuiltins = async (folder: string): Promise<void> => {
-    const adapter = app.vault.adapter;
-    const fs: BuiltinSeedFs = {
-      exists: (p) => adapter.exists(p),
-      read: (p) => adapter.read(p),
-      write: (p, c) => adapter.write(p, c),
-      mkdir: (p) => adapter.mkdir(p),
-      rmRecursive: (p) => adapter.rmdir(p, true),
-    };
-    const useMiyo = shouldUseMiyo(getSettings());
-    try {
-      await seedBuiltinSkills({
-        skillsFolderRelPath: folder,
-        fs,
-        skills: managedBuiltinSkills(useMiyo),
-      });
-      if (!useMiyo) {
-        await removeSeededBuiltin(folder, MIYO_SEARCH_SKILL.name, fs);
+  // gated on the user's explicit `enableMiyoSearchSkill` toggle — seeded when
+  // on, and the seeded copy pruned when off. Discovery runs even when seeding
+  // fails so existing skills still reconcile.
+  //
+  // Passes are SERIALIZED through `seedChain`: a fast enable→disable (or a folder
+  // change landing mid-seed) would otherwise interleave writes and leave the
+  // Miyo skill on disk after a disable, since each pass' skill-set decision is
+  // taken before its first `await`. Chaining also makes each pass read the flag
+  // at its own execution time, so the last one to run reflects the final intent.
+  let seedChain: Promise<void> = Promise.resolve();
+  const seedManagedBuiltins = (folder: string): Promise<void> => {
+    seedChain = seedChain.then(async () => {
+      // Everything runs inside the guard — including the synchronous
+      // `buildBuiltinSeedFs`/`getSettings` reads — so this task can NEVER reject.
+      // A rejected `seedChain` would strand every later `.then(...)` pass, so the
+      // chain must stay resolved no matter what any single pass hits.
+      try {
+        const fs = buildBuiltinSeedFs(app);
+        const useMiyo = getSettings().enableMiyoSearchSkill === true;
+        await seedBuiltinSkills({
+          skillsFolderRelPath: folder,
+          fs,
+          skills: managedBuiltinSkills(useMiyo),
+        });
+        if (!useMiyo) {
+          await removeSeededBuiltin(folder, MIYO_SEARCH_SKILL.name, fs);
+        }
+      } catch (e) {
+        logError("[Skills] builtin skill seeding failed", e);
       }
-    } catch (e) {
-      logError("[Skills] builtin skill seeding failed", e);
-    }
-    await skillManager.refresh();
+      // Always reconcile so existing skills fan out even when seeding failed.
+      // Separately guarded so a refresh error can't wedge the chain either.
+      try {
+        await skillManager.refresh();
+      } catch (e) {
+        logError("[Skills] skill refresh after seeding failed", e);
+      }
+    });
+    return seedChain;
   };
   subscribeToSettingsChange((prev, next) => {
     if (
@@ -348,16 +366,17 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     // same gate-aware seed pass against the current folder.
     const prevFolder = prev.agentMode?.skills?.folder ?? DEFAULT_SKILLS_FOLDER;
     const nextFolder = next.agentMode?.skills?.folder ?? DEFAULT_SKILLS_FOLDER;
-    // `shouldUseMiyo` depends on `isSelfHostAccessValid()`, which reads the
-    // self-host validation fields — and those are refreshed asynchronously at
-    // startup (after the initial seed pass). Watch them too, so the skill is
-    // re-seeded when validation flips invalid→valid without a reload.
+    // The `miyo-search` skill now seeds/prunes off the explicit
+    // `enableMiyoSearchSkill` toggle, so a flip must re-seed and restart (codex/
+    // opencode bake the steering at spawn). `enableMiyo` / `miyoServerUrl` are
+    // still watched because the injected env (MIYO_URL) changes with them, and
+    // `isPaidUser` because Plus status gates other seeded builtins in the same
+    // pass.
     const miyoAvailabilityChanged =
+      prev.enableMiyoSearchSkill !== next.enableMiyoSearchSkill ||
       prev.enableMiyo !== next.enableMiyo ||
       prev.miyoServerUrl !== next.miyoServerUrl ||
-      prev.isPaidUser !== next.isPaidUser ||
-      prev.selfHostModeValidatedAt !== next.selfHostModeValidatedAt ||
-      prev.selfHostValidationCount !== next.selfHostValidationCount;
+      prev.isPaidUser !== next.isPaidUser;
     if (prevFolder !== nextFolder || miyoAvailabilityChanged) {
       // Miyo availability also gates the `miyo-search` system-prompt steering
       // (see `buildAgentSystemPrompt`). codex/opencode bake the prompt at spawn,
@@ -417,6 +436,8 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
   // Per-backend preload registration: each backend's status flips
   // independently. The chat UI gates on the active backend's status; the
   // picker reads every backend's status to render per-backend loading rows.
+  // Every installed backend preloads — Self-Host Mode marks cloud agents but
+  // keeps them usable, so they load like any other.
   for (const descriptor of listBackendDescriptors()) {
     const backendLoad = backendLoadPromises.get(descriptor.id);
     if (backendLoad) {

@@ -16,12 +16,7 @@ import { CodexSettingsPanel } from "./CodexSettingsPanel";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import { agentOriginEnabledModelEntries } from "@/agentMode/backends/shared/agentEnabledModels";
 import { simpleBinaryBackendProcess } from "@/agentMode/backends/shared/simpleBinaryBackend";
-import type {
-  EnabledModelEntry,
-  ModeMapping,
-  ModelSelection,
-  ModelWireCodec,
-} from "@/agentMode/session/types";
+import type { EnabledModelEntry, ModelSelection, ModelWireCodec } from "@/agentMode/session/types";
 import type { BackendDescriptor, BackendProcess, InstallState } from "@/agentMode/session/types";
 import { detectBinary } from "@/utils/detectBinary";
 import { CodexBinaryManager, codexProbeSettingsFingerprint } from "./CodexBinaryManager";
@@ -31,6 +26,7 @@ import {
   resolveCodexAcpLauncher,
   type CodexAcpBinaryResolverInput,
 } from "./codexBinaryResolver";
+import { buildCodexModeMapping } from "./codexModeMapping";
 
 export const CODEX_BINARY_NAME = "codex-acp";
 export const CODEX_INSTALL_COMMAND = CODEX_ACP_INSTALL_COMMAND;
@@ -148,6 +144,8 @@ export const CodexBackendDescriptor: BackendDescriptor = {
   id: "codex",
   displayName: "Codex",
   Icon: CodexLogo,
+  // Cloud agent — flagged with a cloud-egress warning while Self-Host Mode is on.
+  selfHostable: false,
   skillsProjectDir: ".agents/skills",
   crossDiscoveredAgents: [],
   restartOnManagedSkillsChange: false,
@@ -216,16 +214,7 @@ export const CodexBackendDescriptor: BackendDescriptor = {
     await getCodexBinaryManager().refreshInstallState();
   },
 
-  /**
-   * The replacement adapter exposes three approval/sandbox presets via ACP
-   * setMode. Read-only remains the closest available Plan behavior; the
-   * adapter's mode controls permissions rather than Codex collaboration mode.
-   */
-  getModeMapping(): ModeMapping {
-    return {
-      kind: "setMode",
-      canonical: { default: "agent", plan: "read-only", auto: "agent-full-access" },
-      readOnlyModeId: "read-only",
-    };
+  getModeMapping(modeState) {
+    return buildCodexModeMapping(modeState);
   },
 };

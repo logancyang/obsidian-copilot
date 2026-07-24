@@ -641,3 +641,29 @@ describe("normalizeModelProvider", () => {
     expect(normalizeModelProvider("")).toBe("");
   });
 });
+
+describe("sanitizeSettings - docProcessorBackend (v6 field)", () => {
+  it("defaults to 'plus' when missing", () => {
+    const out = sanitizeSettings({
+      ...DEFAULT_SETTINGS,
+      docProcessorBackend: undefined,
+    } as unknown as CopilotSettings);
+    expect(out.docProcessorBackend).toBe("plus");
+  });
+
+  it("resets an invalid value to 'plus'", () => {
+    const out = sanitizeSettings({
+      ...DEFAULT_SETTINGS,
+      docProcessorBackend: "bogus",
+    } as unknown as CopilotSettings);
+    expect(out.docProcessorBackend).toBe("plus");
+  });
+
+  it("preserves 'miyo'", () => {
+    const out = sanitizeSettings({
+      ...DEFAULT_SETTINGS,
+      docProcessorBackend: "miyo",
+    });
+    expect(out.docProcessorBackend).toBe("miyo");
+  });
+});

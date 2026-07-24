@@ -47,6 +47,7 @@ import { $findWebTabPills, $removeWebTabPillsByUrl } from "./pills/WebTabPillNod
 import LexicalEditor from "./LexicalEditor";
 import { cn } from "@/lib/utils";
 import { type AgentMentionBrand, EMPTY_AGENT_MENTION_BRANDS } from "./hooks/useAtMentionCategories";
+import { EMPTY_CLOUD_AGENT_IDS } from "./context/CloudAgentContext";
 import { $createAgentPillNode } from "./pills/AgentPillNode";
 
 const ACCENT_CIRCLE_BUTTON_CLASS =
@@ -193,6 +194,13 @@ export interface ChatInputProps {
   agentBrands?: ReadonlyArray<AgentMentionBrand>;
 
   /**
+   * Cloud (non-self-hostable) agent backend ids — the full registry set (not
+   * just installed agents), so a stale/pasted agent pill still resolves. Drives
+   * the Self-Host cloud-egress warning on agent pills.
+   */
+  cloudAgentIds?: ReadonlySet<string>;
+
+  /**
    * Fires with the backend ids of the agent pills currently in the editor,
    * whenever that set changes. The Agent Mode wrapper resolves these into the
    * structured `mentionedAgents` selection at send time.
@@ -246,6 +254,7 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
     initialContext,
     isAgentMode = false,
     agentBrands = EMPTY_AGENT_MENTION_BRANDS,
+    cloudAgentIds = EMPTY_CLOUD_AGENT_IDS,
     onMentionedAgentsChange,
   },
   ref
@@ -865,6 +874,7 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
               onActiveWebTabAdded={handleActiveWebTabAdded}
               onActiveWebTabRemoved={handleActiveWebTabRemoved}
               agentBrands={agentBrands}
+              cloudAgentIds={cloudAgentIds}
               onAgentsChange={handleAgentsChange}
               onEditorReady={onEditorReady}
               onImagePaste={onAddImage}

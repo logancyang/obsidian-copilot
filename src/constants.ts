@@ -8,6 +8,11 @@ import { PromptSortStrategy } from "./types";
 // fallback link when a usage-cap error doesn't carry its own dashboard_url.
 export const USAGE_DASHBOARD_URL = "https://www.obsidiancopilot.com/en/dashboard/token-usage";
 
+// Miyo's public homepage — where users download the Miyo desktop app and read
+// about it. Distinct from the Copilot site; used by the "download / pair with
+// Miyo" links in settings.
+export const MIYO_HOMEPAGE_URL = "https://www.miyo.md/";
+
 export const BREVILABS_API_BASE_URL = "https://api.brevilabs.com/v1";
 export const BREVILABS_MODELS_BASE_URL = "https://models.brevilabs.com/v1";
 export const CHAT_VIEWTYPE = "copilot-chat-view";
@@ -1038,6 +1043,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   enableSemanticSearchV3: false,
   enableSelfHostMode: false,
   enableMiyo: false,
+  enableMiyoSearchSkill: false,
   miyoSearchAll: false,
   selfHostModeValidatedAt: null,
   selfHostValidationCount: 0,
@@ -1048,6 +1054,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   firecrawlApiKey: "",
   perplexityApiKey: "",
   supadataApiKey: "",
+  docProcessorBackend: "plus",
   enableLexicalBoosts: true,
   suggestedDefaultCommands: false,
   autonomousAgentMaxIterations: 4,

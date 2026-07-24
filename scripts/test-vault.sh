@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-OBSIDIAN_BIN="/Applications/Obsidian.app/Contents/MacOS/obsidian"
+OBSIDIAN_BIN="${OBSIDIAN_BIN:-/Applications/Obsidian.app/Contents/MacOS/obsidian}"
 
 if [[ -z "${COPILOT_TEST_VAULT_PATH:-}" ]]; then
   cat >&2 <<'EOF'
@@ -52,22 +52,15 @@ EOF
     ;;
 esac
 
-# Deployment mode: symlinks by default (macOS / native Linux). Switch to file
-# copy on WSL when the vault lives on a Windows-mounted filesystem — Obsidian
-# on Windows can't resolve WSL-flavored POSIX symlinks stored on DrvFs/9p.
-DEPLOY_MODE="link"
-if [[ "$(uname -r 2>/dev/null)" == *[Mm]icrosoft* ]] && [[ "$VAULT_REAL" == /mnt/* ]]; then
-  DEPLOY_MODE="copy"
-fi
-# iCloud-synced vaults (Obsidian on iOS/iPadOS) can't use symlinks: iCloud
-# uploads file contents, not link targets, so a symlinked main.js never reaches
-# the phone. Copy real files so the mobile device receives the build.
-if [[ "$VAULT_REAL" == *"/Mobile Documents/"* ]]; then
-  DEPLOY_MODE="copy"
-fi
-
 echo "==> Installing dependencies"
 npm install --prefer-offline --no-audit --no-fund
+
+BRANCH="$(git -C "$WORKTREE_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"
+BUILD_COMMIT="$(git -C "$WORKTREE_ROOT" rev-parse --short=8 HEAD 2>/dev/null || echo unknown)"
+BUILD_STATE="clean"
+if [[ -n "$(git -C "$WORKTREE_ROOT" status --porcelain --untracked-files=normal 2>/dev/null)" ]]; then
+  BUILD_STATE="dirty"
+fi
 
 echo "==> Building plugin"
 npm run build
@@ -81,38 +74,62 @@ fi
 PLUGIN_DIR="$VAULT_PATH/.obsidian/plugins/$PLUGIN_ID"
 mkdir -p "$PLUGIN_DIR"
 
-echo "==> Deploying artifacts into $PLUGIN_DIR (mode: $DEPLOY_MODE)"
+echo "==> Copying artifacts into $PLUGIN_DIR"
 for f in main.js styles.css; do
   if [[ ! -f "$WORKTREE_ROOT/$f" ]]; then
     echo "error: expected build artifact missing: $WORKTREE_ROOT/$f" >&2
     exit 1
   fi
   rm -f "$PLUGIN_DIR/$f"
-  if [[ "$DEPLOY_MODE" == "copy" ]]; then
-    cp -f "$WORKTREE_ROOT/$f" "$PLUGIN_DIR/$f"
-  else
-    ln -sfn "$WORKTREE_ROOT/$f" "$PLUGIN_DIR/$f"
-  fi
+  cp -f "$WORKTREE_ROOT/$f" "$PLUGIN_DIR/$f"
 done
 
-# Write a timestamp-tagged manifest.json (real file, not a symlink). The plugin
-# NAME (shown in Obsidian's Community plugins list / sidebar) carries the build
-# timestamp ONLY — never the branch/worktree name, which is not a reliable signal
-# of what code is actually loaded. The DESCRIPTION still carries `branch: <name>`
-# because the `npm run test:vault` preflight in TESTING_GUIDE.md greps it
-# (`/branch: ([^ |]+)/`) to catch deploying from the wrong worktree when several
-# worktrees share one vault.
-BRANCH="$(git -C "$WORKTREE_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"
 BUILD_TS="$(date +%Y%m%d-%H%M%S)"
-echo "==> Writing timestamp-tagged manifest.json (name build: $BUILD_TS, branch: $BRANCH)"
 rm -f "$PLUGIN_DIR/manifest.json"
-SRC="$WORKTREE_ROOT/manifest.json" DEST="$PLUGIN_DIR/manifest.json" BRANCH="$BRANCH" BUILD_TS="$BUILD_TS" node -e '
-  const fs = require("fs");
-  const m = JSON.parse(fs.readFileSync(process.env.SRC, "utf8"));
-  m.name = m.name + " [" + process.env.BUILD_TS + "]";
-  m.description = "[branch: " + process.env.BRANCH + " | build: " + process.env.BUILD_TS + "] " + m.description;
-  fs.writeFileSync(process.env.DEST, JSON.stringify(m, null, 2) + "\n");
-'
+BUILD_TAG="$(
+  SRC="$WORKTREE_ROOT/manifest.json" \
+    DEST="$PLUGIN_DIR/manifest.json" \
+    ARTIFACT_DIR="$PLUGIN_DIR" \
+    BRANCH="$BRANCH" \
+    BUILD_COMMIT="$BUILD_COMMIT" \
+    BUILD_STATE="$BUILD_STATE" \
+    BUILD_TS="$BUILD_TS" \
+    node -e '
+    const crypto = require("node:crypto");
+    const fs = require("node:fs");
+    const path = require("node:path");
+    const hash = crypto.createHash("sha256");
+    for (const file of ["main.js", "styles.css"]) {
+      hash.update(file);
+      hash.update("\0");
+      hash.update(fs.readFileSync(path.join(process.env.ARTIFACT_DIR, file)));
+      hash.update("\0");
+    }
+    const bundleSha = hash.digest("hex").slice(0, 12);
+    const buildTag = [
+      process.env.BUILD_COMMIT,
+      process.env.BUILD_STATE,
+      bundleSha,
+    ].join("-");
+    const manifest = JSON.parse(fs.readFileSync(process.env.SRC, "utf8"));
+    const versionSeparator = manifest.version.includes("+") ? "." : "+";
+    manifest.version += versionSeparator + [
+      "dev",
+      process.env.BUILD_COMMIT,
+      process.env.BUILD_STATE,
+      bundleSha,
+    ].join(".");
+    manifest.name += " [" + buildTag + "]";
+    manifest.description = [
+      "[dev build: " + buildTag,
+      "branch: " + process.env.BRANCH,
+      "built: " + process.env.BUILD_TS + "]",
+    ].join(" | ") + " " + manifest.description;
+    fs.writeFileSync(process.env.DEST, JSON.stringify(manifest, null, 2) + "\n");
+    process.stdout.write(buildTag);
+  '
+)"
+echo "==> Wrote development manifest (build: $BUILD_TAG, branch: $BRANCH)"
 
 # Reload by toggling disable -> enable, NOT `plugin:reload`. On this setup
 # `plugin:reload` returns success but does NOT re-run the plugin's onload, so the
@@ -141,6 +158,7 @@ echo
 echo "Done."
 echo "  worktree: $WORKTREE_ROOT"
 echo "  branch:   $BRANCH"
-echo "  build:    $BUILD_TS"
+echo "  build:    $BUILD_TAG"
+echo "  built:    $BUILD_TS"
 echo "  vault:    $VAULT_PATH"
 echo "  plugin:   $PLUGIN_ID"

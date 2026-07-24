@@ -26,6 +26,16 @@ When the autonomous agent is enabled, Copilot can:
 
 The agent activates automatically when you're in **Copilot Plus** mode. You don't need to do anything special — just ask your question.
 
+## Choosing an Operating Mode
+
+The mode picker beside the message box controls how much the active agent can do:
+
+- **Default** — the agent can work in your vault and asks before sensitive actions.
+- **Plan** — the agent reads and reasons without changing your vault.
+- **Auto** — the agent can work without individual approval prompts. Use it only when you trust the task and workspace.
+
+The available modes depend on the selected agent. Copilot normalizes equivalent modes across supported versions of Claude, Codex, and OpenCode.
+
 ### Max Iterations
 
 The agent works in iteration cycles (think → use a tool → think → use a tool → answer). You can control the maximum number of iterations before the agent stops:
@@ -41,6 +51,21 @@ The agent also has a maximum runtime of 5 minutes per response, regardless of it
 ## Available Tools
 
 Copilot Plus has 13 built-in tools. Some are always active; others can be enabled or disabled.
+
+### Built-in Obsidian skills
+
+Copilot also seeds four Obsidian-native skills for Claude, Codex, and OpenCode:
+
+- **Obsidian Markdown** — wikilinks, embeds, block references, callouts, properties, tags, and comments.
+- **Obsidian Bases** — valid `.base` schemas, filters, formulas, views, summaries, quoting, and date/duration behavior.
+- **JSON Canvas** — the `.canvas` schema, nodes, edges, groups, layout, colors, IDs, and link integrity.
+- **Obsidian CLI** — runtime and indexed operations such as currently open notes and tabs, workspace layout, daily notes, typed properties, tasks, backlinks, Bases queries, template resolution, link-aware moves, registered commands, and plugin debugging.
+
+These skills appear under **Settings → Copilot → Skills**, where each one can be enabled or disabled per agent. Existing choices are preserved when Copilot refreshes a built-in skill.
+
+The Obsidian CLI skill first verifies that `obsidian version` succeeds. The CLI requires a compatible Obsidian installer, registration, and a running Obsidian app; if it is unavailable, the agent falls back to normal filesystem operations where possible. Copilot does not change its minimum supported Obsidian version or attempt to install or repair the CLI.
+
+When inspecting open tabs, the agent preserves Markdown notes, other file-backed tabs, and non-file views as workspace context. It reads content only from explicit vault paths reported by Obsidian and never treats a tab title or ID as a filename.
 
 ### Always-Enabled Tools
 
@@ -160,9 +185,11 @@ While the agent is working, the chat shows status indicators for each tool call:
 
 This lets you see what the agent is doing as it works.
 
-### Parallel Subagents
+### Delegated Agents and Shell Commands
 
-Claude can delegate independent work to background subagents. Agent Mode keeps the turn active while those subagents run, shows the current step, tool count, and elapsed time on each subagent card, then keeps the final report under the card that launched it. Internal result-collection calls stay out of the trail once their report is attached; if Copilot cannot safely match one to its launch, it leaves that result visible instead of risking lost output. Background shell commands and other non-agent tasks do not delay the turn.
+For v4, Claude runs delegated agents and Bash commands synchronously. Copilot waits for each supported tool to finish within the current response so the result arrives predictably before the turn ends. This temporarily favors reliable completion over parallel background execution.
+
+The Workflow tool and remote-isolated agents are temporarily unavailable because they require background execution. Local agents, including worktree-isolated agents, remain available and run synchronously. Background execution will return after Copilot moves Claude sessions to a persistent streaming lifecycle.
 
 This requires Claude Code 2.1.206 or newer. Copilot checks the installed version when it starts and whenever you apply or auto-detect a Claude binary. An older binary is marked **Incompatible version** in Settings → Copilot → Agents → Claude and cannot start a session. If you select Claude in chat, Copilot shows the required version and a **Configure Claude** button that opens the same setup dialog; installation guidance stays in that dialog.
 
@@ -176,6 +203,8 @@ When the agent uses **Write to File** or **Replace in File**, it shows a preview
 
 - **Split view**: Before/after shown side by side
 - **Side-by-side view**: Changes highlighted inline
+
+In Agent Mode, the activity trail names the target of a single-file edit and shows a file count when one action changes multiple files.
 
 You can choose your preferred diff view in **Settings → Copilot → Plus → Diff View Mode**.
 

@@ -167,12 +167,10 @@ export const EnvOverridesSetting: React.FC<Props> = ({
             </div>
           );
         })}
-        <div className="tw-flex tw-justify-end">
-          <Button variant="secondary" size="default" onClick={addRow}>
-            <Plus className="tw-size-icon-xs" />
-            Add variable
-          </Button>
-        </div>
+        <Button variant="ghost2" size="sm" className="tw-self-start" onClick={addRow}>
+          <Plus className="tw-size-icon-xs" />
+          Add variable
+        </Button>
       </div>
     </div>
   );

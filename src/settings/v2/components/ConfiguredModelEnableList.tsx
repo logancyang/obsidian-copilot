@@ -109,6 +109,10 @@ export const ConfiguredModelEnableList: React.FC<ConfiguredModelEnableListProps>
       onQueryChange={setQuery}
       searchPlaceholder={`Search ${descriptor.displayName} models…`}
       emptyState={emptyState}
+      // Only the first provider group starts expanded; the rest collapse so a
+      // long multi-provider list (opencode) opens compact. A stable scalar, so
+      // it doesn't churn the list's collapse state across renders.
+      defaultOpenGroupKey={groups[0]?.key}
     />
   );
 };

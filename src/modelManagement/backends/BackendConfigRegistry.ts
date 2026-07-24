@@ -20,6 +20,7 @@
 import { logError } from "@/logger";
 import { getSettings, setSettings } from "@/settings/model";
 
+import { providerNeedsSelfHostWarning } from "@/modelManagement/providers/selfHostPolicy";
 import type { BackendConfig, BackendType } from "@/modelManagement/types/persisted";
 import type { EnabledBackendEntry } from "@/modelManagement/types/runtime";
 import type { ConfiguredModelRegistry } from "@/modelManagement/models/ConfiguredModelRegistry";
@@ -110,9 +111,19 @@ export class BackendConfigRegistry {
    * ConfiguredModel + Provider state. Order preserved. Broken refs
    * surface as `state: "broken"` rather than silently dropping (data-
    * model spec invariant #3).
+   *
+   * While Self-Host Mode is on, cloud-provider entries are annotated with
+   * `needsSelfHostWarning` (not dropped): the UI flags them and sorts them last,
+   * but the runtime still sees every enabled model in its original order. This
+   * matters because this method feeds the opencode provider-config injection and
+   * chat model resolution — both rely on order, and Self-Host Mode is a
+   * presentation label, not a technical egress block. Read-time projection:
+   * `settings.backends` is never rewritten, so the flags clear when the mode is
+   * turned off. Broken entries carry no provider to flag on.
    */
   resolveEnabled(backend: BackendType): readonly EnabledBackendEntry[] {
-    const config = this.get(backend);
+    const settings = getSettings();
+    const config = settings.backends[backend] ?? EMPTY_CONFIG;
     if (config.enabledModels.length === 0) return EMPTY_RESOLVED;
     return config.enabledModels.map((configuredModelId): EnabledBackendEntry => {
       const configuredModel = this.#models.get(configuredModelId);
@@ -120,7 +131,9 @@ export class BackendConfigRegistry {
         ? this.#providers.get(configuredModel.providerId)
         : undefined;
       if (configuredModel && provider) {
-        return { configuredModelId, state: "ok", configuredModel, provider };
+        const needsSelfHostWarning =
+          settings.enableSelfHostMode && providerNeedsSelfHostWarning(provider, settings);
+        return { configuredModelId, state: "ok", configuredModel, provider, needsSelfHostWarning };
       }
       return { configuredModelId, state: "broken" };
     });
