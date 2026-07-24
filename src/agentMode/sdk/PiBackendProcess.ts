@@ -26,7 +26,8 @@ import { logError, logWarn } from "@/logger";
 import { createPiEngine, type PiEngine } from "@/pi/engine";
 import { createPiModels, listPiModels } from "@/pi/providers";
 import { PI_TOOLS, type PiToolContext } from "@/pi/tools";
-import type { PiModelEntry, PiProviderDeps } from "@/pi/types";
+import { createPiSession, openPiSession, piSessionPath } from "@/pi/sessionStorage";
+import type { PiFileStore, PiModelEntry, PiProviderDeps } from "@/pi/types";
 import type { Models } from "@earendil-works/pi-ai";
 import { v4 as uuidv4 } from "uuid";
 import { toSessionUsage, translatePiEvent, translatePiToolEvent } from "./piEventTranslate";
@@ -34,7 +35,11 @@ import { toSessionUsage, translatePiEvent, translatePiToolEvent } from "./piEven
 /** Cap on events buffered for a session whose handler has not registered yet. */
 const PENDING_UPDATE_LIMIT = 32;
 
-/** Frozen empty session list — this backend has no cross-restart session store yet. */
+/** Shown when neither a Plus license nor a BYOK endpoint yields a usable model. */
+const NO_MODELS_MESSAGE =
+  "No pi models are available. Check your Copilot Plus license key or add an OpenAI-compatible provider.";
+
+/** Frozen empty session list — transcripts are addressed by id, never enumerated. */
 const NO_SESSIONS: ListSessionsOutput = Object.freeze({ sessions: [] });
 
 export interface PiBackendProcessOptions {
@@ -53,6 +58,8 @@ export interface PiBackendProcessOptions {
   getSystemPrompt?: () => string | undefined;
   /** Host dependencies the read-only tools execute against. */
   toolContext: PiToolContext;
+  /** Vault file operations backing the transcript store. */
+  fileStore: PiFileStore;
 }
 
 interface PiSessionState {
@@ -121,19 +128,22 @@ export class PiBackendProcess implements BackendProcess {
   async newSession(_params: OpenSessionInput): Promise<OpenSessionOutput> {
     const models = await this.ensureModels();
     const modelId = this.resolveSeedModelId();
-    if (!modelId) {
-      throw new Error(
-        "No pi models are available. Check your Copilot Plus license key or add an OpenAI-compatible provider."
-      );
-    }
+    if (!modelId) throw new Error(NO_MODELS_MESSAGE);
     const sessionId = uuidv4();
     const engine = createPiEngine({
       models,
       modelId,
+      session: await createPiSession(this.opts.fileStore, sessionId),
       systemPrompt: this.opts.getSystemPrompt?.(),
       tools: PI_TOOLS,
       toolContext: this.opts.toolContext,
     });
+    this.trackSession(sessionId, engine);
+    return { sessionId, state: this.computeState(sessionId) };
+  }
+
+  /** Wire one engine's events to this session id and remember the pair. */
+  private trackSession(sessionId: SessionId, engine: PiEngine): void {
     const unsubscribe = engine.subscribe((event) => {
       for (const update of translatePiEvent(event)) {
         this.dispatchEvent({ sessionId, update });
@@ -152,7 +162,31 @@ export class PiBackendProcess implements BackendProcess {
       }
     });
     this.sessions.set(sessionId, { engine, unsubscribe, cancelled: false });
-    return { sessionId, state: this.computeState(sessionId) };
+  }
+
+  async resumeSession(params: ResumeSessionInput): Promise<ResumeSessionOutput> {
+    const models = await this.ensureModels();
+    const modelId = this.resolveSeedModelId();
+    if (!modelId) throw new Error(NO_MODELS_MESSAGE);
+    const engine = createPiEngine({
+      models,
+      modelId,
+      session: await openPiSession(this.opts.fileStore, params.sessionId),
+      systemPrompt: this.opts.getSystemPrompt?.(),
+      tools: PI_TOOLS,
+      toolContext: this.opts.toolContext,
+    });
+    this.trackSession(params.sessionId, engine);
+    return { sessionId: params.sessionId, state: this.computeState(params.sessionId) };
+  }
+
+  /** A pi session carries its whole transcript, so loading is resuming. */
+  loadSession(params: LoadSessionInput): Promise<LoadSessionOutput> {
+    return this.resumeSession(params);
+  }
+
+  async sessionExistsLocally(params: { sessionId: SessionId }): Promise<boolean> {
+    return this.opts.fileStore.exists(piSessionPath(this.opts.fileStore.dir, params.sessionId));
   }
 
   async prompt(params: PromptInput): Promise<PromptOutput> {
@@ -214,14 +248,6 @@ export class PiBackendProcess implements BackendProcess {
 
   listSessions(_params: ListSessionsInput): Promise<ListSessionsOutput> {
     return Promise.resolve(NO_SESSIONS);
-  }
-
-  resumeSession(_params: ResumeSessionInput): Promise<ResumeSessionOutput> {
-    return Promise.reject(new MethodUnsupportedError("pi cannot resume a session yet"));
-  }
-
-  loadSession(_params: LoadSessionInput): Promise<LoadSessionOutput> {
-    return Promise.reject(new MethodUnsupportedError("pi cannot load a session yet"));
   }
 
   supportsMcpTransport(): boolean {

@@ -58,6 +58,24 @@ const toolContext = {
   webSearch: jest.fn(async () => ""),
 };
 
+const files = new Map<string, string>();
+const fileStore = {
+  dir: "config/plugins/copilot/pi-sessions",
+  read: jest.fn(async (path: string) => {
+    const content = files.get(path);
+    if (content === undefined) throw new Error(`${path} does not exist`);
+    return content;
+  }),
+  write: jest.fn(async (path: string, content: string) => {
+    files.set(path, content);
+  }),
+  append: jest.fn(async (path: string, content: string) => {
+    files.set(path, (files.get(path) ?? "") + content);
+  }),
+  mkdir: jest.fn(async () => undefined),
+  exists: jest.fn(async (path: string) => files.has(path)),
+};
+
 const descriptor = {
   id: "pi",
   wire: {
@@ -79,6 +97,7 @@ describe("PiBackendProcess", () => {
       descriptor,
       getProviderDeps: async () => ({ plusLicenseKey: "key", byokProviders: [], fetch: jest.fn() }),
       toolContext,
+      fileStore,
     });
   }
 
@@ -99,6 +118,7 @@ describe("PiBackendProcess", () => {
         }),
         getDefaultModelId: () => "kimi-k2.6",
         toolContext,
+        fileStore,
       });
 
       const { state } = await proc.newSession({ cwd: "/vault", mcpServers: [] });
@@ -116,6 +136,7 @@ describe("PiBackendProcess", () => {
         }),
         getDefaultModelId: () => "retired-model",
         toolContext,
+        fileStore,
       });
 
       const { state } = await proc.newSession({ cwd: "/vault", mcpServers: [] });
@@ -290,16 +311,56 @@ describe("PiBackendProcess", () => {
 
       await expect(proc.setSessionMode()).rejects.toThrow();
       await expect(proc.setSessionConfigOption()).rejects.toThrow();
+    });
+
+    it("enumerates no sessions — transcripts are addressed by id", async () => {
+      await expect(createProcess().listSessions({})).resolves.toEqual({ sessions: [] });
+    });
+  });
+
+  describe("resumeSession()", () => {
+    it("reopens the stored transcript so the model keeps its history", async () => {
+      const proc = createProcess();
+      const { sessionId } = await proc.newSession({ cwd: "/vault", mcpServers: [] });
+      await proc.shutdown();
+
+      const resumed = createProcess();
+      const output = await resumed.resumeSession({ sessionId, cwd: "/vault", mcpServers: [] });
+
+      expect(output.sessionId).toBe(sessionId);
+      expect(output.state.model?.current.baseModelId).toBe("copilot-plus-flash");
+    });
+
+    it("streams into the resumed session", async () => {
+      const proc = createProcess();
+      const { sessionId } = await proc.newSession({ cwd: "/vault", mcpServers: [] });
+      await proc.shutdown();
+      const resumed = createProcess();
+      await resumed.resumeSession({ sessionId, cwd: "/vault", mcpServers: [] });
+      const seen: SessionEvent[] = [];
+      resumed.registerSessionHandler(sessionId, (event) => seen.push(event));
+
+      emit({
+        type: "message_update",
+        message: {},
+        assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "back", partial: {} },
+      } as unknown as AgentEvent);
+
+      expect(seen.at(-1)?.update).toMatchObject({ sessionUpdate: "agent_message_chunk" });
+    });
+
+    it("fails loudly when the transcript is not on this device", async () => {
       await expect(
-        proc.resumeSession({ sessionId: "s", cwd: "/vault", mcpServers: [] })
-      ).rejects.toThrow();
-      await expect(
-        proc.loadSession({ sessionId: "s", cwd: "/vault", mcpServers: [] })
+        createProcess().resumeSession({ sessionId: "never-here", cwd: "/vault", mcpServers: [] })
       ).rejects.toThrow();
     });
 
-    it("lists no resumable sessions yet", async () => {
-      await expect(createProcess().listSessions({})).resolves.toEqual({ sessions: [] });
+    it("reports whether a transcript exists locally, so dead rows can be hidden", async () => {
+      const proc = createProcess();
+      const { sessionId } = await proc.newSession({ cwd: "/vault", mcpServers: [] });
+
+      await expect(proc.sessionExistsLocally({ sessionId })).resolves.toBe(true);
+      await expect(proc.sessionExistsLocally({ sessionId: "other" })).resolves.toBe(false);
     });
   });
 
