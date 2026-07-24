@@ -92,7 +92,9 @@ Embedding models convert text into numerical vectors, which powers semantic (mea
 
 Go to **Settings → Copilot → QA** → **Embedding Model**.
 
-If you change embedding models, you must rebuild the vault index because the old vectors are incompatible with the new model. Copilot will prompt you to confirm before rebuilding.
+For custom OpenAI-compatible embedding models, you can configure **Embedding dimensions**. Leave it empty to use the provider's default. A value such as `512` is only an example, not a Copilot default; your provider and model must support the dimensions you choose.
+
+If you change the embedding model or its dimensions, you must fully rebuild the vault index because the old vectors are incompatible. Copilot will prompt you to confirm before rebuilding.
 
 ### What Embeddings Affect
 

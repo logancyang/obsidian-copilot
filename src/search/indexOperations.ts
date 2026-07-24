@@ -137,7 +137,7 @@ export class IndexOperations {
       // New: Prepare all chunks first
       const embeddingModel =
         requiresEmbeddings && embeddingInstance
-          ? EmbeddingsManager.getModelName(embeddingInstance)
+          ? this.embeddingsManager.getEmbeddingModelIdentity(embeddingInstance)
           : "";
       const allChunks = await this.prepareAllChunks(files, embeddingModel);
       if (allChunks.length === 0) {
@@ -607,7 +607,7 @@ export class IndexOperations {
       // Reuse prepareAllChunks with a single file
       const embeddingModel =
         requiresEmbeddings && embeddingInstance
-          ? EmbeddingsManager.getModelName(embeddingInstance)
+          ? this.embeddingsManager.getEmbeddingModelIdentity(embeddingInstance)
           : "";
       const chunks = await this.prepareAllChunks([file], embeddingModel);
       if (chunks.length === 0) return;

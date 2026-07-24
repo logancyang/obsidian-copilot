@@ -1,21 +1,31 @@
 import { CustomModel } from "@/aiParams";
+import { RebuildIndexConfirmModal } from "@/components/modals/RebuildIndexConfirmModal";
 import { SettingItem } from "@/components/ui/setting-item";
 import { useApp } from "@/context";
 import { BUILTIN_CHAT_MODELS, BUILTIN_EMBEDDING_MODELS } from "@/constants";
 import EmbeddingManager from "@/LLMProviders/embeddingManager";
 import ProjectManager from "@/LLMProviders/projectManager";
 import { logError } from "@/logger";
-import { CopilotSettings, setSettings, updateSetting, useSettingsValue } from "@/settings/model";
+import {
+  CopilotSettings,
+  getModelKeyFromModel,
+  setSettings,
+  updateSetting,
+  useSettingsValue,
+} from "@/settings/model";
 import { ModelAddDialog } from "@/settings/v2/components/ModelAddDialog";
 import { ModelEditModal } from "@/settings/v2/components/ModelEditDialog";
 import { ModelTable } from "@/settings/v2/components/ModelTable";
+import { applyEmbeddingModelUpdate } from "@/settings/v2/utils/embeddingModelUpdate";
 import { omit } from "@/utils";
 import { Notice } from "obsidian";
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 
 export const ModelSettings: React.FC = () => {
   const app = useApp();
   const settings = useSettingsValue();
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showAddEmbeddingDialog, setShowAddEmbeddingDialog] = useState(false);
 
@@ -68,7 +78,8 @@ export const ModelSettings: React.FC = () => {
     });
   };
 
-  const handleModelUpdate = (
+  /** Persists an edited model in the matching settings collection. */
+  const persistModelUpdate = (
     isEmbeddingModel: boolean,
     originalModel: CustomModel,
     updatedModel: CustomModel
@@ -76,18 +87,49 @@ export const ModelSettings: React.FC = () => {
     const settingField: keyof CopilotSettings = isEmbeddingModel
       ? "activeEmbeddingModels"
       : "activeModels";
+    const currentSettings = settingsRef.current;
 
-    const modelIndex = settings[settingField].findIndex(
+    const modelIndex = currentSettings[settingField].findIndex(
       (m) => m.name === originalModel.name && m.provider === originalModel.provider
     );
     if (modelIndex !== -1) {
-      const updatedModels = [...settings[settingField]];
+      const updatedModels = [...currentSettings[settingField]];
       updatedModels[modelIndex] = updatedModel;
+      settingsRef.current = { ...currentSettings, [settingField]: updatedModels };
       updateSetting(settingField, updatedModels);
     } else {
       new Notice("Could not find model to update");
       logError("Could not find model to update:", originalModel);
     }
+  };
+
+  /** Saves model edits and confirms an index rebuild before changing active dimensions. */
+  const handleModelUpdate = (
+    isEmbeddingModel: boolean,
+    originalModel: CustomModel,
+    updatedModel: CustomModel
+  ) => {
+    const currentSettings = settingsRef.current;
+    const currentModel = currentSettings.activeEmbeddingModels.find(
+      (model) => getModelKeyFromModel(model) === getModelKeyFromModel(originalModel)
+    );
+    applyEmbeddingModelUpdate({
+      isEmbeddingModel,
+      isSelectedModel: getModelKeyFromModel(originalModel) === currentSettings.embeddingModelKey,
+      currentDimensions: currentModel?.dimensions,
+      updatedDimensions: updatedModel.dimensions,
+      semanticSearchEnabled: currentSettings.enableSemanticSearchV3,
+      persist: () => persistModelUpdate(isEmbeddingModel, originalModel, updatedModel),
+      confirmRebuild: (onConfirm) => new RebuildIndexConfirmModal(app, onConfirm).open(),
+      rebuildIndex: async () => {
+        const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
+        await VectorStoreManager.getInstance().indexVaultToVectorStore(false, {
+          userInitiated: true,
+        });
+      },
+      notifySearchDisabled: () =>
+        new Notice("Embedding dimensions saved. Enable Semantic Search to build the index."),
+    });
   };
 
   // Handler for updates originating from the ModelTable itself (e.g., checkbox toggles)

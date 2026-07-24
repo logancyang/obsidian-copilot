@@ -23,6 +23,7 @@ import { MemoryVariables } from "@langchain/core/memory";
 import { DateTime } from "luxon";
 import { MarkdownView, Notice, TFile, Vault, normalizePath, requestUrl } from "obsidian";
 import { CustomModel } from "./aiParams";
+import { EMBEDDING_MODEL_IDENTITY_PREFIX } from "./utils/embeddingDimensions";
 import { getApiKeyForProvider } from "@/utils/modelUtils";
 export { err2String } from "@/errorFormat";
 
@@ -380,6 +381,12 @@ export function areEmbeddingModelsSame(
   model2: string | undefined
 ): boolean {
   if (!model1 || !model2) return false;
+  if (
+    model1.startsWith(EMBEDDING_MODEL_IDENTITY_PREFIX) ||
+    model2.startsWith(EMBEDDING_MODEL_IDENTITY_PREFIX)
+  ) {
+    return model1 === model2;
+  }
   // TODO: Hacks to handle different embedding model names for the same model. Need better handling.
   if (model1.includes(NOMIC_EMBED_TEXT) && model2.includes(NOMIC_EMBED_TEXT)) {
     return true;

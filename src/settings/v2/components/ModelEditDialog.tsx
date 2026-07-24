@@ -1,6 +1,7 @@
 import { CustomModel } from "@/aiParams";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { EmbeddingDimensionsField } from "./EmbeddingDimensionsField";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -208,6 +209,15 @@ const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
             </p>
           )}
         </FormField>
+
+        {isEmbeddingModel &&
+          (localModel.provider as EmbeddingModelProviders) ===
+            EmbeddingModelProviders.OPENAI_FORMAT && (
+            <EmbeddingDimensionsField
+              dimensions={localModel.dimensions}
+              onChange={(dimensions) => handleLocalUpdate("dimensions", dimensions)}
+            />
+          )}
 
         {/* Prompt Caching Toggle for OpenRouter */}
         {(localModel.provider as ChatModelProviders) === ChatModelProviders.OPENROUTERAI && (
