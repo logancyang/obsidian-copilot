@@ -51,6 +51,13 @@ jest.mock("@/pi/providers", () => ({
   ]),
 }));
 
+const toolContext = {
+  readActiveNote: jest.fn(async () => null),
+  readNote: jest.fn(async () => null),
+  searchVault: jest.fn(async () => []),
+  webSearch: jest.fn(async () => ""),
+};
+
 const descriptor = {
   id: "pi",
   wire: {
@@ -71,6 +78,7 @@ describe("PiBackendProcess", () => {
     return new PiBackendProcess({
       descriptor,
       getProviderDeps: async () => ({ plusLicenseKey: "key", byokProviders: [], fetch: jest.fn() }),
+      toolContext,
     });
   }
 
@@ -90,6 +98,7 @@ describe("PiBackendProcess", () => {
           fetch: jest.fn(),
         }),
         getDefaultModelId: () => "kimi-k2.6",
+        toolContext,
       });
 
       const { state } = await proc.newSession({ cwd: "/vault", mcpServers: [] });
@@ -106,6 +115,7 @@ describe("PiBackendProcess", () => {
           fetch: jest.fn(),
         }),
         getDefaultModelId: () => "retired-model",
+        toolContext,
       });
 
       const { state } = await proc.newSession({ cwd: "/vault", mcpServers: [] });
