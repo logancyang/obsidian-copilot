@@ -16,12 +16,21 @@ jest.mock("@/settings/model", () => ({
   getSettings: () => getSettings(),
 }));
 
+// Mocked so the model-management barrel's module graph (which reads settings at
+// module scope) stays out of this suite. The helper's own behavior — default to
+// requiring a key when the flag predates the field — is covered in its module.
+jest.mock("@/modelManagement", () => ({
+  providerRequiresApiKey: (provider: { requiresApiKey?: boolean }) =>
+    provider.requiresApiKey ?? true,
+}));
+
 function byokRow(overrides: Record<string, unknown> = {}) {
   return {
     providerId: "p1",
     providerType: "openai-compatible",
     displayName: "My endpoint",
     baseUrl: "https://api.example.com/v1",
+    requiresApiKey: true,
     origin: { kind: "byok" },
     ...overrides,
   };
@@ -67,6 +76,7 @@ describe("piProviderDeps", () => {
           displayName: "My endpoint",
           baseUrl: "https://api.example.com/v1",
           apiKey: "sk-test",
+          requiresApiKey: true,
           modelIds: ["gpt-5.5", "gpt-5.5-mini"],
         },
       ]);
@@ -82,6 +92,36 @@ describe("piProviderDeps", () => {
       const deps = await resolvePiProviderDeps(pluginWithKey("sk-test"));
 
       expect(deps.byokProviders).toHaveLength(0);
+    });
+
+    it("keeps a keyless local runner, which is usable with no credential", async () => {
+      getSettings.mockReturnValue({
+        plusLicenseKey: "license",
+        providers: {
+          local: byokRow({
+            providerId: "local",
+            displayName: "Ollama",
+            baseUrl: "http://localhost:11434/v1",
+            requiresApiKey: false,
+          }),
+        },
+        configuredModels: [
+          { configuredModelId: "c1", providerId: "local", info: { id: "llama3.2" } },
+        ],
+      });
+
+      const deps = await resolvePiProviderDeps(pluginWithKey(null));
+
+      expect(deps.byokProviders).toEqual([
+        {
+          id: "local",
+          displayName: "Ollama",
+          baseUrl: "http://localhost:11434/v1",
+          apiKey: "",
+          requiresApiKey: false,
+          modelIds: ["llama3.2"],
+        },
+      ]);
     });
 
     it("skips rows that cannot answer: wrong type, no key, no models, no base url", async () => {
@@ -103,10 +143,10 @@ describe("piProviderDeps", () => {
       expect(deps.byokProviders).toHaveLength(0);
     });
 
-    it("skips an endpoint whose key is missing rather than registering a dead provider", async () => {
+    it("skips an endpoint that demands a key but has none", async () => {
       getSettings.mockReturnValue({
         plusLicenseKey: "license",
-        providers: { p1: byokRow() },
+        providers: { p1: byokRow({ requiresApiKey: true }) },
         configuredModels: [{ configuredModelId: "c1", providerId: "p1", info: { id: "gpt-5.5" } }],
       });
 

@@ -1,6 +1,7 @@
 import { logWarn } from "@/logger";
 import { shouldCompactNow } from "@/pi/compaction";
 import { installPromptCacheKey } from "@/pi/promptCache";
+import { parsePiModelWireId, piModelWireId } from "@/pi/providers";
 import type { PiEngineOptions, PiUsage } from "@/pi/types";
 import type { PiToolContext } from "@/pi/tools";
 import {
@@ -49,9 +50,12 @@ function isAgentEvent(event: AgentHarnessEvent): event is AgentEvent {
   return AGENT_EVENT_TYPES.has(event.type);
 }
 
-function requireModel(models: Models, id: string): Model<Api> {
-  const model = models.getModels().find((candidate) => candidate.id === id);
-  if (!model) throw new Error(`No pi model registered with id "${id}"`);
+function requireModel(models: Models, wireId: string): Model<Api> {
+  const { providerId, modelId } = parsePiModelWireId(wireId);
+  const model = providerId
+    ? models.getModel(providerId, modelId)
+    : models.getModels().find((candidate) => candidate.id === modelId);
+  if (!model) throw new Error(`No pi model registered with id "${wireId}"`);
   return model;
 }
 
@@ -121,7 +125,7 @@ export function createPiEngine(options: PiEngineOptions): PiEngine {
     setModel: async (id) => {
       await harness.setModel(requireModel(options.models, id));
     },
-    getModelId: () => harness.getModel().id,
+    getModelId: () => piModelWireId(harness.getModel().provider, harness.getModel().id),
     subscribe: (fn) =>
       harness.subscribe((event) => {
         if (isAgentEvent(event)) fn(event);

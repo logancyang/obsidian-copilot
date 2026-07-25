@@ -303,8 +303,8 @@ export class PiBackendProcess implements BackendProcess {
 
   private resolveSeedModelId(): string | undefined {
     const preferred = this.opts.getDefaultModelId?.();
-    if (preferred && this.catalog.some((entry) => entry.id === preferred)) return preferred;
-    return this.catalog[0]?.id;
+    if (preferred && this.catalog.some((entry) => entry.wireId === preferred)) return preferred;
+    return this.catalog[0]?.wireId;
   }
 
   private requireSession(sessionId: SessionId): PiSessionState {
@@ -320,7 +320,7 @@ export class PiBackendProcess implements BackendProcess {
         ? {
             currentModelId,
             availableModels: this.catalog.map((entry) => ({
-              modelId: entry.id,
+              modelId: entry.wireId,
               name: entry.label,
               description: entry.description,
             })),

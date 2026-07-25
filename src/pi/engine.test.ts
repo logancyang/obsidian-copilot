@@ -35,6 +35,8 @@ const KNOWN_MODELS = [model("gpt-5", 262_144), model("claude", 1_048_576)];
 
 const models = {
   getModels: () => KNOWN_MODELS,
+  getModel: (provider: string, id: string) =>
+    KNOWN_MODELS.find((model) => model.provider === provider && model.id === id),
 } as unknown as Models;
 
 function assistantUsageEvent(overrides: Record<string, number> = {}) {
@@ -67,9 +69,9 @@ describe("engine", () => {
 
   describe("createPiEngine()", () => {
     it("opens the harness on the requested model over an in-memory session", () => {
-      const engine = createPiEngine({ models, modelId: "claude" });
+      const engine = createPiEngine({ models, modelId: "copilot-plus/claude" });
 
-      expect(engine.getModelId()).toBe("claude");
+      expect(engine.getModelId()).toBe("copilot-plus/claude");
       expect(lastHarness().options.session).toBeDefined();
       expect(lastHarness().options.models).toBe(models);
     });
@@ -87,7 +89,7 @@ describe("engine", () => {
     });
 
     it("forwards prompt text and images to the harness", async () => {
-      const engine = createPiEngine({ models, modelId: "gpt-5" });
+      const engine = createPiEngine({ models, modelId: "copilot-plus/gpt-5" });
       const images = [{ type: "image", data: "abc", mimeType: "image/png" }];
 
       await engine.prompt("hello", images as never);
@@ -96,7 +98,7 @@ describe("engine", () => {
     });
 
     it("waits for the run to settle after aborting", async () => {
-      const engine = createPiEngine({ models, modelId: "gpt-5" });
+      const engine = createPiEngine({ models, modelId: "copilot-plus/gpt-5" });
 
       await engine.abort();
 
@@ -105,24 +107,24 @@ describe("engine", () => {
     });
 
     it("switches to another known model and reports it", async () => {
-      const engine = createPiEngine({ models, modelId: "gpt-5" });
+      const engine = createPiEngine({ models, modelId: "copilot-plus/gpt-5" });
 
-      await engine.setModel("claude");
+      await engine.setModel("copilot-plus/claude");
 
-      expect(engine.getModelId()).toBe("claude");
+      expect(engine.getModelId()).toBe("copilot-plus/claude");
     });
 
     it("rejects a switch to a model no provider knows", async () => {
-      const engine = createPiEngine({ models, modelId: "gpt-5" });
+      const engine = createPiEngine({ models, modelId: "copilot-plus/gpt-5" });
 
       await expect(engine.setModel("nope")).rejects.toThrow(
         'No pi model registered with id "nope"'
       );
-      expect(engine.getModelId()).toBe("gpt-5");
+      expect(engine.getModelId()).toBe("copilot-plus/gpt-5");
     });
 
     it("summarizes the older conversation once a turn crowds the window", async () => {
-      const engine = createPiEngine({ models, modelId: "gpt-5" });
+      const engine = createPiEngine({ models, modelId: "copilot-plus/gpt-5" });
       // 262144 - 16384 reserve = 245760; go past it.
       lastHarness().prompt.mockImplementationOnce(() => {
         lastHarness().emit(assistantUsageEvent({ totalTokens: 250_000 }));
@@ -135,7 +137,7 @@ describe("engine", () => {
     });
 
     it("leaves a comfortable conversation uncompacted", async () => {
-      const engine = createPiEngine({ models, modelId: "gpt-5" });
+      const engine = createPiEngine({ models, modelId: "copilot-plus/gpt-5" });
       lastHarness().prompt.mockImplementationOnce(() => {
         lastHarness().emit(assistantUsageEvent({ totalTokens: 1000 }));
         return Promise.resolve({});
@@ -147,7 +149,7 @@ describe("engine", () => {
     });
 
     it("keeps answering when compaction itself fails", async () => {
-      const engine = createPiEngine({ models, modelId: "gpt-5" });
+      const engine = createPiEngine({ models, modelId: "copilot-plus/gpt-5" });
       lastHarness().prompt.mockImplementationOnce(() => {
         lastHarness().emit(assistantUsageEvent({ totalTokens: 250_000 }));
         return Promise.resolve({});
@@ -158,7 +160,7 @@ describe("engine", () => {
     });
 
     it("stamps provider requests with the conversation's cache key when given one", () => {
-      createPiEngine({ models, modelId: "gpt-5", cacheKey: "session-7" });
+      createPiEngine({ models, modelId: "copilot-plus/gpt-5", cacheKey: "session-7" });
 
       const hook = lastHarness().hooks.get("before_provider_payload");
 
@@ -168,13 +170,13 @@ describe("engine", () => {
     });
 
     it("sends no cache key when the caller supplies none", () => {
-      createPiEngine({ models, modelId: "gpt-5" });
+      createPiEngine({ models, modelId: "copilot-plus/gpt-5" });
 
       expect(lastHarness().hooks.has("before_provider_payload")).toBe(false);
     });
 
     it("delegates compaction to the harness", async () => {
-      const engine = createPiEngine({ models, modelId: "gpt-5" });
+      const engine = createPiEngine({ models, modelId: "copilot-plus/gpt-5" });
 
       await engine.compact();
 
@@ -182,7 +184,7 @@ describe("engine", () => {
     });
 
     it("delivers conversation events to subscribers and stops on unsubscribe", () => {
-      const engine = createPiEngine({ models, modelId: "gpt-5" });
+      const engine = createPiEngine({ models, modelId: "copilot-plus/gpt-5" });
       const received: AgentEvent[] = [];
       const unsubscribe = engine.subscribe((event) => received.push(event));
 
@@ -194,7 +196,7 @@ describe("engine", () => {
     });
 
     it("hides harness lifecycle events that are not part of pi's conversation event union", () => {
-      const engine = createPiEngine({ models, modelId: "gpt-5" });
+      const engine = createPiEngine({ models, modelId: "copilot-plus/gpt-5" });
       const received: AgentEvent[] = [];
       engine.subscribe((event) => received.push(event));
 
@@ -206,7 +208,7 @@ describe("engine", () => {
     });
 
     it("reports zero usage against the active model's context window before any response", () => {
-      const engine = createPiEngine({ models, modelId: "claude" });
+      const engine = createPiEngine({ models, modelId: "copilot-plus/claude" });
 
       expect(engine.usage()).toEqual({
         inputTokens: 0,
@@ -219,7 +221,7 @@ describe("engine", () => {
     });
 
     it("reports the most recent assistant usage and tracks the context window across model switches", async () => {
-      const engine = createPiEngine({ models, modelId: "gpt-5" });
+      const engine = createPiEngine({ models, modelId: "copilot-plus/gpt-5" });
 
       lastHarness().emit(assistantUsageEvent());
       expect(engine.usage()).toEqual({
@@ -232,7 +234,7 @@ describe("engine", () => {
       });
 
       lastHarness().emit(assistantUsageEvent({ input: 200, totalTokens: 0 }));
-      await engine.setModel("claude");
+      await engine.setModel("copilot-plus/claude");
 
       expect(engine.usage()).toMatchObject({
         inputTokens: 200,
@@ -242,7 +244,7 @@ describe("engine", () => {
     });
 
     it("ignores usage on messages the model did not produce", () => {
-      const engine = createPiEngine({ models, modelId: "gpt-5" });
+      const engine = createPiEngine({ models, modelId: "copilot-plus/gpt-5" });
 
       lastHarness().emit({ type: "message_end", message: { role: "user", usage: { input: 9 } } });
 
