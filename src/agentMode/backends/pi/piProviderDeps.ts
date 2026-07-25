@@ -1,4 +1,5 @@
 import { getDecryptedKey } from "@/encryptionService";
+import { providerRequiresApiKey } from "@/modelManagement";
 import type CopilotPlugin from "@/main";
 import { getSettings } from "@/settings/model";
 import type { PiByokProvider, PiFetchResponse, PiProviderDeps } from "@/pi/types";
@@ -10,8 +11,8 @@ const NO_BYOK_PROVIDERS: readonly PiByokProvider[] = Object.freeze([]);
  * Collect the user's own OpenAI-compatible endpoints as pi providers. Only
  * BYOK-origin rows qualify: agent-origin rows are catalogs other backends
  * enrolled (including pi's own), so consuming them would feed pi's models back
- * into pi. A row with no key or no configured model is skipped rather than
- * registered as an endpoint that cannot answer.
+ * into pi. A row with no configured model — or one that needs a key and has
+ * none — is skipped rather than registered as an endpoint that cannot answer.
  */
 async function collectByokProviders(plugin: CopilotPlugin): Promise<readonly PiByokProvider[]> {
   const settings = getSettings();
@@ -24,14 +25,18 @@ async function collectByokProviders(plugin: CopilotPlugin): Promise<readonly PiB
       .filter((model) => model.providerId === provider.providerId)
       .map((model) => model.info.id);
     if (modelIds.length === 0) continue;
+    const requiresApiKey = providerRequiresApiKey(provider);
     const apiKey =
       (await plugin.modelManagement.providerRegistry.getApiKey(provider.providerId)) ?? "";
-    if (!apiKey) continue;
+    // A local runner (Ollama, LM Studio) is usable with no key at all; only an
+    // endpoint that demands one is dropped when the key is missing.
+    if (requiresApiKey && !apiKey) continue;
     rows.push({
       id: provider.providerId,
       displayName: provider.displayName,
       baseUrl: provider.baseUrl,
       apiKey,
+      requiresApiKey,
       modelIds,
     });
   }

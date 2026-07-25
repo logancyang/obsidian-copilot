@@ -30,7 +30,14 @@ export interface PiByokProvider {
   id: string;
   displayName: string;
   baseUrl: string;
+  /** Empty for a keyless endpoint (a local runner such as Ollama or LM Studio). */
   apiKey: string;
+  /**
+   * Whether this endpoint refuses requests without a key. A keyless local
+   * runner is configured even with an empty `apiKey`, so it must not be
+   * treated as unauthenticated.
+   */
+  requiresApiKey: boolean;
   modelIds: readonly string[];
 }
 
@@ -48,7 +55,13 @@ export interface PiProviderDeps {
 
 /** A model offered by the engine, flattened for host-side pickers. */
 export interface PiModelEntry {
+  /** Bare model id as the provider names it. */
   id: string;
+  /**
+   * Provider-qualified id used everywhere a model is selected. Two providers
+   * can expose the same bare id, so the bare form alone cannot address a model.
+   */
+  wireId: string;
   providerId: string;
   label: string;
   description?: string;
