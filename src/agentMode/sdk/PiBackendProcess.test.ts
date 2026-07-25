@@ -26,7 +26,7 @@ const engine = {
     contextTokens: 6,
     contextWindow: 1000,
   })),
-  modelId: "copilot-plus-flash",
+  modelId: "copilot-plus/copilot-plus-flash",
 };
 
 jest.mock("@/pi/engine", () => ({
@@ -46,8 +46,27 @@ jest.mock("@/pi/engine", () => ({
 jest.mock("@/pi/providers", () => ({
   createPiModels: jest.fn(() => ({ refresh })),
   listPiModels: jest.fn(() => [
-    { id: "copilot-plus-flash", providerId: "copilot-plus", label: "Flash", contextWindow: 1000 },
-    { id: "kimi-k2.6", providerId: "copilot-plus", label: "Kimi", contextWindow: 500 },
+    {
+      id: "copilot-plus-flash",
+      wireId: "copilot-plus/copilot-plus-flash",
+      providerId: "copilot-plus",
+      label: "Flash",
+      contextWindow: 1000,
+    },
+    {
+      id: "kimi-k2.6",
+      wireId: "copilot-plus/kimi-k2.6",
+      providerId: "copilot-plus",
+      label: "Kimi",
+      contextWindow: 500,
+    },
+    {
+      id: "kimi-k2.6",
+      wireId: "local-endpoint/kimi-k2.6",
+      providerId: "local-endpoint",
+      label: "Kimi (local)",
+      contextWindow: 500,
+    },
   ]),
 }));
 
@@ -104,7 +123,7 @@ describe("PiBackendProcess", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     listeners.length = 0;
-    engine.modelId = "copilot-plus-flash";
+    engine.modelId = "copilot-plus/copilot-plus-flash";
   });
 
   describe("newSession()", () => {
@@ -116,14 +135,14 @@ describe("PiBackendProcess", () => {
           byokProviders: [],
           fetch: jest.fn(),
         }),
-        getDefaultModelId: () => "kimi-k2.6",
+        getDefaultModelId: () => "copilot-plus/kimi-k2.6",
         toolContext,
         fileStore,
       });
 
       const { state } = await proc.newSession({ cwd: "/vault", mcpServers: [] });
 
-      expect(state.model?.current.baseModelId).toBe("kimi-k2.6");
+      expect(state.model?.current.baseModelId).toBe("copilot-plus/kimi-k2.6");
     });
 
     it("falls back to the first catalog model when the preference is gone", async () => {
@@ -141,15 +160,17 @@ describe("PiBackendProcess", () => {
 
       const { state } = await proc.newSession({ cwd: "/vault", mcpServers: [] });
 
-      expect(state.model?.current.baseModelId).toBe("copilot-plus-flash");
+      expect(state.model?.current.baseModelId).toBe("copilot-plus/copilot-plus-flash");
     });
 
     it("advertises the whole catalog to the picker", async () => {
       const { state } = await createProcess().newSession({ cwd: "/vault", mcpServers: [] });
 
+      // The same bare id served by two providers stays two distinct rows.
       expect(state.model?.availableModels.map((m) => m.baseModelId)).toEqual([
-        "copilot-plus-flash",
-        "kimi-k2.6",
+        "copilot-plus/copilot-plus-flash",
+        "copilot-plus/kimi-k2.6",
+        "local-endpoint/kimi-k2.6",
       ]);
     });
 
@@ -244,10 +265,15 @@ describe("PiBackendProcess", () => {
       const proc = createProcess();
       const { sessionId } = await proc.newSession({ cwd: "/vault", mcpServers: [] });
 
-      const state = await proc.setSessionModel({ sessionId, modelId: "kimi-k2.6" });
+      // The local endpoint serves the same bare id as Copilot Plus, so the
+      // selection has to reach that provider rather than the first id match.
+      const state = await proc.setSessionModel({
+        sessionId,
+        modelId: "local-endpoint/kimi-k2.6",
+      });
 
-      expect(engine.setModel).toHaveBeenCalledWith("kimi-k2.6");
-      expect(state.model?.current.baseModelId).toBe("kimi-k2.6");
+      expect(engine.setModel).toHaveBeenCalledWith("local-endpoint/kimi-k2.6");
+      expect(state.model?.current.baseModelId).toBe("local-endpoint/kimi-k2.6");
     });
   });
 
@@ -328,7 +354,7 @@ describe("PiBackendProcess", () => {
       const output = await resumed.resumeSession({ sessionId, cwd: "/vault", mcpServers: [] });
 
       expect(output.sessionId).toBe(sessionId);
-      expect(output.state.model?.current.baseModelId).toBe("copilot-plus-flash");
+      expect(output.state.model?.current.baseModelId).toBe("copilot-plus/copilot-plus-flash");
     });
 
     it("streams into the resumed session", async () => {

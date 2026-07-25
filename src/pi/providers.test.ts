@@ -1,5 +1,5 @@
 import { COPILOT_PLUS_PROVIDER_ID, FALLBACK_CONTEXT_WINDOW } from "@/pi/catalog";
-import { createPiModels, listPiModels } from "@/pi/providers";
+import { createPiModels, listPiModels, parsePiModelWireId, piModelWireId } from "@/pi/providers";
 import type { PiFetch, PiProviderDeps } from "@/pi/types";
 
 jest.mock("@/logger", () => ({
@@ -37,7 +37,18 @@ const BYOK_ROW = {
   displayName: "My OpenRouter",
   baseUrl: "https://openrouter.ai/api/v1",
   apiKey: "byok-key",
+  requiresApiKey: true,
   modelIds: ["z-ai/glm-5"],
+};
+
+/** A local runner: reachable with no credential at all. */
+const KEYLESS_ROW = {
+  id: "local-ollama",
+  displayName: "Ollama",
+  baseUrl: "http://localhost:11434/v1",
+  apiKey: "",
+  requiresApiKey: false,
+  modelIds: ["llama3.2"],
 };
 
 describe("providers", () => {
@@ -96,6 +107,49 @@ describe("providers", () => {
         },
       ]);
     });
+
+    it("treats a keyless local runner as configured rather than unauthenticated", async () => {
+      const models = createPiModels(deps({ byokProviders: [KEYLESS_ROW] }));
+
+      await expect(models.getAuth(KEYLESS_ROW.id)).resolves.toEqual({
+        auth: {},
+        source: "no key required",
+      });
+      expect(models.getModels(KEYLESS_ROW.id).map((model) => model.id)).toEqual(["llama3.2"]);
+    });
+
+    it("reports an endpoint that needs a key but has none as unconfigured", async () => {
+      const unkeyed = { ...BYOK_ROW, apiKey: "" };
+      const models = createPiModels(deps({ byokProviders: [unkeyed] }));
+
+      await expect(models.getAuth(unkeyed.id)).resolves.toBeUndefined();
+    });
+  });
+
+  describe("piModelWireId()", () => {
+    it("qualifies a model with the provider that serves it", () => {
+      expect(piModelWireId("copilot-plus", "kimi-k2.6")).toBe("copilot-plus/kimi-k2.6");
+    });
+  });
+
+  describe("parsePiModelWireId()", () => {
+    it("splits on the first separator only, so slashes inside a model id survive", () => {
+      expect(parsePiModelWireId("my-endpoint/deepseek-ai/DeepSeek-V3")).toEqual({
+        providerId: "my-endpoint",
+        modelId: "deepseek-ai/DeepSeek-V3",
+      });
+    });
+
+    it("round-trips every id it produces", () => {
+      const wireId = piModelWireId("p1", "z-ai/glm-5");
+
+      expect(parsePiModelWireId(wireId)).toEqual({ providerId: "p1", modelId: "z-ai/glm-5" });
+    });
+
+    it("reports no provider for an unqualified id rather than inventing one", () => {
+      expect(parsePiModelWireId("bare-model")).toEqual({ providerId: "", modelId: "bare-model" });
+      expect(parsePiModelWireId("/leading")).toEqual({ providerId: "", modelId: "/leading" });
+    });
   });
 
   describe("listPiModels()", () => {
@@ -106,6 +160,7 @@ describe("providers", () => {
       expect(listPiModels(models)).toEqual([
         {
           id: "gpt-5",
+          wireId: `${COPILOT_PLUS_PROVIDER_ID}/gpt-5`,
           providerId: COPILOT_PLUS_PROVIDER_ID,
           label: "GPT-5",
           description: "Frontier model",
@@ -115,6 +170,7 @@ describe("providers", () => {
         },
         {
           id: "z-ai/glm-5",
+          wireId: `${BYOK_ROW.id}/z-ai/glm-5`,
           providerId: BYOK_ROW.id,
           label: "z-ai/glm-5",
           description: undefined,
@@ -122,6 +178,19 @@ describe("providers", () => {
           supportsImages: false,
           supportsReasoning: false,
         },
+      ]);
+    });
+
+    it("keeps colliding model ids apart by provider, so each stays selectable", async () => {
+      const collidingByok = { ...BYOK_ROW, id: "other-endpoint", modelIds: ["gpt-5"] };
+      const models = createPiModels(deps({ byokProviders: [collidingByok] }));
+      await models.refresh();
+
+      const entries = listPiModels(models);
+
+      expect(entries.map((entry) => entry.wireId)).toEqual([
+        "copilot-plus/gpt-5",
+        "other-endpoint/gpt-5",
       ]);
     });
 
