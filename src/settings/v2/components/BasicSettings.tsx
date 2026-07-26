@@ -7,7 +7,7 @@ import { SettingSection } from "@/components/ui/setting-section";
 import { DEFAULT_OPEN_AREA, SEND_SHORTCUT } from "@/constants";
 import { useApp } from "@/context";
 import { cn } from "@/lib/utils";
-import { resyncMiyoFolder } from "@/miyo/miyoResync";
+import { resyncMiyoFolder, verifyMiyoScope } from "@/miyo/miyoResync";
 import { getMiyoCustomUrl, isLocalMiyoUrl, shouldSurfaceMiyoResync } from "@/miyo/miyoUtils";
 import { ensureCopilotSubfolders } from "@/settings/copilotFolder";
 import {
@@ -110,9 +110,23 @@ export const BasicSettings: React.FC = () => {
             // root change. Fire-and-forget: a Miyo hiccup must not break the
             // rest of the root-change chain.
             const fresh = getSettings();
-            if (!shouldSurfaceMiyoResync(app, fresh)) return;
             const notice = () =>
               new Notice("Miyo search needs a resync — open the Miyo settings tab.", 6000);
+            if (!shouldSurfaceMiyoResync(app, fresh)) {
+              // No local evidence of a registration — but a pre-receipt-era
+              // registration leaves none: a user who registered before receipts
+              // existed and later disconnected (enableMiyo off, receipt empty)
+              // still has a live server-side scope whose Relay can read the new
+              // root. Only a read-only live probe can tell that apart from
+              // "never used Miyo"; on a confirmed stale registration point at
+              // the Miyo tab, and never mutate a disconnected user's Miyo.
+              if (fresh.miyoSyncedExclusions === "") {
+                void verifyMiyoScope(app).then((scope) => {
+                  if (scope === "stale") notice();
+                });
+              }
+              return;
+            }
             if (getVaultBase(app) && isLocalMiyoUrl(getMiyoCustomUrl(fresh))) {
               void resyncMiyoFolder(app).then((outcome) => {
                 if (outcome === "conflict" || outcome === "failed") notice();

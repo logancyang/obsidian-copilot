@@ -1264,6 +1264,18 @@ export function validateCopilotFolder(
     if (segment === ".") {
       return { ok: false, reason: 'Folder path cannot contain "." segments.' };
     }
+    // DESIGN NOTE — leading-dot (hidden) folder names are deliberately
+    // ACCEPTED. Hidden chat folders are a supported upstream capability
+    // (#2188/#2204 added adapter-based save/history precisely because
+    // Obsidian's Vault cache does not track hidden paths), and the chat,
+    // project, and skill stores all carry adapter fallbacks. Custom-command
+    // and system-prompt discovery still enumerate via `vault.getFiles()`, so
+    // those two features cannot see content under a hidden root — a
+    // pre-existing Vault-cache limitation that the single-root design now
+    // couples to the same folder choice. Rejecting dot segments here would
+    // regress the supported hidden-chat capability; porting command/prompt
+    // discovery to adapter scans is a follow-up outside this PR's scope.
+    // If a future review flags this again, point them at this note.
     if (segment.toLowerCase() === CONVENTIONAL_OBSIDIAN_CONFIG_DIR) {
       return {
         ok: false,

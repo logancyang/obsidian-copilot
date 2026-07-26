@@ -43,7 +43,8 @@ jest.mock("@/utils/vaultPath", () => ({ getVaultBase: jest.fn(() => "/abs/vault"
 
 import type { App } from "obsidian";
 import type { MiyoAddFolderRequest, MiyoFolderEntry } from "@/miyo/MiyoClient";
-import { miyoRecordCoversScope, resyncMiyoFolder, verifyMiyoScope } from "@/miyo/miyoResync";
+import { miyoRecordCoversSystemRoots, resyncMiyoFolder, verifyMiyoScope } from "@/miyo/miyoResync";
+import type { CopilotSettings } from "@/settings/model";
 
 const app = { vault: { getName: () => "my-vault" } } as unknown as App;
 
@@ -101,32 +102,44 @@ function rootMovedSettings(): void {
 }
 
 describe("miyoResync", () => {
-  describe("miyoRecordCoversScope()", () => {
-    const desired: MiyoAddFolderRequest = {
-      path: "/abs/vault",
-      exclude_folders: ["copilot", "team/ai"],
-    };
+  describe("miyoRecordCoversSystemRoots()", () => {
+    const movedRootSettings = () =>
+      ({
+        ...currentSettings,
+        copilotFolder: "team/ai",
+        copilotRootHistory: ["copilot", "team/ai"],
+      }) as CopilotSettings;
 
-    it("accepts a record whose exclusions are a superset of the desired ones", () => {
+    it("accepts a record whose exclusions are a superset of the system roots", () => {
       expect(
-        miyoRecordCoversScope(
+        miyoRecordCoversSystemRoots(
           record({ exclude_folders: ["copilot", "team/ai", "user-extra"] }),
-          desired
+          movedRootSettings()
         )
       ).toBe(true);
     });
 
-    it("rejects a record missing a desired exclusion", () => {
-      expect(miyoRecordCoversScope(record({ exclude_folders: ["copilot"] }), desired)).toBe(false);
+    it("rejects a record missing a system root", () => {
+      expect(
+        miyoRecordCoversSystemRoots(record({ exclude_folders: ["copilot"] }), movedRootSettings())
+      ).toBe(false);
     });
 
-    it("rejects a record whose inclusions differ (a different scope, not a superset)", () => {
+    it("ignores qa* and inclusion drift — the staleness signal is roots-only", () => {
+      // The user edited qaExclusions/qaInclusions since registration but never
+      // moved the root: that snapshot drift is the documented pre-existing gap,
+      // not grounds for a destructive rebuild.
+      const settings = {
+        ...currentSettings,
+        qaExclusions: "copilot,drifted-folder",
+        qaInclusions: "notes",
+      } as CopilotSettings;
       expect(
-        miyoRecordCoversScope(
-          record({ exclude_folders: ["copilot", "team/ai"], include_folders: ["notes"] }),
-          desired
+        miyoRecordCoversSystemRoots(
+          record({ exclude_folders: ["copilot"], include_folders: ["stale-whitelist"] }),
+          settings
         )
-      ).toBe(false);
+      ).toBe(true);
     });
   });
 

@@ -24,7 +24,7 @@ import {
 } from "@/miyo/miyoUtils";
 import { useMiyoStatus } from "@/miyo/useMiyoStatus";
 import { deriveSkillsFolder } from "@/settings/copilotFolder";
-import { updateSetting, useSettingsValue } from "@/settings/model";
+import { getSettings, updateSetting, useSettingsValue } from "@/settings/model";
 import {
   type ConnectOutcome,
   type ConnectStep,
@@ -402,9 +402,33 @@ export const MiyoSettings: React.FC = () => {
       //     an idempotent folder-filter re-sync; both are out of this PR's scope.
       //     If a review flags this again, point them at this note.
       // Serialized with resync runs: an auto-resync after a root change must
-      // never interleave its DELETE/POST with this registration.
-      const created = await enqueueMiyoFolderMutation(() =>
-        new MiyoClient().addFolder(
+      // never interleave its DELETE/POST with this registration. The task reads
+      // settings when it RUNS, not when it is queued — it can sit behind an
+      // in-flight mutation, and a root/endpoint change landing in that window
+      // would otherwise be submitted as an already-stale scope (with a receipt
+      // vouching for it). Mirrors resyncMiyoFolder's execution-time fresh read;
+      // the receipt is built from the same snapshot as the submitted body so it
+      // always describes what the server actually holds.
+      const submission = await enqueueMiyoFolderMutation(async () => {
+        const fresh = getSettings();
+        const freshUrl = getMiyoCustomUrl(fresh);
+        // DESIGN NOTE — a remote flip mid-queue surfaces as the retryable
+        // "error" outcome, NOT as a "manual" modal transition. Reaching this
+        // throw needs a double race: the modal blocks local edits, so only a
+        // synced-in endpoint change can land here, and only while the mutation
+        // chain is already busy. Recovery is close-and-reopen (canAutoAdd
+        // re-derives to false → manual deeplink guidance); nothing was
+        // submitted to the wrong target. Extending MiyoConnectModal's outcome
+        // routing with a mid-flight canAutoAdd downgrade for this corner is
+        // deliberately rejected — and a direct deeplink open after the queued
+        // await would have lost user activation anyway.
+        // If a future review flags this again, point them at this note.
+        if (!isLocalMiyoUrl(freshUrl)) {
+          throw new Error(
+            "Miyo endpoint switched to a remote target while registration was queued"
+          );
+        }
+        const created = await new MiyoClient().addFolder(
           {
             path: vaultBase,
             // Remote read (Relay) is enabled by default so a user who turns on
@@ -415,29 +439,30 @@ export const MiyoSettings: React.FC = () => {
             // plainly rather than promising absolute privacy. A user who wants this
             // vault kept out of Relay can flip allow_remote_read off per folder in Miyo.
             allow_remote_read: true,
-            ...getMiyoFolderInclusions(settings.qaInclusions),
+            ...getMiyoFolderInclusions(fresh.qaInclusions),
             // Project the always-on system root exclusions (active + historical
             // Copilot roots) alongside Obsidian's own ignore folders, so a former
             // root's content isn't uploaded for indexing. This is a registration-
             // time snapshot; MiyoSemanticRetriever re-applies the LIVE scope
             // (createCopilotPatternFilter, which also enforces these roots) at
             // query time, so correctness never depends on the snapshot.
-            ...getMiyoFolderExclusions(settings.qaExclusions, [
-              ...getSystemExcludedFolders(settings),
+            ...getMiyoFolderExclusions(fresh.qaExclusions, [
+              ...getSystemExcludedFolders(fresh),
               ...extractAppIgnoreSettings(app),
             ]),
           },
-          customUrl || undefined
-        )
-      );
+          freshUrl || undefined
+        );
+        return { created, receipt: buildMiyoSyncReceipt(app, fresh) };
+      });
       // Record the sync receipt only for a fresh 201 — a 409 (already
       // registered) means the server holds an EARLIER snapshot whose exclusions
       // are unknown and possibly stale; marking it synced would silence the
       // resync prompt over a stale scope. Written before the enable step and
       // regardless of `superseded()`: the server-side registration DID happen
       // with this exact body, whatever the UI does afterwards.
-      if (created !== null) {
-        updateSetting("miyoSyncedExclusions", buildMiyoSyncReceipt(app, settings));
+      if (submission.created !== null) {
+        updateSetting("miyoSyncedExclusions", submission.receipt);
       }
     } catch (error) {
       logWarn(`Miyo add-folder failed: ${err2String(error)}`);

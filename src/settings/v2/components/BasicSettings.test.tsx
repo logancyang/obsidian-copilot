@@ -26,8 +26,10 @@ jest.mock("@/settings/copilotRootChange", () => ({
 
 // The post-change hybrid trigger: observe whether the auto-resync fires.
 const resyncMiyoFolder = jest.fn<Promise<string>, unknown[]>().mockResolvedValue("resynced");
+const verifyMiyoScope = jest.fn<Promise<string>, unknown[]>().mockResolvedValue("unregistered");
 jest.mock("@/miyo/miyoResync", () => ({
   resyncMiyoFolder: (...a: unknown[]) => resyncMiyoFolder(...a),
+  verifyMiyoScope: (...a: unknown[]) => verifyMiyoScope(...a),
 }));
 const shouldSurfaceMiyoResync = jest.fn<boolean, unknown[]>().mockReturnValue(false);
 jest.mock("@/miyo/miyoUtils", () => ({
@@ -60,6 +62,7 @@ describe("BasicSettings", () => {
     isKnownCopilotRoot.mockReturnValue(false);
     shouldSurfaceMiyoResync.mockReturnValue(false);
     resyncMiyoFolder.mockResolvedValue("resynced");
+    verifyMiyoScope.mockResolvedValue("unregistered");
   });
 
   it("binds the Copilot folder input to the persisted root", () => {
@@ -135,6 +138,38 @@ describe("BasicSettings", () => {
 
     await waitFor(() => expect(applyCopilotRootChange).toHaveBeenCalled());
     expect(resyncMiyoFolder).not.toHaveBeenCalled();
+  });
+
+  it("notices after a root change when a live probe finds a stale pre-receipt registration", async () => {
+    // Empty receipt + nothing locally surfacing a resync: the only evidence of
+    // a pre-receipt-era registration is the server itself, so the trigger
+    // probes read-only and points at the Miyo tab instead of mutating.
+    verifyMiyoScope.mockResolvedValue("stale");
+    render(<BasicSettings />);
+    fireEvent.change(screen.getByLabelText("Copilot folder"), { target: { value: "ai" } });
+    fireEvent.click(screen.getByRole("button", { name: "Apply Copilot folder" }));
+
+    capturedOnConfirm?.();
+
+    await waitFor(() =>
+      expect(Notice).toHaveBeenCalledWith(
+        expect.stringContaining("Miyo search needs a resync"),
+        6000
+      )
+    );
+    expect(resyncMiyoFolder).not.toHaveBeenCalled();
+  });
+
+  it("stays silent after a root change when the live probe finds no Miyo registration", async () => {
+    render(<BasicSettings />);
+    fireEvent.change(screen.getByLabelText("Copilot folder"), { target: { value: "ai" } });
+    fireEvent.click(screen.getByRole("button", { name: "Apply Copilot folder" }));
+
+    capturedOnConfirm?.();
+
+    await waitFor(() => expect(verifyMiyoScope).toHaveBeenCalledTimes(1));
+    const noticeTexts = (Notice as unknown as jest.Mock).mock.calls.map((call) => String(call[0]));
+    expect(noticeTexts.some((text) => text.includes("Miyo"))).toBe(false);
   });
 
   it("does nothing when Apply is pressed with the current root unchanged", () => {
