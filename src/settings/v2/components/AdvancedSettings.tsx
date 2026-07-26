@@ -6,6 +6,7 @@ import { ObsidianNativeSelect } from "@/components/ui/obsidian-native-select";
 import { useApp } from "@/context";
 import { logFileManager } from "@/logFileManager";
 import { flushRecordedPromptPayloadToLog } from "@/LLMProviders/chainRunner/utils/promptPayloadRecorder";
+import { getCopilotSaveData } from "@/settings/copilotSaveData";
 import { KeychainService } from "@/services/keychainService";
 import {
   canClearDiskSecrets,
@@ -27,34 +28,13 @@ import {
 import { ArrowUpRight, Info, Plus, ShieldCheck, Trash2, Unlock } from "lucide-react";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { MigrateConfirmModal } from "@/components/modals/MigrateConfirmModal";
-import { type App, Notice } from "obsidian";
+import { Notice } from "obsidian";
 import React, { useCallback, useEffect, useState } from "react";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { getPromptFilePath, SystemPromptAddModal } from "@/system-prompts";
 import { useSystemPrompts } from "@/system-prompts/state";
 
 const DESKTOP_UNAVAILABLE_FRAME_LOG_PATH = "(Agent Mode frame logs are desktop-only)";
-
-/**
- * Returns a `saveData` callback bound to the loaded Copilot plugin instance.
- *
- * Reason: settings React components don't have direct access to the plugin,
- * so persistence transactions look it up via the Obsidian `App`. Kept as a
- * single helper to centralise the `app.plugins` cast (untyped in the Obsidian
- * API) and the "plugin not found" guard at every call site.
- */
-function getCopilotSaveData(app: App): (data: CopilotSettings) => Promise<void> {
-  return async (data: CopilotSettings) => {
-    const { plugins } = app as unknown as {
-      plugins: {
-        getPlugin: (id: string) => { saveData: (data: CopilotSettings) => Promise<void> } | null;
-      };
-    };
-    const copilotPlugin = plugins.getPlugin("copilot");
-    if (!copilotPlugin) throw new Error("Copilot plugin not found");
-    await copilotPlugin.saveData(data);
-  };
-}
 
 export const AdvancedSettings: React.FC = () => {
   const app = useApp();

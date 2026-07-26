@@ -1,7 +1,42 @@
 import { logInfo, logWarn } from "@/logger";
-import { normalizeRootFolders, setSettings, validateCopilotFolder } from "@/settings/model";
+import { getCopilotSaveData } from "@/settings/copilotSaveData";
+import {
+  type CopilotSettings,
+  getSettings,
+  normalizeRootFolders,
+  setSettings,
+  validateCopilotFolder,
+} from "@/settings/model";
+import {
+  persistSettingsWithinTransaction,
+  runPersistenceTransaction,
+  suppressNextPersistOnce,
+} from "@/services/settingsPersistence";
 import type { App } from "obsidian";
 import { normalizePath } from "obsidian";
+
+/**
+ * Build the root-change patch: the new root plus its exclusion history (existing
+ * history ∪ the root being left ∪ the new root), normalized. Applied over a
+ * settings snapshot to produce both the durable write and the in-memory update
+ * from that same snapshot, so the two stay consistent.
+ *
+ * @param current - Settings snapshot the patch is derived against.
+ * @param folder - Validated new root.
+ */
+function buildRootPatch(
+  current: Pick<CopilotSettings, "copilotFolder" | "copilotRootHistory">,
+  folder: string
+): Pick<CopilotSettings, "copilotFolder" | "copilotRootHistory"> {
+  return {
+    copilotRootHistory: normalizeRootFolders([
+      ...current.copilotRootHistory,
+      current.copilotFolder,
+      folder,
+    ]),
+    copilotFolder: folder,
+  };
+}
 
 /**
  * Whether `folder` is a root Copilot has used before, per the recorded history.
@@ -58,74 +93,123 @@ export function copilotRootContainsNotes(app: App, folder: string): boolean {
 }
 
 /**
- * Activate a new Copilot root, persisting the QA protection set and the active
- * root together and then garbage-collecting orphaned index docs.
+ * Activate a new Copilot root: durably persist the new root together with its QA
+ * protection history BEFORE it becomes visible to runtime folder resolvers, then
+ * garbage-collect orphaned index docs.
  *
- * The protection set (legacy root + previous root + full history + new root)
- * and the new `copilotFolder` are written in a single atomic settings update,
- * so a persisted snapshot can never show the new root without a history entry
- * that keeps the previous root excluded from QA — there is no half-committed
- * window to activate a root whose history has not landed. Callers must have
- * already run {@link validateCopilotFolder} and the content check; the guard
- * here is defensive and simply refuses to activate an invalid value.
+ * The protection set (legacy root + previous root + full history + new root) and
+ * the new `copilotFolder` are written as one snapshot, so a persisted snapshot
+ * can never show the new root without a history entry that keeps the previous
+ * root excluded from QA. Callers must have already run
+ * {@link validateCopilotFolder} and the content check; the guard here is
+ * defensive and simply refuses to activate an invalid value.
  *
- * DESIGN NOTE — activation is memory-first, not persist-before-activate.
- * `setSettings` only updates the in-memory atom; the disk write is the
- * fire-and-forget `persistSettings` in the settings subscriber (see `main.ts`).
- * (a) The residual risk: if that persist fails AND the user creates new
- *     conversations under the new root during this same session AND then
- *     restarts, the reloaded snapshot still carries the old root/history, so the
- *     leftover new-root content is no longer system-excluded and can leak into
- *     QA search.
- * (b) We deliberately do NOT `await persistSettings` before activating (no GC /
- *     no "success" until disk lands). The persistence architecture is locked to
- *     memory-first, no-rollback-on-failure (see the subscriber comment in
- *     `main.ts`): memory is the source of truth and disk reconciles on the next
- *     successful write. An awaited persist here could not roll the in-memory
- *     root back on failure without violating that invariant, so it would only
- *     relabel the same unavoidable window — not close it — while adding a
- *     module-level `suppressNextPersistOnce` race against the subscriber.
- * (c) Existing mitigations bound the damage: the subscriber surfaces a Notice on
- *     persist failure so the user knows the save did not land; the next
- *     successful persist reconciles disk with memory; and `sanitizeSettings`
- *     idempotently unions the current root back into the protection set on every
- *     load, so a persisted (even if lagging) snapshot never activates a root
- *     whose own path is unprotected.
+ * DESIGN NOTE — activation is persist-before-activate.
+ * The new root must not reach runtime folder resolvers (`getEffective*Folder`)
+ * until the same snapshot is durably on disk.
+ * (a) Closed leak: previously the in-memory root flipped first and the disk
+ *     write was a fire-and-forget subscriber persist. If that write failed and
+ *     the user then wrote chats under the new root and restarted, the reloaded
+ *     old snapshot no longer system-excluded the new root, so those chats leaked
+ *     into QA search. Persisting first removes that window.
+ * (b) Mechanism: the explicit write runs inside {@link runPersistenceTransaction}
+ *     via {@link persistSettingsWithinTransaction} (the in-queue path — the
+ *     public `persistSettings` would deadlock behind the active transaction).
+ *     Only after it resolves do we {@link suppressNextPersistOnce} and
+ *     `setSettings`, so the subscriber's duplicate persist for this same state
+ *     is swallowed. suppression is consumed synchronously by the subscriber in
+ *     the same call stack, so there is no race — the same invariant the keychain
+ *     transactions already rely on.
+ * (c) Failure path: if the write throws, the transaction rejects before
+ *     `setSettings` runs, so the in-memory root is never touched — no rollback
+ *     needed, and the caller keeps the old root and surfaces the failure.
  * (d) If a future review flags this again, point them at this note.
  *
  * DESIGN NOTE — content-check TOCTOU (accepted, not fixed here).
  * The vault-content guard ({@link copilotRootContainsNotes}) runs in the UI
  * before the confirm modal; this Apply layer deliberately does NOT re-run it
- * before `setSettings`.
+ * before activating.
  * (a) Trigger: within the few-second window between the UI content check passing
  *     and the user confirming, Obsidian Sync or another plugin creates notes
  *     under the target root.
  * (b) Consequence: those newly-arrived notes get excluded from QA wholesale when
  *     the root activates. It is fully reversible — pointing the root elsewhere
  *     restores them; no data is lost.
- * (c) Why not fixed: re-validating at the Apply layer means threading `App` +
- *     `Vault` into this function purely to re-scan for a few-second, reversible
- *     window — a cost that does not match the exposure.
+ * (c) Why not fixed: `app` is now in scope, but a re-scan would only narrow, not
+ *     close, the window — vault contents can still change during the async
+ *     persist. Fully closing it would require coordinating with every vault
+ *     writer, which is not justified for this reversible outcome.
  * (d) If a future review flags this again, point them at this note.
  *
+ * @param app - Active Obsidian app; used to resolve the plugin's `saveData`.
  * @param newRoot - The user-entered root; re-validated defensively.
  */
-export async function applyCopilotRootChange(newRoot: string): Promise<void> {
+export async function applyCopilotRootChange(app: App, newRoot: string): Promise<void> {
   const validation = validateCopilotFolder(newRoot);
   if (!validation.ok) {
     logWarn("Copilot root change rejected an invalid folder value.", validation.reason);
     return;
   }
   const folder = validation.folder;
+  const saveData = getCopilotSaveData(app);
 
-  setSettings((current) => ({
-    copilotRootHistory: normalizeRootFolders([
-      ...current.copilotRootHistory,
-      current.copilotFolder,
-      folder,
-    ]),
-    copilotFolder: folder,
-  }));
+  // Persist the new root + history durably before flipping the in-memory root,
+  // so a failed save (which rejects the transaction) leaves the old root active
+  // rather than a session that writes under an unsaved, unprotected root.
+  await runPersistenceTransaction(async () => {
+    const previous = getSettings();
+    const target: CopilotSettings = { ...previous, ...buildRootPatch(previous, folder) };
+    await persistSettingsWithinTransaction(target, saveData, previous);
+
+    // Reconcile with any concurrent settings edits that landed during the
+    // await. The transaction captured `previous` up front; an unrelated
+    // `setSettings()` (theme, prompts, …) during the persist advances in-memory
+    // state, and its queued subscriber persist is dropped by the
+    // `transactionEpoch` guard. Without this step those edits would be lost from
+    // disk if the user quit before the next save. Re-derive from the latest
+    // snapshot and, if it differs from what we just wrote, persist once more so
+    // disk reflects the merged final state.
+    //
+    // DESIGN NOTE — single-round reconcile with a functional activation update.
+    // The reconcile persists once more so concurrent edits reach disk; it does
+    // NOT loop "re-read → persist" until stable, because a stream of edits (e.g.
+    // a slider drag) could keep it from terminating — a livelock risk on the
+    // settings write queue that is not worth closing a millisecond-scale gap.
+    // The residual window: an edit landing during this second persist has its
+    // own queued persist dropped by the `transactionEpoch` guard, so it may not
+    // reach disk until the next settings save. It is NOT lost from memory —
+    // both activation points below apply the root patch with a functional
+    // updater `(current) => buildRootPatch(current, folder)`, which only
+    // overwrites the root-owned fields and preserves whatever else `current`
+    // holds. So the worst case is a disk-lag that the next save reconciles, not
+    // a vanished setting. (Passing the whole `merged` snapshot to `setSettings`
+    // instead would clobber that concurrent edit from memory too — the bug this
+    // note guards against.)
+    // If a future review flags this again, point them at this note.
+    const fresh = getSettings();
+    const merged: CopilotSettings = { ...fresh, ...buildRootPatch(fresh, folder) };
+    if (JSON.stringify(merged) !== JSON.stringify(target)) {
+      try {
+        await persistSettingsWithinTransaction(merged, saveData, target);
+      } catch (reconcileError) {
+        // The first persist already made the root change durable, so the
+        // user-visible operation SUCCEEDED — throwing here would make the
+        // caller report failure (and skip its follow-ups) over a change that
+        // did happen. The only casualty is the concurrent edit's disk copy;
+        // it stays in memory (the functional updater below preserves it) and
+        // the next successful save reconciles it — the same accepted disk-lag
+        // as the second-window note above.
+        logWarn(
+          "Copilot root change: reconcile save for a concurrent edit failed; " +
+            "it stays in memory and lands with the next save.",
+          reconcileError
+        );
+      }
+    }
+
+    suppressNextPersistOnce();
+    setSettings((current) => buildRootPatch(current, folder));
+  });
 
   // Best-effort: drop index docs that the old/new root now excludes. GC is
   // idempotent and the next full index re-runs it, so failures are logged and

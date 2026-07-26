@@ -460,6 +460,46 @@ describe("persistSettings", () => {
 });
 
 // ---------------------------------------------------------------------------
+// persistSettingsWithinTransaction
+// ---------------------------------------------------------------------------
+
+describe("persistSettingsWithinTransaction", () => {
+  it("dispatches straight to saveData for a disk-mode snapshot", async () => {
+    const { mod } = await loadModule();
+    const saveData = jest.fn().mockResolvedValue(undefined);
+
+    const current = makeSettings({ openAIApiKey: "sk-in-txn" });
+    await mod.persistSettingsWithinTransaction(current, saveData, current);
+
+    expect(saveData).toHaveBeenCalledWith(expect.objectContaining({ openAIApiKey: "sk-in-txn" }));
+  });
+
+  it("ignores the one-shot suppression flag so an in-transaction save always lands", async () => {
+    // suppressNextPersistOnce() is meant to swallow the subscriber-driven
+    // persist that follows setSettings — it must NOT suppress the transaction's
+    // own durable write, or the root change would never reach disk.
+    const { mod } = await loadModule();
+    const saveData = jest.fn().mockResolvedValue(undefined);
+
+    mod.suppressNextPersistOnce();
+    const current = makeSettings({ openAIApiKey: "sk-not-suppressed" });
+    await mod.persistSettingsWithinTransaction(current, saveData, current);
+
+    expect(saveData).toHaveBeenCalledTimes(1);
+  });
+
+  it("propagates a save failure so the caller can abort activation", async () => {
+    const { mod } = await loadModule();
+    const saveData = jest.fn().mockRejectedValue(new Error("disk full"));
+
+    const current = makeSettings({ openAIApiKey: "sk-x" });
+    await expect(mod.persistSettingsWithinTransaction(current, saveData, current)).rejects.toThrow(
+      "disk full"
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
 // migrateDiskSecretsToKeychain
 // ---------------------------------------------------------------------------
 
