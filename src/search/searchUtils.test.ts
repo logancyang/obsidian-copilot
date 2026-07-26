@@ -8,7 +8,6 @@ import {
   getDecodedPatterns,
   getMatchingPatterns,
   getSystemExcludedFolders,
-  hasActiveCopilotPatterns,
   isInternalExcludedPath,
   previewPatternValue,
   shouldIndexFile,
@@ -545,16 +544,6 @@ describe("searchUtils", () => {
         copilotFolder: "team-ai",
       });
       expect(isInternalExcludedPath("team-ai/projects/my-project/notes.md")).toBe(false);
-    });
-  });
-
-  describe("hasActiveCopilotPatterns", () => {
-    it("is always true because the system root exclusion is always active", () => {
-      (settingsModel.getSettings as jest.Mock).mockReturnValue({
-        qaInclusions: "",
-        qaExclusions: "",
-      });
-      expect(hasActiveCopilotPatterns()).toBe(true);
     });
   });
 

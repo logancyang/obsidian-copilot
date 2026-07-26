@@ -75,6 +75,7 @@ import {
   subscribeToSettingsChange,
   updateSetting,
 } from "@/settings/model";
+import { didMiyoSyncedRootsChange, shouldSurfaceMiyoResync } from "@/miyo/miyoUtils";
 import { ensureCopilotSubfolders, getEffectiveConversationsFolder } from "@/settings/copilotFolder";
 import { buildUpgradeRelocationEntries } from "@/settings/upgradeNotice";
 import { UpgradeRelocationNotice } from "@/settings/UpgradeRelocationNotice";
@@ -417,6 +418,22 @@ export default class CopilotPlugin extends Plugin {
         .then(() => migrateSystemPromptsFromSettings(this.app));
 
       void this.notifyLegacyUpgradeRelocation();
+
+      // A Copilot root change can arrive via settings sync without passing
+      // through the settings UI (whose confirm chain runs the auto-resync), so
+      // Miyo's server-side exclusions may be silently stale at startup. Only a
+      // REAL roots change prompts — a receipt from another device with equal
+      // roots stays quiet; the Miyo tab's on-load verification self-heals it.
+      // No `enableMiyo` gate: shouldSurfaceMiyoResync already treats a non-empty
+      // receipt as evidence of a past registration, and a user who disconnected
+      // in Copilot can still be exposed through Miyo's Relay.
+      const startupSettings = getSettings();
+      if (
+        didMiyoSyncedRootsChange(startupSettings) &&
+        shouldSurfaceMiyoResync(this.app, startupSettings)
+      ) {
+        new Notice("Miyo search needs a resync — open the Miyo settings tab.", 8000);
+      }
     });
 
     // Initialize automatic selection handler

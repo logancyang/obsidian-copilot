@@ -4,8 +4,14 @@ import { BaseRetriever } from "@langchain/core/retrievers";
 import { App } from "obsidian";
 import { logInfo, logWarn } from "@/logger";
 import { MiyoClient, MiyoSearchFilter, MiyoSearchResult } from "@/miyo/MiyoClient";
-import { getMiyoCustomUrl, getMiyoFolderName, getVaultRelativeMiyoPath } from "@/miyo/miyoUtils";
-import { createCopilotPatternFilter, hasActiveCopilotPatterns } from "@/search/searchUtils";
+import {
+  getMiyoCustomUrl,
+  getMiyoFolderName,
+  getVaultRelativeMiyoPath,
+  hasUserQaPatterns,
+  isMiyoScopeMismatch,
+} from "@/miyo/miyoUtils";
+import { createCopilotPatternFilter } from "@/search/searchUtils";
 import { getSettings } from "@/settings/model";
 import { RETURN_ALL_LIMIT } from "@/search/v3/SearchCore";
 
@@ -115,12 +121,23 @@ export class MiyoSemanticRetriever extends BaseRetriever {
   private async searchMiyo(query: string): Promise<Document[]> {
     try {
       const baseUrl = await this.client.resolveBaseUrl(getMiyoCustomUrl(getSettings()));
-      // Over-fetch candidates only when inclusion/exclusion filtering can drop
-      // results (or the caller wants everything), so filtering still leaves
-      // enough chunks to fill finalK and the set is capped afterwards. Without
-      // an active filter, bound the request to finalK so default searches don't
-      // transfer up to RETURN_ALL_LIMIT chunks for no filtering benefit.
-      const limit = this.returnAll || hasActiveCopilotPatterns() ? RETURN_ALL_LIMIT : this.finalK;
+      // Over-fetch candidates only when the local filter can actually drop
+      // results: user-authored qa patterns (the server never sees tag/note
+      // patterns, and edited patterns lag its registration snapshot), or a
+      // stale Miyo scope (the server may return system-root content the filter
+      // must remove). With a synced scope and no user patterns, the server
+      // already omits everything the filter would drop, so a small 2× margin —
+      // covering post-fetch chunk dedup, which Miyo does not guarantee against —
+      // replaces the former always-RETURN_ALL_LIMIT fetch. The margin is
+      // best-effort by design: finalK is an upper bound, not a fill guarantee
+      // (the similarity threshold already returns fewer), and a retry-on-
+      // shortfall second request would add tail latency for a duplicate
+      // density no real payload has shown.
+      const settings = getSettings();
+      const limit =
+        this.returnAll || hasUserQaPatterns(settings) || isMiyoScopeMismatch(this.app, settings)
+          ? RETURN_ALL_LIMIT
+          : Math.min(this.finalK * 2, RETURN_ALL_LIMIT);
       const filters = this.buildSearchFilters();
       if (getSettings().debug) {
         logInfo("MiyoSemanticRetriever: search params:", {

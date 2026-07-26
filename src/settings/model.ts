@@ -186,6 +186,13 @@ export interface CopilotSettings {
   selfHostApiKey: string;
   /** Custom Miyo server URL, e.g. "http://192.168.1.10:8742" (empty = use local service discovery) */
   miyoServerUrl: string;
+  /**
+   * Fingerprint of the system root exclusions last successfully synced to the
+   * registered Miyo folder (empty = never synced). Compared against the current
+   * fingerprint to detect that Miyo's server-side exclusions went stale after a
+   * Copilot root change; see `getMiyoExclusionsFingerprint` in miyoUtils.
+   */
+  miyoSyncedExclusions: string;
   /** Which provider to use for self-host web search */
   selfHostSearchProvider: "firecrawl" | "perplexity";
   /** Firecrawl API key for self-host web search */
@@ -808,6 +815,11 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   // Ensure miyoServerUrl has a default value
   if (typeof sanitizedSettings.miyoServerUrl !== "string") {
     sanitizedSettings.miyoServerUrl = DEFAULT_SETTINGS.miyoServerUrl;
+  }
+
+  // Ensure miyoSyncedExclusions has a default value
+  if (typeof sanitizedSettings.miyoSyncedExclusions !== "string") {
+    sanitizedSettings.miyoSyncedExclusions = DEFAULT_SETTINGS.miyoSyncedExclusions;
   }
 
   // Ensure selfHostSearchProvider is a valid value

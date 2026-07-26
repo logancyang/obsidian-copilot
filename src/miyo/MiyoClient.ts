@@ -346,6 +346,54 @@ export class MiyoClient {
   }
 
   /**
+   * Remove a folder registration (`DELETE /v0/folder`), which also purges the
+   * folder's indexed documents (verified empirically: a post-delete global
+   * search returns no leftovers).
+   *
+   * 404 is a success: the caller's goal — no registration under that name —
+   * already holds (e.g. a prior resync deleted it but never got to re-add).
+   * The identifier is the record's canonical `path`, which is the folder NAME,
+   * not the absolute path (also verified against a live registration).
+   *
+   * @param folderName - Registered folder name (see getMiyoFolderName).
+   * @param overrideUrl - Explicit base URL (from settings) or empty for discovery.
+   */
+  public async deleteFolder(folderName: string, overrideUrl?: string): Promise<void> {
+    const baseUrl = await this.resolveBaseUrl(overrideUrl);
+    const headers = await this.buildHeaders();
+    const url = new URL("/v0/folder", baseUrl);
+    logInfo("Miyo request:", {
+      method: "DELETE",
+      url: url.toString(),
+      hasBody: true,
+      hasAuthorizationHeader: Boolean(headers.Authorization),
+    });
+    const response = await requestUrl({
+      url: url.toString(),
+      method: "DELETE",
+      headers,
+      contentType: "application/json",
+      body: JSON.stringify({ path: folderName }),
+      throw: false,
+    });
+    if (response.status === 404) {
+      logInfo("Miyo folder already unregistered; delete is a no-op");
+      return;
+    }
+    if (response.status >= 400) {
+      const detail =
+        this.parseResponseJson<{ detail?: string }>(response.json, response.text)?.detail ||
+        response.text ||
+        "";
+      throw new Error(
+        detail
+          ? `Miyo delete-folder failed with status ${response.status}: ${detail}`
+          : `Miyo delete-folder failed with status ${response.status}`
+      );
+    }
+  }
+
+  /**
    * Determine whether a vault folder is registered with Miyo.
    *
    * Unlike {@link getFolder} (which throws on any non-2xx), this reads the raw

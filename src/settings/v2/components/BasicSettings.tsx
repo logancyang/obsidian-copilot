@@ -7,13 +7,21 @@ import { SettingSection } from "@/components/ui/setting-section";
 import { DEFAULT_OPEN_AREA, SEND_SHORTCUT } from "@/constants";
 import { useApp } from "@/context";
 import { cn } from "@/lib/utils";
+import { resyncMiyoFolder } from "@/miyo/miyoResync";
+import { getMiyoCustomUrl, isLocalMiyoUrl, shouldSurfaceMiyoResync } from "@/miyo/miyoUtils";
 import { ensureCopilotSubfolders } from "@/settings/copilotFolder";
 import {
   applyCopilotRootChange,
   copilotRootContainsNotes,
   isKnownCopilotRoot,
 } from "@/settings/copilotRootChange";
-import { updateSetting, useSettingsValue, validateCopilotFolder } from "@/settings/model";
+import {
+  getSettings,
+  updateSetting,
+  useSettingsValue,
+  validateCopilotFolder,
+} from "@/settings/model";
+import { getVaultBase } from "@/utils/vaultPath";
 import { PlusSettings } from "@/settings/v2/components/PlusSettings";
 import { formatDateTime } from "@/utils";
 import { revealFolderInExplorer } from "@/utils/revealFolderInExplorer";
@@ -94,6 +102,25 @@ export const BasicSettings: React.FC = () => {
       app,
       () => {
         void applyCopilotRootChange(app, folder)
+          .then(() => {
+            // The root moved, so Miyo's server-side exclusions are stale.
+            // Reconcile automatically (silent on success); when that can't run
+            // or fails, point at the Miyo tab where the banner offers a retry.
+            // Reads fresh settings — the React `settings` closure predates the
+            // root change. Fire-and-forget: a Miyo hiccup must not break the
+            // rest of the root-change chain.
+            const fresh = getSettings();
+            if (!shouldSurfaceMiyoResync(app, fresh)) return;
+            const notice = () =>
+              new Notice("Miyo search needs a resync — open the Miyo settings tab.", 6000);
+            if (getVaultBase(app) && isLocalMiyoUrl(getMiyoCustomUrl(fresh))) {
+              void resyncMiyoFolder(app).then((outcome) => {
+                if (outcome === "conflict" || outcome === "failed") notice();
+              });
+            } else {
+              notice();
+            }
+          })
           .then(() => ensureCopilotSubfolders(app.vault, { copilotFolder: folder }))
           .then(() => new Notice(`Copilot folder changed to "${folder}".`, 4000))
           .catch(() => new Notice("Failed to change the Copilot folder. Check the logs.", 5000));
