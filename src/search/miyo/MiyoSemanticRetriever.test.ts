@@ -1,5 +1,5 @@
 import { type App, TFile } from "obsidian";
-import { getMiyoFolderName } from "@/miyo/miyoUtils";
+import { getMiyoFolderName, hasUserQaPatterns, isMiyoScopeMismatch } from "@/miyo/miyoUtils";
 import { MiyoSemanticRetriever } from "@/search/miyo/MiyoSemanticRetriever";
 import { getSettings } from "@/settings/model";
 import { RETURN_ALL_LIMIT } from "@/search/v3/SearchCore";
@@ -20,6 +20,10 @@ jest.mock("@/miyo/miyoUtils", () => ({
   getMiyoFolderName: jest.fn(),
   getVaultRelativeMiyoPath: jest.fn((_: unknown, path: string) => path.replace("/vault/", "")),
   getMiyoCustomUrl: jest.fn().mockReturnValue(""),
+  // Default: synced scope, no user patterns — the narrow-limit branch. Tests
+  // that exercise the over-fetch branches flip these explicitly.
+  hasUserQaPatterns: jest.fn(() => false),
+  isMiyoScopeMismatch: jest.fn(() => false),
 }));
 jest.mock("@/miyo/MiyoClient", () => ({
   MiyoClient: jest.fn().mockImplementation(() => ({
@@ -94,14 +98,14 @@ describe("MiyoSemanticRetriever", () => {
     const retriever = createRetriever();
     const documents = await retriever.getRelevantDocuments("query with [[notes/a]] mention");
 
-    // Over-fetch is always on now: the system root exclusion is always active
-    // (hasActiveCopilotPatterns is unconditionally true), so the request uses
-    // RETURN_ALL_LIMIT so post-filtering still leaves enough to fill finalK.
+    // Synced scope + no user patterns: the server already omits everything the
+    // local filter would drop, so the request narrows to finalK×2 (dedup
+    // margin) instead of the full RETURN_ALL_LIMIT pool.
     expect(mockSearch).toHaveBeenCalledWith(
       "http://miyo.local",
       "/vault",
       "query with [[notes/a]] mention",
-      RETURN_ALL_LIMIT,
+      20,
       undefined
     );
     expect(mockGetDocumentsByPath).not.toHaveBeenCalled();
@@ -157,8 +161,9 @@ describe("MiyoSemanticRetriever", () => {
   });
 
   it("over-fetches but caps returned chunks to the requested limit when a filter is active", async () => {
-    // An active inclusion/exclusion pattern can drop results, so the retriever
-    // over-fetches candidates to still fill the requested cap.
+    // A user-authored inclusion/exclusion pattern can drop results, so the
+    // retriever over-fetches candidates to still fill the requested cap.
+    (hasUserQaPatterns as jest.Mock).mockReturnValue(true);
     (getSettings as jest.Mock).mockReturnValue({
       miyoServerUrl: "http://miyo.local",
       debug: false,
@@ -201,11 +206,11 @@ describe("MiyoSemanticRetriever", () => {
     ]);
   });
 
-  it("over-fetches even with no user patterns because the system root exclusion is always active", async () => {
-    // The always-on system root exclusion (copilot + active + historical roots)
-    // can always drop a chunk, so the retriever must over-fetch to RETURN_ALL_LIMIT
-    // regardless of the user's QA patterns — otherwise post-filtering could leave
-    // fewer than finalK results.
+  it("over-fetches while the Miyo scope is stale", async () => {
+    // A stale server-side scope can return system-root content the local filter
+    // must drop, so the retriever keeps the expanded pool until the resync
+    // receipt is current again.
+    (isMiyoScopeMismatch as jest.Mock).mockReturnValue(true);
     mockSearch.mockResolvedValue({ results: [] });
 
     const retriever = createRetriever({ maxK: 3 });

@@ -25,6 +25,7 @@ const updateSetting = jest.fn<void, unknown[]>();
 let currentSettings = { ...DEFAULT_SETTINGS };
 jest.mock("@/settings/model", () => ({
   updateSetting: (...a: unknown[]) => updateSetting(...a),
+  getSettings: () => currentSettings,
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook; name must match the export
   useSettingsValue: () => currentSettings,
 }));
@@ -65,13 +66,26 @@ jest.mock("@/miyo/MiyoClient", () => ({
     checkFolderRegistration = async () => mockRegistration;
   },
 }));
+// Quiet by default so the resync banner doesn't render into unrelated tests;
+// the banner tests flip this on.
+const shouldSurfaceMiyoResync = jest.fn<boolean, unknown[]>(() => false);
 jest.mock("@/miyo/miyoUtils", () => ({
   getMiyoCustomUrl: () => "",
   getMiyoFolderExclusions: () => ({}),
+  getMiyoFolderInclusions: () => ({}),
   getMiyoFolderName: () => "vault",
   isLocalMiyoUrl: () => true,
+  buildMiyoSyncReceipt: () => "receipt",
+  shouldSurfaceMiyoResync: (...a: unknown[]) => shouldSurfaceMiyoResync(...a),
   MIYO_ADD_FOLDER_DEEPLINK_URL: "miyo://add",
   MIYO_DEEPLINK_URL: "miyo://",
+}));
+// The scope-resync module talks to a live Miyo; keep it inert here.
+const resyncMiyoFolder = jest.fn<Promise<string>, unknown[]>(async () => "verified");
+jest.mock("@/miyo/miyoResync", () => ({
+  enqueueMiyoFolderMutation: (task: () => Promise<unknown>) => task(),
+  resyncMiyoFolder: (...a: unknown[]) => resyncMiyoFolder(...a),
+  verifyMiyoScope: jest.fn(async () => "unknown"),
 }));
 // Capture the options the component passes to the modal so a test can invoke the
 // modal's callbacks (onRetry/onAddVault) directly — the Retry button has no
@@ -449,5 +463,22 @@ describe("Connect — two-phase commit rolls back on a failed health check", () 
     // Without the ownership token, A's superseded revert would write false here.
     expect(updateSetting).not.toHaveBeenCalledWith("enableMiyo", false);
     expect(enableTrueCount()).toBe(2);
+  });
+});
+
+describe("scope resync banner", () => {
+  it("stays hidden when the local receipt matches", () => {
+    render(<MiyoSettings />);
+    expect(screen.queryByRole("button", { name: /Resync Miyo/ })).toBeNull();
+  });
+
+  it("shows and runs the resync when the scope went stale", async () => {
+    shouldSurfaceMiyoResync.mockReturnValue(true);
+    render(<MiyoSettings />);
+
+    const button = screen.getByRole("button", { name: /Resync Miyo/ });
+    fireEvent.click(button);
+
+    await waitFor(() => expect(resyncMiyoFolder).toHaveBeenCalledTimes(1));
   });
 });

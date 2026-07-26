@@ -1,7 +1,7 @@
 import { DEFAULT_SETTINGS } from "@/constants";
 import { settingsAtom, settingsStore } from "@/settings/model";
 import { BasicSettings } from "@/settings/v2/components/BasicSettings";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { Notice } from "obsidian";
 import React from "react";
 
@@ -24,6 +24,19 @@ jest.mock("@/settings/copilotRootChange", () => ({
   isKnownCopilotRoot: (...a: unknown[]) => isKnownCopilotRoot(...a),
 }));
 
+// The post-change hybrid trigger: observe whether the auto-resync fires.
+const resyncMiyoFolder = jest.fn<Promise<string>, unknown[]>().mockResolvedValue("resynced");
+jest.mock("@/miyo/miyoResync", () => ({
+  resyncMiyoFolder: (...a: unknown[]) => resyncMiyoFolder(...a),
+}));
+const shouldSurfaceMiyoResync = jest.fn<boolean, unknown[]>().mockReturnValue(false);
+jest.mock("@/miyo/miyoUtils", () => ({
+  shouldSurfaceMiyoResync: (...a: unknown[]) => shouldSurfaceMiyoResync(...a),
+  isLocalMiyoUrl: () => true,
+  getMiyoCustomUrl: () => "",
+}));
+jest.mock("@/utils/vaultPath", () => ({ getVaultBase: () => "/abs/vault" }));
+
 // Capture ConfirmModal construction so a test can fire its confirm callback.
 let capturedOnConfirm: (() => void) | null = null;
 const modalCtor = jest.fn((onConfirm: () => void) => {
@@ -45,6 +58,8 @@ describe("BasicSettings", () => {
     settingsStore.set(settingsAtom, { ...DEFAULT_SETTINGS, copilotFolder: "copilot" });
     copilotRootContainsNotes.mockReturnValue(false);
     isKnownCopilotRoot.mockReturnValue(false);
+    shouldSurfaceMiyoResync.mockReturnValue(false);
+    resyncMiyoFolder.mockResolvedValue("resynced");
   });
 
   it("binds the Copilot folder input to the persisted root", () => {
@@ -98,6 +113,28 @@ describe("BasicSettings", () => {
 
     capturedOnConfirm?.();
     expect(applyCopilotRootChange).toHaveBeenCalledWith(expect.anything(), "ai");
+  });
+
+  it("auto-resyncs Miyo after a confirmed root change when its scope went stale", async () => {
+    shouldSurfaceMiyoResync.mockReturnValue(true);
+    render(<BasicSettings />);
+    fireEvent.change(screen.getByLabelText("Copilot folder"), { target: { value: "ai" } });
+    fireEvent.click(screen.getByRole("button", { name: "Apply Copilot folder" }));
+
+    capturedOnConfirm?.();
+
+    await waitFor(() => expect(resyncMiyoFolder).toHaveBeenCalledTimes(1));
+  });
+
+  it("leaves Miyo alone after a root change when nothing needs resyncing", async () => {
+    render(<BasicSettings />);
+    fireEvent.change(screen.getByLabelText("Copilot folder"), { target: { value: "ai" } });
+    fireEvent.click(screen.getByRole("button", { name: "Apply Copilot folder" }));
+
+    capturedOnConfirm?.();
+
+    await waitFor(() => expect(applyCopilotRootChange).toHaveBeenCalled());
+    expect(resyncMiyoFolder).not.toHaveBeenCalled();
   });
 
   it("does nothing when Apply is pressed with the current root unchanged", () => {

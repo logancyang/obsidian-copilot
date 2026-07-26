@@ -325,6 +325,55 @@ describe("MiyoClient", () => {
     });
   });
 
+  describe("deleteFolder", () => {
+    it("DELETEs /v0/folder with the folder name in the JSON body", async () => {
+      mockedRequestUrl.mockResolvedValue({
+        status: 200,
+        json: { deleted: true },
+        text: "",
+      } as RequestUrlResponse);
+
+      const client = new MiyoClient();
+      await client.deleteFolder("my-vault");
+
+      expect(mockedRequestUrl).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: "http://127.0.0.1:8742/v0/folder",
+          method: "DELETE",
+          contentType: "application/json",
+          body: JSON.stringify({ path: "my-vault" }),
+          throw: false,
+        })
+      );
+    });
+
+    it("treats 404 not-registered as success", async () => {
+      // The caller's goal — no registration under that name — already holds
+      // (e.g. a prior resync deleted it but never got to re-add).
+      mockedRequestUrl.mockResolvedValue({
+        status: 404,
+        json: { detail: "Folder not registered: my-vault" },
+        text: "",
+      } as RequestUrlResponse);
+
+      const client = new MiyoClient();
+      await expect(client.deleteFolder("my-vault")).resolves.toBeUndefined();
+    });
+
+    it("throws a detailed error on other failures", async () => {
+      mockedRequestUrl.mockResolvedValue({
+        status: 500,
+        json: { detail: "boom" },
+        text: "",
+      } as RequestUrlResponse);
+
+      const client = new MiyoClient();
+      await expect(client.deleteFolder("my-vault")).rejects.toThrow(
+        "Miyo delete-folder failed with status 500: boom"
+      );
+    });
+  });
+
   describe("fetchHealth()", () => {
     it("resolves null once the probe timeout elapses when the request never responds", async () => {
       jest.useFakeTimers();

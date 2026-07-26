@@ -226,15 +226,6 @@ export function createCopilotPatternFilter(app: App): (path: string) => boolean 
 }
 
 /**
- * Whether {@link createCopilotPatternFilter} can remove results, so callers know
- * whether to over-fetch to compensate. Always true: the system root exclusion is
- * always active, so a candidate can be dropped even with no user patterns.
- */
-export function hasActiveCopilotPatterns(): boolean {
-  return true;
-}
-
-/**
  * Break down the patterns into their respective categories.
  * @param patterns - The patterns to categorize.
  * @returns An object containing the categorized patterns.
