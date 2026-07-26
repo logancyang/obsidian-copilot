@@ -430,6 +430,16 @@ export interface MiyoSyncReceipt {
  * device-only mismatches to avoid nagging when this device's server is in
  * fact fine. The Miyo tab's on-load `verifyMiyoScope` is the self-heal entry
  * point — and the exposure window lasts until the user opens that tab.
+ * An EMPTY receipt is the same shape of unknown: a registration made before
+ * receipts existed leaves no local evidence, and a migration cannot
+ * synthesize a truthful one (the server's scope is unknowable offline;
+ * fabricating a receipt would falsely mark it synced). Empty stays the
+ * conservative state — mismatch holds, the retriever over-fetches, the Miyo
+ * tab's on-load verify self-heals or forces the banner, and the root-change
+ * trigger runs a read-only live probe for the disconnected-with-empty-receipt
+ * case. The startup roots-change notice still needs a parseable receipt:
+ * noticing on every empty receipt would nag the entire pre-receipt user base
+ * whose scopes are in fact fine.
  * Follow-up (out of scope here): a timeout-bounded startup live-verify for
  * foreign receipts. If a future review flags this again, point them here.
  *

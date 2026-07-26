@@ -10,7 +10,7 @@ import {
   type MiyoSyncReceipt,
 } from "@/miyo/miyoUtils";
 import { extractAppIgnoreSettings, getSystemExcludedFolders } from "@/search/searchUtils";
-import { getSettings, updateSetting } from "@/settings/model";
+import { type CopilotSettings, getSettings, updateSetting } from "@/settings/model";
 import { err2String } from "@/utils";
 import { getDeviceId } from "@/utils/deviceId";
 import { getVaultBase } from "@/utils/vaultPath";
@@ -128,42 +128,35 @@ function isSuperset(container: readonly string[], required: readonly string[]): 
   return required.every((entry) => set.has(entry));
 }
 
-function sameSet(a: readonly string[], b: readonly string[]): boolean {
-  return isSuperset(a, b) && isSuperset(b, a);
-}
-
 /**
- * Whether the live folder record already enforces the desired scope, making a
- * destructive delete + re-register (and the full re-index it implies)
- * unnecessary. Exclusions may be a superset (extra, user-added Miyo-side
- * exclusions are privacy-safe and not ours to fight); inclusions must match
- * exactly, since a different whitelist is a genuinely different scope.
+ * Whether the live folder record already excludes every CURRENT system root
+ * (active + historical Copilot roots), making a destructive delete +
+ * re-register (and the full re-index it implies) unnecessary.
  *
- * DESIGN NOTE — the superset rule cannot tell a Miyo-side user exclusion from
- * a Copilot-pushed exclusion the user has since REMOVED from `qaExclusions`.
- * After such a removal the server keeps excluding that folder, this check still
- * reads "covered", and the content stays unindexed until a manual
- * re-registration — a search-miss, not a privacy leak (the leak direction is
- * always caught, since a MISSING desired exclusion fails the superset).
- * Distinguishing the two would require the receipt to carry the full pushed
- * exclusion list and a three-way compare; exact equality instead would make
- * resync destroy genuine Miyo-side privacy exclusions, which is strictly
- * worse. If a future review flags this again, point them here.
+ * DESIGN NOTE — the staleness signal is deliberately ROOTS-ONLY. Drift in the
+ * qa* patterns or Obsidian's own ignore list is the pre-existing
+ * registration-snapshot gap documented at the registration site (qa* scope is
+ * re-applied live at query time; the ignore-list gap predates this PR), and
+ * comparing the full desired body here would flag — and destructively
+ * rebuild for — users who never changed their root. Only the resync BODY uses
+ * the full current scope, so once a roots-driven rebuild does happen it
+ * carries everything current along. Exclusions may be a superset: extra,
+ * user-added Miyo-side exclusions are privacy-safe and not ours to fight,
+ * while the leak direction (a system root MISSING from the server's
+ * exclusions) always fails the superset and triggers the rebuild.
+ * If a future review flags this again, point them here.
  *
  * @param record - Live folder entry fetched from Miyo.
- * @param desired - Freshly-built registration body for the current scope.
+ * @param settings - Settings snapshot the current system roots derive from.
  */
-export function miyoRecordCoversScope(
+export function miyoRecordCoversSystemRoots(
   record: MiyoFolderEntry,
-  desired: MiyoAddFolderRequest
+  settings: CopilotSettings
 ): boolean {
-  return (
-    isSuperset(recordArray(record, "exclude_folders"), desired.exclude_folders ?? []) &&
-    isSuperset(recordArray(record, "exclude_patterns"), desired.exclude_patterns ?? []) &&
-    sameSet(recordArray(record, "include_folders"), desired.include_folders ?? []) &&
-    sameSet(recordArray(record, "include_patterns"), desired.include_patterns ?? []) &&
-    sameSet(recordArray(record, "include_extensions"), desired.include_extensions ?? [])
-  );
+  // Reuse the registration-body builder (with no qa patterns) so the roots are
+  // normalized exactly as they were when pushed into `exclude_folders`.
+  const desired = getMiyoFolderExclusions("", getSystemExcludedFolders(settings));
+  return isSuperset(recordArray(record, "exclude_folders"), desired.exclude_folders ?? []);
 }
 
 /** Registration body for the current scope (shared by resync and verify). */
@@ -264,7 +257,7 @@ async function runVerify(app: App): Promise<MiyoScopeVerification> {
       return "unregistered";
     }
 
-    if (!miyoRecordCoversScope(record, buildDesiredScope(app, settings))) {
+    if (!miyoRecordCoversSystemRoots(record, settings)) {
       return "stale";
     }
     const receipt = buildMiyoSyncReceipt(app, settings);
@@ -329,7 +322,7 @@ async function runResync(app: App): Promise<MiyoResyncOutcome> {
     }
 
     if (record) {
-      if (miyoRecordCoversScope(record, desired)) {
+      if (miyoRecordCoversSystemRoots(record, settings)) {
         updateSetting("miyoSyncedExclusions", receipt);
         logInfo("Miyo resync: server record already covers the scope; receipt updated.");
         return "verified";
