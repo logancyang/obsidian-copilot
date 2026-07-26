@@ -93,7 +93,7 @@ export const BasicSettings: React.FC = () => {
     new ConfirmModal(
       app,
       () => {
-        void applyCopilotRootChange(folder)
+        void applyCopilotRootChange(app, folder)
           .then(() => ensureCopilotSubfolders(app.vault, { copilotFolder: folder }))
           .then(() => new Notice(`Copilot folder changed to "${folder}".`, 4000))
           .catch(() => new Notice("Failed to change the Copilot folder. Check the logs.", 5000));

@@ -19,6 +19,7 @@ import {
   readFrontmatterViaAdapter,
   trashFile,
 } from "@/utils/vaultAdapterUtils";
+import { joinPosix } from "@/utils/pathUtils";
 import { TFile, type App } from "obsidian";
 import { Notice } from "obsidian";
 import { coerceProjectId, escapeYamlString, unescapeYamlString } from "./agentChatYaml";
@@ -143,7 +144,12 @@ export class AgentChatPersistenceManager {
       const chatContent = this.formatChatContent(messages);
       const firstMessageEpoch = messages[0].timestamp?.epoch ?? Date.now();
 
-      await ensureFolderExists(this.app.vault, getEffectiveConversationsFolder());
+      // Capture the conversations folder once so a concurrent Copilot-root
+      // change can't make this save ensure one directory and then write a path
+      // under another. The fallback path below reads the same snapshot.
+      const conversationsFolder = getEffectiveConversationsFolder();
+
+      await ensureFolderExists(this.app.vault, conversationsFolder);
 
       const existingFile = options?.existingPath
         ? this.resolveExistingFile(options.existingPath)
@@ -152,7 +158,12 @@ export class AgentChatPersistenceManager {
 
       const preferredFileName = existingFile
         ? existingFile.path
-        : this.generateFileName(messages, firstMessageEpoch, existingMeta.topic);
+        : this.generateFileName(
+            messages,
+            firstMessageEpoch,
+            conversationsFolder,
+            existingMeta.topic
+          );
 
       const noteContent = this.generateNoteContent({
         chatContent,
@@ -196,7 +207,7 @@ export class AgentChatPersistenceManager {
         }
         if (isNameTooLongError(err)) {
           logWarn("[AgentChatPersistenceManager] Filename too long, falling back to minimal name");
-          const fallback = `${getEffectiveConversationsFolder()}/${AGENT_FILENAME_PREFIX}chat-${firstMessageEpoch}.md`;
+          const fallback = `${conversationsFolder}/${AGENT_FILENAME_PREFIX}chat-${firstMessageEpoch}.md`;
           try {
             const created = await this.app.vault.create(fallback, noteContent);
             return { path: created.path };
@@ -414,6 +425,7 @@ export class AgentChatPersistenceManager {
   private generateFileName(
     messages: AgentChatMessage[],
     firstMessageEpoch: number,
+    folder: string,
     topic?: string
   ): string {
     const settings = getSettings();
@@ -473,10 +485,10 @@ export class AgentChatPersistenceManager {
     if (getUtf8ByteLength(baseNameWithPrefix) > SAFE_FILENAME_BYTE_LIMIT) {
       const availableForBasename = SAFE_FILENAME_BYTE_LIMIT - extensionBytes - filePrefixBytes;
       const truncatedBasename = truncateToByteLimit(sanitizedFileName, availableForBasename);
-      return `${getEffectiveConversationsFolder()}/${filePrefix}${truncatedBasename}.md`;
+      return joinPosix(folder, `${filePrefix}${truncatedBasename}.md`);
     }
 
-    return `${getEffectiveConversationsFolder()}/${baseNameWithPrefix}`;
+    return joinPosix(folder, baseNameWithPrefix);
   }
 
   private generateNoteContent(args: {

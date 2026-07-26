@@ -97,7 +97,7 @@ describe("BasicSettings", () => {
     expect(applyCopilotRootChange).not.toHaveBeenCalled();
 
     capturedOnConfirm?.();
-    expect(applyCopilotRootChange).toHaveBeenCalledWith("ai");
+    expect(applyCopilotRootChange).toHaveBeenCalledWith(expect.anything(), "ai");
   });
 
   it("does nothing when Apply is pressed with the current root unchanged", () => {

@@ -841,6 +841,30 @@ export const clearDiskSecrets = migrateDiskSecretsToKeychain;
 // ---------------------------------------------------------------------------
 
 /**
+ * Persist a settings snapshot from *inside* an already-running
+ * {@link runPersistenceTransaction} task, dispatching straight to disk/keychain
+ * without re-entering the write queue.
+ *
+ * Reason: a transaction task already executes inside `writeQueue`. Routing its
+ * own save through the public {@link persistSettings} would enqueue it behind
+ * the very transaction that is awaiting it — a self-deadlock. This entry point
+ * bypasses the queue (and the one-shot suppression flag, which is reserved for
+ * the subscriber-driven duplicate the caller intentionally follows with) so the
+ * transaction can make its snapshot durable before mutating in-memory state.
+ *
+ * @param settings - Complete settings snapshot to make durable.
+ * @param saveData - Plugin-bound writer for `data.json`.
+ * @param prevSettings - Previous snapshot, used as the keychain rollback baseline.
+ */
+export async function persistSettingsWithinTransaction(
+  settings: CopilotSettings,
+  saveData: (data: CopilotSettings) => Promise<void>,
+  prevSettings?: CopilotSettings
+): Promise<void> {
+  await doPersist(settings, saveData, prevSettings);
+}
+
+/**
  * Public entry point — queues a save behind the write queue and any pending
  * dedicated transactions, then dispatches to disk or keychain mode.
  */
