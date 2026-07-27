@@ -4,6 +4,7 @@ import type {
 } from "@/components/modals/SymposiumModal";
 import { SymposiumClientError } from "@/symposium/SymposiumClient";
 import { SymposiumPublisher } from "@/symposium/SymposiumPublisher";
+import { SymposiumDocumentTooLargeError } from "@/symposium/symposiumDocument";
 import type { SymposiumDocument, SymposiumReceipt } from "@/symposium/types";
 import type { App, TFile } from "obsidian";
 
@@ -32,6 +33,7 @@ interface Harness {
   frontmatter: Record<string, unknown>;
   loadLicenseKey: jest.Mock;
   modalOptions: SymposiumModalOptions[];
+  disposeModal: jest.Mock;
   openModal: jest.Mock;
   processFrontMatter: jest.Mock;
   publisher: SymposiumPublisher;
@@ -48,8 +50,13 @@ function createHarness(frontmatter: Record<string, unknown> = {}): Harness {
     }
   );
   const app = {
-    metadataCache: {
-      getFileCache: jest.fn(() => ({ frontmatter })),
+    vault: {
+      read: jest.fn(async () => {
+        const yaml = Object.entries(frontmatter)
+          .map(([key, value]) => `${key}: ${JSON.stringify(value)}`)
+          .join("\n");
+        return yaml ? `---\n${yaml}\n---\n` : "";
+      }),
     },
     fileManager: { processFrontMatter },
   } as unknown as App;
@@ -62,13 +69,14 @@ function createHarness(frontmatter: Record<string, unknown> = {}): Harness {
   const buildDocument = jest.fn().mockResolvedValue(DOCUMENT);
   const modalOptions: SymposiumModalOptions[] = [];
   const openModal = jest.fn();
+  const disposeModal = jest.fn();
   const publisher = new SymposiumPublisher(app, {
     client,
     loadLicenseKey,
     buildDocument,
     createModal: (options) => {
       modalOptions.push(options);
-      return { open: openModal };
+      return { open: openModal, dispose: disposeModal };
     },
   });
 
@@ -80,6 +88,7 @@ function createHarness(frontmatter: Record<string, unknown> = {}): Harness {
     frontmatter,
     loadLicenseKey,
     modalOptions,
+    disposeModal,
     openModal,
     processFrontMatter,
     publisher,
@@ -164,6 +173,24 @@ describe("SymposiumPublisher", () => {
         expect(harness.frontmatter.symposium).toBe(NEW_DOC_ID);
       });
 
+      it("does not POST a fallback when the identity changes during the failed update", async () => {
+        const harness = createHarness({ symposium: DOC_ID });
+        harness.client.update.mockImplementation(async () => {
+          harness.frontmatter.symposium = NEW_DOC_ID;
+          throw new SymposiumClientError("Document is gone.", "not_found", 404, false);
+        });
+
+        const result = await openAndConfirm(harness, "update");
+
+        expect(result).toMatchObject({
+          kind: "failure",
+          action: "update",
+          retryable: false,
+        });
+        expect(harness.client.publish).not.toHaveBeenCalled();
+        expect(harness.frontmatter.symposium).toBe(NEW_DOC_ID);
+      });
+
       it("does not POST after any update failure other than structured 404 not_found", async () => {
         const harness = createHarness({ symposium: DOC_ID });
         harness.client.update.mockRejectedValue(
@@ -209,6 +236,41 @@ describe("SymposiumPublisher", () => {
         });
       });
 
+      it("reports an oversized rendered document without offering a futile retry", async () => {
+        const harness = createHarness();
+        harness.buildDocument.mockRejectedValue(
+          new SymposiumDocumentTooLargeError(10 * 1024 * 1024 + 1)
+        );
+
+        const result = await openAndConfirm(harness, "publish");
+
+        expect(result).toEqual({
+          kind: "failure",
+          action: "publish",
+          message: "Symposium HTML is 10485761 bytes; the limit is 10485760 bytes.",
+          accessNotice: false,
+          retryable: false,
+        });
+        expect(harness.client.publish).not.toHaveBeenCalled();
+      });
+
+      it("keeps a frontmatter read failure retryable without sending a request", async () => {
+        const harness = createHarness();
+        await harness.publisher.open(harness.file);
+        (harness.app.vault.read as jest.Mock).mockRejectedValueOnce(new Error("vault unavailable"));
+
+        const result = await harness.modalOptions[0].onConfirm("publish", activeDocument);
+
+        expect(result).toEqual({
+          kind: "failure",
+          action: "publish",
+          message: "Copilot could not complete this Symposium action.",
+          accessNotice: false,
+          retryable: true,
+        });
+        expect(harness.client.publish).not.toHaveBeenCalled();
+      });
+
       it("preserves a successful POST receipt and retries only the local save", async () => {
         const harness = createHarness();
         harness.processFrontMatter
@@ -228,13 +290,32 @@ describe("SymposiumPublisher", () => {
         });
         expect(harness.client.publish).toHaveBeenCalledTimes(1);
 
-        const saved = await (
-          partial as Extract<SymposiumModalResult, { kind: "persistence" }>
-        ).retrySave();
+        const saved = await (partial as Extract<SymposiumModalResult, { kind: "persistence" }>)
+          .retrySave!();
 
         expect(saved).toEqual({ kind: "success", action: "publish", receipt: RECEIPT });
         expect(harness.frontmatter.symposium).toBe(DOC_ID);
         expect(harness.client.publish).toHaveBeenCalledTimes(1);
+      });
+
+      it("does not overwrite a newer identity after a publish completes", async () => {
+        const harness = createHarness();
+        harness.client.publish.mockImplementation(async () => {
+          harness.frontmatter.symposium = NEW_DOC_ID;
+          return RECEIPT;
+        });
+
+        const result = await openAndConfirm(harness, "publish");
+
+        expect(result).toMatchObject({
+          kind: "persistence",
+          action: "publish",
+          receipt: RECEIPT,
+        });
+        expect(
+          (result as Extract<SymposiumModalResult, { kind: "persistence" }>).retrySave
+        ).toBeUndefined();
+        expect(harness.frontmatter.symposium).toBe(NEW_DOC_ID);
       });
 
       it("rejects a stale unpublished confirmation before it can orphan another page", async () => {
@@ -256,6 +337,24 @@ describe("SymposiumPublisher", () => {
         expect(harness.client.publish).toHaveBeenCalledTimes(1);
       });
 
+      it("does not publish when the identity changes while the document is rendering", async () => {
+        const harness = createHarness();
+        harness.buildDocument.mockImplementation(async () => {
+          harness.frontmatter.symposium = NEW_DOC_ID;
+          return DOCUMENT;
+        });
+
+        const result = await openAndConfirm(harness, "publish");
+
+        expect(result).toMatchObject({
+          kind: "failure",
+          action: "publish",
+          retryable: false,
+        });
+        expect(harness.client.publish).not.toHaveBeenCalled();
+        expect(harness.frontmatter.symposium).toBe(NEW_DOC_ID);
+      });
+
       it("deletes remotely before clearing identity and retries a failed local removal only", async () => {
         const harness = createHarness({ symposium: DOC_ID, tags: ["shared"] });
         harness.processFrontMatter
@@ -272,13 +371,27 @@ describe("SymposiumPublisher", () => {
         expect(harness.buildDocument).not.toHaveBeenCalled();
         expect(partial).toMatchObject({ kind: "persistence", action: "delete" });
 
-        const removed = await (
-          partial as Extract<SymposiumModalResult, { kind: "persistence" }>
-        ).retrySave();
+        const removed = await (partial as Extract<SymposiumModalResult, { kind: "persistence" }>)
+          .retrySave!();
 
         expect(removed).toEqual({ kind: "success", action: "delete" });
         expect(harness.frontmatter).toEqual({ tags: ["shared"] });
         expect(harness.client.delete).toHaveBeenCalledTimes(1);
+      });
+
+      it("does not remove a newer identity after a remote deletion completes", async () => {
+        const harness = createHarness({ symposium: DOC_ID });
+        harness.client.delete.mockImplementation(async () => {
+          harness.frontmatter.symposium = NEW_DOC_ID;
+        });
+
+        const result = await openAndConfirm(harness, "delete");
+
+        expect(result).toMatchObject({ kind: "persistence", action: "delete" });
+        expect(
+          (result as Extract<SymposiumModalResult, { kind: "persistence" }>).retrySave
+        ).toBeUndefined();
+        expect(harness.frontmatter.symposium).toBe(NEW_DOC_ID);
       });
 
       it("requires a decryptable configured key without locally checking a plan", async () => {
@@ -311,7 +424,10 @@ describe("SymposiumPublisher", () => {
         await harness.publisher.open(harness.file);
 
         const first = harness.modalOptions[0].onConfirm("publish", activeDocument);
-        await Promise.resolve();
+        for (let turn = 0; turn < 20 && !resolvePublish; turn += 1) {
+          await Promise.resolve();
+        }
+        expect(resolvePublish).toBeDefined();
         harness.file.path = "Notes/Renamed Architecture.md";
         const second = await harness.modalOptions[1].onConfirm("publish", activeDocument);
 
@@ -338,6 +454,45 @@ describe("SymposiumPublisher", () => {
           receipt: { ...RECEIPT, version: 2 },
         });
         expect(harness.client.update).toHaveBeenCalledTimes(1);
+      });
+
+      it("disposes open modals and prevents stale callbacks after plugin teardown", async () => {
+        const harness = createHarness();
+        await harness.publisher.open(harness.file);
+
+        harness.publisher.dispose();
+        const result = await harness.modalOptions[0].onConfirm("publish", activeDocument);
+        await harness.publisher.open(harness.file);
+
+        expect(harness.disposeModal).toHaveBeenCalledTimes(1);
+        expect(result).toEqual({
+          kind: "failure",
+          action: "publish",
+          message: "Symposium publishing is no longer available.",
+          accessNotice: false,
+          retryable: false,
+        });
+        expect(harness.openModal).toHaveBeenCalledTimes(1);
+        expect(harness.client.publish).not.toHaveBeenCalled();
+      });
+
+      it("does not open a modal when plugin teardown occurs during the identity read", async () => {
+        const harness = createHarness();
+        let resolveRead: ((markdown: string) => void) | undefined;
+        jest.mocked(harness.app.vault.read).mockImplementationOnce(
+          () =>
+            new Promise<string>((resolve) => {
+              resolveRead = resolve;
+            })
+        );
+
+        const opening = harness.publisher.open(harness.file);
+        harness.publisher.dispose();
+        resolveRead?.("");
+        await opening;
+
+        expect(harness.openModal).not.toHaveBeenCalled();
+        expect(harness.modalOptions).toHaveLength(0);
       });
     });
   });

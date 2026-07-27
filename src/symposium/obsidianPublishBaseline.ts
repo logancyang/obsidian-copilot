@@ -137,6 +137,12 @@ body {
   list-style: none;
 }
 
+.symposium-task-marker {
+  display: inline-block;
+  width: 1.4em;
+  margin-left: -1.4em;
+}
+
 .markdown-rendered .callout {
   margin: 1rem 0;
   padding: 0.8rem 1rem;
@@ -166,7 +172,7 @@ body {
   background: var(--background-secondary);
 }
 
-.markdown-rendered mjx-container,
+.markdown-rendered math[display="block"],
 .markdown-rendered .math {
   max-width: 100%;
   overflow-x: auto;

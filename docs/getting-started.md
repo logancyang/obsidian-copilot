@@ -97,7 +97,7 @@ The AI will automatically include your currently open note as context, so you ca
 
 Run **Publish file to Symposium** from the command palette, a Markdown note's File explorer menu, its note menu, or the editor's **Copilot** submenu. Copilot asks for confirmation because anyone with the resulting link can read the published page.
 
-After publishing, Copilot stores the Symposium document ID in the note's `symposium` property. Run the same action again to update the existing page or permanently delete it. Deleting the page also removes the property from the note.
+After publishing, Copilot stores the Symposium document ID in the note's `symposium` property. Run the same action again to update the existing page or withdraw its public link. Symposium deletes its stored copy, but it cannot recall copies that readers or caches already fetched. Withdrawing the page also removes the property from the note.
 
 ---
 

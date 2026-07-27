@@ -61,6 +61,20 @@ type ModernRender = (
 ) => Promise<void>;
 
 /**
+ * Reports the final UTF-8 payload size when a rendered document exceeds Symposium's limit.
+ */
+export class SymposiumDocumentTooLargeError extends Error {
+  /**
+   * @param byteLength The final serialized document size.
+   */
+  constructor(public readonly byteLength: number) {
+    super(`Symposium HTML is ${byteLength} bytes; the limit is ${SYMPOSIUM_MAX_HTML_BYTES} bytes.`);
+    this.name = "SymposiumDocumentTooLargeError";
+    Object.setPrototypeOf(this, SymposiumDocumentTooLargeError.prototype);
+  }
+}
+
+/**
  * Builds the exact HTML payload sent to Symposium from Obsidian's settled reading-view DOM.
  *
  * @param app The Obsidian application that owns the source vault and renderer.
@@ -81,6 +95,8 @@ export async function buildSymposiumDocument(
   const render = (MarkdownRenderer as unknown as { render: ModernRender }).render;
   await render(app, markdown, article, file.path, component);
 
+  normalizeMath(article);
+  normalizeTaskCheckboxes(article);
   removeActiveContent(article);
   normalizeInternalLinks(article);
   await embedVaultImages(article, app, file.path);
@@ -90,12 +106,31 @@ export async function buildSymposiumDocument(
   const html = serializeDocument(ownerDocument, title, article);
   const byteLength = new TextEncoder().encode(html).byteLength;
   if (byteLength > SYMPOSIUM_MAX_HTML_BYTES) {
-    throw new Error(
-      `Symposium HTML is ${byteLength} bytes; the limit is ${SYMPOSIUM_MAX_HTML_BYTES} bytes.`
-    );
+    throw new SymposiumDocumentTooLargeError(byteLength);
   }
 
   return { title, html, byteLength };
+}
+
+function normalizeMath(root: HTMLElement): void {
+  root.querySelectorAll<HTMLElement>("mjx-container").forEach((container) => {
+    const math = container.querySelector("mjx-assistive-mml math");
+    if (math) {
+      container.replaceWith(math.cloneNode(true));
+    }
+  });
+}
+
+function normalizeTaskCheckboxes(root: HTMLElement): void {
+  root.querySelectorAll<HTMLInputElement>("input.task-list-item-checkbox").forEach((checkbox) => {
+    const marker = root.doc.createElement("span");
+    const checked = checkbox.checked || checkbox.hasAttribute("checked");
+    marker.className = "symposium-task-marker";
+    marker.setAttribute("role", "img");
+    marker.setAttribute("aria-label", checked ? "Completed task" : "Open task");
+    marker.textContent = checked ? "☑" : "☐";
+    checkbox.replaceWith(marker);
+  });
 }
 
 function removeActiveContent(root: HTMLElement): void {
@@ -120,13 +155,16 @@ function normalizeInternalLinks(root: HTMLElement): void {
 }
 
 async function embedVaultImages(root: HTMLElement, app: App, sourcePath: string): Promise<void> {
-  const lookup = buildVaultFileLookup(app);
-  for (const image of root.querySelectorAll<HTMLImageElement>("img")) {
+  const images = [...root.querySelectorAll<HTMLImageElement>("img")].filter((image) => {
     const source = image.getAttribute("src")?.trim() ?? "";
-    if (isRemoteImageSource(source) || isEmbeddedImageSource(source)) {
-      continue;
-    }
-
+    return !isRemoteImageSource(source) && !isEmbeddedImageSource(source);
+  });
+  if (images.length === 0) {
+    return;
+  }
+  const lookup = buildVaultFileLookup(app);
+  for (const image of images) {
+    const source = image.getAttribute("src")?.trim() ?? "";
     const file = resolveVaultImage(image, app, sourcePath, lookup);
     if (!file) {
       replaceMissingImage(image, source);
@@ -306,7 +344,8 @@ function sanitizeAttributes(root: HTMLElement): void {
         name === "style" ||
         name === "srcdoc" ||
         name === "srcset" ||
-        name === "contenteditable"
+        name === "contenteditable" ||
+        name === "referrerpolicy"
       ) {
         element.removeAttribute(attribute.name);
         continue;
@@ -318,6 +357,12 @@ function sanitizeAttributes(root: HTMLElement): void {
 
     if (element.tagName === "A" && element.getAttribute("target") === "_blank") {
       element.setAttribute("rel", "noopener noreferrer");
+    }
+    if (
+      element.tagName === "IMG" &&
+      isRemoteImageSource(element.getAttribute("src")?.trim() ?? "")
+    ) {
+      element.setAttribute("referrerpolicy", "no-referrer");
     }
   }
 }

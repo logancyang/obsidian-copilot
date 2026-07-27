@@ -13,7 +13,10 @@ import {
   removeSymposiumDocId,
   saveSymposiumDocId,
 } from "@/symposium/symposiumFrontmatter";
-import { buildSymposiumDocument } from "@/symposium/symposiumDocument";
+import {
+  buildSymposiumDocument,
+  SymposiumDocumentTooLargeError,
+} from "@/symposium/symposiumDocument";
 import type { SymposiumAction, SymposiumDocument, SymposiumReceipt } from "@/symposium/types";
 import { App, Component, TFile } from "obsidian";
 
@@ -25,6 +28,7 @@ interface SymposiumClientPort {
 
 interface SymposiumModalPort {
   open(): void;
+  dispose(): void;
 }
 
 interface SymposiumPublisherDependencies {
@@ -58,6 +62,15 @@ async function buildDocumentWithComponent(
 }
 
 function operationFailure(action: SymposiumAction, error: unknown): SymposiumFailureResult {
+  if (error instanceof SymposiumDocumentTooLargeError) {
+    return {
+      kind: "failure",
+      action,
+      message: error.message,
+      accessNotice: false,
+      retryable: false,
+    };
+  }
   if (error instanceof SymposiumClientError) {
     return {
       kind: "failure",
@@ -77,6 +90,17 @@ function operationFailure(action: SymposiumAction, error: unknown): SymposiumFai
   };
 }
 
+function identityChangedFailure(action: SymposiumAction): SymposiumFailureResult {
+  return {
+    kind: "failure",
+    action,
+    message:
+      "This note's Symposium identity changed. Close and reopen this dialog before trying again.",
+    accessNotice: false,
+    retryable: false,
+  };
+}
+
 /**
  * Coordinates one note's confirmed Symposium action, remote request, and local identity update.
  *
@@ -92,6 +116,8 @@ export class SymposiumPublisher {
   ) => Promise<SymposiumDocument>;
   private readonly createModal: (options: SymposiumModalOptions) => SymposiumModalPort;
   private readonly inFlightFiles = new Set<TFile>();
+  private readonly modals = new Set<SymposiumModalPort>();
+  private disposed = false;
 
   constructor(
     private readonly app: App,
@@ -112,12 +138,38 @@ export class SymposiumPublisher {
    * @param file The Markdown note selected by the invoking command or menu.
    */
   async open(file: TFile): Promise<void> {
-    const docId = getSymposiumDocId(this.app, file);
-    this.createModal({
+    if (this.disposed) {
+      return;
+    }
+    const docId = await getSymposiumDocId(this.app, file);
+    if (this.disposed) {
+      return;
+    }
+    let modal: SymposiumModalPort;
+    modal = this.createModal({
       fileName: file.basename,
       docId,
       onConfirm: (action, ownerDocument) => this.execute(file, docId, action, ownerDocument),
-    }).open();
+      onClosed: () => this.modals.delete(modal),
+    });
+    this.modals.add(modal);
+    try {
+      modal.open();
+    } catch (error) {
+      this.modals.delete(modal);
+      throw error;
+    }
+  }
+
+  /**
+   * Disables stale modal callbacks and closes this publisher's UI during plugin teardown.
+   */
+  dispose(): void {
+    this.disposed = true;
+    for (const modal of [...this.modals]) {
+      modal.dispose();
+    }
+    this.modals.clear();
   }
 
   private async execute(
@@ -127,16 +179,23 @@ export class SymposiumPublisher {
     ownerDocument: Document
   ): Promise<SymposiumModalResult> {
     return this.withFileLock(file, action, async () => {
-      const docId = getSymposiumDocId(this.app, file);
-      if (docId !== expectedDocId) {
+      if (this.disposed) {
         return {
           kind: "failure",
           action,
-          message:
-            "This note's Symposium identity changed. Close and reopen this dialog before trying again.",
+          message: "Symposium publishing is no longer available.",
           accessNotice: false,
           retryable: false,
         };
+      }
+      let docId: string | null;
+      try {
+        docId = await getSymposiumDocId(this.app, file);
+      } catch (error) {
+        return operationFailure(action, error);
+      }
+      if (docId !== expectedDocId) {
+        return identityChangedFailure(action);
       }
 
       let licenseKey: string;
@@ -167,14 +226,20 @@ export class SymposiumPublisher {
 
       try {
         if (action === "delete") {
+          if ((await getSymposiumDocId(this.app, file)) !== docId) {
+            return identityChangedFailure(action);
+          }
           await this.client.delete(docId!, licenseKey);
-          return await this.removeLocalIdentity(file);
+          return await this.removeLocalIdentity(file, docId!);
         }
 
         const document = await this.buildDocument(file, ownerDocument);
+        if ((await getSymposiumDocId(this.app, file)) !== docId) {
+          return identityChangedFailure(action);
+        }
         if (action === "publish") {
           const receipt = await this.client.publish(document, licenseKey);
-          return await this.savePublishedIdentity(file, receipt);
+          return await this.savePublishedIdentity(file, receipt, null);
         }
 
         try {
@@ -190,8 +255,11 @@ export class SymposiumPublisher {
           }
         }
 
+        if ((await getSymposiumDocId(this.app, file)) !== docId) {
+          return identityChangedFailure(action);
+        }
         const receipt = await this.client.publish(document, licenseKey);
-        return await this.savePublishedIdentity(file, receipt);
+        return await this.savePublishedIdentity(file, receipt, docId);
       } catch (error) {
         return operationFailure(action, error);
       }
@@ -200,19 +268,30 @@ export class SymposiumPublisher {
 
   private async savePublishedIdentity(
     file: TFile,
-    receipt: SymposiumReceipt
+    receipt: SymposiumReceipt,
+    expectedDocId: string | null
   ): Promise<SymposiumModalResult> {
     try {
-      await saveSymposiumDocId(this.app, file, receipt.docId);
+      const saved = await saveSymposiumDocId(this.app, file, receipt.docId, expectedDocId);
+      if (!saved) {
+        return {
+          kind: "persistence",
+          action: "publish",
+          message:
+            "The page is public, but this note’s Symposium identity changed while publishing. Its newer identity was left unchanged.",
+          receipt,
+        };
+      }
       return { kind: "success", action: "publish", receipt };
     } catch {
-      return this.publishPersistenceFailure(file, receipt);
+      return this.publishPersistenceFailure(file, receipt, expectedDocId);
     }
   }
 
   private publishPersistenceFailure(
     file: TFile,
-    receipt: SymposiumReceipt
+    receipt: SymposiumReceipt,
+    expectedDocId: string | null
   ): SymposiumPersistenceResult {
     return {
       kind: "persistence",
@@ -221,27 +300,42 @@ export class SymposiumPublisher {
         "The page is already public. Retry saving its document id to this note; this will not publish again.",
       receipt,
       retrySave: () =>
-        this.withFileLock(file, "publish", async () => this.savePublishedIdentity(file, receipt)),
+        this.withFileLock(file, "publish", async () =>
+          this.savePublishedIdentity(file, receipt, expectedDocId)
+        ),
     };
   }
 
-  private async removeLocalIdentity(file: TFile): Promise<SymposiumModalResult> {
+  private async removeLocalIdentity(
+    file: TFile,
+    expectedDocId: string
+  ): Promise<SymposiumModalResult> {
     try {
-      await removeSymposiumDocId(this.app, file);
+      const removed = await removeSymposiumDocId(this.app, file, expectedDocId);
+      if (!removed) {
+        return {
+          kind: "persistence",
+          action: "delete",
+          message:
+            "The original page was withdrawn, but this note now points to a different Symposium document. Its newer identity was left unchanged.",
+        };
+      }
       return { kind: "success", action: "delete" };
     } catch {
-      return this.deletePersistenceFailure(file);
+      return this.deletePersistenceFailure(file, expectedDocId);
     }
   }
 
-  private deletePersistenceFailure(file: TFile): SymposiumPersistenceResult {
+  private deletePersistenceFailure(file: TFile, expectedDocId: string): SymposiumPersistenceResult {
     return {
       kind: "persistence",
       action: "delete",
       message:
         "The public page is already deleted. Retry removing its document id from this note; this will not contact Symposium again.",
       retrySave: () =>
-        this.withFileLock(file, "delete", async () => this.removeLocalIdentity(file)),
+        this.withFileLock(file, "delete", async () =>
+          this.removeLocalIdentity(file, expectedDocId)
+        ),
     };
   }
 

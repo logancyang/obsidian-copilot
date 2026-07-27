@@ -361,14 +361,15 @@ export default class CopilotPlugin extends Plugin {
         .open(file)
         .catch((error) => logError("Failed to open Symposium publishing.", error));
     };
+    this.register(() => symposiumPublisher.dispose());
     registerCommands(this, publishFile);
     registerSymposiumFileMenu(this, publishFile);
 
     // Tool initialization is now handled automatically in CopilotPlusChainRunner and AutonomousAgentChainRunner
 
     this.registerEvent(
-      this.app.workspace.on("editor-menu", (menu: Menu) => {
-        registerContextMenu(menu, this.app, publishFile);
+      this.app.workspace.on("editor-menu", (menu: Menu, _editor, info) => {
+        registerContextMenu(menu, this.app, info.file, publishFile);
       })
     );
 

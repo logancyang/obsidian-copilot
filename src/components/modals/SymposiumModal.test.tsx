@@ -1,4 +1,7 @@
-import type { SymposiumModalOptions } from "@/components/modals/SymposiumModal";
+import type {
+  SymposiumModalOptions,
+  SymposiumModalResult,
+} from "@/components/modals/SymposiumModal";
 import type { SymposiumReceipt } from "@/symposium/types";
 import { act, fireEvent, screen } from "@testing-library/react";
 
@@ -6,7 +9,7 @@ jest.mock("obsidian", () => ({
   App: class App {},
   Modal: class Modal {
     app: unknown;
-    close = jest.fn();
+    baseClose = jest.fn();
     contentEl = activeDocument.createElement("div");
     titleEl = activeDocument.createElement("div");
 
@@ -18,6 +21,10 @@ jest.mock("obsidian", () => ({
       this.titleEl.setText = (text: string) => {
         this.titleEl.textContent = text;
       };
+    }
+
+    close(): void {
+      this.baseClose();
     }
   },
 }));
@@ -81,6 +88,7 @@ describe("SymposiumModal", () => {
           receipt: RECEIPT,
         });
         const modal = renderModal(onConfirm);
+        const baseClose = (modal as unknown as { baseClose: jest.Mock }).baseClose;
 
         expect(screen.getByText("Publish “Architecture”?")).toBeTruthy();
         expect(screen.getByText(/anyone with the public link/i)).toBeTruthy();
@@ -88,11 +96,39 @@ describe("SymposiumModal", () => {
         expect(screen.queryByText(/preview/i)).toBeNull();
 
         fireEvent.click(screen.getByRole("button", { name: "No, cancel" }));
-        expect(modal.close).toHaveBeenCalledTimes(1);
+        expect(baseClose).toHaveBeenCalledTimes(1);
         expect(onConfirm).not.toHaveBeenCalled();
 
         await clickButton("Yes, publish");
         expect(onConfirm).toHaveBeenCalledWith("publish", activeDocument);
+      });
+
+      it("blocks native close while a confirmed action is pending", async () => {
+        let resolveConfirm: ((result: SymposiumModalResult) => void) | undefined;
+        const onConfirm = createConfirmMock().mockImplementation(
+          () =>
+            new Promise((resolve) => {
+              resolveConfirm = resolve;
+            })
+        );
+        const modal = renderModal(onConfirm);
+        const baseClose = (modal as unknown as { baseClose: jest.Mock }).baseClose;
+
+        fireEvent.click(screen.getByRole("button", { name: "Yes, publish" }));
+        modal.close();
+
+        expect(baseClose).not.toHaveBeenCalled();
+        expect(screen.getByRole("button", { name: "Working…" })).toBeTruthy();
+
+        resolveConfirm?.({
+          kind: "success",
+          action: "publish",
+          receipt: RECEIPT,
+        });
+        await screen.findByText("Publish complete");
+        modal.close();
+
+        expect(baseClose).toHaveBeenCalledTimes(1);
       });
 
       it("lets a published note explicitly confirm update or delete", async () => {
@@ -105,7 +141,9 @@ describe("SymposiumModal", () => {
         expect(screen.getByText("Update “Architecture”?")).toBeTruthy();
         fireEvent.click(screen.getByRole("button", { name: "Delete" }));
         expect(screen.getByText("Delete “Architecture”?")).toBeTruthy();
-        expect(screen.getByText(/permanently removes every public version/i)).toBeTruthy();
+        expect(
+          screen.getByText(/previously fetched or cached copies cannot be recalled/i)
+        ).toBeTruthy();
 
         await clickButton("Yes, delete");
         expect(onConfirm).toHaveBeenCalledWith("delete", activeDocument);

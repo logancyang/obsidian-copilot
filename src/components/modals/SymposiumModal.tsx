@@ -24,7 +24,7 @@ export interface SymposiumPersistenceResult {
   action: "publish" | "delete";
   message: string;
   receipt?: SymposiumReceipt;
-  retrySave: () => Promise<SymposiumModalResult>;
+  retrySave?: () => Promise<SymposiumModalResult>;
 }
 
 export type SymposiumModalResult =
@@ -36,10 +36,12 @@ export interface SymposiumModalOptions {
   fileName: string;
   docId: string | null;
   onConfirm: (action: SymposiumAction, ownerDocument: Document) => Promise<SymposiumModalResult>;
+  onClosed?: () => void;
 }
 
 interface SymposiumModalContentProps extends SymposiumModalOptions {
   onClose: () => void;
+  onWorkingChange: (working: boolean) => void;
 }
 
 function actionLabel(action: SymposiumAction): string {
@@ -86,6 +88,7 @@ function SymposiumModalContent({
   docId,
   onConfirm,
   onClose,
+  onWorkingChange,
 }: SymposiumModalContentProps) {
   const [action, setAction] = useState<SymposiumAction>(docId ? "update" : "publish");
   const [result, setResult] = useState<SymposiumModalResult | null>(null);
@@ -93,10 +96,12 @@ function SymposiumModalContent({
 
   const runAction = async (nextAction: SymposiumAction, ownerDocument: Document) => {
     setWorking(true);
+    onWorkingChange(true);
     try {
       setResult(await onConfirm(nextAction, ownerDocument));
     } finally {
       setWorking(false);
+      onWorkingChange(false);
     }
   };
 
@@ -109,14 +114,16 @@ function SymposiumModalContent({
   };
 
   const retrySave = async () => {
-    if (result?.kind !== "persistence") {
+    if (result?.kind !== "persistence" || !result.retrySave) {
       return;
     }
     setWorking(true);
+    onWorkingChange(true);
     try {
       setResult(await result.retrySave());
     } finally {
       setWorking(false);
+      onWorkingChange(false);
     }
   };
 
@@ -167,7 +174,7 @@ function SymposiumModalContent({
         <div className="tw-font-semibold tw-text-normal">
           {result.action === "publish"
             ? "Published, but not saved to the note"
-            : "Deleted, but the note still has its old link"}
+            : "Page withdrawn; note unchanged"}
         </div>
         <p className="tw-m-0 tw-text-muted">{result.message}</p>
         {result.receipt && <SymposiumReceiptView receipt={result.receipt} />}
@@ -175,9 +182,11 @@ function SymposiumModalContent({
           <Button variant="secondary" onClick={onClose}>
             Close
           </Button>
-          <Button onClick={() => void retrySave()} disabled={working}>
-            {working ? "Saving…" : "Retry save"}
-          </Button>
+          {result.retrySave && (
+            <Button onClick={() => void retrySave()} disabled={working}>
+              {working ? "Saving…" : "Retry save"}
+            </Button>
+          )}
         </div>
       </div>
     );
@@ -191,7 +200,7 @@ function SymposiumModalContent({
         </div>
         <p className="tw-mb-0 tw-mt-2 tw-text-muted">
           {action === "delete"
-            ? "Yes permanently removes every public version at this link."
+            ? "Yes withdraws the link and deletes Symposium’s stored copy. Previously fetched or cached copies cannot be recalled."
             : "Yes makes this note available to anyone with the public link."}
         </p>
       </div>
@@ -236,6 +245,8 @@ function SymposiumModalContent({
  */
 export class SymposiumModal extends Modal {
   private root: Root | null = null;
+  private working = false;
+  private forceClose = false;
 
   constructor(
     app: App,
@@ -248,12 +259,35 @@ export class SymposiumModal extends Modal {
   onOpen(): void {
     this.contentEl.empty();
     this.root = createPluginRoot(this.contentEl, this.app);
-    this.root.render(<SymposiumModalContent {...this.options} onClose={() => this.close()} />);
+    this.root.render(
+      <SymposiumModalContent
+        {...this.options}
+        onClose={() => this.close()}
+        onWorkingChange={(working) => {
+          this.working = working;
+        }}
+      />
+    );
+  }
+
+  close(): void {
+    if (!this.working || this.forceClose) {
+      super.close();
+    }
+  }
+
+  /**
+   * Closes the modal during plugin teardown even if a confirmed request is still settling.
+   */
+  dispose(): void {
+    this.forceClose = true;
+    this.close();
   }
 
   onClose(): void {
     this.root?.unmount();
     this.root = null;
     this.contentEl.empty();
+    this.options.onClosed?.();
   }
 }

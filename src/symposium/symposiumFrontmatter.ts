@@ -1,5 +1,5 @@
 import { SYMPOSIUM_DOC_ID_PATTERN } from "@/symposium/constants";
-import { App, TFile } from "obsidian";
+import { App, parseYaml, TFile } from "obsidian";
 
 const SYMPOSIUM_PROPERTY = "symposium";
 
@@ -13,14 +13,28 @@ export function parseSymposiumDocId(value: unknown): string | null {
 }
 
 /**
- * Reads the current valid Symposium identity from Obsidian's metadata cache.
+ * Reads the current valid Symposium identity from the note itself.
  *
  * @param app The Obsidian application that owns the note.
  * @param file The note whose publication identity should be read.
  */
-export function getSymposiumDocId(app: App, file: TFile): string | null {
-  const frontmatter = app.metadataCache.getFileCache(file)?.frontmatter;
-  return parseSymposiumDocId(frontmatter?.[SYMPOSIUM_PROPERTY]);
+export async function getSymposiumDocId(app: App, file: TFile): Promise<string | null> {
+  const markdown = (await app.vault.read(file)).replace(/^\uFEFF/, "");
+  const yaml = markdown.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/)?.[1];
+  if (yaml === undefined) {
+    return null;
+  }
+  let frontmatter: unknown;
+  try {
+    frontmatter = parseYaml(yaml);
+  } catch {
+    return null;
+  }
+  return parseSymposiumDocId(
+    frontmatter && typeof frontmatter === "object"
+      ? (frontmatter as Record<string, unknown>)[SYMPOSIUM_PROPERTY]
+      : undefined
+  );
 }
 
 /**
@@ -29,15 +43,32 @@ export function getSymposiumDocId(app: App, file: TFile): string | null {
  * @param app The Obsidian application that owns the note.
  * @param file The note whose publication identity should be saved.
  * @param docId The validated identity returned by Symposium.
+ * @param expectedDocId The identity that was current when the remote action began.
  */
-export async function saveSymposiumDocId(app: App, file: TFile, docId: string): Promise<void> {
+export async function saveSymposiumDocId(
+  app: App,
+  file: TFile,
+  docId: string,
+  expectedDocId: string | null
+): Promise<boolean> {
   if (!SYMPOSIUM_DOC_ID_PATTERN.test(docId)) {
     throw new Error("Cannot save an invalid Symposium document id.");
   }
 
+  let saved = false;
   await app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
+    const currentDocId = parseSymposiumDocId(frontmatter[SYMPOSIUM_PROPERTY]);
+    if (currentDocId === docId) {
+      saved = true;
+      return;
+    }
+    if (currentDocId !== expectedDocId) {
+      return;
+    }
     frontmatter[SYMPOSIUM_PROPERTY] = docId;
+    saved = true;
   });
+  return saved;
 }
 
 /**
@@ -45,9 +76,25 @@ export async function saveSymposiumDocId(app: App, file: TFile, docId: string): 
  *
  * @param app The Obsidian application that owns the note.
  * @param file The note that should return to an unpublished state.
+ * @param expectedDocId The identity whose remote document was deleted.
  */
-export async function removeSymposiumDocId(app: App, file: TFile): Promise<void> {
+export async function removeSymposiumDocId(
+  app: App,
+  file: TFile,
+  expectedDocId: string
+): Promise<boolean> {
+  let removed = false;
   await app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
+    if (!Object.prototype.hasOwnProperty.call(frontmatter, SYMPOSIUM_PROPERTY)) {
+      removed = true;
+      return;
+    }
+    const currentDocId = parseSymposiumDocId(frontmatter[SYMPOSIUM_PROPERTY]);
+    if (currentDocId !== expectedDocId) {
+      return;
+    }
     delete frontmatter[SYMPOSIUM_PROPERTY];
+    removed = true;
   });
+  return removed;
 }

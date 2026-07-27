@@ -28,10 +28,14 @@ function isMarkdownFile(file: TAbstractFile | null): file is TFile {
 /**
  * Registers the Copilot submenu entries in Obsidian's editor context menu.
  */
-export function registerContextMenu(menu: Menu, obsidianApp: App, publish: PublishFile): void {
+export function registerContextMenu(
+  menu: Menu,
+  obsidianApp: App,
+  file: TFile | null,
+  publish: PublishFile
+): void {
   if (!hasCommandManager(obsidianApp)) return;
 
-  const activeFile = obsidianApp.workspace.getActiveFile();
   const execute = (commandId: string): void => {
     obsidianApp.commands.executeCommandById(commandId);
   };
@@ -63,12 +67,12 @@ export function registerContextMenu(menu: Menu, obsidianApp: App, publish: Publi
       });
     });
 
-    if (isMarkdownFile(activeFile)) {
+    if (isMarkdownFile(file)) {
       submenu.addItem((subItem) => {
         subItem
           .setTitle(COMMAND_NAMES[COMMAND_IDS.PUBLISH_FILE_TO_SYMPOSIUM])
           .setIcon(COMMAND_ICONS[COMMAND_IDS.PUBLISH_FILE_TO_SYMPOSIUM]!)
-          .onClick(() => publish(activeFile));
+          .onClick(() => publish(file));
       });
     }
 

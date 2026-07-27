@@ -64,8 +64,9 @@ function findItem(menu: TestMenu, title: string): TestMenuItem | undefined {
 
 describe("contextMenu", () => {
   describe("registerContextMenu()", () => {
-    it("publishes the active Markdown file directly from the editor Copilot submenu", () => {
+    it("publishes the editor event's Markdown file instead of the workspace active file", () => {
       const activeFile = markdownFile("Notes/Active.md");
+      const editorFile = markdownFile("Notes/Editor.md");
       const publish = jest.fn().mockResolvedValue(undefined);
       const menu = new TestMenu();
       const app = {
@@ -73,7 +74,7 @@ describe("contextMenu", () => {
         workspace: { getActiveFile: jest.fn(() => activeFile) },
       } as unknown as App;
 
-      registerContextMenu(menu as unknown as Menu, app, publish);
+      registerContextMenu(menu as unknown as Menu, app, editorFile, publish);
 
       const copilotMenu = findItem(menu, "Copilot")?.submenu;
       const publishItem = findItem(
@@ -84,7 +85,8 @@ describe("contextMenu", () => {
 
       publishItem?.click?.();
 
-      expect(publish).toHaveBeenCalledWith(activeFile);
+      expect(publish).toHaveBeenCalledWith(editorFile);
+      expect(publish).not.toHaveBeenCalledWith(activeFile);
     });
 
     it.each([
@@ -97,7 +99,7 @@ describe("contextMenu", () => {
         workspace: { getActiveFile: jest.fn(() => activeFile) },
       } as unknown as App;
 
-      registerContextMenu(menu as unknown as Menu, app, jest.fn());
+      registerContextMenu(menu as unknown as Menu, app, activeFile, jest.fn());
 
       const copilotMenu = findItem(menu, "Copilot")?.submenu;
       expect(

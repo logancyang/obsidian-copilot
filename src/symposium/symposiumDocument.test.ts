@@ -1,5 +1,9 @@
 /* eslint-disable obsidianmd/prefer-active-doc -- jsdom tests explicitly pass their single document realm */
-import { buildSymposiumDocument, SYMPOSIUM_MAX_HTML_BYTES } from "@/symposium/symposiumDocument";
+import {
+  buildSymposiumDocument,
+  SYMPOSIUM_MAX_HTML_BYTES,
+  SymposiumDocumentTooLargeError,
+} from "@/symposium/symposiumDocument";
 import { App, Component, MarkdownRenderer, TFile } from "obsidian";
 
 jest.mock("obsidian", () => ({
@@ -72,6 +76,17 @@ describe("symposiumDocument", () => {
     renderMock.mockReset();
   });
 
+  describe("SymposiumDocumentTooLargeError", () => {
+    describe("constructor()", () => {
+      it("retains the measured byte length", () => {
+        const error = new SymposiumDocumentTooLargeError(SYMPOSIUM_MAX_HTML_BYTES + 1);
+
+        expect(error).toBeInstanceOf(Error);
+        expect(error.byteLength).toBe(SYMPOSIUM_MAX_HTML_BYTES + 1);
+      });
+    });
+  });
+
   describe("buildSymposiumDocument()", () => {
     it("serializes the settled Obsidian reading-view output as a complete HTML document", async () => {
       const app = createApp({ markdown: "# Markdown that must not be reparsed" });
@@ -106,6 +121,7 @@ describe("symposiumDocument", () => {
       );
       expect(result.html).not.toContain("# Markdown that must not be reparsed");
       expect(result.byteLength).toBe(new TextEncoder().encode(result.html).byteLength);
+      expect(app.vault.getFiles).not.toHaveBeenCalled();
     });
 
     it("removes active content and dangerous attributes while retaining safe external links", async () => {
@@ -121,8 +137,9 @@ describe("symposiumDocument", () => {
           <form><input value="secret"></form>
           <p id="safe" style="background:url(javascript:alert(1))" onclick="alert(1)">Text</p>
           <a id="bad-link" href="javascript:alert(1)">Bad</a>
-          <a id="safe-link" href="https://example.com" ping="https://tracker.example" target="_blank">External</a>
+          <a id="safe-link" href="https://example.com" ping="https://tracker.example" referrerpolicy="unsafe-url" target="_blank">External</a>
           <a class="internal-link is-unresolved" data-href="Private note" href="Private note">Private</a>
+          <img id="remote-image" src="https://tracker.example/pixel" referrerpolicy="unsafe-url">
           <svg><a id="bad-svg-link" href="data:text/html,bad"><text>SVG</text></a></svg>
         `
         );
@@ -143,11 +160,50 @@ describe("symposiumDocument", () => {
       expect(parsed.querySelector("#safe-link")?.getAttribute("href")).toBe("https://example.com");
       expect(parsed.querySelector("#safe-link")?.hasAttribute("ping")).toBe(false);
       expect(parsed.querySelector("#safe-link")?.getAttribute("rel")).toBe("noopener noreferrer");
+      expect(parsed.querySelector("#safe-link")?.hasAttribute("referrerpolicy")).toBe(false);
+      expect(parsed.querySelector("#remote-image")?.getAttribute("referrerpolicy")).toBe(
+        "no-referrer"
+      );
       expect(parsed.querySelector("a.internal-link")).toBeNull();
       expect(parsed.querySelector("span.internal-link")?.textContent).toBe("Private");
       expect(parsed.querySelector("span.internal-link")?.classList.contains("is-unresolved")).toBe(
         false
       );
+      expect(app.vault.getFiles).not.toHaveBeenCalled();
+    });
+
+    it("keeps rendered math and task state without Obsidian runtime resources", async () => {
+      const app = createApp();
+      const file = createFile("Math and tasks.md");
+      renderMock.mockImplementation(async (_app, _markdown, element) => {
+        appendHtml(
+          element,
+          `
+          <mjx-container class="MathJax" jax="CHTML" display="true">
+            <mjx-math><mjx-mi><mjx-c class="mjx-c1D465"></mjx-c></mjx-mi></mjx-math>
+            <mjx-assistive-mml>
+              <math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+                <mi>x</mi>
+              </math>
+            </mjx-assistive-mml>
+          </mjx-container>
+          <ul class="contains-task-list">
+            <li class="task-list-item"><input class="task-list-item-checkbox" type="checkbox">Open</li>
+            <li class="task-list-item"><input class="task-list-item-checkbox" type="checkbox" checked>Done</li>
+          </ul>
+        `
+        );
+      });
+
+      const result = await buildSymposiumDocument(app, file, createComponent(), document);
+      const parsed = new DOMParser().parseFromString(result.html, "text/html");
+
+      expect(parsed.querySelector("mjx-container")).toBeNull();
+      expect(parsed.querySelector("math")?.textContent?.trim()).toBe("x");
+      expect(
+        [...parsed.querySelectorAll(".symposium-task-marker")].map((marker) => marker.textContent)
+      ).toEqual(["☐", "☑"]);
+      expect(parsed.querySelector("input")).toBeNull();
     });
 
     it("embeds vault images with content-derived MIME types and leaves remote images remote", async () => {
