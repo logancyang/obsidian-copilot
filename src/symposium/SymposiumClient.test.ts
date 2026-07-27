@@ -151,14 +151,15 @@ describe("SymposiumClient", () => {
         });
       });
 
-      it("maps a request failure to a retryable network error", async () => {
+      it("marks a request failure as ambiguous and non-retryable", async () => {
         mockedRequestUrl.mockRejectedValue(new Error("socket failed"));
 
         await expectClientError(new SymposiumClient().publish(DOCUMENT, "decrypted-license"), {
-          message: "Could not reach Symposium. Please try again.",
-          code: "network",
+          message:
+            "Symposium may have published this note, but Copilot did not receive its document id. To avoid creating a duplicate page, this publish cannot be retried until the plugin reloads.",
+          code: "ambiguous_publish",
           status: null,
-          retryable: true,
+          retryable: false,
         });
       });
     });
@@ -221,6 +222,20 @@ describe("SymposiumClient", () => {
             code: "malformed_response",
             status: 200,
             retryable: false,
+          }
+        );
+      });
+
+      it("keeps a PUT transport failure retryable because the document id is stable", async () => {
+        mockedRequestUrl.mockRejectedValue(new Error("socket failed"));
+
+        await expectClientError(
+          new SymposiumClient().update(DOC_ID, DOCUMENT, "decrypted-license"),
+          {
+            message: "Could not reach Symposium. Please try again.",
+            code: "network",
+            status: null,
+            retryable: true,
           }
         );
       });

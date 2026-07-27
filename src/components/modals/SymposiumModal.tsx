@@ -35,6 +35,7 @@ export type SymposiumModalResult =
 export interface SymposiumModalOptions {
   fileName: string;
   docId: string | null;
+  initialResult?: SymposiumModalResult;
   onConfirm: (action: SymposiumAction, ownerDocument: Document) => Promise<SymposiumModalResult>;
   onClosed?: () => void;
 }
@@ -86,12 +87,13 @@ function SymposiumReceiptView({ receipt }: { receipt: SymposiumReceipt }) {
 function SymposiumModalContent({
   fileName,
   docId,
+  initialResult,
   onConfirm,
   onClose,
   onWorkingChange,
 }: SymposiumModalContentProps) {
   const [action, setAction] = useState<SymposiumAction>(docId ? "update" : "publish");
-  const [result, setResult] = useState<SymposiumModalResult | null>(null);
+  const [result, setResult] = useState<SymposiumModalResult | null>(initialResult ?? null);
   const [working, setWorking] = useState(false);
 
   const runAction = async (nextAction: SymposiumAction, ownerDocument: Document) => {

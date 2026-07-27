@@ -49,11 +49,13 @@ function createConfirmMock(): jest.MockedFunction<SymposiumModalOptions["onConfi
 function renderModal(
   onConfirm: jest.MockedFunction<SymposiumModalOptions["onConfirm"]>,
   docId: string | null = null,
-  onClosed?: () => void
+  onClosed?: () => void,
+  initialResult?: SymposiumModalResult
 ): SymposiumModal {
   const modal = new SymposiumModal({} as App, {
     fileName: "Architecture",
     docId,
+    initialResult,
     onConfirm,
     onClosed,
   });
@@ -223,6 +225,31 @@ describe("SymposiumModal", () => {
         await clickButton("Retry save");
         expect(retrySave).toHaveBeenCalledTimes(1);
         expect(onConfirm).toHaveBeenCalledTimes(1);
+        expect(await screen.findByText("Publish complete")).toBeTruthy();
+      });
+
+      it("resumes an initial partial-success save without confirming another publish", async () => {
+        const retrySave = jest.fn().mockResolvedValue({
+          kind: "success",
+          action: "publish",
+          receipt: RECEIPT,
+        });
+        const onConfirm = createConfirmMock();
+        renderModal(onConfirm, null, undefined, {
+          kind: "persistence",
+          action: "publish",
+          message: "The page is already public. Retry saving its document id.",
+          receipt: RECEIPT,
+          retrySave,
+        });
+
+        expect(screen.getByText("Published, but not saved to the note")).toBeTruthy();
+        expect(screen.getByText(RECEIPT.url)).toBeTruthy();
+
+        await clickButton("Retry save");
+
+        expect(retrySave).toHaveBeenCalledTimes(1);
+        expect(onConfirm).not.toHaveBeenCalled();
         expect(await screen.findByText("Publish complete")).toBeTruthy();
       });
 

@@ -9,6 +9,7 @@ import { getDecryptedKey } from "@/encryptionService";
 import { getSettings } from "@/settings/model";
 import { SymposiumClient, SymposiumClientError } from "@/symposium/SymposiumClient";
 import {
+  SymposiumFrontmatterParseError,
   getSymposiumDocId,
   removeSymposiumDocId,
   saveSymposiumDocId,
@@ -63,7 +64,10 @@ async function buildDocumentWithComponent(
 }
 
 function operationFailure(action: SymposiumAction, error: unknown): SymposiumFailureResult {
-  if (error instanceof SymposiumPropertyConflictError) {
+  if (
+    error instanceof SymposiumFrontmatterParseError ||
+    error instanceof SymposiumPropertyConflictError
+  ) {
     return {
       kind: "failure",
       action,
@@ -126,6 +130,10 @@ export class SymposiumPublisher {
   ) => Promise<SymposiumDocument>;
   private readonly createModal: (options: SymposiumModalOptions) => SymposiumModalPort;
   private readonly inFlightFiles = new Set<TFile>();
+  private readonly blockedPublishResults = new Map<
+    TFile,
+    SymposiumFailureResult | SymposiumPersistenceResult
+  >();
   private readonly modals = new Set<SymposiumModalPort>();
   private disposed = false;
 
@@ -152,26 +160,33 @@ export class SymposiumPublisher {
       return;
     }
     let docId: string | null = null;
-    let propertyConflict: SymposiumPropertyConflictError | null = null;
-    try {
-      docId = await getSymposiumDocId(this.app, file);
-    } catch (error) {
-      if (!(error instanceof SymposiumPropertyConflictError)) {
-        throw error;
+    let initialResult: SymposiumFailureResult | SymposiumPersistenceResult | undefined =
+      this.blockedPublishResults.get(file);
+    if (!initialResult) {
+      try {
+        docId = await getSymposiumDocId(this.app, file);
+      } catch (error) {
+        if (
+          !(error instanceof SymposiumFrontmatterParseError) &&
+          !(error instanceof SymposiumPropertyConflictError)
+        ) {
+          throw error;
+        }
+        initialResult = operationFailure("publish", error);
       }
-      propertyConflict = error;
     }
     if (this.disposed) {
       return;
     }
+    const openingResult = initialResult;
     let modal: SymposiumModalPort;
     modal = this.createModal({
       fileName: file.basename,
       docId,
-      onConfirm: (action, ownerDocument) =>
-        propertyConflict
-          ? Promise.resolve(operationFailure(action, propertyConflict))
-          : this.execute(file, docId, action, ownerDocument),
+      initialResult: openingResult,
+      onConfirm: openingResult
+        ? () => Promise.resolve(openingResult)
+        : (action, ownerDocument) => this.execute(file, docId, action, ownerDocument),
       onClosed: () => this.modals.delete(modal),
     });
     this.modals.add(modal);
@@ -192,6 +207,7 @@ export class SymposiumPublisher {
       modal.dispose();
     }
     this.modals.clear();
+    this.blockedPublishResults.clear();
   }
 
   private async execute(
@@ -298,7 +314,11 @@ export class SymposiumPublisher {
         const receipt = await this.client.publish(document, licenseKey);
         return await this.savePublishedIdentity(file, receipt, docId);
       } catch (error) {
-        return operationFailure(action, error);
+        const failure = operationFailure(action, error);
+        if (error instanceof SymposiumClientError && error.code === "ambiguous_publish") {
+          this.blockedPublishResults.set(file, failure);
+        }
+        return failure;
       }
     });
   }
@@ -311,6 +331,7 @@ export class SymposiumPublisher {
     try {
       const saved = await saveSymposiumDocId(this.app, file, receipt.docId, expectedDocId);
       if (!saved) {
+        this.blockedPublishResults.delete(file);
         return {
           kind: "persistence",
           action: "publish",
@@ -319,6 +340,7 @@ export class SymposiumPublisher {
           receipt,
         };
       }
+      this.blockedPublishResults.delete(file);
       return { kind: "success", action: "publish", receipt };
     } catch {
       return this.publishPersistenceFailure(file, receipt, expectedDocId);
@@ -330,7 +352,7 @@ export class SymposiumPublisher {
     receipt: SymposiumReceipt,
     expectedDocId: string | null
   ): SymposiumPersistenceResult {
-    return {
+    const result: SymposiumPersistenceResult = {
       kind: "persistence",
       action: "publish",
       message:
@@ -341,6 +363,8 @@ export class SymposiumPublisher {
           this.savePublishedIdentity(file, receipt, expectedDocId)
         ),
     };
+    this.blockedPublishResults.set(file, result);
+    return result;
   }
 
   private async removeLocalIdentity(

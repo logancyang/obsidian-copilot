@@ -17,6 +17,17 @@ export class SymposiumPropertyConflictError extends Error {
 }
 
 /**
+ * Signals that a note's frontmatter cannot be parsed safely enough to inspect its identity.
+ */
+export class SymposiumFrontmatterParseError extends Error {
+  constructor() {
+    super("This note's frontmatter is not valid YAML. Fix it before publishing to Symposium.");
+    this.name = "SymposiumFrontmatterParseError";
+    Object.setPrototypeOf(this, SymposiumFrontmatterParseError.prototype);
+  }
+}
+
+/**
  * Returns a Symposium identity only when the frontmatter value matches the server's id format.
  * Throws when the reserved property is occupied by unrelated metadata so callers cannot overwrite it.
  *
@@ -42,7 +53,7 @@ export async function getSymposiumDocId(app: App, file: TFile): Promise<string |
   try {
     frontmatter = parseYaml(yaml);
   } catch {
-    return null;
+    throw new SymposiumFrontmatterParseError();
   }
   if (!frontmatter || typeof frontmatter !== "object") {
     return null;

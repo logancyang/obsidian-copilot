@@ -148,6 +148,28 @@ describe("SymposiumPublisher", () => {
         expect(harness.client.publish).not.toHaveBeenCalled();
       });
 
+      it("rejects malformed YAML before rendering or publishing", async () => {
+        const harness = createHarness();
+        jest.mocked(harness.app.vault.read).mockResolvedValue("---\nsymposium: [\n---\n");
+
+        await harness.publisher.open(harness.file);
+        const result = harness.modalOptions[0].initialResult;
+
+        expect(result).toEqual({
+          kind: "failure",
+          action: "publish",
+          message:
+            "This note's frontmatter is not valid YAML. Fix it before publishing to Symposium.",
+          accessNotice: false,
+          retryable: false,
+        });
+        await expect(harness.modalOptions[0].onConfirm("publish", activeDocument)).resolves.toEqual(
+          result
+        );
+        expect(harness.buildDocument).not.toHaveBeenCalled();
+        expect(harness.client.publish).not.toHaveBeenCalled();
+      });
+
       it("updates the current valid id without rewriting frontmatter", async () => {
         const harness = createHarness({ symposium: DOC_ID });
 
@@ -298,6 +320,36 @@ describe("SymposiumPublisher", () => {
         });
       });
 
+      it("blocks another POST after a publish response is lost", async () => {
+        const message =
+          "Symposium may have published this note, but Copilot did not receive its document id. To avoid creating a duplicate page, this publish cannot be retried until the plugin reloads.";
+        const harness = createHarness();
+        harness.client.publish.mockRejectedValue(
+          new SymposiumClientError(message, "ambiguous_publish", null, false)
+        );
+
+        const first = await openAndConfirm(harness, "publish");
+
+        expect(first).toEqual({
+          kind: "failure",
+          action: "publish",
+          message,
+          accessNotice: false,
+          retryable: false,
+        });
+        expect(harness.client.publish).toHaveBeenCalledTimes(1);
+
+        harness.modalOptions[0].onClosed?.();
+        await harness.publisher.open(harness.file);
+
+        expect(harness.modalOptions[1].initialResult).toEqual(first);
+        await expect(harness.modalOptions[1].onConfirm("publish", activeDocument)).resolves.toEqual(
+          first
+        );
+        expect(harness.buildDocument).toHaveBeenCalledTimes(1);
+        expect(harness.client.publish).toHaveBeenCalledTimes(1);
+      });
+
       it("reports an oversized rendered document without offering a futile retry", async () => {
         const harness = createHarness();
         harness.buildDocument.mockRejectedValue(
@@ -352,12 +404,29 @@ describe("SymposiumPublisher", () => {
         });
         expect(harness.client.publish).toHaveBeenCalledTimes(1);
 
-        const saved = await (partial as Extract<SymposiumModalResult, { kind: "persistence" }>)
+        harness.modalOptions[0].onClosed?.();
+        await harness.publisher.open(harness.file);
+
+        const resumed = harness.modalOptions[1].initialResult;
+        expect(resumed).toMatchObject({
+          kind: "persistence",
+          action: "publish",
+          receipt: RECEIPT,
+        });
+        expect(harness.buildDocument).toHaveBeenCalledTimes(1);
+        expect(harness.client.publish).toHaveBeenCalledTimes(1);
+
+        const saved = await (resumed as Extract<SymposiumModalResult, { kind: "persistence" }>)
           .retrySave!();
 
         expect(saved).toEqual({ kind: "success", action: "publish", receipt: RECEIPT });
         expect(harness.frontmatter.symposium).toBe(DOC_ID);
         expect(harness.client.publish).toHaveBeenCalledTimes(1);
+
+        harness.modalOptions[1].onClosed?.();
+        await harness.publisher.open(harness.file);
+        expect(harness.modalOptions[2]).toMatchObject({ docId: DOC_ID });
+        expect(harness.modalOptions[2].initialResult).toBeUndefined();
       });
 
       it.each([

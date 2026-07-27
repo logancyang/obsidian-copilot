@@ -3,6 +3,7 @@ import {
   parseSymposiumDocId,
   removeSymposiumDocId,
   saveSymposiumDocId,
+  SymposiumFrontmatterParseError,
   SymposiumPropertyConflictError,
 } from "@/symposium/symposiumFrontmatter";
 import type { App, TFile } from "obsidian";
@@ -51,6 +52,17 @@ describe("symposiumFrontmatter", () => {
     });
   });
 
+  describe("SymposiumFrontmatterParseError", () => {
+    describe("constructor()", () => {
+      it("identifies frontmatter that cannot be parsed safely", () => {
+        const error = new SymposiumFrontmatterParseError();
+
+        expect(error).toBeInstanceOf(Error);
+        expect(error.message).toContain("frontmatter is not valid YAML");
+      });
+    });
+  });
+
   describe("parseSymposiumDocId()", () => {
     it("accepts only lowercase 16-character Symposium ids", () => {
       expect(parseSymposiumDocId(DOC_ID)).toBe(DOC_ID);
@@ -62,16 +74,20 @@ describe("symposiumFrontmatter", () => {
   });
 
   describe("getSymposiumDocId()", () => {
-    it("reads a valid id and treats missing or invalid YAML as unpublished", async () => {
+    it("reads a valid id and treats missing frontmatter as unpublished", async () => {
       const valid = createApp({ symposium: DOC_ID });
       await expect(getSymposiumDocId(valid.app, file)).resolves.toBe(DOC_ID);
 
       const missing = createApp();
       await expect(getSymposiumDocId(missing.app, file)).resolves.toBeNull();
+    });
 
+    it("rejects invalid YAML before its identity can be treated as unpublished", async () => {
       const invalidYaml = createApp();
       jest.mocked(invalidYaml.app.vault.read).mockResolvedValue("---\nsymposium: [\n---\n");
-      await expect(getSymposiumDocId(invalidYaml.app, file)).resolves.toBeNull();
+      await expect(getSymposiumDocId(invalidYaml.app, file)).rejects.toBeInstanceOf(
+        SymposiumFrontmatterParseError
+      );
     });
 
     it("rejects an occupied property whose value is not a valid document id", async () => {

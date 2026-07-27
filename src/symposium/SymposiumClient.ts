@@ -8,6 +8,8 @@ import { requestUrl, type RequestUrlParam, type RequestUrlResponse } from "obsid
 
 const DOCS_ENDPOINT = `${SYMPOSIUM_API_ORIGIN}/api/v1/docs`;
 const NETWORK_ERROR_MESSAGE = "Could not reach Symposium. Please try again.";
+const AMBIGUOUS_PUBLISH_MESSAGE =
+  "Symposium may have published this note, but Copilot did not receive its document id. To avoid creating a duplicate page, this publish cannot be retried until the plugin reloads.";
 
 /**
  * Carries a Symposium failure to the UI without interpreting server-side authorization policy.
@@ -92,14 +94,22 @@ export class SymposiumClient {
     licenseKey: string,
     expectedDocId?: string
   ): Promise<SymposiumReceipt> {
-    const response = await this.request({
-      url,
-      method,
-      headers: authorizationHeaders(licenseKey),
-      contentType: "application/json",
-      body: JSON.stringify({ title: document.title, html: document.html }),
-      throw: false,
-    });
+    let response: RequestUrlResponse;
+    try {
+      response = await this.request({
+        url,
+        method,
+        headers: authorizationHeaders(licenseKey),
+        contentType: "application/json",
+        body: JSON.stringify({ title: document.title, html: document.html }),
+        throw: false,
+      });
+    } catch (error) {
+      if (method === "POST" && error instanceof SymposiumClientError && error.code === "network") {
+        throw new SymposiumClientError(AMBIGUOUS_PUBLISH_MESSAGE, "ambiguous_publish", null, false);
+      }
+      throw error;
+    }
     const expectedStatus = method === "POST" ? 201 : 200;
     if (response.status !== expectedStatus) {
       if (response.status < 200 || response.status >= 300) {
