@@ -39,6 +39,10 @@ export function parseSymposiumDocId(value: unknown): string | null {
   return typeof value === "string" && SYMPOSIUM_DOC_ID_PATTERN.test(value) ? value : null;
 }
 
+function isFrontmatterProperties(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 /**
  * Reads the current valid Symposium identity from the note itself.
  *
@@ -60,14 +64,13 @@ export async function getSymposiumDocId(app: App, file: TFile): Promise<string |
   if (frontmatter === null || frontmatter === undefined) {
     return null;
   }
-  if (typeof frontmatter !== "object" || Array.isArray(frontmatter)) {
+  if (!isFrontmatterProperties(frontmatter)) {
     throw new SymposiumFrontmatterParseError();
   }
-  const properties = frontmatter as Record<string, unknown>;
-  if (!Object.prototype.hasOwnProperty.call(properties, SYMPOSIUM_PROPERTY)) {
+  if (!Object.prototype.hasOwnProperty.call(frontmatter, SYMPOSIUM_PROPERTY)) {
     return null;
   }
-  const docId = parseSymposiumDocId(properties[SYMPOSIUM_PROPERTY]);
+  const docId = parseSymposiumDocId(frontmatter[SYMPOSIUM_PROPERTY]);
   if (!docId) {
     throw new SymposiumPropertyConflictError();
   }
@@ -93,7 +96,10 @@ export async function saveSymposiumDocId(
   }
 
   let saved = false;
-  await app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
+  await app.fileManager.processFrontMatter(file, (frontmatter: unknown) => {
+    if (!isFrontmatterProperties(frontmatter)) {
+      throw new SymposiumFrontmatterParseError();
+    }
     const currentDocId = parseSymposiumDocId(frontmatter[SYMPOSIUM_PROPERTY]);
     if (Object.prototype.hasOwnProperty.call(frontmatter, SYMPOSIUM_PROPERTY) && !currentDocId) {
       return;
@@ -124,7 +130,10 @@ export async function removeSymposiumDocId(
   expectedDocId: string
 ): Promise<boolean> {
   let removed = false;
-  await app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
+  await app.fileManager.processFrontMatter(file, (frontmatter: unknown) => {
+    if (!isFrontmatterProperties(frontmatter)) {
+      throw new SymposiumFrontmatterParseError();
+    }
     if (!Object.prototype.hasOwnProperty.call(frontmatter, SYMPOSIUM_PROPERTY)) {
       removed = true;
       return;

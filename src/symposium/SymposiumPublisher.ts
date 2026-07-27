@@ -389,6 +389,7 @@ export class SymposiumPublisher {
     try {
       const removed = await removeSymposiumDocId(this.app, file, expectedDocId);
       if (!removed) {
+        this.blockedPublishResults.delete(file);
         return {
           kind: "persistence",
           action: "delete",
@@ -396,6 +397,7 @@ export class SymposiumPublisher {
             "The original page was withdrawn, but this note now points to a different Symposium document. Its newer identity was left unchanged.",
         };
       }
+      this.blockedPublishResults.delete(file);
       return { kind: "success", action: "delete" };
     } catch {
       return this.deletePersistenceFailure(file, expectedDocId);
@@ -403,7 +405,7 @@ export class SymposiumPublisher {
   }
 
   private deletePersistenceFailure(file: TFile, expectedDocId: string): SymposiumPersistenceResult {
-    return {
+    const result: SymposiumPersistenceResult = {
       kind: "persistence",
       action: "delete",
       message:
@@ -413,6 +415,8 @@ export class SymposiumPublisher {
           this.removeLocalIdentity(file, expectedDocId)
         ),
     };
+    this.blockedPublishResults.set(file, result);
+    return result;
   }
 
   private async withFileLock(

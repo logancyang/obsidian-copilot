@@ -99,7 +99,7 @@ Run **Publish file to Symposium** from the command palette, a Markdown note's Fi
 
 After publishing, Copilot stores the Symposium document ID in the note's `symposium` property. Run the same action again to update the existing page or withdraw its public link. Symposium deletes its stored copy, but it cannot recall copies that readers or caches already fetched. Withdrawing the page also removes the property from the note.
 
-If the page is published but its document ID cannot be saved, reopening the dialog resumes the local save without publishing again. If the initial publish response is lost, Copilot blocks another attempt until the plugin reloads to avoid creating a duplicate page.
+If Publish or Delete succeeds but the note's property cannot be updated, reopening the dialog resumes that local change without contacting Symposium again. If the initial publish response is lost, Copilot blocks another attempt until the plugin reloads to avoid creating a duplicate page.
 
 Copilot stops before publishing when a note's frontmatter is malformed or is not a YAML property map.
 

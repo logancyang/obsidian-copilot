@@ -148,6 +148,17 @@ describe("symposiumFrontmatter", () => {
       await expect(saveSymposiumDocId(app, file, DOC_ID, null)).resolves.toBe(false);
       expect(frontmatter.symposium).toBe(existingValue);
     });
+
+    it("rejects a non-mapping root supplied by the atomic callback", async () => {
+      const processFrontMatter = jest.fn(async (_file: TFile, update: (value: unknown) => void) =>
+        update(["shared"])
+      );
+      const app = { fileManager: { processFrontMatter } } as unknown as App;
+
+      await expect(saveSymposiumDocId(app, file, DOC_ID, null)).rejects.toBeInstanceOf(
+        SymposiumFrontmatterParseError
+      );
+    });
   });
 
   describe("removeSymposiumDocId()", () => {
@@ -169,6 +180,17 @@ describe("symposiumFrontmatter", () => {
 
       await expect(removeSymposiumDocId(app, file, DOC_ID)).resolves.toBe(false);
       expect(frontmatter.symposium).toBe(newerDocId);
+    });
+
+    it("rejects a non-mapping root supplied by the atomic callback", async () => {
+      const processFrontMatter = jest.fn(async (_file: TFile, update: (value: unknown) => void) =>
+        update(["shared"])
+      );
+      const app = { fileManager: { processFrontMatter } } as unknown as App;
+
+      await expect(removeSymposiumDocId(app, file, DOC_ID)).rejects.toBeInstanceOf(
+        SymposiumFrontmatterParseError
+      );
     });
   });
 });

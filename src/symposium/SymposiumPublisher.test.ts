@@ -503,6 +503,32 @@ describe("SymposiumPublisher", () => {
         expect(harness.modalOptions[2].initialResult).toBeUndefined();
       });
 
+      it("retains a successful POST receipt when frontmatter becomes a sequence", async () => {
+        const harness = createHarness();
+        harness.processFrontMatter.mockImplementationOnce(
+          async (_file: TFile, update: (value: Record<string, unknown>) => void) => {
+            update(["shared"] as unknown as Record<string, unknown>);
+          }
+        );
+
+        const result = await openAndConfirm(harness, "publish");
+
+        expect(result).toMatchObject({
+          kind: "persistence",
+          action: "publish",
+          receipt: RECEIPT,
+        });
+        expect(
+          (result as Extract<SymposiumModalResult, { kind: "persistence" }>).retrySave
+        ).toBeInstanceOf(Function);
+
+        harness.modalOptions[0].onClosed?.();
+        await harness.publisher.open(harness.file);
+
+        expect(harness.modalOptions[1].initialResult).toEqual(result);
+        expect(harness.client.publish).toHaveBeenCalledTimes(1);
+      });
+
       it.each([
         ["newer identity", NEW_DOC_ID],
         ["unrecognized property", { url: "https://example.com/symposium" }],
@@ -579,12 +605,25 @@ describe("SymposiumPublisher", () => {
         expect(harness.buildDocument).not.toHaveBeenCalled();
         expect(partial).toMatchObject({ kind: "persistence", action: "delete" });
 
-        const removed = await (partial as Extract<SymposiumModalResult, { kind: "persistence" }>)
+        harness.modalOptions[0].onClosed?.();
+        await harness.publisher.open(harness.file);
+
+        const resumed = harness.modalOptions[1].initialResult;
+        expect(resumed).toMatchObject({ kind: "persistence", action: "delete" });
+        expect(harness.client.update).not.toHaveBeenCalled();
+        expect(harness.client.publish).not.toHaveBeenCalled();
+
+        const removed = await (resumed as Extract<SymposiumModalResult, { kind: "persistence" }>)
           .retrySave!();
 
         expect(removed).toEqual({ kind: "success", action: "delete" });
         expect(harness.frontmatter).toEqual({ tags: ["shared"] });
         expect(harness.client.delete).toHaveBeenCalledTimes(1);
+
+        harness.modalOptions[1].onClosed?.();
+        await harness.publisher.open(harness.file);
+        expect(harness.modalOptions[2]).toMatchObject({ docId: null });
+        expect(harness.modalOptions[2].initialResult).toBeUndefined();
       });
 
       it("does not remove a newer identity after a remote deletion completes", async () => {
