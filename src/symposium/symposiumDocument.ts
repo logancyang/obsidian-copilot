@@ -1,9 +1,10 @@
 import { OBSIDIAN_PUBLISH_BASELINE } from "@/symposium/obsidianPublishBaseline";
+import { SYMPOSIUM_MAX_HTML_BYTES } from "@/symposium/constants";
 import { SymposiumDocument } from "@/symposium/types";
 import { arrayBufferToBase64 } from "@/utils/base64";
 import { App, Component, MarkdownRenderer, TFile } from "obsidian";
 
-export const SYMPOSIUM_MAX_HTML_BYTES = 10 * 1024 * 1024;
+export { SYMPOSIUM_MAX_HTML_BYTES };
 
 const ACTIVE_CONTENT_SELECTOR = [
   "base",
