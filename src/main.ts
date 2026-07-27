@@ -17,7 +17,7 @@ import RelevantNotesView from "@/components/RelevantNotesView";
 import { APPLY_VIEW_TYPE, ApplyView } from "@/components/composer/ApplyView";
 import { LoadChatHistoryModal } from "@/components/modals/LoadChatHistoryModal";
 
-import { registerContextMenu } from "@/commands/contextMenu";
+import { registerContextMenu, registerSymposiumFileMenu } from "@/commands/contextMenu";
 import { CustomCommandRegister } from "@/commands/customCommandRegister";
 import { migrateCommands, suggestDefaultCommands } from "@/commands/migrator";
 import { migrateSystemPromptsFromSettings } from "@/system-prompts/migration";
@@ -116,6 +116,7 @@ import {
   trashFile,
 } from "@/utils/vaultAdapterUtils";
 import { v4 as uuidv4 } from "uuid";
+import { SymposiumPublisher } from "@/symposium/SymposiumPublisher";
 
 // Removed unused FileTrackingState interface
 
@@ -354,13 +355,20 @@ export default class CopilotPlugin extends Plugin {
       () => (this.canUseAgentView() ? this.activateAgentView() : this.activateView())
     );
 
-    registerCommands(this);
+    const symposiumPublisher = new SymposiumPublisher(this.app);
+    const publishFile = (file: TFile): void => {
+      void symposiumPublisher
+        .open(file)
+        .catch((error) => logError("Failed to open Symposium publishing.", error));
+    };
+    registerCommands(this, publishFile);
+    registerSymposiumFileMenu(this, publishFile);
 
     // Tool initialization is now handled automatically in CopilotPlusChainRunner and AutonomousAgentChainRunner
 
     this.registerEvent(
       this.app.workspace.on("editor-menu", (menu: Menu) => {
-        registerContextMenu(menu, this.app);
+        registerContextMenu(menu, this.app, publishFile);
       })
     );
 

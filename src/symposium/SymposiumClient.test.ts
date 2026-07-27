@@ -103,13 +103,7 @@ describe("SymposiumClient", () => {
           false,
         ],
         ["an oversized document", 413, "too_large", "That push is too large to accept.", false],
-        [
-          "a quota limit",
-          429,
-          "quota_exceeded",
-          "You have used all of today's pushes.",
-          false,
-        ],
+        ["a quota limit", 429, "quota_exceeded", "You have used all of today's pushes.", false],
         [
           "a license validation outage",
           500,
