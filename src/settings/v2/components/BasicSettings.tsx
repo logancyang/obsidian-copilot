@@ -13,6 +13,7 @@ import { ensureCopilotSubfolders } from "@/settings/copilotFolder";
 import {
   applyCopilotRootChange,
   copilotRootContainsNotes,
+  findCopilotRootFileConflict,
   isKnownCopilotRoot,
 } from "@/settings/copilotRootChange";
 import {
@@ -83,6 +84,17 @@ export const BasicSettings: React.FC = () => {
       new Notice("That's already the Copilot folder.", 3000);
       return;
     }
+    // Reason: a path (or ancestor) occupied by an existing FILE would accept
+    // and persist fine, but every folder creation under it fails from then on
+    // — the first visible symptom being a failed chat save much later.
+    const conflict = findCopilotRootFileConflict(app, folder);
+    if (conflict) {
+      new Notice(
+        `"${conflict}" is an existing file, so "${folder}" can't be used as a folder. Choose another location.`,
+        8000
+      );
+      return;
+    }
     // Reason: a root that already holds ordinary notes would be excluded from
     // search wholesale once activated, silently hiding those notes. A root
     // Copilot used before is exempt — its only Markdown is Copilot's own
@@ -129,6 +141,9 @@ export const BasicSettings: React.FC = () => {
             }
             if (getVaultBase(app) && isLocalMiyoUrl(getMiyoCustomUrl(fresh))) {
               void resyncMiyoFolder(app).then((outcome) => {
+                // "unregistered" stays silent: nothing on the server exposes
+                // the new root, and nagging would second-guess a user who
+                // deliberately removed the registration in Miyo.
                 if (outcome === "conflict" || outcome === "failed") notice();
               });
             } else {

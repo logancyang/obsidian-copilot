@@ -13,7 +13,7 @@ import {
   suppressNextPersistOnce,
 } from "@/services/settingsPersistence";
 import type { App } from "obsidian";
-import { normalizePath } from "obsidian";
+import { normalizePath, TFile } from "obsidian";
 
 /**
  * Build the root-change patch: the new root plus its exclusion history (existing
@@ -90,6 +90,38 @@ export function copilotRootContainsNotes(app: App, folder: string): boolean {
   return app.vault
     .getMarkdownFiles()
     .some((file) => file.path === root || file.path.startsWith(prefix));
+}
+
+/**
+ * Find the first prefix of `folder` that already exists as a FILE in the vault,
+ * or null when every existing prefix is a folder (or nothing exists yet).
+ *
+ * Reason: a root like `ai.txt`, or `team/ai` where `team` is a file, passes the
+ * syntax and Markdown-content checks, persists successfully, and then every
+ * folder creation under it fails forever (the sub-folder pre-create only logs,
+ * so the first visible failure is a chat save much later). The Apply layer's
+ * caller uses this to reject the change up front with the conflicting path.
+ *
+ * Residual gaps, accepted: the vault cache doesn't index hidden paths, so a
+ * conflict inside a hidden directory surfaces at adapter write time instead;
+ * and a file inside an existing root that happens to carry a fixed sub-folder
+ * name (e.g. a non-Markdown file literally named `chats`) is not prechecked —
+ * both are rare and fail visibly at the write site.
+ *
+ * @param app - Active Obsidian app, threaded in (never the global `app`).
+ * @param folder - Candidate root, vault-root-relative.
+ */
+export function findCopilotRootFileConflict(app: App, folder: string): string | null {
+  const root = normalizePath(folder).replace(/\/+$/, "");
+  if (root.length === 0) return null;
+  let prefix = "";
+  for (const segment of root.split("/")) {
+    prefix = prefix ? `${prefix}/${segment}` : segment;
+    if (app.vault.getAbstractFileByPath(prefix) instanceof TFile) {
+      return prefix;
+    }
+  }
+  return null;
 }
 
 /**

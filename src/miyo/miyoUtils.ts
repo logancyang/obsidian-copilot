@@ -382,6 +382,28 @@ export function getVaultRelativeMiyoPath(app: App, miyoPath: string): string {
 }
 
 /**
+ * Whether a RAW Miyo result path belongs to the current vault's registered
+ * folder. Ownership must be decided before {@link getVaultRelativeMiyoPath}
+ * strips the prefix: raw paths are unambiguous (this vault's results carry the
+ * vault's folder name, other folders carry theirs), but once stripped, an
+ * external folder that happens to share a name with a vault-relative folder
+ * (e.g. a Miyo folder literally named "copilot") becomes indistinguishable
+ * from in-vault content.
+ *
+ * @param app - Obsidian application instance.
+ * @param miyoPath - Raw path as returned by Miyo, before prefix-stripping.
+ */
+export function isCurrentVaultMiyoPath(app: App, miyoPath: string): boolean {
+  const folderName = getMiyoFolderName(app);
+  if (!folderName) {
+    // No resolvable folder name (mobile/remote): claim ownership so the
+    // privacy filters still apply — the conservative direction.
+    return true;
+  }
+  return normalizeFilesystemPath(miyoPath).startsWith(`${folderName}/`);
+}
+
+/**
  * Build the sync receipt recorded after the system root exclusions were
  * successfully pushed to the registered Miyo folder. The receipt self-identifies
  * its target — device, Miyo endpoint, folder name — alongside the sorted roots:

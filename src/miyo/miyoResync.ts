@@ -6,6 +6,7 @@ import {
   getMiyoFolderExclusions,
   getMiyoFolderInclusions,
   getMiyoFolderName,
+  isLocalMiyoUrl,
   parseMiyoSyncReceipt,
   type MiyoSyncReceipt,
 } from "@/miyo/miyoUtils";
@@ -38,8 +39,13 @@ export type MiyoResyncOutcome =
   | "resynced"
   /** Re-registered, but the re-scan trigger failed; Miyo re-scans on its own. */
   | "resynced-scan-failed"
-  /** Re-add hit 409 right after a delete — server state contested; still stale. */
+  /** Server holds a registration this flow can't safely replace (409 right
+   *  after a delete, or one left under this vault's previous name) — manual
+   *  cleanup in Miyo; still stale. */
   | "conflict"
+  /** Vault not registered with Miyo; nothing rebuilt — registering is the
+   *  register flow's job (it carries explicit user consent). */
+  | "unregistered"
   /** Transport/setup failure (Miyo unreachable, no vault base, …); still stale. */
   | "failed";
 
@@ -248,8 +254,23 @@ async function runVerify(app: App): Promise<MiyoScopeVerification> {
       }
       // Same device + endpoint but a different folder name: the vault was
       // renamed and the OLD registration may still exist (and expose content).
-      // Keep the receipt as the cleanup lead and surface the prompt.
+      // A read-only probe settles it: still registered → keep the receipt as
+      // the cleanup lead and surface the prompt; confirmed gone (the user
+      // cleaned it up in Miyo) → consume the receipt so the banner can end.
       if (receipt.device === getDeviceId() && receipt.url === getMiyoCustomUrl(settings)) {
+        const oldName = await withLookupTimeout(
+          client.checkFolderRegistration(receipt.folder, customUrl),
+          "previous-name check"
+        );
+        if (oldName === "unregistered") {
+          updateSetting("miyoSyncedExclusions", "");
+          return "unregistered";
+        }
+        if (oldName !== "registered") {
+          // Transient failure: the old registration's existence is unknown —
+          // neither accuse nor clear; report like any other failed lookup.
+          return "unknown";
+        }
         return "stale";
       }
       // Foreign device / other endpoint: says nothing about this server, and
@@ -280,7 +301,18 @@ async function runResync(app: App): Promise<MiyoResyncOutcome> {
       return "failed";
     }
     const folderName = getMiyoFolderName(app);
-    const customUrl = getMiyoCustomUrl(settings) || undefined;
+    const miyoUrl = getMiyoCustomUrl(settings);
+    // Reason: callers gate on a LOCAL endpoint before enqueueing, but this
+    // task reads settings fresh when its turn arrives — the endpoint may have
+    // been switched to a remote target while queued. A remote registration is
+    // not this flow's to DELETE/POST (and the body would leak this machine's
+    // vault path), so refuse and stay retryable — mirroring registerVault's
+    // execution-time re-check.
+    if (!isLocalMiyoUrl(miyoUrl)) {
+      logWarn("Miyo resync: endpoint switched to a remote target while queued; not resyncing.");
+      return "failed";
+    }
+    const customUrl = miyoUrl || undefined;
     const client = new MiyoClient();
     const baseUrl = await client.resolveBaseUrl(customUrl);
 
@@ -292,7 +324,7 @@ async function runResync(app: App): Promise<MiyoResyncOutcome> {
     const desired = buildDesiredScope(app, settings);
 
     // Verify first: a record that already enforces the scope needs no rebuild.
-    let record: MiyoFolderEntry | null = null;
+    let record: MiyoFolderEntry;
     try {
       record = await withLookupTimeout(client.getFolder(baseUrl, folderName), "folder lookup");
     } catch (error) {
@@ -304,47 +336,82 @@ async function runResync(app: App): Promise<MiyoResyncOutcome> {
         logWarn(`Miyo resync: could not read folder record: ${err2String(error)}`);
         return "failed";
       }
-      // Unregistered: recovery path — a prior run deleted but never re-added
-      // (or the user removed it in Miyo). Register directly with the fresh scope.
-      // If the receipt shows THIS device+endpoint registered under a different
-      // folder name, the vault was renamed and the old registration still
-      // exists — delete it so it can't keep serving stale content. Never act on
-      // a foreign-device or other-endpoint receipt: it is not ours to delete.
+      // DESIGN NOTE — an unregistered vault triggers NO server mutation here.
+      // (a) It is NOT re-registered: "a prior rebuild was interrupted between
+      //     DELETE and POST" and "the user removed the registration in Miyo"
+      //     are indistinguishable, and every registration in this product is
+      //     an explicit user action (Connect / Add this vault).
+      //     Auto-registering would silently reverse a deliberate removal —
+      //     and the toggles the stale-record path carries (Relay opt-out)
+      //     have no source here, so it would also re-grant allow_remote_read.
+      // (b) A receipt naming a DIFFERENT folder on this device+endpoint is
+      //     NOT auto-deleted either: folder names are just vault names, so
+      //     the receipt cannot prove that name still belongs to this vault —
+      //     another vault may have registered the same name since, and
+      //     deleting on receipt evidence alone could destroy that vault's
+      //     registration and index. Manual cleanup is surfaced instead.
+      // If a future review flags this again, point them here.
       const staleReceipt = parseMiyoSyncReceipt(settings.miyoSyncedExclusions);
       if (
         staleReceipt &&
         staleReceipt.device === getDeviceId() &&
-        staleReceipt.url === getMiyoCustomUrl(settings) &&
-        staleReceipt.folder !== folderName
+        staleReceipt.url === getMiyoCustomUrl(settings)
       ) {
-        await client.deleteFolder(staleReceipt.folder, customUrl);
+        if (staleReceipt.folder !== folderName) {
+          // Read-only probe: once the old-name registration is confirmed gone
+          // (the user cleaned it up in Miyo), the receipt is consumed —
+          // without this, following our own "remove it in Miyo, then retry"
+          // instruction would keep reporting a conflict forever.
+          const oldName = await withLookupTimeout(
+            client.checkFolderRegistration(staleReceipt.folder, customUrl),
+            "previous-name check"
+          );
+          if (oldName === "unregistered") {
+            updateSetting("miyoSyncedExclusions", "");
+            return "unregistered";
+          }
+          if (oldName !== "registered") {
+            // Transient failure: don't tell the user to delete a registration
+            // whose existence is unconfirmed — keep the receipt and retry.
+            logWarn("Miyo resync: could not determine the previous-name registration's state.");
+            return "failed";
+          }
+          // Still registered: keep the receipt — it is the only evidence that
+          // keeps verify reporting the exposure until the user cleans up.
+          logWarn(
+            "Miyo resync: a registration under this vault's previous name still exists; " +
+              "remove it in the Miyo app."
+          );
+          return "conflict";
+        }
+        // The registration the receipt vouched for is confirmed gone: clear
+        // it so verify stops reporting a stale registration that no longer
+        // exists. Foreign-device / other-endpoint receipts are never touched
+        // — they are not ours to clear.
+        updateSetting("miyoSyncedExclusions", "");
       }
+      return "unregistered";
     }
 
-    if (record) {
-      if (miyoRecordCoversSystemRoots(record, settings)) {
-        updateSetting("miyoSyncedExclusions", receipt);
-        logInfo("Miyo resync: server record already covers the scope; receipt updated.");
-        return "verified";
-      }
-      // Carry the user's Miyo-side toggles into the re-registration. Fail
-      // closed when a field is absent: omitting allow_remote_read makes the
-      // server default it to TRUE, silently re-enabling Relay for a user who
-      // opted out in Miyo — the exact privacy hole this resync exists to close.
-      desired.allow_remote_read = record.allow_remote_read === true;
-      desired.allow_writes = record.allow_writes === true;
-
-      await client.deleteFolder(folderName, customUrl);
-    } else {
-      // Fresh registration (recovery): match the register flow's defaults.
-      desired.allow_remote_read = true;
+    if (miyoRecordCoversSystemRoots(record, settings)) {
+      updateSetting("miyoSyncedExclusions", receipt);
+      logInfo("Miyo resync: server record already covers the scope; receipt updated.");
+      return "verified";
     }
+    // Carry the user's Miyo-side toggles into the re-registration. Fail
+    // closed when a field is absent: omitting allow_remote_read makes the
+    // server default it to TRUE, silently re-enabling Relay for a user who
+    // opted out in Miyo — the exact privacy hole this resync exists to close.
+    desired.allow_remote_read = record.allow_remote_read === true;
+    desired.allow_writes = record.allow_writes === true;
+
+    await client.deleteFolder(folderName, customUrl);
 
     const created = await client.addFolder(desired, customUrl);
     if (created === null) {
-      // 409 right after a delete (or on the recovery path): the server still
-      // holds a registration we couldn't replace. Do NOT write the receipt —
-      // its exclusions are unknown and possibly stale.
+      // 409 right after a delete: the server still holds a registration we
+      // couldn't replace. Do NOT write the receipt — its exclusions are
+      // unknown and possibly stale.
       logWarn("Miyo resync: re-add returned 409; server registration contested.");
       return "conflict";
     }

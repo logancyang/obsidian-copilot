@@ -24,6 +24,7 @@ import {
   getSearchBackend,
   getVaultRelativeMiyoPath,
   hasUserQaPatterns,
+  isCurrentVaultMiyoPath,
   isLocalMiyoUrl,
   isMiyoScopeMismatch,
   seedDocProcessorBackend,
@@ -87,6 +88,29 @@ describe("getVaultRelativeMiyoPath", () => {
 
   it("returns the normalized path when the vault folder name is empty", () => {
     expect(getVaultRelativeMiyoPath(buildApp(""), "notes\\foo.md")).toBe("notes/foo.md");
+  });
+});
+
+describe("isCurrentVaultMiyoPath", () => {
+  const buildApp = (vaultName: string): App =>
+    ({
+      vault: {
+        getName: () => vaultName,
+      },
+    }) as unknown as App;
+
+  it("owns a raw path prefixed with the current vault's folder name", () => {
+    expect(isCurrentVaultMiyoPath(buildApp("MyVault"), "MyVault/copilot/x.md")).toBe(true);
+  });
+
+  it("disowns a raw path prefixed with another folder's name, even one matching a system root", () => {
+    // "copilot" is the default Copilot root NAME — but as a raw prefix it is
+    // another Miyo folder's namespace, not this vault's content.
+    expect(isCurrentVaultMiyoPath(buildApp("MyVault"), "copilot/notes/foo.md")).toBe(false);
+  });
+
+  it("claims ownership when no folder name is resolvable (conservative: filters still apply)", () => {
+    expect(isCurrentVaultMiyoPath(buildApp(""), "notes/foo.md")).toBe(true);
   });
 });
 

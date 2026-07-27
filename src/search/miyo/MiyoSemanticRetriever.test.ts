@@ -19,6 +19,8 @@ jest.mock("@/settings/model", () => ({
 jest.mock("@/miyo/miyoUtils", () => ({
   getMiyoFolderName: jest.fn(),
   getVaultRelativeMiyoPath: jest.fn((_: unknown, path: string) => path.replace("/vault/", "")),
+  // Mirrors the real ownership rule against the mocked "/vault" folder name.
+  isCurrentVaultMiyoPath: jest.fn((_: unknown, path: string) => path.startsWith("/vault/")),
   getMiyoCustomUrl: jest.fn().mockReturnValue(""),
   // Default: synced scope, no user patterns — the narrow-limit branch. Tests
   // that exercise the over-fetch branches flip these explicitly.
@@ -266,5 +268,77 @@ describe("MiyoSemanticRetriever", () => {
 
     expect(documents).toHaveLength(1);
     expect(documents[0].metadata.path).toBe("notes/keep.md");
+  });
+
+  it("keeps search-all results from an external folder that shares a system root's name", async () => {
+    // Ownership is judged on the RAW path: this vault's results carry the
+    // "/vault/" prefix, an external folder carries its own name — even when
+    // that name equals the default Copilot root ("copilot"). The external
+    // chunk must survive while the vault's own former-root chunk is dropped.
+    (getSettings as jest.Mock).mockReturnValue({
+      miyoServerUrl: "http://miyo.local",
+      debug: false,
+      miyoSearchAll: true,
+      copilotFolder: "copilot",
+    });
+    // clearAllMocks does not reset mockReturnValue implementations pinned by
+    // earlier tests; re-pin the narrow-limit branch explicitly.
+    (hasUserQaPatterns as jest.Mock).mockReturnValue(false);
+    (isMiyoScopeMismatch as jest.Mock).mockReturnValue(false);
+
+    mockSearch.mockResolvedValue({
+      results: [
+        {
+          id: "own-old-root",
+          score: 0.9,
+          path: "/vault/copilot/old-chat.md",
+          chunk_index: 0,
+          chunk_text: "this vault's excluded copilot data",
+        },
+        {
+          id: "external",
+          score: 0.85,
+          path: "copilot/notes/foo.md",
+          chunk_index: 0,
+          chunk_text: "another folder that happens to be named copilot",
+        },
+      ],
+    });
+
+    const retriever = createRetriever();
+    const documents = await retriever.getRelevantDocuments("query");
+
+    expect(mockSearch).toHaveBeenCalledWith("http://miyo.local", undefined, "query", 20, undefined);
+    expect(documents).toHaveLength(1);
+    expect(documents[0].metadata.path).toBe("copilot/notes/foo.md");
+    expect(documents[0].metadata.fromCurrentVault).toBe(false);
+  });
+
+  it("still applies the system-root filter to unprefixed paths on a folder-scoped query", async () => {
+    // A folder-scoped query only returns this vault's content, so ownership is
+    // asserted regardless of the raw prefix — a result arriving without the
+    // folder prefix must not dodge the privacy filter by looking external.
+    (getSettings as jest.Mock).mockReturnValue({
+      miyoServerUrl: "http://miyo.local",
+      debug: false,
+      copilotFolder: "copilot",
+    });
+
+    mockSearch.mockResolvedValue({
+      results: [
+        {
+          id: "unprefixed",
+          score: 0.9,
+          path: "copilot/old-chat.md",
+          chunk_index: 0,
+          chunk_text: "unprefixed former-root content",
+        },
+      ],
+    });
+
+    const retriever = createRetriever();
+    const documents = await retriever.getRelevantDocuments("query");
+
+    expect(documents).toHaveLength(0);
   });
 });

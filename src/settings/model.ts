@@ -1136,6 +1136,10 @@ function sanitizeAgentMode(raw: unknown): CopilotSettings["agentMode"] {
  * embedded literal control bytes, which made the source file binary and
  * missed DEL.
  */
+// Names Windows reserves at any path depth, with or without an extension —
+// creating `NUL` or `con.md` fails or misbehaves at the filesystem layer.
+const WINDOWS_RESERVED_NAME_RE = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i;
+
 // eslint-disable-next-line no-control-regex
 const CONTROL_CHAR_RE = /[\u0000-\u001f\u007f]/;
 
@@ -1286,6 +1290,16 @@ export function validateCopilotFolder(
         ok: false,
         reason: 'Folder path contains characters not allowed in folder names (< > : " | ? *).',
       };
+    }
+    // Rejected on every platform, not just Windows: vaults sync across
+    // machines, so a root that persists fine on macOS would then fail every
+    // folder creation on a Windows device — the same silent, persistent
+    // write-failure mode as pointing the root at an existing file.
+    if (/[. ]$/.test(segment)) {
+      return { ok: false, reason: "Folder names cannot end with a dot or space." };
+    }
+    if (WINDOWS_RESERVED_NAME_RE.test(segment)) {
+      return { ok: false, reason: `"${segment}" is a name reserved by Windows.` };
     }
   }
   return { ok: true, folder: cleaned };

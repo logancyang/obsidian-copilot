@@ -17,10 +17,12 @@ jest.mock("@/context", () => ({
 
 const applyCopilotRootChange = jest.fn<Promise<void>, unknown[]>().mockResolvedValue(undefined);
 const copilotRootContainsNotes = jest.fn<boolean, unknown[]>().mockReturnValue(false);
+const findCopilotRootFileConflict = jest.fn<string | null, unknown[]>().mockReturnValue(null);
 const isKnownCopilotRoot = jest.fn<boolean, unknown[]>().mockReturnValue(false);
 jest.mock("@/settings/copilotRootChange", () => ({
   applyCopilotRootChange: (...a: unknown[]) => applyCopilotRootChange(...a),
   copilotRootContainsNotes: (...a: unknown[]) => copilotRootContainsNotes(...a),
+  findCopilotRootFileConflict: (...a: unknown[]) => findCopilotRootFileConflict(...a),
   isKnownCopilotRoot: (...a: unknown[]) => isKnownCopilotRoot(...a),
 }));
 
@@ -59,6 +61,7 @@ describe("BasicSettings", () => {
     capturedOnConfirm = null;
     settingsStore.set(settingsAtom, { ...DEFAULT_SETTINGS, copilotFolder: "copilot" });
     copilotRootContainsNotes.mockReturnValue(false);
+    findCopilotRootFileConflict.mockReturnValue(null);
     isKnownCopilotRoot.mockReturnValue(false);
     shouldSurfaceMiyoResync.mockReturnValue(false);
     resyncMiyoFolder.mockResolvedValue("resynced");
@@ -79,6 +82,16 @@ describe("BasicSettings", () => {
   it("rejects an invalid root on Apply without opening the confirm modal", () => {
     render(<BasicSettings />);
     fireEvent.change(screen.getByLabelText("Copilot folder"), { target: { value: "../escape" } });
+    fireEvent.click(screen.getByRole("button", { name: "Apply Copilot folder" }));
+    expect(Notice).toHaveBeenCalledTimes(1);
+    expect(modalCtor).not.toHaveBeenCalled();
+    expect(applyCopilotRootChange).not.toHaveBeenCalled();
+  });
+
+  it("rejects a root whose path is occupied by an existing file without opening the confirm modal", () => {
+    findCopilotRootFileConflict.mockReturnValue("ai.txt");
+    render(<BasicSettings />);
+    fireEvent.change(screen.getByLabelText("Copilot folder"), { target: { value: "ai.txt" } });
     fireEvent.click(screen.getByRole("button", { name: "Apply Copilot folder" }));
     expect(Notice).toHaveBeenCalledTimes(1);
     expect(modalCtor).not.toHaveBeenCalled();
