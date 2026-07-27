@@ -4,7 +4,21 @@ import { App, parseYaml, TFile } from "obsidian";
 const SYMPOSIUM_PROPERTY = "symposium";
 
 /**
+ * Signals that a note already uses the reserved Symposium property for unrelated metadata.
+ */
+export class SymposiumPropertyConflictError extends Error {
+  constructor() {
+    super(
+      "This note already uses the symposium property for an unrecognized value. Rename or remove that property before publishing."
+    );
+    this.name = "SymposiumPropertyConflictError";
+    Object.setPrototypeOf(this, SymposiumPropertyConflictError.prototype);
+  }
+}
+
+/**
  * Returns a Symposium identity only when the frontmatter value matches the server's id format.
+ * Throws when the reserved property is occupied by unrelated metadata so callers cannot overwrite it.
  *
  * @param value The raw frontmatter property value.
  */
@@ -30,11 +44,18 @@ export async function getSymposiumDocId(app: App, file: TFile): Promise<string |
   } catch {
     return null;
   }
-  return parseSymposiumDocId(
-    frontmatter && typeof frontmatter === "object"
-      ? (frontmatter as Record<string, unknown>)[SYMPOSIUM_PROPERTY]
-      : undefined
-  );
+  if (!frontmatter || typeof frontmatter !== "object") {
+    return null;
+  }
+  const properties = frontmatter as Record<string, unknown>;
+  if (!Object.prototype.hasOwnProperty.call(properties, SYMPOSIUM_PROPERTY)) {
+    return null;
+  }
+  const docId = parseSymposiumDocId(properties[SYMPOSIUM_PROPERTY]);
+  if (!docId) {
+    throw new SymposiumPropertyConflictError();
+  }
+  return docId;
 }
 
 /**
@@ -58,6 +79,9 @@ export async function saveSymposiumDocId(
   let saved = false;
   await app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
     const currentDocId = parseSymposiumDocId(frontmatter[SYMPOSIUM_PROPERTY]);
+    if (Object.prototype.hasOwnProperty.call(frontmatter, SYMPOSIUM_PROPERTY) && !currentDocId) {
+      return;
+    }
     if (currentDocId === docId) {
       saved = true;
       return;

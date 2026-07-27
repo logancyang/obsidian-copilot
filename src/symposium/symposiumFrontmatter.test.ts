@@ -3,6 +3,7 @@ import {
   parseSymposiumDocId,
   removeSymposiumDocId,
   saveSymposiumDocId,
+  SymposiumPropertyConflictError,
 } from "@/symposium/symposiumFrontmatter";
 import type { App, TFile } from "obsidian";
 
@@ -39,6 +40,17 @@ describe("symposiumFrontmatter", () => {
   // eslint-disable-next-line obsidianmd/no-tfile-tfolder-cast -- path-only test fixture
   const file = { path: "Notes/Architecture.md" } as TFile;
 
+  describe("SymposiumPropertyConflictError", () => {
+    describe("constructor()", () => {
+      it("identifies an occupied reserved property", () => {
+        const error = new SymposiumPropertyConflictError();
+
+        expect(error).toBeInstanceOf(Error);
+        expect(error.message).toContain("already uses the symposium property");
+      });
+    });
+  });
+
   describe("parseSymposiumDocId()", () => {
     it("accepts only lowercase 16-character Symposium ids", () => {
       expect(parseSymposiumDocId(DOC_ID)).toBe(DOC_ID);
@@ -50,12 +62,9 @@ describe("symposiumFrontmatter", () => {
   });
 
   describe("getSymposiumDocId()", () => {
-    it("reads a valid id and treats missing or malformed frontmatter as unpublished", async () => {
+    it("reads a valid id and treats missing or invalid YAML as unpublished", async () => {
       const valid = createApp({ symposium: DOC_ID });
       await expect(getSymposiumDocId(valid.app, file)).resolves.toBe(DOC_ID);
-
-      const malformed = createApp({ symposium: { docId: DOC_ID } });
-      await expect(getSymposiumDocId(malformed.app, file)).resolves.toBeNull();
 
       const missing = createApp();
       await expect(getSymposiumDocId(missing.app, file)).resolves.toBeNull();
@@ -63,6 +72,14 @@ describe("symposiumFrontmatter", () => {
       const invalidYaml = createApp();
       jest.mocked(invalidYaml.app.vault.read).mockResolvedValue("---\nsymposium: [\n---\n");
       await expect(getSymposiumDocId(invalidYaml.app, file)).resolves.toBeNull();
+    });
+
+    it("rejects an occupied property whose value is not a valid document id", async () => {
+      const malformed = createApp({ symposium: { docId: DOC_ID } });
+
+      await expect(getSymposiumDocId(malformed.app, file)).rejects.toBeInstanceOf(
+        SymposiumPropertyConflictError
+      );
     });
   });
 
@@ -94,6 +111,14 @@ describe("symposiumFrontmatter", () => {
 
       await expect(saveSymposiumDocId(app, file, DOC_ID, null)).resolves.toBe(false);
       expect(frontmatter.symposium).toBe(newerDocId);
+    });
+
+    it("does not overwrite an occupied property with an unrecognized value", async () => {
+      const existingValue = { url: "https://example.com/symposium" };
+      const { app, frontmatter } = createApp({ symposium: existingValue });
+
+      await expect(saveSymposiumDocId(app, file, DOC_ID, null)).resolves.toBe(false);
+      expect(frontmatter.symposium).toBe(existingValue);
     });
   });
 

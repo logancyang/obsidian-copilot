@@ -394,6 +394,9 @@ function isAllowedUrl(element: HTMLElement, attribute: string, rawValue: string)
   if (value.startsWith("#")) {
     return true;
   }
+  if (value.startsWith("//")) {
+    return element.tagName === "A" && attribute === "href";
+  }
 
   const scheme = value.match(/^([a-z][a-z0-9+.-]*):/i)?.[1]?.toLowerCase();
   if (element.tagName === "IMG" && attribute === "src") {

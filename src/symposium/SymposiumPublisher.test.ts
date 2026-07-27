@@ -106,11 +106,8 @@ async function openAndConfirm(
 describe("SymposiumPublisher", () => {
   describe("SymposiumPublisher", () => {
     describe("open()", () => {
-      it.each([
-        ["missing", {}],
-        ["non-string", { symposium: { docId: DOC_ID } }],
-        ["malformed", { symposium: "UPPERCASE1234567" }],
-      ])("opens an unpublished confirmation and posts for a %s property", async (_case, value) => {
+      it("opens an unpublished confirmation and posts when the property is missing", async () => {
+        const value = {};
         const harness = createHarness(value);
 
         await harness.publisher.open(harness.file);
@@ -128,6 +125,27 @@ describe("SymposiumPublisher", () => {
         expect(harness.buildDocument).toHaveBeenCalledWith(harness.file, activeDocument);
         expect(harness.client.publish).toHaveBeenCalledWith(DOCUMENT, "decrypted-license");
         expect(harness.frontmatter.symposium).toBe(DOC_ID);
+      });
+
+      it.each([
+        ["non-string", { docId: DOC_ID }],
+        ["malformed", "UPPERCASE1234567"],
+      ])("refuses to overwrite an occupied %s property", async (_case, value) => {
+        const harness = createHarness({ symposium: value });
+
+        const result = await openAndConfirm(harness, "publish");
+
+        expect(result).toEqual({
+          kind: "failure",
+          action: "publish",
+          message:
+            "This note already uses the symposium property for an unrecognized value. Rename or remove that property before publishing.",
+          accessNotice: false,
+          retryable: false,
+        });
+        expect(harness.frontmatter.symposium).toBe(value);
+        expect(harness.buildDocument).not.toHaveBeenCalled();
+        expect(harness.client.publish).not.toHaveBeenCalled();
       });
 
       it("updates the current valid id without rewriting frontmatter", async () => {
@@ -342,10 +360,13 @@ describe("SymposiumPublisher", () => {
         expect(harness.client.publish).toHaveBeenCalledTimes(1);
       });
 
-      it("does not overwrite a newer identity after a publish completes", async () => {
+      it.each([
+        ["newer identity", NEW_DOC_ID],
+        ["unrecognized property", { url: "https://example.com/symposium" }],
+      ])("does not overwrite a %s after a publish completes", async (_case, newerValue) => {
         const harness = createHarness();
         harness.client.publish.mockImplementation(async () => {
-          harness.frontmatter.symposium = NEW_DOC_ID;
+          harness.frontmatter.symposium = newerValue;
           return RECEIPT;
         });
 
@@ -359,7 +380,7 @@ describe("SymposiumPublisher", () => {
         expect(
           (result as Extract<SymposiumModalResult, { kind: "persistence" }>).retrySave
         ).toBeUndefined();
-        expect(harness.frontmatter.symposium).toBe(NEW_DOC_ID);
+        expect(harness.frontmatter.symposium).toBe(newerValue);
       });
 
       it("rejects a stale unpublished confirmation before it can orphan another page", async () => {

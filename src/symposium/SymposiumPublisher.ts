@@ -12,6 +12,7 @@ import {
   getSymposiumDocId,
   removeSymposiumDocId,
   saveSymposiumDocId,
+  SymposiumPropertyConflictError,
 } from "@/symposium/symposiumFrontmatter";
 import {
   buildSymposiumDocument,
@@ -62,6 +63,15 @@ async function buildDocumentWithComponent(
 }
 
 function operationFailure(action: SymposiumAction, error: unknown): SymposiumFailureResult {
+  if (error instanceof SymposiumPropertyConflictError) {
+    return {
+      kind: "failure",
+      action,
+      message: error.message,
+      accessNotice: false,
+      retryable: false,
+    };
+  }
   if (error instanceof SymposiumDocumentTooLargeError) {
     return {
       kind: "failure",
@@ -141,7 +151,16 @@ export class SymposiumPublisher {
     if (this.disposed) {
       return;
     }
-    const docId = await getSymposiumDocId(this.app, file);
+    let docId: string | null = null;
+    let propertyConflict: SymposiumPropertyConflictError | null = null;
+    try {
+      docId = await getSymposiumDocId(this.app, file);
+    } catch (error) {
+      if (!(error instanceof SymposiumPropertyConflictError)) {
+        throw error;
+      }
+      propertyConflict = error;
+    }
     if (this.disposed) {
       return;
     }
@@ -149,7 +168,10 @@ export class SymposiumPublisher {
     modal = this.createModal({
       fileName: file.basename,
       docId,
-      onConfirm: (action, ownerDocument) => this.execute(file, docId, action, ownerDocument),
+      onConfirm: (action, ownerDocument) =>
+        propertyConflict
+          ? Promise.resolve(operationFailure(action, propertyConflict))
+          : this.execute(file, docId, action, ownerDocument),
       onClosed: () => this.modals.delete(modal),
     });
     this.modals.add(modal);

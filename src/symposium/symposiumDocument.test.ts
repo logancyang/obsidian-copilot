@@ -140,6 +140,7 @@ describe("symposiumDocument", () => {
           <p id="safe" style="background:url(javascript:alert(1))" onclick="alert(1)">Text</p>
           <a id="bad-link" href="javascript:alert(1)">Bad</a>
           <a id="safe-link" href="https://example.com" ping="https://tracker.example" referrerpolicy="unsafe-url" target="_blank">External</a>
+          <a id="scheme-relative-link" href="//docs.example.com/guide">Docs</a>
           <a class="internal-link is-unresolved" data-href="Private note" href="Private note">Private</a>
           <img id="remote-image" src="https://tracker.example/pixel" referrerpolicy="unsafe-url">
           <svg><a id="bad-svg-link" href="data:text/html,bad"><text>SVG</text></a></svg>
@@ -163,6 +164,9 @@ describe("symposiumDocument", () => {
       expect(parsed.querySelector("#safe-link")?.hasAttribute("ping")).toBe(false);
       expect(parsed.querySelector("#safe-link")?.getAttribute("rel")).toBe("noopener noreferrer");
       expect(parsed.querySelector("#safe-link")?.hasAttribute("referrerpolicy")).toBe(false);
+      expect(parsed.querySelector("#scheme-relative-link")?.getAttribute("href")).toBe(
+        "//docs.example.com/guide"
+      );
       expect(parsed.querySelector("#remote-image")?.getAttribute("referrerpolicy")).toBe(
         "no-referrer"
       );
