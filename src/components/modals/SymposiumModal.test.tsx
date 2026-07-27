@@ -25,6 +25,7 @@ jest.mock("obsidian", () => ({
 
     close(): void {
       this.baseClose();
+      (this as unknown as { onClose?: () => void }).onClose?.();
     }
   },
 }));
@@ -47,12 +48,14 @@ function createConfirmMock(): jest.MockedFunction<SymposiumModalOptions["onConfi
 
 function renderModal(
   onConfirm: jest.MockedFunction<SymposiumModalOptions["onConfirm"]>,
-  docId: string | null = null
+  docId: string | null = null,
+  onClosed?: () => void
 ): SymposiumModal {
   const modal = new SymposiumModal({} as App, {
     fileName: "Architecture",
     docId,
     onConfirm,
+    onClosed,
   });
   activeDocument.body.appendChild(modal.contentEl);
   act(() => {
@@ -99,8 +102,10 @@ describe("SymposiumModal", () => {
         expect(baseClose).toHaveBeenCalledTimes(1);
         expect(onConfirm).not.toHaveBeenCalled();
 
+        const publishModal = renderModal(onConfirm);
         await clickButton("Yes, publish");
         expect(onConfirm).toHaveBeenCalledWith("publish", activeDocument);
+        expect(publishModal.contentEl.childElementCount).toBeGreaterThan(0);
       });
 
       it("blocks native close while a confirmed action is pending", async () => {
@@ -126,7 +131,9 @@ describe("SymposiumModal", () => {
           receipt: RECEIPT,
         });
         await screen.findByText("Publish complete");
-        modal.close();
+        act(() => {
+          modal.close();
+        });
 
         expect(baseClose).toHaveBeenCalledTimes(1);
       });
@@ -253,6 +260,40 @@ describe("SymposiumModal", () => {
         });
 
         expect(modal.contentEl.childElementCount).toBe(0);
+      });
+    });
+
+    describe("dispose()", () => {
+      it("force-closes and unmounts while a confirmed action is pending", async () => {
+        let resolveConfirm: ((result: SymposiumModalResult) => void) | undefined;
+        const onConfirm = createConfirmMock().mockImplementation(
+          () =>
+            new Promise((resolve) => {
+              resolveConfirm = resolve;
+            })
+        );
+        const onClosed = jest.fn();
+        const modal = renderModal(onConfirm, null, onClosed);
+        const baseClose = (modal as unknown as { baseClose: jest.Mock }).baseClose;
+
+        fireEvent.click(screen.getByRole("button", { name: "Yes, publish" }));
+        expect(screen.getByRole("button", { name: "Working…" })).toBeTruthy();
+
+        act(() => {
+          modal.dispose();
+        });
+
+        expect(baseClose).toHaveBeenCalledTimes(1);
+        expect(modal.contentEl.childElementCount).toBe(0);
+        expect(onClosed).toHaveBeenCalledTimes(1);
+
+        await act(async () => {
+          resolveConfirm?.({
+            kind: "success",
+            action: "publish",
+            receipt: RECEIPT,
+          });
+        });
       });
     });
   });

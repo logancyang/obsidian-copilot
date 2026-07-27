@@ -88,7 +88,7 @@ export async function buildSymposiumDocument(
   component: Component,
   ownerDocument: Document
 ): Promise<SymposiumDocument> {
-  const markdown = await app.vault.cachedRead(file);
+  const markdown = await app.vault.read(file);
   const article = ownerDocument.createElement("article");
   article.className = "markdown-preview-view markdown-rendered symposium-document";
 

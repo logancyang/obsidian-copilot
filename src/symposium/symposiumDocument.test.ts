@@ -48,7 +48,7 @@ function createApp(options: AppOptions = {}): App {
   const files = options.files ?? [];
   return {
     vault: {
-      cachedRead: jest.fn().mockResolvedValue(options.markdown ?? "# Source Markdown"),
+      read: jest.fn().mockResolvedValue(options.markdown ?? "# Source Markdown"),
       getFiles: jest.fn(() => files),
       getResourcePath: jest.fn((file: TestFile) => file.resourceUrl ?? `app://vault/${file.path}`),
       readBinary: jest.fn(options.readBinary ?? (async () => new ArrayBuffer(0))),
@@ -109,6 +109,7 @@ describe("symposiumDocument", () => {
         file.path,
         component
       );
+      expect(app.vault.read).toHaveBeenCalledWith(file);
       expect(result.title).toBe("Rendered note");
       expect(result.html).toMatch(/^<!doctype html><html lang="en"><head>/);
       expect(result.html).toContain('<meta charset="utf-8">');
