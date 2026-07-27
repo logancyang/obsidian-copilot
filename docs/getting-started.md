@@ -9,6 +9,7 @@ Copilot for Obsidian is an AI-powered plugin that brings large language models (
 - **Note editing**: Ask the AI to write or update your notes for you
 - **Semantic search**: Find notes by meaning, not just keywords
 - **Custom commands**: Run AI-powered prompts on selected text
+- **Public sharing**: Publish Markdown notes to Symposium with a shareable link
 - **Web search**: Fetch and summarize information from the internet
 - **Memory**: Have the AI remember facts about you across conversations
 
@@ -89,6 +90,18 @@ By default, Copilot opens as a **view** (sidebar panel). You can change this in 
 5. Continue the conversation naturally
 
 The AI will automatically include your currently open note as context, so you can say things like "summarize this note" or "what are the action items in this note?"
+
+---
+
+## Publish a Note to Symposium
+
+Run **Publish file to Symposium** from the command palette, a Markdown note's File explorer menu, its note menu, or the editor's **Copilot** submenu. Copilot asks for confirmation because anyone with the resulting link can read the published page.
+
+After publishing, Copilot stores the Symposium document ID in the note's `symposium` property. Run the same action again to update the existing page or withdraw its public link. Symposium deletes its stored copy, but it cannot recall copies that readers or caches already fetched. Withdrawing the page also removes the property from the note.
+
+If Publish or Delete succeeds but the note's property cannot be updated, reopening the dialog resumes that local change without contacting Symposium again. If the initial publish response is lost, Copilot blocks another attempt until the plugin reloads to avoid creating a duplicate page.
+
+Copilot stops before publishing when a note's frontmatter is malformed or is not a YAML property map.
 
 ---
 

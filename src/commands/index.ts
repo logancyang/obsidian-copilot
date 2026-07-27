@@ -22,7 +22,7 @@ import { ApplyCustomCommandModal } from "@/components/modals/ApplyCustomCommandM
 import { YoutubeTranscriptModal } from "@/components/modals/YoutubeTranscriptModal";
 import { checkIsPaidUser } from "@/plusUtils";
 // Debug modals removed with search v3
-import CopilotPlugin from "@/main";
+import type CopilotPlugin from "@/main";
 import { getSearchBackend } from "@/miyo/miyoUtils";
 import { getAllQAMarkdownContent } from "@/search/searchUtils";
 import { NoteSelectedTextContext, WebSelectedTextContext } from "@/types/message";
@@ -32,6 +32,8 @@ import { Editor, MarkdownView, Notice, TFile } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
 import { COMMAND_IDS, COMMAND_ICONS, COMMAND_NAMES, CommandId } from "@/constants";
 import { setSelectedTextContexts } from "@/aiParams";
+
+type PublishFile = (file: TFile) => void;
 
 /**
  * Add a command to the plugin. Supports async callbacks; errors are logged.
@@ -87,7 +89,19 @@ function addCheckCommand(
   });
 }
 
-export function registerCommands(plugin: CopilotPlugin) {
+export function registerCommands(plugin: CopilotPlugin, publish: PublishFile) {
+  addCheckCommand(plugin, COMMAND_IDS.PUBLISH_FILE_TO_SYMPOSIUM, (checking) => {
+    const activeFile = plugin.app.workspace.getActiveFile();
+    if (!(activeFile instanceof TFile) || activeFile.extension !== "md") {
+      return false;
+    }
+
+    if (!checking) {
+      publish(activeFile);
+    }
+    return true;
+  });
+
   addEditorCommand(plugin, COMMAND_IDS.COUNT_WORD_AND_TOKENS_SELECTION, async (editor: Editor) => {
     const selectedText = editor.getSelection();
     const wordCount = selectedText.split(" ").length;
