@@ -33,7 +33,7 @@ interface Harness {
   frontmatter: Record<string, unknown>;
   loadLicenseKey: jest.Mock;
   modalOptions: SymposiumModalOptions[];
-  disposeModal: jest.Mock;
+  closeModal: jest.Mock;
   openModal: jest.Mock;
   processFrontMatter: jest.Mock;
   publisher: SymposiumPublisher;
@@ -69,14 +69,14 @@ function createHarness(frontmatter: Record<string, unknown> = {}): Harness {
   const buildDocument = jest.fn().mockResolvedValue(DOCUMENT);
   const modalOptions: SymposiumModalOptions[] = [];
   const openModal = jest.fn();
-  const disposeModal = jest.fn();
+  const closeModal = jest.fn();
   const publisher = new SymposiumPublisher(app, {
     client,
     loadLicenseKey,
     buildDocument,
     createModal: (options) => {
       modalOptions.push(options);
-      return { open: openModal, dispose: disposeModal };
+      return { open: openModal, close: closeModal };
     },
   });
 
@@ -88,7 +88,7 @@ function createHarness(frontmatter: Record<string, unknown> = {}): Harness {
     frontmatter,
     loadLicenseKey,
     modalOptions,
-    disposeModal,
+    closeModal,
     openModal,
     processFrontMatter,
     publisher,
@@ -711,7 +711,7 @@ describe("SymposiumPublisher", () => {
         const result = await harness.modalOptions[0].onConfirm("publish", activeDocument);
         await harness.publisher.open(harness.file);
 
-        expect(harness.disposeModal).toHaveBeenCalledTimes(1);
+        expect(harness.closeModal).toHaveBeenCalledTimes(1);
         expect(result).toEqual({
           kind: "failure",
           action: "publish",

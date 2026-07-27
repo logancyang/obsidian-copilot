@@ -30,7 +30,7 @@ interface SymposiumClientPort {
 
 interface SymposiumModalPort {
   open(): void;
-  dispose(): void;
+  close(): void;
 }
 
 interface SymposiumPublisherDependencies {
@@ -204,7 +204,7 @@ export class SymposiumPublisher {
   dispose(): void {
     this.disposed = true;
     for (const modal of [...this.modals]) {
-      modal.dispose();
+      modal.close();
     }
     this.modals.clear();
     this.blockedPublishResults.clear();

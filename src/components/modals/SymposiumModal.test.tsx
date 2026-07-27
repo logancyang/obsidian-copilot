@@ -110,7 +110,7 @@ describe("SymposiumModal", () => {
         expect(publishModal.contentEl.childElementCount).toBeGreaterThan(0);
       });
 
-      it("blocks native close while a confirmed action is pending", async () => {
+      it("allows native close while a confirmed action is pending", async () => {
         let resolveConfirm: ((result: SymposiumModalResult) => void) | undefined;
         const onConfirm = createConfirmMock().mockImplementation(
           () =>
@@ -118,23 +118,27 @@ describe("SymposiumModal", () => {
               resolveConfirm = resolve;
             })
         );
-        const modal = renderModal(onConfirm);
+        const onClosed = jest.fn();
+        const modal = renderModal(onConfirm, null, onClosed);
         const baseClose = (modal as unknown as { baseClose: jest.Mock }).baseClose;
 
         fireEvent.click(screen.getByRole("button", { name: "Yes, publish" }));
-        modal.close();
-
-        expect(baseClose).not.toHaveBeenCalled();
         expect(screen.getByRole("button", { name: "Working…" })).toBeTruthy();
 
-        resolveConfirm?.({
-          kind: "success",
-          action: "publish",
-          receipt: RECEIPT,
-        });
-        await screen.findByText("Publish complete");
         act(() => {
           modal.close();
+        });
+
+        expect(baseClose).toHaveBeenCalledTimes(1);
+        expect(modal.contentEl.childElementCount).toBe(0);
+        expect(onClosed).toHaveBeenCalledTimes(1);
+
+        await act(async () => {
+          resolveConfirm?.({
+            kind: "success",
+            action: "publish",
+            receipt: RECEIPT,
+          });
         });
 
         expect(baseClose).toHaveBeenCalledTimes(1);
@@ -306,40 +310,6 @@ describe("SymposiumModal", () => {
         });
 
         expect(modal.contentEl.childElementCount).toBe(0);
-      });
-    });
-
-    describe("dispose()", () => {
-      it("force-closes and unmounts while a confirmed action is pending", async () => {
-        let resolveConfirm: ((result: SymposiumModalResult) => void) | undefined;
-        const onConfirm = createConfirmMock().mockImplementation(
-          () =>
-            new Promise((resolve) => {
-              resolveConfirm = resolve;
-            })
-        );
-        const onClosed = jest.fn();
-        const modal = renderModal(onConfirm, null, onClosed);
-        const baseClose = (modal as unknown as { baseClose: jest.Mock }).baseClose;
-
-        fireEvent.click(screen.getByRole("button", { name: "Yes, publish" }));
-        expect(screen.getByRole("button", { name: "Working…" })).toBeTruthy();
-
-        act(() => {
-          modal.dispose();
-        });
-
-        expect(baseClose).toHaveBeenCalledTimes(1);
-        expect(modal.contentEl.childElementCount).toBe(0);
-        expect(onClosed).toHaveBeenCalledTimes(1);
-
-        await act(async () => {
-          resolveConfirm?.({
-            kind: "success",
-            action: "publish",
-            receipt: RECEIPT,
-          });
-        });
       });
     });
   });

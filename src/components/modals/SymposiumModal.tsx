@@ -42,7 +42,6 @@ export interface SymposiumModalOptions {
 
 interface SymposiumModalContentProps extends SymposiumModalOptions {
   onClose: () => void;
-  onWorkingChange: (working: boolean) => void;
 }
 
 function actionLabel(action: SymposiumAction): string {
@@ -90,7 +89,6 @@ function SymposiumModalContent({
   initialResult,
   onConfirm,
   onClose,
-  onWorkingChange,
 }: SymposiumModalContentProps) {
   const [action, setAction] = useState<SymposiumAction>(docId ? "update" : "publish");
   const [result, setResult] = useState<SymposiumModalResult | null>(initialResult ?? null);
@@ -98,12 +96,10 @@ function SymposiumModalContent({
 
   const runAction = async (nextAction: SymposiumAction, ownerDocument: Document) => {
     setWorking(true);
-    onWorkingChange(true);
     try {
       setResult(await onConfirm(nextAction, ownerDocument));
     } finally {
       setWorking(false);
-      onWorkingChange(false);
     }
   };
 
@@ -120,12 +116,10 @@ function SymposiumModalContent({
       return;
     }
     setWorking(true);
-    onWorkingChange(true);
     try {
       setResult(await result.retrySave());
     } finally {
       setWorking(false);
-      onWorkingChange(false);
     }
   };
 
@@ -249,8 +243,6 @@ function SymposiumModalContent({
  */
 export class SymposiumModal extends Modal {
   private root: Root | null = null;
-  private working = false;
-  private forceClose = false;
 
   constructor(
     app: App,
@@ -263,29 +255,7 @@ export class SymposiumModal extends Modal {
   onOpen(): void {
     this.contentEl.empty();
     this.root = createPluginRoot(this.contentEl, this.app);
-    this.root.render(
-      <SymposiumModalContent
-        {...this.options}
-        onClose={() => this.close()}
-        onWorkingChange={(working) => {
-          this.working = working;
-        }}
-      />
-    );
-  }
-
-  close(): void {
-    if (!this.working || this.forceClose) {
-      super.close();
-    }
-  }
-
-  /**
-   * Closes the modal during plugin teardown even if a confirmed request is still settling.
-   */
-  dispose(): void {
-    this.forceClose = true;
-    this.close();
+    this.root.render(<SymposiumModalContent {...this.options} onClose={() => this.close()} />);
   }
 
   onClose(): void {
