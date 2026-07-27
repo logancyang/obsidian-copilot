@@ -78,7 +78,14 @@ function SymposiumReceiptView({ receipt, actions }: SymposiumReceiptViewProps) {
   return (
     <div className="tw-flex tw-flex-col tw-gap-3">
       <code className="tw-break-all tw-rounded-md tw-bg-secondary tw-p-2 tw-text-small">
-        {receipt.url}
+        <a
+          href={receipt.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="tw-text-accent tw-underline"
+        >
+          {receipt.url}
+        </a>
       </code>
       <div className="tw-text-small tw-text-muted">
         Document {receipt.docId} · Version {receipt.version}

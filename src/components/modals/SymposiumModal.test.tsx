@@ -319,6 +319,10 @@ describe("SymposiumModal", () => {
         fireEvent.click(screen.getByRole("button", { name: "Update" }));
         await clickButton("Yes, update");
         expectButtonsInSameRow("Close", "Copy", "Open");
+        const link = screen.getByRole("link", { name: RECEIPT.url });
+        expect(link.getAttribute("href")).toBe(RECEIPT.url);
+        expect(link.getAttribute("target")).toBe("_blank");
+        expect(link.getAttribute("rel")).toBe("noopener noreferrer");
         await clickButton("Copy");
         fireEvent.click(screen.getByRole("button", { name: "Open" }));
 
