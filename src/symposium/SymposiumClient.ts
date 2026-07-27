@@ -9,7 +9,7 @@ import { requestUrl, type RequestUrlParam, type RequestUrlResponse } from "obsid
 const DOCS_ENDPOINT = `${SYMPOSIUM_API_ORIGIN}/api/v1/docs`;
 const NETWORK_ERROR_MESSAGE = "Could not reach Symposium. Please try again.";
 const AMBIGUOUS_PUBLISH_MESSAGE =
-  "Symposium may have published this note, but Copilot did not receive its document id. To avoid creating a duplicate page, this publish cannot be retried until the plugin reloads.";
+  "Symposium may have published this note, but Copilot did not receive a valid receipt. To avoid creating a duplicate page, this publish cannot be retried until the plugin reloads.";
 
 /**
  * Carries a Symposium failure to the UI without interpreting server-side authorization policy.
@@ -106,7 +106,7 @@ export class SymposiumClient {
       });
     } catch (error) {
       if (method === "POST" && error instanceof SymposiumClientError && error.code === "network") {
-        throw new SymposiumClientError(AMBIGUOUS_PUBLISH_MESSAGE, "ambiguous_publish", null, false);
+        throw ambiguousPublishError(null);
       }
       throw error;
     }
@@ -115,10 +115,24 @@ export class SymposiumClient {
       if (response.status < 200 || response.status >= 300) {
         throw errorFromResponse(response);
       }
+      if (method === "POST") {
+        throw ambiguousPublishError(response.status);
+      }
       throw malformedResponse(response.status);
     }
 
-    return parseReceipt(response, expectedDocId);
+    try {
+      return parseReceipt(response, expectedDocId);
+    } catch (error) {
+      if (
+        method === "POST" &&
+        error instanceof SymposiumClientError &&
+        error.code === "malformed_response"
+      ) {
+        throw ambiguousPublishError(response.status);
+      }
+      throw error;
+    }
   }
 
   private async request(options: RequestUrlParam): Promise<RequestUrlResponse> {
@@ -211,4 +225,8 @@ function malformedResponse(status: number): SymposiumClientError {
     status,
     status >= 500
   );
+}
+
+function ambiguousPublishError(status: number | null): SymposiumClientError {
+  return new SymposiumClientError(AMBIGUOUS_PUBLISH_MESSAGE, "ambiguous_publish", status, false);
 }

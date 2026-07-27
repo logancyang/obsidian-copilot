@@ -140,13 +140,26 @@ describe("SymposiumClient", () => {
         ["invalid doc id", { docId: "UPPERCASE", url: "https://symposium.site/d/x", version: 1 }],
         ["non-HTTPS URL", { docId: DOC_ID, url: "http://symposium.site/d/x", version: 1 }],
         ["non-integer version", { docId: DOC_ID, url: "https://symposium.site/d/x", version: 1.5 }],
-      ])("rejects a successful receipt with %s", async (_case, receipt) => {
+      ])("treats a successful POST with %s as ambiguous", async (_case, receipt) => {
         mockedRequestUrl.mockResolvedValue(response(201, receipt));
 
         await expectClientError(new SymposiumClient().publish(DOCUMENT, "decrypted-license"), {
-          message: "Symposium returned an invalid response (HTTP 201).",
-          code: "malformed_response",
+          message:
+            "Symposium may have published this note, but Copilot did not receive a valid receipt. To avoid creating a duplicate page, this publish cannot be retried until the plugin reloads.",
+          code: "ambiguous_publish",
           status: 201,
+          retryable: false,
+        });
+      });
+
+      it("treats an unexpected successful POST status as ambiguous", async () => {
+        mockedRequestUrl.mockResolvedValue(response(200));
+
+        await expectClientError(new SymposiumClient().publish(DOCUMENT, "decrypted-license"), {
+          message:
+            "Symposium may have published this note, but Copilot did not receive a valid receipt. To avoid creating a duplicate page, this publish cannot be retried until the plugin reloads.",
+          code: "ambiguous_publish",
+          status: 200,
           retryable: false,
         });
       });
@@ -156,7 +169,7 @@ describe("SymposiumClient", () => {
 
         await expectClientError(new SymposiumClient().publish(DOCUMENT, "decrypted-license"), {
           message:
-            "Symposium may have published this note, but Copilot did not receive its document id. To avoid creating a duplicate page, this publish cannot be retried until the plugin reloads.",
+            "Symposium may have published this note, but Copilot did not receive a valid receipt. To avoid creating a duplicate page, this publish cannot be retried until the plugin reloads.",
           code: "ambiguous_publish",
           status: null,
           retryable: false,
@@ -211,6 +224,26 @@ describe("SymposiumClient", () => {
           response(200, {
             docId: "0123456789abcdef",
             url: "https://symposium.site/d/0123456789abcdef",
+            version: 2,
+          })
+        );
+
+        await expectClientError(
+          new SymposiumClient().update(DOC_ID, DOCUMENT, "decrypted-license"),
+          {
+            message: "Symposium returned an invalid response (HTTP 200).",
+            code: "malformed_response",
+            status: 200,
+            retryable: false,
+          }
+        );
+      });
+
+      it("keeps a malformed PUT receipt distinct from ambiguous creation", async () => {
+        mockedRequestUrl.mockResolvedValue(
+          response(200, {
+            docId: DOC_ID,
+            url: "http://symposium.site/d/x",
             version: 2,
           })
         );

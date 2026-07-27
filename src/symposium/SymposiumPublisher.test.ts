@@ -322,7 +322,7 @@ describe("SymposiumPublisher", () => {
 
       it("blocks another POST after a publish response is lost", async () => {
         const message =
-          "Symposium may have published this note, but Copilot did not receive its document id. To avoid creating a duplicate page, this publish cannot be retried until the plugin reloads.";
+          "Symposium may have published this note, but Copilot did not receive a valid receipt. To avoid creating a duplicate page, this publish cannot be retried until the plugin reloads.";
         const harness = createHarness();
         harness.client.publish.mockRejectedValue(
           new SymposiumClientError(message, "ambiguous_publish", null, false)
