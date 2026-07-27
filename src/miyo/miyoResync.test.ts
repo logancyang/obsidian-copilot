@@ -194,18 +194,32 @@ describe("miyoResync", () => {
       expect(body.allow_remote_read).toBe(false);
     });
 
-    it("recovers an unregistered vault by registering directly (no delete)", async () => {
-      // A prior run deleted but never re-added, or the user removed the folder
-      // in Miyo: GET 404 → POST straight away.
+    it("never re-registers an unregistered vault — registration needs explicit consent", async () => {
+      // At the 404, "a prior rebuild was interrupted" and "the user removed
+      // the registration in Miyo" are indistinguishable, so the resync must
+      // not re-register (it would silently reverse a deliberate removal and
+      // re-grant Relay). Recovery goes through the register flow.
       getFolder.mockRejectedValue(new Error("Miyo request failed with status 404"));
       checkFolderRegistration.mockResolvedValue("unregistered");
 
       const outcome = await resyncMiyoFolder(app);
 
-      expect(outcome).toBe("resynced");
+      expect(outcome).toBe("unregistered");
       expect(deleteFolder).not.toHaveBeenCalled();
-      const body = addFolder.mock.calls[0][0] as MiyoAddFolderRequest;
-      expect(body.allow_remote_read).toBe(true); // register-flow default
+      expect(addFolder).not.toHaveBeenCalled();
+      expect(updateSetting).not.toHaveBeenCalled(); // empty receipt: nothing to clear
+    });
+
+    it("clears this device's receipt when its registration is confirmed gone", async () => {
+      currentSettings.miyoSyncedExclusions = receiptFor();
+      getFolder.mockRejectedValue(new Error("Miyo request failed with status 404"));
+      checkFolderRegistration.mockResolvedValue("unregistered");
+
+      const outcome = await resyncMiyoFolder(app);
+
+      expect(outcome).toBe("unregistered");
+      expect(addFolder).not.toHaveBeenCalled();
+      expect(updateSetting).toHaveBeenCalledWith("miyoSyncedExclusions", "");
     });
 
     it("reports a conflict and keeps the stale receipt when re-add hits 409", async () => {
@@ -265,21 +279,74 @@ describe("miyoResync", () => {
       expect(getFolder).toHaveBeenCalledTimes(2);
     });
 
-    it("cleans up the old registration when the vault was renamed on this device", async () => {
-      // GET by the new name 404s, but the receipt shows THIS device+endpoint
-      // registered under the old name — that stale registration is deleted
-      // before registering the new name.
+    it("reports a conflict without deleting when the previous-name registration still exists", async () => {
+      // GET by the current name 404s and the receipt shows THIS device+endpoint
+      // under a different, still-registered name. That name may belong to
+      // ANOTHER vault by now (folder names are just vault names), so nothing is
+      // deleted or cleared — the user cleans up in Miyo, and the kept receipt
+      // keeps verify reporting the exposure.
+      currentSettings.miyoSyncedExclusions = receiptFor({ folder: "old-vault-name" });
+      getFolder.mockRejectedValue(new Error("Miyo request failed with status 404"));
+      checkFolderRegistration.mockImplementation((name) =>
+        Promise.resolve(name === "old-vault-name" ? "registered" : "unregistered")
+      );
+
+      const outcome = await resyncMiyoFolder(app);
+
+      expect(outcome).toBe("conflict");
+      expect(deleteFolder).not.toHaveBeenCalled();
+      expect(addFolder).not.toHaveBeenCalled();
+      expect(updateSetting).not.toHaveBeenCalled();
+    });
+
+    it("fails without accusing when the previous-name probe can't determine the state", async () => {
+      // A transient error must not instruct the user to delete a registration
+      // whose existence is unconfirmed; the receipt survives for the retry.
+      currentSettings.miyoSyncedExclusions = receiptFor({ folder: "old-vault-name" });
+      getFolder.mockRejectedValue(new Error("Miyo request failed with status 404"));
+      checkFolderRegistration.mockImplementation((name) =>
+        Promise.resolve(name === "old-vault-name" ? "error" : "unregistered")
+      );
+
+      const outcome = await resyncMiyoFolder(app);
+
+      expect(outcome).toBe("failed");
+      expect(deleteFolder).not.toHaveBeenCalled();
+      expect(updateSetting).not.toHaveBeenCalled();
+    });
+
+    it("consumes the rename receipt when the previous-name registration is confirmed gone", async () => {
+      // The user already removed the old registration in Miyo: the probe
+      // confirms it, so the receipt clears instead of reporting a conflict
+      // forever after the user followed the cleanup instruction.
       currentSettings.miyoSyncedExclusions = receiptFor({ folder: "old-vault-name" });
       getFolder.mockRejectedValue(new Error("Miyo request failed with status 404"));
       checkFolderRegistration.mockResolvedValue("unregistered");
 
       const outcome = await resyncMiyoFolder(app);
 
-      expect(outcome).toBe("resynced");
-      expect(deleteFolder).toHaveBeenCalledWith("old-vault-name", undefined);
+      expect(outcome).toBe("unregistered");
+      expect(deleteFolder).not.toHaveBeenCalled();
+      expect(addFolder).not.toHaveBeenCalled();
+      expect(updateSetting).toHaveBeenCalledWith("miyoSyncedExclusions", "");
     });
 
-    it("never deletes based on a foreign device's receipt", async () => {
+    it("refuses to run when the endpoint flipped to a remote target while queued", async () => {
+      // Callers gate on a local endpoint before enqueueing; the queued task
+      // re-checks at execution so a mid-queue URL switch can't make it mutate
+      // a remote registration.
+      currentSettings.miyoServerUrl = "https://miyo.example.com";
+
+      const outcome = await resyncMiyoFolder(app);
+
+      expect(outcome).toBe("failed");
+      expect(getFolder).not.toHaveBeenCalled();
+      expect(deleteFolder).not.toHaveBeenCalled();
+      expect(addFolder).not.toHaveBeenCalled();
+      expect(updateSetting).not.toHaveBeenCalled();
+    });
+
+    it("never deletes or clears based on a foreign device's receipt", async () => {
       currentSettings.miyoSyncedExclusions = receiptFor({
         device: "device-B",
         folder: "old-vault-name",
@@ -287,9 +354,11 @@ describe("miyoResync", () => {
       getFolder.mockRejectedValue(new Error("Miyo request failed with status 404"));
       checkFolderRegistration.mockResolvedValue("unregistered");
 
-      await resyncMiyoFolder(app);
+      const outcome = await resyncMiyoFolder(app);
 
+      expect(outcome).toBe("unregistered");
       expect(deleteFolder).not.toHaveBeenCalled();
+      expect(updateSetting).not.toHaveBeenCalled();
     });
   });
 
@@ -326,16 +395,46 @@ describe("miyoResync", () => {
     });
 
     it("keeps the receipt and reports stale on 404 after a same-device rename", async () => {
-      // The old registration may still exist under the old name; the receipt is
+      // The old registration still exists under the old name; the receipt is
       // the only cleanup lead and must survive.
+      currentSettings.miyoSyncedExclusions = receiptFor({ folder: "old-vault-name" });
+      getFolder.mockRejectedValue(new Error("Miyo request failed with status 404"));
+      checkFolderRegistration.mockImplementation((name) =>
+        Promise.resolve(name === "old-vault-name" ? "registered" : "unregistered")
+      );
+
+      const verdict = await verifyMiyoScope(app);
+
+      expect(verdict).toBe("stale");
+      expect(updateSetting).not.toHaveBeenCalled();
+    });
+
+    it("reports unknown when the previous-name probe can't determine the state", async () => {
+      // Same three-state rule as the resync path: only a confirmed
+      // "registered" may drive the stale banner and its cleanup instruction.
+      currentSettings.miyoSyncedExclusions = receiptFor({ folder: "old-vault-name" });
+      getFolder.mockRejectedValue(new Error("Miyo request failed with status 404"));
+      checkFolderRegistration.mockImplementation((name) =>
+        Promise.resolve(name === "old-vault-name" ? "error" : "unregistered")
+      );
+
+      const verdict = await verifyMiyoScope(app);
+
+      expect(verdict).toBe("unknown");
+      expect(updateSetting).not.toHaveBeenCalled();
+    });
+
+    it("consumes the rename receipt once the old-name registration is confirmed gone", async () => {
+      // The user followed the cleanup prompt and removed the old registration
+      // in Miyo: the probe confirms it, the receipt clears, the banner ends.
       currentSettings.miyoSyncedExclusions = receiptFor({ folder: "old-vault-name" });
       getFolder.mockRejectedValue(new Error("Miyo request failed with status 404"));
       checkFolderRegistration.mockResolvedValue("unregistered");
 
       const verdict = await verifyMiyoScope(app);
 
-      expect(verdict).toBe("stale");
-      expect(updateSetting).not.toHaveBeenCalled();
+      expect(verdict).toBe("unregistered");
+      expect(updateSetting).toHaveBeenCalledWith("miyoSyncedExclusions", "");
     });
 
     it("never clears a non-empty receipt it cannot parse", async () => {

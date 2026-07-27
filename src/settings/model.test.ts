@@ -828,10 +828,26 @@ describe("model", () => {
       expect(validateCopilotFolder("a/b|c").ok).toBe(false);
     });
 
+    it("rejects Windows-reserved device names in any segment, any case, with or without extension", () => {
+      expect(validateCopilotFolder("NUL").ok).toBe(false);
+      expect(validateCopilotFolder("team/CON").ok).toBe(false);
+      expect(validateCopilotFolder("con.md").ok).toBe(false);
+      expect(validateCopilotFolder("Com1").ok).toBe(false);
+      // Names that merely CONTAIN a reserved word stay valid.
+      expect(validateCopilotFolder("console").ok).toBe(true);
+      expect(validateCopilotFolder("nul-notes").ok).toBe(true);
+    });
+
+    it("rejects segments ending with a dot or space on every platform", () => {
+      expect(validateCopilotFolder("copilot.").ok).toBe(false);
+      expect(validateCopilotFolder("team /ai").ok).toBe(false);
+      expect(validateCopilotFolder("team./ai").ok).toBe(false);
+    });
+
     it("agrees with sanitizeSettings on the copilotFolder fallback contract", () => {
       // sanitizeSettings must coerce every value validateCopilotFolder rejects to
       // the default; a value it accepts must survive verbatim.
-      for (const value of ["../escape", "/etc/passwd", "C:/x", ""]) {
+      for (const value of ["../escape", "/etc/passwd", "C:/x", "", "NUL", "copilot."]) {
         const out = sanitizeSettings({ ...DEFAULT_SETTINGS, copilotFolder: value });
         expect(out.copilotFolder).toBe(DEFAULT_SETTINGS.copilotFolder);
       }

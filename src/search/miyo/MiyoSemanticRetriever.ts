@@ -9,6 +9,7 @@ import {
   getMiyoFolderName,
   getVaultRelativeMiyoPath,
   hasUserQaPatterns,
+  isCurrentVaultMiyoPath,
   isMiyoScopeMismatch,
 } from "@/miyo/miyoUtils";
 import { createCopilotPatternFilter } from "@/search/searchUtils";
@@ -94,6 +95,15 @@ export class MiyoSemanticRetriever extends BaseRetriever {
     const excludedPaths: string[] = [];
     for (const chunk of chunks) {
       const path = chunk.metadata.path as string;
+      // Another vault's results (search-all) never go through Copilot's QA
+      // rules: those rules — including the system-root exclusion — are defined
+      // over THIS vault's namespace, and an external folder that merely shares
+      // a root's name (e.g. "copilot") must not be swallowed by them. Absent
+      // flag (fail-closed) means "ours" and gets filtered.
+      if (chunk.metadata.fromCurrentVault === false) {
+        allowed.push(chunk);
+        continue;
+      }
       if (isAllowed(path)) {
         allowed.push(chunk);
       } else {
@@ -149,7 +159,8 @@ export class MiyoSemanticRetriever extends BaseRetriever {
           filters,
         });
       }
-      const folderName = getSettings().miyoSearchAll ? undefined : getMiyoFolderName(this.app);
+      const searchAll = settings.miyoSearchAll;
+      const folderName = searchAll ? undefined : getMiyoFolderName(this.app);
       const response = await this.client.search(baseUrl, folderName, query, limit, filters);
 
       const rawResults = response.results || [];
@@ -161,7 +172,7 @@ export class MiyoSemanticRetriever extends BaseRetriever {
         );
       }
 
-      return filteredResults.map((result) => this.toDocument(result));
+      return filteredResults.map((result) => this.toDocument(result, searchAll));
     } catch (error) {
       logWarn(`MiyoSemanticRetriever: search failed: ${error}`);
       return [];
@@ -192,10 +203,17 @@ export class MiyoSemanticRetriever extends BaseRetriever {
    * Convert Miyo search results to LangChain Documents.
    *
    * @param result - Miyo search result item.
+   * @param searchAll - Whether the originating query spanned all Miyo folders
+   *   (snapshotted at request time so a mid-request settings flip can't change
+   *   how this batch's ownership is judged).
    * @returns LangChain Document instance.
    */
-  private toDocument(result: MiyoSearchResult): Document {
+  private toDocument(result: MiyoSearchResult, searchAll: boolean): Document {
     const relativePath = getVaultRelativeMiyoPath(this.app, result.path);
+    // A folder-scoped query only ever returns this vault's content, so it is
+    // always ours — even if a result arrives without the folder prefix. Only
+    // an unrestricted (search-all) query needs the raw-path ownership check.
+    const fromCurrentVault = !searchAll || isCurrentVaultMiyoPath(this.app, result.path);
     const metadata = result.metadata ?? {};
     const chunkId =
       metadata.chunkId ||
@@ -219,6 +237,9 @@ export class MiyoSemanticRetriever extends BaseRetriever {
         created_at: result.created_at,
         nchars: result.nchars,
         chunkId,
+        // After ...metadata so a server-supplied field can never override the
+        // locally-computed ownership verdict.
+        fromCurrentVault,
       },
     });
   }

@@ -273,8 +273,15 @@ export const MiyoSettings: React.FC = () => {
           break;
         case "conflict":
           new Notice(
-            "Miyo still reports a conflicting registration. Retry, or remove this folder in the Miyo app."
+            "Miyo reports a conflicting registration (possibly under this vault's previous name). " +
+              "Remove it in the Miyo app, then retry."
           );
+          break;
+        case "unregistered":
+          // Nothing on the server exposes this vault, so the stale banner can
+          // clear; re-registering is the register flow's job (explicit consent).
+          new Notice("This vault isn't registered with Miyo. Reconnect to register it.");
+          setServerScopeStale(false);
           break;
         case "failed":
           new Notice("Couldn't resync Miyo. Make sure Miyo is running, then retry.");

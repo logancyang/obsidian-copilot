@@ -2,8 +2,10 @@ import { DEFAULT_SETTINGS } from "@/constants";
 import {
   applyCopilotRootChange,
   copilotRootContainsNotes,
+  findCopilotRootFileConflict,
   isKnownCopilotRoot,
 } from "@/settings/copilotRootChange";
+import { mockTFile, mockTFolder } from "@/__tests__/mockObsidian";
 import { getSettings, settingsAtom, settingsStore, type CopilotSettings } from "@/settings/model";
 import type { App } from "obsidian";
 
@@ -75,6 +77,47 @@ describe("copilotRootChange", () => {
     it("returns false for an empty candidate root", () => {
       const app = appWithMarkdown(["a.md"]);
       expect(copilotRootContainsNotes(app, "")).toBe(false);
+    });
+  });
+
+  describe("findCopilotRootFileConflict()", () => {
+    /** Minimal App whose vault cache holds the given file/folder entries. */
+    function appWithEntries(entries: Record<string, "file" | "folder">): App {
+      return {
+        vault: {
+          getAbstractFileByPath: (path: string) => {
+            const kind = entries[path];
+            if (kind === "file") return mockTFile({ path });
+            if (kind === "folder") return mockTFolder({ path });
+            return null;
+          },
+        },
+      } as unknown as App;
+    }
+
+    it("returns the root itself when it exists as a file", () => {
+      const app = appWithEntries({ "ai.txt": "file" });
+      expect(findCopilotRootFileConflict(app, "ai.txt")).toBe("ai.txt");
+    });
+
+    it("returns the first ancestor that exists as a file", () => {
+      const app = appWithEntries({ team: "file" });
+      expect(findCopilotRootFileConflict(app, "team/ai")).toBe("team");
+    });
+
+    it("returns null when every existing prefix is a folder", () => {
+      const app = appWithEntries({ team: "folder", "team/ai": "folder" });
+      expect(findCopilotRootFileConflict(app, "team/ai")).toBeNull();
+    });
+
+    it("returns null when nothing exists at any prefix yet", () => {
+      const app = appWithEntries({});
+      expect(findCopilotRootFileConflict(app, "brand/new/root")).toBeNull();
+    });
+
+    it("returns null for an empty candidate root", () => {
+      const app = appWithEntries({});
+      expect(findCopilotRootFileConflict(app, "")).toBeNull();
     });
   });
 
