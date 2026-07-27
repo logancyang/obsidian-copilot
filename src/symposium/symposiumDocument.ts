@@ -52,6 +52,8 @@ const URL_ATTRIBUTES = new Set([
   "xlink:href",
 ]);
 
+const MIN_IMAGE_DATA_URL_PREFIX_BYTES = "data:image/png;base64,".length;
+
 type ModernRender = (
   app: App,
   markdown: string,
@@ -61,11 +63,11 @@ type ModernRender = (
 ) => Promise<void>;
 
 /**
- * Reports the final UTF-8 payload size when a rendered document exceeds Symposium's limit.
+ * Reports the measured or projected UTF-8 payload size when a document exceeds Symposium's limit.
  */
 export class SymposiumDocumentTooLargeError extends Error {
   /**
-   * @param byteLength The final serialized document size.
+   * @param byteLength The measured or projected serialized document size.
    */
   constructor(public readonly byteLength: number) {
     super(`Symposium HTML is ${byteLength} bytes; the limit is ${SYMPOSIUM_MAX_HTML_BYTES} bytes.`);
@@ -163,6 +165,7 @@ async function embedVaultImages(root: HTMLElement, app: App, sourcePath: string)
     return;
   }
   const lookup = buildVaultFileLookup(app);
+  let embeddedImageByteLength = 0;
   for (const image of images) {
     const source = image.getAttribute("src")?.trim() ?? "";
     const file = resolveVaultImage(image, app, sourcePath, lookup);
@@ -171,19 +174,35 @@ async function embedVaultImages(root: HTMLElement, app: App, sourcePath: string)
       continue;
     }
 
+    const projectedImageByteLength =
+      MIN_IMAGE_DATA_URL_PREFIX_BYTES + 4 * Math.ceil(file.stat.size / 3);
+    if (embeddedImageByteLength + projectedImageByteLength > SYMPOSIUM_MAX_HTML_BYTES) {
+      throw new SymposiumDocumentTooLargeError(embeddedImageByteLength + projectedImageByteLength);
+    }
+
+    let bytes: ArrayBuffer;
     try {
-      const bytes = await app.vault.readBinary(file);
-      const mimeType = detectImageMimeType(bytes);
-      if (!mimeType) {
-        replaceMissingImage(image, file.path);
-        continue;
-      }
-      image.src = `data:${mimeType};base64,${arrayBufferToBase64(bytes)}`;
-      image.removeAttribute("data-path");
-      image.removeAttribute("data-src");
+      bytes = await app.vault.readBinary(file);
     } catch {
       replaceMissingImage(image, file.path);
+      continue;
     }
+
+    const mimeType = detectImageMimeType(bytes);
+    if (!mimeType) {
+      replaceMissingImage(image, file.path);
+      continue;
+    }
+
+    const dataUrlPrefix = `data:${mimeType};base64,`;
+    const encodedImageByteLength = dataUrlPrefix.length + 4 * Math.ceil(bytes.byteLength / 3);
+    if (embeddedImageByteLength + encodedImageByteLength > SYMPOSIUM_MAX_HTML_BYTES) {
+      throw new SymposiumDocumentTooLargeError(embeddedImageByteLength + encodedImageByteLength);
+    }
+    image.src = `${dataUrlPrefix}${arrayBufferToBase64(bytes)}`;
+    image.removeAttribute("data-path");
+    image.removeAttribute("data-src");
+    embeddedImageByteLength += encodedImageByteLength;
   }
 }
 

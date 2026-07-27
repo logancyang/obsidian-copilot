@@ -32,7 +32,7 @@ interface AppOptions {
   resolveLink?: (link: string, sourcePath: string) => TFile | null;
 }
 
-function createFile(path: string, resourceUrl?: string): TestFile {
+function createFile(path: string, resourceUrl?: string, size = 0): TestFile {
   const name = path.split("/").at(-1) ?? path;
   const extension = name.includes(".") ? (name.split(".").at(-1) ?? "") : "";
   return {
@@ -41,6 +41,7 @@ function createFile(path: string, resourceUrl?: string): TestFile {
     basename: extension ? name.slice(0, -(extension.length + 1)) : name,
     extension,
     resourceUrl,
+    stat: { ctime: 0, mtime: 0, size },
   } as TestFile;
 }
 
@@ -268,6 +269,46 @@ describe("symposiumDocument", () => {
         "[Missing image: Missing diagram]"
       );
       expect(app.vault.readBinary).toHaveBeenCalledTimes(3);
+    });
+
+    it("rejects an oversized local image before loading its binary", async () => {
+      const oversized = createFile(
+        "Assets/oversized.png",
+        undefined,
+        Math.floor((SYMPOSIUM_MAX_HTML_BYTES * 3) / 4) + 1
+      );
+      const app = createApp({ files: [oversized] });
+      renderMock.mockImplementation(async (_app, _markdown, element) => {
+        appendHtml(element, '<img alt="Oversized" src="Assets/oversized.png">');
+      });
+
+      await expect(
+        buildSymposiumDocument(app, createFile("Images.md"), createComponent(), document)
+      ).rejects.toBeInstanceOf(SymposiumDocumentTooLargeError);
+      expect(app.vault.readBinary).not.toHaveBeenCalled();
+    });
+
+    it("rejects cumulative local image data before loading the image that exceeds the budget", async () => {
+      const imageSize = Math.floor((SYMPOSIUM_MAX_HTML_BYTES * 3) / 8);
+      const first = createFile("Assets/first.png", undefined, imageSize);
+      const second = createFile("Assets/second.png", undefined, imageSize);
+      const bytes = new Uint8Array(imageSize);
+      bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+      const app = createApp({
+        files: [first, second],
+        readBinary: async () => bytes.buffer,
+      });
+      renderMock.mockImplementation(async (_app, _markdown, element) => {
+        appendHtml(
+          element,
+          '<img alt="First" src="Assets/first.png"><img alt="Second" src="Assets/second.png">'
+        );
+      });
+
+      await expect(
+        buildSymposiumDocument(app, createFile("Images.md"), createComponent(), document)
+      ).rejects.toBeInstanceOf(SymposiumDocumentTooLargeError);
+      expect(app.vault.readBinary).toHaveBeenCalledTimes(1);
     });
 
     it("reports the UTF-8 byte length for non-ASCII titles and rendered content", async () => {
