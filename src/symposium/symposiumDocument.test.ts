@@ -143,6 +143,7 @@ describe("symposiumDocument", () => {
           <a id="scheme-relative-link" href="//docs.example.com/guide">Docs</a>
           <a class="internal-link is-unresolved" data-href="Private note" href="Private note">Private</a>
           <img id="remote-image" src="https://tracker.example/pixel" referrerpolicy="unsafe-url">
+          <img id="scheme-relative-image" src="//cdn.example.com/image.png">
           <svg><a id="bad-svg-link" href="data:text/html,bad"><text>SVG</text></a></svg>
         `
         );
@@ -168,6 +169,12 @@ describe("symposiumDocument", () => {
         "//docs.example.com/guide"
       );
       expect(parsed.querySelector("#remote-image")?.getAttribute("referrerpolicy")).toBe(
+        "no-referrer"
+      );
+      expect(parsed.querySelector("#scheme-relative-image")?.getAttribute("src")).toBe(
+        "//cdn.example.com/image.png"
+      );
+      expect(parsed.querySelector("#scheme-relative-image")?.getAttribute("referrerpolicy")).toBe(
         "no-referrer"
       );
       expect(parsed.querySelector("a.internal-link")).toBeNull();
@@ -313,6 +320,24 @@ describe("symposiumDocument", () => {
         buildSymposiumDocument(app, createFile("Images.md"), createComponent(), document)
       ).rejects.toBeInstanceOf(SymposiumDocumentTooLargeError);
       expect(app.vault.readBinary).toHaveBeenCalledTimes(1);
+    });
+
+    it("reserves rendered HTML before loading an image that would exceed the combined budget", async () => {
+      const image = createFile(
+        "Assets/large.png",
+        undefined,
+        Math.floor((SYMPOSIUM_MAX_HTML_BYTES * 3) / 8)
+      );
+      const app = createApp({ files: [image] });
+      renderMock.mockImplementation(async (_app, _markdown, element) => {
+        element.append("x".repeat(Math.floor(SYMPOSIUM_MAX_HTML_BYTES / 2)));
+        appendHtml(element, '<img alt="Large" src="Assets/large.png">');
+      });
+
+      await expect(
+        buildSymposiumDocument(app, createFile("Images.md"), createComponent(), document)
+      ).rejects.toBeInstanceOf(SymposiumDocumentTooLargeError);
+      expect(app.vault.readBinary).not.toHaveBeenCalled();
     });
 
     it("reports the UTF-8 byte length for non-ASCII titles and rendered content", async () => {

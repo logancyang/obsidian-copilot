@@ -101,7 +101,15 @@ export async function buildSymposiumDocument(
   normalizeTaskCheckboxes(article);
   removeActiveContent(article);
   normalizeInternalLinks(article);
-  await embedVaultImages(article, app, file.path);
+  const budgetArticle = article.cloneNode(true) as HTMLElement;
+  sanitizeAttributes(budgetArticle);
+  const projectedByteLength = new TextEncoder().encode(
+    serializeDocument(ownerDocument, file.basename, budgetArticle)
+  ).byteLength;
+  if (projectedByteLength > SYMPOSIUM_MAX_HTML_BYTES) {
+    throw new SymposiumDocumentTooLargeError(projectedByteLength);
+  }
+  await embedVaultImages(article, app, file.path, projectedByteLength);
   sanitizeAttributes(article);
 
   const title = file.basename;
@@ -156,7 +164,12 @@ function normalizeInternalLinks(root: HTMLElement): void {
   });
 }
 
-async function embedVaultImages(root: HTMLElement, app: App, sourcePath: string): Promise<void> {
+async function embedVaultImages(
+  root: HTMLElement,
+  app: App,
+  sourcePath: string,
+  initialDocumentByteLength: number
+): Promise<void> {
   const images = [...root.querySelectorAll<HTMLImageElement>("img")].filter((image) => {
     const source = image.getAttribute("src")?.trim() ?? "";
     return !isRemoteImageSource(source) && !isEmbeddedImageSource(source);
@@ -165,7 +178,7 @@ async function embedVaultImages(root: HTMLElement, app: App, sourcePath: string)
     return;
   }
   const lookup = buildVaultFileLookup(app);
-  let embeddedImageByteLength = 0;
+  let projectedDocumentByteLength = initialDocumentByteLength;
   for (const image of images) {
     const source = image.getAttribute("src")?.trim() ?? "";
     const file = resolveVaultImage(image, app, sourcePath, lookup);
@@ -176,8 +189,10 @@ async function embedVaultImages(root: HTMLElement, app: App, sourcePath: string)
 
     const projectedImageByteLength =
       MIN_IMAGE_DATA_URL_PREFIX_BYTES + 4 * Math.ceil(file.stat.size / 3);
-    if (embeddedImageByteLength + projectedImageByteLength > SYMPOSIUM_MAX_HTML_BYTES) {
-      throw new SymposiumDocumentTooLargeError(embeddedImageByteLength + projectedImageByteLength);
+    if (projectedDocumentByteLength + projectedImageByteLength > SYMPOSIUM_MAX_HTML_BYTES) {
+      throw new SymposiumDocumentTooLargeError(
+        projectedDocumentByteLength + projectedImageByteLength
+      );
     }
 
     let bytes: ArrayBuffer;
@@ -196,13 +211,15 @@ async function embedVaultImages(root: HTMLElement, app: App, sourcePath: string)
 
     const dataUrlPrefix = `data:${mimeType};base64,`;
     const encodedImageByteLength = dataUrlPrefix.length + 4 * Math.ceil(bytes.byteLength / 3);
-    if (embeddedImageByteLength + encodedImageByteLength > SYMPOSIUM_MAX_HTML_BYTES) {
-      throw new SymposiumDocumentTooLargeError(embeddedImageByteLength + encodedImageByteLength);
+    if (projectedDocumentByteLength + encodedImageByteLength > SYMPOSIUM_MAX_HTML_BYTES) {
+      throw new SymposiumDocumentTooLargeError(
+        projectedDocumentByteLength + encodedImageByteLength
+      );
     }
     image.src = `${dataUrlPrefix}${arrayBufferToBase64(bytes)}`;
     image.removeAttribute("data-path");
     image.removeAttribute("data-src");
-    embeddedImageByteLength += encodedImageByteLength;
+    projectedDocumentByteLength += encodedImageByteLength;
   }
 }
 
@@ -395,7 +412,10 @@ function isAllowedUrl(element: HTMLElement, attribute: string, rawValue: string)
     return true;
   }
   if (value.startsWith("//")) {
-    return element.tagName === "A" && attribute === "href";
+    return (
+      (element.tagName === "A" && attribute === "href") ||
+      (element.tagName === "IMG" && attribute === "src")
+    );
   }
 
   const scheme = value.match(/^([a-z][a-z0-9+.-]*):/i)?.[1]?.toLowerCase();
@@ -412,7 +432,7 @@ function isAllowedUrl(element: HTMLElement, attribute: string, rawValue: string)
 }
 
 function isRemoteImageSource(source: string): boolean {
-  return /^https?:\/\//i.test(source);
+  return /^(?:https?:)?\/\//i.test(source);
 }
 
 function isEmbeddedImageSource(source: string): boolean {
