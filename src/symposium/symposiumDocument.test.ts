@@ -1,0 +1,250 @@
+/* eslint-disable obsidianmd/prefer-active-doc -- jsdom tests explicitly pass their single document realm */
+import { buildSymposiumDocument, SYMPOSIUM_MAX_HTML_BYTES } from "@/symposium/symposiumDocument";
+import { App, Component, MarkdownRenderer, TFile } from "obsidian";
+
+jest.mock("obsidian", () => ({
+  MarkdownRenderer: { render: jest.fn() },
+}));
+
+const renderMock = (MarkdownRenderer as unknown as { render: jest.Mock })
+  .render as jest.MockedFunction<
+  (
+    app: App,
+    markdown: string,
+    el: HTMLElement,
+    sourcePath: string,
+    component: Component
+  ) => Promise<void>
+>;
+
+interface TestFile extends TFile {
+  resourceUrl?: string;
+}
+
+interface AppOptions {
+  markdown?: string;
+  files?: TestFile[];
+  readBinary?: (file: TFile) => Promise<ArrayBuffer>;
+  resolveLink?: (link: string, sourcePath: string) => TFile | null;
+}
+
+function createFile(path: string, resourceUrl?: string): TestFile {
+  const name = path.split("/").at(-1) ?? path;
+  const extension = name.includes(".") ? (name.split(".").at(-1) ?? "") : "";
+  return {
+    path,
+    name,
+    basename: extension ? name.slice(0, -(extension.length + 1)) : name,
+    extension,
+    resourceUrl,
+  } as TestFile;
+}
+
+function createApp(options: AppOptions = {}): App {
+  const files = options.files ?? [];
+  return {
+    vault: {
+      cachedRead: jest.fn().mockResolvedValue(options.markdown ?? "# Source Markdown"),
+      getFiles: jest.fn(() => files),
+      getResourcePath: jest.fn((file: TestFile) => file.resourceUrl ?? `app://vault/${file.path}`),
+      readBinary: jest.fn(options.readBinary ?? (async () => new ArrayBuffer(0))),
+      getAbstractFileByPath: jest.fn(
+        (path: string) => files.find((file) => file.path === path) ?? null
+      ),
+    },
+    metadataCache: {
+      getFirstLinkpathDest: jest.fn(options.resolveLink ?? (() => null)),
+    },
+  } as unknown as App;
+}
+
+function createComponent(): Component {
+  return { register: jest.fn() } as unknown as Component;
+}
+
+function appendHtml(element: HTMLElement, html: string): void {
+  const parsed = new DOMParser().parseFromString(html, "text/html");
+  element.append(...parsed.body.childNodes);
+}
+
+describe("symposiumDocument", () => {
+  beforeEach(() => {
+    renderMock.mockReset();
+  });
+
+  describe("buildSymposiumDocument()", () => {
+    it("serializes the settled Obsidian reading-view output as a complete HTML document", async () => {
+      const app = createApp({ markdown: "# Markdown that must not be reparsed" });
+      const file = createFile("Notes/Rendered note.md");
+      const component = createComponent();
+      renderMock.mockImplementation(async (_app, _markdown, element) => {
+        await Promise.resolve();
+        appendHtml(
+          element,
+          '<section class="callout" data-callout="info"><p>Postprocessed output</p></section>'
+        );
+      });
+
+      const result = await buildSymposiumDocument(app, file, component, document);
+
+      expect(renderMock).toHaveBeenCalledWith(
+        app,
+        "# Markdown that must not be reparsed",
+        expect.any(HTMLElement),
+        file.path,
+        component
+      );
+      expect(result.title).toBe("Rendered note");
+      expect(result.html).toMatch(/^<!doctype html><html lang="en"><head>/);
+      expect(result.html).toContain('<meta charset="utf-8">');
+      expect(result.html).toContain("<title>Rendered note</title>");
+      expect(result.html).toContain(
+        '<article class="markdown-preview-view markdown-rendered symposium-document">'
+      );
+      expect(result.html).toContain(
+        '<section class="callout" data-callout="info"><p>Postprocessed output</p></section>'
+      );
+      expect(result.html).not.toContain("# Markdown that must not be reparsed");
+      expect(result.byteLength).toBe(new TextEncoder().encode(result.html).byteLength);
+    });
+
+    it("removes active content and dangerous attributes while retaining safe external links", async () => {
+      const app = createApp();
+      const file = createFile("Unsafe.md");
+      renderMock.mockImplementation(async (_app, _markdown, element) => {
+        appendHtml(
+          element,
+          `
+          <script>alert("x")</script>
+          <style>body { display: none }</style>
+          <iframe src="https://tracker.example"></iframe>
+          <form><input value="secret"></form>
+          <p id="safe" style="background:url(javascript:alert(1))" onclick="alert(1)">Text</p>
+          <a id="bad-link" href="javascript:alert(1)">Bad</a>
+          <a id="safe-link" href="https://example.com" ping="https://tracker.example" target="_blank">External</a>
+          <a class="internal-link is-unresolved" data-href="Private note" href="Private note">Private</a>
+          <svg><a id="bad-svg-link" href="data:text/html,bad"><text>SVG</text></a></svg>
+        `
+        );
+      });
+
+      const result = await buildSymposiumDocument(app, file, createComponent(), document);
+      const parsed = new DOMParser().parseFromString(result.html, "text/html");
+
+      expect(
+        parsed.querySelector(
+          "script, style:not(#symposium-obsidian-publish-baseline), iframe, form"
+        )
+      ).toBeNull();
+      expect(parsed.querySelector("#safe")?.hasAttribute("style")).toBe(false);
+      expect(parsed.querySelector("#safe")?.hasAttribute("onclick")).toBe(false);
+      expect(parsed.querySelector("#bad-link")?.hasAttribute("href")).toBe(false);
+      expect(parsed.querySelector("#bad-svg-link")?.hasAttribute("href")).toBe(false);
+      expect(parsed.querySelector("#safe-link")?.getAttribute("href")).toBe("https://example.com");
+      expect(parsed.querySelector("#safe-link")?.hasAttribute("ping")).toBe(false);
+      expect(parsed.querySelector("#safe-link")?.getAttribute("rel")).toBe("noopener noreferrer");
+      expect(parsed.querySelector("a.internal-link")).toBeNull();
+      expect(parsed.querySelector("span.internal-link")?.textContent).toBe("Private");
+      expect(parsed.querySelector("span.internal-link")?.classList.contains("is-unresolved")).toBe(
+        false
+      );
+    });
+
+    it("embeds vault images with content-derived MIME types and leaves remote images remote", async () => {
+      const png = createFile("Assets/chart.bin", "app://vault-resource/chart");
+      const jpeg = createFile("Assets/photo.jpeg");
+      const corrupt = createFile("Assets/corrupt.png");
+      const app = createApp({
+        files: [png, jpeg, corrupt],
+        resolveLink: (link) => (link === "Assets/photo.jpeg" ? jpeg : null),
+        readBinary: async (file) => {
+          if (file.path === png.path) {
+            return new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).buffer;
+          }
+          if (file.path === jpeg.path) {
+            return new Uint8Array([0xff, 0xd8, 0xff, 0xdb]).buffer;
+          }
+          return new TextEncoder().encode("not an image").buffer as ArrayBuffer;
+        },
+      });
+      renderMock.mockImplementation(async (_app, _markdown, element) => {
+        appendHtml(
+          element,
+          `
+          <img id="resource" alt="Chart" src="app://vault-resource/chart">
+          <img id="linked" alt="Photo" data-path="Assets/photo.jpeg" src="Assets/photo.jpeg">
+          <img id="remote" alt="Remote" src="https://images.example/image.png">
+          <img id="embedded" alt="Embedded" src="data:image/gif;base64,R0lGODlh">
+          <img id="corrupt" alt="Corrupt image" data-path="Assets/corrupt.png" src="Assets/corrupt.png">
+          <img id="missing" alt="Missing diagram" src="Assets/missing.png">
+        `
+        );
+      });
+
+      const result = await buildSymposiumDocument(
+        app,
+        createFile("Notes/Images.md"),
+        createComponent(),
+        document
+      );
+      const parsed = new DOMParser().parseFromString(result.html, "text/html");
+
+      expect(parsed.querySelector<HTMLImageElement>("#resource")?.src).toBe(
+        "data:image/png;base64,iVBORw0KGgo="
+      );
+      expect(parsed.querySelector<HTMLImageElement>("#linked")?.src).toBe(
+        "data:image/jpeg;base64,/9j/2w=="
+      );
+      expect(parsed.querySelector("#linked")?.hasAttribute("data-path")).toBe(false);
+      expect(parsed.querySelector<HTMLImageElement>("#remote")?.getAttribute("src")).toBe(
+        "https://images.example/image.png"
+      );
+      expect(parsed.querySelector<HTMLImageElement>("#embedded")?.getAttribute("src")).toBe(
+        "data:image/gif;base64,R0lGODlh"
+      );
+      expect(parsed.querySelector("#corrupt")).toBeNull();
+      expect(parsed.querySelector(".symposium-missing-asset")?.textContent).toBe(
+        "[Missing image: Corrupt image]"
+      );
+      expect(parsed.querySelector("#missing")).toBeNull();
+      expect(parsed.querySelectorAll(".symposium-missing-asset")[1]?.textContent).toBe(
+        "[Missing image: Missing diagram]"
+      );
+      expect(app.vault.readBinary).toHaveBeenCalledTimes(3);
+    });
+
+    it("reports the UTF-8 byte length for non-ASCII titles and rendered content", async () => {
+      const app = createApp();
+      const file = createFile("Notes/Résumé 🚀.md");
+      renderMock.mockImplementation(async (_app, _markdown, element) => {
+        element.textContent = "你好 🌍";
+      });
+
+      const result = await buildSymposiumDocument(app, file, createComponent(), document);
+
+      expect(result.title).toBe("Résumé 🚀");
+      expect(result.byteLength).toBe(new TextEncoder().encode(result.html).byteLength);
+      expect(result.byteLength).toBeGreaterThan(result.html.length);
+    });
+
+    it("accepts exactly 10 MiB of final HTML and rejects one additional byte", async () => {
+      const app = createApp();
+      const file = createFile("Boundary.md");
+      let renderedText = "";
+      renderMock.mockImplementation(async (_app, _markdown, element) => {
+        element.textContent = renderedText;
+      });
+
+      const empty = await buildSymposiumDocument(app, file, createComponent(), document);
+      renderedText = "x".repeat(SYMPOSIUM_MAX_HTML_BYTES - empty.byteLength);
+      const exact = await buildSymposiumDocument(app, file, createComponent(), document);
+
+      expect(exact.byteLength).toBe(SYMPOSIUM_MAX_HTML_BYTES);
+
+      renderedText += "x";
+      await expect(buildSymposiumDocument(app, file, createComponent(), document)).rejects.toThrow(
+        `Symposium HTML is ${SYMPOSIUM_MAX_HTML_BYTES + 1} bytes; the limit is ${SYMPOSIUM_MAX_HTML_BYTES} bytes.`
+      );
+    });
+  });
+});
