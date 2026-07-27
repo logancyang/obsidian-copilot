@@ -416,7 +416,7 @@ function sanitizeAttributes(root: HTMLElement): void {
       }
     }
 
-    if (element.tagName === "A" && element.getAttribute("target") === "_blank") {
+    if (element.tagName === "A" && element.hasAttribute("target")) {
       element.setAttribute("rel", "noopener noreferrer");
     }
     if (

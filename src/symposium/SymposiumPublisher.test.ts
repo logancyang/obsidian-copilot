@@ -401,8 +401,10 @@ describe("SymposiumPublisher", () => {
         harness.client.publish.mockRejectedValue(
           new SymposiumClientError(message, "ambiguous_publish", null, false)
         );
+        await harness.publisher.open(harness.file);
+        await harness.publisher.open(harness.file);
 
-        const first = await openAndConfirm(harness, "publish");
+        const first = await harness.modalOptions[0].onConfirm("publish", activeDocument);
 
         expect(first).toEqual({
           kind: "failure",
@@ -412,12 +414,17 @@ describe("SymposiumPublisher", () => {
           retryable: false,
         });
         expect(harness.client.publish).toHaveBeenCalledTimes(1);
+        await expect(harness.modalOptions[1].onConfirm("publish", activeDocument)).resolves.toEqual(
+          first
+        );
+        expect(harness.client.publish).toHaveBeenCalledTimes(1);
 
         harness.modalOptions[0].onClosed?.();
+        harness.modalOptions[1].onClosed?.();
         await harness.publisher.open(harness.file);
 
-        expect(harness.modalOptions[1].initialResult).toEqual(first);
-        await expect(harness.modalOptions[1].onConfirm("publish", activeDocument)).resolves.toEqual(
+        expect(harness.modalOptions[2].initialResult).toEqual(first);
+        await expect(harness.modalOptions[2].onConfirm("publish", activeDocument)).resolves.toEqual(
           first
         );
         expect(harness.buildDocument).toHaveBeenCalledTimes(1);

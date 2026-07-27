@@ -226,6 +226,10 @@ export class SymposiumPublisher {
           retryable: false,
         };
       }
+      const blockedResult = this.blockedPublishResults.get(file);
+      if (blockedResult) {
+        return blockedResult;
+      }
       let docId: string | null;
       try {
         docId = await getSymposiumDocId(this.app, file);
