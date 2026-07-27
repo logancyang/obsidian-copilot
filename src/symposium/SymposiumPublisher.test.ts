@@ -216,6 +216,12 @@ describe("SymposiumPublisher", () => {
         });
         expect(harness.frontmatter.symposium).toBe(NEW_DOC_ID);
         expect(harness.processFrontMatter).not.toHaveBeenCalled();
+
+        await harness.publisher.open(harness.file);
+        expect(harness.modalOptions[1]).toMatchObject({
+          docId: NEW_DOC_ID,
+          initialResult: undefined,
+        });
       });
 
       it("reports partial success when the identity cannot be read after update completes", async () => {
@@ -239,6 +245,38 @@ describe("SymposiumPublisher", () => {
         });
         expect(harness.frontmatter.symposium).toBe(DOC_ID);
         expect(harness.processFrontMatter).not.toHaveBeenCalled();
+
+        await harness.publisher.open(harness.file);
+        expect(harness.modalOptions[1].initialResult).toEqual(result);
+      });
+
+      it("retains an updated receipt when the note identity disappears", async () => {
+        const receipt = { ...RECEIPT, version: 2 };
+        const harness = createHarness({ symposium: DOC_ID });
+        harness.client.update.mockImplementation(async () => {
+          delete harness.frontmatter.symposium;
+          return receipt;
+        });
+
+        const result = await openAndConfirm(harness, "update");
+
+        expect(result).toEqual({
+          kind: "persistence",
+          action: "update",
+          message:
+            "The original page was updated, but this note’s Symposium identity changed or could not be verified. Its current identity was left unchanged.",
+          receipt,
+        });
+
+        harness.modalOptions[0].onClosed?.();
+        await harness.publisher.open(harness.file);
+
+        expect(harness.modalOptions[1].initialResult).toEqual(result);
+        await expect(harness.modalOptions[1].onConfirm("publish", activeDocument)).resolves.toEqual(
+          result
+        );
+        expect(harness.client.update).toHaveBeenCalledTimes(1);
+        expect(harness.client.publish).not.toHaveBeenCalled();
       });
 
       it("falls back once from exact PUT not_found to POST and replaces the stale id", async () => {
