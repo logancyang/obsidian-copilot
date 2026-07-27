@@ -73,6 +73,15 @@ async function clickButton(name: string | RegExp): Promise<void> {
   });
 }
 
+function expectButtonsInSameRow(...names: string[]): void {
+  const buttons = names.map((name) => screen.getByRole("button", { name }));
+  const row = buttons[0].parentElement;
+  expect(row).not.toBeNull();
+  for (const button of buttons) {
+    expect(button.parentElement).toBe(row);
+  }
+}
+
 describe("SymposiumModal", () => {
   afterEach(() => {
     for (const modal of mountedModals.splice(0)) {
@@ -86,7 +95,7 @@ describe("SymposiumModal", () => {
 
   describe("SymposiumModal", () => {
     describe("onOpen()", () => {
-      it("shows a compact explicit yes/no publish confirmation with the note name and warning", async () => {
+      it("shows a compact publish confirmation with the note name and warning", async () => {
         const onConfirm = createConfirmMock().mockResolvedValue({
           kind: "success",
           action: "publish",
@@ -100,12 +109,12 @@ describe("SymposiumModal", () => {
         expect(screen.queryByText(/theme/i)).toBeNull();
         expect(screen.queryByText(/preview/i)).toBeNull();
 
-        fireEvent.click(screen.getByRole("button", { name: "No, cancel" }));
+        fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
         expect(baseClose).toHaveBeenCalledTimes(1);
         expect(onConfirm).not.toHaveBeenCalled();
 
         const publishModal = renderModal(onConfirm);
-        await clickButton("Yes, publish");
+        await clickButton("Publish");
         expect(onConfirm).toHaveBeenCalledWith("publish", activeDocument);
         expect(publishModal.contentEl.childElementCount).toBeGreaterThan(0);
       });
@@ -122,8 +131,8 @@ describe("SymposiumModal", () => {
         const modal = renderModal(onConfirm, null, onClosed);
         const baseClose = (modal as unknown as { baseClose: jest.Mock }).baseClose;
 
-        fireEvent.click(screen.getByRole("button", { name: "Yes, publish" }));
-        expect(screen.getByRole("button", { name: "Working…" })).toBeTruthy();
+        fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+        expect(screen.getByRole("button", { name: "Publishing…" })).toBeTruthy();
 
         act(() => {
           modal.close();
@@ -144,21 +153,20 @@ describe("SymposiumModal", () => {
         expect(baseClose).toHaveBeenCalledTimes(1);
       });
 
-      it("lets a published note explicitly confirm update or delete", async () => {
+      it("offers update and delete as direct confirmed actions for a published note", async () => {
         const onConfirm = createConfirmMock().mockResolvedValue({
           kind: "success",
           action: "delete",
         });
         renderModal(onConfirm, DOC_ID);
 
-        expect(screen.getByText("Update “Architecture”?")).toBeTruthy();
-        fireEvent.click(screen.getByRole("button", { name: "Delete" }));
-        expect(screen.getByText("Delete “Architecture”?")).toBeTruthy();
+        expect(screen.getByText("Manage “Architecture”")).toBeTruthy();
+        expectButtonsInSameRow("Cancel", "Update", "Delete");
         expect(
           screen.getByText(/previously fetched or cached copies cannot be recalled/i)
         ).toBeTruthy();
 
-        await clickButton("Yes, delete");
+        await clickButton("Delete");
         expect(onConfirm).toHaveBeenCalledWith("delete", activeDocument);
         expect(await screen.findByText("Removed from Symposium")).toBeTruthy();
       });
@@ -173,7 +181,7 @@ describe("SymposiumModal", () => {
         });
         renderModal(onConfirm);
 
-        await clickButton("Yes, publish");
+        await clickButton("Publish");
 
         expect(await screen.findByText("Symposium access required")).toBeTruthy();
         expect(
@@ -198,7 +206,7 @@ describe("SymposiumModal", () => {
           });
         renderModal(onConfirm);
 
-        await clickButton("Yes, publish");
+        await clickButton("Publish");
         expect(await screen.findByText("Publish failed")).toBeTruthy();
 
         await clickButton("Retry");
@@ -222,9 +230,10 @@ describe("SymposiumModal", () => {
         });
         renderModal(onConfirm);
 
-        await clickButton("Yes, publish");
+        await clickButton("Publish");
         expect(await screen.findByText("Published, but not saved to the note")).toBeTruthy();
         expect(screen.getByText(RECEIPT.url)).toBeTruthy();
+        expectButtonsInSameRow("Close", "Retry save", "Copy", "Open");
 
         await clickButton("Retry save");
         expect(retrySave).toHaveBeenCalledTimes(1);
@@ -266,7 +275,7 @@ describe("SymposiumModal", () => {
         });
         renderModal(onConfirm, DOC_ID);
 
-        await clickButton("Yes, update");
+        await clickButton("Update");
 
         expect(await screen.findByText("Page updated; note identity not verified")).toBeTruthy();
         expect(
@@ -290,7 +299,8 @@ describe("SymposiumModal", () => {
         });
         renderModal(onConfirm, DOC_ID);
 
-        await clickButton("Yes, update");
+        await clickButton("Update");
+        expectButtonsInSameRow("Close", "Copy", "Open");
         await clickButton("Copy");
         fireEvent.click(screen.getByRole("button", { name: "Open" }));
 

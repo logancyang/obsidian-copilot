@@ -48,7 +48,12 @@ function actionLabel(action: SymposiumAction): string {
   return `${action[0].toUpperCase()}${action.slice(1)}`;
 }
 
-function SymposiumReceiptView({ receipt }: { receipt: SymposiumReceipt }) {
+interface SymposiumReceiptViewProps {
+  receipt: SymposiumReceipt;
+  actions?: React.ReactNode;
+}
+
+function SymposiumReceiptView({ receipt, actions }: SymposiumReceiptViewProps) {
   const [copyMessage, setCopyMessage] = useState("");
 
   const copyUrl = async (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -74,6 +79,7 @@ function SymposiumReceiptView({ receipt }: { receipt: SymposiumReceipt }) {
       </div>
       <div className="tw-flex tw-items-center tw-justify-end tw-gap-2">
         {copyMessage && <span className="tw-text-small tw-text-muted">{copyMessage}</span>}
+        {actions}
         <Button variant="secondary" onClick={copyUrl}>
           Copy
         </Button>
@@ -90,40 +96,43 @@ function SymposiumModalContent({
   onConfirm,
   onClose,
 }: SymposiumModalContentProps) {
-  const [action, setAction] = useState<SymposiumAction>(docId ? "update" : "publish");
   const [result, setResult] = useState<SymposiumModalResult | null>(initialResult ?? null);
-  const [working, setWorking] = useState(false);
+  const [workingAction, setWorkingAction] = useState<SymposiumAction | null>(null);
+  const working = workingAction !== null;
 
   const runAction = async (nextAction: SymposiumAction, ownerDocument: Document) => {
-    setWorking(true);
+    setWorkingAction(nextAction);
     try {
       setResult(await onConfirm(nextAction, ownerDocument));
     } finally {
-      setWorking(false);
+      setWorkingAction(null);
     }
   };
 
-  const confirm = (event: React.MouseEvent<HTMLButtonElement>) => {
-    void runAction(action, event.currentTarget.doc);
-  };
-
   const retry = (event: React.MouseEvent<HTMLButtonElement>) => {
-    void runAction(result?.action ?? action, event.currentTarget.doc);
+    if (result?.kind === "failure") {
+      void runAction(result.action, event.currentTarget.doc);
+    }
   };
 
   const retrySave = async () => {
     if (result?.kind !== "persistence" || !result.retrySave) {
       return;
     }
-    setWorking(true);
+    setWorkingAction(result.action);
     try {
       setResult(await result.retrySave());
     } finally {
-      setWorking(false);
+      setWorkingAction(null);
     }
   };
 
   if (result?.kind === "success") {
+    const closeButton = (
+      <Button variant="secondary" onClick={onClose}>
+        Close
+      </Button>
+    );
     return (
       <div className="tw-flex tw-flex-col tw-gap-4">
         <div className="tw-font-semibold tw-text-normal">
@@ -131,12 +140,11 @@ function SymposiumModalContent({
             ? "Removed from Symposium"
             : `${actionLabel(result.action)} complete`}
         </div>
-        {result.receipt && <SymposiumReceiptView receipt={result.receipt} />}
-        <div className="tw-flex tw-justify-end">
-          <Button variant="secondary" onClick={onClose}>
-            Close
-          </Button>
-        </div>
+        {result.receipt ? (
+          <SymposiumReceiptView receipt={result.receipt} actions={closeButton} />
+        ) : (
+          <div className="tw-flex tw-justify-end">{closeButton}</div>
+        )}
       </div>
     );
   }
@@ -165,6 +173,18 @@ function SymposiumModalContent({
   }
 
   if (result?.kind === "persistence") {
+    const actions = (
+      <>
+        <Button variant="secondary" onClick={onClose}>
+          Close
+        </Button>
+        {result.retrySave && (
+          <Button onClick={() => void retrySave()} disabled={working}>
+            {working ? "Saving…" : "Retry save"}
+          </Button>
+        )}
+      </>
+    );
     return (
       <div className="tw-flex tw-flex-col tw-gap-4" role="alert">
         <div className="tw-font-semibold tw-text-normal">
@@ -175,17 +195,11 @@ function SymposiumModalContent({
               : "Page withdrawn; note unchanged"}
         </div>
         <p className="tw-m-0 tw-text-muted">{result.message}</p>
-        {result.receipt && <SymposiumReceiptView receipt={result.receipt} />}
-        <div className="tw-flex tw-justify-end tw-gap-2">
-          <Button variant="secondary" onClick={onClose}>
-            Close
-          </Button>
-          {result.retrySave && (
-            <Button onClick={() => void retrySave()} disabled={working}>
-              {working ? "Saving…" : "Retry save"}
-            </Button>
-          )}
-        </div>
+        {result.receipt ? (
+          <SymposiumReceiptView receipt={result.receipt} actions={actions} />
+        ) : (
+          <div className="tw-flex tw-justify-end tw-gap-2">{actions}</div>
+        )}
       </div>
     );
   }
@@ -194,45 +208,43 @@ function SymposiumModalContent({
     <div className="tw-flex tw-flex-col tw-gap-4">
       <div>
         <div className="tw-font-semibold tw-text-normal">
-          {actionLabel(action)} “{fileName}”?
+          {docId ? `Manage “${fileName}”` : `Publish “${fileName}”?`}
         </div>
         <p className="tw-mb-0 tw-mt-2 tw-text-muted">
-          {action === "delete"
-            ? "Yes withdraws the link and deletes Symposium’s stored copy. Previously fetched or cached copies cannot be recalled."
-            : "Yes makes this note available to anyone with the public link."}
+          {docId
+            ? "Update replaces the current public page. Delete withdraws the link and removes Symposium’s stored copy; previously fetched or cached copies cannot be recalled."
+            : "This makes the note available to anyone with the public link."}
         </p>
       </div>
 
-      {docId && (
-        <div className="tw-flex tw-gap-2" aria-label="Symposium action">
+      <div className="tw-flex tw-justify-end tw-gap-2" aria-label="Symposium actions">
+        <Button variant="secondary" onClick={onClose}>
+          Cancel
+        </Button>
+        {docId ? (
+          <>
+            <Button
+              onClick={(event) => void runAction("update", event.currentTarget.doc)}
+              disabled={working}
+            >
+              {workingAction === "update" ? "Updating…" : "Update"}
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={(event) => void runAction("delete", event.currentTarget.doc)}
+              disabled={working}
+            >
+              {workingAction === "delete" ? "Deleting…" : "Delete"}
+            </Button>
+          </>
+        ) : (
           <Button
-            variant={action === "update" ? "default" : "secondary"}
-            onClick={() => setAction("update")}
+            onClick={(event) => void runAction("publish", event.currentTarget.doc)}
             disabled={working}
           >
-            Update
+            {workingAction === "publish" ? "Publishing…" : "Publish"}
           </Button>
-          <Button
-            variant={action === "delete" ? "destructive" : "secondary"}
-            onClick={() => setAction("delete")}
-            disabled={working}
-          >
-            Delete
-          </Button>
-        </div>
-      )}
-
-      <div className="tw-flex tw-justify-end tw-gap-2">
-        <Button variant="secondary" onClick={onClose} disabled={working}>
-          No, cancel
-        </Button>
-        <Button
-          variant={action === "delete" ? "destructive" : "default"}
-          onClick={confirm}
-          disabled={working}
-        >
-          {working ? "Working…" : `Yes, ${action}`}
-        </Button>
+        )}
       </div>
     </div>
   );
