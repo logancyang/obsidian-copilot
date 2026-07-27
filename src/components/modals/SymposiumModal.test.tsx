@@ -226,6 +226,25 @@ describe("SymposiumModal", () => {
         expect(await screen.findByText("Publish complete")).toBeTruthy();
       });
 
+      it("shows an update receipt as partial success when the note identity is not verified", async () => {
+        const onConfirm = createConfirmMock().mockResolvedValue({
+          kind: "persistence",
+          action: "update",
+          message: "The original page was updated, but this note's identity changed.",
+          receipt: RECEIPT,
+        });
+        renderModal(onConfirm, DOC_ID);
+
+        await clickButton("Yes, update");
+
+        expect(await screen.findByText("Page updated; note identity not verified")).toBeTruthy();
+        expect(
+          screen.getByText("The original page was updated, but this note's identity changed.")
+        ).toBeTruthy();
+        expect(screen.getByText(RECEIPT.url)).toBeTruthy();
+        expect(screen.queryByRole("button", { name: "Retry save" })).toBeNull();
+      });
+
       it("copies and opens the API-returned URL from the success view", async () => {
         const writeText = jest.fn().mockResolvedValue(undefined);
         Object.defineProperty(window.navigator, "clipboard", {

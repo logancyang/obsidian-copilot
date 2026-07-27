@@ -157,6 +157,50 @@ describe("SymposiumPublisher", () => {
         expect(second.client.update).toHaveBeenCalledWith(DOC_ID, DOCUMENT, "decrypted-license");
       });
 
+      it("reports partial success without replacing a newer identity after update completes", async () => {
+        const receipt = { ...RECEIPT, version: 2 };
+        const harness = createHarness({ symposium: DOC_ID });
+        harness.client.update.mockImplementation(async () => {
+          harness.frontmatter.symposium = NEW_DOC_ID;
+          return receipt;
+        });
+
+        const result = await openAndConfirm(harness, "update");
+
+        expect(result).toEqual({
+          kind: "persistence",
+          action: "update",
+          message:
+            "The original page was updated, but this note’s Symposium identity changed or could not be verified. Its current identity was left unchanged.",
+          receipt,
+        });
+        expect(harness.frontmatter.symposium).toBe(NEW_DOC_ID);
+        expect(harness.processFrontMatter).not.toHaveBeenCalled();
+      });
+
+      it("reports partial success when the identity cannot be read after update completes", async () => {
+        const receipt = { ...RECEIPT, version: 2 };
+        const harness = createHarness({ symposium: DOC_ID });
+        harness.client.update.mockImplementation(async () => {
+          (harness.app.vault.read as jest.Mock).mockRejectedValueOnce(
+            new Error("vault unavailable")
+          );
+          return receipt;
+        });
+
+        const result = await openAndConfirm(harness, "update");
+
+        expect(result).toEqual({
+          kind: "persistence",
+          action: "update",
+          message:
+            "The original page was updated, but this note’s Symposium identity changed or could not be verified. Its current identity was left unchanged.",
+          receipt,
+        });
+        expect(harness.frontmatter.symposium).toBe(DOC_ID);
+        expect(harness.processFrontMatter).not.toHaveBeenCalled();
+      });
+
       it("falls back once from exact PUT not_found to POST and replaces the stale id", async () => {
         const replacement = { ...RECEIPT, docId: NEW_DOC_ID, version: 1 };
         const harness = createHarness({ symposium: DOC_ID });

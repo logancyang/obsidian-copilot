@@ -21,7 +21,7 @@ export interface SymposiumFailureResult {
 
 export interface SymposiumPersistenceResult {
   kind: "persistence";
-  action: "publish" | "delete";
+  action: SymposiumAction;
   message: string;
   receipt?: SymposiumReceipt;
   retrySave?: () => Promise<SymposiumModalResult>;
@@ -174,7 +174,9 @@ function SymposiumModalContent({
         <div className="tw-font-semibold tw-text-normal">
           {result.action === "publish"
             ? "Published, but not saved to the note"
-            : "Page withdrawn; note unchanged"}
+            : result.action === "update"
+              ? "Page updated; note identity not verified"
+              : "Page withdrawn; note unchanged"}
         </div>
         <p className="tw-m-0 tw-text-muted">{result.message}</p>
         {result.receipt && <SymposiumReceiptView receipt={result.receipt} />}

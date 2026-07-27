@@ -244,6 +244,21 @@ export class SymposiumPublisher {
 
         try {
           const receipt = await this.client.update(docId!, document, licenseKey);
+          let identityUnchanged = false;
+          try {
+            identityUnchanged = (await getSymposiumDocId(this.app, file)) === docId;
+          } catch {
+            // Remote success is still partial success when the local identity cannot be verified.
+          }
+          if (!identityUnchanged) {
+            return {
+              kind: "persistence",
+              action: "update",
+              message:
+                "The original page was updated, but this note’s Symposium identity changed or could not be verified. Its current identity was left unchanged.",
+              receipt,
+            };
+          }
           return { kind: "success", action: "update", receipt };
         } catch (error) {
           if (
