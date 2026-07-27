@@ -48,6 +48,12 @@ function actionLabel(action: SymposiumAction): string {
   return `${action[0].toUpperCase()}${action.slice(1)}`;
 }
 
+const WORKING_LABELS: Record<SymposiumAction, string> = {
+  publish: "Publishing…",
+  update: "Updating…",
+  delete: "Deleting…",
+};
+
 interface SymposiumReceiptViewProps {
   receipt: SymposiumReceipt;
   actions?: React.ReactNode;
@@ -96,6 +102,9 @@ function SymposiumModalContent({
   onConfirm,
   onClose,
 }: SymposiumModalContentProps) {
+  const [confirmationAction, setConfirmationAction] = useState<SymposiumAction | null>(
+    docId ? null : "publish"
+  );
   const [result, setResult] = useState<SymposiumModalResult | null>(initialResult ?? null);
   const [workingAction, setWorkingAction] = useState<SymposiumAction | null>(null);
   const working = workingAction !== null;
@@ -204,46 +213,49 @@ function SymposiumModalContent({
     );
   }
 
+  const heading = confirmationAction
+    ? `${actionLabel(confirmationAction)} “${fileName}”?`
+    : `Manage “${fileName}”`;
+  const description =
+    confirmationAction === "delete"
+      ? "Yes withdraws the link and deletes Symposium’s stored copy. Previously fetched or cached copies cannot be recalled."
+      : confirmationAction === "update"
+        ? "Yes replaces the current public page with this note’s latest content."
+        : confirmationAction === "publish"
+          ? "Yes makes this note available to anyone with the public link."
+          : "Choose whether to replace the current public page or withdraw it.";
+
   return (
     <div className="tw-flex tw-flex-col tw-gap-4">
       <div>
-        <div className="tw-font-semibold tw-text-normal">
-          {docId ? `Manage “${fileName}”` : `Publish “${fileName}”?`}
-        </div>
-        <p className="tw-mb-0 tw-mt-2 tw-text-muted">
-          {docId
-            ? "Update replaces the current public page. Delete withdraws the link and removes Symposium’s stored copy; previously fetched or cached copies cannot be recalled."
-            : "This makes the note available to anyone with the public link."}
-        </p>
+        <div className="tw-font-semibold tw-text-normal">{heading}</div>
+        <p className="tw-mb-0 tw-mt-2 tw-text-muted">{description}</p>
       </div>
 
       <div className="tw-flex tw-justify-end tw-gap-2" aria-label="Symposium actions">
-        <Button variant="secondary" onClick={onClose}>
-          Cancel
-        </Button>
-        {docId ? (
+        {confirmationAction ? (
           <>
-            <Button
-              onClick={(event) => void runAction("update", event.currentTarget.doc)}
-              disabled={working}
-            >
-              {workingAction === "update" ? "Updating…" : "Update"}
+            <Button variant="secondary" onClick={onClose} disabled={working}>
+              No, cancel
             </Button>
             <Button
-              variant="destructive"
-              onClick={(event) => void runAction("delete", event.currentTarget.doc)}
+              variant={confirmationAction === "delete" ? "destructive" : "default"}
+              onClick={(event) => void runAction(confirmationAction, event.currentTarget.doc)}
               disabled={working}
             >
-              {workingAction === "delete" ? "Deleting…" : "Delete"}
+              {working ? WORKING_LABELS[confirmationAction] : `Yes, ${confirmationAction}`}
             </Button>
           </>
         ) : (
-          <Button
-            onClick={(event) => void runAction("publish", event.currentTarget.doc)}
-            disabled={working}
-          >
-            {workingAction === "publish" ? "Publishing…" : "Publish"}
-          </Button>
+          <>
+            <Button variant="secondary" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button onClick={() => setConfirmationAction("update")}>Update</Button>
+            <Button variant="destructive" onClick={() => setConfirmationAction("delete")}>
+              Delete
+            </Button>
+          </>
         )}
       </div>
     </div>
@@ -261,6 +273,7 @@ export class SymposiumModal extends Modal {
     private readonly options: SymposiumModalOptions
   ) {
     super(app);
+    this.modalEl.classList.add("copilot-symposium-modal");
     this.titleEl.setText("Share with Symposium");
   }
 

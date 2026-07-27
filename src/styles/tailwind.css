@@ -20,6 +20,12 @@ If your plugin does not need CSS, delete this file.
   z-index: 9999 !important;
 }
 
+.copilot-symposium-modal {
+  width: min(32rem, calc(100vw - 2rem));
+  min-width: 0;
+  max-width: calc(100vw - 2rem);
+}
+
 /* Single-side dividers. Preflight is off, so `tw-border-b tw-border-solid`
    leaks `border-style: solid` to all sides and renders all four borders. */
 .copilot-divider-b {
