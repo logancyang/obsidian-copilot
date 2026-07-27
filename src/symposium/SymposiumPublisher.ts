@@ -335,14 +335,25 @@ export class SymposiumPublisher {
     try {
       const saved = await saveSymposiumDocId(this.app, file, receipt.docId, expectedDocId);
       if (!saved) {
-        this.blockedPublishResults.delete(file);
-        return {
+        const result: SymposiumPersistenceResult = {
           kind: "persistence",
           action: "publish",
           message:
-            "The page is public, but this note’s Symposium identity changed while publishing. Its newer identity was left unchanged.",
+            "The page is public, but this note’s Symposium identity changed or could not be verified. Its current frontmatter was left unchanged.",
           receipt,
         };
+        let currentDocId: string | null | undefined;
+        try {
+          currentDocId = await getSymposiumDocId(this.app, file);
+        } catch {
+          // A successful POST must stay blocked when no valid identity can route reopen to Update.
+        }
+        if (currentDocId) {
+          this.blockedPublishResults.delete(file);
+        } else {
+          this.blockedPublishResults.set(file, result);
+        }
+        return result;
       }
       this.blockedPublishResults.delete(file);
       return { kind: "success", action: "publish", receipt };

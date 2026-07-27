@@ -53,6 +53,7 @@ const URL_ATTRIBUTES = new Set([
 ]);
 
 const MIN_IMAGE_DATA_URL_PREFIX_BYTES = "data:image/png;base64,".length;
+const IMAGE_DATA_URL_PLACEHOLDER = "data:image/png;base64,A";
 
 type ModernRender = (
   app: App,
@@ -181,46 +182,69 @@ async function embedVaultImages(
   let projectedDocumentByteLength = initialDocumentByteLength;
   for (const image of images) {
     const source = image.getAttribute("src")?.trim() ?? "";
+    const originalImageByteLength = sanitizedElementByteLength(image);
     const file = resolveVaultImage(image, app, sourcePath, lookup);
     if (!file) {
-      replaceMissingImage(image, source);
+      const replacement = replaceMissingImage(image, source);
+      projectedDocumentByteLength +=
+        sanitizedElementByteLength(replacement) - originalImageByteLength;
       continue;
     }
 
-    const projectedImageByteLength =
+    const projectedDataUrlByteLength =
       MIN_IMAGE_DATA_URL_PREFIX_BYTES + 4 * Math.ceil(file.stat.size / 3);
-    if (projectedDocumentByteLength + projectedImageByteLength > SYMPOSIUM_MAX_HTML_BYTES) {
-      throw new SymposiumDocumentTooLargeError(
-        projectedDocumentByteLength + projectedImageByteLength
-      );
+    const projectedImageByteLength = embeddedImageByteLength(image, projectedDataUrlByteLength);
+    const projectedByteLength =
+      projectedDocumentByteLength - originalImageByteLength + projectedImageByteLength;
+    if (projectedByteLength > SYMPOSIUM_MAX_HTML_BYTES) {
+      throw new SymposiumDocumentTooLargeError(projectedByteLength);
     }
 
     let bytes: ArrayBuffer;
     try {
       bytes = await app.vault.readBinary(file);
     } catch {
-      replaceMissingImage(image, file.path);
+      const replacement = replaceMissingImage(image, file.path);
+      projectedDocumentByteLength +=
+        sanitizedElementByteLength(replacement) - originalImageByteLength;
       continue;
     }
 
     const mimeType = detectImageMimeType(bytes);
     if (!mimeType) {
-      replaceMissingImage(image, file.path);
+      const replacement = replaceMissingImage(image, file.path);
+      projectedDocumentByteLength +=
+        sanitizedElementByteLength(replacement) - originalImageByteLength;
       continue;
     }
 
     const dataUrlPrefix = `data:${mimeType};base64,`;
-    const encodedImageByteLength = dataUrlPrefix.length + 4 * Math.ceil(bytes.byteLength / 3);
-    if (projectedDocumentByteLength + encodedImageByteLength > SYMPOSIUM_MAX_HTML_BYTES) {
-      throw new SymposiumDocumentTooLargeError(
-        projectedDocumentByteLength + encodedImageByteLength
-      );
+    const dataUrlByteLength = dataUrlPrefix.length + 4 * Math.ceil(bytes.byteLength / 3);
+    const embeddedImageMarkupByteLength = embeddedImageByteLength(image, dataUrlByteLength);
+    const embeddedDocumentByteLength =
+      projectedDocumentByteLength - originalImageByteLength + embeddedImageMarkupByteLength;
+    if (embeddedDocumentByteLength > SYMPOSIUM_MAX_HTML_BYTES) {
+      throw new SymposiumDocumentTooLargeError(embeddedDocumentByteLength);
     }
     image.src = `${dataUrlPrefix}${arrayBufferToBase64(bytes)}`;
     image.removeAttribute("data-path");
     image.removeAttribute("data-src");
-    projectedDocumentByteLength += encodedImageByteLength;
+    projectedDocumentByteLength = embeddedDocumentByteLength;
   }
+}
+
+function sanitizedElementByteLength(element: HTMLElement): number {
+  const clone = element.cloneNode(true) as HTMLElement;
+  sanitizeAttributes(clone);
+  return new TextEncoder().encode(clone.outerHTML).byteLength;
+}
+
+function embeddedImageByteLength(image: HTMLImageElement, dataUrlByteLength: number): number {
+  const clone = image.cloneNode(true) as HTMLImageElement;
+  clone.src = IMAGE_DATA_URL_PLACEHOLDER;
+  clone.removeAttribute("data-path");
+  clone.removeAttribute("data-src");
+  return sanitizedElementByteLength(clone) - IMAGE_DATA_URL_PLACEHOLDER.length + dataUrlByteLength;
 }
 
 function buildVaultFileLookup(app: App): Map<string, TFile> {
@@ -364,11 +388,12 @@ function asciiAt(bytes: Uint8Array, offset: number, expected: string): boolean {
   );
 }
 
-function replaceMissingImage(image: HTMLImageElement, source: string): void {
+function replaceMissingImage(image: HTMLImageElement, source: string): HTMLElement {
   const replacement = image.doc.createElement("span");
   replacement.className = "symposium-missing-asset";
   replacement.textContent = `[Missing image: ${image.alt || source || "unknown"}]`;
   image.replaceWith(replacement);
+  return replacement;
 }
 
 function sanitizeAttributes(root: HTMLElement): void {

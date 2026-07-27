@@ -148,9 +148,12 @@ describe("SymposiumPublisher", () => {
         expect(harness.client.publish).not.toHaveBeenCalled();
       });
 
-      it("rejects malformed YAML before rendering or publishing", async () => {
+      it.each([
+        ["malformed YAML", "---\nsymposium: [\n---\n"],
+        ["a YAML sequence", "---\n- shared\n---\n"],
+      ])("rejects %s before rendering or publishing", async (_case, markdown) => {
         const harness = createHarness();
-        jest.mocked(harness.app.vault.read).mockResolvedValue("---\nsymposium: [\n---\n");
+        jest.mocked(harness.app.vault.read).mockResolvedValue(markdown);
 
         await harness.publisher.open(harness.file);
         const result = harness.modalOptions[0].initialResult;
@@ -159,7 +162,7 @@ describe("SymposiumPublisher", () => {
           kind: "failure",
           action: "publish",
           message:
-            "This note's frontmatter is not valid YAML. Fix it before publishing to Symposium.",
+            "This note's frontmatter must be a YAML property map. Fix it before publishing to Symposium.",
           accessNotice: false,
           retryable: false,
         });
@@ -293,6 +296,39 @@ describe("SymposiumPublisher", () => {
         expect(harness.client.update).toHaveBeenCalledTimes(1);
         expect(harness.client.publish).toHaveBeenCalledTimes(1);
         expect(harness.frontmatter.symposium).toBe(NEW_DOC_ID);
+      });
+
+      it("retains a fallback POST receipt when the stale identity disappears", async () => {
+        const replacement = { ...RECEIPT, docId: NEW_DOC_ID, version: 1 };
+        const harness = createHarness({ symposium: DOC_ID });
+        harness.client.update.mockRejectedValue(
+          new SymposiumClientError("Document is gone.", "not_found", 404, false)
+        );
+        harness.client.publish.mockImplementation(async () => {
+          delete harness.frontmatter.symposium;
+          return replacement;
+        });
+
+        const result = await openAndConfirm(harness, "update");
+
+        expect(result).toMatchObject({
+          kind: "persistence",
+          action: "publish",
+          receipt: replacement,
+        });
+        expect(
+          (result as Extract<SymposiumModalResult, { kind: "persistence" }>).retrySave
+        ).toBeUndefined();
+
+        harness.modalOptions[0].onClosed?.();
+        await harness.publisher.open(harness.file);
+
+        expect(harness.modalOptions[1].initialResult).toEqual(result);
+        await expect(harness.modalOptions[1].onConfirm("publish", activeDocument)).resolves.toEqual(
+          result
+        );
+        expect(harness.client.update).toHaveBeenCalledTimes(1);
+        expect(harness.client.publish).toHaveBeenCalledTimes(1);
       });
 
       it("does not POST a fallback when the identity changes during the failed update", async () => {

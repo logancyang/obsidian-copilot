@@ -101,6 +101,8 @@ After publishing, Copilot stores the Symposium document ID in the note's `sympos
 
 If the page is published but its document ID cannot be saved, reopening the dialog resumes the local save without publishing again. If the initial publish response is lost, Copilot blocks another attempt until the plugin reloads to avoid creating a duplicate page.
 
+Copilot stops before publishing when a note's frontmatter is malformed or is not a YAML property map.
+
 ---
 
 ## Keyboard Shortcuts

@@ -58,7 +58,7 @@ describe("symposiumFrontmatter", () => {
         const error = new SymposiumFrontmatterParseError();
 
         expect(error).toBeInstanceOf(Error);
-        expect(error.message).toContain("frontmatter is not valid YAML");
+        expect(error.message).toContain("frontmatter must be a YAML property map");
       });
     });
   });
@@ -86,6 +86,18 @@ describe("symposiumFrontmatter", () => {
       const invalidYaml = createApp();
       jest.mocked(invalidYaml.app.vault.read).mockResolvedValue("---\nsymposium: [\n---\n");
       await expect(getSymposiumDocId(invalidYaml.app, file)).rejects.toBeInstanceOf(
+        SymposiumFrontmatterParseError
+      );
+    });
+
+    it.each([
+      ["sequence", "---\n- shared\n---\n"],
+      ["scalar", "---\nshared\n---\n"],
+    ])("rejects a YAML %s root that cannot hold properties", async (_case, markdown) => {
+      const nonMapping = createApp();
+      jest.mocked(nonMapping.app.vault.read).mockResolvedValue(markdown);
+
+      await expect(getSymposiumDocId(nonMapping.app, file)).rejects.toBeInstanceOf(
         SymposiumFrontmatterParseError
       );
     });

@@ -340,6 +340,34 @@ describe("symposiumDocument", () => {
       expect(app.vault.readBinary).not.toHaveBeenCalled();
     });
 
+    it("budgets the embedded image replacement delta instead of removed source markup", async () => {
+      const longPath = `Assets/${"a".repeat(16_000)}.png`;
+      const dataUrlBudget = SYMPOSIUM_MAX_HTML_BYTES - 10_000;
+      const imageSize = Math.floor(((dataUrlBudget - "data:image/png;base64,".length) * 3) / 4);
+      const image = createFile(longPath, undefined, imageSize);
+      const bytes = new Uint8Array(imageSize);
+      bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+      const app = createApp({
+        files: [image],
+        resolveLink: (link) => (link === longPath ? image : null),
+        readBinary: async () => bytes.buffer,
+      });
+      renderMock.mockImplementation(async (_app, _markdown, element) => {
+        appendHtml(element, `<img alt="Near limit" data-path="${longPath}" src="local.png">`);
+      });
+
+      const result = await buildSymposiumDocument(
+        app,
+        createFile("Images.md"),
+        createComponent(),
+        document
+      );
+
+      expect(result.byteLength).toBeLessThanOrEqual(SYMPOSIUM_MAX_HTML_BYTES);
+      expect(result.html).not.toContain(longPath);
+      expect(app.vault.readBinary).toHaveBeenCalledTimes(1);
+    });
+
     it("reports the UTF-8 byte length for non-ASCII titles and rendered content", async () => {
       const app = createApp();
       const file = createFile("Notes/Résumé 🚀.md");

@@ -21,7 +21,9 @@ export class SymposiumPropertyConflictError extends Error {
  */
 export class SymposiumFrontmatterParseError extends Error {
   constructor() {
-    super("This note's frontmatter is not valid YAML. Fix it before publishing to Symposium.");
+    super(
+      "This note's frontmatter must be a YAML property map. Fix it before publishing to Symposium."
+    );
     this.name = "SymposiumFrontmatterParseError";
     Object.setPrototypeOf(this, SymposiumFrontmatterParseError.prototype);
   }
@@ -55,8 +57,11 @@ export async function getSymposiumDocId(app: App, file: TFile): Promise<string |
   } catch {
     throw new SymposiumFrontmatterParseError();
   }
-  if (!frontmatter || typeof frontmatter !== "object") {
+  if (frontmatter === null || frontmatter === undefined) {
     return null;
+  }
+  if (typeof frontmatter !== "object" || Array.isArray(frontmatter)) {
+    throw new SymposiumFrontmatterParseError();
   }
   const properties = frontmatter as Record<string, unknown>;
   if (!Object.prototype.hasOwnProperty.call(properties, SYMPOSIUM_PROPERTY)) {
