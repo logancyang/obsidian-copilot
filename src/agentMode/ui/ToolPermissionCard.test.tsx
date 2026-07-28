@@ -1,6 +1,6 @@
 import type { PermissionOption, PermissionPrompt, SessionId } from "@/agentMode/session/types";
 import { ToolPermissionCard } from "@/agentMode/ui/ToolPermissionCard";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import React from "react";
 
 const SESSION_ID = "session-1" as SessionId;
@@ -20,92 +20,93 @@ function makeRequest(options: PermissionOption[]): PermissionPrompt {
   };
 }
 
-describe("ToolPermissionCard module", () => {
-  describe("ToolPermissionCard", () => {
-    it("uses a fixed action label and presents a long option name as its description", () => {
+describe("ToolPermissionCard", () => {
+  describe("ToolPermissionCard()", () => {
+    it("keeps multiple described actions visibly paired with their respective decisions", () => {
       const onResolve = jest.fn();
-      const longName =
+      const commandRule =
         "Allow Commands Starting With `/long/path/semantic-search.sh Search only within agents/themes/capture for LLM wiki, AI second brain, knowledge base, digital twin, and local-first Markdown knowledge workspace.`";
+      const networkRule =
+        "Allow network access to a.really-long-and-specific-subdomain.example.com for future matching requests.";
+      const options: PermissionOption[] = [
+        {
+          optionId: "accept_execpolicy_amendment",
+          name: "Allow Always",
+          description: commandRule,
+          kind: "allow_always",
+        },
+        {
+          optionId: "accept_networkpolicy_amendment",
+          name: "Allow Always",
+          description: networkRule,
+          kind: "allow_always",
+        },
+      ];
 
-      render(
+      const { rerender } = render(
         <ToolPermissionCard
-          request={makeRequest([
-            { optionId: "allow_once", name: "Allow Once", kind: "allow_once" },
-            { optionId: "allow_always", name: "Allow for Session", kind: "allow_always" },
-            {
-              optionId: "accept_execpolicy_amendment",
-              name: longName,
-              kind: "allow_always",
-            },
-            { optionId: "reject_once", name: "Reject", kind: "reject_once" },
-          ])}
+          key="first-decision"
+          request={makeRequest(options)}
           onResolve={onResolve}
         />
       );
 
-      expect(screen.queryByRole("button", { name: longName })).toBeNull();
-      const ruleButton = screen.getByRole("button", {
+      const commandRow = screen.getByText(commandRule).parentElement;
+      const networkRow = screen.getByText(networkRule).parentElement;
+      expect(commandRow).not.toBeNull();
+      expect(networkRow).not.toBeNull();
+
+      const commandButton = within(commandRow!).getByRole("button", {
         name: "Allow Always",
-        description: longName,
+        description: commandRule,
       });
-      expect(screen.getByText(longName)).not.toBe(ruleButton);
+      const networkButton = within(networkRow!).getByRole("button", {
+        name: "Allow Always",
+        description: networkRule,
+      });
+      expect(commandButton.textContent).toBe("Allow Always");
 
-      fireEvent.click(ruleButton);
-      expect(onResolve).toHaveBeenCalledWith(TOOL_CALL_ID, "accept_execpolicy_amendment");
+      fireEvent.click(networkButton);
+      expect(onResolve).toHaveBeenLastCalledWith(TOOL_CALL_ID, "accept_networkpolicy_amendment");
+
+      rerender(
+        <ToolPermissionCard
+          key="second-decision"
+          request={makeRequest(options)}
+          onResolve={onResolve}
+        />
+      );
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: "Allow Always",
+          description: commandRule,
+        })
+      );
+      expect(onResolve).toHaveBeenLastCalledWith(TOOL_CALL_ID, "accept_execpolicy_amendment");
     });
 
-    it("uses semantic fixed labels for every kind of descriptive option", () => {
-      const options: PermissionOption[] = [
-        {
-          optionId: "once",
-          name: "Allow this individual permission request after reviewing all of its details",
-          kind: "allow_once",
-        },
-        {
-          optionId: "always",
-          name: "Allow this permission rule for later matching tool calls in the session",
-          kind: "allow_always",
-        },
-        {
-          optionId: "reject",
-          name: "Reject this individual permission request after reviewing all of its details",
-          kind: "reject_once",
-        },
-        {
-          optionId: "block",
-          name: "Block this permission rule for later matching tool calls in the session",
-          kind: "reject_always",
-        },
-      ];
-
-      render(<ToolPermissionCard request={makeRequest(options)} onResolve={jest.fn()} />);
-
-      const expectedLabels = ["Allow", "Allow Always", "Reject", "Block Rule"];
-      for (const [index, label] of expectedLabels.entries()) {
-        expect(
-          screen.getByRole("button", { name: label, description: options[index].name })
-        ).toBeTruthy();
-      }
-    });
-
-    it("keeps compact backend labels and orders them by permission kind", () => {
+    it("orders compact actions by kind and constrains their labels to the card width", () => {
+      const unbrokenLabel = "AllowAccessToNetwork.example.com";
       render(
         <ToolPermissionCard
           request={makeRequest([
             { optionId: "reject", name: "No", kind: "reject_once" },
             { optionId: "session", name: "Allow for Session", kind: "allow_always" },
-            { optionId: "once", name: "Allow Once", kind: "allow_once" },
+            { optionId: "once", name: unbrokenLabel, kind: "allow_once" },
           ])}
           onResolve={jest.fn()}
         />
       );
 
       expect(screen.getAllByRole("button").map((button) => button.textContent)).toEqual([
-        "Allow Once",
+        unbrokenLabel,
         "Allow for Session",
         "No",
       ]);
-      expect(screen.queryByText("Permission details")).toBeNull();
+      const labelClasses = screen.getByRole("button", { name: unbrokenLabel }).classList;
+      expect(labelClasses.contains("tw-max-w-full")).toBe(true);
+      expect(labelClasses.contains("tw-whitespace-normal")).toBe(true);
+      expect(labelClasses.contains("tw-break-words")).toBe(true);
     });
   });
 });

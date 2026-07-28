@@ -41,6 +41,7 @@ import type {
   McpServerSpec,
   PermissionDecision,
   PermissionOption,
+  PermissionOptionKind,
   PermissionPrompt,
   PromptContent,
   SessionEvent,
@@ -445,13 +446,29 @@ export function acpPermissionRequestToPrompt(req: RequestPermissionRequest): Per
 }
 
 function permissionOptionFromAcp(opt: AcpPermissionOption): PermissionOption {
+  const kind = (PERMISSION_OPTION_KINDS as readonly string[]).includes(opt.kind)
+    ? opt.kind
+    : "reject_once";
+  const name = permissionOptionActionName(kind);
   return {
     optionId: opt.optionId,
-    name: opt.name,
-    kind: (PERMISSION_OPTION_KINDS as readonly string[]).includes(opt.kind)
-      ? opt.kind
-      : "reject_once",
+    name,
+    description: opt.name === name ? undefined : opt.name,
+    kind,
   };
+}
+
+function permissionOptionActionName(kind: PermissionOptionKind): string {
+  switch (kind) {
+    case "allow_once":
+      return "Allow";
+    case "allow_always":
+      return "Allow Always";
+    case "reject_once":
+      return "Reject";
+    case "reject_always":
+      return "Block Rule";
+  }
 }
 
 export function permissionPromptToAcp(prompt: PermissionPrompt): RequestPermissionRequest {
@@ -466,7 +483,7 @@ export function permissionPromptToAcp(prompt: PermissionPrompt): RequestPermissi
     },
     options: prompt.options.map((o) => ({
       optionId: o.optionId,
-      name: o.name,
+      name: o.description ?? o.name,
       kind: o.kind,
     })),
   };

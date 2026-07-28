@@ -299,16 +299,29 @@ describe("AcpBackendProcess", () => {
     );
     await backend.start();
 
-    const prompter = jest
-      .fn()
-      .mockResolvedValue({ outcome: { outcome: "selected", optionId: "ok" } });
+    const prompter = jest.fn().mockResolvedValue({
+      outcome: { outcome: "selected", optionId: "accept_execpolicy_amendment" },
+    });
     backend.setPermissionPrompter(prompter);
 
     const client = getVaultClient(backend);
+    const commandRule = "Allow commands matching `/usr/local/bin/search --vault notes`";
+    const networkRule = "Allow network access to api.example.com";
     const req = {
       sessionId: "s1",
       toolCall: { toolCallId: "tc1", title: "Read" },
-      options: [{ optionId: "ok", name: "Allow", kind: "allow_once" }],
+      options: [
+        {
+          optionId: "accept_execpolicy_amendment",
+          name: commandRule,
+          kind: "allow_always",
+        },
+        {
+          optionId: "accept_networkpolicy_amendment",
+          name: networkRule,
+          kind: "allow_always",
+        },
+      ],
     } as unknown as Parameters<typeof client.requestPermission>[0];
     const response = await client.requestPermission(req);
     expect(prompter).toHaveBeenCalledTimes(1);
@@ -316,7 +329,23 @@ describe("AcpBackendProcess", () => {
     const prompt = prompter.mock.calls[0][0];
     expect(prompt.sessionId).toBe("s1");
     expect(prompt.toolCall.toolCallId).toBe("tc1");
-    expect(response).toEqual({ outcome: { outcome: "selected", optionId: "ok" } });
+    expect(prompt.options).toEqual([
+      {
+        optionId: "accept_execpolicy_amendment",
+        name: "Allow Always",
+        description: commandRule,
+        kind: "allow_always",
+      },
+      {
+        optionId: "accept_networkpolicy_amendment",
+        name: "Allow Always",
+        description: networkRule,
+        kind: "allow_always",
+      },
+    ]);
+    expect(response).toEqual({
+      outcome: { outcome: "selected", optionId: "accept_execpolicy_amendment" },
+    });
   });
 
   it("clears connection state on subprocess exit so subsequent ops fail with a clear error", async () => {

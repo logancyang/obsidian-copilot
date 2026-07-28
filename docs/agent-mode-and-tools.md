@@ -37,8 +37,8 @@ The mode picker beside the message box controls how much the active agent can do
 The available modes depend on the selected agent. Copilot normalizes equivalent modes across supported versions of Claude, Codex, and OpenCode.
 
 When **Default** mode asks for permission, the request stays in the chat until
-you choose an action. Detailed permission rules appear in the card body, while
-the buttons keep short action labels.
+you choose an action, cancel the turn, or close the session. Each detailed
+permission rule appears beside its matching short action button.
 
 ### Max Iterations
 

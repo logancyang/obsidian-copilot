@@ -14,10 +14,6 @@ interface ToolPermissionCardProps {
   onResolve: (toolCallId: string, optionId: string) => void;
 }
 
-// ACP provides one name field, so adapters sometimes place a full permission
-// rule there even though the same value must also identify the action.
-const MAX_PERMISSION_BUTTON_LABEL_LENGTH = 32;
-
 /**
  * Inline permission card rendered at the tail of the chat scroll container
  * while a tool call is awaiting the user's decision. Replaces the modal that
@@ -26,10 +22,9 @@ const MAX_PERMISSION_BUTTON_LABEL_LENGTH = 32;
  * sessions. The card stays in-place until the user picks an option or the
  * turn is cancelled.
  *
- * The actual SDK permission update (allow_once / allow_always /
- * reject_once / reject_always semantics, including the
- * `updatedPermissions` payload for "always" choices) is handled in
- * `mapDecisionToSdk` — this component just forwards the chosen `optionId`.
+ * The backend translates one-time and persistent decisions from the selected
+ * `optionId`; this component only displays the domain prompt and forwards that
+ * identifier.
  */
 export const ToolPermissionCard: React.FC<ToolPermissionCardProps> = ({ request, onResolve }) => {
   const { toolCall, options } = request;
@@ -86,62 +81,48 @@ export const ToolPermissionCard: React.FC<ToolPermissionCardProps> = ({ request,
             </pre>
           </details>
         ) : null}
-
-        {orderedOptions.some(isDescriptiveOption) ? (
-          <div className="tw-flex tw-min-w-0 tw-flex-col tw-gap-1 tw-rounded tw-bg-primary tw-p-2">
-            <p className="tw-m-0 tw-text-xs tw-font-medium">Permission details</p>
-            {orderedOptions.map((option, index) =>
-              isDescriptiveOption(option) ? (
-                <p
-                  key={option.optionId}
-                  id={`${descriptionIdPrefix}-${index}`}
-                  className="tw-m-0 tw-min-w-0 tw-break-words tw-text-xs tw-text-muted"
-                >
-                  {option.name}
-                </p>
-              ) : null
-            )}
-          </div>
-        ) : null}
       </div>
 
       <div className="tw-flex tw-flex-wrap tw-items-center tw-justify-end tw-gap-2 tw-border-t tw-border-solid tw-border-border tw-px-3 tw-py-2">
         {orderedOptions.map((option, index) => {
-          const descriptive = isDescriptiveOption(option);
-          return (
+          const descriptionId = `${descriptionIdPrefix}-${index}`;
+          const button = (
             <Button
               key={option.optionId}
               variant={variantForKind(option.kind)}
               size="sm"
+              className="tw-h-auto tw-min-h-6 tw-max-w-full tw-whitespace-normal tw-break-words"
               disabled={busy}
-              aria-describedby={descriptive ? `${descriptionIdPrefix}-${index}` : undefined}
+              aria-describedby={option.description ? descriptionId : undefined}
               onClick={() => choose(option.optionId)}
             >
-              {descriptive ? descriptiveOptionButtonLabel(option.kind) : option.name}
+              {option.name}
             </Button>
           );
+
+          if (option.description) {
+            return (
+              <div
+                key={option.optionId}
+                className="tw-flex tw-w-full tw-min-w-0 tw-flex-col tw-items-start tw-gap-2 tw-rounded tw-bg-primary tw-p-2"
+              >
+                <p
+                  id={descriptionId}
+                  className="tw-m-0 tw-w-full tw-min-w-0 tw-break-words tw-text-xs tw-text-muted"
+                >
+                  {option.description}
+                </p>
+                <div className="tw-flex tw-w-full tw-justify-end">{button}</div>
+              </div>
+            );
+          }
+
+          return button;
         })}
       </div>
     </div>
   );
 };
-
-function isDescriptiveOption(option: PermissionOption): boolean {
-  return option.name.length > MAX_PERMISSION_BUTTON_LABEL_LENGTH;
-}
-
-function descriptiveOptionButtonLabel(kind: PermissionOptionKind): string {
-  switch (kind) {
-    case "allow_once":
-      return "Allow";
-    case "allow_always":
-      return "Allow Always";
-    case "reject_once":
-      return "Reject";
-    case "reject_always":
-      return "Block Rule";
-  }
-}
 
 /**
  * Map `PermissionOptionKind` to a Button variant. "Once" actions stay neutral
