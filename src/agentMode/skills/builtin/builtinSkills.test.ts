@@ -187,6 +187,7 @@ describe("builtinSkills", () => {
       expect(skill!.skillMd).toContain("A previous");
       expect(skill!.skillMd).toContain("request to publish is not confirmation");
       expect(skill!.skillMd).toContain(PLUS_ENV.licenseKey);
+      expect(skill!.skillMd).toContain("app.fileManager.processFrontMatter");
       expect(skill!.skillMd).toContain(`${SYMPOSIUM_API_ORIGIN}/api/v1/docs`);
       expect(skill!.skillMd).toContain("POST exactly once");
       expect(skill!.skillMd).toContain("401/403");
@@ -198,6 +199,9 @@ describe("builtinSkills", () => {
       expect(skill!.skillMd).toContain("| Document ID | Status | Note | URL |");
       expect(skill!.skillMd).toContain("normal Obsidian note tools");
       expect(skill!.skillMd).toContain("Obsidian CLI");
+      expect(skill!.skillMd).toContain("append only when it begins with that exact");
+      expect(skill!.skillMd).toContain("Escape existing backslashes");
+      expect(skill!.skillMd).toContain("one `processFrontMatter` callback");
       expect(skill!.skillMd).toContain("only if it is still absent");
       expect(skill!.skillMd).toContain("server's `url` verbatim");
     });

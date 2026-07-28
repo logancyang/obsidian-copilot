@@ -520,8 +520,10 @@ question UI, ask conversationally and stop until the user answers. A previous
 request to publish is not confirmation. On No, send nothing.
 
 On Yes, read \`${PLUS_ENV.licenseKey}\` from the environment without printing
-or storing it. Recheck that the source still exists and has no \`symposium\`
-property, then use the agent's available HTTP tooling to POST exactly once to
+or storing it. Use the Obsidian CLI to verify that
+\`app.fileManager.processFrontMatter\` is available; if not, stop. Recheck that
+the source still exists and has no \`symposium\` property, then use the agent's
+available HTTP tooling to POST exactly once to
 \`${SYMPOSIUM_API_ORIGIN}/api/v1/docs\` with Bearer authorization and JSON
 \`{"title": <title>, "html": <html>}\`. Do not retry if the request may have
 reached the server. Report 401/403 as a rejected Copilot Plus license. Any other
@@ -540,12 +542,16 @@ so create or append it with normal Obsidian note tools. Use this header:
 | --- | --- | --- | --- | --- | ---: | --- |
 \`\`\`
 
-Append in that column order without rewriting old rows. If this advisory write
-fails, continue. Then set the source note's \`symposium\` text property to
-\`docId\` with the Obsidian CLI only if it is still absent. If that fails, do
-not publish again; report the URL and id so they remain recoverable. Return the
-server's \`url\` verbatim. Never put the license key in the note, HTML, ledger,
-command arguments, or chat.
+Create the note if absent; otherwise append only when it begins with that exact
+header. Escape existing backslashes, then pipes, and replace line breaks with
+spaces in every cell. Append in column order without rewriting old rows. If
+this advisory write fails, continue.
+
+Finally use one \`processFrontMatter\` callback to set the source note's
+\`symposium\` text property to \`docId\` only if it is still absent. If that
+fails, do not publish again; report the URL and id so they remain recoverable.
+Return the server's \`url\` verbatim. Never put the license key in the note,
+HTML, ledger, command arguments, or chat.
 `,
   files: [],
 };
