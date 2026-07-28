@@ -7,12 +7,16 @@ import type {
 } from "@/agentMode/session/types";
 import { PERMISSION_OPTION_KINDS } from "@/agentMode/session/types";
 import { ShieldQuestion } from "lucide-react";
-import React, { useMemo, useState } from "react";
+import React, { useId, useMemo, useState } from "react";
 
 interface ToolPermissionCardProps {
   request: PermissionPrompt;
   onResolve: (toolCallId: string, optionId: string) => void;
 }
+
+// ACP provides one name field, so adapters sometimes place a full permission
+// rule there even though the same value must also identify the action.
+const MAX_PERMISSION_BUTTON_LABEL_LENGTH = 32;
 
 /**
  * Inline permission card rendered at the tail of the chat scroll container
@@ -31,6 +35,7 @@ export const ToolPermissionCard: React.FC<ToolPermissionCardProps> = ({ request,
   const { toolCall, options } = request;
   const [busy, setBusy] = useState(false);
   const orderedOptions = useMemo(() => sortOptions(options), [options]);
+  const descriptionIdPrefix = useId();
   const diffContents = useMemo(() => extractDiffContents(toolCall.content), [toolCall.content]);
   const inputJson = useMemo(() => formatAgentInput(toolCall.rawInput), [toolCall.rawInput]);
   const title = toolCall.title ?? "Tool call";
@@ -81,24 +86,62 @@ export const ToolPermissionCard: React.FC<ToolPermissionCardProps> = ({ request,
             </pre>
           </details>
         ) : null}
+
+        {orderedOptions.some(isDescriptiveOption) ? (
+          <div className="tw-flex tw-min-w-0 tw-flex-col tw-gap-1 tw-rounded tw-bg-primary tw-p-2">
+            <p className="tw-m-0 tw-text-xs tw-font-medium">Permission details</p>
+            {orderedOptions.map((option, index) =>
+              isDescriptiveOption(option) ? (
+                <p
+                  key={option.optionId}
+                  id={`${descriptionIdPrefix}-${index}`}
+                  className="tw-m-0 tw-min-w-0 tw-break-words tw-text-xs tw-text-muted"
+                >
+                  {option.name}
+                </p>
+              ) : null
+            )}
+          </div>
+        ) : null}
       </div>
 
       <div className="tw-flex tw-flex-wrap tw-items-center tw-justify-end tw-gap-2 tw-border-t tw-border-solid tw-border-border tw-px-3 tw-py-2">
-        {orderedOptions.map((opt) => (
-          <Button
-            key={opt.optionId}
-            variant={variantForKind(opt.kind)}
-            size="sm"
-            disabled={busy}
-            onClick={() => choose(opt.optionId)}
-          >
-            {opt.name}
-          </Button>
-        ))}
+        {orderedOptions.map((option, index) => {
+          const descriptive = isDescriptiveOption(option);
+          return (
+            <Button
+              key={option.optionId}
+              variant={variantForKind(option.kind)}
+              size="sm"
+              disabled={busy}
+              aria-describedby={descriptive ? `${descriptionIdPrefix}-${index}` : undefined}
+              onClick={() => choose(option.optionId)}
+            >
+              {descriptive ? descriptiveOptionButtonLabel(option.kind) : option.name}
+            </Button>
+          );
+        })}
       </div>
     </div>
   );
 };
+
+function isDescriptiveOption(option: PermissionOption): boolean {
+  return option.name.length > MAX_PERMISSION_BUTTON_LABEL_LENGTH;
+}
+
+function descriptiveOptionButtonLabel(kind: PermissionOptionKind): string {
+  switch (kind) {
+    case "allow_once":
+      return "Allow";
+    case "allow_always":
+      return "Allow Always";
+    case "reject_once":
+      return "Reject";
+    case "reject_always":
+      return "Block Rule";
+  }
+}
 
 /**
  * Map `PermissionOptionKind` to a Button variant. "Once" actions stay neutral
