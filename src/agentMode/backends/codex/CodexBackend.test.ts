@@ -6,6 +6,7 @@ import {
   updateCachedSystemPrompts,
 } from "@/system-prompts/state";
 import type { UserSystemPrompt } from "@/system-prompts/type";
+import { SYMPOSIUM_WORKSPACE_ROOT_ENV } from "@/symposium/constants";
 import { CodexBackend, toTomlBasicString } from "./CodexBackend";
 
 jest.mock("@/logger", () => ({
@@ -66,6 +67,7 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
     const backend = new CodexBackend();
     const desc = await backend.buildSpawnDescriptor({ vaultBasePath: "/vault" });
     expect(desc.command).toBe("/usr/local/bin/codex-acp");
+    expect(desc.env[SYMPOSIUM_WORKSPACE_ROOT_ENV]).toBe("/vault");
 
     const config = JSON.parse(desc.env.CODEX_CONFIG as string);
     expect(config.developer_instructions).toContain("Obsidian Copilot");

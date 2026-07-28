@@ -1,5 +1,9 @@
 import { BUILTIN_SKILLS, managedBuiltinSkills, MIYO_SEARCH_SKILL, PLUS_ENV } from "./builtinSkills";
-import { SYMPOSIUM_API_ORIGIN, SYMPOSIUM_TOKEN_ENV } from "@/symposium/constants";
+import {
+  SYMPOSIUM_API_ORIGIN,
+  SYMPOSIUM_TOKEN_ENV,
+  SYMPOSIUM_WORKSPACE_ROOT_ENV,
+} from "@/symposium/constants";
 
 /** A script file shipped by a skill, matched by extension (".sh", ".cmd", ".ps1"). */
 function scriptOf(name: string, ext: ".sh" | ".cmd" | ".ps1" = ".sh"): string {
@@ -199,6 +203,8 @@ describe("builtinSkills", () => {
       expect(skill!.skillMd).toContain("malformed");
       expect(skill!.skillMd).toContain("ambiguous and non-retryable");
       expect(skill!.skillMd).toContain(".symposium/publish-history.md");
+      expect(skill!.skillMd).toContain(SYMPOSIUM_WORKSPACE_ROOT_ENV);
+      expect(skill!.skillMd).toContain("project-scoped");
       expect(skill!.skillMd).toContain("| Document ID | Status | Note | URL |");
       expect(skill!.skillMd).toContain("direct filesystem");
       expect(skill!.skillMd).toContain("append only when it begins with that exact");

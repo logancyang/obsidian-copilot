@@ -1,5 +1,9 @@
 import type { BackendId } from "@/agentMode/session/types";
-import { SYMPOSIUM_API_ORIGIN, SYMPOSIUM_TOKEN_ENV } from "@/symposium/constants";
+import {
+  SYMPOSIUM_API_ORIGIN,
+  SYMPOSIUM_TOKEN_ENV,
+  SYMPOSIUM_WORKSPACE_ROOT_ENV,
+} from "@/symposium/constants";
 import { OBSIDIAN_SKILLS } from "./obsidianSkills";
 
 /**
@@ -538,7 +542,9 @@ A 201 receipt is valid only when \`docId\` is 16 lowercase Crockford characters,
 Treat a malformed 201 as ambiguous and non-retryable. Before updating the source
 note, append a \`published\` row containing that receipt, the source path, current
 UTC time, and the HTML SHA-256 to \`.symposium/publish-history.md\` under the
-workspace root (the vault root when running in Obsidian). Use direct filesystem
+publishing root. Use \`${SYMPOSIUM_WORKSPACE_ROOT_ENV}\` when it is nonempty;
+otherwise use the current workspace root. Do not substitute a project-scoped
+session's working directory for a host-provided root. Use direct filesystem
 operations because hidden directories are not ordinary indexed notes. Create
 the directory and file when absent. Use this header:
 
