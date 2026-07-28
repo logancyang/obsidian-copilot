@@ -11,7 +11,7 @@ jest.mock("@/logger", () => ({
 
 describe("legacyAgentsResidue", () => {
   describe("reconcileLegacyAgentsResidue()", () => {
-    it("creates the missing project record without deleting the canonical AGENTS file", async () => {
+    it("creates the missing project record and keeps AGENTS.md as body-only instructions", async () => {
       const agentsPath = "copilot-projects/Research/AGENTS.md";
       const projectPath = "copilot-projects/Research/project.md";
       const agentsContent = "---\ncopilot-project-id: research\n---\nUse primary sources.";
@@ -37,8 +37,11 @@ describe("legacyAgentsResidue", () => {
 
       await reconcileLegacyAgentsResidue(app);
 
+      // The config lands in project.md verbatim (zero data loss)...
       expect(files.get(projectPath)).toBe(agentsContent);
-      expect(files.get(agentsPath)).toBe(agentsContent);
+      // ...while the surviving AGENTS.md keeps only the instruction body: its frontmatter is
+      // project config, and feeding that YAML to the agent as instruction text is nonsense.
+      expect(files.get(agentsPath)).toBe("Use primary sources.");
       expect(adapter.remove).not.toHaveBeenCalled();
     });
   });

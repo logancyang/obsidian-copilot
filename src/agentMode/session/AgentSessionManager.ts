@@ -74,6 +74,8 @@ import {
 } from "@/projects/projectContextSignature";
 import { ProjectContentTracker } from "@/context/projectContentTracker";
 import { buildProjectContextUpdatesBlock } from "@/context/contextUpdatesBlockBuilder";
+import { ensureAgentsFileForDiscovery } from "@/instructions/agentsFile";
+import { getProjectFolderPath } from "@/projects/projectPaths";
 import { ProjectFileManager } from "@/projects/ProjectFileManager";
 import type {
   AgentQuestionAnswers,
@@ -310,6 +312,14 @@ export class AgentSessionManager {
   private disposed = false;
   private startingBackendId: BackendId | null = null;
   private lastError: string | null = null;
+  /**
+   * Bumped on every recorded failure. Lets a create that succeeds tell "no failure happened
+   * while I was starting" (clear the banner) from "a sibling create failed in the meantime"
+   * (leave it). Without it the distinction rests on microtask ordering between two creates'
+   * `ready` chains, which any added await before `newSession` silently flips.
+   */
+  private lastErrorSeq = 0;
+
   private readonly pendingBackendRestarts = new Map<BackendId, string>();
   private readonly restartingBackends = new Set<BackendId>();
   private readonly preloader: AgentModelPreloader;
@@ -1176,13 +1186,23 @@ export class AgentSessionManager {
     // safety the removed Self-Host redirect used to provide as a side effect.
     const requestedId = backendId ?? getSettings().agentMode?.activeBackend ?? "opencode";
     const resolvedId = this.opts.resolveDescriptor(requestedId) ? requestedId : "opencode";
+    // Read SYNCHRONOUSLY, before this method's first await, so the success path below can
+    // tell whether any failure landed while this create was in flight.
+    const errorSeqAtStart = this.lastErrorSeq;
 
-    // Read the live record once for the landing-capture signature recorded
-    // after the session is built.
+    // Read the live record once: it drives both the instruction-file ensure below and the
+    // landing-capture signature recorded after the session is built.
     const projectRecord =
       projectId === GLOBAL_SCOPE ? undefined : getCachedProjectRecordById(projectId);
+
+    // Make this scope's instructions discoverable BEFORE resolving cwd, so every backend
+    // sees them on its first session. Only initializes a scope that has something to
+    // preserve (a legacy `project.md` body, or an AGENTS.md already on disk needing its
+    // Claude import) — a fresh project folder stays empty. Never throws.
+    await this.ensureScopeInstructions(projectId, projectRecord);
+
     const landingCaptureSignature = projectRecord
-      ? getProjectLandingCaptureSignature(projectRecord)
+      ? this.landingCaptureSignatureFor(projectRecord)
       : undefined;
 
     // Resolves the scope's cwd (vault root for global, project folder otherwise)
@@ -1234,7 +1254,7 @@ export class AgentSessionManager {
       // available for adoption below — skips a second `newSession`.
       ({ proc: backend, warm } = await this.ensureBackend(resolvedId, descriptor));
     } catch (err) {
-      this.lastError = err2String(err);
+      this.setLastError(err2String(err));
       this.finishPendingCreate();
       throw err;
     }
@@ -1382,7 +1402,11 @@ export class AgentSessionManager {
             );
           }
         }
-        this.lastError = null;
+        // Only clear when nothing failed while this session was starting — a concurrent
+        // create's failure must stay on the status surface.
+        if (this.lastErrorSeq === errorSeqAtStart) {
+          this.lastError = null;
+        }
         logInfo(
           `[AgentMode] session ready (internal=${session.internalId} backend-id=${session.getBackendSessionId()} backend=${resolvedId}); pool size=${this.sessions.size}`
         );
@@ -1393,11 +1417,17 @@ export class AgentSessionManager {
         await replayPersistedMode(session, this.getDefaultMode(resolvedId));
       })
       .catch((err) => {
-        this.lastError = err2String(err);
+        this.setLastError(err2String(err));
       })
       .finally(() => this.finishPendingCreate());
 
     return session;
+  }
+
+  /** Record a failure for the status surface, advancing the failure sequence. */
+  private setLastError(message: string): void {
+    this.lastError = message;
+    this.lastErrorSeq++;
   }
 
   private finishPendingCreate(): void {
@@ -1898,7 +1928,34 @@ export class AgentSessionManager {
   private currentLandingCaptureSignature(projectId: ProjectScopeId): string | null {
     if (projectId === GLOBAL_SCOPE) return null;
     const record = getCachedProjectRecordById(projectId);
-    return record ? getProjectLandingCaptureSignature(record) : null;
+    return record ? this.landingCaptureSignatureFor(record) : null;
+  }
+
+  /** Bind the app to the signature helper so it can stat the project's AGENTS.md. */
+  private landingCaptureSignatureFor(record: ProjectFileRecord): string {
+    return getProjectLandingCaptureSignature(this.app, record);
+  }
+
+  /**
+   * Initialize the scope's canonical instruction files so the backend discovers them from
+   * cwd. Global scope only ever adds the Claude import next to an AGENTS.md the user wrote
+   * themselves (there is no legacy vault-level body to migrate); a project additionally
+   * initializes from its `project.md` body. Best-effort — never rejects.
+   */
+  private async ensureScopeInstructions(
+    projectId: ProjectScopeId,
+    record: ProjectFileRecord | undefined
+  ): Promise<void> {
+    if (projectId === GLOBAL_SCOPE) {
+      await ensureAgentsFileForDiscovery(this.app, "", "");
+      return;
+    }
+    if (!record) return;
+    await ensureAgentsFileForDiscovery(
+      this.app,
+      getProjectFolderPath(record.folderName),
+      record.project.systemPrompt ?? ""
+    );
   }
 
   /**
@@ -2864,6 +2921,12 @@ export class AgentSessionManager {
     sessionId: SessionId,
     projectId: ProjectScopeId
   ): Promise<AgentSession | null> {
+    // Same instruction ensure as `createSession` — a resumed session still derives its cwd
+    // from the scope, so the backend needs the file present before cwd is read.
+    await this.ensureScopeInstructions(
+      projectId,
+      projectId === GLOBAL_SCOPE ? undefined : getCachedProjectRecordById(projectId)
+    );
     const cwd = this.resolveSessionCwd(projectId);
     // Settle queued vault events so the revision key below reflects a just-edited
     // source — otherwise resume could join an in-flight run reading the old content
@@ -2896,7 +2959,7 @@ export class AgentSessionManager {
       // session sits unused on the proc until shutdown — harmless.
       ({ proc: backend } = await this.ensureBackend(backendId, descriptor));
     } catch (err) {
-      this.lastError = err2String(err);
+      this.setLastError(err2String(err));
       this.finishPendingCreate();
       return null;
     }
@@ -3388,7 +3451,7 @@ export class AgentSessionManager {
       // router's auto-spawn effect (which bails on lastError) doesn't
       // immediately respawn behind the user's back. The next explicit
       // create call clears it.
-      this.lastError = `${descriptor.displayName} backend exited unexpectedly.`;
+      this.setLastError(`${descriptor.displayName} backend exited unexpectedly.`);
       this.notify();
     });
   }
@@ -3411,7 +3474,7 @@ export class AgentSessionManager {
     try {
       await this.restartBackendNow(backendId, reason);
     } catch (err) {
-      this.lastError = err2String(err);
+      this.setLastError(err2String(err));
       logError(`[AgentMode] deferred ${backendId} backend restart failed`, err);
       this.notify();
     }
@@ -3492,7 +3555,7 @@ export class AgentSessionManager {
       try {
         await this.restartBackendNow(backendId, queued);
       } catch (err) {
-        this.lastError = err2String(err);
+        this.setLastError(err2String(err));
         logError(`[AgentMode] queued ${backendId} backend restart failed`, err);
         this.notify();
       }

@@ -10,6 +10,7 @@ import type { UserSystemPrompt } from "@/system-prompts/type";
 import {
   buildAgentSystemPrompt,
   COPILOT_MIYO_SEARCH_STEERING,
+  COPILOT_PROJECT_WORKSPACE_POLICY,
   COPILOT_PLUS_TOOLS_STEERING,
   COPILOT_PROMPT_BASE,
 } from "./agentSystemPrompt";
@@ -66,6 +67,17 @@ describe("agentSystemPrompt", () => {
       expect(prompt).not.toContain("You are Obsidian Copilot");
       expect(prompt).not.toContain(AGENT_TODO_PLANNING_STEERING);
       expect(prompt).toContain("{folder_name}");
+    });
+
+    it("keeps the project workspace policy internal and always on", () => {
+      // Operational wiring (where the agent may write and read), not builtin framing — and
+      // pre-AGENTS.md it rode the project mirror / <project_instructions>, which the toggle
+      // never suppressed. Losing it would let a project session scatter output anywhere.
+      expect(buildAgentSystemPrompt()).toContain(COPILOT_PROJECT_WORKSPACE_POLICY);
+      setDisableBuiltinSystemPrompt(true);
+      expect(buildAgentSystemPrompt()).toContain(COPILOT_PROJECT_WORKSPACE_POLICY);
+      expect(COPILOT_PROJECT_WORKSPACE_POLICY).toContain("outputs/");
+      expect(COPILOT_PROJECT_WORKSPACE_POLICY).toContain("configured context sources");
     });
 
     it("steers toward the builtin Copilot Plus skills regardless of Plus status", () => {
@@ -143,12 +155,6 @@ describe("agentSystemPrompt", () => {
 
     it("ports AGENT_LOOP_GUIDANCE behavior bullets", () => {
       expect(COPILOT_PROMPT_BASE).toMatch(/NEVER search for the same/);
-    });
-
-    it("keeps project workspace policy in the internal prompt", () => {
-      expect(COPILOT_PROMPT_BASE).toContain("<project_context>");
-      expect(COPILOT_PROMPT_BASE).toContain("outputs/");
-      expect(COPILOT_PROMPT_BASE).toContain("configured context sources");
     });
 
     it("renders note titles as bare [[wikilinks]], never backticked (v3 rule 7)", () => {

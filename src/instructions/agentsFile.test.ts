@@ -1,4 +1,8 @@
-import { ensureAgentsFile, openAgentsFile } from "@/instructions/agentsFile";
+import {
+  ensureAgentsFile,
+  ensureAgentsFileForDiscovery,
+  openAgentsFile,
+} from "@/instructions/agentsFile";
 import { App, TFile, TFolder } from "obsidian";
 
 interface MockVaultState {
@@ -17,7 +21,10 @@ function makeApp(initialFiles: Record<string, string> = {}, folders: string[] = 
   const openFile = jest.fn().mockResolvedValue(undefined);
   const app = {
     vault: {
+      // Obsidian never indexes dot-folders, so those paths resolve only through the adapter —
+      // the same split `vaultAdapterUtils` exists to bridge.
       getAbstractFileByPath: jest.fn((path: string) => {
+        if (path.split("/").some((segment) => segment.startsWith("."))) return null;
         if (state.files.has(path)) return toFile(path);
         if (state.folders.has(path)) return toFolder(path);
         return null;
@@ -92,6 +99,60 @@ describe("agentsFile", () => {
     });
   });
 
+  describe("ensureAgentsFileForDiscovery()", () => {
+    it("initializes an old project so the backend discovers it without a manual open", async () => {
+      // The regression this guards: a project whose instructions still live only in the
+      // project.md body would otherwise send NO instructions to any backend until the user
+      // happened to click the popover's AGENTS.md row.
+      const { app, state } = makeApp({}, ["copilot/projects/Research"]);
+
+      await ensureAgentsFileForDiscovery(app, "copilot/projects/Research", "Legacy project rules");
+
+      expect(state.files.get("copilot/projects/Research/AGENTS.md")).toBe("Legacy project rules");
+      expect(state.files.get("copilot/projects/Research/CLAUDE.md")).toBe("@AGENTS.md\n");
+    });
+
+    it("creates nothing for a scope with no instructions to preserve", async () => {
+      const { app, state } = makeApp({}, ["copilot/projects/Fresh"]);
+
+      await ensureAgentsFileForDiscovery(app, "copilot/projects/Fresh", "   \n ");
+
+      expect(state.files.size).toBe(0);
+    });
+
+    it("adds the Claude import next to a user-authored AGENTS.md without a legacy body", async () => {
+      const { app, state } = makeApp({ "AGENTS.md": "My vault rules" });
+
+      await ensureAgentsFileForDiscovery(app, "", "");
+
+      expect(state.files.get("AGENTS.md")).toBe("My vault rules");
+      expect(state.files.get("CLAUDE.md")).toBe("@AGENTS.md\n");
+    });
+
+    it("never rejects when the vault write fails", async () => {
+      const { app } = makeApp({}, ["copilot/projects/Research"]);
+      (app.vault.create as jest.Mock).mockRejectedValue(new Error("disk full"));
+
+      await expect(
+        ensureAgentsFileForDiscovery(app, "copilot/projects/Research", "rules")
+      ).resolves.toBeUndefined();
+    });
+  });
+
+  describe("claude import detection", () => {
+    it.each(["@AGENTS.md", "@./AGENTS.md", "# Rules\n\n@AGENTS.md\n\nmore"])(
+      "does not duplicate the import for %p",
+      async (claudeContent) => {
+        const { app, state } = makeApp({ "AGENTS.md": "rules", "CLAUDE.md": claudeContent });
+
+        await ensureAgentsFile(app, "", "");
+        await ensureAgentsFile(app, "", "");
+
+        expect(state.files.get("CLAUDE.md")).toBe(claudeContent);
+      }
+    );
+  });
+
   describe("openAgentsFile()", () => {
     it("opens the ensured AGENTS file in the requested leaf", async () => {
       const { app, openFile } = makeApp();
@@ -100,6 +161,17 @@ describe("agentsFile", () => {
 
       expect(app.workspace.getLeaf).toHaveBeenCalledWith(true);
       expect(openFile).toHaveBeenCalledWith(expect.objectContaining({ path: "AGENTS.md" }));
+    });
+
+    it("reports the path instead of opening a file Obsidian cannot show", async () => {
+      // A dot-folder file is never in the vault cache, so the resolved TFile is synthetic and
+      // the editor would open an empty leaf.
+      const { app, openFile } = makeApp({ ".copilot/projects/One/AGENTS.md": "rules" });
+
+      await expect(openAgentsFile(app, ".copilot/projects/One", "", true)).rejects.toThrow(
+        ".copilot/projects/One/AGENTS.md"
+      );
+      expect(openFile).not.toHaveBeenCalled();
     });
   });
 });

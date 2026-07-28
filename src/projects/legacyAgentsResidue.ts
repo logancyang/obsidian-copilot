@@ -7,6 +7,7 @@ import {
 } from "@/projects/constants";
 import { getProjectsFolder } from "@/projects/projectPaths";
 import { addPendingFileWrite, removePendingFileWrite } from "@/projects/state";
+import { stripFrontmatter } from "@/utils";
 import { App, normalizePath, parseYaml, TFile, TFolder } from "obsidian";
 
 /**
@@ -53,6 +54,19 @@ export async function reconcileLegacyAgentsResidue(app: App): Promise<void> {
         removePendingFileWrite(projectMdPath);
       }
 
+      // The residue file carries PR2b-1's config frontmatter, which now lives in the
+      // project.md we just wrote. Leaving it in place would feed the project's YAML config
+      // to the agent as instruction text, so keep only the body.
+      const body = stripFrontmatter(content, { trimStart: false });
+      if (body !== content) {
+        addPendingFileWrite(agentsPath);
+        try {
+          await writeFile(app, agentsPath, body);
+        } finally {
+          removePendingFileWrite(agentsPath);
+        }
+      }
+
       logInfo(`[Projects] Reconciled PR2b-1 AGENTS.md residue → project.md in ${folderPath}`);
     } catch (error) {
       logError(`[Projects] Failed to reconcile AGENTS.md residue in ${folderPath}`, error);
@@ -97,6 +111,15 @@ async function readFile(app: App, path: string): Promise<string | null> {
   if (file instanceof TFile) return app.vault.read(file);
   if (await app.vault.adapter.exists(path)) return app.vault.adapter.read(path);
   return null;
+}
+
+async function writeFile(app: App, path: string, content: string): Promise<void> {
+  const file = app.vault.getAbstractFileByPath(path);
+  if (file instanceof TFile) {
+    await app.vault.modify(file, content);
+    return;
+  }
+  await app.vault.adapter.write(path, content);
 }
 
 async function createFile(app: App, path: string, content: string): Promise<void> {

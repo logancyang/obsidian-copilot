@@ -221,7 +221,16 @@ function buildApp(basePath = "/vault"): App {
     on: jest.fn(() => ({}) as never),
     offref: jest.fn(),
   };
-  return { vault: { adapter, ...vaultEvents } } as unknown as App;
+  // Session start ensures the scope's AGENTS.md is discoverable and stats it for the
+  // landing-capture signature. An empty vault (no cached file, adapter reports nothing on
+  // disk) is the "nothing to initialize" case, so no files are written.
+  const vaultFiles = {
+    getAbstractFileByPath: jest.fn(() => null),
+    create: jest.fn(),
+    read: jest.fn(async () => ""),
+    modify: jest.fn(),
+  };
+  return { vault: { adapter, ...vaultEvents, ...vaultFiles } } as unknown as App;
 }
 
 function buildPlugin(): { manifest: { version: string } } {
@@ -471,7 +480,9 @@ describe("AgentSessionManager.createSession", () => {
     await succeedingSession.ready;
     // Allow the manager's `.finally` continuation to run.
     await Promise.resolve();
-    await Promise.resolve();
+    // Several microtasks: session creation awaits the scope's instruction ensure before the
+    // failing spawn settles.
+    for (let i = 0; i < 10; i++) await Promise.resolve();
 
     expect(mgr.getLastError()).toMatch(/boom/);
   });

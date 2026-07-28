@@ -1,5 +1,8 @@
 import type { ProjectConfig } from "@/aiParams";
+import { AGENTS_FILE_NAME } from "@/instructions/agentsFile";
+import { getProjectFolderPath } from "@/projects/projectPaths";
 import type { ProjectFileRecord } from "@/projects/type";
+import { App, normalizePath, TFile } from "obsidian";
 
 /**
  * The context-source fields whose change should invalidate a project's
@@ -66,21 +69,41 @@ export function getProjectContextSignature(record: ProjectFileRecord): string {
 }
 
 /**
- * Fingerprint of a project's materialized context plus its legacy project.md
- * instruction body. The body remains here for compatibility with projects that
- * have not yet initialized AGENTS.md.
+ * Fingerprint of everything an EMPTY project landing session bakes in at creation: the
+ * materialization signature PLUS the project's instructions. A landing session captures its
+ * instructions once at start — every backend reads `AGENTS.md` from the session cwd — so an
+ * instruction-only edit must replace the still-empty session for the first message to use the
+ * new text, even though it changes no materialized source.
  *
- * Kept SEPARATE from {@link getProjectContextSignature} on purpose: that one
- * drives re-materialization (glob/URL/PDF conversion) and must stay insensitive
- * to `systemPrompt` (see its DESIGN NOTE) — folding the legacy body in there
- * would re-materialize context unnecessarily. It is compared verbatim because
- * `project.md` preserves its whitespace.
+ * The instruction term is the `AGENTS.md` mtime/size, NOT the `project.md` body: since
+ * AGENTS.md became canonical, the body is inert for Agent Mode, so keying on it would both
+ * miss real edits (stale instructions on the first message) and churn on edits that no longer
+ * matter. `stat` comes from the vault cache, keeping this synchronous for its render-path
+ * callers. Falls back to the legacy body for a project whose AGENTS.md does not exist yet (or
+ * lives in a hidden folder Obsidian does not index) — there, the body is still what
+ * initializes the file.
+ *
+ * Kept SEPARATE from {@link getProjectContextSignature} on purpose: that one drives
+ * re-materialization (glob/URL/PDF conversion) and must stay insensitive to instructions (see
+ * its DESIGN NOTE) — folding them in there would re-materialize on every prompt edit.
  */
-export function getProjectLandingCaptureSignature(record: ProjectFileRecord): string {
+export function getProjectLandingCaptureSignature(app: App, record: ProjectFileRecord): string {
   return JSON.stringify({
     context: getProjectContextSignature(record),
-    systemPrompt: record.project.systemPrompt ?? "",
+    instructions: getInstructionsFingerprint(app, record),
   });
+}
+
+function getInstructionsFingerprint(app: App, record: ProjectFileRecord): string {
+  const agentsPath = normalizePath(
+    `${getProjectFolderPath(record.folderName)}/${AGENTS_FILE_NAME}`
+  );
+  const file = app.vault.getAbstractFileByPath(agentsPath);
+  if (file instanceof TFile) return `agents:${file.stat.mtime}:${file.stat.size}`;
+  // Compared verbatim (no `normalizeMultiline`): `project.md` preserves the body's
+  // whitespace, so a whitespace-only edit is a real change to what the file would be
+  // initialized with.
+  return `legacy:${record.project.systemPrompt ?? ""}`;
 }
 
 /**

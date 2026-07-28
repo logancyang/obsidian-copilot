@@ -50,6 +50,15 @@ Codex and OpenCode.
 
 Changes apply to new agent sessions.
 
+### Upgrading from an earlier version
+
+Nothing to do — your existing instructions are carried over the first time they are needed:
+
+- A project that had a **Project System Prompt** initializes its `AGENTS.md` from that text.
+- The vault file initializes from whichever custom system prompt Agent Mode was using.
+
+Your own hand-written `AGENTS.md` and `CLAUDE.md` files are never replaced.
+
 ---
 
 ## Chat Mode Custom System Prompts
@@ -67,6 +76,16 @@ copilot/system-prompts/
 You can change this folder in **Settings → Copilot → Advanced → System Prompts Folder Name**.
 
 ### Creating a System Prompt
+
+#### From Settings
+
+1. Go to **Settings → Copilot → Advanced → Chat system prompts**
+2. Click the `+` button next to **Default System Prompt**
+3. Enter a title for the prompt (e.g., "Academic Writing")
+4. A new markdown file is created in your system prompts folder
+5. Open the file and write your instructions
+
+#### From the System Prompts Folder
 
 Create any `.md` file in the `copilot/system-prompts/` folder. Its filename (without `.md`) becomes the prompt's title.
 
@@ -90,6 +109,20 @@ You are a Zettelkasten assistant helping me build a knowledge base.
 - Format all note suggestions as [[Note Title]]
 - Keep responses concise — under 200 words
 ```
+
+---
+
+## Setting a Global Default (Chat Mode)
+
+You can set one of your custom prompts as the chat-mode default — it will be used for all new
+chat conversations:
+
+1. Go to **Settings → Copilot → Advanced → Chat system prompts**
+2. Under **Default System Prompt**, select your prompt from the dropdown
+3. Any new conversation will start with this prompt active
+
+To stop using a custom default, select **None (use built-in prompt)** from the dropdown. This
+setting applies to Chat mode only — Agent Mode reads `AGENTS.md` instead.
 
 ---
 

@@ -22,8 +22,10 @@ import {
 import { App, Notice, TFile, TFolder } from "obsidian";
 import React, { memo, useMemo, useState } from "react";
 
-const HIDDEN_BASENAME = "project.md";
-const AGENTS_BASENAME = "agents.md";
+// Files the popover represents with its own fixed row, or generates as wiring, rather than
+// listing as plain project files: the metadata record, the instruction file (the AGENTS.md
+// row above), and the CLAUDE.md import Copilot writes next to it.
+const HIDDEN_BASENAMES = new Set(["project.md", "agents.md", "claude.md"]);
 
 /** Per-extension badge tints, the same project palette tokens rows use. */
 const BADGE_CLASSES: Record<string, string> = {
@@ -121,8 +123,7 @@ function ProjectFilesSection({ app, project, onClose }: ProjectFilesSectionProps
         (child): child is TFile =>
           child instanceof TFile &&
           !child.name.startsWith(".") &&
-          child.name.toLowerCase() !== HIDDEN_BASENAME &&
-          child.name.toLowerCase() !== AGENTS_BASENAME
+          !HIDDEN_BASENAMES.has(child.name.toLowerCase())
       )
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [app, project.id]);

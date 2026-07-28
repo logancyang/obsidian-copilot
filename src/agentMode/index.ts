@@ -328,12 +328,6 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     return seedChain;
   };
   subscribeToSettingsChange((prev, next) => {
-    if (
-      prev.defaultSystemPromptTitle !== next.defaultSystemPromptTitle ||
-      prev.userSystemPrompt !== next.userSystemPrompt
-    ) {
-      restartSystemPromptAffected();
-    }
     // The managed env injected at spawn (see `buildBuiltinSkillEnv`) changes with
     // Copilot Plus sign-in/out or license rotation (the decrypted license the
     // builtin Plus skill scripts read) and with the Miyo server URL (the

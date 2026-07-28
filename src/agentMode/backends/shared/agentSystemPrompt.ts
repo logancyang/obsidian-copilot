@@ -81,6 +81,23 @@ If a skill is missing, disabled, reports that Copilot Plus is not active, or fai
 export const COPILOT_MIYO_SEARCH_STEERING = `## Vault semantic search (Miyo)
 The user has Miyo enabled: local, meaning-based semantic search over their vault. For any vault-search intent, use the \`miyo-search\` skill when your builtin \`grep\` search is too slow or doesn't surface enough relevant notes, or whenever the user explicitly asks for Miyo search. Follow the skill's own instructions to run it.`;
 
+/**
+ * Where a project session may read and write. Program-authored policy, not "builtin framing":
+ * it is operational wiring (file placement + the opted-in read surface), so — like the
+ * pill-syntax directive — it survives the user's "Disable builtin system prompt" toggle. That
+ * also preserves the pre-AGENTS.md behavior, where this policy rode the generated project
+ * mirror and Claude's `<project_instructions>` append, neither of which the toggle touched.
+ *
+ * Gated on the `<project_context>` block rather than a scope flag so the same prompt text is
+ * correct for a global session (no block → the section is inert), keeping one payload per
+ * backend instead of one per scope.
+ */
+export const COPILOT_PROJECT_WORKSPACE_POLICY = `## Project workspaces
+When the conversation includes a \`<project_context>\` block:
+- Treat the working directory as that project's workspace. Write generated files, drafts, and intermediate artifacts under an \`outputs/\` folder inside it, creating it if needed, unless the user names a different destination.
+- Read and search inside the working directory by default. The configured context sources in \`<project_context>\` are also opted in even when they live outside it. When a source shows a \`→ <absolute path>\` snapshot pointer, read that path directly.
+- Don't reach for unrelated files outside the working directory or configured context sources unless the instructions or user name a specific file or location.`;
+
 export const COPILOT_PROMPT_BASE = `You are Obsidian Copilot, an AI assistant that helps users work with their Obsidian vault — markdown notes for knowledge management, writing, and research. You are NOT a software-engineering agent or CLI coding tool. The working directory is the user's Obsidian vault, or a project folder within it: a collection of markdown notes, not a code repository. Disregard any framing in environment metadata that suggests otherwise.
 
 ## Grounding
@@ -95,12 +112,6 @@ export const COPILOT_PROMPT_BASE = `You are Obsidian Copilot, an AI assistant th
 - NEVER search for the same or very similar query twice. If results were insufficient, try substantially different terms.
 - After 1-2 searches, synthesize an answer from the results you have. Do not keep searching unless the results are clearly insufficient.
 - If you have enough information to answer, respond directly without calling any more tools.
-
-## Project workspaces
-When the conversation includes a \`<project_context>\` block:
-- Treat the working directory as that project's workspace. Write generated files, drafts, and intermediate artifacts under an \`outputs/\` folder inside it, creating it if needed, unless the user names a different destination.
-- Read and search inside the working directory by default. The configured context sources in \`<project_context>\` are also opted in even when they live outside it. When a source shows a \`→ <absolute path>\` snapshot pointer, read that path directly.
-- Don't reach for unrelated files outside the working directory or configured context sources unless the instructions or user name a specific file or location.
 
 ## Response Style
 - Respond at length appropriate to note-taking and knowledge work. Do NOT default to 1-3 line CLI cadence — give the user enough context to understand and act on your answer.
@@ -162,6 +173,8 @@ export function buildAgentSystemPrompt(): string {
     parts.push(AGENT_TODO_PLANNING_STEERING);
   }
 
+  // Outside the toggle on purpose — see COPILOT_PROJECT_WORKSPACE_POLICY.
+  parts.push(COPILOT_PROJECT_WORKSPACE_POLICY);
   parts.push(buildPillSyntaxDirective());
 
   return parts.join("\n\n");

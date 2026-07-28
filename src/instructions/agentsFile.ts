@@ -1,9 +1,18 @@
+import { logWarn } from "@/logger";
 import { isInVaultCache, resolveFileByPath } from "@/utils/vaultAdapterUtils";
 import { App, normalizePath, TFile, TFolder } from "obsidian";
 
 export const AGENTS_FILE_NAME = "AGENTS.md";
 export const CLAUDE_FILE_NAME = "CLAUDE.md";
 const CLAUDE_AGENTS_REFERENCE = "@AGENTS.md";
+
+/**
+ * Matches a line whose only content is a Claude import of the sibling AGENTS.md, in the
+ * spellings Claude actually resolves (`@AGENTS.md` / `@./AGENTS.md`). Detection is
+ * deliberately loose: a false positive skips a redundant append, while a false negative
+ * appends a duplicate import to a file the user owns on EVERY open.
+ */
+const CLAUDE_REFERENCE_PATTERN = /^[ \t>-]*@\.?\/?AGENTS\.md[ \t]*$/im;
 
 /**
  * Ensure a folder has an editable AGENTS.md and a Claude import for it.
@@ -28,6 +37,43 @@ export async function ensureAgentsFile(
 }
 
 /**
+ * Session-start counterpart to {@link ensureAgentsFile}: make a scope's instructions
+ * discoverable by the backends WITHOUT conjuring files out of nothing.
+ *
+ * Backends read instructions from the session cwd (codex/opencode natively, Claude through
+ * the sibling CLAUDE.md import), so a scope whose instructions still live only in the legacy
+ * `project.md` body — every project that predates this file layout — would silently send no
+ * instructions at all until the user happened to click the popover's AGENTS.md row. This runs
+ * that same initialization at session start instead.
+ *
+ * The "don't create from nothing" rule keeps it quiet: a scope with no AGENTS.md and no legacy
+ * body to migrate gets no files, so a brand-new project folder stays clean.
+ *
+ * Never throws — instructions are best-effort and must not block session creation.
+ *
+ * @param app - Obsidian app that owns the target vault
+ * @param folderPath - Vault-relative folder, or an empty string for the vault root
+ * @param initialContent - Legacy body to migrate; blank means "nothing to preserve"
+ */
+export async function ensureAgentsFileForDiscovery(
+  app: App,
+  folderPath: string,
+  initialContent: string
+): Promise<void> {
+  try {
+    const agentsPath = childPath(folderPath, AGENTS_FILE_NAME);
+    const existing = await resolveFileByPath(app, agentsPath);
+    if (!existing && !initialContent.trim()) return;
+    await ensureAgentsFile(app, folderPath, initialContent);
+  } catch (error) {
+    logWarn(
+      `[Instructions] Failed to ensure AGENTS.md for "${folderPath || "<vault root>"}"`,
+      error
+    );
+  }
+}
+
+/**
  * Open a folder's canonical instruction file in Obsidian, creating it if needed.
  *
  * @param app - Obsidian app that owns the target vault
@@ -42,6 +88,12 @@ export async function openAgentsFile(
   newLeaf: boolean
 ): Promise<void> {
   const file = await ensureAgentsFile(app, folderPath, initialContent);
+  // A file under a dot-folder is never in the vault cache, so `resolveFileByPath` hands back
+  // a synthetic TFile that Obsidian's editor cannot open. Report the real path instead of
+  // opening an empty leaf.
+  if (!isInVaultCache(app, file.path)) {
+    throw new Error(`${file.path} is in a hidden folder Obsidian cannot open. Edit it externally.`);
+  }
   await app.workspace.getLeaf(newLeaf).openFile(file);
 }
 
@@ -75,7 +127,7 @@ async function ensureClaudeReference(app: App, claudePath: string): Promise<void
   const content = isInVaultCache(app, claudePath)
     ? await app.vault.read(file)
     : await app.vault.adapter.read(claudePath);
-  if (/^@AGENTS\.md\s*$/m.test(content)) return;
+  if (CLAUDE_REFERENCE_PATTERN.test(content)) return;
 
   const separator = content.length === 0 ? "" : content.endsWith("\n") ? "\n" : "\n\n";
   const nextContent = `${content}${separator}${CLAUDE_AGENTS_REFERENCE}\n`;

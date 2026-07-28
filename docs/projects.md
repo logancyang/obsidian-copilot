@@ -64,9 +64,11 @@ Open the project info popover and select **AGENTS.md**. This opens the real file
 is no separate prompt editor in project settings.
 
 Vault instructions apply first, followed by the project's `AGENTS.md`, so project rules take
-precedence. For an older project without `AGENTS.md`, opening it once initializes the file from
-the existing Project System Prompt stored in `project.md`. A legacy Copilot-generated mirror is
-converted to that raw prompt on first open; user-authored files are left alone.
+precedence. For an older project without `AGENTS.md`, the file is initialized from the Project
+System Prompt already stored in `project.md` — the first time you open it, or automatically when
+you next start a chat in that project, so existing projects keep working without any migration
+step. A legacy Copilot-generated mirror is converted to that same text; user-authored files are
+left alone, and a project with no instructions gets no file at all.
 
 `project.md` remains the project's metadata and context configuration record. It is not the agent
 instruction file and is not renamed or migrated.
