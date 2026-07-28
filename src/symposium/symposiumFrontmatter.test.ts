@@ -2,13 +2,17 @@ import {
   getSymposiumDocId,
   parseSymposiumDocId,
   removeSymposiumDocId,
-  saveSymposiumDocId,
+  saveSymposiumLink,
   SymposiumFrontmatterParseError,
   SymposiumPropertyConflictError,
 } from "@/symposium/symposiumFrontmatter";
 import type { App, TFile } from "obsidian";
 
 const DOC_ID = "9f2k4mvq7t0xbz3n";
+const DOC_URL = `https://symposium.site/d/${DOC_ID}`;
+const OTHER_DOC_ID = "0123456789abcdef";
+const OTHER_DOC_URL = `https://symposium.site/d/${OTHER_DOC_ID}`;
+const RECEIPT = { docId: DOC_ID, url: DOC_URL, version: 1 };
 
 interface TestApp {
   app: App;
@@ -64,18 +68,20 @@ describe("symposiumFrontmatter", () => {
   });
 
   describe("parseSymposiumDocId()", () => {
-    it("accepts only lowercase 16-character Symposium ids", () => {
-      expect(parseSymposiumDocId(DOC_ID)).toBe(DOC_ID);
-      expect(parseSymposiumDocId("9F2K4MVQ7T0XBZ3N")).toBeNull();
-      expect(parseSymposiumDocId("too-short")).toBeNull();
+    it("extracts lowercase 16-character ids only from HTTPS document links", () => {
+      expect(parseSymposiumDocId(`${DOC_URL}?source=note`)).toBe(DOC_ID);
+      expect(parseSymposiumDocId(DOC_ID)).toBeNull();
+      expect(parseSymposiumDocId(`http://symposium.site/d/${DOC_ID}`)).toBeNull();
+      expect(parseSymposiumDocId("https://symposium.site/d/UPPERCASE1234567")).toBeNull();
+      expect(parseSymposiumDocId("https://symposium.site/about")).toBeNull();
       expect(parseSymposiumDocId(42)).toBeNull();
       expect(parseSymposiumDocId(null)).toBeNull();
     });
   });
 
   describe("getSymposiumDocId()", () => {
-    it("reads a valid id and treats missing frontmatter as unpublished", async () => {
-      const valid = createApp({ symposium: DOC_ID });
+    it("reads an id from a valid link and treats missing frontmatter as unpublished", async () => {
+      const valid = createApp({ symposium: DOC_URL });
       await expect(getSymposiumDocId(valid.app, file)).resolves.toBe(DOC_ID);
 
       const missing = createApp();
@@ -102,7 +108,7 @@ describe("symposiumFrontmatter", () => {
       );
     });
 
-    it("rejects an occupied property whose value is not a valid document id", async () => {
+    it("rejects an occupied property whose value is not a valid document link", async () => {
       const malformed = createApp({ symposium: { docId: DOC_ID } });
 
       await expect(getSymposiumDocId(malformed.app, file)).rejects.toBeInstanceOf(
@@ -111,41 +117,40 @@ describe("symposiumFrontmatter", () => {
     });
   });
 
-  describe("saveSymposiumDocId()", () => {
-    it("writes or replaces the property through processFrontMatter", async () => {
+  describe("saveSymposiumLink()", () => {
+    it("writes or replaces the property with the public link through processFrontMatter", async () => {
       const { app, frontmatter, processFrontMatter } = createApp({
-        symposium: "0123456789abcdef",
+        symposium: OTHER_DOC_URL,
         tags: ["public"],
       });
 
-      await expect(saveSymposiumDocId(app, file, DOC_ID, "0123456789abcdef")).resolves.toBe(true);
+      await expect(saveSymposiumLink(app, file, RECEIPT, OTHER_DOC_ID)).resolves.toBe(true);
 
       expect(processFrontMatter).toHaveBeenCalledWith(file, expect.any(Function));
-      expect(frontmatter).toEqual({ symposium: DOC_ID, tags: ["public"] });
+      expect(frontmatter).toEqual({ symposium: DOC_URL, tags: ["public"] });
     });
 
-    it("rejects an invalid id before changing the note", async () => {
+    it("rejects a receipt whose link does not contain its id before changing the note", async () => {
       const { app, processFrontMatter } = createApp();
 
-      await expect(saveSymposiumDocId(app, file, "INVALID", null)).rejects.toThrow(
-        "Cannot save an invalid Symposium document id."
-      );
+      await expect(
+        saveSymposiumLink(app, file, { ...RECEIPT, url: OTHER_DOC_URL }, null)
+      ).rejects.toThrow("Cannot save an invalid Symposium document link.");
       expect(processFrontMatter).not.toHaveBeenCalled();
     });
 
     it("does not overwrite an identity that changed after the remote action began", async () => {
-      const newerDocId = "0123456789abcdef";
-      const { app, frontmatter } = createApp({ symposium: newerDocId });
+      const { app, frontmatter } = createApp({ symposium: OTHER_DOC_URL });
 
-      await expect(saveSymposiumDocId(app, file, DOC_ID, null)).resolves.toBe(false);
-      expect(frontmatter.symposium).toBe(newerDocId);
+      await expect(saveSymposiumLink(app, file, RECEIPT, null)).resolves.toBe(false);
+      expect(frontmatter.symposium).toBe(OTHER_DOC_URL);
     });
 
     it("does not overwrite an occupied property with an unrecognized value", async () => {
       const existingValue = { url: "https://example.com/symposium" };
       const { app, frontmatter } = createApp({ symposium: existingValue });
 
-      await expect(saveSymposiumDocId(app, file, DOC_ID, null)).resolves.toBe(false);
+      await expect(saveSymposiumLink(app, file, RECEIPT, null)).resolves.toBe(false);
       expect(frontmatter.symposium).toBe(existingValue);
     });
 
@@ -155,7 +160,7 @@ describe("symposiumFrontmatter", () => {
       );
       const app = { fileManager: { processFrontMatter } } as unknown as App;
 
-      await expect(saveSymposiumDocId(app, file, DOC_ID, null)).rejects.toBeInstanceOf(
+      await expect(saveSymposiumLink(app, file, RECEIPT, null)).rejects.toBeInstanceOf(
         SymposiumFrontmatterParseError
       );
     });
@@ -164,7 +169,7 @@ describe("symposiumFrontmatter", () => {
   describe("removeSymposiumDocId()", () => {
     it("deletes only the Symposium property through processFrontMatter", async () => {
       const { app, frontmatter, processFrontMatter } = createApp({
-        symposium: DOC_ID,
+        symposium: DOC_URL,
         tags: ["public"],
       });
 
@@ -175,11 +180,10 @@ describe("symposiumFrontmatter", () => {
     });
 
     it("does not remove an identity that changed after the remote deletion began", async () => {
-      const newerDocId = "0123456789abcdef";
-      const { app, frontmatter } = createApp({ symposium: newerDocId });
+      const { app, frontmatter } = createApp({ symposium: OTHER_DOC_URL });
 
       await expect(removeSymposiumDocId(app, file, DOC_ID)).resolves.toBe(false);
-      expect(frontmatter.symposium).toBe(newerDocId);
+      expect(frontmatter.symposium).toBe(OTHER_DOC_URL);
     });
 
     it("rejects a non-mapping root supplied by the atomic callback", async () => {

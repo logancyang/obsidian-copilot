@@ -139,6 +139,10 @@ describe("SymposiumClient", () => {
       it.each([
         ["invalid doc id", { docId: "UPPERCASE", url: "https://symposium.site/d/x", version: 1 }],
         ["non-HTTPS URL", { docId: DOC_ID, url: "http://symposium.site/d/x", version: 1 }],
+        [
+          "mismatched document URL",
+          { docId: DOC_ID, url: "https://symposium.site/d/0123456789abcdef", version: 1 },
+        ],
         ["non-integer version", { docId: DOC_ID, url: "https://symposium.site/d/x", version: 1.5 }],
       ])("treats a successful POST with %s as ambiguous", async (_case, receipt) => {
         mockedRequestUrl.mockResolvedValue(response(201, receipt));

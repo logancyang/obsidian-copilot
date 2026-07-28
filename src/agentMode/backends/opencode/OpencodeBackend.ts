@@ -125,7 +125,7 @@ export class OpencodeBackend implements AcpBackend {
       );
     }
     // Builtin skills consume plugin-managed runtime paths and credentials.
-    const builtinSkillEnv = await buildBuiltinSkillEnv();
+    const builtinSkillEnv = await buildBuiltinSkillEnv("", ctx.vaultBasePath);
 
     return {
       command: binaryPath,

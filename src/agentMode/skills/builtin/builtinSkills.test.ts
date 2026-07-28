@@ -1,4 +1,10 @@
 import { BUILTIN_SKILLS, managedBuiltinSkills, MIYO_SEARCH_SKILL, PLUS_ENV } from "./builtinSkills";
+import {
+  SYMPOSIUM_API_ORIGIN,
+  SYMPOSIUM_MAX_HTML_BYTES,
+  SYMPOSIUM_TOKEN_ENV,
+  SYMPOSIUM_WORKSPACE_ROOT_ENV,
+} from "@/symposium/constants";
 
 /** A script file shipped by a skill, matched by extension (".sh", ".cmd", ".ps1"). */
 function scriptOf(name: string, ext: ".sh" | ".cmd" | ".ps1" = ".sh"): string {
@@ -9,7 +15,7 @@ function scriptOf(name: string, ext: ".sh" | ".cmd" | ".ps1" = ".sh"): string {
   return file.content;
 }
 
-const PLUS_SKILLS = BUILTIN_SKILLS.filter((skill) => skill.name.startsWith("copilot-"));
+const RELAY_SKILLS = BUILTIN_SKILLS.filter((skill) => skill.name.startsWith("copilot-"));
 
 describe("builtinSkills", () => {
   describe("BUILTIN_SKILLS", () => {
@@ -20,6 +26,7 @@ describe("builtinSkills", () => {
         "copilot-read-pdf",
         "copilot-youtube-transcript",
         "copilot-fetch-x",
+        "symposium-publish",
         "obsidian-markdown",
         "obsidian-bases",
         "json-canvas",
@@ -37,7 +44,7 @@ describe("builtinSkills", () => {
     });
 
     it("ships one runnable script per OS — POSIX sh + Windows cmd/ps1, no Node", () => {
-      for (const skill of PLUS_SKILLS) {
+      for (const skill of RELAY_SKILLS) {
         const sh = skill.files.find((f) => f.path.endsWith(".sh"));
         const cmd = skill.files.find((f) => f.path.endsWith(".cmd"));
         const ps1 = skill.files.find((f) => f.path.endsWith(".ps1"));
@@ -64,7 +71,7 @@ describe("builtinSkills", () => {
     });
 
     it("reads its config from the injected env and never embeds a key (both scripts)", () => {
-      for (const skill of PLUS_SKILLS) {
+      for (const skill of RELAY_SKILLS) {
         const sh = scriptOf(skill.name, ".sh");
         expect(sh).toContain(`#!/bin/sh`);
         expect(sh).toContain(PLUS_ENV.licenseKey);
@@ -97,7 +104,7 @@ describe("builtinSkills", () => {
     });
 
     it("falls back to the agent's own tools instead of blocking when Plus is absent", () => {
-      for (const skill of PLUS_SKILLS) {
+      for (const skill of RELAY_SKILLS) {
         const sh = scriptOf(skill.name, ".sh");
         // No license: tell the agent to use its own equivalent tools, never
         // refuse, and only append the upsell occasionally (gated on the pid). The
@@ -171,6 +178,46 @@ describe("builtinSkills", () => {
         "[System.Convert]::ToBase64String([System.IO.File]::ReadAllBytes($FILE))"
       );
       expect(ps1).toContain("@{ pdf = $PDF; user_id = $USER_ID }");
+    });
+
+    it("publishes confirmed agent-generated HTML and retains the link on its source note", () => {
+      const skill = BUILTIN_SKILLS.find((item) => item.name === "symposium-publish");
+      expect(skill).toBeDefined();
+      expect(skill!.files).toEqual([]);
+      expect(skill!.skillMd).toContain("Require one existing Markdown source file");
+      expect(skill!.skillMd).toMatch(/static HTML or\s+SVG/);
+      expect(skill!.skillMd).toContain(`\`${SYMPOSIUM_MAX_HTML_BYTES}\` bytes`);
+      expect(skill!.skillMd).toContain("ask an explicit Yes/No confirmation");
+      expect(skill!.skillMd).toContain("A previous");
+      expect(skill!.skillMd).toContain("request to publish is not confirmation");
+      expect(skill!.skillMd).toContain(SYMPOSIUM_TOKEN_ENV);
+      expect(skill!.skillMd).not.toContain(PLUS_ENV.licenseKey);
+      expect(skill!.skillMd).toContain("empty or absent");
+      expect(skill!.skillMd).toContain(`${SYMPOSIUM_API_ORIGIN}/api/v1/docs`);
+      expect(skill!.skillMd).toContain("POST exactly once");
+      expect(skill!.skillMd).toContain("Accept: application/json");
+      expect(skill!.skillMd).toContain("`User-Agent: Symposium-Agent`");
+      expect(skill!.skillMd).toContain("error.code");
+      expect(skill!.skillMd).toContain("Cloudflare 1xxx");
+      expect(skill!.skillMd).toContain("says nothing about token validity");
+      expect(skill!.skillMd).toContain("positive safe integer");
+      expect(skill!.skillMd).toContain("/d/<docId>");
+      expect(skill!.skillMd).toContain("malformed");
+      expect(skill!.skillMd).toContain("ambiguous and non-retryable");
+      expect(skill!.skillMd).toContain(".symposium/publish-history.md");
+      expect(skill!.skillMd).toContain(SYMPOSIUM_WORKSPACE_ROOT_ENV);
+      expect(skill!.skillMd).toContain("project-scoped");
+      expect(skill!.skillMd).toContain("| Document ID | Status | Note | URL |");
+      expect(skill!.skillMd).toContain("direct filesystem");
+      expect(skill!.skillMd).toContain("append only when it begins with that exact");
+      expect(skill!.skillMd).toContain("Escape existing backslashes");
+      expect(skill!.skillMd).toContain("structured frontmatter API");
+      expect(skill!.skillMd).toContain("server's full `url`");
+      expect(skill!.skillMd).toMatch(/only if the property is still\s+absent/);
+      expect(skill!.skillMd).toContain("server's `url` verbatim");
+      expect(skill!.skillMd).not.toContain("Copilot Plus");
+      expect(skill!.skillMd).not.toContain("Copilot-Obsidian");
+      expect(skill!.skillMd).not.toContain("Obsidian CLI");
     });
   });
 

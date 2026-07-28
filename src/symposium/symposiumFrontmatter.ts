@@ -1,4 +1,5 @@
 import { SYMPOSIUM_DOC_ID_PATTERN } from "@/symposium/constants";
+import type { SymposiumReceipt } from "@/symposium/types";
 import { App, parseYaml, TFile } from "obsidian";
 
 const SYMPOSIUM_PROPERTY = "symposium";
@@ -9,7 +10,7 @@ const SYMPOSIUM_PROPERTY = "symposium";
 export class SymposiumPropertyConflictError extends Error {
   constructor() {
     super(
-      "This note already uses the symposium property for an unrecognized value. Rename or remove that property before publishing."
+      "This note already uses the symposium property for an unrecognized value. Recover its public link from .symposium/publish-history.md, then repair or remove the property before publishing."
     );
     this.name = "SymposiumPropertyConflictError";
     Object.setPrototypeOf(this, SymposiumPropertyConflictError.prototype);
@@ -30,13 +31,22 @@ export class SymposiumFrontmatterParseError extends Error {
 }
 
 /**
- * Returns a Symposium identity only when the frontmatter value matches the server's id format.
+ * Returns the document id from a valid Symposium public link.
  * Throws when the reserved property is occupied by unrelated metadata so callers cannot overwrite it.
  *
  * @param value The raw frontmatter property value.
  */
 export function parseSymposiumDocId(value: unknown): string | null {
-  return typeof value === "string" && SYMPOSIUM_DOC_ID_PATTERN.test(value) ? value : null;
+  if (typeof value !== "string") return null;
+  try {
+    const url = new URL(value);
+    const docId = url.pathname.match(/^\/d\/([^/]+)\/?$/)?.[1];
+    return url.protocol === "https:" && docId && SYMPOSIUM_DOC_ID_PATTERN.test(docId)
+      ? docId
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 function isFrontmatterProperties(value: unknown): value is Record<string, unknown> {
@@ -78,21 +88,21 @@ export async function getSymposiumDocId(app: App, file: TFile): Promise<string |
 }
 
 /**
- * Saves a server-issued Symposium identity without replacing unrelated frontmatter.
+ * Saves a server-issued Symposium link without replacing unrelated frontmatter.
  *
  * @param app The Obsidian application that owns the note.
  * @param file The note whose publication identity should be saved.
- * @param docId The validated identity returned by Symposium.
+ * @param receipt The validated publication receipt returned by Symposium.
  * @param expectedDocId The identity that was current when the remote action began.
  */
-export async function saveSymposiumDocId(
+export async function saveSymposiumLink(
   app: App,
   file: TFile,
-  docId: string,
+  receipt: SymposiumReceipt,
   expectedDocId: string | null
 ): Promise<boolean> {
-  if (!SYMPOSIUM_DOC_ID_PATTERN.test(docId)) {
-    throw new Error("Cannot save an invalid Symposium document id.");
+  if (parseSymposiumDocId(receipt.url) !== receipt.docId) {
+    throw new Error("Cannot save an invalid Symposium document link.");
   }
 
   let saved = false;
@@ -104,14 +114,14 @@ export async function saveSymposiumDocId(
     if (Object.prototype.hasOwnProperty.call(frontmatter, SYMPOSIUM_PROPERTY) && !currentDocId) {
       return;
     }
-    if (currentDocId === docId) {
+    if (currentDocId === receipt.docId) {
       saved = true;
       return;
     }
     if (currentDocId !== expectedDocId) {
       return;
     }
-    frontmatter[SYMPOSIUM_PROPERTY] = docId;
+    frontmatter[SYMPOSIUM_PROPERTY] = receipt.url;
     saved = true;
   });
   return saved;

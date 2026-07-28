@@ -69,6 +69,12 @@ When inspecting open tabs, the agent preserves Markdown notes, other file-backed
 
 The agent never reloads or restarts Obsidian, nor does it reload, disable, or uninstall the Copilot plugin hosting its session. Those actions terminate in-flight agent work. When a reload is required to finish verification, the agent leaves it for you to perform after the session ends. Reloading a different plugin remains available for plugin development.
 
+### Publish to Symposium
+
+Ask Claude, Codex, or OpenCode to publish an existing Markdown note as a web page. The agent creates self-contained HTML, renders Mermaid and Bases as static content, then asks for explicit confirmation because the resulting link is public.
+
+The skill handles initial publishing only. It appends the receipt to the hidden history file `.symposium/publish-history.md` and stores the full public link in the required source note's `symposium` property. Use **Publish file to Symposium** to update or withdraw the page.
+
 ### Always-Enabled Tools
 
 These tools are always available and cannot be disabled:

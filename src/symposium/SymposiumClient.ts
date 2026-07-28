@@ -161,6 +161,7 @@ function parseReceipt(response: RequestUrlResponse, expectedDocId?: string): Sym
     (expectedDocId !== undefined && docId !== expectedDocId) ||
     typeof url !== "string" ||
     !isHttpsUrl(url) ||
+    new URL(url).pathname.replace(/\/$/, "") !== `/d/${docId}` ||
     typeof version !== "number" ||
     !Number.isSafeInteger(version) ||
     version < 1
