@@ -181,13 +181,11 @@ describe("builtinSkills", () => {
       const skill = BUILTIN_SKILLS.find((item) => item.name === "copilot-publish-symposium");
       expect(skill).toBeDefined();
       expect(skill!.files).toEqual([]);
-      expect(skill!.skillMd).toContain("Use one existing Markdown source note");
+      expect(skill!.skillMd).toContain("Require one existing Markdown source note");
       expect(skill!.skillMd).toContain("static HTML or SVG");
       expect(skill!.skillMd).toContain("ask an explicit Yes/No confirmation");
       expect(skill!.skillMd).toContain("A previous");
       expect(skill!.skillMd).toContain("request to publish is not confirmation");
-      expect(skill!.skillMd).toContain("Before any network request");
-      expect(skill!.skillMd).toContain("capability probe fails");
       expect(skill!.skillMd).toContain(PLUS_ENV.licenseKey);
       expect(skill!.skillMd).toContain(`${SYMPOSIUM_API_ORIGIN}/api/v1/docs`);
       expect(skill!.skillMd).toContain("POST exactly once");
@@ -197,10 +195,11 @@ describe("builtinSkills", () => {
       expect(skill!.skillMd).toContain("ambiguous and non-retryable");
       expect(skill!.skillMd).toContain("copilot/symposium/published-documents.md");
       expect(skill!.skillMd).toContain("ordinary Markdown note");
-      expect(skill!.skillMd).toContain("processFrontMatter");
-      expect(skill!.skillMd).toContain("only if the property is still absent");
-      expect(skill!.skillMd).toContain("Return the server's");
-      expect(skill!.skillMd).toContain("verbatim");
+      expect(skill!.skillMd).toContain("| Document ID | Status | Note | URL |");
+      expect(skill!.skillMd).toContain("normal Obsidian note tools");
+      expect(skill!.skillMd).toContain("Obsidian CLI");
+      expect(skill!.skillMd).toContain("only if it is still absent");
+      expect(skill!.skillMd).toContain("server's `url` verbatim");
     });
   });
 

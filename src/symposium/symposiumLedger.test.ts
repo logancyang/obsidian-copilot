@@ -19,12 +19,16 @@ describe("symposiumLedger", () => {
   describe("appendSymposiumLedgerEntry()", () => {
     const append = jest.fn();
     const exists = jest.fn();
-    const vault = { adapter: { append, exists } } as unknown as Vault;
+    const read = jest.fn();
+    const vault = { adapter: { append, exists, read } } as unknown as Vault;
 
     beforeEach(() => {
       jest.clearAllMocks();
       jest.mocked(ensureFolderExists).mockResolvedValue(undefined);
       append.mockResolvedValue(undefined);
+      read.mockResolvedValue(
+        "| Document ID | Status | Note | URL | Published at (UTC) | Version | Content SHA-256 |"
+      );
     });
 
     it("creates a readable Markdown ledger and escapes table-breaking note paths", async () => {
@@ -67,6 +71,14 @@ describe("symposiumLedger", () => {
       await appendSymposiumLedgerEntry(vault, ENTRY);
 
       expect(append).toHaveBeenCalledWith(LEDGER_PATH, expect.stringContaining(ENTRY.docId));
+    });
+
+    it("refuses to append to an unrelated existing note", async () => {
+      exists.mockResolvedValue(true);
+      read.mockResolvedValue("# My note");
+
+      await expect(appendSymposiumLedgerEntry(vault, ENTRY)).rejects.toThrow("non-ledger note");
+      expect(append).not.toHaveBeenCalled();
     });
   });
 });

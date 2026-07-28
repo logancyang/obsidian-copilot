@@ -506,9 +506,9 @@ metadata:
 
 # Publish Markdown to Symposium
 
-Use one existing Markdown source note; if needed, create it first. Read its
-\`symposium\` property through Obsidian. If present, stop and use **Publish file
-to Symposium** for Update/Delete.
+Require one existing Markdown source note. Read it with normal Obsidian note
+tools. If its \`symposium\` property is present, stop and use **Publish file to
+Symposium** for Update/Delete.
 
 Convert the note into a complete, self-contained, passive HTML document. Render
 Obsidian-only content such as Mermaid and Bases into static HTML or SVG, embed
@@ -519,13 +519,9 @@ link is public and ask an explicit Yes/No confirmation. If the agent has no
 question UI, ask conversationally and stop until the user answers. A previous
 request to publish is not confirmation. On No, send nothing.
 
-Before any network request, use the Obsidian CLI to verify that it can access
-\`app.fileManager.processFrontMatter\`. If this capability probe fails, stop
-without publishing.
-
 On Yes, read \`${PLUS_ENV.licenseKey}\` from the environment without printing
-or storing it. Recheck that the source has no \`symposium\` property, then use
-the agent's available HTTP tooling to POST exactly once to
+or storing it. Recheck that the source still exists and has no \`symposium\`
+property, then use the agent's available HTTP tooling to POST exactly once to
 \`${SYMPOSIUM_API_ORIGIN}/api/v1/docs\` with Bearer authorization and JSON
 \`{"title": <title>, "html": <html>}\`. Do not retry if the request may have
 reached the server. Report 401/403 as a rejected Copilot Plus license. Any other
@@ -537,14 +533,19 @@ A 201 receipt is valid only when \`docId\` is 16 lowercase Crockford characters,
 \`published\` row containing that receipt, the source path, current UTC time,
 and the HTML SHA-256 to
 \`copilot/symposium/published-documents.md\`; this is an ordinary Markdown note,
-so create it with the existing ledger table header if absent and otherwise
-append without rewriting old rows. If this advisory write fails, continue.
+so create or append it with normal Obsidian note tools. Use this header:
 
-Finally use one Obsidian \`processFrontMatter\` call to set \`symposium\` to
-\`docId\` only if the property is still absent. Never overwrite a concurrent
-value. If this compare-and-set fails, do not publish again; report the URL and
-id so they remain recoverable. Return the server's \`url\` verbatim. Never put
-the license key in the note, HTML, ledger, command arguments, or chat.
+\`\`\`markdown
+| Document ID | Status | Note | URL | Published at (UTC) | Version | Content SHA-256 |
+| --- | --- | --- | --- | --- | ---: | --- |
+\`\`\`
+
+Append in that column order without rewriting old rows. If this advisory write
+fails, continue. Then set the source note's \`symposium\` text property to
+\`docId\` with the Obsidian CLI only if it is still absent. If that fails, do
+not publish again; report the URL and id so they remain recoverable. Return the
+server's \`url\` verbatim. Never put the license key in the note, HTML, ledger,
+command arguments, or chat.
 `,
   files: [],
 };
