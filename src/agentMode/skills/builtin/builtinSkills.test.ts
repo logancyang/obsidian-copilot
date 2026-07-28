@@ -1,6 +1,7 @@
 import { BUILTIN_SKILLS, managedBuiltinSkills, MIYO_SEARCH_SKILL, PLUS_ENV } from "./builtinSkills";
 import {
   SYMPOSIUM_API_ORIGIN,
+  SYMPOSIUM_MAX_HTML_BYTES,
   SYMPOSIUM_TOKEN_ENV,
   SYMPOSIUM_WORKSPACE_ROOT_ENV,
 } from "@/symposium/constants";
@@ -185,6 +186,7 @@ describe("builtinSkills", () => {
       expect(skill!.files).toEqual([]);
       expect(skill!.skillMd).toContain("Require one existing Markdown source file");
       expect(skill!.skillMd).toMatch(/static HTML or\s+SVG/);
+      expect(skill!.skillMd).toContain(`\`${SYMPOSIUM_MAX_HTML_BYTES}\` bytes (10 MiB)`);
       expect(skill!.skillMd).toContain("ask an explicit Yes/No confirmation");
       expect(skill!.skillMd).toContain("A previous");
       expect(skill!.skillMd).toContain("request to publish is not confirmation");

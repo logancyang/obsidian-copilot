@@ -1,6 +1,7 @@
 import type { BackendId } from "@/agentMode/session/types";
 import {
   SYMPOSIUM_API_ORIGIN,
+  SYMPOSIUM_MAX_HTML_BYTES,
   SYMPOSIUM_TOKEN_ENV,
   SYMPOSIUM_WORKSPACE_ROOT_ENV,
 } from "@/symposium/constants";
@@ -515,7 +516,8 @@ property is present, stop: this skill performs initial publishing only.
 Convert the note into a complete, self-contained, passive HTML document. Render
 source-specific content such as Mermaid and Obsidian Bases into static HTML or
 SVG, embed images, and include no scripts, frames, forms, handlers, or external
-assets.
+assets. If its UTF-8 encoding exceeds \`${SYMPOSIUM_MAX_HTML_BYTES}\` bytes (10 MiB),
+stop without asking for confirmation or sending a request.
 
 Show the source note, title, and a concise preview. Explain that the resulting
 link is public and ask an explicit Yes/No confirmation. If the agent has no
