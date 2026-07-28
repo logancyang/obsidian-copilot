@@ -527,17 +527,20 @@ the agent's available HTTP tooling to POST exactly once to
 reached the server. Report 401/403 as a rejected Copilot Plus license. Any other
 non-201 response is a publish failure.
 
-A 201 response must contain \`docId\`, \`url\`, and \`version\`. Before updating
-the source note, append a \`published\` row containing that receipt, the source
-path, current UTC time, and the HTML SHA-256 to
+A 201 receipt is valid only when \`docId\` is 16 lowercase Crockford characters,
+\`url\` is HTTPS, and \`version\` is a positive safe integer. Treat a malformed
+201 as ambiguous and non-retryable. Before updating the source note, append a
+\`published\` row containing that receipt, the source path, current UTC time,
+and the HTML SHA-256 to
 \`copilot/symposium/published-documents.md\`; this is an ordinary Markdown note,
 so create it with the existing ledger table header if absent and otherwise
 append without rewriting old rows. If this advisory write fails, continue.
 
-Finally set the source note's \`symposium\` property to \`docId\` through
-Obsidian. If that local write fails, do not publish again; report the URL and id
-so they remain recoverable. Return the server's \`url\` verbatim. Never put the
-license key in the note, HTML, ledger, command arguments, or chat.
+Finally use one Obsidian \`processFrontMatter\` call to set \`symposium\` to
+\`docId\` only if the property is still absent. Never overwrite a concurrent
+value. If this compare-and-set fails, do not publish again; report the URL and
+id so they remain recoverable. Return the server's \`url\` verbatim. Never put
+the license key in the note, HTML, ledger, command arguments, or chat.
 `,
   files: [],
 };

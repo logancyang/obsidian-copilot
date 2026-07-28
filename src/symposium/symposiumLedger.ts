@@ -28,7 +28,9 @@ export async function appendSymposiumLedgerEntry(
   vault: Vault,
   entry: SymposiumLedgerEntry
 ): Promise<void> {
-  await ensureFolderExists(vault, SYMPOSIUM_LEDGER_FOLDER);
+  await ensureFolderExists(vault, SYMPOSIUM_LEDGER_FOLDER).catch(async (error) => {
+    if (!(await vault.adapter.exists(SYMPOSIUM_LEDGER_FOLDER))) throw error;
+  });
   const row = [
     entry.docId,
     entry.status,

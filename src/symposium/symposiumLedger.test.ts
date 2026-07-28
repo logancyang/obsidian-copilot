@@ -23,6 +23,7 @@ describe("symposiumLedger", () => {
 
     beforeEach(() => {
       jest.clearAllMocks();
+      jest.mocked(ensureFolderExists).mockResolvedValue(undefined);
       append.mockResolvedValue(undefined);
     });
 
@@ -57,6 +58,15 @@ describe("symposiumLedger", () => {
         LEDGER_PATH,
         "| 9f2k4mvq7t0xbz3n | unpublished | Notes/Architecture \\| Review.md | — | — | — | — |\n"
       );
+    });
+
+    it("continues when another publish creates the ledger folder first", async () => {
+      jest.mocked(ensureFolderExists).mockRejectedValueOnce(new Error("already exists"));
+      exists.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+
+      await appendSymposiumLedgerEntry(vault, ENTRY);
+
+      expect(append).toHaveBeenCalledWith(LEDGER_PATH, expect.stringContaining(ENTRY.docId));
     });
   });
 });
