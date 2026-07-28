@@ -1,11 +1,10 @@
-import {
-  appendSymposiumLedgerEntry,
-  SYMPOSIUM_LEDGER_FOLDER,
-  SYMPOSIUM_LEDGER_PATH,
-  type SymposiumLedgerEntry,
-} from "@/symposium/symposiumLedger";
+import { appendSymposiumLedgerEntry, type SymposiumLedgerEntry } from "./symposiumLedger";
+import { ensureFolderExists } from "@/utils";
 import type { Vault } from "obsidian";
 
+jest.mock("@/utils", () => ({ ensureFolderExists: jest.fn() }));
+
+const LEDGER_PATH = "copilot/symposium/published-documents.md";
 const ENTRY: SymposiumLedgerEntry = {
   docId: "9f2k4mvq7t0xbz3n",
   status: "published",
@@ -16,67 +15,36 @@ const ENTRY: SymposiumLedgerEntry = {
   contentHash: "abc123",
 };
 
-interface VaultHarness {
-  append: jest.Mock;
-  contents: Map<string, string>;
-  exists: jest.Mock;
-  mkdir: jest.Mock;
-  vault: Vault;
-  write: jest.Mock;
-}
-
-function createVault(): VaultHarness {
-  const contents = new Map<string, string>();
-  const folders = new Set<string>();
-  const mkdir = jest.fn(async (path: string) => {
-    folders.add(path);
-  });
-  const write = jest.fn(async (path: string, content: string) => {
-    contents.set(path, content);
-  });
-  const append = jest.fn(async (path: string, content: string) => {
-    contents.set(path, `${contents.get(path) ?? ""}${content}`);
-  });
-  const exists = jest.fn(async (path: string) => contents.has(path));
-  const vault = {
-    getAbstractFileByPath: jest.fn((path: string) =>
-      folders.has(path) ? { path, children: [] } : null
-    ),
-    adapter: {
-      append,
-      exists,
-      mkdir,
-      read: jest.fn(async (path: string) => contents.get(path) ?? ""),
-      write,
-    },
-  } as unknown as Vault;
-  return { append, contents, exists, mkdir, vault, write };
-}
-
 describe("symposiumLedger", () => {
   describe("appendSymposiumLedgerEntry()", () => {
-    it("creates a readable Markdown ledger and escapes table-breaking note paths", async () => {
-      const harness = createVault();
+    const append = jest.fn();
+    const exists = jest.fn();
+    const vault = { adapter: { append, exists } } as unknown as Vault;
 
-      await appendSymposiumLedgerEntry(harness.vault, ENTRY);
-
-      expect(harness.mkdir).toHaveBeenCalledWith("copilot");
-      expect(harness.mkdir).toHaveBeenCalledWith(SYMPOSIUM_LEDGER_FOLDER);
-      expect(harness.contents.get(SYMPOSIUM_LEDGER_PATH)).toContain(
-        "| Document ID | Status | Note | URL | Published at (UTC) | Version | Content SHA-256 |"
-      );
-      expect(harness.contents.get(SYMPOSIUM_LEDGER_PATH)).toContain(
-        "| 9f2k4mvq7t0xbz3n | published | Notes/Architecture \\| Review.md | <https://symposium.site/d/9f2k4mvq7t0xbz3n> | 2026-07-27T18:30:00.000Z | 1 | abc123 |"
-      );
-      expect(harness.append).toHaveBeenCalledTimes(1);
-      expect(harness.write).not.toHaveBeenCalled();
+    beforeEach(() => {
+      jest.clearAllMocks();
+      append.mockResolvedValue(undefined);
     });
 
-    it("appends withdrawal records without deleting publication history", async () => {
-      const harness = createVault();
-      await appendSymposiumLedgerEntry(harness.vault, ENTRY);
+    it("creates a readable Markdown ledger and escapes table-breaking note paths", async () => {
+      exists.mockResolvedValue(false);
 
-      await appendSymposiumLedgerEntry(harness.vault, {
+      await appendSymposiumLedgerEntry(vault, ENTRY);
+
+      expect(ensureFolderExists).toHaveBeenCalledWith(vault, "copilot/symposium");
+      expect(append).toHaveBeenCalledWith(
+        LEDGER_PATH,
+        expect.stringContaining(
+          "| 9f2k4mvq7t0xbz3n | published | Notes/Architecture \\| Review.md | <https://symposium.site/d/9f2k4mvq7t0xbz3n> | 2026-07-27T18:30:00.000Z | 1 | abc123 |"
+        )
+      );
+      expect(append.mock.calls[0][1]).toContain("| Document ID | Status | Note | URL |");
+    });
+
+    it("appends withdrawal records without adding another header", async () => {
+      exists.mockResolvedValue(true);
+
+      await appendSymposiumLedgerEntry(vault, {
         ...ENTRY,
         status: "unpublished",
         url: null,
@@ -85,59 +53,10 @@ describe("symposiumLedger", () => {
         contentHash: null,
       });
 
-      const ledger = harness.contents.get(SYMPOSIUM_LEDGER_PATH) ?? "";
-      expect(harness.append).toHaveBeenCalledTimes(2);
-      expect(ledger.match(/\| 9f2k4mvq7t0xbz3n \|/g)).toHaveLength(2);
-      expect(ledger).toContain(
-        "| 9f2k4mvq7t0xbz3n | unpublished | Notes/Architecture \\| Review.md | — | — | — | — |"
+      expect(append).toHaveBeenCalledWith(
+        LEDGER_PATH,
+        "| 9f2k4mvq7t0xbz3n | unpublished | Notes/Architecture \\| Review.md | — | — | — | — |\n"
       );
-    });
-
-    it("serializes concurrent writes and continues after an earlier write fails", async () => {
-      const harness = createVault();
-      let releaseFirst: (() => void) | undefined;
-      harness.append
-        .mockImplementationOnce(
-          () =>
-            new Promise<void>((_resolve, reject) => {
-              releaseFirst = () => reject(new Error("read-only"));
-            })
-        )
-        .mockImplementation(async (path: string, content: string) => {
-          harness.contents.set(path, `${harness.contents.get(path) ?? ""}${content}`);
-        });
-
-      const first = appendSymposiumLedgerEntry(harness.vault, ENTRY);
-      const second = appendSymposiumLedgerEntry(harness.vault, {
-        ...ENTRY,
-        docId: "0123456789abcdef",
-      });
-      for (let turn = 0; turn < 20 && !releaseFirst; turn += 1) {
-        await Promise.resolve();
-      }
-
-      expect(releaseFirst).toBeDefined();
-      expect(harness.append).toHaveBeenCalledTimes(1);
-      releaseFirst?.();
-      await expect(first).rejects.toThrow("read-only");
-      await expect(second).resolves.toBeUndefined();
-      expect(harness.append).toHaveBeenCalledTimes(2);
-      expect(harness.contents.get(SYMPOSIUM_LEDGER_PATH)).toContain("0123456789abcdef");
-    });
-
-    it("preserves a ledger created after a stale absence check", async () => {
-      const harness = createVault();
-      harness.exists.mockImplementationOnce(async () => {
-        harness.contents.set(SYMPOSIUM_LEDGER_PATH, "concurrent receipt\n");
-        return false;
-      });
-
-      await appendSymposiumLedgerEntry(harness.vault, ENTRY);
-
-      const ledger = harness.contents.get(SYMPOSIUM_LEDGER_PATH) ?? "";
-      expect(ledger).toContain("concurrent receipt");
-      expect(ledger).toContain(ENTRY.docId);
-      expect(harness.write).not.toHaveBeenCalled();
     });
   });
 });

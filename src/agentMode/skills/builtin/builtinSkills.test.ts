@@ -10,9 +10,8 @@ function scriptOf(name: string, ext: ".sh" | ".cmd" | ".ps1" = ".sh"): string {
   return file.content;
 }
 
-const SCRIPTED_PLUS_SKILLS = BUILTIN_SKILLS.filter((skill) => skill.name.startsWith("copilot-"));
-const RELAY_SKILLS = SCRIPTED_PLUS_SKILLS.filter(
-  (skill) => skill.name !== "copilot-publish-symposium"
+const RELAY_SKILLS = BUILTIN_SKILLS.filter(
+  (skill) => skill.name.startsWith("copilot-") && skill.name !== "copilot-publish-symposium"
 );
 
 describe("builtinSkills", () => {
@@ -42,7 +41,7 @@ describe("builtinSkills", () => {
     });
 
     it("ships one runnable script per OS — POSIX sh + Windows cmd/ps1, no Node", () => {
-      for (const skill of SCRIPTED_PLUS_SKILLS) {
+      for (const skill of RELAY_SKILLS) {
         const sh = skill.files.find((f) => f.path.endsWith(".sh"));
         const cmd = skill.files.find((f) => f.path.endsWith(".cmd"));
         const ps1 = skill.files.find((f) => f.path.endsWith(".ps1"));
@@ -181,53 +180,21 @@ describe("builtinSkills", () => {
     it("publishes confirmed agent-generated HTML and retains the id on its source note", () => {
       const skill = BUILTIN_SKILLS.find((item) => item.name === "copilot-publish-symposium");
       expect(skill).toBeDefined();
-      expect(skill!.skillMd).toContain("complete HTML document yourself");
-      expect(skill!.skillMd).toContain("static SVG");
-      expect(skill!.skillMd).toContain("static table or");
-      expect(skill!.skillMd).toContain("Do not publish standalone HTML without a source note");
-      expect(skill!.skillMd).toContain("Ask an explicit Yes/No question");
-      expect(skill!.skillMd).toContain("If that");
-      expect(skill!.skillMd).toContain("UI is unavailable");
-      expect(skill!.skillMd).toContain("invoke the wrapper unless the user");
-      expect(skill!.skillMd).toContain("answers Yes to this confirmation");
+      expect(skill!.files).toEqual([]);
+      expect(skill!.skillMd).toContain("Use one existing Markdown source note");
+      expect(skill!.skillMd).toContain("static HTML or SVG");
+      expect(skill!.skillMd).toContain("ask an explicit Yes/No confirmation");
+      expect(skill!.skillMd).toContain("A previous");
+      expect(skill!.skillMd).toContain("request to publish is not confirmation");
+      expect(skill!.skillMd).toContain(PLUS_ENV.licenseKey);
+      expect(skill!.skillMd).toContain(`${SYMPOSIUM_API_ORIGIN}/api/v1/docs`);
+      expect(skill!.skillMd).toContain("POST exactly once");
+      expect(skill!.skillMd).toContain("401/403");
       expect(skill!.skillMd).toContain("copilot/symposium/published-documents.md");
-      expect(skill!.skillMd).toContain("Append one row; never rewrite or delete older rows");
-      expect(skill!.skillMd).toContain("Only after attempting the ledger write");
-      expect(skill!.skillMd).toContain("one atomic");
-      expect(skill!.skillMd).toContain("processFrontMatter");
-      expect(skill!.skillMd).not.toContain("property:set path=");
-      expect(skill!.skillMd).toContain('Require the result to contain `"saved":true`');
-      expect(skill!.skillMd).toContain("return the server's");
+      expect(skill!.skillMd).toContain("ordinary Markdown note");
+      expect(skill!.skillMd).toContain("set the source note's `symposium` property");
+      expect(skill!.skillMd).toContain("Return the server's");
       expect(skill!.skillMd).toContain("verbatim");
-
-      const sh = scriptOf(skill!.name, ".sh");
-      expect(sh).toContain(PLUS_ENV.licenseKey);
-      expect(sh).toContain(`${SYMPOSIUM_API_ORIGIN}/api/v1/docs`);
-      expect(sh).toContain('[ -f "$SOURCE" ]');
-      expect(sh).toContain('properties path="$SOURCE_PATH" format=json');
-      expect(sh).toContain('json_escape "$FINAL_LF" < "$FILE"');
-      expect(sh).toContain("Authorization: Bearer $KEY");
-      expect(sh).toContain("--data-binary @-");
-      expect(sh).toContain("source_is_unpublished");
-      expect(sh).toContain("JSON.parse(input)");
-      expect(sh).toContain("Number.isSafeInteger(receipt.version)");
-      expect(sh).not.toContain("command -v node");
-      expect(sh).toContain("abcdefghjkmnpqrstvwxyz");
-      expect(sh).toContain("Do not retry");
-
-      const ps1 = scriptOf(skill!.name, ".ps1");
-      expect(ps1).toContain(PLUS_ENV.licenseKey);
-      expect(ps1).toContain(`${SYMPOSIUM_API_ORIGIN}/api/v1/docs`);
-      expect(ps1).toContain("Test-Path -LiteralPath $SOURCE");
-      expect(ps1).toContain('"vault=$VAULT" properties "path=$SOURCE_PATH" "format=json"');
-      expect(ps1).toContain("[System.IO.File]::ReadAllText($FILE");
-      expect(ps1).toContain('Authorization = "Bearer $KEY"');
-      expect(ps1).toContain("-Body $BYTES");
-      expect(ps1).toContain("ConvertFrom-Json -ErrorAction Stop");
-      expect(ps1).toContain("$VALID_VERSION_TYPE");
-      expect(ps1).toContain("9007199254740991");
-      expect(ps1).toContain("abcdefghjkmnpqrstvwxyz");
-      expect(ps1).toContain("Do not retry");
     });
   });
 

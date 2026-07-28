@@ -15,52 +15,33 @@ export interface SymposiumLedgerEntry {
   contentHash: string | null;
 }
 
-const LEDGER_HEADER = `# Symposium publication ledger
-
-This append-only ledger keeps Symposium document IDs recoverable independently of note properties.
-
-| Document ID | Status | Note | URL | Published at (UTC) | Version | Content SHA-256 |
+const LEDGER_HEADER = `| Document ID | Status | Note | URL | Published at (UTC) | Version | Content SHA-256 |
 | --- | --- | --- | --- | --- | ---: | --- |
 `;
-const ledgerWriteTails = new WeakMap<Vault, Promise<void>>();
 
 function tableCell(value: string | number | null): string {
-  if (value === null) {
-    return "—";
-  }
+  if (value === null) return "—";
   return String(value).replace(/\r?\n/g, " ").replace(/\|/g, "\\|");
 }
 
-function ledgerRow(entry: SymposiumLedgerEntry): string {
-  const url = entry.url ? `<${entry.url}>` : null;
-  return `| ${tableCell(entry.docId)} | ${entry.status} | ${tableCell(entry.notePath)} | ${tableCell(url)} | ${tableCell(entry.publishedAt)} | ${tableCell(entry.version)} | ${tableCell(entry.contentHash)} |`;
-}
-
-async function writeLedgerEntry(vault: Vault, entry: SymposiumLedgerEntry): Promise<void> {
-  await ensureFolderExists(vault, SYMPOSIUM_LEDGER_FOLDER);
-  const exists = await vault.adapter.exists(SYMPOSIUM_LEDGER_PATH);
-  const row = `${ledgerRow(entry)}\n`;
-  await vault.adapter.append(SYMPOSIUM_LEDGER_PATH, `${exists ? "" : LEDGER_HEADER}${row}`);
-}
-
-/**
- * Appends one durable publication record while serializing all writes for the vault.
- *
- * @param vault The vault that owns the human-readable ledger.
- * @param entry The successful remote action to preserve.
- */
 export async function appendSymposiumLedgerEntry(
   vault: Vault,
   entry: SymposiumLedgerEntry
 ): Promise<void> {
-  const previous = ledgerWriteTails.get(vault) ?? Promise.resolve();
-  const current = previous.catch(() => undefined).then(() => writeLedgerEntry(vault, entry));
-  ledgerWriteTails.set(vault, current);
-  try {
-    await current;
-  } finally {
-    if (ledgerWriteTails.get(vault) === current) {
-      ledgerWriteTails.delete(vault);
-    }
-  }
+  await ensureFolderExists(vault, SYMPOSIUM_LEDGER_FOLDER);
+  const row = [
+    entry.docId,
+    entry.status,
+    entry.notePath,
+    entry.url ? `<${entry.url}>` : null,
+    entry.publishedAt,
+    entry.version,
+    entry.contentHash,
+  ]
+    .map(tableCell)
+    .join(" | ");
+  await vault.adapter.append(
+    SYMPOSIUM_LEDGER_PATH,
+    `${(await vault.adapter.exists(SYMPOSIUM_LEDGER_PATH)) ? "" : LEDGER_HEADER}| ${row} |\n`
+  );
 }

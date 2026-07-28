@@ -490,7 +490,7 @@ const FETCH_X = relaySkill({
   scriptFile: "fetch-x.sh",
 });
 
-const SYMPOSIUM_PUBLISH_VERSION = 6;
+const SYMPOSIUM_PUBLISH_VERSION = 7;
 const SYMPOSIUM_PUBLISH: BuiltinSkill = {
   name: "copilot-publish-symposium",
   version: SYMPOSIUM_PUBLISH_VERSION,
@@ -506,290 +506,40 @@ metadata:
 
 # Publish Markdown to Symposium
 
-Create a standalone web page from one Markdown source note, ask the user to
-approve the finished page, and publish it once through the bundled wrapper.
+Use one existing Markdown source note; if needed, create it first. Read its
+\`symposium\` property through Obsidian. If present, stop and use **Publish file
+to Symposium** for Update/Delete.
 
-## 1. Require a source note
+Convert the note into a complete, self-contained, passive HTML document. Render
+Obsidian-only content such as Mermaid and Bases into static HTML or SVG, embed
+images, and include no scripts, frames, forms, handlers, or external assets.
 
-Resolve an existing Markdown note and keep its vault name, absolute path, and
-vault-relative path. Do not publish standalone HTML without a source note. If
-the requested content is not in a note yet, create the source note first.
+Show the source note, title, and a concise preview. Explain that the resulting
+link is public and ask an explicit Yes/No confirmation. If the agent has no
+question UI, ask conversationally and stop until the user answers. A previous
+request to publish is not confirmation. On No, send nothing.
 
-Inspect the note's \`symposium\` property before doing any network work. If it
-already contains a document id, tell the user to use **Publish file to
-Symposium** for Update/Delete. If it contains another value, stop rather than
-overwriting it.
+On Yes, read \`${PLUS_ENV.licenseKey}\` from the environment without printing
+or storing it. Recheck that the source has no \`symposium\` property, then use
+the agent's available HTTP tooling to POST exactly once to
+\`${SYMPOSIUM_API_ORIGIN}/api/v1/docs\` with Bearer authorization and JSON
+\`{"title": <title>, "html": <html>}\`. Do not retry if the request may have
+reached the server. Report 401/403 as a rejected Copilot Plus license. Any other
+non-201 response is a publish failure.
 
-## 2. Prepare the page
+A 201 response must contain \`docId\`, \`url\`, and \`version\`. Before updating
+the source note, append a \`published\` row containing that receipt, the source
+path, current UTC time, and the HTML SHA-256 to
+\`copilot/symposium/published-documents.md\`; this is an ordinary Markdown note,
+so create it with the existing ledger table header if absent and otherwise
+append without rewriting old rows. If this advisory write fails, continue.
 
-Create a complete HTML document yourself from the requested Markdown. The file
-must start with \`<!doctype html>\` and include its own readable layout and
-inline CSS. Send HTML, never raw Markdown.
-
-The page must be self-contained and passive:
-
-- resolve Obsidian-only rendered content into static HTML before publishing;
-  for example, turn Mermaid into static SVG and Bases into a static table or
-  card layout rather than leaving a raw code block or \`.base\` source;
-- embed required images as data URLs and do not depend on external styles,
-  scripts, fonts, frames, media, or other fetched assets;
-- include no \`script\`, \`iframe\`, form controls, embedded objects, event
-  handlers, or other executable/interactive content.
-
-Write the final HTML to a temporary \`.html\` file. Keep it unchanged after the
-confirmation question is shown.
-
-## 3. Ask before publishing
-
-Show the user the source note, title, and a concise preview or description of
-the finished page. Explain that anyone with the resulting link can read it.
-Ask an explicit Yes/No question through the agent's user-question UI. If that
-UI is unavailable, ask the same question conversationally, stop the turn, and
-wait for the user's next message. Do not invoke the wrapper unless the user
-answers Yes to this confirmation; a prior general request to publish is not
-enough. If they decline, delete the temporary HTML and make no request.
-
-## 4. Publish once
-
-Find the absolute path to this SKILL.md file, then run the matching wrapper with
-exactly five arguments: the vault name, vault-relative source path, absolute
-source-note path, page title, and prepared HTML file.
-
-On macOS or Linux:
-
-\`\`\`bash
-sh "/absolute/path/to/this/skill/directory/publish-symposium.sh" "Vault name" "folder/source.md" "/absolute/path/to/source.md" "Page title" "/absolute/path/to/prepared.html"
-\`\`\`
-
-On Windows, call the \`.cmd\` wrapper from PowerShell:
-
-\`\`\`powershell
-& "/absolute/path/to/this/skill/directory/publish-symposium.cmd" "Vault name" "folder/source.md" "C:\\absolute\\path\\to\\source.md" "Page title" "C:\\absolute\\path\\to\\prepared.html"
-\`\`\`
-
-Immediately before POST, the wrapper verifies that the source note still has
-no \`symposium\` property. It prints a canonical, validated publish receipt as
-JSON. Never retry after an uncertain response; it may already have created a
-public page.
-
-## 5. Record the receipt
-
-Before changing the source note, append the receipt to the vault-local
-\`copilot/symposium/published-documents.md\` ledger. Create its parent folder
-and this plain Markdown table when absent:
-
-\`\`\`markdown
-| Document ID | Status | Note | URL | Published at (UTC) | Version | Content SHA-256 |
-| --- | --- | --- | --- | --- | ---: | --- |
-\`\`\`
-
-Append one row; never rewrite or delete older rows. Use \`published\` status,
-the vault-relative source path, the exact returned URL and version, the current
-UTC ISO timestamp, and the SHA-256 of the exact prepared HTML file. Wrap the URL
-in angle brackets and escape \`|\` in the note path as \`\\|\`.
-
-The ledger is recovery history, not publication state. If this advisory write
-fails, continue to save the source property; never publish again and never put
-the license key in the ledger.
-
-## 6. Save the identity
-
-Only after attempting the ledger write, save the identity through one atomic
-Obsidian \`processFrontMatter\` callback. Do not use \`property:set\`: its
-separate read and write can replace an identity saved by another publisher.
-
-Base64-encode the UTF-8 vault-relative source path without a trailing newline
-as \`<pathBase64>\`, then use the Obsidian CLI. The returned document id is
-already restricted to lowercase Crockford characters, so substitute it for
-\`<docId>\`:
-
-\`\`\`bash
-obsidian vault="<vault>" eval code='(async()=>{const path=new TextDecoder().decode(Uint8Array.from(atob("<pathBase64>"),c=>c.charCodeAt(0)));const docId="<docId>";const file=app.vault.getAbstractFileByPath(path);if(!file||file.extension!=="md")throw new Error("Source note unavailable");let saved=false;let current=null;await app.fileManager.processFrontMatter(file,frontmatter=>{if(!frontmatter||typeof frontmatter!=="object"||Array.isArray(frontmatter))throw new Error("Invalid frontmatter");const has=Object.prototype.hasOwnProperty.call(frontmatter,"symposium");current=has?frontmatter.symposium:null;if(current===docId){saved=true}else if(!has){frontmatter.symposium=docId;current=docId;saved=true}});return JSON.stringify({saved,current})})()'
-\`\`\`
-
-Require the result to contain \`"saved":true\`. Otherwise leave the current
-property unchanged and report the concurrent change together with the new URL
-and document id from the ledger. If saving fails, do not publish again. Report
-the returned URL and document id so the page remains recoverable. Otherwise
-return the server's \`url\` verbatim. Always delete the temporary HTML file.
-Never print or write the license key into the note, HTML, command arguments, or
-chat.
+Finally set the source note's \`symposium\` property to \`docId\` through
+Obsidian. If that local write fails, do not publish again; report the URL and id
+so they remain recoverable. Return the server's \`url\` verbatim. Never put the
+license key in the note, HTML, ledger, command arguments, or chat.
 `,
-  files: [
-    {
-      path: "publish-symposium.sh",
-      content: `#!/bin/sh
-KEY="\${${PLUS_ENV.licenseKey}:-}"
-ENDPOINT="${SYMPOSIUM_API_ORIGIN}/api/v1/docs"
-
-die() {
-  printf '%s\\n' "$1" >&2
-  exit "\${2:-2}"
-}
-
-[ "$#" -eq 5 ] || die "Usage: sh publish-symposium.sh <vault> <vault-source-path> <source-note.md> <title> <prepared.html>" 1
-VAULT=$1
-SOURCE_PATH=$2
-SOURCE=$3
-TITLE=$4
-FILE=$5
-[ -n "$KEY" ] || die "Copilot Plus is not active, so Symposium publishing is unavailable." 1
-[ -f "$SOURCE" ] && [ -r "$SOURCE" ] || die "Could not read source note: $SOURCE" 1
-case "$SOURCE" in *.[mM][dD]) ;; *) die "The Symposium source must be a Markdown note." 1 ;; esac
-[ -f "$FILE" ] && [ -r "$FILE" ] || die "Could not read prepared HTML: $FILE" 1
-command -v obsidian >/dev/null 2>&1 || die "The Obsidian CLI is required to publish safely to Symposium." 1
-
-json_escape() {
-  awk -v final_lf="\${1:-0}" 'BEGIN { ORS=""; printf "\\"" }
-    {
-      if (NR > 1) printf "\\\\n"
-      gsub(/\\\\/, "\\\\\\\\")
-      gsub(/\\"/, "\\\\\\"")
-      gsub(/\\t/, "\\\\t")
-      gsub(/\\r/, "\\\\r")
-      printf "%s", $0
-    }
-    END {
-      if (final_lf) printf "\\\\n"
-      printf "\\""
-    }'
-}
-
-source_is_unpublished() {
-  PROPERTIES=$(obsidian vault="$VAULT" properties path="$SOURCE_PATH" format=json 2>&1)
-  PROPERTIES_B64=$(printf '%s' "$PROPERTIES" | base64 | tr -d '\\r\\n')
-  STATE=$(obsidian vault="$VAULT" eval code="(()=>{try{const input=new TextDecoder().decode(Uint8Array.from(atob('$PROPERTIES_B64'),c=>c.charCodeAt(0)));const properties=JSON.parse(input);if(!properties||Array.isArray(properties)||typeof properties!==\\"object\\")return \\"INVALID\\";return Object.prototype.hasOwnProperty.call(properties,\\"symposium\\")?\\"OCCUPIED\\":\\"CLEAR\\"}catch{return \\"INVALID\\"}})()" 2>/dev/null)
-  STATE=\${STATE#"=> "}
-  [ "$STATE" = "CLEAR" ]
-}
-
-invalid_receipt() {
-  die "Symposium may have published the page but returned an invalid receipt. Do not retry: $OUT" 1
-}
-
-source_is_unpublished || die "The source note's Symposium identity changed. Do not publish it again." 1
-FINAL_LF=0
-if [ -s "$FILE" ] && [ "$(tail -c 1 "$FILE" | wc -l | tr -d '[:space:]')" = "1" ]; then
-  FINAL_LF=1
-fi
-RESP=$({
-  printf '{"title":'
-  printf '%s' "$TITLE" | json_escape 0
-  printf ',"html":'
-  json_escape "$FINAL_LF" < "$FILE"
-  printf '}'
-} | curl -sS -w '\\n%{http_code}' \\
-  -X POST "$ENDPOINT" \\
-  -H "Authorization: Bearer $KEY" \\
-  -H 'Content-Type: application/json; charset=utf-8' \\
-  --data-binary @-)
-[ $? -eq 0 ] || die "Symposium may have published the page without returning a receipt. Do not retry." 1
-CODE=$(printf '%s' "$RESP" | tail -n1)
-OUT=$(printf '%s' "$RESP" | sed '$d')
-case "$CODE" in
-  201)
-    RECEIPT_B64=$(printf '%s' "$OUT" | base64 | tr -d '\\r\\n')
-    CANONICAL=$(obsidian vault="$VAULT" eval code="(()=>{try{const input=new TextDecoder().decode(Uint8Array.from(atob('$RECEIPT_B64'),c=>c.charCodeAt(0)));const receipt=JSON.parse(input);const url=new URL(receipt.url);if(!receipt||Array.isArray(receipt)||typeof receipt!==\\"object\\"||!/^[0123456789abcdefghjkmnpqrstvwxyz]{16}$/.test(receipt.docId)||url.protocol!==\\"https:\\"||!url.hostname||!Number.isSafeInteger(receipt.version)||receipt.version<1)return \\"INVALID\\";return \\"VALID \\"+JSON.stringify({docId:receipt.docId,url:receipt.url,version:receipt.version})}catch{return \\"INVALID\\"}})()" 2>/dev/null)
-    CANONICAL=\${CANONICAL#"=> "}
-    case "$CANONICAL" in "VALID "*) CANONICAL=\${CANONICAL#"VALID "} ;; *) invalid_receipt ;; esac
-    printf '%s\\n' "$CANONICAL"
-    ;;
-  401|403) die "Symposium rejected the Copilot Plus license: $OUT" 1 ;;
-  2*) die "Symposium returned an unexpected success response (HTTP $CODE): $OUT. Do not retry." 1 ;;
-  *) die "Symposium publish failed (HTTP $CODE): $OUT" 1 ;;
-esac
-`,
-    },
-    {
-      path: "publish-symposium.cmd",
-      content: cmdLauncher("publish-symposium.ps1"),
-    },
-    {
-      path: "publish-symposium.ps1",
-      content: `# Publishes prepared HTML to Symposium. Windows PowerShell 5.1 only.
-[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-$OutputEncoding = [System.Text.Encoding]::UTF8
-
-function Die($message, $code = 2) {
-  [Console]::Error.WriteLine([string]$message)
-  exit $code
-}
-
-if ($args.Count -ne 5) { Die "Usage: publish-symposium.ps1 <vault> <vault-source-path> <source-note.md> <title> <prepared.html>" 1 }
-$VAULT = $args[0]
-$SOURCE_PATH = $args[1]
-$SOURCE = $args[2]
-$TITLE = $args[3]
-$FILE = $args[4]
-$KEY = [Environment]::GetEnvironmentVariable('${PLUS_ENV.licenseKey}')
-$ENDPOINT = '${SYMPOSIUM_API_ORIGIN}/api/v1/docs'
-if (-not $KEY) { Die "Copilot Plus is not active, so Symposium publishing is unavailable." 1 }
-if (-not (Test-Path -LiteralPath $SOURCE -PathType Leaf)) { Die "Could not read source note: $SOURCE" 1 }
-if ([System.IO.Path]::GetExtension($SOURCE) -ine '.md') { Die "The Symposium source must be a Markdown note." 1 }
-if (-not (Test-Path -LiteralPath $FILE -PathType Leaf)) { Die "Could not read prepared HTML: $FILE" 1 }
-if (-not (Get-Command obsidian -ErrorAction SilentlyContinue)) { Die "The Obsidian CLI is required to publish safely to Symposium." 1 }
-
-try {
-  $PROPERTIES_JSON = (& obsidian "vault=$VAULT" properties "path=$SOURCE_PATH" "format=json" 2>&1 | Out-String)
-  $PROPERTIES = $PROPERTIES_JSON | ConvertFrom-Json -ErrorAction Stop
-} catch {
-  Die "Could not inspect the source note's Symposium identity." 1
-}
-if ($null -ne $PROPERTIES.PSObject.Properties['symposium']) {
-  Die "The source note's Symposium identity changed. Do not publish it again." 1
-}
-
-try {
-  $HTML = [System.IO.File]::ReadAllText($FILE, [System.Text.Encoding]::UTF8)
-  $JSON = @{ title = $TITLE; html = $HTML } | ConvertTo-Json -Compress
-  $BYTES = [System.Text.Encoding]::UTF8.GetBytes($JSON)
-  $RESP = Invoke-WebRequest -Uri $ENDPOINT -Method Post -ContentType 'application/json; charset=utf-8' \`
-    -Headers @{ Authorization = "Bearer $KEY" } -Body $BYTES -UseBasicParsing
-} catch {
-  $R = $null
-  try { $R = $_.Exception.Response } catch {}
-  if (-not $R) { Die "Symposium may have published the page without returning a receipt. Do not retry." 1 }
-  $READER = New-Object System.IO.StreamReader($R.GetResponseStream())
-  $OUT = $READER.ReadToEnd()
-  Die "Symposium publish failed (HTTP $([int]$R.StatusCode)): $OUT" 1
-}
-if ([int]$RESP.StatusCode -ne 201) {
-  Die "Symposium returned an unexpected success response (HTTP $([int]$RESP.StatusCode)): $($RESP.Content). Do not retry." 1
-}
-try {
-  $RECEIPT = $RESP.Content | ConvertFrom-Json -ErrorAction Stop
-  $DOC_ID = $RECEIPT.docId
-  $URL_TEXT = $RECEIPT.url
-  $VERSION = $RECEIPT.version
-  $URI = $null
-  $VALID_VERSION_TYPE = $VERSION -is [int] -or
-    $VERSION -is [long] -or
-    $VERSION -is [double] -or
-    $VERSION -is [decimal]
-  $VALID_URL = $URL_TEXT -is [string] -and
-    [Uri]::TryCreate($URL_TEXT, [UriKind]::Absolute, [ref]$URI) -and
-    $URI.Scheme -eq 'https'
-  if ($RECEIPT -isnot [PSCustomObject] -or
-      $DOC_ID -isnot [string] -or
-      $DOC_ID -notmatch '^[0123456789abcdefghjkmnpqrstvwxyz]{16}$' -or
-      -not $VALID_URL -or
-      -not $VALID_VERSION_TYPE) {
-    throw "invalid receipt"
-  }
-  $VERSION_NUMBER = [decimal]$VERSION
-  if ($VERSION_NUMBER -lt 1 -or
-      $VERSION_NUMBER -gt 9007199254740991 -or
-      $VERSION_NUMBER -ne [decimal]::Truncate($VERSION_NUMBER)) {
-    throw "invalid version"
-  }
-} catch {
-  Die "Symposium may have published the page but returned an invalid receipt. Do not retry: $($RESP.Content)" 1
-}
-[Console]::Out.WriteLine($RESP.Content)
-`,
-    },
-  ],
+  files: [],
 };
 
 /** All always-seeded plugin-shipped skills, in display order. */
