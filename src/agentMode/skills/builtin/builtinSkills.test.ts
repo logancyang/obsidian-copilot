@@ -187,10 +187,16 @@ describe("builtinSkills", () => {
       expect(skill!.skillMd).toContain("A previous");
       expect(skill!.skillMd).toContain("request to publish is not confirmation");
       expect(skill!.skillMd).toContain(PLUS_ENV.licenseKey);
+      expect(skill!.skillMd).toContain("empty or absent");
       expect(skill!.skillMd).toContain("app.fileManager.processFrontMatter");
       expect(skill!.skillMd).toContain(`${SYMPOSIUM_API_ORIGIN}/api/v1/docs`);
       expect(skill!.skillMd).toContain("POST exactly once");
-      expect(skill!.skillMd).toContain("401/403");
+      expect(skill!.skillMd).toContain("Accept: application/json");
+      expect(skill!.skillMd).toContain("`User-Agent`");
+      expect(skill!.skillMd).toContain(PLUS_ENV.clientVersion);
+      expect(skill!.skillMd).toContain("error.code");
+      expect(skill!.skillMd).toContain("Cloudflare 1xxx");
+      expect(skill!.skillMd).toContain("says nothing about license validity");
       expect(skill!.skillMd).toContain("positive safe integer");
       expect(skill!.skillMd).toContain("malformed");
       expect(skill!.skillMd).toContain("ambiguous and non-retryable");

@@ -490,7 +490,7 @@ const FETCH_X = relaySkill({
   scriptFile: "fetch-x.sh",
 });
 
-const SYMPOSIUM_PUBLISH_VERSION = 7;
+const SYMPOSIUM_PUBLISH_VERSION = 8;
 const SYMPOSIUM_PUBLISH: BuiltinSkill = {
   name: "copilot-publish-symposium",
   version: SYMPOSIUM_PUBLISH_VERSION,
@@ -520,14 +520,21 @@ question UI, ask conversationally and stop until the user answers. A previous
 request to publish is not confirmation. On No, send nothing.
 
 On Yes, read \`${PLUS_ENV.licenseKey}\` from the environment without printing
-or storing it. Use the Obsidian CLI to verify that
-\`app.fileManager.processFrontMatter\` is available; if not, stop. Recheck that
-the source still exists and has no \`symposium\` property, then use the agent's
-available HTTP tooling to POST exactly once to
+or storing it. If it is empty or absent, stop without making a request. Use the
+Obsidian CLI to verify that \`app.fileManager.processFrontMatter\` is available;
+if not, stop. Recheck that the source still exists and has no \`symposium\`
+property, then use the agent's available HTTP tooling to POST exactly once to
 \`${SYMPOSIUM_API_ORIGIN}/api/v1/docs\` with Bearer authorization and JSON
-\`{"title": <title>, "html": <html>}\`. Do not retry if the request may have
-reached the server. Report 401/403 as a rejected Copilot Plus license. Any other
-non-201 response is a publish failure.
+\`{"title": <title>, "html": <html>}\`. Send \`Accept: application/json\` and
+\`Content-Type: application/json\`, and set \`User-Agent\` to
+\`Copilot-Obsidian/<${PLUS_ENV.clientVersion} or unknown>\`; Python \`urllib\`'s
+default client signature is blocked by Cloudflare. Do not retry if the request
+may have reached the server.
+
+Report a rejected Copilot Plus license only when the response is JSON and
+\`error.code\` is \`unauthorized\`. A non-JSON 403, including a Cloudflare 1xxx
+error, is an edge/client rejection and says nothing about license validity. Any
+other non-201 response is a publish failure.
 
 A 201 receipt is valid only when \`docId\` is 16 lowercase Crockford characters,
 \`url\` is HTTPS, and \`version\` is a positive safe integer. Treat a malformed
