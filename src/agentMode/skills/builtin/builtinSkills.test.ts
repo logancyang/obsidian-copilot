@@ -177,7 +177,7 @@ describe("builtinSkills", () => {
       expect(ps1).toContain("@{ pdf = $PDF; user_id = $USER_ID }");
     });
 
-    it("publishes confirmed agent-generated HTML and retains the id on its source note", () => {
+    it("publishes confirmed agent-generated HTML and retains the link on its source note", () => {
       const skill = BUILTIN_SKILLS.find((item) => item.name === "copilot-publish-symposium");
       expect(skill).toBeDefined();
       expect(skill!.files).toEqual([]);
@@ -198,6 +198,7 @@ describe("builtinSkills", () => {
       expect(skill!.skillMd).toContain("Cloudflare 1xxx");
       expect(skill!.skillMd).toContain("says nothing about license validity");
       expect(skill!.skillMd).toContain("positive safe integer");
+      expect(skill!.skillMd).toContain("/d/<docId>");
       expect(skill!.skillMd).toContain("malformed");
       expect(skill!.skillMd).toContain("ambiguous and non-retryable");
       expect(skill!.skillMd).toContain("copilot/symposium/published-documents.md");
@@ -208,7 +209,8 @@ describe("builtinSkills", () => {
       expect(skill!.skillMd).toContain("append only when it begins with that exact");
       expect(skill!.skillMd).toContain("Escape existing backslashes");
       expect(skill!.skillMd).toContain("one `processFrontMatter` callback");
-      expect(skill!.skillMd).toContain("only if it is still absent");
+      expect(skill!.skillMd).toContain("server's full `url`");
+      expect(skill!.skillMd).toMatch(/only if it is still\s+absent/);
       expect(skill!.skillMd).toContain("server's `url` verbatim");
     });
   });

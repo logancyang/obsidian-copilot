@@ -97,9 +97,9 @@ The AI will automatically include your currently open note as context, so you ca
 
 Run **Publish file to Symposium** from the command palette, a Markdown note's File explorer menu, its note menu, or the editor's **Copilot** submenu. Copilot asks for confirmation because anyone with the resulting link can read the published page.
 
-After publishing, Copilot stores the Symposium document ID in the note's `symposium` property. Run the same action again to update the existing page or withdraw its public link. Symposium deletes its stored copy, but it cannot recall copies that readers or caches already fetched. Withdrawing the page also removes the property from the note.
+After publishing, Copilot stores the full public link in the note's `symposium` property. Run the same action again to update the existing page or withdraw its public link. Symposium deletes its stored copy, but it cannot recall copies that readers or caches already fetched. Withdrawing the page also removes the property from the note.
 
-Copilot appends successful publishes, updates, and withdrawals to the plain Markdown ledger at `copilot/symposium/published-documents.md`. It is recovery history only: the note's `symposium` property remains the source of truth. If that property is damaged, recover its 16-character ID from the ledger or public URL; ledger rows remain after a note is deleted.
+Copilot appends successful publishes, updates, and withdrawals to the plain Markdown ledger at `copilot/symposium/published-documents.md`. It is recovery history only: the note's `symposium` property remains the source of truth. If that property is damaged, recover the public link from the ledger; ledger rows remain after a note is deleted.
 
 If Publish or Delete succeeds but the note's property cannot be updated, reopening the dialog resumes that local change without contacting Symposium again. If the initial publish response is lost, Copilot blocks another attempt until the plugin reloads to avoid creating a duplicate page.
 

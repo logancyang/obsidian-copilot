@@ -73,7 +73,7 @@ The agent never reloads or restarts Obsidian, nor does it reload, disable, or un
 
 Ask Claude, Codex, or OpenCode to publish an existing Markdown note as a web page. The agent creates self-contained HTML, renders Mermaid and Bases as static content, then asks for explicit confirmation because the resulting link is public.
 
-The skill handles initial publishing only. It appends the receipt to `copilot/symposium/published-documents.md` and stores the document ID in the required source note's `symposium` property. Use **Publish file to Symposium** to update or withdraw the page.
+The skill handles initial publishing only. It appends the receipt to `copilot/symposium/published-documents.md` and stores the full public link in the required source note's `symposium` property. Use **Publish file to Symposium** to update or withdraw the page.
 
 ### Always-Enabled Tools
 

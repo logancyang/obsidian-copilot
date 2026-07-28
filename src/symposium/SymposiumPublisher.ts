@@ -13,7 +13,7 @@ import {
   SymposiumFrontmatterParseError,
   getSymposiumDocId,
   removeSymposiumDocId,
-  saveSymposiumDocId,
+  saveSymposiumLink,
   SymposiumPropertyConflictError,
 } from "@/symposium/symposiumFrontmatter";
 import {
@@ -267,7 +267,7 @@ export class SymposiumPublisher {
         return {
           kind: "failure",
           action,
-          message: "This note no longer has a valid Symposium document id.",
+          message: "This note no longer has a valid Symposium link.",
           accessNotice: false,
           retryable: false,
         };
@@ -380,7 +380,7 @@ export class SymposiumPublisher {
     expectedDocId: string | null
   ): Promise<SymposiumModalResult> {
     try {
-      const saved = await saveSymposiumDocId(this.app, file, receipt.docId, expectedDocId);
+      const saved = await saveSymposiumLink(this.app, file, receipt, expectedDocId);
       if (!saved) {
         const result: SymposiumPersistenceResult = {
           kind: "persistence",
@@ -418,7 +418,7 @@ export class SymposiumPublisher {
       kind: "persistence",
       action: "publish",
       message:
-        "The page is already public. Retry saving its document id to this note; this will not publish again.",
+        "The page is already public. Retry saving its link to this note; this will not publish again.",
       receipt,
       retrySave: () =>
         this.withFileLock(file, "publish", async () =>
@@ -456,7 +456,7 @@ export class SymposiumPublisher {
       kind: "persistence",
       action: "delete",
       message:
-        "The public page is already deleted. Retry removing its document id from this note; this will not contact Symposium again.",
+        "The public page is already deleted. Retry removing its link from this note; this will not contact Symposium again.",
       retrySave: () =>
         this.withFileLock(file, "delete", async () =>
           this.removeLocalIdentity(file, expectedDocId)

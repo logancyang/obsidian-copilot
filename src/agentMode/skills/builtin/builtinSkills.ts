@@ -537,10 +537,10 @@ error, is an edge/client rejection and says nothing about license validity. Any
 other non-201 response is a publish failure.
 
 A 201 receipt is valid only when \`docId\` is 16 lowercase Crockford characters,
-\`url\` is HTTPS, and \`version\` is a positive safe integer. Treat a malformed
-201 as ambiguous and non-retryable. Before updating the source note, append a
-\`published\` row containing that receipt, the source path, current UTC time,
-and the HTML SHA-256 to
+\`url\` is HTTPS with path \`/d/<docId>\`, and \`version\` is a positive safe integer.
+Treat a malformed 201 as ambiguous and non-retryable. Before updating the source
+note, append a \`published\` row containing that receipt, the source path, current
+UTC time, and the HTML SHA-256 to
 \`copilot/symposium/published-documents.md\`; this is an ordinary Markdown note,
 so create or append it with normal Obsidian note tools. Use this header:
 
@@ -555,8 +555,9 @@ spaces in every cell. Append in column order without rewriting old rows. If
 this advisory write fails, continue.
 
 Finally use one \`processFrontMatter\` callback to set the source note's
-\`symposium\` text property to \`docId\` only if it is still absent. If that
-fails, do not publish again; report the URL and id so they remain recoverable.
+\`symposium\` text property to the server's full \`url\` only if it is still
+absent. If that fails, do not publish again; report the URL and id so they remain
+recoverable.
 Return the server's \`url\` verbatim. Never put the license key in the note,
 HTML, ledger, command arguments, or chat.
 `,
