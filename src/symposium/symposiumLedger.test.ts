@@ -5,6 +5,9 @@ import type { Vault } from "obsidian";
 jest.mock("@/utils", () => ({ ensureFolderExists: jest.fn() }));
 
 const LEDGER_PATH = "copilot/symposium/published-documents.md";
+const LEDGER_HEADER =
+  "| Document ID | Status | Note | URL | Published at (UTC) | Version | Content SHA-256 |\r\n" +
+  "| --- | --- | --- | --- | --- | ---: | --- |";
 const ENTRY: SymposiumLedgerEntry = {
   docId: "9f2k4mvq7t0xbz3n",
   status: "published",
@@ -26,9 +29,7 @@ describe("symposiumLedger", () => {
       jest.clearAllMocks();
       jest.mocked(ensureFolderExists).mockResolvedValue(undefined);
       append.mockResolvedValue(undefined);
-      read.mockResolvedValue(
-        "| Document ID | Status | Note | URL | Published at (UTC) | Version | Content SHA-256 |"
-      );
+      read.mockResolvedValue(LEDGER_HEADER);
     });
 
     it("creates a readable Markdown ledger and escapes table-breaking note paths", async () => {
@@ -60,7 +61,7 @@ describe("symposiumLedger", () => {
 
       expect(append).toHaveBeenCalledWith(
         LEDGER_PATH,
-        `${String.raw`| 9f2k4mvq7t0xbz3n | unpublished | Notes/Architecture \\\| Review.md | — | — | — | — |`}\n`
+        `\n${String.raw`| 9f2k4mvq7t0xbz3n | unpublished | Notes/Architecture \\\| Review.md | — | — | — | — |`}\n`
       );
     });
 
@@ -75,7 +76,7 @@ describe("symposiumLedger", () => {
 
     it("refuses to append to an unrelated existing note", async () => {
       exists.mockResolvedValue(true);
-      read.mockResolvedValue("# My note");
+      read.mockResolvedValue(`${LEDGER_HEADER.split("\r\n")[0]}\nNot a ledger`);
 
       await expect(appendSymposiumLedgerEntry(vault, ENTRY)).rejects.toThrow("non-ledger note");
       expect(append).not.toHaveBeenCalled();

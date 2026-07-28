@@ -18,8 +18,7 @@ export interface SymposiumLedgerEntry {
 const LEDGER_COLUMNS =
   "| Document ID | Status | Note | URL | Published at (UTC) | Version | Content SHA-256 |";
 const LEDGER_HEADER = `${LEDGER_COLUMNS}
-| --- | --- | --- | --- | --- | ---: | --- |
-`;
+| --- | --- | --- | --- | --- | ---: | --- |`;
 
 function tableCell(value: string | number | null): string {
   if (value === null) return "—";
@@ -45,8 +44,14 @@ export async function appendSymposiumLedgerEntry(
     .map(tableCell)
     .join(" | ");
   const exists = await vault.adapter.exists(SYMPOSIUM_LEDGER_PATH);
-  if (exists && !(await vault.adapter.read(SYMPOSIUM_LEDGER_PATH)).startsWith(LEDGER_COLUMNS)) {
+  const existing = exists ? await vault.adapter.read(SYMPOSIUM_LEDGER_PATH) : "";
+  const normalized = existing.replace(/\r\n?/g, "\n");
+  if (exists && normalized !== LEDGER_HEADER && !normalized.startsWith(`${LEDGER_HEADER}\n`)) {
     throw new Error(`Refusing to append to non-ledger note: ${SYMPOSIUM_LEDGER_PATH}`);
   }
-  await vault.adapter.append(SYMPOSIUM_LEDGER_PATH, `${exists ? "" : LEDGER_HEADER}| ${row} |\n`);
+  const rowPrefix = exists && !/[\r\n]$/.test(existing) ? "\n" : "";
+  await vault.adapter.append(
+    SYMPOSIUM_LEDGER_PATH,
+    `${exists ? rowPrefix : `${LEDGER_HEADER}\n`}| ${row} |\n`
+  );
 }
