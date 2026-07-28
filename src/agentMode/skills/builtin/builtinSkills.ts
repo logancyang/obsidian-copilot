@@ -490,7 +490,7 @@ const FETCH_X = relaySkill({
   scriptFile: "fetch-x.sh",
 });
 
-const SYMPOSIUM_PUBLISH_VERSION = 4;
+const SYMPOSIUM_PUBLISH_VERSION = 5;
 const SYMPOSIUM_PUBLISH: BuiltinSkill = {
   name: "copilot-publish-symposium",
   version: SYMPOSIUM_PUBLISH_VERSION,
@@ -594,20 +594,26 @@ the license key in the ledger.
 
 ## 6. Save the identity
 
-Only after attempting the ledger write, read the source note's \`symposium\`
-property again. Set it to the returned \`docId\` only if it is still absent,
-preserving all other frontmatter. Prefer the Obsidian CLI:
+Only after attempting the ledger write, save the identity through one atomic
+Obsidian \`processFrontMatter\` callback. Do not use \`property:set\`: its
+separate read and write can replace an identity saved by another publisher.
+
+Base64-encode the UTF-8 vault-relative source path without a trailing newline
+as \`<pathBase64>\`, then use the Obsidian CLI. The returned document id is
+already restricted to lowercase Crockford characters, so substitute it for
+\`<docId>\`:
 
 \`\`\`bash
-obsidian vault="<vault>" property:set path="<vault-relative-source.md>" name=symposium value="<docId>" type=text
+obsidian vault="<vault>" eval code='(async()=>{const path=new TextDecoder().decode(Uint8Array.from(atob("<pathBase64>"),c=>c.charCodeAt(0)));const docId="<docId>";const file=app.vault.getAbstractFileByPath(path);if(!file||file.extension!=="md")throw new Error("Source note unavailable");let saved=false;let current=null;await app.fileManager.processFrontMatter(file,frontmatter=>{if(!frontmatter||typeof frontmatter!=="object"||Array.isArray(frontmatter))throw new Error("Invalid frontmatter");const has=Object.prototype.hasOwnProperty.call(frontmatter,"symposium");current=has?frontmatter.symposium:null;if(current===docId){saved=true}else if(!has){frontmatter.symposium=docId;current=docId;saved=true}});return JSON.stringify({saved,current})})()'
 \`\`\`
 
-If the property now has any value, leave it unchanged and report the concurrent
-change together with the new URL and document id from the ledger. If reading or
-saving the property fails, do not publish again. Report the returned URL and
-document id so the page remains recoverable. Otherwise return the server's
-\`url\` verbatim. Always delete the temporary HTML file. Never print or write
-the license key into the note, HTML, command arguments, or chat.
+Require the result to contain \`"saved":true\`. Otherwise leave the current
+property unchanged and report the concurrent change together with the new URL
+and document id from the ledger. If saving fails, do not publish again. Report
+the returned URL and document id so the page remains recoverable. Otherwise
+return the server's \`url\` verbatim. Always delete the temporary HTML file.
+Never print or write the license key into the note, HTML, command arguments, or
+chat.
 `,
   files: [
     {
@@ -629,19 +635,7 @@ FILE=$3
 [ -f "$SOURCE" ] && [ -r "$SOURCE" ] || die "Could not read source note: $SOURCE" 1
 case "$SOURCE" in *.[mM][dD]) ;; *) die "The Symposium source must be a Markdown note." 1 ;; esac
 [ -f "$FILE" ] && [ -r "$FILE" ] || die "Could not read prepared HTML: $FILE" 1
-
-json_escape() {
-  awk 'BEGIN { ORS=""; printf "\\"" }
-    {
-      if (NR > 1) printf "\\\\n"
-      gsub(/\\\\/, "\\\\\\\\")
-      gsub(/\\"/, "\\\\\\"")
-      gsub(/\\t/, "\\\\t")
-      gsub(/\\r/, "\\\\r")
-      printf "%s", $0
-    }
-    END { printf "\\"" }'
-}
+command -v node >/dev/null 2>&1 || die "Node.js is required to publish safely to Symposium." 1
 
 source_is_unpublished() {
   awk '
@@ -662,13 +656,14 @@ invalid_receipt() {
 }
 
 source_is_unpublished || die "The source note's Symposium identity changed. Do not publish it again." 1
-RESP=$({
-  printf '{"title":'
-  printf '%s' "$TITLE" | json_escape
-  printf ',"html":'
-  json_escape < "$FILE"
-  printf '}'
-} | curl -sS -w '\\n%{http_code}' \\
+PAYLOAD=$(node -e '
+  const fs = require("fs");
+  process.stdout.write(JSON.stringify({
+    title: process.argv[1],
+    html: fs.readFileSync(process.argv[2], "utf8"),
+  }));
+' "$TITLE" "$FILE") || die "Could not encode the prepared Symposium page." 1
+RESP=$(printf '%s' "$PAYLOAD" | curl -sS -w '\\n%{http_code}' \\
   -X POST "$ENDPOINT" \\
   -H "Authorization: Bearer $KEY" \\
   -H 'Content-Type: application/json; charset=utf-8' \\
@@ -678,21 +673,31 @@ CODE=$(printf '%s' "$RESP" | tail -n1)
 OUT=$(printf '%s' "$RESP" | sed '$d')
 case "$CODE" in
   201)
-    COMPACT=$(printf '%s' "$OUT" | tr -d '[:space:]')
-    case "$COMPACT" in \\{*\\}) ;; *) invalid_receipt ;; esac
-    DOC_ID=$(printf '%s' "$COMPACT" | sed -n 's/.*"docId":"\\([^"]*\\)".*/\\1/p')
-    [ "\${#DOC_ID}" -eq 16 ] || invalid_receipt
-    case "$DOC_ID" in *[!0123456789abcdefghjkmnpqrstvwxyz]*) invalid_receipt ;; esac
-    URL=$(printf '%s' "$COMPACT" | sed -n 's/.*"url":"\\([^"]*\\)".*/\\1/p')
-    case "$URL" in https://?*) ;; *) invalid_receipt ;; esac
-    VERSION=$(printf '%s' "$COMPACT" | sed -n 's/.*"version":\\([0-9][0-9]*\\)[,}].*/\\1/p')
-    case "$VERSION" in ""|0|0*) invalid_receipt ;; esac
-    awk -v value="$VERSION" 'BEGIN {
-      max = "9007199254740991"
-      if (length(value) < length(max)) exit 0
-      if (length(value) > length(max) || ("x" value) > ("x" max)) exit 1
-    }' || invalid_receipt
-    printf '%s\\n' "$OUT"
+    CANONICAL=$(printf '%s' "$OUT" | node -e '
+      let input = "";
+      process.stdin.setEncoding("utf8");
+      process.stdin.on("data", chunk => { input += chunk; });
+      process.stdin.on("end", () => {
+        try {
+          const receipt = JSON.parse(input);
+          const url = new URL(receipt.url);
+          if (!receipt || Array.isArray(receipt) || typeof receipt !== "object" ||
+              !/^[0123456789abcdefghjkmnpqrstvwxyz]{16}$/.test(receipt.docId) ||
+              url.protocol !== "https:" || !url.hostname ||
+              !Number.isSafeInteger(receipt.version) || receipt.version < 1) {
+            throw new Error("invalid receipt");
+          }
+          process.stdout.write(JSON.stringify({
+            docId: receipt.docId,
+            url: receipt.url,
+            version: receipt.version,
+          }));
+        } catch {
+          process.exitCode = 1;
+        }
+      });
+    ') || invalid_receipt
+    printf '%s\\n' "$CANONICAL"
     ;;
   401|403) die "Symposium rejected the Copilot Plus license: $OUT" 1 ;;
   2*) die "Symposium returned an unexpected success response (HTTP $CODE): $OUT. Do not retry." 1 ;;

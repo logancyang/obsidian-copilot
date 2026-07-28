@@ -40,11 +40,7 @@ async function writeLedgerEntry(vault: Vault, entry: SymposiumLedgerEntry): Prom
   await ensureFolderExists(vault, SYMPOSIUM_LEDGER_FOLDER);
   const exists = await vault.adapter.exists(SYMPOSIUM_LEDGER_PATH);
   const row = `${ledgerRow(entry)}\n`;
-  if (exists) {
-    await vault.adapter.append(SYMPOSIUM_LEDGER_PATH, row);
-  } else {
-    await vault.adapter.write(SYMPOSIUM_LEDGER_PATH, `${LEDGER_HEADER}${row}`);
-  }
+  await vault.adapter.append(SYMPOSIUM_LEDGER_PATH, `${exists ? "" : LEDGER_HEADER}${row}`);
 }
 
 /**

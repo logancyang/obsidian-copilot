@@ -193,10 +193,10 @@ describe("builtinSkills", () => {
       expect(skill!.skillMd).toContain("copilot/symposium/published-documents.md");
       expect(skill!.skillMd).toContain("Append one row; never rewrite or delete older rows");
       expect(skill!.skillMd).toContain("Only after attempting the ledger write");
-      expect(skill!.skillMd).toContain("only if it is still absent");
-      expect(skill!.skillMd).toContain("property:set");
-      expect(skill!.skillMd).toContain("read the source note's `symposium`");
-      expect(skill!.skillMd).toContain("Set it to the returned `docId`");
+      expect(skill!.skillMd).toContain("one atomic");
+      expect(skill!.skillMd).toContain("processFrontMatter");
+      expect(skill!.skillMd).not.toContain("property:set path=");
+      expect(skill!.skillMd).toContain('Require the result to contain `"saved":true`');
       expect(skill!.skillMd).toContain("return the server's");
       expect(skill!.skillMd).toContain("verbatim");
 
@@ -204,11 +204,12 @@ describe("builtinSkills", () => {
       expect(sh).toContain(PLUS_ENV.licenseKey);
       expect(sh).toContain(`${SYMPOSIUM_API_ORIGIN}/api/v1/docs`);
       expect(sh).toContain('[ -f "$SOURCE" ]');
-      expect(sh).toContain('json_escape < "$FILE"');
+      expect(sh).toContain('fs.readFileSync(process.argv[2], "utf8")');
       expect(sh).toContain("Authorization: Bearer $KEY");
       expect(sh).toContain("--data-binary @-");
       expect(sh).toContain("source_is_unpublished");
-      expect(sh).toContain("9007199254740991");
+      expect(sh).toContain("JSON.parse(input)");
+      expect(sh).toContain("Number.isSafeInteger(receipt.version)");
       expect(sh).toContain("abcdefghjkmnpqrstvwxyz");
       expect(sh).toContain("Do not retry");
 
