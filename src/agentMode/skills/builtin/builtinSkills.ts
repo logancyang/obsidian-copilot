@@ -516,8 +516,8 @@ property is present, stop: this skill performs initial publishing only.
 Convert the note into a complete, self-contained, passive HTML document. Render
 source-specific content such as Mermaid and Obsidian Bases into static HTML or
 SVG, embed images, and include no scripts, frames, forms, handlers, or external
-assets. If its UTF-8 encoding exceeds \`${SYMPOSIUM_MAX_HTML_BYTES}\` bytes (10 MiB),
-stop without asking for confirmation or sending a request.
+assets. If its UTF-8 encoding exceeds \`${SYMPOSIUM_MAX_HTML_BYTES}\` bytes, stop
+without asking for confirmation or sending a request.
 
 Show the source note, title, and a concise preview. Explain that the resulting
 link is public and ask an explicit Yes/No confirmation. If the agent has no
