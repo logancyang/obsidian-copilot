@@ -449,13 +449,28 @@ function permissionOptionFromAcp(opt: AcpPermissionOption): PermissionOption {
   const kind = (PERMISSION_OPTION_KINDS as readonly string[]).includes(opt.kind)
     ? opt.kind
     : "reject_once";
-  const name = permissionOptionActionName(kind);
+  if (!isPolicyAmendmentOption(opt.optionId)) {
+    return {
+      optionId: opt.optionId,
+      name: opt.name,
+      kind,
+    };
+  }
+
   return {
     optionId: opt.optionId,
-    name,
-    description: opt.name === name ? undefined : opt.name,
+    name: permissionOptionActionName(kind),
+    description: opt.name,
     kind,
   };
+}
+
+function isPolicyAmendmentOption(optionId: string): boolean {
+  // Codex policy amendments use ACP's name field for rule prose rather than an action label.
+  return (
+    optionId === "accept_execpolicy_amendment" ||
+    /^apply_network_policy_amendment:\d+$/.test(optionId)
+  );
 }
 
 function permissionOptionActionName(kind: PermissionOptionKind): string {

@@ -290,7 +290,7 @@ describe("AcpBackendProcess", () => {
     expect(response).toEqual({ outcome: { outcome: "cancelled" } });
   });
 
-  it("delegates to the registered prompter and forwards the response", async () => {
+  it("preserves compact permission labels and separates policy rules before delegating", async () => {
     const backend = new AcpBackendProcess(
       buildApp(),
       buildStubBackend(),
@@ -311,13 +311,26 @@ describe("AcpBackendProcess", () => {
       sessionId: "s1",
       toolCall: { toolCallId: "tc1", title: "Read" },
       options: [
+        { optionId: "allow_once", name: "Allow Once", kind: "allow_once" },
+        { optionId: "allow_session", name: "Allow for Session", kind: "allow_always" },
+        {
+          optionId: "allow_host_session",
+          name: "Allow Host for Session",
+          kind: "allow_always",
+        },
+        {
+          optionId: "allow_root_session",
+          name: "Allow Root for Session",
+          kind: "allow_always",
+        },
+        { optionId: "reject_once", name: "No", kind: "reject_once" },
         {
           optionId: "accept_execpolicy_amendment",
           name: commandRule,
           kind: "allow_always",
         },
         {
-          optionId: "accept_networkpolicy_amendment",
+          optionId: "apply_network_policy_amendment:0",
           name: networkRule,
           kind: "allow_always",
         },
@@ -331,13 +344,38 @@ describe("AcpBackendProcess", () => {
     expect(prompt.toolCall.toolCallId).toBe("tc1");
     expect(prompt.options).toEqual([
       {
+        optionId: "allow_once",
+        name: "Allow Once",
+        kind: "allow_once",
+      },
+      {
+        optionId: "allow_session",
+        name: "Allow for Session",
+        kind: "allow_always",
+      },
+      {
+        optionId: "allow_host_session",
+        name: "Allow Host for Session",
+        kind: "allow_always",
+      },
+      {
+        optionId: "allow_root_session",
+        name: "Allow Root for Session",
+        kind: "allow_always",
+      },
+      {
+        optionId: "reject_once",
+        name: "No",
+        kind: "reject_once",
+      },
+      {
         optionId: "accept_execpolicy_amendment",
         name: "Allow Always",
         description: commandRule,
         kind: "allow_always",
       },
       {
-        optionId: "accept_networkpolicy_amendment",
+        optionId: "apply_network_policy_amendment:0",
         name: "Allow Always",
         description: networkRule,
         kind: "allow_always",

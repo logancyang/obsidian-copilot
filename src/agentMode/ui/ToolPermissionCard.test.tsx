@@ -36,7 +36,7 @@ describe("ToolPermissionCard", () => {
           kind: "allow_always",
         },
         {
-          optionId: "accept_networkpolicy_amendment",
+          optionId: "apply_network_policy_amendment:0",
           name: "Allow Always",
           description: networkRule,
           kind: "allow_always",
@@ -67,7 +67,7 @@ describe("ToolPermissionCard", () => {
       expect(commandButton.textContent).toBe("Allow Always");
 
       fireEvent.click(networkButton);
-      expect(onResolve).toHaveBeenLastCalledWith(TOOL_CALL_ID, "accept_networkpolicy_amendment");
+      expect(onResolve).toHaveBeenLastCalledWith(TOOL_CALL_ID, "apply_network_policy_amendment:0");
 
       rerender(
         <ToolPermissionCard
