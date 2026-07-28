@@ -24,15 +24,33 @@ describe("descriptor", () => {
         });
       });
 
-      it("leaves ordinary Codex permission labels unchanged", () => {
+      it("uses block language for a persistent network rejection", () => {
         const option: PermissionOption = {
-          optionId: "allow_host_session",
-          name: "Allow Host for Session",
-          kind: "allow_always",
+          optionId: "apply_network_policy_amendment:3",
+          name: "Block api.example.com in the Future",
+          kind: "reject_always",
         };
 
-        expect(CodexBackendDescriptor.presentPermissionOption?.(option)).toBe(option);
+        expect(CodexBackendDescriptor.presentPermissionOption?.(option)).toEqual({
+          optionId: "apply_network_policy_amendment:3",
+          name: "Block Always",
+          description: "Block api.example.com in the Future",
+          kind: "reject_always",
+        });
       });
+
+      it.each(["allow_host_session", "apply_network_policy_amendment:not-an-index"])(
+        "leaves the ordinary or near-match label for %s unchanged",
+        (optionId) => {
+          const option: PermissionOption = {
+            optionId,
+            name: "Allow Host for Session",
+            kind: "allow_always",
+          };
+
+          expect(CodexBackendDescriptor.presentPermissionOption?.(option)).toBe(option);
+        }
+      );
     });
   });
 });

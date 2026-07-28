@@ -26,8 +26,7 @@ describe("ToolPermissionCard", () => {
       const onResolve = jest.fn();
       const commandRule =
         "Allow Commands Starting With `/long/path/semantic-search.sh Search only within agents/themes/capture for LLM wiki, AI second brain, knowledge base, digital twin, and local-first Markdown knowledge workspace.`";
-      const networkRule =
-        "Allow network access to a.really-long-and-specific-subdomain.example.com for future matching requests.";
+      const networkRule = "Block a.really-long-and-specific-subdomain.example.com in the Future";
       const options: PermissionOption[] = [
         {
           optionId: "accept_execpolicy_amendment",
@@ -37,9 +36,9 @@ describe("ToolPermissionCard", () => {
         },
         {
           optionId: "apply_network_policy_amendment:0",
-          name: "Allow Always",
+          name: "Block Always",
           description: networkRule,
-          kind: "allow_always",
+          kind: "reject_always",
         },
       ];
 
@@ -61,10 +60,11 @@ describe("ToolPermissionCard", () => {
         description: commandRule,
       });
       const networkButton = within(networkRow!).getByRole("button", {
-        name: "Allow Always",
+        name: "Block Always",
         description: networkRule,
       });
       expect(commandButton.textContent).toBe("Allow Always");
+      expect(networkButton.textContent).toBe("Block Always");
 
       fireEvent.click(networkButton);
       expect(onResolve).toHaveBeenLastCalledWith(TOOL_CALL_ID, "apply_network_policy_amendment:0");

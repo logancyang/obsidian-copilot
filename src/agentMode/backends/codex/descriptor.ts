@@ -146,7 +146,7 @@ export const CodexBackendDescriptor: BackendDescriptor = {
     }
     return {
       ...option,
-      name: "Allow Always",
+      name: option.kind === "reject_always" ? "Block Always" : "Allow Always",
       description: option.name,
     };
   },
