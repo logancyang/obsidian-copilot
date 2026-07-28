@@ -1,5 +1,5 @@
 import type { BackendId } from "@/agentMode/session/types";
-import { SYMPOSIUM_API_ORIGIN } from "@/symposium/constants";
+import { SYMPOSIUM_API_ORIGIN, SYMPOSIUM_TOKEN_ENV } from "@/symposium/constants";
 import { OBSIDIAN_SKILLS } from "./obsidianSkills";
 
 /**
@@ -492,13 +492,12 @@ const FETCH_X = relaySkill({
 
 const SYMPOSIUM_PUBLISH_VERSION = 1;
 const SYMPOSIUM_PUBLISH: BuiltinSkill = {
-  name: "copilot-publish-symposium",
+  name: "symposium-publish",
   version: SYMPOSIUM_PUBLISH_VERSION,
   enabledAgents: ["claude", "codex", "opencode"],
   skillMd: `---
-name: copilot-publish-symposium
-description: Convert a source Markdown note into standalone HTML and publish it as a public Symposium page. Use when the user asks to publish or share a note as a web page. Initial publishing only; existing Symposium pages use Obsidian's normal Update/Delete flow. Requires an active Copilot Plus license.
-license: Copilot Plus
+name: symposium-publish
+description: Convert an existing source Markdown file into standalone HTML and publish it as a public Symposium page. Use when the user asks to publish or share Markdown as a web page. Handles initial publishing only; existing pages require the host's update or delete flow.
 metadata:
   copilot-enabled-agents: claude, codex, opencode
   copilot-builtin-version: "${SYMPOSIUM_PUBLISH_VERSION}"
@@ -506,60 +505,60 @@ metadata:
 
 # Publish Markdown to Symposium
 
-Require one existing Markdown source note. Read it with normal Obsidian note
-tools. If its \`symposium\` property is present, stop and use **Publish file to
-Symposium** for Update/Delete.
+Require one existing Markdown source file. If its \`symposium\` frontmatter
+property is present, stop: this skill performs initial publishing only.
 
 Convert the note into a complete, self-contained, passive HTML document. Render
-Obsidian-only content such as Mermaid and Bases into static HTML or SVG, embed
-images, and include no scripts, frames, forms, handlers, or external assets.
+source-specific content such as Mermaid and Obsidian Bases into static HTML or
+SVG, embed images, and include no scripts, frames, forms, handlers, or external
+assets.
 
 Show the source note, title, and a concise preview. Explain that the resulting
 link is public and ask an explicit Yes/No confirmation. If the agent has no
 question UI, ask conversationally and stop until the user answers. A previous
 request to publish is not confirmation. On No, send nothing.
 
-On Yes, read \`${PLUS_ENV.licenseKey}\` from the environment without printing
-or storing it. If it is empty or absent, stop without making a request. Use the
-Obsidian CLI to verify that \`app.fileManager.processFrontMatter\` is available;
-if not, stop. Recheck that the source still exists and has no \`symposium\`
-property, then use the agent's available HTTP tooling to POST exactly once to
-\`${SYMPOSIUM_API_ORIGIN}/api/v1/docs\` with Bearer authorization and JSON
-\`{"title": <title>, "html": <html>}\`. Send \`Accept: application/json\` and
-\`Content-Type: application/json\`, and set \`User-Agent\` to
-\`Copilot-Obsidian/<${PLUS_ENV.clientVersion} or unknown>\`; Python \`urllib\`'s
-default client signature is blocked by Cloudflare. Do not retry if the request
-may have reached the server.
+On Yes, read \`${SYMPOSIUM_TOKEN_ENV}\` from the environment without printing
+or storing it. If it is empty or absent, stop without making a request and
+report that Symposium authentication is unavailable. Recheck that the source
+still exists and has no \`symposium\` property, then use available HTTP tooling
+to POST exactly once to \`${SYMPOSIUM_API_ORIGIN}/api/v1/docs\` with Bearer
+authorization and JSON \`{"title": <title>, "html": <html>}\`. Send
+\`Accept: application/json\` and \`Content-Type: application/json\`, and set
+\`User-Agent: Symposium-Agent\`; Python \`urllib\`'s default client signature is
+blocked by Cloudflare. Do not retry if the request may have reached the server.
 
-Report a rejected Copilot Plus license only when the response is JSON and
+Report that Symposium rejected the token only when the response is JSON and
 \`error.code\` is \`unauthorized\`. A non-JSON 403, including a Cloudflare 1xxx
-error, is an edge/client rejection and says nothing about license validity. Any
+error, is an edge/client rejection and says nothing about token validity. Any
 other non-201 response is a publish failure.
 
 A 201 receipt is valid only when \`docId\` is 16 lowercase Crockford characters,
 \`url\` is HTTPS with path \`/d/<docId>\`, and \`version\` is a positive safe integer.
 Treat a malformed 201 as ambiguous and non-retryable. Before updating the source
 note, append a \`published\` row containing that receipt, the source path, current
-UTC time, and the HTML SHA-256 to
-\`copilot/symposium/published-documents.md\`; this is an ordinary Markdown note,
-so create or append it with normal Obsidian note tools. Use this header:
+UTC time, and the HTML SHA-256 to \`.symposium/publish-history.md\` under the
+workspace root (the vault root when running in Obsidian). Use direct filesystem
+operations because hidden directories are not ordinary indexed notes. Create
+the directory and file when absent. Use this header:
 
 \`\`\`markdown
 | Document ID | Status | Note | URL | Published at (UTC) | Version | Content SHA-256 |
 | --- | --- | --- | --- | --- | ---: | --- |
 \`\`\`
 
-Create the note if absent; otherwise append only when it begins with that exact
+If the file exists, append only when it begins with that exact
 header. Escape existing backslashes, then pipes, and replace line breaks with
 spaces in every cell. Append in column order without rewriting old rows. If
 this advisory write fails, continue.
 
-Finally use one \`processFrontMatter\` callback to set the source note's
-\`symposium\` text property to the server's full \`url\` only if it is still
-absent. If that fails, do not publish again; report the URL and id so they remain
-recoverable.
-Return the server's \`url\` verbatim. Never put the license key in the note,
-HTML, ledger, command arguments, or chat.
+Finally re-read the source and set its \`symposium\` text property to the
+server's full \`url\` only if the property is still absent. Prefer a host's
+structured frontmatter API when available; otherwise make the smallest direct
+file edit without replacing concurrent changes. If that fails, do not publish
+again; report the URL and id so they remain recoverable.
+Return the server's \`url\` verbatim. Never put the token in the note, HTML,
+ledger, command arguments, or chat.
 `,
   files: [],
 };

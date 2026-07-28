@@ -1,5 +1,5 @@
 import { BUILTIN_SKILLS, managedBuiltinSkills, MIYO_SEARCH_SKILL, PLUS_ENV } from "./builtinSkills";
-import { SYMPOSIUM_API_ORIGIN } from "@/symposium/constants";
+import { SYMPOSIUM_API_ORIGIN, SYMPOSIUM_TOKEN_ENV } from "@/symposium/constants";
 
 /** A script file shipped by a skill, matched by extension (".sh", ".cmd", ".ps1"). */
 function scriptOf(name: string, ext: ".sh" | ".cmd" | ".ps1" = ".sh"): string {
@@ -10,9 +10,7 @@ function scriptOf(name: string, ext: ".sh" | ".cmd" | ".ps1" = ".sh"): string {
   return file.content;
 }
 
-const RELAY_SKILLS = BUILTIN_SKILLS.filter(
-  (skill) => skill.name.startsWith("copilot-") && skill.name !== "copilot-publish-symposium"
-);
+const RELAY_SKILLS = BUILTIN_SKILLS.filter((skill) => skill.name.startsWith("copilot-"));
 
 describe("builtinSkills", () => {
   describe("BUILTIN_SKILLS", () => {
@@ -23,7 +21,7 @@ describe("builtinSkills", () => {
         "copilot-read-pdf",
         "copilot-youtube-transcript",
         "copilot-fetch-x",
-        "copilot-publish-symposium",
+        "symposium-publish",
         "obsidian-markdown",
         "obsidian-bases",
         "json-canvas",
@@ -178,40 +176,40 @@ describe("builtinSkills", () => {
     });
 
     it("publishes confirmed agent-generated HTML and retains the link on its source note", () => {
-      const skill = BUILTIN_SKILLS.find((item) => item.name === "copilot-publish-symposium");
+      const skill = BUILTIN_SKILLS.find((item) => item.name === "symposium-publish");
       expect(skill).toBeDefined();
       expect(skill!.files).toEqual([]);
-      expect(skill!.skillMd).toContain("Require one existing Markdown source note");
-      expect(skill!.skillMd).toContain("static HTML or SVG");
+      expect(skill!.skillMd).toContain("Require one existing Markdown source file");
+      expect(skill!.skillMd).toMatch(/static HTML or\s+SVG/);
       expect(skill!.skillMd).toContain("ask an explicit Yes/No confirmation");
       expect(skill!.skillMd).toContain("A previous");
       expect(skill!.skillMd).toContain("request to publish is not confirmation");
-      expect(skill!.skillMd).toContain(PLUS_ENV.licenseKey);
+      expect(skill!.skillMd).toContain(SYMPOSIUM_TOKEN_ENV);
+      expect(skill!.skillMd).not.toContain(PLUS_ENV.licenseKey);
       expect(skill!.skillMd).toContain("empty or absent");
-      expect(skill!.skillMd).toContain("app.fileManager.processFrontMatter");
       expect(skill!.skillMd).toContain(`${SYMPOSIUM_API_ORIGIN}/api/v1/docs`);
       expect(skill!.skillMd).toContain("POST exactly once");
       expect(skill!.skillMd).toContain("Accept: application/json");
-      expect(skill!.skillMd).toContain("`User-Agent`");
-      expect(skill!.skillMd).toContain(PLUS_ENV.clientVersion);
+      expect(skill!.skillMd).toContain("`User-Agent: Symposium-Agent`");
       expect(skill!.skillMd).toContain("error.code");
       expect(skill!.skillMd).toContain("Cloudflare 1xxx");
-      expect(skill!.skillMd).toContain("says nothing about license validity");
+      expect(skill!.skillMd).toContain("says nothing about token validity");
       expect(skill!.skillMd).toContain("positive safe integer");
       expect(skill!.skillMd).toContain("/d/<docId>");
       expect(skill!.skillMd).toContain("malformed");
       expect(skill!.skillMd).toContain("ambiguous and non-retryable");
-      expect(skill!.skillMd).toContain("copilot/symposium/published-documents.md");
-      expect(skill!.skillMd).toContain("ordinary Markdown note");
+      expect(skill!.skillMd).toContain(".symposium/publish-history.md");
       expect(skill!.skillMd).toContain("| Document ID | Status | Note | URL |");
-      expect(skill!.skillMd).toContain("normal Obsidian note tools");
-      expect(skill!.skillMd).toContain("Obsidian CLI");
+      expect(skill!.skillMd).toContain("direct filesystem");
       expect(skill!.skillMd).toContain("append only when it begins with that exact");
       expect(skill!.skillMd).toContain("Escape existing backslashes");
-      expect(skill!.skillMd).toContain("one `processFrontMatter` callback");
+      expect(skill!.skillMd).toContain("structured frontmatter API");
       expect(skill!.skillMd).toContain("server's full `url`");
-      expect(skill!.skillMd).toMatch(/only if it is still\s+absent/);
+      expect(skill!.skillMd).toMatch(/only if the property is still\s+absent/);
       expect(skill!.skillMd).toContain("server's `url` verbatim");
+      expect(skill!.skillMd).not.toContain("Copilot Plus");
+      expect(skill!.skillMd).not.toContain("Copilot-Obsidian");
+      expect(skill!.skillMd).not.toContain("Obsidian CLI");
     });
   });
 

@@ -4,7 +4,7 @@ import type { Vault } from "obsidian";
 
 jest.mock("@/utils", () => ({ ensureFolderExists: jest.fn() }));
 
-const LEDGER_PATH = "copilot/symposium/published-documents.md";
+const LEDGER_PATH = ".symposium/publish-history.md";
 const LEDGER_HEADER =
   "| Document ID | Status | Note | URL | Published at (UTC) | Version | Content SHA-256 |\r\n" +
   "| --- | --- | --- | --- | --- | ---: | --- |";
@@ -32,12 +32,12 @@ describe("symposiumLedger", () => {
       read.mockResolvedValue(LEDGER_HEADER);
     });
 
-    it("creates a readable Markdown ledger and escapes table-breaking note paths", async () => {
+    it("creates hidden Markdown history and escapes table-breaking note paths", async () => {
       exists.mockResolvedValue(false);
 
       await appendSymposiumLedgerEntry(vault, ENTRY);
 
-      expect(ensureFolderExists).toHaveBeenCalledWith(vault, "copilot/symposium");
+      expect(ensureFolderExists).toHaveBeenCalledWith(vault, ".symposium");
       expect(append).toHaveBeenCalledWith(
         LEDGER_PATH,
         expect.stringContaining(
@@ -74,11 +74,11 @@ describe("symposiumLedger", () => {
       expect(append).toHaveBeenCalledWith(LEDGER_PATH, expect.stringContaining(ENTRY.docId));
     });
 
-    it("refuses to append to an unrelated existing note", async () => {
+    it("refuses to append to an unrelated existing file", async () => {
       exists.mockResolvedValue(true);
       read.mockResolvedValue(`${LEDGER_HEADER.split("\r\n")[0]}\nNot a ledger`);
 
-      await expect(appendSymposiumLedgerEntry(vault, ENTRY)).rejects.toThrow("non-ledger note");
+      await expect(appendSymposiumLedgerEntry(vault, ENTRY)).rejects.toThrow("non-ledger file");
       expect(append).not.toHaveBeenCalled();
     });
   });

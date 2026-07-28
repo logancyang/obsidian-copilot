@@ -5,6 +5,7 @@ import { logWarn } from "@/logger";
 import { getSettings } from "@/settings/model";
 import { getMiyoCustomUrl } from "@/miyo/miyoUtils";
 import { PLUS_ENV } from "@/agentMode/skills/builtin/builtinSkills";
+import { SYMPOSIUM_TOKEN_ENV } from "@/symposium/constants";
 import {
   COPILOT_OBSIDIAN_CLI_ENV,
   resolveObsidianCliPath,
@@ -19,7 +20,7 @@ const EMPTY_MANAGED_ENV: Readonly<Record<string, string>> = Object.freeze({});
 /**
  * Build the plugin-managed environment for builtin skill scripts. Composes
  * independent contributions, all merged BEFORE the user's `envOverrides` so a
- * user can still shadow them; the decrypted key lives only in the agent
+ * user can still shadow them; the credential lives only in the agent
  * subprocess env (never written to disk in the skill files):
  *
  * - **Obsidian CLI** (`COPILOT_OBSIDIAN_CLI`): terminal-capable executable
@@ -29,6 +30,8 @@ const EMPTY_MANAGED_ENV: Readonly<Record<string, string>> = Object.freeze({});
  *   base URL + user id + client version, only for an active Plus subscriber with
  *   a key on file. Absent otherwise, so the relay skills exit with the upgrade
  *   prompt.
+ * - **Symposium** (`SYMPOSIUM_TOKEN`): the same credential under the
+ *   service-owned name expected by the portable publishing skill.
  * - **Miyo** (`MIYO_URL`): the user's custom/remote Miyo server URL when set, so
  *   the bundled `miyo` CLI targets their configured service instead of local
  *   loopback discovery (the only way Miyo works on mobile or against a remote
@@ -58,6 +61,7 @@ export async function buildBuiltinSkillEnv(
       const licenseKey = await getDecryptedKey(settings.plusLicenseKey);
       if (licenseKey) {
         env[PLUS_ENV.licenseKey] = licenseKey;
+        env[SYMPOSIUM_TOKEN_ENV] = licenseKey;
         env[PLUS_ENV.baseUrl] = BREVILABS_API_BASE_URL;
         env[PLUS_ENV.userId] = settings.userId ?? "";
         env[PLUS_ENV.clientVersion] = clientVersion;

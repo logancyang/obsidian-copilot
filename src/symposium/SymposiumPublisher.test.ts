@@ -173,7 +173,7 @@ describe("SymposiumPublisher", () => {
           kind: "failure",
           action: "publish",
           message:
-            "This note already uses the symposium property for an unrecognized value. Recover its public link from copilot/symposium/published-documents.md, then repair or remove the property before publishing.",
+            "This note already uses the symposium property for an unrecognized value. Recover its public link from .symposium/publish-history.md, then repair or remove the property before publishing.",
           accessNotice: false,
           retryable: false,
         });

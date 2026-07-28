@@ -1,9 +1,8 @@
-import { COPILOT_FOLDER_ROOT } from "@/constants";
 import { ensureFolderExists } from "@/utils";
 import type { Vault } from "obsidian";
 
-export const SYMPOSIUM_LEDGER_FOLDER = `${COPILOT_FOLDER_ROOT}/symposium`;
-export const SYMPOSIUM_LEDGER_PATH = `${SYMPOSIUM_LEDGER_FOLDER}/published-documents.md`;
+export const SYMPOSIUM_LEDGER_FOLDER = ".symposium";
+export const SYMPOSIUM_LEDGER_PATH = `${SYMPOSIUM_LEDGER_FOLDER}/publish-history.md`;
 
 export interface SymposiumLedgerEntry {
   docId: string;
@@ -47,7 +46,7 @@ export async function appendSymposiumLedgerEntry(
   const existing = exists ? await vault.adapter.read(SYMPOSIUM_LEDGER_PATH) : "";
   const normalized = existing.replace(/\r\n?/g, "\n");
   if (exists && normalized !== LEDGER_HEADER && !normalized.startsWith(`${LEDGER_HEADER}\n`)) {
-    throw new Error(`Refusing to append to non-ledger note: ${SYMPOSIUM_LEDGER_PATH}`);
+    throw new Error(`Refusing to append to non-ledger file: ${SYMPOSIUM_LEDGER_PATH}`);
   }
   const rowPrefix = exists && !/[\r\n]$/.test(existing) ? "\n" : "";
   await vault.adapter.append(
