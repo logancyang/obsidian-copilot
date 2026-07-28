@@ -490,7 +490,7 @@ const FETCH_X = relaySkill({
   scriptFile: "fetch-x.sh",
 });
 
-const SYMPOSIUM_PUBLISH_VERSION = 3;
+const SYMPOSIUM_PUBLISH_VERSION = 4;
 const SYMPOSIUM_PUBLISH: BuiltinSkill = {
   name: "copilot-publish-symposium",
   version: SYMPOSIUM_PUBLISH_VERSION,
@@ -543,10 +543,11 @@ confirmation question is shown.
 
 Show the user the source note, title, and a concise preview or description of
 the finished page. Explain that anyone with the resulting link can read it.
-Ask an explicit Yes/No question through the agent's user-question UI. Do not
-invoke the wrapper unless the user answers Yes; a prior general request to
-publish is not this confirmation. If they decline, delete the temporary HTML
-and make no request.
+Ask an explicit Yes/No question through the agent's user-question UI. If that
+UI is unavailable, ask the same question conversationally, stop the turn, and
+wait for the user's next message. Do not invoke the wrapper unless the user
+answers Yes to this confirmation; a prior general request to publish is not
+enough. If they decline, delete the temporary HTML and make no request.
 
 ## 4. Publish once
 
@@ -566,9 +567,10 @@ On Windows, call the \`.cmd\` wrapper from PowerShell:
 & "/absolute/path/to/this/skill/directory/publish-symposium.cmd" "C:\\absolute\\path\\to\\source.md" "Page title" "C:\\absolute\\path\\to\\prepared.html"
 \`\`\`
 
-The wrapper prints the publish receipt as JSON. Validate that it contains a
-16-character lowercase \`docId\` and an HTTPS \`url\`. Never retry a publish
-after an uncertain response; it may already have created a public page.
+Immediately before POST, the wrapper verifies that the source note still has
+no \`symposium\` property. It prints a canonical, validated publish receipt as
+JSON. Never retry after an uncertain response; it may already have created a
+public page.
 
 ## 5. Record the receipt
 
@@ -592,15 +594,17 @@ the license key in the ledger.
 
 ## 6. Save the identity
 
-Only after attempting the ledger write, set the source note's \`symposium\`
-text property to the returned \`docId\`, preserving all other frontmatter.
-Prefer the Obsidian CLI:
+Only after attempting the ledger write, read the source note's \`symposium\`
+property again. Set it to the returned \`docId\` only if it is still absent,
+preserving all other frontmatter. Prefer the Obsidian CLI:
 
 \`\`\`bash
 obsidian vault="<vault>" property:set path="<vault-relative-source.md>" name=symposium value="<docId>" type=text
 \`\`\`
 
-If saving the property fails, do not publish again. Report the returned URL and
+If the property now has any value, leave it unchanged and report the concurrent
+change together with the new URL and document id from the ledger. If reading or
+saving the property fails, do not publish again. Report the returned URL and
 document id so the page remains recoverable. Otherwise return the server's
 \`url\` verbatim. Always delete the temporary HTML file. Never print or write
 the license key into the note, HTML, command arguments, or chat.
@@ -639,6 +643,25 @@ json_escape() {
     END { printf "\\"" }'
 }
 
+source_is_unpublished() {
+  awk '
+    NR == 1 {
+      sub(/^\\357\\273\\277/, "")
+      if ($0 != "---") exit 0
+      in_yaml = 1
+      next
+    }
+    in_yaml && $0 ~ /^(---|\\.\\.\\.)[[:space:]]*$/ { exit found ? 1 : 0 }
+    in_yaml && $0 ~ /^[[:space:]]*symposium[[:space:]]*:/ { found = 1 }
+    END { if (found) exit 1 }
+  ' "$SOURCE"
+}
+
+invalid_receipt() {
+  die "Symposium may have published the page but returned an invalid receipt. Do not retry: $OUT" 1
+}
+
+source_is_unpublished || die "The source note's Symposium identity changed. Do not publish it again." 1
 RESP=$({
   printf '{"title":'
   printf '%s' "$TITLE" | json_escape
@@ -654,7 +677,23 @@ RESP=$({
 CODE=$(printf '%s' "$RESP" | tail -n1)
 OUT=$(printf '%s' "$RESP" | sed '$d')
 case "$CODE" in
-  201) printf '%s\\n' "$OUT" ;;
+  201)
+    COMPACT=$(printf '%s' "$OUT" | tr -d '[:space:]')
+    case "$COMPACT" in \\{*\\}) ;; *) invalid_receipt ;; esac
+    DOC_ID=$(printf '%s' "$COMPACT" | sed -n 's/.*"docId":"\\([^"]*\\)".*/\\1/p')
+    [ "\${#DOC_ID}" -eq 16 ] || invalid_receipt
+    case "$DOC_ID" in *[!0123456789abcdefghjkmnpqrstvwxyz]*) invalid_receipt ;; esac
+    URL=$(printf '%s' "$COMPACT" | sed -n 's/.*"url":"\\([^"]*\\)".*/\\1/p')
+    case "$URL" in https://?*) ;; *) invalid_receipt ;; esac
+    VERSION=$(printf '%s' "$COMPACT" | sed -n 's/.*"version":\\([0-9][0-9]*\\)[,}].*/\\1/p')
+    case "$VERSION" in ""|0|0*) invalid_receipt ;; esac
+    awk -v value="$VERSION" 'BEGIN {
+      max = "9007199254740991"
+      if (length(value) < length(max)) exit 0
+      if (length(value) > length(max) || ("x" value) > ("x" max)) exit 1
+    }' || invalid_receipt
+    printf '%s\\n' "$OUT"
+    ;;
   401|403) die "Symposium rejected the Copilot Plus license: $OUT" 1 ;;
   2*) die "Symposium returned an unexpected success response (HTTP $CODE): $OUT. Do not retry." 1 ;;
   *) die "Symposium publish failed (HTTP $CODE): $OUT" 1 ;;
@@ -689,6 +728,16 @@ if ([System.IO.Path]::GetExtension($SOURCE) -ine '.md') { Die "The Symposium sou
 if (-not (Test-Path -LiteralPath $FILE -PathType Leaf)) { Die "Could not read prepared HTML: $FILE" 1 }
 
 try {
+  $SOURCE_TEXT = [System.IO.File]::ReadAllText($SOURCE, [System.Text.Encoding]::UTF8)
+} catch {
+  Die "Could not read source note: $SOURCE" 1
+}
+$FRONTMATTER = [regex]::Match($SOURCE_TEXT.TrimStart([char]0xFEFF), '(?s)\\A---\\r?\\n(.*?)\\r?\\n(?:---|\\.\\.\\.)\\s*(?:\\r?\\n|$)')
+if ($FRONTMATTER.Success -and $FRONTMATTER.Groups[1].Value -match '(?m)^\\s*symposium\\s*:') {
+  Die "The source note's Symposium identity changed. Do not publish it again." 1
+}
+
+try {
   $HTML = [System.IO.File]::ReadAllText($FILE, [System.Text.Encoding]::UTF8)
   $JSON = @{ title = $TITLE; html = $HTML } | ConvertTo-Json -Compress
   $BYTES = [System.Text.Encoding]::UTF8.GetBytes($JSON)
@@ -704,6 +753,31 @@ try {
 }
 if ([int]$RESP.StatusCode -ne 201) {
   Die "Symposium returned an unexpected success response (HTTP $([int]$RESP.StatusCode)): $($RESP.Content). Do not retry." 1
+}
+try {
+  $RECEIPT = $RESP.Content | ConvertFrom-Json -ErrorAction Stop
+  $DOC_ID = $RECEIPT.docId
+  $URL_TEXT = $RECEIPT.url
+  $VERSION = $RECEIPT.version
+  $URI = $null
+  $VALID_URL = $URL_TEXT -is [string] -and
+    [Uri]::TryCreate($URL_TEXT, [UriKind]::Absolute, [ref]$URI) -and
+    $URI.Scheme -eq 'https'
+  if ($RECEIPT -isnot [PSCustomObject] -or
+      $DOC_ID -isnot [string] -or
+      $DOC_ID -notmatch '^[0123456789abcdefghjkmnpqrstvwxyz]{16}$' -or
+      -not $VALID_URL -or
+      $VERSION -is [string]) {
+    throw "invalid receipt"
+  }
+  $VERSION_NUMBER = [decimal]$VERSION
+  if ($VERSION_NUMBER -lt 1 -or
+      $VERSION_NUMBER -gt 9007199254740991 -or
+      $VERSION_NUMBER -ne [decimal]::Truncate($VERSION_NUMBER)) {
+    throw "invalid version"
+  }
+} catch {
+  Die "Symposium may have published the page but returned an invalid receipt. Do not retry: $($RESP.Content)" 1
 }
 [Console]::Out.WriteLine($RESP.Content)
 `,

@@ -17,6 +17,7 @@ const ENTRY: SymposiumLedgerEntry = {
 };
 
 interface VaultHarness {
+  append: jest.Mock;
   contents: Map<string, string>;
   mkdir: jest.Mock;
   vault: Vault;
@@ -32,18 +33,22 @@ function createVault(): VaultHarness {
   const write = jest.fn(async (path: string, content: string) => {
     contents.set(path, content);
   });
+  const append = jest.fn(async (path: string, content: string) => {
+    contents.set(path, `${contents.get(path) ?? ""}${content}`);
+  });
   const vault = {
     getAbstractFileByPath: jest.fn((path: string) =>
       folders.has(path) ? { path, children: [] } : null
     ),
     adapter: {
+      append,
       exists: jest.fn(async (path: string) => contents.has(path)),
       mkdir,
       read: jest.fn(async (path: string) => contents.get(path) ?? ""),
       write,
     },
   } as unknown as Vault;
-  return { contents, mkdir, vault, write };
+  return { append, contents, mkdir, vault, write };
 }
 
 describe("symposiumLedger", () => {
@@ -77,6 +82,7 @@ describe("symposiumLedger", () => {
       });
 
       const ledger = harness.contents.get(SYMPOSIUM_LEDGER_PATH) ?? "";
+      expect(harness.append).toHaveBeenCalledTimes(1);
       expect(ledger.match(/\| 9f2k4mvq7t0xbz3n \|/g)).toHaveLength(2);
       expect(ledger).toContain(
         "| 9f2k4mvq7t0xbz3n | unpublished | Notes/Architecture \\| Review.md | — | — | — | — |"

@@ -186,13 +186,17 @@ describe("builtinSkills", () => {
       expect(skill!.skillMd).toContain("static table or");
       expect(skill!.skillMd).toContain("Do not publish standalone HTML without a source note");
       expect(skill!.skillMd).toContain("Ask an explicit Yes/No question");
-      expect(skill!.skillMd).toContain("invoke the wrapper unless the user answers Yes");
+      expect(skill!.skillMd).toContain("If that");
+      expect(skill!.skillMd).toContain("UI is unavailable");
+      expect(skill!.skillMd).toContain("invoke the wrapper unless the user");
+      expect(skill!.skillMd).toContain("answers Yes to this confirmation");
       expect(skill!.skillMd).toContain("copilot/symposium/published-documents.md");
       expect(skill!.skillMd).toContain("Append one row; never rewrite or delete older rows");
       expect(skill!.skillMd).toContain("Only after attempting the ledger write");
+      expect(skill!.skillMd).toContain("only if it is still absent");
       expect(skill!.skillMd).toContain("property:set");
-      expect(skill!.skillMd).toContain("set the source note's `symposium`");
-      expect(skill!.skillMd).toContain("text property to the returned `docId`");
+      expect(skill!.skillMd).toContain("read the source note's `symposium`");
+      expect(skill!.skillMd).toContain("Set it to the returned `docId`");
       expect(skill!.skillMd).toContain("return the server's");
       expect(skill!.skillMd).toContain("verbatim");
 
@@ -203,6 +207,9 @@ describe("builtinSkills", () => {
       expect(sh).toContain('json_escape < "$FILE"');
       expect(sh).toContain("Authorization: Bearer $KEY");
       expect(sh).toContain("--data-binary @-");
+      expect(sh).toContain("source_is_unpublished");
+      expect(sh).toContain("9007199254740991");
+      expect(sh).toContain("abcdefghjkmnpqrstvwxyz");
       expect(sh).toContain("Do not retry");
 
       const ps1 = scriptOf(skill!.name, ".ps1");
@@ -212,6 +219,10 @@ describe("builtinSkills", () => {
       expect(ps1).toContain("[System.IO.File]::ReadAllText($FILE");
       expect(ps1).toContain('Authorization = "Bearer $KEY"');
       expect(ps1).toContain("-Body $BYTES");
+      expect(ps1).toContain("TrimStart([char]0xFEFF)");
+      expect(ps1).toContain("ConvertFrom-Json -ErrorAction Stop");
+      expect(ps1).toContain("9007199254740991");
+      expect(ps1).toContain("abcdefghjkmnpqrstvwxyz");
       expect(ps1).toContain("Do not retry");
     });
   });

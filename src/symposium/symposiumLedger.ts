@@ -39,9 +39,12 @@ function ledgerRow(entry: SymposiumLedgerEntry): string {
 async function writeLedgerEntry(vault: Vault, entry: SymposiumLedgerEntry): Promise<void> {
   await ensureFolderExists(vault, SYMPOSIUM_LEDGER_FOLDER);
   const exists = await vault.adapter.exists(SYMPOSIUM_LEDGER_PATH);
-  const current = exists ? await vault.adapter.read(SYMPOSIUM_LEDGER_PATH) : LEDGER_HEADER;
-  const separator = current.endsWith("\n") ? "" : "\n";
-  await vault.adapter.write(SYMPOSIUM_LEDGER_PATH, `${current}${separator}${ledgerRow(entry)}\n`);
+  const row = `${ledgerRow(entry)}\n`;
+  if (exists) {
+    await vault.adapter.append(SYMPOSIUM_LEDGER_PATH, row);
+  } else {
+    await vault.adapter.write(SYMPOSIUM_LEDGER_PATH, `${LEDGER_HEADER}${row}`);
+  }
 }
 
 /**
