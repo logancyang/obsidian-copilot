@@ -43,11 +43,6 @@ const settingsChangeCallbacks = new Set<
   (prev: { agentMode: unknown }, next: { agentMode: unknown }) => void
 >();
 
-// Stub the project-folder mirror so a non-global spawn never touches the vault.
-jest.mock("@/projects/ensureAgentsMirror", () => ({
-  ensureAgentsMirror: jest.fn(async () => undefined),
-}));
-
 // MRU touch is fire-and-forget through the singleton; mock it so enterProject
 // tests assert the call without real frontmatter IO.
 const mockTouchProjectLastUsed = jest.fn(async () => undefined);

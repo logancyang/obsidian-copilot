@@ -1,34 +1,27 @@
 import { revealProjectFolder } from "@/agentMode/ui/AgentProjectRowActions";
-import { ProjectSystemPromptModal } from "@/agentMode/ui/ProjectSystemPromptModal";
 import type { AgentTodoListEntry } from "@/agentMode/session/types";
 import { ProjectConfig } from "@/aiParams";
 import { AddProjectModal } from "@/components/modals/project/AddProjectModal";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { openAgentsFile } from "@/instructions/agentsFile";
 import { cn } from "@/lib/utils";
 import { logError } from "@/logger";
-import { isGeneratedAgentsMirrorContent } from "@/projects/ensureAgentsMirror";
 import { getProjectFolderPath } from "@/projects/projectPaths";
 import { ProjectFileManager } from "@/projects/ProjectFileManager";
 import { getCachedProjectRecordById } from "@/projects/state";
 import {
+  ArrowUpRight,
   Check,
   ChevronDown,
   ChevronRight,
   FolderSearch,
   List,
   Settings,
-  SquarePen,
 } from "lucide-react";
-import { App, TFile, TFolder } from "obsidian";
-import React, { memo, useEffect, useState } from "react";
+import { App, Notice, TFile, TFolder } from "obsidian";
+import React, { memo, useMemo, useState } from "react";
 
-/**
- * The project's instruction config — always represented by the fixed "System
- * Prompt" row, never listed as a plain file. `AGENTS.md` is NOT in here: it can
- * be either the plugin's generated mirror (hidden) or a user-authored file
- * (shown), distinguished by marker content, not by name — see the listing.
- */
 const HIDDEN_BASENAME = "project.md";
 const AGENTS_BASENAME = "agents.md";
 
@@ -114,58 +107,24 @@ interface ProjectFilesSectionProps {
   app: App;
   project: ProjectConfig;
   onClose: () => void;
-  /** Fired after the System Prompt is saved, so the caller refreshes its cache. */
-  onEdited?: (project: ProjectConfig) => void;
 }
 
-function ProjectFilesSection({ app, project, onClose, onEdited }: ProjectFilesSectionProps) {
+function ProjectFilesSection({ app, project, onClose }: ProjectFilesSectionProps) {
   const [outputsOpen, setOutputsOpen] = useState(false);
-  const [files, setFiles] = useState<TFile[]>([]);
-
-  // Direct children of the project folder, minus: ALL dot-prefixed entries
-  // (user dot-files like `.env` — hiding dot-files is the conventional listing
-  // default, matching Finder/`ls`
-  // and Obsidian's own dot-folder handling), project.md (the System Prompt row
-  // represents it), and a GENERATED AGENTS.md mirror. A user-authored AGENTS.md
-  // (no marker) is kept — distinguishing the two needs the file CONTENT, not
-  // its name, so the listing is async. Runs when the popover body mounts (it
-  // only exists while open, so each open re-lists fresh without a vault
-  // subscription).
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const record = getCachedProjectRecordById(project.id);
-      const folderPath = record ? getProjectFolderPath(record.folderName) : null;
-      const folder = folderPath ? app.vault.getAbstractFileByPath(folderPath) : null;
-      if (!(folder instanceof TFolder)) {
-        if (!cancelled) setFiles([]);
-        return;
-      }
-      const candidates = folder.children.filter(
+  const files = useMemo(() => {
+    const record = getCachedProjectRecordById(project.id);
+    const folderPath = record ? getProjectFolderPath(record.folderName) : null;
+    const folder = folderPath ? app.vault.getAbstractFileByPath(folderPath) : null;
+    if (!(folder instanceof TFolder)) return [];
+    return folder.children
+      .filter(
         (child): child is TFile =>
           child instanceof TFile &&
           !child.name.startsWith(".") &&
-          child.name.toLowerCase() !== HIDDEN_BASENAME
-      );
-      const visible: TFile[] = [];
-      for (const child of candidates) {
-        if (child.name.toLowerCase() === AGENTS_BASENAME) {
-          // Hide only the generated mirror; on read failure keep the file
-          // visible rather than risk hiding a user's own AGENTS.md.
-          const isMirror = await app.vault
-            .read(child)
-            .then(isGeneratedAgentsMirrorContent)
-            .catch(() => false);
-          if (isMirror) continue;
-        }
-        visible.push(child);
-      }
-      visible.sort((a, b) => a.name.localeCompare(b.name));
-      if (!cancelled) setFiles(visible);
-    })();
-    return () => {
-      cancelled = true;
-    };
+          child.name.toLowerCase() !== HIDDEN_BASENAME &&
+          child.name.toLowerCase() !== AGENTS_BASENAME
+      )
+      .sort((a, b) => a.name.localeCompare(b.name));
   }, [app, project.id]);
 
   const handleOpenFile = (file: TFile) => {
@@ -176,17 +135,19 @@ function ProjectFilesSection({ app, project, onClose, onEdited }: ProjectFilesSe
       .catch((err) => logError("[ProjectInfoPopover] openFile failed", err));
   };
 
-  const handleEditSystemPrompt = () => {
+  const handleOpenProjectInstructions = () => {
+    const record = getCachedProjectRecordById(project.id);
+    if (!record) return;
     onClose();
-    new ProjectSystemPromptModal(app, project.systemPrompt ?? "", async (prompt) => {
-      const updated = await ProjectFileManager.getInstance(app).updateProject(project.id, {
-        ...project,
-        systemPrompt: prompt,
-      });
-      // Keep the caller's cached project in sync with the gear-edit path, so a
-      // reopen reads the new prompt instead of the pre-save value.
-      onEdited?.(updated.project);
-    }).open();
+    void openAgentsFile(
+      app,
+      getProjectFolderPath(record.folderName),
+      record.project.systemPrompt ?? "",
+      true
+    ).catch((error) => {
+      logError("[ProjectInfoPopover] Failed to open project AGENTS.md", error);
+      new Notice("Failed to open project AGENTS.md.");
+    });
   };
 
   return (
@@ -207,20 +168,19 @@ function ProjectFilesSection({ app, project, onClose, onEdited }: ProjectFilesSe
         </Button>
       </div>
 
-      {/* Fixed first row: the project's instructions. Shows ONLY the label —
-          never the backing file name (project.md / the AGENTS.md mirror). */}
+      {/* Fixed first row: the project's canonical instructions file. */}
       <div
         role="button"
         tabIndex={0}
         className="tw-flex tw-cursor-pointer tw-items-center tw-gap-2 tw-rounded tw-p-1 hover:tw-bg-secondary"
-        onClick={handleEditSystemPrompt}
+        onClick={handleOpenProjectInstructions}
         onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") handleEditSystemPrompt();
+          if (e.key === "Enter" || e.key === " ") handleOpenProjectInstructions();
         }}
       >
         <FileBadge ext="md" />
-        <span className="tw-min-w-0 tw-flex-1 tw-truncate tw-text-ui-small">System Prompt</span>
-        <SquarePen aria-hidden="true" className="tw-size-3.5 tw-shrink-0 tw-text-faint" />
+        <span className="tw-min-w-0 tw-flex-1 tw-truncate tw-text-ui-small">AGENTS.md</span>
+        <ArrowUpRight aria-hidden="true" className="tw-size-3.5 tw-shrink-0 tw-text-faint" />
       </div>
 
       {files.map((file) => (
@@ -285,7 +245,7 @@ interface ProjectInfoPopoverProps {
  * Project-info popover anchored to the project header's trailing button,
  * replacing the old `⋯` overflow menu (design: PROJECT_INFO_POPOVER.md,
  * project-info-panel-hifi.html F1–F3). Top card (name + Edit gear + reveal) →
- * Progress (live todo list, hidden when none) → Project files (System Prompt
+ * Progress (live todo list, hidden when none) → Project files (AGENTS.md
  * row + folder files + Outputs placeholder). Deliberately NO Delete and no
  * config chips — deletion stays on the project list rows' inline actions.
  */
@@ -370,12 +330,7 @@ export const ProjectInfoPopover = memo(
             </Button>
           </div>
           <ProgressSection todoList={todoList} />
-          <ProjectFilesSection
-            app={app}
-            project={project}
-            onClose={() => setOpen(false)}
-            onEdited={onEdited}
-          />
+          <ProjectFilesSection app={app} project={project} onClose={() => setOpen(false)} />
         </PopoverContent>
       </Popover>
     );

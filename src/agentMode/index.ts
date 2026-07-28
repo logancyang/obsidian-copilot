@@ -111,8 +111,7 @@ function collectAgentSkillsDirsProjectRel(): Record<string, string> {
  * The exact system prompt every backend bakes in — i.e. `buildAgentSystemPrompt`'s
  * real output, not a hand-picked subset. Used as the per-backend restart dedup
  * key so a restart fires iff the composed prompt actually changes: the "disable
- * builtin" toggle, the user's custom prompt (including the legacy
- * `userSystemPrompt` fallback), the base framing, and the pill directive.
+ * builtin" toggle, the base framing, tool guidance, and the pill directive.
  * Keying on the builder's actual output means the key can't silently drift from
  * what the backend sends.
  *
@@ -237,17 +236,12 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
   plugin.modelManagement.backendConfigRegistry.subscribe(() =>
     restartProviderAffected("backend enabled models changed")
   );
-  // The composed Agent Mode system prompt (Copilot base + pill directive + the
-  // user's custom prompt) is baked into opencode/codex spawn-time config and
-  // shared across sessions, so a prompt change only reaches those agents on a
-  // fresh spawn. Restart the opted-in backends when their *effective* composed
-  // prompt changes; the Claude SDK re-reads it per `newSession()` and opts out.
+  // The composed Agent Mode built-in prompt is baked into opencode/codex
+  // spawn-time config and shared across sessions. Restart the opted-in backends
+  // when its effective content changes; Claude re-reads it per `newSession()`.
   //
-  // The effective prompt depends on several stores (the session-selection atom,
-  // the prompts list, the persisted default-prompt-title, and the legacy
-  // `userSystemPrompt` fallback), and the underlying atoms also fire on no-op
-  // list reloads — so we dedupe per backend on the builder's real output rather
-  // than a guessed subset of inputs. On initial load this is a harmless no-op:
+  // The system-prompt store also emits for Chat mode prompt changes, so dedupe
+  // on the builder's real output. On initial load this is a harmless no-op:
   // `restartBackend` returns early when no subprocess is running yet.
   const lastSystemPromptKeys = new Map<BackendId, string>();
   for (const descriptor of listBackendDescriptors()) {

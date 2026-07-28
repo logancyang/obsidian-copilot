@@ -75,8 +75,6 @@ import {
 import { ProjectContentTracker } from "@/context/projectContentTracker";
 import { buildProjectContextUpdatesBlock } from "@/context/contextUpdatesBlockBuilder";
 import { ProjectFileManager } from "@/projects/ProjectFileManager";
-import { ensureAgentsMirror } from "@/projects/ensureAgentsMirror";
-import { getComposedProjectInstructions } from "@/projects/projectSystemPrompt";
 import type {
   AgentQuestionAnswers,
   AskUserQuestionPrompt,
@@ -91,7 +89,6 @@ import type {
   ModelSelection,
   PermissionDecision,
   PermissionPrompt,
-  ProjectProfile,
   SessionId,
 } from "./types";
 
@@ -146,11 +143,6 @@ const EMPTY_HISTORY_ITEMS = Object.freeze([]) as unknown as ChatHistoryItem[];
 //     the surface) plus the convention that no caller mutates the result — consumers only
 //     `.has()`, read `.size`, and iterate.
 const EMPTY_RECENT_CHAT_IDS: ReadonlySet<string> = new Set();
-
-// Backends that discover project instructions from a physical `AGENTS.md` in the session cwd.
-// (claude instead has `project.md` parsed and injected in-process via setProjectProfileProvider,
-// so it needs no file.) Only these require the generated mirror to exist before cwd is read.
-const CWD_INSTRUCTION_BACKENDS: ReadonlySet<BackendId> = new Set(["codex", "opencode"]);
 
 // Delivery-cursor seed for a resumed session: BEHIND any real content epoch
 // (which starts at 0), so its first send always emits the coarse freshness note
@@ -283,8 +275,8 @@ export class AgentSessionManager {
   // (no lost update). Mirrors chat mode's `markdownNeedsReload`.
   private readonly contextDirtySignatures = new Map<ProjectScopeId, string>();
   // A project landing session captures MORE than materialized context at
-  // creation: codex/opencode read the AGENTS.md mirror from cwd, and Claude
-  // captures its project-instructions append. The materialization dirty flag
+  // creation: each backend reads the project's instruction files from cwd.
+  // The materialization dirty flag
   // above deliberately ignores `systemPrompt`, so reuse decisions need their own
   // fingerprint of what the session actually baked in (the landing-capture
   // signature). Keyed by internal session id; every project session gets an
@@ -1185,23 +1177,13 @@ export class AgentSessionManager {
     const requestedId = backendId ?? getSettings().agentMode?.activeBackend ?? "opencode";
     const resolvedId = this.opts.resolveDescriptor(requestedId) ? requestedId : "opencode";
 
-    // Read the live record once: it drives both the AGENTS.md mirror below and
-    // the landing-capture signature recorded after the session is built, so the
-    // two agree on the exact config this session bakes in.
+    // Read the live record once for the landing-capture signature recorded
+    // after the session is built.
     const projectRecord =
       projectId === GLOBAL_SCOPE ? undefined : getCachedProjectRecordById(projectId);
     const landingCaptureSignature = projectRecord
       ? getProjectLandingCaptureSignature(projectRecord)
       : undefined;
-
-    // Materialize the project's AGENTS.md mirror from project.md BEFORE resolving cwd, so a
-    // cwd-instruction backend (codex/opencode) discovers the instruction file on its first
-    // session. This is the sole correctness guarantee for an old project.md-only project.
-    // Never throws (degrades gracefully); skipped for GLOBAL_SCOPE and for claude (which gets
-    // the instruction injected in-process, no file needed).
-    if (projectRecord && CWD_INSTRUCTION_BACKENDS.has(resolvedId)) {
-      await ensureAgentsMirror(this.app, projectRecord);
-    }
 
     // Resolves the scope's cwd (vault root for global, project folder otherwise)
     // and validates desktop/orphaned up front, before any pending-create state
@@ -1454,8 +1436,8 @@ export class AgentSessionManager {
    *
    * Publishes the blocking load state SYNCHRONOUSLY (before the session even
    * appears) so the composer gates send the instant the tab renders, then flips
-   * to `done`/`error` and stores the result for {@link getProjectProfile} once
-   * the materializer settles. NEVER rejects — failure degrades to an empty
+   * to `done`/`error` and stores the result for the session once the materializer
+   * settles. NEVER rejects — failure degrades to an empty
    * result so the session's `newSession` (which awaits this) is never blocked.
    *
    * Resolves the full {@link ContextMaterializationResult} (searchable roots +
@@ -2882,14 +2864,6 @@ export class AgentSessionManager {
     sessionId: SessionId,
     projectId: ProjectScopeId
   ): Promise<AgentSession | null> {
-    // Same AGENTS.md mirror ensure as `createSession` — resume rehydrates an existing
-    // session, but its cwd still derives from the project record, so a cwd-instruction
-    // backend needs the mirror materialized before cwd is read. Never throws; skipped for
-    // GLOBAL_SCOPE and for claude.
-    if (projectId !== GLOBAL_SCOPE && CWD_INSTRUCTION_BACKENDS.has(backendId)) {
-      const record = getCachedProjectRecordById(projectId);
-      if (record) await ensureAgentsMirror(this.app, record);
-    }
     const cwd = this.resolveSessionCwd(projectId);
     // Settle queued vault events so the revision key below reflects a just-edited
     // source — otherwise resume could join an in-flight run reading the old content
@@ -3315,29 +3289,6 @@ export class AgentSessionManager {
     // Lets a backend with its own permission gate (Claude SDK) hard-deny write/exec
     // tools for read-only fan-out sub-sessions — see `permissionBridge`.
     proc.setReadOnlySessionPredicate?.((sessionId) => this.isReadOnlyFanoutSession(sessionId));
-    // Inject the project-instruction resolver. Wiring here (the single
-    // warm-adopt + fresh choke point) covers both backend bring-up paths.
-    // Backends that discover instructions from cwd (codex/opencode) omit the
-    // setter and this is a no-op.
-    proc.setProjectProfileProvider?.((projectId) => this.getProjectProfile(projectId));
-  }
-
-  /**
-   * Map a scope id to the minimal {@link ProjectProfile} a backend needs to
-   * inject project instructions. Returns `undefined` for {@link GLOBAL_SCOPE}
-   * or an unknown project — keeping the `projects/` lookup here so
-   * `backends/` never imports the projects layer.
-   */
-  private getProjectProfile(projectId: ProjectScopeId): ProjectProfile | undefined {
-    if (projectId === GLOBAL_SCOPE) return undefined;
-    const record = getCachedProjectRecordById(projectId);
-    if (!record) return undefined;
-    return {
-      id: record.project.id,
-      // Layer the built-in project policy ahead of the user's own instruction body, so Claude's
-      // `<project_instructions>` carries the same composed body codex/opencode get via the mirror.
-      systemPrompt: getComposedProjectInstructions(record),
-    };
   }
 
   private async ensureBackend(

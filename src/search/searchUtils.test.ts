@@ -99,6 +99,33 @@ describe("searchUtils", () => {
       expect(shouldIndexFile(window.app, file, null, null)).toBe(true);
     });
 
+    it("excludes canonical instruction files from search and indexing", () => {
+      expect(shouldIndexFile(window.app, createTestFile("AGENTS.md"), null, null)).toBe(false);
+      expect(shouldIndexFile(window.app, createTestFile("CLAUDE.md"), null, null)).toBe(false);
+
+      (settingsModel.getSettings as jest.Mock).mockReturnValue({
+        qaInclusions: "",
+        qaExclusions: "",
+        projectsFolder: "copilot/projects",
+      });
+      expect(
+        shouldIndexFile(
+          window.app,
+          createTestFile("copilot/projects/research/AGENTS.md"),
+          null,
+          null
+        )
+      ).toBe(false);
+      expect(
+        shouldIndexFile(
+          window.app,
+          createTestFile("copilot/projects/research/CLAUDE.md"),
+          null,
+          null
+        )
+      ).toBe(false);
+    });
+
     it("should return false when file matches exclusion pattern", () => {
       const file = createTestFile("private/secret.md");
       const exclusions = {

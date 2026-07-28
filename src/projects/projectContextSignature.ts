@@ -66,20 +66,15 @@ export function getProjectContextSignature(record: ProjectFileRecord): string {
 }
 
 /**
- * Fingerprint of everything an EMPTY project landing session bakes in at
- * creation: the materialization signature PLUS the project's instruction body.
- * A landing session captures its instructions once at start — Claude via
- * `systemPromptAppend`, codex/opencode via the AGENTS.md mirror read from cwd —
- * so a System-Prompt-only edit must replace the still-empty session for the
- * first message to use the new instructions, even though it changes no
- * materialized source.
+ * Fingerprint of a project's materialized context plus its legacy project.md
+ * instruction body. The body remains here for compatibility with projects that
+ * have not yet initialized AGENTS.md.
  *
  * Kept SEPARATE from {@link getProjectContextSignature} on purpose: that one
  * drives re-materialization (glob/URL/PDF conversion) and must stay insensitive
- * to `systemPrompt` (see its DESIGN NOTE) — folding the prompt in there would
- * re-materialize on every prompt edit. `systemPrompt` is compared verbatim
- * (no `normalizeMultiline`): `project.md` preserves the body's whitespace, so a
- * whitespace-only edit is still a real change to what the session captures.
+ * to `systemPrompt` (see its DESIGN NOTE) — folding the legacy body in there
+ * would re-materialize context unnecessarily. It is compared verbatim because
+ * `project.md` preserves its whitespace.
  */
 export function getProjectLandingCaptureSignature(record: ProjectFileRecord): string {
   return JSON.stringify({

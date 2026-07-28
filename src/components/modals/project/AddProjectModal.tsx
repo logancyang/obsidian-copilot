@@ -342,26 +342,21 @@ function AddProjectModalContent({
                 />
               </FormField>
 
-              <FormField
-                label="Project System Prompt"
-                description="Custom instructions for how the AI should behave in this project context"
-              >
-                {/* Template variables ({activeNote}, {[[Note]]}, …) are expanded by
-                    legacy chat's prompt processor only; agent backends receive the
-                    prompt verbatim, so the hints would mislead in Agent Mode. */}
-                {!agentMode && <SystemPromptSyntaxInstruction />}
-                <Textarea
-                  value={formData.systemPrompt}
-                  onChange={(e) => handleInputChange("systemPrompt", e.target.value)}
-                  onBlur={() => setTouched((prev) => ({ ...prev, systemPrompt: true }))}
-                  placeholder={
-                    agentMode
-                      ? "Enter your project system prompt here..."
-                      : "Enter your project system prompt here... Use {[[Note Name]]} to include note contents."
-                  }
-                  className="tw-min-h-32"
-                />
-              </FormField>
+              {!agentMode && (
+                <FormField
+                  label="Project System Prompt"
+                  description="Custom instructions for how the AI should behave in this project context"
+                >
+                  <SystemPromptSyntaxInstruction />
+                  <Textarea
+                    value={formData.systemPrompt}
+                    onChange={(e) => handleInputChange("systemPrompt", e.target.value)}
+                    onBlur={() => setTouched((prev) => ({ ...prev, systemPrompt: true }))}
+                    placeholder="Enter your project system prompt here... Use {[[Note Name]]} to include note contents."
+                    className="tw-min-h-32"
+                  />
+                </FormField>
+              )}
             </div>
           </div>
 

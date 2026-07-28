@@ -477,8 +477,8 @@ describe("ClaudeSdkBackendProcess", () => {
     // The SDK adapter's contract is "forward `getSystemPromptAppend()` verbatim
     // into `options.systemPrompt.append`", proven above. The Claude descriptor
     // wires that callback to `buildAgentSystemPrompt`, whose composition — the
-    // Copilot base prompt, pill directive, user custom prompt, and the
-    // disable-builtin behavior — is unit-tested in
+    // Copilot base prompt, pill directive, tool guidance, and disable-builtin
+    // behavior — is unit-tested in
     // `backends/shared/agentSystemPrompt.test.ts`. (The `sdk` layer can't import
     // a `backend` module under `boundaries/dependencies`, so that assertion
     // lives there, not here.)
@@ -948,129 +948,6 @@ describe("ClaudeSdkBackendProcess", () => {
       session_id: "irrelevant",
     };
   }
-
-  describe("setProjectProfileProvider()", () => {
-    beforeEach(() => {
-      queryMock.mockReset();
-      createSdkMcpServerMock.mockClear();
-    });
-
-    // Echoes the resolved project instructions so a test can read back exactly
-    // what the SDK passed to `getSystemPromptAppend` per session. Mirrors the
-    // descriptor's real `(opts) => buildAgentSystemPrompt(opts)`.
-    const echoAppend = (opts?: { projectInstructions?: string }): string => {
-      const parts = ["BASE"];
-      if (opts?.projectInstructions) parts.push(opts.projectInstructions);
-      return parts.join("\n\n");
-    };
-
-    function makeProc(getSystemPromptAppend: (opts?: { projectInstructions?: string }) => string) {
-      return new ClaudeSdkBackendProcess({
-        pathToClaudeCodeExecutable: "/usr/local/bin/claude",
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        app: { vault: {} } as any,
-        clientVersion: "1.2.3",
-        descriptor: fakeDescriptor(),
-        getSystemPromptAppend,
-      });
-    }
-
-    function appendOf(callIndex: number): unknown {
-      const opts = (getPromptQueryCalls()[callIndex][0] as { options: Record<string, unknown> })
-        .options;
-      return (opts.systemPrompt as { append?: unknown } | undefined)?.append;
-    }
-
-    it("global parity: an unset provider resolves the byte-identical no-project append", async () => {
-      queryMock.mockImplementation(() => makeQuery([resultMessage()]));
-      const proc = makeProc(echoAppend);
-
-      // No provider wired, no projectId → same as today's global path.
-      const { sessionId } = await proc.newSession({ cwd: "/vault", mcpServers: [] });
-      proc.registerSessionHandler(sessionId, () => {});
-      await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
-
-      expect(appendOf(0)).toBe("BASE");
-    });
-
-    it("global parity: GLOBAL_SCOPE / unknown project (provider returns undefined) yields the global append", async () => {
-      queryMock.mockImplementation(() => makeQuery([resultMessage()]));
-      const proc = makeProc(echoAppend);
-      proc.setProjectProfileProvider(() => undefined);
-
-      const { sessionId } = await proc.newSession({
-        cwd: "/vault",
-        mcpServers: [],
-        projectId: "__global__",
-      });
-      proc.registerSessionHandler(sessionId, () => {});
-      await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
-
-      expect(appendOf(0)).toBe("BASE");
-    });
-
-    it("appends the owning project's instructions when the provider resolves a profile", async () => {
-      queryMock.mockImplementation(() => makeQuery([resultMessage()]));
-      const proc = makeProc(echoAppend);
-      proc.setProjectProfileProvider((id) =>
-        id === "proj-1" ? { id, systemPrompt: "Cite only #verified notes." } : undefined
-      );
-
-      const { sessionId } = await proc.newSession({
-        cwd: "/vault",
-        mcpServers: [],
-        projectId: "proj-1",
-      });
-      proc.registerSessionHandler(sessionId, () => {});
-      await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
-
-      expect(appendOf(0)).toBe("BASE\n\nCite only #verified notes.");
-    });
-
-    it("resolves each session's own project on one process (per-session, not process-global)", async () => {
-      queryMock.mockImplementation(() => makeQuery([resultMessage()]));
-      const proc = makeProc(echoAppend);
-      proc.setProjectProfileProvider((id) => {
-        if (id === "proj-A") return { id, systemPrompt: "A rules" };
-        if (id === "proj-B") return { id, systemPrompt: "B rules" };
-        return undefined;
-      });
-
-      const a = await proc.newSession({ cwd: "/vault", mcpServers: [], projectId: "proj-A" });
-      const b = await proc.newSession({ cwd: "/vault", mcpServers: [], projectId: "proj-B" });
-      proc.registerSessionHandler(a.sessionId, () => {});
-      proc.registerSessionHandler(b.sessionId, () => {});
-
-      await proc.prompt({ sessionId: a.sessionId, prompt: [{ type: "text", text: "hi" }] });
-      await proc.prompt({ sessionId: b.sessionId, prompt: [{ type: "text", text: "hi" }] });
-
-      // The two prompt calls carry each session's own project instructions.
-      expect(appendOf(0)).toBe("BASE\n\nA rules");
-      expect(appendOf(1)).toBe("BASE\n\nB rules");
-    });
-
-    it("captures project instructions at newSession, ignoring later provider swaps mid-session", async () => {
-      queryMock.mockImplementation(() => makeQuery([resultMessage()]));
-      const proc = makeProc(echoAppend);
-      proc.setProjectProfileProvider((id) =>
-        id === "proj-1" ? { id, systemPrompt: "ORIGINAL" } : undefined
-      );
-
-      const { sessionId } = await proc.newSession({
-        cwd: "/vault",
-        mcpServers: [],
-        projectId: "proj-1",
-      });
-      proc.registerSessionHandler(sessionId, () => {});
-      // Swap the provider after the session exists; the captured append must win.
-      proc.setProjectProfileProvider((id) =>
-        id === "proj-1" ? { id, systemPrompt: "CHANGED" } : undefined
-      );
-      await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
-
-      expect(appendOf(0)).toBe("BASE\n\nORIGINAL");
-    });
-  });
 
   describe("supportsAdditionalDirectories()", () => {
     beforeEach(() => {

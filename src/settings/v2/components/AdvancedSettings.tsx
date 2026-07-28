@@ -2,8 +2,8 @@ import { CHAT_AGENT_VIEWTYPE } from "@/constants";
 import { Button } from "@/components/ui/button";
 import { SettingItem } from "@/components/ui/setting-item";
 import { SettingSection } from "@/components/ui/setting-section";
-import { ObsidianNativeSelect } from "@/components/ui/obsidian-native-select";
 import { useApp } from "@/context";
+import { openAgentsFile } from "@/instructions/agentsFile";
 import { logFileManager } from "@/logFileManager";
 import { flushRecordedPromptPayloadToLog } from "@/LLMProviders/chainRunner/utils/promptPayloadRecorder";
 import { KeychainService } from "@/services/keychainService";
@@ -24,14 +24,12 @@ import {
   updateSetting,
   useSettingsValue,
 } from "@/settings/model";
-import { ArrowUpRight, Info, Plus, ShieldCheck, Trash2, Unlock } from "lucide-react";
+import { ArrowUpRight, Info, ShieldCheck, Trash2, Unlock } from "lucide-react";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { MigrateConfirmModal } from "@/components/modals/MigrateConfirmModal";
 import { type App, Notice } from "obsidian";
 import React, { useCallback, useEffect, useState } from "react";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
-import { getPromptFilePath, SystemPromptAddModal } from "@/system-prompts";
-import { useSystemPrompts } from "@/system-prompts/state";
 
 const DESKTOP_UNAVAILABLE_FRAME_LOG_PATH = "(Agent Mode frame logs are desktop-only)";
 
@@ -59,7 +57,6 @@ function getCopilotSaveData(app: App): (data: CopilotSettings) => Promise<void> 
 export const AdvancedSettings: React.FC = () => {
   const app = useApp();
   const settings = useSettingsValue();
-  const prompts = useSystemPrompts();
   const [forgetting, setForgetting] = useState(false);
   const [migrating, setMigrating] = useState(false);
   const [frameLogPath, setFrameLogPath] = useState(DESKTOP_UNAVAILABLE_FRAME_LOG_PATH);
@@ -117,28 +114,13 @@ export const AdvancedSettings: React.FC = () => {
   // pill misleads the user into thinking everything is fine.
   const keychainAppearsEmpty = storageStatus === "active" && !hasPersistedSecrets(settings);
 
-  // Check if the default system prompt exists in the current prompts list
-  const defaultPromptExists = prompts.some(
-    (prompt) => prompt.title === settings.defaultSystemPromptTitle
-  );
-
-  const displayValue = defaultPromptExists ? settings.defaultSystemPromptTitle : "";
-
-  const handleSelectChange = (value: string) => {
-    updateSetting("defaultSystemPromptTitle", value);
-  };
-
-  const handleOpenSourceFile = () => {
-    if (!displayValue) return;
-    const filePath = getPromptFilePath(displayValue);
+  const handleOpenVaultInstructions = () => {
     // Close the settings modal before opening the file
     (app as unknown as { setting: { close: () => void } }).setting.close();
-    void app.workspace.openLinkText(filePath, "", true);
-  };
-
-  const handleAddPrompt = () => {
-    const modal = new SystemPromptAddModal(app, prompts);
-    modal.open();
+    void openAgentsFile(app, "", "", true).catch((error) => {
+      logError("Failed to open vault AGENTS.md.", error);
+      new Notice("Failed to open AGENTS.md.");
+    });
   };
 
   const handleReportIssue = useCallback(() => {
@@ -316,49 +298,24 @@ export const AdvancedSettings: React.FC = () => {
 
   return (
     <div className="tw-space-y-4">
-      {/* User System Prompt Section */}
-      <SettingSection label="User system prompt">
+      <SettingSection label="Agent instructions">
         <SettingItem
           type="custom"
-          title="Default System Prompt"
-          description="Customize the system prompt for all messages, may result in unexpected behavior!"
+          title="Vault instructions"
+          description="Agent Mode instructions stored in the vault-root AGENTS.md file."
         >
-          <div className="tw-flex tw-items-center tw-gap-2">
-            <ObsidianNativeSelect
-              value={displayValue}
-              onChange={(e) => handleSelectChange(e.target.value)}
-              options={[
-                { label: "None (use built-in prompt)", value: "" },
-                ...prompts.map((prompt) => ({
-                  label:
-                    prompt.title === settings.defaultSystemPromptTitle
-                      ? `${prompt.title} (Default)`
-                      : prompt.title,
-                  value: prompt.title,
-                })),
-              ]}
-              containerClassName="tw-flex-1"
-            />
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handleOpenSourceFile}
-              className="tw-size-5 tw-shrink-0 tw-p-0"
-              title="Open the source file"
-              disabled={!displayValue}
-            >
-              <ArrowUpRight className="tw-size-5" />
-            </Button>
-            <Button variant="default" size="icon" onClick={handleAddPrompt} title="Add new prompt">
-              <Plus className="tw-size-4" />
-            </Button>
-          </div>
+          <Button variant="default" onClick={handleOpenVaultInstructions}>
+            <ArrowUpRight className="tw-size-4" />
+            Open AGENTS.md
+          </Button>
         </SettingItem>
+      </SettingSection>
 
+      <SettingSection label="Chat system prompts">
         <SettingItem
           type="text"
           title="System Prompts Folder Name"
-          description="Folder where system prompts are stored."
+          description="Folder used by Chat mode system prompts."
           value={settings.userSystemPromptsFolder}
           onChange={(value) => updateSetting("userSystemPromptsFolder", value)}
           placeholder="copilot/system-prompts"

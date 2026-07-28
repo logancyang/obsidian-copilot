@@ -30,7 +30,7 @@ describe("isProjectConfigFile — project.md only (AGENTS.md is not a config)", 
     ).toBe(true);
   });
 
-  it("does NOT recognize the generated AGENTS.md mirror as a config file", () => {
+  it("does NOT recognize AGENTS.md as a config file", () => {
     expect(
       isProjectConfigFile(
         mockTFile({ path: "copilot-projects/Foo/AGENTS.md", name: "AGENTS.md", extension: "md" })

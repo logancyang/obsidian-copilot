@@ -1,5 +1,6 @@
 import { CustomError } from "@/error";
-import { AGENTS_MIRROR_FILE, PROJECT_CONFIG_FILE_NAME } from "@/projects/constants";
+import { AGENTS_FILE_NAME, CLAUDE_FILE_NAME } from "@/instructions/agentsFile";
+import { PROJECT_CONFIG_FILE_NAME } from "@/projects/constants";
 import EmbeddingsManager from "@/LLMProviders/embeddingManager";
 import { logError, logInfo, logWarn } from "@/logger";
 import { getSettings } from "@/settings/model";
@@ -152,7 +153,7 @@ export function shouldIndexFile(
   exclusions: PatternCategory | null,
   isProject?: boolean
 ): boolean {
-  // Always exclude Copilot's own log file from Copilot searches/indexing
+  // Always exclude Copilot's internal files from Copilot searches/indexing.
   if (isInternalExcludedFile(file)) {
     return false;
   }
@@ -411,7 +412,7 @@ export function getExtensionPattern(extension: string): string {
  * Includes the rolling log file path (e.g., "copilot/copilot-log.md").
  */
 function getInternalExcludePaths(): string[] {
-  return [logFileManager.getLogPath()];
+  return [logFileManager.getLogPath(), AGENTS_FILE_NAME, CLAUDE_FILE_NAME];
 }
 
 /**
@@ -451,12 +452,11 @@ export function isInternalExcludedPath(filePath: string): boolean {
     if (!filePath.startsWith(prefix)) continue;
     const relativePath = filePath.slice(prefix.length);
     const parts = relativePath.split("/");
-    // Exact match: <folderName>/<config> (2 segments). Exclude both the `project.md`
-    // config and its generated `AGENTS.md` mirror by name (path-level mechanism — the
-    // mirror's marker isn't visible here) so neither instruction file leaks into the index.
+    // Exact match: <folderName>/<file> (2 segments). Exclude the metadata record and
+    // instruction files so internal guidance does not leak into semantic search results.
     if (
       parts.length === 2 &&
-      (parts[1] === PROJECT_CONFIG_FILE_NAME || parts[1] === AGENTS_MIRROR_FILE)
+      [PROJECT_CONFIG_FILE_NAME, AGENTS_FILE_NAME, CLAUDE_FILE_NAME].includes(parts[1])
     )
       return true;
     if (relativePath.startsWith("unsupported/") || relativePath === "unsupported") return true;

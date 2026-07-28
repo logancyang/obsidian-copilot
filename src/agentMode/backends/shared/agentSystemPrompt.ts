@@ -8,7 +8,7 @@
  * `claude_code` preset. Forwarding `COPILOT_PROMPT_BASE` to all three gives
  * the same "you are an Obsidian vault assistant" framing everywhere.
  *
- * `buildAgentSystemPrompt` composes the full payload each backend forwards:
+ * `buildAgentSystemPrompt` composes the built-in payload each backend forwards:
  *
  *   1. `COPILOT_PROMPT_BASE` (the Obsidian-vault identity) — unless the user
  *      enabled Settings → System prompts → "Disable builtin system prompt".
@@ -16,12 +16,14 @@
  *      Plus skills, with a fallback to the agent's own tools) — sent to everyone.
  *      Then `COPILOT_MIYO_SEARCH_STEERING` — appended only when `shouldUseMiyo`
  *      is true, so the agent is pointed at the `miyo-search` skill only while
- *      Miyo is enabled and available.
+ *      Miyo is enabled and available. Task-planning guidance follows as another
+ *      internal behavior layer.
  *   2. The pill-syntax directive (`buildPillSyntaxDirective`) — always present;
  *      it teaches the agent how to read the chat editor's `[[note]]`/`{folder}`
  *      tokens and is functional wiring, not "builtin framing" the user toggles.
- *   3. The user's custom prompt (`getEffectiveUserPrompt`) wrapped in
- *      `<user_custom_instructions>`, mirroring legacy chat's `getSystemPrompt()`.
+ *
+ * User-authored Agent Mode instructions live in AGENTS.md and are discovered
+ * from the session working directory instead of being copied into this prompt.
  *
  * `COPILOT_PROMPT_BASE` content is curated, not invented. Two existing Copilot
  * prompts cover most of what's needed:
@@ -40,8 +42,8 @@
 // discovery, or the Skills UI the barrel also re-exports.
 import { buildPillSyntaxDirective } from "@/agentMode/skills/pillSyntaxDirective";
 import { getSettings } from "@/settings/model";
+import { AGENT_TODO_PLANNING_STEERING } from "@/system-prompts/agentTodoPlanningSteering";
 import { getDisableBuiltinSystemPrompt } from "@/system-prompts/state";
-import { getEffectiveUserPrompt } from "@/system-prompts/systemPromptBuilder";
 /**
  * Steers the agent toward the bundled Copilot Plus skills for the relay
  * capabilities (see `skills/builtin/builtinSkills.ts`) instead of its own
@@ -79,7 +81,7 @@ If a skill is missing, disabled, reports that Copilot Plus is not active, or fai
 export const COPILOT_MIYO_SEARCH_STEERING = `## Vault semantic search (Miyo)
 The user has Miyo enabled: local, meaning-based semantic search over their vault. For any vault-search intent, use the \`miyo-search\` skill when your builtin \`grep\` search is too slow or doesn't surface enough relevant notes, or whenever the user explicitly asks for Miyo search. Follow the skill's own instructions to run it.`;
 
-export const COPILOT_PROMPT_BASE = `You are Obsidian Copilot, an AI assistant that helps users work with their Obsidian vault — markdown notes for knowledge management, writing, and research. You are NOT a software-engineering agent or CLI coding tool. The working directory is the user's Obsidian vault: a collection of markdown notes, not a code repository. Disregard any framing in environment metadata that suggests otherwise.
+export const COPILOT_PROMPT_BASE = `You are Obsidian Copilot, an AI assistant that helps users work with their Obsidian vault — markdown notes for knowledge management, writing, and research. You are NOT a software-engineering agent or CLI coding tool. The working directory is the user's Obsidian vault, or a project folder within it: a collection of markdown notes, not a code repository. Disregard any framing in environment metadata that suggests otherwise.
 
 ## Grounding
 - The user's vault contains markdown notes. When the user says "note", they mean an Obsidian note in this vault.
@@ -93,6 +95,12 @@ export const COPILOT_PROMPT_BASE = `You are Obsidian Copilot, an AI assistant th
 - NEVER search for the same or very similar query twice. If results were insufficient, try substantially different terms.
 - After 1-2 searches, synthesize an answer from the results you have. Do not keep searching unless the results are clearly insufficient.
 - If you have enough information to answer, respond directly without calling any more tools.
+
+## Project workspaces
+When the conversation includes a \`<project_context>\` block:
+- Treat the working directory as that project's workspace. Write generated files, drafts, and intermediate artifacts under an \`outputs/\` folder inside it, creating it if needed, unless the user names a different destination.
+- Read and search inside the working directory by default. The configured context sources in \`<project_context>\` are also opted in even when they live outside it. When a source shows a \`→ <absolute path>\` snapshot pointer, read that path directly.
+- Don't reach for unrelated files outside the working directory or configured context sources unless the instructions or user name a specific file or location.
 
 ## Response Style
 - Respond at length appropriate to note-taking and knowledge work. Do NOT default to 1-3 line CLI cadence — give the user enough context to understand and act on your answer.
@@ -119,29 +127,17 @@ export const COPILOT_PROMPT_BASE = `You are Obsidian Copilot, an AI assistant th
  * is ever needed, key it off the live model at a respawn or per-turn boundary
  * (e.g. a `restartOnModelChange` descriptor flag) — not a spawn-time id.
  *
- * Reads the live system-prompt state (`getDisableBuiltinSystemPrompt`,
- * `getEffectiveUserPrompt`) at call time. Backends call this at their natural
+ * Reads the live built-in-prompt state (`getDisableBuiltinSystemPrompt`) at call time.
+ * Backends call this at their natural
  * prompt-injection point — spawn time for opencode/codex, `newSession()` for
  * the Claude SDK — so a settings change applies to the next session.
- *
- * `opts.projectInstructions` is the owning project's composed instruction
- * body — the built-in project policy layered ahead of the user's `project.md`
- * body (an opaque string the caller resolves via
- * `getComposedProjectInstructions`; this module never touches the `projects/`
- * layer). When absent or blank the output is byte-identical to the no-project
- * prompt — the global (no-project) parity guarantee. When present it is
- * wrapped in `<project_instructions>` (mirroring `<user_custom_instructions>`)
- * as the final section, after the user's custom prompt. codex/opencode get the
- * same composed body for free via native `AGENTS.md` discovery from the
- * session cwd; this append is the Claude SDK's equivalent, since it has no
- * cwd-discovery channel.
  *
  * Project *file context* (folders/notes/URLs) is NOT part of the system prompt:
  * it is delivered as a `<project_context>` block inlined into the session's
  * first user message (reachable by all three backends), built by the context
  * materializer's `buildProjectContextBlock`.
  */
-export function buildAgentSystemPrompt(opts?: { projectInstructions?: string }): string {
+export function buildAgentSystemPrompt(): string {
   const parts: string[] = [];
 
   // The "Disable builtin system prompt" toggle suppresses only the Copilot
@@ -163,32 +159,10 @@ export function buildAgentSystemPrompt(opts?: { projectInstructions?: string }):
     if (getSettings().enableMiyoSearchSkill === true) {
       parts.push(COPILOT_MIYO_SEARCH_STEERING);
     }
-    // Extensibility seam — todo/plan steering. Today `AGENT_TODO_PLANNING_STEERING`
-    // is injected ONLY in Project scope (via `composeProjectInstructions`), so this
-    // global prompt stays byte-identical for no-project sessions. To make todo
-    // planning global: push it here AND remove it from `composeProjectInstructions`
-    // — otherwise a Project session receives the section twice (once globally, once
-    // via `<project_instructions>` / AGENTS.md). Note the placement decision: pushing
-    // it INSIDE this `!getDisableBuiltinSystemPrompt()` branch ties it to the "Disable
-    // builtin system prompt" toggle (so those users lose Project todo steering too);
-    // push it OUTSIDE the branch if todo planning should survive that toggle.
+    parts.push(AGENT_TODO_PLANNING_STEERING);
   }
 
   parts.push(buildPillSyntaxDirective());
-
-  const userPrompt = getEffectiveUserPrompt().trim();
-  if (userPrompt) {
-    parts.push(`<user_custom_instructions>\n${userPrompt}\n</user_custom_instructions>`);
-  }
-
-  // Optional project-instructions block, last. Absent/blank → nothing pushed,
-  // so the global (no-project) prompt stays byte-identical. Wrapped in
-  // `<project_instructions>`, mirroring the `<user_custom_instructions>` block
-  // above — the plugin's convention for tagging opaque user content.
-  const projectInstructions = opts?.projectInstructions?.trim();
-  if (projectInstructions) {
-    parts.push(`<project_instructions>\n${projectInstructions}\n</project_instructions>`);
-  }
 
   return parts.join("\n\n");
 }

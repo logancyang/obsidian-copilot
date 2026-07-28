@@ -2,8 +2,7 @@ import { AGENT_TODO_PLANNING_STEERING } from "@/system-prompts/agentTodoPlanning
 
 describe("AGENT_TODO_PLANNING_STEERING", () => {
   it("is a self-contained ## section with no leading/trailing whitespace", () => {
-    // Composed as its own section (joined by blank lines); stray edge whitespace would
-    // double-space the seams in `composeProjectInstructions`.
+    // Composed as its own section; stray edge whitespace would double-space prompt seams.
     expect(AGENT_TODO_PLANNING_STEERING.startsWith("## ")).toBe(true);
     expect(AGENT_TODO_PLANNING_STEERING).toBe(AGENT_TODO_PLANNING_STEERING.trim());
   });
