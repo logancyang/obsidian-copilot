@@ -8,7 +8,7 @@ const LEDGER_PATH = "copilot/symposium/published-documents.md";
 const ENTRY: SymposiumLedgerEntry = {
   docId: "9f2k4mvq7t0xbz3n",
   status: "published",
-  notePath: "Notes/Architecture | Review.md",
+  notePath: String.raw`Notes/Architecture \| Review.md`,
   url: "https://symposium.site/d/9f2k4mvq7t0xbz3n",
   publishedAt: "2026-07-27T18:30:00.000Z",
   version: 1,
@@ -36,7 +36,7 @@ describe("symposiumLedger", () => {
       expect(append).toHaveBeenCalledWith(
         LEDGER_PATH,
         expect.stringContaining(
-          "| 9f2k4mvq7t0xbz3n | published | Notes/Architecture \\| Review.md | <https://symposium.site/d/9f2k4mvq7t0xbz3n> | 2026-07-27T18:30:00.000Z | 1 | abc123 |"
+          String.raw`| 9f2k4mvq7t0xbz3n | published | Notes/Architecture \\\| Review.md | <https://symposium.site/d/9f2k4mvq7t0xbz3n> | 2026-07-27T18:30:00.000Z | 1 | abc123 |`
         )
       );
       expect(append.mock.calls[0][1]).toContain("| Document ID | Status | Note | URL |");
@@ -56,7 +56,7 @@ describe("symposiumLedger", () => {
 
       expect(append).toHaveBeenCalledWith(
         LEDGER_PATH,
-        "| 9f2k4mvq7t0xbz3n | unpublished | Notes/Architecture \\| Review.md | — | — | — | — |\n"
+        `${String.raw`| 9f2k4mvq7t0xbz3n | unpublished | Notes/Architecture \\\| Review.md | — | — | — | — |`}\n`
       );
     });
 

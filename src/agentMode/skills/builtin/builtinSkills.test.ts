@@ -186,6 +186,8 @@ describe("builtinSkills", () => {
       expect(skill!.skillMd).toContain("ask an explicit Yes/No confirmation");
       expect(skill!.skillMd).toContain("A previous");
       expect(skill!.skillMd).toContain("request to publish is not confirmation");
+      expect(skill!.skillMd).toContain("Before any network request");
+      expect(skill!.skillMd).toContain("capability probe fails");
       expect(skill!.skillMd).toContain(PLUS_ENV.licenseKey);
       expect(skill!.skillMd).toContain(`${SYMPOSIUM_API_ORIGIN}/api/v1/docs`);
       expect(skill!.skillMd).toContain("POST exactly once");

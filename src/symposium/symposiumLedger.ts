@@ -21,7 +21,7 @@ const LEDGER_HEADER = `| Document ID | Status | Note | URL | Published at (UTC) 
 
 function tableCell(value: string | number | null): string {
   if (value === null) return "—";
-  return String(value).replace(/\r?\n/g, " ").replace(/\|/g, "\\|");
+  return String(value).replace(/\\/g, "\\\\").replace(/\r?\n/g, " ").replace(/\|/g, "\\|");
 }
 
 export async function appendSymposiumLedgerEntry(

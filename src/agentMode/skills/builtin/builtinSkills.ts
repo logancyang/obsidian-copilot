@@ -519,6 +519,10 @@ link is public and ask an explicit Yes/No confirmation. If the agent has no
 question UI, ask conversationally and stop until the user answers. A previous
 request to publish is not confirmation. On No, send nothing.
 
+Before any network request, use the Obsidian CLI to verify that it can access
+\`app.fileManager.processFrontMatter\`. If this capability probe fails, stop
+without publishing.
+
 On Yes, read \`${PLUS_ENV.licenseKey}\` from the environment without printing
 or storing it. Recheck that the source has no \`symposium\` property, then use
 the agent's available HTTP tooling to POST exactly once to
