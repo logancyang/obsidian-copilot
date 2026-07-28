@@ -223,18 +223,36 @@ export const MiyoSettings: React.FC = () => {
   // unreachable → the banner falls back to the local receipt-mismatch signal.
   const [serverScopeStale, setServerScopeStale] = useState<boolean | null>(null);
   const [resyncPending, setResyncPending] = useState(false);
+  const [scopeVerifyNonce, setScopeVerifyNonce] = useState(0);
 
-  // Verify the live record on mount AND whenever the Miyo endpoint changes —
-  // a verdict for the old endpoint says nothing about the new one, so it is
-  // reset before re-verifying (the `cancelled` flag drops results from a
-  // superseded run). The live record outranks local signals in both directions:
-  // a covering record silently self-heals a mismatched receipt (e.g. another
-  // device's receipt arrived via sync), and a stale record forces the banner
-  // even when local state looks clean (Reset Settings wiped the receipt, or
-  // the registration predates receipts).
+  // Forces the verify below to run again when the live record may have changed
+  // without any local input moving — see the call sites for the two cases.
+  const invalidateScopeVerdict = useCallback(() => setScopeVerifyNonce((n) => n + 1), []);
+
+  // Verify the live record on mount AND whenever an input the verdict was
+  // derived from moves underneath it: the Miyo endpoint, the system roots the
+  // record is checked against, or an explicit invalidation. The verdict is a
+  // sticky veto — a `false` suppresses the local mismatch banner outright — so
+  // a verdict formed against inputs that no longer hold must not answer for the
+  // current ones; it is reset before re-verifying (the `cancelled` flag drops
+  // results from a superseded run). Keying on the roots also covers the async
+  // tail of a root change: `applyCopilotRootChange` persists to disk before it
+  // flips the in-memory root, and the user can open this tab inside that window,
+  // so the new root can land while this component stays mounted.
+  //
+  // The live record outranks local signals in both directions: a covering
+  // record silently self-heals a mismatched receipt (e.g. another device's
+  // receipt arrived via sync), and a stale record forces the banner even when
+  // local state looks clean (Reset Settings wiped the receipt, or the
+  // registration predates receipts).
   const miyoEndpointUrl = getMiyoCustomUrl(settings);
+  // Only the system roots: they are what the record is checked against
+  // (`miyoRecordCoversSystemRoots`). The receipt is deliberately NOT part of
+  // this key — a "covered" verdict writes the receipt itself, which would
+  // re-trigger the effect forever.
+  const verifiedRootsKey = [...getSystemExcludedFolders(settings)].sort().join("\n");
   useEffect(() => {
-    /* eslint-disable @eslint-react/hooks-extra/no-direct-set-state-in-use-effect -- reset the stale verdict when the endpoint changes underneath us */
+    /* eslint-disable @eslint-react/hooks-extra/no-direct-set-state-in-use-effect -- reset the stale verdict when the inputs it was derived from change underneath us */
     setServerScopeStale(null);
     /* eslint-enable @eslint-react/hooks-extra/no-direct-set-state-in-use-effect */
     // No local-only gate: the verify is a read-only lookup that works against a
@@ -251,7 +269,7 @@ export const MiyoSettings: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [app, miyoEndpointUrl]);
+  }, [app, miyoEndpointUrl, verifiedRootsKey, scopeVerifyNonce]);
 
   const handleResync = useCallback(async () => {
     setResyncPending(true);
@@ -480,10 +498,15 @@ export const MiyoSettings: React.FC = () => {
     // confirm reachability is "unreachable" (guide the user to start Miyo), never
     // "error" (which reads as "couldn't register" and contradicts the server).
     if (superseded()) return "unreachable";
+    // The record just changed (201) or turned out to pre-exist with unknown
+    // exclusions (409, which deliberately leaves the receipt empty above). The
+    // standing verdict was formed against the record as it was before either,
+    // so it must not keep vetoing the banner.
+    invalidateScopeVerdict();
     const available = await enableMiyoBackend(superseded);
     if (superseded()) return "unreachable";
     return available ? "added" : "unreachable";
-  }, [app, settings, enableMiyoBackend]);
+  }, [app, settings, enableMiyoBackend, invalidateScopeVerdict]);
 
   // One connection attempt: probe reachability, then (if reachable) check whether
   // this vault is registered with Miyo. An unregistered vault is NOT auto-added —
@@ -514,6 +537,11 @@ export const MiyoSettings: React.FC = () => {
     // Registered → enable. Re-check the guard right before the settings write so a
     // cancel/unmount that landed during the check can't flip enableMiyo on.
     if (superseded()) return "superseded";
+    // This tab never registered the vault, so the record is one the user created
+    // in the Miyo app — its exclusions are unknown and no local input moved to
+    // signal that. Re-verify instead of trusting a verdict formed when the
+    // record was absent (or was a different record entirely).
+    invalidateScopeVerdict();
     const available = await enableMiyoBackend(superseded);
     // A newer attempt may have started during the enable refresh — don't let this
     // stale result drive the UI (close the modal / bounce a step). enableMiyoBackend
@@ -522,7 +550,7 @@ export const MiyoSettings: React.FC = () => {
     // Miyo may have dropped between registration and this refresh; only claim
     // "connected" when the backend is actually available now.
     return available ? "connected" : "unreachable";
-  }, [app, settings, probeReachable, enableMiyoBackend]);
+  }, [app, settings, probeReachable, enableMiyoBackend, invalidateScopeVerdict]);
 
   // Wraps attemptConnection with the shared error affordance so both entry points
   // (Connect button, modal Retry) surface the same Notice on an indeterminate
