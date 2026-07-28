@@ -28,6 +28,10 @@ jest.mock("@/settings/model", () => ({
   getSettings: () => currentSettings,
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook; name must match the export
   useSettingsValue: () => currentSettings,
+  // The scope-verify key derives the system roots through the real normalizer,
+  // so a test that moves the Copilot root gets the production root set.
+  normalizeRootFolders:
+    jest.requireActual<typeof import("@/settings/model")>("@/settings/model").normalizeRootFolders,
 }));
 
 // Miyo connection status. Defaults to connected; individual tests flip
@@ -80,12 +84,15 @@ jest.mock("@/miyo/miyoUtils", () => ({
   MIYO_ADD_FOLDER_DEEPLINK_URL: "miyo://add",
   MIYO_DEEPLINK_URL: "miyo://",
 }));
-// The scope-resync module talks to a live Miyo; keep it inert here.
+// The scope-resync module talks to a live Miyo; keep it inert here. The verify
+// verdict defaults to "unknown" (the component then falls back to the local
+// signal); the banner tests pin it to a definite verdict.
 const resyncMiyoFolder = jest.fn<Promise<string>, unknown[]>(async () => "verified");
+const verifyMiyoScope = jest.fn<Promise<string>, unknown[]>(async () => "unknown");
 jest.mock("@/miyo/miyoResync", () => ({
   enqueueMiyoFolderMutation: (task: () => Promise<unknown>) => task(),
   resyncMiyoFolder: (...a: unknown[]) => resyncMiyoFolder(...a),
-  verifyMiyoScope: jest.fn(async () => "unknown"),
+  verifyMiyoScope: (...a: unknown[]) => verifyMiyoScope(...a),
 }));
 // Capture the options the component passes to the modal so a test can invoke the
 // modal's callbacks (onRetry/onAddVault) directly — the Retry button has no
@@ -100,9 +107,13 @@ jest.mock("@/settings/v2/components/MiyoConnectModal", () => ({
     close = jest.fn();
   },
 }));
+// Stable identity, matching production: useApp() reads a context value, so the
+// app reference does not change between renders. A fresh object per call would
+// re-fire every app-keyed effect on each render.
+const mockAppInstance = {};
 jest.mock("@/context", () => ({
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook; name must match the export
-  useApp: () => ({}),
+  useApp: () => mockAppInstance,
 }));
 jest.mock("@/plusUtils", () => ({ createPlusPageUrl: () => "https://example.com" }));
 jest.mock("@/utils/vaultPath", () => ({ getVaultBase: () => "/vault" }));
@@ -467,6 +478,12 @@ describe("Connect — two-phase commit rolls back on a failed health check", () 
 });
 
 describe("scope resync banner", () => {
+  // The verdict is pinned per test; restore the indefinite default so a pinned
+  // verdict can't leak forward.
+  beforeEach(() => {
+    verifyMiyoScope.mockResolvedValue("unknown");
+  });
+
   it("stays hidden when the local receipt matches", () => {
     render(<MiyoSettings />);
     expect(screen.queryByRole("button", { name: /Resync Miyo/ })).toBeNull();
@@ -480,5 +497,43 @@ describe("scope resync banner", () => {
     fireEvent.click(button);
 
     await waitFor(() => expect(resyncMiyoFolder).toHaveBeenCalledTimes(1));
+  });
+
+  it("re-verifies when the Copilot root changes while the tab stays mounted", async () => {
+    // A "covered" verdict vetoes the local mismatch signal outright, so the
+    // banner is hidden despite shouldSurfaceMiyoResync saying otherwise.
+    shouldSurfaceMiyoResync.mockReturnValue(true);
+    verifyMiyoScope.mockResolvedValue("covered");
+    const { rerender } = render(<MiyoSettings />);
+    await waitFor(() => expect(verifyMiyoScope).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole("button", { name: /Resync Miyo/ })).toBeNull();
+
+    // A root change reaches the shared settings atom without unmounting this
+    // tab: its Apply persists to disk before flipping the in-memory root, and
+    // the user can be back here by then. A verdict about roots that no longer
+    // apply must stop answering for the ones that do.
+    currentSettings = { ...currentSettings, copilotFolder: "notes/copilot" };
+    verifyMiyoScope.mockResolvedValue("unknown");
+    rerender(<MiyoSettings />);
+
+    await waitFor(() => expect(verifyMiyoScope).toHaveBeenCalledTimes(2));
+    expect(await screen.findByRole("button", { name: /Resync Miyo/ })).toBeTruthy();
+  });
+
+  it("re-verifies when Connect adopts a registration this tab did not create", async () => {
+    // Nothing was registered at load, so the verdict reads "no exposure".
+    verifyMiyoScope.mockResolvedValue("unregistered");
+    mockMiyoBackend = "unavailable";
+    currentSettings = { ...DEFAULT_SETTINGS, enableMiyo: false };
+    render(<MiyoSettings />);
+    await waitFor(() => expect(verifyMiyoScope).toHaveBeenCalledTimes(1));
+
+    // The user registered the vault in the Miyo app and Connect finds it
+    // already there. That record's exclusions are unknown and no local input
+    // moved, so only an explicit re-verify can tell whether it exposes the
+    // Copilot roots.
+    fireEvent.click(await screen.findByText("Connect"));
+
+    await waitFor(() => expect(verifyMiyoScope).toHaveBeenCalledTimes(2));
   });
 });
