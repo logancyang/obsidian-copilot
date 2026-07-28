@@ -9,7 +9,7 @@ const SYMPOSIUM_PROPERTY = "symposium";
 export class SymposiumPropertyConflictError extends Error {
   constructor() {
     super(
-      "This note already uses the symposium property for an unrecognized value. Rename or remove that property before publishing."
+      "This note already uses the symposium property for an unrecognized value. Recover its document id from copilot/symposium/published-documents.md, then repair or remove the property before publishing."
     );
     this.name = "SymposiumPropertyConflictError";
     Object.setPrototypeOf(this, SymposiumPropertyConflictError.prototype);

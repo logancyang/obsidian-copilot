@@ -99,6 +99,10 @@ Run **Publish file to Symposium** from the command palette, a Markdown note's Fi
 
 After publishing, Copilot stores the Symposium document ID in the note's `symposium` property. Run the same action again to update the existing page or withdraw its public link. Symposium deletes its stored copy, but it cannot recall copies that readers or caches already fetched. Withdrawing the page also removes the property from the note.
 
+Copilot also appends every successful publish, update, and withdrawal to the plain Markdown ledger at `copilot/symposium/published-documents.md`. The ledger preserves document IDs and public URLs even if a source note or its property is later deleted or damaged. It is recovery history only: the note's `symposium` property remains the source of truth for Publish, Update, and Delete. Deleting the ledger does not change those actions.
+
+If a `symposium` property is damaged, recover the 16-character document ID from the ledger or from the `/d/<document-id>` part of its public URL, then repair the property before updating or withdrawing the page. Publication traces deliberately remain in the ledger after deleting a note.
+
 If Publish or Delete succeeds but the note's property cannot be updated, reopening the dialog resumes that local change without contacting Symposium again. If the initial publish response is lost, Copilot blocks another attempt until the plugin reloads to avoid creating a duplicate page.
 
 Copilot stops before publishing when a note's frontmatter is malformed or is not a YAML property map.

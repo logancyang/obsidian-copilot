@@ -5,7 +5,9 @@ import type {
 import { SymposiumClientError } from "@/symposium/SymposiumClient";
 import { SymposiumPublisher } from "@/symposium/SymposiumPublisher";
 import { SymposiumDocumentTooLargeError } from "@/symposium/symposiumDocument";
+import type { SymposiumLedgerEntry } from "@/symposium/symposiumLedger";
 import type { SymposiumDocument, SymposiumReceipt } from "@/symposium/types";
+import { sha256 } from "@/utils/hash";
 import type { App, TFile } from "obsidian";
 
 const DOC_ID = "9f2k4mvq7t0xbz3n";
@@ -37,6 +39,7 @@ interface Harness {
   openModal: jest.Mock;
   processFrontMatter: jest.Mock;
   publisher: SymposiumPublisher;
+  recordLedger: jest.Mock<Promise<void>, [SymposiumLedgerEntry]>;
 }
 
 function createHarness(frontmatter: Record<string, unknown> = {}): Harness {
@@ -70,10 +73,14 @@ function createHarness(frontmatter: Record<string, unknown> = {}): Harness {
   const modalOptions: SymposiumModalOptions[] = [];
   const openModal = jest.fn();
   const closeModal = jest.fn();
+  const recordLedger = jest
+    .fn<Promise<void>, [SymposiumLedgerEntry]>()
+    .mockResolvedValue(undefined);
   const publisher = new SymposiumPublisher(app, {
     client,
     loadLicenseKey,
     buildDocument,
+    recordLedger,
     createModal: (options) => {
       modalOptions.push(options);
       return { open: openModal, close: closeModal };
@@ -92,6 +99,7 @@ function createHarness(frontmatter: Record<string, unknown> = {}): Harness {
     openModal,
     processFrontMatter,
     publisher,
+    recordLedger,
   };
 }
 
@@ -124,6 +132,30 @@ describe("SymposiumPublisher", () => {
         expect(harness.loadLicenseKey).toHaveBeenCalledTimes(1);
         expect(harness.buildDocument).toHaveBeenCalledWith(harness.file, activeDocument);
         expect(harness.client.publish).toHaveBeenCalledWith(DOCUMENT, "decrypted-license");
+        const ledgerEntry = harness.recordLedger.mock.calls[0][0];
+        expect(ledgerEntry).toMatchObject({
+          docId: DOC_ID,
+          status: "published",
+          notePath: "Notes/Architecture.md",
+          url: RECEIPT.url,
+          version: 1,
+          contentHash: sha256(DOCUMENT.html),
+        });
+        expect(ledgerEntry.publishedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+        expect(harness.recordLedger.mock.invocationCallOrder[0]).toBeLessThan(
+          harness.processFrontMatter.mock.invocationCallOrder[0]
+        );
+        expect(harness.frontmatter.symposium).toBe(DOC_ID);
+      });
+
+      it("keeps a successful publish usable when the advisory ledger cannot be written", async () => {
+        const harness = createHarness();
+        harness.recordLedger.mockRejectedValue(new Error("vault is read-only"));
+
+        const result = await openAndConfirm(harness, "publish");
+
+        expect(result).toEqual({ kind: "success", action: "publish", receipt: RECEIPT });
+        expect(harness.recordLedger).toHaveBeenCalledTimes(1);
         expect(harness.frontmatter.symposium).toBe(DOC_ID);
       });
 
@@ -139,7 +171,7 @@ describe("SymposiumPublisher", () => {
           kind: "failure",
           action: "publish",
           message:
-            "This note already uses the symposium property for an unrecognized value. Rename or remove that property before publishing.",
+            "This note already uses the symposium property for an unrecognized value. Recover its document id from copilot/symposium/published-documents.md, then repair or remove the property before publishing.",
           accessNotice: false,
           retryable: false,
         });
@@ -185,6 +217,16 @@ describe("SymposiumPublisher", () => {
           receipt: { ...RECEIPT, version: 2 },
         });
         expect(harness.client.update).toHaveBeenCalledWith(DOC_ID, DOCUMENT, "decrypted-license");
+        const ledgerEntry = harness.recordLedger.mock.calls[0][0];
+        expect(ledgerEntry).toMatchObject({
+          docId: DOC_ID,
+          status: "published",
+          notePath: "Notes/Architecture.md",
+          url: RECEIPT.url,
+          version: 2,
+          contentHash: sha256(DOCUMENT.html),
+        });
+        expect(ledgerEntry.publishedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
         expect(harness.client.publish).not.toHaveBeenCalled();
         expect(harness.processFrontMatter).not.toHaveBeenCalled();
       });
@@ -610,6 +652,18 @@ describe("SymposiumPublisher", () => {
 
         expect(harness.client.delete).toHaveBeenCalledWith(DOC_ID, "decrypted-license");
         expect(harness.buildDocument).not.toHaveBeenCalled();
+        expect(harness.recordLedger).toHaveBeenCalledWith({
+          docId: DOC_ID,
+          status: "unpublished",
+          notePath: "Notes/Architecture.md",
+          url: null,
+          publishedAt: null,
+          version: null,
+          contentHash: null,
+        });
+        expect(harness.recordLedger.mock.invocationCallOrder[0]).toBeLessThan(
+          harness.processFrontMatter.mock.invocationCallOrder[0]
+        );
         expect(partial).toMatchObject({ kind: "persistence", action: "delete" });
 
         harness.modalOptions[0].onClosed?.();

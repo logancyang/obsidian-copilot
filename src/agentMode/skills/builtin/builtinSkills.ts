@@ -1,4 +1,5 @@
 import type { BackendId } from "@/agentMode/session/types";
+import { SYMPOSIUM_API_ORIGIN } from "@/symposium/constants";
 import { OBSIDIAN_SKILLS } from "./obsidianSkills";
 
 /**
@@ -489,6 +490,227 @@ const FETCH_X = relaySkill({
   scriptFile: "fetch-x.sh",
 });
 
+const SYMPOSIUM_PUBLISH_VERSION = 3;
+const SYMPOSIUM_PUBLISH: BuiltinSkill = {
+  name: "copilot-publish-symposium",
+  version: SYMPOSIUM_PUBLISH_VERSION,
+  enabledAgents: ["claude", "codex", "opencode"],
+  skillMd: `---
+name: copilot-publish-symposium
+description: Convert a source Markdown note into standalone HTML and publish it as a public Symposium page. Use when the user asks to publish or share a note as a web page. Initial publishing only; existing Symposium pages use Obsidian's normal Update/Delete flow. Requires an active Copilot Plus license.
+license: Copilot Plus
+metadata:
+  copilot-enabled-agents: claude, codex, opencode
+  copilot-builtin-version: "${SYMPOSIUM_PUBLISH_VERSION}"
+---
+
+# Publish Markdown to Symposium
+
+Create a standalone web page from one Markdown source note, ask the user to
+approve the finished page, and publish it once through the bundled wrapper.
+
+## 1. Require a source note
+
+Resolve an existing Markdown note and keep both its absolute path and its
+vault-relative path. Do not publish standalone HTML without a source note. If
+the requested content is not in a note yet, create the source note first.
+
+Inspect the note's \`symposium\` property before doing any network work. If it
+already contains a document id, tell the user to use **Publish file to
+Symposium** for Update/Delete. If it contains another value, stop rather than
+overwriting it.
+
+## 2. Prepare the page
+
+Create a complete HTML document yourself from the requested Markdown. The file
+must start with \`<!doctype html>\` and include its own readable layout and
+inline CSS. Send HTML, never raw Markdown.
+
+The page must be self-contained and passive:
+
+- resolve Obsidian-only rendered content into static HTML before publishing;
+  for example, turn Mermaid into static SVG and Bases into a static table or
+  card layout rather than leaving a raw code block or \`.base\` source;
+- embed required images as data URLs and do not depend on external styles,
+  scripts, fonts, frames, media, or other fetched assets;
+- include no \`script\`, \`iframe\`, form controls, embedded objects, event
+  handlers, or other executable/interactive content.
+
+Write the final HTML to a temporary \`.html\` file. Keep it unchanged after the
+confirmation question is shown.
+
+## 3. Ask before publishing
+
+Show the user the source note, title, and a concise preview or description of
+the finished page. Explain that anyone with the resulting link can read it.
+Ask an explicit Yes/No question through the agent's user-question UI. Do not
+invoke the wrapper unless the user answers Yes; a prior general request to
+publish is not this confirmation. If they decline, delete the temporary HTML
+and make no request.
+
+## 4. Publish once
+
+Find the absolute path to this SKILL.md file, then run the matching wrapper with
+exactly three arguments: the absolute source-note path, page title, and prepared
+HTML file.
+
+On macOS or Linux:
+
+\`\`\`bash
+sh "/absolute/path/to/this/skill/directory/publish-symposium.sh" "/absolute/path/to/source.md" "Page title" "/absolute/path/to/prepared.html"
+\`\`\`
+
+On Windows, call the \`.cmd\` wrapper from PowerShell:
+
+\`\`\`powershell
+& "/absolute/path/to/this/skill/directory/publish-symposium.cmd" "C:\\absolute\\path\\to\\source.md" "Page title" "C:\\absolute\\path\\to\\prepared.html"
+\`\`\`
+
+The wrapper prints the publish receipt as JSON. Validate that it contains a
+16-character lowercase \`docId\` and an HTTPS \`url\`. Never retry a publish
+after an uncertain response; it may already have created a public page.
+
+## 5. Record the receipt
+
+Before changing the source note, append the receipt to the vault-local
+\`copilot/symposium/published-documents.md\` ledger. Create its parent folder
+and this plain Markdown table when absent:
+
+\`\`\`markdown
+| Document ID | Status | Note | URL | Published at (UTC) | Version | Content SHA-256 |
+| --- | --- | --- | --- | --- | ---: | --- |
+\`\`\`
+
+Append one row; never rewrite or delete older rows. Use \`published\` status,
+the vault-relative source path, the exact returned URL and version, the current
+UTC ISO timestamp, and the SHA-256 of the exact prepared HTML file. Wrap the URL
+in angle brackets and escape \`|\` in the note path as \`\\|\`.
+
+The ledger is recovery history, not publication state. If this advisory write
+fails, continue to save the source property; never publish again and never put
+the license key in the ledger.
+
+## 6. Save the identity
+
+Only after attempting the ledger write, set the source note's \`symposium\`
+text property to the returned \`docId\`, preserving all other frontmatter.
+Prefer the Obsidian CLI:
+
+\`\`\`bash
+obsidian vault="<vault>" property:set path="<vault-relative-source.md>" name=symposium value="<docId>" type=text
+\`\`\`
+
+If saving the property fails, do not publish again. Report the returned URL and
+document id so the page remains recoverable. Otherwise return the server's
+\`url\` verbatim. Always delete the temporary HTML file. Never print or write
+the license key into the note, HTML, command arguments, or chat.
+`,
+  files: [
+    {
+      path: "publish-symposium.sh",
+      content: `#!/bin/sh
+KEY="\${${PLUS_ENV.licenseKey}:-}"
+ENDPOINT="${SYMPOSIUM_API_ORIGIN}/api/v1/docs"
+
+die() {
+  printf '%s\\n' "$1" >&2
+  exit "\${2:-2}"
+}
+
+[ "$#" -eq 3 ] || die "Usage: sh publish-symposium.sh <source-note.md> <title> <prepared.html>" 1
+SOURCE=$1
+TITLE=$2
+FILE=$3
+[ -n "$KEY" ] || die "Copilot Plus is not active, so Symposium publishing is unavailable." 1
+[ -f "$SOURCE" ] && [ -r "$SOURCE" ] || die "Could not read source note: $SOURCE" 1
+case "$SOURCE" in *.[mM][dD]) ;; *) die "The Symposium source must be a Markdown note." 1 ;; esac
+[ -f "$FILE" ] && [ -r "$FILE" ] || die "Could not read prepared HTML: $FILE" 1
+
+json_escape() {
+  awk 'BEGIN { ORS=""; printf "\\"" }
+    {
+      if (NR > 1) printf "\\\\n"
+      gsub(/\\\\/, "\\\\\\\\")
+      gsub(/\\"/, "\\\\\\"")
+      gsub(/\\t/, "\\\\t")
+      gsub(/\\r/, "\\\\r")
+      printf "%s", $0
+    }
+    END { printf "\\"" }'
+}
+
+RESP=$({
+  printf '{"title":'
+  printf '%s' "$TITLE" | json_escape
+  printf ',"html":'
+  json_escape < "$FILE"
+  printf '}'
+} | curl -sS -w '\\n%{http_code}' \\
+  -X POST "$ENDPOINT" \\
+  -H "Authorization: Bearer $KEY" \\
+  -H 'Content-Type: application/json; charset=utf-8' \\
+  --data-binary @-)
+[ $? -eq 0 ] || die "Symposium may have published the page without returning a receipt. Do not retry." 1
+CODE=$(printf '%s' "$RESP" | tail -n1)
+OUT=$(printf '%s' "$RESP" | sed '$d')
+case "$CODE" in
+  201) printf '%s\\n' "$OUT" ;;
+  401|403) die "Symposium rejected the Copilot Plus license: $OUT" 1 ;;
+  2*) die "Symposium returned an unexpected success response (HTTP $CODE): $OUT. Do not retry." 1 ;;
+  *) die "Symposium publish failed (HTTP $CODE): $OUT" 1 ;;
+esac
+`,
+    },
+    {
+      path: "publish-symposium.cmd",
+      content: cmdLauncher("publish-symposium.ps1"),
+    },
+    {
+      path: "publish-symposium.ps1",
+      content: `# Publishes prepared HTML to Symposium. Windows PowerShell 5.1 only.
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
+
+function Die($message, $code = 2) {
+  [Console]::Error.WriteLine([string]$message)
+  exit $code
+}
+
+if ($args.Count -ne 3) { Die "Usage: publish-symposium.ps1 <source-note.md> <title> <prepared.html>" 1 }
+$SOURCE = $args[0]
+$TITLE = $args[1]
+$FILE = $args[2]
+$KEY = [Environment]::GetEnvironmentVariable('${PLUS_ENV.licenseKey}')
+$ENDPOINT = '${SYMPOSIUM_API_ORIGIN}/api/v1/docs'
+if (-not $KEY) { Die "Copilot Plus is not active, so Symposium publishing is unavailable." 1 }
+if (-not (Test-Path -LiteralPath $SOURCE -PathType Leaf)) { Die "Could not read source note: $SOURCE" 1 }
+if ([System.IO.Path]::GetExtension($SOURCE) -ine '.md') { Die "The Symposium source must be a Markdown note." 1 }
+if (-not (Test-Path -LiteralPath $FILE -PathType Leaf)) { Die "Could not read prepared HTML: $FILE" 1 }
+
+try {
+  $HTML = [System.IO.File]::ReadAllText($FILE, [System.Text.Encoding]::UTF8)
+  $JSON = @{ title = $TITLE; html = $HTML } | ConvertTo-Json -Compress
+  $BYTES = [System.Text.Encoding]::UTF8.GetBytes($JSON)
+  $RESP = Invoke-WebRequest -Uri $ENDPOINT -Method Post -ContentType 'application/json; charset=utf-8' \`
+    -Headers @{ Authorization = "Bearer $KEY" } -Body $BYTES -UseBasicParsing
+} catch {
+  $R = $null
+  try { $R = $_.Exception.Response } catch {}
+  if (-not $R) { Die "Symposium may have published the page without returning a receipt. Do not retry." 1 }
+  $READER = New-Object System.IO.StreamReader($R.GetResponseStream())
+  $OUT = $READER.ReadToEnd()
+  Die "Symposium publish failed (HTTP $([int]$R.StatusCode)): $OUT" 1
+}
+if ([int]$RESP.StatusCode -ne 201) {
+  Die "Symposium returned an unexpected success response (HTTP $([int]$RESP.StatusCode)): $($RESP.Content). Do not retry." 1
+}
+[Console]::Out.WriteLine($RESP.Content)
+`,
+    },
+  ],
+};
+
 /** All always-seeded plugin-shipped skills, in display order. */
 export const BUILTIN_SKILLS: readonly BuiltinSkill[] = [
   WEB_SEARCH,
@@ -496,6 +718,7 @@ export const BUILTIN_SKILLS: readonly BuiltinSkill[] = [
   READ_PDF,
   YOUTUBE_TRANSCRIPT,
   FETCH_X,
+  SYMPOSIUM_PUBLISH,
   ...OBSIDIAN_SKILLS,
 ];
 

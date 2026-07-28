@@ -1,4 +1,5 @@
 import { BUILTIN_SKILLS, managedBuiltinSkills, MIYO_SEARCH_SKILL, PLUS_ENV } from "./builtinSkills";
+import { SYMPOSIUM_API_ORIGIN } from "@/symposium/constants";
 
 /** A script file shipped by a skill, matched by extension (".sh", ".cmd", ".ps1"). */
 function scriptOf(name: string, ext: ".sh" | ".cmd" | ".ps1" = ".sh"): string {
@@ -9,7 +10,10 @@ function scriptOf(name: string, ext: ".sh" | ".cmd" | ".ps1" = ".sh"): string {
   return file.content;
 }
 
-const PLUS_SKILLS = BUILTIN_SKILLS.filter((skill) => skill.name.startsWith("copilot-"));
+const SCRIPTED_PLUS_SKILLS = BUILTIN_SKILLS.filter((skill) => skill.name.startsWith("copilot-"));
+const RELAY_SKILLS = SCRIPTED_PLUS_SKILLS.filter(
+  (skill) => skill.name !== "copilot-publish-symposium"
+);
 
 describe("builtinSkills", () => {
   describe("BUILTIN_SKILLS", () => {
@@ -20,6 +24,7 @@ describe("builtinSkills", () => {
         "copilot-read-pdf",
         "copilot-youtube-transcript",
         "copilot-fetch-x",
+        "copilot-publish-symposium",
         "obsidian-markdown",
         "obsidian-bases",
         "json-canvas",
@@ -37,7 +42,7 @@ describe("builtinSkills", () => {
     });
 
     it("ships one runnable script per OS — POSIX sh + Windows cmd/ps1, no Node", () => {
-      for (const skill of PLUS_SKILLS) {
+      for (const skill of SCRIPTED_PLUS_SKILLS) {
         const sh = skill.files.find((f) => f.path.endsWith(".sh"));
         const cmd = skill.files.find((f) => f.path.endsWith(".cmd"));
         const ps1 = skill.files.find((f) => f.path.endsWith(".ps1"));
@@ -64,7 +69,7 @@ describe("builtinSkills", () => {
     });
 
     it("reads its config from the injected env and never embeds a key (both scripts)", () => {
-      for (const skill of PLUS_SKILLS) {
+      for (const skill of RELAY_SKILLS) {
         const sh = scriptOf(skill.name, ".sh");
         expect(sh).toContain(`#!/bin/sh`);
         expect(sh).toContain(PLUS_ENV.licenseKey);
@@ -97,7 +102,7 @@ describe("builtinSkills", () => {
     });
 
     it("falls back to the agent's own tools instead of blocking when Plus is absent", () => {
-      for (const skill of PLUS_SKILLS) {
+      for (const skill of RELAY_SKILLS) {
         const sh = scriptOf(skill.name, ".sh");
         // No license: tell the agent to use its own equivalent tools, never
         // refuse, and only append the upsell occasionally (gated on the pid). The
@@ -171,6 +176,43 @@ describe("builtinSkills", () => {
         "[System.Convert]::ToBase64String([System.IO.File]::ReadAllBytes($FILE))"
       );
       expect(ps1).toContain("@{ pdf = $PDF; user_id = $USER_ID }");
+    });
+
+    it("publishes confirmed agent-generated HTML and retains the id on its source note", () => {
+      const skill = BUILTIN_SKILLS.find((item) => item.name === "copilot-publish-symposium");
+      expect(skill).toBeDefined();
+      expect(skill!.skillMd).toContain("complete HTML document yourself");
+      expect(skill!.skillMd).toContain("static SVG");
+      expect(skill!.skillMd).toContain("static table or");
+      expect(skill!.skillMd).toContain("Do not publish standalone HTML without a source note");
+      expect(skill!.skillMd).toContain("Ask an explicit Yes/No question");
+      expect(skill!.skillMd).toContain("invoke the wrapper unless the user answers Yes");
+      expect(skill!.skillMd).toContain("copilot/symposium/published-documents.md");
+      expect(skill!.skillMd).toContain("Append one row; never rewrite or delete older rows");
+      expect(skill!.skillMd).toContain("Only after attempting the ledger write");
+      expect(skill!.skillMd).toContain("property:set");
+      expect(skill!.skillMd).toContain("set the source note's `symposium`");
+      expect(skill!.skillMd).toContain("text property to the returned `docId`");
+      expect(skill!.skillMd).toContain("return the server's");
+      expect(skill!.skillMd).toContain("verbatim");
+
+      const sh = scriptOf(skill!.name, ".sh");
+      expect(sh).toContain(PLUS_ENV.licenseKey);
+      expect(sh).toContain(`${SYMPOSIUM_API_ORIGIN}/api/v1/docs`);
+      expect(sh).toContain('[ -f "$SOURCE" ]');
+      expect(sh).toContain('json_escape < "$FILE"');
+      expect(sh).toContain("Authorization: Bearer $KEY");
+      expect(sh).toContain("--data-binary @-");
+      expect(sh).toContain("Do not retry");
+
+      const ps1 = scriptOf(skill!.name, ".ps1");
+      expect(ps1).toContain(PLUS_ENV.licenseKey);
+      expect(ps1).toContain(`${SYMPOSIUM_API_ORIGIN}/api/v1/docs`);
+      expect(ps1).toContain("Test-Path -LiteralPath $SOURCE");
+      expect(ps1).toContain("[System.IO.File]::ReadAllText($FILE");
+      expect(ps1).toContain('Authorization = "Bearer $KEY"');
+      expect(ps1).toContain("-Body $BYTES");
+      expect(ps1).toContain("Do not retry");
     });
   });
 
