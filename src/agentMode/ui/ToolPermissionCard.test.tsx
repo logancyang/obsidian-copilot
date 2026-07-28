@@ -85,8 +85,8 @@ describe("ToolPermissionCard", () => {
       expect(onResolve).toHaveBeenLastCalledWith(TOOL_CALL_ID, "accept_execpolicy_amendment");
     });
 
-    it("orders compact actions by kind and constrains their labels to the card width", () => {
-      const unbrokenLabel = "AllowAccessToNetwork.example.com";
+    it("orders compact actions by kind and makes unbroken labels shrinkable", () => {
+      const unbrokenLabel = "AllowAccessToNetwork.example.com".repeat(8);
       render(
         <ToolPermissionCard
           request={makeRequest([
@@ -103,10 +103,15 @@ describe("ToolPermissionCard", () => {
         "Allow for Session",
         "No",
       ]);
-      const labelClasses = screen.getByRole("button", { name: unbrokenLabel }).classList;
-      expect(labelClasses.contains("tw-max-w-full")).toBe(true);
-      expect(labelClasses.contains("tw-whitespace-normal")).toBe(true);
-      expect(labelClasses.contains("tw-break-words")).toBe(true);
+      const button = screen.getByRole("button", { name: unbrokenLabel });
+      expect(button.classList.contains("tw-max-w-full")).toBe(true);
+      expect(button.classList.contains("tw-min-w-0")).toBe(true);
+      expect(button.firstElementChild).toMatchObject({
+        tagName: "SPAN",
+        textContent: unbrokenLabel,
+      });
+      expect(button.firstElementChild?.classList.contains("tw-min-w-0")).toBe(true);
+      expect(button.firstElementChild?.classList.contains("tw-break-all")).toBe(true);
     });
   });
 });

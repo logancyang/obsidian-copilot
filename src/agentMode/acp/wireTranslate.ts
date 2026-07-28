@@ -41,7 +41,6 @@ import type {
   McpServerSpec,
   PermissionDecision,
   PermissionOption,
-  PermissionOptionKind,
   PermissionPrompt,
   PromptContent,
   SessionEvent,
@@ -428,7 +427,16 @@ function acpUpdateToSessionUpdate(update: SessionNotification["update"]): Sessio
 
 // ---- Permission prompt / decision -------------------------------------
 
-export function acpPermissionRequestToPrompt(req: RequestPermissionRequest): PermissionPrompt {
+/**
+ * Convert an ACP permission request into the session-domain prompt.
+ *
+ * @param req - The request emitted by the ACP backend.
+ * @param presentPermissionOption - Optional backend-owned presentation adapter.
+ */
+export function acpPermissionRequestToPrompt(
+  req: RequestPermissionRequest,
+  presentPermissionOption?: (option: PermissionOption) => PermissionOption
+): PermissionPrompt {
   const call = req.toolCall;
   return {
     sessionId: sessionIdFromAcp(req.sessionId),
@@ -441,49 +449,22 @@ export function acpPermissionRequestToPrompt(req: RequestPermissionRequest): Per
       content: toolCallContentFromAcp(call.content),
       locations: call.locations?.map((l) => ({ path: l.path, line: l.line ?? undefined })),
     },
-    options: req.options.map(permissionOptionFromAcp),
+    options: req.options.map((option) => permissionOptionFromAcp(option, presentPermissionOption)),
   };
 }
 
-function permissionOptionFromAcp(opt: AcpPermissionOption): PermissionOption {
-  const kind = (PERMISSION_OPTION_KINDS as readonly string[]).includes(opt.kind)
-    ? opt.kind
-    : "reject_once";
-  if (!isPolicyAmendmentOption(opt.optionId)) {
-    return {
-      optionId: opt.optionId,
-      name: opt.name,
-      kind,
-    };
-  }
-
-  return {
+function permissionOptionFromAcp(
+  opt: AcpPermissionOption,
+  presentPermissionOption?: (option: PermissionOption) => PermissionOption
+): PermissionOption {
+  const option: PermissionOption = {
     optionId: opt.optionId,
-    name: permissionOptionActionName(kind),
-    description: opt.name,
-    kind,
+    name: opt.name,
+    kind: (PERMISSION_OPTION_KINDS as readonly string[]).includes(opt.kind)
+      ? opt.kind
+      : "reject_once",
   };
-}
-
-function isPolicyAmendmentOption(optionId: string): boolean {
-  // Codex policy amendments use ACP's name field for rule prose rather than an action label.
-  return (
-    optionId === "accept_execpolicy_amendment" ||
-    /^apply_network_policy_amendment:\d+$/.test(optionId)
-  );
-}
-
-function permissionOptionActionName(kind: PermissionOptionKind): string {
-  switch (kind) {
-    case "allow_once":
-      return "Allow";
-    case "allow_always":
-      return "Allow Always";
-    case "reject_once":
-      return "Reject";
-    case "reject_always":
-      return "Block Rule";
-  }
+  return presentPermissionOption?.(option) ?? option;
 }
 
 export function permissionPromptToAcp(prompt: PermissionPrompt): RequestPermissionRequest {

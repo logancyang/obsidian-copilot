@@ -1,5 +1,5 @@
 import { FileSystemAdapter, App } from "obsidian";
-import type { BackendDescriptor } from "@/agentMode/session/types";
+import type { BackendDescriptor, PermissionOption } from "@/agentMode/session/types";
 import { AcpBackendProcess } from "./AcpBackendProcess";
 import type { AcpBackend } from "./types";
 import type { VaultClient } from "./VaultClient";
@@ -83,10 +83,11 @@ function buildStubBackend(): AcpBackend {
   };
 }
 
-function buildStubDescriptor(): BackendDescriptor {
+function buildStubDescriptor(overrides: Partial<BackendDescriptor> = {}): BackendDescriptor {
   return {
     id: "opencode",
     displayName: "opencode",
+    ...overrides,
   } as unknown as BackendDescriptor;
 }
 
@@ -290,53 +291,44 @@ describe("AcpBackendProcess", () => {
     expect(response).toEqual({ outcome: { outcome: "cancelled" } });
   });
 
-  it("preserves compact permission labels and separates policy rules before delegating", async () => {
+  it("applies the backend permission presentation hook before delegating", async () => {
+    const presentPermissionOption = jest.fn((option: PermissionOption): PermissionOption => {
+      if (option.optionId !== "backend-policy-rule") return option;
+      return {
+        ...option,
+        name: "Allow Always",
+        description: option.name,
+      };
+    });
     const backend = new AcpBackendProcess(
       buildApp(),
       buildStubBackend(),
       "1.0.0",
-      buildStubDescriptor()
+      buildStubDescriptor({ presentPermissionOption })
     );
     await backend.start();
 
     const prompter = jest.fn().mockResolvedValue({
-      outcome: { outcome: "selected", optionId: "accept_execpolicy_amendment" },
+      outcome: { outcome: "selected", optionId: "backend-policy-rule" },
     });
     backend.setPermissionPrompter(prompter);
 
     const client = getVaultClient(backend);
-    const commandRule = "Allow commands matching `/usr/local/bin/search --vault notes`";
-    const networkRule = "Allow network access to api.example.com";
+    const policyRule = "Allow commands matching `/usr/local/bin/search --vault notes`";
     const req = {
       sessionId: "s1",
       toolCall: { toolCallId: "tc1", title: "Read" },
       options: [
         { optionId: "allow_once", name: "Allow Once", kind: "allow_once" },
-        { optionId: "allow_session", name: "Allow for Session", kind: "allow_always" },
         {
-          optionId: "allow_host_session",
-          name: "Allow Host for Session",
-          kind: "allow_always",
-        },
-        {
-          optionId: "allow_root_session",
-          name: "Allow Root for Session",
-          kind: "allow_always",
-        },
-        { optionId: "reject_once", name: "No", kind: "reject_once" },
-        {
-          optionId: "accept_execpolicy_amendment",
-          name: commandRule,
-          kind: "allow_always",
-        },
-        {
-          optionId: "apply_network_policy_amendment:0",
-          name: networkRule,
+          optionId: "backend-policy-rule",
+          name: policyRule,
           kind: "allow_always",
         },
       ],
     } as unknown as Parameters<typeof client.requestPermission>[0];
     const response = await client.requestPermission(req);
+    expect(presentPermissionOption).toHaveBeenCalledTimes(2);
     expect(prompter).toHaveBeenCalledTimes(1);
     // Prompter receives a session-domain `PermissionPrompt`.
     const prompt = prompter.mock.calls[0][0];
@@ -349,40 +341,14 @@ describe("AcpBackendProcess", () => {
         kind: "allow_once",
       },
       {
-        optionId: "allow_session",
-        name: "Allow for Session",
-        kind: "allow_always",
-      },
-      {
-        optionId: "allow_host_session",
-        name: "Allow Host for Session",
-        kind: "allow_always",
-      },
-      {
-        optionId: "allow_root_session",
-        name: "Allow Root for Session",
-        kind: "allow_always",
-      },
-      {
-        optionId: "reject_once",
-        name: "No",
-        kind: "reject_once",
-      },
-      {
-        optionId: "accept_execpolicy_amendment",
+        optionId: "backend-policy-rule",
         name: "Allow Always",
-        description: commandRule,
-        kind: "allow_always",
-      },
-      {
-        optionId: "apply_network_policy_amendment:0",
-        name: "Allow Always",
-        description: networkRule,
+        description: policyRule,
         kind: "allow_always",
       },
     ]);
     expect(response).toEqual({
-      outcome: { outcome: "selected", optionId: "accept_execpolicy_amendment" },
+      outcome: { outcome: "selected", optionId: "backend-policy-rule" },
     });
   });
 

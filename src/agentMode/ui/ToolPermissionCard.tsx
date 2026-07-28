@@ -91,12 +91,12 @@ export const ToolPermissionCard: React.FC<ToolPermissionCardProps> = ({ request,
               key={option.optionId}
               variant={variantForKind(option.kind)}
               size="sm"
-              className="tw-h-auto tw-min-h-6 tw-max-w-full tw-whitespace-normal tw-break-words"
+              className="tw-h-auto tw-min-h-6 tw-min-w-0 tw-max-w-full tw-whitespace-normal"
               disabled={busy}
               aria-describedby={option.description ? descriptionId : undefined}
               onClick={() => choose(option.optionId)}
             >
-              {option.name}
+              <span className="tw-min-w-0 tw-break-all">{option.name}</span>
             </Button>
           );
 
@@ -108,7 +108,7 @@ export const ToolPermissionCard: React.FC<ToolPermissionCardProps> = ({ request,
               >
                 <p
                   id={descriptionId}
-                  className="tw-m-0 tw-w-full tw-min-w-0 tw-break-words tw-text-xs tw-text-muted"
+                  className="tw-m-0 tw-w-full tw-min-w-0 tw-break-all tw-text-xs tw-text-muted"
                 >
                   {option.description}
                 </p>

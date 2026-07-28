@@ -13,6 +13,7 @@ import type {
   ModelState,
   ModelWireCodec,
   ModeMapping,
+  PermissionOption,
   RawModeState,
   SessionId,
 } from "./types";
@@ -248,6 +249,15 @@ export interface BackendDescriptor {
    * reports (`gpt-5.4` → `GPT-5.4`); most backends omit it.
    */
   normalizeModelName?(name: string): string;
+
+  /**
+   * Optional: adapt a backend-native permission option for generic UI
+   * presentation. The option id remains the backend's executable decision;
+   * backends may separate wire-level rule prose from a compact action label.
+   *
+   * @param option - The neutral permission option produced at the backend boundary.
+   */
+  presentPermissionOption?(option: PermissionOption): PermissionOption;
 
   /**
    * Opt in to surfacing this backend's per-model `description` as the row

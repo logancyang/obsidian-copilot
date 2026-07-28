@@ -17,7 +17,12 @@ import {
   binaryPathInstallState,
   simpleBinaryBackendProcess,
 } from "@/agentMode/backends/shared/simpleBinaryBackend";
-import type { EnabledModelEntry, ModelSelection, ModelWireCodec } from "@/agentMode/session/types";
+import type {
+  EnabledModelEntry,
+  ModelSelection,
+  ModelWireCodec,
+  PermissionOption,
+} from "@/agentMode/session/types";
 import type { BackendDescriptor, BackendProcess, InstallState } from "@/agentMode/session/types";
 import { detectBinary } from "@/utils/detectBinary";
 import { codexAcpSearchDirs, resolveCodexAcpBinary } from "./codexBinaryResolver";
@@ -130,6 +135,20 @@ export const CodexBackendDescriptor: BackendDescriptor = {
    */
   normalizeModelName(name: string): string {
     return name.replace(/^gpt/i, "GPT");
+  },
+
+  presentPermissionOption(option: PermissionOption): PermissionOption {
+    if (
+      option.optionId !== "accept_execpolicy_amendment" &&
+      !/^apply_network_policy_amendment:\d+$/.test(option.optionId)
+    ) {
+      return option;
+    }
+    return {
+      ...option,
+      name: "Allow Always",
+      description: option.name,
+    };
   },
 
   getInstallState(settings: CopilotSettings): InstallState {
