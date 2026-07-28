@@ -490,7 +490,7 @@ const FETCH_X = relaySkill({
   scriptFile: "fetch-x.sh",
 });
 
-const SYMPOSIUM_PUBLISH_VERSION = 5;
+const SYMPOSIUM_PUBLISH_VERSION = 6;
 const SYMPOSIUM_PUBLISH: BuiltinSkill = {
   name: "copilot-publish-symposium",
   version: SYMPOSIUM_PUBLISH_VERSION,
@@ -511,7 +511,7 @@ approve the finished page, and publish it once through the bundled wrapper.
 
 ## 1. Require a source note
 
-Resolve an existing Markdown note and keep both its absolute path and its
+Resolve an existing Markdown note and keep its vault name, absolute path, and
 vault-relative path. Do not publish standalone HTML without a source note. If
 the requested content is not in a note yet, create the source note first.
 
@@ -552,19 +552,19 @@ enough. If they decline, delete the temporary HTML and make no request.
 ## 4. Publish once
 
 Find the absolute path to this SKILL.md file, then run the matching wrapper with
-exactly three arguments: the absolute source-note path, page title, and prepared
-HTML file.
+exactly five arguments: the vault name, vault-relative source path, absolute
+source-note path, page title, and prepared HTML file.
 
 On macOS or Linux:
 
 \`\`\`bash
-sh "/absolute/path/to/this/skill/directory/publish-symposium.sh" "/absolute/path/to/source.md" "Page title" "/absolute/path/to/prepared.html"
+sh "/absolute/path/to/this/skill/directory/publish-symposium.sh" "Vault name" "folder/source.md" "/absolute/path/to/source.md" "Page title" "/absolute/path/to/prepared.html"
 \`\`\`
 
 On Windows, call the \`.cmd\` wrapper from PowerShell:
 
 \`\`\`powershell
-& "/absolute/path/to/this/skill/directory/publish-symposium.cmd" "C:\\absolute\\path\\to\\source.md" "Page title" "C:\\absolute\\path\\to\\prepared.html"
+& "/absolute/path/to/this/skill/directory/publish-symposium.cmd" "Vault name" "folder/source.md" "C:\\absolute\\path\\to\\source.md" "Page title" "C:\\absolute\\path\\to\\prepared.html"
 \`\`\`
 
 Immediately before POST, the wrapper verifies that the source note still has
@@ -627,28 +627,40 @@ die() {
   exit "\${2:-2}"
 }
 
-[ "$#" -eq 3 ] || die "Usage: sh publish-symposium.sh <source-note.md> <title> <prepared.html>" 1
-SOURCE=$1
-TITLE=$2
-FILE=$3
+[ "$#" -eq 5 ] || die "Usage: sh publish-symposium.sh <vault> <vault-source-path> <source-note.md> <title> <prepared.html>" 1
+VAULT=$1
+SOURCE_PATH=$2
+SOURCE=$3
+TITLE=$4
+FILE=$5
 [ -n "$KEY" ] || die "Copilot Plus is not active, so Symposium publishing is unavailable." 1
 [ -f "$SOURCE" ] && [ -r "$SOURCE" ] || die "Could not read source note: $SOURCE" 1
 case "$SOURCE" in *.[mM][dD]) ;; *) die "The Symposium source must be a Markdown note." 1 ;; esac
 [ -f "$FILE" ] && [ -r "$FILE" ] || die "Could not read prepared HTML: $FILE" 1
-command -v node >/dev/null 2>&1 || die "Node.js is required to publish safely to Symposium." 1
+command -v obsidian >/dev/null 2>&1 || die "The Obsidian CLI is required to publish safely to Symposium." 1
+
+json_escape() {
+  awk -v final_lf="\${1:-0}" 'BEGIN { ORS=""; printf "\\"" }
+    {
+      if (NR > 1) printf "\\\\n"
+      gsub(/\\\\/, "\\\\\\\\")
+      gsub(/\\"/, "\\\\\\"")
+      gsub(/\\t/, "\\\\t")
+      gsub(/\\r/, "\\\\r")
+      printf "%s", $0
+    }
+    END {
+      if (final_lf) printf "\\\\n"
+      printf "\\""
+    }'
+}
 
 source_is_unpublished() {
-  awk '
-    NR == 1 {
-      sub(/^\\357\\273\\277/, "")
-      if ($0 != "---") exit 0
-      in_yaml = 1
-      next
-    }
-    in_yaml && $0 ~ /^(---|\\.\\.\\.)[[:space:]]*$/ { exit found ? 1 : 0 }
-    in_yaml && $0 ~ /^[[:space:]]*symposium[[:space:]]*:/ { found = 1 }
-    END { if (found) exit 1 }
-  ' "$SOURCE"
+  PROPERTIES=$(obsidian vault="$VAULT" properties path="$SOURCE_PATH" format=json 2>&1)
+  PROPERTIES_B64=$(printf '%s' "$PROPERTIES" | base64 | tr -d '\\r\\n')
+  STATE=$(obsidian vault="$VAULT" eval code="(()=>{try{const input=new TextDecoder().decode(Uint8Array.from(atob('$PROPERTIES_B64'),c=>c.charCodeAt(0)));const properties=JSON.parse(input);if(!properties||Array.isArray(properties)||typeof properties!==\\"object\\")return \\"INVALID\\";return Object.prototype.hasOwnProperty.call(properties,\\"symposium\\")?\\"OCCUPIED\\":\\"CLEAR\\"}catch{return \\"INVALID\\"}})()" 2>/dev/null)
+  STATE=\${STATE#"=> "}
+  [ "$STATE" = "CLEAR" ]
 }
 
 invalid_receipt() {
@@ -656,14 +668,17 @@ invalid_receipt() {
 }
 
 source_is_unpublished || die "The source note's Symposium identity changed. Do not publish it again." 1
-PAYLOAD=$(node -e '
-  const fs = require("fs");
-  process.stdout.write(JSON.stringify({
-    title: process.argv[1],
-    html: fs.readFileSync(process.argv[2], "utf8"),
-  }));
-' "$TITLE" "$FILE") || die "Could not encode the prepared Symposium page." 1
-RESP=$(printf '%s' "$PAYLOAD" | curl -sS -w '\\n%{http_code}' \\
+FINAL_LF=0
+if [ -s "$FILE" ] && [ "$(tail -c 1 "$FILE" | wc -l | tr -d '[:space:]')" = "1" ]; then
+  FINAL_LF=1
+fi
+RESP=$({
+  printf '{"title":'
+  printf '%s' "$TITLE" | json_escape 0
+  printf ',"html":'
+  json_escape "$FINAL_LF" < "$FILE"
+  printf '}'
+} | curl -sS -w '\\n%{http_code}' \\
   -X POST "$ENDPOINT" \\
   -H "Authorization: Bearer $KEY" \\
   -H 'Content-Type: application/json; charset=utf-8' \\
@@ -673,30 +688,10 @@ CODE=$(printf '%s' "$RESP" | tail -n1)
 OUT=$(printf '%s' "$RESP" | sed '$d')
 case "$CODE" in
   201)
-    CANONICAL=$(printf '%s' "$OUT" | node -e '
-      let input = "";
-      process.stdin.setEncoding("utf8");
-      process.stdin.on("data", chunk => { input += chunk; });
-      process.stdin.on("end", () => {
-        try {
-          const receipt = JSON.parse(input);
-          const url = new URL(receipt.url);
-          if (!receipt || Array.isArray(receipt) || typeof receipt !== "object" ||
-              !/^[0123456789abcdefghjkmnpqrstvwxyz]{16}$/.test(receipt.docId) ||
-              url.protocol !== "https:" || !url.hostname ||
-              !Number.isSafeInteger(receipt.version) || receipt.version < 1) {
-            throw new Error("invalid receipt");
-          }
-          process.stdout.write(JSON.stringify({
-            docId: receipt.docId,
-            url: receipt.url,
-            version: receipt.version,
-          }));
-        } catch {
-          process.exitCode = 1;
-        }
-      });
-    ') || invalid_receipt
+    RECEIPT_B64=$(printf '%s' "$OUT" | base64 | tr -d '\\r\\n')
+    CANONICAL=$(obsidian vault="$VAULT" eval code="(()=>{try{const input=new TextDecoder().decode(Uint8Array.from(atob('$RECEIPT_B64'),c=>c.charCodeAt(0)));const receipt=JSON.parse(input);const url=new URL(receipt.url);if(!receipt||Array.isArray(receipt)||typeof receipt!==\\"object\\"||!/^[0123456789abcdefghjkmnpqrstvwxyz]{16}$/.test(receipt.docId)||url.protocol!==\\"https:\\"||!url.hostname||!Number.isSafeInteger(receipt.version)||receipt.version<1)return \\"INVALID\\";return \\"VALID \\"+JSON.stringify({docId:receipt.docId,url:receipt.url,version:receipt.version})}catch{return \\"INVALID\\"}})()" 2>/dev/null)
+    CANONICAL=\${CANONICAL#"=> "}
+    case "$CANONICAL" in "VALID "*) CANONICAL=\${CANONICAL#"VALID "} ;; *) invalid_receipt ;; esac
     printf '%s\\n' "$CANONICAL"
     ;;
   401|403) die "Symposium rejected the Copilot Plus license: $OUT" 1 ;;
@@ -721,24 +716,27 @@ function Die($message, $code = 2) {
   exit $code
 }
 
-if ($args.Count -ne 3) { Die "Usage: publish-symposium.ps1 <source-note.md> <title> <prepared.html>" 1 }
-$SOURCE = $args[0]
-$TITLE = $args[1]
-$FILE = $args[2]
+if ($args.Count -ne 5) { Die "Usage: publish-symposium.ps1 <vault> <vault-source-path> <source-note.md> <title> <prepared.html>" 1 }
+$VAULT = $args[0]
+$SOURCE_PATH = $args[1]
+$SOURCE = $args[2]
+$TITLE = $args[3]
+$FILE = $args[4]
 $KEY = [Environment]::GetEnvironmentVariable('${PLUS_ENV.licenseKey}')
 $ENDPOINT = '${SYMPOSIUM_API_ORIGIN}/api/v1/docs'
 if (-not $KEY) { Die "Copilot Plus is not active, so Symposium publishing is unavailable." 1 }
 if (-not (Test-Path -LiteralPath $SOURCE -PathType Leaf)) { Die "Could not read source note: $SOURCE" 1 }
 if ([System.IO.Path]::GetExtension($SOURCE) -ine '.md') { Die "The Symposium source must be a Markdown note." 1 }
 if (-not (Test-Path -LiteralPath $FILE -PathType Leaf)) { Die "Could not read prepared HTML: $FILE" 1 }
+if (-not (Get-Command obsidian -ErrorAction SilentlyContinue)) { Die "The Obsidian CLI is required to publish safely to Symposium." 1 }
 
 try {
-  $SOURCE_TEXT = [System.IO.File]::ReadAllText($SOURCE, [System.Text.Encoding]::UTF8)
+  $PROPERTIES_JSON = (& obsidian "vault=$VAULT" properties "path=$SOURCE_PATH" "format=json" 2>&1 | Out-String)
+  $PROPERTIES = $PROPERTIES_JSON | ConvertFrom-Json -ErrorAction Stop
 } catch {
-  Die "Could not read source note: $SOURCE" 1
+  Die "Could not inspect the source note's Symposium identity." 1
 }
-$FRONTMATTER = [regex]::Match($SOURCE_TEXT.TrimStart([char]0xFEFF), '(?s)\\A---\\r?\\n(.*?)\\r?\\n(?:---|\\.\\.\\.)\\s*(?:\\r?\\n|$)')
-if ($FRONTMATTER.Success -and $FRONTMATTER.Groups[1].Value -match '(?m)^\\s*symposium\\s*:') {
+if ($null -ne $PROPERTIES.PSObject.Properties['symposium']) {
   Die "The source note's Symposium identity changed. Do not publish it again." 1
 }
 
@@ -765,6 +763,10 @@ try {
   $URL_TEXT = $RECEIPT.url
   $VERSION = $RECEIPT.version
   $URI = $null
+  $VALID_VERSION_TYPE = $VERSION -is [int] -or
+    $VERSION -is [long] -or
+    $VERSION -is [double] -or
+    $VERSION -is [decimal]
   $VALID_URL = $URL_TEXT -is [string] -and
     [Uri]::TryCreate($URL_TEXT, [UriKind]::Absolute, [ref]$URI) -and
     $URI.Scheme -eq 'https'
@@ -772,7 +774,7 @@ try {
       $DOC_ID -isnot [string] -or
       $DOC_ID -notmatch '^[0123456789abcdefghjkmnpqrstvwxyz]{16}$' -or
       -not $VALID_URL -or
-      $VERSION -is [string]) {
+      -not $VALID_VERSION_TYPE) {
     throw "invalid receipt"
   }
   $VERSION_NUMBER = [decimal]$VERSION

@@ -204,12 +204,14 @@ describe("builtinSkills", () => {
       expect(sh).toContain(PLUS_ENV.licenseKey);
       expect(sh).toContain(`${SYMPOSIUM_API_ORIGIN}/api/v1/docs`);
       expect(sh).toContain('[ -f "$SOURCE" ]');
-      expect(sh).toContain('fs.readFileSync(process.argv[2], "utf8")');
+      expect(sh).toContain('properties path="$SOURCE_PATH" format=json');
+      expect(sh).toContain('json_escape "$FINAL_LF" < "$FILE"');
       expect(sh).toContain("Authorization: Bearer $KEY");
       expect(sh).toContain("--data-binary @-");
       expect(sh).toContain("source_is_unpublished");
       expect(sh).toContain("JSON.parse(input)");
       expect(sh).toContain("Number.isSafeInteger(receipt.version)");
+      expect(sh).not.toContain("command -v node");
       expect(sh).toContain("abcdefghjkmnpqrstvwxyz");
       expect(sh).toContain("Do not retry");
 
@@ -217,11 +219,12 @@ describe("builtinSkills", () => {
       expect(ps1).toContain(PLUS_ENV.licenseKey);
       expect(ps1).toContain(`${SYMPOSIUM_API_ORIGIN}/api/v1/docs`);
       expect(ps1).toContain("Test-Path -LiteralPath $SOURCE");
+      expect(ps1).toContain('"vault=$VAULT" properties "path=$SOURCE_PATH" "format=json"');
       expect(ps1).toContain("[System.IO.File]::ReadAllText($FILE");
       expect(ps1).toContain('Authorization = "Bearer $KEY"');
       expect(ps1).toContain("-Body $BYTES");
-      expect(ps1).toContain("TrimStart([char]0xFEFF)");
       expect(ps1).toContain("ConvertFrom-Json -ErrorAction Stop");
+      expect(ps1).toContain("$VALID_VERSION_TYPE");
       expect(ps1).toContain("9007199254740991");
       expect(ps1).toContain("abcdefghjkmnpqrstvwxyz");
       expect(ps1).toContain("Do not retry");
