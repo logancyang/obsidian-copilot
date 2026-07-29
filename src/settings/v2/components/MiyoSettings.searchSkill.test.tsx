@@ -90,7 +90,8 @@ jest.mock("@/miyo/miyoUtils", () => ({
 const resyncMiyoFolder = jest.fn<Promise<string>, unknown[]>(async () => "verified");
 const verifyMiyoScope = jest.fn<Promise<string>, unknown[]>(async () => "unknown");
 jest.mock("@/miyo/miyoResync", () => ({
-  enqueueMiyoFolderMutation: (task: () => Promise<unknown>) => task(),
+  assertCurrentLifecycle: () => undefined,
+  enqueueMiyoFolderMutation: (task: (lifecycle: number) => Promise<unknown>) => task(0),
   resyncMiyoFolder: (...a: unknown[]) => resyncMiyoFolder(...a),
   verifyMiyoScope: (...a: unknown[]) => verifyMiyoScope(...a),
 }));
@@ -114,6 +115,15 @@ const mockAppInstance = {};
 jest.mock("@/context", () => ({
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook; name must match the export
   useApp: () => mockAppInstance,
+}));
+// The Miyo mutation session is owned by the plugin (one per lifecycle) rather
+// than captured by this tab, which mounts lazily. Hoisted so the stand-in keeps
+// production's referential stability: the session is an effect dependency, and a
+// fresh object per render would loop the verify effect forever.
+const mockPluginInstance = { miyoMutationSession: Object.freeze({ lifecycle: 0 }) };
+jest.mock("@/contexts/PluginContext", () => ({
+  // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook; name must match the export
+  usePlugin: () => mockPluginInstance,
 }));
 jest.mock("@/plusUtils", () => ({ createPlusPageUrl: () => "https://example.com" }));
 jest.mock("@/utils/vaultPath", () => ({ getVaultBase: () => "/vault" }));
@@ -150,6 +160,19 @@ beforeEach(() => {
   mockReachable = true;
   mockRegistration = "registered";
   lastModalOptions = null;
+});
+
+it("verifies scope with the plugin's session, not one this tab obtained itself", async () => {
+  // Tabs mount lazily, so a tab first opened after a plugin reload would
+  // otherwise vouch for the incoming lifecycle while holding the outgoing
+  // vault's app. The session has to come from the plugin instance.
+  render(<MiyoSettings />);
+
+  await waitFor(() => expect(verifyMiyoScope).toHaveBeenCalled());
+  expect(verifyMiyoScope).toHaveBeenCalledWith(
+    expect.anything(),
+    mockPluginInstance.miyoMutationSession
+  );
 });
 
 it("installs the skill, commits the flag, and confirms with a Notice on enable", async () => {

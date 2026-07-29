@@ -6,6 +6,7 @@ import { SettingItem } from "@/components/ui/setting-item";
 import { SettingSection } from "@/components/ui/setting-section";
 import { DEFAULT_OPEN_AREA, SEND_SHORTCUT } from "@/constants";
 import { useApp } from "@/context";
+import { usePlugin } from "@/contexts/PluginContext";
 import { cn } from "@/lib/utils";
 import { verifyMiyoScope } from "@/miyo/miyoResync";
 import { shouldSurfaceMiyoResync } from "@/miyo/miyoUtils";
@@ -55,6 +56,10 @@ function CopilotFolderChangeNotice({ oldRoot, newRoot }: { oldRoot: string; newR
 export const BasicSettings: React.FC = () => {
   const app = useApp();
   const settings = useSettingsValue();
+  // From the plugin, not captured here: this tab mounts the first time the user
+  // selects it, so a tab first opened after a reload would vouch for the
+  // incoming lifecycle while still holding the outgoing vault's `app`.
+  const { miyoMutationSession } = usePlugin();
   const [isChecking, setIsChecking] = useState(false);
   const [conversationNoteName, setConversationNoteName] = useState(
     settings.defaultConversationNoteName || "{$date}_{$time}__{$topic}"
@@ -133,7 +138,7 @@ export const BasicSettings: React.FC = () => {
               // receipt. Only asking the server can tell that apart from
               // "never used Miyo". Read-only — it never mutates the
               // registration; a covering record just self-heals the receipt.
-              void verifyMiyoScope(app).then((scope) => {
+              void verifyMiyoScope(app, miyoMutationSession).then((scope) => {
                 if (scope === "stale") notice();
               });
             }

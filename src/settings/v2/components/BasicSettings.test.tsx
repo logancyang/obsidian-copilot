@@ -15,6 +15,16 @@ jest.mock("@/context", () => ({
   useApp: () => ({ vault: { getMarkdownFiles: () => [] } }),
 }));
 
+// The Miyo mutation session is owned by the plugin (one per lifecycle) rather
+// than captured by this tab, which mounts lazily. Hoisted so the stand-in keeps
+// production's referential stability: the session is an effect dependency, and a
+// fresh object per render would loop the verify effect forever.
+const mockPluginInstance = { miyoMutationSession: Object.freeze({ lifecycle: 0 }) };
+jest.mock("@/contexts/PluginContext", () => ({
+  // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook; name must match the export
+  usePlugin: () => mockPluginInstance,
+}));
+
 const applyCopilotRootChange = jest.fn<Promise<void>, unknown[]>().mockResolvedValue(undefined);
 const copilotRootContainsNotes = jest.fn<boolean, unknown[]>().mockReturnValue(false);
 const findCopilotRootFileConflict = jest.fn<string | null, unknown[]>().mockReturnValue(null);
@@ -163,6 +173,24 @@ describe("BasicSettings", () => {
         expect.stringContaining("Miyo search needs a resync"),
         6000
       )
+    );
+  });
+
+  it("probes with the plugin's session, so a tree that outlived its lifecycle is refused", async () => {
+    // The session must come from the plugin (one per lifecycle), not from this
+    // tab: tabs mount lazily, so a tab first opened after a reload would
+    // otherwise vouch for the incoming lifecycle while holding the old app.
+    verifyMiyoScope.mockResolvedValue("covered");
+    render(<BasicSettings />);
+    fireEvent.change(screen.getByLabelText("Copilot folder"), { target: { value: "ai" } });
+    fireEvent.click(screen.getByRole("button", { name: "Apply Copilot folder" }));
+
+    capturedOnConfirm?.();
+
+    await waitFor(() => expect(verifyMiyoScope).toHaveBeenCalledTimes(1));
+    expect(verifyMiyoScope).toHaveBeenCalledWith(
+      expect.anything(),
+      mockPluginInstance.miyoMutationSession
     );
   });
 

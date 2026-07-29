@@ -21,8 +21,18 @@ jest.mock("@/miyo/MiyoClient", () => ({
     resolveBaseUrl = (...a: unknown[]) => resolveBaseUrl(...a);
     getFolder = (...a: unknown[]) => getFolder(...a);
     checkFolderRegistration = (...a: unknown[]) => checkFolderRegistration(...a);
-    deleteFolder = (...a: unknown[]) => deleteFolder(...a);
-    addFolder = (...a: unknown[]) => addFolder(...a);
+    // The destructive calls run their `beforeRequest` hook before delegating,
+    // exactly where the real client runs it: after URL/credential resolution and
+    // before `requestUrl`. A hook that throws must therefore leave the spy
+    // untouched, which is what "no request went out" means at this boundary.
+    deleteFolder = (folderName: unknown, url: unknown, beforeRequest?: () => void) => {
+      beforeRequest?.();
+      return deleteFolder(folderName, url, beforeRequest);
+    };
+    addFolder = (request: unknown, url: unknown, beforeRequest?: () => void) => {
+      beforeRequest?.();
+      return addFolder(request, url, beforeRequest);
+    };
     scanFolder = (...a: unknown[]) => scanFolder(...a);
   },
 }));
@@ -50,6 +60,7 @@ import {
   resyncMiyoFolder,
   verifyMiyoScope,
 } from "@/miyo/miyoResync";
+import type { MiyoMutationSession } from "@/miyo/miyoResync";
 import type { CopilotSettings } from "@/settings/model";
 
 const app = { vault: { getName: () => "my-vault" } } as unknown as App;
@@ -91,11 +102,15 @@ function record(over: Record<string, unknown> = {}): MiyoFolderEntry {
   };
 }
 
+// Session for the lifecycle `beforeEach` established. Tests that reset mid-way
+// keep a reference to this one to act as the outgoing lifecycle's producer.
+let session: MiyoMutationSession;
+
 beforeEach(() => {
   jest.clearAllMocks();
   // The mutation queue is module state that outlives a single test just as it
   // outlives a plugin lifecycle; start each test on a fresh chain and token.
-  resetMiyoMutations();
+  session = resetMiyoMutations();
   currentSettings = {
     copilotFolder: "copilot",
     copilotRootHistory: ["copilot"],
@@ -165,7 +180,7 @@ describe("miyoResync", () => {
     it("verifies without rebuilding when the record already covers the scope", async () => {
       getFolder.mockResolvedValue(record());
 
-      const outcome = await resyncMiyoFolder(app);
+      const outcome = await resyncMiyoFolder(app, session);
 
       expect(outcome).toBe("verified");
       expect(deleteFolder).not.toHaveBeenCalled();
@@ -177,10 +192,10 @@ describe("miyoResync", () => {
       rootMovedSettings();
       getFolder.mockResolvedValue(record()); // still only excludes "copilot"
 
-      const outcome = await resyncMiyoFolder(app);
+      const outcome = await resyncMiyoFolder(app, session);
 
       expect(outcome).toBe("resynced");
-      expect(deleteFolder).toHaveBeenCalledWith("my-vault", undefined);
+      expect(deleteFolder).toHaveBeenCalledWith("my-vault", undefined, expect.any(Function));
       const body = addFolder.mock.calls[0][0] as MiyoAddFolderRequest;
       expect(body.path).toBe("/abs/vault");
       expect(body.exclude_folders).toEqual(expect.arrayContaining(["copilot", "team/ai"]));
@@ -192,7 +207,7 @@ describe("miyoResync", () => {
       rootMovedSettings();
       getFolder.mockResolvedValue(record({ allow_remote_read: false }));
 
-      await resyncMiyoFolder(app);
+      await resyncMiyoFolder(app, session);
 
       const body = addFolder.mock.calls[0][0] as MiyoAddFolderRequest;
       expect(body.allow_remote_read).toBe(false);
@@ -206,7 +221,7 @@ describe("miyoResync", () => {
       delete (stale as Record<string, unknown>).allow_remote_read;
       getFolder.mockResolvedValue(stale);
 
-      await resyncMiyoFolder(app);
+      await resyncMiyoFolder(app, session);
 
       const body = addFolder.mock.calls[0][0] as MiyoAddFolderRequest;
       expect(body.allow_remote_read).toBe(false);
@@ -220,7 +235,7 @@ describe("miyoResync", () => {
       getFolder.mockRejectedValue(new Error("Miyo request failed with status 404"));
       checkFolderRegistration.mockResolvedValue("unregistered");
 
-      const outcome = await resyncMiyoFolder(app);
+      const outcome = await resyncMiyoFolder(app, session);
 
       expect(outcome).toBe("unregistered");
       expect(deleteFolder).not.toHaveBeenCalled();
@@ -238,11 +253,14 @@ describe("miyoResync", () => {
       addFolder.mockRejectedValueOnce(new Error("connection reset"));
       addFolder.mockResolvedValue(record());
 
-      await expect(resyncMiyoFolder(app)).resolves.toBe("resynced");
+      await expect(resyncMiyoFolder(app, session)).resolves.toBe("resynced");
 
       expect(addFolder).toHaveBeenCalledTimes(2);
+      // No `beforeRequest` on this one, deliberately: once the DELETE is out the
+      // POST has to follow or the vault is left unregistered.
       expect(addFolder).toHaveBeenLastCalledWith(
         expect.objectContaining({ allow_remote_read: true, allow_writes: false }),
+        undefined,
         undefined
       );
     });
@@ -255,7 +273,7 @@ describe("miyoResync", () => {
       getFolder.mockRejectedValue(new Error("Miyo request failed with status 404"));
       checkFolderRegistration.mockResolvedValue("unregistered");
 
-      const outcome = await resyncMiyoFolder(app);
+      const outcome = await resyncMiyoFolder(app, session);
 
       // A distinct outcome, because the caller has to tell the user: the record
       // that carried the grants is gone, and guessing `true` would re-grant
@@ -263,7 +281,8 @@ describe("miyoResync", () => {
       expect(outcome).toBe("resynced-grants-reset");
       expect(addFolder).toHaveBeenCalledWith(
         expect.objectContaining({ allow_remote_read: false, allow_writes: false }),
-        undefined
+        undefined,
+        expect.any(Function)
       );
       expect(updateSetting).toHaveBeenCalledWith("miyoSyncedExclusions", expect.any(String));
     });
@@ -278,7 +297,7 @@ describe("miyoResync", () => {
       addFolder.mockRejectedValueOnce(new Error("connection reset"));
       addFolder.mockRejectedValueOnce(new Error("connection reset"));
 
-      await expect(resyncMiyoFolder(app)).resolves.toBe("failed");
+      await expect(resyncMiyoFolder(app, session)).resolves.toBe("failed");
       expect(deleteFolder).toHaveBeenCalledTimes(1);
 
       // Second click: the folder now 404s, and the receipt still vouches for it.
@@ -286,7 +305,7 @@ describe("miyoResync", () => {
       checkFolderRegistration.mockResolvedValue("unregistered");
       addFolder.mockResolvedValue(record());
 
-      await expect(resyncMiyoFolder(app)).resolves.toBe("resynced-grants-reset");
+      await expect(resyncMiyoFolder(app, session)).resolves.toBe("resynced-grants-reset");
       // No second DELETE — there was nothing left to delete.
       expect(deleteFolder).toHaveBeenCalledTimes(1);
     });
@@ -296,7 +315,7 @@ describe("miyoResync", () => {
       getFolder.mockResolvedValue(record());
       addFolder.mockResolvedValue(null); // 409 → null per addFolder contract
 
-      const outcome = await resyncMiyoFolder(app);
+      const outcome = await resyncMiyoFolder(app, session);
 
       expect(outcome).toBe("conflict");
       expect(updateSetting).not.toHaveBeenCalled();
@@ -306,7 +325,7 @@ describe("miyoResync", () => {
       getFolder.mockRejectedValue(new Error("boom"));
       checkFolderRegistration.mockResolvedValue("error");
 
-      const outcome = await resyncMiyoFolder(app);
+      const outcome = await resyncMiyoFolder(app, session);
 
       expect(outcome).toBe("failed");
       expect(deleteFolder).not.toHaveBeenCalled();
@@ -320,7 +339,7 @@ describe("miyoResync", () => {
       getFolder.mockResolvedValue(record());
       scanFolder.mockRejectedValue(new Error("scan down"));
 
-      const outcome = await resyncMiyoFolder(app);
+      const outcome = await resyncMiyoFolder(app, session);
 
       expect(outcome).toBe("resynced-scan-failed");
       expect(updateSetting).toHaveBeenCalledWith("miyoSyncedExclusions", expect.any(String));
@@ -333,8 +352,8 @@ describe("miyoResync", () => {
       );
       getFolder.mockResolvedValue(record());
 
-      const first = resyncMiyoFolder(app);
-      const second = resyncMiyoFolder(app);
+      const first = resyncMiyoFolder(app, session);
+      const second = resyncMiyoFolder(app, session);
       // Flush pending microtasks so the first run reaches its blocked getFolder.
       await new Promise((resolve) => window.setTimeout(resolve, 0));
 
@@ -358,7 +377,7 @@ describe("miyoResync", () => {
       const post = deferred<MiyoFolderEntry>();
       addFolder.mockReturnValueOnce(post.promise);
 
-      const pending = resyncMiyoFolder(app);
+      const pending = resyncMiyoFolder(app, session);
       await new Promise((resolve) => window.setTimeout(resolve, 0));
       expect(deleteFolder).toHaveBeenCalledTimes(1);
 
@@ -385,7 +404,7 @@ describe("miyoResync", () => {
         Promise.resolve(name === "old-vault-name" ? "registered" : "unregistered")
       );
 
-      const outcome = await resyncMiyoFolder(app);
+      const outcome = await resyncMiyoFolder(app, session);
 
       expect(outcome).toBe("conflict");
       expect(deleteFolder).not.toHaveBeenCalled();
@@ -402,7 +421,7 @@ describe("miyoResync", () => {
         Promise.resolve(name === "old-vault-name" ? "error" : "unregistered")
       );
 
-      const outcome = await resyncMiyoFolder(app);
+      const outcome = await resyncMiyoFolder(app, session);
 
       expect(outcome).toBe("failed");
       expect(deleteFolder).not.toHaveBeenCalled();
@@ -417,7 +436,7 @@ describe("miyoResync", () => {
       getFolder.mockRejectedValue(new Error("Miyo request failed with status 404"));
       checkFolderRegistration.mockResolvedValue("unregistered");
 
-      const outcome = await resyncMiyoFolder(app);
+      const outcome = await resyncMiyoFolder(app, session);
 
       expect(outcome).toBe("unregistered");
       expect(deleteFolder).not.toHaveBeenCalled();
@@ -431,7 +450,7 @@ describe("miyoResync", () => {
       // a remote registration.
       currentSettings.miyoServerUrl = "https://miyo.example.com";
 
-      const outcome = await resyncMiyoFolder(app);
+      const outcome = await resyncMiyoFolder(app, session);
 
       expect(outcome).toBe("failed");
       expect(getFolder).not.toHaveBeenCalled();
@@ -448,10 +467,28 @@ describe("miyoResync", () => {
       getFolder.mockRejectedValue(new Error("Miyo request failed with status 404"));
       checkFolderRegistration.mockResolvedValue("unregistered");
 
-      const outcome = await resyncMiyoFolder(app);
+      const outcome = await resyncMiyoFolder(app, session);
 
       expect(outcome).toBe("unregistered");
       expect(deleteFolder).not.toHaveBeenCalled();
+      expect(updateSetting).not.toHaveBeenCalled();
+    });
+
+    it("reports failed without touching Miyo when the caller's session has expired", async () => {
+      // The Resync button lives in a tree that is never unmounted, so a click
+      // handler bound under the outgoing vault stays callable. Its stale session
+      // must stop the DELETE/POST rather than rebuild the outgoing vault's
+      // registration from inside the incoming one.
+      rootMovedSettings();
+      const staleSession = session;
+      getFolder.mockResolvedValue(record());
+
+      resetMiyoMutations();
+
+      await expect(resyncMiyoFolder(app, staleSession)).resolves.toBe("failed");
+      expect(getFolder).not.toHaveBeenCalled();
+      expect(deleteFolder).not.toHaveBeenCalled();
+      expect(addFolder).not.toHaveBeenCalled();
       expect(updateSetting).not.toHaveBeenCalled();
     });
   });
@@ -461,7 +498,7 @@ describe("miyoResync", () => {
       getFolder.mockResolvedValue(record());
       currentSettings.miyoSyncedExclusions = receiptFor({ device: "device-B" }); // foreign, mismatch
 
-      const verdict = await verifyMiyoScope(app);
+      const verdict = await verifyMiyoScope(app, session);
 
       expect(verdict).toBe("covered");
       expect(updateSetting).toHaveBeenCalledWith("miyoSyncedExclusions", expect.any(String));
@@ -471,7 +508,7 @@ describe("miyoResync", () => {
       rootMovedSettings();
       getFolder.mockResolvedValue(record()); // only excludes "copilot"
 
-      const verdict = await verifyMiyoScope(app);
+      const verdict = await verifyMiyoScope(app, session);
 
       expect(verdict).toBe("stale");
       expect(updateSetting).not.toHaveBeenCalled();
@@ -482,7 +519,7 @@ describe("miyoResync", () => {
       getFolder.mockRejectedValue(new Error("Miyo request failed with status 404"));
       checkFolderRegistration.mockResolvedValue("unregistered");
 
-      const verdict = await verifyMiyoScope(app);
+      const verdict = await verifyMiyoScope(app, session);
 
       expect(verdict).toBe("unregistered");
       expect(updateSetting).toHaveBeenCalledWith("miyoSyncedExclusions", "");
@@ -497,7 +534,7 @@ describe("miyoResync", () => {
         Promise.resolve(name === "old-vault-name" ? "registered" : "unregistered")
       );
 
-      const verdict = await verifyMiyoScope(app);
+      const verdict = await verifyMiyoScope(app, session);
 
       expect(verdict).toBe("stale");
       expect(updateSetting).not.toHaveBeenCalled();
@@ -512,7 +549,7 @@ describe("miyoResync", () => {
         Promise.resolve(name === "old-vault-name" ? "error" : "unregistered")
       );
 
-      const verdict = await verifyMiyoScope(app);
+      const verdict = await verifyMiyoScope(app, session);
 
       expect(verdict).toBe("unknown");
       expect(updateSetting).not.toHaveBeenCalled();
@@ -525,7 +562,7 @@ describe("miyoResync", () => {
       getFolder.mockRejectedValue(new Error("Miyo request failed with status 404"));
       checkFolderRegistration.mockResolvedValue("unregistered");
 
-      const verdict = await verifyMiyoScope(app);
+      const verdict = await verifyMiyoScope(app, session);
 
       expect(verdict).toBe("unregistered");
       expect(updateSetting).toHaveBeenCalledWith("miyoSyncedExclusions", "");
@@ -538,7 +575,7 @@ describe("miyoResync", () => {
       getFolder.mockRejectedValue(new Error("Miyo request failed with status 404"));
       checkFolderRegistration.mockResolvedValue("unregistered");
 
-      const verdict = await verifyMiyoScope(app);
+      const verdict = await verifyMiyoScope(app, session);
 
       expect(verdict).toBe("unregistered");
       expect(updateSetting).not.toHaveBeenCalled();
@@ -550,7 +587,7 @@ describe("miyoResync", () => {
       getFolder.mockRejectedValue(new Error("Miyo request failed with status 404"));
       checkFolderRegistration.mockResolvedValue("unregistered");
 
-      const verdict = await verifyMiyoScope(app);
+      const verdict = await verifyMiyoScope(app, session);
 
       expect(verdict).toBe("unregistered");
       expect(updateSetting).not.toHaveBeenCalled();
@@ -560,7 +597,7 @@ describe("miyoResync", () => {
       getFolder.mockRejectedValue(new Error("boom"));
       checkFolderRegistration.mockResolvedValue("error");
 
-      const verdict = await verifyMiyoScope(app);
+      const verdict = await verifyMiyoScope(app, session);
 
       expect(verdict).toBe("unknown");
       expect(updateSetting).not.toHaveBeenCalled();
@@ -575,15 +612,29 @@ describe("miyoResync", () => {
         getFolder.mockImplementationOnce(() => new Promise<never>(() => {}));
         checkFolderRegistration.mockResolvedValue("error");
 
-        const verify = verifyMiyoScope(app);
+        const verify = verifyMiyoScope(app, session);
         await jest.advanceTimersByTimeAsync(10_001);
         await expect(verify).resolves.toBe("unknown");
 
         getFolder.mockResolvedValue(record());
-        await expect(verifyMiyoScope(app)).resolves.toBe("covered");
+        await expect(verifyMiyoScope(app, session)).resolves.toBe("covered");
       } finally {
         jest.useRealTimers();
       }
+    });
+
+    it("reports unknown without writing a receipt when the caller's session has expired", async () => {
+      // The root-change probe fires from an async tail that can outlive its
+      // vault. A covering record would otherwise self-heal the receipt — into
+      // whichever vault is open by then, describing a scope that is not its own.
+      const staleSession = session;
+      getFolder.mockResolvedValue(record());
+
+      resetMiyoMutations();
+
+      await expect(verifyMiyoScope(app, staleSession)).resolves.toBe("unknown");
+      expect(getFolder).not.toHaveBeenCalled();
+      expect(updateSetting).not.toHaveBeenCalled();
     });
   });
 
@@ -596,14 +647,15 @@ describe("miyoResync", () => {
       getFolder.mockReturnValueOnce(hung.promise);
       getFolder.mockResolvedValue(record());
 
-      const stranded = resyncMiyoFolder(app);
+      const stranded = resyncMiyoFolder(app, session);
       await new Promise((resolve) => window.setTimeout(resolve, 0));
       expect(getFolder).toHaveBeenCalledTimes(1);
 
-      resetMiyoMutations();
+      const nextLifecycle = resetMiyoMutations();
 
-      // Runs to completion with the first request still outstanding.
-      await expect(resyncMiyoFolder(app)).resolves.toBe("verified");
+      // Runs to completion with the first request still outstanding. Uses the
+      // session the reset handed back — the incoming lifecycle's own proof.
+      await expect(resyncMiyoFolder(app, nextLifecycle)).resolves.toBe("verified");
 
       hung.resolve(record());
       await expect(stranded).resolves.toBe("failed");
@@ -616,8 +668,8 @@ describe("miyoResync", () => {
       getFolder.mockReturnValueOnce(hung.promise);
       getFolder.mockResolvedValue(record());
 
-      const running = resyncMiyoFolder(app);
-      const queued = resyncMiyoFolder(app);
+      const running = resyncMiyoFolder(app, session);
+      const queued = resyncMiyoFolder(app, session);
       await new Promise((resolve) => window.setTimeout(resolve, 0));
       expect(getFolder).toHaveBeenCalledTimes(1);
 
@@ -643,7 +695,7 @@ describe("miyoResync", () => {
       const pending = enqueueMiyoFolderMutation(() => {
         started.resolve();
         return finish.promise;
-      });
+      }, session);
       await started.promise;
 
       resetMiyoMutations();
@@ -653,8 +705,24 @@ describe("miyoResync", () => {
     });
 
     it("resolves with the task's value when the lifecycle is still current", async () => {
-      await expect(enqueueMiyoFolderMutation(async () => "value")).resolves.toBe("value");
+      await expect(enqueueMiyoFolderMutation(async () => "value", session)).resolves.toBe("value");
     });
+
+    it("refuses a producer whose session predates the current lifecycle", async () => {
+      // The producers that can reach here after a vault switch — the settings
+      // tab's never-unmounted React tree, an open MiyoConnectModal, the
+      // root-change async tail — hold a session taken when they were created.
+      // Reading the token at enqueue time instead would hand them the incoming
+      // vault's token and let them act on it.
+      const staleSession = session;
+      const task = jest.fn(async () => "ran");
+
+      resetMiyoMutations();
+
+      await expect(enqueueMiyoFolderMutation(task, staleSession)).rejects.toThrow();
+      expect(task).not.toHaveBeenCalled();
+    });
+
     it("stops an in-flight mutation before it can delete on a closed vault's behalf", async () => {
       // The previous coverage let the stale task's lookup return a covering
       // record, so it only ever tried to write a receipt. Park it on a lookup
@@ -665,7 +733,7 @@ describe("miyoResync", () => {
       const lookup = deferred<MiyoFolderEntry>();
       getFolder.mockReturnValueOnce(lookup.promise);
 
-      const stranded = resyncMiyoFolder(app);
+      const stranded = resyncMiyoFolder(app, session);
       await new Promise((resolve) => window.setTimeout(resolve, 0));
 
       resetMiyoMutations();

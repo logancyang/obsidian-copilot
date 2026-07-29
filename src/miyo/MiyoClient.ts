@@ -287,11 +287,16 @@ export class MiyoClient {
    *
    * @param request - Folder registration body; `path` must be absolute.
    * @param overrideUrl - Explicit base URL (from settings) or empty for discovery.
+   * @param beforeRequest - Invoked once the URL and credentials are resolved and
+   *   immediately before the request goes out; throw from it to call the
+   *   registration off. Exists because resolution and decryption are awaits, so
+   *   a caller's earlier check can go stale before anything is sent.
    * @returns The created folder record on 201, or `null` when already registered.
    */
   public async addFolder(
     request: MiyoAddFolderRequest,
-    overrideUrl?: string
+    overrideUrl?: string,
+    beforeRequest?: () => void
   ): Promise<MiyoFolderEntry | null> {
     let response: Awaited<ReturnType<typeof requestUrl>>;
     try {
@@ -299,6 +304,9 @@ export class MiyoClient {
       const url = new URL("/v0/folder", baseUrl);
       const headers = await this.buildHeaders();
       const body = JSON.stringify(request);
+      // Last point at which this registration can still be called off: once
+      // `requestUrl` has it, Obsidian offers no way to abort.
+      beforeRequest?.();
       logInfo("Miyo request:", {
         method: "POST",
         url: url.toString(),
@@ -367,11 +375,22 @@ export class MiyoClient {
    *
    * @param folderName - Registered folder name (see getMiyoFolderName).
    * @param overrideUrl - Explicit base URL (from settings) or empty for discovery.
+   * @param beforeRequest - Invoked once the URL and credentials are resolved and
+   *   immediately before the request goes out; throw from it to call the deletion
+   *   off. Exists because resolution and decryption are awaits, so a caller's
+   *   earlier check can go stale before anything is sent.
    */
-  public async deleteFolder(folderName: string, overrideUrl?: string): Promise<void> {
+  public async deleteFolder(
+    folderName: string,
+    overrideUrl?: string,
+    beforeRequest?: () => void
+  ): Promise<void> {
     const baseUrl = await this.resolveBaseUrl(overrideUrl);
     const headers = await this.buildHeaders();
     const url = new URL("/v0/folder", baseUrl);
+    // Last point at which this deletion can still be called off: once
+    // `requestUrl` has it, Obsidian offers no way to abort.
+    beforeRequest?.();
     logInfo("Miyo request:", {
       method: "DELETE",
       url: url.toString(),
