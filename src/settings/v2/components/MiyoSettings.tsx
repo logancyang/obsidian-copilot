@@ -426,8 +426,8 @@ export const MiyoSettings: React.FC = () => {
       //     needs either a query-time userIgnoreFilters filter in the retriever or
       //     an idempotent folder-filter re-sync; both are out of this PR's scope.
       //     If a review flags this again, point them at this note.
-      // Serialized with resync runs: an auto-resync after a root change must
-      // never interleave its DELETE/POST with this registration. The task reads
+      // Serialized with resync runs: the Resync button's DELETE/POST must never
+      // interleave with this registration. The task reads settings when it RUNS,
       // settings when it RUNS, not when it is queued — it can sit behind an
       // in-flight mutation, and a root/endpoint change landing in that window
       // would otherwise be submitted as an already-stale scope (with a receipt
@@ -453,7 +453,10 @@ export const MiyoSettings: React.FC = () => {
             "Miyo endpoint switched to a remote target while registration was queued"
           );
         }
-        const created = await new MiyoClient().addFolder(
+        // Snapshot the credential alongside the endpoint: this registration is
+        // queued and can outlive the vault that asked for it, while the auth
+        // header is otherwise read live per request.
+        const created = await new MiyoClient({ plusLicenseKey: fresh.plusLicenseKey }).addFolder(
           {
             path: vaultBase,
             // Remote read (Relay) is enabled by default so a user who turns on

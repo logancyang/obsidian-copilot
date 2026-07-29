@@ -44,6 +44,7 @@ jest.mock("@/utils/vaultPath", () => ({ getVaultBase: jest.fn(() => "/abs/vault"
 import type { App } from "obsidian";
 import type { MiyoAddFolderRequest, MiyoFolderEntry } from "@/miyo/MiyoClient";
 import {
+  enqueueMiyoFolderMutation,
   miyoRecordCoversSystemRoots,
   resetMiyoMutations,
   resyncMiyoFolder,
@@ -227,16 +228,48 @@ describe("miyoResync", () => {
       expect(updateSetting).not.toHaveBeenCalled(); // empty receipt: nothing to clear
     });
 
-    it("clears this device's receipt when its registration is confirmed gone", async () => {
+    it("rebuilds its own vanished registration, failing closed on the Miyo-side grants", async () => {
+      // The receipt proves this vault WAS registered here; the server says it
+      // isn't now. Refusing to re-add used to strand a rebuild that died between
+      // its DELETE and its POST — every retry saw the same 404 and refused too.
       currentSettings.miyoSyncedExclusions = receiptFor();
       getFolder.mockRejectedValue(new Error("Miyo request failed with status 404"));
       checkFolderRegistration.mockResolvedValue("unregistered");
 
       const outcome = await resyncMiyoFolder(app);
 
-      expect(outcome).toBe("unregistered");
-      expect(addFolder).not.toHaveBeenCalled();
-      expect(updateSetting).toHaveBeenCalledWith("miyoSyncedExclusions", "");
+      expect(outcome).toBe("resynced");
+      // The vanished record's toggles are unknowable, so they are not guessed:
+      // re-granting Relay read to a vault whose owner turned it off is the one
+      // outcome that cannot be undone by noticing later.
+      expect(addFolder).toHaveBeenCalledWith(
+        expect.objectContaining({ allow_remote_read: false, allow_writes: false }),
+        undefined
+      );
+      expect(updateSetting).toHaveBeenCalledWith("miyoSyncedExclusions", expect.any(String));
+    });
+
+    it("recovers on a second Resync after the re-add failed mid-rebuild", async () => {
+      // DELETE lands, POST throws: the registration and its index are gone while
+      // the receipt still names this vault. The next Resync must be able to
+      // repair that, since the same action caused it.
+      rootMovedSettings();
+      currentSettings.miyoSyncedExclusions = receiptFor();
+      getFolder.mockResolvedValueOnce(record());
+      addFolder.mockRejectedValueOnce(new Error("connection reset"));
+
+      await expect(resyncMiyoFolder(app)).resolves.toBe("failed");
+      expect(deleteFolder).toHaveBeenCalledTimes(1);
+
+      // Second click: the folder now 404s, and the receipt still vouches for it.
+      getFolder.mockRejectedValue(new Error("Miyo request failed with status 404"));
+      checkFolderRegistration.mockResolvedValue("unregistered");
+      addFolder.mockResolvedValue(record());
+
+      await expect(resyncMiyoFolder(app)).resolves.toBe("resynced");
+      expect(addFolder).toHaveBeenCalledTimes(2);
+      // No second DELETE — there was nothing left to delete.
+      expect(deleteFolder).toHaveBeenCalledTimes(1);
     });
 
     it("reports a conflict and keeps the stale receipt when re-add hits 409", async () => {
@@ -577,6 +610,31 @@ describe("miyoResync", () => {
       // The queued run never reached its own lookup.
       expect(getFolder).toHaveBeenCalledTimes(1);
       expect(updateSetting).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("enqueueMiyoFolderMutation()", () => {
+    it("rejects a task that completed after its lifecycle ended", async () => {
+      // The register flow writes its receipt in the caller's continuation, after
+      // the awaited call returns — outside anything this module can guard. Only
+      // rejecting the promise keeps that continuation from running, so this is
+      // the contract that stops one vault's registration from landing in another.
+      const started = deferred<void>();
+      const finish = deferred<string>();
+      const pending = enqueueMiyoFolderMutation(() => {
+        started.resolve();
+        return finish.promise;
+      });
+      await started.promise;
+
+      resetMiyoMutations();
+      finish.resolve("would-have-been-returned");
+
+      await expect(pending).rejects.toThrow();
+    });
+
+    it("resolves with the task's value when the lifecycle is still current", async () => {
+      await expect(enqueueMiyoFolderMutation(async () => "value")).resolves.toBe("value");
     });
   });
 });

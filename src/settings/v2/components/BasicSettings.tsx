@@ -7,6 +7,7 @@ import { SettingSection } from "@/components/ui/setting-section";
 import { DEFAULT_OPEN_AREA, SEND_SHORTCUT } from "@/constants";
 import { useApp } from "@/context";
 import { cn } from "@/lib/utils";
+import { verifyMiyoScope } from "@/miyo/miyoResync";
 import { shouldSurfaceMiyoResync } from "@/miyo/miyoUtils";
 import { ensureCopilotSubfolders } from "@/settings/copilotFolder";
 import {
@@ -114,12 +115,27 @@ export const BasicSettings: React.FC = () => {
         void applyCopilotRootChange(app, folder)
           .then(() => {
             // The root moved, so Miyo's server-side exclusions no longer match.
-            // Point at the Miyo tab and stop there: changing a local folder
-            // setting must not mutate a remote registration on its own, and the
-            // banner there carries the explicit Resync action. Reads fresh
-            // settings — the React `settings` closure predates the root change.
-            if (shouldSurfaceMiyoResync(app, getSettings())) {
+            // Surface it and stop there: changing a local folder setting must
+            // not mutate a remote registration on its own, and the Miyo tab's
+            // banner carries the explicit Resync. Reads fresh settings — the
+            // React `settings` closure predates the root change.
+            const fresh = getSettings();
+            const notice = () =>
               new Notice("Miyo search needs a resync — open the Miyo settings tab.", 6000);
+            if (shouldSurfaceMiyoResync(app, fresh)) {
+              notice();
+            } else if (fresh.miyoSyncedExclusions === "") {
+              // No local evidence — but a registration made before receipts
+              // existed leaves none, and neither does one whose receipt a
+              // Reset Settings wiped. Such a vault is still indexed, and its
+              // Relay can read the new root, while nothing local would ever
+              // report it: the startup notice is gated on the same empty
+              // receipt. Only asking the server can tell that apart from
+              // "never used Miyo". Read-only — it never mutates the
+              // registration; a covering record just self-heals the receipt.
+              void verifyMiyoScope(app).then((scope) => {
+                if (scope === "stale") notice();
+              });
             }
           })
           .then(() => ensureCopilotSubfolders(app.vault, { copilotFolder: folder }))

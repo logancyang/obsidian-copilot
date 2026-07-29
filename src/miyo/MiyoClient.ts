@@ -2,7 +2,7 @@ import { getDecryptedKey } from "@/encryptionService";
 import { logError, logInfo, logWarn } from "@/logger";
 import type { MiyoHealthResponse } from "@/miyo/miyoHealth";
 import { MiyoServiceDiscovery } from "@/miyo/MiyoServiceDiscovery";
-import { getSettings } from "@/settings/model";
+import { type CopilotSettings, getSettings } from "@/settings/model";
 import { err2String, withTimeout } from "@/utils";
 import { requestUrl } from "obsidian";
 
@@ -184,10 +184,20 @@ export class MiyoClient {
 
   private discovery: MiyoServiceDiscovery;
 
+  private readonly authSnapshot?: Pick<CopilotSettings, "plusLicenseKey">;
+
   /**
    * Create a new Miyo client instance.
+   *
+   * @param authSnapshot - Credentials captured when the caller's work began.
+   *   Callers whose requests can outlive the settings they started under —
+   *   a multi-request mutation that straddles a vault switch — pass their own
+   *   snapshot so every request carries the credential of the vault that asked
+   *   for it. Omitted, each request reads the live settings, which is what
+   *   short-lived callers want.
    */
-  constructor() {
+  constructor(authSnapshot?: Pick<CopilotSettings, "plusLicenseKey">) {
+    this.authSnapshot = authSnapshot;
     this.discovery = MiyoServiceDiscovery.getInstance();
   }
 
@@ -605,7 +615,7 @@ export class MiyoClient {
    * @returns Headers object for requestUrl.
    */
   private async buildHeaders(): Promise<Record<string, string>> {
-    const settings = getSettings();
+    const settings = this.authSnapshot ?? getSettings();
     const headers: Record<string, string> = {};
 
     const licenseKey = settings.plusLicenseKey

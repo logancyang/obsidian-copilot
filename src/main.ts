@@ -435,14 +435,14 @@ export default class CopilotPlugin extends Plugin {
 
       void this.notifyLegacyUpgradeRelocation();
 
-      // A Copilot root change can arrive via settings sync without passing
-      // through the settings UI (whose confirm chain runs the auto-resync), so
-      // Miyo's server-side exclusions may be silently stale at startup. Only a
-      // REAL roots change prompts — a receipt from another device with equal
-      // roots stays quiet; the Miyo tab's on-load verification self-heals it.
-      // No `enableMiyo` gate: shouldSurfaceMiyoResync already treats a non-empty
-      // receipt as evidence of a past registration, and a user who disconnected
-      // in Copilot can still be exposed through Miyo's Relay.
+      // A Copilot root change can leave Miyo's server-side exclusions stale
+      // without anything prompting at the time: one arriving via settings sync
+      // never passes through the settings UI at all, and the UI itself only
+      // points at the Miyo tab. Only a REAL roots change prompts — a receipt
+      // from another device with equal roots stays quiet; the Miyo tab's on-load
+      // verification self-heals it. No `enableMiyo` gate: shouldSurfaceMiyoResync
+      // already treats a non-empty receipt as evidence of a past registration,
+      // and a user who disconnected in Copilot can still be exposed via Relay.
       const startupSettings = getSettings();
       if (
         didMiyoSyncedRootsChange(startupSettings) &&
