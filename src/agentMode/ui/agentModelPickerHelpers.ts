@@ -12,7 +12,6 @@ import type { CopilotSettings } from "@/settings/model";
 import type {
   BackendDescriptor,
   BackendId,
-  BackendState,
   EffortOption,
   EnabledModelCredentialState,
   EnabledModelEntry,
@@ -29,24 +28,6 @@ export const EMPTY_EFFORT_OPTIONS = Object.freeze([]) as unknown as EffortOption
  * with the settings default-model picker so the two pickers never diverge.
  */
 export const MISSING_KEY_LABEL = "Add API key";
-
-/**
- * Pick the BackendState that should drive the picker's *current selection*
- * display: prefer the active session's live state, fall back to the
- * per-backend preloader cache only when the session has nothing reportable
- * yet (e.g. the brief "starting" window). The cache is shared across every
- * session on the same backend, so reading it directly leaks a sibling
- * tab's most recent setModel into this tab's picker.
- */
-export function resolveActiveDisplayState(
-  activeSessionState: BackendState | null,
-  activeBackendId: BackendId | null,
-  getCachedBackendState: (id: BackendId) => BackendState | null
-): BackendState | null {
-  if (activeSessionState) return activeSessionState;
-  if (!activeBackendId) return null;
-  return getCachedBackendState(activeBackendId);
-}
 
 /**
  * Standard catch handler for picker `apply*` calls. `MethodUnsupportedError`
@@ -276,11 +257,7 @@ export function collectModelActiveContext(manager: AgentSessionManager): ModelAc
   const activeBackendId = activeSession?.backendId ?? null;
   const activeDescriptor = activeBackendId ? backendRegistry[activeBackendId] : undefined;
   const activeSessionHasHistory = activeSession?.hasUserVisibleMessages() ?? false;
-  const activeState = resolveActiveDisplayState(
-    activeSession?.getState() ?? null,
-    activeBackendId,
-    (id) => manager.getCachedBackendState(id)
-  );
+  const activeState = activeSession?.getState() ?? null;
   const activeModelState = activeState?.model ?? null;
   const activeCurrentEntry = activeModelState?.availableModels.find(
     (e) => e.baseModelId === activeModelState.current.baseModelId

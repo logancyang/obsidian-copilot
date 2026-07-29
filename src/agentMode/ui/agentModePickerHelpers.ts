@@ -2,7 +2,7 @@ import type { AgentChatUIState } from "@/agentMode/session/AgentChatUIState";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import type { BackendId, BackendState } from "@/agentMode/session/types";
 import type { AgentModePickerOverride } from "./useAgentModePicker";
-import { handlePickerSwitchError, resolveActiveDisplayState } from "./agentModelPickerHelpers";
+import { handlePickerSwitchError } from "./agentModelPickerHelpers";
 
 interface ModeActiveContext {
   activeBackendId: BackendId | null;
@@ -14,11 +14,7 @@ function collectModeActiveContext(manager: AgentSessionManager): ModeActiveConte
   const activeSession = manager.getActiveSession();
   const activeChatUIState = manager.getActiveChatUIState();
   const activeBackendId = activeSession?.backendId ?? null;
-  const activeState = resolveActiveDisplayState(
-    activeSession?.getState() ?? null,
-    activeBackendId,
-    (id) => manager.getCachedBackendState(id)
-  );
+  const activeState = activeSession?.getState() ?? null;
   return {
     activeBackendId,
     activeMode: activeState?.mode ?? null,

@@ -4,7 +4,7 @@ import {
   buildEffortSibling,
   buildModelOnChange,
   buildPickerEntries,
-  resolveActiveDisplayState,
+  collectModelActiveContext,
   synthesizeAgentEntry,
 } from "./agentModelPickerHelpers";
 import { ModelCapability } from "@/constants";
@@ -76,35 +76,34 @@ function makeState(modelId: string): BackendState {
   };
 }
 
-describe("resolveActiveDisplayState", () => {
-  it("returns the active session's state when present", () => {
-    const sessionState = makeState("session-model");
-    const cacheState = makeState("cache-model");
-    const got = resolveActiveDisplayState(sessionState, "codex", () => cacheState);
-    expect(got).toBe(sessionState);
+describe("collectModelActiveContext", () => {
+  it("uses the active session's current model instead of a sibling cache entry", () => {
+    const activeState = makeState("active-model");
+    const manager = {
+      getActiveSession: () => ({
+        backendId: "codex",
+        getState: () => activeState,
+        hasUserVisibleMessages: () => false,
+      }),
+      getActiveChatUIState: () => null,
+      getCachedBackendState: () => makeState("sibling-model"),
+    } as unknown as AgentSessionManager;
+
+    expect(collectModelActiveContext(manager).activeModelState).toBe(activeState.model);
   });
 
-  it("isolates sibling tabs on the same backend: cache writes for backend X don't leak when the active session of X has its own state", () => {
-    const tab2State = makeState("model-A");
-    const tab1WroteThisToCache = makeState("model-B");
-    const got = resolveActiveDisplayState(tab2State, "codex", () => tab1WroteThisToCache);
-    expect(got?.model?.current.baseModelId).toBe("model-A");
-  });
+  it("does not borrow a current model from the shared cache while the active session is starting", () => {
+    const manager = {
+      getActiveSession: () => ({
+        backendId: "codex",
+        getState: () => null,
+        hasUserVisibleMessages: () => false,
+      }),
+      getActiveChatUIState: () => null,
+      getCachedBackendState: () => makeState("sibling-model"),
+    } as unknown as AgentSessionManager;
 
-  it("falls back to the cache when the active session reports no state yet", () => {
-    const cacheState = makeState("cache-model");
-    const got = resolveActiveDisplayState(null, "codex", () => cacheState);
-    expect(got).toBe(cacheState);
-  });
-
-  it("returns null when there is no active backend at all", () => {
-    const got = resolveActiveDisplayState(null, null, () => makeState("ignored"));
-    expect(got).toBeNull();
-  });
-
-  it("returns null when both session and cache are empty", () => {
-    const got = resolveActiveDisplayState(null, "codex", () => null);
-    expect(got).toBeNull();
+    expect(collectModelActiveContext(manager).activeModelState).toBeNull();
   });
 });
 
