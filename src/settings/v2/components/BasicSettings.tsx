@@ -7,8 +7,7 @@ import { SettingSection } from "@/components/ui/setting-section";
 import { DEFAULT_OPEN_AREA, SEND_SHORTCUT } from "@/constants";
 import { useApp } from "@/context";
 import { cn } from "@/lib/utils";
-import { resyncMiyoFolder, verifyMiyoScope } from "@/miyo/miyoResync";
-import { getMiyoCustomUrl, isLocalMiyoUrl, shouldSurfaceMiyoResync } from "@/miyo/miyoUtils";
+import { shouldSurfaceMiyoResync } from "@/miyo/miyoUtils";
 import { ensureCopilotSubfolders } from "@/settings/copilotFolder";
 import {
   applyCopilotRootChange,
@@ -22,7 +21,6 @@ import {
   useSettingsValue,
   validateCopilotFolder,
 } from "@/settings/model";
-import { getVaultBase } from "@/utils/vaultPath";
 import { PlusSettings } from "@/settings/v2/components/PlusSettings";
 import { formatDateTime } from "@/utils";
 import { revealFolderInExplorer } from "@/utils/revealFolderInExplorer";
@@ -115,39 +113,13 @@ export const BasicSettings: React.FC = () => {
       () => {
         void applyCopilotRootChange(app, folder)
           .then(() => {
-            // The root moved, so Miyo's server-side exclusions are stale.
-            // Reconcile automatically (silent on success); when that can't run
-            // or fails, point at the Miyo tab where the banner offers a retry.
-            // Reads fresh settings — the React `settings` closure predates the
-            // root change. Fire-and-forget: a Miyo hiccup must not break the
-            // rest of the root-change chain.
-            const fresh = getSettings();
-            const notice = () =>
+            // The root moved, so Miyo's server-side exclusions no longer match.
+            // Point at the Miyo tab and stop there: changing a local folder
+            // setting must not mutate a remote registration on its own, and the
+            // banner there carries the explicit Resync action. Reads fresh
+            // settings — the React `settings` closure predates the root change.
+            if (shouldSurfaceMiyoResync(app, getSettings())) {
               new Notice("Miyo search needs a resync — open the Miyo settings tab.", 6000);
-            if (!shouldSurfaceMiyoResync(app, fresh)) {
-              // No local evidence of a registration — but a pre-receipt-era
-              // registration leaves none: a user who registered before receipts
-              // existed and later disconnected (enableMiyo off, receipt empty)
-              // still has a live server-side scope whose Relay can read the new
-              // root. Only a read-only live probe can tell that apart from
-              // "never used Miyo"; on a confirmed stale registration point at
-              // the Miyo tab, and never mutate a disconnected user's Miyo.
-              if (fresh.miyoSyncedExclusions === "") {
-                void verifyMiyoScope(app).then((scope) => {
-                  if (scope === "stale") notice();
-                });
-              }
-              return;
-            }
-            if (getVaultBase(app) && isLocalMiyoUrl(getMiyoCustomUrl(fresh))) {
-              void resyncMiyoFolder(app).then((outcome) => {
-                // "unregistered" stays silent: nothing on the server exposes
-                // the new root, and nagging would second-guess a user who
-                // deliberately removed the registration in Miyo.
-                if (outcome === "conflict" || outcome === "failed") notice();
-              });
-            } else {
-              notice();
             }
           })
           .then(() => ensureCopilotSubfolders(app.vault, { copilotFolder: folder }))
