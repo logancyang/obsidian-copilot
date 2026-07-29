@@ -592,9 +592,9 @@ export class AgentSession {
   }
 
   /**
-   * Latest known unified picker state for this session — model catalog,
-   * canonical mode, canonical effort. `null` while the session is still
-   * starting and the agent hasn't reported anything yet.
+   * Return the session's local in-memory state snapshot without contacting the
+   * backend. `null` while the session is still starting and neither a cached
+   * nor backend-reported state is available.
    */
   getState(): BackendState | null {
     return this.currentState;
@@ -667,17 +667,7 @@ export class AgentSession {
       : null;
     const originalEffort = originalState.model?.current.effort ?? null;
     if (encoded === originalEncoded && selection.effort === originalEffort) return;
-    // Config-option backends (opencode ≥1.15.13) guard their model switch on
-    // the *current* state, and the optimistic baseModelId seed already shows
-    // the target — which would skip the real switch and strand the backend on
-    // its originally-reported model. Drop the seed first so `applySelection`
-    // sees the true state and issues the switch. setModel-style backends always
-    // issue the round-trip regardless of current, so their optimistic seed can
-    // stand and the picker doesn't blink.
     const configOptionBacked = originalState.model?.apply?.kind === "setConfigOption";
-    if (configOptionBacked) {
-      this.currentState = originalState;
-    }
     try {
       // Clearing effort to the agent default on a config-option backend whose
       // process baked a concrete effort: the base already matches, so
@@ -688,7 +678,9 @@ export class AgentSession {
         await this.applyModelWireId(descriptor.wire.encode(selection));
         return;
       }
-      await descriptor.applySelection(this, selection);
+      await descriptor.applySelection(this, selection, {
+        backendReportedCurrent: originalState.model?.current ?? null,
+      });
     } catch (e) {
       logWarn(`[AgentMode] could not apply seeded selection ${encoded}; reverting seed`, e);
       this.currentState = originalState;

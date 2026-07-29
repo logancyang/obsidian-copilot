@@ -196,12 +196,14 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
     }
   },
 
-  async applySelection(session: AgentSession, selection: ModelSelection): Promise<void> {
+  async applySelection(session: AgentSession, selection: ModelSelection, context): Promise<void> {
     const apply = session.getState()?.model?.apply;
     if (apply?.kind === "setConfigOption" && apply.effortConfigId) {
       // The effort option is model-specific, so activate the bare model first
       // and use the option id from the refreshed state.
-      const currentBase = session.getState()?.model?.current.baseModelId;
+      const currentBase = context
+        ? context.backendReportedCurrent?.baseModelId
+        : session.getState()?.model?.current.baseModelId;
       if (currentBase !== selection.baseModelId) {
         await session.applyModelWireId(
           opencodeWire.encode({ baseModelId: selection.baseModelId, effort: null })

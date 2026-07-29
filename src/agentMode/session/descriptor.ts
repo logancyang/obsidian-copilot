@@ -47,6 +47,15 @@ export interface BackendSignInHandlers {
 }
 
 /**
+ * Backend-confirmed state available while applying a selection. Startup passes
+ * the state returned by `newSession`; ordinary picker changes omit the context
+ * and compare against the session's in-memory snapshot.
+ */
+export interface ApplySelectionContext {
+  backendReportedCurrent: ModelSelection | null;
+}
+
+/**
  * Optional auth capability. Backends whose readiness depends on an external
  * sign-in (the Claude CLI's login state) implement this so generic `ui/` can
  * surface a "Sign in" CTA without knowing the backend's auth mechanism.
@@ -273,7 +282,11 @@ export interface BackendDescriptor {
    * the underlying `session.setConfigOption` call (the backend may simply
    * lack the capability) and propagate everything else.
    */
-  applySelection(session: AgentSession, selection: ModelSelection): Promise<void>;
+  applySelection(
+    session: AgentSession,
+    selection: ModelSelection,
+    context?: ApplySelectionContext
+  ): Promise<void>;
 
   /**
    * Optional: return the canonical → native mode mapping for this backend

@@ -1,4 +1,6 @@
 import { AI_SENDER, USER_SENDER } from "@/constants";
+import { ClaudeBackendDescriptor } from "@/agentMode/backends/claude/descriptor";
+import { waitFor } from "@testing-library/react";
 import type { TFile } from "obsidian";
 import {
   AgentSession,
@@ -10,6 +12,7 @@ import {
 import { ensureMultiAgentEntitlement, showMultiAgentUpgradePrompt } from "@/plusUtils";
 import { GLOBAL_SCOPE } from "./scope";
 import { AuthRequiredError, MethodUnsupportedError } from "./errors";
+import type { ApplySelectionContext } from "./descriptor";
 import type { FanoutRunInput } from "./fanout/FanoutOrchestrator";
 import { FANOUT_READONLY_PREAMBLE, type FanoutTurn } from "./fanout/fanoutTypes";
 import type {
@@ -1969,7 +1972,7 @@ describe("AgentSession.create (via start)", () => {
     );
   });
 
-  it("attempts setModel when defaultModelSelection is set", async () => {
+  it("confirms a Claude-style seed against the backend-reported model", async () => {
     const mock = makeMockBackend();
     const stateWithSonnet: BackendState = {
       model: {
@@ -1992,9 +1995,9 @@ describe("AgentSession.create (via start)", () => {
       backend: mock.asBackend,
       cwd: "/vault",
       internalId: "internal-1",
-      backendId: "opencode",
+      backendId: "claude",
       defaultModelSelection: { baseModelId: "openai/gpt-5", effort: null },
-      getDescriptor: () => makeWireOnlyDescriptor(),
+      getDescriptor: () => ClaudeBackendDescriptor,
     });
     await session.ready;
     expect(mock.setSessionModel).toHaveBeenCalledWith({
@@ -2096,10 +2099,13 @@ describe("AgentSession.create (via start)", () => {
       onModelChanged: () => observed.push(session.getState()?.model?.current.baseModelId),
     });
 
-    // Wait for the first notifyModelChanged inside initialize.
-    await Promise.resolve();
-    await Promise.resolve();
-    expect(observed[0]).toBe("openai/gpt-5");
+    await waitFor(() => {
+      expect(observed[0]).toBe("openai/gpt-5");
+      expect(mock.setSessionModel).toHaveBeenCalledWith({
+        sessionId: "acp-1",
+        modelId: "openai/gpt-5",
+      });
+    });
 
     resolveSetModel!(stateWithSonnet);
     await session.ready;
@@ -2281,8 +2287,11 @@ describe("AgentSession.create (via start)", () => {
     mock.newSession.mockResolvedValueOnce({ sessionId: "acp-1", state: reportedState });
     // First config write switches the bare model (refreshing the effort
     // option), the second lands the effort on `thought_level`.
+    let resolveModelSwitch!: (state: BackendState) => void;
     mock.setSessionConfigOption
-      .mockResolvedValueOnce(switchedState)
+      .mockImplementationOnce(
+        () => new Promise<BackendState>((resolve) => (resolveModelSwitch = resolve))
+      )
       .mockResolvedValue(switchedState);
 
     const session = AgentSession.start({
@@ -2293,6 +2302,16 @@ describe("AgentSession.create (via start)", () => {
       defaultModelSelection: { baseModelId: "openai/gpt-5", effort: "high" },
       getDescriptor: () => makeConfigOptionDescriptor(),
     });
+    await waitFor(() =>
+      expect(mock.setSessionConfigOption).toHaveBeenCalledWith({
+        sessionId: "acp-1",
+        configId: "model",
+        value: "openai/gpt-5",
+      })
+    );
+    expect(session.getState()?.model?.current.baseModelId).toBe("openai/gpt-5");
+
+    resolveModelSwitch(switchedState);
     await session.ready;
 
     // Never the model channel.
@@ -2403,11 +2422,14 @@ function makeConfigOptionDescriptor(): BackendDescriptor {
     wire,
     applySelection: async (
       session: AgentSession,
-      selection: { baseModelId: string; effort: string | null }
+      selection: { baseModelId: string; effort: string | null },
+      context?: ApplySelectionContext
     ) => {
       const apply = session.getState()?.model?.apply;
       if (apply?.kind === "setConfigOption" && apply.effortConfigId) {
-        const currentBase = session.getState()?.model?.current.baseModelId;
+        const currentBase = context
+          ? context.backendReportedCurrent?.baseModelId
+          : session.getState()?.model?.current.baseModelId;
         if (currentBase !== selection.baseModelId) {
           await session.applyModelWireId(
             wire.encode({ baseModelId: selection.baseModelId, effort: null })
@@ -2518,9 +2540,12 @@ function makeDescriptorWireWithoutEffort(): BackendDescriptor {
     // carries only the base id and effort goes through setConfigOption.
     applySelection: async (
       session: AgentSession,
-      selection: { baseModelId: string; effort: string | null }
+      selection: { baseModelId: string; effort: string | null },
+      context?: ApplySelectionContext
     ) => {
-      const currentBase = session.getState()?.model?.current.baseModelId;
+      const currentBase = context
+        ? context.backendReportedCurrent?.baseModelId
+        : session.getState()?.model?.current.baseModelId;
       if (currentBase !== selection.baseModelId)
         await session.applyModelWireId(wire.encode(selection));
       if (selection.effort !== null) await session.setConfigOption("effort", selection.effort);
