@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import React from "react";
 import { AgentSettings } from "./AgentSettings";
 
@@ -51,6 +51,10 @@ const DESCRIPTORS = [
   makeDescriptor("codex", "Codex", false),
 ];
 
+const mockGetCachedBackendState = jest.fn();
+const mockGetCachedModelCatalog = jest.fn();
+const mockPreloadModels = jest.fn();
+
 jest.mock("@/agentMode", () => ({
   listBackendDescriptors: () => DESCRIPTORS,
   backendNeedsSelfHostWarning: (
@@ -72,8 +76,9 @@ jest.mock("@/contexts/PluginContext", () => ({
   usePlugin: () => ({
     app: {},
     agentSessionManager: {
-      getCachedBackendState: () => ({ model: "x" }),
-      preloadModels: jest.fn().mockResolvedValue(undefined),
+      getCachedBackendState: mockGetCachedBackendState,
+      getCachedModelCatalog: mockGetCachedModelCatalog,
+      preloadModels: mockPreloadModels,
     },
   }),
 }));
@@ -97,6 +102,28 @@ describe("AgentSettings", () => {
     installStates.opencode = { kind: "ready", source: "managed" };
     installStates.claude = { kind: "ready", source: "custom" };
     installStates.codex = { kind: "ready", source: "custom" };
+    mockGetCachedBackendState.mockReset().mockImplementation(() => {
+      throw new Error("settings must not read session state");
+    });
+    mockGetCachedModelCatalog.mockReset().mockReturnValue({ availableModels: [] });
+    mockPreloadModels.mockReset().mockResolvedValue(undefined);
+  });
+
+  it("skips model preload when the shared catalog is already available", async () => {
+    render(<AgentSettings />);
+
+    await waitFor(() => expect(mockGetCachedModelCatalog).toHaveBeenCalledWith("opencode"));
+    expect(mockPreloadModels).not.toHaveBeenCalled();
+    expect(mockGetCachedBackendState).not.toHaveBeenCalled();
+  });
+
+  it("preloads models when the shared catalog is unavailable", async () => {
+    mockGetCachedModelCatalog.mockReturnValue(null);
+
+    render(<AgentSettings />);
+
+    await waitFor(() => expect(mockPreloadModels).toHaveBeenCalledWith("opencode"));
+    expect(mockGetCachedBackendState).not.toHaveBeenCalled();
   });
 
   it("renders the four sub-tabs in order: OpenCode, Claude, Codex, Quick Chat", () => {
