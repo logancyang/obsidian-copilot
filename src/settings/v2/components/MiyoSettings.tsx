@@ -289,6 +289,17 @@ export const MiyoSettings: React.FC = () => {
           new Notice("Miyo resynced; indexing will catch up on Miyo's next scan.");
           setServerScopeStale(false);
           break;
+        case "resynced-grants-reset":
+          // The rebuild could not recover this folder's Miyo-side permissions,
+          // so they were reset to off. Say so plainly: a user who had remote
+          // read enabled would otherwise keep believing it still is.
+          new Notice(
+            "Miyo resynced. This folder's registration had to be rebuilt, so its " +
+              "remote read and write access were turned off — re-enable them in the Miyo app if you want them.",
+            10000
+          );
+          setServerScopeStale(false);
+          break;
         case "conflict":
           new Notice(
             "Miyo reports a conflicting registration (possibly under this vault's previous name). " +

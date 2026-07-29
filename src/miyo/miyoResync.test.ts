@@ -228,7 +228,26 @@ describe("miyoResync", () => {
       expect(updateSetting).not.toHaveBeenCalled(); // empty receipt: nothing to clear
     });
 
-    it("rebuilds its own vanished registration, failing closed on the Miyo-side grants", async () => {
+    it("retries the re-add once so a transient failure keeps the record's grants", async () => {
+      // The grants are only knowable in the run that deleted the record. One
+      // more attempt here is the difference between preserving the user's Relay
+      // setting and resetting it on the next Resync.
+      rootMovedSettings();
+      currentSettings.miyoSyncedExclusions = receiptFor();
+      getFolder.mockResolvedValue(record({ allow_remote_read: true, allow_writes: false }));
+      addFolder.mockRejectedValueOnce(new Error("connection reset"));
+      addFolder.mockResolvedValue(record());
+
+      await expect(resyncMiyoFolder(app)).resolves.toBe("resynced");
+
+      expect(addFolder).toHaveBeenCalledTimes(2);
+      expect(addFolder).toHaveBeenLastCalledWith(
+        expect.objectContaining({ allow_remote_read: true, allow_writes: false }),
+        undefined
+      );
+    });
+
+    it("rebuilds its own vanished registration, and reports the grants it had to reset", async () => {
       // The receipt proves this vault WAS registered here; the server says it
       // isn't now. Refusing to re-add used to strand a rebuild that died between
       // its DELETE and its POST — every retry saw the same 404 and refused too.
@@ -238,10 +257,10 @@ describe("miyoResync", () => {
 
       const outcome = await resyncMiyoFolder(app);
 
-      expect(outcome).toBe("resynced");
-      // The vanished record's toggles are unknowable, so they are not guessed:
-      // re-granting Relay read to a vault whose owner turned it off is the one
-      // outcome that cannot be undone by noticing later.
+      // A distinct outcome, because the caller has to tell the user: the record
+      // that carried the grants is gone, and guessing `true` would re-grant
+      // Relay read to a vault whose owner had turned it off.
+      expect(outcome).toBe("resynced-grants-reset");
       expect(addFolder).toHaveBeenCalledWith(
         expect.objectContaining({ allow_remote_read: false, allow_writes: false }),
         undefined
@@ -250,12 +269,13 @@ describe("miyoResync", () => {
     });
 
     it("recovers on a second Resync after the re-add failed mid-rebuild", async () => {
-      // DELETE lands, POST throws: the registration and its index are gone while
-      // the receipt still names this vault. The next Resync must be able to
-      // repair that, since the same action caused it.
+      // DELETE lands, both POST attempts throw: the registration and its index
+      // are gone while the receipt still names this vault. The next Resync must
+      // be able to repair that, since the same action caused it.
       rootMovedSettings();
       currentSettings.miyoSyncedExclusions = receiptFor();
       getFolder.mockResolvedValueOnce(record());
+      addFolder.mockRejectedValueOnce(new Error("connection reset"));
       addFolder.mockRejectedValueOnce(new Error("connection reset"));
 
       await expect(resyncMiyoFolder(app)).resolves.toBe("failed");
@@ -266,8 +286,7 @@ describe("miyoResync", () => {
       checkFolderRegistration.mockResolvedValue("unregistered");
       addFolder.mockResolvedValue(record());
 
-      await expect(resyncMiyoFolder(app)).resolves.toBe("resynced");
-      expect(addFolder).toHaveBeenCalledTimes(2);
+      await expect(resyncMiyoFolder(app)).resolves.toBe("resynced-grants-reset");
       // No second DELETE — there was nothing left to delete.
       expect(deleteFolder).toHaveBeenCalledTimes(1);
     });
@@ -635,6 +654,27 @@ describe("miyoResync", () => {
 
     it("resolves with the task's value when the lifecycle is still current", async () => {
       await expect(enqueueMiyoFolderMutation(async () => "value")).resolves.toBe("value");
+    });
+    it("stops an in-flight mutation before it can delete on a closed vault's behalf", async () => {
+      // The previous coverage let the stale task's lookup return a covering
+      // record, so it only ever tried to write a receipt. Park it on a lookup
+      // that comes back STALE instead: without a guard before the DELETE, the
+      // task would go on to rebuild a registration for a vault that is gone.
+      rootMovedSettings();
+      currentSettings.miyoSyncedExclusions = receiptFor();
+      const lookup = deferred<MiyoFolderEntry>();
+      getFolder.mockReturnValueOnce(lookup.promise);
+
+      const stranded = resyncMiyoFolder(app);
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+
+      resetMiyoMutations();
+      lookup.resolve(record());
+
+      await expect(stranded).resolves.toBe("failed");
+      expect(deleteFolder).not.toHaveBeenCalled();
+      expect(addFolder).not.toHaveBeenCalled();
+      expect(updateSetting).not.toHaveBeenCalled();
     });
   });
 });

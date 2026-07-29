@@ -37,6 +37,9 @@ export type MiyoResyncOutcome =
   | "verified"
   /** Deleted + re-registered with the fresh scope; re-scan kicked off. */
   | "resynced"
+  /** Rebuilt a registration that had vanished, but its Miyo-side Relay/write
+   *  grants were unknowable and had to be reset — the user must be told. */
+  | "resynced-grants-reset"
   /** Re-registered, but the re-scan trigger failed; Miyo re-scans on its own. */
   | "resynced-scan-failed"
   /** Server holds a registration this flow can't safely replace (409 right
@@ -66,35 +69,42 @@ let mutationChain: Promise<unknown> = Promise.resolve();
 let mutationLifecycle = 0;
 
 /**
- * Abandon queued Miyo mutations and invalidate in-flight ones, so a new plugin
- * lifecycle starts with a clean queue and no stale task can write into it.
+ * Abandon queued Miyo mutations and invalidate in-flight ones, so no task can
+ * outlive the plugin lifecycle that started it.
  *
- * Call at the START of `onload()`, alongside `resetPersistenceState()` — NOT
- * from `onunload()`. Obsidian treats unload as fire-and-forget, so a reset there
- * can land after the next `onload()` has already initialized and would clear the
- * new lifecycle's state (see the comment at that call site).
+ * Called from `onunload()` as its first statement — everything there runs
+ * before the first `await`, hence before the next `onload()` could begin, so it
+ * carries none of the late-continuation risk that keeps `resetPersistenceState`
+ * at load time. Also called at the start of `onload()`, because a crash never
+ * runs unload at all.
  *
  * Replacing the chain matters independently of the token: mutations are
  * deliberately untimed (see {@link withLookupTimeout}), so a hung request from
  * the previous lifecycle would otherwise block every Miyo operation in the new
  * one.
  *
- * DESIGN NOTE — this deliberately trades serialization for liveness. A task
- * already running under the old chain keeps running, so its late DELETE/POST
- * can now interleave with a new lifecycle's mutation against the same Miyo
- * folder (same vault re-enabled, or two vaults sharing a folder identity).
- * Both properties are unattainable at once while `requestUrl` is
- * uncancellable — a request that cannot be aborted will land whatever we do,
- * and blocking the new lifecycle behind it is the failure this exists to fix.
- * The token below keeps the stale task from writing settings; the server-side
- * race is accepted. Note that nothing repairs it automatically — a later verify
- * only DETECTS the drift and surfaces the banner, whose Resync button the user
- * must press.
- * If a future review flags this again, point them at this note.
+ * A task that is mid-flight keeps running, but {@link assertCurrentLifecycle}
+ * stops it before it can issue anything destructive, so what survives a reset
+ * is only the read it was already waiting on. The one sequence deliberately
+ * allowed to finish is a DELETE that has already gone out: its POST must
+ * follow, or the vault is left unregistered with no record to rebuild from.
  */
 export function resetMiyoMutations(): void {
   mutationLifecycle += 1;
   mutationChain = Promise.resolve();
+}
+
+/**
+ * Abort the current mutation unless it still belongs to the live plugin
+ * lifecycle. Called before every request that changes server state, so a task
+ * whose vault closed mid-flight cannot act on the registration afterwards.
+ *
+ * @param lifecycle - Token the mutation captured when it was enqueued.
+ */
+function assertCurrentLifecycle(lifecycle: number): void {
+  if (lifecycle !== mutationLifecycle) {
+    throw new Error("Miyo mutation belongs to an expired plugin lifecycle");
+  }
 }
 
 /**
@@ -134,16 +144,12 @@ export function enqueueMiyoFolderMutation<T>(task: (lifecycle: number) => Promis
   const run = mutationChain.then(async () => {
     // Queued but not yet started when the lifecycle ended: never run it at all,
     // so it cannot issue requests on behalf of a vault that is no longer open.
-    if (lifecycle !== mutationLifecycle) {
-      throw new Error("Miyo mutation belongs to an expired plugin lifecycle");
-    }
+    assertCurrentLifecycle(lifecycle);
     const result = await task(lifecycle);
     // Ran to completion, but the lifecycle ended while it did. The server-side
     // work stands (it was this vault's own registration); only the result must
     // not travel onward into a lifecycle that never asked for it.
-    if (lifecycle !== mutationLifecycle) {
-      throw new Error("Miyo mutation completed after its plugin lifecycle expired");
-    }
+    assertCurrentLifecycle(lifecycle);
     return result;
   });
   mutationChain = run.catch(() => {
@@ -388,6 +394,35 @@ async function runVerify(app: App, lifecycle: number): Promise<MiyoScopeVerifica
   }
 }
 
+/**
+ * Re-register a folder whose record was just deleted, retrying once.
+ *
+ * The retry exists because the grants being restored are only knowable inside
+ * this run: they were read off the record moments before the DELETE removed it.
+ * A later Resync has no source for them and must fail closed, so one more
+ * attempt here is the difference between preserving a user's Relay setting and
+ * silently turning it off.
+ *
+ * @param client - Client already bound to this run's endpoint and credential.
+ * @param desired - Registration body carrying the grants read before the DELETE.
+ * @param customUrl - Endpoint override captured for this run, if any.
+ * @returns The created record, or `null` when the server reports a conflict.
+ */
+async function addFolderPreservingGrants(
+  client: MiyoClient,
+  desired: MiyoAddFolderRequest,
+  customUrl: string | undefined
+): Promise<MiyoFolderEntry | null> {
+  try {
+    return await client.addFolder(desired, customUrl);
+  } catch (error) {
+    logWarn(`Miyo resync: re-add failed, retrying once: ${err2String(error)}`);
+    // A first POST that landed but lost its response surfaces as 409 here,
+    // which the caller already treats as a contested registration.
+    return await client.addFolder(desired, customUrl);
+  }
+}
+
 async function runResync(app: App, lifecycle: number): Promise<MiyoResyncOutcome> {
   try {
     const settings = getSettings();
@@ -447,11 +482,14 @@ async function runResync(app: App, lifecycle: number): Promise<MiyoResyncOutcome
       //     the same 404 and refused again. The explicit Resync click is the
       //     consent to re-add: it is a user action, on a banner that says the
       //     scope is out of sync, and re-adding is what "resync" means.
-      //     Re-registration FAILS CLOSED on the Miyo-side toggles — the record
-      //     that carried them is gone, so they are unknowable here, and
-      //     guessing `true` would silently re-grant Relay read access to a
-      //     vault whose owner had turned it off. A downgrade the user can undo
-      //     in Miyo beats a re-grant they never see.
+      //     Re-registration FAILS CLOSED on the Miyo-side toggles. They were
+      //     knowable in the run that deleted the record — which is why that run
+      //     retries its own POST rather than leaving them to this path — but by
+      //     the time a separate Resync arrives their only source is gone.
+      //     Guessing `true` would silently re-grant Relay read access to a
+      //     vault whose owner had turned it off; guessing `false` downgrades,
+      //     which is why this returns its own outcome so the user is told
+      //     rather than left thinking Relay is still on.
       // (b) A receipt naming a DIFFERENT folder on this device+endpoint is NOT
       //     auto-deleted: folder names are just vault names, so the receipt
       //     cannot prove that name still belongs to this vault — another vault
@@ -497,6 +535,7 @@ async function runResync(app: App, lifecycle: number): Promise<MiyoResyncOutcome
         // carried — see (a) above.
         desired.allow_remote_read = false;
         desired.allow_writes = false;
+        assertCurrentLifecycle(lifecycle);
         const rebuilt = await client.addFolder(desired, customUrl);
         if (rebuilt === null) {
           // 409: something registered this folder between the two lookups.
@@ -508,11 +547,13 @@ async function runResync(app: App, lifecycle: number): Promise<MiyoResyncOutcome
         commitReceipt(lifecycle, receipt);
         try {
           await client.scanFolder(baseUrl, folderName, false);
-          return "resynced";
         } catch (scanError) {
           logWarn(`Miyo resync: re-scan trigger failed: ${err2String(scanError)}`);
-          return "resynced-scan-failed";
         }
+        // Reported separately from a normal resync: the caller has to say the
+        // grants were reset, or the downgrade is as silent as the re-grant this
+        // avoids.
+        return "resynced-grants-reset";
       }
       return "unregistered";
     }
@@ -529,9 +570,12 @@ async function runResync(app: App, lifecycle: number): Promise<MiyoResyncOutcome
     desired.allow_remote_read = record.allow_remote_read === true;
     desired.allow_writes = record.allow_writes === true;
 
+    // Last point at which abandoning is still safe: once the DELETE is out, the
+    // POST must follow or the vault is left unregistered.
+    assertCurrentLifecycle(lifecycle);
     await client.deleteFolder(folderName, customUrl);
 
-    const created = await client.addFolder(desired, customUrl);
+    const created = await addFolderPreservingGrants(client, desired, customUrl);
     if (created === null) {
       // 409 right after a delete: the server still holds a registration we
       // couldn't replace. Do NOT write the receipt — its exclusions are
