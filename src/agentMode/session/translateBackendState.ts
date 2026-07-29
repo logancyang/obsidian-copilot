@@ -1,6 +1,7 @@
 import type {
   BackendConfigOption,
   BackendDescriptor,
+  BackendModelCatalog,
   BackendModelInfo,
   RawModelState,
   RawModeState,
@@ -410,6 +411,15 @@ export function modelStateSignature(state: BackendState | null): string {
       )
       .join(","),
   ].join("/");
+}
+
+/**
+ * Stable signature of shared model discovery, distinct from session-owned selection state.
+ * @param catalog - Probe-owned catalog, or null before discovery settles.
+ */
+export function modelCatalogSignature(catalog: BackendModelCatalog | null): string {
+  if (!catalog) return "";
+  return JSON.stringify(catalog.availableModels);
 }
 
 /**

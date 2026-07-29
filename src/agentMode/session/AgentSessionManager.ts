@@ -52,7 +52,7 @@ import {
   type FanoutRunInput,
 } from "./fanout/FanoutOrchestrator";
 import type { FanoutTurn } from "./fanout/fanoutTypes";
-import { backendStateSignature } from "./translateBackendState";
+import { modelCatalogSignature } from "./translateBackendState";
 import { GLOBAL_SCOPE, type ProjectScopeId } from "./scope";
 import {
   OrphanedProjectError,
@@ -82,6 +82,7 @@ import type {
   AskUserQuestionPrompt,
   BackendDescriptor,
   BackendId,
+  BackendModelCatalog,
   BackendProcess,
   BackendState,
   CopilotMode,
@@ -2268,6 +2269,11 @@ export class AgentSessionManager {
     return this.preloader.getCachedBackendState(backendId);
   }
 
+  /** Probe-owned model discovery shared across sessions for `backendId`. */
+  getCachedModelCatalog(backendId: BackendId): BackendModelCatalog | null {
+    return this.preloader.getCachedModelCatalog(backendId);
+  }
+
   /**
    * Per-model effort options (baseModelId → options) discovered by the
    * preloader's post-catalog prefetch, or `null`. The picker reads this to show
@@ -2283,8 +2289,8 @@ export class AgentSessionManager {
    * first). Returns `null` when the catalog hasn't been probed yet.
    */
   getDefaultBaseModelId(backendId: BackendId): string | null {
-    const state = this.preloader.getCachedBackendState(backendId);
-    return state?.model?.availableModels[0]?.baseModelId ?? null;
+    const catalog = this.getCachedModelCatalog(backendId);
+    return catalog?.availableModels?.[0]?.baseModelId ?? null;
   }
 
   /** Subscribe to preloader cache updates. Used by the picker hook. */
@@ -2294,7 +2300,7 @@ export class AgentSessionManager {
 
   /**
    * Stable string that changes whenever anything a model picker reads for
-   * `backendId` changes: preload status, the cached backend state, and the
+   * `backendId` changes: preload status, the shared model catalog, and the
    * prefetched effort catalog. A `useSyncExternalStore` snapshot built only
    * from `getPreloadStatus` would miss the post-`"ready"` effort-catalog
    * prefetch (the snapshot stays `"ready"`, so React skips the rerender and
@@ -2302,7 +2308,7 @@ export class AgentSessionManager {
    */
   getModelCacheSignature(backendId: BackendId): string {
     const status = this.getPreloadStatus(backendId);
-    const state = backendStateSignature(this.getCachedBackendState(backendId));
+    const catalog = modelCatalogSignature(this.getCachedModelCatalog(backendId));
     const effort = this.getEffortCatalog(backendId);
     const effortSig = effort
       ? Object.keys(effort)
@@ -2310,7 +2316,7 @@ export class AgentSessionManager {
           .map((id) => `${id}:${effort[id].map((o) => o.value ?? "").join(",")}`)
           .join("|")
       : "";
-    return `${status}#${state}#${effortSig}`;
+    return `${status}#${catalog}#${effortSig}`;
   }
 
   /** Kick off a (best-effort) model probe for `backendId`. */

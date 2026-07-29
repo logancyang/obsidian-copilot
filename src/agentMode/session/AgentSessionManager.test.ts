@@ -5,6 +5,7 @@
  */
 import { FileSystemAdapter, App, TFile } from "obsidian";
 import { AgentSession } from "./AgentSession";
+import type { AgentModelPreloader } from "./AgentModelPreloader";
 import { buildNativeChatId } from "@/utils/nativeChatId";
 import { AgentSessionIndex } from "./AgentSessionIndex";
 import { AgentSessionManager } from "./AgentSessionManager";
@@ -27,7 +28,7 @@ import {
 } from "@/aiParams";
 import type { ProjectFileRecord } from "@/projects/type";
 import { getProjectContextSignature } from "@/projects/projectContextSignature";
-import type { BackendDescriptor, InstallState } from "./types";
+import type { BackendDescriptor, BackendModelCatalog, BackendState, InstallState } from "./types";
 
 const mockEnsureMaterialized = ensureProjectContextMaterialized as jest.Mock;
 
@@ -249,10 +250,31 @@ function buildDescriptor(): BackendDescriptor {
   } as unknown as BackendDescriptor;
 }
 
-function buildManager(): AgentSessionManager {
+function modelCatalog(baseModelId: string): BackendModelCatalog {
+  return {
+    availableModels: [{ baseModelId, name: baseModelId, provider: null, effortOptions: [] }],
+  };
+}
+
+function backendState(baseModelId: string): BackendState {
+  return {
+    model: {
+      current: { baseModelId, effort: null },
+      availableModels: [{ baseModelId, name: baseModelId, provider: null, effortOptions: [] }],
+      apply: { kind: "setModel" },
+    },
+    mode: null,
+  };
+}
+
+function buildManager(
+  modelPreloaderOverrides: Partial<AgentModelPreloader> = {}
+): AgentSessionManager {
   const descriptor = buildDescriptor();
   const modelPreloader = {
     getCachedBackendState: jest.fn(() => null),
+    getCachedModelCatalog: jest.fn(() => null),
+    getEffortCatalog: jest.fn(() => null),
     preload: jest.fn(async () => undefined),
     refresh: jest.fn(() => null),
     subscribe: jest.fn(() => () => {}),
@@ -261,6 +283,7 @@ function buildManager(): AgentSessionManager {
     clearCached: jest.fn(),
     takeWarm: jest.fn(() => null),
     getWarmProcs: jest.fn(() => []),
+    ...modelPreloaderOverrides,
   };
   return new AgentSessionManager(
     buildApp(),
@@ -329,6 +352,7 @@ describe("AgentSessionManager.createSession", () => {
     const cache = new Map<string, unknown>();
     const modelPreloader = {
       getCachedBackendState: jest.fn((id: string) => cache.get(id) ?? null),
+      getCachedModelCatalog: jest.fn(() => null),
       preload: jest.fn(async () => undefined),
       refresh: jest.fn(() => null),
       subscribe: jest.fn(() => () => {}),
@@ -402,6 +426,9 @@ describe("AgentSessionManager.createSession", () => {
     const descriptor = buildDescriptor();
     const modelPreloader = {
       getCachedBackendState: jest.fn(() => probeState),
+      getCachedModelCatalog: jest.fn(() => ({
+        availableModels: probeState.model.availableModels,
+      })),
       preload: jest.fn(async () => undefined),
       refresh: jest.fn(() => null),
       subscribe: jest.fn(() => () => {}),
@@ -503,6 +530,9 @@ describe("AgentSessionManager warm-backend reuse", () => {
       .mockReturnValue(null);
     const modelPreloader = {
       getCachedBackendState: jest.fn(() => probeState),
+      getCachedModelCatalog: jest.fn(() => ({
+        availableModels: probeState.model.availableModels,
+      })),
       preload: jest.fn(async () => undefined),
       subscribe: jest.fn(() => () => {}),
       shutdown: jest.fn(),
@@ -613,6 +643,60 @@ describe("AgentSessionManager preload status", () => {
   });
 });
 
+describe("AgentSessionManager.getCachedModelCatalog", () => {
+  it("returns probe-owned discovery instead of the legacy session-state cache", () => {
+    const catalog = modelCatalog("catalog");
+    const mgr = buildManager({
+      getCachedBackendState: jest.fn(() => backendState("session")),
+      getCachedModelCatalog: jest.fn(() => catalog),
+    });
+
+    expect(mgr.getCachedModelCatalog("opencode")).toBe(catalog);
+  });
+});
+
+describe("AgentSessionManager.getDefaultBaseModelId", () => {
+  it("uses catalog ordering instead of a session cache's available models", () => {
+    const mgr = buildManager({
+      getCachedBackendState: jest.fn(() => backendState("session")),
+      getCachedModelCatalog: jest.fn(() => modelCatalog("catalog")),
+    });
+
+    expect(mgr.getDefaultBaseModelId("opencode")).toBe("catalog");
+  });
+});
+
+describe("AgentSessionManager.getModelCacheSignature", () => {
+  it("ignores legacy session selection when shared discovery is unchanged", () => {
+    const catalog = modelCatalog("catalog");
+    const first = buildManager({
+      getCachedBackendState: jest.fn(() => backendState("first-session")),
+      getCachedModelCatalog: jest.fn(() => catalog),
+    });
+    const second = buildManager({
+      getCachedBackendState: jest.fn(() => backendState("second-session")),
+      getCachedModelCatalog: jest.fn(() => catalog),
+    });
+
+    expect(first.getModelCacheSignature("opencode")).toBe(
+      second.getModelCacheSignature("opencode")
+    );
+  });
+
+  it("changes when shared model discovery changes", () => {
+    const first = buildManager({
+      getCachedModelCatalog: jest.fn(() => modelCatalog("first-catalog")),
+    });
+    const second = buildManager({
+      getCachedModelCatalog: jest.fn(() => modelCatalog("second-catalog")),
+    });
+
+    expect(first.getModelCacheSignature("opencode")).not.toBe(
+      second.getModelCacheSignature("opencode")
+    );
+  });
+});
+
 describe("AgentSessionManager.getOrCreateActiveSession", () => {
   it("dedupes concurrent auto-spawn callers into a single session", async () => {
     const mgr = buildManager();
@@ -717,6 +801,7 @@ describe("AgentSessionManager.restartBackend", () => {
     const refresh = jest.fn(() => Promise.resolve());
     const modelPreloader = {
       getCachedBackendState: jest.fn(() => ({ model: null, mode: null })),
+      getCachedModelCatalog: jest.fn(() => null),
       preload: jest.fn(async () => undefined),
       refresh,
       subscribe: jest.fn(() => () => {}),
@@ -756,6 +841,7 @@ describe("AgentSessionManager.restartBackend", () => {
     const refresh = jest.fn(() => null);
     const modelPreloader = {
       getCachedBackendState: jest.fn(() => null),
+      getCachedModelCatalog: jest.fn(() => null),
       preload: jest.fn(async () => undefined),
       refresh,
       subscribe: jest.fn(() => () => {}),
@@ -793,6 +879,7 @@ describe("AgentSessionManager.restartBackend", () => {
     const preload = jest.fn(async () => undefined);
     const modelPreloader = {
       getCachedBackendState: jest.fn(() => null),
+      getCachedModelCatalog: jest.fn(() => null),
       preload,
       refresh: jest.fn(() => null),
       subscribe: jest.fn(() => () => {}),
@@ -852,6 +939,7 @@ describe("AgentSessionManager.restartBackend", () => {
     const preload = jest.fn(async () => undefined);
     const modelPreloader = {
       getCachedBackendState: jest.fn(() => null),
+      getCachedModelCatalog: jest.fn(() => null),
       preload,
       refresh: jest.fn(() => null),
       subscribe: jest.fn(() => () => {}),
@@ -1040,6 +1128,7 @@ describe("AgentSessionManager.getRunningChatIds", () => {
         resolveDescriptor: (id) => (id === descriptor.id ? descriptor : undefined),
         modelPreloader: {
           getCachedBackendState: jest.fn(() => null),
+          getCachedModelCatalog: jest.fn(() => null),
           preload: jest.fn(async () => undefined),
           refresh: jest.fn(() => null),
           subscribe: jest.fn(() => () => {}),
@@ -1340,6 +1429,7 @@ describe("AgentSessionManager.applySelection", () => {
     } as unknown as BackendDescriptor;
     const modelPreloader = {
       getCachedBackendState: jest.fn(() => null),
+      getCachedModelCatalog: jest.fn(() => null),
       preload: jest.fn(async () => undefined),
       subscribe: jest.fn(() => () => {}),
       shutdown: jest.fn(),
@@ -1427,9 +1517,10 @@ describe("AgentSessionManager default-model settings subscription", () => {
     } as unknown as BackendDescriptor;
   }
 
-  function makeStubPreloader(cachedState: unknown = null) {
+  function makeStubPreloader(catalog: BackendModelCatalog | null = null) {
     return {
-      getCachedBackendState: jest.fn(() => cachedState),
+      getCachedBackendState: jest.fn(() => null),
+      getCachedModelCatalog: jest.fn(() => catalog),
       preload: jest.fn(async () => undefined),
       subscribe: jest.fn(() => () => {}),
       shutdown: jest.fn(),
@@ -1527,9 +1618,9 @@ describe("AgentSessionManager default-model settings subscription", () => {
       {
         permissionPrompter: jest.fn(),
         resolveDescriptor: (id) => (id === descriptor.id ? descriptor : undefined),
-        modelPreloader: makeStubPreloader(cachedState) as unknown as ConstructorParameters<
-          typeof AgentSessionManager
-        >[2]["modelPreloader"],
+        modelPreloader: makeStubPreloader({
+          availableModels: cachedState.model.availableModels,
+        }) as unknown as ConstructorParameters<typeof AgentSessionManager>[2]["modelPreloader"],
       }
     );
     const session = await mgr.createSession();
@@ -1676,6 +1767,7 @@ describe("AgentSessionManager.onInstallStateChanged", () => {
     let installState = opts.installState;
     const preloader = {
       getCachedBackendState: jest.fn(() => opts.cachedState ?? null),
+      getCachedModelCatalog: jest.fn(() => null),
       preload: jest.fn(async () => undefined),
       refresh: jest.fn(() => opts.refreshResult ?? null),
       subscribe: jest.fn(() => () => {}),
@@ -1951,6 +2043,7 @@ describe("AgentSessionManager chat history aggregation", () => {
         resolveDescriptor: (id) => (id === "opencode" ? descriptor : undefined),
         modelPreloader: {
           getCachedBackendState: jest.fn(() => null),
+          getCachedModelCatalog: jest.fn(() => null),
           preload: jest.fn(async () => undefined),
           refresh: jest.fn(() => null),
           subscribe: jest.fn(() => () => {}),

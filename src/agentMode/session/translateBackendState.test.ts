@@ -1,6 +1,7 @@
 import {
   backendStateSignature,
   findModelEntry,
+  modelCatalogSignature,
   modelStateSignature,
   modeStateSignature,
   translateBackendState,
@@ -781,6 +782,25 @@ describe("backendStateSignature", () => {
       suffixDescriptor()
     );
     expect(backendStateSignature(before)).not.toBe(backendStateSignature(after));
+  });
+});
+
+describe("modelCatalogSignature", () => {
+  it("distinguishes discovery lifecycle and catalog content", () => {
+    const signatures = [
+      modelCatalogSignature(null),
+      modelCatalogSignature({ availableModels: null }),
+      modelCatalogSignature({
+        availableModels: [
+          { baseModelId: "alpha", name: "Alpha", provider: null, effortOptions: [] },
+        ],
+      }),
+      modelCatalogSignature({
+        availableModels: [{ baseModelId: "beta", name: "Beta", provider: null, effortOptions: [] }],
+      }),
+    ];
+
+    expect(new Set(signatures).size).toBe(signatures.length);
   });
 });
 
