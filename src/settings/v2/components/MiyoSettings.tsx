@@ -6,6 +6,7 @@ import { SettingSection } from "@/components/ui/setting-section";
 import { SettingSwitch } from "@/components/ui/setting-switch";
 import { MIYO_HOMEPAGE_URL } from "@/constants";
 import { useApp } from "@/context";
+import { usePlugin } from "@/contexts/PluginContext";
 import { cn } from "@/lib/utils";
 import { logWarn } from "@/logger";
 import { MiyoClient } from "@/miyo/MiyoClient";
@@ -132,6 +133,11 @@ export const MiyoSettings: React.FC = () => {
   const app = useApp();
   const settings = useSettingsValue();
   const status = useMiyoStatus();
+
+  // From the plugin, not captured here: this tab mounts the first time the user
+  // selects it, which in a settings tree that outlived a reload is a different
+  // lifecycle than the one this tree belongs to.
+  const { miyoMutationSession } = usePlugin();
 
   // Draft + blur commit so we persist once on blur, not on every keystroke.
   const [urlDraft, setUrlDraft] = useState(settings.miyoServerUrl || "");
@@ -266,7 +272,7 @@ export const MiyoSettings: React.FC = () => {
     // endpoints resolve to "unknown" and fall back to the local signal. Only
     // the Resync button's delete/re-add stays gated on canAutoAddVault.
     let cancelled = false;
-    void verifyMiyoScope(app).then((verdict) => {
+    void verifyMiyoScope(app, miyoMutationSession).then((verdict) => {
       if (cancelled || !mountedRef.current) return;
       if (verdict === "stale") setServerScopeStale(true);
       else if (verdict === "covered" || verdict === "unregistered") setServerScopeStale(false);
@@ -274,12 +280,12 @@ export const MiyoSettings: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [app, miyoEndpointUrl, verifiedRootsKey, scopeVerifyNonce]);
+  }, [app, miyoEndpointUrl, miyoMutationSession, verifiedRootsKey, scopeVerifyNonce]);
 
   const handleResync = useCallback(async () => {
     setResyncPending(true);
     try {
-      const outcome = await resyncMiyoFolder(app);
+      const outcome = await resyncMiyoFolder(app, miyoMutationSession);
       if (!mountedRef.current) return;
       switch (outcome) {
         case "verified":
@@ -324,7 +330,7 @@ export const MiyoSettings: React.FC = () => {
     } finally {
       if (mountedRef.current) setResyncPending(false);
     }
-  }, [app]);
+  }, [app, miyoMutationSession]);
 
   // Direct reachability probe that BYPASSES the shouldUseMiyo gate. The status
   // store only probes once Miyo is enabled (its snapshot reflects the *effective*
@@ -471,10 +477,11 @@ export const MiyoSettings: React.FC = () => {
         }
         // Snapshot the credential alongside the endpoint: this registration is
         // queued and can outlive the vault that asked for it, while the auth
-        // header is otherwise read live per request. The lifecycle re-check is
-        // separate from `superseded()` above — that one tracks the UI's own
-        // attempt generation, this one whether the vault is still open at all.
-        assertCurrentLifecycle(lifecycle);
+        // header is otherwise read live per request. The lifecycle check rides
+        // on `addFolder`'s `beforeRequest` below — it fires after URL resolution
+        // and decryption, so unlike a check here it cannot go stale before the
+        // POST leaves. It is separate from `superseded()` above: that tracks the
+        // UI's own attempt generation, this one whether the vault is still open.
         const created = await new MiyoClient({ plusLicenseKey: fresh.plusLicenseKey }).addFolder(
           {
             path: vaultBase,
@@ -498,10 +505,11 @@ export const MiyoSettings: React.FC = () => {
               ...extractAppIgnoreSettings(app),
             ]),
           },
-          freshUrl || undefined
+          freshUrl || undefined,
+          () => assertCurrentLifecycle(lifecycle)
         );
         return { created, receipt: buildMiyoSyncReceipt(app, fresh) };
-      });
+      }, miyoMutationSession);
       // Record the sync receipt only for a fresh 201 — a 409 (already
       // registered) means the server holds an EARLIER snapshot whose exclusions
       // are unknown and possibly stale; marking it synced would silence the
@@ -528,7 +536,7 @@ export const MiyoSettings: React.FC = () => {
     const available = await enableMiyoBackend(superseded);
     if (superseded()) return "unreachable";
     return available ? "added" : "unreachable";
-  }, [app, settings, enableMiyoBackend, invalidateScopeVerdict]);
+  }, [app, settings, enableMiyoBackend, invalidateScopeVerdict, miyoMutationSession]);
 
   // One connection attempt: probe reachability, then (if reachable) check whether
   // this vault is registered with Miyo. An unregistered vault is NOT auto-added —

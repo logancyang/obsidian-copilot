@@ -69,8 +69,33 @@ let mutationChain: Promise<unknown> = Promise.resolve();
 let mutationLifecycle = 0;
 
 /**
+ * A producer's proof of which plugin lifecycle it belongs to.
+ *
+ * Held instead of a bare number so it can only be obtained from
+ * {@link resetMiyoMutations} — i.e. by the lifecycle owner, at the moment the
+ * previous lifecycle's queue is abandoned. There is deliberately no way to ask
+ * for "whatever lifecycle is current right now": handing that to the queue is
+ * precisely what let stale producers pass every guard.
+ */
+export interface MiyoMutationSession {
+  readonly lifecycle: number;
+}
+
+/**
  * Abandon queued Miyo mutations and invalidate in-flight ones, so no task can
- * outlive the plugin lifecycle that started it.
+ * outlive the plugin lifecycle that started it, and return the incoming
+ * lifecycle's session.
+ *
+ * The plugin stores that session on itself (`CopilotPlugin.miyoMutationSession`)
+ * and producers read it from there; they must never obtain one themselves.
+ * Nothing guarantees a producer dies with its lifecycle — the settings React
+ * root is never unmounted (`SettingsPage.display()` drops it into a local), an
+ * open `Modal` outlives `onunload()`, and settings tabs mount lazily, so a tab
+ * first opened after a reload would otherwise vouch for the INCOMING lifecycle
+ * while still holding the outgoing vault's `app`. Returning the session from the
+ * reset rather than exposing a separate capture makes that misuse unavailable:
+ * the only way to get one is to end the previous lifecycle, and only the plugin
+ * does that. `onunload` ignores the return value.
  *
  * Called from `onunload()` as its first statement — everything there runs
  * before the first `await`, hence before the next `onload()` could begin, so it
@@ -84,23 +109,28 @@ let mutationLifecycle = 0;
  * one.
  *
  * A task that is mid-flight keeps running, but {@link assertCurrentLifecycle}
- * refuses it before each request it has NOT yet sent. What that does and does
- * not reach is written down below rather than assumed.
+ * refuses it before each request it has NOT yet sent — including inside
+ * `MiyoClient`, immediately before `requestUrl`. What that does and does not
+ * reach is written down below rather than assumed.
  *
- * KNOWN GAP — the guards sit at the call sites, so `addFolder`/`deleteFolder`
- * still await service discovery and credential decryption after their check;
- * a lifecycle ending inside those awaits lets the request through. Moving the
- * check next to `requestUrl` would close that, and is worth doing — it needs an
- * optional per-request hook on two client methods, not the wholesale change an
- * earlier version of this note claimed. Tracked as follow-up.
+ * DESIGN NOTE — the only requests that can still act for a closed lifecycle are
+ * ones already handed to `requestUrl`, which Obsidian cannot abort. Everything
+ * earlier is refused, including during service discovery and credential
+ * decryption (the `beforeRequest` hook the destructive client calls take). The
+ * damage a sent request can still do: an explicit `customUrl` bypasses
+ * `MiyoServiceDiscovery`'s cache, so it cannot be redirected at the incoming
+ * vault, but discovery is a process-wide singleton and an empty URL resolves to
+ * a machine-level endpoint (`service.json`, else `127.0.0.1:8742`). When both
+ * lifecycles end up on the same endpoint AND share a folder name (folder name
+ * is the vault name), an outgoing DELETE can land on the incoming
+ * registration — a same-vault re-enable being one common instance.
  *
- * KNOWN GAP — a task enqueued by an outgoing lifecycle's UI *after* the next
- * `onload()` captures the NEW token and passes every guard while carrying the
- * old vault's `app`. Closing it requires the producer to hold a session taken at
- * mount rather than being handed the current token at enqueue time. Tracked as
- * follow-up; the trigger needs an async chain still resolving across a vault
- * switch, and the damage is a receipt landing in the wrong vault, which that
- * vault's own banner then reports.
+ * DESIGN NOTE — a producer that outlives its lifecycle can no longer smuggle
+ * work in: the lifecycle is proved by a {@link MiyoMutationSession} the plugin
+ * received at load, not read at enqueue time. That covers the producers which
+ * really do survive `onunload()` — the never-unmounted settings React tree, an
+ * open `MiyoConnectModal`, and the root-change async tail — including the case
+ * where the stale tree mounts a tab for the FIRST time after the reload.
  *
  * DESIGN NOTE — replacing the chain lets the incoming lifecycle proceed while an
  * uncancellable DELETE from the outgoing one is still in flight, so that DELETE
@@ -108,14 +138,16 @@ let mutationLifecycle = 0;
  * chain instead would restore ordering, but only by blocking the new lifecycle
  * behind the hung request — the failure this function exists to fix, and the one
  * the maintainer named. `requestUrl` cannot be aborted, so no third option
- * exists for a request already sent. Both vaults must share a folder name for
- * the scopes to disagree; a same-vault re-enable rebuilds an equivalent scope
- * and costs an index rebuild.
+ * exists for a request already sent. Recovery is the Resync button: the
+ * lifecycle guard stops the outgoing POST that would have followed, so the
+ * incoming vault is left unregistered rather than holding a wrong scope, and its
+ * own banner reports that.
  * If a future review flags any of these, point them at these notes.
  */
-export function resetMiyoMutations(): void {
+export function resetMiyoMutations(): MiyoMutationSession {
   mutationLifecycle += 1;
   mutationChain = Promise.resolve();
+  return Object.freeze({ lifecycle: mutationLifecycle });
 }
 
 /**
@@ -164,9 +196,16 @@ function commitReceipt(lifecycle: number, receipt: string): void {
  *
  * @param task - Mutation to serialize; invoked once its turn arrives, receiving
  *   the lifecycle token it must pass to {@link commitReceipt} for any write.
+ * @param session - The lifecycle's session, obtained by the plugin from
+ *   {@link resetMiyoMutations} at load and read off it by the caller. Required
+ *   rather than defaulted to the live lifecycle: a default would silently
+ *   re-admit any producer that outlived its vault.
  */
-export function enqueueMiyoFolderMutation<T>(task: (lifecycle: number) => Promise<T>): Promise<T> {
-  const lifecycle = mutationLifecycle;
+export function enqueueMiyoFolderMutation<T>(
+  task: (lifecycle: number) => Promise<T>,
+  session: MiyoMutationSession
+): Promise<T> {
+  const { lifecycle } = session;
   const run = mutationChain.then(async () => {
     // Queued but not yet started when the lifecycle ended: never run it at all,
     // so it cannot issue requests on behalf of a vault that is no longer open.
@@ -298,15 +337,22 @@ function buildDesiredScope(app: App, settings = getSettings()): MiyoAddFolderReq
  * its turn arrives, so a queued run always reconciles toward the latest scope.
  *
  * @param app - Active Obsidian app (vault name/base for the registration).
+ * @param session - The lifecycle's session, read off the plugin
+ *   (`CopilotPlugin.miyoMutationSession`); never obtained by the caller itself.
  */
-export function resyncMiyoFolder(app: App): Promise<MiyoResyncOutcome> {
-  return enqueueMiyoFolderMutation((lifecycle) => runResync(app, lifecycle)).catch((error) => {
-    // Preserves the never-throws contract: the only rejection the queue itself
-    // raises is an expired lifecycle, which for a caller in the current one
-    // reads the same as any other unfinished mutation.
-    logWarn(`Miyo resync abandoned: ${err2String(error)}`);
-    return "failed";
-  });
+export function resyncMiyoFolder(
+  app: App,
+  session: MiyoMutationSession
+): Promise<MiyoResyncOutcome> {
+  return enqueueMiyoFolderMutation((lifecycle) => runResync(app, lifecycle), session).catch(
+    (error) => {
+      // Preserves the never-throws contract: the only rejection the queue itself
+      // raises is an expired lifecycle, which for a caller in the current one
+      // reads the same as any other unfinished mutation.
+      logWarn(`Miyo resync abandoned: ${err2String(error)}`);
+      return "failed";
+    }
+  );
 }
 
 /** Result of a read-only scope verification against the live Miyo record. */
@@ -336,14 +382,21 @@ export type MiyoScopeVerification = "covered" | "stale" | "unregistered" | "unkn
  * local mismatch signal.
  *
  * @param app - Active Obsidian app (vault name for the registration lookup).
+ * @param session - The lifecycle's session, read off the plugin
+ *   (`CopilotPlugin.miyoMutationSession`); never obtained by the caller itself.
  */
-export function verifyMiyoScope(app: App): Promise<MiyoScopeVerification> {
-  return enqueueMiyoFolderMutation((lifecycle) => runVerify(app, lifecycle)).catch((error) => {
-    // Same never-throws contract as the resync entry point; an abandoned verify
-    // is indistinguishable from an unreachable one to the banner.
-    logWarn(`Miyo scope verification abandoned: ${err2String(error)}`);
-    return "unknown";
-  });
+export function verifyMiyoScope(
+  app: App,
+  session: MiyoMutationSession
+): Promise<MiyoScopeVerification> {
+  return enqueueMiyoFolderMutation((lifecycle) => runVerify(app, lifecycle), session).catch(
+    (error) => {
+      // Same never-throws contract as the resync entry point; an abandoned verify
+      // is indistinguishable from an unreachable one to the banner.
+      logWarn(`Miyo scope verification abandoned: ${err2String(error)}`);
+      return "unknown";
+    }
+  );
 }
 
 async function runVerify(app: App, lifecycle: number): Promise<MiyoScopeVerification> {
@@ -561,8 +614,9 @@ async function runResync(app: App, lifecycle: number): Promise<MiyoResyncOutcome
         // carried — see (a) above.
         desired.allow_remote_read = false;
         desired.allow_writes = false;
-        assertCurrentLifecycle(lifecycle);
-        const rebuilt = await client.addFolder(desired, customUrl);
+        const rebuilt = await client.addFolder(desired, customUrl, () =>
+          assertCurrentLifecycle(lifecycle)
+        );
         if (rebuilt === null) {
           // 409: something registered this folder between the two lookups.
           // Its scope is unknown, so the receipt stays unwritten and the
@@ -598,8 +652,7 @@ async function runResync(app: App, lifecycle: number): Promise<MiyoResyncOutcome
 
     // Last point at which abandoning is still safe: once the DELETE is out, the
     // POST must follow or the vault is left unregistered.
-    assertCurrentLifecycle(lifecycle);
-    await client.deleteFolder(folderName, customUrl);
+    await client.deleteFolder(folderName, customUrl, () => assertCurrentLifecycle(lifecycle));
 
     const created = await addFolderPreservingGrants(client, desired, customUrl);
     if (created === null) {

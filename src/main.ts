@@ -76,7 +76,7 @@ import {
   updateSetting,
 } from "@/settings/model";
 import { didMiyoSyncedRootsChange, shouldSurfaceMiyoResync } from "@/miyo/miyoUtils";
-import { resetMiyoMutations } from "@/miyo/miyoResync";
+import { type MiyoMutationSession, resetMiyoMutations } from "@/miyo/miyoResync";
 import { ensureCopilotSubfolders, getEffectiveConversationsFolder } from "@/settings/copilotFolder";
 import { buildUpgradeRelocationEntries } from "@/settings/upgradeNotice";
 import { UpgradeRelocationNotice } from "@/settings/UpgradeRelocationNotice";
@@ -146,6 +146,18 @@ export default class CopilotPlugin extends Plugin {
   private planPreviewViewType?: typeof import("@/agentMode").PLAN_PREVIEW_VIEW_TYPE;
   private agentModelDiscoveryUnsubscriber?: () => void;
   modelManagement!: ModelManagementApi;
+  // Proof of THIS lifecycle for anything that enqueues a Miyo folder mutation.
+  // Assigned in `onload` right after the queue reset, and read by the settings
+  // UI rather than captured there: settings tabs mount lazily (`TabContent`
+  // renders nothing until selected), so a tab first opened after a reload would
+  // capture the incoming lifecycle while still holding the outgoing vault's
+  // `app`. The plugin instance is one-per-lifecycle by construction, so it is
+  // the honest place for this.
+  //
+  // Assign it exactly once and never recompute it per read: the Miyo tab uses it
+  // as an effect dependency, so a getter that captured on every access would
+  // hand React a new object each render and spin that effect forever.
+  miyoMutationSession!: MiyoMutationSession;
   private ribbonIconEl?: HTMLElement;
   userMemoryManager: UserMemoryManager;
   quickAskController: QuickAskController;
@@ -179,7 +191,10 @@ export default class CopilotPlugin extends Plugin {
     // Also reset here, not only in `onunload`: a crash or a hard kill never runs
     // unload at all, and the module would then start this lifecycle holding the
     // previous one's queue. Bumping twice is harmless — no task exists yet.
-    resetMiyoMutations();
+    // The reset hands back this lifecycle's session; producers read it off the
+    // plugin rather than obtaining one themselves, which is what keeps a stale
+    // settings tree from vouching for the lifecycle it outlived.
+    this.miyoMutationSession = resetMiyoMutations();
     KeychainService.resetInstance();
     KeychainService.getInstance(this.app);
     await this.loadSettings();
