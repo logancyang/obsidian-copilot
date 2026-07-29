@@ -43,10 +43,24 @@ jest.mock("@/utils/vaultPath", () => ({ getVaultBase: jest.fn(() => "/abs/vault"
 
 import type { App } from "obsidian";
 import type { MiyoAddFolderRequest, MiyoFolderEntry } from "@/miyo/MiyoClient";
-import { miyoRecordCoversSystemRoots, resyncMiyoFolder, verifyMiyoScope } from "@/miyo/miyoResync";
+import {
+  miyoRecordCoversSystemRoots,
+  resetMiyoMutations,
+  resyncMiyoFolder,
+  verifyMiyoScope,
+} from "@/miyo/miyoResync";
 import type { CopilotSettings } from "@/settings/model";
 
 const app = { vault: { getName: () => "my-vault" } } as unknown as App;
+
+/** A promise whose settlement the test controls, to hold a mutation mid-flight. */
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((r) => {
+    resolve = r;
+  });
+  return { promise, resolve };
+}
 
 /** Stored sync receipt; defaults to this device/endpoint/folder identity. */
 function receiptFor(
@@ -78,6 +92,9 @@ function record(over: Record<string, unknown> = {}): MiyoFolderEntry {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  // The mutation queue is module state that outlives a single test just as it
+  // outlives a plugin lifecycle; start each test on a fresh chain and token.
+  resetMiyoMutations();
   currentSettings = {
     copilotFolder: "copilot",
     copilotRootHistory: ["copilot"],
@@ -277,6 +294,31 @@ describe("miyoResync", () => {
       await expect(first).resolves.toBe("verified");
       await expect(second).resolves.toBe("verified");
       expect(getFolder).toHaveBeenCalledTimes(2);
+    });
+
+    it("finishes the server-side rebuild but discards the receipt when the lifecycle ends mid-flight", async () => {
+      // A resync that got past DELETE must still complete its POST — abandoning
+      // it between the two is exactly what strands a vault unregistered. What
+      // must not survive is the receipt: this vault's settings store is gone.
+      rootMovedSettings();
+      currentSettings.miyoSyncedExclusions = receiptFor();
+      getFolder.mockResolvedValue(record());
+      const post = deferred<MiyoFolderEntry>();
+      addFolder.mockReturnValueOnce(post.promise);
+
+      const pending = resyncMiyoFolder(app);
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+      expect(deleteFolder).toHaveBeenCalledTimes(1);
+
+      // The vault closes while the POST is outstanding.
+      resetMiyoMutations();
+      post.resolve(record({ exclude_folders: ["copilot", "team/ai"] }));
+
+      // Server-side work completes; the local receipt does not follow it, and
+      // the caller sees a failure rather than a success it can act on.
+      await expect(pending).resolves.toBe("failed");
+      expect(addFolder).toHaveBeenCalledTimes(1);
+      expect(updateSetting).not.toHaveBeenCalled();
     });
 
     it("reports a conflict without deleting when the previous-name registration still exists", async () => {
@@ -490,6 +532,51 @@ describe("miyoResync", () => {
       } finally {
         jest.useRealTimers();
       }
+    });
+  });
+
+  describe("resetMiyoMutations()", () => {
+    it("lets a new lifecycle run while a previous mutation is still hung", async () => {
+      // The failure this exists to fix: mutations are deliberately untimed, so
+      // without a fresh chain a request that never returns would block every
+      // Miyo operation for the newly opened vault.
+      const hung = deferred<MiyoFolderEntry>();
+      getFolder.mockReturnValueOnce(hung.promise);
+      getFolder.mockResolvedValue(record());
+
+      const stranded = resyncMiyoFolder(app);
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+      expect(getFolder).toHaveBeenCalledTimes(1);
+
+      resetMiyoMutations();
+
+      // Runs to completion with the first request still outstanding.
+      await expect(resyncMiyoFolder(app)).resolves.toBe("verified");
+
+      hung.resolve(record());
+      await expect(stranded).resolves.toBe("failed");
+    });
+
+    it("keeps a mutation queued behind the old chain from ever starting", async () => {
+      // A task that had not begun when the vault closed must not issue requests
+      // at all — unlike a started one, nothing is half-done that needs finishing.
+      const hung = deferred<MiyoFolderEntry>();
+      getFolder.mockReturnValueOnce(hung.promise);
+      getFolder.mockResolvedValue(record());
+
+      const running = resyncMiyoFolder(app);
+      const queued = resyncMiyoFolder(app);
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+      expect(getFolder).toHaveBeenCalledTimes(1);
+
+      resetMiyoMutations();
+      hung.resolve(record());
+
+      await expect(running).resolves.toBe("failed");
+      await expect(queued).resolves.toBe("failed");
+      // The queued run never reached its own lookup.
+      expect(getFolder).toHaveBeenCalledTimes(1);
+      expect(updateSetting).not.toHaveBeenCalled();
     });
   });
 });

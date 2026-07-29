@@ -57,14 +57,93 @@ export type MiyoResyncOutcome =
 // chain itself never rejects so one failure can't strand later mutations.
 let mutationChain: Promise<unknown> = Promise.resolve();
 
+// Identifies the plugin lifecycle a mutation was enqueued under. Node's require
+// cache keeps this module alive across disable→enable and "Open another vault",
+// so without it a task started under vault A can finish after vault B loaded and
+// write A's receipt into B's settings. Monotonic on purpose — never reset to 0
+// (unlike `transactionEpoch`), or a task holding a stale value could match a
+// later lifecycle by coincidence.
+let mutationLifecycle = 0;
+
+/**
+ * Abandon queued Miyo mutations and invalidate in-flight ones, so a new plugin
+ * lifecycle starts with a clean queue and no stale task can write into it.
+ *
+ * Call at the START of `onload()`, alongside `resetPersistenceState()` — NOT
+ * from `onunload()`. Obsidian treats unload as fire-and-forget, so a reset there
+ * can land after the next `onload()` has already initialized and would clear the
+ * new lifecycle's state (see the comment at that call site).
+ *
+ * Replacing the chain matters independently of the token: mutations are
+ * deliberately untimed (see {@link withLookupTimeout}), so a hung request from
+ * the previous lifecycle would otherwise block every Miyo operation in the new
+ * one.
+ *
+ * DESIGN NOTE — this deliberately trades serialization for liveness. A task
+ * already running under the old chain keeps running, so its late DELETE/POST
+ * can now interleave with a new lifecycle's mutation against the same Miyo
+ * folder (same vault re-enabled, or two vaults sharing a folder identity).
+ * Both properties are unattainable at once while `requestUrl` is
+ * uncancellable — a request that cannot be aborted will land whatever we do,
+ * and blocking the new lifecycle behind it is the failure this exists to fix.
+ * The token below keeps the stale task from writing settings; the server-side
+ * race is accepted and self-heals on the next verify.
+ * If a future review flags this again, point them at this note.
+ */
+export function resetMiyoMutations(): void {
+  mutationLifecycle += 1;
+  mutationChain = Promise.resolve();
+}
+
+/**
+ * Persist the Miyo sync receipt on behalf of a queued mutation, unless that
+ * mutation belongs to a plugin lifecycle that has since ended.
+ *
+ * Every receipt write inside a mutation goes through here rather than calling
+ * `updateSetting` directly: the settings store is module-global too, so after a
+ * vault switch a late write would land in whichever vault is now open.
+ *
+ * @param lifecycle - Token the mutation captured when it was enqueued.
+ * @param receipt - Receipt to store, or `""` to clear it.
+ */
+function commitReceipt(lifecycle: number, receipt: string): void {
+  if (lifecycle !== mutationLifecycle) {
+    logWarn("Miyo: discarded a receipt write from an expired plugin lifecycle.");
+    return;
+  }
+  updateSetting("miyoSyncedExclusions", receipt);
+}
+
 /**
  * Run `task` behind every previously enqueued Miyo folder mutation. Returns the
  * task's own promise (rejections reach the caller; the chain stays resolved).
  *
- * @param task - Mutation to serialize; invoked once its turn arrives.
+ * Rejects instead of resolving when the plugin lifecycle ended while the task
+ * was queued or running. Rejecting rather than returning a value is what stops
+ * a caller's `await` continuation from running — the register flow writes its
+ * receipt *outside* this module, after the awaited call returns, so a check
+ * confined to the task body would not cover it.
+ *
+ * @param task - Mutation to serialize; invoked once its turn arrives, receiving
+ *   the lifecycle token it must pass to {@link commitReceipt} for any write.
  */
-export function enqueueMiyoFolderMutation<T>(task: () => Promise<T>): Promise<T> {
-  const run = mutationChain.then(task);
+export function enqueueMiyoFolderMutation<T>(task: (lifecycle: number) => Promise<T>): Promise<T> {
+  const lifecycle = mutationLifecycle;
+  const run = mutationChain.then(async () => {
+    // Queued but not yet started when the lifecycle ended: never run it at all,
+    // so it cannot issue requests on behalf of a vault that is no longer open.
+    if (lifecycle !== mutationLifecycle) {
+      throw new Error("Miyo mutation belongs to an expired plugin lifecycle");
+    }
+    const result = await task(lifecycle);
+    // Ran to completion, but the lifecycle ended while it did. The server-side
+    // work stands (it was this vault's own registration); only the result must
+    // not travel onward into a lifecycle that never asked for it.
+    if (lifecycle !== mutationLifecycle) {
+      throw new Error("Miyo mutation completed after its plugin lifecycle expired");
+    }
+    return result;
+  });
   mutationChain = run.catch(() => {
     /* keep the chain alive for the next mutation */
   });
@@ -187,7 +266,13 @@ function buildDesiredScope(app: App, settings = getSettings()): MiyoAddFolderReq
  * @param app - Active Obsidian app (vault name/base for the registration).
  */
 export function resyncMiyoFolder(app: App): Promise<MiyoResyncOutcome> {
-  return enqueueMiyoFolderMutation(() => runResync(app));
+  return enqueueMiyoFolderMutation((lifecycle) => runResync(app, lifecycle)).catch((error) => {
+    // Preserves the never-throws contract: the only rejection the queue itself
+    // raises is an expired lifecycle, which for a caller in the current one
+    // reads the same as any other unfinished mutation.
+    logWarn(`Miyo resync abandoned: ${err2String(error)}`);
+    return "failed";
+  });
 }
 
 /** Result of a read-only scope verification against the live Miyo record. */
@@ -219,10 +304,15 @@ export type MiyoScopeVerification = "covered" | "stale" | "unregistered" | "unkn
  * @param app - Active Obsidian app (vault name for the registration lookup).
  */
 export function verifyMiyoScope(app: App): Promise<MiyoScopeVerification> {
-  return enqueueMiyoFolderMutation(() => runVerify(app));
+  return enqueueMiyoFolderMutation((lifecycle) => runVerify(app, lifecycle)).catch((error) => {
+    // Same never-throws contract as the resync entry point; an abandoned verify
+    // is indistinguishable from an unreachable one to the banner.
+    logWarn(`Miyo scope verification abandoned: ${err2String(error)}`);
+    return "unknown";
+  });
 }
 
-async function runVerify(app: App): Promise<MiyoScopeVerification> {
+async function runVerify(app: App, lifecycle: number): Promise<MiyoScopeVerification> {
   try {
     const settings = getSettings();
     const folderName = getMiyoFolderName(app);
@@ -249,7 +339,7 @@ async function runVerify(app: App): Promise<MiyoScopeVerification> {
         return "unregistered";
       }
       if (receiptMatchesIdentity(receipt, settings, folderName)) {
-        updateSetting("miyoSyncedExclusions", "");
+        commitReceipt(lifecycle, "");
         return "unregistered";
       }
       // Same device + endpoint but a different folder name: the vault was
@@ -263,7 +353,7 @@ async function runVerify(app: App): Promise<MiyoScopeVerification> {
           "previous-name check"
         );
         if (oldName === "unregistered") {
-          updateSetting("miyoSyncedExclusions", "");
+          commitReceipt(lifecycle, "");
           return "unregistered";
         }
         if (oldName !== "registered") {
@@ -283,7 +373,7 @@ async function runVerify(app: App): Promise<MiyoScopeVerification> {
     }
     const receipt = buildMiyoSyncReceipt(app, settings);
     if (settings.miyoSyncedExclusions !== receipt) {
-      updateSetting("miyoSyncedExclusions", receipt);
+      commitReceipt(lifecycle, receipt);
     }
     return "covered";
   } catch (error) {
@@ -292,7 +382,7 @@ async function runVerify(app: App): Promise<MiyoScopeVerification> {
   }
 }
 
-async function runResync(app: App): Promise<MiyoResyncOutcome> {
+async function runResync(app: App, lifecycle: number): Promise<MiyoResyncOutcome> {
   try {
     const settings = getSettings();
     const vaultBase = getVaultBase(app);
@@ -367,7 +457,7 @@ async function runResync(app: App): Promise<MiyoResyncOutcome> {
             "previous-name check"
           );
           if (oldName === "unregistered") {
-            updateSetting("miyoSyncedExclusions", "");
+            commitReceipt(lifecycle, "");
             return "unregistered";
           }
           if (oldName !== "registered") {
@@ -388,13 +478,13 @@ async function runResync(app: App): Promise<MiyoResyncOutcome> {
         // it so verify stops reporting a stale registration that no longer
         // exists. Foreign-device / other-endpoint receipts are never touched
         // — they are not ours to clear.
-        updateSetting("miyoSyncedExclusions", "");
+        commitReceipt(lifecycle, "");
       }
       return "unregistered";
     }
 
     if (miyoRecordCoversSystemRoots(record, settings)) {
-      updateSetting("miyoSyncedExclusions", receipt);
+      commitReceipt(lifecycle, receipt);
       logInfo("Miyo resync: server record already covers the scope; receipt updated.");
       return "verified";
     }
@@ -416,7 +506,7 @@ async function runResync(app: App): Promise<MiyoResyncOutcome> {
       return "conflict";
     }
 
-    updateSetting("miyoSyncedExclusions", receipt);
+    commitReceipt(lifecycle, receipt);
 
     try {
       await client.scanFolder(baseUrl, folderName, false);

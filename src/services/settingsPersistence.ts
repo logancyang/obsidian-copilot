@@ -124,7 +124,9 @@ export function refreshDiskHasSecrets(data: CopilotSettings): void {
  * Electron's require cache keeps the module instance alive across plugin
  * disable→enable. After a mid-migration disable, stale state would poison
  * the next session. Similarly, switching vaults via "Open another vault"
- * carries stale state across vaults. Call this from `onunload`.
+ * carries stale state across vaults. Call this at the START of `onload`, not
+ * from `onunload` — unload is fire-and-forget, so a reset there can land after
+ * the next `onload` initialized and would clear the incoming lifecycle's state.
  */
 export function resetPersistenceState(): void {
   writeQueue = Promise.resolve();
