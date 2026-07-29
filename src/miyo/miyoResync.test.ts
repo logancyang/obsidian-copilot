@@ -212,11 +212,11 @@ describe("miyoResync", () => {
       expect(body.allow_remote_read).toBe(false);
     });
 
-    it("never re-registers an unregistered vault — registration needs explicit consent", async () => {
-      // At the 404, "a prior rebuild was interrupted" and "the user removed
-      // the registration in Miyo" are indistinguishable, so the resync must
-      // not re-register (it would silently reverse a deliberate removal and
-      // re-grant Relay). Recovery goes through the register flow.
+    it("does not re-register on a 404 it has no receipt to vouch for", async () => {
+      // Without a receipt naming this device/endpoint/folder there is no evidence
+      // this vault was ever registered here, so a 404 says "never used Miyo" —
+      // not "our own rebuild was interrupted". Registering would be inventing
+      // consent; the vouched-for case is covered by the next test.
       getFolder.mockRejectedValue(new Error("Miyo request failed with status 404"));
       checkFolderRegistration.mockResolvedValue("unregistered");
 
