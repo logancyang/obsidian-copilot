@@ -7,6 +7,7 @@ import { backendStateSignature } from "./translateBackendState";
 import type {
   BackendDescriptor,
   BackendId,
+  BackendModelCatalog,
   BackendProcess,
   BackendState,
   EffortOption,
@@ -53,6 +54,8 @@ export class AgentModelPreloader {
   // consumed (or that pushed updates after consumption via `setCached`).
   // The active session's `attachModelCacheSync` writes here.
   private readonly cache = new Map<BackendId, BackendState>();
+  // Probe-owned discovery data. Live sessions never write this map.
+  private readonly modelCatalogCache = new Map<BackendId, BackendModelCatalog>();
   // Per-backend effort options keyed by baseModelId, discovered by probing each
   // enabled model once after the catalog loads (opencode only advertises effort
   // for the active model, so the catalog itself carries none). Read by the
@@ -78,6 +81,14 @@ export class AgentModelPreloader {
 
   getCachedBackendState(backendId: BackendId): BackendState | null {
     return this.warm.get(backendId)?.state ?? this.cache.get(backendId) ?? null;
+  }
+
+  /**
+   * Latest model catalog discovered by this backend's probe, or null before discovery.
+   * @param backendId - Backend whose shared discovery result should be read.
+   */
+  getCachedModelCatalog(backendId: BackendId): BackendModelCatalog | null {
+    return this.modelCatalogCache.get(backendId) ?? null;
   }
 
   /** Per-model effort options discovered by the post-catalog prefetch, or null. */
@@ -106,6 +117,7 @@ export class AgentModelPreloader {
   clearCached(backendId: BackendId): void {
     if (this.disposed) return;
     let changed = this.cache.delete(backendId);
+    if (this.modelCatalogCache.delete(backendId)) changed = true;
     if (this.effortCatalog.delete(backendId)) changed = true;
     const warm = this.warm.get(backendId);
     if (warm) {
@@ -226,6 +238,7 @@ export class AgentModelPreloader {
   shutdown(): void {
     this.disposed = true;
     this.cache.clear();
+    this.modelCatalogCache.clear();
     this.effortCatalog.clear();
     this.inflight.clear();
     this.pendingRefresh.clear();
@@ -313,11 +326,15 @@ export class AgentModelPreloader {
       // descriptor.
       if (this.warm.get(backendId) === warm) {
         this.warm.delete(backendId);
+        this.modelCatalogCache.delete(backendId);
         this.warmExitUnsubs.delete(backendId);
         this.notify();
       }
     });
     this.warm.set(backendId, warm);
+    this.modelCatalogCache.set(backendId, {
+      availableModels: probe.state.model?.availableModels ?? null,
+    });
     this.warmExitUnsubs.set(backendId, exitUnsub);
     logProbeResult(backendId, "session probe", probe.state);
     this.notify();

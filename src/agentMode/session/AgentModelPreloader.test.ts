@@ -109,7 +109,80 @@ function buildDescriptor(makeProc: () => MockProcHandle): {
   return { descriptor, procHandle };
 }
 
-describe("AgentModelPreloader.takeWarm", () => {
+describe("AgentModelPreloader", () => {
+  describe("getCachedModelCatalog()", () => {
+    it("exposes only the discovered model catalog from a full probe state", async () => {
+      const probeState: BackendState = {
+        model: {
+          current: { baseModelId: "big-pickle", effort: null },
+          availableModels: [
+            {
+              baseModelId: "big-pickle",
+              name: "Big Pickle",
+              provider: null,
+              effortOptions: [],
+            },
+          ],
+          apply: { kind: "setModel" },
+        },
+        mode: {
+          current: "plan",
+          options: [{ value: "plan", label: "Plan" }],
+          apply: { plan: { kind: "setMode", nativeId: "plan" } },
+        },
+      };
+      const { descriptor } = buildDescriptor(() => makeMockProc({ newSessionState: probeState }));
+      const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
+
+      await preloader.preload("claude-sdk");
+
+      expect(preloader.getCachedModelCatalog("claude-sdk")).toEqual({
+        availableModels: probeState.model?.availableModels,
+      });
+    });
+
+    it("does not let a live session overwrite the discovered model catalog", async () => {
+      const { descriptor } = buildDescriptor(() => makeMockProc());
+      const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
+      await preloader.preload("claude-sdk");
+      preloader.takeWarm("claude-sdk");
+
+      preloader.setCached("claude-sdk", {
+        model: {
+          current: { baseModelId: "minimax", effort: null },
+          availableModels: [
+            { baseModelId: "minimax", name: "Minimax", provider: null, effortOptions: [] },
+          ],
+          apply: { kind: "setModel" },
+        },
+        mode: null,
+      });
+
+      expect(preloader.getCachedModelCatalog("claude-sdk")?.availableModels?.[0].baseModelId).toBe(
+        "claude-sonnet"
+      );
+    });
+
+    it("records a completed probe that reports no model catalog", async () => {
+      const modeOnlyState: BackendState = {
+        model: null,
+        mode: {
+          current: "plan",
+          options: [{ value: "plan", label: "Plan" }],
+          apply: { plan: { kind: "setMode", nativeId: "plan" } },
+        },
+      };
+      const { descriptor } = buildDescriptor(() =>
+        makeMockProc({ newSessionState: modeOnlyState })
+      );
+      const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
+
+      await preloader.preload("claude-sdk");
+
+      expect(preloader.getCachedModelCatalog("claude-sdk")).toEqual({ availableModels: null });
+    });
+  });
+
   it("retains the probe subprocess after a successful preload and hands it to the manager", async () => {
     const { descriptor, procHandle } = buildDescriptor(() => makeMockProc());
     const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
@@ -154,6 +227,7 @@ describe("AgentModelPreloader.takeWarm", () => {
 
     expect(procHandle.shutdown).toHaveBeenCalledTimes(1);
     expect(preloader.takeWarm("claude-sdk")).toBeNull();
+    expect(preloader.getCachedModelCatalog("claude-sdk")).toBeNull();
   });
 
   it("drops the warm entry when the probe subprocess exits before adoption", async () => {
@@ -167,6 +241,7 @@ describe("AgentModelPreloader.takeWarm", () => {
     procHandle.emitExit();
 
     expect(preloader.takeWarm("claude-sdk")).toBeNull();
+    expect(preloader.getCachedModelCatalog("claude-sdk")).toBeNull();
   });
 
   it("shuts down the probe proc when the agent reports no usable state", async () => {
@@ -253,6 +328,7 @@ describe("AgentModelPreloader.takeWarm", () => {
 
     expect(procHandle.shutdown).toHaveBeenCalledTimes(1);
     expect(preloader.getCachedBackendState("claude-sdk")).toBeNull();
+    expect(preloader.getCachedModelCatalog("claude-sdk")).toBeNull();
     expect(preloader.takeWarm("claude-sdk")).toBeNull();
   });
 });
