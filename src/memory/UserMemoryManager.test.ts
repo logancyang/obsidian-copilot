@@ -269,6 +269,30 @@ describe("UserMemoryManager", () => {
     });
   });
 
+  describe("updateSavedMemory", () => {
+    it("reports the path it wrote, not one re-resolved after the root moved", async () => {
+      // The write intentionally stays in the folder captured before the model
+      // call, so a caller re-resolving afterwards would name a file this save
+      // never touched — and the memory would look missing.
+      mockedMemoryFolder.mockReturnValue("copilot/memory");
+      (mockVault.getAbstractFileByPath as jest.Mock).mockReturnValue(null);
+      const model = {
+        invoke: jest.fn(async () => {
+          mockedMemoryFolder.mockReturnValue("moved/memory");
+          return new AIMessageChunk({ content: "- remembered" });
+        }),
+      } as unknown as BaseChatModel;
+
+      const result = await userMemoryManager.updateSavedMemory("remember this", model);
+
+      expect(result.filePath).toBe("copilot/memory/Saved Memories.md");
+      expect(mockVault.create).toHaveBeenCalledWith(
+        "copilot/memory/Saved Memories.md",
+        expect.any(String)
+      );
+    });
+  });
+
   describe("extractJsonFromResponse", () => {
     it("should extract JSON from markdown code blocks with json language tag", () => {
       const content = `Here's the response:
@@ -566,7 +590,10 @@ The conversation covered advanced features and included code examples.`,
       const createdContent = mockVault.create.mock.calls[0][1];
       expect(createdContent).not.toContain("**");
 
-      expect(result).toEqual({ content: llmMergedContent });
+      expect(result).toEqual({
+        content: llmMergedContent,
+        filePath: "copilot/memory/Saved Memories.md",
+      });
     });
 
     it("should append to existing Saved Memories file", async () => {
@@ -609,7 +636,10 @@ The conversation covered advanced features and included code examples.`,
       const modifiedContent = mockVault.modify.mock.calls[0][1];
       expect(modifiedContent).not.toContain("**");
 
-      expect(result).toEqual({ content: mergedContent });
+      expect(result).toEqual({
+        content: mergedContent,
+        filePath: "copilot/memory/Saved Memories.md",
+      });
     });
 
     it("should handle errors during save operation", async () => {

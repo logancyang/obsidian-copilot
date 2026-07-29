@@ -88,7 +88,7 @@ export class UserMemoryManager {
   async updateSavedMemory(
     query: string,
     chatModel: BaseChatModel
-  ): Promise<{ content?: string; error?: string }> {
+  ): Promise<{ content?: string; error?: string; filePath?: string }> {
     const settings = getSettings();
 
     // Only proceed if saved memory is enabled
@@ -112,12 +112,12 @@ export class UserMemoryManager {
       const memoryFolder = getEffectiveMemoryFolder();
       await this.ensureMemoryFolderExists(memoryFolder);
       // Add to saved memories file
-      const result = await this.updateSavedMemoryFile(
-        this.getSavedMemoriesFilePath(memoryFolder),
-        query,
-        chatModel
-      );
-      return result;
+      const filePath = this.getSavedMemoriesFilePath(memoryFolder);
+      const result = await this.updateSavedMemoryFile(filePath, query, chatModel);
+      // Report the path actually written, not a re-resolved one: the root can
+      // move during the model call, and a caller resolving it afterwards would
+      // name a file this write never touched.
+      return { ...result, filePath };
     } catch (error) {
       return {
         error: "Error saving memory: " + (error instanceof Error ? error.message : String(error)),
