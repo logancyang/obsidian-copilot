@@ -1285,8 +1285,7 @@ export class AgentSessionManager {
     // replay the previous conversation's transcript and auto-title into a
     // supposedly fresh chat. `AgentSession.start` runs `newSession` on the
     // (warm or cold) proc at the resolved scope cwd, threading the project
-    // scope + context roots; the probe's state still seeds the picker so it
-    // doesn't blink while that round-trip is in flight.
+    // scope + context roots.
     const internalId = uuidv4();
     const session = AgentSession.start({
       backend,
@@ -1295,7 +1294,6 @@ export class AgentSessionManager {
       backendId: resolvedId,
       projectId,
       defaultModelSelection: resolvedSeed,
-      initialCachedState: warm?.state ?? this.preloader.getCachedBackendState(resolvedId),
       getDescriptor: () => this.opts.resolveDescriptor(resolvedId),
       runFanoutTurn: (input) => this.runFanoutTurn(input),
       getDisplayName: (backendId) => this.resolveDescriptor(backendId).displayName,

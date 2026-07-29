@@ -2111,9 +2111,9 @@ describe("AgentSession.create (via start)", () => {
     await session.ready;
   });
 
-  it("eagerly seeds currentState from initialCachedState before newSession resolves", async () => {
+  it("waits for backend state before exposing the desired model", async () => {
     const mock = makeMockBackend();
-    const cachedState: BackendState = {
+    const backendState: BackendState = {
       model: {
         current: { baseModelId: "kimi-2.6", effort: null },
         apply: { kind: "setModel" },
@@ -2129,7 +2129,6 @@ describe("AgentSession.create (via start)", () => {
       },
       mode: null,
     };
-    // Block newSession so we can observe the pre-initialize state.
     let resolveNewSession: ((r: { sessionId: string; state: BackendState }) => void) | null = null;
     mock.newSession.mockImplementationOnce(
       () =>
@@ -2137,22 +2136,41 @@ describe("AgentSession.create (via start)", () => {
           (resolve) => (resolveNewSession = resolve)
         )
     );
+    let resolveSetModel: ((state: BackendState) => void) | null = null;
+    mock.setSessionModel.mockImplementationOnce(
+      () => new Promise<BackendState>((resolve) => (resolveSetModel = resolve))
+    );
     const session = AgentSession.start({
       backend: mock.asBackend,
       cwd: "/vault",
       internalId: "internal-1",
       backendId: "opencode",
       defaultModelSelection: { baseModelId: "big-pickle", effort: null },
-      initialCachedState: cachedState,
       getDescriptor: () => makeWireOnlyDescriptor(),
     });
 
-    // Before newSession resolves, getState reflects the eager seed
-    // (current = big-pickle) rather than the cached current (kimi-2.6).
-    expect(session.getState()?.model?.current.baseModelId).toBe("big-pickle");
+    expect(session.getState()).toBeNull();
 
-    resolveNewSession!({ sessionId: "acp-1", state: cachedState });
+    resolveNewSession!({ sessionId: "acp-1", state: backendState });
+    await waitFor(() => {
+      expect(session.getState()?.model?.current.baseModelId).toBe("big-pickle");
+      expect(mock.setSessionModel).toHaveBeenCalledWith({
+        sessionId: "acp-1",
+        modelId: "big-pickle",
+      });
+    });
+
+    resolveSetModel!({
+      ...backendState,
+      model: backendState.model
+        ? {
+            ...backendState.model,
+            current: { baseModelId: "big-pickle", effort: null },
+          }
+        : null,
+    });
     await session.ready;
+    expect(session.getState()?.model?.current.baseModelId).toBe("big-pickle");
   });
 
   it("applies a seeded effort via setConfigOption without a redundant setModel", async () => {

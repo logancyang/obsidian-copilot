@@ -238,13 +238,6 @@ export interface AgentSessionStartOptions extends ProjectContextUpdatesHooks {
    */
   defaultModelSelection?: ModelSelection;
   /**
-   * Snapshot from the preloader cache used to seed `currentState`
-   * synchronously so the picker doesn't flash the previous session's
-   * selection during the `backend.newSession` round-trip. Replaced by the
-   * agent's fresh `newSession` response inside `initialize()`.
-   */
-  initialCachedState?: BackendState | null;
-  /**
    * Optional descriptor accessor. The session uses it to resolve mode mappings
    * without coupling to specific backends. Manager-supplied; tests omit it.
    */
@@ -507,13 +500,7 @@ export class AgentSession {
           ? this.confirmSeededSelection(opts.defaultModelSelection, originalState)
           : Promise.resolve();
     } else {
-      // Eagerly seed from the preloader cache so the picker doesn't fall
-      // back to the prior session's `current` while `backend.newSession` is
-      // in flight. `initialize()` replaces this with the agent's response.
-      this.currentState = seedSelectionIntoState(
-        opts.initialCachedState ?? null,
-        opts.defaultModelSelection
-      );
+      this.currentState = null;
       this.ready = this.initialize(opts);
     }
   }

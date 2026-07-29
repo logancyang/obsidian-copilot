@@ -348,6 +348,16 @@ describe("AgentSessionManager.createSession", () => {
     expect(mockBackendStart).toHaveBeenCalledTimes(1);
   });
 
+  it("does not pass shared backend state into a new session", async () => {
+    const mgr = buildManager({
+      getCachedBackendState: jest.fn(() => backendState("probe-model")),
+    });
+
+    await mgr.createSession();
+
+    expect(sessionCreateSpy.mock.calls[0][0]).not.toHaveProperty("initialCachedState");
+  });
+
   it("mirrors the new session's unified state into the preloader cache", async () => {
     const cache = new Map<string, unknown>();
     const modelPreloader = {
