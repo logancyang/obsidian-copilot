@@ -294,6 +294,50 @@ function isSuperset(container: readonly string[], required: readonly string[]): 
 }
 
 /**
+ * Fold the live record's own scope into a replacement body, so a rebuild never
+ * comes back broader than what the server already enforced.
+ *
+ * Needed because the record is not ours alone: `PATCH /v0/folder` (docs/miyo-api.md)
+ * lets any client narrow a registration's filters, and a rebuild that POSTs only
+ * the Copilot-derived scope would silently drop those — re-indexing content the
+ * owner had excluded and, with Relay on, exposing it to remote AI.
+ *
+ * Exclusions union: excludes always win server-side, so adding is always safe.
+ * Include filters do NOT union — they are an OR whitelist (see
+ * {@link getMiyoFolderInclusions}), so unioning would WIDEN scope. When the
+ * record carries one, it is kept verbatim and ours is dropped; the cost is that
+ * a `qaInclusions` edit stops propagating through a rebuild, which changes
+ * nothing in practice since staleness detection is roots-only and never fires on
+ * qa* drift anyway. When the record carries none, ours applies — a narrowing.
+ *
+ * @param desired - Replacement body built from the current Copilot scope; mutated.
+ * @param record - Live folder entry the rebuild is replacing.
+ */
+function preserveRecordScope(desired: MiyoAddFolderRequest, record: MiyoFolderEntry): void {
+  const union = (ours: string[] | undefined, theirs: string[]): string[] | undefined => {
+    const merged = [...new Set([...(ours ?? []), ...theirs])];
+    return merged.length > 0 ? merged : undefined;
+  };
+  desired.exclude_folders = union(desired.exclude_folders, recordArray(record, "exclude_folders"));
+  desired.exclude_patterns = union(
+    desired.exclude_patterns,
+    recordArray(record, "exclude_patterns")
+  );
+
+  const recordIncludeFolders = recordArray(record, "include_folders");
+  const recordIncludePatterns = recordArray(record, "include_patterns");
+  const recordIncludeExtensions = recordArray(record, "include_extensions");
+  const recordWhitelists =
+    recordIncludeFolders.length + recordIncludePatterns.length + recordIncludeExtensions.length > 0;
+  if (recordWhitelists) {
+    desired.include_folders = recordIncludeFolders.length > 0 ? recordIncludeFolders : undefined;
+    desired.include_patterns = recordIncludePatterns.length > 0 ? recordIncludePatterns : undefined;
+    desired.include_extensions =
+      recordIncludeExtensions.length > 0 ? recordIncludeExtensions : undefined;
+  }
+}
+
+/**
  * Whether the live folder record already excludes every CURRENT system root
  * (active + historical Copilot roots), making a destructive delete +
  * re-register (and the full re-index it implies) unnecessary.
@@ -303,12 +347,13 @@ function isSuperset(container: readonly string[], required: readonly string[]): 
  * registration-snapshot gap documented at the registration site (qa* scope is
  * re-applied live at query time; the ignore-list gap predates this PR), and
  * comparing the full desired body here would flag — and destructively
- * rebuild for — users who never changed their root. Only the resync BODY uses
- * the full current scope, so once a roots-driven rebuild does happen it
- * carries everything current along. Exclusions may be a superset: extra,
- * user-added Miyo-side exclusions are privacy-safe and not ours to fight,
- * while the leak direction (a system root MISSING from the server's
- * exclusions) always fails the superset and triggers the rebuild.
+ * rebuild for — users who never changed their root. Exclusions may be a
+ * superset: extra exclusions on the record are privacy-safe and not ours to
+ * fight, while the leak direction (a system root MISSING from the server's
+ * exclusions) always fails the superset and triggers the rebuild. A rebuild
+ * then keeps those extras rather than replacing them — see
+ * {@link preserveRecordScope}, without which this tolerance would only hold
+ * until the next resync.
  * If a future review flags this again, point them here.
  *
  * @param record - Live folder entry fetched from Miyo.
@@ -656,6 +701,9 @@ async function runResync(app: App, lifecycle: number): Promise<MiyoResyncOutcome
     // opted out in Miyo — the exact privacy hole this resync exists to close.
     desired.allow_remote_read = record.allow_remote_read === true;
     desired.allow_writes = record.allow_writes === true;
+    // Same reasoning one level up: the record's own filters are part of the
+    // boundary it enforces, and a rebuild must not come back broader.
+    preserveRecordScope(desired, record);
 
     // Last point at which abandoning is still safe: once the DELETE is out, the
     // POST must follow or the vault is left unregistered.

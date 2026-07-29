@@ -474,6 +474,55 @@ describe("miyoResync", () => {
       expect(updateSetting).not.toHaveBeenCalled();
     });
 
+    it("keeps the record's own exclusions instead of narrowing to the Copilot scope", async () => {
+      // `PATCH /v0/folder` lets any client tighten a registration, so the record
+      // is not ours alone. Replacing its filters with only the Copilot-derived
+      // scope would re-index what its owner excluded — and with Relay on, expose
+      // it. Excludes always win server-side, so the union is the safe direction.
+      rootMovedSettings();
+      getFolder.mockResolvedValue(
+        record({
+          exclude_folders: ["copilot", "Private"],
+          exclude_patterns: ["**/secret/**"],
+        })
+      );
+
+      await expect(resyncMiyoFolder(app, session)).resolves.toBe("resynced");
+
+      const body = addFolder.mock.calls[0][0] as MiyoAddFolderRequest;
+      expect(body.exclude_folders).toEqual(
+        expect.arrayContaining(["copilot", "team/ai", "Private"])
+      );
+      expect(body.exclude_patterns).toEqual(expect.arrayContaining(["**/secret/**"]));
+    });
+
+    it("keeps the record's include whitelist rather than widening it with ours", async () => {
+      // Include filters are an OR whitelist, so unioning would ADD everything
+      // our side lists to what the record permitted. Preserving the record's is
+      // the only direction that cannot end up broader than the server enforced.
+      rootMovedSettings();
+      currentSettings.qaInclusions = "Notes";
+      getFolder.mockResolvedValue(record({ include_folders: ["OnlyThis"] }));
+
+      await resyncMiyoFolder(app, session);
+
+      const body = addFolder.mock.calls[0][0] as MiyoAddFolderRequest;
+      expect(body.include_folders).toEqual(["OnlyThis"]);
+    });
+
+    it("applies our include whitelist when the record carries none", async () => {
+      // No whitelist on the record means nothing is narrowed today; applying
+      // ours narrows, which is the safe direction.
+      rootMovedSettings();
+      currentSettings.qaInclusions = "Notes";
+      getFolder.mockResolvedValue(record());
+
+      await resyncMiyoFolder(app, session);
+
+      const body = addFolder.mock.calls[0][0] as MiyoAddFolderRequest;
+      expect(body.include_folders).toEqual(expect.arrayContaining(["Notes"]));
+    });
+
     it("still re-registers when the lifecycle ends after its DELETE went out", async () => {
       // The compensating POST deliberately carries no lifecycle hook: abandoning
       // it once the DELETE succeeded would leave the vault unregistered. So the
