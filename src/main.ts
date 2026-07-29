@@ -176,11 +176,9 @@ export default class CopilotPlugin extends Plugin {
     // AFTER the next onload has already initialized — and would then null
     // out the new instance, breaking saves until another full reload.
     resetPersistenceState();
-    // Same lifecycle hazard, same placement: abandon Miyo mutations queued by a
-    // previous lifecycle so a hung request can't block this one, and invalidate
-    // in-flight ones so their receipts can't land in this vault's settings.
-    // Must precede `loadSettings()` — after the token moves, a late write is
-    // discarded; before it, the write still belongs to the outgoing vault.
+    // Also reset here, not only in `onunload`: a crash or a hard kill never runs
+    // unload at all, and the module would then start this lifecycle holding the
+    // previous one's queue. Bumping twice is harmless — no task exists yet.
     resetMiyoMutations();
     KeychainService.resetInstance();
     KeychainService.getInstance(this.app);
@@ -509,12 +507,21 @@ export default class CopilotPlugin extends Plugin {
   }
 
   async onunload() {
+    // End the Miyo mutation lifecycle HERE, as the first statement: everything
+    // above the first `await` runs before the next `onload()` can possibly
+    // start, so this carries none of the late-continuation risk that keeps
+    // `resetPersistenceState()` at load time. Doing it at unload is what makes
+    // the boundary real — waiting for the next load would leave a task from
+    // this vault free to write settings and issue DELETE/POST during an unload
+    // that is never followed by a re-enable, or while another vault is opening.
+    resetMiyoMutations();
+
     // Best-effort flush of pending keychain/data.json writes.
     // Reason: onunload() is void in Obsidian's type system, but awaiting here
     // is no worse than fire-and-forget, and consistent with the log flush below.
-    // (Module-level state + KeychainService singleton reset happen at the
-    // START of the next onload, not here — see comment in onload above for
-    // the late-write race that motivated the move.)
+    // (The KeychainService singleton and the persistence module's own state
+    // reset at the START of the next onload — see the comment there for the
+    // late-write race that motivated it.)
     await flushPersistence();
 
     // Clear all persistent selection highlights before unload
