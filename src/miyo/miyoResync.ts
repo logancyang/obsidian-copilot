@@ -84,27 +84,34 @@ let mutationLifecycle = 0;
  * one.
  *
  * A task that is mid-flight keeps running, but {@link assertCurrentLifecycle}
- * refuses it before each request it has NOT yet sent. Two things are outside
- * that reach, deliberately:
+ * refuses it before each request it has NOT yet sent. What that does and does
+ * not reach is written down below rather than assumed.
  *
- * DESIGN NOTE — a request already on the wire cannot be recalled: Obsidian's
- * `requestUrl` takes no abort signal, and the guards sit at the call sites, so a
- * lifecycle that ends between the check and the socket write still lets that one
- * request through. Narrowing the window further (a callback fired inside the
- * client, just before the write) was considered and rejected: it would thread a
- * parameter through a client shared by seven call sites to shave milliseconds
- * off a window it cannot close.
+ * KNOWN GAP — the guards sit at the call sites, so `addFolder`/`deleteFolder`
+ * still await service discovery and credential decryption after their check;
+ * a lifecycle ending inside those awaits lets the request through. Moving the
+ * check next to `requestUrl` would close that, and is worth doing — it needs an
+ * optional per-request hook on two client methods, not the wholesale change an
+ * earlier version of this note claimed. Tracked as follow-up.
+ *
+ * KNOWN GAP — a task enqueued by an outgoing lifecycle's UI *after* the next
+ * `onload()` captures the NEW token and passes every guard while carrying the
+ * old vault's `app`. Closing it requires the producer to hold a session taken at
+ * mount rather than being handed the current token at enqueue time. Tracked as
+ * follow-up; the trigger needs an async chain still resolving across a vault
+ * switch, and the damage is a receipt landing in the wrong vault, which that
+ * vault's own banner then reports.
  *
  * DESIGN NOTE — replacing the chain lets the incoming lifecycle proceed while an
  * uncancellable DELETE from the outgoing one is still in flight, so that DELETE
  * can land on a registration the new lifecycle just created. Keeping the old
  * chain instead would restore ordering, but only by blocking the new lifecycle
  * behind the hung request — the failure this function exists to fix, and the one
- * the maintainer named. Reads are bounded (see {@link withLookupTimeout}); the
- * untimed requests are exactly the destructive ones, so the two properties
- * cannot both hold. Same-vault re-enable rebuilds the same scope, costing an
- * index rebuild; the harmful shape needs two vaults sharing a folder name.
- * If a future review flags either of these, point them at these notes.
+ * the maintainer named. `requestUrl` cannot be aborted, so no third option
+ * exists for a request already sent. Both vaults must share a folder name for
+ * the scopes to disagree; a same-vault re-enable rebuilds an equivalent scope
+ * and costs an index rebuild.
+ * If a future review flags any of these, point them at these notes.
  */
 export function resetMiyoMutations(): void {
   mutationLifecycle += 1;
