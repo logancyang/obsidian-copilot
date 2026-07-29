@@ -26,11 +26,10 @@ jest.mock("@/settings/copilotRootChange", () => ({
   isKnownCopilotRoot: (...a: unknown[]) => isKnownCopilotRoot(...a),
 }));
 
-// The post-change hybrid trigger: observe whether the auto-resync fires.
-const resyncMiyoFolder = jest.fn<Promise<string>, unknown[]>().mockResolvedValue("resynced");
+// The root-change trigger's read-only probe: the only way a registration that
+// predates receipts (or whose receipt a reset wiped) can be reported at all.
 const verifyMiyoScope = jest.fn<Promise<string>, unknown[]>().mockResolvedValue("unregistered");
 jest.mock("@/miyo/miyoResync", () => ({
-  resyncMiyoFolder: (...a: unknown[]) => resyncMiyoFolder(...a),
   verifyMiyoScope: (...a: unknown[]) => verifyMiyoScope(...a),
 }));
 const shouldSurfaceMiyoResync = jest.fn<boolean, unknown[]>().mockReturnValue(false);
@@ -64,7 +63,6 @@ describe("BasicSettings", () => {
     findCopilotRootFileConflict.mockReturnValue(null);
     isKnownCopilotRoot.mockReturnValue(false);
     shouldSurfaceMiyoResync.mockReturnValue(false);
-    resyncMiyoFolder.mockResolvedValue("resynced");
     verifyMiyoScope.mockResolvedValue("unregistered");
   });
 
@@ -131,10 +129,8 @@ describe("BasicSettings", () => {
     expect(applyCopilotRootChange).toHaveBeenCalledWith(expect.anything(), "ai");
   });
 
-  it("points at the Miyo tab without mutating the registration when the scope went stale", async () => {
-    // Changing a local folder setting must never delete/recreate a remote
-    // registration on its own; the Miyo tab's banner carries the explicit
-    // Resync. The unused mocks below are the regression guard for that.
+  it("points at the Miyo tab without probing when local state already signals a resync", async () => {
+    // Local evidence is enough; asking the server would add nothing.
     shouldSurfaceMiyoResync.mockReturnValue(true);
     render(<BasicSettings />);
     fireEvent.change(screen.getByLabelText("Copilot folder"), { target: { value: "ai" } });
@@ -148,22 +144,38 @@ describe("BasicSettings", () => {
         6000
       )
     );
-    expect(resyncMiyoFolder).not.toHaveBeenCalled();
     expect(verifyMiyoScope).not.toHaveBeenCalled();
   });
 
-  it("stays silent about Miyo after a root change when nothing locally signals a resync", async () => {
+  it("reports a registration only the server knows about when the receipt is empty", async () => {
+    // A registration made before receipts existed — or one whose receipt a Reset
+    // Settings wiped — leaves no local trace, and the startup notice is gated on
+    // the same empty receipt. Without this probe the user is never told.
+    verifyMiyoScope.mockResolvedValue("stale");
     render(<BasicSettings />);
     fireEvent.change(screen.getByLabelText("Copilot folder"), { target: { value: "ai" } });
     fireEvent.click(screen.getByRole("button", { name: "Apply Copilot folder" }));
 
     capturedOnConfirm?.();
 
-    await waitFor(() => expect(applyCopilotRootChange).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(Notice).toHaveBeenCalledWith(
+        expect.stringContaining("Miyo search needs a resync"),
+        6000
+      )
+    );
+  });
+
+  it("stays silent when the probe finds no registration exposing the new root", async () => {
+    render(<BasicSettings />);
+    fireEvent.change(screen.getByLabelText("Copilot folder"), { target: { value: "ai" } });
+    fireEvent.click(screen.getByRole("button", { name: "Apply Copilot folder" }));
+
+    capturedOnConfirm?.();
+
+    await waitFor(() => expect(verifyMiyoScope).toHaveBeenCalledTimes(1));
     const noticeTexts = (Notice as unknown as jest.Mock).mock.calls.map((call) => String(call[0]));
     expect(noticeTexts.some((text) => text.includes("Miyo"))).toBe(false);
-    expect(resyncMiyoFolder).not.toHaveBeenCalled();
-    expect(verifyMiyoScope).not.toHaveBeenCalled();
   });
 
   it("does nothing when Apply is pressed with the current root unchanged", () => {

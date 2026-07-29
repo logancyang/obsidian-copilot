@@ -49,12 +49,12 @@ export type MiyoResyncOutcome =
   /** Transport/setup failure (Miyo unreachable, no vault base, …); still stale. */
   | "failed";
 
-// Serializes every Miyo folder mutation. Reason: the auto-resync after a root
-// change, the settings-tab Resync button, and the register flow can otherwise
-// interleave DELETE/POST against the same registration. The chain mirrors the
-// agent-skills seedChain: each task reads fresh state when IT runs (so a root
-// change mid-run simply enqueues a later run that sees the newer root), and the
-// chain itself never rejects so one failure can't strand later mutations.
+// Serializes every Miyo folder mutation. Reason: the settings-tab Resync button
+// and the register flow can otherwise interleave DELETE/POST against the same
+// registration. The chain mirrors the agent-skills seedChain: each task reads
+// fresh state when IT runs (so a root change mid-run simply enqueues a later run
+// that sees the newer root), and the chain itself never rejects so one failure
+// can't strand later mutations.
 let mutationChain: Promise<unknown> = Promise.resolve();
 
 // Identifies the plugin lifecycle a mutation was enqueued under. Node's require
@@ -87,7 +87,9 @@ let mutationLifecycle = 0;
  * uncancellable — a request that cannot be aborted will land whatever we do,
  * and blocking the new lifecycle behind it is the failure this exists to fix.
  * The token below keeps the stale task from writing settings; the server-side
- * race is accepted and self-heals on the next verify.
+ * race is accepted. Note that nothing repairs it automatically — a later verify
+ * only DETECTS the drift and surfaces the banner, whose Resync button the user
+ * must press.
  * If a future review flags this again, point them at this note.
  */
 export function resetMiyoMutations(): void {
@@ -317,7 +319,11 @@ async function runVerify(app: App, lifecycle: number): Promise<MiyoScopeVerifica
     const settings = getSettings();
     const folderName = getMiyoFolderName(app);
     const customUrl = getMiyoCustomUrl(settings) || undefined;
-    const client = new MiyoClient();
+    // Snapshot the credential with the rest of the request identity: this task
+    // may outlive the vault it started under, and the header is otherwise read
+    // live per request — which would send the incoming vault's key to this
+    // vault's endpoint.
+    const client = new MiyoClient({ plusLicenseKey: settings.plusLicenseKey });
     const baseUrl = await client.resolveBaseUrl(customUrl);
 
     let record: MiyoFolderEntry;
@@ -403,7 +409,11 @@ async function runResync(app: App, lifecycle: number): Promise<MiyoResyncOutcome
       return "failed";
     }
     const customUrl = miyoUrl || undefined;
-    const client = new MiyoClient();
+    // Snapshot the credential with the rest of the request identity: this task
+    // may outlive the vault it started under, and the header is otherwise read
+    // live per request — which would send the incoming vault's key to this
+    // vault's endpoint.
+    const client = new MiyoClient({ plusLicenseKey: settings.plusLicenseKey });
     const baseUrl = await client.resolveBaseUrl(customUrl);
 
     // Capture the receipt for the scope we are about to commit. Written only
@@ -426,20 +436,28 @@ async function runResync(app: App, lifecycle: number): Promise<MiyoResyncOutcome
         logWarn(`Miyo resync: could not read folder record: ${err2String(error)}`);
         return "failed";
       }
-      // DESIGN NOTE — an unregistered vault triggers NO server mutation here.
-      // (a) It is NOT re-registered: "a prior rebuild was interrupted between
-      //     DELETE and POST" and "the user removed the registration in Miyo"
-      //     are indistinguishable, and every registration in this product is
-      //     an explicit user action (Connect / Add this vault).
-      //     Auto-registering would silently reverse a deliberate removal —
-      //     and the toggles the stale-record path carries (Relay opt-out)
-      //     have no source here, so it would also re-grant allow_remote_read.
-      // (b) A receipt naming a DIFFERENT folder on this device+endpoint is
-      //     NOT auto-deleted either: folder names are just vault names, so
-      //     the receipt cannot prove that name still belongs to this vault —
-      //     another vault may have registered the same name since, and
-      //     deleting on receipt evidence alone could destroy that vault's
-      //     registration and index. Manual cleanup is surfaced instead.
+      // DESIGN NOTE — what an unregistered vault means here, and what Resync
+      // may do about it.
+      // (a) A receipt naming THIS device+endpoint+folder is only written after a
+      //     successful registration, so its subject is gone: either the user
+      //     removed it in Miyo, or a previous rebuild died between its DELETE
+      //     and its POST. Those are indistinguishable, and the second one is a
+      //     hole this flow can dig itself — refusing to re-add left the user
+      //     with no registration and no way back, since every later Resync saw
+      //     the same 404 and refused again. The explicit Resync click is the
+      //     consent to re-add: it is a user action, on a banner that says the
+      //     scope is out of sync, and re-adding is what "resync" means.
+      //     Re-registration FAILS CLOSED on the Miyo-side toggles — the record
+      //     that carried them is gone, so they are unknowable here, and
+      //     guessing `true` would silently re-grant Relay read access to a
+      //     vault whose owner had turned it off. A downgrade the user can undo
+      //     in Miyo beats a re-grant they never see.
+      // (b) A receipt naming a DIFFERENT folder on this device+endpoint is NOT
+      //     auto-deleted: folder names are just vault names, so the receipt
+      //     cannot prove that name still belongs to this vault — another vault
+      //     may have registered the same name since, and deleting on receipt
+      //     evidence alone could destroy that vault's registration and index.
+      //     Manual cleanup is surfaced instead.
       // If a future review flags this again, point them here.
       const staleReceipt = parseMiyoSyncReceipt(settings.miyoSyncedExclusions);
       if (
@@ -474,18 +492,34 @@ async function runResync(app: App, lifecycle: number): Promise<MiyoResyncOutcome
           );
           return "conflict";
         }
-        // The registration the receipt vouched for is confirmed gone: clear
-        // it so verify stops reporting a stale registration that no longer
-        // exists. Foreign-device / other-endpoint receipts are never touched
-        // — they are not ours to clear.
-        commitReceipt(lifecycle, "");
+        // The registration this receipt vouched for is gone. Rebuild it with
+        // the current scope, but without the Relay/write grants it may have
+        // carried — see (a) above.
+        desired.allow_remote_read = false;
+        desired.allow_writes = false;
+        const rebuilt = await client.addFolder(desired, customUrl);
+        if (rebuilt === null) {
+          // 409: something registered this folder between the two lookups.
+          // Its scope is unknown, so the receipt stays unwritten and the
+          // banner stays up.
+          logWarn("Miyo resync: re-add of a vanished registration returned 409.");
+          return "conflict";
+        }
+        commitReceipt(lifecycle, receipt);
+        try {
+          await client.scanFolder(baseUrl, folderName, false);
+          return "resynced";
+        } catch (scanError) {
+          logWarn(`Miyo resync: re-scan trigger failed: ${err2String(scanError)}`);
+          return "resynced-scan-failed";
+        }
       }
       return "unregistered";
     }
 
     if (miyoRecordCoversSystemRoots(record, settings)) {
       commitReceipt(lifecycle, receipt);
-      logInfo("Miyo resync: server record already covers the scope; receipt updated.");
+      logInfo("Miyo resync: server record already covers the scope.");
       return "verified";
     }
     // Carry the user's Miyo-side toggles into the re-registration. Fail
