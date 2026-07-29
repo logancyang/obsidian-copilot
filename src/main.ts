@@ -76,6 +76,7 @@ import {
   updateSetting,
 } from "@/settings/model";
 import { didMiyoSyncedRootsChange, shouldSurfaceMiyoResync } from "@/miyo/miyoUtils";
+import { resetMiyoMutations } from "@/miyo/miyoResync";
 import { ensureCopilotSubfolders, getEffectiveConversationsFolder } from "@/settings/copilotFolder";
 import { buildUpgradeRelocationEntries } from "@/settings/upgradeNotice";
 import { UpgradeRelocationNotice } from "@/settings/UpgradeRelocationNotice";
@@ -175,6 +176,12 @@ export default class CopilotPlugin extends Plugin {
     // AFTER the next onload has already initialized — and would then null
     // out the new instance, breaking saves until another full reload.
     resetPersistenceState();
+    // Same lifecycle hazard, same placement: abandon Miyo mutations queued by a
+    // previous lifecycle so a hung request can't block this one, and invalidate
+    // in-flight ones so their receipts can't land in this vault's settings.
+    // Must precede `loadSettings()` — after the token moves, a late write is
+    // discarded; before it, the write still belongs to the outgoing vault.
+    resetMiyoMutations();
     KeychainService.resetInstance();
     KeychainService.getInstance(this.app);
     await this.loadSettings();
