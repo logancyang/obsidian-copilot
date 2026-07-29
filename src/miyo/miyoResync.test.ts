@@ -474,6 +474,28 @@ describe("miyoResync", () => {
       expect(updateSetting).not.toHaveBeenCalled();
     });
 
+    it("still re-registers when the lifecycle ends after its DELETE went out", async () => {
+      // The compensating POST deliberately carries no lifecycle hook: abandoning
+      // it once the DELETE succeeded would leave the vault unregistered. So the
+      // POST runs even though the lifecycle is gone — and the receipt, which is
+      // guarded, is not written. This is the trade-off the reset note records.
+      rootMovedSettings();
+      getFolder.mockResolvedValue(record());
+      const deleteLanded = deferred<void>();
+      deleteFolder.mockReturnValueOnce(deleteLanded.promise);
+
+      const pending = resyncMiyoFolder(app, session);
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+      expect(deleteFolder).toHaveBeenCalledTimes(1);
+
+      resetMiyoMutations();
+      deleteLanded.resolve();
+
+      await expect(pending).resolves.toBe("failed");
+      expect(addFolder).toHaveBeenCalledTimes(1);
+      expect(updateSetting).not.toHaveBeenCalled();
+    });
+
     it("reports failed without touching Miyo when the caller's session has expired", async () => {
       // The Resync button lives in a tree that is never unmounted, so a click
       // handler bound under the outgoing vault stays callable. Its stale session

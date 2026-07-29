@@ -138,10 +138,17 @@ export interface MiyoMutationSession {
  * chain instead would restore ordering, but only by blocking the new lifecycle
  * behind the hung request — the failure this function exists to fix, and the one
  * the maintainer named. `requestUrl` cannot be aborted, so no third option
- * exists for a request already sent. Recovery is the Resync button: the
- * lifecycle guard stops the outgoing POST that would have followed, so the
- * incoming vault is left unregistered rather than holding a wrong scope, and its
- * own banner reports that.
+ * exists for a request already sent.
+ *
+ * The worst case is worth stating plainly rather than softened: the outgoing
+ * lifecycle's compensating POST deliberately carries no lifecycle hook (see
+ * {@link addFolderPreservingGrants} — abandoning it after its DELETE succeeded
+ * would leave a vault unregistered), so when both lifecycles share an endpoint
+ * and a folder name, the late DELETE can remove the incoming registration and
+ * the POST then re-create it under the OUTGOING vault's path and scope. The
+ * incoming vault's own receipt no longer matches that record, which is what its
+ * banner keys on; Resync repairs it. Ordering this correctly would need either a
+ * blocking chain (rejected above) or an abortable transport (Obsidian has none).
  * If a future review flags any of these, point them at these notes.
  */
 export function resetMiyoMutations(): MiyoMutationSession {

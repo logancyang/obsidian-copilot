@@ -370,9 +370,7 @@ describe("MiyoClient", () => {
 
       expect(mockResolveBaseUrl).toHaveBeenCalledWith({ overrideUrl: "http://127.0.0.1:9999" });
     });
-  });
 
-  describe("beforeRequest hook", () => {
     it("refuses addFolder after the URL and credentials resolve, so nothing is sent", async () => {
       // The caller's own check runs before this method; resolution and
       // decryption are awaits, so only a hook here can stop a request whose
@@ -393,39 +391,6 @@ describe("MiyoClient", () => {
       expect(mockResolveBaseUrl).toHaveBeenCalled();
       expect(mockedGetDecryptedKey).toHaveBeenCalled();
       expect(mockedRequestUrl).not.toHaveBeenCalled();
-    });
-
-    it("refuses deleteFolder after the URL and credentials resolve, so nothing is sent", async () => {
-      mockedRequestUrl.mockResolvedValue({
-        status: 200,
-        json: { deleted: true },
-        text: "",
-      } as RequestUrlResponse);
-      const client = new MiyoClient();
-
-      await expect(
-        client.deleteFolder("my-vault", undefined, () => {
-          throw new Error("lifecycle expired");
-        })
-      ).rejects.toThrow("lifecycle expired");
-
-      expect(mockResolveBaseUrl).toHaveBeenCalled();
-      expect(mockedRequestUrl).not.toHaveBeenCalled();
-    });
-
-    it("sends the request when the hook is absent or returns", async () => {
-      mockedRequestUrl.mockResolvedValue({
-        status: 200,
-        json: { deleted: true },
-        text: "",
-      } as RequestUrlResponse);
-      const client = new MiyoClient();
-      const hook = jest.fn();
-
-      await client.deleteFolder("my-vault", undefined, hook);
-
-      expect(hook).toHaveBeenCalledTimes(1);
-      expect(mockedRequestUrl).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -475,6 +440,39 @@ describe("MiyoClient", () => {
       await expect(client.deleteFolder("my-vault")).rejects.toThrow(
         "Miyo delete-folder failed with status 500: boom"
       );
+    });
+
+    it("refuses deleteFolder after the URL and credentials resolve, so nothing is sent", async () => {
+      mockedRequestUrl.mockResolvedValue({
+        status: 200,
+        json: { deleted: true },
+        text: "",
+      } as RequestUrlResponse);
+      const client = new MiyoClient();
+
+      await expect(
+        client.deleteFolder("my-vault", undefined, () => {
+          throw new Error("lifecycle expired");
+        })
+      ).rejects.toThrow("lifecycle expired");
+
+      expect(mockResolveBaseUrl).toHaveBeenCalled();
+      expect(mockedRequestUrl).not.toHaveBeenCalled();
+    });
+
+    it("sends the request when the hook is absent or returns", async () => {
+      mockedRequestUrl.mockResolvedValue({
+        status: 200,
+        json: { deleted: true },
+        text: "",
+      } as RequestUrlResponse);
+      const client = new MiyoClient();
+      const hook = jest.fn();
+
+      await client.deleteFolder("my-vault", undefined, hook);
+
+      expect(hook).toHaveBeenCalledTimes(1);
+      expect(mockedRequestUrl).toHaveBeenCalledTimes(1);
     });
   });
 

@@ -68,6 +68,7 @@ jest.mock("@/miyo/MiyoClient", () => ({
   MiyoClient: class {
     isBackendAvailable = async () => mockReachable;
     checkFolderRegistration = async () => mockRegistration;
+    addFolder = async () => ({ path: "/vault" });
   },
 }));
 // Quiet by default so the resync banner doesn't render into unrelated tests;
@@ -88,20 +89,37 @@ jest.mock("@/miyo/miyoUtils", () => ({
 // verdict defaults to "unknown" (the component then falls back to the local
 // signal); the banner tests pin it to a definite verdict.
 const resyncMiyoFolder = jest.fn<Promise<string>, unknown[]>(async () => "verified");
+// Sessions the register flow presented to the queue, so a test can prove the
+// producer forwarded the plugin's rather than one of its own.
+const enqueuedSessions: unknown[] = [];
 const verifyMiyoScope = jest.fn<Promise<string>, unknown[]>(async () => "unknown");
 jest.mock("@/miyo/miyoResync", () => ({
   assertCurrentLifecycle: () => undefined,
-  enqueueMiyoFolderMutation: (task: (lifecycle: number) => Promise<unknown>) => task(0),
+  enqueueMiyoFolderMutation: (task: (lifecycle: number) => Promise<unknown>, session: unknown) => {
+    enqueuedSessions.push(session);
+    return task(0);
+  },
   resyncMiyoFolder: (...a: unknown[]) => resyncMiyoFolder(...a),
   verifyMiyoScope: (...a: unknown[]) => verifyMiyoScope(...a),
 }));
 // Capture the options the component passes to the modal so a test can invoke the
 // modal's callbacks (onRetry/onAddVault) directly — the Retry button has no
 // busy-guard, which is the real path that fires concurrent enable attempts.
-let lastModalOptions: { onRetry: () => Promise<unknown>; onClose: () => void } | null = null;
+let lastModalOptions: {
+  onRetry: () => Promise<unknown>;
+  onClose: () => void;
+  onAddVault?: () => Promise<unknown>;
+} | null = null;
 jest.mock("@/settings/v2/components/MiyoConnectModal", () => ({
   MiyoConnectModal: class {
-    constructor(_app: unknown, options: { onRetry: () => Promise<unknown>; onClose: () => void }) {
+    constructor(
+      _app: unknown,
+      options: {
+        onRetry: () => Promise<unknown>;
+        onClose: () => void;
+        onAddVault?: () => Promise<unknown>;
+      }
+    ) {
       lastModalOptions = options;
     }
     open = jest.fn();
@@ -160,6 +178,23 @@ beforeEach(() => {
   mockReachable = true;
   mockRegistration = "registered";
   lastModalOptions = null;
+  enqueuedSessions.length = 0;
+});
+
+it("registers through the queue with the plugin's session", async () => {
+  // The Connect modal is a standalone Obsidian Modal that outlives onunload, so
+  // its Add-this-vault callback is the producer most able to act for a closed
+  // lifecycle. It must hand the queue the plugin's session, not a fresh one.
+  mockRegistration = "unregistered";
+  render(<MiyoSettings />);
+
+  fireEvent.click(await screen.findByText("Connect"));
+  await waitFor(() => expect(lastModalOptions).not.toBeNull());
+  expect(lastModalOptions?.onAddVault).toBeDefined();
+
+  await lastModalOptions?.onAddVault?.();
+
+  expect(enqueuedSessions).toEqual([mockPluginInstance.miyoMutationSession]);
 });
 
 it("verifies scope with the plugin's session, not one this tab obtained itself", async () => {
@@ -520,6 +555,13 @@ describe("scope resync banner", () => {
     fireEvent.click(button);
 
     await waitFor(() => expect(resyncMiyoFolder).toHaveBeenCalledTimes(1));
+    // Same requirement as the verify probe: the Resync click must present the
+    // plugin's session, or a settings tree that outlived its lifecycle could
+    // delete and re-register on the incoming vault's queue.
+    expect(resyncMiyoFolder).toHaveBeenCalledWith(
+      expect.anything(),
+      mockPluginInstance.miyoMutationSession
+    );
   });
 
   it("re-verifies when the Copilot root changes while the tab stays mounted", async () => {
