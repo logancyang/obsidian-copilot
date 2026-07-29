@@ -13,7 +13,9 @@
 
 import type { ModelManagementApi, Provider, ProviderOrigin } from "@/modelManagement";
 import type CopilotPlugin from "@/main";
-import type { AgentSessionManager, BackendDescriptor, BackendState } from "@/agentMode";
+import type { AgentSessionManager, BackendDescriptor } from "@/agentMode";
+import { logInfo } from "@/logger";
+import { waitFor } from "@testing-library/react";
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -51,11 +53,11 @@ jest.mock("@/agentMode", () => ({
   },
   computeDefaultEnabledIds: (
     enrolled: Array<{ configuredModelId: string; wireModelId: string }>,
-    currentWireId: string | undefined
+    preferredWireId: string | undefined
   ) => {
     if (enrolled.length === 0) return [];
-    const current = enrolled.find((e) => e.wireModelId === currentWireId);
-    return [(current ?? enrolled[0]).configuredModelId];
+    const preferred = enrolled.find((e) => e.wireModelId === preferredWireId);
+    return [(preferred ?? enrolled[0]).configuredModelId];
   },
 }));
 
@@ -66,6 +68,8 @@ import { buildManagedOpencodeProviderIds, wireAgentModelDiscovery } from "./agen
 // Fakes
 // ---------------------------------------------------------------------------
 
+const mockedLogInfo = jest.mocked(logInfo);
+type ModelCatalog = NonNullable<ReturnType<AgentSessionManager["getCachedModelCatalog"]>>;
 const identityWire = {
   encode: (s: { baseModelId: string }) => s.baseModelId,
   decode: (wireId: string) => ({
@@ -83,23 +87,15 @@ function makeDescriptor(partial: Partial<BackendDescriptor>): BackendDescriptor 
   } as unknown as BackendDescriptor;
 }
 
-/**
- * State with a settled model list of the given wire baseModelIds. The agent's
- * current selection defaults to the first model unless `currentBaseId` is given.
- */
-function stateWithModels(baseIds: string[], currentBaseId?: string): BackendState {
+/** Probe-owned catalog with a settled model list of the given wire baseModelIds. */
+function catalogWithModels(baseIds: string[]): ModelCatalog {
   return {
-    model: {
-      current: { baseModelId: currentBaseId ?? baseIds[0] ?? "", effort: null },
-      apply: { kind: "setModel" },
-      availableModels: baseIds.map((baseModelId) => ({
-        baseModelId,
-        name: baseModelId,
-        provider: null,
-        effortOptions: [],
-      })),
-    },
-    mode: null,
+    availableModels: baseIds.map((baseModelId) => ({
+      baseModelId,
+      name: baseModelId,
+      provider: null,
+      effortOptions: [],
+    })),
   };
 }
 
@@ -159,15 +155,15 @@ function makeApiFake(): ApiFake {
 
 interface ManagerFake {
   manager: AgentSessionManager;
-  setState: (backendId: string, state: BackendState | null) => void;
+  setCatalog: (backendId: string, catalog: ModelCatalog | null) => void;
   emit: () => void;
 }
 
 function makeManagerFake(): ManagerFake {
-  const states = new Map<string, BackendState | null>();
+  const catalogs = new Map<string, ModelCatalog | null>();
   let listener: (() => void) | null = null;
   const manager = {
-    getCachedBackendState: (id: string) => states.get(id) ?? null,
+    getCachedModelCatalog: (id: string) => catalogs.get(id) ?? null,
     subscribeModelCache: (cb: () => void) => {
       listener = cb;
       return () => {
@@ -177,7 +173,7 @@ function makeManagerFake(): ManagerFake {
   } as unknown as AgentSessionManager;
   return {
     manager,
-    setState: (id, state) => states.set(id, state),
+    setCatalog: (id, catalog) => catalogs.set(id, catalog),
     emit: () => listener?.(),
   };
 }
@@ -186,18 +182,13 @@ function makePlugin(api: ModelManagementApi): CopilotPlugin {
   return { modelManagement: api } as unknown as CopilotPlugin;
 }
 
-/** Let queued microtask chains (per-backend serialized runs) settle. */
-async function flush(): Promise<void> {
-  // The orchestrator chains: prior → enrollBackend (which awaits the async
-  // register/sync) → lastEnrolled.set → finally. Several layers of awaited
-  // promises, so drain generously.
-  for (let i = 0; i < 20; i++) {
-    await Promise.resolve();
-  }
+async function waitForDiscoveryLog(message: string): Promise<void> {
+  await waitFor(() => expect(mockedLogInfo).toHaveBeenCalledWith(expect.stringContaining(message)));
 }
 
 beforeEach(() => {
   mockDescriptors = [];
+  mockedLogInfo.mockClear();
 });
 
 // ---------------------------------------------------------------------------
@@ -209,10 +200,10 @@ describe("wireAgentModelDiscovery", () => {
     mockDescriptors = [makeDescriptor({ id: "codex" })];
     const m = makeManagerFake();
     const a = makeApiFake();
-    m.setState("codex", stateWithModels(["gpt-5", "gpt-5.5"]));
+    m.setCatalog("codex", catalogWithModels(["gpt-5", "gpt-5.5"]));
 
     const unsub = wireAgentModelDiscovery(makePlugin(a.api), m.manager);
-    await flush();
+    await waitForDiscoveryLog("first enrollment for codex");
 
     expect(a.registerAgentProvider).toHaveBeenCalledTimes(1);
     expect(a.registerAgentProvider.mock.calls[0][0]).toMatchObject({
@@ -228,20 +219,15 @@ describe("wireAgentModelDiscovery", () => {
     mockDescriptors = [makeDescriptor({ id: "codex" })];
     const m = makeManagerFake();
     const a = makeApiFake();
-    m.setState("codex", {
-      model: {
-        current: { baseModelId: "gpt-5", effort: null },
-        apply: { kind: "setModel" },
-        availableModels: [
-          { baseModelId: "gpt-5", name: "GPT-5", provider: null, effortOptions: [] },
-          { baseModelId: "blank", name: "", provider: null, effortOptions: [] },
-        ],
-      },
-      mode: null,
+    m.setCatalog("codex", {
+      availableModels: [
+        { baseModelId: "gpt-5", name: "GPT-5", provider: null, effortOptions: [] },
+        { baseModelId: "blank", name: "", provider: null, effortOptions: [] },
+      ],
     });
 
     const unsub = wireAgentModelDiscovery(makePlugin(a.api), m.manager);
-    await flush();
+    await waitForDiscoveryLog("first enrollment for codex");
 
     // "blank" is still enrolled (it's a real wire id) but contributes no
     // display-name fallback, so resolution falls back to catalog/id instead.
@@ -251,42 +237,43 @@ describe("wireAgentModelDiscovery", () => {
     unsub();
   });
 
-  it("seeds enabledModels to the agent's current model on first enrollment", async () => {
+  it("seeds enabledModels to the catalog's first model without reading session state", async () => {
     mockDescriptors = [makeDescriptor({ id: "codex" })];
-    const m = makeManagerFake();
     const a = makeApiFake();
-    // Agent reports gpt-5.5 as current (not the first reported model).
-    m.setState("codex", stateWithModels(["gpt-5", "gpt-5.5"], "gpt-5.5"));
+    const catalog = catalogWithModels(["gpt-5", "gpt-5.5"]);
+    const manager = {
+      getCachedBackendState: jest.fn(() => {
+        throw new Error("model discovery must not read session state");
+      }),
+      getCachedModelCatalog: jest.fn(() => catalog),
+      subscribeModelCache: jest.fn(() => () => {}),
+    } as unknown as AgentSessionManager;
 
-    const unsub = wireAgentModelDiscovery(makePlugin(a.api), m.manager);
-    await flush();
-
-    // registerAgentProvider auto-enrolled both; seeding narrows to the current
-    // model only (gpt-5.5 → cm-codex-1).
-    expect(a.setEnabledModels).toHaveBeenCalledTimes(1);
-    expect(a.setEnabledModels.mock.calls[0]).toEqual(["codex", ["cm-codex-1"]]);
+    const unsub = wireAgentModelDiscovery(makePlugin(a.api), manager);
+    await waitFor(() => expect(a.setEnabledModels).toHaveBeenCalledWith("codex", ["cm-codex-0"]));
     unsub();
   });
 
-  it("falls back to the first model when the current one isn't enrolled", async () => {
-    // opencode suppresses the agent's current model (a BYOK-managed anthropic
-    // model); seeding falls back to the first opencode-only model.
+  it("falls back to the first enrolled model when the catalog default is suppressed", async () => {
+    // opencode suppresses the catalog default (a BYOK-managed anthropic model);
+    // seeding falls back to the first opencode-only model.
     mockDescriptors = [makeDescriptor({ id: "opencode" })];
     const m = makeManagerFake();
     const a = makeApiFake();
     a.byok.push({ origin: { kind: "byok", catalogProviderId: "anthropic" } });
-    m.setState(
+    m.setCatalog(
       "opencode",
-      stateWithModels(
-        ["anthropic/claude-sonnet-4-5", "opencode/big-pickle", "opencode/small-gherkin"],
-        "anthropic/claude-sonnet-4-5"
-      )
+      catalogWithModels([
+        "anthropic/claude-sonnet-4-5",
+        "opencode/big-pickle",
+        "opencode/small-gherkin",
+      ])
     );
 
     const unsub = wireAgentModelDiscovery(makePlugin(a.api), m.manager);
-    await flush();
+    await waitForDiscoveryLog("first enrollment for opencode");
 
-    // anthropic/* suppressed; current not enrolled → first enrolled (big-pickle).
+    // anthropic/* suppressed; default not enrolled → first enrolled (big-pickle).
     expect(a.setEnabledModels).toHaveBeenCalledTimes(1);
     expect(a.setEnabledModels.mock.calls[0]).toEqual(["opencode", ["cm-opencode-0"]]);
     unsub();
@@ -297,10 +284,10 @@ describe("wireAgentModelDiscovery", () => {
     const m = makeManagerFake();
     const a = makeApiFake();
     // One reported model is already the entire enabled set → no narrowing.
-    m.setState("codex", stateWithModels(["gpt-5"]));
+    m.setCatalog("codex", catalogWithModels(["gpt-5"]));
 
     const unsub = wireAgentModelDiscovery(makePlugin(a.api), m.manager);
-    await flush();
+    await waitForDiscoveryLog("first enrollment for codex");
 
     expect(a.setEnabledModels).not.toHaveBeenCalled();
     unsub();
@@ -310,15 +297,15 @@ describe("wireAgentModelDiscovery", () => {
     mockDescriptors = [makeDescriptor({ id: "codex" })];
     const m = makeManagerFake();
     const a = makeApiFake();
-    m.setState("codex", stateWithModels(["gpt-5"]));
+    m.setCatalog("codex", catalogWithModels(["gpt-5"]));
 
     const unsub = wireAgentModelDiscovery(makePlugin(a.api), m.manager);
-    await flush(); // first enrollment → register
+    await waitForDiscoveryLog("first enrollment for codex");
 
     // A new probe reports a changed list; provider now exists → sync only.
-    m.setState("codex", stateWithModels(["gpt-5", "gpt-5.5"]));
+    m.setCatalog("codex", catalogWithModels(["gpt-5", "gpt-5.5"]));
     m.emit();
-    await flush();
+    await waitFor(() => expect(a.syncAgentModels).toHaveBeenCalledTimes(1));
 
     expect(a.registerAgentProvider).toHaveBeenCalledTimes(1);
     expect(a.syncAgentModels).toHaveBeenCalledTimes(1);
@@ -337,15 +324,14 @@ describe("wireAgentModelDiscovery", () => {
     mockDescriptors = [makeDescriptor({ id: "codex" })];
     const m = makeManagerFake();
     const a = makeApiFake();
-    m.setState("codex", stateWithModels(["gpt-5"]));
+    m.setCatalog("codex", catalogWithModels(["gpt-5"]));
 
     const unsub = wireAgentModelDiscovery(makePlugin(a.api), m.manager);
-    await flush();
+    await waitForDiscoveryLog("first enrollment for codex");
     a.syncAgentModels.mockClear();
 
     // Same list re-reported.
     m.emit();
-    await flush();
 
     expect(a.syncAgentModels).not.toHaveBeenCalled();
     unsub();
@@ -356,10 +342,13 @@ describe("wireAgentModelDiscovery", () => {
     const m = makeManagerFake();
     const a = makeApiFake();
     a.byok.push({ origin: { kind: "byok", catalogProviderId: "anthropic" } });
-    m.setState("opencode", stateWithModels(["anthropic/claude-sonnet-4-5", "opencode/big-pickle"]));
+    m.setCatalog(
+      "opencode",
+      catalogWithModels(["anthropic/claude-sonnet-4-5", "opencode/big-pickle"])
+    );
 
     const unsub = wireAgentModelDiscovery(makePlugin(a.api), m.manager);
-    await flush();
+    await waitForDiscoveryLog("first enrollment for opencode");
 
     // anthropic/* is suppressed (BYOK-managed); only opencode/* enrolls.
     expect(a.registerAgentProvider.mock.calls[0][0].wireModelIds).toEqual(["opencode/big-pickle"]);
@@ -371,10 +360,10 @@ describe("wireAgentModelDiscovery", () => {
     const m = makeManagerFake();
     const a = makeApiFake();
     // A settled state that reports zero models (distinct from null/no-state).
-    m.setState("codex", stateWithModels([]));
+    m.setCatalog("codex", catalogWithModels([]));
 
     const unsub = wireAgentModelDiscovery(makePlugin(a.api), m.manager);
-    await flush();
+    await waitForDiscoveryLog("empty model list for codex");
 
     expect(a.registerAgentProvider).not.toHaveBeenCalled();
     expect(a.syncAgentModels).not.toHaveBeenCalled();
@@ -395,10 +384,10 @@ describe("wireAgentModelDiscovery", () => {
       origin: { kind: "agent", agentType: "opencode" },
     });
     a.byok.push({ origin: { kind: "byok", catalogProviderId: "anthropic" } });
-    m.setState("opencode", stateWithModels(["anthropic/claude-sonnet-4-5"]));
+    m.setCatalog("opencode", catalogWithModels(["anthropic/claude-sonnet-4-5"]));
 
     const unsub = wireAgentModelDiscovery(makePlugin(a.api), m.manager);
-    await flush();
+    await waitForDiscoveryLog("empty model list for opencode");
 
     // All reported ids are suppressed → empty list → no destructive sync.
     expect(a.syncAgentModels).not.toHaveBeenCalled();
@@ -406,32 +395,29 @@ describe("wireAgentModelDiscovery", () => {
     unsub();
   });
 
-  it("ignores a backend that has not reported a model state yet", async () => {
+  it("ignores a backend that has not reported a model catalog yet", () => {
     mockDescriptors = [makeDescriptor({ id: "codex" })];
     const m = makeManagerFake();
     const a = makeApiFake();
-    m.setState("codex", null);
+    m.setCatalog("codex", null);
 
     const unsub = wireAgentModelDiscovery(makePlugin(a.api), m.manager);
-    await flush();
 
     expect(a.registerAgentProvider).not.toHaveBeenCalled();
     expect(a.syncAgentModels).not.toHaveBeenCalled();
     unsub();
   });
 
-  it("after unsubscribe, further cache emits do nothing", async () => {
+  it("after unsubscribe, further cache emits do nothing", () => {
     mockDescriptors = [makeDescriptor({ id: "codex" })];
     const m = makeManagerFake();
     const a = makeApiFake();
 
     const unsub = wireAgentModelDiscovery(makePlugin(a.api), m.manager);
-    await flush();
     unsub();
 
-    m.setState("codex", stateWithModels(["gpt-5"]));
+    m.setCatalog("codex", catalogWithModels(["gpt-5"]));
     m.emit();
-    await flush();
     expect(a.registerAgentProvider).not.toHaveBeenCalled();
   });
 });
