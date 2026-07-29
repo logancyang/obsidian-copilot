@@ -24,6 +24,8 @@ import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type { AgentChatUIState } from "@/agentMode/session/AgentChatUIState";
 import type { CopilotSettings } from "@/settings/model";
 
+type ModelCatalog = NonNullable<ReturnType<AgentSessionManager["getCachedModelCatalog"]>>;
+
 jest.mock("obsidian", () => ({
   Notice: jest.fn(),
   Modal: class {},
@@ -137,6 +139,10 @@ function makeModelState(currentBaseId: string, available: ModelEntry[]): ModelSt
   };
 }
 
+function makeCatalog(availableModels: ModelEntry[] | null): ModelCatalog {
+  return { availableModels };
+}
+
 function makeUIState(opts: {
   canSwitchModel?: boolean | null;
   canSwitchEffort?: boolean | null;
@@ -150,7 +156,7 @@ function makeUIState(opts: {
 }
 
 function makeManager(opts: {
-  cachedStateById?: Record<string, BackendState | null>;
+  catalogById?: Record<string, ModelCatalog | null>;
   preloadStatusById?: Record<string, "pending" | "ready" | "error" | "absent">;
   effortCatalogById?: Record<string, Record<string, EffortOption[]>>;
   defaultSelectionById?: Record<string, { baseModelId: string; effort: string | null } | null>;
@@ -161,7 +167,7 @@ function makeManager(opts: {
   closeSession?: jest.Mock;
 }): AgentSessionManager {
   return {
-    getCachedBackendState: (id: string) => opts.cachedStateById?.[id] ?? null,
+    getCachedModelCatalog: (id: string) => opts.catalogById?.[id] ?? null,
     getPreloadStatus: (id: string) => opts.preloadStatusById?.[id] ?? "absent",
     getEffortCatalog: (id: string) => opts.effortCatalogById?.[id] ?? null,
     getDefaultSelection: (id: string) => opts.defaultSelectionById?.[id] ?? null,
@@ -178,7 +184,32 @@ const emptySettings = {} as CopilotSettings;
 // ---- buildPickerEntries ----
 
 describe("buildPickerEntries", () => {
-  it("keeps enabled models selectable when a settled preload has no live catalog", () => {
+  it("builds shared choices from the model catalog without reading legacy session state", () => {
+    const entry = makeModelEntry("catalog-model");
+    const descriptor = {
+      ...makeDescriptor("opencode"),
+      getEnabledModelEntries: () => [
+        { baseModelId: entry.baseModelId, name: entry.name, credentialState: "ok" as const },
+      ],
+    } as unknown as BackendDescriptor;
+    const manager = {
+      getCachedBackendState: jest.fn(() => {
+        throw new Error("picker choices must not read session state");
+      }),
+      getCachedModelCatalog: () => ({ availableModels: [entry] }),
+      getPreloadStatus: () => "ready",
+      getDefaultSelection: () => null,
+    } as unknown as AgentSessionManager;
+    const { entries } = buildPickerEntries(
+      manager,
+      [descriptor],
+      {} as ModelActiveContext,
+      emptySettings
+    );
+    expect(entries.map((model) => model.name)).toEqual(["catalog-model"]);
+  });
+
+  it("keeps enabled models selectable when a settled preload has no discovered catalog", () => {
     const claude = {
       ...makeDescriptor("claude"),
       getEnabledModelEntries: () => [
@@ -187,7 +218,7 @@ describe("buildPickerEntries", () => {
       ],
     } as unknown as BackendDescriptor;
     const manager = makeManager({
-      cachedStateById: { claude: null },
+      catalogById: { claude: null },
       preloadStatusById: { claude: "ready" },
     });
     const ctx: ModelActiveContext = {
@@ -206,7 +237,7 @@ describe("buildPickerEntries", () => {
     expect(entries.every((entry) => entry._disabledReason === undefined)).toBe(true);
   });
 
-  it("does not invent model rows when the backend intentionally reports mode-only state", () => {
+  it("does not invent model rows when discovery settles without a model catalog", () => {
     const descriptor = {
       ...makeDescriptor("claude"),
       getEnabledModelEntries: () => [
@@ -214,12 +245,7 @@ describe("buildPickerEntries", () => {
       ],
     } as unknown as BackendDescriptor;
     const manager = makeManager({
-      cachedStateById: {
-        claude: {
-          model: null,
-          mode: { current: null, options: [], apply: {} },
-        },
-      },
+      catalogById: { claude: makeCatalog(null) },
       preloadStatusById: { claude: "ready" },
     });
     const ctx: ModelActiveContext = {
@@ -243,9 +269,9 @@ describe("buildPickerEntries", () => {
     const codexEntry = makeModelEntry("gpt-5");
     const claudeEntry = makeModelEntry("opus");
     const manager = makeManager({
-      cachedStateById: {
-        codex: { model: makeModelState("gpt-5", [codexEntry]), mode: null },
-        claude: { model: makeModelState("opus", [claudeEntry]), mode: null },
+      catalogById: {
+        codex: makeCatalog([codexEntry]),
+        claude: makeCatalog([claudeEntry]),
       },
     });
     const ctx: ModelActiveContext = {
@@ -266,11 +292,11 @@ describe("buildPickerEntries", () => {
     const codex = makeDescriptor("codex");
     const stranded = makeModelEntry("ghost-model", "Ghost");
     const visible = makeModelEntry("real-model");
-    // Only the "visible" model is in the cached catalog — the active "ghost"
+    // Only the "visible" model is in the discovered catalog — the active "ghost"
     // is not, so synth-fallback should fire.
     const manager = makeManager({
-      cachedStateById: {
-        codex: { model: makeModelState("real-model", [visible]), mode: null },
+      catalogById: {
+        codex: makeCatalog([visible]),
       },
     });
     const ctx: ModelActiveContext = {
@@ -292,8 +318,8 @@ describe("buildPickerEntries", () => {
     const codex = makeDescriptor("codex");
     const entry = makeModelEntry("gpt-5");
     const manager = makeManager({
-      cachedStateById: {
-        codex: { model: makeModelState("gpt-5", [entry]), mode: null },
+      catalogById: {
+        codex: makeCatalog([entry]),
       },
     });
     const ctx: ModelActiveContext = {
@@ -326,11 +352,8 @@ describe("buildPickerEntries", () => {
       ],
     } as unknown as BackendDescriptor;
     const manager = makeManager({
-      cachedStateById: {
-        opencode: {
-          model: makeModelState("anthropic/claude-sonnet-4-6", [enabled, disabled]),
-          mode: null,
-        },
+      catalogById: {
+        opencode: makeCatalog([enabled, disabled]),
       },
     });
     const ctx: ModelActiveContext = {
@@ -356,8 +379,8 @@ describe("buildPickerEntries", () => {
       getEnabledModelEntries: () => [],
     } as unknown as BackendDescriptor;
     const manager = makeManager({
-      cachedStateById: {
-        opencode: { model: makeModelState("kept-model", [kept, dropped]), mode: null },
+      catalogById: {
+        opencode: makeCatalog([kept, dropped]),
       },
     });
     const ctx: ModelActiveContext = {
@@ -388,8 +411,8 @@ describe("buildPickerEntries", () => {
       ],
     } as unknown as BackendDescriptor;
     const manager = makeManager({
-      cachedStateById: {
-        codex: { model: makeModelState("gpt-5", [entry]), mode: null },
+      catalogById: {
+        codex: makeCatalog([entry]),
       },
     });
     const ctx: ModelActiveContext = {
@@ -416,8 +439,8 @@ describe("buildPickerEntries", () => {
     const visible = makeModelEntry("real-model");
     const codex = makeDescriptor("codex");
     const manager = makeManager({
-      cachedStateById: {
-        codex: { model: makeModelState("real-model", [visible]), mode: null },
+      catalogById: {
+        codex: makeCatalog([visible]),
       },
     });
     const ctx: ModelActiveContext = {
@@ -444,8 +467,8 @@ describe("buildPickerEntries", () => {
       getEnabledModelEntries: () => [],
     } as unknown as BackendDescriptor;
     const manager = makeManager({
-      cachedStateById: {
-        opencode: { model: makeModelState("anthropic/claude-haiku", [sticky]), mode: null },
+      catalogById: {
+        opencode: makeCatalog([sticky]),
       },
     });
     const ctx: ModelActiveContext = {
@@ -470,8 +493,8 @@ describe("buildPickerEntries", () => {
       ],
     } as unknown as BackendDescriptor;
     const manager = makeManager({
-      cachedStateById: {
-        claude: { model: makeModelState("opus", [makeModelEntry("opus")]), mode: null },
+      catalogById: {
+        claude: makeCatalog([makeModelEntry("opus")]),
       },
     });
     const ctx: ModelActiveContext = {
@@ -489,7 +512,7 @@ describe("buildPickerEntries", () => {
   });
 
   it("flags a warned cloud backend's preload placeholder row", () => {
-    // No cached catalog yet + a settled preload → the loop synthesizes a
+    // No discovered catalog yet + a settled preload → the loop synthesizes a
     // placeholder; the self-host pass must reach it too (it lives in the same
     // section, after the placeholder push).
     mockSelfHostWarnIds.add("claude");
@@ -500,7 +523,7 @@ describe("buildPickerEntries", () => {
       ],
     } as unknown as BackendDescriptor;
     const manager = makeManager({
-      cachedStateById: { claude: null },
+      catalogById: { claude: null },
       preloadStatusById: { claude: "pending" },
     });
     const ctx: ModelActiveContext = {
@@ -525,8 +548,8 @@ describe("buildPickerEntries", () => {
     const stranded = makeModelEntry("ghost-model", "Ghost");
     const visible = makeModelEntry("real-model");
     const manager = makeManager({
-      cachedStateById: {
-        codex: { model: makeModelState("real-model", [visible]), mode: null },
+      catalogById: {
+        codex: makeCatalog([visible]),
       },
     });
     const ctx: ModelActiveContext = {
@@ -810,37 +833,31 @@ describe("buildEffortOptionsByModelKey", () => {
   const ACTIVE = "github-copilot/gpt-5.4";
   const OTHER = "opencode/nemotron-3-super-free";
 
-  function stateWithEffort(
-    currentBaseId: string,
+  function catalogWithEffort(
     available: { baseModelId: string; effortOptions: EffortOption[] }[]
-  ): BackendState {
-    return {
-      model: {
-        current: { baseModelId: currentBaseId, effort: null },
-        apply: { kind: "setConfigOption", configId: "model" },
-        availableModels: available.map((a) => ({
-          baseModelId: a.baseModelId,
-          name: a.baseModelId,
-          provider: null,
-          effortOptions: a.effortOptions,
-        })),
-      },
-      mode: null,
-    };
+  ): ModelCatalog {
+    return makeCatalog(
+      available.map((a) => ({
+        baseModelId: a.baseModelId,
+        name: a.baseModelId,
+        provider: null,
+        effortOptions: a.effortOptions,
+      }))
+    );
   }
 
-  it("prefers live effort for the active model and falls back to the prefetch cache for others", () => {
+  it("prefers catalog effort and falls back to the prefetch cache for other models", () => {
     const opencode = makeDescriptor("opencode");
     const manager = makeManager({
-      cachedStateById: {
-        opencode: stateWithEffort(ACTIVE, [
+      catalogById: {
+        opencode: catalogWithEffort([
           { baseModelId: ACTIVE, effortOptions: [{ value: "high", label: "high" }] },
-          { baseModelId: OTHER, effortOptions: [] }, // not active → no live effort
+          { baseModelId: OTHER, effortOptions: [] },
         ]),
       },
       effortCatalogById: {
         opencode: {
-          [ACTIVE]: [{ value: "low", label: "low" }], // ignored — live wins
+          [ACTIVE]: [{ value: "low", label: "low" }], // ignored — catalog wins
           [OTHER]: [
             { value: "minimal", label: "minimal" },
             { value: "max", label: "max" },
@@ -860,11 +877,11 @@ describe("buildEffortOptionsByModelKey", () => {
     ]);
   });
 
-  it("returns empty when neither live nor cached effort exists", () => {
+  it("returns empty when neither catalog nor prefetched effort exists", () => {
     const opencode = makeDescriptor("opencode");
     const manager = makeManager({
-      cachedStateById: {
-        opencode: stateWithEffort(OTHER, [{ baseModelId: OTHER, effortOptions: [] }]),
+      catalogById: {
+        opencode: catalogWithEffort([{ baseModelId: OTHER, effortOptions: [] }]),
       },
       effortCatalogById: { opencode: {} },
     });
@@ -906,11 +923,8 @@ describe("buildPickerEntries — persisted capability propagation", () => {
       ],
     } as unknown as BackendDescriptor;
     const manager = makeManager({
-      cachedStateById: {
-        claude: {
-          model: makeModelState("claude-sonnet-4-5", [reported("claude-sonnet-4-5", "anthropic")]),
-          mode: null,
-        },
+      catalogById: {
+        claude: makeCatalog([reported("claude-sonnet-4-5", "anthropic")]),
       },
     });
     const { entries } = buildPickerEntries(manager, [claude], ctxFor("claude"), emptySettings);
@@ -926,11 +940,8 @@ describe("buildPickerEntries — persisted capability propagation", () => {
       ],
     } as unknown as BackendDescriptor;
     const manager = makeManager({
-      cachedStateById: {
-        claude: {
-          model: makeModelState("claude-sonnet-4-5", [reported("claude-sonnet-4-5", "anthropic")]),
-          mode: null,
-        },
+      catalogById: {
+        claude: makeCatalog([reported("claude-sonnet-4-5", "anthropic")]),
       },
     });
     const { entries } = buildPickerEntries(manager, [claude], ctxFor("claude"), emptySettings);

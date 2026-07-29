@@ -56,7 +56,7 @@ export function appendBackendSection(
   entries: ModelSelectorEntry[],
   descriptor: BackendDescriptor,
   ctx: {
-    /** Translator-produced entries from `state.model.availableModels`. */
+    /** Translator-produced entries from probe-owned model discovery. */
     backendModels: ReadonlyArray<ModelEntry> | null;
     /** baseModelId of the active session — never filtered out. */
     keepBaseModelId: string | null;
@@ -275,7 +275,7 @@ export function collectModelActiveContext(manager: AgentSessionManager): ModelAc
 
 /**
  * Builds a cross-backend picker that keeps the active choice visible through preload gaps and catalog changes.
- * @param manager - The session manager that owns live and cached backend selection state.
+ * @param manager - The session manager that owns session selection and shared model discovery.
  * @param descriptors - The registered backends that may contribute picker choices.
  * @param ctx - The active session and model context that must remain stable in the picker.
  * @param settings - The persisted configuration used to determine enabled choices.
@@ -290,27 +290,26 @@ export function buildPickerEntries(
   for (const descriptor of descriptors) {
     const isActiveBackend = descriptor.id === ctx.activeBackendId;
     if (!isActiveBackend && ctx.activeSessionHasHistory) continue;
-    const cached = manager.getCachedBackendState(descriptor.id);
+    const catalog = manager.getCachedModelCatalog(descriptor.id);
     const keepBaseModelId = isActiveBackend
       ? (ctx.activeModelState?.current.baseModelId ?? null)
       : (manager.getDefaultSelection(descriptor.id)?.baseModelId ?? null);
-    const backendModels = cached?.model?.availableModels ?? null;
-    const hasNoCachedState = cached === null;
+    const backendModels = catalog?.availableModels ?? null;
+    const hasNoCatalog = catalog === null;
     const preloadStatus = manager.getPreloadStatus(descriptor.id);
     const sectionStart = entries.length;
     appendBackendSection(entries, descriptor, {
       backendModels,
       keepBaseModelId,
       settings,
-      useEnabledFallback:
-        hasNoCachedState && (preloadStatus === "ready" || preloadStatus === "error"),
+      useEnabledFallback: hasNoCatalog && (preloadStatus === "ready" || preloadStatus === "error"),
     });
-    // No catalog cached yet (and not because the agent intentionally
-    // omitted a model state). Show a per-backend loading / failure row so
+    // No catalog discovered yet (distinct from a settled probe reporting no
+    // model catalog). Show a per-backend loading / failure row so
     // the user can see every installed backend immediately — important
     // because the chat now unblocks on just the *active* backend's
     // preload, not the global preload.
-    if (hasNoCachedState && entries.length === sectionStart) {
+    if (hasNoCatalog && entries.length === sectionStart) {
       if (preloadStatus === "pending") {
         entries.push(synthesizePreloadPlaceholder(descriptor, "pending"));
       } else if (preloadStatus === "ready" || preloadStatus === "error") {
@@ -500,20 +499,19 @@ export function buildEffortOptionsByModelKey(
 }
 
 /**
- * Effort options for one (backend, model). The reported catalog only carries
- * effort for the *active* model (opencode surfaces it only for the current
- * model); fall back to the preloader's prefetched effort catalog for every
- * other model. Returns `EMPTY_EFFORT_OPTIONS` when the model has none.
+ * Effort options for one (backend, model). Prefer options carried by shared
+ * model discovery, then fall back to the preloader's per-model effort
+ * prefetch. Returns `EMPTY_EFFORT_OPTIONS` when the model has none.
  */
 export function resolveEffortOptions(
   manager: AgentSessionManager,
   backendId: BackendId,
   baseModelId: string
 ): EffortOption[] {
-  const catalog = manager.getCachedBackendState(backendId)?.model?.availableModels ?? null;
-  const found = catalog?.find((m) => m.baseModelId === baseModelId);
-  const live = found?.effortOptions ?? [];
-  if (live.length > 0) return live;
+  const models = manager.getCachedModelCatalog(backendId)?.availableModels ?? null;
+  const found = models?.find((m) => m.baseModelId === baseModelId);
+  const reported = found?.effortOptions ?? [];
+  if (reported.length > 0) return reported;
   return manager.getEffortCatalog(backendId)?.[baseModelId] ?? EMPTY_EFFORT_OPTIONS;
 }
 
