@@ -58,7 +58,6 @@ describe("useAgentModelPicker", () => {
         getState: () => state,
         hasUserVisibleMessages: () => false,
       } as unknown as AgentSession;
-      const getCachedBackendState = jest.fn(() => stateWithModel("legacy"));
       const manager = {
         getActiveSession: () => session,
         getActiveChatUIState: () => activeUI,
@@ -69,7 +68,6 @@ describe("useAgentModelPicker", () => {
             cacheListener = null;
           };
         },
-        getCachedBackendState,
         getModelCacheSignature: () => catalogSignal,
       } as unknown as AgentSessionManager;
 
@@ -83,7 +81,6 @@ describe("useAgentModelPicker", () => {
       catalogSignal = "catalog-two";
       act(() => cacheListener?.());
       expect(result.current?.value).toBe("second:catalog-two");
-      expect(getCachedBackendState).not.toHaveBeenCalled();
     });
   });
 });

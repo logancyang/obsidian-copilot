@@ -18,8 +18,7 @@ jest.mock("@/agentMode/backends/registry", () => ({
 
 describe("useAgentModePicker", () => {
   describe("useAgentModePicker()", () => {
-    it("does not read shared cached state while the active session is starting", () => {
-      const getCachedBackendState = jest.fn();
+    it("returns null while the active session is starting", () => {
       const activeUI = {
         canSwitchMode: () => null,
         subscribe: () => jest.fn(),
@@ -35,13 +34,11 @@ describe("useAgentModePicker", () => {
         getActiveChatUIState: () => activeUI,
         subscribe: () => jest.fn(),
         subscribeModelCache: () => jest.fn(),
-        getCachedBackendState,
       } as unknown as AgentSessionManager;
 
       const { result } = renderHook(() => useAgentModePicker(manager));
 
       expect(result.current).toBeNull();
-      expect(getCachedBackendState).not.toHaveBeenCalled();
     });
   });
 });

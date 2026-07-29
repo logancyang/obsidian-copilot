@@ -242,9 +242,6 @@ describe("wireAgentModelDiscovery", () => {
     const a = makeApiFake();
     const catalog = catalogWithModels(["gpt-5", "gpt-5.5"]);
     const manager = {
-      getCachedBackendState: jest.fn(() => {
-        throw new Error("model discovery must not read session state");
-      }),
       getCachedModelCatalog: jest.fn(() => catalog),
       subscribeModelCache: jest.fn(() => () => {}),
     } as unknown as AgentSessionManager;

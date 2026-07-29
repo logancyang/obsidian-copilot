@@ -51,7 +51,6 @@ const DESCRIPTORS = [
   makeDescriptor("codex", "Codex", false),
 ];
 
-const mockGetCachedBackendState = jest.fn();
 const mockGetCachedModelCatalog = jest.fn();
 const mockPreloadModels = jest.fn();
 
@@ -76,7 +75,6 @@ jest.mock("@/contexts/PluginContext", () => ({
   usePlugin: () => ({
     app: {},
     agentSessionManager: {
-      getCachedBackendState: mockGetCachedBackendState,
       getCachedModelCatalog: mockGetCachedModelCatalog,
       preloadModels: mockPreloadModels,
     },
@@ -102,9 +100,6 @@ describe("AgentSettings", () => {
     installStates.opencode = { kind: "ready", source: "managed" };
     installStates.claude = { kind: "ready", source: "custom" };
     installStates.codex = { kind: "ready", source: "custom" };
-    mockGetCachedBackendState.mockReset().mockImplementation(() => {
-      throw new Error("settings must not read session state");
-    });
     mockGetCachedModelCatalog.mockReset().mockReturnValue({ availableModels: [] });
     mockPreloadModels.mockReset().mockResolvedValue(undefined);
   });
@@ -114,7 +109,6 @@ describe("AgentSettings", () => {
 
     await waitFor(() => expect(mockGetCachedModelCatalog).toHaveBeenCalledWith("opencode"));
     expect(mockPreloadModels).not.toHaveBeenCalled();
-    expect(mockGetCachedBackendState).not.toHaveBeenCalled();
   });
 
   it("preloads models when the shared catalog is unavailable", async () => {
@@ -123,7 +117,6 @@ describe("AgentSettings", () => {
     render(<AgentSettings />);
 
     await waitFor(() => expect(mockPreloadModels).toHaveBeenCalledWith("opencode"));
-    expect(mockGetCachedBackendState).not.toHaveBeenCalled();
   });
 
   it("renders the four sub-tabs in order: OpenCode, Claude, Codex, Quick Chat", () => {

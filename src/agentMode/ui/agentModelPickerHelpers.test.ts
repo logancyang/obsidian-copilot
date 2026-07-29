@@ -79,7 +79,7 @@ function makeState(modelId: string): BackendState {
 }
 
 describe("collectModelActiveContext", () => {
-  it("uses the active session's current model instead of a sibling cache entry", () => {
+  it("uses the active session's current model", () => {
     const activeState = makeState("active-model");
     const manager = {
       getActiveSession: () => ({
@@ -88,13 +88,12 @@ describe("collectModelActiveContext", () => {
         hasUserVisibleMessages: () => false,
       }),
       getActiveChatUIState: () => null,
-      getCachedBackendState: () => makeState("sibling-model"),
     } as unknown as AgentSessionManager;
 
     expect(collectModelActiveContext(manager).activeModelState).toBe(activeState.model);
   });
 
-  it("does not borrow a current model from the shared cache while the active session is starting", () => {
+  it("returns no current model while the active session is starting", () => {
     const manager = {
       getActiveSession: () => ({
         backendId: "codex",
@@ -102,7 +101,6 @@ describe("collectModelActiveContext", () => {
         hasUserVisibleMessages: () => false,
       }),
       getActiveChatUIState: () => null,
-      getCachedBackendState: () => makeState("sibling-model"),
     } as unknown as AgentSessionManager;
 
     expect(collectModelActiveContext(manager).activeModelState).toBeNull();
@@ -184,7 +182,7 @@ const emptySettings = {} as CopilotSettings;
 // ---- buildPickerEntries ----
 
 describe("buildPickerEntries", () => {
-  it("builds shared choices from the model catalog without reading legacy session state", () => {
+  it("builds shared choices from the model catalog", () => {
     const entry = makeModelEntry("catalog-model");
     const descriptor = {
       ...makeDescriptor("opencode"),
@@ -193,9 +191,6 @@ describe("buildPickerEntries", () => {
       ],
     } as unknown as BackendDescriptor;
     const manager = {
-      getCachedBackendState: jest.fn(() => {
-        throw new Error("picker choices must not read session state");
-      }),
       getCachedModelCatalog: () => ({ availableModels: [entry] }),
       getPreloadStatus: () => "ready",
       getDefaultSelection: () => null,

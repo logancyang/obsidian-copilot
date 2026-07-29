@@ -268,8 +268,8 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
         }
       }
     } finally {
-      // Restore the probe session's model so the adopted session isn't left on
-      // the last probed model.
+      // Restore the probe session itself so discovery does not persist the last
+      // prefetched model into the next preload.
       try {
         await proc.setSessionConfigOption({ sessionId, configId, value: originalWire });
       } catch (e) {

@@ -5,6 +5,7 @@
  * `takeWarm`; failures and shutdowns must dispose the still-warm proc.
  */
 import { App, FileSystemAdapter } from "obsidian";
+import { waitFor } from "@testing-library/react";
 import type CopilotPlugin from "@/main";
 import { AgentModelPreloader } from "./AgentModelPreloader";
 import type { BackendDescriptor, BackendProcess, BackendState, ModelSelection } from "./types";
@@ -141,28 +142,6 @@ describe("AgentModelPreloader", () => {
       });
     });
 
-    it("does not let a live session overwrite the discovered model catalog", async () => {
-      const { descriptor } = buildDescriptor(() => makeMockProc());
-      const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
-      await preloader.preload("claude-sdk");
-      preloader.takeWarm("claude-sdk");
-
-      preloader.setCached("claude-sdk", {
-        model: {
-          current: { baseModelId: "minimax", effort: null },
-          availableModels: [
-            { baseModelId: "minimax", name: "Minimax", provider: null, effortOptions: [] },
-          ],
-          apply: { kind: "setModel" },
-        },
-        mode: null,
-      });
-
-      expect(preloader.getCachedModelCatalog("claude-sdk")?.availableModels?.[0].baseModelId).toBe(
-        "claude-sonnet"
-      );
-    });
-
     it("records a completed probe that reports no model catalog", async () => {
       const modeOnlyState: BackendState = {
         model: null,
@@ -193,25 +172,24 @@ describe("AgentModelPreloader", () => {
     expect(procHandle.start).toHaveBeenCalledTimes(1);
     expect(procHandle.shutdown).not.toHaveBeenCalled();
 
-    // State cache populated so the picker can read it before the manager
-    // takes ownership.
-    const cached = preloader.getCachedBackendState("claude-sdk");
-    expect(cached?.model?.current.baseModelId).toBe("claude-sonnet");
+    expect(preloader.getCachedModelCatalog("claude-sdk")?.availableModels?.[0].baseModelId).toBe(
+      "claude-sonnet"
+    );
 
-    // First takeWarm yields the running proc + probe sessionId + state.
+    // First takeWarm yields only the running process.
     const warm = preloader.takeWarm("claude-sdk");
     expect(warm).not.toBeNull();
     expect(warm?.proc).toBe(procHandle.proc);
-    expect(warm?.probeSessionId).toBe("probe-1");
-    expect(warm?.state.model?.current.baseModelId).toBe("claude-sonnet");
+    expect(warm).not.toHaveProperty("state");
 
     // Single-shot — second call returns null so the manager can never
     // hand out the same warm proc to two sessions.
     expect(preloader.takeWarm("claude-sdk")).toBeNull();
 
-    // The cached state survives consumption so the picker keeps rendering
-    // until the live session pushes its own state via `setCached`.
-    expect(preloader.getCachedBackendState("claude-sdk")).not.toBeNull();
+    // Probe-owned discovery survives process handoff.
+    expect(preloader.getCachedModelCatalog("claude-sdk")?.availableModels?.[0].baseModelId).toBe(
+      "claude-sonnet"
+    );
   });
 
   it("shuts down a still-warm proc on dispose so the subprocess does not leak", async () => {
@@ -222,10 +200,7 @@ describe("AgentModelPreloader", () => {
     expect(procHandle.shutdown).not.toHaveBeenCalled();
 
     preloader.shutdown();
-    // shutdown is async-fire-and-forget; wait a tick.
-    await Promise.resolve();
-
-    expect(procHandle.shutdown).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(procHandle.shutdown).toHaveBeenCalledTimes(1));
     expect(preloader.takeWarm("claude-sdk")).toBeNull();
     expect(preloader.getCachedModelCatalog("claude-sdk")).toBeNull();
   });
@@ -321,13 +296,11 @@ describe("AgentModelPreloader", () => {
     const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
 
     await preloader.preload("claude-sdk");
-    expect(preloader.getCachedBackendState("claude-sdk")).not.toBeNull();
+    expect(preloader.getCachedModelCatalog("claude-sdk")).not.toBeNull();
 
     preloader.clearCached("claude-sdk");
-    await Promise.resolve();
 
-    expect(procHandle.shutdown).toHaveBeenCalledTimes(1);
-    expect(preloader.getCachedBackendState("claude-sdk")).toBeNull();
+    await waitFor(() => expect(procHandle.shutdown).toHaveBeenCalledTimes(1));
     expect(preloader.getCachedModelCatalog("claude-sdk")).toBeNull();
     expect(preloader.takeWarm("claude-sdk")).toBeNull();
   });

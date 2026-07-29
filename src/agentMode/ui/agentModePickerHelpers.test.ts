@@ -25,7 +25,6 @@ function makeUIState(canSwitchMode: boolean | null): AgentChatUIState {
 function makeManager(opts: {
   backendId: string | null;
   state: BackendState | null;
-  cachedState?: BackendState | null;
   canSwitchMode?: boolean | null;
   applyMode?: jest.Mock;
 }): AgentSessionManager {
@@ -38,7 +37,6 @@ function makeManager(opts: {
   return {
     getActiveSession: () => session,
     getActiveChatUIState: () => makeUIState(opts.canSwitchMode ?? null),
-    getCachedBackendState: () => opts.cachedState ?? null,
     applyMode: opts.applyMode ?? jest.fn().mockResolvedValue(undefined),
   } as unknown as AgentSessionManager;
 }
@@ -67,19 +65,10 @@ describe("buildAgentModePicker", () => {
     ).toBeNull();
   });
 
-  it("does not borrow a mode from the shared cache while the active session is starting", () => {
-    const cachedState: BackendState = {
-      model: null,
-      mode: {
-        current: "plan",
-        options: [{ value: "plan", label: "Plan" }],
-        apply: { plan: { kind: "setMode", nativeId: "plan" } },
-      },
-    };
-
+  it("returns null while the active session is starting", () => {
     expect(
       buildAgentModePicker({
-        manager: makeManager({ backendId: "codex", state: null, cachedState }),
+        manager: makeManager({ backendId: "codex", state: null }),
       })
     ).toBeNull();
   });
