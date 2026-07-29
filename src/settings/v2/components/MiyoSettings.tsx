@@ -10,7 +10,12 @@ import { cn } from "@/lib/utils";
 import { logWarn } from "@/logger";
 import { MiyoClient } from "@/miyo/MiyoClient";
 import { type CapabilityStatus, refreshMiyoStatus } from "@/miyo/miyoStatusStore";
-import { enqueueMiyoFolderMutation, resyncMiyoFolder, verifyMiyoScope } from "@/miyo/miyoResync";
+import {
+  assertCurrentLifecycle,
+  enqueueMiyoFolderMutation,
+  resyncMiyoFolder,
+  verifyMiyoScope,
+} from "@/miyo/miyoResync";
 import {
   buildMiyoSyncReceipt,
   getMiyoCustomUrl,
@@ -439,13 +444,13 @@ export const MiyoSettings: React.FC = () => {
       //     If a review flags this again, point them at this note.
       // Serialized with resync runs: the Resync button's DELETE/POST must never
       // interleave with this registration. The task reads settings when it RUNS,
-      // settings when it RUNS, not when it is queued — it can sit behind an
+      // not when it is queued — it can sit behind an
       // in-flight mutation, and a root/endpoint change landing in that window
       // would otherwise be submitted as an already-stale scope (with a receipt
       // vouching for it). Mirrors resyncMiyoFolder's execution-time fresh read;
       // the receipt is built from the same snapshot as the submitted body so it
       // always describes what the server actually holds.
-      const submission = await enqueueMiyoFolderMutation(async () => {
+      const submission = await enqueueMiyoFolderMutation(async (lifecycle) => {
         const fresh = getSettings();
         const freshUrl = getMiyoCustomUrl(fresh);
         // DESIGN NOTE — a remote flip mid-queue surfaces as the retryable
@@ -466,7 +471,10 @@ export const MiyoSettings: React.FC = () => {
         }
         // Snapshot the credential alongside the endpoint: this registration is
         // queued and can outlive the vault that asked for it, while the auth
-        // header is otherwise read live per request.
+        // header is otherwise read live per request. The lifecycle re-check is
+        // separate from `superseded()` above — that one tracks the UI's own
+        // attempt generation, this one whether the vault is still open at all.
+        assertCurrentLifecycle(lifecycle);
         const created = await new MiyoClient({ plusLicenseKey: fresh.plusLicenseKey }).addFolder(
           {
             path: vaultBase,

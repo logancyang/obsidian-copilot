@@ -253,6 +253,53 @@ describe("MiyoClient", () => {
     });
   });
 
+  describe("constructor", () => {
+    it("authenticates with the snapshot it was given, not whatever settings hold later", async () => {
+      // A queued Miyo mutation can outlive the vault that started it. Reading
+      // the key per request would then send the newly-opened vault's credential
+      // to the outgoing vault's endpoint, so callers whose work spans that
+      // boundary capture the key up front.
+      mockedRequestUrl.mockResolvedValue({
+        status: 201,
+        json: { path: "/Users/me/vault" },
+        text: "",
+      } as RequestUrlResponse);
+      const client = new MiyoClient({ plusLicenseKey: "key-of-the-vault-that-asked" });
+
+      // The vault switches while the mutation is queued.
+      mockedGetSettings.mockReturnValue({
+        plusLicenseKey: "key-of-a-different-vault",
+        debug: false,
+      } as CopilotSettings);
+      mockedGetDecryptedKey.mockImplementation(async (value: string) => value);
+
+      await client.addFolder({ path: "/Users/me/vault" });
+
+      expect(mockedRequestUrl).toHaveBeenCalledWith(
+        expect.objectContaining({
+          headers: { Authorization: "Bearer key-of-the-vault-that-asked" },
+        })
+      );
+    });
+
+    it("reads the live key when given no snapshot, as short-lived callers expect", async () => {
+      mockedRequestUrl.mockResolvedValue({
+        status: 201,
+        json: { path: "/Users/me/vault" },
+        text: "",
+      } as RequestUrlResponse);
+      mockedGetDecryptedKey.mockImplementation(async (value: string) => value);
+
+      await new MiyoClient().addFolder({ path: "/Users/me/vault" });
+
+      expect(mockedRequestUrl).toHaveBeenCalledWith(
+        expect.objectContaining({
+          headers: { Authorization: "Bearer plus-test-license" },
+        })
+      );
+    });
+  });
+
   describe("addFolder", () => {
     it("POSTs the request to /v0/folder and returns the created record on 201", async () => {
       const folderRecord = { path: "/Users/me/vault", exclude_folders: ["copilot"] };

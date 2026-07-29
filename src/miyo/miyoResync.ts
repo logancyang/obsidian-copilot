@@ -84,10 +84,27 @@ let mutationLifecycle = 0;
  * one.
  *
  * A task that is mid-flight keeps running, but {@link assertCurrentLifecycle}
- * stops it before it can issue anything destructive, so what survives a reset
- * is only the read it was already waiting on. The one sequence deliberately
- * allowed to finish is a DELETE that has already gone out: its POST must
- * follow, or the vault is left unregistered with no record to rebuild from.
+ * refuses it before each request it has NOT yet sent. Two things are outside
+ * that reach, deliberately:
+ *
+ * DESIGN NOTE — a request already on the wire cannot be recalled: Obsidian's
+ * `requestUrl` takes no abort signal, and the guards sit at the call sites, so a
+ * lifecycle that ends between the check and the socket write still lets that one
+ * request through. Narrowing the window further (a callback fired inside the
+ * client, just before the write) was considered and rejected: it would thread a
+ * parameter through a client shared by seven call sites to shave milliseconds
+ * off a window it cannot close.
+ *
+ * DESIGN NOTE — replacing the chain lets the incoming lifecycle proceed while an
+ * uncancellable DELETE from the outgoing one is still in flight, so that DELETE
+ * can land on a registration the new lifecycle just created. Keeping the old
+ * chain instead would restore ordering, but only by blocking the new lifecycle
+ * behind the hung request — the failure this function exists to fix, and the one
+ * the maintainer named. Reads are bounded (see {@link withLookupTimeout}); the
+ * untimed requests are exactly the destructive ones, so the two properties
+ * cannot both hold. Same-vault re-enable rebuilds the same scope, costing an
+ * index rebuild; the harmful shape needs two vaults sharing a folder name.
+ * If a future review flags either of these, point them at these notes.
  */
 export function resetMiyoMutations(): void {
   mutationLifecycle += 1;
@@ -96,12 +113,14 @@ export function resetMiyoMutations(): void {
 
 /**
  * Abort the current mutation unless it still belongs to the live plugin
- * lifecycle. Called before every request that changes server state, so a task
- * whose vault closed mid-flight cannot act on the registration afterwards.
+ * lifecycle. Called before each request that changes server state — including
+ * the register flow's, which reaches its POST several awaits after its task
+ * started — so a task whose vault closed mid-flight stops rather than acting on
+ * a registration nobody is watching.
  *
  * @param lifecycle - Token the mutation captured when it was enqueued.
  */
-function assertCurrentLifecycle(lifecycle: number): void {
+export function assertCurrentLifecycle(lifecycle: number): void {
   if (lifecycle !== mutationLifecycle) {
     throw new Error("Miyo mutation belongs to an expired plugin lifecycle");
   }
