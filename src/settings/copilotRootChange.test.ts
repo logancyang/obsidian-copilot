@@ -75,21 +75,6 @@ describe("copilotRootChange", () => {
       expect(copilotRootContainsNotes(app, "ai")).toBe(false);
     });
 
-    it("does not treat a differently-cased folder as a recorded root", () => {
-      // Identity stays exact-case even on filesystems where coverage folds: this
-      // gates the EXEMPTION from the note-content guard, so folding here would
-      // accept a genuinely different `notes/` as the `Notes` root once used and
-      // activate Copilot over the user's own notes. See the note on the function.
-      const platform = obsidian.Platform as { isMacOS: boolean };
-      const previous = platform.isMacOS;
-      platform.isMacOS = true;
-      try {
-        expect(isKnownCopilotRoot("TeamAI", ["teamai"])).toBe(false);
-      } finally {
-        platform.isMacOS = previous;
-      }
-    });
-
     it("returns false for an empty candidate root", () => {
       const app = appWithMarkdown(["a.md"]);
       expect(copilotRootContainsNotes(app, "")).toBe(false);
@@ -167,6 +152,21 @@ describe("copilotRootChange", () => {
 
     it("matches a root against the history in canonical form despite trailing slashes", () => {
       expect(isKnownCopilotRoot("ai/", ["copilot", "ai"])).toBe(true);
+    });
+
+    it("does not treat a differently-cased folder as a recorded root", () => {
+      // Identity stays exact-case even on filesystems where coverage folds: this
+      // gates the EXEMPTION from the note-content guard, so folding here would
+      // accept a genuinely different `notes/` as the `Notes` root once used and
+      // activate Copilot over the user's own notes. See the note on the function.
+      const platform = obsidian.Platform as { isMacOS: boolean };
+      const previous = platform.isMacOS;
+      platform.isMacOS = true;
+      try {
+        expect(isKnownCopilotRoot("TeamAI", ["teamai"])).toBe(false);
+      } finally {
+        platform.isMacOS = previous;
+      }
     });
 
     it("returns false for a root absent from the history", () => {
