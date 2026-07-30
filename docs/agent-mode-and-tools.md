@@ -36,6 +36,10 @@ The mode picker beside the message box controls how much the active agent can do
 
 The available modes depend on the selected agent. Copilot normalizes equivalent modes across supported versions of Claude, Codex, and OpenCode.
 
+### Switching Agents and Models
+
+Changing the agent or model from the picker keeps the text and attachments currently in the message box. This lets you continue composing the same message after switching between Claude, Codex, and OpenCode. **New Chat** intentionally starts with an empty message box.
+
 ### Max Iterations
 
 The agent works in iteration cycles (think → use a tool → think → use a tool → answer). You can control the maximum number of iterations before the agent stops:
