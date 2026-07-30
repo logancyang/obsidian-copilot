@@ -215,6 +215,12 @@ export type AskUserQuestionPrompter = (req: AskUserQuestionPrompt) => Promise<Ag
 // `backends/registry` directly (would breach the layer boundary).
 export type DescriptorResolver = (id: BackendId) => BackendDescriptor | undefined;
 
+/** Controls which user-facing state an in-place runtime-session replacement inherits. */
+export interface ReplaceSessionOptions {
+  preserveChatInput?: boolean;
+  seedSelection?: ModelSelection;
+}
+
 export interface AgentSessionManagerOptions {
   permissionPrompter: PermissionPrompter;
   /**
@@ -1165,12 +1171,14 @@ export class AgentSessionManager {
    * The new session's initial (model, effort) defaults to the persisted
    * default for `backendId` via `getDefaultSelection`. Pass `seedSelection`
    * to seed a specific (model, effort) without touching that default — used
-   * by a cross-backend chat pick, which is transient.
+   * by a cross-backend chat pick, which is transient. `chatInputId` is supplied
+   * only when the replacement must retain the same logical AgentChatInput.
    */
   async createSession(
     backendId?: BackendId,
     projectId: ProjectScopeId = this.activeProjectId,
-    seedSelection?: ModelSelection
+    seedSelection?: ModelSelection,
+    chatInputId?: string
   ): Promise<AgentSession> {
     if (this.disposed) {
       throw new Error("AgentSessionManager has been shut down");
@@ -1287,10 +1295,12 @@ export class AgentSessionManager {
     // scope + context roots; the probe's state still seeds the picker so it
     // doesn't blink while that round-trip is in flight.
     const internalId = uuidv4();
+    const resolvedChatInputId = chatInputId ?? uuidv4();
     const session = AgentSession.start({
       backend,
       cwd,
       internalId,
+      chatInputId: resolvedChatInputId,
       backendId: resolvedId,
       projectId,
       defaultModelSelection: resolvedSeed,
@@ -2450,14 +2460,26 @@ export class AgentSessionManager {
    * replacement chat takes the same slot the user was looking at instead of
    * appearing at the end of the strip (which made it look like focus had
    * jumped to a sibling tab). `backendId` defaults to the same fallback as
-   * `createSession`.
+   * `createSession`. Set `preserveChatInput` only when the visible input remains
+   * the same while its runtime session is replaced.
    */
-  async replaceSessionInPlace(oldId: string, backendId?: BackendId): Promise<AgentSession> {
+  async replaceSessionInPlace(
+    oldId: string,
+    backendId?: BackendId,
+    options: ReplaceSessionOptions = {}
+  ): Promise<AgentSession> {
     const oldIdx = Array.from(this.sessions.keys()).indexOf(oldId);
     // The replacement inherits the REPLACED session's scope, not the active
     // scope (they can differ if the old tab wasn't the active one).
-    const replacedProjectId = this.sessions.get(oldId)?.projectId ?? this.activeProjectId;
-    const created = await this.createSession(backendId, replacedProjectId);
+    const replaced = this.sessions.get(oldId);
+    const replacedProjectId = replaced?.projectId ?? this.activeProjectId;
+    const chatInputId = options.preserveChatInput ? replaced?.chatInputId : undefined;
+    const created = await this.createSession(
+      backendId,
+      replacedProjectId,
+      options.seedSelection,
+      chatInputId
+    );
     if (oldIdx >= 0) {
       this.moveMapEntry(this.sessions, created.internalId, oldIdx);
       this.moveMapEntry(this.chatUIStates, created.internalId, oldIdx);

@@ -145,6 +145,7 @@ function getSessionTestHandle(session: AgentSession): MockSessionTestHandle {
 
 function makeMockSession(overrides: {
   internalId: string;
+  chatInputId?: string;
   backendSessionId?: string;
   backendId: string;
   projectId?: string;
@@ -161,6 +162,7 @@ function makeMockSession(overrides: {
   }>();
   const session = {
     internalId: overrides.internalId,
+    chatInputId: overrides.chatInputId ?? overrides.internalId,
     backendId: overrides.backendId,
     projectId: overrides.projectId ?? GLOBAL_SCOPE,
     ready: overrides.ready ?? Promise.resolve(),
@@ -213,6 +215,7 @@ function makeMockSession(overrides: {
 const sessionCreateSpy = jest.spyOn(AgentSession, "start").mockImplementation((opts) =>
   makeMockSession({
     internalId: opts.internalId,
+    chatInputId: opts.chatInputId,
     backendId: opts.backendId,
     projectId: opts.projectId,
   })
@@ -1213,6 +1216,22 @@ describe("AgentSessionManager.replaceSessionInPlace", () => {
     await flushBackgroundClose();
     expect(mgr.getSessions()).toEqual([replacement, b]);
     expect(mgr.getActiveSession()).toBe(replacement);
+  });
+
+  it("preserves the logical chat input only when explicitly requested", async () => {
+    const mgr = buildManager();
+    const freshSource = await mgr.createSession();
+    expect(freshSource.chatInputId).not.toBe(freshSource.internalId);
+    const freshReplacement = await mgr.replaceSessionInPlace(freshSource.internalId);
+    expect(freshReplacement.chatInputId).not.toBe(freshSource.chatInputId);
+
+    const preservedSource = freshReplacement;
+    const preservedReplacement = await mgr.replaceSessionInPlace(
+      preservedSource.internalId,
+      undefined,
+      { preserveChatInput: true }
+    );
+    expect(preservedReplacement.chatInputId).toBe(preservedSource.chatInputId);
   });
 
   it("closes the old session in the background", async () => {
