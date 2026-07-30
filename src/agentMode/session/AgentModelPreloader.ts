@@ -288,6 +288,7 @@ export class AgentModelPreloader {
       if (this.warm.get(backendId) === warm) {
         this.warm.delete(backendId);
         this.modelCatalogCache.delete(backendId);
+        this.effortCatalog.delete(backendId);
         this.warmExitUnsubs.delete(backendId);
         this.notify();
       }

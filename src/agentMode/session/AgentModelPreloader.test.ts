@@ -207,16 +207,29 @@ describe("AgentModelPreloader", () => {
 
   it("drops the warm entry when the probe subprocess exits before adoption", async () => {
     const { descriptor, procHandle } = buildDescriptor(() => makeMockProc());
+    descriptor.prefetchEffortCatalog = jest.fn(async () => ({
+      "claude-sonnet": [{ label: "High", value: "high" }],
+    }));
+    descriptor.getEnabledModelEntries = jest.fn(() => [
+      {
+        baseModelId: "claude-sonnet",
+        name: "Claude Sonnet",
+        provider: "anthropic",
+        credentialState: "ok",
+      },
+    ]);
     const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
 
     await preloader.preload("claude-sdk");
     expect(preloader.takeWarm("claude-sdk")).not.toBeNull();
     // Re-prime — populate a second warm entry to exercise the onExit path.
     await preloader.preload("claude-sdk");
+    expect(preloader.getEffortCatalog("claude-sdk")).not.toBeNull();
     procHandle.emitExit();
 
     expect(preloader.takeWarm("claude-sdk")).toBeNull();
     expect(preloader.getCachedModelCatalog("claude-sdk")).toBeNull();
+    expect(preloader.getEffortCatalog("claude-sdk")).toBeNull();
   });
 
   it("shuts down the probe proc when the agent reports no usable state", async () => {
