@@ -1,6 +1,7 @@
 interface CodexManagedConfig {
   developer_instructions: string;
   approval_policy: "on-request";
+  approvals_reviewer: "user";
   sandbox_mode: "workspace-write";
 }
 
@@ -32,6 +33,7 @@ export function mergeCodexConfigEnv(
   const managed: CodexManagedConfig = {
     developer_instructions: developerInstructions,
     approval_policy: "on-request",
+    approvals_reviewer: "user",
     sandbox_mode: "workspace-write",
   };
   return JSON.stringify({ ...parseCodexConfig(existing), ...managed });

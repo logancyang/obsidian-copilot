@@ -427,7 +427,16 @@ function acpUpdateToSessionUpdate(update: SessionNotification["update"]): Sessio
 
 // ---- Permission prompt / decision -------------------------------------
 
-export function acpPermissionRequestToPrompt(req: RequestPermissionRequest): PermissionPrompt {
+/**
+ * Convert an ACP permission request into the session-domain prompt.
+ *
+ * @param req - The request emitted by the ACP backend.
+ * @param presentPermissionOption - Optional backend-owned presentation adapter.
+ */
+export function acpPermissionRequestToPrompt(
+  req: RequestPermissionRequest,
+  presentPermissionOption?: (option: PermissionOption, metadata: unknown) => PermissionOption
+): PermissionPrompt {
   const call = req.toolCall;
   return {
     sessionId: sessionIdFromAcp(req.sessionId),
@@ -440,18 +449,22 @@ export function acpPermissionRequestToPrompt(req: RequestPermissionRequest): Per
       content: toolCallContentFromAcp(call.content),
       locations: call.locations?.map((l) => ({ path: l.path, line: l.line ?? undefined })),
     },
-    options: req.options.map(permissionOptionFromAcp),
+    options: req.options.map((option) => permissionOptionFromAcp(option, presentPermissionOption)),
   };
 }
 
-function permissionOptionFromAcp(opt: AcpPermissionOption): PermissionOption {
-  return {
+function permissionOptionFromAcp(
+  opt: AcpPermissionOption,
+  presentPermissionOption?: (option: PermissionOption, metadata: unknown) => PermissionOption
+): PermissionOption {
+  const option: PermissionOption = {
     optionId: opt.optionId,
     name: opt.name,
     kind: (PERMISSION_OPTION_KINDS as readonly string[]).includes(opt.kind)
       ? opt.kind
       : "reject_once",
   };
+  return presentPermissionOption?.(option, opt._meta) ?? option;
 }
 
 export function permissionPromptToAcp(prompt: PermissionPrompt): RequestPermissionRequest {

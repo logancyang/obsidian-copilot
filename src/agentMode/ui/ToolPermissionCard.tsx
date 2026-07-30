@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { extractDiffContents, formatAgentInput, renderDiff } from "@/agentMode/ui/diffRender";
 import type {
   PermissionOption,
@@ -14,6 +15,8 @@ interface ToolPermissionCardProps {
   onResolve: (toolCallId: string, optionId: string) => void;
 }
 
+const EMPTY_OPTION_NAMES: readonly string[] = Object.freeze([]);
+
 /**
  * Inline permission card rendered at the tail of the chat scroll container
  * while a tool call is awaiting the user's decision. Replaces the modal that
@@ -22,15 +25,15 @@ interface ToolPermissionCardProps {
  * sessions. The card stays in-place until the user picks an option or the
  * turn is cancelled.
  *
- * The actual SDK permission update (allow_once / allow_always /
- * reject_once / reject_always semantics, including the
- * `updatedPermissions` payload for "always" choices) is handled in
- * `mapDecisionToSdk` — this component just forwards the chosen `optionId`.
+ * The backend translates one-time and persistent decisions from the selected
+ * `optionId`; this component only displays the domain prompt and forwards that
+ * identifier.
  */
 export const ToolPermissionCard: React.FC<ToolPermissionCardProps> = ({ request, onResolve }) => {
   const { toolCall, options } = request;
   const [busy, setBusy] = useState(false);
   const orderedOptions = useMemo(() => sortOptions(options), [options]);
+  const optionNames = useMemo(() => disambiguateOptionNames(orderedOptions), [orderedOptions]);
   const diffContents = useMemo(() => extractDiffContents(toolCall.content), [toolCall.content]);
   const inputJson = useMemo(() => formatAgentInput(toolCall.rawInput), [toolCall.rawInput]);
   const title = toolCall.title ?? "Tool call";
@@ -84,17 +87,36 @@ export const ToolPermissionCard: React.FC<ToolPermissionCardProps> = ({ request,
       </div>
 
       <div className="tw-flex tw-flex-wrap tw-items-center tw-justify-end tw-gap-2 tw-border-t tw-border-solid tw-border-border tw-px-3 tw-py-2">
-        {orderedOptions.map((opt) => (
-          <Button
-            key={opt.optionId}
-            variant={variantForKind(opt.kind)}
-            size="sm"
-            disabled={busy}
-            onClick={() => choose(opt.optionId)}
-          >
-            {opt.name}
-          </Button>
-        ))}
+        <TooltipProvider delayDuration={0}>
+          {orderedOptions.map((option, index) => {
+            const button = (
+              <Button
+                key={option.optionId}
+                variant={variantForKind(option.kind)}
+                size="sm"
+                className="tw-h-auto tw-min-h-6 tw-min-w-0 tw-max-w-full tw-whitespace-normal"
+                disabled={busy}
+                onClick={() => choose(option.optionId)}
+              >
+                <span className="tw-min-w-0 tw-break-all">{optionNames[index]}</span>
+              </Button>
+            );
+
+            if (!option.description) return button;
+
+            return (
+              <Tooltip key={option.optionId}>
+                <TooltipTrigger asChild>{button}</TooltipTrigger>
+                <TooltipContent
+                  side="top"
+                  className="tw-max-w-sm tw-whitespace-pre-wrap tw-break-words"
+                >
+                  {option.description}
+                </TooltipContent>
+              </Tooltip>
+            );
+          })}
+        </TooltipProvider>
       </div>
     </div>
   );
@@ -126,4 +148,28 @@ function sortOptions(options: PermissionOption[]): PermissionOption[] {
   return [...options].sort(
     (a, b) => PERMISSION_OPTION_KINDS.indexOf(a.kind) - PERMISSION_OPTION_KINDS.indexOf(b.kind)
   );
+}
+
+function disambiguateOptionNames(options: PermissionOption[]): readonly string[] {
+  if (options.length === 0) return EMPTY_OPTION_NAMES;
+
+  const totals = new Map<string, number>();
+  const suffixes = new Map<string, number>();
+  const reservedNames = new Set(options.map((option) => option.name));
+
+  for (const option of options) {
+    totals.set(option.name, (totals.get(option.name) ?? 0) + 1);
+  }
+
+  return options.map((option) => {
+    if (totals.get(option.name) === 1) return option.name;
+
+    let suffix = (suffixes.get(option.name) ?? 0) + 1;
+    while (reservedNames.has(`${option.name} ${suffix}`)) suffix++;
+    suffixes.set(option.name, suffix);
+
+    const name = `${option.name} ${suffix}`;
+    reservedNames.add(name);
+    return name;
+  });
 }

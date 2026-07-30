@@ -36,6 +36,10 @@ The mode picker beside the message box controls how much the active agent can do
 
 The available modes depend on the selected agent. Copilot normalizes equivalent modes across supported versions of Claude, Codex, and OpenCode.
 
+When **Default** mode asks for permission, the request stays in the chat until
+you choose an action, cancel the turn, or close the session. Hover or focus a
+persistent action to inspect its detailed permission rule.
+
 ### Updating an older Codex adapter
 
 If Codex reports that it could not verify the maintained Codex ACP adapter, update it with:

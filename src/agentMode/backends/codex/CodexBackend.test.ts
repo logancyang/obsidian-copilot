@@ -212,6 +212,7 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
     expect(JSON.parse(desc.env.CODEX_CONFIG as string)).toEqual(
       expect.objectContaining({
         approval_policy: "on-request",
+        approvals_reviewer: "user",
         sandbox_mode: "workspace-write",
       })
     );
@@ -234,6 +235,7 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
                 model: "custom-model",
                 developer_instructions: "drop Copilot prompt",
                 approval_policy: "never",
+                approvals_reviewer: "auto_review",
                 sandbox_mode: "danger-full-access",
               }),
             },
@@ -248,6 +250,7 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
       expect.objectContaining({
         model: "custom-model",
         approval_policy: "on-request",
+        approvals_reviewer: "user",
         sandbox_mode: "workspace-write",
       })
     );
