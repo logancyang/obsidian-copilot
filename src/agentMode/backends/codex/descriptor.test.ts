@@ -53,11 +53,14 @@ const mockSubscribeCompatibility = subscribeCodexCompatibility as jest.MockedFun
   typeof subscribeCodexCompatibility
 >;
 
-function settingsWithCodexPath(binaryPath?: string): CopilotSettings {
+function settingsWithCodexPath(
+  binaryPath?: string,
+  envOverrides?: Record<string, string>
+): CopilotSettings {
   return {
     agentMode: {
       backends: {
-        codex: { binaryPath },
+        codex: { binaryPath, envOverrides },
       },
     },
   } as unknown as CopilotSettings;
@@ -87,7 +90,7 @@ describe("codex descriptor", () => {
       expect(
         getCodexInstallState(settingsWithCodexPath("/usr/local/bin/codex-acp"), () => true)
       ).toBe(checking);
-      expect(mockGetCompatibility).toHaveBeenCalledWith("/usr/local/bin/codex-acp");
+      expect(mockGetCompatibility).toHaveBeenCalledWith("/usr/local/bin/codex-acp", undefined);
     });
   });
 
@@ -112,6 +115,7 @@ describe("codex descriptor", () => {
       ).resolves.toBe(ready);
       expect(mockRefreshCompatibility).toHaveBeenCalledWith("/usr/local/bin/codex-acp", {
         force: true,
+        envOverrides: undefined,
       });
     });
   });
@@ -123,7 +127,23 @@ describe("codex descriptor", () => {
       mockSubscribeCompatibility.mockReturnValue(unsubscribe);
 
       expect(subscribeCodexInstallState(listener)).toBe(unsubscribe);
-      expect(mockSubscribeCompatibility).toHaveBeenCalledWith(listener);
+      expect(mockSubscribeCompatibility).toHaveBeenCalledWith(expect.any(Function), listener);
+    });
+
+    it("provides the currently selected path and environment to the scoped subscription", () => {
+      const settings = settingsWithCodexPath("/current/codex-acp", {
+        PATH: "/portable/node",
+      });
+      mockGetSettings.mockReturnValue(settings);
+      mockSubscribeCompatibility.mockReturnValue(jest.fn());
+
+      subscribeCodexInstallState(jest.fn());
+      const getCurrent = mockSubscribeCompatibility.mock.calls[0][0];
+
+      expect(getCurrent()).toEqual({
+        binaryPath: "/current/codex-acp",
+        envOverrides: { PATH: "/portable/node" },
+      });
     });
   });
 
@@ -152,11 +172,36 @@ describe("codex descriptor", () => {
       expect(listener).toHaveBeenCalledTimes(1);
       expect(mockRefreshCompatibility).toHaveBeenCalledWith("/maintained/codex-acp", {
         force: true,
+        envOverrides: undefined,
       });
 
       unsubscribe();
       expect(unsubscribeSettings).toHaveBeenCalledTimes(1);
       expect(unsubscribeCompatibility).toHaveBeenCalledTimes(1);
+    });
+
+    it("refreshes compatibility after the configured environment changes", async () => {
+      let settingsListener:
+        | ((previous: CopilotSettings, next: CopilotSettings) => void)
+        | undefined;
+      mockSubscribeToSettingsChange.mockImplementation((listener) => {
+        settingsListener = listener;
+        return jest.fn();
+      });
+      mockSubscribeCompatibility.mockReturnValue(jest.fn());
+      mockRefreshCompatibility.mockResolvedValue({ kind: "ready", source: "custom" });
+
+      CodexBackendDescriptor.subscribeInstallState({} as never, jest.fn());
+      settingsListener?.(
+        settingsWithCodexPath("/codex-acp", { PATH: "/old/node" }),
+        settingsWithCodexPath("/codex-acp", { PATH: "/new/node" })
+      );
+      await Promise.resolve();
+
+      expect(mockRefreshCompatibility).toHaveBeenCalledWith("/codex-acp", {
+        force: true,
+        envOverrides: { PATH: "/new/node" },
+      });
     });
   });
 
@@ -173,6 +218,7 @@ describe("codex descriptor", () => {
 
       expect(mockRefreshCompatibility).toHaveBeenCalledWith("/legacy/codex-acp", {
         force: true,
+        envOverrides: undefined,
       });
     });
   });

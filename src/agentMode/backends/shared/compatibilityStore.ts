@@ -9,7 +9,7 @@ export interface CompatibilityRefreshOptions {
   force?: boolean;
 }
 
-type Listener = () => void;
+type Listener = (cacheKey: string) => void;
 
 const CHECKING_STATES = Object.freeze({
   managed: Object.freeze({ kind: "checking", source: "managed" }),
@@ -73,7 +73,7 @@ export class CompatibilityStore<
 
   /**
    * Keeps readiness consumers synchronized with compatibility transitions.
-   * @param listener - The consumer to notify after checking and settled transitions.
+   * @param listener - The consumer to notify with the runtime key that changed.
    */
   subscribe(listener: Listener): () => void {
     this.listeners.add(listener);
@@ -82,6 +82,6 @@ export class CompatibilityStore<
 
   private set(key: string, state: InstallState): void {
     this.states.set(key, state);
-    for (const listener of this.listeners) listener();
+    for (const listener of this.listeners) listener(key);
   }
 }

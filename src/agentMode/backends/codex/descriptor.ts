@@ -77,7 +77,7 @@ export function getCodexInstallState(
 ): InstallState {
   const binaryPath = settings.agentMode?.backends?.codex?.binaryPath;
   if (!binaryPath || !fileExists(binaryPath)) return ABSENT_INSTALL_STATE;
-  return getCodexCompatibility(binaryPath);
+  return getCodexCompatibility(binaryPath, settings.agentMode?.backends?.codex?.envOverrides);
 }
 
 /**
@@ -93,11 +93,19 @@ export function refreshCodexInstallState(
 ): Promise<InstallState> {
   const binaryPath = settings.agentMode?.backends?.codex?.binaryPath;
   if (!binaryPath || !fileExists(binaryPath)) return Promise.resolve(ABSENT_INSTALL_STATE);
-  return refreshCodexCompatibility(binaryPath, { force });
+  return refreshCodexCompatibility(binaryPath, {
+    force,
+    envOverrides: settings.agentMode?.backends?.codex?.envOverrides,
+  });
 }
 
 export function subscribeCodexInstallState(listener: () => void): () => void {
-  return subscribeCodexCompatibility(listener);
+  return subscribeCodexCompatibility(() => {
+    const codex = getSettings().agentMode?.backends?.codex;
+    return codex?.binaryPath
+      ? { binaryPath: codex.binaryPath, envOverrides: codex.envOverrides }
+      : null;
+  }, listener);
 }
 
 /**
@@ -180,7 +188,10 @@ export const CodexBackendDescriptor: BackendDescriptor = {
   subscribeInstallState(_plugin: CopilotPlugin, cb: () => void): () => void {
     const unsubscribeSettings = subscribeToSettingsChange((prev, next) => {
       if (
-        prev.agentMode?.backends?.codex?.binaryPath !== next.agentMode?.backends?.codex?.binaryPath
+        prev.agentMode?.backends?.codex?.binaryPath !==
+          next.agentMode?.backends?.codex?.binaryPath ||
+        prev.agentMode?.backends?.codex?.envOverrides !==
+          next.agentMode?.backends?.codex?.envOverrides
       ) {
         cb();
         void refreshCodexInstallState(next, true);

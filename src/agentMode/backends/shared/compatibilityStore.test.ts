@@ -44,6 +44,8 @@ describe("compatibilityStore", () => {
       });
 
       expect(listener).toHaveBeenCalledTimes(4);
+      expect(listener).toHaveBeenNthCalledWith(1, "legacy");
+      expect(listener).toHaveBeenNthCalledWith(3, "maintained");
       expect(store.get(input("legacy"))).toEqual({
         kind: "error",
         message: "not supported",

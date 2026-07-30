@@ -86,7 +86,10 @@ describe("codexCompatibility", () => {
       const run = jest
         .fn<ReturnType<CodexVersionRunner>, Parameters<CodexVersionRunner>>()
         .mockRejectedValue(new Error("exit 2"));
-      const unsubscribe = subscribeCodexCompatibility(listener);
+      const unsubscribe = subscribeCodexCompatibility(
+        () => ({ binaryPath: "/publish/codex-acp" }),
+        listener
+      );
 
       await expect(refreshCodexCompatibility("/publish/codex-acp", { run })).resolves.toEqual({
         kind: "error",
@@ -134,12 +137,63 @@ describe("codexCompatibility", () => {
         source: "custom",
       });
     });
+
+    it("uses environment overrides in both the probe and cache identity", async () => {
+      const run = jest
+        .fn<ReturnType<CodexVersionRunner>, Parameters<CodexVersionRunner>>()
+        .mockResolvedValue({ stdout: "@agentclientprotocol/codex-acp 1.1.7" });
+      const envOverrides = { TOKEN: "configured", PATH: "/portable/node/bin" };
+
+      await refreshCodexCompatibility("/env/codex-acp", { envOverrides, run });
+
+      expect(run).toHaveBeenCalledWith(
+        "/env/codex-acp",
+        ["--version"],
+        expect.objectContaining({
+          env: expect.objectContaining(envOverrides),
+        })
+      );
+      expect(
+        getCodexCompatibility("/env/codex-acp", {
+          PATH: "/portable/node/bin",
+          TOKEN: "configured",
+        })
+      ).toEqual({ kind: "ready", source: "custom" });
+      expect(getCodexCompatibility("/env/codex-acp")).toEqual({
+        kind: "checking",
+        source: "custom",
+      });
+    });
   });
 
   describe("subscribeCodexCompatibility()", () => {
+    it("ignores publications from a path that is no longer selected", async () => {
+      let selectedPath = "/selected-a/codex-acp";
+      const listener = jest.fn();
+      const unsubscribe = subscribeCodexCompatibility(
+        () => ({ binaryPath: selectedPath }),
+        listener
+      );
+
+      selectedPath = "/selected-b/codex-acp";
+      await refreshCodexCompatibility("/selected-a/codex-acp", {
+        run: jest.fn().mockResolvedValue({ stdout: "@agentclientprotocol/codex-acp 1.1.7" }),
+      });
+      expect(listener).not.toHaveBeenCalled();
+
+      await refreshCodexCompatibility("/selected-b/codex-acp", {
+        run: jest.fn().mockResolvedValue({ stdout: "@agentclientprotocol/codex-acp 1.1.7" }),
+      });
+      expect(listener).toHaveBeenCalledTimes(2);
+      unsubscribe();
+    });
+
     it("stops notifying a listener after unsubscribe", async () => {
       const listener = jest.fn();
-      const unsubscribe = subscribeCodexCompatibility(listener);
+      const unsubscribe = subscribeCodexCompatibility(
+        () => ({ binaryPath: "/unsubscribed/codex-acp" }),
+        listener
+      );
       unsubscribe();
 
       await refreshCodexCompatibility("/unsubscribed/codex-acp", {

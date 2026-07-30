@@ -26,11 +26,37 @@ export type CodexVersionRunner = (
 ) => Promise<{ stdout: string }>;
 
 interface RefreshOptions extends CompatibilityRefreshOptions {
+  envOverrides?: Record<string, string>;
   run?: CodexVersionRunner;
 }
 
 interface CodexCompatibilityInput extends CompatibilityStoreInput {
   binaryPath: string;
+  env: NodeJS.ProcessEnv;
+}
+
+interface CodexCompatibilitySelection {
+  binaryPath: string;
+  envOverrides?: Record<string, string>;
+}
+
+function codexCompatibilityInput(
+  binaryPath: string,
+  envOverrides?: Record<string, string>
+): CodexCompatibilityInput {
+  const environmentKey = JSON.stringify(
+    Object.entries(envOverrides ?? {}).sort(([a], [b]) => a.localeCompare(b))
+  );
+  return {
+    cacheKey: `${binaryPath}\u0000${environmentKey}`,
+    binaryPath,
+    source: "custom",
+    env: {
+      ...process.env,
+      PATH: augmentPathForNodeShebang(binaryPath, process.env.PATH),
+      ...(envOverrides ?? {}),
+    },
+  };
 }
 
 /**
@@ -38,19 +64,21 @@ interface CodexCompatibilityInput extends CompatibilityStoreInput {
  * @param binaryPath - The selected executable whose package identity should be verified.
  * @param run - The command runner used to read the executable's local identity.
  * @param platform - The device platform used to translate Windows npm command shims.
+ * @param env - The effective environment the adapter process will inherit.
  */
 export async function probeCodexAcpCompatibility(
   binaryPath: string,
   run: CodexVersionRunner = execFileAsync,
-  platform: NodeJS.Platform = process.platform
+  platform: NodeJS.Platform = process.platform,
+  env: NodeJS.ProcessEnv = {
+    ...process.env,
+    PATH: augmentPathForNodeShebang(binaryPath, process.env.PATH),
+  }
 ): Promise<InstallState> {
   try {
     const invocation = codexAcpInvocation(binaryPath, platform);
     const { stdout } = await run(invocation.command, [...invocation.args, "--version"], {
-      env: {
-        ...process.env,
-        PATH: augmentPathForNodeShebang(binaryPath, process.env.PATH),
-      },
+      env,
       timeout: VERSION_TIMEOUT_MS,
     });
     if (MAINTAINED_ADAPTER_VERSION.test(stdout)) {
@@ -63,19 +91,19 @@ export async function probeCodexAcpCompatibility(
 }
 
 const codexCompatibilityStore = new CompatibilityStore<CodexCompatibilityInput, RefreshOptions>(
-  (input, options) => probeCodexAcpCompatibility(input.binaryPath, options.run)
+  (input, options) =>
+    probeCodexAcpCompatibility(input.binaryPath, options.run, process.platform, input.env)
 );
 
 /**
  * Gives synchronous consumers the latest result for a selected executable.
  * @param binaryPath - The selected executable whose compatibility should be read.
  */
-export function getCodexCompatibility(binaryPath: string): InstallState {
-  return codexCompatibilityStore.get({
-    cacheKey: binaryPath,
-    binaryPath,
-    source: "custom",
-  });
+export function getCodexCompatibility(
+  binaryPath: string,
+  envOverrides?: Record<string, string>
+): InstallState {
+  return codexCompatibilityStore.get(codexCompatibilityInput(binaryPath, envOverrides));
 }
 
 /**
@@ -88,19 +116,25 @@ export function refreshCodexCompatibility(
   options: RefreshOptions = {}
 ): Promise<InstallState> {
   return codexCompatibilityStore.refresh(
-    {
-      cacheKey: binaryPath,
-      binaryPath,
-      source: "custom",
-    },
+    codexCompatibilityInput(binaryPath, options.envOverrides),
     options
   );
 }
 
 /**
- * Notifies a consumer whenever any selected path changes compatibility state.
- * @param listener - The consumer to notify after checking and settled transitions.
+ * Notifies a consumer only when the currently selected runtime changes state.
+ * @param getCurrent - Resolves the path and environment currently selected in settings.
+ * @param listener - The consumer to notify after matching checking and settled transitions.
  */
-export function subscribeCodexCompatibility(listener: () => void): () => void {
-  return codexCompatibilityStore.subscribe(listener);
+export function subscribeCodexCompatibility(
+  getCurrent: () => CodexCompatibilitySelection | null,
+  listener: () => void
+): () => void {
+  return codexCompatibilityStore.subscribe((cacheKey) => {
+    const current = getCurrent();
+    if (!current) return;
+    if (codexCompatibilityInput(current.binaryPath, current.envOverrides).cacheKey === cacheKey) {
+      listener();
+    }
+  });
 }
