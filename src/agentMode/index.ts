@@ -38,9 +38,6 @@ export { useAgentModePicker } from "./ui/useAgentModePicker";
 export type { AgentModePickerOverride } from "./ui/useAgentModePicker";
 export type { AgentSessionManager } from "./session/AgentSessionManager";
 export type { AgentBrand, BackendDescriptor, BackendId, InstallState } from "./session/types";
-// First-enrollment default-enable rule (enable the agent's current model).
-export { computeDefaultEnabledIds } from "./session/agentDefaultEnable";
-export type { EnrolledModelRef } from "./session/agentDefaultEnable";
 export { partitionOpencodeOnlyWireIds } from "./backends/opencode/opencodeProbePartition";
 export {
   mapProviderToOpencodeId,
