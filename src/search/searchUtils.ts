@@ -8,7 +8,7 @@ import { getEffectiveProjectsFolder } from "@/settings/copilotFolder";
 import { logFileManager } from "@/logFileManager";
 import { getTagsFromNote, stripHash } from "@/utils";
 import { Embeddings } from "@langchain/core/embeddings";
-import { App, TFile } from "obsidian";
+import { App, Platform, TFile } from "obsidian";
 
 export interface PatternCategory {
   tagPatterns?: string[];
@@ -153,9 +153,46 @@ export function getSystemExcludedFolders(settings: CopilotSettings): string[] {
   return normalizeRootFolders([COPILOT_FOLDER_ROOT, settings.copilotFolder, ...history]);
 }
 
-/** Whether a vault-relative path falls under any live system-excluded Copilot root. */
+/**
+ * Whether a vault-relative path falls under any live system-excluded Copilot root.
+ *
+ * Case-folded on case-insensitive filesystems, unlike the user's own qa*
+ * patterns. A stored root keeps whatever spelling it was configured with —
+ * nothing reconciles it against the real path, and an external sync, an OS-level
+ * case-only rename, or simply typing `TeamAI` when the disk holds `teamai/` is
+ * enough to make them differ. Comparing exact-case there fails OPEN, letting
+ * chats under a Copilot root reach QA indexing and Miyo results. Folding is
+ * confined to these roots: `qaExclusions` is the user's own literal, and on a
+ * case-sensitive volume `Notes/` and `notes/` really are two folders — so this
+ * gates on the platform, accepting that a case-sensitive APFS volume may
+ * over-exclude, which fails closed.
+ */
 function isSystemExcludedPath(filePath: string): boolean {
-  return matchFilePathWithFolders(filePath, getSystemExcludedFolders(getSettings()));
+  return matchSystemRoots(filePath, getSystemExcludedFolders(getSettings()));
+}
+
+/** Whether the host filesystem treats paths case-insensitively. */
+function hasCaseInsensitiveFilesystem(): boolean {
+  return Platform.isWin || Platform.isMacOS || Platform.isIosApp;
+}
+
+/**
+ * Match a raw path against the system-excluded Copilot roots.
+ *
+ * Separate from {@link matchFilePathWithFolders} so the case-folding stays off
+ * the user-pattern path — see {@link isSystemExcludedPath} for why.
+ *
+ * @param filePath - Vault-relative path, as the vault or Miyo reported it.
+ * @param systemRoots - Roots from {@link getSystemExcludedFolders}.
+ */
+function matchSystemRoots(filePath: string, systemRoots: string[]): boolean {
+  if (!hasCaseInsensitiveFilesystem()) {
+    return matchFilePathWithFolders(filePath, systemRoots);
+  }
+  return matchFilePathWithFolders(
+    filePath.toLowerCase(),
+    systemRoots.map((root) => root.toLowerCase())
+  );
 }
 
 /**
@@ -210,8 +247,9 @@ export function createCopilotPatternFilter(app: App): (path: string) => boolean 
   const { inclusions, exclusions } = getMatchingPatterns();
   return (path: string) => {
     // System root exclusion runs first on the raw path (no TFile), holding even
-    // in the no-user-pattern fast path below.
-    if (matchFilePathWithFolders(path, systemExcludedFolders)) {
+    // in the no-user-pattern fast path below. Case-folded where the filesystem
+    // is — see isSystemExcludedPath.
+    if (matchSystemRoots(path, systemExcludedFolders)) {
       return false;
     }
     if (!inclusions && !exclusions) {
