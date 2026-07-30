@@ -49,16 +49,40 @@ export function updateCodexFields(partial: Partial<CodexBackendSettings>): void 
 }
 
 function codexAcpResolverEnv(): Parameters<typeof resolveCodexAcpBinary>[0] {
+  const envOverrides = getSettings().agentMode?.backends?.codex?.envOverrides;
   return {
     homeDir: os.homedir(),
     platform: process.platform,
-    env: process.env,
+    env: mergeCodexResolverEnvironment(process.env, envOverrides, process.platform),
     fs: {
       existsSync: (p) => fs.existsSync(p),
       readFileSync: (p, encoding) => fs.readFileSync(p, encoding),
       readdirSync: (p) => fs.readdirSync(p),
     },
   };
+}
+
+function mergeCodexResolverEnvironment(
+  baseEnv: NodeJS.ProcessEnv,
+  envOverrides: Record<string, string> = {},
+  platform: NodeJS.Platform = process.platform
+): NodeJS.ProcessEnv {
+  if (platform !== "win32") return { ...baseEnv, ...envOverrides };
+
+  const env = { ...baseEnv };
+  let effectivePath = Object.entries(baseEnv).find(([key]) => key.toLowerCase() === "path")?.[1];
+  for (const key of Object.keys(env)) {
+    if (key.toLowerCase() === "path") delete env[key];
+  }
+  for (const [key, value] of Object.entries(envOverrides)) {
+    if (key.toLowerCase() === "path") {
+      effectivePath = value;
+    } else {
+      env[key] = value;
+    }
+  }
+  if (effectivePath !== undefined) env.PATH = effectivePath;
+  return env;
 }
 
 export async function detectCodexAcpPath(): Promise<string | null> {

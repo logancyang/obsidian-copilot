@@ -10,6 +10,7 @@ import {
 } from "./codexCompatibility";
 import {
   CodexBackendDescriptor,
+  detectCodexAcpPath,
   getCodexInstallState,
   refreshCodexInstallState,
   subscribeCodexInstallState,
@@ -70,6 +71,36 @@ describe("descriptor", () => {
   beforeEach(() => {
     jest.resetAllMocks();
     mockExistsSync.mockReturnValue(true);
+  });
+
+  describe("detectCodexAcpPath()", () => {
+    it("uses a case-insensitive Codex PATH override to find a Windows npm shim", async () => {
+      const originalPlatform = process.platform;
+      const originalPathEntries = Object.entries(process.env).filter(
+        ([key]) => key.toLowerCase() === "path"
+      );
+      const expected = "D:\\portable-node\\bin\\codex-acp.cmd";
+      Object.defineProperty(process, "platform", { value: "win32" });
+      for (const [key] of originalPathEntries) delete process.env[key];
+      process.env.PATH = "C:\\Windows\\System32";
+      mockGetSettings.mockReturnValue(
+        settingsWithCodexPath(undefined, {
+          APPDATA: "C:\\Users\\me\\AppData\\Roaming",
+          Path: "D:\\portable-node\\bin",
+        })
+      );
+      mockExistsSync.mockImplementation((candidate) => candidate === expected);
+
+      try {
+        await expect(detectCodexAcpPath()).resolves.toBe(expected);
+      } finally {
+        Object.defineProperty(process, "platform", { value: originalPlatform });
+        for (const key of Object.keys(process.env)) {
+          if (key.toLowerCase() === "path") delete process.env[key];
+        }
+        for (const [key, value] of originalPathEntries) process.env[key] = value;
+      }
+    });
   });
 
   describe("getCodexInstallState()", () => {
