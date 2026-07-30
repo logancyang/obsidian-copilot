@@ -187,8 +187,6 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
         "-c",
         'approval_policy="on-request"',
         "-c",
-        'approvals_reviewer="user"',
-        "-c",
         'sandbox_mode="workspace-write"',
       ])
     );

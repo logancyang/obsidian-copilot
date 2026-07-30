@@ -46,7 +46,7 @@ export class CodexBackend implements AcpBackend {
       ...descriptor.args,
       "-c",
       `developer_instructions=${toTomlBasicString(directive)}`,
-      // Pin spawn-time approval/reviewer/sandbox so legacy codex-acp's first
+      // Pin spawn-time approval/sandbox so legacy codex-acp's first
       // `currentModeId` report matches its canonical `auto` preset
       // (workspace-write + on-request), which Agent Mode surfaces as
       // canonical `default` (ask mode). Without this, codex-acp derives
@@ -57,8 +57,6 @@ export class CodexBackend implements AcpBackend {
       // and `Thread::modes()` in codex-acp/src/thread.rs.
       "-c",
       'approval_policy="on-request"',
-      "-c",
-      'approvals_reviewer="user"',
       "-c",
       'sandbox_mode="workspace-write"',
     ];
