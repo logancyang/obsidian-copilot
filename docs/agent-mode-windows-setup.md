@@ -30,7 +30,8 @@ irm https://gist.githubusercontent.com/zeroliu/8914d6b923724cfa7a6169ebdc7a0bc0/
 Do not run the installer inside WSL. Obsidian runs on Windows, so it needs the adapter installed by
 Windows `node.exe` and `npm.cmd`. The installer removes the superseded adapter, installs the
 maintained adapter with its compatible Codex dependency, verifies its package identity, and copies
-the `codex-acp.cmd` path to your clipboard.
+the `codex-acp.cmd` path to your clipboard. If no Codex API key is available, it also opens the
+bundled Codex CLI's ChatGPT sign-in flow.
 
 In Obsidian: **Settings -> Copilot -> Agents -> Codex -> Configure -> Auto-detect**. If it doesn't
 find Codex, paste the copied path into the binary path field, then save. Copilot resolves the npm

@@ -36,6 +36,40 @@ function Invoke-Npm {
     }
 }
 
+function Find-BundledCodex {
+    param([string]$NpmPrefix)
+
+    $candidatePaths = @(
+        (Join-Path $NpmPrefix "node_modules\@agentclientprotocol\codex-acp\node_modules\@openai\codex\bin\codex.js"),
+        (Join-Path $NpmPrefix "node_modules\@openai\codex\bin\codex.js")
+    )
+    foreach ($candidate in $candidatePaths) {
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+            return $candidate
+        }
+    }
+
+    throw "The adapter's bundled Codex CLI was not found. Checked: $($candidatePaths -join '; ')"
+}
+
+function Test-CodexLoggedIn {
+    param(
+        [string]$NodeCommand,
+        [string]$CodexCommand
+    )
+
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $status = & $NodeCommand $CodexCommand login status 2>&1
+        return ($LASTEXITCODE -eq 0 -and (($status -join "`n") -match "Logged in"))
+    } catch {
+        return $false
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+}
+
 if ($env:OS -ne "Windows_NT") {
     throw "Run this installer in native Windows PowerShell, not WSL."
 }
@@ -83,6 +117,26 @@ if ($version -notmatch "^@agentclientprotocol/codex-acp\s+\d+\.\d+\.\d+(?:[-+]\S
     throw "Unexpected codex-acp identity: $version"
 }
 Write-Host $version
+
+$hasApiKey = (-not [string]::IsNullOrWhiteSpace($env:CODEX_API_KEY)) -or (-not [string]::IsNullOrWhiteSpace($env:OPENAI_API_KEY))
+if ($hasApiKey) {
+    Write-Step "Using the existing Codex API key"
+} else {
+    $codex = Find-BundledCodex -NpmPrefix $npmPrefix
+    Write-Step "Checking Codex authentication"
+    if (Test-CodexLoggedIn -NodeCommand $node -CodexCommand $codex) {
+        Write-Host "Codex is already signed in."
+    } else {
+        Write-Host "Follow the Codex login prompts. This installer will continue after sign-in finishes."
+        & $node $codex login
+        if ($LASTEXITCODE -ne 0) {
+            throw "Codex login failed with exit code $LASTEXITCODE."
+        }
+        if (-not (Test-CodexLoggedIn -NodeCommand $node -CodexCommand $codex)) {
+            throw "Codex login did not report a signed-in account."
+        }
+    }
+}
 
 try {
     Set-Clipboard -Value $adapter
