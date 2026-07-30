@@ -487,8 +487,7 @@ export class ProjectFileManager {
             lastUsedMs,
           });
         } catch (fmError) {
-          if (materialized)
-            await this.rollbackCreatedFile(filePath, getProjectFolderPath(folderName));
+          if (materialized) await this.rollbackCreatedFile(filePath, projectFolderIn(folderName));
           throw fmError;
         }
 
@@ -575,7 +574,10 @@ export class ProjectFileManager {
       return;
     }
 
-    const folderPath = getProjectFolderPath(existing.folderName);
+    // From the record's own config path: deleting via the live root would target
+    // a same-named project in a different tree during the window after a root
+    // change but before ProjectRegister reloads its cache.
+    const { projectFolderPath: folderPath } = getProjectAnchorFromConfigPath(existing.filePath);
 
     try {
       addPendingFileWrite(existing.filePath);

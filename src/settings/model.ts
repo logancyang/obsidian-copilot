@@ -1265,16 +1265,23 @@ export function validateCopilotFolder(
       return { ok: false, reason: 'Folder path cannot contain "." segments.' };
     }
     // DESIGN NOTE — leading-dot (hidden) folder names are deliberately
-    // ACCEPTED. Hidden chat folders are a supported upstream capability
-    // (#2188/#2204 added adapter-based save/history precisely because
-    // Obsidian's Vault cache does not track hidden paths), and the chat,
-    // project, and skill stores all carry adapter fallbacks. Custom-command
-    // and system-prompt discovery still enumerate via `vault.getFiles()`, so
-    // those two features cannot see content under a hidden root — a
-    // pre-existing Vault-cache limitation that the single-root design now
-    // couples to the same folder choice. Rejecting dot segments here would
-    // regress the supported hidden-chat capability; porting command/prompt
-    // discovery to adapter scans is a follow-up outside this PR's scope.
+    // ACCEPTED.
+    // Trigger: a root such as `.copilot` places every derived store under a
+    // path Obsidian omits from the Vault cache.
+    // Assessment: chat, projects, and skills carry adapter-backed hidden-path
+    // support. Custom commands and system prompts do not — and the gap is wider
+    // than discovery: `loadAllCustomCommands` / `loadAllSystemPrompts` enumerate
+    // `vault.getFiles()`, while their create/update/delete paths also rely on
+    // cached `TFile`s, metadataCache, and `processFrontMatter`. Under a hidden
+    // root both can therefore read as empty AND fail to edit reliably.
+    // Scope: the Vault-cache limitation predates this PR — the old
+    // `customPromptsFolder` / `userSystemPromptsFolder` settings accepted hidden
+    // paths too. What the single-root design adds is the coupling: a root chosen
+    // for the supported hidden-chat capability now drags these two along.
+    // Why not fixed here: rejecting dot segments would regress supported hidden
+    // chats, and a scanner-only patch would leave them listable but not
+    // editable — real support needs adapter-backed CRUD plus frontmatter
+    // handling. Deferred as a follow-up.
     // If a future review flags this again, point them at this note.
     if (segment.toLowerCase() === CONVENTIONAL_OBSIDIAN_CONFIG_DIR) {
       return {

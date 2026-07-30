@@ -1,3 +1,4 @@
+import * as obsidian from "obsidian";
 import * as settingsModel from "@/settings/model";
 import * as utils from "@/utils";
 import { TFile } from "obsidian";
@@ -16,6 +17,9 @@ import {
 // Mock Obsidian's TFile and Modal classes
 jest.mock("obsidian", () => ({
   normalizePath: (path: string) => path.replace(/\/+/g, "/").replace(/^\/|\/$/g, ""),
+  // Mutable so a test can assert the case-sensitive and case-insensitive
+  // behaviours of system-root matching on one platform.
+  Platform: { isWin: false, isMacOS: true, isIosApp: false },
   TFile: class TFile {
     path: string;
   },
@@ -563,7 +567,7 @@ describe("searchUtils", () => {
       expect(mockGetAbstractFileByPath).not.toHaveBeenCalledWith("ai/memory/note.md");
     });
 
-    it("does not over-match sibling or differently-cased folders", () => {
+    it("does not over-match a sibling folder that merely shares the root's prefix", () => {
       (settingsModel.getSettings as jest.Mock).mockReturnValue({
         qaInclusions: "",
         qaExclusions: "",
@@ -571,10 +575,43 @@ describe("searchUtils", () => {
         copilotRootHistory: ["copilot"],
       });
       const filter = createCopilotPatternFilter(window.app);
-      // Case-sensitive: "Copilot/" is a different folder and is kept.
-      expect(filter("Copilot/note.md")).toBe(true);
       // Segment boundary: "mycopilot/" is not the "copilot" root.
       expect(filter("mycopilot/note.md")).toBe(true);
+    });
+
+    it("excludes a differently-cased root where the filesystem is case-insensitive", () => {
+      // On macOS/Windows, "Copilot/" and "copilot/" are the same folder. Nothing
+      // reconciles the stored spelling against the real one, so comparing
+      // exact-case here would fail OPEN and let chats reach QA indexing.
+      (obsidian.Platform as { isMacOS: boolean }).isMacOS = true;
+      (settingsModel.getSettings as jest.Mock).mockReturnValue({
+        qaInclusions: "",
+        qaExclusions: "",
+        copilotFolder: "copilot",
+        copilotRootHistory: ["copilot"],
+      });
+
+      expect(createCopilotPatternFilter(window.app)("Copilot/note.md")).toBe(false);
+    });
+
+    it("keeps a differently-cased folder where the filesystem is case-sensitive", () => {
+      // On Linux the two really are separate folders, so folding would exclude
+      // notes the user never put under a Copilot root.
+      const platform = obsidian.Platform as { isWin: boolean; isMacOS: boolean; isIosApp: boolean };
+      const restore = { ...platform };
+      Object.assign(platform, { isWin: false, isMacOS: false, isIosApp: false });
+      try {
+        (settingsModel.getSettings as jest.Mock).mockReturnValue({
+          qaInclusions: "",
+          qaExclusions: "",
+          copilotFolder: "copilot",
+          copilotRootHistory: ["copilot"],
+        });
+
+        expect(createCopilotPatternFilter(window.app)("Copilot/note.md")).toBe(true);
+      } finally {
+        Object.assign(platform, restore);
+      }
     });
   });
 });

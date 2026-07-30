@@ -30,10 +30,19 @@ export function getProjectAnchorFromConfigPath(configFilePath: string): {
   projectFolderPath: string;
   projectsRoot: string;
 } {
-  const normalized = normalizePath(configFilePath);
-  const projectFolderPath = normalized.slice(0, normalized.lastIndexOf("/"));
-  const projectsRoot = projectFolderPath.slice(0, projectFolderPath.lastIndexOf("/"));
-  return { projectFolderPath, projectsRoot };
+  const segments = normalizePath(configFilePath).split("/");
+  // Records only ever come from a path `isProjectConfigFile` accepted, which is
+  // exactly `<root>/<folder>/project.md`. Anything shorter cannot name a tree,
+  // so throw rather than invent one: a naive slice would silently truncate
+  // ("project.md" -> "project."), and falling back to the live root would
+  // reintroduce the very dependency this function exists to remove.
+  if (segments.length < 3) {
+    throw new Error(`Not a project config path: "${configFilePath}"`);
+  }
+  return {
+    projectFolderPath: segments.slice(0, -1).join("/"),
+    projectsRoot: segments.slice(0, -2).join("/"),
+  };
 }
 
 /**

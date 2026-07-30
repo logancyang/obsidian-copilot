@@ -20,7 +20,7 @@ import {
 import { addPendingFileWrite, removePendingFileWrite } from "@/projects/state";
 import { getSettings, updateSetting } from "@/settings/model";
 import { ensureFolderExists, stripFrontmatter } from "@/utils";
-import { App, Notice, parseYaml, TFile, TFolder, Vault } from "obsidian";
+import { App, Notice, normalizePath, parseYaml, TFile, TFolder, Vault } from "obsidian";
 import { trashFile } from "@/utils/vaultAdapterUtils";
 
 /**
@@ -43,10 +43,13 @@ function normalizeLineEndings(content: string): string {
 async function saveFailedProjectToUnsupported(
   vault: Vault,
   project: ProjectConfig,
-  reason: string
+  reason: string,
+  projectsFolder: string
 ): Promise<boolean> {
   try {
-    const unsupportedFolder = getProjectsUnsupportedFolder();
+    const unsupportedFolder = normalizePath(
+      `${projectsFolder}/${PROJECTS_UNSUPPORTED_FOLDER_NAME}`
+    );
     await ensureFolderExists(vault, unsupportedFolder);
 
     const safeId = sanitizeVaultPathSegment(project.id || "unknown") || "unknown";
@@ -147,10 +150,10 @@ async function rollbackCreatedFile(app: App, filePath: string, folderPath: strin
 async function writeProjectToVaultFile(
   app: App,
   project: ProjectConfig,
-  folderName: string
+  folderName: string,
+  projectsFolder: string
 ): Promise<TFile> {
   const vault = app.vault;
-  const projectsFolder = getProjectsFolder();
   await ensureFolderExists(vault, projectsFolder);
   await ensureFolderExists(vault, `${projectsFolder}/${folderName}`);
 
@@ -275,14 +278,19 @@ export async function migrateProjectsFromSettingsToVault(app: App): Promise<void
     // Dirty data defense: skip empty ids
     if (!id) {
       logWarn("[Projects] Skip migrating project with empty id");
-      await saveFailedProjectToUnsupported(vault, project, "empty project id");
+      await saveFailedProjectToUnsupported(vault, project, "empty project id", passProjectsFolder);
       continue;
     }
 
     // Dirty data defense: skip duplicate ids
     if (seenIds.has(id)) {
       logWarn(`[Projects] Skip migrating duplicate project id: ${id}`);
-      await saveFailedProjectToUnsupported(vault, project, `duplicate project id: ${id}`);
+      await saveFailedProjectToUnsupported(
+        vault,
+        project,
+        `duplicate project id: ${id}`,
+        passProjectsFolder
+      );
       continue;
     }
     seenIds.add(id);
@@ -300,7 +308,8 @@ export async function migrateProjectsFromSettingsToVault(app: App): Promise<void
       await saveFailedProjectToUnsupported(
         vault,
         project,
-        `folder name collision: "${folderName}" already used by id="${firstIdForFolder}"`
+        `folder name collision: "${folderName}" already used by id="${firstIdForFolder}"`,
+        passProjectsFolder
       );
       continue;
     }
@@ -387,7 +396,8 @@ export async function migrateProjectsFromSettingsToVault(app: App): Promise<void
         await saveFailedProjectToUnsupported(
           vault,
           project,
-          `existing file content mismatch at ${filePath} (delete/rename the file and re-run migration)`
+          `existing file content mismatch at ${filePath} (delete/rename the file and re-run migration)`,
+          passProjectsFolder
         );
         continue;
       }
@@ -399,13 +409,14 @@ export async function migrateProjectsFromSettingsToVault(app: App): Promise<void
       await saveFailedProjectToUnsupported(
         vault,
         project,
-        `target file exists at ${filePath} with mismatched id="${existingId}"`
+        `target file exists at ${filePath} with mismatched id="${existingId}"`,
+        passProjectsFolder
       );
       continue;
     }
 
     try {
-      const file = await writeProjectToVaultFile(app, project, folderName);
+      const file = await writeProjectToVaultFile(app, project, folderName, passProjectsFolder);
 
       const verified = await verifyMigratedContent(vault, file, project.systemPrompt || "");
       if (!verified) {
@@ -414,14 +425,19 @@ export async function migrateProjectsFromSettingsToVault(app: App): Promise<void
         // and fails again indefinitely.
         const folderPath = `${passProjectsFolder}/${folderName}`;
         await rollbackCreatedFile(app, file.path, folderPath);
-        await saveFailedProjectToUnsupported(vault, project, "content verification mismatch");
+        await saveFailedProjectToUnsupported(
+          vault,
+          project,
+          "content verification mismatch",
+          passProjectsFolder
+        );
       } else {
         migratedEntries.push(project);
       }
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       logError(`[Projects] Failed to migrate project id=${id}`, error);
-      await saveFailedProjectToUnsupported(vault, project, msg);
+      await saveFailedProjectToUnsupported(vault, project, msg, passProjectsFolder);
     }
   }
 

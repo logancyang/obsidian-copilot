@@ -35,6 +35,16 @@ describe("getProjectAnchorFromConfigPath", () => {
     expect(anchor.projectsRoot).toBe("old-root/projects");
   });
 
+  it("throws on a path too shallow to name a tree instead of inventing one", () => {
+    // Unreachable from a real record (isProjectConfigFile enforces the shape).
+    // Throwing beats both alternatives: a naive slice truncates ("project.md" to
+    // "project."), and defaulting to the live root reintroduces the dependency
+    // this helper removes. Either hands the caller a path pointing nowhere.
+    expect(() => getProjectAnchorFromConfigPath("project.md")).toThrow(
+      'Not a project config path: "project.md"'
+    );
+  });
+
   it("is unaffected by the configured root moving", () => {
     const mockedRoot = getEffectiveProjectsFolder as jest.Mock;
     mockedRoot.mockReturnValue("new-root/projects");
