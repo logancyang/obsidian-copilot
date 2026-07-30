@@ -2111,7 +2111,7 @@ describe("AgentSession.create (via start)", () => {
     await session.ready;
   });
 
-  it("waits for backend state before exposing the desired model", async () => {
+  it("stays starting until the backend applies the desired model", async () => {
     const mock = makeMockBackend();
     const backendState: BackendState = {
       model: {
@@ -2159,6 +2159,9 @@ describe("AgentSession.create (via start)", () => {
         modelId: "big-pickle",
       });
     });
+    expect(session.getStatus()).toBe("starting");
+    expect(() => session.sendPrompt("too early")).toThrow("Session is still starting");
+    expect(mock.prompt).not.toHaveBeenCalled();
 
     resolveSetModel!({
       ...backendState,
@@ -2171,6 +2174,7 @@ describe("AgentSession.create (via start)", () => {
     });
     await session.ready;
     expect(session.getState()?.model?.current.baseModelId).toBe("big-pickle");
+    expect(session.getStatus()).toBe("idle");
   });
 
   it("applies a seeded effort via setConfigOption without a redundant setModel", async () => {
@@ -2467,7 +2471,7 @@ function makeConfigOptionDescriptor(): BackendDescriptor {
 }
 
 describe("AgentSession warm-adoption ready gating", () => {
-  it("ready stays pending until setModel resolves so sendPrompt can't fire on the probe model", async () => {
+  it("stays starting until setModel resolves so sendPrompt can't fire on the probe model", async () => {
     const mock = makeMockBackend();
     const probeState: BackendState = {
       model: {
@@ -2501,16 +2505,15 @@ describe("AgentSession warm-adoption ready gating", () => {
       getDescriptor: () => makeWireOnlyDescriptor(),
     });
 
-    let readyResolved = false;
-    void session.ready.then(() => {
-      readyResolved = true;
+    await waitFor(() => {
+      expect(mock.setSessionModel).toHaveBeenCalledWith({
+        sessionId: "probe-1",
+        modelId: "openai/gpt-5",
+      });
     });
-    await new Promise((r) => window.setTimeout(r, 0));
-    expect(readyResolved).toBe(false);
-    expect(mock.setSessionModel).toHaveBeenCalledWith({
-      sessionId: "probe-1",
-      modelId: "openai/gpt-5",
-    });
+    expect(session.getStatus()).toBe("starting");
+    expect(() => session.sendPrompt("too early")).toThrow("Session is still starting");
+    expect(mock.prompt).not.toHaveBeenCalled();
 
     resolveSetModel({
       model: {
@@ -2520,8 +2523,8 @@ describe("AgentSession warm-adoption ready gating", () => {
       mode: null,
     });
     await session.ready;
-    expect(readyResolved).toBe(true);
     expect(session.getState()?.model?.current.baseModelId).toBe("openai/gpt-5");
+    expect(session.getStatus()).toBe("idle");
   });
 
   it("ready resolves immediately when no default selection is supplied", async () => {

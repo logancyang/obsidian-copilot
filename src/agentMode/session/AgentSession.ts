@@ -318,7 +318,7 @@ export class AgentSession {
   readonly backendId: BackendId;
   /** Immutable scope binding ({@link GLOBAL_SCOPE} or a project id). */
   readonly projectId: ProjectScopeId;
-  /** Resolves when `newSession` succeeds; rejects when it fails. */
+  /** Resolves when startup and any initial model selection have settled. */
   readonly ready: Promise<void>;
   private backendSessionId: SessionId | null = null;
   private readonly backend: BackendProcess;
@@ -352,6 +352,9 @@ export class AgentSession {
   // Combined with `backendSessionId === null` this yields the startup
   // `"error"` status.
   private startupFailed = false;
+  // Remains false until the backend has accepted or rejected the persisted
+  // model selection, preventing a prompt from racing that startup write.
+  private startupSettled = false;
   // Set in `runTurn`'s catch; cleared at the top of `sendPrompt` once
   // preconditions pass. Yields the per-turn `"error"` status while the
   // session sits idle between a failed turn and the next prompt.
@@ -489,16 +492,23 @@ export class AgentSession {
         opts.backendSessionId,
         (event) => this.handleSessionEvent(event)
       );
-      // Sync the status cache so the first recomputeStatusIfChanged doesn't
-      // fire a spurious "starting → idle" transition that no one observed.
-      this.cachedStatus = this.getStatus();
       // Gate `ready` on the model confirmation round-trip so `sendPrompt`
       // can't fire on the probe's model before the user's persisted
       // selection is applied to the backend.
-      this.ready =
-        opts.defaultModelSelection && originalState
-          ? this.confirmSeededSelection(opts.defaultModelSelection, originalState)
-          : Promise.resolve();
+      if (opts.defaultModelSelection && originalState) {
+        this.ready = this.confirmSeededSelection(opts.defaultModelSelection, originalState).finally(
+          () => {
+            this.startupSettled = true;
+            this.recomputeStatusIfChanged();
+          }
+        );
+      } else {
+        this.startupSettled = true;
+        this.ready = Promise.resolve();
+      }
+      // Sync the status cache so the first recomputeStatusIfChanged doesn't
+      // fire a spurious transition that no listener observed.
+      this.cachedStatus = this.getStatus();
     } else {
       this.currentState = null;
       this.ready = this.initialize(opts);
@@ -569,6 +579,8 @@ export class AgentSession {
       if (defaultModelSelection) {
         await this.confirmSeededSelection(defaultModelSelection, resp.state);
       }
+      this.startupSettled = true;
+      this.recomputeStatusIfChanged();
     } catch (err) {
       if (this.disposed) return;
       logWarn(`[AgentMode] session/new failed for ${this.internalId}`, err);
@@ -763,16 +775,15 @@ export class AgentSession {
   /**
    * The status is derived from underlying primitives so it cannot drift
    * from reality: any combination of `disposed`, `backendSessionId`,
-   * resolver-map sizes, `abortController`, `startupFailed`, and
+   * `startupSettled`, resolver-map sizes, `abortController`, `startupFailed`, and
    * `lastTurnError` maps to exactly one status. Mutating any of those
    * primitives implicitly transitions the status; consumers observe the
    * change via `onStatusChanged` after `recomputeStatusIfChanged()` runs.
    */
   getStatus(): AgentSessionStatus {
     if (this.disposed) return "closed";
-    if (this.backendSessionId === null) {
-      return this.startupFailed ? "error" : "starting";
-    }
+    if (this.startupFailed) return "error";
+    if (this.backendSessionId === null || !this.startupSettled) return "starting";
     if (
       this.pendingPlanResolvers.size +
         this.pendingToolResolvers.size +
@@ -1888,7 +1899,7 @@ export class AgentSession {
    * `getStatus()`.
    *
    * Call this after mutating any primitive that participates in the
-   * derivation: `disposed`, `backendSessionId`, `startupFailed`,
+   * derivation: `disposed`, `backendSessionId`, `startupFailed`, `startupSettled`,
    * `abortController`, `lastTurnError`, or the resolver maps.
    */
   private recomputeStatusIfChanged(): void {
