@@ -75,6 +75,10 @@ export class ProjectRegister {
     for (const d of this.fileModifyDebouncers.values()) d.cancel();
     this.fileModifyDebouncers.clear();
     this.debouncedFolderChange.cancel();
+    // Cancelling only stops a reload that has not started. Bumping the
+    // generation also retires one already in flight, so a torn-down instance
+    // cannot commit records into the store a new instance now owns.
+    this.folderChangeRequestId++;
     this.settingsUnsubscriber?.();
 
     this.vault.off("create", this.handleFileCreation);
@@ -150,6 +154,10 @@ export class ProjectRegister {
         )
       );
 
+      // Clearing the caches is per-file disk I/O, so a newer reload can start
+      // and finish inside it; without this second check whichever handler
+      // resumes last would install its own records over the newer ones.
+      if (currentRequestId !== this.folderChangeRequestId) return;
       updateCachedProjectRecords(nextRecords);
 
       // Reason: don't call setCurrentProject(null) here — ProjectManager's
@@ -189,6 +197,9 @@ export class ProjectRegister {
         )
       );
 
+      // A newer reload may have committed while these clears were awaited;
+      // wiping the records now would discard its results.
+      if (currentRequestId !== this.folderChangeRequestId) return;
       updateCachedProjectRecords([]);
 
       logError(`[Projects] Failed to reload after folder change: ${nextFolder}`, error);
