@@ -2,9 +2,8 @@ import { BinaryPathSetting } from "@/agentMode/backends/shared/BinaryPathSetting
 import { ConfigDialogShell, ConfigSection } from "@/agentMode/backends/shared/ConfigDialogShell";
 import { InstallCommandRow } from "@/agentMode/backends/shared/InstallCommandRow";
 import { InstallStatusLine } from "@/agentMode/backends/shared/installStatus";
-import { binaryPathInstallState } from "@/agentMode/backends/shared/simpleBinaryBackend";
 import { ReactModal } from "@/components/modals/ReactModal";
-import { useSettingsValue } from "@/settings/model";
+import { getSettings, useSettingsValue } from "@/settings/model";
 import { validateExecutableFile } from "@/utils/detectBinary";
 import { App, Notice } from "obsidian";
 import React from "react";
@@ -13,26 +12,42 @@ import {
   CODEX_INSTALL_COMMAND,
   codexAcpDetectionSearchDirs,
   detectCodexAcpPath,
+  getCodexInstallState,
+  refreshCodexInstallState,
+  subscribeCodexInstallState,
   updateCodexFields,
 } from "./descriptor";
+
+interface CodexConfigBodyProps {
+  onClose: () => void;
+}
 
 /**
  * Configure dialog for the Codex backend. Copilot spawns the native
  * `codex-acp` ACP adapter. The dialog configures the codex-acp path
  * and gives auth guidance; `codex login` owns the user's auth state.
  */
-const CodexConfigBody: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+export const CodexConfigBody: React.FC<CodexConfigBodyProps> = ({ onClose }) => {
   const settings = useSettingsValue();
   const binaryPath = settings.agentMode?.backends?.codex?.binaryPath ?? "";
-  // Existence-checked (same as descriptor.getInstallState): a synced-but-missing
-  // path reads "absent" here too, not a stale "Ready", so the dialog guides the
-  // user to re-detect or clear the dead path instead of looking configured.
-  const sessionState = binaryPathInstallState(binaryPath);
+  const getInstallStateSnapshot = React.useCallback(
+    () => getCodexInstallState(settings),
+    [settings]
+  );
+  const sessionState = React.useSyncExternalStore(
+    subscribeCodexInstallState,
+    getInstallStateSnapshot
+  );
+
+  React.useEffect(() => {
+    void refreshCodexInstallState(getSettings(), true);
+  }, []);
 
   const onSavePath = React.useCallback(async (path: string): Promise<string | null> => {
     const err = await validateExecutableFile(path);
     if (err) return err;
     updateCodexFields({ binaryPath: path });
+    await refreshCodexInstallState(getSettings(), true);
     new Notice("Codex binary path saved.");
     return null;
   }, []);

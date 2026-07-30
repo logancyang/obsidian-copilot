@@ -1,9 +1,4 @@
-/**
- * Locate a user-installed native `codex-acp` binary for the Codex Configure
- * dialog. On Windows, the npm shim (`codex-acp.cmd`) is not spawnable through
- * Agent Mode's no-shell ACP process path, so this resolver probes native
- * `.exe` locations first and only falls back to the generic PATH detector.
- */
+/** Locate a user-installed `codex-acp` adapter for the Codex Configure dialog. */
 import * as path from "node:path";
 
 import { nodeToolBinDirCandidates, type NodeToolFs } from "@/utils/nodeToolBinDirs";
@@ -15,6 +10,11 @@ export interface CodexAcpBinaryResolverInput {
   platform: NodeJS.Platform;
   env: NodeJS.ProcessEnv;
   fs: CodexAcpBinaryResolverFs;
+}
+
+export interface CodexAcpInvocation {
+  command: string;
+  args: string[];
 }
 
 export function resolveCodexAcpBinary(input: CodexAcpBinaryResolverInput): string | null {
@@ -33,6 +33,33 @@ export function codexAcpSearchDirs(input: CodexAcpBinaryResolverInput): string[]
   const candidates = input.platform === "win32" ? windowsCandidates(input) : unixCandidates(input);
   const pathImpl = input.platform === "win32" ? path.win32 : path.posix;
   return Array.from(new Set(candidates.map((candidate) => pathImpl.dirname(candidate))));
+}
+
+/**
+ * Converts npm's Windows command shim into a no-shell Node invocation.
+ * @param binaryPath - The selected adapter path saved in settings.
+ * @param platform - The device platform that determines whether command shims need translation.
+ */
+export function codexAcpInvocation(
+  binaryPath: string,
+  platform: NodeJS.Platform = process.platform
+): CodexAcpInvocation {
+  if (platform !== "win32" || !binaryPath.toLowerCase().endsWith(".cmd")) {
+    return { command: binaryPath, args: [] };
+  }
+  return {
+    command: "node",
+    args: [
+      path.win32.join(
+        path.win32.dirname(binaryPath),
+        "node_modules",
+        "@agentclientprotocol",
+        "codex-acp",
+        "dist",
+        "index.js"
+      ),
+    ],
+  };
 }
 
 const posix = path.posix;
@@ -55,7 +82,11 @@ function windowsCandidates(input: CodexAcpBinaryResolverInput): string[] {
   const localAppData = env.LOCALAPPDATA ?? win.join(homeDir, "AppData", "Local");
   const appData = env.APPDATA ?? win.join(homeDir, "AppData", "Roaming");
   const npmGlobal = win.join(appData, "npm");
+  const nodeToolDirs = Array.from(new Set([...nodeToolBinDirCandidates(input), npmGlobal]));
   const out: string[] = [
+    // The maintained adapter is a JavaScript npm package. Its command shim is
+    // translated to a direct Node invocation by `codexAcpInvocation`.
+    ...nodeToolDirs.map((dir) => win.join(dir, "codex-acp.cmd")),
     // Copilot's docs helper installs the native release zip here.
     win.join(localAppData, "Programs", "codex-acp", "codex-acp.exe"),
     // Earlier direct-tarball docs extracted the npm platform package here.
@@ -65,7 +96,7 @@ function windowsCandidates(input: CodexAcpBinaryResolverInput): string[] {
     win.join(homeDir, ".local", "bin", "codex-acp.exe"),
   ];
 
-  for (const dir of [...nodeToolBinDirCandidates(input), npmGlobal]) {
+  for (const dir of nodeToolDirs) {
     out.push(win.join(dir, "codex-acp.exe"));
     out.push(
       win.join(

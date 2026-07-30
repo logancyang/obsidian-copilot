@@ -3344,6 +3344,14 @@ export class AgentSessionManager {
     backendId: BackendId,
     descriptor: BackendDescriptor
   ): Promise<{ proc: BackendProcess; warm: WarmBackend | null }> {
+    const installState = descriptor.getInstallState(getSettings());
+    if (installState.kind !== "ready") {
+      const reason =
+        installState.kind === "error"
+          ? installState.message
+          : `${descriptor.displayName} is not ready (${installState.kind}).`;
+      throw new Error(reason);
+    }
     const existing = this.backends.get(backendId);
     if (existing && existing.isRunning()) return { proc: existing, warm: null };
     const inflight = this.starting.get(backendId);

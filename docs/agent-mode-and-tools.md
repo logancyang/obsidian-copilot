@@ -36,6 +36,16 @@ The mode picker beside the message box controls how much the active agent can do
 
 The available modes depend on the selected agent. Copilot normalizes equivalent modes across supported versions of Claude, Codex, and OpenCode.
 
+### Updating an older Codex adapter
+
+If Codex reports that it could not verify the maintained Codex ACP adapter, update it with:
+
+```bash
+npm install -g @agentclientprotocol/codex-acp
+```
+
+Then open **Settings → Copilot → Agents → Codex → Configure** and select the new `codex-acp` path. Copilot checks the selected adapter before loading its models, so superseded adapters remain unavailable until their path is replaced.
+
 ### Max Iterations
 
 The agent works in iteration cycles (think → use a tool → think → use a tool → answer). You can control the maximum number of iterations before the agent stops:

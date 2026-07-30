@@ -95,6 +95,37 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
     expect(value).not.toContain("copilot/skills/<name>/SKILL.md");
   });
 
+  it("runs the maintained Windows npm adapter through Node without a shell", async () => {
+    const originalPlatform = process.platform;
+    Object.defineProperty(process, "platform", { value: "win32" });
+    setSettings({
+      agentMode: {
+        byok: {},
+        mcpServers: [],
+        activeBackend: "codex",
+        debugFullFrames: false,
+        welcomeDismissed: false,
+        skills: { folder: "copilot/skills" },
+        backends: {
+          codex: {
+            binaryPath: "C:\\Users\\me\\AppData\\Roaming\\npm\\codex-acp.cmd",
+          },
+        },
+      },
+    });
+
+    try {
+      const desc = await new CodexBackend().buildSpawnDescriptor({ vaultBasePath: "C:\\vault" });
+
+      expect(desc.command).toBe("node");
+      expect(desc.args[0]).toBe(
+        "C:\\Users\\me\\AppData\\Roaming\\npm\\node_modules\\@agentclientprotocol\\codex-acp\\dist\\index.js"
+      );
+    } finally {
+      Object.defineProperty(process, "platform", { value: originalPlatform });
+    }
+  });
+
   it("appends the user's selected custom prompt to developer_instructions", async () => {
     updateCachedSystemPrompts([makeSystemPrompt("Haiku", "respond in haiku")]);
     setSelectedPromptTitle("Haiku");

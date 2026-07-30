@@ -3,6 +3,7 @@ import { AcpBackend, AcpSpawnDescriptor } from "@/agentMode/acp/types";
 import { buildSimpleSpawnDescriptor } from "@/agentMode/backends/shared/simpleBinaryBackend";
 import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemPrompt";
 import { buildBuiltinSkillEnv } from "@/agentMode/backends/shared/builtinSkillEnv";
+import { codexAcpInvocation } from "./codexBinaryResolver";
 import { mergeCodexConfigEnv } from "./codexConfigEnv";
 
 /**
@@ -18,8 +19,9 @@ export class CodexBackend implements AcpBackend {
   readonly displayName = "Codex";
 
   async buildSpawnDescriptor(ctx: { vaultBasePath: string }): Promise<AcpSpawnDescriptor> {
+    const binaryPath = getSettings().agentMode?.backends?.codex?.binaryPath;
     const descriptor = buildSimpleSpawnDescriptor(
-      getSettings().agentMode?.backends?.codex?.binaryPath,
+      binaryPath,
       "Codex binary path not configured. Open Agent Mode settings and set the path to codex-acp.",
       getSettings().agentMode?.backends?.codex?.envOverrides,
       {
@@ -30,6 +32,9 @@ export class CodexBackend implements AcpBackend {
         INITIAL_AGENT_MODE: "agent",
       }
     );
+    const invocation = codexAcpInvocation(descriptor.command);
+    descriptor.command = invocation.command;
+    descriptor.args = invocation.args;
     // Forward the shared composed system prompt — the Copilot base framing
     // (unless the user disabled it), the pill-syntax directive, and the user's
     // custom prompt — via codex's `developer_instructions` config field as a

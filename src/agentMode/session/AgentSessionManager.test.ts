@@ -249,8 +249,7 @@ function buildDescriptor(): BackendDescriptor {
   } as unknown as BackendDescriptor;
 }
 
-function buildManager(): AgentSessionManager {
-  const descriptor = buildDescriptor();
+function buildManager(descriptor: BackendDescriptor = buildDescriptor()): AgentSessionManager {
   const modelPreloader = {
     getCachedBackendState: jest.fn(() => null),
     preload: jest.fn(async () => undefined),
@@ -323,6 +322,21 @@ describe("AgentSessionManager.createSession", () => {
     await mgr.createSession();
     await mgr.createSession();
     expect(mockBackendStart).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not start a backend whose install state is not ready", async () => {
+    const descriptor = {
+      ...buildDescriptor(),
+      getInstallState: jest.fn(() => ({
+        kind: "error",
+        message: "Update the configured adapter.",
+      })),
+    } as unknown as BackendDescriptor;
+    const mgr = buildManager(descriptor);
+
+    await expect(mgr.createSession()).rejects.toThrow("Update the configured adapter.");
+    expect(descriptor.createBackendProcess).not.toHaveBeenCalled();
+    expect(mockBackendStart).not.toHaveBeenCalled();
   });
 
   it("mirrors the new session's unified state into the preloader cache", async () => {
@@ -1324,7 +1338,7 @@ describe("AgentSessionManager.applySelection", () => {
     const descriptor = {
       id: "opencode",
       displayName: "opencode",
-      getInstallState: jest.fn(),
+      getInstallState: jest.fn(() => ({ kind: "ready" })),
       subscribeInstallState: jest.fn(),
       openInstallUI: jest.fn(),
       createBackendProcess: jest.fn(() => makeMockBackendProcess()),
@@ -1415,7 +1429,7 @@ describe("AgentSessionManager default-model settings subscription", () => {
     return {
       id: "opencode",
       displayName: "opencode",
-      getInstallState: jest.fn(),
+      getInstallState: jest.fn(() => ({ kind: "ready" })),
       subscribeInstallState: jest.fn(),
       openInstallUI: jest.fn(),
       createBackendProcess: jest.fn(() => makeMockBackendProcess()),
@@ -1808,13 +1822,14 @@ describe("AgentSessionManager.onInstallStateChanged", () => {
   });
 
   it("keeps live and warm backend state while a compatibility check is in flight", async () => {
-    const { mgr, preloader } = buildInstallStateManager({
-      installState: { kind: "checking", source: "custom" },
+    const { mgr, preloader, setInstallState } = buildInstallStateManager({
+      installState: { kind: "ready", source: "custom" },
       cachedState: { model: null, mode: null },
     });
     await mgr.createSession();
     mockBackendShutdown.mockClear();
 
+    setInstallState({ kind: "checking", source: "custom" });
     await mgr.onInstallStateChanged("opencode");
 
     expect(mockBackendShutdown).not.toHaveBeenCalled();

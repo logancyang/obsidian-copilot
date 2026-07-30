@@ -1,0 +1,178 @@
+import * as fs from "node:fs";
+
+import type { InstallState } from "@/agentMode/session/types";
+import type { CopilotSettings } from "@/settings/model";
+import { getSettings, subscribeToSettingsChange } from "@/settings/model";
+import {
+  getCodexCompatibility,
+  refreshCodexCompatibility,
+  subscribeCodexCompatibility,
+} from "./codexCompatibility";
+import {
+  CodexBackendDescriptor,
+  getCodexInstallState,
+  refreshCodexInstallState,
+  subscribeCodexInstallState,
+} from "./descriptor";
+
+jest.mock("node:fs", () => ({
+  existsSync: jest.fn(),
+  readFileSync: jest.fn(),
+  readdirSync: jest.fn(),
+}));
+
+jest.mock("@/settings/model", () => ({
+  getSettings: jest.fn(),
+  subscribeToSettingsChange: jest.fn(),
+  updateAgentModeBackendFields: jest.fn(),
+}));
+
+jest.mock("./CodexInstallModal", () => ({
+  CodexInstallModal: jest.fn(),
+}));
+
+jest.mock("./codexCompatibility", () => ({
+  getCodexCompatibility: jest.fn(),
+  refreshCodexCompatibility: jest.fn(),
+  subscribeCodexCompatibility: jest.fn(),
+}));
+
+const mockGetSettings = getSettings as jest.MockedFunction<typeof getSettings>;
+const mockExistsSync = fs.existsSync as jest.MockedFunction<typeof fs.existsSync>;
+const mockSubscribeToSettingsChange = subscribeToSettingsChange as jest.MockedFunction<
+  typeof subscribeToSettingsChange
+>;
+const mockGetCompatibility = getCodexCompatibility as jest.MockedFunction<
+  typeof getCodexCompatibility
+>;
+const mockRefreshCompatibility = refreshCodexCompatibility as jest.MockedFunction<
+  typeof refreshCodexCompatibility
+>;
+const mockSubscribeCompatibility = subscribeCodexCompatibility as jest.MockedFunction<
+  typeof subscribeCodexCompatibility
+>;
+
+function settingsWithCodexPath(binaryPath?: string): CopilotSettings {
+  return {
+    agentMode: {
+      backends: {
+        codex: { binaryPath },
+      },
+    },
+  } as unknown as CopilotSettings;
+}
+
+describe("codex descriptor", () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+    mockExistsSync.mockReturnValue(true);
+  });
+
+  describe("getCodexInstallState()", () => {
+    it("returns a stable absent state when no executable is selected or present", () => {
+      const first = getCodexInstallState(settingsWithCodexPath(), () => false);
+
+      expect(first).toEqual({ kind: "absent" });
+      expect(getCodexInstallState(settingsWithCodexPath("/missing/codex-acp"), () => false)).toBe(
+        first
+      );
+      expect(mockGetCompatibility).not.toHaveBeenCalled();
+    });
+
+    it("returns the compatibility state for an executable that exists", () => {
+      const checking: InstallState = { kind: "checking", source: "custom" };
+      mockGetCompatibility.mockReturnValue(checking);
+
+      expect(
+        getCodexInstallState(settingsWithCodexPath("/usr/local/bin/codex-acp"), () => true)
+      ).toBe(checking);
+      expect(mockGetCompatibility).toHaveBeenCalledWith("/usr/local/bin/codex-acp");
+    });
+  });
+
+  describe("refreshCodexInstallState()", () => {
+    it("skips compatibility probing when no executable exists", async () => {
+      await expect(
+        refreshCodexInstallState(settingsWithCodexPath("/missing/codex-acp"), true, () => false)
+      ).resolves.toEqual({ kind: "absent" });
+      expect(mockRefreshCompatibility).not.toHaveBeenCalled();
+    });
+
+    it("refreshes compatibility for the selected executable", async () => {
+      const ready: InstallState = { kind: "ready", source: "custom" };
+      mockRefreshCompatibility.mockResolvedValue(ready);
+
+      await expect(
+        refreshCodexInstallState(
+          settingsWithCodexPath("/usr/local/bin/codex-acp"),
+          true,
+          () => true
+        )
+      ).resolves.toBe(ready);
+      expect(mockRefreshCompatibility).toHaveBeenCalledWith("/usr/local/bin/codex-acp", {
+        force: true,
+      });
+    });
+  });
+
+  describe("subscribeCodexInstallState()", () => {
+    it("returns the compatibility store unsubscribe function", () => {
+      const listener = jest.fn();
+      const unsubscribe = jest.fn();
+      mockSubscribeCompatibility.mockReturnValue(unsubscribe);
+
+      expect(subscribeCodexInstallState(listener)).toBe(unsubscribe);
+      expect(mockSubscribeCompatibility).toHaveBeenCalledWith(listener);
+    });
+  });
+
+  describe("CodexBackendDescriptor.subscribeInstallState()", () => {
+    it("publishes checking immediately and refreshes after the selected path changes", async () => {
+      let settingsListener:
+        | ((previous: CopilotSettings, next: CopilotSettings) => void)
+        | undefined;
+      const unsubscribeSettings = jest.fn();
+      const unsubscribeCompatibility = jest.fn();
+      mockSubscribeToSettingsChange.mockImplementation((listener) => {
+        settingsListener = listener;
+        return unsubscribeSettings;
+      });
+      mockSubscribeCompatibility.mockReturnValue(unsubscribeCompatibility);
+      mockRefreshCompatibility.mockResolvedValue({ kind: "ready", source: "custom" });
+      const listener = jest.fn();
+
+      const unsubscribe = CodexBackendDescriptor.subscribeInstallState({} as never, listener);
+      settingsListener?.(
+        settingsWithCodexPath("/legacy/codex-acp"),
+        settingsWithCodexPath("/maintained/codex-acp")
+      );
+      await Promise.resolve();
+
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect(mockRefreshCompatibility).toHaveBeenCalledWith("/maintained/codex-acp", {
+        force: true,
+      });
+
+      unsubscribe();
+      expect(unsubscribeSettings).toHaveBeenCalledTimes(1);
+      expect(unsubscribeCompatibility).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("CodexBackendDescriptor.onPluginLoad()", () => {
+    it("forces a compatibility refresh for an existing saved path", async () => {
+      const settings = settingsWithCodexPath("/legacy/codex-acp");
+      mockGetSettings.mockReturnValue(settings);
+      mockRefreshCompatibility.mockResolvedValue({
+        kind: "error",
+        message: "update codex-acp",
+      });
+
+      await CodexBackendDescriptor.onPluginLoad?.({} as never);
+
+      expect(mockRefreshCompatibility).toHaveBeenCalledWith("/legacy/codex-acp", {
+        force: true,
+      });
+    });
+  });
+});
