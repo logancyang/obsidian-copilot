@@ -350,23 +350,24 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     if (next.value !== value) onChange(next.value);
   }, [modePickerOverride]);
 
-  // Stable list of live session ids so the draft store's pruning and memo
+  // Stable list of live chat-input ids so the draft store's pruning and memo
   // don't churn on every manager notify (getSessions() returns a fresh array).
   // The "\0" delimiter (matching useAgentInputDrafts' own signature key) can't
-  // appear in a session id, so distinct id sets always produce distinct keys.
+  // appear in an id, so distinct id sets always produce distinct keys.
   const sessions = manager.getSessions();
-  const liveKey = sessions.map((s) => s.internalId).join("\0");
-  const liveSessionIds = useMemo(() => sessions.map((s) => s.internalId), [liveKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const liveKey = sessions.map((s) => s.chatInputId).join("\0");
+  const liveChatInputIds = useMemo(() => sessions.map((s) => s.chatInputId), [liveKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const chatInputId = manager.getSession(sessionId)?.chatInputId ?? sessionId;
 
-  // Per-session compose drafts live in the shell (the common owner) so the
+  // Per-chat-input compose drafts live in the shell (the common owner) so the
   // active turn's `loading` (transcript spinner) and the drop overlay's drag
   // state can be read directly here, instead of being mirrored up from the
   // composer via effect callbacks. The hook returns a referentially stable
   // controls object, so passing it down to the memoized AgentChatInput doesn't
   // re-render the composer on per-token stream updates.
   const draft = useAgentInputDrafts({
-    activeSessionId: sessionId,
-    liveSessionIds,
+    activeChatInputId: chatInputId,
+    liveChatInputIds,
     defaultIncludeActiveNote: settings.autoAddActiveContentToContext === true,
   });
 

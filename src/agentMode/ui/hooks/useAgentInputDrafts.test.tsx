@@ -14,8 +14,8 @@ const queued = (id: string): QueuedAgentMessage => ({
 });
 
 interface Props {
-  activeSessionId: string;
-  liveSessionIds: string[];
+  activeChatInputId: string;
+  liveChatInputIds: string[];
   defaultIncludeActiveNote: boolean;
 }
 
@@ -25,8 +25,8 @@ const renderDrafts = (initialProps: Props) =>
 describe("useAgentInputDrafts", () => {
   it("seeds a fresh draft from the defaults with frozen empties", () => {
     const { result } = renderDrafts({
-      activeSessionId: "a",
-      liveSessionIds: ["a"],
+      activeChatInputId: "a",
+      liveChatInputIds: ["a"],
       defaultIncludeActiveNote: true,
     });
 
@@ -41,8 +41,8 @@ describe("useAgentInputDrafts", () => {
 
   it("keeps each session's compose draft isolated across switches", () => {
     const { result, rerender } = renderDrafts({
-      activeSessionId: "a",
-      liveSessionIds: ["a", "b"],
+      activeChatInputId: "a",
+      liveChatInputIds: ["a", "b"],
       defaultIncludeActiveNote: false,
     });
 
@@ -51,8 +51,8 @@ describe("useAgentInputDrafts", () => {
 
     // Switch to b: its draft is fresh.
     rerender({
-      activeSessionId: "b",
-      liveSessionIds: ["a", "b"],
+      activeChatInputId: "b",
+      liveChatInputIds: ["a", "b"],
       defaultIncludeActiveNote: false,
     });
     expect(result.current.input).toBe("");
@@ -60,8 +60,8 @@ describe("useAgentInputDrafts", () => {
 
     // Back to a: the unsent text survived the round-trip.
     rerender({
-      activeSessionId: "a",
-      liveSessionIds: ["a", "b"],
+      activeChatInputId: "a",
+      liveChatInputIds: ["a", "b"],
       defaultIncludeActiveNote: false,
     });
     expect(result.current.input).toBe("draft for a");
@@ -69,8 +69,8 @@ describe("useAgentInputDrafts", () => {
 
   it("tracks loading per session so a background turn doesn't bleed", () => {
     const { result, rerender } = renderDrafts({
-      activeSessionId: "a",
-      liveSessionIds: ["a", "b"],
+      activeChatInputId: "a",
+      liveChatInputIds: ["a", "b"],
       defaultIncludeActiveNote: false,
     });
 
@@ -78,15 +78,15 @@ describe("useAgentInputDrafts", () => {
     expect(result.current.loading).toBe(true);
 
     rerender({
-      activeSessionId: "b",
-      liveSessionIds: ["a", "b"],
+      activeChatInputId: "b",
+      liveChatInputIds: ["a", "b"],
       defaultIncludeActiveNote: false,
     });
     expect(result.current.loading).toBe(false);
 
     rerender({
-      activeSessionId: "a",
-      liveSessionIds: ["a", "b"],
+      activeChatInputId: "a",
+      liveChatInputIds: ["a", "b"],
       defaultIncludeActiveNote: false,
     });
     expect(result.current.loading).toBe(true);
@@ -94,8 +94,8 @@ describe("useAgentInputDrafts", () => {
 
   it("applies functional updates to attachments and queue", () => {
     const { result } = renderDrafts({
-      activeSessionId: "a",
-      liveSessionIds: ["a"],
+      activeChatInputId: "a",
+      liveChatInputIds: ["a"],
       defaultIncludeActiveNote: false,
     });
 
@@ -110,8 +110,8 @@ describe("useAgentInputDrafts", () => {
 
   it("resetCompose clears compose fields but leaves loading and queue", () => {
     const { result } = renderDrafts({
-      activeSessionId: "a",
-      liveSessionIds: ["a"],
+      activeChatInputId: "a",
+      liveChatInputIds: ["a"],
       defaultIncludeActiveNote: true,
     });
 
@@ -136,8 +136,8 @@ describe("useAgentInputDrafts", () => {
 
   it("prunes a draft once its session is no longer live", () => {
     const { result, rerender } = renderDrafts({
-      activeSessionId: "a",
-      liveSessionIds: ["a", "b"],
+      activeChatInputId: "a",
+      liveChatInputIds: ["a", "b"],
       defaultIncludeActiveNote: false,
     });
 
@@ -145,15 +145,15 @@ describe("useAgentInputDrafts", () => {
 
     // Close session a (e.g. tab closed / replaced); only b remains live.
     rerender({
-      activeSessionId: "b",
-      liveSessionIds: ["b"],
+      activeChatInputId: "b",
+      liveChatInputIds: ["b"],
       defaultIncludeActiveNote: false,
     });
 
     // Revisiting a (were it ever reselected) yields a fresh draft, not the old.
     rerender({
-      activeSessionId: "a",
-      liveSessionIds: ["b"],
+      activeChatInputId: "a",
+      liveChatInputIds: ["b"],
       defaultIncludeActiveNote: false,
     });
     expect(result.current.input).toBe("");

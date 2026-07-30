@@ -30,9 +30,9 @@ export interface QueuedAgentMessage {
 }
 
 /**
- * Per-session compose state. Replaces the old `key={internalId}` remount of
+ * Per-chat-input compose state. Replaces the old `key={internalId}` remount of
  * the chat surface: instead of throwing away and rebuilding input state on
- * every tab switch, each session keeps its own draft so unsent text,
+ * every tab switch, each logical input keeps its own draft so unsent text,
  * attachments, and queued follow-ups survive switching away and back.
  *
  * `loading` (turn in flight) and `queue` live here too — without the remount
@@ -52,9 +52,9 @@ export interface AgentInputDraft {
 }
 
 interface UseAgentInputDraftsArgs {
-  activeSessionId: string;
-  /** Internal ids of all live sessions; drafts for ids not here are pruned. */
-  liveSessionIds: readonly string[];
+  activeChatInputId: string;
+  /** Logical ids of all live chat inputs; drafts for ids not here are pruned. */
+  liveChatInputIds: readonly string[];
   /** Seed for a fresh draft's include-active-note toggle (the user setting). */
   defaultIncludeActiveNote: boolean;
 }
@@ -112,20 +112,20 @@ const hasDraftPayload = (draft: AgentInputDraft, defaultIncludeActiveNote: boole
   draft.includeActiveWebTab;
 
 export function useAgentInputDrafts({
-  activeSessionId,
-  liveSessionIds,
+  activeChatInputId,
+  liveChatInputIds,
   defaultIncludeActiveNote,
 }: UseAgentInputDraftsArgs): AgentInputDraftControls {
   const [drafts, setDrafts] = useState<Record<string, AgentInputDraft>>({});
 
-  // Stable key so the prune effect only fires when the set of live sessions
+  // Stable key so the prune effect only fires when the set of live chat inputs
   // actually changes, not on every parent re-render (the array prop is a
   // fresh reference each render).
-  const liveKey = liveSessionIds.join("\0");
-  const liveSetRef = useRef<Set<string>>(new Set(liveSessionIds));
+  const liveKey = liveChatInputIds.join("\0");
+  const liveSetRef = useRef<Set<string>>(new Set(liveChatInputIds));
 
   useEffect(() => {
-    const live = new Set(liveSessionIds);
+    const live = new Set(liveChatInputIds);
     liveSetRef.current = live;
     setDrafts((prev) => {
       let changed = false;
@@ -136,7 +136,7 @@ export function useAgentInputDrafts({
       }
       return changed ? next : prev;
     });
-    // liveSessionIds is re-derived each render; gate on its stable join key.
+    // liveChatInputIds is re-derived each render; gate on its stable join key.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [liveKey]);
 
@@ -156,8 +156,9 @@ export function useAgentInputDrafts({
   );
 
   const updateActive = useCallback(
-    (updater: (draft: AgentInputDraft) => AgentInputDraft) => updateDraft(activeSessionId, updater),
-    [activeSessionId, updateDraft]
+    (updater: (draft: AgentInputDraft) => AgentInputDraft) =>
+      updateDraft(activeChatInputId, updater),
+    [activeChatInputId, updateDraft]
   );
 
   const setInput = useCallback(
@@ -252,7 +253,7 @@ export function useAgentInputDrafts({
   //      the setting (#2525) — a side effect of the remount, not an intended
   //      feature. PR1 dropped the remount; re-entering a session now restores
   //      that session's saved draft (toggle already false from its last send).
-  //      This is the point of per-session drafts: a session reads back exactly
+  //      This is the point of per-chat-input drafts: a chat reads back exactly
   //      as you left it, not silently re-toggled. A genuinely fresh session
   //      still seeds from defaultIncludeActiveNote (see createDraft and the
   //      missing-draft fallback below), so "new chat" honors the setting.
@@ -271,7 +272,7 @@ export function useAgentInputDrafts({
     [updateActive]
   );
 
-  const active = drafts[activeSessionId];
+  const active = drafts[activeChatInputId];
   const fields = useMemo<AgentInputDraft>(
     () =>
       active ?? {
