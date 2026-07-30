@@ -4,7 +4,7 @@
  * The Agent Mode barrel (`@/agentMode`) and the settings module are mocked so
  * the test exercises `wireAgentModelDiscovery` / `enrollBackend` against
  * controllable fakes without dragging in the React/Obsidian dependency tree.
- * The barrel helpers (`partitionOpencodeOnlyWireIds`, `computeDefaultEnabledIds`,
+ * The barrel helpers (`partitionOpencodeOnlyWireIds`,
  * `mapProviderToOpencodeId`) are re-implemented thinly in the mock to keep the
  * orchestration assertions independent of their unit tests;
  * `buildManagedOpencodeProviderIds` now lives in this module and is tested for
@@ -50,14 +50,6 @@ jest.mock("@/agentMode", () => ({
       default:
         return null;
     }
-  },
-  computeDefaultEnabledIds: (
-    enrolled: Array<{ configuredModelId: string; wireModelId: string }>,
-    preferredWireId: string | undefined
-  ) => {
-    if (enrolled.length === 0) return [];
-    const preferred = enrolled.find((e) => e.wireModelId === preferredWireId);
-    return [(preferred ?? enrolled[0]).configuredModelId];
   },
 }));
 
@@ -212,6 +204,7 @@ describe("wireAgentModelDiscovery", () => {
       wireModelIds: ["gpt-5", "gpt-5.5"],
     });
     expect(a.syncAgentModels).not.toHaveBeenCalled();
+    expect(a.setEnabledModels).not.toHaveBeenCalled();
     unsub();
   });
 
@@ -237,7 +230,7 @@ describe("wireAgentModelDiscovery", () => {
     unsub();
   });
 
-  it("seeds enabledModels to the catalog's first model without reading session state", async () => {
+  it("keeps every registered model enabled regardless of catalog order", async () => {
     mockDescriptors = [makeDescriptor({ id: "codex" })];
     const a = makeApiFake();
     const catalog = catalogWithModels(["gpt-5", "gpt-5.5"]);
@@ -247,13 +240,13 @@ describe("wireAgentModelDiscovery", () => {
     } as unknown as AgentSessionManager;
 
     const unsub = wireAgentModelDiscovery(makePlugin(a.api), manager);
-    await waitFor(() => expect(a.setEnabledModels).toHaveBeenCalledWith("codex", ["cm-codex-0"]));
+    await waitForDiscoveryLog("first enrollment for codex");
+    expect(a.registerAgentProvider.mock.calls[0][0].wireModelIds).toEqual(["gpt-5", "gpt-5.5"]);
+    expect(a.setEnabledModels).not.toHaveBeenCalled();
     unsub();
   });
 
-  it("falls back to the first enrolled model when the catalog default is suppressed", async () => {
-    // opencode suppresses the catalog default (a BYOK-managed anthropic model);
-    // seeding falls back to the first opencode-only model.
+  it("keeps every remaining OpenCode model enabled after managed-provider suppression", async () => {
     mockDescriptors = [makeDescriptor({ id: "opencode" })];
     const m = makeManagerFake();
     const a = makeApiFake();
@@ -270,9 +263,11 @@ describe("wireAgentModelDiscovery", () => {
     const unsub = wireAgentModelDiscovery(makePlugin(a.api), m.manager);
     await waitForDiscoveryLog("first enrollment for opencode");
 
-    // anthropic/* suppressed; default not enrolled → first enrolled (big-pickle).
-    expect(a.setEnabledModels).toHaveBeenCalledTimes(1);
-    expect(a.setEnabledModels.mock.calls[0]).toEqual(["opencode", ["cm-opencode-0"]]);
+    expect(a.registerAgentProvider.mock.calls[0][0].wireModelIds).toEqual([
+      "opencode/big-pickle",
+      "opencode/small-gherkin",
+    ]);
+    expect(a.setEnabledModels).not.toHaveBeenCalled();
     unsub();
   });
 
@@ -312,7 +307,7 @@ describe("wireAgentModelDiscovery", () => {
       fallbackDisplayNames: { "gpt-5": "gpt-5", "gpt-5.5": "gpt-5.5" },
       fallbackDescriptions: {},
     });
-    // Seeding never re-runs on the sync branch.
+    // Discovery never narrows the enabled set on either branch.
     expect(a.setEnabledModels).not.toHaveBeenCalled();
     unsub();
   });

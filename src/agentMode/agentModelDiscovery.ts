@@ -4,9 +4,9 @@
  * `origin: "agent"` `ConfiguredModel` so the curation UI and chat picker can
  * show the agent-discovered set.
  *
- * First enrollment of an `agentType` creates the provider and seeds the enabled
- * set to the catalog's first model; every later probe only reconciles the model
- * list (no provider-row write), so re-probes don't churn settings.
+ * First enrollment of an `agentType` creates the provider and enables every
+ * reported model; every later probe only reconciles the model list (no
+ * provider-row write), so re-probes don't churn settings.
  *
  * opencode enrolls all its models under a single agent provider, each
  * `ConfiguredModel.info.id` keeping the full prefixed wire form (e.g.
@@ -18,7 +18,6 @@ import { logError, logInfo } from "@/logger";
 import type CopilotPlugin from "@/main";
 import type { AgentType, ModelManagementApi, Provider, ProviderType } from "@/modelManagement";
 import {
-  computeDefaultEnabledIds,
   listBackendDescriptors,
   mapProviderToOpencodeId,
   partitionOpencodeOnlyWireIds,
@@ -67,10 +66,6 @@ export function wireAgentModelDiscovery(
       .join("\n");
     if (lastEnrolled.get(descriptor.id) === signature) return; // Unchanged — no-op.
 
-    // Catalog ordering is the backend's shared recommendation; a probe
-    // session's current selection is not authoritative for other sessions.
-    const defaultWireId = catalog?.availableModels?.[0]?.baseModelId;
-
     // Chain behind any in-flight run for this backend so two settles can't
     // interleave register/sync writes.
     const prior = inFlight.get(descriptor.id) ?? Promise.resolve();
@@ -78,7 +73,7 @@ export function wireAgentModelDiscovery(
       .catch(() => undefined)
       .then(async () => {
         if (disposed) return;
-        await enrollBackend(plugin.modelManagement, descriptor, reported, defaultWireId);
+        await enrollBackend(plugin.modelManagement, descriptor, reported);
         // Record the signature only after a successful enroll so a failed
         // run retries on the next settle.
         lastEnrolled.set(descriptor.id, signature);
@@ -112,15 +107,14 @@ export function wireAgentModelDiscovery(
 
 /**
  * Enroll one backend's reported wire ids through `AgentSetupApi`: first
- * enrollment registers the provider and seeds the enabled set to the catalog's
- * first model; later enrollments only reconcile the model list. opencode
- * first drops models it shares with a Copilot-managed provider.
+ * enrollment registers the provider and keeps every reported model enabled;
+ * later enrollments only reconcile the model list. opencode first drops models
+ * it shares with a Copilot-managed provider.
  */
 async function enrollBackend(
   api: ModelManagementApi,
   descriptor: BackendDescriptor,
-  reported: readonly ReportedModel[],
-  defaultWireId: string | undefined
+  reported: readonly ReportedModel[]
 ): Promise<void> {
   // A backend's id doubles as its model-management AgentType.
   const agentType = descriptor.id as AgentType;
@@ -167,8 +161,8 @@ async function enrollBackend(
     return;
   }
 
-  // First enrollment: register the provider (auto-enrolls every model), then
-  // narrow the enabled set to the catalog-declared default.
+  // First enrollment keeps every registered model enabled. Catalog ordering
+  // carries no backend-default semantics.
   const result = await api.setup.agent.registerAgentProvider({
     agentType,
     providerType: PROVIDER_TYPE_BY_AGENT[agentType],
@@ -181,21 +175,9 @@ async function enrollBackend(
     fallbackDescriptions,
   });
 
-  // `configuredModelIds` come back in `wireModelIds` order, so zip them to
-  // recover each model's wire id for the default-model lookup.
-  const enrolled = result.configuredModelIds.map((configuredModelId, i) => ({
-    configuredModelId,
-    wireModelId: wireModelIds[i],
-  }));
-  const seeded = computeDefaultEnabledIds(enrolled, defaultWireId);
-
-  if (seeded.length !== result.configuredModelIds.length) {
-    await api.backendConfigRegistry.setEnabledModels(agentType, seeded);
-  }
-
   logInfo(
     `[AgentMode] model discovery: first enrollment for ${agentType} — ` +
-      `${result.configuredModelIds.length} model(s) configured, ${seeded.length} enabled`
+      `${result.configuredModelIds.length} model(s) configured and enabled`
   );
 }
 
