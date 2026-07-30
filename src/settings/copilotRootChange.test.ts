@@ -8,6 +8,7 @@ import {
 import { mockTFile, mockTFolder } from "@/__tests__/mockObsidian";
 import { getSettings, settingsAtom, settingsStore, type CopilotSettings } from "@/settings/model";
 import type { App } from "obsidian";
+import * as obsidian from "obsidian";
 
 const garbageCollectVectorStore = jest.fn<Promise<number>, []>();
 jest.mock("@/search/vectorStoreManager", () => ({
@@ -77,6 +78,29 @@ describe("copilotRootChange", () => {
     it("returns false for an empty candidate root", () => {
       const app = appWithMarkdown(["a.md"]);
       expect(copilotRootContainsNotes(app, "")).toBe(false);
+    });
+
+    it("catches a differently-cased folder where the filesystem is case-insensitive", () => {
+      // This guard has to agree with the exclusion matcher, which folds case on
+      // these platforms. Comparing exact-case would clear `Notes`, and the real
+      // `notes/` — the user's own notes — would then be excluded from search:
+      // exactly what the guard exists to prevent.
+      const platform = obsidian.Platform as { isMacOS: boolean };
+      const previous = platform.isMacOS;
+      platform.isMacOS = true;
+      try {
+        const app = appWithMarkdown(["notes/private.md"]);
+        expect(copilotRootContainsNotes(app, "Notes")).toBe(true);
+      } finally {
+        platform.isMacOS = previous;
+      }
+    });
+
+    it("treats a differently-cased folder as distinct where the filesystem is case-sensitive", () => {
+      // On Linux `Notes/` and `notes/` really are two folders, so the candidate
+      // holds no notes and must be accepted.
+      const app = appWithMarkdown(["notes/private.md"]);
+      expect(copilotRootContainsNotes(app, "Notes")).toBe(false);
     });
   });
 

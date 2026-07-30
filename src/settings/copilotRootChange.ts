@@ -1,4 +1,5 @@
 import { logInfo, logWarn } from "@/logger";
+import { matchSystemRoots } from "@/search/searchUtils";
 import { getCopilotSaveData } from "@/settings/copilotSaveData";
 import {
   type CopilotSettings,
@@ -86,10 +87,11 @@ export function isKnownCopilotRoot(folder: string, history: readonly string[]): 
 export function copilotRootContainsNotes(app: App, folder: string): boolean {
   const root = normalizePath(folder).replace(/\/+$/, "");
   if (root.length === 0) return false;
-  const prefix = `${root}/`;
-  return app.vault
-    .getMarkdownFiles()
-    .some((file) => file.path === root || file.path.startsWith(prefix));
+  // Compared exactly as the exclusion boundary will compare it: that matcher
+  // folds case on case-insensitive filesystems, so an exact-case check here
+  // would clear `Notes` while the vault holds `notes/` — and the very notes this
+  // guard exists to protect would then be excluded from search.
+  return app.vault.getMarkdownFiles().some((file) => matchSystemRoots(file.path, [root]));
 }
 
 /**

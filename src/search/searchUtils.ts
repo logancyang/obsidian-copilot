@@ -177,15 +177,20 @@ function hasCaseInsensitiveFilesystem(): boolean {
 }
 
 /**
- * Match a raw path against the system-excluded Copilot roots.
+ * Match a raw path against Copilot roots the way the exclusion boundary does.
  *
  * Separate from {@link matchFilePathWithFolders} so the case-folding stays off
  * the user-pattern path — see {@link isSystemExcludedPath} for why.
  *
+ * Exported because anything DECIDING which paths a root covers has to agree with
+ * this: a guard that compares exact-case would clear a candidate root this
+ * matcher then treats as covering the user's real notes.
+ *
  * @param filePath - Vault-relative path, as the vault or Miyo reported it.
- * @param systemRoots - Roots from {@link getSystemExcludedFolders}.
+ * @param systemRoots - Roots from {@link getSystemExcludedFolders}, or a
+ *   candidate root being evaluated before it is committed.
  */
-function matchSystemRoots(filePath: string, systemRoots: string[]): boolean {
+export function matchSystemRoots(filePath: string, systemRoots: string[]): boolean {
   if (!hasCaseInsensitiveFilesystem()) {
     return matchFilePathWithFolders(filePath, systemRoots);
   }
