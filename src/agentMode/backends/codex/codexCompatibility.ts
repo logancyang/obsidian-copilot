@@ -16,8 +16,42 @@ const MAINTAINED_ADAPTER_VERSION =
   /^@agentclientprotocol\/codex-acp\s+\d+\.\d+\.\d+(?:[-+][^\s]+)?\s*$/;
 
 export const CODEX_REMOVE_LEGACY_COMMAND = "npm uninstall -g @zed-industries/codex-acp";
-export const CODEX_INSTALL_COMMAND = "npm install -g @agentclientprotocol/codex-acp";
-export const CODEX_ACP_UPDATE_MESSAGE = `Copilot could not verify this as the maintained Codex ACP adapter. The superseded adapter cannot provide current Codex models. Run ${CODEX_REMOVE_LEGACY_COMMAND}, then ${CODEX_INSTALL_COMMAND}, and select the new codex-acp path.`;
+const CODEX_NPM_INSTALL_COMMAND = "npm install -g @agentclientprotocol/codex-acp";
+const CODEX_WINDOWS_INSTALL_COMMAND =
+  "irm https://gist.githubusercontent.com/zeroliu/8914d6b923724cfa7a6169ebdc7a0bc0/raw/install-codex-agent-mode-windows.ps1 | iex";
+
+export interface CodexInstallGuidance {
+  installCommand: string;
+  removeLegacyCommand: string | null;
+  updateMessage: string;
+}
+
+/**
+ * Returns installation guidance that preserves the host environment where Obsidian runs.
+ * @param platform - The host platform that determines whether native Windows bootstrapping is needed.
+ */
+export function getCodexInstallGuidance(
+  platform: NodeJS.Platform = process.platform
+): CodexInstallGuidance {
+  if (platform === "win32") {
+    return {
+      installCommand: CODEX_WINDOWS_INSTALL_COMMAND,
+      removeLegacyCommand: null,
+      updateMessage:
+        "Copilot could not verify this as the maintained Codex ACP adapter. The superseded adapter cannot provide current Codex models. Run the Windows PowerShell install command, then select the new codex-acp.cmd path.",
+    };
+  }
+
+  return {
+    installCommand: CODEX_NPM_INSTALL_COMMAND,
+    removeLegacyCommand: CODEX_REMOVE_LEGACY_COMMAND,
+    updateMessage: `Copilot could not verify this as the maintained Codex ACP adapter. The superseded adapter cannot provide current Codex models. Run ${CODEX_REMOVE_LEGACY_COMMAND}, then ${CODEX_NPM_INSTALL_COMMAND}, and select the new codex-acp path.`,
+  };
+}
+
+const DEFAULT_INSTALL_GUIDANCE = getCodexInstallGuidance();
+export const CODEX_INSTALL_COMMAND = DEFAULT_INSTALL_GUIDANCE.installCommand;
+export const CODEX_ACP_UPDATE_MESSAGE = DEFAULT_INSTALL_GUIDANCE.updateMessage;
 
 export type CodexVersionRunner = (
   binaryPath: string,
@@ -121,7 +155,7 @@ export async function probeCodexAcpCompatibility(
   } catch {
     // The superseded adapter rejects --version; every unverified executable follows the same recovery path.
   }
-  return { kind: "error", message: CODEX_ACP_UPDATE_MESSAGE };
+  return { kind: "error", message: getCodexInstallGuidance(platform).updateMessage };
 }
 
 const codexCompatibilityStore = new CompatibilityStore<CodexCompatibilityInput, RefreshOptions>(

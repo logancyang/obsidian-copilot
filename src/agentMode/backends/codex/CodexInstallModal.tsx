@@ -9,7 +9,6 @@ import { App, Notice } from "obsidian";
 import React from "react";
 import {
   CODEX_BINARY_NAME,
-  CODEX_INSTALL_COMMAND,
   codexAcpDetectionSearchDirs,
   detectCodexAcpPath,
   getCodexInstallState,
@@ -17,10 +16,11 @@ import {
   subscribeCodexInstallState,
   updateCodexFields,
 } from "./descriptor";
-import { CODEX_REMOVE_LEGACY_COMMAND } from "./codexCompatibility";
+import { getCodexInstallGuidance } from "./codexCompatibility";
 
 interface CodexConfigBodyProps {
   onClose: () => void;
+  platform?: NodeJS.Platform;
 }
 
 /**
@@ -28,8 +28,12 @@ interface CodexConfigBodyProps {
  * `codex-acp` ACP adapter. The dialog configures the codex-acp path
  * and gives auth guidance; `codex login` owns the user's auth state.
  */
-export const CodexConfigBody: React.FC<CodexConfigBodyProps> = ({ onClose }) => {
+export const CodexConfigBody: React.FC<CodexConfigBodyProps> = ({
+  onClose,
+  platform = process.platform,
+}) => {
   const settings = useSettingsValue();
+  const installGuidance = getCodexInstallGuidance(platform);
   const binaryPath = settings.agentMode?.backends?.codex?.binaryPath ?? "";
   const getInstallStateSnapshot = React.useCallback(
     () => getCodexInstallState(settings),
@@ -63,15 +67,21 @@ export const CodexConfigBody: React.FC<CodexConfigBodyProps> = ({ onClose }) => 
   return (
     <ConfigDialogShell status={<InstallStatusLine state={sessionState} />} onClose={onClose}>
       <ConfigSection title="Install codex-acp">
-        {needsLegacyRemoval && (
+        {needsLegacyRemoval && installGuidance.removeLegacyCommand && (
           <InstallCommandRow
-            command={CODEX_REMOVE_LEGACY_COMMAND}
+            command={installGuidance.removeLegacyCommand}
             label="1. Remove the superseded adapter"
           />
         )}
         <InstallCommandRow
-          command={CODEX_INSTALL_COMMAND}
-          label={needsLegacyRemoval ? "2. Install the maintained adapter" : undefined}
+          command={installGuidance.installCommand}
+          label={
+            needsLegacyRemoval
+              ? installGuidance.removeLegacyCommand
+                ? "2. Install the maintained adapter"
+                : "Replace with the maintained adapter (Windows PowerShell)"
+              : undefined
+          }
         />
       </ConfigSection>
 

@@ -1,7 +1,9 @@
 import {
   buildCodexEnvironment,
   CODEX_ACP_UPDATE_MESSAGE,
+  CODEX_REMOVE_LEGACY_COMMAND,
   getCodexCompatibility,
+  getCodexInstallGuidance,
   probeCodexAcpCompatibility,
   refreshCodexCompatibility,
   subscribeCodexCompatibility,
@@ -9,6 +11,27 @@ import {
 } from "./codexCompatibility";
 
 describe("codexCompatibility", () => {
+  describe("getCodexInstallGuidance()", () => {
+    it("uses one native PowerShell bootstrap command on Windows", () => {
+      expect(getCodexInstallGuidance("win32")).toEqual({
+        installCommand:
+          "irm https://gist.githubusercontent.com/zeroliu/8914d6b923724cfa7a6169ebdc7a0bc0/raw/install-codex-agent-mode-windows.ps1 | iex",
+        removeLegacyCommand: null,
+        updateMessage:
+          "Copilot could not verify this as the maintained Codex ACP adapter. The superseded adapter cannot provide current Codex models. Run the Windows PowerShell install command, then select the new codex-acp.cmd path.",
+      });
+    });
+
+    it("uses separate npm migration commands outside Windows", () => {
+      const guidance = getCodexInstallGuidance("darwin");
+
+      expect(guidance.installCommand).toBe("npm install -g @agentclientprotocol/codex-acp");
+      expect(guidance.removeLegacyCommand).toBe(CODEX_REMOVE_LEGACY_COMMAND);
+      expect(guidance.updateMessage).toContain(CODEX_REMOVE_LEGACY_COMMAND);
+      expect(guidance.updateMessage).toContain(guidance.installCommand);
+    });
+  });
+
   describe("buildCodexEnvironment()", () => {
     it("normalizes Windows PATH casing so the configured override reaches Node", () => {
       expect(
@@ -87,6 +110,26 @@ describe("codexCompatibility", () => {
       await expect(probeCodexAcpCompatibility("/usr/local/bin/codex-acp", run)).resolves.toEqual({
         kind: "error",
         message: CODEX_ACP_UPDATE_MESSAGE,
+      });
+    });
+
+    it("returns the native Windows recovery path for an incompatible npm shim", async () => {
+      const run = jest
+        .fn<ReturnType<CodexVersionRunner>, Parameters<CodexVersionRunner>>()
+        .mockResolvedValue({ stdout: "codex-acp 0.8.1\n" });
+
+      await expect(
+        probeCodexAcpCompatibility(
+          "C:\\Users\\me\\AppData\\Roaming\\npm\\codex-acp.cmd",
+          run,
+          "win32",
+          undefined,
+          () =>
+            '"%_prog%" "%dp0%\\node_modules\\@agentclientprotocol\\codex-acp\\dist\\index.js" %*'
+        )
+      ).resolves.toEqual({
+        kind: "error",
+        message: getCodexInstallGuidance("win32").updateMessage,
       });
     });
   });

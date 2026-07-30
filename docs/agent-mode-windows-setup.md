@@ -20,19 +20,21 @@ Open a Copilot chat, switch to **Agent Mode**, pick **Claude**, and send a messa
 
 ## Codex
 
-Install a current [Node.js](https://nodejs.org/) release, then run these commands separately in **PowerShell**:
+Install a current [Node.js](https://nodejs.org/) release for Windows, then run this command in
+native **Windows PowerShell**:
 
 ```powershell
-npm install -g @openai/codex
-npm uninstall -g @zed-industries/codex-acp
-npm install -g @agentclientprotocol/codex-acp
-codex login
-codex-acp --version
+irm https://gist.githubusercontent.com/zeroliu/8914d6b923724cfa7a6169ebdc7a0bc0/raw/install-codex-agent-mode-windows.ps1 | iex
 ```
 
-Finish the Codex login flow. The final command must report a version beginning with `@agentclientprotocol/codex-acp`.
+Do not run the installer inside WSL. Obsidian runs on Windows, so it needs the adapter installed by
+Windows `node.exe` and `npm.cmd`. The installer removes the superseded adapter, installs the
+maintained adapter with its compatible Codex dependency, verifies its package identity, and copies
+the `codex-acp.cmd` path to your clipboard.
 
-In Obsidian: **Settings -> Copilot -> Agents -> Codex -> Configure -> Auto-detect**. The maintained npm package normally installs `codex-acp.cmd`; Copilot resolves that shim to its Node entry point before starting it.
+In Obsidian: **Settings -> Copilot -> Agents -> Codex -> Configure -> Auto-detect**. If it doesn't
+find Codex, paste the copied path into the binary path field, then save. Copilot resolves the npm
+command shim to its Node entry point before starting it.
 
 Open a Copilot chat, switch to **Agent Mode**, pick **Codex**, and send a message.
 

@@ -120,5 +120,19 @@ describe("CodexInstallModal", () => {
       expect(screen.getByText(/2. Install the maintained adapter/)).toBeTruthy();
       expect(mockRefreshCodexInstallState).toHaveBeenCalledWith(expect.anything(), true);
     });
+
+    it("shows one native PowerShell migration command on Windows", () => {
+      render(<CodexConfigBody onClose={jest.fn()} platform="win32" />);
+
+      expect(screen.queryByText(/1. Remove the superseded adapter/)).not.toBeTruthy();
+      expect(
+        screen.getByText(
+          /irm https:\/\/gist\.githubusercontent\.com\/zeroliu\/8914d6b923724cfa7a6169ebdc7a0bc0/
+        )
+      ).toBeTruthy();
+      expect(
+        screen.getByText(/Replace with the maintained adapter \(Windows PowerShell\)/)
+      ).toBeTruthy();
+    });
   });
 });
