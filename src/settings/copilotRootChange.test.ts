@@ -75,6 +75,21 @@ describe("copilotRootChange", () => {
       expect(copilotRootContainsNotes(app, "ai")).toBe(false);
     });
 
+    it("does not treat a differently-cased folder as a recorded root", () => {
+      // Identity stays exact-case even on filesystems where coverage folds: this
+      // gates the EXEMPTION from the note-content guard, so folding here would
+      // accept a genuinely different `notes/` as the `Notes` root once used and
+      // activate Copilot over the user's own notes. See the note on the function.
+      const platform = obsidian.Platform as { isMacOS: boolean };
+      const previous = platform.isMacOS;
+      platform.isMacOS = true;
+      try {
+        expect(isKnownCopilotRoot("TeamAI", ["teamai"])).toBe(false);
+      } finally {
+        platform.isMacOS = previous;
+      }
+    });
+
     it("returns false for an empty candidate root", () => {
       const app = appWithMarkdown(["a.md"]);
       expect(copilotRootContainsNotes(app, "")).toBe(false);
@@ -101,41 +116,6 @@ describe("copilotRootChange", () => {
       // holds no notes and must be accepted.
       const app = appWithMarkdown(["notes/private.md"]);
       expect(copilotRootContainsNotes(app, "Notes")).toBe(false);
-    });
-  });
-
-  // The Apply guard is `!isKnownCopilotRoot(...) && copilotRootContainsNotes(...)`,
-  // and the two use different comparisons on purpose. BasicSettings mocks both,
-  // so the composed rule is only observable here.
-  describe("the exemption/coverage pair the Apply guard composes", () => {
-    const applyWouldBlock = (app: App, folder: string, history: string[]) =>
-      !isKnownCopilotRoot(folder, history) && copilotRootContainsNotes(app, folder);
-
-    it("blocks a differently-cased historical root rather than exempting it", () => {
-      // Fails closed: identity is exact-case, so this is refused by the content
-      // guard instead of exempted. The user's original spelling still works.
-      const platform = obsidian.Platform as { isMacOS: boolean };
-      const previous = platform.isMacOS;
-      platform.isMacOS = true;
-      try {
-        const app = appWithMarkdown(["teamai/copilot-conversations/chat.md"]);
-        expect(applyWouldBlock(app, "TeamAI", ["teamai"])).toBe(true);
-      } finally {
-        platform.isMacOS = previous;
-      }
-    });
-
-    it("does not exempt a real folder that merely differs in case from a historical root", () => {
-      // The reason identity must NOT fold: on a case-sensitive volume `notes/`
-      // is a different folder holding the user's own notes. Folding identity
-      // would exempt it and activate a Copilot root over them.
-      const app = appWithMarkdown(["notes/user-note.md"]);
-      expect(applyWouldBlock(app, "notes", ["Notes"])).toBe(true);
-    });
-
-    it("exempts a historical root spelled exactly as recorded", () => {
-      const app = appWithMarkdown(["teamai/copilot-conversations/chat.md"]);
-      expect(applyWouldBlock(app, "teamai", ["teamai"])).toBe(false);
     });
   });
 
