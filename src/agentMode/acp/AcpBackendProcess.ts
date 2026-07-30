@@ -669,7 +669,12 @@ export class AcpBackendProcess implements BackendProcess {
       logWarn(`[AgentMode] permission requested but no prompter is registered; auto-cancelling`);
       return { outcome: { outcome: "cancelled" } };
     }
-    const decision = await this.permissionPrompter(acpPermissionRequestToPrompt(req));
+    const decision = await this.permissionPrompter(
+      acpPermissionRequestToPrompt(
+        req,
+        (option, metadata) => this.descriptor.presentPermissionOption?.(option, metadata) ?? option
+      )
+    );
     return decisionToAcpResponse(decision);
   }
 }

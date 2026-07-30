@@ -573,7 +573,10 @@ export const PERMISSION_REJECT_KINDS: readonly PermissionOptionKind[] = [
 /** Single option carried in a `PermissionPrompt`. */
 export interface PermissionOption {
   optionId: string;
+  /** Compact action text suitable for a permission button. */
   name: string;
+  /** Option-specific context exposed by the matching action. */
+  description?: string;
   kind: PermissionOptionKind;
 }
 

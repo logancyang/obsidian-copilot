@@ -17,7 +17,12 @@ import {
   binaryPathInstallState,
   simpleBinaryBackendProcess,
 } from "@/agentMode/backends/shared/simpleBinaryBackend";
-import type { EnabledModelEntry, ModelSelection, ModelWireCodec } from "@/agentMode/session/types";
+import type {
+  EnabledModelEntry,
+  ModelSelection,
+  ModelWireCodec,
+  PermissionOption,
+} from "@/agentMode/session/types";
 import type { BackendDescriptor, BackendProcess, InstallState } from "@/agentMode/session/types";
 import { detectBinary } from "@/utils/detectBinary";
 import { codexAcpSearchDirs, resolveCodexAcpBinary } from "./codexBinaryResolver";
@@ -132,6 +137,22 @@ export const CodexBackendDescriptor: BackendDescriptor = {
     return name.replace(/^gpt/i, "GPT");
   },
 
+  presentPermissionOption(option: PermissionOption, metadata: unknown): PermissionOption {
+    const decision = codexPermissionDecision(metadata);
+    const isExecpolicyAmendment =
+      decision === "acceptWithExecpolicyAmendment" && option.kind === "allow_always";
+    const isNetworkPolicyAmendment =
+      decision === "applyNetworkPolicyAmendment" &&
+      (option.kind === "allow_always" || option.kind === "reject_always");
+    if (!isExecpolicyAmendment && !isNetworkPolicyAmendment) return option;
+
+    return {
+      ...option,
+      name: option.kind === "reject_always" ? "Block Always" : "Allow Always",
+      description: option.name,
+    };
+  },
+
   getInstallState(settings: CopilotSettings): InstallState {
     return binaryPathInstallState(settings.agentMode?.backends?.codex?.binaryPath);
   },
@@ -172,3 +193,10 @@ export const CodexBackendDescriptor: BackendDescriptor = {
     return buildCodexModeMapping(modeState);
   },
 };
+
+function codexPermissionDecision(metadata: unknown): unknown {
+  if (metadata === null || typeof metadata !== "object") return undefined;
+  const codex = (metadata as Record<string, unknown>).codex;
+  if (codex === null || typeof codex !== "object") return undefined;
+  return (codex as Record<string, unknown>).decision;
+}

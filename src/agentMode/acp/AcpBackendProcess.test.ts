@@ -1,5 +1,5 @@
 import { FileSystemAdapter, App } from "obsidian";
-import type { BackendDescriptor } from "@/agentMode/session/types";
+import type { BackendDescriptor, PermissionOption } from "@/agentMode/session/types";
 import { AcpBackendProcess } from "./AcpBackendProcess";
 import type { AcpBackend } from "./types";
 import type { VaultClient } from "./VaultClient";
@@ -83,10 +83,11 @@ function buildStubBackend(): AcpBackend {
   };
 }
 
-function buildStubDescriptor(): BackendDescriptor {
+function buildStubDescriptor(overrides: Partial<BackendDescriptor> = {}): BackendDescriptor {
   return {
     id: "opencode",
     displayName: "opencode",
+    ...overrides,
   } as unknown as BackendDescriptor;
 }
 
@@ -290,33 +291,72 @@ describe("AcpBackendProcess", () => {
     expect(response).toEqual({ outcome: { outcome: "cancelled" } });
   });
 
-  it("delegates to the registered prompter and forwards the response", async () => {
+  it("forwards opaque option metadata unchanged to the presentation hook before delegating", async () => {
+    const policyMetadata = {
+      codex: { decision: "acceptWithExecpolicyAmendment" },
+    };
+    const presentPermissionOption = jest.fn(
+      (option: PermissionOption, metadata: unknown): PermissionOption => {
+        if (metadata !== policyMetadata) return option;
+        return {
+          ...option,
+          name: "Allow Always",
+          description: option.name,
+        };
+      }
+    );
     const backend = new AcpBackendProcess(
       buildApp(),
       buildStubBackend(),
       "1.0.0",
-      buildStubDescriptor()
+      buildStubDescriptor({ presentPermissionOption })
     );
     await backend.start();
 
-    const prompter = jest
-      .fn()
-      .mockResolvedValue({ outcome: { outcome: "selected", optionId: "ok" } });
+    const prompter = jest.fn().mockResolvedValue({
+      outcome: { outcome: "selected", optionId: "backend-policy-rule" },
+    });
     backend.setPermissionPrompter(prompter);
 
     const client = getVaultClient(backend);
+    const policyRule = "Allow commands matching `/usr/local/bin/search --vault notes`";
     const req = {
       sessionId: "s1",
       toolCall: { toolCallId: "tc1", title: "Read" },
-      options: [{ optionId: "ok", name: "Allow", kind: "allow_once" }],
+      options: [
+        { optionId: "allow_once", name: "Allow Once", kind: "allow_once" },
+        {
+          optionId: "backend-policy-rule",
+          name: policyRule,
+          kind: "allow_always",
+          _meta: policyMetadata,
+        },
+      ],
     } as unknown as Parameters<typeof client.requestPermission>[0];
     const response = await client.requestPermission(req);
+    expect(presentPermissionOption).toHaveBeenCalledTimes(2);
+    expect(presentPermissionOption.mock.calls[1][1]).toBe(policyMetadata);
     expect(prompter).toHaveBeenCalledTimes(1);
     // Prompter receives a session-domain `PermissionPrompt`.
     const prompt = prompter.mock.calls[0][0];
     expect(prompt.sessionId).toBe("s1");
     expect(prompt.toolCall.toolCallId).toBe("tc1");
-    expect(response).toEqual({ outcome: { outcome: "selected", optionId: "ok" } });
+    expect(prompt.options).toEqual([
+      {
+        optionId: "allow_once",
+        name: "Allow Once",
+        kind: "allow_once",
+      },
+      {
+        optionId: "backend-policy-rule",
+        name: "Allow Always",
+        description: policyRule,
+        kind: "allow_always",
+      },
+    ]);
+    expect(response).toEqual({
+      outcome: { outcome: "selected", optionId: "backend-policy-rule" },
+    });
   });
 
   it("clears connection state on subprocess exit so subsequent ops fail with a clear error", async () => {
