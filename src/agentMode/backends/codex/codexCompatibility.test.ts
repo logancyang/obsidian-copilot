@@ -1,5 +1,5 @@
 import {
-  buildCodexProbeEnvironment,
+  buildCodexEnvironment,
   CODEX_ACP_UPDATE_MESSAGE,
   getCodexCompatibility,
   probeCodexAcpCompatibility,
@@ -9,10 +9,10 @@ import {
 } from "./codexCompatibility";
 
 describe("codexCompatibility", () => {
-  describe("buildCodexProbeEnvironment()", () => {
+  describe("buildCodexEnvironment()", () => {
     it("normalizes Windows PATH casing so the configured override reaches Node", () => {
       expect(
-        buildCodexProbeEnvironment(
+        buildCodexEnvironment(
           "C:\\portable\\codex-acp.cmd",
           { PATH: "C:\\generated-node", TOKEN: "base" },
           { Path: "D:\\portable-node\\bin", TOKEN: "configured" },

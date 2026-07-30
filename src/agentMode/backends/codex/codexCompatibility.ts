@@ -51,18 +51,18 @@ function codexCompatibilityInput(
     cacheKey: `${binaryPath}\u0000${environmentKey}`,
     binaryPath,
     source: "custom",
-    env: buildCodexProbeEnvironment(binaryPath, process.env, envOverrides),
+    env: buildCodexEnvironment(binaryPath, process.env, envOverrides),
   };
 }
 
 /**
- * Builds the compatibility probe environment without duplicate Windows PATH keys.
+ * Builds a Codex adapter environment without duplicate Windows PATH keys.
  * @param binaryPath - The selected adapter path used to augment sparse GUI environments.
  * @param baseEnv - The process environment inherited by the plugin.
  * @param envOverrides - User-configured Codex environment overrides.
  * @param platform - The device platform that determines environment-key casing.
  */
-export function buildCodexProbeEnvironment(
+export function buildCodexEnvironment(
   binaryPath: string,
   baseEnv: NodeJS.ProcessEnv,
   envOverrides: Record<string, string> = {},

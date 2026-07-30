@@ -4,6 +4,7 @@ import { buildSimpleSpawnDescriptor } from "@/agentMode/backends/shared/simpleBi
 import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemPrompt";
 import { buildBuiltinSkillEnv } from "@/agentMode/backends/shared/builtinSkillEnv";
 import { codexAcpInvocation } from "./codexBinaryResolver";
+import { buildCodexEnvironment } from "./codexCompatibility";
 import { mergeCodexConfigEnv } from "./codexConfigEnv";
 
 /**
@@ -19,11 +20,12 @@ export class CodexBackend implements AcpBackend {
   readonly displayName = "Codex";
 
   async buildSpawnDescriptor(ctx: { vaultBasePath: string }): Promise<AcpSpawnDescriptor> {
-    const binaryPath = getSettings().agentMode?.backends?.codex?.binaryPath;
+    const codexSettings = getSettings().agentMode?.backends?.codex;
+    const binaryPath = codexSettings?.binaryPath;
     const descriptor = buildSimpleSpawnDescriptor(
       binaryPath,
       "Codex binary path not configured. Open Agent Mode settings and set the path to codex-acp.",
-      getSettings().agentMode?.backends?.codex?.envOverrides,
+      codexSettings?.envOverrides,
       {
         // Builtin skills consume plugin-managed runtime paths and credentials.
         ...(await buildBuiltinSkillEnv("", ctx.vaultBasePath)),
@@ -31,6 +33,11 @@ export class CodexBackend implements AcpBackend {
         // than Codex's approval/sandbox config. User env overrides still win.
         INITIAL_AGENT_MODE: "agent",
       }
+    );
+    descriptor.env = buildCodexEnvironment(
+      descriptor.command,
+      descriptor.env,
+      codexSettings?.envOverrides
     );
     const invocation = codexAcpInvocation(descriptor.command);
     descriptor.command = invocation.command;

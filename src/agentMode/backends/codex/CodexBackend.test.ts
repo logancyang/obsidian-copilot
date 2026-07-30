@@ -122,6 +122,7 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
         backends: {
           codex: {
             binaryPath,
+            envOverrides: { Path: "D:\\portable-node\\bin" },
           },
         },
       },
@@ -134,6 +135,8 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
       expect(desc.args[0]).toBe(
         "C:\\Users\\me\\AppData\\Roaming\\npm\\node_modules\\@agentclientprotocol\\codex-acp\\dist\\index.js"
       );
+      expect(Object.keys(desc.env).filter((key) => key.toLowerCase() === "path")).toEqual(["PATH"]);
+      expect(desc.env.PATH).toBe("D:\\portable-node\\bin");
     } finally {
       Object.defineProperty(process, "platform", { value: originalPlatform });
       (fs.readFileSync as jest.Mock).mockImplementation(actualReadFileSync);
