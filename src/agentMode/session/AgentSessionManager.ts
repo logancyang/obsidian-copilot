@@ -319,6 +319,9 @@ export class AgentSessionManager {
   // spawn; the key is cleared in `finally` so the next enter doesn't reuse a
   // settled promise.
   private readonly firstSessionPromiseByScope = new Map<ProjectScopeId, Promise<AgentSession>>();
+  // A source tab can only have one replacement in flight. Without this guard,
+  // rapid picker selections can create multiple sessions that share its input.
+  private readonly replacementPromiseBySessionId = new Map<string, Promise<AgentSession>>();
   private pendingCreates = 0;
   private listeners = new Set<() => void>();
   private disposed = false;
@@ -2464,6 +2467,22 @@ export class AgentSessionManager {
    * the same while its runtime session is replaced.
    */
   async replaceSessionInPlace(
+    oldId: string,
+    backendId?: BackendId,
+    options: ReplaceSessionOptions = {}
+  ): Promise<AgentSession> {
+    const pending = this.replacementPromiseBySessionId.get(oldId);
+    if (pending) return pending;
+    const replacement = this.replaceSessionInPlaceOnce(oldId, backendId, options);
+    this.replacementPromiseBySessionId.set(oldId, replacement);
+    try {
+      return await replacement;
+    } finally {
+      this.replacementPromiseBySessionId.delete(oldId);
+    }
+  }
+
+  private async replaceSessionInPlaceOnce(
     oldId: string,
     backendId?: BackendId,
     options: ReplaceSessionOptions = {}

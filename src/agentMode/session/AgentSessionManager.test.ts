@@ -1234,6 +1234,25 @@ describe("AgentSessionManager.replaceSessionInPlace", () => {
     expect(preservedReplacement.chatInputId).toBe(preservedSource.chatInputId);
   });
 
+  it("deduplicates concurrent replacements of the same session", async () => {
+    const mgr = buildManager();
+    const source = await mgr.createSession();
+
+    const first = mgr.replaceSessionInPlace(source.internalId, "opencode", {
+      preserveChatInput: true,
+    });
+    const second = mgr.replaceSessionInPlace(source.internalId, "codex", {
+      preserveChatInput: true,
+    });
+    const [firstReplacement, secondReplacement] = await Promise.all([first, second]);
+    await flushBackgroundClose();
+
+    expect(secondReplacement).toBe(firstReplacement);
+    expect(firstReplacement.backendId).toBe("opencode");
+    expect(firstReplacement.chatInputId).toBe(source.chatInputId);
+    expect(mgr.getSessions()).toEqual([firstReplacement]);
+  });
+
   it("closes the old session in the background", async () => {
     const mgr = buildManager();
     const a = await mgr.createSession();
