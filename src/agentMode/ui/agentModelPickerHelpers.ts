@@ -404,14 +404,17 @@ function runCrossBackendPick(
 ): void {
   void (async () => {
     try {
-      // projectId left default (active scope); the transient pick only seeds the model.
-      await manager.createSession(targetBackendId, undefined, { baseModelId, effort });
-      manager.setDefaultBackend(targetBackendId);
+      const seedSelection = { baseModelId, effort };
       if (oldSessionId) {
-        void manager
-          .closeSession(oldSessionId)
-          .catch((e) => logError("[AgentMode] closeSession of empty tab failed", e));
+        await manager.replaceSessionInPlace(oldSessionId, targetBackendId, {
+          preserveChatInput: true,
+          seedSelection,
+        });
+      } else {
+        // projectId left default (active scope); the transient pick only seeds the model.
+        await manager.createSession(targetBackendId, undefined, seedSelection);
       }
+      manager.setDefaultBackend(targetBackendId);
     } catch (err) {
       logError("[AgentMode] cross-backend pick failed", err);
       new Notice(`Failed to start ${targetDescriptor.displayName}. See console for details.`);
@@ -423,8 +426,8 @@ function runCrossBackendPick(
  * Build the model picker's `onChange` callback. Cross-backend picks seed
  * a fresh session on the target backend with the chosen model + the
  * target backend's persisted effort (no effort plumbed through the
- * legacy single-arg signature) and close the old empty tab in the
- * background. Same-backend picks route through the running session via
+ * legacy single-arg signature), replacing the runtime session while retaining
+ * its logical chat input. Same-backend picks route through the running session via
  * `applySelection`. Neither path writes to the saved default selection.
  */
 export function buildModelOnChange(

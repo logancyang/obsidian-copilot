@@ -61,6 +61,7 @@ import {
   type FanoutTurn,
   type PendingFanoutContext,
 } from "@/agentMode/session/fanout/fanoutTypes";
+import { v4 as uuidv4 } from "uuid";
 
 /**
  * Seam the session calls to dispatch a multi-agent read-only QA turn. Supplied
@@ -223,6 +224,8 @@ export interface AgentSessionStartOptions extends ProjectContextUpdatesHooks {
   backend: BackendProcess;
   cwd: string;
   internalId: string;
+  /** Logical AgentChatInput identity; a fresh identity is minted when absent. */
+  chatInputId?: string;
   backendId: BackendId;
   /**
    * Scope this session belongs to. Immutable like `backendId`; defaults to
@@ -282,6 +285,8 @@ export interface AgentSessionStateOptions extends ProjectContextUpdatesHooks {
   backend: BackendProcess;
   backendSessionId: SessionId;
   internalId: string;
+  /** Logical AgentChatInput identity; a fresh identity is minted when absent. */
+  chatInputId?: string;
   backendId: BackendId;
   /** Scope this session belongs to. See {@link AgentSessionStartOptions.projectId}. */
   projectId?: ProjectScopeId;
@@ -315,6 +320,7 @@ export interface AgentSessionStateOptions extends ProjectContextUpdatesHooks {
 export class AgentSession {
   readonly store = new AgentMessageStore();
   readonly internalId: string;
+  readonly chatInputId: string;
   readonly backendId: BackendId;
   /** Immutable scope binding ({@link GLOBAL_SCOPE} or a project id). */
   readonly projectId: ProjectScopeId;
@@ -472,6 +478,7 @@ export class AgentSession {
   constructor(opts: AgentSessionStateOptions | AgentSessionStartOptions) {
     this.backend = opts.backend;
     this.internalId = opts.internalId;
+    this.chatInputId = opts.chatInputId ?? uuidv4();
     this.backendId = opts.backendId;
     this.projectId = opts.projectId ?? GLOBAL_SCOPE;
     this.cwd = opts.cwd ?? null;

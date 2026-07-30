@@ -97,6 +97,7 @@ export const AgentModeChat: React.FC<Props> = ({
       <AgentHome
         backend={backend}
         sessionId={activeSession.internalId}
+        chatInputId={activeSession.chatInputId}
         manager={manager}
         plugin={plugin}
         onSaveChat={onSaveChat}

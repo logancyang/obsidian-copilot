@@ -7,7 +7,8 @@ import type {
   PermissionPrompt,
 } from "@/agentMode/session/types";
 import { useAgentChatRuntimeState } from "@/agentMode/ui/hooks/useAgentChatRuntimeState";
-import { act, renderHook } from "@testing-library/react";
+import { act, render, renderHook } from "@testing-library/react";
+import React, { useEffect } from "react";
 
 interface FakeBackendState {
   messages: AgentChatMessage[];
@@ -103,6 +104,26 @@ describe("useAgentChatRuntimeState", () => {
     // the new snapshot imperatively rather than keep stale values.
     expect(result.current.messages).toEqual([msg("second")]);
     expect(result.current.isStarting).toBe(true);
+  });
+
+  it("never exposes the previous runtime snapshot after the backend prop changes", () => {
+    const first = makeFakeBackend({ isStarting: false });
+    const second = makeFakeBackend({ isStarting: true });
+    const snapshots: boolean[] = [];
+
+    function Probe({ backend }: { backend: AgentChatBackend }) {
+      const { isStarting } = useAgentChatRuntimeState(backend);
+      useEffect(() => {
+        snapshots.push(isStarting);
+      }, [isStarting]);
+      return null;
+    }
+
+    const { rerender } = render(<Probe backend={first.backend} />);
+    snapshots.length = 0;
+    rerender(<Probe backend={second.backend} />);
+
+    expect(snapshots).toEqual([true]);
   });
 
   it("unsubscribes from the previous backend on switch and unmount", () => {

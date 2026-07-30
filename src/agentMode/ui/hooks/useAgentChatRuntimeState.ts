@@ -25,23 +25,29 @@ export interface AgentChatRuntimeState {
   pendingAskUserQuestions: AskUserQuestionPrompt[];
 }
 
+interface BackendRuntimeSnapshot {
+  backend: AgentChatBackend;
+  state: AgentChatRuntimeState;
+}
+
+function readBackendRuntimeSnapshot(backend: AgentChatBackend): BackendRuntimeSnapshot {
+  return {
+    backend,
+    state: {
+      messages: backend.getMessages(),
+      isStarting: backend.isStarting(),
+      hasPendingPlanPermission: backend.hasPendingPlanPermission(),
+      currentPlan: backend.getCurrentPlan(),
+      currentTodoList: backend.getCurrentTodoList(),
+      pendingToolPermissions: backend.getPendingToolPermissions(),
+      pendingAskUserQuestions: backend.getPendingAskUserQuestions(),
+    },
+  };
+}
+
 export function useAgentChatRuntimeState(backend: AgentChatBackend): AgentChatRuntimeState {
-  const [messages, setMessages] = useState<AgentChatMessage[]>(() => backend.getMessages());
-  const [isStarting, setIsStarting] = useState(() => backend.isStarting());
-  const [hasPendingPlanPermission, setHasPendingPlanPermission] = useState(() =>
-    backend.hasPendingPlanPermission()
-  );
-  const [currentPlan, setCurrentPlan] = useState<CurrentPlan | null>(() =>
-    backend.getCurrentPlan()
-  );
-  const [currentTodoList, setCurrentTodoList] = useState<AgentTodoListEntry[] | null>(() =>
-    backend.getCurrentTodoList()
-  );
-  const [pendingToolPermissions, setPendingToolPermissions] = useState<PermissionPrompt[]>(() =>
-    backend.getPendingToolPermissions()
-  );
-  const [pendingAskUserQuestions, setPendingAskUserQuestions] = useState<AskUserQuestionPrompt[]>(
-    () => backend.getPendingAskUserQuestions()
+  const [snapshot, setSnapshot] = useState<BackendRuntimeSnapshot>(() =>
+    readBackendRuntimeSnapshot(backend)
   );
 
   const isMountedRef = useRef(false);
@@ -60,13 +66,7 @@ export function useAgentChatRuntimeState(backend: AgentChatBackend): AgentChatRu
   // setState.
   useEffect(() => {
     const sync = () => {
-      setMessages(backend.getMessages());
-      setIsStarting(backend.isStarting());
-      setHasPendingPlanPermission(backend.hasPendingPlanPermission());
-      setCurrentPlan(backend.getCurrentPlan());
-      setCurrentTodoList(backend.getCurrentTodoList());
-      setPendingToolPermissions(backend.getPendingToolPermissions());
-      setPendingAskUserQuestions(backend.getPendingAskUserQuestions());
+      setSnapshot(readBackendRuntimeSnapshot(backend));
     };
     sync();
     return backend.subscribe(() => {
@@ -75,13 +75,8 @@ export function useAgentChatRuntimeState(backend: AgentChatBackend): AgentChatRu
     });
   }, [backend]);
 
-  return {
-    messages,
-    isStarting,
-    hasPendingPlanPermission,
-    currentPlan,
-    currentTodoList,
-    pendingToolPermissions,
-    pendingAskUserQuestions,
-  };
+  // A replacement backend renders before the passive subscription effect can
+  // synchronize. Never expose the prior runtime's readiness or permissions
+  // alongside the new backend during that render.
+  return snapshot.backend === backend ? snapshot.state : readBackendRuntimeSnapshot(backend).state;
 }
