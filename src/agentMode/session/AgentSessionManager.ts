@@ -424,13 +424,13 @@ export class AgentSessionManager {
 
   /**
    * Append a default-model re-apply to the session's serialized chain. The
-   * apply re-reads the latest default at run time (clearing to "Agent default"
-   * resolves to the catalog native so the next turn isn't pinned to the old
-   * explicit model; no probed catalog leaves the session as-is), so when
-   * several changes land in a burst the final settings value wins instead of
-   * an out-of-order round-trip. Chaining off `session.ready` also covers a
-   * session still in its startup window, which has no `backendSessionId` yet
-   * and would throw on a bare `applySelection`.
+   * apply re-reads the latest default at run time, so when several changes land
+   * in a burst the final settings value wins instead of an out-of-order
+   * round-trip. Clearing to "Agent default" leaves an existing session on its
+   * current model; future sessions inherit the backend-reported default.
+   * Chaining off `session.ready` also covers a session still in its startup
+   * window, which has no `backendSessionId` yet and would throw on a bare
+   * `applySelection`.
    */
   private enqueueDefaultApply(session: AgentSession, descriptor: BackendDescriptor): void {
     const backendId = session.backendId;
@@ -439,8 +439,7 @@ export class AgentSessionManager {
       .then(() => session.ready)
       .then(() => {
         if (session.getStatus() === "closed") return;
-        const target =
-          this.getDefaultSelection(backendId) ?? this.nativeDefaultSelection(backendId);
+        const target = this.getDefaultSelection(backendId);
         if (!target) return;
         return descriptor.applySelection(session, target);
       })
@@ -451,16 +450,6 @@ export class AgentSessionManager {
         }
       });
     this.defaultApplyChains.set(session.internalId, next);
-  }
-
-  /**
-   * The agent's catalog-declared native default as a `ModelSelection`, or
-   * `null` when no catalog has been probed. Used to revert a live session
-   * after its explicit default is cleared.
-   */
-  private nativeDefaultSelection(backendId: BackendId): ModelSelection | null {
-    const baseModelId = this.getDefaultBaseModelId(backendId);
-    return baseModelId ? { baseModelId, effort: null } : null;
   }
 
   /** Whether `backendSessionId` is an ephemeral read-only fan-out sub-session. */
@@ -481,12 +470,9 @@ export class AgentSessionManager {
         const proc = await this.ensureBackend(backendId, descriptor);
         return { proc, descriptor };
       },
-      // Mirror createSession's fallback: a fan-out sub-session spawned on a
-      // warm/running subprocess inherits the model baked into its spawn-time
-      // config, so a cleared default must resolve to the catalog native to
-      // override that stale model rather than no-op.
-      getDefaultSelection: (backendId) =>
-        this.getDefaultSelection(backendId) ?? this.nativeDefaultSelection(backendId),
+      // An absent preference leaves the fan-out sub-session on the model its
+      // own session/new reports; catalog ordering carries no default meaning.
+      getDefaultSelection: (backendId) => this.getDefaultSelection(backendId),
       getDisplayName: (backendId) => this.resolveDescriptor(backendId).displayName,
       // DESIGN NOTE: fan-out sub-sessions intentionally run at the vault root,
       // not the originating session's project folder, and aren't handed the
@@ -1257,19 +1243,10 @@ export class AgentSessionManager {
       throw new Error("AgentSessionManager was shut down during session creation");
     }
 
-    // Falls back to the catalog native default when there's no transient seed
-    // and no stored default. Otherwise a warm/running subprocess (e.g.
-    // opencode) keeps serving the model baked into its spawn-time config from
-    // a since-cleared default, so a brand-new "Agent default" chat would
-    // silently inherit the stale model. Confirming the native selection here
-    // pins the new session to native instead. With no probed catalog there's
-    // no native id to target, so the seed stays undefined and behavior is
-    // unchanged.
-    const resolvedSeed =
-      seedSelection ??
-      this.getDefaultSelection(resolvedId) ??
-      this.nativeDefaultSelection(resolvedId) ??
-      undefined;
+    // An absent preference means "Agent default": let session/new report the
+    // backend's actual selection. Catalog ordering describes choices, not a
+    // default, so only explicit transient or persisted selections are applied.
+    const resolvedSeed = seedSelection ?? this.getDefaultSelection(resolvedId) ?? undefined;
 
     // A new chat must always start from a brand-new backend session. When a
     // warm preload probe is available we reuse its already-spawned and
@@ -2262,16 +2239,6 @@ export class AgentSessionManager {
    */
   getEffortCatalog(backendId: BackendId): Record<string, EffortOption[]> | null {
     return this.preloader.getEffortCatalog(backendId);
-  }
-
-  /**
-   * The agent's catalog-declared default base model id for `backendId`.
-   * Trusts `availableModels` ordering (agents put their recommended model
-   * first). Returns `null` when the catalog hasn't been probed yet.
-   */
-  getDefaultBaseModelId(backendId: BackendId): string | null {
-    const catalog = this.getCachedModelCatalog(backendId);
-    return catalog?.availableModels?.[0]?.baseModelId ?? null;
   }
 
   /** Subscribe to preloader cache updates. Used by the picker hook. */

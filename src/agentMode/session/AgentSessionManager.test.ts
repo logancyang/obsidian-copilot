@@ -4,6 +4,7 @@
  * session-pool invariants without touching ACP or spawning a child process.
  */
 import { FileSystemAdapter, App, TFile } from "obsidian";
+import { waitFor } from "@testing-library/react";
 import { AgentSession } from "./AgentSession";
 import type { AgentModelPreloader } from "./AgentModelPreloader";
 import { buildNativeChatId } from "@/utils/nativeChatId";
@@ -335,51 +336,14 @@ describe("AgentSessionManager.createSession", () => {
     expect(mockBackendStart).toHaveBeenCalledTimes(1);
   });
 
-  it("seeds the catalog native default when no explicit default is stored", async () => {
-    // Regression: a warm/running subprocess bakes its model from the default
-    // at spawn time. After the default is cleared, getDefaultSelection is null,
-    // so without this fallback a fresh "Agent default" chat would inherit the
-    // stale baked model. The new session must be confirmed onto the native
-    // catalog default instead.
-    const probeState = {
-      model: {
-        current: { baseModelId: "opencode/old-baked", effort: null },
-        availableModels: [
-          { baseModelId: "opencode/native", name: "Native", provider: null, effortOptions: [] },
-        ],
-      },
-      mode: null,
-    };
-    const descriptor = buildDescriptor();
-    const modelPreloader = {
-      getCachedModelCatalog: jest.fn(() => ({
-        availableModels: probeState.model.availableModels,
-      })),
-      preload: jest.fn(async () => undefined),
-      refresh: jest.fn(() => null),
-      subscribe: jest.fn(() => () => {}),
-      shutdown: jest.fn(),
-      clearCached: jest.fn(),
-      takeWarm: jest.fn(() => null),
-      getWarmProcs: jest.fn(() => []),
-    };
-    const mgr = new AgentSessionManager(
-      buildApp(),
-      buildPlugin() as unknown as ConstructorParameters<typeof AgentSessionManager>[1],
-      {
-        permissionPrompter: jest.fn(),
-        resolveDescriptor: (id) => (id === descriptor.id ? descriptor : undefined),
-        modelPreloader: modelPreloader as unknown as ConstructorParameters<
-          typeof AgentSessionManager
-        >[2]["modelPreloader"],
-      }
-    );
+  it("leaves the seed unset when a catalog exists but no explicit default is stored", async () => {
+    const mgr = buildManager({
+      getCachedModelCatalog: jest.fn(() => modelCatalog("catalog-first")),
+    });
 
     await mgr.createSession();
     expect(sessionCreateSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        defaultModelSelection: { baseModelId: "opencode/native", effort: null },
-      })
+      expect.objectContaining({ defaultModelSelection: undefined })
     );
   });
 
@@ -571,16 +535,6 @@ describe("AgentSessionManager.getCachedModelCatalog", () => {
     });
 
     expect(mgr.getCachedModelCatalog("opencode")).toBe(catalog);
-  });
-});
-
-describe("AgentSessionManager.getDefaultBaseModelId", () => {
-  it("uses catalog ordering", () => {
-    const mgr = buildManager({
-      getCachedModelCatalog: jest.fn(() => modelCatalog("catalog")),
-    });
-
-    expect(mgr.getDefaultBaseModelId("opencode")).toBe("catalog");
   });
 });
 
@@ -1499,10 +1453,9 @@ describe("AgentSessionManager default-model settings subscription", () => {
     expect(applySelectionMock).not.toHaveBeenCalled();
   });
 
-  it("reverts a live session to the agent's native default when the default is cleared", async () => {
+  it("leaves a live session unchanged when the explicit default is cleared", async () => {
     const applySelectionMock = jest.fn(async () => {});
     const descriptor = makeApplySelectionDescriptor(applySelectionMock);
-    // A probed catalog whose first model is the agent's native default.
     const catalog = modelCatalog("native");
     const mgr = new AgentSessionManager(
       buildApp(),
@@ -1515,9 +1468,10 @@ describe("AgentSessionManager default-model settings subscription", () => {
         >[2]["modelPreloader"],
       }
     );
-    const session = await mgr.createSession();
+    await mgr.createSession();
 
     // User picks "Agent default" → stored default goes from explicit to null.
+    const settingsReadsBeforeChange = (mockedGetSettings as jest.Mock).mock.calls.length;
     emitSettingsChange(
       {
         agentMode: {
@@ -1526,12 +1480,12 @@ describe("AgentSessionManager default-model settings subscription", () => {
       },
       { agentMode: { backends: { opencode: { defaultModel: null } } } }
     );
-    await flushApplyChain();
-
-    expect(applySelectionMock).toHaveBeenCalledWith(session, {
-      baseModelId: "native",
-      effort: null,
-    });
+    await waitFor(() =>
+      expect((mockedGetSettings as jest.Mock).mock.calls.length).toBeGreaterThan(
+        settingsReadsBeforeChange
+      )
+    );
+    expect(applySelectionMock).not.toHaveBeenCalled();
   });
 
   it("defers re-apply for a starting session until ready, using the latest default", async () => {
