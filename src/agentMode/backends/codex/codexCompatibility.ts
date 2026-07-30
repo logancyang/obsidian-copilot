@@ -8,7 +8,7 @@ import {
   type CompatibilityStoreInput,
 } from "@/agentMode/backends/shared/compatibilityStore";
 import type { InstallState } from "@/agentMode/session/types";
-import { codexAcpInvocation } from "./codexBinaryResolver";
+import { codexAcpInvocation, type CodexAcpShimReader } from "./codexBinaryResolver";
 
 const execFileAsync = promisify(execFile);
 const VERSION_TIMEOUT_MS = 10_000;
@@ -51,12 +51,44 @@ function codexCompatibilityInput(
     cacheKey: `${binaryPath}\u0000${environmentKey}`,
     binaryPath,
     source: "custom",
-    env: {
-      ...process.env,
-      PATH: augmentPathForNodeShebang(binaryPath, process.env.PATH),
-      ...(envOverrides ?? {}),
-    },
+    env: buildCodexProbeEnvironment(binaryPath, process.env, envOverrides),
   };
+}
+
+/**
+ * Builds the compatibility probe environment without duplicate Windows PATH keys.
+ * @param binaryPath - The selected adapter path used to augment sparse GUI environments.
+ * @param baseEnv - The process environment inherited by the plugin.
+ * @param envOverrides - User-configured Codex environment overrides.
+ * @param platform - The device platform that determines environment-key casing.
+ */
+export function buildCodexProbeEnvironment(
+  binaryPath: string,
+  baseEnv: NodeJS.ProcessEnv,
+  envOverrides: Record<string, string> = {},
+  platform: NodeJS.Platform = process.platform
+): NodeJS.ProcessEnv {
+  const env = { ...baseEnv };
+  const basePathEntry = Object.entries(baseEnv).find(([key]) => key.toLowerCase() === "path");
+  const augmentedPath = augmentPathForNodeShebang(binaryPath, basePathEntry?.[1]);
+
+  if (platform !== "win32") {
+    return { ...env, PATH: augmentedPath, ...envOverrides };
+  }
+
+  for (const key of Object.keys(env)) {
+    if (key.toLowerCase() === "path") delete env[key];
+  }
+  let effectivePath = augmentedPath;
+  for (const [key, value] of Object.entries(envOverrides)) {
+    if (key.toLowerCase() === "path") {
+      effectivePath = value;
+    } else {
+      env[key] = value;
+    }
+  }
+  env.PATH = effectivePath;
+  return env;
 }
 
 /**
@@ -65,6 +97,7 @@ function codexCompatibilityInput(
  * @param run - The command runner used to read the executable's local identity.
  * @param platform - The device platform used to translate Windows npm command shims.
  * @param env - The effective environment the adapter process will inherit.
+ * @param readShim - Reads a Windows command shim so its encoded package target can be resolved.
  */
 export async function probeCodexAcpCompatibility(
   binaryPath: string,
@@ -73,10 +106,11 @@ export async function probeCodexAcpCompatibility(
   env: NodeJS.ProcessEnv = {
     ...process.env,
     PATH: augmentPathForNodeShebang(binaryPath, process.env.PATH),
-  }
+  },
+  readShim?: CodexAcpShimReader
 ): Promise<InstallState> {
   try {
-    const invocation = codexAcpInvocation(binaryPath, platform);
+    const invocation = codexAcpInvocation(binaryPath, platform, readShim);
     const { stdout } = await run(invocation.command, [...invocation.args, "--version"], {
       env,
       timeout: VERSION_TIMEOUT_MS,

@@ -110,5 +110,15 @@ describe("CodexInstallModal", () => {
       expect(screen.getByText(/npm install -g @agentclientprotocol\/codex-acp/)).toBeTruthy();
       expect(mockRefreshCodexInstallState).toHaveBeenCalledWith(expect.anything(), false);
     });
+
+    it("shows the removal step before installing when no adapter path is configured", () => {
+      installState = { kind: "absent" };
+
+      render(<CodexConfigBody onClose={jest.fn()} />);
+
+      expect(screen.getByText(/1. Remove the superseded adapter/)).toBeTruthy();
+      expect(screen.getByText(/2. Install the maintained adapter/)).toBeTruthy();
+      expect(mockRefreshCodexInstallState).toHaveBeenCalledWith(expect.anything(), true);
+    });
   });
 });

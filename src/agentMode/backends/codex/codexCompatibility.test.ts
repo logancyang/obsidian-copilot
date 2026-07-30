@@ -1,4 +1,5 @@
 import {
+  buildCodexProbeEnvironment,
   CODEX_ACP_UPDATE_MESSAGE,
   getCodexCompatibility,
   probeCodexAcpCompatibility,
@@ -8,6 +9,22 @@ import {
 } from "./codexCompatibility";
 
 describe("codexCompatibility", () => {
+  describe("buildCodexProbeEnvironment()", () => {
+    it("normalizes Windows PATH casing so the configured override reaches Node", () => {
+      expect(
+        buildCodexProbeEnvironment(
+          "C:\\portable\\codex-acp.cmd",
+          { PATH: "C:\\generated-node", TOKEN: "base" },
+          { Path: "D:\\portable-node\\bin", TOKEN: "configured" },
+          "win32"
+        )
+      ).toEqual({
+        PATH: "D:\\portable-node\\bin",
+        TOKEN: "configured",
+      });
+    });
+  });
+
   describe("probeCodexAcpCompatibility()", () => {
     it("accepts the maintained adapter identity reported by the selected executable", async () => {
       const run = jest
@@ -37,7 +54,10 @@ describe("codexCompatibility", () => {
         probeCodexAcpCompatibility(
           "C:\\Users\\me\\AppData\\Roaming\\npm\\codex-acp.cmd",
           run,
-          "win32"
+          "win32",
+          undefined,
+          () =>
+            '"%_prog%" "%dp0%\\node_modules\\@agentclientprotocol\\codex-acp\\dist\\index.js" %*'
         )
       ).resolves.toEqual({ kind: "ready", source: "custom" });
       expect(run).toHaveBeenCalledWith(

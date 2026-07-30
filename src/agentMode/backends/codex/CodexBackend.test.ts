@@ -7,7 +7,13 @@ import {
 } from "@/system-prompts/state";
 import type { UserSystemPrompt } from "@/system-prompts/type";
 import { SYMPOSIUM_WORKSPACE_ROOT_ENV } from "@/symposium/constants";
+import * as fs from "node:fs";
 import { CodexBackend, toTomlBasicString } from "./CodexBackend";
+
+jest.mock("node:fs", () => {
+  const actual = jest.requireActual("node:fs");
+  return { ...actual, readFileSync: jest.fn(actual.readFileSync) };
+});
 
 jest.mock("@/logger", () => ({
   logInfo: jest.fn(),
@@ -97,7 +103,14 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
 
   it("runs the maintained Windows npm adapter through Node without a shell", async () => {
     const originalPlatform = process.platform;
+    const actualReadFileSync = jest.requireActual("node:fs").readFileSync;
+    const binaryPath = "C:\\Users\\me\\AppData\\Roaming\\npm\\codex-acp.cmd";
     Object.defineProperty(process, "platform", { value: "win32" });
+    (fs.readFileSync as jest.Mock).mockImplementation((filePath, encoding) =>
+      filePath === binaryPath
+        ? '"%_prog%" "%dp0%\\node_modules\\@agentclientprotocol\\codex-acp\\dist\\index.js" %*'
+        : actualReadFileSync(filePath, encoding)
+    );
     setSettings({
       agentMode: {
         byok: {},
@@ -108,7 +121,7 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
         skills: { folder: "copilot/skills" },
         backends: {
           codex: {
-            binaryPath: "C:\\Users\\me\\AppData\\Roaming\\npm\\codex-acp.cmd",
+            binaryPath,
           },
         },
       },
@@ -123,6 +136,7 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
       );
     } finally {
       Object.defineProperty(process, "platform", { value: originalPlatform });
+      (fs.readFileSync as jest.Mock).mockImplementation(actualReadFileSync);
     }
   });
 

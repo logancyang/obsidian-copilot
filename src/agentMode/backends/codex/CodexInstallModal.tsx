@@ -39,6 +39,7 @@ export const CodexConfigBody: React.FC<CodexConfigBodyProps> = ({ onClose }) => 
     subscribeCodexInstallState,
     getInstallStateSnapshot
   );
+  const needsLegacyRemoval = sessionState.kind === "error" || sessionState.kind === "absent";
 
   React.useEffect(() => {
     const current = getCodexInstallState(getSettings());
@@ -62,7 +63,7 @@ export const CodexConfigBody: React.FC<CodexConfigBodyProps> = ({ onClose }) => 
   return (
     <ConfigDialogShell status={<InstallStatusLine state={sessionState} />} onClose={onClose}>
       <ConfigSection title="Install codex-acp">
-        {sessionState.kind === "error" && (
+        {needsLegacyRemoval && (
           <InstallCommandRow
             command={CODEX_REMOVE_LEGACY_COMMAND}
             label="1. Remove the superseded adapter"
@@ -70,7 +71,7 @@ export const CodexConfigBody: React.FC<CodexConfigBodyProps> = ({ onClose }) => 
         )}
         <InstallCommandRow
           command={CODEX_INSTALL_COMMAND}
-          label={sessionState.kind === "error" ? "2. Install the maintained adapter" : undefined}
+          label={needsLegacyRemoval ? "2. Install the maintained adapter" : undefined}
         />
       </ConfigSection>
 

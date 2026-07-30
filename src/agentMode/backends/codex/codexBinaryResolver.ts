@@ -1,4 +1,5 @@
 /** Locate a user-installed `codex-acp` adapter for the Codex Configure dialog. */
+import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { nodeToolBinDirCandidates, type NodeToolFs } from "@/utils/nodeToolBinDirs";
@@ -16,6 +17,8 @@ export interface CodexAcpInvocation {
   command: string;
   args: string[];
 }
+
+export type CodexAcpShimReader = (path: string, encoding: "utf8") => string;
 
 export function resolveCodexAcpBinary(input: CodexAcpBinaryResolverInput): string | null {
   const candidates = input.platform === "win32" ? windowsCandidates(input) : unixCandidates(input);
@@ -39,31 +42,43 @@ export function codexAcpSearchDirs(input: CodexAcpBinaryResolverInput): string[]
  * Converts npm's Windows command shim into a no-shell Node invocation.
  * @param binaryPath - The selected adapter path saved in settings.
  * @param platform - The device platform that determines whether command shims need translation.
+ * @param readFile - Reads a Windows shim so its encoded package target can be resolved.
  */
 export function codexAcpInvocation(
   binaryPath: string,
-  platform: NodeJS.Platform = process.platform
+  platform: NodeJS.Platform = process.platform,
+  readFile: CodexAcpShimReader = fs.readFileSync
 ): CodexAcpInvocation {
   if (platform !== "win32" || !binaryPath.toLowerCase().endsWith(".cmd")) {
     return { command: binaryPath, args: [] };
   }
+  const shimTarget = resolveWindowsShimTarget(binaryPath, readFile(binaryPath, "utf8"));
   return {
     command: "node",
-    args: [
-      path.win32.join(
-        path.win32.dirname(binaryPath),
-        "node_modules",
-        "@agentclientprotocol",
-        "codex-acp",
-        "dist",
-        "index.js"
-      ),
-    ],
+    args: [shimTarget],
   };
 }
 
 const posix = path.posix;
 const win = path.win32;
+const MAINTAINED_WINDOWS_ENTRY =
+  /"([^"\r\n]*@agentclientprotocol[\\/]+codex-acp[\\/]+dist[\\/]+index\.js)"/i;
+
+function resolveWindowsShimTarget(binaryPath: string, contents: string): string {
+  const encodedTarget = MAINTAINED_WINDOWS_ENTRY.exec(contents)?.[1];
+  if (!encodedTarget) {
+    throw new Error(`Could not resolve the maintained Codex ACP target from ${binaryPath}`);
+  }
+
+  const shimDir = win.dirname(binaryPath);
+  const dp0Relative = encodedTarget.match(/^%~?dp0%?(.*)$/i);
+  if (dp0Relative) {
+    return win.normalize(`${shimDir}${dp0Relative[1]}`);
+  }
+  return win.isAbsolute(encodedTarget)
+    ? win.normalize(encodedTarget)
+    : win.resolve(shimDir, encodedTarget);
+}
 
 function unixCandidates(input: CodexAcpBinaryResolverInput): string[] {
   const { homeDir } = input;
