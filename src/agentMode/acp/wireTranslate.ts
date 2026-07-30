@@ -479,7 +479,7 @@ export function permissionPromptToAcp(prompt: PermissionPrompt): RequestPermissi
     },
     options: prompt.options.map((o) => ({
       optionId: o.optionId,
-      name: o.description ?? o.name,
+      name: o.name,
       kind: o.kind,
     })),
   };

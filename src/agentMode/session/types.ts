@@ -566,7 +566,7 @@ export interface PermissionOption {
   optionId: string;
   /** Compact action text suitable for a permission button. */
   name: string;
-  /** Option-specific context shown next to the matching action. */
+  /** Option-specific context exposed by the matching action. */
   description?: string;
   kind: PermissionOptionKind;
 }
