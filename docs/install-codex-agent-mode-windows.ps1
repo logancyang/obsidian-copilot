@@ -93,11 +93,11 @@ Invoke-Npm -NpmCommand $npm -Arguments @("uninstall", "-g", "@zed-industries/cod
 Write-Step "Installing the maintained Codex ACP adapter"
 Invoke-Npm -NpmCommand $npm -Arguments @("install", "-g", "@agentclientprotocol/codex-acp")
 
-$prefixOutput = & $npm config get prefix 2>&1
+$prefixOutput = & $npm config get prefix
 if ($LASTEXITCODE -ne 0) {
     throw "npm.cmd config get prefix failed with exit code $LASTEXITCODE."
 }
-$npmPrefix = (($prefixOutput | Out-String).Trim())
+$npmPrefix = ([string]($prefixOutput | Select-Object -Last 1)).Trim()
 if ([string]::IsNullOrWhiteSpace($npmPrefix)) {
     throw "npm.cmd did not report its global install directory."
 }

@@ -239,4 +239,12 @@ describe("resolveNodeToolBinDirs (windows)", () => {
     );
     expect(dirs).toContain(symlink);
   });
+
+  test("finds the official Node installer directory without relying on inherited PATH", () => {
+    const nodeDir = "D:\\Program Files\\nodejs";
+    const dirs = resolveNodeToolBinDirs(
+      winInput({ env: { ProgramFiles: "D:\\Program Files" }, fs: makeFs({ dirs: [nodeDir] }) })
+    );
+    expect(dirs).toContain(nodeDir);
+  });
 });
