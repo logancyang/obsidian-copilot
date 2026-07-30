@@ -1237,6 +1237,20 @@ describe("AgentSessionManager.replaceSessionInPlace", () => {
   it("serializes concurrent replacements so the latest selection wins", async () => {
     const mgr = buildManager();
     const source = await mgr.createSession();
+    const createSession = mgr.createSession.bind(mgr);
+    let releaseSecond!: () => void;
+    let markSecondStarted!: () => void;
+    const secondStarted = new Promise<void>((resolve) => (markSecondStarted = resolve));
+    const secondGate = new Promise<void>((resolve) => (releaseSecond = resolve));
+    let replacementCount = 0;
+    jest.spyOn(mgr, "createSession").mockImplementation(async (...args) => {
+      replacementCount++;
+      if (replacementCount === 2) {
+        markSecondStarted();
+        await secondGate;
+      }
+      return createSession(...args);
+    });
 
     const first = mgr.replaceSessionInPlace(source.internalId, "opencode", {
       preserveChatInput: true,
@@ -1246,17 +1260,25 @@ describe("AgentSessionManager.replaceSessionInPlace", () => {
       preserveChatInput: true,
       seedSelection: { baseModelId: "latest-model", effort: "high" },
     });
-    const [firstReplacement, secondReplacement] = await Promise.all([first, second]);
+    const firstReplacement = await first;
+    await secondStarted;
+    const third = mgr.replaceSessionInPlace(firstReplacement.internalId, "opencode", {
+      preserveChatInput: true,
+      seedSelection: { baseModelId: "final-model", effort: "low" },
+    });
+    releaseSecond();
+    const [secondReplacement, thirdReplacement] = await Promise.all([second, third]);
     await flushBackgroundClose();
 
     expect(secondReplacement).not.toBe(firstReplacement);
-    expect(secondReplacement.chatInputId).toBe(source.chatInputId);
+    expect(thirdReplacement).not.toBe(secondReplacement);
+    expect(thirdReplacement.chatInputId).toBe(source.chatInputId);
     expect(sessionCreateSpy).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        defaultModelSelection: { baseModelId: "latest-model", effort: "high" },
+        defaultModelSelection: { baseModelId: "final-model", effort: "low" },
       })
     );
-    expect(mgr.getSessions()).toEqual([secondReplacement]);
+    expect(mgr.getSessions()).toEqual([thirdReplacement]);
   });
 
   it("closes the old session in the background", async () => {

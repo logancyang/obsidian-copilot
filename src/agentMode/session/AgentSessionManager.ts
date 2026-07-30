@@ -319,9 +319,9 @@ export class AgentSessionManager {
   // spawn; the key is cleared in `finally` so the next enter doesn't reuse a
   // settled promise.
   private readonly firstSessionPromiseByScope = new Map<ProjectScopeId, Promise<AgentSession>>();
-  // Serializes replacements requested from the same source tab. Each later pick
-  // replaces the prior result, so the latest choice wins without parallel input owners.
-  private readonly replacementChainBySourceSessionId = new Map<string, Promise<AgentSession>>();
+  // Serializes replacements for one logical input even after its runtime session id changes.
+  // Each later pick replaces the prior result, so the latest choice wins.
+  private readonly replacementChainByChatInputId = new Map<string, Promise<AgentSession>>();
   private pendingCreates = 0;
   private listeners = new Set<() => void>();
   private disposed = false;
@@ -2471,19 +2471,20 @@ export class AgentSessionManager {
     backendId?: BackendId,
     options: ReplaceSessionOptions = {}
   ): Promise<AgentSession> {
-    const pending = this.replacementChainBySourceSessionId.get(oldId);
+    const replacementKey = this.sessions.get(oldId)?.chatInputId ?? oldId;
+    const pending = this.replacementChainByChatInputId.get(replacementKey);
     const replacement = pending
       ? pending.then(
           (current) => this.replaceSessionInPlaceOnce(current.internalId, backendId, options),
           () => this.replaceSessionInPlaceOnce(oldId, backendId, options)
         )
       : this.replaceSessionInPlaceOnce(oldId, backendId, options);
-    this.replacementChainBySourceSessionId.set(oldId, replacement);
+    this.replacementChainByChatInputId.set(replacementKey, replacement);
     try {
       return await replacement;
     } finally {
-      if (this.replacementChainBySourceSessionId.get(oldId) === replacement) {
-        this.replacementChainBySourceSessionId.delete(oldId);
+      if (this.replacementChainByChatInputId.get(replacementKey) === replacement) {
+        this.replacementChainByChatInputId.delete(replacementKey);
       }
     }
   }
