@@ -125,6 +125,15 @@ export interface ModelEntry {
 }
 
 /**
+ * Model discovery shared across sessions on one backend. The active selection,
+ * switch mechanism, and mode remain session-owned and are intentionally absent.
+ */
+export interface BackendModelCatalog {
+  /** `null` when a completed probe reports no model catalog. */
+  availableModels: readonly ModelEntry[] | null;
+}
+
+/**
  * Credential health of an enabled model, derived from its provider row.
  * Drives the agent picker's non-selectable flags so an enabled model is
  * never silently hidden:

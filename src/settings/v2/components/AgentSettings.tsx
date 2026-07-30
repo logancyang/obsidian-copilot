@@ -231,7 +231,7 @@ const BackendPanel: React.FC<{
   React.useEffect(() => {
     if (!manager) return;
     if (installState.kind !== "ready") return;
-    if (manager.getCachedBackendState(descriptor.id)?.model) return;
+    if (manager.getCachedModelCatalog(descriptor.id)) return;
     manager
       .preloadModels(descriptor.id)
       .catch((e) => logError(`[AgentMode] preload ${descriptor.id} failed`, e));

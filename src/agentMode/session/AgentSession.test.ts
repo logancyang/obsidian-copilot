@@ -1,4 +1,6 @@
 import { AI_SENDER, USER_SENDER } from "@/constants";
+import { ClaudeBackendDescriptor } from "@/agentMode/backends/claude/descriptor";
+import { waitFor } from "@testing-library/react";
 import type { TFile } from "obsidian";
 import {
   AgentSession,
@@ -10,6 +12,7 @@ import {
 import { ensureMultiAgentEntitlement, showMultiAgentUpgradePrompt } from "@/plusUtils";
 import { GLOBAL_SCOPE } from "./scope";
 import { AuthRequiredError, MethodUnsupportedError } from "./errors";
+import type { ApplySelectionContext } from "./descriptor";
 import type { FanoutRunInput } from "./fanout/FanoutOrchestrator";
 import { FANOUT_READONLY_PREAMBLE, type FanoutTurn } from "./fanout/fanoutTypes";
 import type {
@@ -1969,7 +1972,7 @@ describe("AgentSession.create (via start)", () => {
     );
   });
 
-  it("attempts setModel when defaultModelSelection is set", async () => {
+  it("confirms a Claude-style seed against the backend-reported model", async () => {
     const mock = makeMockBackend();
     const stateWithSonnet: BackendState = {
       model: {
@@ -1992,9 +1995,9 @@ describe("AgentSession.create (via start)", () => {
       backend: mock.asBackend,
       cwd: "/vault",
       internalId: "internal-1",
-      backendId: "opencode",
+      backendId: "claude",
       defaultModelSelection: { baseModelId: "openai/gpt-5", effort: null },
-      getDescriptor: () => makeWireOnlyDescriptor(),
+      getDescriptor: () => ClaudeBackendDescriptor,
     });
     await session.ready;
     expect(mock.setSessionModel).toHaveBeenCalledWith({
@@ -2096,18 +2099,21 @@ describe("AgentSession.create (via start)", () => {
       onModelChanged: () => observed.push(session.getState()?.model?.current.baseModelId),
     });
 
-    // Wait for the first notifyModelChanged inside initialize.
-    await Promise.resolve();
-    await Promise.resolve();
-    expect(observed[0]).toBe("openai/gpt-5");
+    await waitFor(() => {
+      expect(observed[0]).toBe("openai/gpt-5");
+      expect(mock.setSessionModel).toHaveBeenCalledWith({
+        sessionId: "acp-1",
+        modelId: "openai/gpt-5",
+      });
+    });
 
     resolveSetModel!(stateWithSonnet);
     await session.ready;
   });
 
-  it("eagerly seeds currentState from initialCachedState before newSession resolves", async () => {
+  it("stays starting until the backend applies the desired model", async () => {
     const mock = makeMockBackend();
-    const cachedState: BackendState = {
+    const backendState: BackendState = {
       model: {
         current: { baseModelId: "kimi-2.6", effort: null },
         apply: { kind: "setModel" },
@@ -2123,7 +2129,6 @@ describe("AgentSession.create (via start)", () => {
       },
       mode: null,
     };
-    // Block newSession so we can observe the pre-initialize state.
     let resolveNewSession: ((r: { sessionId: string; state: BackendState }) => void) | null = null;
     mock.newSession.mockImplementationOnce(
       () =>
@@ -2131,22 +2136,45 @@ describe("AgentSession.create (via start)", () => {
           (resolve) => (resolveNewSession = resolve)
         )
     );
+    let resolveSetModel: ((state: BackendState) => void) | null = null;
+    mock.setSessionModel.mockImplementationOnce(
+      () => new Promise<BackendState>((resolve) => (resolveSetModel = resolve))
+    );
     const session = AgentSession.start({
       backend: mock.asBackend,
       cwd: "/vault",
       internalId: "internal-1",
       backendId: "opencode",
       defaultModelSelection: { baseModelId: "big-pickle", effort: null },
-      initialCachedState: cachedState,
       getDescriptor: () => makeWireOnlyDescriptor(),
     });
 
-    // Before newSession resolves, getState reflects the eager seed
-    // (current = big-pickle) rather than the cached current (kimi-2.6).
-    expect(session.getState()?.model?.current.baseModelId).toBe("big-pickle");
+    expect(session.getState()).toBeNull();
 
-    resolveNewSession!({ sessionId: "acp-1", state: cachedState });
+    resolveNewSession!({ sessionId: "acp-1", state: backendState });
+    await waitFor(() => {
+      expect(session.getState()?.model?.current.baseModelId).toBe("big-pickle");
+      expect(mock.setSessionModel).toHaveBeenCalledWith({
+        sessionId: "acp-1",
+        modelId: "big-pickle",
+      });
+    });
+    expect(session.getStatus()).toBe("starting");
+    expect(() => session.sendPrompt("too early")).toThrow("Session is still starting");
+    expect(mock.prompt).not.toHaveBeenCalled();
+
+    resolveSetModel!({
+      ...backendState,
+      model: backendState.model
+        ? {
+            ...backendState.model,
+            current: { baseModelId: "big-pickle", effort: null },
+          }
+        : null,
+    });
     await session.ready;
+    expect(session.getState()?.model?.current.baseModelId).toBe("big-pickle");
+    expect(session.getStatus()).toBe("idle");
   });
 
   it("applies a seeded effort via setConfigOption without a redundant setModel", async () => {
@@ -2281,8 +2309,11 @@ describe("AgentSession.create (via start)", () => {
     mock.newSession.mockResolvedValueOnce({ sessionId: "acp-1", state: reportedState });
     // First config write switches the bare model (refreshing the effort
     // option), the second lands the effort on `thought_level`.
+    let resolveModelSwitch!: (state: BackendState) => void;
     mock.setSessionConfigOption
-      .mockResolvedValueOnce(switchedState)
+      .mockImplementationOnce(
+        () => new Promise<BackendState>((resolve) => (resolveModelSwitch = resolve))
+      )
       .mockResolvedValue(switchedState);
 
     const session = AgentSession.start({
@@ -2293,6 +2324,16 @@ describe("AgentSession.create (via start)", () => {
       defaultModelSelection: { baseModelId: "openai/gpt-5", effort: "high" },
       getDescriptor: () => makeConfigOptionDescriptor(),
     });
+    await waitFor(() =>
+      expect(mock.setSessionConfigOption).toHaveBeenCalledWith({
+        sessionId: "acp-1",
+        configId: "model",
+        value: "openai/gpt-5",
+      })
+    );
+    expect(session.getState()?.model?.current.baseModelId).toBe("openai/gpt-5");
+
+    resolveModelSwitch(switchedState);
     await session.ready;
 
     // Never the model channel.
@@ -2403,11 +2444,14 @@ function makeConfigOptionDescriptor(): BackendDescriptor {
     wire,
     applySelection: async (
       session: AgentSession,
-      selection: { baseModelId: string; effort: string | null }
+      selection: { baseModelId: string; effort: string | null },
+      context?: ApplySelectionContext
     ) => {
       const apply = session.getState()?.model?.apply;
       if (apply?.kind === "setConfigOption" && apply.effortConfigId) {
-        const currentBase = session.getState()?.model?.current.baseModelId;
+        const currentBase = context
+          ? context.backendReportedCurrent?.baseModelId
+          : session.getState()?.model?.current.baseModelId;
         if (currentBase !== selection.baseModelId) {
           await session.applyModelWireId(
             wire.encode({ baseModelId: selection.baseModelId, effort: null })
@@ -2427,7 +2471,7 @@ function makeConfigOptionDescriptor(): BackendDescriptor {
 }
 
 describe("AgentSession warm-adoption ready gating", () => {
-  it("ready stays pending until setModel resolves so sendPrompt can't fire on the probe model", async () => {
+  it("stays starting until setModel resolves so sendPrompt can't fire on the probe model", async () => {
     const mock = makeMockBackend();
     const probeState: BackendState = {
       model: {
@@ -2461,16 +2505,15 @@ describe("AgentSession warm-adoption ready gating", () => {
       getDescriptor: () => makeWireOnlyDescriptor(),
     });
 
-    let readyResolved = false;
-    void session.ready.then(() => {
-      readyResolved = true;
+    await waitFor(() => {
+      expect(mock.setSessionModel).toHaveBeenCalledWith({
+        sessionId: "probe-1",
+        modelId: "openai/gpt-5",
+      });
     });
-    await new Promise((r) => window.setTimeout(r, 0));
-    expect(readyResolved).toBe(false);
-    expect(mock.setSessionModel).toHaveBeenCalledWith({
-      sessionId: "probe-1",
-      modelId: "openai/gpt-5",
-    });
+    expect(session.getStatus()).toBe("starting");
+    expect(() => session.sendPrompt("too early")).toThrow("Session is still starting");
+    expect(mock.prompt).not.toHaveBeenCalled();
 
     resolveSetModel({
       model: {
@@ -2480,8 +2523,8 @@ describe("AgentSession warm-adoption ready gating", () => {
       mode: null,
     });
     await session.ready;
-    expect(readyResolved).toBe(true);
     expect(session.getState()?.model?.current.baseModelId).toBe("openai/gpt-5");
+    expect(session.getStatus()).toBe("idle");
   });
 
   it("ready resolves immediately when no default selection is supplied", async () => {
@@ -2518,9 +2561,12 @@ function makeDescriptorWireWithoutEffort(): BackendDescriptor {
     // carries only the base id and effort goes through setConfigOption.
     applySelection: async (
       session: AgentSession,
-      selection: { baseModelId: string; effort: string | null }
+      selection: { baseModelId: string; effort: string | null },
+      context?: ApplySelectionContext
     ) => {
-      const currentBase = session.getState()?.model?.current.baseModelId;
+      const currentBase = context
+        ? context.backendReportedCurrent?.baseModelId
+        : session.getState()?.model?.current.baseModelId;
       if (currentBase !== selection.baseModelId)
         await session.applyModelWireId(wire.encode(selection));
       if (selection.effort !== null) await session.setConfigOption("effort", selection.effort);

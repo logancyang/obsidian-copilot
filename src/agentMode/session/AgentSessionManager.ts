@@ -35,7 +35,7 @@ import { App, FileSystemAdapter, Notice, Platform, TFile } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
 import { AgentSession, ATTENTION_TRIGGER_STATUSES, DEFAULT_TITLE_PREFIX } from "./AgentSession";
 import type { AgentChatPersistenceManager } from "./AgentChatPersistenceManager";
-import type { AgentModelPreloader, WarmBackend } from "./AgentModelPreloader";
+import type { AgentModelPreloader } from "./AgentModelPreloader";
 import { buildNativeChatId, parseNativeChatId } from "@/utils/nativeChatId";
 import type { AgentSessionIndex } from "./AgentSessionIndex";
 import {
@@ -52,7 +52,7 @@ import {
   type FanoutRunInput,
 } from "./fanout/FanoutOrchestrator";
 import type { FanoutTurn } from "./fanout/fanoutTypes";
-import { backendStateSignature } from "./translateBackendState";
+import { modelCatalogSignature } from "./translateBackendState";
 import { GLOBAL_SCOPE, type ProjectScopeId } from "./scope";
 import {
   OrphanedProjectError,
@@ -82,6 +82,7 @@ import type {
   AskUserQuestionPrompt,
   BackendDescriptor,
   BackendId,
+  BackendModelCatalog,
   BackendProcess,
   BackendState,
   CopilotMode,
@@ -337,7 +338,6 @@ export class AgentSessionManager {
   // - `indexTimer`: pending session-index write-through debounce timer
   // - `unsub`: tear-down for the auto-save `session.subscribe()`
   // - `signature`: last serialized snapshot, for no-op skipping
-  // - `modelCacheUnsub`: tear-down for the model-cache mirror subscription
   // - `attentionUnsub`: tear-down for the per-session status watcher that both
   //   flags needs-attention AND notifies on running-membership flips (spinner)
   private readonly sessionState = new Map<
@@ -348,7 +348,6 @@ export class AgentSessionManager {
       indexTimer?: number;
       unsub?: () => void;
       signature?: string;
-      modelCacheUnsub?: () => void;
       attentionUnsub?: () => void;
     }
   >();
@@ -425,13 +424,13 @@ export class AgentSessionManager {
 
   /**
    * Append a default-model re-apply to the session's serialized chain. The
-   * apply re-reads the latest default at run time (clearing to "Agent default"
-   * resolves to the catalog native so the next turn isn't pinned to the old
-   * explicit model; no probed catalog leaves the session as-is), so when
-   * several changes land in a burst the final settings value wins instead of
-   * an out-of-order round-trip. Chaining off `session.ready` also covers a
-   * session still in its startup window, which has no `backendSessionId` yet
-   * and would throw on a bare `applySelection`.
+   * apply re-reads the latest default at run time, so when several changes land
+   * in a burst the final settings value wins instead of an out-of-order
+   * round-trip. Clearing to "Agent default" leaves an existing session on its
+   * current model; future sessions inherit the backend-reported default.
+   * Chaining off `session.ready` also covers a session still in its startup
+   * window, which has no `backendSessionId` yet and would throw on a bare
+   * `applySelection`.
    */
   private enqueueDefaultApply(session: AgentSession, descriptor: BackendDescriptor): void {
     const backendId = session.backendId;
@@ -440,8 +439,7 @@ export class AgentSessionManager {
       .then(() => session.ready)
       .then(() => {
         if (session.getStatus() === "closed") return;
-        const target =
-          this.getDefaultSelection(backendId) ?? this.nativeDefaultSelection(backendId);
+        const target = this.getDefaultSelection(backendId);
         if (!target) return;
         return descriptor.applySelection(session, target);
       })
@@ -452,16 +450,6 @@ export class AgentSessionManager {
         }
       });
     this.defaultApplyChains.set(session.internalId, next);
-  }
-
-  /**
-   * The agent's catalog-declared native default as a `ModelSelection`, or
-   * `null` when no catalog has been probed. Used to revert a live session
-   * after its explicit default is cleared.
-   */
-  private nativeDefaultSelection(backendId: BackendId): ModelSelection | null {
-    const baseModelId = this.getDefaultBaseModelId(backendId);
-    return baseModelId ? { baseModelId, effort: null } : null;
   }
 
   /** Whether `backendSessionId` is an ephemeral read-only fan-out sub-session. */
@@ -479,15 +467,12 @@ export class AgentSessionManager {
     return {
       ensureBackendForFanout: async (backendId) => {
         const descriptor = this.resolveDescriptor(backendId);
-        const { proc } = await this.ensureBackend(backendId, descriptor);
+        const proc = await this.ensureBackend(backendId, descriptor);
         return { proc, descriptor };
       },
-      // Mirror createSession's fallback: a fan-out sub-session spawned on a
-      // warm/running subprocess inherits the model baked into its spawn-time
-      // config, so a cleared default must resolve to the catalog native to
-      // override that stale model rather than no-op.
-      getDefaultSelection: (backendId) =>
-        this.getDefaultSelection(backendId) ?? this.nativeDefaultSelection(backendId),
+      // An absent preference leaves the fan-out sub-session on the model its
+      // own session/new reports; catalog ordering carries no default meaning.
+      getDefaultSelection: (backendId) => this.getDefaultSelection(backendId),
       getDisplayName: (backendId) => this.resolveDescriptor(backendId).displayName,
       // DESIGN NOTE: fan-out sub-sessions intentionally run at the vault root,
       // not the originating session's project folder, and aren't handed the
@@ -1245,12 +1230,8 @@ export class AgentSessionManager {
     this.notify();
 
     let backend: BackendProcess;
-    let warm: WarmBackend | null = null;
     try {
-      // ensureBackend tries the preloader's warm probe before paying a
-      // fresh spawn. When `warm` is non-null the probe session is
-      // available for adoption below — skips a second `newSession`.
-      ({ proc: backend, warm } = await this.ensureBackend(resolvedId, descriptor));
+      backend = await this.ensureBackend(resolvedId, descriptor);
     } catch (err) {
       this.lastError = err2String(err);
       this.finishPendingCreate();
@@ -1262,19 +1243,10 @@ export class AgentSessionManager {
       throw new Error("AgentSessionManager was shut down during session creation");
     }
 
-    // Falls back to the catalog native default when there's no transient seed
-    // and no stored default. Otherwise a warm/running subprocess (e.g.
-    // opencode) keeps serving the model baked into its spawn-time config from
-    // a since-cleared default, so a brand-new "Agent default" chat would
-    // silently inherit the stale model. Confirming the native selection here
-    // pins the new session to native instead. With no probed catalog there's
-    // no native id to target, so the seed stays undefined and behavior is
-    // unchanged.
-    const resolvedSeed =
-      seedSelection ??
-      this.getDefaultSelection(resolvedId) ??
-      this.nativeDefaultSelection(resolvedId) ??
-      undefined;
+    // An absent preference means "Agent default": let session/new report the
+    // backend's actual selection. Catalog ordering describes choices, not a
+    // default, so only explicit transient or persisted selections are applied.
+    const resolvedSeed = seedSelection ?? this.getDefaultSelection(resolvedId) ?? undefined;
 
     // A new chat must always start from a brand-new backend session. When a
     // warm preload probe is available we reuse its already-spawned and
@@ -1284,8 +1256,7 @@ export class AgentSessionManager {
     // replay the previous conversation's transcript and auto-title into a
     // supposedly fresh chat. `AgentSession.start` runs `newSession` on the
     // (warm or cold) proc at the resolved scope cwd, threading the project
-    // scope + context roots; the probe's state still seeds the picker so it
-    // doesn't blink while that round-trip is in flight.
+    // scope + context roots.
     const internalId = uuidv4();
     const session = AgentSession.start({
       backend,
@@ -1294,7 +1265,6 @@ export class AgentSessionManager {
       backendId: resolvedId,
       projectId,
       defaultModelSelection: resolvedSeed,
-      initialCachedState: warm?.state ?? this.preloader.getCachedBackendState(resolvedId),
       getDescriptor: () => this.opts.resolveDescriptor(resolvedId),
       runFanoutTurn: (input) => this.runFanoutTurn(input),
       getDisplayName: (backendId) => this.resolveDescriptor(backendId).displayName,
@@ -1310,11 +1280,6 @@ export class AgentSessionManager {
           }
         : {}),
     });
-    if (warm) {
-      logInfo(
-        `[AgentMode] session reused warm proc with a fresh session (internal=${session.internalId} backend=${resolvedId})`
-      );
-    }
     this.sessions.set(session.internalId, session);
     this.chatUIStates.set(session.internalId, new AgentChatUIState(session));
     // Record what this project landing captured so re-entry can tell a current
@@ -1339,7 +1304,6 @@ export class AgentSessionManager {
       this.activeSessionId = session.internalId;
     }
     this.attachAutoSave(session);
-    this.attachModelCacheSync(session);
     this.attachAttentionTracking(session);
     this.notify();
 
@@ -2263,9 +2227,9 @@ export class AgentSessionManager {
     return descriptor?.getInstallState(getSettings())?.kind === "ready";
   }
 
-  /** Cached unified backend state for `backendId`, populated by the model preloader. */
-  getCachedBackendState(backendId: BackendId): BackendState | null {
-    return this.preloader.getCachedBackendState(backendId);
+  /** Probe-owned model discovery shared across sessions for `backendId`. */
+  getCachedModelCatalog(backendId: BackendId): BackendModelCatalog | null {
+    return this.preloader.getCachedModelCatalog(backendId);
   }
 
   /**
@@ -2277,16 +2241,6 @@ export class AgentSessionManager {
     return this.preloader.getEffortCatalog(backendId);
   }
 
-  /**
-   * The agent's catalog-declared default base model id for `backendId`.
-   * Trusts `availableModels` ordering (agents put their recommended model
-   * first). Returns `null` when the catalog hasn't been probed yet.
-   */
-  getDefaultBaseModelId(backendId: BackendId): string | null {
-    const state = this.preloader.getCachedBackendState(backendId);
-    return state?.model?.availableModels[0]?.baseModelId ?? null;
-  }
-
   /** Subscribe to preloader cache updates. Used by the picker hook. */
   subscribeModelCache(listener: () => void): () => void {
     return this.preloader.subscribe(listener);
@@ -2294,7 +2248,7 @@ export class AgentSessionManager {
 
   /**
    * Stable string that changes whenever anything a model picker reads for
-   * `backendId` changes: preload status, the cached backend state, and the
+   * `backendId` changes: preload status, the shared model catalog, and the
    * prefetched effort catalog. A `useSyncExternalStore` snapshot built only
    * from `getPreloadStatus` would miss the post-`"ready"` effort-catalog
    * prefetch (the snapshot stays `"ready"`, so React skips the rerender and
@@ -2302,7 +2256,7 @@ export class AgentSessionManager {
    */
   getModelCacheSignature(backendId: BackendId): string {
     const status = this.getPreloadStatus(backendId);
-    const state = backendStateSignature(this.getCachedBackendState(backendId));
+    const catalog = modelCatalogSignature(this.getCachedModelCatalog(backendId));
     const effort = this.getEffortCatalog(backendId);
     const effortSig = effort
       ? Object.keys(effort)
@@ -2310,7 +2264,7 @@ export class AgentSessionManager {
           .map((id) => `${id}:${effort[id].map((o) => o.value ?? "").join(",")}`)
           .join("|")
       : "";
-    return `${status}#${state}#${effortSig}`;
+    return `${status}#${catalog}#${effortSig}`;
   }
 
   /** Kick off a (best-effort) model probe for `backendId`. */
@@ -2917,10 +2871,7 @@ export class AgentSessionManager {
 
     let backend: BackendProcess;
     try {
-      // Discard the optional warm probe-session info: we're rehydrating a
-      // specific saved session, not opening a fresh chat. The probe
-      // session sits unused on the proc until shutdown — harmless.
-      ({ proc: backend } = await this.ensureBackend(backendId, descriptor));
+      backend = await this.ensureBackend(backendId, descriptor);
     } catch (err) {
       this.lastError = err2String(err);
       this.finishPendingCreate();
@@ -3028,7 +2979,6 @@ export class AgentSessionManager {
     this.activeProjectId = projectId;
     this.lastActiveByScope.set(projectId, session.internalId);
     this.attachAutoSave(session);
-    this.attachModelCacheSync(session);
     this.attachAttentionTracking(session);
     this.lastError = null;
     this.finishPendingCreate();
@@ -3224,32 +3174,8 @@ export class AgentSessionManager {
     if (state.timer) window.clearTimeout(state.timer);
     if (state.indexTimer) window.clearTimeout(state.indexTimer);
     state.unsub?.();
-    state.modelCacheUnsub?.();
     state.attentionUnsub?.();
     this.sessionState.delete(internalId);
-  }
-
-  /**
-   * Mirror this session's unified `BackendState` into the preloader cache
-   * so the picker reflects current state. Skips when the session has no
-   * usable state yet (during the `"starting"` window) — a naive sync
-   * would clobber the previous session's cached entries with an empty
-   * snapshot.
-   */
-  private attachModelCacheSync(session: AgentSession): void {
-    const sync = (): void => {
-      const state = session.getState();
-      if (!state) return;
-      if (!state.model && !state.mode) return;
-      this.preloader.setCached(session.backendId, state);
-    };
-    sync();
-    const unsubscribe = session.subscribe({
-      onMessagesChanged: () => {},
-      onStatusChanged: () => {},
-      onModelChanged: () => sync(),
-    });
-    this.getSessionState(session.internalId).modelCacheUnsub = unsubscribe;
   }
 
   /**
@@ -3285,22 +3211,6 @@ export class AgentSessionManager {
     this.getSessionState(session.internalId).attentionUnsub = unsubscribe;
   }
 
-  /**
-   * Obtain a running backend process for `backendId`. Tries three sources
-   * in order:
-   *  1. An already-running proc owned by the manager (second-and-later
-   *     sessions on the same backend).
-   *  2. An in-flight spawn — concurrent callers join the first one.
-   *  3. The preloader's warm probe (skips spawn + `initialize` handshake).
-   *  4. A fresh `descriptor.createBackendProcess()` + `start()`.
-   *
-   * The returned `warm` slot is non-null only on path 3 and carries the
-   * probe session id + state snapshot so callers that open a fresh chat
-   * can adopt the probe session as the user's session (avoids a second
-   * `newSession` round-trip). Callers that need a specific saved session
-   * (e.g. `tryResumeSessionFromHistory`) can ignore `warm` — the probe
-   * session simply sits unused on the proc.
-   */
   /**
    * Register the session-domain prompters on a freshly-adopted backend. The
    * permission prompter is required; the ask-question prompter is wired only
@@ -3340,16 +3250,21 @@ export class AgentSessionManager {
     };
   }
 
+  /**
+   * Obtain a running backend process from manager ownership, an in-flight
+   * spawn, a warm probe process, or a fresh spawn. Warm process adoption never
+   * adopts the probe session; callers open or resume their own session.
+   */
   private async ensureBackend(
     backendId: BackendId,
     descriptor: BackendDescriptor
-  ): Promise<{ proc: BackendProcess; warm: WarmBackend | null }> {
+  ): Promise<BackendProcess> {
     const installState = descriptor.getInstallState(getSettings());
     if (installState.kind === "ready" || installState.kind === "checking") {
       const existing = this.backends.get(backendId);
-      if (existing && existing.isRunning()) return { proc: existing, warm: null };
+      if (existing && existing.isRunning()) return existing;
       const inflight = this.starting.get(backendId);
-      if (inflight) return { proc: await inflight, warm: null };
+      if (inflight) return inflight;
 
       const warm = this.preloader.takeWarm(backendId);
       if (warm) {
@@ -3358,7 +3273,7 @@ export class AgentSessionManager {
         this.wirePrompters(warm.proc);
         this.installBackendExitHandler(backendId, warm.proc, descriptor);
         this.backends.set(backendId, warm.proc);
-        return { proc: warm.proc, warm };
+        return warm.proc;
       }
     }
 
@@ -3387,7 +3302,7 @@ export class AgentSessionManager {
     })();
     this.starting.set(backendId, startPromise);
     try {
-      return { proc: await startPromise, warm: null };
+      return await startPromise;
     } finally {
       this.starting.delete(backendId);
     }
@@ -3517,13 +3432,11 @@ export class AgentSessionManager {
       new Notice(`${this.resolveDescriptor(backendId).displayName} refreshed.`);
       if (!this.disposed && this.isBackendInstalled(backendId)) {
         // Spawn config (enabled models, keys, prompt, skills) is rebuilt on
-        // every restart, and the picker's catalog *and* per-model effort
-        // catalog both derive from it. A live session mirrors catalog state via
-        // attachModelCacheSync but NOT the effort catalog, so always re-probe —
-        // the prefetch repopulates effort for every enabled model. When a tab
-        // on this backend is active, await the probe and let the replacement
-        // adopt its warm proc: one spawn, and the per-model switch flicker
-        // stays on the throwaway probe session instead of the user's.
+        // every restart, and the picker's catalog and per-model effort catalog
+        // are both probe-owned, so always re-probe. When a tab on this backend
+        // is active, await the probe and let the replacement adopt its warm
+        // proc: one spawn, and the per-model switch flicker stays on the
+        // throwaway probe session instead of the user's.
         const probe = this.preloader.preload(backendId);
         this.registerPreload(backendId, probe);
         if (shouldCreateReplacement && !this.disposed) {

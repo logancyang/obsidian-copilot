@@ -269,12 +269,14 @@ export const ClaudeBackendDescriptor: BackendDescriptor = {
     return isClaudePlanModePlanFilePath(absolutePath);
   },
 
-  async applySelection(session: AgentSession, selection: ModelSelection): Promise<void> {
+  async applySelection(session: AgentSession, selection: ModelSelection, context): Promise<void> {
     // Claude's wire id is just the baseModelId — effort travels through
     // `setConfigOption`, not the model id. Skip the model round-trip when
     // the base hasn't changed, otherwise effort-only ticks would fire a
     // pointless `setSessionModel` on every slider drag.
-    const currentBase = session.getState()?.model?.current.baseModelId;
+    const currentBase = context
+      ? context.backendReportedCurrent?.baseModelId
+      : session.getState()?.model?.current.baseModelId;
     if (currentBase !== selection.baseModelId) {
       await session.applyModelWireId(claudeWire.encode(selection));
     }

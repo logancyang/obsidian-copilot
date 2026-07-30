@@ -28,7 +28,7 @@ function useAgentModeSignal(manager: AgentSessionManager | null): string {
   const getSnapshot = useCallback((): string => {
     if (!manager) return "";
     const session = manager.getActiveSession();
-    const state = session?.getState() ?? manager.getCachedBackendState(session?.backendId ?? "");
+    const state = session?.getState() ?? null;
     return [
       session?.internalId ?? "",
       session?.backendId ?? "",
