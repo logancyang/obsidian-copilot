@@ -62,6 +62,10 @@ jest.mock("@/aiParams", () => ({
   useSelectedTextContexts: () => [[], jest.fn()],
 }));
 jest.mock("@/settings/model", () => ({
+  getModelKeyFromModel: (model: { name: string; provider: string; _backendId?: string }) => {
+    const baseKey = `${model.name}|${model.provider}`;
+    return model._backendId ? `${model._backendId}:${baseKey}` : baseKey;
+  },
   useSettingsValue: () => ({}),
 }));
 /* eslint-enable @eslint-react/hooks-extra/no-unnecessary-use-prefix */
@@ -265,6 +269,39 @@ describe("AgentChatInput queue reason", () => {
     expect(rows[0].textContent).toContain("Waiting for context · held for context");
     expect(rows[1].textContent).toContain("held while busy");
     expect(rows[1].textContent).not.toContain("Waiting for context");
+  });
+
+  it("keeps queued images when the active model is known not to support vision", async () => {
+    const backend = makeBackend();
+    const draft = makeDraft({
+      queue: [
+        {
+          id: "q1",
+          text: "describe this",
+          rawInput: "describe this",
+          promptContent: [{ type: "image", mimeType: "image/png", data: "AA==" }],
+        },
+      ],
+    });
+
+    renderInput(backend, draft, {
+      modelPickerOverride: {
+        models: [
+          {
+            name: "text-only",
+            provider: "agent",
+            enabled: true,
+            capabilities: [],
+          },
+        ],
+        value: "text-only|agent",
+        onChange: jest.fn(),
+      },
+    });
+    await act(async () => {});
+
+    expect(backend.sendMessage).not.toHaveBeenCalled();
+    expect(draft.setQueue).not.toHaveBeenCalled();
   });
 });
 

@@ -255,6 +255,13 @@ export const AgentChatInput = memo(function AgentChatInput({
     setQueue: setQueuedMessages,
     resetCompose,
   } = draft;
+  const activeModelEntry = modelPickerOverride?.models.find(
+    (model) => getModelKeyFromModel(model) === modelPickerOverride.value
+  );
+  const unsupportedImageModelLabel =
+    Array.isArray(activeModelEntry?.capabilities) && !modelSupportsVision(activeModelEntry)
+      ? activeModelEntry.displayName || activeModelEntry.name
+      : null;
 
   // Clear input-scoped ephemeral state when the logical chat input changes: the global
   // selected-text atom and the mentioned-agent ref (neither is reset by the
@@ -361,17 +368,11 @@ export const AgentChatInput = memo(function AgentChatInput({
       // block. An undefined `modelPickerOverride` (model switching disabled) can't
       // resolve an active entry, so it's also treated as unknown. Inputs are left
       // intact (guard precedes resetCompose) so the user can switch models.
-      if (selectedImages.length > 0) {
-        const activeEntry = modelPickerOverride?.models.find(
-          (m) => getModelKeyFromModel(m) === modelPickerOverride.value
+      if (selectedImages.length > 0 && unsupportedImageModelLabel) {
+        new Notice(
+          `${unsupportedImageModelLabel} doesn't support images. Switch to a vision-capable model to send images.`
         );
-        if (Array.isArray(activeEntry?.capabilities) && !modelSupportsVision(activeEntry)) {
-          const modelLabel = activeEntry.displayName || activeEntry.name;
-          new Notice(
-            `${modelLabel} doesn't support images. Switch to a vision-capable model to send images.`
-          );
-          return;
-        }
+        return;
       }
 
       // Resolve the `@`-mentions into the ANSWERER set (installed, deduped). Only
@@ -446,7 +447,7 @@ export const AgentChatInput = memo(function AgentChatInput({
       selectedTextContexts,
       loading,
       isStarting,
-      modelPickerOverride,
+      unsupportedImageModelLabel,
       holdForContext,
       disabled,
       resetCompose,
@@ -483,9 +484,27 @@ export const AgentChatInput = memo(function AgentChatInput({
     // disabled composer.
     if (disabled || loading || isStarting || holdForContext || queuedMessages.length === 0) return;
     const combined = combineQueuedMessages(queuedMessages);
+    if (
+      combined.promptContent?.some((content) => content.type === "image") &&
+      unsupportedImageModelLabel
+    ) {
+      new Notice(
+        `${unsupportedImageModelLabel} doesn't support images. Switch to a vision-capable model to send images.`
+      );
+      return;
+    }
     setQueuedMessages([]);
     void runSend(combined);
-  }, [disabled, loading, isStarting, holdForContext, queuedMessages, runSend, setQueuedMessages]);
+  }, [
+    disabled,
+    loading,
+    isStarting,
+    holdForContext,
+    queuedMessages,
+    runSend,
+    setQueuedMessages,
+    unsupportedImageModelLabel,
+  ]);
 
   const handleRemoveQueuedMessage = useCallback(
     (id: string) => {
