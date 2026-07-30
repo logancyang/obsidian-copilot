@@ -9,6 +9,7 @@ import type { UserSystemPrompt } from "@/system-prompts/type";
 import { SYMPOSIUM_WORKSPACE_ROOT_ENV } from "@/symposium/constants";
 import * as fs from "node:fs";
 import { CodexBackend } from "./CodexBackend";
+import { probeCodexAcpCompatibility } from "./codexCompatibility";
 
 jest.mock("node:fs", () => {
   const actual = jest.requireActual("node:fs");
@@ -20,6 +21,18 @@ jest.mock("@/logger", () => ({
   logWarn: jest.fn(),
   logError: jest.fn(),
 }));
+
+jest.mock("./codexCompatibility", () => {
+  const actual = jest.requireActual("./codexCompatibility");
+  return {
+    ...actual,
+    probeCodexAcpCompatibility: jest.fn(() => Promise.resolve({ kind: "ready", source: "custom" })),
+  };
+});
+
+const mockProbeCodexAcpCompatibility = probeCodexAcpCompatibility as jest.MockedFunction<
+  typeof probeCodexAcpCompatibility
+>;
 
 function makeSystemPrompt(title: string, content: string): UserSystemPrompt {
   return { title, content, createdMs: 0, modifiedMs: 0, lastUsedMs: 0 };
@@ -52,6 +65,7 @@ jest.mock("@/agentMode/skills", () => {
 
 describe("CodexBackend.buildSpawnDescriptor", () => {
   beforeEach(() => {
+    mockProbeCodexAcpCompatibility.mockResolvedValue({ kind: "ready", source: "custom" });
     resetSettings();
     resetPromptState();
     setSettings({
@@ -86,6 +100,23 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
     expect(config.developer_instructions).not.toContain("copilot/skills/<name>/SKILL.md");
 
     expect(desc.args).toEqual([]);
+  });
+
+  it("rejects an adapter replaced in place before creating a fresh spawn descriptor", async () => {
+    mockProbeCodexAcpCompatibility.mockResolvedValueOnce({
+      kind: "error",
+      message: "Install the maintained adapter.",
+    });
+
+    await expect(
+      new CodexBackend().buildSpawnDescriptor({ vaultBasePath: "/vault" })
+    ).rejects.toThrow("Install the maintained adapter.");
+    expect(mockProbeCodexAcpCompatibility).toHaveBeenCalledWith(
+      "/usr/local/bin/codex-acp",
+      undefined,
+      process.platform,
+      expect.objectContaining({ PATH: expect.any(String) })
+    );
   });
 
   it("runs the maintained Windows npm adapter through Node without a shell", async () => {

@@ -4,7 +4,7 @@ import { buildSimpleSpawnDescriptor } from "@/agentMode/backends/shared/simpleBi
 import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemPrompt";
 import { buildBuiltinSkillEnv } from "@/agentMode/backends/shared/builtinSkillEnv";
 import { codexAcpInvocation } from "./codexBinaryResolver";
-import { buildCodexEnvironment } from "./codexCompatibility";
+import { buildCodexEnvironment, probeCodexAcpCompatibility } from "./codexCompatibility";
 import { mergeCodexConfigEnv } from "./codexConfigEnv";
 
 /**
@@ -39,6 +39,19 @@ export class CodexBackend implements AcpBackend {
       descriptor.env,
       codexSettings?.envOverrides
     );
+    const compatibility = await probeCodexAcpCompatibility(
+      descriptor.command,
+      undefined,
+      process.platform,
+      descriptor.env
+    );
+    if (compatibility.kind !== "ready") {
+      throw new Error(
+        compatibility.kind === "error"
+          ? compatibility.message
+          : `Codex is not ready (${compatibility.kind}).`
+      );
+    }
     const invocation = codexAcpInvocation(descriptor.command);
     descriptor.command = invocation.command;
     descriptor.args = invocation.args;
