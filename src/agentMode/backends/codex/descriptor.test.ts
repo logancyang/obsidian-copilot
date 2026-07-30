@@ -32,6 +32,7 @@ jest.mock("./CodexInstallModal", () => ({
 }));
 
 jest.mock("./codexCompatibility", () => ({
+  CODEX_INSTALL_COMMAND: "npm install -g @agentclientprotocol/codex-acp",
   getCodexCompatibility: jest.fn(),
   refreshCodexCompatibility: jest.fn(),
   subscribeCodexCompatibility: jest.fn(),

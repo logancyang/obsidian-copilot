@@ -2,6 +2,11 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
 import { augmentPathForNodeShebang } from "@/agentMode/acp/nodeShebangPath";
+import {
+  CompatibilityStore,
+  type CompatibilityRefreshOptions,
+  type CompatibilityStoreInput,
+} from "@/agentMode/backends/shared/compatibilityStore";
 import type { InstallState } from "@/agentMode/session/types";
 import { codexAcpInvocation } from "./codexBinaryResolver";
 
@@ -9,10 +14,10 @@ const execFileAsync = promisify(execFile);
 const VERSION_TIMEOUT_MS = 10_000;
 const MAINTAINED_ADAPTER_VERSION =
   /^@agentclientprotocol\/codex-acp\s+\d+\.\d+\.\d+(?:[-+][^\s]+)?\s*$/;
-const CHECKING_STATE: InstallState = Object.freeze({ kind: "checking", source: "custom" });
 
-export const CODEX_ACP_UPDATE_MESSAGE =
-  "Copilot could not verify this as the maintained Codex ACP adapter. The superseded adapter cannot provide current Codex models. Update with: npm install -g @agentclientprotocol/codex-acp, then select the new codex-acp path.";
+export const CODEX_REMOVE_LEGACY_COMMAND = "npm uninstall -g @zed-industries/codex-acp";
+export const CODEX_INSTALL_COMMAND = "npm install -g @agentclientprotocol/codex-acp";
+export const CODEX_ACP_UPDATE_MESSAGE = `Copilot could not verify this as the maintained Codex ACP adapter. The superseded adapter cannot provide current Codex models. Run ${CODEX_REMOVE_LEGACY_COMMAND}, then ${CODEX_INSTALL_COMMAND}, and select the new codex-acp path.`;
 
 export type CodexVersionRunner = (
   binaryPath: string,
@@ -20,15 +25,13 @@ export type CodexVersionRunner = (
   options: { env: NodeJS.ProcessEnv; timeout: number }
 ) => Promise<{ stdout: string }>;
 
-interface RefreshOptions {
-  force?: boolean;
+interface RefreshOptions extends CompatibilityRefreshOptions {
   run?: CodexVersionRunner;
 }
 
-type Listener = () => void;
-const states = new Map<string, InstallState>();
-const inflight = new Map<string, Promise<InstallState>>();
-const listeners = new Set<Listener>();
+interface CodexCompatibilityInput extends CompatibilityStoreInput {
+  binaryPath: string;
+}
 
 /**
  * Positively identifies the maintained Codex ACP adapter without starting an ACP session.
@@ -59,12 +62,20 @@ export async function probeCodexAcpCompatibility(
   return { kind: "error", message: CODEX_ACP_UPDATE_MESSAGE };
 }
 
+const codexCompatibilityStore = new CompatibilityStore<CodexCompatibilityInput, RefreshOptions>(
+  (input, options) => probeCodexAcpCompatibility(input.binaryPath, options.run)
+);
+
 /**
  * Gives synchronous consumers the latest result for a selected executable.
  * @param binaryPath - The selected executable whose compatibility should be read.
  */
 export function getCodexCompatibility(binaryPath: string): InstallState {
-  return states.get(binaryPath) ?? CHECKING_STATE;
+  return codexCompatibilityStore.get({
+    cacheKey: binaryPath,
+    binaryPath,
+    source: "custom",
+  });
 }
 
 /**
@@ -76,34 +87,20 @@ export function refreshCodexCompatibility(
   binaryPath: string,
   options: RefreshOptions = {}
 ): Promise<InstallState> {
-  const running = inflight.get(binaryPath);
-  if (running) return running;
-
-  const cached = states.get(binaryPath);
-  if (!options.force && cached && cached.kind !== "checking") return Promise.resolve(cached);
-
-  publish(binaryPath, CHECKING_STATE);
-  const promise = probeCodexAcpCompatibility(binaryPath, options.run)
-    .then((state) => {
-      publish(binaryPath, state);
-      return state;
-    })
-    .finally(() => inflight.delete(binaryPath));
-
-  inflight.set(binaryPath, promise);
-  return promise;
+  return codexCompatibilityStore.refresh(
+    {
+      cacheKey: binaryPath,
+      binaryPath,
+      source: "custom",
+    },
+    options
+  );
 }
 
 /**
  * Notifies a consumer whenever any selected path changes compatibility state.
  * @param listener - The consumer to notify after checking and settled transitions.
  */
-export function subscribeCodexCompatibility(listener: Listener): () => void {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-}
-
-function publish(binaryPath: string, state: InstallState): void {
-  states.set(binaryPath, state);
-  for (const listener of listeners) listener();
+export function subscribeCodexCompatibility(listener: () => void): () => void {
+  return codexCompatibilityStore.subscribe(listener);
 }

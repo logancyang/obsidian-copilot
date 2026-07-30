@@ -339,6 +339,19 @@ describe("AgentSessionManager.createSession", () => {
     expect(mockBackendStart).not.toHaveBeenCalled();
   });
 
+  it("reuses a running backend while an install-state recheck is in flight", async () => {
+    const descriptor = buildDescriptor();
+    const mgr = buildManager(descriptor);
+    await mgr.createSession();
+    (descriptor.getInstallState as jest.Mock).mockReturnValue({
+      kind: "checking",
+      source: "custom",
+    });
+
+    await expect(mgr.createSession()).resolves.toBeDefined();
+    expect(mockBackendStart).toHaveBeenCalledTimes(1);
+  });
+
   it("mirrors the new session's unified state into the preloader cache", async () => {
     const cache = new Map<string, unknown>();
     const modelPreloader = {

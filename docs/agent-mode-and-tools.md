@@ -41,10 +41,11 @@ The available modes depend on the selected agent. Copilot normalizes equivalent 
 If Codex reports that it could not verify the maintained Codex ACP adapter, update it with:
 
 ```bash
+npm uninstall -g @zed-industries/codex-acp
 npm install -g @agentclientprotocol/codex-acp
 ```
 
-Then open **Settings → Copilot → Agents → Codex → Configure** and select the new `codex-acp` path. Copilot checks the selected adapter before loading its models, so superseded adapters remain unavailable until their path is replaced.
+Run the commands separately in order so the superseded package releases its global `codex-acp` executable before npm installs the maintained adapter. Then open **Settings → Copilot → Agents → Codex → Configure** and select the new `codex-acp` path. Copilot checks the selected adapter before loading its models, so superseded adapters remain unavailable until their path is replaced.
 
 ### Max Iterations
 

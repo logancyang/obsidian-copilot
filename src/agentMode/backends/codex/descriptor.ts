@@ -20,6 +20,7 @@ import type { BackendDescriptor, BackendProcess, InstallState } from "@/agentMod
 import { detectBinary } from "@/utils/detectBinary";
 import { codexAcpSearchDirs, resolveCodexAcpBinary } from "./codexBinaryResolver";
 import {
+  CODEX_INSTALL_COMMAND,
   getCodexCompatibility,
   refreshCodexCompatibility,
   subscribeCodexCompatibility,
@@ -27,7 +28,7 @@ import {
 import { buildCodexModeMapping } from "./codexModeMapping";
 
 export const CODEX_BINARY_NAME = "codex-acp";
-export const CODEX_INSTALL_COMMAND = "npm install -g @agentclientprotocol/codex-acp";
+export { CODEX_INSTALL_COMMAND };
 
 const ABSENT_INSTALL_STATE: InstallState = Object.freeze({ kind: "absent" });
 

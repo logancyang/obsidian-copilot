@@ -17,6 +17,7 @@ import {
   subscribeCodexInstallState,
   updateCodexFields,
 } from "./descriptor";
+import { CODEX_REMOVE_LEGACY_COMMAND } from "./codexCompatibility";
 
 interface CodexConfigBodyProps {
   onClose: () => void;
@@ -40,7 +41,8 @@ export const CodexConfigBody: React.FC<CodexConfigBodyProps> = ({ onClose }) => 
   );
 
   React.useEffect(() => {
-    void refreshCodexInstallState(getSettings(), true);
+    const current = getCodexInstallState(getSettings());
+    void refreshCodexInstallState(getSettings(), current.kind !== "ready");
   }, []);
 
   const onSavePath = React.useCallback(async (path: string): Promise<string | null> => {
@@ -60,7 +62,16 @@ export const CodexConfigBody: React.FC<CodexConfigBodyProps> = ({ onClose }) => 
   return (
     <ConfigDialogShell status={<InstallStatusLine state={sessionState} />} onClose={onClose}>
       <ConfigSection title="Install codex-acp">
-        <InstallCommandRow command={CODEX_INSTALL_COMMAND} />
+        {sessionState.kind === "error" && (
+          <InstallCommandRow
+            command={CODEX_REMOVE_LEGACY_COMMAND}
+            label="1. Remove the superseded adapter"
+          />
+        )}
+        <InstallCommandRow
+          command={CODEX_INSTALL_COMMAND}
+          label={sessionState.kind === "error" ? "2. Install the maintained adapter" : undefined}
+        />
       </ConfigSection>
 
       <ConfigSection title="Use your own binary">

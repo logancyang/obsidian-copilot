@@ -35,7 +35,11 @@ jest.mock("@/agentMode/backends/shared/ConfigDialogShell", () => ({
 }));
 
 jest.mock("@/agentMode/backends/shared/InstallCommandRow", () => ({
-  InstallCommandRow: () => null,
+  InstallCommandRow: ({ command, label }: { command: string; label?: string }) => (
+    <div>
+      {label}: {command}
+    </div>
+  ),
 }));
 
 jest.mock("@/agentMode/backends/shared/installStatus", () => ({
@@ -55,7 +59,7 @@ jest.mock("@/settings/model", () => ({
 
 jest.mock("./descriptor", () => ({
   CODEX_ACP_UPDATE_MESSAGE:
-    "Copilot could not verify this as the maintained Codex ACP adapter. The superseded adapter cannot provide current Codex models. Update with: npm install -g @agentclientprotocol/codex-acp, then select the new codex-acp path.",
+    "Copilot could not verify this as the maintained Codex ACP adapter. The superseded adapter cannot provide current Codex models. Run npm uninstall -g @zed-industries/codex-acp, then npm install -g @agentclientprotocol/codex-acp, and select the new codex-acp path.",
   CODEX_BINARY_NAME: "codex-acp",
   CODEX_INSTALL_COMMAND: "npm install -g @agentclientprotocol/codex-acp",
   codexAcpDetectionSearchDirs: jest.fn(() => []),
@@ -86,13 +90,25 @@ describe("CodexInstallModal", () => {
       jest.clearAllMocks();
     });
 
-    it("renders and refreshes the adapter compatibility state", () => {
+    it("shows ordered migration commands and rechecks an incompatible adapter", () => {
       render(<CodexConfigBody onClose={jest.fn()} />);
 
       expect(screen.getByText(CODEX_ACP_UPDATE_MESSAGE)).toBeTruthy();
+      expect(screen.getByText(/1. Remove the superseded adapter/)).toBeTruthy();
+      expect(screen.getByText(/2. Install the maintained adapter/)).toBeTruthy();
       expect(mockGetCodexInstallState).toHaveBeenCalled();
       expect(mockSubscribeCodexInstallState).toHaveBeenCalled();
       expect(mockRefreshCodexInstallState).toHaveBeenCalledWith(expect.anything(), true);
+    });
+
+    it("does not force a settled adapter recheck when Configure opens", () => {
+      installState = { kind: "ready", source: "custom" };
+
+      render(<CodexConfigBody onClose={jest.fn()} />);
+
+      expect(screen.queryByText(/npm uninstall -g @zed-industries\/codex-acp/)).not.toBeTruthy();
+      expect(screen.getByText(/npm install -g @agentclientprotocol\/codex-acp/)).toBeTruthy();
+      expect(mockRefreshCodexInstallState).toHaveBeenCalledWith(expect.anything(), false);
     });
   });
 });
