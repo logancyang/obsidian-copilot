@@ -320,8 +320,8 @@ export class AgentSessionManager {
   // settled promise.
   private readonly firstSessionPromiseByScope = new Map<ProjectScopeId, Promise<AgentSession>>();
   // Serializes replacements for one logical input even after its runtime session id changes.
-  // Each later pick replaces the prior result, so the latest choice wins.
-  private readonly replacementChainByChatInputId = new Map<string, Promise<AgentSession>>();
+  // The cursor retains the last successful owner when an individual replacement fails.
+  private readonly replacementCursorByChatInputId = new Map<string, Promise<string>>();
   private pendingCreates = 0;
   private listeners = new Set<() => void>();
   private disposed = false;
@@ -2472,19 +2472,21 @@ export class AgentSessionManager {
     options: ReplaceSessionOptions = {}
   ): Promise<AgentSession> {
     const replacementKey = this.sessions.get(oldId)?.chatInputId ?? oldId;
-    const pending = this.replacementChainByChatInputId.get(replacementKey);
-    const replacement = pending
-      ? pending.then(
-          (current) => this.replaceSessionInPlaceOnce(current.internalId, backendId, options),
-          () => this.replaceSessionInPlaceOnce(oldId, backendId, options)
-        )
-      : this.replaceSessionInPlaceOnce(oldId, backendId, options);
-    this.replacementChainByChatInputId.set(replacementKey, replacement);
+    const cursor =
+      this.replacementCursorByChatInputId.get(replacementKey) ?? Promise.resolve(oldId);
+    const replacement = cursor.then((currentId) =>
+      this.replaceSessionInPlaceOnce(currentId, backendId, options)
+    );
+    const nextCursor = replacement.then(
+      (current) => current.internalId,
+      () => cursor
+    );
+    this.replacementCursorByChatInputId.set(replacementKey, nextCursor);
     try {
       return await replacement;
     } finally {
-      if (this.replacementChainByChatInputId.get(replacementKey) === replacement) {
-        this.replacementChainByChatInputId.delete(replacementKey);
+      if (this.replacementCursorByChatInputId.get(replacementKey) === nextCursor) {
+        this.replacementCursorByChatInputId.delete(replacementKey);
       }
     }
   }

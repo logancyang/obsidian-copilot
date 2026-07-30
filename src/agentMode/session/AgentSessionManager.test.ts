@@ -1234,7 +1234,7 @@ describe("AgentSessionManager.replaceSessionInPlace", () => {
     expect(preservedReplacement.chatInputId).toBe(preservedSource.chatInputId);
   });
 
-  it("serializes concurrent replacements so the latest selection wins", async () => {
+  it("keeps the last successful replacement when a queued replacement fails", async () => {
     const mgr = buildManager();
     const source = await mgr.createSession();
     const createSession = mgr.createSession.bind(mgr);
@@ -1248,6 +1248,7 @@ describe("AgentSessionManager.replaceSessionInPlace", () => {
       if (replacementCount === 2) {
         markSecondStarted();
         await secondGate;
+        throw new Error("replacement failed");
       }
       return createSession(...args);
     });
@@ -1267,11 +1268,11 @@ describe("AgentSessionManager.replaceSessionInPlace", () => {
       seedSelection: { baseModelId: "final-model", effort: "low" },
     });
     releaseSecond();
-    const [secondReplacement, thirdReplacement] = await Promise.all([second, third]);
+    await expect(second).rejects.toThrow("replacement failed");
+    const thirdReplacement = await third;
     await flushBackgroundClose();
 
-    expect(secondReplacement).not.toBe(firstReplacement);
-    expect(thirdReplacement).not.toBe(secondReplacement);
+    expect(thirdReplacement).not.toBe(firstReplacement);
     expect(thirdReplacement.chatInputId).toBe(source.chatInputId);
     expect(sessionCreateSpy).toHaveBeenLastCalledWith(
       expect.objectContaining({
