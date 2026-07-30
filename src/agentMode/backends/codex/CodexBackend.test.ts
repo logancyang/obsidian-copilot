@@ -8,7 +8,7 @@ import {
 import type { UserSystemPrompt } from "@/system-prompts/type";
 import { SYMPOSIUM_WORKSPACE_ROOT_ENV } from "@/symposium/constants";
 import * as fs from "node:fs";
-import { CodexBackend, toTomlBasicString } from "./CodexBackend";
+import { CodexBackend } from "./CodexBackend";
 
 jest.mock("node:fs", () => {
   const actual = jest.requireActual("node:fs");
@@ -69,7 +69,7 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
     });
   });
 
-  it("forwards the Copilot prompt through both current and legacy adapter config paths", async () => {
+  it("forwards the Copilot prompt through the maintained adapter config", async () => {
     const backend = new CodexBackend();
     const desc = await backend.buildSpawnDescriptor({ vaultBasePath: "/vault" });
     expect(desc.command).toBe("/usr/local/bin/codex-acp");
@@ -85,20 +85,7 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
     expect(config.developer_instructions).not.toContain("metadata.copilot-enabled-agents");
     expect(config.developer_instructions).not.toContain("copilot/skills/<name>/SKILL.md");
 
-    const cIdx = desc.args.indexOf("-c");
-    expect(cIdx).toBeGreaterThanOrEqual(0);
-    const value = desc.args[cIdx + 1];
-    expect(value.startsWith("developer_instructions=")).toBe(true);
-    // Base Obsidian-vault framing reaches Codex (decode the TOML basic string).
-    expect(value).toContain("Obsidian Copilot");
-    expect(value).toContain("NOT a software-engineering agent or CLI coding tool");
-    // Pill-syntax directive.
-    expect(value).toContain("{folder_name}");
-    expect(value).toContain("{activeNote}");
-    // Skill discovery is automatic from `.agents/skills/`, so the directive
-    // never templates in SKILL.md authoring instructions.
-    expect(value).not.toContain("metadata.copilot-enabled-agents");
-    expect(value).not.toContain("copilot/skills/<name>/SKILL.md");
+    expect(desc.args).toEqual([]);
   });
 
   it("runs the maintained Windows npm adapter through Node without a shell", async () => {
@@ -148,10 +135,8 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
     setSelectedPromptTitle("Haiku");
     const backend = new CodexBackend();
     const desc = await backend.buildSpawnDescriptor({ vaultBasePath: "/vault" });
-    const value = desc.args[desc.args.indexOf("-c") + 1];
+    const value = JSON.parse(desc.env.CODEX_CONFIG as string).developer_instructions;
     expect(value).toContain("Obsidian Copilot");
-    // The TOML basic string escapes newlines as \n, so match the wrapper +
-    // content rather than the literal multi-line block.
     expect(value).toContain("<user_custom_instructions>");
     expect(value).toContain("respond in haiku");
   });
@@ -162,7 +147,7 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
     setDisableBuiltinSystemPrompt(true);
     const backend = new CodexBackend();
     const desc = await backend.buildSpawnDescriptor({ vaultBasePath: "/vault" });
-    const value = desc.args[desc.args.indexOf("-c") + 1];
+    const value = JSON.parse(desc.env.CODEX_CONFIG as string).developer_instructions;
     expect(value).not.toContain("Obsidian Copilot");
     expect(value).toContain("respond in haiku");
     // Pill directive is functional wiring, not builtin framing — always sent.
@@ -183,63 +168,16 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
     });
     const backend = new CodexBackend();
     const desc = await backend.buildSpawnDescriptor({ vaultBasePath: "/vault" });
-    const cIdx = desc.args.indexOf("-c");
-    const value = desc.args[cIdx + 1];
+    const value = JSON.parse(desc.env.CODEX_CONFIG as string).developer_instructions;
     // The pill directive doesn't reference the skills folder at all.
     expect(value).not.toContain("team-skills");
     expect(value).not.toContain("copilot/skills");
   });
 
-  it("escapes embedded double quotes and backslashes for TOML safety", async () => {
-    // Folders can't contain quotes in practice (validateSkillsFolder
-    // strips them), but the escape logic should still be airtight — the
-    // resulting -c value is consumed by a TOML parser, so an unescaped
-    // quote would terminate the basic-string literal and break
-    // codex-acp's startup.
+  it("pins approval_policy and sandbox_mode in the maintained adapter config", async () => {
     const backend = new CodexBackend();
     const desc = await backend.buildSpawnDescriptor({ vaultBasePath: "/vault" });
-    const cIdx = desc.args.indexOf("-c");
-    const value = desc.args[cIdx + 1];
-    // The value is wrapped in unescaped outer quotes; any inner double
-    // quote must be `\"` and every newline `\n` (no raw newlines, which
-    // would also break TOML basic strings).
-    expect(value).not.toMatch(/\n/);
-    // Confirm the outer literal is well-formed: starts with `key="…` and
-    // ends with `…"` (the closing quote of the TOML string).
-    expect(value.startsWith('developer_instructions="')).toBe(true);
-    expect(value.endsWith('"')).toBe(true);
-  });
-
-  it("escapes the full TOML basic-string control set", () => {
-    // Named escapes per the TOML 1.0 spec.
-    expect(toTomlBasicString("a\bb\tc\nd\fe\rf")).toBe('"a\\bb\\tc\\nd\\fe\\rf"');
-    // Backslash + double-quote.
-    expect(toTomlBasicString('back\\slash"quote')).toBe('"back\\\\slash\\"quote"');
-    // Other controls fall through as \\uXXXX. Build the input from char
-    // codes so the source file stays plain ASCII (and copies/pastes cleanly).
-    const controls =
-      String.fromCharCode(0x01) + String.fromCharCode(0x1f) + String.fromCharCode(0x7f);
-    expect(toTomlBasicString(controls)).toBe('"\\u0001\\u001f\\u007f"');
-    // Non-ASCII passes through unescaped.
-    expect(toTomlBasicString("über — café")).toBe('"über — café"');
-  });
-
-  it("pins spawn-time approval_policy + sandbox_mode to canonical 'auto' preset", async () => {
-    // Without these overrides codex-acp derives the initial mode from
-    // ~/.codex/config.toml, which can land on read-only and surface as
-    // "Plan" in our picker for a brief moment before the post-spawn
-    // coerce kicks in. The TOML strings need outer quotes — codex parses
-    // the value portion of `-c key=value` as TOML.
-    const backend = new CodexBackend();
-    const desc = await backend.buildSpawnDescriptor({ vaultBasePath: "/vault" });
-    expect(desc.args).toEqual(
-      expect.arrayContaining([
-        "-c",
-        'approval_policy="on-request"',
-        "-c",
-        'sandbox_mode="workspace-write"',
-      ])
-    );
+    expect(desc.args).toEqual([]);
     expect(JSON.parse(desc.env.CODEX_CONFIG as string)).toEqual(
       expect.objectContaining({
         approval_policy: "on-request",

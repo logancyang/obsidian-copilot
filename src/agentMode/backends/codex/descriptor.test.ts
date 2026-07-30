@@ -174,6 +174,9 @@ describe("codex descriptor", () => {
         force: true,
         envOverrides: undefined,
       });
+      expect(mockRefreshCompatibility.mock.invocationCallOrder[0]).toBeLessThan(
+        listener.mock.invocationCallOrder[0]
+      );
 
       unsubscribe();
       expect(unsubscribeSettings).toHaveBeenCalledTimes(1);

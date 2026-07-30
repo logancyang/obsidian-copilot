@@ -193,8 +193,9 @@ export const CodexBackendDescriptor: BackendDescriptor = {
         prev.agentMode?.backends?.codex?.envOverrides !==
           next.agentMode?.backends?.codex?.envOverrides
       ) {
+        const refresh = refreshCodexInstallState(next, true);
         cb();
-        void refreshCodexInstallState(next, true);
+        void refresh;
       }
     });
     const unsubscribeCompatibility = subscribeCodexInstallState(cb);
