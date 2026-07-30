@@ -60,6 +60,8 @@ interface AgentHomeProps {
   backend: AgentChatBackend;
   /** Active runtime session id. */
   sessionId: string;
+  /** Logical identity of the active chat input surface. */
+  chatInputId: string;
   manager: AgentSessionManager;
   plugin: CopilotPlugin;
   onSaveChat: (saveAsNote: () => Promise<void>) => void;
@@ -83,6 +85,7 @@ interface AgentHomeProps {
 const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   backend,
   sessionId,
+  chatInputId,
   manager,
   plugin,
   onSaveChat,
@@ -356,8 +359,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   const sessions = manager.getSessions();
   const liveKey = sessions.map((s) => s.chatInputId).join("\0");
   const liveChatInputIds = useMemo(() => sessions.map((s) => s.chatInputId), [liveKey]); // eslint-disable-line react-hooks/exhaustive-deps
-  const chatInputId = manager.getSession(sessionId)?.chatInputId ?? sessionId;
-
   // Per-chat-input compose drafts live in the shell (the common owner) so the
   // active turn's `loading` (transcript spinner) and the drop overlay's drag
   // state can be read directly here, instead of being mirrored up from the
