@@ -167,7 +167,7 @@ export function getSystemExcludedFolders(settings: CopilotSettings): string[] {
  * gates on the platform, accepting that a case-sensitive APFS volume may
  * over-exclude, which fails closed.
  */
-function isSystemExcludedPath(filePath: string): boolean {
+export function isSystemExcludedPath(filePath: string): boolean {
   return matchSystemRoots(filePath, getSystemExcludedFolders(getSettings()));
 }
 
