@@ -4,10 +4,9 @@
  * `origin: "agent"` `ConfiguredModel` so the curation UI and chat picker can
  * show the agent-discovered set.
  *
- * First enrollment of an `agentType` creates the provider and seeds the enabled
- * set to the model the agent reports as current; every later probe only
- * reconciles the model list (no provider-row write), so re-probes don't churn
- * settings.
+ * First enrollment of an `agentType` creates the provider and enables every
+ * reported model; every later probe only reconciles the model list (no
+ * provider-row write), so re-probes don't churn settings.
  *
  * opencode enrolls all its models under a single agent provider, each
  * `ConfiguredModel.info.id` keeping the full prefixed wire form (e.g.
@@ -19,14 +18,12 @@ import { logError, logInfo } from "@/logger";
 import type CopilotPlugin from "@/main";
 import type { AgentType, ModelManagementApi, Provider, ProviderType } from "@/modelManagement";
 import {
-  computeDefaultEnabledIds,
   listBackendDescriptors,
   mapProviderToOpencodeId,
   partitionOpencodeOnlyWireIds,
   type AgentSessionManager,
   type BackendDescriptor,
   type BackendId,
-  type BackendState,
 } from "@/agentMode";
 
 /**
@@ -58,9 +55,9 @@ export function wireAgentModelDiscovery(
   let disposed = false;
 
   const runForBackend = (descriptor: BackendDescriptor): void => {
-    const state = manager.getCachedBackendState(descriptor.id);
-    const reported = reportedModels(state);
-    if (reported === null) return; // No model state yet — agent hasn't settled.
+    const catalog = manager.getCachedModelCatalog(descriptor.id);
+    const reported = reportedModels(catalog);
+    if (reported === null) return; // No catalog yet — the probe hasn't settled.
 
     // Include the display strings in the signature so a CLI upgrade that
     // renames a model (or rewrites its blurb) re-syncs the persisted info.
@@ -69,10 +66,6 @@ export function wireAgentModelDiscovery(
       .join("\n");
     if (lastEnrolled.get(descriptor.id) === signature) return; // Unchanged — no-op.
 
-    // The model the agent currently has selected — the one first enrollment
-    // seeds as the sole enabled model.
-    const currentWireId = state?.model?.current.baseModelId;
-
     // Chain behind any in-flight run for this backend so two settles can't
     // interleave register/sync writes.
     const prior = inFlight.get(descriptor.id) ?? Promise.resolve();
@@ -80,7 +73,7 @@ export function wireAgentModelDiscovery(
       .catch(() => undefined)
       .then(async () => {
         if (disposed) return;
-        await enrollBackend(plugin.modelManagement, descriptor, reported, currentWireId);
+        await enrollBackend(plugin.modelManagement, descriptor, reported);
         // Record the signature only after a successful enroll so a failed
         // run retries on the next settle.
         lastEnrolled.set(descriptor.id, signature);
@@ -114,15 +107,14 @@ export function wireAgentModelDiscovery(
 
 /**
  * Enroll one backend's reported wire ids through `AgentSetupApi`: first
- * enrollment registers the provider and seeds the enabled set to the agent's
- * current model; later enrollments only reconcile the model list. opencode
- * first drops models it shares with a Copilot-managed provider.
+ * enrollment registers the provider and keeps every reported model enabled;
+ * later enrollments only reconcile the model list. opencode first drops models
+ * it shares with a Copilot-managed provider.
  */
 async function enrollBackend(
   api: ModelManagementApi,
   descriptor: BackendDescriptor,
-  reported: readonly ReportedModel[],
-  currentWireId: string | undefined
+  reported: readonly ReportedModel[]
 ): Promise<void> {
   // A backend's id doubles as its model-management AgentType.
   const agentType = descriptor.id as AgentType;
@@ -169,8 +161,8 @@ async function enrollBackend(
     return;
   }
 
-  // First enrollment: register the provider (auto-enrolls every model), then
-  // narrow the enabled set to the agent's current model.
+  // First enrollment keeps every registered model enabled. Catalog ordering
+  // carries no backend-default semantics.
   const result = await api.setup.agent.registerAgentProvider({
     agentType,
     providerType: PROVIDER_TYPE_BY_AGENT[agentType],
@@ -183,21 +175,9 @@ async function enrollBackend(
     fallbackDescriptions,
   });
 
-  // `configuredModelIds` come back in `wireModelIds` order, so zip them to
-  // recover each model's wire id for the current-model lookup.
-  const enrolled = result.configuredModelIds.map((configuredModelId, i) => ({
-    configuredModelId,
-    wireModelId: wireModelIds[i],
-  }));
-  const seeded = computeDefaultEnabledIds(enrolled, currentWireId);
-
-  if (seeded.length !== result.configuredModelIds.length) {
-    await api.backendConfigRegistry.setEnabledModels(agentType, seeded);
-  }
-
   logInfo(
     `[AgentMode] model discovery: first enrollment for ${agentType} — ` +
-      `${result.configuredModelIds.length} model(s) configured, ${seeded.length} enabled`
+      `${result.configuredModelIds.length} model(s) configured and enabled`
   );
 }
 
@@ -243,15 +223,17 @@ interface ReportedModel {
 }
 
 /**
- * The reported models from a cached `BackendState`, or `null` when the backend
- * hasn't reported a model state yet — distinct from an empty array (a settled
- * state with zero models), which callers treat differently. Carries each
+ * The models from probe-owned discovery, or `null` before the backend reports
+ * a catalog — distinct from an empty array (a settled catalog with zero
+ * models), which callers treat differently. Carries each
  * model's translated `name`/`description` so enrollment persists the same
  * strings the chat picker shows.
  */
-function reportedModels(state: BackendState | null): ReportedModel[] | null {
-  if (!state?.model) return null;
-  return state.model.availableModels.map((m) => ({
+function reportedModels(
+  catalog: ReturnType<AgentSessionManager["getCachedModelCatalog"]>
+): ReportedModel[] | null {
+  if (!catalog?.availableModels) return null;
+  return catalog.availableModels.map((m) => ({
     wireId: m.baseModelId,
     name: m.name,
     description: m.description,

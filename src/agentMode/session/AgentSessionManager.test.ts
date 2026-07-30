@@ -4,7 +4,9 @@
  * session-pool invariants without touching ACP or spawning a child process.
  */
 import { FileSystemAdapter, App, TFile } from "obsidian";
+import { waitFor } from "@testing-library/react";
 import { AgentSession } from "./AgentSession";
+import type { AgentModelPreloader } from "./AgentModelPreloader";
 import { buildNativeChatId } from "@/utils/nativeChatId";
 import { AgentSessionIndex } from "./AgentSessionIndex";
 import { AgentSessionManager } from "./AgentSessionManager";
@@ -27,7 +29,7 @@ import {
 } from "@/aiParams";
 import type { ProjectFileRecord } from "@/projects/type";
 import { getProjectContextSignature } from "@/projects/projectContextSignature";
-import type { BackendDescriptor, InstallState } from "./types";
+import type { BackendDescriptor, BackendModelCatalog, InstallState } from "./types";
 
 const mockEnsureMaterialized = ensureProjectContextMaterialized as jest.Mock;
 
@@ -249,18 +251,27 @@ function buildDescriptor(): BackendDescriptor {
   } as unknown as BackendDescriptor;
 }
 
-function buildManager(): AgentSessionManager {
+function modelCatalog(baseModelId: string): BackendModelCatalog {
+  return {
+    availableModels: [{ baseModelId, name: baseModelId, provider: null, effortOptions: [] }],
+  };
+}
+
+function buildManager(
+  modelPreloaderOverrides: Partial<AgentModelPreloader> = {}
+): AgentSessionManager {
   const descriptor = buildDescriptor();
   const modelPreloader = {
-    getCachedBackendState: jest.fn(() => null),
+    getCachedModelCatalog: jest.fn(() => null),
+    getEffortCatalog: jest.fn(() => null),
     preload: jest.fn(async () => undefined),
     refresh: jest.fn(() => null),
     subscribe: jest.fn(() => () => {}),
     shutdown: jest.fn(),
-    setCached: jest.fn(),
     clearCached: jest.fn(),
     takeWarm: jest.fn(() => null),
     getWarmProcs: jest.fn(() => []),
+    ...modelPreloaderOverrides,
   };
   return new AgentSessionManager(
     buildApp(),
@@ -325,109 +336,14 @@ describe("AgentSessionManager.createSession", () => {
     expect(mockBackendStart).toHaveBeenCalledTimes(1);
   });
 
-  it("mirrors the new session's unified state into the preloader cache", async () => {
-    const cache = new Map<string, unknown>();
-    const modelPreloader = {
-      getCachedBackendState: jest.fn((id: string) => cache.get(id) ?? null),
-      preload: jest.fn(async () => undefined),
-      refresh: jest.fn(() => null),
-      subscribe: jest.fn(() => () => {}),
-      shutdown: jest.fn(),
-      setCached: jest.fn((id: string, state: unknown) => {
-        cache.set(id, state);
-      }),
-      clearCached: jest.fn((id: string) => {
-        cache.delete(id);
-      }),
-      takeWarm: jest.fn(() => null),
-      getWarmProcs: jest.fn(() => []),
-    };
-    const descriptor = buildDescriptor();
-    const mgr = new AgentSessionManager(
-      buildApp(),
-      buildPlugin() as unknown as ConstructorParameters<typeof AgentSessionManager>[1],
-      {
-        permissionPrompter: jest.fn(),
-        resolveDescriptor: (id) => (id === descriptor.id ? descriptor : undefined),
-        modelPreloader: modelPreloader as unknown as ConstructorParameters<
-          typeof AgentSessionManager
-        >[2]["modelPreloader"],
-      }
-    );
-
-    const modelEntry = {
-      baseModelId: "anthropic/sonnet",
-      name: "Claude Sonnet",
-      provider: "anthropic",
-      effortOptions: [],
-    };
-    const unified = {
-      model: { current: { model: modelEntry, effort: null }, availableModels: [modelEntry] },
-      mode: null,
-    };
-    sessionCreateSpy.mockImplementationOnce((opts) => {
-      const s = makeMockSession({ internalId: opts.internalId, backendId: opts.backendId });
-      (s as unknown as { getState: () => unknown }).getState = () => unified;
-      return s;
+  it("leaves the seed unset when a catalog exists but no explicit default is stored", async () => {
+    const mgr = buildManager({
+      getCachedModelCatalog: jest.fn(() => modelCatalog("catalog-first")),
     });
 
     await mgr.createSession();
-    expect(modelPreloader.setCached).toHaveBeenCalledWith("opencode", unified);
-    expect(mgr.getCachedBackendState("opencode")).toBe(unified);
-
-    // Spawning a second session before its session/new resolves must not
-    // overwrite the cached state with nulls.
-    sessionCreateSpy.mockImplementationOnce((opts) =>
-      makeMockSession({ internalId: opts.internalId, backendId: opts.backendId })
-    );
-    await mgr.createSession();
-    expect(mgr.getCachedBackendState("opencode")).toBe(unified);
-  });
-
-  it("seeds the catalog native default when no explicit default is stored", async () => {
-    // Regression: a warm/running subprocess bakes its model from the default
-    // at spawn time. After the default is cleared, getDefaultSelection is null,
-    // so without this fallback a fresh "Agent default" chat would inherit the
-    // stale baked model. The new session must be confirmed onto the native
-    // catalog default instead.
-    const probeState = {
-      model: {
-        current: { baseModelId: "opencode/old-baked", effort: null },
-        availableModels: [
-          { baseModelId: "opencode/native", name: "Native", provider: null, effortOptions: [] },
-        ],
-      },
-      mode: null,
-    };
-    const descriptor = buildDescriptor();
-    const modelPreloader = {
-      getCachedBackendState: jest.fn(() => probeState),
-      preload: jest.fn(async () => undefined),
-      refresh: jest.fn(() => null),
-      subscribe: jest.fn(() => () => {}),
-      shutdown: jest.fn(),
-      setCached: jest.fn(),
-      clearCached: jest.fn(),
-      takeWarm: jest.fn(() => null),
-      getWarmProcs: jest.fn(() => []),
-    };
-    const mgr = new AgentSessionManager(
-      buildApp(),
-      buildPlugin() as unknown as ConstructorParameters<typeof AgentSessionManager>[1],
-      {
-        permissionPrompter: jest.fn(),
-        resolveDescriptor: (id) => (id === descriptor.id ? descriptor : undefined),
-        modelPreloader: modelPreloader as unknown as ConstructorParameters<
-          typeof AgentSessionManager
-        >[2]["modelPreloader"],
-      }
-    );
-
-    await mgr.createSession();
     expect(sessionCreateSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        defaultModelSelection: { baseModelId: "opencode/native", effort: null },
-      })
+      expect.objectContaining({ defaultModelSelection: undefined })
     );
   });
 
@@ -497,16 +413,14 @@ describe("AgentSessionManager warm-backend reuse", () => {
   // persisted probe session id) on the first `takeWarm`, then null.
   function buildManagerWithWarm(warmProc: ReturnType<typeof makeMockBackendProcess>) {
     const descriptor = buildDescriptor();
-    const takeWarmMock = jest
-      .fn()
-      .mockReturnValueOnce({ proc: warmProc, probeSessionId: "probe-1", state: probeState })
-      .mockReturnValue(null);
+    const takeWarmMock = jest.fn().mockReturnValueOnce({ proc: warmProc }).mockReturnValue(null);
     const modelPreloader = {
-      getCachedBackendState: jest.fn(() => probeState),
+      getCachedModelCatalog: jest.fn(() => ({
+        availableModels: probeState.model.availableModels,
+      })),
       preload: jest.fn(async () => undefined),
       subscribe: jest.fn(() => () => {}),
       shutdown: jest.fn(),
-      setCached: jest.fn(),
       clearCached: jest.fn(),
       takeWarm: takeWarmMock,
     };
@@ -535,7 +449,7 @@ describe("AgentSessionManager warm-backend reuse", () => {
     // No fresh backend was created either — descriptor.createBackendProcess
     // is the spawn primitive.
     expect(descriptor.createBackendProcess).not.toHaveBeenCalled();
-    // Active session is the warm one.
+    // The active session uses the warm process.
     expect(mgr.getActiveSession()).not.toBeNull();
     expect(mgr.getActiveSession()?.backendId).toBe("opencode");
   });
@@ -610,6 +524,46 @@ describe("AgentSessionManager preload status", () => {
     // The chat treats error as "ready enough" so the user isn't stuck on
     // a perpetual spinner; the picker shows the failure row.
     expect(mgr.isPreloadReady("opencode")).toBe(true);
+  });
+});
+
+describe("AgentSessionManager.getCachedModelCatalog", () => {
+  it("returns probe-owned discovery", () => {
+    const catalog = modelCatalog("catalog");
+    const mgr = buildManager({
+      getCachedModelCatalog: jest.fn(() => catalog),
+    });
+
+    expect(mgr.getCachedModelCatalog("opencode")).toBe(catalog);
+  });
+});
+
+describe("AgentSessionManager.getModelCacheSignature", () => {
+  it("is stable when shared discovery is unchanged", () => {
+    const catalog = modelCatalog("catalog");
+    const first = buildManager({
+      getCachedModelCatalog: jest.fn(() => catalog),
+    });
+    const second = buildManager({
+      getCachedModelCatalog: jest.fn(() => catalog),
+    });
+
+    expect(first.getModelCacheSignature("opencode")).toBe(
+      second.getModelCacheSignature("opencode")
+    );
+  });
+
+  it("changes when shared model discovery changes", () => {
+    const first = buildManager({
+      getCachedModelCatalog: jest.fn(() => modelCatalog("first-catalog")),
+    });
+    const second = buildManager({
+      getCachedModelCatalog: jest.fn(() => modelCatalog("second-catalog")),
+    });
+
+    expect(first.getModelCacheSignature("opencode")).not.toBe(
+      second.getModelCacheSignature("opencode")
+    );
   });
 });
 
@@ -716,12 +670,11 @@ describe("AgentSessionManager.restartBackend", () => {
     // freshly-keyed model "not offered by agent" until a full reload.
     const refresh = jest.fn(() => Promise.resolve());
     const modelPreloader = {
-      getCachedBackendState: jest.fn(() => ({ model: null, mode: null })),
+      getCachedModelCatalog: jest.fn(() => null),
       preload: jest.fn(async () => undefined),
       refresh,
       subscribe: jest.fn(() => () => {}),
       shutdown: jest.fn(),
-      setCached: jest.fn(),
       clearCached: jest.fn(),
       takeWarm: jest.fn(() => null),
       getWarmProcs: jest.fn(() => []),
@@ -755,12 +708,11 @@ describe("AgentSessionManager.restartBackend", () => {
     // `refresh` returns null and the manager must not spin a probe up.
     const refresh = jest.fn(() => null);
     const modelPreloader = {
-      getCachedBackendState: jest.fn(() => null),
+      getCachedModelCatalog: jest.fn(() => null),
       preload: jest.fn(async () => undefined),
       refresh,
       subscribe: jest.fn(() => () => {}),
       shutdown: jest.fn(),
-      setCached: jest.fn(),
       clearCached: jest.fn(),
       takeWarm: jest.fn(() => null),
       getWarmProcs: jest.fn(() => []),
@@ -788,16 +740,15 @@ describe("AgentSessionManager.restartBackend", () => {
   it("re-probes after restart when no replacement session is created", async () => {
     // Proc exists but no active session is on this backend (e.g. the active
     // tab is on a different agent). The torn-down proc leaves nothing to
-    // repopulate the cache, so the manager must re-probe — otherwise the
+    // repopulate discovery, so the manager must re-probe — otherwise the
     // picker flags freshly-enabled models "not offered by agent" until reload.
     const preload = jest.fn(async () => undefined);
     const modelPreloader = {
-      getCachedBackendState: jest.fn(() => null),
+      getCachedModelCatalog: jest.fn(() => null),
       preload,
       refresh: jest.fn(() => null),
       subscribe: jest.fn(() => () => {}),
       shutdown: jest.fn(),
-      setCached: jest.fn(),
       clearCached: jest.fn(),
       takeWarm: jest.fn(() => null),
       getWarmProcs: jest.fn(() => []),
@@ -845,18 +796,16 @@ describe("AgentSessionManager.restartBackend", () => {
 
   it("re-probes before creating the replacement so the effort catalog is rebuilt", async () => {
     // The active tab is on this backend, so the restart creates a replacement
-    // session. `restartBackendNow` cleared the (now stale) effort catalog, and
-    // a live session's attachModelCacheSync mirrors catalog state but NOT the
-    // effort catalog — so the manager must re-probe before the replacement, or
-    // the picker loses every model's effort stepper until a reload.
+    // session. `restartBackendNow` cleared the probe-owned model and effort
+    // catalogs, so the manager must re-probe before the replacement or the
+    // picker loses every model's effort stepper until a reload.
     const preload = jest.fn(async () => undefined);
     const modelPreloader = {
-      getCachedBackendState: jest.fn(() => null),
+      getCachedModelCatalog: jest.fn(() => null),
       preload,
       refresh: jest.fn(() => null),
       subscribe: jest.fn(() => () => {}),
       shutdown: jest.fn(),
-      setCached: jest.fn(),
       clearCached: jest.fn(),
       takeWarm: jest.fn(() => null),
       getWarmProcs: jest.fn(() => []),
@@ -1039,12 +988,11 @@ describe("AgentSessionManager.getRunningChatIds", () => {
         permissionPrompter: jest.fn(),
         resolveDescriptor: (id) => (id === descriptor.id ? descriptor : undefined),
         modelPreloader: {
-          getCachedBackendState: jest.fn(() => null),
+          getCachedModelCatalog: jest.fn(() => null),
           preload: jest.fn(async () => undefined),
           refresh: jest.fn(() => null),
           subscribe: jest.fn(() => () => {}),
           shutdown: jest.fn(),
-          setCached: jest.fn(),
           clearCached: jest.fn(),
           takeWarm: jest.fn(() => null),
           getWarmProcs: jest.fn(() => []),
@@ -1339,11 +1287,10 @@ describe("AgentSessionManager.applySelection", () => {
       applySelection: applySelectionMock,
     } as unknown as BackendDescriptor;
     const modelPreloader = {
-      getCachedBackendState: jest.fn(() => null),
+      getCachedModelCatalog: jest.fn(() => null),
       preload: jest.fn(async () => undefined),
       subscribe: jest.fn(() => () => {}),
       shutdown: jest.fn(),
-      setCached: jest.fn(),
       clearCached: jest.fn(),
       takeWarm: jest.fn(() => null),
       getWarmProcs: jest.fn(() => []),
@@ -1427,13 +1374,12 @@ describe("AgentSessionManager default-model settings subscription", () => {
     } as unknown as BackendDescriptor;
   }
 
-  function makeStubPreloader(cachedState: unknown = null) {
+  function makeStubPreloader(catalog: BackendModelCatalog | null = null) {
     return {
-      getCachedBackendState: jest.fn(() => cachedState),
+      getCachedModelCatalog: jest.fn(() => catalog),
       preload: jest.fn(async () => undefined),
       subscribe: jest.fn(() => () => {}),
       shutdown: jest.fn(),
-      setCached: jest.fn(),
       clearCached: jest.fn(),
       takeWarm: jest.fn(() => null),
       getWarmProcs: jest.fn(() => []),
@@ -1507,34 +1453,25 @@ describe("AgentSessionManager default-model settings subscription", () => {
     expect(applySelectionMock).not.toHaveBeenCalled();
   });
 
-  it("reverts a live session to the agent's native default when the default is cleared", async () => {
+  it("leaves a live session unchanged when the explicit default is cleared", async () => {
     const applySelectionMock = jest.fn(async () => {});
     const descriptor = makeApplySelectionDescriptor(applySelectionMock);
-    // A probed catalog whose first model is the agent's native default.
-    const cachedState = {
-      model: {
-        current: { baseModelId: "native", effort: null },
-        apply: { kind: "setModel" },
-        availableModels: [
-          { baseModelId: "native", name: "Native", provider: "x", effortOptions: [] },
-        ],
-      },
-      mode: null,
-    };
+    const catalog = modelCatalog("native");
     const mgr = new AgentSessionManager(
       buildApp(),
       buildPlugin() as unknown as ConstructorParameters<typeof AgentSessionManager>[1],
       {
         permissionPrompter: jest.fn(),
         resolveDescriptor: (id) => (id === descriptor.id ? descriptor : undefined),
-        modelPreloader: makeStubPreloader(cachedState) as unknown as ConstructorParameters<
+        modelPreloader: makeStubPreloader(catalog) as unknown as ConstructorParameters<
           typeof AgentSessionManager
         >[2]["modelPreloader"],
       }
     );
-    const session = await mgr.createSession();
+    await mgr.createSession();
 
     // User picks "Agent default" → stored default goes from explicit to null.
+    const settingsReadsBeforeChange = (mockedGetSettings as jest.Mock).mock.calls.length;
     emitSettingsChange(
       {
         agentMode: {
@@ -1543,12 +1480,12 @@ describe("AgentSessionManager default-model settings subscription", () => {
       },
       { agentMode: { backends: { opencode: { defaultModel: null } } } }
     );
-    await flushApplyChain();
-
-    expect(applySelectionMock).toHaveBeenCalledWith(session, {
-      baseModelId: "native",
-      effort: null,
-    });
+    await waitFor(() =>
+      expect((mockedGetSettings as jest.Mock).mock.calls.length).toBeGreaterThan(
+        settingsReadsBeforeChange
+      )
+    );
+    expect(applySelectionMock).not.toHaveBeenCalled();
   });
 
   it("defers re-apply for a starting session until ready, using the latest default", async () => {
@@ -1670,17 +1607,15 @@ describe("AgentSessionManager.onInstallStateChanged", () => {
   // applying/clearing a binary path) and exposes the preloader spies.
   function buildInstallStateManager(opts: {
     installState: InstallState;
-    cachedState?: unknown;
     refreshResult?: Promise<void> | null;
   }) {
     let installState = opts.installState;
     const preloader = {
-      getCachedBackendState: jest.fn(() => opts.cachedState ?? null),
+      getCachedModelCatalog: jest.fn(() => null),
       preload: jest.fn(async () => undefined),
       refresh: jest.fn(() => opts.refreshResult ?? null),
       subscribe: jest.fn(() => () => {}),
       shutdown: jest.fn(),
-      setCached: jest.fn(),
       clearCached: jest.fn(),
       takeWarm: jest.fn(() => null),
       getWarmProcs: jest.fn(() => []),
@@ -1723,7 +1658,6 @@ describe("AgentSessionManager.onInstallStateChanged", () => {
     // it rather than spinning up a second one.
     const { mgr, preloader } = buildInstallStateManager({
       installState: { kind: "ready", source: "custom" },
-      cachedState: { model: null, mode: null },
       refreshResult: Promise.resolve(),
     });
 
@@ -1810,7 +1744,6 @@ describe("AgentSessionManager.onInstallStateChanged", () => {
   it("keeps live and warm backend state while a compatibility check is in flight", async () => {
     const { mgr, preloader } = buildInstallStateManager({
       installState: { kind: "checking", source: "custom" },
-      cachedState: { model: null, mode: null },
     });
     await mgr.createSession();
     mockBackendShutdown.mockClear();
@@ -1950,12 +1883,11 @@ describe("AgentSessionManager chat history aggregation", () => {
         permissionPrompter: jest.fn(),
         resolveDescriptor: (id) => (id === "opencode" ? descriptor : undefined),
         modelPreloader: {
-          getCachedBackendState: jest.fn(() => null),
+          getCachedModelCatalog: jest.fn(() => null),
           preload: jest.fn(async () => undefined),
           refresh: jest.fn(() => null),
           subscribe: jest.fn(() => () => {}),
           shutdown: jest.fn(),
-          setCached: jest.fn(),
           clearCached: jest.fn(),
           takeWarm: jest.fn(() => null),
           getWarmProcs: jest.fn(() => {

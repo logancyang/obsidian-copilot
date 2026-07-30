@@ -1,8 +1,10 @@
-import type { InstallState } from "@/agentMode/session/types";
+import type { AgentSession } from "@/agentMode/session/AgentSession";
+import type { BackendState, InstallState } from "@/agentMode/session/types";
 import type { CopilotSettings } from "@/settings/model";
 import { resolveClaudeBinary } from "./claudeBinaryResolver";
 import { claudeCompatibilityStore } from "./claudeCompatibilityStore";
 import {
+  ClaudeBackendDescriptor,
   getClaudeInstallState,
   refreshClaudeInstallState,
   subscribeClaudeInstallState,
@@ -128,6 +130,53 @@ describe("claude descriptor", () => {
 
       expect(subscribeClaudeInstallState(listener)).toBe(unsubscribe);
       expect(mockSubscribeCompatibility).toHaveBeenCalledWith(listener);
+    });
+  });
+
+  describe("ClaudeBackendDescriptor.applySelection()", () => {
+    function makeSession(currentBaseModelId: string): {
+      session: AgentSession;
+      applyModelWireId: jest.Mock;
+    } {
+      const state: BackendState = {
+        model: {
+          current: { baseModelId: currentBaseModelId, effort: null },
+          availableModels: [],
+          apply: { kind: "setModel" },
+        },
+        mode: null,
+      };
+      const applyModelWireId = jest.fn(async () => undefined);
+      return {
+        session: {
+          getState: () => state,
+          applyModelWireId,
+        } as unknown as AgentSession,
+        applyModelWireId,
+      };
+    }
+
+    it("uses backend-confirmed startup state when the session is optimistically seeded", async () => {
+      const { session, applyModelWireId } = makeSession("sonnet");
+
+      await ClaudeBackendDescriptor.applySelection(
+        session,
+        { baseModelId: "sonnet", effort: null },
+        { backendReportedCurrent: { baseModelId: "default", effort: null } }
+      );
+
+      expect(applyModelWireId).toHaveBeenCalledWith("sonnet");
+    });
+
+    it("skips the model write for an ordinary same-model selection", async () => {
+      const { session, applyModelWireId } = makeSession("sonnet");
+
+      await ClaudeBackendDescriptor.applySelection(session, {
+        baseModelId: "sonnet",
+        effort: null,
+      });
+
+      expect(applyModelWireId).not.toHaveBeenCalled();
     });
   });
 });

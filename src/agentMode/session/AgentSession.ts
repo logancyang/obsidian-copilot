@@ -238,13 +238,6 @@ export interface AgentSessionStartOptions extends ProjectContextUpdatesHooks {
    */
   defaultModelSelection?: ModelSelection;
   /**
-   * Snapshot from the preloader cache used to seed `currentState`
-   * synchronously so the picker doesn't flash the previous session's
-   * selection during the `backend.newSession` round-trip. Replaced by the
-   * agent's fresh `newSession` response inside `initialize()`.
-   */
-  initialCachedState?: BackendState | null;
-  /**
    * Optional descriptor accessor. The session uses it to resolve mode mappings
    * without coupling to specific backends. Manager-supplied; tests omit it.
    */
@@ -325,7 +318,7 @@ export class AgentSession {
   readonly backendId: BackendId;
   /** Immutable scope binding ({@link GLOBAL_SCOPE} or a project id). */
   readonly projectId: ProjectScopeId;
-  /** Resolves when `newSession` succeeds; rejects when it fails. */
+  /** Resolves when startup and any initial model selection have settled. */
   readonly ready: Promise<void>;
   private backendSessionId: SessionId | null = null;
   private readonly backend: BackendProcess;
@@ -359,6 +352,9 @@ export class AgentSession {
   // Combined with `backendSessionId === null` this yields the startup
   // `"error"` status.
   private startupFailed = false;
+  // Remains false until the backend has accepted or rejected the persisted
+  // model selection, preventing a prompt from racing that startup write.
+  private startupSettled = false;
   // Set in `runTurn`'s catch; cleared at the top of `sendPrompt` once
   // preconditions pass. Yields the per-turn `"error"` status while the
   // session sits idle between a failed turn and the next prompt.
@@ -496,24 +492,25 @@ export class AgentSession {
         opts.backendSessionId,
         (event) => this.handleSessionEvent(event)
       );
-      // Sync the status cache so the first recomputeStatusIfChanged doesn't
-      // fire a spurious "starting → idle" transition that no one observed.
-      this.cachedStatus = this.getStatus();
       // Gate `ready` on the model confirmation round-trip so `sendPrompt`
       // can't fire on the probe's model before the user's persisted
       // selection is applied to the backend.
-      this.ready =
-        opts.defaultModelSelection && originalState
-          ? this.confirmSeededSelection(opts.defaultModelSelection, originalState)
-          : Promise.resolve();
+      if (opts.defaultModelSelection && originalState) {
+        this.ready = this.confirmSeededSelection(opts.defaultModelSelection, originalState).finally(
+          () => {
+            this.startupSettled = true;
+            this.recomputeStatusIfChanged();
+          }
+        );
+      } else {
+        this.startupSettled = true;
+        this.ready = Promise.resolve();
+      }
+      // Sync the status cache so the first recomputeStatusIfChanged doesn't
+      // fire a spurious transition that no listener observed.
+      this.cachedStatus = this.getStatus();
     } else {
-      // Eagerly seed from the preloader cache so the picker doesn't fall
-      // back to the prior session's `current` while `backend.newSession` is
-      // in flight. `initialize()` replaces this with the agent's response.
-      this.currentState = seedSelectionIntoState(
-        opts.initialCachedState ?? null,
-        opts.defaultModelSelection
-      );
+      this.currentState = null;
       this.ready = this.initialize(opts);
     }
   }
@@ -582,6 +579,8 @@ export class AgentSession {
       if (defaultModelSelection) {
         await this.confirmSeededSelection(defaultModelSelection, resp.state);
       }
+      this.startupSettled = true;
+      this.recomputeStatusIfChanged();
     } catch (err) {
       if (this.disposed) return;
       logWarn(`[AgentMode] session/new failed for ${this.internalId}`, err);
@@ -592,9 +591,9 @@ export class AgentSession {
   }
 
   /**
-   * Latest known unified picker state for this session — model catalog,
-   * canonical mode, canonical effort. `null` while the session is still
-   * starting and the agent hasn't reported anything yet.
+   * Return the session's local in-memory state snapshot without contacting the
+   * backend. `null` while the session is still starting and neither a cached
+   * nor backend-reported state is available.
    */
   getState(): BackendState | null {
     return this.currentState;
@@ -667,17 +666,7 @@ export class AgentSession {
       : null;
     const originalEffort = originalState.model?.current.effort ?? null;
     if (encoded === originalEncoded && selection.effort === originalEffort) return;
-    // Config-option backends (opencode ≥1.15.13) guard their model switch on
-    // the *current* state, and the optimistic baseModelId seed already shows
-    // the target — which would skip the real switch and strand the backend on
-    // its originally-reported model. Drop the seed first so `applySelection`
-    // sees the true state and issues the switch. setModel-style backends always
-    // issue the round-trip regardless of current, so their optimistic seed can
-    // stand and the picker doesn't blink.
     const configOptionBacked = originalState.model?.apply?.kind === "setConfigOption";
-    if (configOptionBacked) {
-      this.currentState = originalState;
-    }
     try {
       // Clearing effort to the agent default on a config-option backend whose
       // process baked a concrete effort: the base already matches, so
@@ -688,7 +677,9 @@ export class AgentSession {
         await this.applyModelWireId(descriptor.wire.encode(selection));
         return;
       }
-      await descriptor.applySelection(this, selection);
+      await descriptor.applySelection(this, selection, {
+        backendReportedCurrent: originalState.model?.current ?? null,
+      });
     } catch (e) {
       logWarn(`[AgentMode] could not apply seeded selection ${encoded}; reverting seed`, e);
       this.currentState = originalState;
@@ -784,16 +775,15 @@ export class AgentSession {
   /**
    * The status is derived from underlying primitives so it cannot drift
    * from reality: any combination of `disposed`, `backendSessionId`,
-   * resolver-map sizes, `abortController`, `startupFailed`, and
+   * `startupSettled`, resolver-map sizes, `abortController`, `startupFailed`, and
    * `lastTurnError` maps to exactly one status. Mutating any of those
    * primitives implicitly transitions the status; consumers observe the
    * change via `onStatusChanged` after `recomputeStatusIfChanged()` runs.
    */
   getStatus(): AgentSessionStatus {
     if (this.disposed) return "closed";
-    if (this.backendSessionId === null) {
-      return this.startupFailed ? "error" : "starting";
-    }
+    if (this.startupFailed) return "error";
+    if (this.backendSessionId === null || !this.startupSettled) return "starting";
     if (
       this.pendingPlanResolvers.size +
         this.pendingToolResolvers.size +
@@ -1909,7 +1899,7 @@ export class AgentSession {
    * `getStatus()`.
    *
    * Call this after mutating any primitive that participates in the
-   * derivation: `disposed`, `backendSessionId`, `startupFailed`,
+   * derivation: `disposed`, `backendSessionId`, `startupFailed`, `startupSettled`,
    * `abortController`, `lastTurnError`, or the resolver maps.
    */
   private recomputeStatusIfChanged(): void {
