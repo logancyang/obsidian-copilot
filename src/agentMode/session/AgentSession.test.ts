@@ -353,7 +353,27 @@ describe("AgentSession.loadDisplayMessages", () => {
   });
 });
 
-describe("AgentSession.projectId", () => {
+describe("AgentSession immutable fields", () => {
+  it("mints a distinct chat input id unless one is explicitly provided", () => {
+    const mock = makeMockBackend();
+    const fresh = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+    });
+    const preserved = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-2",
+      internalId: "internal-2",
+      chatInputId: "chat-input-1",
+      backendId: "opencode",
+    });
+
+    expect(fresh.chatInputId).not.toBe(fresh.internalId);
+    expect(preserved.chatInputId).toBe("chat-input-1");
+  });
+
   it("defaults to GLOBAL_SCOPE when no projectId option is given", () => {
     const mock = makeMockBackend();
     const session = new AgentSession({

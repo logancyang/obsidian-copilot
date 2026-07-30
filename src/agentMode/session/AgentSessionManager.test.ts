@@ -147,6 +147,7 @@ function getSessionTestHandle(session: AgentSession): MockSessionTestHandle {
 
 function makeMockSession(overrides: {
   internalId: string;
+  chatInputId?: string;
   backendSessionId?: string;
   backendId: string;
   projectId?: string;
@@ -163,6 +164,7 @@ function makeMockSession(overrides: {
   }>();
   const session = {
     internalId: overrides.internalId,
+    chatInputId: overrides.chatInputId ?? overrides.internalId,
     backendId: overrides.backendId,
     projectId: overrides.projectId ?? GLOBAL_SCOPE,
     ready: overrides.ready ?? Promise.resolve(),
@@ -215,6 +217,7 @@ function makeMockSession(overrides: {
 const sessionCreateSpy = jest.spyOn(AgentSession, "start").mockImplementation((opts) =>
   makeMockSession({
     internalId: opts.internalId,
+    chatInputId: opts.chatInputId,
     backendId: opts.backendId,
     projectId: opts.projectId,
   })
@@ -1217,6 +1220,70 @@ describe("AgentSessionManager.replaceSessionInPlace", () => {
     await flushBackgroundClose();
     expect(mgr.getSessions()).toEqual([replacement, b]);
     expect(mgr.getActiveSession()).toBe(replacement);
+  });
+
+  it("preserves the logical chat input only when explicitly requested", async () => {
+    const mgr = buildManager();
+    const freshSource = await mgr.createSession();
+    expect(freshSource.chatInputId).not.toBe(freshSource.internalId);
+    const freshReplacement = await mgr.replaceSessionInPlace(freshSource.internalId);
+    expect(freshReplacement.chatInputId).not.toBe(freshSource.chatInputId);
+
+    const preservedSource = freshReplacement;
+    const preservedReplacement = await mgr.replaceSessionInPlace(
+      preservedSource.internalId,
+      undefined,
+      { preserveChatInput: true }
+    );
+    expect(preservedReplacement.chatInputId).toBe(preservedSource.chatInputId);
+  });
+
+  it("keeps the last successful replacement when a queued replacement fails", async () => {
+    const mgr = buildManager();
+    const source = await mgr.createSession();
+    const createSession = mgr.createSession.bind(mgr);
+    let releaseSecond!: () => void;
+    let markSecondStarted!: () => void;
+    const secondStarted = new Promise<void>((resolve) => (markSecondStarted = resolve));
+    const secondGate = new Promise<void>((resolve) => (releaseSecond = resolve));
+    let replacementCount = 0;
+    jest.spyOn(mgr, "createSession").mockImplementation(async (...args) => {
+      replacementCount++;
+      if (replacementCount === 2) {
+        markSecondStarted();
+        await secondGate;
+        throw new Error("replacement failed");
+      }
+      return createSession(...args);
+    });
+
+    const first = mgr.replaceSessionInPlace(source.internalId, "opencode", {
+      preserveChatInput: true,
+      seedSelection: { baseModelId: "first-model", effort: null },
+    });
+    const second = mgr.replaceSessionInPlace(source.internalId, "opencode", {
+      preserveChatInput: true,
+      seedSelection: { baseModelId: "latest-model", effort: "high" },
+    });
+    const firstReplacement = await first;
+    await secondStarted;
+    const third = mgr.replaceSessionInPlace(firstReplacement.internalId, "opencode", {
+      preserveChatInput: true,
+      seedSelection: { baseModelId: "final-model", effort: "low" },
+    });
+    releaseSecond();
+    await expect(second).rejects.toThrow("replacement failed");
+    const thirdReplacement = await third;
+    await flushBackgroundClose();
+
+    expect(thirdReplacement).not.toBe(firstReplacement);
+    expect(thirdReplacement.chatInputId).toBe(source.chatInputId);
+    expect(sessionCreateSpy).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        defaultModelSelection: { baseModelId: "final-model", effort: "low" },
+      })
+    );
+    expect(mgr.getSessions()).toEqual([thirdReplacement]);
   });
 
   it("closes the old session in the background", async () => {

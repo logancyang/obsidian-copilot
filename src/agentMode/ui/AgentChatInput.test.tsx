@@ -62,6 +62,10 @@ jest.mock("@/aiParams", () => ({
   useSelectedTextContexts: () => [[], jest.fn()],
 }));
 jest.mock("@/settings/model", () => ({
+  getModelKeyFromModel: (model: { name: string; provider: string; _backendId?: string }) => {
+    const baseKey = `${model.name}|${model.provider}`;
+    return model._backendId ? `${model._backendId}:${baseKey}` : baseKey;
+  },
   useSettingsValue: () => ({}),
 }));
 /* eslint-enable @eslint-react/hooks-extra/no-unnecessary-use-prefix */
@@ -95,21 +99,20 @@ const makeDraft = (overrides: Partial<AgentInputDraftControls> = {}): AgentInput
   setIncludeActiveWebTab: jest.fn(),
   setLoading: jest.fn(),
   setQueue: jest.fn(),
-  migrateDraft: jest.fn(),
   resetCompose: jest.fn(),
   ...overrides,
 });
 
-function renderInput(
+function inputNode(
   backend: AgentChatBackend,
   draft: AgentInputDraftControls,
   extraProps: Partial<React.ComponentProps<typeof AgentChatInput>> = {}
 ) {
-  return render(
+  return (
     <AgentChatInput
       backend={backend}
       plugin={{} as never}
-      sessionId="session-1"
+      chatInputId="input-1"
       draft={draft}
       app={makeApp()}
       mainAgentId={null}
@@ -124,7 +127,13 @@ function renderInput(
   );
 }
 
-describe("AgentChatInput agent-mention gate", () => {
+const renderInput = (
+  backend: AgentChatBackend,
+  draft: AgentInputDraftControls,
+  extraProps: Partial<React.ComponentProps<typeof AgentChatInput>> = {}
+) => render(inputNode(backend, draft, extraProps));
+
+describe("AgentChatInput identity and agent-mention gate", () => {
   beforeEach(() => {
     capturedAgentBrands = undefined;
     mockNavigateToPlusPage.mockClear();
@@ -137,6 +146,20 @@ describe("AgentChatInput agent-mention gate", () => {
       makeDraft()
     );
     expect(capturedAgentBrands).toBe(FAKE_BRANDS);
+  });
+
+  it("clears input-scoped context only when the logical chat input changes", () => {
+    const clearSelectedTextContexts = jest.requireMock("@/aiParams")
+      .clearSelectedTextContexts as jest.Mock;
+    clearSelectedTextContexts.mockClear();
+    const backend = { sendMessage: jest.fn(), cancel: jest.fn() } as unknown as AgentChatBackend;
+    const draft = makeDraft();
+    const view = renderInput(backend, draft);
+
+    view.rerender(inputNode(backend, draft, { chatInputId: "input-1" }));
+    expect(clearSelectedTextContexts).not.toHaveBeenCalled();
+    view.rerender(inputNode(backend, draft, { chatInputId: "input-2" }));
+    expect(clearSelectedTextContexts).toHaveBeenCalledTimes(1);
   });
 
   it("passes the frozen empty list (not a fresh []) when not entitled", () => {
@@ -246,6 +269,39 @@ describe("AgentChatInput queue reason", () => {
     expect(rows[0].textContent).toContain("Waiting for context · held for context");
     expect(rows[1].textContent).toContain("held while busy");
     expect(rows[1].textContent).not.toContain("Waiting for context");
+  });
+
+  it("keeps queued images when the active model is known not to support vision", async () => {
+    const backend = makeBackend();
+    const draft = makeDraft({
+      queue: [
+        {
+          id: "q1",
+          text: "describe this",
+          rawInput: "describe this",
+          promptContent: [{ type: "image", mimeType: "image/png", data: "AA==" }],
+        },
+      ],
+    });
+
+    renderInput(backend, draft, {
+      modelPickerOverride: {
+        models: [
+          {
+            name: "text-only",
+            provider: "agent",
+            enabled: true,
+            capabilities: [],
+          },
+        ],
+        value: "text-only|agent",
+        onChange: jest.fn(),
+      },
+    });
+    await act(async () => {});
+
+    expect(backend.sendMessage).not.toHaveBeenCalled();
+    expect(draft.setQueue).not.toHaveBeenCalled();
   });
 });
 
