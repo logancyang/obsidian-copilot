@@ -74,6 +74,38 @@ export function deriveProjectsFolder(settings: FolderSettings): string {
 }
 
 /**
+ * DESIGN NOTE — every `getEffective*Folder()` below reads the LIVE global
+ * settings, so calling one twice inside a single operation can return two
+ * different folders: the root activates the moment it is persisted, and the
+ * caches keyed off it reload asynchronously (`ProjectRegister` on a 1s trailing
+ * debounce, the command/prompt registers likewise).
+ *
+ * The rule for callers is therefore: an operation resolves its folder ONCE and
+ * uses that value for every `ensureFolderExists` and write it performs.
+ * Which moment to resolve at is not uniform, and cannot be — the two directions
+ * are opposites:
+ *   - Work whose content does not depend on the old location (a fresh create, a
+ *     summary produced by a model call) resolves LATE, just before writing, so
+ *     it lands where the user now expects it.
+ *   - Work anchored to something already on disk (a read-modify-write, or any
+ *     CRUD on an existing record) resolves from that thing's own path — see
+ *     `getProjectAnchorFromConfigPath` — because redirecting it would overwrite
+ *     a different file with a snapshot of this one.
+ *
+ * Enforcing this by construction would mean these accessors becoming
+ * unavailable except through an operation-scoped layout snapshot, the way
+ * `MiyoMutationSession` makes a stale lifecycle token unrepresentable. That is
+ * the right long-term shape and is deliberately NOT done here: it would touch
+ * every writer and consumer across ~14 modules, and the correctness of each one
+ * depends on which of the two directions above it needs — a mechanical
+ * conversion would silently pick the wrong one. Tracked as a follow-up.
+ *
+ * If a future review flags a new instance, the fix is to give that operation a
+ * single folder value, and to point them at this note for why there is no
+ * blanket rule.
+ */
+
+/**
  * Effective root folder for artifacts written directly under it (e.g. the log
  * file and index-inspection notes), not into one of the derived sub-folders.
  */
