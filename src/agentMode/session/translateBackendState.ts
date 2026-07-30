@@ -434,12 +434,3 @@ export function modeStateSignature(state: BackendState | null): string {
   const apply = md.options.map((o) => `${o.value}:${md.apply[o.value]?.kind ?? ""}`).join(",");
   return `${md.current ?? ""}|${apply}`;
 }
-
-/**
- * Stable signature of a normalized `BackendState`. Used by the preloader
- * to skip notifying listeners on no-op updates.
- */
-export function backendStateSignature(state: BackendState | null): string {
-  if (!state) return "";
-  return `${modelStateSignature(state)}#${modeStateSignature(state)}`;
-}

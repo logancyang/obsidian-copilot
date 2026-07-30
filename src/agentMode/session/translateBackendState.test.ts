@@ -1,5 +1,4 @@
 import {
-  backendStateSignature,
   findModelEntry,
   modelCatalogSignature,
   modelStateSignature,
@@ -712,76 +711,6 @@ describe("translateBackendState — invariants", () => {
     expect(cur.effort === null || entry.effortOptions.some((o) => o.value === cur.effort)).toBe(
       true
     );
-  });
-});
-
-describe("backendStateSignature", () => {
-  it("is stable across structurally identical raws (case 17)", () => {
-    const models: RawModelState = {
-      currentModelId: "x/y",
-      availableModels: [{ modelId: "x/y", name: "x/y" }],
-    };
-    const a = translateBackendState({ models, modes: null, configOptions: null }, descriptor());
-    const b = translateBackendState({ models, modes: null, configOptions: null }, descriptor());
-    expect(backendStateSignature(a)).toBe(backendStateSignature(b));
-  });
-
-  it("differs when current flips (case 18)", () => {
-    const before = translateBackendState(
-      {
-        models: {
-          currentModelId: "a",
-          availableModels: [
-            { modelId: "a", name: "A" },
-            { modelId: "b", name: "B" },
-          ],
-        },
-        modes: null,
-        configOptions: null,
-      },
-      descriptor()
-    );
-    const after = translateBackendState(
-      {
-        models: {
-          currentModelId: "b",
-          availableModels: [
-            { modelId: "a", name: "A" },
-            { modelId: "b", name: "B" },
-          ],
-        },
-        modes: null,
-        configOptions: null,
-      },
-      descriptor()
-    );
-    expect(backendStateSignature(before)).not.toBe(backendStateSignature(after));
-  });
-
-  it("differs when effortOptions changes (case 19)", () => {
-    const baseModels: RawModelState = {
-      currentModelId: "openai/gpt-5",
-      availableModels: [{ modelId: "openai/gpt-5", name: "GPT-5" }],
-    };
-    const before = translateBackendState(
-      { models: baseModels, modes: null, configOptions: null },
-      suffixDescriptor()
-    );
-    const after = translateBackendState(
-      {
-        models: {
-          currentModelId: "openai/gpt-5",
-          availableModels: [
-            { modelId: "openai/gpt-5", name: "GPT-5" },
-            { modelId: "openai/gpt-5/low", name: "GPT-5 low" },
-          ],
-        },
-        modes: null,
-        configOptions: null,
-      },
-      suffixDescriptor()
-    );
-    expect(backendStateSignature(before)).not.toBe(backendStateSignature(after));
   });
 });
 
