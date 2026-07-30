@@ -352,6 +352,19 @@ describe("AgentSessionManager.createSession", () => {
     expect(mockBackendStart).toHaveBeenCalledTimes(1);
   });
 
+  it("rejects a settled install error instead of reusing a running backend", async () => {
+    const descriptor = buildDescriptor();
+    const mgr = buildManager(descriptor);
+    await mgr.createSession();
+    (descriptor.getInstallState as jest.Mock).mockReturnValue({
+      kind: "error",
+      message: "Update the configured adapter.",
+    });
+
+    await expect(mgr.createSession()).rejects.toThrow("Update the configured adapter.");
+    expect(mockBackendStart).toHaveBeenCalledTimes(1);
+  });
+
   it("mirrors the new session's unified state into the preloader cache", async () => {
     const cache = new Map<string, unknown>();
     const modelPreloader = {
@@ -565,6 +578,21 @@ describe("AgentSessionManager warm-backend reuse", () => {
     // Active session is the warm one.
     expect(mgr.getActiveSession()).not.toBeNull();
     expect(mgr.getActiveSession()?.backendId).toBe("opencode");
+  });
+
+  it("reuses the warm proc while an install-state recheck is in flight", async () => {
+    const warmProc = makeMockBackendProcess();
+    const { mgr, descriptor } = buildManagerWithWarm(warmProc);
+    (descriptor.getInstallState as jest.Mock).mockReturnValue({
+      kind: "checking",
+      source: "custom",
+    });
+
+    await mgr.createSession();
+
+    expect(mockBackendStart).not.toHaveBeenCalled();
+    expect(descriptor.createBackendProcess).not.toHaveBeenCalled();
+    expect(mgr.getActiveSession()).not.toBeNull();
   });
 
   it("starts a fresh session on the warm proc instead of adopting the probe session", async () => {

@@ -3344,28 +3344,30 @@ export class AgentSessionManager {
     backendId: BackendId,
     descriptor: BackendDescriptor
   ): Promise<{ proc: BackendProcess; warm: WarmBackend | null }> {
-    const existing = this.backends.get(backendId);
-    if (existing && existing.isRunning()) return { proc: existing, warm: null };
-    const inflight = this.starting.get(backendId);
-    if (inflight) return { proc: await inflight, warm: null };
-
     const installState = descriptor.getInstallState(getSettings());
+    if (installState.kind === "ready" || installState.kind === "checking") {
+      const existing = this.backends.get(backendId);
+      if (existing && existing.isRunning()) return { proc: existing, warm: null };
+      const inflight = this.starting.get(backendId);
+      if (inflight) return { proc: await inflight, warm: null };
+
+      const warm = this.preloader.takeWarm(backendId);
+      if (warm) {
+        // Probe subprocess is already started + initialize-handshaken —
+        // wire it into the manager without paying either cost again.
+        this.wirePrompters(warm.proc);
+        this.installBackendExitHandler(backendId, warm.proc, descriptor);
+        this.backends.set(backendId, warm.proc);
+        return { proc: warm.proc, warm };
+      }
+    }
+
     if (installState.kind !== "ready") {
       const reason =
         installState.kind === "error"
           ? installState.message
           : `${descriptor.displayName} is not ready (${installState.kind}).`;
       throw new Error(reason);
-    }
-
-    const warm = this.preloader.takeWarm(backendId);
-    if (warm) {
-      // Probe subprocess is already started + initialize-handshaken —
-      // wire it into the manager without paying either cost again.
-      this.wirePrompters(warm.proc);
-      this.installBackendExitHandler(backendId, warm.proc, descriptor);
-      this.backends.set(backendId, warm.proc);
-      return { proc: warm.proc, warm };
     }
 
     const proc = descriptor.createBackendProcess({

@@ -47,6 +47,21 @@ describe("codexBinaryResolver", () => {
       ).toBe(maintained);
     });
 
+    it("finds a maintained shim under a custom npm prefix on PATH", () => {
+      const expected = "D:\\portable-node\\bin\\codex-acp.cmd";
+
+      expect(
+        resolveCodexAcpBinary({
+          homeDir: "C:\\Users\\me",
+          platform: "win32",
+          env: {
+            Path: "D:\\portable-node\\bin;C:\\Windows\\System32",
+          },
+          fs: fsWith([expected]),
+        })
+      ).toBe(expected);
+    });
+
     it("finds the Windows helper-script install path", () => {
       const expected = path.win32.join(
         "C:\\Users\\me",

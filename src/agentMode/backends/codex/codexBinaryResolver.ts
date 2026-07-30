@@ -82,12 +82,19 @@ function windowsCandidates(input: CodexAcpBinaryResolverInput): string[] {
   const localAppData = env.LOCALAPPDATA ?? win.join(homeDir, "AppData", "Local");
   const appData = env.APPDATA ?? win.join(homeDir, "AppData", "Roaming");
   const npmGlobal = win.join(appData, "npm");
-  const nodeToolDirs = Array.from(new Set([...nodeToolBinDirCandidates(input), npmGlobal]));
+  const effectivePath = env.PATH ?? env.Path ?? env.path ?? "";
+  const pathDirs = effectivePath
+    .split(win.delimiter)
+    .map((dir) => dir.trim())
+    .filter(Boolean);
+  const nodeToolDirs = Array.from(
+    new Set([...pathDirs, ...nodeToolBinDirCandidates(input), npmGlobal])
+  );
   const out: string[] = [
     // The maintained adapter is a JavaScript npm package. Its command shim is
     // translated to a direct Node invocation by `codexAcpInvocation`.
     ...nodeToolDirs.map((dir) => win.join(dir, "codex-acp.cmd")),
-    // Copilot's docs helper installs the native release zip here.
+    // Copilot's former Windows helper installed the superseded native release here.
     win.join(localAppData, "Programs", "codex-acp", "codex-acp.exe"),
     // Earlier direct-tarball docs extracted the npm platform package here.
     win.join(localAppData, "codex-acp", "package", "bin", "codex-acp.exe"),
