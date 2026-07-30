@@ -1,6 +1,6 @@
 import type { PermissionOption, PermissionPrompt, SessionId } from "@/agentMode/session/types";
 import { ToolPermissionCard } from "@/agentMode/ui/ToolPermissionCard";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 
 const SESSION_ID = "session-1" as SessionId;
@@ -22,67 +22,90 @@ function makeRequest(options: PermissionOption[]): PermissionPrompt {
 
 describe("ToolPermissionCard", () => {
   describe("ToolPermissionCard()", () => {
-    it("keeps multiple described actions visibly paired with their respective decisions", () => {
+    it("keeps duplicate described actions together and numbers their tooltip triggers", async () => {
       const onResolve = jest.fn();
-      const commandRule =
-        "Allow Commands Starting With `/long/path/semantic-search.sh Search only within agents/themes/capture for LLM wiki, AI second brain, knowledge base, digital twin, and local-first Markdown knowledge workspace.`";
-      const networkRule = "Block a.really-long-and-specific-subdomain.example.com in the Future";
+      const firstRule = "Allow commands starting with mkdir";
+      const secondRule = "Allow commands starting with dir";
       const options: PermissionOption[] = [
         {
           optionId: "accept_execpolicy_amendment",
           name: "Allow Always",
-          description: commandRule,
+          description: firstRule,
           kind: "allow_always",
         },
         {
           optionId: "apply_network_policy_amendment:0",
-          name: "Block Always",
-          description: networkRule,
-          kind: "reject_always",
+          name: "Allow Always",
+          description: secondRule,
+          kind: "allow_always",
         },
+        { optionId: "reject", name: "Reject", kind: "reject_once" },
       ];
 
-      const { rerender } = render(
-        <ToolPermissionCard
-          key="first-decision"
-          request={makeRequest(options)}
-          onResolve={onResolve}
-        />
-      );
+      render(<ToolPermissionCard request={makeRequest(options)} onResolve={onResolve} />);
 
-      const commandRow = screen.getByText(commandRule).parentElement;
-      const networkRow = screen.getByText(networkRule).parentElement;
-      expect(commandRow).not.toBeNull();
-      expect(networkRow).not.toBeNull();
+      expect(screen.queryByText(firstRule)).toBeNull();
+      expect(screen.queryByText(secondRule)).toBeNull();
 
-      const commandButton = within(commandRow!).getByRole("button", {
-        name: "Allow Always",
-        description: commandRule,
-      });
-      const networkButton = within(networkRow!).getByRole("button", {
-        name: "Block Always",
-        description: networkRule,
-      });
-      expect(commandButton.textContent).toBe("Allow Always");
-      expect(networkButton.textContent).toBe("Block Always");
+      const firstButton = screen.getByRole("button", { name: "Allow Always 1" });
+      const secondButton = screen.getByRole("button", { name: "Allow Always 2" });
+      const rejectButton = screen.getByRole("button", { name: "Reject" });
+      expect(firstButton.parentElement).toBe(secondButton.parentElement);
+      expect(secondButton.parentElement).toBe(rejectButton.parentElement);
 
-      fireEvent.click(networkButton);
+      fireEvent.pointerMove(firstButton, { pointerType: "mouse" });
+      expect((await screen.findByRole("tooltip")).textContent).toBe(firstRule);
+
+      fireEvent.click(secondButton);
       expect(onResolve).toHaveBeenLastCalledWith(TOOL_CALL_ID, "apply_network_policy_amendment:0");
+    });
 
-      rerender(
+    it("leaves a single described action unnumbered", () => {
+      const description = "Allow commands starting with mkdir";
+      const onResolve = jest.fn();
+      render(
         <ToolPermissionCard
-          key="second-decision"
-          request={makeRequest(options)}
+          request={makeRequest([
+            {
+              optionId: "accept_execpolicy_amendment",
+              name: "Allow Always",
+              description,
+              kind: "allow_always",
+            },
+          ])}
           onResolve={onResolve}
         />
       );
-      fireEvent.click(
-        screen.getByRole("button", {
-          name: "Allow Always",
-          description: commandRule,
-        })
-      );
+
+      expect(screen.queryByText(description)).toBeNull();
+      const button = screen.getByRole("button", { name: "Allow Always" });
+      fireEvent.click(button);
       expect(onResolve).toHaveBeenLastCalledWith(TOOL_CALL_ID, "accept_execpolicy_amendment");
+    });
+
+    it("does not number distinct persistent action labels", () => {
+      render(
+        <ToolPermissionCard
+          request={makeRequest([
+            {
+              optionId: "allow",
+              name: "Allow Always",
+              description: "Allow example.com",
+              kind: "allow_always",
+            },
+            {
+              optionId: "block",
+              name: "Block Always",
+              description: "Block example.net",
+              kind: "reject_always",
+            },
+          ])}
+          onResolve={jest.fn()}
+        />
+      );
+
+      expect(screen.getByRole("button", { name: "Allow Always" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Block Always" })).toBeTruthy();
     });
 
     it("orders compact actions by kind and makes unbroken labels shrinkable", () => {

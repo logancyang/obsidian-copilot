@@ -256,8 +256,9 @@ export interface BackendDescriptor {
    * backends may separate wire-level rule prose from a compact action label.
    *
    * @param option - The neutral permission option produced at the backend boundary.
+   * @param metadata - Opaque backend metadata forwarded unchanged from the ACP option.
    */
-  presentPermissionOption?(option: PermissionOption): PermissionOption;
+  presentPermissionOption?(option: PermissionOption, metadata: unknown): PermissionOption;
 
   /**
    * Opt in to surfacing this backend's per-model `description` as the row

@@ -291,15 +291,20 @@ describe("AcpBackendProcess", () => {
     expect(response).toEqual({ outcome: { outcome: "cancelled" } });
   });
 
-  it("applies the backend permission presentation hook before delegating", async () => {
-    const presentPermissionOption = jest.fn((option: PermissionOption): PermissionOption => {
-      if (option.optionId !== "backend-policy-rule") return option;
-      return {
-        ...option,
-        name: "Allow Always",
-        description: option.name,
-      };
-    });
+  it("forwards opaque option metadata unchanged to the presentation hook before delegating", async () => {
+    const policyMetadata = {
+      codex: { decision: "acceptWithExecpolicyAmendment" },
+    };
+    const presentPermissionOption = jest.fn(
+      (option: PermissionOption, metadata: unknown): PermissionOption => {
+        if (metadata !== policyMetadata) return option;
+        return {
+          ...option,
+          name: "Allow Always",
+          description: option.name,
+        };
+      }
+    );
     const backend = new AcpBackendProcess(
       buildApp(),
       buildStubBackend(),
@@ -324,11 +329,13 @@ describe("AcpBackendProcess", () => {
           optionId: "backend-policy-rule",
           name: policyRule,
           kind: "allow_always",
+          _meta: policyMetadata,
         },
       ],
     } as unknown as Parameters<typeof client.requestPermission>[0];
     const response = await client.requestPermission(req);
     expect(presentPermissionOption).toHaveBeenCalledTimes(2);
+    expect(presentPermissionOption.mock.calls[1][1]).toBe(policyMetadata);
     expect(prompter).toHaveBeenCalledTimes(1);
     // Prompter receives a session-domain `PermissionPrompt`.
     const prompt = prompter.mock.calls[0][0];

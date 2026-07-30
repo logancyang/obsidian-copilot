@@ -137,13 +137,15 @@ export const CodexBackendDescriptor: BackendDescriptor = {
     return name.replace(/^gpt/i, "GPT");
   },
 
-  presentPermissionOption(option: PermissionOption): PermissionOption {
-    if (
-      option.optionId !== "accept_execpolicy_amendment" &&
-      !/^apply_network_policy_amendment:\d+$/.test(option.optionId)
-    ) {
-      return option;
-    }
+  presentPermissionOption(option: PermissionOption, metadata: unknown): PermissionOption {
+    const decision = codexPermissionDecision(metadata);
+    const isExecpolicyAmendment =
+      decision === "acceptWithExecpolicyAmendment" && option.kind === "allow_always";
+    const isNetworkPolicyAmendment =
+      decision === "applyNetworkPolicyAmendment" &&
+      (option.kind === "allow_always" || option.kind === "reject_always");
+    if (!isExecpolicyAmendment && !isNetworkPolicyAmendment) return option;
+
     return {
       ...option,
       name: option.kind === "reject_always" ? "Block Always" : "Allow Always",
@@ -191,3 +193,10 @@ export const CodexBackendDescriptor: BackendDescriptor = {
     return buildCodexModeMapping(modeState);
   },
 };
+
+function codexPermissionDecision(metadata: unknown): unknown {
+  if (metadata === null || typeof metadata !== "object") return undefined;
+  const codex = (metadata as Record<string, unknown>).codex;
+  if (codex === null || typeof codex !== "object") return undefined;
+  return (codex as Record<string, unknown>).decision;
+}

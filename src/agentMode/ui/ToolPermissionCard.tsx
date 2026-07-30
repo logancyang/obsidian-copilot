@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { extractDiffContents, formatAgentInput, renderDiff } from "@/agentMode/ui/diffRender";
 import type {
   PermissionOption,
@@ -7,7 +8,7 @@ import type {
 } from "@/agentMode/session/types";
 import { PERMISSION_OPTION_KINDS } from "@/agentMode/session/types";
 import { ShieldQuestion } from "lucide-react";
-import React, { useId, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 
 interface ToolPermissionCardProps {
   request: PermissionPrompt;
@@ -30,7 +31,7 @@ export const ToolPermissionCard: React.FC<ToolPermissionCardProps> = ({ request,
   const { toolCall, options } = request;
   const [busy, setBusy] = useState(false);
   const orderedOptions = useMemo(() => sortOptions(options), [options]);
-  const descriptionIdPrefix = useId();
+  const optionNames = useMemo(() => disambiguateOptionNames(orderedOptions), [orderedOptions]);
   const diffContents = useMemo(() => extractDiffContents(toolCall.content), [toolCall.content]);
   const inputJson = useMemo(() => formatAgentInput(toolCall.rawInput), [toolCall.rawInput]);
   const title = toolCall.title ?? "Tool call";
@@ -84,41 +85,36 @@ export const ToolPermissionCard: React.FC<ToolPermissionCardProps> = ({ request,
       </div>
 
       <div className="tw-flex tw-flex-wrap tw-items-center tw-justify-end tw-gap-2 tw-border-t tw-border-solid tw-border-border tw-px-3 tw-py-2">
-        {orderedOptions.map((option, index) => {
-          const descriptionId = `${descriptionIdPrefix}-${index}`;
-          const button = (
-            <Button
-              key={option.optionId}
-              variant={variantForKind(option.kind)}
-              size="sm"
-              className="tw-h-auto tw-min-h-6 tw-min-w-0 tw-max-w-full tw-whitespace-normal"
-              disabled={busy}
-              aria-describedby={option.description ? descriptionId : undefined}
-              onClick={() => choose(option.optionId)}
-            >
-              <span className="tw-min-w-0 tw-break-all">{option.name}</span>
-            </Button>
-          );
-
-          if (option.description) {
-            return (
-              <div
+        <TooltipProvider delayDuration={0}>
+          {orderedOptions.map((option, index) => {
+            const button = (
+              <Button
                 key={option.optionId}
-                className="tw-flex tw-w-full tw-min-w-0 tw-flex-col tw-items-start tw-gap-2 tw-rounded tw-bg-primary tw-p-2"
+                variant={variantForKind(option.kind)}
+                size="sm"
+                className="tw-h-auto tw-min-h-6 tw-min-w-0 tw-max-w-full tw-whitespace-normal"
+                disabled={busy}
+                onClick={() => choose(option.optionId)}
               >
-                <p
-                  id={descriptionId}
-                  className="tw-m-0 tw-w-full tw-min-w-0 tw-break-all tw-text-xs tw-text-muted"
+                <span className="tw-min-w-0 tw-break-all">{optionNames[index]}</span>
+              </Button>
+            );
+
+            if (!option.description) return button;
+
+            return (
+              <Tooltip key={option.optionId}>
+                <TooltipTrigger asChild>{button}</TooltipTrigger>
+                <TooltipContent
+                  side="top"
+                  className="tw-max-w-sm tw-whitespace-pre-wrap tw-break-words"
                 >
                   {option.description}
-                </p>
-                <div className="tw-flex tw-w-full tw-justify-end">{button}</div>
-              </div>
+                </TooltipContent>
+              </Tooltip>
             );
-          }
-
-          return button;
-        })}
+          })}
+        </TooltipProvider>
       </div>
     </div>
   );
@@ -150,4 +146,21 @@ function sortOptions(options: PermissionOption[]): PermissionOption[] {
   return [...options].sort(
     (a, b) => PERMISSION_OPTION_KINDS.indexOf(a.kind) - PERMISSION_OPTION_KINDS.indexOf(b.kind)
   );
+}
+
+function disambiguateOptionNames(options: PermissionOption[]): string[] {
+  const totals = new Map<string, number>();
+  const occurrences = new Map<string, number>();
+
+  for (const option of options) {
+    totals.set(option.name, (totals.get(option.name) ?? 0) + 1);
+  }
+
+  return options.map((option) => {
+    if (totals.get(option.name) === 1) return option.name;
+
+    const occurrence = (occurrences.get(option.name) ?? 0) + 1;
+    occurrences.set(option.name, occurrence);
+    return `${option.name} ${occurrence}`;
+  });
 }

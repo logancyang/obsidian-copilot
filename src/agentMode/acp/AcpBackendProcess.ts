@@ -672,7 +672,7 @@ export class AcpBackendProcess implements BackendProcess {
     const decision = await this.permissionPrompter(
       acpPermissionRequestToPrompt(
         req,
-        (option) => this.descriptor.presentPermissionOption?.(option) ?? option
+        (option, metadata) => this.descriptor.presentPermissionOption?.(option, metadata) ?? option
       )
     );
     return decisionToAcpResponse(decision);

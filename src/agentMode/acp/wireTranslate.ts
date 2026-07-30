@@ -435,7 +435,7 @@ function acpUpdateToSessionUpdate(update: SessionNotification["update"]): Sessio
  */
 export function acpPermissionRequestToPrompt(
   req: RequestPermissionRequest,
-  presentPermissionOption?: (option: PermissionOption) => PermissionOption
+  presentPermissionOption?: (option: PermissionOption, metadata: unknown) => PermissionOption
 ): PermissionPrompt {
   const call = req.toolCall;
   return {
@@ -455,7 +455,7 @@ export function acpPermissionRequestToPrompt(
 
 function permissionOptionFromAcp(
   opt: AcpPermissionOption,
-  presentPermissionOption?: (option: PermissionOption) => PermissionOption
+  presentPermissionOption?: (option: PermissionOption, metadata: unknown) => PermissionOption
 ): PermissionOption {
   const option: PermissionOption = {
     optionId: opt.optionId,
@@ -464,7 +464,7 @@ function permissionOptionFromAcp(
       ? opt.kind
       : "reject_once",
   };
-  return presentPermissionOption?.(option) ?? option;
+  return presentPermissionOption?.(option, opt._meta) ?? option;
 }
 
 export function permissionPromptToAcp(prompt: PermissionPrompt): RequestPermissionRequest {
