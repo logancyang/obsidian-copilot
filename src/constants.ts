@@ -57,10 +57,18 @@ const DEFAULT_PROJECTS_FOLDER = `${COPILOT_FOLDER_ROOT}/projects`;
 export const DEFAULT_SKILLS_FOLDER = `${COPILOT_FOLDER_ROOT}/skills`;
 const DEFAULT_CONVERTED_DOC_OUTPUT_FOLDER = "";
 // Built-in tag written into every saved conversation's frontmatter. Frozen as a
-// constant (no longer user-configurable): no code reads the tag to identify
-// conversations — they are keyed by folder + epoch — so it only serves as a
-// stable, filterable marker. The legacy `defaultConversationTag` setting is kept
-// as a dead field for schema compatibility but is no longer read.
+// constant: no code reads the tag to identify conversations — they are keyed by
+// folder + epoch — so built-in history is unaffected by the freeze.
+//
+// DESIGN NOTE (accepted compatibility break): a vault that had customized the
+// old `defaultConversationTag` keeps that value in data.json, but it is no
+// longer read, and existing notes are never rewritten. Such a vault therefore
+// ends up with two markers, and the user's own tag-based queries, searches and
+// automations see only the older half. That cost was accepted deliberately to
+// converge on one built-in marker; grandfathering the persisted value was
+// rejected because a hidden setting would then steer output forever. Batch
+// remediation is tracked in obsidian-copilot-preview#224.
+// If a future review flags this again, point them at this note.
 export const COPILOT_CONVERSATION_TAG = "copilot-conversation";
 export const DEFAULT_QA_EXCLUSIONS_SETTING = COPILOT_FOLDER_ROOT;
 export const DEFAULT_SYSTEM_PROMPT = `You are Obsidian Copilot, a helpful assistant that integrates AI to Obsidian note-taking.
