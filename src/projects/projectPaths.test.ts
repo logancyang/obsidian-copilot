@@ -1,8 +1,10 @@
 import {
+  getProjectAnchorFromConfigPath,
   getProjectConfigFilePath,
   getProjectFolderNameFromConfigPath,
   isProjectConfigFile,
 } from "@/projects/projectPaths";
+import { getEffectiveProjectsFolder } from "@/settings/copilotFolder";
 import { mockTFile } from "@/__tests__/mockObsidian";
 
 jest.mock("@/settings/copilotFolder", () => ({
@@ -18,6 +20,33 @@ describe("getProjectConfigFilePath — single source of truth", () => {
     expect(getProjectConfigFilePath("MyProject", "custom/root")).toBe(
       "custom/root/MyProject/project.md"
     );
+  });
+});
+
+describe("getProjectAnchorFromConfigPath", () => {
+  it("resolves a project's tree from its own config path, ignoring the live root", () => {
+    // The two disagree for at least a second after a Copilot root change: the
+    // root activates immediately while ProjectRegister reloads its cache on a
+    // 1s trailing debounce. An operation holding a record from the old tree must
+    // keep acting on that tree.
+    const anchor = getProjectAnchorFromConfigPath("old-root/projects/My Project/project.md");
+
+    expect(anchor.projectFolderPath).toBe("old-root/projects/My Project");
+    expect(anchor.projectsRoot).toBe("old-root/projects");
+  });
+
+  it("is unaffected by the configured root moving", () => {
+    const mockedRoot = getEffectiveProjectsFolder as jest.Mock;
+    mockedRoot.mockReturnValue("new-root/projects");
+    try {
+      const anchor = getProjectAnchorFromConfigPath("old-root/projects/Alpha/project.md");
+
+      expect(anchor.projectsRoot).toBe("old-root/projects");
+    } finally {
+      // Restore: this mock is module-level, and the suites below derive paths
+      // from it.
+      mockedRoot.mockReturnValue("copilot-projects");
+    }
   });
 });
 

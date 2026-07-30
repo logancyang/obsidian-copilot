@@ -34,6 +34,7 @@ import {
 
 // Re-export path utilities so existing consumers don't need to change imports
 export {
+  getProjectAnchorFromConfigPath,
   getProjectsFolder,
   getProjectsUnsupportedFolder,
   getProjectFolderPath,
