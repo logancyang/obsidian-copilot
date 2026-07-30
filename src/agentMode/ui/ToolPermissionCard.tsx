@@ -15,6 +15,8 @@ interface ToolPermissionCardProps {
   onResolve: (toolCallId: string, optionId: string) => void;
 }
 
+const EMPTY_OPTION_NAMES: readonly string[] = Object.freeze([]);
+
 /**
  * Inline permission card rendered at the tail of the chat scroll container
  * while a tool call is awaiting the user's decision. Replaces the modal that
@@ -148,9 +150,12 @@ function sortOptions(options: PermissionOption[]): PermissionOption[] {
   );
 }
 
-function disambiguateOptionNames(options: PermissionOption[]): string[] {
+function disambiguateOptionNames(options: PermissionOption[]): readonly string[] {
+  if (options.length === 0) return EMPTY_OPTION_NAMES;
+
   const totals = new Map<string, number>();
-  const occurrences = new Map<string, number>();
+  const suffixes = new Map<string, number>();
+  const reservedNames = new Set(options.map((option) => option.name));
 
   for (const option of options) {
     totals.set(option.name, (totals.get(option.name) ?? 0) + 1);
@@ -159,8 +164,12 @@ function disambiguateOptionNames(options: PermissionOption[]): string[] {
   return options.map((option) => {
     if (totals.get(option.name) === 1) return option.name;
 
-    const occurrence = (occurrences.get(option.name) ?? 0) + 1;
-    occurrences.set(option.name, occurrence);
-    return `${option.name} ${occurrence}`;
+    let suffix = (suffixes.get(option.name) ?? 0) + 1;
+    while (reservedNames.has(`${option.name} ${suffix}`)) suffix++;
+    suffixes.set(option.name, suffix);
+
+    const name = `${option.name} ${suffix}`;
+    reservedNames.add(name);
+    return name;
   });
 }

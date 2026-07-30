@@ -108,6 +108,25 @@ describe("ToolPermissionCard", () => {
       expect(screen.getByRole("button", { name: "Block Always" })).toBeTruthy();
     });
 
+    it("keeps generated suffixes distinct from backend-provided labels", () => {
+      render(
+        <ToolPermissionCard
+          request={makeRequest([
+            { optionId: "first", name: "Allow Always", kind: "allow_always" },
+            { optionId: "second", name: "Allow Always", kind: "allow_always" },
+            { optionId: "third", name: "Allow Always 1", kind: "allow_always" },
+          ])}
+          onResolve={jest.fn()}
+        />
+      );
+
+      expect(screen.getAllByRole("button").map((button) => button.textContent)).toEqual([
+        "Allow Always 2",
+        "Allow Always 3",
+        "Allow Always 1",
+      ]);
+    });
+
     it("orders compact actions by kind and makes unbroken labels shrinkable", () => {
       const unbrokenLabel = "AllowAccessToNetwork.example.com".repeat(8);
       render(

@@ -1,5 +1,6 @@
-import type { SessionNotification } from "@agentclientprotocol/sdk";
-import { acpNotificationToEvents } from "./wireTranslate";
+import type { RequestPermissionRequest, SessionNotification } from "@agentclientprotocol/sdk";
+import type { PermissionOption } from "@/agentMode/session/types";
+import { acpNotificationToEvents, acpPermissionRequestToPrompt } from "./wireTranslate";
 
 const SESSION_ID = "sess-1";
 
@@ -13,7 +14,7 @@ const VALID_TODOS = [
   { content: "Review and polish", status: "pending", priority: "medium" },
 ];
 
-describe("acpNotificationToEvents — todowrite → synthesized plan", () => {
+const testAcpNotificationToEvents = () => {
   it("appends a plan event after a todowrite tool_call carrying rawInput.todos", () => {
     const events = acpNotificationToEvents(
       notification({
@@ -181,36 +182,92 @@ describe("acpNotificationToEvents — todowrite → synthesized plan", () => {
       entries: [{ content: "step", status: "pending", priority: "medium" }],
     });
   });
-});
-
-describe("acpNotificationToEvents — usage_update → SessionUsage", () => {
-  const FIXED_NOW = 1_700_000_000_000;
-  let nowSpy: jest.SpyInstance;
-
-  beforeEach(() => {
-    nowSpy = jest.spyOn(Date, "now").mockReturnValue(FIXED_NOW);
-  });
-  afterEach(() => nowSpy.mockRestore());
 
   it("maps size→contextWindow and used→usedTokens, ignoring any cost", () => {
-    const events = acpNotificationToEvents(
-      notification({
+    const fixedNow = 1_700_000_000_000;
+    const nowSpy = jest.spyOn(Date, "now").mockReturnValue(fixedNow);
+    try {
+      const events = acpNotificationToEvents(
+        notification({
+          sessionUpdate: "usage_update",
+          size: 200_000,
+          used: 42_000,
+          // cost is no longer part of the usage model — it must be dropped.
+          cost: { amount: 0.1234, currency: "USD" },
+        })
+      );
+      expect(events).toHaveLength(1);
+      expect(events[0].sessionId).toBe(SESSION_ID);
+      expect(events[0].update).toEqual({
         sessionUpdate: "usage_update",
-        size: 200_000,
-        used: 42_000,
-        // cost is no longer part of the usage model — it must be dropped.
-        cost: { amount: 0.1234, currency: "USD" },
-      })
-    );
-    expect(events).toHaveLength(1);
-    expect(events[0].sessionId).toBe(SESSION_ID);
-    expect(events[0].update).toEqual({
-      sessionUpdate: "usage_update",
-      usage: {
-        usedTokens: 42_000,
-        contextWindow: 200_000,
-        updatedAt: FIXED_NOW,
-      },
-    });
+        usage: {
+          usedTokens: 42_000,
+          contextWindow: 200_000,
+          updatedAt: fixedNow,
+        },
+      });
+    } finally {
+      nowSpy.mockRestore();
+    }
   });
+};
+
+const testAcpPermissionRequestToPrompt = () => {
+  function permissionRequest(metadata: unknown): RequestPermissionRequest {
+    return {
+      sessionId: SESSION_ID,
+      toolCall: {
+        toolCallId: "tool-1",
+        title: "Run command",
+        kind: "execute",
+        status: "pending",
+      },
+      options: [
+        {
+          optionId: "opaque-option",
+          name: "Allow",
+          kind: "allow_always",
+          _meta: metadata,
+        },
+      ],
+    } as RequestPermissionRequest;
+  }
+
+  it("passes unchanged metadata to the presentation adapter", () => {
+    const metadata = { codex: { decision: "accept" } };
+    const presentPermissionOption = jest.fn((option: PermissionOption, _metadata: unknown) => ({
+      ...option,
+      name: "Allow Always",
+    }));
+
+    const prompt = acpPermissionRequestToPrompt(
+      permissionRequest(metadata),
+      presentPermissionOption
+    );
+
+    expect(presentPermissionOption).toHaveBeenCalledTimes(1);
+    expect(presentPermissionOption.mock.calls[0][1]).toBe(metadata);
+    expect(prompt.options).toEqual([
+      {
+        optionId: "opaque-option",
+        name: "Allow Always",
+        kind: "allow_always",
+      },
+    ]);
+  });
+
+  it("uses the wire option unchanged when no presentation adapter exists", () => {
+    expect(acpPermissionRequestToPrompt(permissionRequest({ backend: "opaque" })).options).toEqual([
+      {
+        optionId: "opaque-option",
+        name: "Allow",
+        kind: "allow_always",
+      },
+    ]);
+  });
+};
+
+describe("wireTranslate", () => {
+  describe("acpNotificationToEvents()", testAcpNotificationToEvents);
+  describe("acpPermissionRequestToPrompt()", testAcpPermissionRequestToPrompt);
 });
