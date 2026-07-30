@@ -18,7 +18,7 @@ const MAINTAINED_ADAPTER_VERSION =
 export const CODEX_REMOVE_LEGACY_COMMAND = "npm uninstall -g @zed-industries/codex-acp";
 const CODEX_NPM_INSTALL_COMMAND = "npm install -g @agentclientprotocol/codex-acp";
 const CODEX_WINDOWS_INSTALL_COMMAND =
-  "irm https://gist.githubusercontent.com/zeroliu/8914d6b923724cfa7a6169ebdc7a0bc0/raw/install-codex-agent-mode-windows.ps1 | iex";
+  "irm https://raw.githubusercontent.com/logancyang/obsidian-copilot/78723aec5ebe3a1fa271ebf437511550a97f3266/docs/install-codex-agent-mode-windows.ps1 | iex";
 
 export interface CodexInstallGuidance {
   installCommand: string;

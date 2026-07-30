@@ -24,7 +24,7 @@ Install a current [Node.js](https://nodejs.org/) release for Windows, then run t
 native **Windows PowerShell**:
 
 ```powershell
-irm https://gist.githubusercontent.com/zeroliu/8914d6b923724cfa7a6169ebdc7a0bc0/raw/install-codex-agent-mode-windows.ps1 | iex
+irm https://raw.githubusercontent.com/logancyang/obsidian-copilot/78723aec5ebe3a1fa271ebf437511550a97f3266/docs/install-codex-agent-mode-windows.ps1 | iex
 ```
 
 Do not run the installer inside WSL. Obsidian runs on Windows, so it needs the adapter installed by

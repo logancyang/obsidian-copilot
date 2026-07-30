@@ -15,7 +15,7 @@ describe("codexCompatibility", () => {
     it("uses one native PowerShell bootstrap command on Windows", () => {
       expect(getCodexInstallGuidance("win32")).toEqual({
         installCommand:
-          "irm https://gist.githubusercontent.com/zeroliu/8914d6b923724cfa7a6169ebdc7a0bc0/raw/install-codex-agent-mode-windows.ps1 | iex",
+          "irm https://raw.githubusercontent.com/logancyang/obsidian-copilot/78723aec5ebe3a1fa271ebf437511550a97f3266/docs/install-codex-agent-mode-windows.ps1 | iex",
         removeLegacyCommand: null,
         updateMessage:
           "Copilot could not verify this as the maintained Codex ACP adapter. The superseded adapter cannot provide current Codex models. Run the Windows PowerShell install command, then select the new codex-acp.cmd path.",

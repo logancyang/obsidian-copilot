@@ -127,7 +127,7 @@ describe("CodexInstallModal", () => {
       expect(screen.queryByText(/1. Remove the superseded adapter/)).not.toBeTruthy();
       expect(
         screen.getByText(
-          /irm https:\/\/gist\.githubusercontent\.com\/zeroliu\/8914d6b923724cfa7a6169ebdc7a0bc0/
+          /irm https:\/\/raw\.githubusercontent\.com\/logancyang\/obsidian-copilot\/78723aec5ebe3a1fa271ebf437511550a97f3266/
         )
       ).toBeTruthy();
       expect(
