@@ -71,6 +71,17 @@ let mutationLifecycle = 0;
 /**
  * A producer's proof of which plugin lifecycle it belongs to.
  *
+ * DESIGN NOTE — the queue below is module state that a token makes behave like
+ * instance state. The honest shape is a coordinator the plugin OWNS and disposes
+ * (`plugin.miyoMutations.dispose()`), since a new plugin instance would then get
+ * a new queue for free and a stale settings tree would hold the disposed one.
+ * Deliberately not done here: it still needs an explicit `disposed` flag (that
+ * is this token under another name), every guard point below stays — including
+ * the enqueue EXIT check, because the register flow writes its receipt after the
+ * awaited call returns, outside anything the queue can wrap — and it would reset
+ * the review surface of this whole area for a rename. Tracked as follow-up.
+ * If a future review flags the module-level state again, point them here.
+ *
  * Held instead of a bare number so it can only be obtained from
  * {@link resetMiyoMutations} — i.e. by the lifecycle owner, at the moment the
  * previous lifecycle's queue is abandoned. There is deliberately no way to ask
