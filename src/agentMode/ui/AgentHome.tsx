@@ -58,7 +58,7 @@ import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } 
 
 interface AgentHomeProps {
   backend: AgentChatBackend;
-  /** Active session's internal id — drives per-session draft selection. */
+  /** Active runtime session id. */
   sessionId: string;
   manager: AgentSessionManager;
   plugin: CopilotPlugin;
@@ -68,8 +68,8 @@ interface AgentHomeProps {
 
 /**
  * Agent Mode home surface for an active session. Persistent across tab switches
- * (the tab strip swaps `sessionId`/`backend` props), so input drafts live in
- * `AgentChatInput` keyed by session rather than being reset by a `key` remount.
+ * (the tab strip swaps `sessionId`/`backend` props), so input drafts live here
+ * and are selected by the active session's logical `chatInputId`.
  *
  * Derives a per-session view state across three surfaces: a session with no
  * user-visible messages is a landing — global (no project scope: top-anchored
@@ -179,9 +179,8 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
         new Notice("Failed to start a new chat. Please try again.");
       }
     })();
-    // replaceSessionInPlace mints a new internal id, so the input resets via
-    // that session's fresh draft and AgentChatInput clears the global selected
-    // text on the session switch — no explicit reset needed here.
+    // A New Chat replacement gets a fresh chat input, so its draft and
+    // input-scoped context reset without an explicit clear here.
   }, [manager]);
 
   const descriptor = useSessionBackendDescriptor(manager);
@@ -498,7 +497,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   // landing open gets a new line) but stable across the stream re-renders within
   // a session, so it doesn't flicker as tokens arrive. sessionId is the
   // intentional re-roll trigger — not read inside the factory, so exhaustive-deps
-  // flags it; the dep is deliberate (same as the liveSessionIds memo above).
+  // flags it; the dep is deliberate (same as the liveChatInputIds memo above).
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const greeting = useMemo(() => pickRandomGreeting(), [sessionId]);
 
@@ -726,7 +725,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     <AgentChatInput
       backend={backend}
       plugin={plugin}
-      sessionId={sessionId}
+      chatInputId={chatInputId}
       draft={draft}
       app={app}
       mainAgentId={mainAgentId}
@@ -846,7 +845,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                   branches but sits at different tree positions, so it remounts on
                   the landing→conversation flip. That flip only fires right after
                   a send (which already reset the draft) or on a chat load (which
-                  changes `sessionId` and remounts anyway); the per-session draft
+                  changes `chatInputId` and remounts anyway); the per-chat-input draft
                   lives in AgentHome and survives. CAUTION: the flip happens
                   DURING the first turn, so the unmounting composer instance still
                   has an in-flight `runSend` — anything that turn must do on

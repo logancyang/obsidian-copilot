@@ -51,8 +51,8 @@ interface AgentChatInputProps {
   backend: AgentChatBackend;
   /** Plugin instance — descriptors need it to observe backend readiness changes. */
   plugin: CopilotPlugin;
-  /** Active session's internal id; selects which per-session draft is shown. */
-  sessionId: string;
+  /** Identity of the logical chat input whose UI state this component owns. */
+  chatInputId: string;
   /**
    * Per-session draft controls, owned by AgentHome (the common owner of the
    * transcript spinner and drop overlay that also read this draft's `loading`
@@ -173,16 +173,16 @@ async function fileToImageBlock(file: File): Promise<PromptContent | null> {
 }
 
 /**
- * Composer for Agent Mode: owns per-session draft state (input, attachments,
- * include flags, in-flight loading, queued follow-ups), the send/queue/stop
- * flow, and renders `ChatInput`. Memoized and detached from the message stream
+ * Composer for Agent Mode: consumes per-chat-input draft state (input,
+ * attachments, include flags, in-flight loading, queued follow-ups), owns the
+ * send/queue/stop flow, and renders `ChatInput`. Memoized and detached from the message stream
  * so streamed tokens don't re-render the input. The plan/permission gate
  * (`pointer-events-none` while a plan permission is pending) wraps the input.
  */
 export const AgentChatInput = memo(function AgentChatInput({
   backend,
   plugin,
-  sessionId,
+  chatInputId,
   draft,
   app,
   mainAgentId,
@@ -210,7 +210,7 @@ export const AgentChatInput = memo(function AgentChatInput({
   // webTabs at send time below.
   const { activeWebTabForMentions } = useActiveWebTabState();
 
-  const previousSessionIdRef = useRef(sessionId);
+  const previousChatInputIdRef = useRef(chatInputId);
 
   // The `@agent` typeahead group + pills are paid-only. Reactive so a settings
   // change flips the gate live; the authoritative send-time check is separate.
@@ -256,15 +256,15 @@ export const AgentChatInput = memo(function AgentChatInput({
     resetCompose,
   } = draft;
 
-  // Clear cross-session ephemeral state on a session switch: the global
+  // Clear input-scoped ephemeral state when the logical chat input changes: the global
   // selected-text atom and the mentioned-agent ref (neither is reset by the
-  // editor remount), so a selection or `@agent` pill can't ride into the next session.
+  // editor remount), so a selection or `@agent` pill can't ride into the next input.
   useEffect(() => {
-    if (previousSessionIdRef.current === sessionId) return;
-    previousSessionIdRef.current = sessionId;
+    if (previousChatInputIdRef.current === chatInputId) return;
+    previousChatInputIdRef.current = chatInputId;
     clearSelectedTextContexts();
     mentionedAgentIdsRef.current = [];
-  }, [sessionId]);
+  }, [chatInputId]);
 
   const handleStopGenerating = useCallback(async () => {
     try {
@@ -298,9 +298,9 @@ export const AgentChatInput = memo(function AgentChatInput({
         // landing→conversation flip (AgentHome renders it at different tree
         // positions), which happens DURING the first turn of every session —
         // the unmounting instance must still clear the in-flight flag.
-        // `setLoading` writes AgentHome's per-session draft store (not local
+        // `setLoading` writes AgentHome's per-chat-input draft store (not local
         // state), so calling it after unmount is safe, and the store itself
-        // drops updates for sessions that are no longer live.
+        // drops updates for chat inputs that are no longer live.
         setLoading(false);
       }
     },
@@ -532,18 +532,18 @@ export const AgentChatInput = memo(function AgentChatInput({
             padding — an open-ended maintenance obligation (#205). If a
             future review flags either choice again, point them at this
             note. */}
-        {/* Key by session so ChatInput remounts on a tab/session switch. The
+        {/* Key by logical chat input so ChatInput remounts on a tab/New Chat switch. The
             per-session draft store (input/images/contextNotes/include flags)
             lives up in AgentHome and is threaded back as controlled props, so
             those survive the remount — but ChatInput's own internal-only state
             (contextUrls/contextFolders/contextWebTabs, the @-mention pills, the
             Lexical editor) is NOT in the draft, and would otherwise bleed from
             the previous session into a fresh one. The remount restores the
-            per-session isolation the old `key={internalId}` AgentChat gave us.
-            sessionId is stable across the landing→conversation flip (same
-            session), so this never remounts during that transition. */}
+            input isolation the old `key={internalId}` AgentChat gave us.
+            chatInputId also stays stable when only the backend runtime is
+            replaced, so that transition preserves editor-owned state. */}
         <ChatInput
-          key={sessionId}
+          key={chatInputId}
           isAgentMode
           inputMessage={inputMessage}
           setInputMessage={setInputMessage}

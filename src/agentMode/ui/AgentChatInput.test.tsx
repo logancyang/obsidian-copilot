@@ -95,21 +95,20 @@ const makeDraft = (overrides: Partial<AgentInputDraftControls> = {}): AgentInput
   setIncludeActiveWebTab: jest.fn(),
   setLoading: jest.fn(),
   setQueue: jest.fn(),
-  migrateDraft: jest.fn(),
   resetCompose: jest.fn(),
   ...overrides,
 });
 
-function renderInput(
+function inputNode(
   backend: AgentChatBackend,
   draft: AgentInputDraftControls,
   extraProps: Partial<React.ComponentProps<typeof AgentChatInput>> = {}
 ) {
-  return render(
+  return (
     <AgentChatInput
       backend={backend}
       plugin={{} as never}
-      sessionId="session-1"
+      chatInputId="input-1"
       draft={draft}
       app={makeApp()}
       mainAgentId={null}
@@ -124,7 +123,13 @@ function renderInput(
   );
 }
 
-describe("AgentChatInput agent-mention gate", () => {
+const renderInput = (
+  backend: AgentChatBackend,
+  draft: AgentInputDraftControls,
+  extraProps: Partial<React.ComponentProps<typeof AgentChatInput>> = {}
+) => render(inputNode(backend, draft, extraProps));
+
+describe("AgentChatInput identity and agent-mention gate", () => {
   beforeEach(() => {
     capturedAgentBrands = undefined;
     mockNavigateToPlusPage.mockClear();
@@ -137,6 +142,20 @@ describe("AgentChatInput agent-mention gate", () => {
       makeDraft()
     );
     expect(capturedAgentBrands).toBe(FAKE_BRANDS);
+  });
+
+  it("clears input-scoped context only when the logical chat input changes", () => {
+    const clearSelectedTextContexts = jest.requireMock("@/aiParams")
+      .clearSelectedTextContexts as jest.Mock;
+    clearSelectedTextContexts.mockClear();
+    const backend = { sendMessage: jest.fn(), cancel: jest.fn() } as unknown as AgentChatBackend;
+    const draft = makeDraft();
+    const view = renderInput(backend, draft);
+
+    view.rerender(inputNode(backend, draft, { chatInputId: "input-1" }));
+    expect(clearSelectedTextContexts).not.toHaveBeenCalled();
+    view.rerender(inputNode(backend, draft, { chatInputId: "input-2" }));
+    expect(clearSelectedTextContexts).toHaveBeenCalledTimes(1);
   });
 
   it("passes the frozen empty list (not a fresh []) when not entitled", () => {
