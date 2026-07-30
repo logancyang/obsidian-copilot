@@ -11,6 +11,7 @@ import {
 } from "@/projects/projectSystemPrompt";
 import { ProjectFileRecord } from "@/projects/type";
 import { mockTFile, mockTFolder } from "@/__tests__/mockObsidian";
+import { getSettings } from "@/settings/model";
 
 jest.mock("@/settings/model", () => ({
   getSettings: jest.fn(() => ({ projectsFolder: "copilot-projects" })),
@@ -119,6 +120,25 @@ describe("ensureAgentsMirror", () => {
     const [markerLine] = written.split("\n", 1);
     expect(markerLine.startsWith(MIRROR_MARKER_PREFIX)).toBe(true);
     expect(written).toBe(`${markerLine}\n\n${composeProjectInstructions("Be concise.")}`);
+  });
+
+  it("writes beside the record's own project.md even after the configured root moved", async () => {
+    // A Copilot root change activates before ProjectRegister reloads its cache,
+    // so for at least a second the record still points at the old tree. Deriving
+    // the mirror from the live root there would write it next to a DIFFERENT
+    // project — overwriting that one's generated mirror.
+    const vault = new FakeVault();
+    const mockedSettings = getSettings as jest.Mock;
+    mockedSettings.mockReturnValue({ projectsFolder: "moved-root/projects" });
+    try {
+      await ensureAgentsMirror(makeApp(vault), makeRecord("Be concise."));
+
+      expect(vault.files.has(MIRROR_PATH)).toBe(true);
+      expect([...vault.files.keys()].some((k) => k.startsWith("moved-root/"))).toBe(false);
+    } finally {
+      // Restore: the mock is module-level and later suites read it.
+      mockedSettings.mockReturnValue({ projectsFolder: "copilot-projects" });
+    }
   });
 
   it("cheap-skips when the instruction body is unchanged (even if other config fields change)", async () => {

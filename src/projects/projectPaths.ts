@@ -11,6 +11,32 @@ export function getProjectsFolder(): string {
 }
 
 /**
+ * Locate an existing project from its own config path instead of the live root.
+ *
+ * For a project that is already on disk, `record.filePath` is the authority —
+ * not whatever root is configured right now. The two disagree for at least a
+ * second after a Copilot root change: the root activates immediately while
+ * `ProjectRegister` reloads its cache on a 1s trailing debounce, so an operation
+ * started in that window holds a record from the old tree. Deriving paths from
+ * the live root there would rename, write, or mirror into a DIFFERENT tree —
+ * destructively so when the new root is a previously-used Copilot root that
+ * already holds a project of the same name (re-activating one is supported, and
+ * the note-content guard exempts it).
+ *
+ * @param configFilePath - A record's `filePath` (`\<root\>/\<folder\>/project.md`).
+ * @returns The project's own folder and the projects root that contains it.
+ */
+export function getProjectAnchorFromConfigPath(configFilePath: string): {
+  projectFolderPath: string;
+  projectsRoot: string;
+} {
+  const normalized = normalizePath(configFilePath);
+  const projectFolderPath = normalized.slice(0, normalized.lastIndexOf("/"));
+  const projectsRoot = projectFolderPath.slice(0, projectFolderPath.lastIndexOf("/"));
+  return { projectFolderPath, projectsRoot };
+}
+
+/**
  * Get the unsupported backup folder path for failed migrations.
  * @returns Normalized vault path
  */
