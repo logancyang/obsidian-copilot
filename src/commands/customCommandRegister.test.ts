@@ -108,9 +108,7 @@ describe("customCommandRegister", () => {
         fetchAllCustomCommands.mockResolvedValue([command("New")]);
 
         settingsChangeHandler(settingsWithRoot("copilot"), settingsWithRoot("team/ai"));
-        jest.advanceTimersByTime(1000);
-        await Promise.resolve();
-        await Promise.resolve();
+        await jest.advanceTimersByTimeAsync(0);
 
         // Stale "Old" registration removed, "New" registered, cache replaced.
         expect(removeCommand).toHaveBeenCalledWith("copilot-command-Old");
@@ -120,9 +118,19 @@ describe("customCommandRegister", () => {
         expect(updateCachedCommands).toHaveBeenCalledWith([command("New")]);
       });
 
-      it("does not reload when the root — and thus the derived folder — is unchanged", () => {
+      it("starts the reload without waiting, so no timer delay keeps old commands live", () => {
+        // Any delay before the swap is a window in which a caller holding a
+        // command from the old folder writes it through the new live root.
+        fetchAllCustomCommands.mockResolvedValue([]);
+
+        settingsChangeHandler(settingsWithRoot("copilot"), settingsWithRoot("team/ai"));
+
+        expect(fetchAllCustomCommands).toHaveBeenCalledTimes(1);
+      });
+
+      it("does not reload when the root — and thus the derived folder — is unchanged", async () => {
         settingsChangeHandler(settingsWithRoot("copilot"), settingsWithRoot("copilot"));
-        jest.advanceTimersByTime(1000);
+        await jest.advanceTimersByTimeAsync(1000);
 
         expect(fetchAllCustomCommands).not.toHaveBeenCalled();
       });
@@ -138,14 +146,11 @@ describe("customCommandRegister", () => {
 
         // Request A: folder change copilot -> a
         settingsChangeHandler(settingsWithRoot("copilot"), settingsWithRoot("a"));
-        jest.advanceTimersByTime(1000);
-        await Promise.resolve();
+        await jest.advanceTimersByTimeAsync(0);
 
         // Request B: folder change a -> b, resolves before A
         settingsChangeHandler(settingsWithRoot("a"), settingsWithRoot("b"));
-        jest.advanceTimersByTime(1000);
-        await Promise.resolve();
-        await Promise.resolve();
+        await jest.advanceTimersByTimeAsync(0);
 
         expect(updateCachedCommands).toHaveBeenCalledWith([command("Fresh")]);
         updateCachedCommands.mockClear();
@@ -222,8 +227,7 @@ describe("customCommandRegister", () => {
 
           // Kick off a reload; its fetch stays pending across teardown.
           settingsChangeHandler(settingsWithRoot("copilot"), settingsWithRoot("team/ai"));
-          jest.advanceTimersByTime(1000);
-          await Promise.resolve();
+          await jest.advanceTimersByTimeAsync(0);
 
           register.cleanup();
 

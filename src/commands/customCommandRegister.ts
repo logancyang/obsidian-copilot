@@ -67,7 +67,6 @@ export class CustomCommandRegister {
     // cache after teardown.
     this.disposed = true;
     ++this.folderChangeRequestId;
-    this.debouncedFolderChange.cancel();
     this.settingsUnsubscriber?.();
     this.vault.off("create", this.handleFileCreation);
     this.vault.off("delete", this.handleFileDeletion);
@@ -94,18 +93,13 @@ export class CustomCommandRegister {
   ): void => {
     // Reason: the folder is derived from copilotFolder; compare derived paths.
     if (deriveCustomPromptsFolder(prev) !== deriveCustomPromptsFolder(next)) {
-      this.debouncedFolderChange();
+      // Started immediately, not debounced: the root is committed through an
+      // explicit Apply + Confirm, so there is no keystroke burst to absorb, and
+      // every millisecond of delay is a millisecond in which a caller holding a
+      // command from the old folder can write it through the new one.
+      void this.handleFolderChange();
     }
   };
-
-  /** Debounced folder-change reload (avoid rapid-fire while the root is edited). */
-  private debouncedFolderChange = debounce(
-    () => {
-      void this.handleFolderChange();
-    },
-    1000,
-    { leading: false, trailing: true }
-  );
 
   /**
    * Reload command registrations after the folder changes, using a pure fetch
@@ -122,8 +116,8 @@ export class CustomCommandRegister {
    * snapshot predates that command, so the atomic-swap phase treats it as stale,
    * removes its registration, and `updateCachedCommands` overwrites it out of the
    * cache.
-   * (a) Trigger: a command file created concurrently inside the change-root
-   *     debounce + fetch window.
+   * (a) Trigger: a command file created concurrently inside the root-change
+   *     fetch window.
    * (b) Consequence: that command is briefly cleared by this swap; the next vault
    *     event targeting the same file (modify/create/delete) re-registers it, so
    *     the state self-heals.
