@@ -232,6 +232,26 @@ describe("OpencodeBackendDescriptor.applySelection", () => {
       setConfigOption.mock.invocationCallOrder[0]
     );
   });
+
+  it("uses backend-confirmed startup state instead of the optimistic session state", async () => {
+    const { session, applyModelWireId, setConfigOption } = makeSession({
+      model: {
+        current: { baseModelId: "openai/gpt-5", effort: "high" },
+        availableModels: [],
+        apply: { kind: "setConfigOption", configId: "model", effortConfigId: "effort" },
+      },
+      mode: null,
+    });
+
+    await OpencodeBackendDescriptor.applySelection(
+      session,
+      { baseModelId: "openai/gpt-5", effort: "high" },
+      { backendReportedCurrent: { baseModelId: "copilot-plus/minimax-m2.7", effort: null } }
+    );
+
+    expect(applyModelWireId).toHaveBeenCalledWith("openai/gpt-5");
+    expect(setConfigOption).toHaveBeenCalledWith("effort", "high");
+  });
 });
 
 describe("OpencodeBackendDescriptor.prefetchEffortCatalog", () => {

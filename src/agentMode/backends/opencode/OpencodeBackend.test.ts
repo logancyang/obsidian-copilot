@@ -572,7 +572,7 @@ describe("buildOpencodeConfig — agent/prompt/mode/skills blocks (preserved)", 
     resetPromptState();
   });
 
-  it("sets top-level model from the persisted defaultModel.baseModelId", async () => {
+  it("leaves the top-level model unset when a persisted selection exists", async () => {
     setSettings({
       agentMode: {
         byok: {},
@@ -584,47 +584,8 @@ describe("buildOpencodeConfig — agent/prompt/mode/skills blocks (preserved)", 
         backends: {
           opencode: {
             binaryPath: "/x",
-            defaultModel: { baseModelId: "anthropic/claude-sonnet-4-6", effort: null },
+            defaultModel: { baseModelId: "opencode/big-pickle", effort: "high" },
           },
-        },
-      },
-    });
-    const cfg = (await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS)) as { model?: string };
-    expect(cfg.model).toBe("anthropic/claude-sonnet-4-6");
-  });
-
-  it("appends effort suffix when defaultModel.effort is set", async () => {
-    setSettings({
-      agentMode: {
-        byok: {},
-        mcpServers: [],
-        activeBackend: "opencode",
-        debugFullFrames: false,
-        welcomeDismissed: false,
-        skills: { folder: "copilot/skills" },
-        backends: {
-          opencode: {
-            binaryPath: "/x",
-            defaultModel: { baseModelId: "anthropic/claude-sonnet-4-6", effort: "high" },
-          },
-        },
-      },
-    });
-    const cfg = (await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS)) as { model?: string };
-    expect(cfg.model).toBe("anthropic/claude-sonnet-4-6/high");
-  });
-
-  it("omits cfg.model when no defaultModel is set", async () => {
-    setSettings({
-      agentMode: {
-        byok: {},
-        mcpServers: [],
-        activeBackend: "opencode",
-        debugFullFrames: false,
-        welcomeDismissed: false,
-        skills: { folder: "copilot/skills" },
-        backends: {
-          opencode: { binaryPath: "/x" },
         },
       },
     });

@@ -13,6 +13,7 @@ import type {
   ModelState,
   ModelWireCodec,
   ModeMapping,
+  PermissionOption,
   RawModeState,
   SessionId,
 } from "./types";
@@ -44,6 +45,15 @@ export interface BackendSignInHandlers {
   onUrl?: (url: string) => void;
   /** Per-line progress from the sign-in subprocess. */
   onLine?: (line: string) => void;
+}
+
+/**
+ * Backend-confirmed state available while applying a selection. Startup passes
+ * the state returned by `newSession`; ordinary picker changes omit the context
+ * and compare against the session's in-memory snapshot.
+ */
+export interface ApplySelectionContext {
+  backendReportedCurrent: ModelSelection | null;
 }
 
 /**
@@ -250,6 +260,16 @@ export interface BackendDescriptor {
   normalizeModelName?(name: string): string;
 
   /**
+   * Optional: adapt a backend-native permission option for generic UI
+   * presentation. The option id remains the backend's executable decision;
+   * backends may separate wire-level rule prose from a compact action label.
+   *
+   * @param option - The neutral permission option produced at the backend boundary.
+   * @param metadata - Opaque backend metadata forwarded unchanged from the ACP option.
+   */
+  presentPermissionOption?(option: PermissionOption, metadata: unknown): PermissionOption;
+
+  /**
    * Opt in to surfacing this backend's per-model `description` as the row
    * subtitle in the chat picker and the settings enable list. Set for backends
    * whose catalog is small and curated with meaningful blurbs (claude, codex);
@@ -273,7 +293,11 @@ export interface BackendDescriptor {
    * the underlying `session.setConfigOption` call (the backend may simply
    * lack the capability) and propagate everything else.
    */
-  applySelection(session: AgentSession, selection: ModelSelection): Promise<void>;
+  applySelection(
+    session: AgentSession,
+    selection: ModelSelection,
+    context?: ApplySelectionContext
+  ): Promise<void>;
 
   /**
    * Optional: return the canonical → native mode mapping for this backend

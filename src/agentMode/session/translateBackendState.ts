@@ -1,6 +1,7 @@
 import type {
   BackendConfigOption,
   BackendDescriptor,
+  BackendModelCatalog,
   BackendModelInfo,
   RawModelState,
   RawModeState,
@@ -413,6 +414,15 @@ export function modelStateSignature(state: BackendState | null): string {
 }
 
 /**
+ * Stable signature of shared model discovery, distinct from session-owned selection state.
+ * @param catalog - Probe-owned catalog, or null before discovery settles.
+ */
+export function modelCatalogSignature(catalog: BackendModelCatalog | null): string {
+  if (!catalog) return "";
+  return JSON.stringify(catalog.availableModels);
+}
+
+/**
  * Stable signature of the mode slice of a `BackendState`. Used by the mode
  * picker hook to invalidate its memo only on mode-relevant changes. Includes
  * each option's apply-spec kind so capability flips (`setMode` ↔
@@ -423,13 +433,4 @@ export function modeStateSignature(state: BackendState | null): string {
   if (!md) return "";
   const apply = md.options.map((o) => `${o.value}:${md.apply[o.value]?.kind ?? ""}`).join(",");
   return `${md.current ?? ""}|${apply}`;
-}
-
-/**
- * Stable signature of a normalized `BackendState`. Used by the preloader
- * to skip notifying listeners on no-op updates.
- */
-export function backendStateSignature(state: BackendState | null): string {
-  if (!state) return "";
-  return `${modelStateSignature(state)}#${modeStateSignature(state)}`;
 }

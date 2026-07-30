@@ -37,7 +37,6 @@ function makeManager(opts: {
   return {
     getActiveSession: () => session,
     getActiveChatUIState: () => makeUIState(opts.canSwitchMode ?? null),
-    getCachedBackendState: () => null,
     applyMode: opts.applyMode ?? jest.fn().mockResolvedValue(undefined),
   } as unknown as AgentSessionManager;
 }
@@ -62,6 +61,14 @@ describe("buildAgentModePicker", () => {
           backendId: "codex",
           state: { model: null, mode: null },
         }),
+      })
+    ).toBeNull();
+  });
+
+  it("returns null while the active session is starting", () => {
+    expect(
+      buildAgentModePicker({
+        manager: makeManager({ backendId: "codex", state: null }),
       })
     ).toBeNull();
   });

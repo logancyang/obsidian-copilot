@@ -45,9 +45,9 @@ export interface AgentModelPickerOverride {
  * is purely a memo invalidator — `buildAgentModelPicker` reads fresh state
  * directly off the manager.
  *
- * Encodes only model-relevant slices (active session id, active backend
- * id, hasUserVisibleMessages, per-backend `modelStateSignature`) — switching
- * mode on the active session does not change this key.
+ * Encodes only model-relevant slices: active-session identity, status,
+ * history and model state, plus each backend's shared catalog/effort
+ * signature. Switching mode on the active session does not change this key.
  */
 function useAgentModelSignal(
   manager: AgentSessionManager | null,
@@ -65,18 +65,10 @@ function useAgentModelSignal(
       // transitions out of "starting" (canSwitchModel/Effort gate on status).
       session?.getStatus() ?? "",
       session?.hasUserVisibleMessages() ? "1" : "0",
+      modelStateSignature(session?.getState() ?? null),
     ];
     for (const d of descriptors) {
-      // Include preload status so the picker re-renders when a backend
-      // flips pending → ready (the placeholder row swaps out for real
-      // models) without waiting on an unrelated cache write.
-      parts.push(
-        `${d.id}:${manager.getPreloadStatus(d.id)}:${modelStateSignature(
-          manager.getCachedBackendState(d.id)
-        )}:${Object.keys(manager.getEffortCatalog(d.id) ?? {})
-          .sort()
-          .join(",")}`
-      );
+      parts.push(`${d.id}:${manager.getModelCacheSignature(d.id)}`);
     }
     return parts.join("|");
   }, [manager, descriptors]);
