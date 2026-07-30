@@ -1234,23 +1234,29 @@ describe("AgentSessionManager.replaceSessionInPlace", () => {
     expect(preservedReplacement.chatInputId).toBe(preservedSource.chatInputId);
   });
 
-  it("deduplicates concurrent replacements of the same session", async () => {
+  it("serializes concurrent replacements so the latest selection wins", async () => {
     const mgr = buildManager();
     const source = await mgr.createSession();
 
     const first = mgr.replaceSessionInPlace(source.internalId, "opencode", {
       preserveChatInput: true,
+      seedSelection: { baseModelId: "first-model", effort: null },
     });
-    const second = mgr.replaceSessionInPlace(source.internalId, "codex", {
+    const second = mgr.replaceSessionInPlace(source.internalId, "opencode", {
       preserveChatInput: true,
+      seedSelection: { baseModelId: "latest-model", effort: "high" },
     });
     const [firstReplacement, secondReplacement] = await Promise.all([first, second]);
     await flushBackgroundClose();
 
-    expect(secondReplacement).toBe(firstReplacement);
-    expect(firstReplacement.backendId).toBe("opencode");
-    expect(firstReplacement.chatInputId).toBe(source.chatInputId);
-    expect(mgr.getSessions()).toEqual([firstReplacement]);
+    expect(secondReplacement).not.toBe(firstReplacement);
+    expect(secondReplacement.chatInputId).toBe(source.chatInputId);
+    expect(sessionCreateSpy).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        defaultModelSelection: { baseModelId: "latest-model", effort: "high" },
+      })
+    );
+    expect(mgr.getSessions()).toEqual([secondReplacement]);
   });
 
   it("closes the old session in the background", async () => {
