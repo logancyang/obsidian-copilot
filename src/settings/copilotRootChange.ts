@@ -53,6 +53,24 @@ function buildRootPatch(
  * @param folder - Candidate root, vault-root-relative.
  * @param history - Recorded `copilotRootHistory` from settings.
  */
+/**
+ * DESIGN NOTE — this comparison is exact-case while
+ * {@link copilotRootContainsNotes} folds case on Windows/macOS. The asymmetry is
+ * deliberate: that one answers COVERAGE (fail-closed — over-excluding is safe),
+ * this one answers IDENTITY and gates an EXEMPTION from the note-content guard,
+ * where the same heuristic inverts. On a case-sensitive macOS volume, folding
+ * here would accept a genuinely different `notes/` as "the `Notes` root I used
+ * before" and skip the guard, activating a Copilot root over the user's real
+ * notes.
+ * Cost of leaving it exact-case: re-activating a historical root under a
+ * different spelling (history holds `teamai`, the user types `TeamAI`) is
+ * refused by the content guard instead of exempted. Recoverable — the original
+ * spelling works — and it fails closed.
+ * The real fix is a filesystem-aware root identity (resolve the candidate to the
+ * actual directory and compare that), which this repo has no facility for and
+ * which touches already-persisted history. Deferred.
+ * If a future review flags the mismatch, point them at this note.
+ */
 export function isKnownCopilotRoot(folder: string, history: readonly string[]): boolean {
   const [normalizedFolder] = normalizeRootFolders([folder]);
   if (!normalizedFolder) return false;

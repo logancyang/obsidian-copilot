@@ -182,9 +182,16 @@ function hasCaseInsensitiveFilesystem(): boolean {
  * Separate from {@link matchFilePathWithFolders} so the case-folding stays off
  * the user-pattern path — see {@link isSystemExcludedPath} for why.
  *
- * Exported because anything DECIDING which paths a root covers has to agree with
- * this: a guard that compares exact-case would clear a candidate root this
- * matcher then treats as covering the user's real notes.
+ * Exported for COVERAGE questions only — "does this root cover that path" — so a
+ * guard deciding whether a candidate root would swallow the user's notes agrees
+ * with the boundary that later enforces it.
+ *
+ * Deliberately NOT for IDENTITY questions such as "is this candidate the root I
+ * used before" (see `isKnownCopilotRoot`). The platform check here is a
+ * heuristic that treats every macOS volume as case-insensitive, which is safe
+ * while it only ever over-excludes. Reused to grant an exemption it inverts:
+ * on a case-sensitive volume it would accept a genuinely different folder as
+ * "already known" and skip the content guard entirely.
  *
  * @param filePath - Vault-relative path, as the vault or Miyo reported it.
  * @param systemRoots - Roots from {@link getSystemExcludedFolders}, or a

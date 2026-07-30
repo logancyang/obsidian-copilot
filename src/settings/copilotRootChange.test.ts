@@ -104,6 +104,41 @@ describe("copilotRootChange", () => {
     });
   });
 
+  // The Apply guard is `!isKnownCopilotRoot(...) && copilotRootContainsNotes(...)`,
+  // and the two use different comparisons on purpose. BasicSettings mocks both,
+  // so the composed rule is only observable here.
+  describe("the exemption/coverage pair the Apply guard composes", () => {
+    const applyWouldBlock = (app: App, folder: string, history: string[]) =>
+      !isKnownCopilotRoot(folder, history) && copilotRootContainsNotes(app, folder);
+
+    it("blocks a differently-cased historical root rather than exempting it", () => {
+      // Fails closed: identity is exact-case, so this is refused by the content
+      // guard instead of exempted. The user's original spelling still works.
+      const platform = obsidian.Platform as { isMacOS: boolean };
+      const previous = platform.isMacOS;
+      platform.isMacOS = true;
+      try {
+        const app = appWithMarkdown(["teamai/copilot-conversations/chat.md"]);
+        expect(applyWouldBlock(app, "TeamAI", ["teamai"])).toBe(true);
+      } finally {
+        platform.isMacOS = previous;
+      }
+    });
+
+    it("does not exempt a real folder that merely differs in case from a historical root", () => {
+      // The reason identity must NOT fold: on a case-sensitive volume `notes/`
+      // is a different folder holding the user's own notes. Folding identity
+      // would exempt it and activate a Copilot root over them.
+      const app = appWithMarkdown(["notes/user-note.md"]);
+      expect(applyWouldBlock(app, "notes", ["Notes"])).toBe(true);
+    });
+
+    it("exempts a historical root spelled exactly as recorded", () => {
+      const app = appWithMarkdown(["teamai/copilot-conversations/chat.md"]);
+      expect(applyWouldBlock(app, "teamai", ["teamai"])).toBe(false);
+    });
+  });
+
   describe("findCopilotRootFileConflict()", () => {
     /** Minimal App whose vault cache holds the given file/folder entries. */
     function appWithEntries(entries: Record<string, "file" | "folder">): App {
