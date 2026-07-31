@@ -237,15 +237,21 @@ export async function checkIsPaidUser(
 }
 
 /**
- * Reactive form of {@link isSelfHostEntitled} for the Self-Host settings tab.
+ * Whether the entitlement grants self-host, for the Self-Host settings tab —
+ * the entitlement half of {@link isSelfHostModeValid}, without the toggle.
  * Re-verifies the persisted token rather than reading the module-level verified
  * set, because that set is populated asynchronously at startup and React needs a
  * value that settles on its own. Verification is offline (WebCrypto against the
  * embedded public key), so this costs no network call. `undefined` means the
  * check is still in flight.
  *
- * Also forces `enableSelfHostMode` off once the entitlement stops granting
- * self-host, so a lapsed plan's stale toggle doesn't keep reading as on.
+ * Also forces `enableSelfHostMode` off when a token verifies and its plan does
+ * NOT grant self-host, so a downgraded plan's stale toggle doesn't keep reading
+ * as on. A token that fails to verify is not that signal — it means "unknown"
+ * (kid not shipped yet, WebCrypto unavailable, expired just before the online
+ * refresh), and clearing on it would destroy a preference no later success
+ * restores, silently leaving searches on Brevilabs cloud. Unknown closes the
+ * runtime gate via {@link isSelfHostModeValid} and leaves the preference alone.
  */
 export function useIsSelfHostEligible(): boolean | undefined {
   const settings = useSettingsValue();
@@ -260,7 +266,7 @@ export function useIsSelfHostEligible(): boolean | undefined {
         return;
       }
       const eligible = claims?.features.includes("self_host") === true;
-      if (!eligible && settings.enableSelfHostMode) {
+      if (claims && !eligible && settings.enableSelfHostMode) {
         updateSetting("enableSelfHostMode", false);
       }
       setIsEligible(eligible);

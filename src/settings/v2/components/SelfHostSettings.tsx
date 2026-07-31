@@ -66,7 +66,10 @@ export const SelfHostSettings: React.FC = () => {
           onCheckedChange={(checked) => updateSetting("enableSelfHostMode", checked)}
           // Only an entitlement that grants self-host may flip this on; the
           // still-resolving `undefined` keeps it locked until the check settles.
-          disabled={isEligible !== true}
+          // Turning it OFF is always allowed — the preference is the user's to
+          // withdraw, and gating that direction too would strand anyone whose
+          // token stopped verifying with self-host stuck on and unreachable.
+          disabled={isEligible !== true && !selfHostOn}
         />
 
         <div className="tw-flex tw-items-start tw-gap-2 tw-rounded-lg tw-border tw-border-solid tw-px-3 tw-py-2.5 tw-text-xs tw-text-normal tw-bg-interactive-accent/10 tw-border-interactive-accent/30">

@@ -106,4 +106,17 @@ describe("SelfHostSettings", () => {
     fireEvent.click(enableToggle());
     expect(updateSetting).not.toHaveBeenCalledWith("enableSelfHostMode", true);
   });
+
+  it("lets an ineligible user turn self-host mode back off", () => {
+    // A token that stops verifying leaves the preference on (it is not an
+    // authoritative "not entitled"), so gating this direction too would strand
+    // the user with self-host stuck on and the toggle unreachable.
+    mockEligible = false;
+    setSettings({ enableSelfHostMode: true });
+    render(<SelfHostSettings />);
+
+    expect(enableToggle().getAttribute("aria-disabled")).not.toBe("true");
+    fireEvent.click(enableToggle());
+    expect(updateSetting).toHaveBeenCalledWith("enableSelfHostMode", false);
+  });
 });

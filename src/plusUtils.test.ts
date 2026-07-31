@@ -3,10 +3,13 @@ import type { CopilotSettings } from "@/settings/model";
 
 const mockGetSettings = jest.fn<CopilotSettings, []>();
 const mockSetSettings = jest.fn<void, [Partial<CopilotSettings>]>();
+const mockUpdateSetting = jest.fn<void, [string, unknown]>();
 
 jest.mock("@/settings/model", () => ({
   getSettings: () => mockGetSettings(),
   setSettings: (partial: Partial<CopilotSettings>) => mockSetSettings(partial),
+  updateSetting: (key: string, value: unknown) => mockUpdateSetting(key, value),
+  useSettingsValue: () => mockGetSettings(),
 }));
 
 const mockVerifyEntitlement = jest.fn<Promise<unknown>, [string, unknown?]>();
@@ -22,8 +25,10 @@ import {
   markPaidPendingEntitlement,
   turnOffPaid,
   turnOnPaid,
+  useIsSelfHostEligible,
   verifyCachedEntitlement,
 } from "@/plusUtils";
+import { renderHook, waitFor } from "@testing-library/react";
 
 const FUTURE_EXP_SECONDS = 9_999_999_999;
 const PAST_EXP_SECONDS = 1_000_000_000;
@@ -70,6 +75,7 @@ describe("plusUtils", () => {
   // Every gate reads the in-memory proof, so reset it to the fail-closed state.
   beforeEach(async () => {
     mockSetSettings.mockClear();
+    mockUpdateSetting.mockClear();
     mockVerifyEntitlement.mockReset();
     mockGetSettings.mockReturnValue(buildSettings({ entitlementToken: "" }));
     await verifyCachedEntitlement();
@@ -336,6 +342,56 @@ describe("plusUtils", () => {
 
       expect(isSelfHostModeValid()).toBe(false);
       expect(canUseMultiAgent()).toBe(false);
+    });
+  });
+
+  describe("useIsSelfHostEligible()", () => {
+    it("reports eligible without touching the preference when the token grants self-host", async () => {
+      mockVerifyEntitlement.mockResolvedValue({
+        user_id: "user-123",
+        plan: "believer",
+        tier: "plus",
+        features: ["multi_agent", "self_host"],
+        iat: 0,
+        exp: FUTURE_EXP_SECONDS,
+      });
+      mockGetSettings.mockReturnValue(tokenBackedSettings({ enableSelfHostMode: true }));
+
+      const { result } = renderHook(() => useIsSelfHostEligible());
+
+      await waitFor(() => expect(result.current).toBe(true));
+      expect(mockUpdateSetting).not.toHaveBeenCalled();
+    });
+
+    it("clears the preference when a verified token's plan does not grant self-host", async () => {
+      mockVerifyEntitlement.mockResolvedValue({
+        user_id: "user-123",
+        plan: "plus",
+        tier: "plus",
+        features: ["multi_agent"],
+        iat: 0,
+        exp: FUTURE_EXP_SECONDS,
+      });
+      mockGetSettings.mockReturnValue(tokenBackedSettings({ enableSelfHostMode: true }));
+
+      const { result } = renderHook(() => useIsSelfHostEligible());
+
+      await waitFor(() => expect(result.current).toBe(false));
+      expect(mockUpdateSetting).toHaveBeenCalledWith("enableSelfHostMode", false);
+    });
+
+    it("keeps the preference when the token cannot be verified", async () => {
+      // Unverifiable is "unknown", not "not entitled": a kid that has not
+      // shipped, unavailable WebCrypto, or an expiry crossed just before the
+      // online refresh. Clearing here would burn a preference that the next
+      // successful refresh cannot restore, silently leaving the user on cloud.
+      mockVerifyEntitlement.mockResolvedValue(null);
+      mockGetSettings.mockReturnValue(tokenBackedSettings({ enableSelfHostMode: true }));
+
+      const { result } = renderHook(() => useIsSelfHostEligible());
+
+      await waitFor(() => expect(result.current).toBe(false));
+      expect(mockUpdateSetting).not.toHaveBeenCalled();
     });
   });
 });
