@@ -399,6 +399,27 @@ describe("plusUtils", () => {
       expect(await checkIsPaidUser()).toBe(false);
     });
 
+    it("refuses the offline fallback to an unexpired free-tier token", async () => {
+      // The backend downgrades a lapsed paid key to the free policy instead of
+      // refusing it a token, so an unexpired proof is not by itself paid access.
+      mockVerifyEntitlement.mockResolvedValue({
+        user_id: "user-123",
+        plan: "none",
+        tier: "free",
+        features: [],
+        iat: 0,
+        exp: FUTURE_EXP_SECONDS,
+      });
+      mockGetSettings.mockReturnValue(
+        buildSettings({ userId: "user-123", entitlementToken: "token" })
+      );
+      await verifyCachedEntitlement();
+      mockGetSettings.mockReturnValue(tokenBackedSettings({ plusLicenseKey: "key" }));
+      mockValidateLicenseKey.mockRejectedValue(new Error("net::ERR_INTERNET_DISCONNECTED"));
+
+      expect(await checkIsPaidUser()).toBe(false);
+    });
+
     it("does not grant offline access on persisted flags alone (edited data.json)", async () => {
       mockGetSettings.mockReturnValue(
         tokenBackedSettings({ plusLicenseKey: "key", isPaidUser: true })

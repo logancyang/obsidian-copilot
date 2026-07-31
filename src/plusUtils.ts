@@ -102,6 +102,12 @@ interface VerifiedEntitlement {
   features: ReadonlySet<EntitlementFeature>;
   /** The claims' `exp`, in epoch ms. */
   expiresAt: number;
+  /**
+   * Whether the signed tier is above free. The server downgrades a lapsed paid
+   * key to the free policy rather than refusing it a token, so liveness alone
+   * does not mean paid — this is the claim that does.
+   */
+  paid: boolean;
 }
 
 /** Frozen "nothing verified" proof — referential stability for the empty state. */
@@ -109,6 +115,7 @@ const NO_VERIFIED_ENTITLEMENT: VerifiedEntitlement = Object.freeze({
   token: "",
   features: Object.freeze(new Set<EntitlementFeature>()),
   expiresAt: 0,
+  paid: false,
 });
 
 let verified: VerifiedEntitlement = NO_VERIFIED_ENTITLEMENT;
@@ -252,7 +259,7 @@ export async function checkIsPaidUser(
     logInfo("License validation unreachable; falling back to the cached entitlement:", error);
     return { isValid: undefined };
   });
-  return result.isValid ?? hasLiveEntitlement();
+  return result.isValid ?? (hasLiveEntitlement() && verified.paid);
 }
 
 /**
@@ -439,11 +446,16 @@ export async function applyEntitlement(token: string): Promise<boolean> {
   if (!claims) {
     return false;
   }
-  verified = { token, features: new Set(claims.features), expiresAt: claims.exp * 1000 };
+  verified = {
+    token,
+    features: new Set(claims.features),
+    expiresAt: claims.exp * 1000,
+    paid: claims.tier !== "free",
+  };
   setSettings({
     entitlementToken: token,
     entitlementExpiresAt: verified.expiresAt,
-    isPaidUser: claims.tier !== "free",
+    isPaidUser: verified.paid,
     isPlusUser: verified.features.has("multi_agent"),
   });
   return true;
@@ -477,5 +489,6 @@ export async function verifyCachedEntitlement(): Promise<void> {
     token: entitlementToken,
     features: new Set(claims?.features),
     expiresAt: (claims?.exp ?? 0) * 1000,
+    paid: claims ? claims.tier !== "free" : false,
   };
 }
