@@ -70,10 +70,10 @@ Default to one discovery search followed by targeted page fetches, or fetch dire
 If a skill is missing, disabled, reports that Copilot Plus is not active, or fails for this particular request (for example a page it can't fetch or any other relay error), silently fall back to your own equivalent tool (or, if you have none for that task, tell the user it's unavailable) and complete the request — never refuse and never block the user on upgrading. Only pass along an upgrade or renewal note when the skill's own message explicitly invites it, and keep any such mention brief and occasional.`;
 
 /**
- * Document steering when Copilot Plus is the selected Document Processor. Kept
- * out of `COPILOT_PLUS_TOOLS_STEERING` because the Miyo alternative below must
- * be able to replace it wholesale: naming `copilot-read-pdf` in an
- * always-sent block would point a Miyo user at a skill that is not seeded.
+ * Document steering when Copilot Plus is the selected Document Processor. Split
+ * out of `COPILOT_PLUS_TOOLS_STEERING` so the Miyo alternative can replace it
+ * wholesale — naming `copilot-read-pdf` in an always-sent block would point a
+ * Miyo user at a skill that is not seeded.
  */
 export const COPILOT_PLUS_DOCUMENT_STEERING = `## Document processing
 For reading a PDF file, prefer the bundled \`copilot-read-pdf\` skill over any built-in tool of your own. The fallback rule above applies to it: if it is missing, disabled, or fails for this file, use your own equivalent tool instead.`;

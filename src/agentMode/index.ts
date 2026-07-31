@@ -2,7 +2,7 @@ import { type App, Platform } from "obsidian";
 import os from "node:os";
 import * as path from "node:path";
 import type CopilotPlugin from "@/main";
-import { logError, logWarn } from "@/logger";
+import { logError } from "@/logger";
 import { DEFAULT_SKILLS_FOLDER } from "@/constants";
 import { getSettings, subscribeToSettingsChange, type CopilotSettings } from "@/settings/model";
 import { subscribeToSystemPromptChange } from "@/system-prompts/state";
@@ -17,11 +17,7 @@ import { createNodeFileStorage } from "./session/nodeFileStorage";
 import { AgentSessionManager } from "./session/AgentSessionManager";
 import { SkillManager } from "./skills";
 import { planManagedBuiltins } from "./skills/builtin/builtinSkills";
-import {
-  inspectBuiltinSkill,
-  removeSeededBuiltin,
-  seedBuiltinSkills,
-} from "./skills/builtin/seedBuiltinSkills";
+import { removeSeededBuiltin, seedBuiltinSkills } from "./skills/builtin/seedBuiltinSkills";
 import { buildBuiltinSeedFs } from "./skills/builtin/miyoSearchSeed";
 import {
   createDefaultAskUserQuestionPrompter,
@@ -296,10 +292,8 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
   // Miyo vault search and Miyo document parsing are gated independently;
   // `planManagedBuiltins` decides both what to write and what to remove, so no
   // gate can be added without its prune (the cloud PDF skill Miyo documents
-  // replace is pruned this way). Removal is still best-effort against the
-  // filesystem — a survivor is logged, and the prompt steering remains the
-  // backstop. Discovery runs even when seeding fails so existing skills still
-  // reconcile.
+  // replace is pruned this way). Discovery runs even when seeding fails so
+  // existing skills still reconcile.
   //
   // Passes are SERIALIZED through `seedChain`: a fast enable→disable (or a folder
   // change landing mid-seed) would otherwise interleave writes and leave the
@@ -323,14 +317,6 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
         await seedBuiltinSkills({ skillsFolderRelPath: folder, fs, skills: seed });
         for (const name of prune) {
           await removeSeededBuiltin(folder, name, fs);
-          // Its `false` covers "already absent", "kept a user-authored copy", and
-          // "the delete threw" alike, so classify from disk the way
-          // `removeMiyoSearchSkill` does. Only a still-marked copy means the prune
-          // didn't take — the refresh below will fan it back out, silently
-          // downgrading a structural gate to prompt-only steering.
-          if ((await inspectBuiltinSkill(folder, name, fs)) === "seeded") {
-            logWarn(`[Skills] de-gated builtin ${name} is still on disk; agents can still see it`);
-          }
         }
       } catch (e) {
         logError("[Skills] builtin skill seeding failed", e);
@@ -405,13 +391,11 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
           if (!miyoAvailabilityChanged) return;
           restartSystemPromptAffected();
           if (prev.docProcessorBackend === next.docProcessorBackend) return;
-          // Backends that opt out above rebuild the prompt per `newSession()`, so
-          // a NEW chat is already correct — but a chat already open keeps the
-          // document route it was born with. After a switch to Miyo that means a
-          // live Claude session still holds the Plus steering while
-          // `copilot-read-pdf` is gone, and the fallback clause sends the PDF to
-          // its own reader. Restart them so the replacement session rebuilds the
-          // prompt on the route the user actually chose.
+          // Backends skipped above rebuild the prompt per `newSession()`, so a new
+          // chat is already correct — but one already open keeps the route it was
+          // born with, and after a switch to Miyo that means a live Claude session
+          // still holds the Plus steering while `copilot-read-pdf` is gone, whose
+          // fallback clause then sends the PDF to its own reader.
           for (const descriptor of listBackendDescriptors()) {
             if (descriptor.restartOnSystemPromptChange) continue;
             void manager

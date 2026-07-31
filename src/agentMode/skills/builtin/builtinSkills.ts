@@ -784,8 +784,7 @@ metadata:
 
 Use Miyo to extract Markdown/text from one PDF or EPUB. Parsing runs locally,
 works for files anywhere on the filesystem, and does not require the Miyo
-service to be running. It does require the Miyo CLI on this machine: a remote
-Miyo server cannot parse for you.
+service to be running.
 
 ## How to run
 
@@ -824,14 +823,6 @@ Processor to Plus.
   ],
 };
 
-/** Which conditionally-seeded Miyo capabilities the user has turned on. */
-export interface MiyoSkillGates {
-  /** Mirrors the `enableMiyoSearchSkill` setting. */
-  search: boolean;
-  /** Mirrors `docProcessorBackend === "miyo"`. */
-  documents: boolean;
-}
-
 /** Every builtin the host may seed, gated or not — the universe it reconciles. */
 const ALL_MANAGED_SKILLS: readonly BuiltinSkill[] = [
   ...BUILTIN_SKILLS,
@@ -840,17 +831,18 @@ const ALL_MANAGED_SKILLS: readonly BuiltinSkill[] = [
 ];
 
 /**
- * Splits the managed builtins into what the given gates want on disk and what
- * must be removed, so the host can't seed a gate without pruning its opposite.
+ * Splits the managed builtins into what to write and what to remove, so the host
+ * can't seed a gate without pruning its opposite.
  *
  * Miyo-owned documents drop `copilot-read-pdf` outright instead of merely
  * steering away from it: that choice is fail-closed (see
  * `resolveDocProcessorBackend`), and a cloud PDF skill left on disk is one
  * ignored instruction away from uploading a document the user kept local.
  *
- * @param gates Live state of the two independent Miyo settings.
+ * @param gates `search` mirrors `enableMiyoSearchSkill`, `documents` mirrors
+ *   `docProcessorBackend === "miyo"`.
  */
-export function planManagedBuiltins(gates: MiyoSkillGates): {
+export function planManagedBuiltins(gates: { search: boolean; documents: boolean }): {
   seed: readonly BuiltinSkill[];
   prune: readonly string[];
 } {

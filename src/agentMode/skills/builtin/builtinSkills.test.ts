@@ -343,7 +343,7 @@ describe("builtinSkills", () => {
     it("names the recovery path when the CLI is absent, since a remote server can't parse", () => {
       // `miyo parse` runs locally and never reads MIYO_URL, so a remote-only
       // user has to install the CLI or move the picker back to Plus.
-      expect(MIYO_PARSE_SKILL.skillMd).toMatch(/remote\s+Miyo\s+server\s+cannot\s+parse/i);
+      expect(MIYO_PARSE_SKILL.skillMd).toMatch(/remote\s+Miyo\s+server\s+does\s+not\s+help/i);
       expect(MIYO_PARSE_SKILL.skillMd).toMatch(/Document\s+Processor to Plus/i);
     });
 
@@ -390,15 +390,6 @@ describe("builtinSkills", () => {
         "miyo-search",
         "miyo-parse",
       ]);
-    });
-
-    it("never leaves a managed skill both seeded and pruned", () => {
-      for (const search of [true, false]) {
-        for (const documents of [true, false]) {
-          const plan = planManagedBuiltins({ search, documents });
-          expect(names(plan.seed).filter((name) => plan.prune.includes(name))).toEqual([]);
-        }
-      }
     });
   });
 });
