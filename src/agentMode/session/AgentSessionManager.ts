@@ -1198,7 +1198,7 @@ export class AgentSessionManager {
     await this.ensureScopeInstructions(projectId, projectRecord);
 
     const landingCaptureSignature = projectRecord
-      ? this.landingCaptureSignatureFor(projectRecord)
+      ? getProjectLandingCaptureSignature(this.app, projectRecord)
       : undefined;
 
     // Resolves the scope's cwd (vault root for global, project folder otherwise)
@@ -1905,12 +1905,7 @@ export class AgentSessionManager {
   private currentLandingCaptureSignature(projectId: ProjectScopeId): string | null {
     if (projectId === GLOBAL_SCOPE) return null;
     const record = getCachedProjectRecordById(projectId);
-    return record ? this.landingCaptureSignatureFor(record) : null;
-  }
-
-  /** Bind the app to the signature helper so it can stat the project's AGENTS.md. */
-  private landingCaptureSignatureFor(record: ProjectFileRecord): string {
-    return getProjectLandingCaptureSignature(this.app, record);
+    return record ? getProjectLandingCaptureSignature(this.app, record) : null;
   }
 
   /**
