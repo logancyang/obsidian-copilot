@@ -8,7 +8,9 @@ import {
 import type { UserSystemPrompt } from "@/system-prompts/type";
 import {
   buildAgentSystemPrompt,
+  COPILOT_MIYO_DOCUMENT_STEERING,
   COPILOT_MIYO_SEARCH_STEERING,
+  COPILOT_PLUS_DOCUMENT_STEERING,
   COPILOT_PLUS_TOOLS_STEERING,
   COPILOT_PROMPT_BASE,
 } from "./agentSystemPrompt";
@@ -89,6 +91,7 @@ describe("buildAgentSystemPrompt", () => {
     // users fall back to their own tools via the steering's fallback clause.
     const nonPlus = buildAgentSystemPrompt();
     expect(nonPlus).toContain(COPILOT_PLUS_TOOLS_STEERING);
+    expect(nonPlus).toContain(COPILOT_PLUS_DOCUMENT_STEERING);
     expect(nonPlus).toContain("copilot-web-search");
     expect(nonPlus).toContain("copilot-web-fetch");
     expect(nonPlus).toContain("copilot-read-pdf");
@@ -107,10 +110,34 @@ describe("buildAgentSystemPrompt", () => {
     expect(buildAgentSystemPrompt()).toContain(COPILOT_PLUS_TOOLS_STEERING);
   });
 
+  it("proactively routes external questions to bounded web research without leaking vault text", () => {
+    const prompt = buildAgentSystemPrompt();
+    expect(prompt).toMatch(/current facts, external topics, or third-party documentation/i);
+    expect(prompt).toMatch(/without waiting for an explicit web-search request/i);
+    expect(prompt).toMatch(/local search is empty or weak/i);
+    expect(prompt).toMatch(/instead of answering from memory/i);
+    expect(prompt).toMatch(/questions about the user's own notes or vault, search locally first/i);
+    expect(prompt).toMatch(/Do not place text from the vault into a web query/i);
+    expect(prompt).toMatch(/one discovery search followed by targeted page fetches/i);
+    expect(prompt).toMatch(/do not start repeated or open-ended search chains/i);
+  });
+
+  it("uses the local fail-closed document route only when Miyo is selected", () => {
+    updateSetting("docProcessorBackend", "miyo");
+    const prompt = buildAgentSystemPrompt();
+    expect(prompt).toContain(COPILOT_MIYO_DOCUMENT_STEERING);
+    expect(prompt).not.toContain(COPILOT_PLUS_DOCUMENT_STEERING);
+    expect(prompt).toContain("miyo-parse");
+    expect(prompt).toMatch(/Never use `copilot-read-pdf` or another cloud parser as a fallback/i);
+    expect(prompt).toMatch(/without uploading the document elsewhere/i);
+  });
+
   it("suppresses the steering when the builtin prompt is disabled", () => {
     setDisableBuiltinSystemPrompt(true);
     const prompt = buildAgentSystemPrompt();
     expect(prompt).not.toContain(COPILOT_PLUS_TOOLS_STEERING);
+    expect(prompt).not.toContain(COPILOT_PLUS_DOCUMENT_STEERING);
+    expect(prompt).not.toContain(COPILOT_MIYO_DOCUMENT_STEERING);
   });
 
   it("omits the Miyo steering when the search skill is not installed", () => {

@@ -16,7 +16,11 @@ import { AgentSessionIndex } from "./session/AgentSessionIndex";
 import { createNodeFileStorage } from "./session/nodeFileStorage";
 import { AgentSessionManager } from "./session/AgentSessionManager";
 import { SkillManager } from "./skills";
-import { managedBuiltinSkills, MIYO_SEARCH_SKILL } from "./skills/builtin/builtinSkills";
+import {
+  managedBuiltinSkills,
+  MIYO_PARSE_SKILL,
+  MIYO_SEARCH_SKILL,
+} from "./skills/builtin/builtinSkills";
 import { removeSeededBuiltin, seedBuiltinSkills } from "./skills/builtin/seedBuiltinSkills";
 import { buildBuiltinSeedFs } from "./skills/builtin/miyoSearchSeed";
 import {
@@ -289,10 +293,10 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
   });
   // Seed the plugin-shipped builtin skills into the canonical folder, then run
   // discovery so the pass picks them up and fans them out to the agent dirs.
-  // The Plus relay skills are always seeded; the Miyo vault-search skill is
-  // gated on the user's explicit `enableMiyoSearchSkill` toggle — seeded when
-  // on, and the seeded copy pruned when off. Discovery runs even when seeding
-  // fails so existing skills still reconcile.
+  // The Plus relay skills are always seeded. Miyo vault search and local
+  // document parsing are gated independently by their corresponding settings,
+  // with stale seeded copies pruned when either capability is disabled.
+  // Discovery runs even when seeding fails so existing skills still reconcile.
   //
   // Passes are SERIALIZED through `seedChain`: a fast enable→disable (or a folder
   // change landing mid-seed) would otherwise interleave writes and leave the
@@ -308,14 +312,19 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
       // chain must stay resolved no matter what any single pass hits.
       try {
         const fs = buildBuiltinSeedFs(app);
-        const useMiyo = getSettings().enableMiyoSearchSkill === true;
+        const settings = getSettings();
+        const useMiyoSearch = settings.enableMiyoSearchSkill === true;
+        const useMiyoParse = settings.docProcessorBackend === "miyo";
         await seedBuiltinSkills({
           skillsFolderRelPath: folder,
           fs,
-          skills: managedBuiltinSkills(useMiyo),
+          skills: managedBuiltinSkills(useMiyoSearch, useMiyoParse),
         });
-        if (!useMiyo) {
+        if (!useMiyoSearch) {
           await removeSeededBuiltin(folder, MIYO_SEARCH_SKILL.name, fs);
+        }
+        if (!useMiyoParse) {
+          await removeSeededBuiltin(folder, MIYO_PARSE_SKILL.name, fs);
         }
       } catch (e) {
         logError("[Skills] builtin skill seeding failed", e);
@@ -359,18 +368,16 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     }
     // Re-seed builtins when the canonical skills folder changes (so the tools
     // appear in the new folder without a reload) or when Miyo availability
-    // flips (so the gated Miyo skill is seeded/pruned to match). Both run the
+    // flips (so each gated Miyo skill is seeded/pruned to match). Both run the
     // same gate-aware seed pass against the current folder.
     const prevFolder = prev.agentMode?.skills?.folder ?? DEFAULT_SKILLS_FOLDER;
     const nextFolder = next.agentMode?.skills?.folder ?? DEFAULT_SKILLS_FOLDER;
-    // The `miyo-search` skill now seeds/prunes off the explicit
-    // `enableMiyoSearchSkill` toggle, so a flip must re-seed and restart (codex/
-    // opencode bake the steering at spawn). `enableMiyo` / `miyoServerUrl` are
-    // still watched because the injected env (MIYO_URL) changes with them, and
-    // `isPaidUser` because Plus status gates other seeded builtins in the same
-    // pass.
+    // Search and document parsing have independent settings, and codex/opencode
+    // bake their corresponding prompt steering at spawn. Other Miyo and Plus
+    // fields remain watched because they affect the managed agent environment.
     const miyoAvailabilityChanged =
       prev.enableMiyoSearchSkill !== next.enableMiyoSearchSkill ||
+      prev.docProcessorBackend !== next.docProcessorBackend ||
       prev.enableMiyo !== next.enableMiyo ||
       prev.miyoServerUrl !== next.miyoServerUrl ||
       prev.isPaidUser !== next.isPaidUser;

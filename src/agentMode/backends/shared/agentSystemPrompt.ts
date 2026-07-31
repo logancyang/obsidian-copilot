@@ -13,10 +13,10 @@
  *   1. `COPILOT_PROMPT_BASE` (the Obsidian-vault identity) — unless the user
  *      enabled Settings → System prompts → "Disable builtin system prompt".
  *      Followed by `COPILOT_PLUS_TOOLS_STEERING` (prefer the builtin Copilot
- *      Plus skills, with a fallback to the agent's own tools) — sent to everyone.
- *      Then `COPILOT_MIYO_SEARCH_STEERING` — appended only when `shouldUseMiyo`
- *      is true, so the agent is pointed at the `miyo-search` skill only while
- *      Miyo is enabled and available.
+ *      Plus web/media skills and proactively route external questions to them)
+ *      and document steering selected by `docProcessorBackend`.
+ *      Then `COPILOT_MIYO_SEARCH_STEERING` — appended only when the dedicated
+ *      Miyo search-skill setting is enabled.
  *   2. The pill-syntax directive (`buildPillSyntaxDirective`) — always present;
  *      it teaches the agent how to read the chat editor's `[[note]]`/`{folder}`
  *      tokens and is functional wiring, not "builtin framing" the user toggles.
@@ -55,13 +55,27 @@ export const COPILOT_PLUS_TOOLS_STEERING = `## Copilot Plus tools
 For these requests, prefer the bundled Copilot skill over any built-in tool of your own:
 - Searching the web → the \`copilot-web-search\` skill
 - Fetching or reading a specific web page → the \`copilot-web-fetch\` skill
-- Reading a PDF file → the \`copilot-read-pdf\` skill
 - Getting a YouTube video's transcript → the \`copilot-youtube-transcript\` skill
 - Fetching an X (Twitter) post → the \`copilot-fetch-x\` skill
 
 Each skill ships a runnable script per OS — a \`.sh\` for macOS/Linux and a \`.cmd\` for Windows. Follow the skill's own "How to run" instructions for the right command; both runtimes are always present, so nothing needs to be installed.
 
+Choose vault or web evidence from the request:
+- For questions about the user's own notes or vault, search locally first. Do not place text from the vault into a web query unless the request clearly requires researching that text.
+- For current facts, external topics, or third-party documentation, proactively use web search or fetch without waiting for an explicit web-search request.
+- If local search is empty or weak and the question is external in nature, switch to web evidence instead of answering from memory.
+
+Default to one discovery search followed by targeted page fetches, or fetch directly when the user supplied a specific URL. Stop when you have enough evidence; do not start repeated or open-ended search chains.
+
 If a skill is missing, disabled, reports that Copilot Plus is not active, or fails for this particular request (for example a page it can't fetch or any other relay error), silently fall back to your own equivalent tool (or, if you have none for that task, tell the user it's unavailable) and complete the request — never refuse and never block the user on upgrading. Only pass along an upgrade or renewal note when the skill's own message explicitly invites it, and keep any such mention brief and occasional.`;
+
+/** Cloud PDF steering used when Copilot Plus is the selected document processor. */
+export const COPILOT_PLUS_DOCUMENT_STEERING = `## Document processing
+For reading a PDF file, prefer the bundled \`copilot-read-pdf\` skill over your own tool. If the skill is missing, disabled, unavailable to the user's Copilot Plus account, or fails for this file, silently fall back to your own equivalent tool. If no document-reading tool is available, tell the user; never block them on upgrading.`;
+
+/** Local, fail-closed document steering used when Miyo is selected. */
+export const COPILOT_MIYO_DOCUMENT_STEERING = `## Local document processing (Miyo)
+Miyo is the selected Document Processor. For any PDF or EPUB file, use the \`miyo-parse\` skill, which parses the document locally. Never use \`copilot-read-pdf\` or another cloud parser as a fallback. If the Miyo skill is missing or fails, report the problem clearly without uploading the document elsewhere.`;
 
 /**
  * Steers the agent toward the bundled `miyo-search` skill for vault search. A
@@ -70,11 +84,9 @@ If a skill is missing, disabled, reports that Copilot Plus is not active, or fai
  * prompt the way `COPILOT_PLUS_TOOLS_STEERING` names the relay skills, with
  * concrete triggers (grep too slow / too few relevant hits / explicit request).
  *
- * Unlike the Plus steering, this is gated: it is appended only when
- * `shouldUseMiyo(...)` is true, so it never tells the agent to reach for a
- * skill that isn't seeded. That keeps the prompt in lockstep with the
- * seeding gate in `agentMode/index.ts` (both key off `shouldUseMiyo`), which is
- * how the skill respects the user's "Miyo enabled" setting.
+ * Unlike the Plus steering, this is gated by `enableMiyoSearchSkill`, so it
+ * never tells the agent to reach for a skill that isn't seeded. That keeps the
+ * prompt in lockstep with the seeding gate in `agentMode/index.ts`.
  */
 export const COPILOT_MIYO_SEARCH_STEERING = `## Vault semantic search (Miyo)
 The user has Miyo enabled: local, meaning-based semantic search over their vault. For any vault-search intent, use the \`miyo-search\` skill when your builtin \`grep\` search is too slow or doesn't surface enough relevant notes, or whenever the user explicitly asks for Miyo search. Follow the skill's own instructions to run it.`;
@@ -150,6 +162,7 @@ export function buildAgentSystemPrompt(opts?: { projectInstructions?: string }):
   // wiring (it explains the editor's mention tokens), not builtin framing, so
   // it is always sent.
   if (!getDisableBuiltinSystemPrompt()) {
+    const settings = getSettings();
     parts.push(COPILOT_PROMPT_BASE);
     // Always steer toward the builtin Copilot Plus skills, regardless of Plus
     // status. Gating on `isPaidUser` would be wrong anyway — valid self-host
@@ -157,10 +170,15 @@ export function buildAgentSystemPrompt(opts?: { projectInstructions?: string }):
     // can't run, its script exits telling the agent to use its own equivalent
     // tools and the fallback clause routes it there. Never blocks free users.
     parts.push(COPILOT_PLUS_TOOLS_STEERING);
+    parts.push(
+      settings.docProcessorBackend === "miyo"
+        ? COPILOT_MIYO_DOCUMENT_STEERING
+        : COPILOT_PLUS_DOCUMENT_STEERING
+    );
     // Miyo steering is gated on the same flag that seeds the skill, so we only
     // point the agent at `miyo-search` when the user has installed it — the
     // prompt-side half of respecting the "Miyo search skill" toggle.
-    if (getSettings().enableMiyoSearchSkill === true) {
+    if (settings.enableMiyoSearchSkill === true) {
       parts.push(COPILOT_MIYO_SEARCH_STEERING);
     }
     // Extensibility seam — todo/plan steering. Today `AGENT_TODO_PLANNING_STEERING`

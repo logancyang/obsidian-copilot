@@ -77,6 +77,17 @@ When inspecting open tabs, the agent preserves Markdown notes, other file-backed
 
 The agent never reloads or restarts Obsidian, nor does it reload, disable, or uninstall the Copilot plugin hosting its session. Those actions terminate in-flight agent work. When a reload is required to finish verification, the agent leaves it for you to perform after the session ends. Reloading a different plugin remains available for plugin development.
 
+### Web and document routing
+
+Claude, Codex, and OpenCode choose between vault and web evidence from the question. They search the vault first for questions about your own notes. For current facts, external topics, and third-party documentation, they can proactively search the web without requiring an explicit “search the web” instruction. A weak or empty vault search can also lead to web research when the question is external in nature.
+
+Web research normally starts with one discovery search followed by targeted page fetches. The agent does not put text from your vault into a web query unless your request clearly requires researching that text.
+
+For PDF and EPUB files, the **Document Processor** choice under **Settings → Copilot → Miyo** also controls Agent Mode:
+
+- **Plus** uses the Copilot Plus PDF reader and can fall back to another available document-reading tool.
+- **Miyo** parses PDF and EPUB files locally with the Miyo CLI, including files outside the vault. If local parsing fails, the agent reports the error and does not upload the document to a cloud parser.
+
 ### Publish to Symposium
 
 Ask Claude, Codex, or OpenCode to publish an existing Markdown note as a web page. The agent creates self-contained HTML, renders Mermaid and Bases as static content, then asks for explicit confirmation because the resulting link is public.

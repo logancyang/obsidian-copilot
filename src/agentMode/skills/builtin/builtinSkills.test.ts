@@ -1,4 +1,10 @@
-import { BUILTIN_SKILLS, managedBuiltinSkills, MIYO_SEARCH_SKILL, PLUS_ENV } from "./builtinSkills";
+import {
+  BUILTIN_SKILLS,
+  managedBuiltinSkills,
+  MIYO_PARSE_SKILL,
+  MIYO_SEARCH_SKILL,
+  PLUS_ENV,
+} from "./builtinSkills";
 import {
   SYMPOSIUM_API_ORIGIN,
   SYMPOSIUM_MAX_HTML_BYTES,
@@ -297,21 +303,87 @@ describe("builtinSkills", () => {
     });
   });
 
+  describe("MIYO_PARSE_SKILL", () => {
+    const miyoParseScript = (ext: ".sh" | ".cmd"): string => {
+      const file = MIYO_PARSE_SKILL.files.find((candidate) => candidate.path.endsWith(ext));
+      if (!file) throw new Error(`miyo-parse ships no ${ext} script`);
+      return file.content;
+    };
+
+    it("is separate from the always-seeded and semantic-search skills", () => {
+      expect(BUILTIN_SKILLS).not.toContain(MIYO_PARSE_SKILL);
+      expect(MIYO_PARSE_SKILL).not.toBe(MIYO_SEARCH_SKILL);
+      expect(MIYO_PARSE_SKILL.name).toBe("miyo-parse");
+      expect(MIYO_PARSE_SKILL.enabledAgents).toEqual(["claude", "codex", "opencode"]);
+    });
+
+    it("ships one dependency-free wrapper for each supported OS", () => {
+      expect(MIYO_PARSE_SKILL.files.map((file) => file.path)).toEqual([
+        "miyo-parse.sh",
+        "miyo-parse.cmd",
+      ]);
+      expect(MIYO_PARSE_SKILL.files.some((file) => file.path.endsWith(".mjs"))).toBe(false);
+      expect(MIYO_PARSE_SKILL.skillMd).not.toContain("node ");
+    });
+
+    it("keeps the SKILL.md frontmatter version aligned with its numeric version", () => {
+      expect(MIYO_PARSE_SKILL.skillMd).toContain(
+        `copilot-builtin-version: "${MIYO_PARSE_SKILL.version}"`
+      );
+    });
+
+    it("runs the current Miyo parse command with one quoted file path", () => {
+      expect(miyoParseScript(".sh")).toContain('"$MIYO" parse "$FILE"');
+      expect(miyoParseScript(".cmd")).toContain('"%MIYO%" parse "%~1"');
+    });
+
+    it("resolves Miyo's install path before falling back to PATH on each OS", () => {
+      expect(miyoParseScript(".sh")).toContain("$HOME/.miyo/bin/miyo");
+      expect(miyoParseScript(".sh")).toContain("command -v miyo");
+      expect(miyoParseScript(".cmd")).toContain("%LOCALAPPDATA%\\Miyo\\bin\\miyo\\miyo.exe");
+      expect(miyoParseScript(".cmd")).toContain("where miyo");
+    });
+
+    it("documents the supported inputs, local output, and fail-closed privacy contract", () => {
+      const md = MIYO_PARSE_SKILL.skillMd;
+      expect(md).toMatch(/PDF or EPUB/i);
+      expect(md).toMatch(/anywhere on the filesystem/i);
+      expect(md).toMatch(/stdout/i);
+      expect(md).toMatch(/Never fall back/i);
+      expect(md).toContain("copilot-read-pdf");
+      expect(md).toMatch(/local-processing choice/i);
+    });
+
+    it("does not embed Copilot Plus credentials", () => {
+      expect(MIYO_PARSE_SKILL.skillMd).not.toContain(PLUS_ENV.licenseKey);
+      expect(MIYO_PARSE_SKILL.skillMd).not.toContain(PLUS_ENV.baseUrl);
+      expect(miyoParseScript(".sh")).not.toContain(PLUS_ENV.licenseKey);
+      expect(miyoParseScript(".cmd")).not.toContain(PLUS_ENV.licenseKey);
+    });
+  });
+
   describe("managedBuiltinSkills()", () => {
-    it("includes the Miyo skill only when Miyo is in use", () => {
+    it("preserves the existing one-argument semantic-search gate", () => {
       expect(managedBuiltinSkills(true)).toContain(MIYO_SEARCH_SKILL);
+      expect(managedBuiltinSkills(true)).not.toContain(MIYO_PARSE_SKILL);
       expect(managedBuiltinSkills(false)).not.toContain(MIYO_SEARCH_SKILL);
     });
 
-    it("appends Miyo after the Plus skills, preserving their order", () => {
-      expect(managedBuiltinSkills(true).map((s) => s.name)).toEqual([
+    it("gates search and document parsing independently while preserving order", () => {
+      expect(managedBuiltinSkills(false, true).map((skill) => skill.name)).toEqual([
+        ...BUILTIN_SKILLS.map((skill) => skill.name),
+        "miyo-parse",
+      ]);
+      expect(managedBuiltinSkills(true, true).map((skill) => skill.name)).toEqual([
         ...BUILTIN_SKILLS.map((s) => s.name),
         "miyo-search",
+        "miyo-parse",
       ]);
     });
 
-    it("returns the stable BUILTIN_SKILLS reference when Miyo is off", () => {
+    it("returns the stable BUILTIN_SKILLS reference when both Miyo skills are off", () => {
       expect(managedBuiltinSkills(false)).toBe(BUILTIN_SKILLS);
+      expect(managedBuiltinSkills(false, false)).toBe(BUILTIN_SKILLS);
     });
   });
 });

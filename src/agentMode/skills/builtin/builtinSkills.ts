@@ -583,6 +583,26 @@ export const BUILTIN_SKILLS: readonly BuiltinSkill[] = [
 ];
 
 const MIYO_SEARCH_VERSION = 2;
+const MIYO_PARSE_VERSION = 1;
+
+const MIYO_POSIX_RESOLVER = `# Absolute install path first (Obsidian shells often miss Miyo's bin on PATH).
+if [ -x "$HOME/.miyo/bin/miyo" ]; then
+  MIYO="$HOME/.miyo/bin/miyo"
+elif command -v miyo >/dev/null 2>&1; then
+  MIYO=miyo
+else
+  die "Miyo CLI not found (no ~/.miyo/bin/miyo and 'miyo' not on PATH). The Miyo desktop app is not installed — tell the user to install Miyo, then retry. Do not retry in a loop." 3
+fi`;
+
+const MIYO_WINDOWS_RESOLVER = `set "MIYO=%LOCALAPPDATA%\\Miyo\\bin\\miyo\\miyo.exe"
+if not exist "%MIYO%" (
+  set "MIYO="
+  where miyo >nul 2>&1 && set "MIYO=miyo"
+)
+if not defined MIYO (
+  echo Miyo CLI not found. The Miyo desktop app is not installed - tell the user to install Miyo, then retry. Do not retry in a loop. 1>&2
+  exit /b 3
+)`;
 
 /**
  * POSIX (macOS/Linux) wrapper for the Miyo CLI; Windows uses the `.cmd` below.
@@ -604,14 +624,7 @@ die() {
 QUERY="$*"
 [ -n "$QUERY" ] || die "Usage: sh miyo-search.sh <query>" 1
 
-# Absolute install path first (Obsidian shells often miss Miyo's bin on PATH).
-if [ -x "$HOME/.miyo/bin/miyo" ]; then
-  MIYO="$HOME/.miyo/bin/miyo"
-elif command -v miyo >/dev/null 2>&1; then
-  MIYO=miyo
-else
-  die "Miyo CLI not found (no ~/.miyo/bin/miyo and 'miyo' not on PATH). The Miyo desktop app is not installed — tell the user to install and open Miyo, then retry. Do not retry in a loop." 3
-fi
+${MIYO_POSIX_RESOLVER}
 
 OUT=$("$MIYO" search "$QUERY" -n 10 --json 2>&1) || die "Miyo search failed — the Miyo app may not be running. Tell the user to open Miyo, then continue without vault search if they can't. Details: $OUT" 1
 printf '%s\\n' "$OUT"
@@ -630,16 +643,35 @@ if "%~1"=="" (
   echo Usage: miyo-search.cmd "query" 1>&2
   exit /b 1
 )
-set "MIYO=%LOCALAPPDATA%\\Miyo\\bin\\miyo\\miyo.exe"
-if not exist "%MIYO%" (
-  set "MIYO="
-  where miyo >nul 2>&1 && set "MIYO=miyo"
-)
-if not defined MIYO (
-  echo Miyo CLI not found. The Miyo desktop app is not installed - tell the user to install and open Miyo, then retry. Do not retry in a loop. 1>&2
-  exit /b 3
-)
+${MIYO_WINDOWS_RESOLVER}
 "%MIYO%" search %* -n 10 --json
+`;
+
+const MIYO_PARSE_SH = `#!/bin/sh
+# Parse one local PDF or EPUB through the Miyo CLI and print Markdown/text.
+die() {
+  printf '%s\\n' "$1" >&2
+  exit "\${2:-2}"
+}
+
+FILE="$1"
+[ -n "$FILE" ] || die "Usage: sh miyo-parse.sh <file>" 1
+
+${MIYO_POSIX_RESOLVER}
+
+"$MIYO" parse "$FILE"
+`;
+
+const MIYO_PARSE_CMD = `@echo off
+setlocal enableextensions
+rem Parse one local PDF or EPUB through the Miyo CLI and print Markdown/text.
+if "%~1"=="" (
+  echo Usage: miyo-parse.cmd "file" 1>&2
+  exit /b 1
+)
+${MIYO_WINDOWS_RESOLVER}
+"%MIYO%" parse "%~1"
+exit /b %ERRORLEVEL%
 `;
 
 /**
@@ -652,10 +684,9 @@ if not defined MIYO (
  * Smaller models were giving up after the old PATH-first prose attempt failed in
  * Obsidian's reduced-PATH shells.
  *
- * Gated on Miyo being in use: the host only seeds this skill when
- * `shouldUseMiyo(...)` is true (see `seedManagedBuiltins` in `agentMode/index`),
- * and prunes the seeded copy when Miyo is turned off — matching the issue's
- * "surface only when Miyo is installed/running" intent.
+ * The host seeds this skill only when the dedicated Miyo search-skill setting
+ * is enabled (see `seedManagedBuiltins` in `agentMode/index`) and prunes the
+ * managed copy when the setting is turned off.
  */
 export const MIYO_SEARCH_SKILL: BuiltinSkill = {
   name: "miyo-search",
@@ -731,12 +762,77 @@ The script exits with a clear message when Miyo can't be used:
 };
 
 /**
- * The builtin skills the host should seed into the canonical folder. The Plus
- * relay skills are always included; the Miyo skill is gated on Miyo being in
- * use (the host passes \`includeMiyo = shouldUseMiyo(...)\`). Kept pure so the
- * gating decision stays in the host layer (the skills layer must not import
- * \`@/miyo\`), while the composition is unit-testable here.
+ * Parses local PDF and EPUB files through the standalone Miyo CLI.
+ *
+ * This skill is gated by the Document Processor setting. Unlike the Plus PDF
+ * relay, it keeps document contents local and deliberately fails closed: the
+ * instructions forbid silently switching to a cloud parser if Miyo fails.
  */
-export function managedBuiltinSkills(includeMiyo: boolean): readonly BuiltinSkill[] {
-  return includeMiyo ? [...BUILTIN_SKILLS, MIYO_SEARCH_SKILL] : BUILTIN_SKILLS;
+export const MIYO_PARSE_SKILL: BuiltinSkill = {
+  name: "miyo-parse",
+  version: MIYO_PARSE_VERSION,
+  enabledAgents: ["claude", "codex", "opencode"],
+  skillMd: `---
+name: miyo-parse
+description: Parse a local PDF or EPUB file into Markdown/text with the local Miyo CLI. Use this for document reading when Miyo is the selected Document Processor. The file can be anywhere on the filesystem and does not need to be indexed or copied into the vault.
+metadata:
+  copilot-enabled-agents: claude, codex, opencode
+  copilot-builtin-version: "${MIYO_PARSE_VERSION}"
+---
+
+# Parse a document locally with Miyo
+
+Use Miyo to extract Markdown/text from one PDF or EPUB. Parsing runs locally,
+works for files anywhere on the filesystem, and does not require the Miyo
+service to be running.
+
+## How to run
+
+Find the absolute path to this SKILL.md file, then run the adjacent wrapper
+with exactly one quoted file path.
+
+On macOS or Linux:
+
+\`\`\`bash
+sh "/absolute/path/to/this/skill/directory/miyo-parse.sh" "/absolute/path/to/document.pdf"
+\`\`\`
+
+On Windows PowerShell:
+
+\`\`\`powershell
+& "/absolute/path/to/this/skill/directory/miyo-parse.cmd" "C:\\absolute\\path\\to\\document.pdf"
+\`\`\`
+
+The wrapper prints the parsed Markdown/text to stdout. Use that output to
+answer the user's question.
+
+## If it reports a problem
+
+Report the error clearly and stop parsing that document. Never fall back to
+\`copilot-read-pdf\` or any other cloud document parser: selecting Miyo is an
+explicit local-processing choice. Do not retry in a loop.
+`,
+  files: [
+    { path: "miyo-parse.sh", content: MIYO_PARSE_SH },
+    { path: "miyo-parse.cmd", content: MIYO_PARSE_CMD },
+  ],
+};
+
+/**
+ * Returns the builtin skills enabled by the host's independent Miyo settings.
+ *
+ * @param includeMiyoSearch Whether the Miyo vault-search skill is enabled.
+ * @param includeMiyoParse Whether Miyo is the selected document processor.
+ */
+export function managedBuiltinSkills(
+  includeMiyoSearch: boolean,
+  includeMiyoParse = false
+): readonly BuiltinSkill[] {
+  if (!includeMiyoSearch && !includeMiyoParse) return BUILTIN_SKILLS;
+
+  return [
+    ...BUILTIN_SKILLS,
+    ...(includeMiyoSearch ? [MIYO_SEARCH_SKILL] : []),
+    ...(includeMiyoParse ? [MIYO_PARSE_SKILL] : []),
+  ];
 }
