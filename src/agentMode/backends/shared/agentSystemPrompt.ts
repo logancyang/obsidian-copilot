@@ -69,13 +69,25 @@ Default to one discovery search followed by targeted page fetches, or fetch dire
 
 If a skill is missing, disabled, reports that Copilot Plus is not active, or fails for this particular request (for example a page it can't fetch or any other relay error), silently fall back to your own equivalent tool (or, if you have none for that task, tell the user it's unavailable) and complete the request — never refuse and never block the user on upgrading. Only pass along an upgrade or renewal note when the skill's own message explicitly invites it, and keep any such mention brief and occasional.`;
 
-/** Cloud PDF steering used when Copilot Plus is the selected document processor. */
+/**
+ * Document steering when Copilot Plus is the selected Document Processor. Kept
+ * out of `COPILOT_PLUS_TOOLS_STEERING` because the Miyo alternative below must
+ * be able to replace it wholesale: naming `copilot-read-pdf` in an
+ * always-sent block would point a Miyo user at a skill that is not seeded.
+ */
 export const COPILOT_PLUS_DOCUMENT_STEERING = `## Document processing
-For reading a PDF file, prefer the bundled \`copilot-read-pdf\` skill over your own tool. If the skill is missing, disabled, unavailable to the user's Copilot Plus account, or fails for this file, silently fall back to your own equivalent tool. If no document-reading tool is available, tell the user; never block them on upgrading.`;
+For reading a PDF file, prefer the bundled \`copilot-read-pdf\` skill over any built-in tool of your own. The fallback rule above applies to it: if it is missing, disabled, or fails for this file, use your own equivalent tool instead.`;
 
-/** Local, fail-closed document steering used when Miyo is selected. */
-export const COPILOT_MIYO_DOCUMENT_STEERING = `## Local document processing (Miyo)
-Miyo is the selected Document Processor. For any PDF or EPUB file, use the \`miyo-parse\` skill, which parses the document locally. Never use \`copilot-read-pdf\` or another cloud parser as a fallback. If the Miyo skill is missing or fails, report the problem clearly without uploading the document elsewhere.`;
+/**
+ * Document steering when Miyo is the selected Document Processor. Fails closed
+ * on purpose — it must cancel the blanket fallback clause in
+ * `COPILOT_PLUS_TOOLS_STEERING`, or the agent could read "silently fall back to
+ * your own equivalent tool" as permission to send the document to the cloud.
+ */
+export const COPILOT_MIYO_DOCUMENT_STEERING = `## Document processing (local, Miyo)
+The user selected Miyo as their Document Processor, so PDFs and EPUBs must stay on their machine. For any PDF or EPUB file, use the \`miyo-parse\` skill, which parses it locally.
+
+The fallback rule above does NOT apply here. If \`miyo-parse\` is missing or fails, report the problem and stop — never send the document to \`copilot-read-pdf\`, another cloud parser, or any other web service.`;
 
 /**
  * Steers the agent toward the bundled `miyo-search` skill for vault search. A

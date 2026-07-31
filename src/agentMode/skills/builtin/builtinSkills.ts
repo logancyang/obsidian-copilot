@@ -585,6 +585,7 @@ export const BUILTIN_SKILLS: readonly BuiltinSkill[] = [
 const MIYO_SEARCH_VERSION = 2;
 const MIYO_PARSE_VERSION = 1;
 
+/** Shared by both Miyo wrappers; the host script must define `die` before it. */
 const MIYO_POSIX_RESOLVER = `# Absolute install path first (Obsidian shells often miss Miyo's bin on PATH).
 if [ -x "$HOME/.miyo/bin/miyo" ]; then
   MIYO="$HOME/.miyo/bin/miyo"
@@ -656,6 +657,7 @@ die() {
 
 FILE="$1"
 [ -n "$FILE" ] || die "Usage: sh miyo-parse.sh <file>" 1
+[ -f "$FILE" ] && [ -r "$FILE" ] || die "Could not read file: $FILE (pass an absolute path)." 1
 
 ${MIYO_POSIX_RESOLVER}
 
@@ -669,9 +671,13 @@ if "%~1"=="" (
   echo Usage: miyo-parse.cmd "file" 1>&2
   exit /b 1
 )
+rem Never echo %~1 back: an unquoted & or > in the path would run as a command.
+if not exist "%~1" (
+  echo Could not read that file. Pass an absolute path to a PDF or EPUB. 1>&2
+  exit /b 1
+)
 ${MIYO_WINDOWS_RESOLVER}
 "%MIYO%" parse "%~1"
-exit /b %ERRORLEVEL%
 `;
 
 /**
@@ -818,21 +824,48 @@ explicit local-processing choice. Do not retry in a loop.
   ],
 };
 
-/**
- * Returns the builtin skills enabled by the host's independent Miyo settings.
- *
- * @param includeMiyoSearch Whether the Miyo vault-search skill is enabled.
- * @param includeMiyoParse Whether Miyo is the selected document processor.
- */
-export function managedBuiltinSkills(
-  includeMiyoSearch: boolean,
-  includeMiyoParse = false
-): readonly BuiltinSkill[] {
-  if (!includeMiyoSearch && !includeMiyoParse) return BUILTIN_SKILLS;
+/** Which conditionally-seeded Miyo capabilities the user has turned on. */
+export interface MiyoSkillGates {
+  /** Mirrors the `enableMiyoSearchSkill` setting. */
+  search: boolean;
+  /** Mirrors `docProcessorBackend === "miyo"`. */
+  documents: boolean;
+}
 
-  return [
-    ...BUILTIN_SKILLS,
-    ...(includeMiyoSearch ? [MIYO_SEARCH_SKILL] : []),
-    ...(includeMiyoParse ? [MIYO_PARSE_SKILL] : []),
-  ];
+/** Every builtin the host may seed, gated or not — the universe it reconciles. */
+const ALL_MANAGED_SKILLS: readonly BuiltinSkill[] = [
+  ...BUILTIN_SKILLS,
+  MIYO_SEARCH_SKILL,
+  MIYO_PARSE_SKILL,
+];
+
+/**
+ * Splits the managed builtins into what the given gates want on disk and what
+ * must be removed, so the host can't seed a gate without pruning its opposite.
+ *
+ * Miyo-owned documents drop `copilot-read-pdf` outright instead of merely
+ * steering away from it: that choice is fail-closed (see
+ * `resolveDocProcessorBackend`), and a cloud PDF skill left on disk is one
+ * ignored instruction away from uploading a document the user kept local.
+ *
+ * @param gates Live state of the two independent Miyo settings.
+ */
+export function planManagedBuiltins(gates: MiyoSkillGates): {
+  seed: readonly BuiltinSkill[];
+  prune: readonly string[];
+} {
+  const seed: readonly BuiltinSkill[] =
+    !gates.search && !gates.documents
+      ? BUILTIN_SKILLS
+      : [
+          ...(gates.documents
+            ? BUILTIN_SKILLS.filter((skill) => skill !== READ_PDF)
+            : BUILTIN_SKILLS),
+          ...(gates.search ? [MIYO_SEARCH_SKILL] : []),
+          ...(gates.documents ? [MIYO_PARSE_SKILL] : []),
+        ];
+  return {
+    seed,
+    prune: ALL_MANAGED_SKILLS.filter((skill) => !seed.includes(skill)).map((skill) => skill.name),
+  };
 }

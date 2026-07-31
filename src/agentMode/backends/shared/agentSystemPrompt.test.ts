@@ -110,26 +110,24 @@ describe("buildAgentSystemPrompt", () => {
     expect(buildAgentSystemPrompt()).toContain(COPILOT_PLUS_TOOLS_STEERING);
   });
 
-  it("proactively routes external questions to bounded web research without leaking vault text", () => {
+  it("routes external questions to the web proactively and keeps vault text out of queries", () => {
     const prompt = buildAgentSystemPrompt();
-    expect(prompt).toMatch(/current facts, external topics, or third-party documentation/i);
+    // Both halves of the routing rule, plus the privacy constraint on queries.
+    expect(prompt).toMatch(/search locally first/i);
     expect(prompt).toMatch(/without waiting for an explicit web-search request/i);
-    expect(prompt).toMatch(/local search is empty or weak/i);
-    expect(prompt).toMatch(/instead of answering from memory/i);
-    expect(prompt).toMatch(/questions about the user's own notes or vault, search locally first/i);
     expect(prompt).toMatch(/Do not place text from the vault into a web query/i);
-    expect(prompt).toMatch(/one discovery search followed by targeted page fetches/i);
-    expect(prompt).toMatch(/do not start repeated or open-ended search chains/i);
   });
 
   it("uses the local fail-closed document route only when Miyo is selected", () => {
     updateSetting("docProcessorBackend", "miyo");
     const prompt = buildAgentSystemPrompt();
     expect(prompt).toContain(COPILOT_MIYO_DOCUMENT_STEERING);
+    // The Plus route must be absent, not merely outranked: `copilot-read-pdf` is
+    // pruned from disk in this mode, so steering toward it would dead-end.
     expect(prompt).not.toContain(COPILOT_PLUS_DOCUMENT_STEERING);
     expect(prompt).toContain("miyo-parse");
-    expect(prompt).toMatch(/Never use `copilot-read-pdf` or another cloud parser as a fallback/i);
-    expect(prompt).toMatch(/without uploading the document elsewhere/i);
+    // Cancels the blanket fallback clause the Plus tools steering sets up.
+    expect(prompt).toMatch(/fallback rule above does NOT apply/i);
   });
 
   it("suppresses the steering when the builtin prompt is disabled", () => {

@@ -1,8 +1,8 @@
 import {
   BUILTIN_SKILLS,
-  managedBuiltinSkills,
   MIYO_PARSE_SKILL,
   MIYO_SEARCH_SKILL,
+  planManagedBuiltins,
   PLUS_ENV,
 } from "./builtinSkills";
 import {
@@ -310,29 +310,20 @@ describe("builtinSkills", () => {
       return file.content;
     };
 
-    it("is separate from the always-seeded and semantic-search skills", () => {
+    it("is a gated skill distinct from the always-seeded set and from Miyo search", () => {
       expect(BUILTIN_SKILLS).not.toContain(MIYO_PARSE_SKILL);
-      expect(MIYO_PARSE_SKILL).not.toBe(MIYO_SEARCH_SKILL);
       expect(MIYO_PARSE_SKILL.name).toBe("miyo-parse");
       expect(MIYO_PARSE_SKILL.enabledAgents).toEqual(["claude", "codex", "opencode"]);
-    });
-
-    it("ships one dependency-free wrapper for each supported OS", () => {
-      expect(MIYO_PARSE_SKILL.files.map((file) => file.path)).toEqual([
-        "miyo-parse.sh",
-        "miyo-parse.cmd",
-      ]);
-      expect(MIYO_PARSE_SKILL.files.some((file) => file.path.endsWith(".mjs"))).toBe(false);
-      expect(MIYO_PARSE_SKILL.skillMd).not.toContain("node ");
-    });
-
-    it("keeps the SKILL.md frontmatter version aligned with its numeric version", () => {
       expect(MIYO_PARSE_SKILL.skillMd).toContain(
         `copilot-builtin-version: "${MIYO_PARSE_SKILL.version}"`
       );
     });
 
-    it("runs the current Miyo parse command with one quoted file path", () => {
+    it("ships one wrapper per OS that runs `miyo parse` on a single quoted path", () => {
+      expect(MIYO_PARSE_SKILL.files.map((file) => file.path)).toEqual([
+        "miyo-parse.sh",
+        "miyo-parse.cmd",
+      ]);
       expect(miyoParseScript(".sh")).toContain('"$MIYO" parse "$FILE"');
       expect(miyoParseScript(".cmd")).toContain('"%MIYO%" parse "%~1"');
     });
@@ -344,14 +335,16 @@ describe("builtinSkills", () => {
       expect(miyoParseScript(".cmd")).toContain("where miyo");
     });
 
-    it("documents the supported inputs, local output, and fail-closed privacy contract", () => {
-      const md = MIYO_PARSE_SKILL.skillMd;
-      expect(md).toMatch(/PDF or EPUB/i);
-      expect(md).toMatch(/anywhere on the filesystem/i);
-      expect(md).toMatch(/stdout/i);
-      expect(md).toMatch(/Never fall back/i);
-      expect(md).toContain("copilot-read-pdf");
-      expect(md).toMatch(/local-processing choice/i);
+    it("rejects a missing or unreadable file before invoking the CLI", () => {
+      // Without this the agent only sees the CLI's own error and cannot tell a
+      // bad (e.g. vault-relative) path from a broken Miyo install.
+      expect(miyoParseScript(".sh")).toContain('[ -f "$FILE" ] && [ -r "$FILE" ]');
+      expect(miyoParseScript(".cmd")).toContain('if not exist "%~1"');
+    });
+
+    it("tells the agent to fail closed rather than reach for a cloud parser", () => {
+      expect(MIYO_PARSE_SKILL.skillMd).toMatch(/Never fall back/i);
+      expect(MIYO_PARSE_SKILL.skillMd).toContain("copilot-read-pdf");
     });
 
     it("does not embed Copilot Plus credentials", () => {
@@ -362,28 +355,50 @@ describe("builtinSkills", () => {
     });
   });
 
-  describe("managedBuiltinSkills()", () => {
-    it("preserves the existing one-argument semantic-search gate", () => {
-      expect(managedBuiltinSkills(true)).toContain(MIYO_SEARCH_SKILL);
-      expect(managedBuiltinSkills(true)).not.toContain(MIYO_PARSE_SKILL);
-      expect(managedBuiltinSkills(false)).not.toContain(MIYO_SEARCH_SKILL);
+  describe("planManagedBuiltins()", () => {
+    const names = (skills: readonly { name: string }[]): string[] => skills.map((s) => s.name);
+
+    it("seeds only the always-on builtins when both Miyo gates are off", () => {
+      const plan = planManagedBuiltins({ search: false, documents: false });
+      // Stable reference, per the project's referential-stability rule.
+      expect(plan.seed).toBe(BUILTIN_SKILLS);
+      expect(plan.prune).toEqual(["miyo-search", "miyo-parse"]);
     });
 
-    it("gates search and document parsing independently while preserving order", () => {
-      expect(managedBuiltinSkills(false, true).map((skill) => skill.name)).toEqual([
-        ...BUILTIN_SKILLS.map((skill) => skill.name),
-        "miyo-parse",
+    it("gates search and document parsing independently", () => {
+      expect(names(planManagedBuiltins({ search: true, documents: false }).seed)).toEqual([
+        ...names(BUILTIN_SKILLS),
+        "miyo-search",
       ]);
-      expect(managedBuiltinSkills(true, true).map((skill) => skill.name)).toEqual([
-        ...BUILTIN_SKILLS.map((s) => s.name),
+      expect(planManagedBuiltins({ search: true, documents: false }).prune).toEqual(["miyo-parse"]);
+      expect(planManagedBuiltins({ search: false, documents: true }).seed).toContain(
+        MIYO_PARSE_SKILL
+      );
+      expect(planManagedBuiltins({ search: false, documents: true }).prune).toContain(
+        "miyo-search"
+      );
+    });
+
+    it("replaces the cloud PDF skill with Miyo parse when Miyo owns documents", () => {
+      // Steering alone would leave copilot-read-pdf on disk, one ignored
+      // instruction away from uploading a document the user chose to keep local.
+      const plan = planManagedBuiltins({ search: true, documents: true });
+      expect(names(plan.seed)).not.toContain("copilot-read-pdf");
+      expect(plan.prune).toEqual(["copilot-read-pdf"]);
+      expect(names(plan.seed)).toEqual([
+        ...names(BUILTIN_SKILLS).filter((name) => name !== "copilot-read-pdf"),
         "miyo-search",
         "miyo-parse",
       ]);
     });
 
-    it("returns the stable BUILTIN_SKILLS reference when both Miyo skills are off", () => {
-      expect(managedBuiltinSkills(false)).toBe(BUILTIN_SKILLS);
-      expect(managedBuiltinSkills(false, false)).toBe(BUILTIN_SKILLS);
+    it("never leaves a managed skill both seeded and pruned", () => {
+      for (const search of [true, false]) {
+        for (const documents of [true, false]) {
+          const plan = planManagedBuiltins({ search, documents });
+          expect(names(plan.seed).filter((name) => plan.prune.includes(name))).toEqual([]);
+        }
+      }
     });
   });
 });

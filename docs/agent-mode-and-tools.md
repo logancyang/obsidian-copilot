@@ -86,7 +86,9 @@ Web research normally starts with one discovery search followed by targeted page
 For PDF and EPUB files, the **Document Processor** choice under **Settings → Copilot → Miyo** also controls Agent Mode:
 
 - **Plus** uses the Copilot Plus PDF reader and can fall back to another available document-reading tool.
-- **Miyo** parses PDF and EPUB files locally with the Miyo CLI, including files outside the vault. If local parsing fails, the agent reports the error and does not upload the document to a cloud parser.
+- **Miyo** parses PDF and EPUB files locally with the Miyo CLI, including files outside the vault. Copilot removes the Plus PDF skill from the agent's skills folder while this is selected, so a document cannot reach a cloud parser by mistake. If local parsing fails, the agent reports the error and stops.
+
+Switching between the two reseeds the skills folder and restarts running agents, so the change applies without a reload.
 
 ### Publish to Symposium
 
