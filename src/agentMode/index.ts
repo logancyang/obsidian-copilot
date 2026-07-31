@@ -402,8 +402,26 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
       // key, so it's a no-op when the rebuilt prompt is unchanged.
       void seedManagedBuiltins(nextFolder)
         .then(() => {
-          if (miyoAvailabilityChanged) {
-            restartSystemPromptAffected();
+          if (!miyoAvailabilityChanged) return;
+          restartSystemPromptAffected();
+          if (prev.docProcessorBackend === next.docProcessorBackend) return;
+          // Backends that opt out above rebuild the prompt per `newSession()`, so
+          // a NEW chat is already correct — but a chat already open keeps the
+          // document route it was born with. After a switch to Miyo that means a
+          // live Claude session still holds the Plus steering while
+          // `copilot-read-pdf` is gone, and the fallback clause sends the PDF to
+          // its own reader. Restart them so the replacement session rebuilds the
+          // prompt on the route the user actually chose.
+          for (const descriptor of listBackendDescriptors()) {
+            if (descriptor.restartOnSystemPromptChange) continue;
+            void manager
+              .restartBackend(descriptor.id, "document processor changed")
+              .catch((e) =>
+                logError(
+                  `[AgentMode] restart after doc processor change failed: ${descriptor.id}`,
+                  e
+                )
+              );
           }
         })
         .catch((e) => logError("[Skills] builtin skill re-seeding failed", e));
