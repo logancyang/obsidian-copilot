@@ -925,6 +925,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                 ) : (
                   <>
                     <AgentChatMessages
+                      key={sessionId}
                       messages={messages}
                       app={app}
                       currentPlan={currentPlan}
