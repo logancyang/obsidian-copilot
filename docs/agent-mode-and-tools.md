@@ -36,6 +36,14 @@ The mode picker beside the message box controls how much the active agent can do
 
 The available modes depend on the selected agent. Copilot normalizes equivalent modes across supported versions of Claude, Codex, and OpenCode.
 
+When **Default** mode asks for permission, the request stays in the chat until
+you choose an action, cancel the turn, or close the session. Hover or focus a
+persistent action to inspect its detailed permission rule.
+
+### Switching Agents and Models
+
+Changing the agent or model from the picker keeps the text and attachments currently in the message box. This lets you continue composing the same message after switching between Claude, Codex, and OpenCode. **New Chat** intentionally starts with an empty message box.
+
 ### Max Iterations
 
 The agent works in iteration cycles (think → use a tool → think → use a tool → answer). You can control the maximum number of iterations before the agent stops:
@@ -68,6 +76,25 @@ The Obsidian CLI skill first verifies that the CLI's `version` command succeeds.
 When inspecting open tabs, the agent preserves Markdown notes, other file-backed tabs, and non-file views as workspace context. It reads content only from explicit vault paths reported by Obsidian and never treats a tab title or ID as a filename.
 
 The agent never reloads or restarts Obsidian, nor does it reload, disable, or uninstall the Copilot plugin hosting its session. Those actions terminate in-flight agent work. When a reload is required to finish verification, the agent leaves it for you to perform after the session ends. Reloading a different plugin remains available for plugin development.
+
+### Web and document routing
+
+Claude, Codex, and OpenCode choose between vault and web evidence from the question. They search the vault first for questions about your own notes. For current facts, external topics, and third-party documentation, they can proactively search the web without requiring an explicit “search the web” instruction. A weak or empty vault search can also lead to web research when the question is external in nature.
+
+Web research normally starts with one discovery search followed by targeted page fetches. The agent does not put text from your vault into a web query unless your request clearly requires researching that text.
+
+For PDF and EPUB files, the **Document Processor** choice under **Settings → Copilot → Miyo** also controls Agent Mode:
+
+- **Plus** uses the Copilot Plus PDF reader and can fall back to another available document-reading tool.
+- **Miyo** parses PDF and EPUB files locally, including files outside the vault. Copilot removes the Plus PDF skill from the agent's skills folder while this is selected, so a document cannot reach a cloud parser by mistake. If local parsing fails, the agent reports the error and stops.
+
+Unlike chat, Agent Mode parses through the Miyo CLI rather than the Miyo server, so the Miyo option needs the app installed on the same machine as Obsidian; a remote Miyo server does not enable it. Without a local install, either install Miyo or set Document Processor back to **Plus**. Switching between the two reseeds the skills folder and restarts running agents, so either choice applies without a reload.
+
+### Publish to Symposium
+
+Ask Claude, Codex, or OpenCode to publish an existing Markdown note as a web page. The agent creates self-contained HTML, renders Mermaid and Bases as static content, then asks for explicit confirmation because the resulting link is public.
+
+The skill handles initial publishing only. It appends the receipt to the hidden history file `.symposium/publish-history.md` and stores the full public link in the required source note's `symposium` property. Use **Publish file to Symposium** to update or withdraw the page.
 
 ### Always-Enabled Tools
 

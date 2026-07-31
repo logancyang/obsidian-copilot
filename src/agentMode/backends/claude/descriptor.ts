@@ -20,6 +20,7 @@ import { ClaudeSdkBackendProcess } from "@/agentMode/sdk/ClaudeSdkBackendProcess
 import { getCachedSdkCatalog, synthesizeEffortConfigOption } from "@/agentMode/sdk/effortOption";
 import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemPrompt";
 import { buildBuiltinSkillEnv } from "@/agentMode/backends/shared/builtinSkillEnv";
+import { getVaultBase } from "@/utils/vaultPath";
 import type {
   BackendConfigOption,
   EnabledModelEntry,
@@ -268,12 +269,14 @@ export const ClaudeBackendDescriptor: BackendDescriptor = {
     return isClaudePlanModePlanFilePath(absolutePath);
   },
 
-  async applySelection(session: AgentSession, selection: ModelSelection): Promise<void> {
+  async applySelection(session: AgentSession, selection: ModelSelection, context): Promise<void> {
     // Claude's wire id is just the baseModelId — effort travels through
     // `setConfigOption`, not the model id. Skip the model round-trip when
     // the base hasn't changed, otherwise effort-only ticks would fire a
     // pointless `setSessionModel` on every slider drag.
-    const currentBase = session.getState()?.model?.current.baseModelId;
+    const currentBase = context
+      ? context.backendReportedCurrent?.baseModelId
+      : session.getState()?.model?.current.baseModelId;
     if (currentBase !== selection.baseModelId) {
       await session.applyModelWireId(claudeWire.encode(selection));
     }
@@ -304,7 +307,7 @@ export const ClaudeBackendDescriptor: BackendDescriptor = {
       getEnvOverrides: () => getSettings().agentMode?.backends?.claude?.envOverrides,
       // Plugin-managed runtime paths and credentials for builtin skills.
       // Passed as a callback so `sdk/` need not import `backends/` (lint boundary).
-      getManagedEnv: () => buildBuiltinSkillEnv(args.clientVersion),
+      getManagedEnv: () => buildBuiltinSkillEnv(args.clientVersion, getVaultBase(args.app) ?? ""),
       checkAuth: async () =>
         (await getClaudeAuthStatus(claudePath, claudeChildEnv(getSettings()))).loggedIn,
       checkCompatibility: () =>

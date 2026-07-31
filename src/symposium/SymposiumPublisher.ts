@@ -6,20 +6,23 @@ import {
   type SymposiumPersistenceResult,
 } from "@/components/modals/SymposiumModal";
 import { getDecryptedKey } from "@/encryptionService";
+import { logWarn } from "@/logger";
 import { getSettings } from "@/settings/model";
 import { SymposiumClient, SymposiumClientError } from "@/symposium/SymposiumClient";
 import {
   SymposiumFrontmatterParseError,
   getSymposiumDocId,
   removeSymposiumDocId,
-  saveSymposiumDocId,
+  saveSymposiumLink,
   SymposiumPropertyConflictError,
 } from "@/symposium/symposiumFrontmatter";
 import {
   buildSymposiumDocument,
   SymposiumDocumentTooLargeError,
 } from "@/symposium/symposiumDocument";
+import { appendSymposiumLedgerEntry, type SymposiumLedgerEntry } from "@/symposium/symposiumLedger";
 import type { SymposiumAction, SymposiumDocument, SymposiumReceipt } from "@/symposium/types";
+import { sha256 } from "@/utils/hash";
 import { App, Component, TFile } from "obsidian";
 
 interface SymposiumClientPort {
@@ -38,6 +41,7 @@ interface SymposiumPublisherDependencies {
   loadLicenseKey?: () => Promise<string>;
   buildDocument?: (file: TFile, ownerDocument: Document) => Promise<SymposiumDocument>;
   createModal?: (options: SymposiumModalOptions) => SymposiumModalPort;
+  recordLedger?: (entry: SymposiumLedgerEntry) => Promise<void>;
 }
 
 const MISSING_LICENSE_MESSAGE =
@@ -129,6 +133,7 @@ export class SymposiumPublisher {
     ownerDocument: Document
   ) => Promise<SymposiumDocument>;
   private readonly createModal: (options: SymposiumModalOptions) => SymposiumModalPort;
+  private readonly recordLedger: (entry: SymposiumLedgerEntry) => Promise<void>;
   private readonly inFlightFiles = new Set<TFile>();
   private readonly blockedPublishResults = new Map<
     TFile,
@@ -148,6 +153,8 @@ export class SymposiumPublisher {
       ((file, ownerDocument) => buildDocumentWithComponent(this.app, file, ownerDocument));
     this.createModal =
       dependencies.createModal ?? ((options) => new SymposiumModal(this.app, options));
+    this.recordLedger =
+      dependencies.recordLedger ?? ((entry) => appendSymposiumLedgerEntry(this.app.vault, entry));
   }
 
   /**
@@ -260,7 +267,7 @@ export class SymposiumPublisher {
         return {
           kind: "failure",
           action,
-          message: "This note no longer has a valid Symposium document id.",
+          message: "This note no longer has a valid Symposium link.",
           accessNotice: false,
           retryable: false,
         };
@@ -272,6 +279,15 @@ export class SymposiumPublisher {
             return identityChangedFailure(action);
           }
           await this.client.delete(docId!, licenseKey);
+          await this.recordLedgerSafely({
+            docId: docId!,
+            status: "unpublished",
+            notePath: file.path,
+            url: null,
+            publishedAt: null,
+            version: null,
+            contentHash: null,
+          });
           return await this.removeLocalIdentity(file, docId!);
         }
 
@@ -281,11 +297,13 @@ export class SymposiumPublisher {
         }
         if (action === "publish") {
           const receipt = await this.client.publish(document, licenseKey);
+          await this.recordPublishedReceipt(file, document, receipt);
           return await this.savePublishedIdentity(file, receipt, null);
         }
 
         try {
           const receipt = await this.client.update(docId!, document, licenseKey);
+          await this.recordPublishedReceipt(file, document, receipt);
           let currentDocId: string | null | undefined;
           try {
             currentDocId = await getSymposiumDocId(this.app, file);
@@ -320,6 +338,7 @@ export class SymposiumPublisher {
           return identityChangedFailure(action);
         }
         const receipt = await this.client.publish(document, licenseKey);
+        await this.recordPublishedReceipt(file, document, receipt);
         return await this.savePublishedIdentity(file, receipt, docId);
       } catch (error) {
         const failure = operationFailure(action, error);
@@ -331,13 +350,37 @@ export class SymposiumPublisher {
     });
   }
 
+  private async recordPublishedReceipt(
+    file: TFile,
+    document: SymposiumDocument,
+    receipt: SymposiumReceipt
+  ): Promise<void> {
+    await this.recordLedgerSafely({
+      docId: receipt.docId,
+      status: "published",
+      notePath: file.path,
+      url: receipt.url,
+      publishedAt: new Date().toISOString(),
+      version: receipt.version,
+      contentHash: sha256(document.html),
+    });
+  }
+
+  private async recordLedgerSafely(entry: SymposiumLedgerEntry): Promise<void> {
+    try {
+      await this.recordLedger(entry);
+    } catch (error) {
+      logWarn("Could not append a Symposium receipt to the recoverable ledger.", error);
+    }
+  }
+
   private async savePublishedIdentity(
     file: TFile,
     receipt: SymposiumReceipt,
     expectedDocId: string | null
   ): Promise<SymposiumModalResult> {
     try {
-      const saved = await saveSymposiumDocId(this.app, file, receipt.docId, expectedDocId);
+      const saved = await saveSymposiumLink(this.app, file, receipt, expectedDocId);
       if (!saved) {
         const result: SymposiumPersistenceResult = {
           kind: "persistence",
@@ -375,7 +418,7 @@ export class SymposiumPublisher {
       kind: "persistence",
       action: "publish",
       message:
-        "The page is already public. Retry saving its document id to this note; this will not publish again.",
+        "The page is already public. Retry saving its link to this note; this will not publish again.",
       receipt,
       retrySave: () =>
         this.withFileLock(file, "publish", async () =>
@@ -413,7 +456,7 @@ export class SymposiumPublisher {
       kind: "persistence",
       action: "delete",
       message:
-        "The public page is already deleted. Retry removing its document id from this note; this will not contact Symposium again.",
+        "The public page is already deleted. Retry removing its link from this note; this will not contact Symposium again.",
       retrySave: () =>
         this.withFileLock(file, "delete", async () =>
           this.removeLocalIdentity(file, expectedDocId)

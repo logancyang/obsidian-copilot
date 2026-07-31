@@ -1,4 +1,10 @@
 import type { BackendId } from "@/agentMode/session/types";
+import {
+  SYMPOSIUM_API_ORIGIN,
+  SYMPOSIUM_MAX_HTML_BYTES,
+  SYMPOSIUM_TOKEN_ENV,
+  SYMPOSIUM_WORKSPACE_ROOT_ENV,
+} from "@/symposium/constants";
 import { OBSIDIAN_SKILLS } from "./obsidianSkills";
 
 /**
@@ -489,6 +495,82 @@ const FETCH_X = relaySkill({
   scriptFile: "fetch-x.sh",
 });
 
+const SYMPOSIUM_PUBLISH_VERSION = 1;
+const SYMPOSIUM_PUBLISH: BuiltinSkill = {
+  name: "symposium-publish",
+  version: SYMPOSIUM_PUBLISH_VERSION,
+  enabledAgents: ["claude", "codex", "opencode"],
+  skillMd: `---
+name: symposium-publish
+description: Convert an existing source Markdown file into standalone HTML and publish it as a public Symposium page. Use when the user asks to publish or share Markdown as a web page. Handles initial publishing only; existing pages require the host's update or delete flow.
+metadata:
+  copilot-enabled-agents: claude, codex, opencode
+  copilot-builtin-version: "${SYMPOSIUM_PUBLISH_VERSION}"
+---
+
+# Publish Markdown to Symposium
+
+Require one existing Markdown source file. If its \`symposium\` frontmatter
+property is present, stop: this skill performs initial publishing only.
+
+Convert the note into a complete, self-contained, passive HTML document. Render
+source-specific content such as Mermaid and Obsidian Bases into static HTML or
+SVG, embed images, and include no scripts, frames, forms, handlers, or external
+assets. If its UTF-8 encoding exceeds \`${SYMPOSIUM_MAX_HTML_BYTES}\` bytes, stop
+without asking for confirmation or sending a request.
+
+Show the source note, title, and a concise preview. Explain that the resulting
+link is public and ask an explicit Yes/No confirmation. If the agent has no
+question UI, ask conversationally and stop until the user answers. A previous
+request to publish is not confirmation. On No, send nothing.
+
+On Yes, read \`${SYMPOSIUM_TOKEN_ENV}\` from the environment without printing
+or storing it. If it is empty or absent, stop without making a request and
+report that Symposium authentication is unavailable. Recheck that the source
+still exists and has no \`symposium\` property, then use available HTTP tooling
+to POST exactly once to \`${SYMPOSIUM_API_ORIGIN}/api/v1/docs\` with Bearer
+authorization and JSON \`{"title": <title>, "html": <html>}\`. Send
+\`Accept: application/json\` and \`Content-Type: application/json\`, and set
+\`User-Agent: Symposium-Agent\`; Python \`urllib\`'s default client signature is
+blocked by Cloudflare. Do not retry if the request may have reached the server.
+
+Report that Symposium rejected the token only when the response is JSON and
+\`error.code\` is \`unauthorized\`. A non-JSON 403, including a Cloudflare 1xxx
+error, is an edge/client rejection and says nothing about token validity. Any
+other non-201 response is a publish failure.
+
+A 201 receipt is valid only when \`docId\` is 16 lowercase Crockford characters,
+\`url\` is HTTPS with path \`/d/<docId>\`, and \`version\` is a positive safe integer.
+Treat a malformed 201 as ambiguous and non-retryable. Before updating the source
+note, append a \`published\` row containing that receipt, the source path, current
+UTC time, and the HTML SHA-256 to \`.symposium/publish-history.md\` under the
+publishing root. Use \`${SYMPOSIUM_WORKSPACE_ROOT_ENV}\` when it is nonempty;
+otherwise use the current workspace root. Do not substitute a project-scoped
+session's working directory for a host-provided root. Use direct filesystem
+operations because hidden directories are not ordinary indexed notes. Create
+the directory and file when absent. Use this header:
+
+\`\`\`markdown
+| Document ID | Status | Note | URL | Published at (UTC) | Version | Content SHA-256 |
+| --- | --- | --- | --- | --- | ---: | --- |
+\`\`\`
+
+If the file exists, append only when it begins with that exact
+header. Escape existing backslashes, then pipes, and replace line breaks with
+spaces in every cell. Append in column order without rewriting old rows. If
+this advisory write fails, continue.
+
+Finally re-read the source and set its \`symposium\` text property to the
+server's full \`url\` only if the property is still absent. Prefer a host's
+structured frontmatter API when available; otherwise make the smallest direct
+file edit without replacing concurrent changes. If that fails, do not publish
+again; report the URL and id so they remain recoverable.
+Return the server's \`url\` verbatim. Never put the token in the note, HTML,
+ledger, command arguments, or chat.
+`,
+  files: [],
+};
+
 /** All always-seeded plugin-shipped skills, in display order. */
 export const BUILTIN_SKILLS: readonly BuiltinSkill[] = [
   WEB_SEARCH,
@@ -496,10 +578,32 @@ export const BUILTIN_SKILLS: readonly BuiltinSkill[] = [
   READ_PDF,
   YOUTUBE_TRANSCRIPT,
   FETCH_X,
+  SYMPOSIUM_PUBLISH,
   ...OBSIDIAN_SKILLS,
 ];
 
 const MIYO_SEARCH_VERSION = 2;
+const MIYO_PARSE_VERSION = 1;
+
+/** Shared by both Miyo wrappers; the host script must define `die` before it. */
+const MIYO_POSIX_RESOLVER = `# Absolute install path first (Obsidian shells often miss Miyo's bin on PATH).
+if [ -x "$HOME/.miyo/bin/miyo" ]; then
+  MIYO="$HOME/.miyo/bin/miyo"
+elif command -v miyo >/dev/null 2>&1; then
+  MIYO=miyo
+else
+  die "Miyo CLI not found (no ~/.miyo/bin/miyo and 'miyo' not on PATH). The Miyo desktop app is not installed — tell the user to install Miyo, then retry. Do not retry in a loop." 3
+fi`;
+
+const MIYO_WINDOWS_RESOLVER = `set "MIYO=%LOCALAPPDATA%\\Miyo\\bin\\miyo\\miyo.exe"
+if not exist "%MIYO%" (
+  set "MIYO="
+  where miyo >nul 2>&1 && set "MIYO=miyo"
+)
+if not defined MIYO (
+  echo Miyo CLI not found. The Miyo desktop app is not installed - tell the user to install Miyo, then retry. Do not retry in a loop. 1>&2
+  exit /b 3
+)`;
 
 /**
  * POSIX (macOS/Linux) wrapper for the Miyo CLI; Windows uses the `.cmd` below.
@@ -521,14 +625,7 @@ die() {
 QUERY="$*"
 [ -n "$QUERY" ] || die "Usage: sh miyo-search.sh <query>" 1
 
-# Absolute install path first (Obsidian shells often miss Miyo's bin on PATH).
-if [ -x "$HOME/.miyo/bin/miyo" ]; then
-  MIYO="$HOME/.miyo/bin/miyo"
-elif command -v miyo >/dev/null 2>&1; then
-  MIYO=miyo
-else
-  die "Miyo CLI not found (no ~/.miyo/bin/miyo and 'miyo' not on PATH). The Miyo desktop app is not installed — tell the user to install and open Miyo, then retry. Do not retry in a loop." 3
-fi
+${MIYO_POSIX_RESOLVER}
 
 OUT=$("$MIYO" search "$QUERY" -n 10 --json 2>&1) || die "Miyo search failed — the Miyo app may not be running. Tell the user to open Miyo, then continue without vault search if they can't. Details: $OUT" 1
 printf '%s\\n' "$OUT"
@@ -547,16 +644,34 @@ if "%~1"=="" (
   echo Usage: miyo-search.cmd "query" 1>&2
   exit /b 1
 )
-set "MIYO=%LOCALAPPDATA%\\Miyo\\bin\\miyo\\miyo.exe"
-if not exist "%MIYO%" (
-  set "MIYO="
-  where miyo >nul 2>&1 && set "MIYO=miyo"
-)
-if not defined MIYO (
-  echo Miyo CLI not found. The Miyo desktop app is not installed - tell the user to install and open Miyo, then retry. Do not retry in a loop. 1>&2
-  exit /b 3
-)
+${MIYO_WINDOWS_RESOLVER}
 "%MIYO%" search %* -n 10 --json
+`;
+
+const MIYO_PARSE_SH = `#!/bin/sh
+# Parse one local PDF or EPUB through the Miyo CLI and print Markdown/text.
+die() {
+  printf '%s\\n' "$1" >&2
+  exit "\${2:-2}"
+}
+
+FILE="$1"
+[ -n "$FILE" ] || die "Usage: sh miyo-parse.sh <file>" 1
+
+${MIYO_POSIX_RESOLVER}
+
+"$MIYO" parse "$FILE"
+`;
+
+const MIYO_PARSE_CMD = `@echo off
+setlocal enableextensions
+rem Parse one local PDF or EPUB through the Miyo CLI and print Markdown/text.
+if "%~1"=="" (
+  echo Usage: miyo-parse.cmd "file" 1>&2
+  exit /b 1
+)
+${MIYO_WINDOWS_RESOLVER}
+"%MIYO%" parse "%~1"
 `;
 
 /**
@@ -569,10 +684,9 @@ if not defined MIYO (
  * Smaller models were giving up after the old PATH-first prose attempt failed in
  * Obsidian's reduced-PATH shells.
  *
- * Gated on Miyo being in use: the host only seeds this skill when
- * `shouldUseMiyo(...)` is true (see `seedManagedBuiltins` in `agentMode/index`),
- * and prunes the seeded copy when Miyo is turned off — matching the issue's
- * "surface only when Miyo is installed/running" intent.
+ * The host seeds this skill only when the dedicated Miyo search-skill setting
+ * is enabled (see `seedManagedBuiltins` in `agentMode/index`) and prunes the
+ * managed copy when the setting is turned off.
  */
 export const MIYO_SEARCH_SKILL: BuiltinSkill = {
   name: "miyo-search",
@@ -648,12 +762,102 @@ The script exits with a clear message when Miyo can't be used:
 };
 
 /**
- * The builtin skills the host should seed into the canonical folder. The Plus
- * relay skills are always included; the Miyo skill is gated on Miyo being in
- * use (the host passes \`includeMiyo = shouldUseMiyo(...)\`). Kept pure so the
- * gating decision stays in the host layer (the skills layer must not import
- * \`@/miyo\`), while the composition is unit-testable here.
+ * Parses local PDF and EPUB files through the standalone Miyo CLI.
+ *
+ * This skill is gated by the Document Processor setting. Unlike the Plus PDF
+ * relay, it keeps document contents local and deliberately fails closed: the
+ * instructions forbid silently switching to a cloud parser if Miyo fails.
  */
-export function managedBuiltinSkills(includeMiyo: boolean): readonly BuiltinSkill[] {
-  return includeMiyo ? [...BUILTIN_SKILLS, MIYO_SEARCH_SKILL] : BUILTIN_SKILLS;
+export const MIYO_PARSE_SKILL: BuiltinSkill = {
+  name: "miyo-parse",
+  version: MIYO_PARSE_VERSION,
+  enabledAgents: ["claude", "codex", "opencode"],
+  skillMd: `---
+name: miyo-parse
+description: Parse a local PDF or EPUB file into Markdown/text with the local Miyo CLI. Use this for document reading when Miyo is the selected Document Processor. The file can be anywhere on the filesystem and does not need to be indexed or copied into the vault.
+metadata:
+  copilot-enabled-agents: claude, codex, opencode
+  copilot-builtin-version: "${MIYO_PARSE_VERSION}"
+---
+
+# Parse a document locally with Miyo
+
+Use Miyo to extract Markdown/text from one PDF or EPUB. Parsing runs locally,
+works for files anywhere on the filesystem, and does not require the Miyo
+service to be running.
+
+## How to run
+
+Find the absolute path to this SKILL.md file, then run the adjacent wrapper
+with exactly one quoted file path.
+
+On macOS or Linux:
+
+\`\`\`bash
+sh "/absolute/path/to/this/skill/directory/miyo-parse.sh" "/absolute/path/to/document.pdf"
+\`\`\`
+
+On Windows PowerShell:
+
+\`\`\`powershell
+& "/absolute/path/to/this/skill/directory/miyo-parse.cmd" "C:\\absolute\\path\\to\\document.pdf"
+\`\`\`
+
+The wrapper prints the parsed Markdown/text to stdout. Use that output to
+answer the user's question.
+
+## If it reports a problem
+
+Report the error clearly and stop parsing that document. Never fall back to
+\`copilot-read-pdf\` or any other cloud document parser: selecting Miyo is an
+explicit local-processing choice. Do not retry in a loop.
+
+If it reports that the Miyo CLI is not installed, say that pointing Copilot at a
+remote Miyo server does not help here, and that the user's options are to
+install Miyo on this machine or switch Settings → Copilot → Miyo → Document
+Processor to Plus.
+`,
+  files: [
+    { path: "miyo-parse.sh", content: MIYO_PARSE_SH },
+    { path: "miyo-parse.cmd", content: MIYO_PARSE_CMD },
+  ],
+};
+
+/** Every builtin the host may seed, gated or not — the universe it reconciles. */
+const ALL_MANAGED_SKILLS: readonly BuiltinSkill[] = [
+  ...BUILTIN_SKILLS,
+  MIYO_SEARCH_SKILL,
+  MIYO_PARSE_SKILL,
+];
+
+/**
+ * Splits the managed builtins into what to write and what to remove, so the host
+ * can't seed a gate without pruning its opposite.
+ *
+ * Miyo-owned documents drop `copilot-read-pdf` outright instead of merely
+ * steering away from it: that choice is fail-closed (see
+ * `resolveDocProcessorBackend`), and a cloud PDF skill left on disk is one
+ * ignored instruction away from uploading a document the user kept local.
+ *
+ * @param gates `search` mirrors `enableMiyoSearchSkill`, `documents` mirrors
+ *   `docProcessorBackend === "miyo"`.
+ */
+export function planManagedBuiltins(gates: { search: boolean; documents: boolean }): {
+  seed: readonly BuiltinSkill[];
+  prune: readonly string[];
+} {
+  const seed: readonly BuiltinSkill[] =
+    !gates.search && !gates.documents
+      ? BUILTIN_SKILLS
+      : [
+          ...(gates.documents
+            ? BUILTIN_SKILLS.filter((skill) => skill !== READ_PDF)
+            : BUILTIN_SKILLS),
+          ...(gates.search ? [MIYO_SEARCH_SKILL] : []),
+          ...(gates.documents ? [MIYO_PARSE_SKILL] : []),
+        ];
+  return {
+    seed,
+    prune: ALL_MANAGED_SKILLS.filter((skill) => !seed.includes(skill)).map((skill) => skill.name),
+  };
 }

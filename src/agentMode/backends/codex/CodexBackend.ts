@@ -17,14 +17,14 @@ export class CodexBackend implements AcpBackend {
   readonly id = "codex" as const;
   readonly displayName = "Codex";
 
-  async buildSpawnDescriptor(_ctx: { vaultBasePath: string }): Promise<AcpSpawnDescriptor> {
+  async buildSpawnDescriptor(ctx: { vaultBasePath: string }): Promise<AcpSpawnDescriptor> {
     const descriptor = buildSimpleSpawnDescriptor(
       getSettings().agentMode?.backends?.codex?.binaryPath,
       "Codex binary path not configured. Open Agent Mode settings and set the path to codex-acp.",
       getSettings().agentMode?.backends?.codex?.envOverrides,
       {
         // Builtin skills consume plugin-managed runtime paths and credentials.
-        ...(await buildBuiltinSkillEnv()),
+        ...(await buildBuiltinSkillEnv("", ctx.vaultBasePath)),
         // Newer adapters derive the initial ACP mode from this variable rather
         // than Codex's approval/sandbox config. User env overrides still win.
         INITIAL_AGENT_MODE: "agent",

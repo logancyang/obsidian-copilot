@@ -58,8 +58,10 @@ import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } 
 
 interface AgentHomeProps {
   backend: AgentChatBackend;
-  /** Active session's internal id — drives per-session draft selection. */
+  /** Active runtime session id. */
   sessionId: string;
+  /** Logical identity of the active chat input surface. */
+  chatInputId: string;
   manager: AgentSessionManager;
   plugin: CopilotPlugin;
   onSaveChat: (saveAsNote: () => Promise<void>) => void;
@@ -68,8 +70,8 @@ interface AgentHomeProps {
 
 /**
  * Agent Mode home surface for an active session. Persistent across tab switches
- * (the tab strip swaps `sessionId`/`backend` props), so input drafts live in
- * `AgentChatInput` keyed by session rather than being reset by a `key` remount.
+ * (the tab strip swaps `sessionId`/`backend` props), so input drafts live here
+ * and are selected by the active session's logical `chatInputId`.
  *
  * Derives a per-session view state across three surfaces: a session with no
  * user-visible messages is a landing — global (no project scope: top-anchored
@@ -83,6 +85,7 @@ interface AgentHomeProps {
 const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   backend,
   sessionId,
+  chatInputId,
   manager,
   plugin,
   onSaveChat,
@@ -179,9 +182,8 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
         new Notice("Failed to start a new chat. Please try again.");
       }
     })();
-    // replaceSessionInPlace mints a new internal id, so the input resets via
-    // that session's fresh draft and AgentChatInput clears the global selected
-    // text on the session switch — no explicit reset needed here.
+    // A New Chat replacement gets a fresh chat input, so its draft and
+    // input-scoped context reset without an explicit clear here.
   }, [manager]);
 
   const descriptor = useSessionBackendDescriptor(manager);
@@ -350,23 +352,22 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     if (next.value !== value) onChange(next.value);
   }, [modePickerOverride]);
 
-  // Stable list of live session ids so the draft store's pruning and memo
+  // Stable list of live chat-input ids so the draft store's pruning and memo
   // don't churn on every manager notify (getSessions() returns a fresh array).
   // The "\0" delimiter (matching useAgentInputDrafts' own signature key) can't
-  // appear in a session id, so distinct id sets always produce distinct keys.
+  // appear in an id, so distinct id sets always produce distinct keys.
   const sessions = manager.getSessions();
-  const liveKey = sessions.map((s) => s.internalId).join("\0");
-  const liveSessionIds = useMemo(() => sessions.map((s) => s.internalId), [liveKey]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Per-session compose drafts live in the shell (the common owner) so the
+  const liveKey = sessions.map((s) => s.chatInputId).join("\0");
+  const liveChatInputIds = useMemo(() => sessions.map((s) => s.chatInputId), [liveKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Per-chat-input compose drafts live in the shell (the common owner) so the
   // active turn's `loading` (transcript spinner) and the drop overlay's drag
   // state can be read directly here, instead of being mirrored up from the
   // composer via effect callbacks. The hook returns a referentially stable
   // controls object, so passing it down to the memoized AgentChatInput doesn't
   // re-render the composer on per-token stream updates.
   const draft = useAgentInputDrafts({
-    activeSessionId: sessionId,
-    liveSessionIds,
+    activeChatInputId: chatInputId,
+    liveChatInputIds,
     defaultIncludeActiveNote: settings.autoAddActiveContentToContext === true,
   });
 
@@ -395,10 +396,8 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   // pattern) so its fresh `initialize()` re-captures the new context — createSession
   // joins the just-started materialization (single-flight by project) on Retry, or
   // re-materializes the updated config on Edit. Guarded on an EMPTY draft so a
-  // refresh never interrupts a draft already in progress. The replace mints a new
-  // session id and prunes the old draft, so to honor "never discard text the user
-  // has started typing" we also migrate any draft typed during the async startup
-  // window onto the new id (the pre-await check can't see those late keystrokes).
+  // refresh never interrupts a draft already in progress. The replacement keeps
+  // the logical chat input, so text typed during async startup stays attached.
   // Returns whether a swap actually happened (false = guarded no-op), so the
   // context-source observer advances its baseline only on a real capture.
   const refreshContextForEmptyLanding = useCallback(async (): Promise<boolean> => {
@@ -411,8 +410,9 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       draft.queue.length === 0;
     if (!draftEmpty) return false;
     try {
-      const replacement = await manager.replaceSessionInPlace(active.internalId, active.backendId);
-      draft.migrateDraft(active.internalId, replacement.internalId);
+      await manager.replaceSessionInPlace(active.internalId, active.backendId, {
+        preserveChatInput: true,
+      });
       return true;
     } catch (e) {
       logError("[AgentMode] refresh landing context failed", e);
@@ -498,7 +498,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   // landing open gets a new line) but stable across the stream re-renders within
   // a session, so it doesn't flicker as tokens arrive. sessionId is the
   // intentional re-roll trigger — not read inside the factory, so exhaustive-deps
-  // flags it; the dep is deliberate (same as the liveSessionIds memo above).
+  // flags it; the dep is deliberate (same as the liveChatInputIds memo above).
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const greeting = useMemo(() => pickRandomGreeting(), [sessionId]);
 
@@ -726,7 +726,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     <AgentChatInput
       backend={backend}
       plugin={plugin}
-      sessionId={sessionId}
+      chatInputId={chatInputId}
       draft={draft}
       app={app}
       mainAgentId={mainAgentId}
@@ -846,7 +846,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                   branches but sits at different tree positions, so it remounts on
                   the landing→conversation flip. That flip only fires right after
                   a send (which already reset the draft) or on a chat load (which
-                  changes `sessionId` and remounts anyway); the per-session draft
+                  changes `chatInputId` and remounts anyway); the per-chat-input draft
                   lives in AgentHome and survives. CAUTION: the flip happens
                   DURING the first turn, so the unmounting composer instance still
                   has an in-flight `runSend` — anything that turn must do on
@@ -925,6 +925,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                 ) : (
                   <>
                     <AgentChatMessages
+                      key={sessionId}
                       messages={messages}
                       app={app}
                       currentPlan={currentPlan}

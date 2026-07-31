@@ -1,4 +1,16 @@
-import { BUILTIN_SKILLS, managedBuiltinSkills, MIYO_SEARCH_SKILL, PLUS_ENV } from "./builtinSkills";
+import {
+  BUILTIN_SKILLS,
+  MIYO_PARSE_SKILL,
+  MIYO_SEARCH_SKILL,
+  planManagedBuiltins,
+  PLUS_ENV,
+} from "./builtinSkills";
+import {
+  SYMPOSIUM_API_ORIGIN,
+  SYMPOSIUM_MAX_HTML_BYTES,
+  SYMPOSIUM_TOKEN_ENV,
+  SYMPOSIUM_WORKSPACE_ROOT_ENV,
+} from "@/symposium/constants";
 
 /** A script file shipped by a skill, matched by extension (".sh", ".cmd", ".ps1"). */
 function scriptOf(name: string, ext: ".sh" | ".cmd" | ".ps1" = ".sh"): string {
@@ -9,7 +21,7 @@ function scriptOf(name: string, ext: ".sh" | ".cmd" | ".ps1" = ".sh"): string {
   return file.content;
 }
 
-const PLUS_SKILLS = BUILTIN_SKILLS.filter((skill) => skill.name.startsWith("copilot-"));
+const RELAY_SKILLS = BUILTIN_SKILLS.filter((skill) => skill.name.startsWith("copilot-"));
 
 describe("builtinSkills", () => {
   describe("BUILTIN_SKILLS", () => {
@@ -20,6 +32,7 @@ describe("builtinSkills", () => {
         "copilot-read-pdf",
         "copilot-youtube-transcript",
         "copilot-fetch-x",
+        "symposium-publish",
         "obsidian-markdown",
         "obsidian-bases",
         "json-canvas",
@@ -37,7 +50,7 @@ describe("builtinSkills", () => {
     });
 
     it("ships one runnable script per OS — POSIX sh + Windows cmd/ps1, no Node", () => {
-      for (const skill of PLUS_SKILLS) {
+      for (const skill of RELAY_SKILLS) {
         const sh = skill.files.find((f) => f.path.endsWith(".sh"));
         const cmd = skill.files.find((f) => f.path.endsWith(".cmd"));
         const ps1 = skill.files.find((f) => f.path.endsWith(".ps1"));
@@ -64,7 +77,7 @@ describe("builtinSkills", () => {
     });
 
     it("reads its config from the injected env and never embeds a key (both scripts)", () => {
-      for (const skill of PLUS_SKILLS) {
+      for (const skill of RELAY_SKILLS) {
         const sh = scriptOf(skill.name, ".sh");
         expect(sh).toContain(`#!/bin/sh`);
         expect(sh).toContain(PLUS_ENV.licenseKey);
@@ -97,7 +110,7 @@ describe("builtinSkills", () => {
     });
 
     it("falls back to the agent's own tools instead of blocking when Plus is absent", () => {
-      for (const skill of PLUS_SKILLS) {
+      for (const skill of RELAY_SKILLS) {
         const sh = scriptOf(skill.name, ".sh");
         // No license: tell the agent to use its own equivalent tools, never
         // refuse, and only append the upsell occasionally (gated on the pid). The
@@ -171,6 +184,46 @@ describe("builtinSkills", () => {
         "[System.Convert]::ToBase64String([System.IO.File]::ReadAllBytes($FILE))"
       );
       expect(ps1).toContain("@{ pdf = $PDF; user_id = $USER_ID }");
+    });
+
+    it("publishes confirmed agent-generated HTML and retains the link on its source note", () => {
+      const skill = BUILTIN_SKILLS.find((item) => item.name === "symposium-publish");
+      expect(skill).toBeDefined();
+      expect(skill!.files).toEqual([]);
+      expect(skill!.skillMd).toContain("Require one existing Markdown source file");
+      expect(skill!.skillMd).toMatch(/static HTML or\s+SVG/);
+      expect(skill!.skillMd).toContain(`\`${SYMPOSIUM_MAX_HTML_BYTES}\` bytes`);
+      expect(skill!.skillMd).toContain("ask an explicit Yes/No confirmation");
+      expect(skill!.skillMd).toContain("A previous");
+      expect(skill!.skillMd).toContain("request to publish is not confirmation");
+      expect(skill!.skillMd).toContain(SYMPOSIUM_TOKEN_ENV);
+      expect(skill!.skillMd).not.toContain(PLUS_ENV.licenseKey);
+      expect(skill!.skillMd).toContain("empty or absent");
+      expect(skill!.skillMd).toContain(`${SYMPOSIUM_API_ORIGIN}/api/v1/docs`);
+      expect(skill!.skillMd).toContain("POST exactly once");
+      expect(skill!.skillMd).toContain("Accept: application/json");
+      expect(skill!.skillMd).toContain("`User-Agent: Symposium-Agent`");
+      expect(skill!.skillMd).toContain("error.code");
+      expect(skill!.skillMd).toContain("Cloudflare 1xxx");
+      expect(skill!.skillMd).toContain("says nothing about token validity");
+      expect(skill!.skillMd).toContain("positive safe integer");
+      expect(skill!.skillMd).toContain("/d/<docId>");
+      expect(skill!.skillMd).toContain("malformed");
+      expect(skill!.skillMd).toContain("ambiguous and non-retryable");
+      expect(skill!.skillMd).toContain(".symposium/publish-history.md");
+      expect(skill!.skillMd).toContain(SYMPOSIUM_WORKSPACE_ROOT_ENV);
+      expect(skill!.skillMd).toContain("project-scoped");
+      expect(skill!.skillMd).toContain("| Document ID | Status | Note | URL |");
+      expect(skill!.skillMd).toContain("direct filesystem");
+      expect(skill!.skillMd).toContain("append only when it begins with that exact");
+      expect(skill!.skillMd).toContain("Escape existing backslashes");
+      expect(skill!.skillMd).toContain("structured frontmatter API");
+      expect(skill!.skillMd).toContain("server's full `url`");
+      expect(skill!.skillMd).toMatch(/only if the property is still\s+absent/);
+      expect(skill!.skillMd).toContain("server's `url` verbatim");
+      expect(skill!.skillMd).not.toContain("Copilot Plus");
+      expect(skill!.skillMd).not.toContain("Copilot-Obsidian");
+      expect(skill!.skillMd).not.toContain("Obsidian CLI");
     });
   });
 
@@ -250,21 +303,93 @@ describe("builtinSkills", () => {
     });
   });
 
-  describe("managedBuiltinSkills()", () => {
-    it("includes the Miyo skill only when Miyo is in use", () => {
-      expect(managedBuiltinSkills(true)).toContain(MIYO_SEARCH_SKILL);
-      expect(managedBuiltinSkills(false)).not.toContain(MIYO_SEARCH_SKILL);
+  describe("MIYO_PARSE_SKILL", () => {
+    const miyoParseScript = (ext: ".sh" | ".cmd"): string => {
+      const file = MIYO_PARSE_SKILL.files.find((candidate) => candidate.path.endsWith(ext));
+      if (!file) throw new Error(`miyo-parse ships no ${ext} script`);
+      return file.content;
+    };
+
+    it("is a gated skill distinct from the always-seeded set and from Miyo search", () => {
+      expect(BUILTIN_SKILLS).not.toContain(MIYO_PARSE_SKILL);
+      expect(MIYO_PARSE_SKILL.name).toBe("miyo-parse");
+      expect(MIYO_PARSE_SKILL.enabledAgents).toEqual(["claude", "codex", "opencode"]);
+      expect(MIYO_PARSE_SKILL.skillMd).toContain(
+        `copilot-builtin-version: "${MIYO_PARSE_SKILL.version}"`
+      );
     });
 
-    it("appends Miyo after the Plus skills, preserving their order", () => {
-      expect(managedBuiltinSkills(true).map((s) => s.name)).toEqual([
-        ...BUILTIN_SKILLS.map((s) => s.name),
+    it("ships one wrapper per OS that runs `miyo parse` on a single quoted path", () => {
+      expect(MIYO_PARSE_SKILL.files.map((file) => file.path)).toEqual([
+        "miyo-parse.sh",
+        "miyo-parse.cmd",
+      ]);
+      expect(miyoParseScript(".sh")).toContain('"$MIYO" parse "$FILE"');
+      expect(miyoParseScript(".cmd")).toContain('"%MIYO%" parse "%~1"');
+    });
+
+    it("resolves Miyo's install path before falling back to PATH on each OS", () => {
+      expect(miyoParseScript(".sh")).toContain("$HOME/.miyo/bin/miyo");
+      expect(miyoParseScript(".sh")).toContain("command -v miyo");
+      expect(miyoParseScript(".cmd")).toContain("%LOCALAPPDATA%\\Miyo\\bin\\miyo\\miyo.exe");
+      expect(miyoParseScript(".cmd")).toContain("where miyo");
+    });
+
+    it("tells the agent to fail closed rather than reach for a cloud parser", () => {
+      expect(MIYO_PARSE_SKILL.skillMd).toMatch(/Never fall back/i);
+      expect(MIYO_PARSE_SKILL.skillMd).toContain("copilot-read-pdf");
+    });
+
+    it("names the recovery path when the CLI is absent, since a remote server can't parse", () => {
+      // `miyo parse` runs locally and never reads MIYO_URL, so a remote-only
+      // user has to install the CLI or move the picker back to Plus.
+      expect(MIYO_PARSE_SKILL.skillMd).toMatch(/remote\s+Miyo\s+server\s+does\s+not\s+help/i);
+      expect(MIYO_PARSE_SKILL.skillMd).toMatch(/Document\s+Processor to Plus/i);
+    });
+
+    it("does not embed Copilot Plus credentials", () => {
+      expect(MIYO_PARSE_SKILL.skillMd).not.toContain(PLUS_ENV.licenseKey);
+      expect(MIYO_PARSE_SKILL.skillMd).not.toContain(PLUS_ENV.baseUrl);
+      expect(miyoParseScript(".sh")).not.toContain(PLUS_ENV.licenseKey);
+      expect(miyoParseScript(".cmd")).not.toContain(PLUS_ENV.licenseKey);
+    });
+  });
+
+  describe("planManagedBuiltins()", () => {
+    const names = (skills: readonly { name: string }[]): string[] => skills.map((s) => s.name);
+
+    it("seeds only the always-on builtins when both Miyo gates are off", () => {
+      const plan = planManagedBuiltins({ search: false, documents: false });
+      // Stable reference, per the project's referential-stability rule.
+      expect(plan.seed).toBe(BUILTIN_SKILLS);
+      expect(plan.prune).toEqual(["miyo-search", "miyo-parse"]);
+    });
+
+    it("gates search and document parsing independently", () => {
+      expect(names(planManagedBuiltins({ search: true, documents: false }).seed)).toEqual([
+        ...names(BUILTIN_SKILLS),
         "miyo-search",
       ]);
+      expect(planManagedBuiltins({ search: true, documents: false }).prune).toEqual(["miyo-parse"]);
+      expect(planManagedBuiltins({ search: false, documents: true }).seed).toContain(
+        MIYO_PARSE_SKILL
+      );
+      expect(planManagedBuiltins({ search: false, documents: true }).prune).toContain(
+        "miyo-search"
+      );
     });
 
-    it("returns the stable BUILTIN_SKILLS reference when Miyo is off", () => {
-      expect(managedBuiltinSkills(false)).toBe(BUILTIN_SKILLS);
+    it("replaces the cloud PDF skill with Miyo parse when Miyo owns documents", () => {
+      // Steering alone would leave copilot-read-pdf on disk, one ignored
+      // instruction away from uploading a document the user chose to keep local.
+      const plan = planManagedBuiltins({ search: true, documents: true });
+      expect(names(plan.seed)).not.toContain("copilot-read-pdf");
+      expect(plan.prune).toEqual(["copilot-read-pdf"]);
+      expect(names(plan.seed)).toEqual([
+        ...names(BUILTIN_SKILLS).filter((name) => name !== "copilot-read-pdf"),
+        "miyo-search",
+        "miyo-parse",
+      ]);
     });
   });
 });

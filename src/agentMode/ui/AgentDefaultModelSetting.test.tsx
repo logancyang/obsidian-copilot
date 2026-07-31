@@ -38,9 +38,7 @@ function makeManager(opts: {
     subscribeModelCache: () => () => {},
     getActiveChatUIState: () => null,
     getDefaultSelection: () => opts.defaultSelection ?? null,
-    // resolveEffortOptions reads cached state first, then the effort catalog;
-    // route everything through the catalog so the test controls it per model.
-    getCachedBackendState: () => null,
+    getCachedModelCatalog: () => null,
     getEffortCatalog: () => effortByModel,
     persistDefaultSelection: opts.persist ?? jest.fn().mockResolvedValue(undefined),
   } as unknown as AgentSessionManager;

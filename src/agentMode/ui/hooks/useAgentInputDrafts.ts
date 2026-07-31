@@ -30,9 +30,9 @@ export interface QueuedAgentMessage {
 }
 
 /**
- * Per-session compose state. Replaces the old `key={internalId}` remount of
+ * Per-chat-input compose state. Replaces the old `key={internalId}` remount of
  * the chat surface: instead of throwing away and rebuilding input state on
- * every tab switch, each session keeps its own draft so unsent text,
+ * every tab switch, each logical input keeps its own draft so unsent text,
  * attachments, and queued follow-ups survive switching away and back.
  *
  * `loading` (turn in flight) and `queue` live here too — without the remount
@@ -52,9 +52,9 @@ export interface AgentInputDraft {
 }
 
 interface UseAgentInputDraftsArgs {
-  activeSessionId: string;
-  /** Internal ids of all live sessions; drafts for ids not here are pruned. */
-  liveSessionIds: readonly string[];
+  activeChatInputId: string;
+  /** Logical ids of all live chat inputs; drafts for ids not here are pruned. */
+  liveChatInputIds: readonly string[];
   /** Seed for a fresh draft's include-active-note toggle (the user setting). */
   defaultIncludeActiveNote: boolean;
 }
@@ -68,13 +68,6 @@ export interface AgentInputDraftControls extends AgentInputDraft {
   setIncludeActiveWebTab: (include: boolean) => void;
   setLoading: (loading: boolean) => void;
   setQueue: React.Dispatch<React.SetStateAction<QueuedAgentMessage[]>>;
-  /**
-   * Carry a compose draft from a replaced session onto its replacement, so text
-   * typed during an in-place session swap (e.g. the empty-landing context
-   * refresh) survives the old session's pruning. No-op when the source draft is
-   * empty or the target already holds user input. See {@link migrateDraft}.
-   */
-  migrateDraft: (fromSessionId: string, toSessionId: string) => void;
   /** Clear the compose fields after a send; leaves loading/queue untouched. */
   resetCompose: () => void;
 }
@@ -98,34 +91,21 @@ const createDraft = (includeActiveNote: boolean): AgentInputDraft => ({
 const applyArrayState = <T>(value: React.SetStateAction<T[]>, previous: T[]): T[] =>
   typeof value === "function" ? value(previous) : value;
 
-/**
- * Whether a draft carries anything worth preserving across a session swap —
- * any composed text/attachments/queue, or a toggle the user moved off its seed.
- * An untouched draft migrates to nothing, so the swap stays a clean reset.
- */
-const hasDraftPayload = (draft: AgentInputDraft, defaultIncludeActiveNote: boolean): boolean =>
-  draft.input.length > 0 ||
-  draft.images.length > 0 ||
-  draft.contextNotes.length > 0 ||
-  draft.queue.length > 0 ||
-  draft.includeActiveNote !== defaultIncludeActiveNote ||
-  draft.includeActiveWebTab;
-
 export function useAgentInputDrafts({
-  activeSessionId,
-  liveSessionIds,
+  activeChatInputId,
+  liveChatInputIds,
   defaultIncludeActiveNote,
 }: UseAgentInputDraftsArgs): AgentInputDraftControls {
   const [drafts, setDrafts] = useState<Record<string, AgentInputDraft>>({});
 
-  // Stable key so the prune effect only fires when the set of live sessions
+  // Stable key so the prune effect only fires when the set of live chat inputs
   // actually changes, not on every parent re-render (the array prop is a
   // fresh reference each render).
-  const liveKey = liveSessionIds.join("\0");
-  const liveSetRef = useRef<Set<string>>(new Set(liveSessionIds));
+  const liveKey = liveChatInputIds.join("\0");
+  const liveSetRef = useRef<Set<string>>(new Set(liveChatInputIds));
 
   useEffect(() => {
-    const live = new Set(liveSessionIds);
+    const live = new Set(liveChatInputIds);
     liveSetRef.current = live;
     setDrafts((prev) => {
       let changed = false;
@@ -136,7 +116,7 @@ export function useAgentInputDrafts({
       }
       return changed ? next : prev;
     });
-    // liveSessionIds is re-derived each render; gate on its stable join key.
+    // liveChatInputIds is re-derived each render; gate on its stable join key.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [liveKey]);
 
@@ -156,8 +136,9 @@ export function useAgentInputDrafts({
   );
 
   const updateActive = useCallback(
-    (updater: (draft: AgentInputDraft) => AgentInputDraft) => updateDraft(activeSessionId, updater),
-    [activeSessionId, updateDraft]
+    (updater: (draft: AgentInputDraft) => AgentInputDraft) =>
+      updateDraft(activeChatInputId, updater),
+    [activeChatInputId, updateDraft]
   );
 
   const setInput = useCallback(
@@ -205,39 +186,6 @@ export function useAgentInputDrafts({
     [updateActive]
   );
 
-  // Move a draft onto a replacement session id during an in-place swap. Writes
-  // `setDrafts` DIRECTLY (not via `updateDraft`) on purpose: the new id isn't in
-  // `liveSetRef` yet — React hasn't observed the manager's new session list when
-  // the swap resolves — so `updateDraft`'s live-guard would drop the write. The
-  // caller runs this synchronously the moment `replaceSessionInPlace` resolves,
-  // while the old session's `closeSession` is still suspended at `await cancel()`
-  // (it deletes the session only afterwards), so the source draft is still
-  // present here and the prune effect only fires later. `loading` resets — the
-  // replacement starts its own turn.
-  const migrateDraft = useCallback(
-    (fromSessionId: string, toSessionId: string) => {
-      if (fromSessionId === toSessionId) return;
-      setDrafts((prev) => {
-        const source = prev[fromSessionId];
-        if (!source || !hasDraftPayload(source, defaultIncludeActiveNote)) return prev;
-        // Never clobber input the user already started on the replacement.
-        const target = prev[toSessionId];
-        if (target && hasDraftPayload(target, defaultIncludeActiveNote)) return prev;
-        const next = { ...prev };
-        delete next[fromSessionId];
-        next[toSessionId] = {
-          ...source,
-          images: [...source.images],
-          contextNotes: [...source.contextNotes],
-          queue: [...source.queue],
-          loading: false,
-        };
-        return next;
-      });
-    },
-    [defaultIncludeActiveNote]
-  );
-
   // DESIGN NOTE: resetCompose hard-clears includeActiveNote to false after a
   // send, so within one session the active note auto-attaches only to the
   // FIRST message. Two scenarios, only one of which matches the legacy
@@ -252,7 +200,7 @@ export function useAgentInputDrafts({
   //      the setting (#2525) — a side effect of the remount, not an intended
   //      feature. PR1 dropped the remount; re-entering a session now restores
   //      that session's saved draft (toggle already false from its last send).
-  //      This is the point of per-session drafts: a session reads back exactly
+  //      This is the point of per-chat-input drafts: a chat reads back exactly
   //      as you left it, not silently re-toggled. A genuinely fresh session
   //      still seeds from defaultIncludeActiveNote (see createDraft and the
   //      missing-draft fallback below), so "new chat" honors the setting.
@@ -271,7 +219,7 @@ export function useAgentInputDrafts({
     [updateActive]
   );
 
-  const active = drafts[activeSessionId];
+  const active = drafts[activeChatInputId];
   const fields = useMemo<AgentInputDraft>(
     () =>
       active ?? {
@@ -302,7 +250,6 @@ export function useAgentInputDrafts({
       setIncludeActiveWebTab,
       setLoading,
       setQueue,
-      migrateDraft,
       resetCompose,
     }),
     [
@@ -315,7 +262,6 @@ export function useAgentInputDrafts({
       setIncludeActiveWebTab,
       setLoading,
       setQueue,
-      migrateDraft,
       resetCompose,
     ]
   );

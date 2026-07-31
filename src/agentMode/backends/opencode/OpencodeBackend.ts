@@ -120,7 +120,7 @@ export class OpencodeBackend implements AcpBackend {
       );
     }
     // Builtin skills consume plugin-managed runtime paths and credentials.
-    const builtinSkillEnv = await buildBuiltinSkillEnv();
+    const builtinSkillEnv = await buildBuiltinSkillEnv("", ctx.vaultBasePath);
 
     return {
       command: binaryPath,
@@ -161,8 +161,8 @@ type ProviderConfig = {
  * Build the `OPENCODE_CONFIG_CONTENT` payload from the enabled opencode models.
  * Each non-native (BYOK / Plus) provider is registered with its keychain key
  * and its models; native (agent-origin) providers are skipped since opencode
- * already hosts them. The top-level `model` field carries the user's sticky
- * preference so a fresh session boots with the right default.
+ * already hosts them. Model selection is applied to each session after
+ * `session/new` reports the backend's actual initial state.
  *
  * Takes settings + registries as parameters (no singletons) so it stays
  * unit-testable.
@@ -330,17 +330,6 @@ export async function buildOpencodeConfig(
       prompt,
     },
   };
-
-  // Apply sticky model preference at spawn so the very first turn (before
-  // `unstable_setSessionModel` lands) uses the user's pick. The persisted
-  // shape is `{ baseModelId, effort }` where `baseModelId` is opencode's
-  // `<provider>/<model>` form — append the effort suffix when present.
-  const defaultModel = s.agentMode?.backends?.opencode?.defaultModel;
-  if (defaultModel?.baseModelId) {
-    config.model = defaultModel.effort
-      ? `${defaultModel.baseModelId}/${defaultModel.effort}`
-      : defaultModel.baseModelId;
-  }
 
   // Always spawn in canonical `default` (ask-before-write `copilot-build`).
   // Mode selection is never persisted — every fresh session starts in ask

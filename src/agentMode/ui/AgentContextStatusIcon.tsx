@@ -317,10 +317,9 @@ export default function AgentContextStatusIcon({
   const { triggerKind } = useStatusView(app, activeProjectId, project, hasConfiguredContextSource);
   const [open, setOpen] = useState(false);
 
-  // A retry/reindex re-captures context by swapping the empty landing session,
-  // which remounts this whole composer subtree (ChatInput is `key={sessionId}`)
-  // and would close the popover. So we hold that refresh until the popover is
-  // dismissed. `openRef` lets a retry settling AFTER an early close still fire it.
+  // A retry/reindex re-captures context by swapping the empty landing session.
+  // Hold that refresh until dismissal so the status surface does not change
+  // underneath the open popover. `openRef` also handles an early close.
   const openRef = useRef(open);
   // The scope a deferred refresh belongs to, captured when the retry/reindex was
   // triggered (null = none pending). A retry can settle after the user switched

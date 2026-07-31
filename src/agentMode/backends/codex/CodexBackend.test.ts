@@ -6,6 +6,7 @@ import {
   updateCachedSystemPrompts,
 } from "@/system-prompts/state";
 import type { UserSystemPrompt } from "@/system-prompts/type";
+import { SYMPOSIUM_WORKSPACE_ROOT_ENV } from "@/symposium/constants";
 import { CodexBackend, toTomlBasicString } from "./CodexBackend";
 
 jest.mock("@/logger", () => ({
@@ -66,6 +67,7 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
     const backend = new CodexBackend();
     const desc = await backend.buildSpawnDescriptor({ vaultBasePath: "/vault" });
     expect(desc.command).toBe("/usr/local/bin/codex-acp");
+    expect(desc.env[SYMPOSIUM_WORKSPACE_ROOT_ENV]).toBe("/vault");
 
     const config = JSON.parse(desc.env.CODEX_CONFIG as string);
     expect(config.developer_instructions).toContain("Obsidian Copilot");
@@ -172,7 +174,7 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
     expect(toTomlBasicString("über — café")).toBe('"über — café"');
   });
 
-  it("pins spawn-time approval_policy + sandbox_mode to canonical 'auto' preset", async () => {
+  it("pins spawn-time approval policy, reviewer, and sandbox to canonical Default mode", async () => {
     // Without these overrides codex-acp derives the initial mode from
     // ~/.codex/config.toml, which can land on read-only and surface as
     // "Plan" in our picker for a brief moment before the post-spawn
@@ -191,6 +193,7 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
     expect(JSON.parse(desc.env.CODEX_CONFIG as string)).toEqual(
       expect.objectContaining({
         approval_policy: "on-request",
+        approvals_reviewer: "user",
         sandbox_mode: "workspace-write",
       })
     );
@@ -213,6 +216,7 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
                 model: "custom-model",
                 developer_instructions: "drop Copilot prompt",
                 approval_policy: "never",
+                approvals_reviewer: "auto_review",
                 sandbox_mode: "danger-full-access",
               }),
             },
@@ -227,6 +231,7 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
       expect.objectContaining({
         model: "custom-model",
         approval_policy: "on-request",
+        approvals_reviewer: "user",
         sandbox_mode: "workspace-write",
       })
     );

@@ -16,7 +16,7 @@ import { AgentSessionIndex } from "./session/AgentSessionIndex";
 import { createNodeFileStorage } from "./session/nodeFileStorage";
 import { AgentSessionManager } from "./session/AgentSessionManager";
 import { SkillManager } from "./skills";
-import { managedBuiltinSkills, MIYO_SEARCH_SKILL } from "./skills/builtin/builtinSkills";
+import { planManagedBuiltins } from "./skills/builtin/builtinSkills";
 import { removeSeededBuiltin, seedBuiltinSkills } from "./skills/builtin/seedBuiltinSkills";
 import { buildBuiltinSeedFs } from "./skills/builtin/miyoSearchSeed";
 import {
@@ -38,9 +38,6 @@ export { useAgentModePicker } from "./ui/useAgentModePicker";
 export type { AgentModePickerOverride } from "./ui/useAgentModePicker";
 export type { AgentSessionManager } from "./session/AgentSessionManager";
 export type { AgentBrand, BackendDescriptor, BackendId, InstallState } from "./session/types";
-// First-enrollment default-enable rule (enable the agent's current model).
-export { computeDefaultEnabledIds } from "./session/agentDefaultEnable";
-export type { EnrolledModelRef } from "./session/agentDefaultEnable";
 export { partitionOpencodeOnlyWireIds } from "./backends/opencode/opencodeProbePartition";
 export {
   mapProviderToOpencodeId,
@@ -286,10 +283,11 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
   });
   // Seed the plugin-shipped builtin skills into the canonical folder, then run
   // discovery so the pass picks them up and fans them out to the agent dirs.
-  // The Plus relay skills are always seeded; the Miyo vault-search skill is
-  // gated on the user's explicit `enableMiyoSearchSkill` toggle — seeded when
-  // on, and the seeded copy pruned when off. Discovery runs even when seeding
-  // fails so existing skills still reconcile.
+  // Miyo vault search and Miyo document parsing are gated independently;
+  // `planManagedBuiltins` decides both what to write and what to remove, so no
+  // gate can be added without its prune (the cloud PDF skill Miyo documents
+  // replace is pruned this way). Discovery runs even when seeding fails so
+  // existing skills still reconcile.
   //
   // Passes are SERIALIZED through `seedChain`: a fast enable→disable (or a folder
   // change landing mid-seed) would otherwise interleave writes and leave the
@@ -305,14 +303,14 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
       // chain must stay resolved no matter what any single pass hits.
       try {
         const fs = buildBuiltinSeedFs(app);
-        const useMiyo = getSettings().enableMiyoSearchSkill === true;
-        await seedBuiltinSkills({
-          skillsFolderRelPath: folder,
-          fs,
-          skills: managedBuiltinSkills(useMiyo),
+        const settings = getSettings();
+        const { seed, prune } = planManagedBuiltins({
+          search: settings.enableMiyoSearchSkill === true,
+          documents: settings.docProcessorBackend === "miyo",
         });
-        if (!useMiyo) {
-          await removeSeededBuiltin(folder, MIYO_SEARCH_SKILL.name, fs);
+        await seedBuiltinSkills({ skillsFolderRelPath: folder, fs, skills: seed });
+        for (const name of prune) {
+          await removeSeededBuiltin(folder, name, fs);
         }
       } catch (e) {
         logError("[Skills] builtin skill seeding failed", e);
@@ -350,18 +348,18 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     }
     // Re-seed builtins when the canonical skills folder changes (so the tools
     // appear in the new folder without a reload) or when Miyo availability
-    // flips (so the gated Miyo skill is seeded/pruned to match). Both run the
+    // flips (so each gated Miyo skill is seeded/pruned to match). Both run the
     // same gate-aware seed pass against the current folder.
     const prevFolder = prev.agentMode?.skills?.folder ?? DEFAULT_SKILLS_FOLDER;
     const nextFolder = next.agentMode?.skills?.folder ?? DEFAULT_SKILLS_FOLDER;
-    // The `miyo-search` skill now seeds/prunes off the explicit
-    // `enableMiyoSearchSkill` toggle, so a flip must re-seed and restart (codex/
-    // opencode bake the steering at spawn). `enableMiyo` / `miyoServerUrl` are
-    // still watched because the injected env (MIYO_URL) changes with them, and
-    // `isPaidUser` because Plus status gates other seeded builtins in the same
-    // pass.
+    // `enableMiyoSearchSkill` and `docProcessorBackend` are the two gates
+    // `planManagedBuiltins` reads, and each also selects prompt steering that
+    // codex/opencode bake at spawn. `enableMiyo` / `miyoServerUrl` are still
+    // watched because the injected env (MIYO_URL) changes with them, and
+    // `isPaidUser` because it changes the license the seeded Plus scripts read.
     const miyoAvailabilityChanged =
       prev.enableMiyoSearchSkill !== next.enableMiyoSearchSkill ||
+      prev.docProcessorBackend !== next.docProcessorBackend ||
       prev.enableMiyo !== next.enableMiyo ||
       prev.miyoServerUrl !== next.miyoServerUrl ||
       prev.isPaidUser !== next.isPaidUser;
@@ -378,8 +376,24 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
       // key, so it's a no-op when the rebuilt prompt is unchanged.
       void seedManagedBuiltins(nextFolder)
         .then(() => {
-          if (miyoAvailabilityChanged) {
-            restartSystemPromptAffected();
+          if (!miyoAvailabilityChanged) return;
+          restartSystemPromptAffected();
+          if (prev.docProcessorBackend === next.docProcessorBackend) return;
+          // Backends skipped above rebuild the prompt per `newSession()`, so a new
+          // chat is already correct — but one already open keeps the route it was
+          // born with, and after a switch to Miyo that means a live Claude session
+          // still holds the Plus steering while `copilot-read-pdf` is gone, whose
+          // fallback clause then sends the PDF to its own reader.
+          for (const descriptor of listBackendDescriptors()) {
+            if (descriptor.restartOnSystemPromptChange) continue;
+            void manager
+              .restartBackend(descriptor.id, "document processor changed")
+              .catch((e) =>
+                logError(
+                  `[AgentMode] restart after doc processor change failed: ${descriptor.id}`,
+                  e
+                )
+              );
           }
         })
         .catch((e) => logError("[Skills] builtin skill re-seeding failed", e));
