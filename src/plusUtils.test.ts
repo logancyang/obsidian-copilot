@@ -18,9 +18,16 @@ jest.mock("@/entitlement", () => ({
   verifyEntitlement: (...args: [string, unknown?]) => mockVerifyEntitlement(...args),
 }));
 
+const mockValidateLicenseKey = jest.fn<Promise<{ isValid: boolean | undefined }>, []>();
+
+jest.mock("@/LLMProviders/brevilabsClient", () => ({
+  BrevilabsClient: { getInstance: () => ({ validateLicenseKey: () => mockValidateLicenseKey() }) },
+}));
+
 import {
   applyEntitlement,
   canUseMultiAgent,
+  checkIsPaidUser,
   isSelfHostModeValid,
   markPaidPendingEntitlement,
   turnOffPaid,
@@ -77,6 +84,7 @@ describe("plusUtils", () => {
     mockSetSettings.mockClear();
     mockUpdateSetting.mockClear();
     mockVerifyEntitlement.mockReset();
+    mockValidateLicenseKey.mockReset();
     mockGetSettings.mockReturnValue(buildSettings({ entitlementToken: "" }));
     await verifyCachedEntitlement();
   });
@@ -342,6 +350,47 @@ describe("plusUtils", () => {
 
       expect(isSelfHostModeValid()).toBe(false);
       expect(canUseMultiAgent()).toBe(false);
+    });
+  });
+
+  describe("checkIsPaidUser()", () => {
+    it("returns false without reaching the server when no license key is set", async () => {
+      mockGetSettings.mockReturnValue(buildSettings({ plusLicenseKey: "" }));
+
+      expect(await checkIsPaidUser()).toBe(false);
+      expect(mockValidateLicenseKey).not.toHaveBeenCalled();
+    });
+
+    it("returns the server's verdict when it answers", async () => {
+      mockGetSettings.mockReturnValue(buildSettings({ plusLicenseKey: "key", isPaidUser: true }));
+      mockValidateLicenseKey.mockResolvedValue({ isValid: false });
+
+      expect(await checkIsPaidUser()).toBe(false);
+    });
+
+    it("keeps a paid user working when the license server is unreachable", async () => {
+      // requestUrl rejects offline, and every caller reads a rejection as "no
+      // license" — which would deny the offline window the signed token exists
+      // to provide. The call still runs, since it is what renews the token.
+      mockGetSettings.mockReturnValue(buildSettings({ plusLicenseKey: "key", isPaidUser: true }));
+      mockValidateLicenseKey.mockRejectedValue(new Error("net::ERR_INTERNET_DISCONNECTED"));
+
+      expect(await checkIsPaidUser()).toBe(true);
+      expect(mockValidateLicenseKey).toHaveBeenCalled();
+    });
+
+    it("keeps a paid user working when the server answers without a verdict", async () => {
+      mockGetSettings.mockReturnValue(buildSettings({ plusLicenseKey: "key", isPaidUser: true }));
+      mockValidateLicenseKey.mockResolvedValue({ isValid: undefined });
+
+      expect(await checkIsPaidUser()).toBe(true);
+    });
+
+    it("does not grant offline access to a user with no cached paid state", async () => {
+      mockGetSettings.mockReturnValue(buildSettings({ plusLicenseKey: "key", isPaidUser: false }));
+      mockValidateLicenseKey.mockRejectedValue(new Error("net::ERR_INTERNET_DISCONNECTED"));
+
+      expect(await checkIsPaidUser()).toBe(false);
     });
   });
 

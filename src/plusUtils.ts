@@ -222,6 +222,12 @@ export function useCanUseMultiAgent(): boolean {
 
 /**
  * Check if the user has a valid paid license (any tier, incl. Lite).
+ *
+ * An unreachable server means "unknown", not "unentitled". `requestUrl` rejects
+ * when offline, and callers read both a rejection and `undefined` as no license
+ * — which would cut off the very offline window the signed token exists to
+ * provide. So the call still happens (it is what renews the token), but a
+ * transport failure answers from what verified locally instead.
  */
 export async function checkIsPaidUser(
   app?: App,
@@ -232,8 +238,11 @@ export async function checkIsPaidUser(
     return false;
   }
   const brevilabsClient = BrevilabsClient.getInstance();
-  const result = await brevilabsClient.validateLicenseKey(app, context);
-  return result.isValid;
+  const result = await brevilabsClient.validateLicenseKey(app, context).catch((error) => {
+    logInfo("License validation unreachable; falling back to the cached entitlement:", error);
+    return { isValid: undefined };
+  });
+  return result.isValid ?? isPaidEnabled();
 }
 
 /**
