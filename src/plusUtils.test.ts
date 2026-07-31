@@ -368,26 +368,41 @@ describe("plusUtils", () => {
       expect(await checkIsPaidUser()).toBe(false);
     });
 
-    it("keeps a paid user working when the license server is unreachable", async () => {
+    it("keeps an unexpired entitlement working when the license server is unreachable", async () => {
       // requestUrl rejects offline, and every caller reads a rejection as "no
       // license" — which would deny the offline window the signed token exists
       // to provide. The call still runs, since it is what renews the token.
-      mockGetSettings.mockReturnValue(buildSettings({ plusLicenseKey: "key", isPaidUser: true }));
+      await verifySessionFeatures(["multi_agent", "self_host"]);
+      mockGetSettings.mockReturnValue(tokenBackedSettings({ plusLicenseKey: "key" }));
       mockValidateLicenseKey.mockRejectedValue(new Error("net::ERR_INTERNET_DISCONNECTED"));
 
       expect(await checkIsPaidUser()).toBe(true);
       expect(mockValidateLicenseKey).toHaveBeenCalled();
     });
 
-    it("keeps a paid user working when the server answers without a verdict", async () => {
-      mockGetSettings.mockReturnValue(buildSettings({ plusLicenseKey: "key", isPaidUser: true }));
+    it("keeps an unexpired entitlement working when the server answers without a verdict", async () => {
+      await verifySessionFeatures(["multi_agent", "self_host"]);
+      mockGetSettings.mockReturnValue(tokenBackedSettings({ plusLicenseKey: "key" }));
       mockValidateLicenseKey.mockResolvedValue({ isValid: undefined });
 
       expect(await checkIsPaidUser()).toBe(true);
     });
 
-    it("does not grant offline access to a user with no cached paid state", async () => {
-      mockGetSettings.mockReturnValue(buildSettings({ plusLicenseKey: "key", isPaidUser: false }));
+    it("stops a turn whose entitlement expired while renewal was failing", async () => {
+      // The persisted isPaidUser is still true here. Answering from it would let
+      // the turn proceed with isSelfHostModeValid() already closed, rerouting a
+      // self-host user's searches to the cloud on a failed renewal.
+      await verifySessionFeatures(["multi_agent", "self_host"], PAST_EXP_SECONDS);
+      mockGetSettings.mockReturnValue(tokenBackedSettings({ plusLicenseKey: "key" }));
+      mockValidateLicenseKey.mockResolvedValue({ isValid: undefined });
+
+      expect(await checkIsPaidUser()).toBe(false);
+    });
+
+    it("does not grant offline access on persisted flags alone (edited data.json)", async () => {
+      mockGetSettings.mockReturnValue(
+        tokenBackedSettings({ plusLicenseKey: "key", isPaidUser: true })
+      );
       mockValidateLicenseKey.mockRejectedValue(new Error("net::ERR_INTERNET_DISCONNECTED"));
 
       expect(await checkIsPaidUser()).toBe(false);

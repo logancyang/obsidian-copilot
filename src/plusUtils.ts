@@ -114,18 +114,23 @@ const NO_VERIFIED_ENTITLEMENT: VerifiedEntitlement = Object.freeze({
 let verified: VerifiedEntitlement = NO_VERIFIED_ENTITLEMENT;
 
 /**
- * Whether the entitlement verified this session still grants `feature`: the
- * proof must belong to the token settings currently hold, and the signed `exp`
- * must not have passed — a session running past expiry loses the capability.
+ * Whether the entitlement verified this session still stands: the proof must
+ * belong to the token settings currently hold, and the signed `exp` must not
+ * have passed. This is the offline window — signature-backed, so unlike the
+ * persisted `isPaidUser` an edited `data.json` cannot widen it.
+ */
+function hasLiveEntitlement(): boolean {
+  return verified.token === getSettings().entitlementToken && Date.now() < verified.expiresAt;
+}
+
+/**
+ * Whether the entitlement verified this session still grants `feature` — a
+ * session running past the signed expiry loses the capability.
  *
  * @param feature - Capability to check for.
  */
 function hasVerifiedFeature(feature: EntitlementFeature): boolean {
-  return (
-    verified.token === getSettings().entitlementToken &&
-    verified.features.has(feature) &&
-    Date.now() < verified.expiresAt
-  );
+  return hasLiveEntitlement() && verified.features.has(feature);
 }
 
 /**
@@ -226,8 +231,13 @@ export function useCanUseMultiAgent(): boolean {
  * An unreachable server means "unknown", not "unentitled". `requestUrl` rejects
  * when offline, and callers read both a rejection and `undefined` as no license
  * — which would cut off the very offline window the signed token exists to
- * provide. So the call still happens (it is what renews the token), but a
- * transport failure answers from what verified locally instead.
+ * provide. So the call still happens (it is what renews the token), but an
+ * unknown answer defers to the signed entitlement.
+ *
+ * That fallback is the token, never the persisted `isPaidUser`: the flag knows
+ * nothing about expiry, so a renewal failing past `exp` would keep answering
+ * true and let a self-host user's turn proceed with the runtime gate already
+ * closed — quietly rerouting their searches to the cloud.
  */
 export async function checkIsPaidUser(
   app?: App,
@@ -242,7 +252,7 @@ export async function checkIsPaidUser(
     logInfo("License validation unreachable; falling back to the cached entitlement:", error);
     return { isValid: undefined };
   });
-  return result.isValid ?? isPaidEnabled();
+  return result.isValid ?? hasLiveEntitlement();
 }
 
 /**
