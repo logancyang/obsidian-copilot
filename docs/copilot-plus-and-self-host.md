@@ -103,7 +103,7 @@ Self-Host Mode lets you replace Copilot's cloud services with your own infrastru
 4. Toggle **Enable Miyo** to use the Miyo desktop app for local search, PDF parsing, and context.
 5. *(Optional)* Set **Custom Miyo Server URL** only if Miyo is running on a remote machine. Leave blank to use automatic local service discovery.
 
-**Working offline**: Self-Host Mode keeps working without an internet connection. Copilot remembers your plan for about two weeks at a time and refreshes that automatically whenever you're online, so an occasional online session is all it takes to stay activated indefinitely.
+**Working offline**: Self-Host Mode keeps working without an internet connection for a while after your last online check, and renews itself automatically whenever you're online. How long that offline period lasts currently varies, so reconnect when you can rather than relying on a fixed window.
 
 ### Web Search in Self-Host Mode
 
