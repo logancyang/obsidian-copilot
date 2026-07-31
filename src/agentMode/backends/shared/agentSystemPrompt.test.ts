@@ -8,7 +8,9 @@ import {
 import type { UserSystemPrompt } from "@/system-prompts/type";
 import {
   buildAgentSystemPrompt,
+  COPILOT_MIYO_DOCUMENT_STEERING,
   COPILOT_MIYO_SEARCH_STEERING,
+  COPILOT_PLUS_DOCUMENT_STEERING,
   COPILOT_PLUS_TOOLS_STEERING,
   COPILOT_PROMPT_BASE,
 } from "./agentSystemPrompt";
@@ -89,6 +91,7 @@ describe("buildAgentSystemPrompt", () => {
     // users fall back to their own tools via the steering's fallback clause.
     const nonPlus = buildAgentSystemPrompt();
     expect(nonPlus).toContain(COPILOT_PLUS_TOOLS_STEERING);
+    expect(nonPlus).toContain(COPILOT_PLUS_DOCUMENT_STEERING);
     expect(nonPlus).toContain("copilot-web-search");
     expect(nonPlus).toContain("copilot-web-fetch");
     expect(nonPlus).toContain("copilot-read-pdf");
@@ -107,10 +110,32 @@ describe("buildAgentSystemPrompt", () => {
     expect(buildAgentSystemPrompt()).toContain(COPILOT_PLUS_TOOLS_STEERING);
   });
 
+  it("routes external questions to the web proactively and keeps vault text out of queries", () => {
+    const prompt = buildAgentSystemPrompt();
+    // Both halves of the routing rule, plus the privacy constraint on queries.
+    expect(prompt).toMatch(/search locally first/i);
+    expect(prompt).toMatch(/without waiting for an explicit web-search request/i);
+    expect(prompt).toMatch(/Do not place text from the vault into a web query/i);
+  });
+
+  it("uses the local fail-closed document route only when Miyo is selected", () => {
+    updateSetting("docProcessorBackend", "miyo");
+    const prompt = buildAgentSystemPrompt();
+    expect(prompt).toContain(COPILOT_MIYO_DOCUMENT_STEERING);
+    // The Plus route must be absent, not merely outranked: `copilot-read-pdf` is
+    // pruned from disk in this mode, so steering toward it would dead-end.
+    expect(prompt).not.toContain(COPILOT_PLUS_DOCUMENT_STEERING);
+    expect(prompt).toContain("miyo-parse");
+    // Cancels the blanket fallback clause the Plus tools steering sets up.
+    expect(prompt).toMatch(/fallback rule above does NOT apply/i);
+  });
+
   it("suppresses the steering when the builtin prompt is disabled", () => {
     setDisableBuiltinSystemPrompt(true);
     const prompt = buildAgentSystemPrompt();
     expect(prompt).not.toContain(COPILOT_PLUS_TOOLS_STEERING);
+    expect(prompt).not.toContain(COPILOT_PLUS_DOCUMENT_STEERING);
+    expect(prompt).not.toContain(COPILOT_MIYO_DOCUMENT_STEERING);
   });
 
   it("omits the Miyo steering when the search skill is not installed", () => {

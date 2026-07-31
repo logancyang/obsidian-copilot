@@ -1,4 +1,10 @@
-import { BUILTIN_SKILLS, managedBuiltinSkills, MIYO_SEARCH_SKILL, PLUS_ENV } from "./builtinSkills";
+import {
+  BUILTIN_SKILLS,
+  MIYO_PARSE_SKILL,
+  MIYO_SEARCH_SKILL,
+  planManagedBuiltins,
+  PLUS_ENV,
+} from "./builtinSkills";
 import {
   SYMPOSIUM_API_ORIGIN,
   SYMPOSIUM_MAX_HTML_BYTES,
@@ -297,21 +303,93 @@ describe("builtinSkills", () => {
     });
   });
 
-  describe("managedBuiltinSkills()", () => {
-    it("includes the Miyo skill only when Miyo is in use", () => {
-      expect(managedBuiltinSkills(true)).toContain(MIYO_SEARCH_SKILL);
-      expect(managedBuiltinSkills(false)).not.toContain(MIYO_SEARCH_SKILL);
+  describe("MIYO_PARSE_SKILL", () => {
+    const miyoParseScript = (ext: ".sh" | ".cmd"): string => {
+      const file = MIYO_PARSE_SKILL.files.find((candidate) => candidate.path.endsWith(ext));
+      if (!file) throw new Error(`miyo-parse ships no ${ext} script`);
+      return file.content;
+    };
+
+    it("is a gated skill distinct from the always-seeded set and from Miyo search", () => {
+      expect(BUILTIN_SKILLS).not.toContain(MIYO_PARSE_SKILL);
+      expect(MIYO_PARSE_SKILL.name).toBe("miyo-parse");
+      expect(MIYO_PARSE_SKILL.enabledAgents).toEqual(["claude", "codex", "opencode"]);
+      expect(MIYO_PARSE_SKILL.skillMd).toContain(
+        `copilot-builtin-version: "${MIYO_PARSE_SKILL.version}"`
+      );
     });
 
-    it("appends Miyo after the Plus skills, preserving their order", () => {
-      expect(managedBuiltinSkills(true).map((s) => s.name)).toEqual([
-        ...BUILTIN_SKILLS.map((s) => s.name),
+    it("ships one wrapper per OS that runs `miyo parse` on a single quoted path", () => {
+      expect(MIYO_PARSE_SKILL.files.map((file) => file.path)).toEqual([
+        "miyo-parse.sh",
+        "miyo-parse.cmd",
+      ]);
+      expect(miyoParseScript(".sh")).toContain('"$MIYO" parse "$FILE"');
+      expect(miyoParseScript(".cmd")).toContain('"%MIYO%" parse "%~1"');
+    });
+
+    it("resolves Miyo's install path before falling back to PATH on each OS", () => {
+      expect(miyoParseScript(".sh")).toContain("$HOME/.miyo/bin/miyo");
+      expect(miyoParseScript(".sh")).toContain("command -v miyo");
+      expect(miyoParseScript(".cmd")).toContain("%LOCALAPPDATA%\\Miyo\\bin\\miyo\\miyo.exe");
+      expect(miyoParseScript(".cmd")).toContain("where miyo");
+    });
+
+    it("tells the agent to fail closed rather than reach for a cloud parser", () => {
+      expect(MIYO_PARSE_SKILL.skillMd).toMatch(/Never fall back/i);
+      expect(MIYO_PARSE_SKILL.skillMd).toContain("copilot-read-pdf");
+    });
+
+    it("names the recovery path when the CLI is absent, since a remote server can't parse", () => {
+      // `miyo parse` runs locally and never reads MIYO_URL, so a remote-only
+      // user has to install the CLI or move the picker back to Plus.
+      expect(MIYO_PARSE_SKILL.skillMd).toMatch(/remote\s+Miyo\s+server\s+does\s+not\s+help/i);
+      expect(MIYO_PARSE_SKILL.skillMd).toMatch(/Document\s+Processor to Plus/i);
+    });
+
+    it("does not embed Copilot Plus credentials", () => {
+      expect(MIYO_PARSE_SKILL.skillMd).not.toContain(PLUS_ENV.licenseKey);
+      expect(MIYO_PARSE_SKILL.skillMd).not.toContain(PLUS_ENV.baseUrl);
+      expect(miyoParseScript(".sh")).not.toContain(PLUS_ENV.licenseKey);
+      expect(miyoParseScript(".cmd")).not.toContain(PLUS_ENV.licenseKey);
+    });
+  });
+
+  describe("planManagedBuiltins()", () => {
+    const names = (skills: readonly { name: string }[]): string[] => skills.map((s) => s.name);
+
+    it("seeds only the always-on builtins when both Miyo gates are off", () => {
+      const plan = planManagedBuiltins({ search: false, documents: false });
+      // Stable reference, per the project's referential-stability rule.
+      expect(plan.seed).toBe(BUILTIN_SKILLS);
+      expect(plan.prune).toEqual(["miyo-search", "miyo-parse"]);
+    });
+
+    it("gates search and document parsing independently", () => {
+      expect(names(planManagedBuiltins({ search: true, documents: false }).seed)).toEqual([
+        ...names(BUILTIN_SKILLS),
         "miyo-search",
       ]);
+      expect(planManagedBuiltins({ search: true, documents: false }).prune).toEqual(["miyo-parse"]);
+      expect(planManagedBuiltins({ search: false, documents: true }).seed).toContain(
+        MIYO_PARSE_SKILL
+      );
+      expect(planManagedBuiltins({ search: false, documents: true }).prune).toContain(
+        "miyo-search"
+      );
     });
 
-    it("returns the stable BUILTIN_SKILLS reference when Miyo is off", () => {
-      expect(managedBuiltinSkills(false)).toBe(BUILTIN_SKILLS);
+    it("replaces the cloud PDF skill with Miyo parse when Miyo owns documents", () => {
+      // Steering alone would leave copilot-read-pdf on disk, one ignored
+      // instruction away from uploading a document the user chose to keep local.
+      const plan = planManagedBuiltins({ search: true, documents: true });
+      expect(names(plan.seed)).not.toContain("copilot-read-pdf");
+      expect(plan.prune).toEqual(["copilot-read-pdf"]);
+      expect(names(plan.seed)).toEqual([
+        ...names(BUILTIN_SKILLS).filter((name) => name !== "copilot-read-pdf"),
+        "miyo-search",
+        "miyo-parse",
+      ]);
     });
   });
 });
