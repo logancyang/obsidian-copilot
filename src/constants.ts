@@ -1039,8 +1039,6 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   enableMiyo: false,
   enableMiyoSearchSkill: false,
   miyoSearchAll: false,
-  selfHostModeValidatedAt: null,
-  selfHostValidationCount: 0,
   selfHostUrl: "",
   selfHostApiKey: "",
   miyoServerUrl: "",

@@ -439,22 +439,18 @@ describe("sanitizeSettings - legacy Miyo settings cleanup", () => {
 });
 
 describe("sanitizeSettings - legacy self-host migration", () => {
-  it("renames legacy enableSelfHostedSearch=true to enableSelfHostMode without fabricating a receipt", () => {
+  it("renames legacy enableSelfHostedSearch=true to enableSelfHostMode", () => {
     const legacy = {
       ...DEFAULT_SETTINGS,
       enableSelfHostMode: undefined,
       enableSelfHostedSearch: true,
-      selfHostModeValidatedAt: null,
-      selfHostValidationCount: 0,
     } as unknown as CopilotSettings;
 
     const sanitized = sanitizeSettings(legacy);
 
+    // Only the user preference carries over; entitlement comes from the signed
+    // token, so there is no local receipt for sanitize to seed.
     expect(sanitized.enableSelfHostMode).toBe(true);
-    // The toggle alone gates self-host tools (isSelfHostModeValid), so sanitize
-    // must not invent a validation receipt — the receipt stays untouched.
-    expect(sanitized.selfHostModeValidatedAt).toBeNull();
-    expect(sanitized.selfHostValidationCount).toBe(0);
   });
 });
 

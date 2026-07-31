@@ -106,8 +106,6 @@ describe("findRelevantNotes", () => {
       miyoServerUrl: "",
       enableMiyo: false,
       enableSemanticSearchV3: false,
-      selfHostModeValidatedAt: null,
-      selfHostValidationCount: 0,
     } as CopilotSettings);
     mockedGetLinkedNotes.mockReturnValue([]);
     mockedGetBacklinkedNotes.mockReturnValue([]);

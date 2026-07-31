@@ -5,7 +5,6 @@ import {
   refreshMiyoStatus,
 } from "@/miyo/miyoStatusStore";
 import { shouldUseMiyo } from "@/miyo/miyoRuntimePolicy";
-import { isSelfHostModeValidFor } from "@/plusUtils";
 import { categorizePatterns, getDecodedPatterns } from "@/search/searchUtils";
 import { CopilotSettings, getSettings } from "@/settings/model";
 import { App } from "obsidian";
@@ -249,16 +248,18 @@ export function getSearchBackend(settings: CopilotSettings = getSettings()): "ke
  * circular (it would read the very field being computed) and non-deterministic
  * (it would depend on runtime connectivity at migration time).
  *
- * Both inputs are read from the passed `settings` (via the pure
- * {@link isSelfHostModeValidFor}), so the result depends only on that snapshot.
+ * Reads the raw toggles off the passed `settings` rather than the runtime
+ * `isSelfHostModeValid()` gate, which additionally consults the entitlement
+ * verified this session — a migration must not depend on whether that
+ * asynchronous verification has landed yet.
  *
  * @param settings - Settings being migrated.
- * @returns "miyo" when self-host mode is valid and Miyo is enabled, else "plus".
+ * @returns "miyo" when self-host mode and Miyo are both enabled, else "plus".
  */
 export function seedDocProcessorBackend(
   settings: CopilotSettings = getSettings()
 ): "plus" | "miyo" {
-  return isSelfHostModeValidFor(settings) && settings.enableMiyo ? "miyo" : "plus";
+  return settings.enableSelfHostMode && settings.enableMiyo ? "miyo" : "plus";
 }
 
 /**

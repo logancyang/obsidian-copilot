@@ -1,11 +1,3 @@
-// isSelfHostModeValidFor is a pure predicate over the passed settings; keep the
-// real implementation so seedDocProcessorBackend tests drive it via the settings
-// snapshot (proving purity) rather than through a global mock.
-jest.mock("@/plusUtils", () => ({
-  isSelfHostModeValidFor: (settings: { enableSelfHostMode?: boolean }): boolean =>
-    settings.enableSelfHostMode === true,
-}));
-
 // miyoUtils imports isMiyoAvailableForCapability (used by resolveDocProcessorBackend,
 // which is covered end-to-end in FileParserManager.test.ts). Stub the status store
 // so importing the module here doesn't pull in the real store.

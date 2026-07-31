@@ -99,9 +99,11 @@ Self-Host Mode lets you replace Copilot's cloud services with your own infrastru
 
 1. Go to **Settings → Copilot → Plus**
 2. Under **Self-Host Mode**, toggle **Enable Self-Host Mode**
-3. Copilot validates your license. If valid, the toggle activates.
+3. Copilot checks your plan. The toggle stays locked if your plan doesn't include Self-Host Mode.
 4. Toggle **Enable Miyo** to use the Miyo desktop app for local search, PDF parsing, and context.
 5. *(Optional)* Set **Custom Miyo Server URL** only if Miyo is running on a remote machine. Leave blank to use automatic local service discovery.
+
+**Working offline**: Self-Host Mode keeps working without an internet connection. Copilot remembers your plan for about two weeks at a time and refreshes that automatically whenever you're online, so an occasional online session is all it takes to stay activated indefinitely.
 
 ### Web Search in Self-Host Mode
 

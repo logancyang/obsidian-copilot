@@ -150,10 +150,6 @@ export interface CopilotSettings {
   enableMiyoSearchSkill: boolean;
   /** When true, omit folder_name from Miyo search requests so all indexed content is searched */
   miyoSearchAll: boolean;
-  /** Timestamp of last successful Believer validation for self-host mode (null if never validated) */
-  selfHostModeValidatedAt: number | null;
-  /** Count of successful periodic validations (3 = permanently valid) */
-  selfHostValidationCount: number;
   /** URL endpoint for the self-host mode backend */
   selfHostUrl: string;
   /** API key for the self-host mode backend (if required) */
