@@ -657,7 +657,6 @@ die() {
 
 FILE="$1"
 [ -n "$FILE" ] || die "Usage: sh miyo-parse.sh <file>" 1
-[ -f "$FILE" ] && [ -r "$FILE" ] || die "Could not read file: $FILE (pass an absolute path)." 1
 
 ${MIYO_POSIX_RESOLVER}
 
@@ -669,11 +668,6 @@ setlocal enableextensions
 rem Parse one local PDF or EPUB through the Miyo CLI and print Markdown/text.
 if "%~1"=="" (
   echo Usage: miyo-parse.cmd "file" 1>&2
-  exit /b 1
-)
-rem Never echo %~1 back: an unquoted & or > in the path would run as a command.
-if not exist "%~1" (
-  echo Could not read that file. Pass an absolute path to a PDF or EPUB. 1>&2
   exit /b 1
 )
 ${MIYO_WINDOWS_RESOLVER}
@@ -790,7 +784,8 @@ metadata:
 
 Use Miyo to extract Markdown/text from one PDF or EPUB. Parsing runs locally,
 works for files anywhere on the filesystem, and does not require the Miyo
-service to be running.
+service to be running. It does require the Miyo CLI on this machine: a remote
+Miyo server cannot parse for you.
 
 ## How to run
 
@@ -817,6 +812,11 @@ answer the user's question.
 Report the error clearly and stop parsing that document. Never fall back to
 \`copilot-read-pdf\` or any other cloud document parser: selecting Miyo is an
 explicit local-processing choice. Do not retry in a loop.
+
+If it reports that the Miyo CLI is not installed, say that pointing Copilot at a
+remote Miyo server does not help here, and that the user's options are to
+install Miyo on this machine or switch Settings → Copilot → Miyo → Document
+Processor to Plus.
 `,
   files: [
     { path: "miyo-parse.sh", content: MIYO_PARSE_SH },

@@ -86,9 +86,9 @@ Web research normally starts with one discovery search followed by targeted page
 For PDF and EPUB files, the **Document Processor** choice under **Settings → Copilot → Miyo** also controls Agent Mode:
 
 - **Plus** uses the Copilot Plus PDF reader and can fall back to another available document-reading tool.
-- **Miyo** parses PDF and EPUB files locally with the Miyo CLI, including files outside the vault. Copilot removes the Plus PDF skill from the agent's skills folder while this is selected, so a document cannot reach a cloud parser by mistake. If local parsing fails, the agent reports the error and stops.
+- **Miyo** parses PDF and EPUB files locally, including files outside the vault. Copilot removes the Plus PDF skill from the agent's skills folder while this is selected, so a document cannot reach a cloud parser by mistake. If local parsing fails, the agent reports the error and stops.
 
-Switching between the two reseeds the skills folder and restarts running agents, so the change applies without a reload.
+Unlike chat, Agent Mode parses through the Miyo CLI rather than the Miyo server, so the Miyo option needs the app installed on the same machine as Obsidian; a remote Miyo server does not enable it. Without a local install, either install Miyo or set Document Processor back to **Plus**. Switching between the two reseeds the skills folder and restarts running agents, so either choice applies without a reload.
 
 ### Publish to Symposium
 

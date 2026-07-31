@@ -335,16 +335,16 @@ describe("builtinSkills", () => {
       expect(miyoParseScript(".cmd")).toContain("where miyo");
     });
 
-    it("rejects a missing or unreadable file before invoking the CLI", () => {
-      // Without this the agent only sees the CLI's own error and cannot tell a
-      // bad (e.g. vault-relative) path from a broken Miyo install.
-      expect(miyoParseScript(".sh")).toContain('[ -f "$FILE" ] && [ -r "$FILE" ]');
-      expect(miyoParseScript(".cmd")).toContain('if not exist "%~1"');
-    });
-
     it("tells the agent to fail closed rather than reach for a cloud parser", () => {
       expect(MIYO_PARSE_SKILL.skillMd).toMatch(/Never fall back/i);
       expect(MIYO_PARSE_SKILL.skillMd).toContain("copilot-read-pdf");
+    });
+
+    it("names the recovery path when the CLI is absent, since a remote server can't parse", () => {
+      // `miyo parse` runs locally and never reads MIYO_URL, so a remote-only
+      // user has to install the CLI or move the picker back to Plus.
+      expect(MIYO_PARSE_SKILL.skillMd).toMatch(/remote\s+Miyo\s+server\s+cannot\s+parse/i);
+      expect(MIYO_PARSE_SKILL.skillMd).toMatch(/Document\s+Processor to Plus/i);
     });
 
     it("does not embed Copilot Plus credentials", () => {
