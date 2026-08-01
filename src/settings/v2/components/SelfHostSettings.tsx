@@ -72,7 +72,11 @@ export const SelfHostSettings: React.FC = () => {
           disabled={isEligible !== true && !selfHostOn}
         />
 
-        <div className="tw-flex tw-items-start tw-gap-2 tw-rounded-lg tw-border tw-border-solid tw-px-3 tw-py-2.5 tw-text-xs tw-text-normal tw-bg-interactive-accent/10 tw-border-interactive-accent/30">
+        <div
+          className={cn(
+            "tw-flex tw-items-start tw-gap-2 tw-py-3 tw-text-xs tw-text-normal tw-bg-interactive-accent/10"
+          )}
+        >
           <ShieldCheck className="tw-mt-0.5 tw-size-4 tw-shrink-0 tw-text-accent" />
           <div className="tw-leading-relaxed">
             <span className="tw-font-semibold">Privacy-first.</span> While Self-Host is on, cloud

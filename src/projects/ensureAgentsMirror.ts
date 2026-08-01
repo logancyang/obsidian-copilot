@@ -1,6 +1,6 @@
 import { logError } from "@/logger";
 import { AGENTS_MIRROR_FILE } from "@/projects/constants";
-import { getProjectFolderPath } from "@/projects/projectPaths";
+import { getProjectAnchorFromConfigPath } from "@/projects/projectPaths";
 import { getComposedProjectInstructions } from "@/projects/projectSystemPrompt";
 import { addPendingFileWrite, removePendingFileWrite } from "@/projects/state";
 import { ProjectFileRecord } from "@/projects/type";
@@ -144,8 +144,17 @@ async function removeMirrorInternal(app: App, mirrorPath: string): Promise<void>
   }
 }
 
+/**
+ * The mirror always sits beside the `project.md` it mirrors.
+ *
+ * Derived from `record.filePath` rather than the live projects root: a Copilot
+ * root change activates before `ProjectRegister` reloads its cache, so a mirror
+ * written from the live root in that window lands in a different tree — and
+ * overwrites the generated mirror of whatever project occupies that name there.
+ */
 function getMirrorPath(record: ProjectFileRecord): string {
-  return normalizePath(`${getProjectFolderPath(record.folderName)}/${AGENTS_MIRROR_FILE}`);
+  const { projectFolderPath } = getProjectAnchorFromConfigPath(record.filePath);
+  return normalizePath(`${projectFolderPath}/${AGENTS_MIRROR_FILE}`);
 }
 
 function buildMirrorContent(body: string): string {

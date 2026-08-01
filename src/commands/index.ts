@@ -27,6 +27,7 @@ import { getSearchBackend } from "@/miyo/miyoUtils";
 import { getAllQAMarkdownContent } from "@/search/searchUtils";
 import { NoteSelectedTextContext, WebSelectedTextContext } from "@/types/message";
 import { ensureFolderExists, isSourceModeOn } from "@/utils";
+import { getEffectiveCopilotFolder } from "@/settings/copilotFolder";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { Editor, MarkdownView, Notice, TFile } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
@@ -409,7 +410,7 @@ export function registerCommands(plugin: CopilotPlugin, publish: PublishFile) {
 
       // Create or update the file in the vault
       const fileName = `Copilot-Indexed-Files-${new Date().toLocaleDateString().replace(/\//g, "-")}.md`;
-      const folderPath = "copilot";
+      const folderPath = getEffectiveCopilotFolder();
       const filePath = `${folderPath}/${fileName}`;
 
       // Ensure destination folder exists (supports mobile and nested)
@@ -484,7 +485,7 @@ export function registerCommands(plugin: CopilotPlugin, publish: PublishFile) {
 
       // Create the debug file
       const fileName = `Copilot-Embedding-Debug-${activeFile.basename.replace(/[\\/:*?"<>|]/g, "_")}.md`;
-      const folderPath = "copilot";
+      const folderPath = getEffectiveCopilotFolder();
       const filePath = `${folderPath}/${fileName}`;
 
       await ensureFolderExists(plugin.app.vault, folderPath);

@@ -6,6 +6,8 @@ import { GLOBAL_SCOPE } from "./scope";
 import type { AgentChatMessage } from "./types";
 import { TFile } from "obsidian";
 import type { App } from "obsidian";
+import { getSettings } from "@/settings/model";
+import { getEffectiveConversationsFolder } from "@/settings/copilotFolder";
 
 jest.mock("obsidian", () => ({
   Notice: jest.fn(),
@@ -18,6 +20,9 @@ jest.mock("@/settings/model", () => ({
     defaultConversationTag: "copilot-conversation",
     defaultConversationNoteName: "{$date}_{$time}__{$topic}",
   }),
+}));
+jest.mock("@/settings/copilotFolder", () => ({
+  getEffectiveConversationsFolder: jest.fn(() => "test-folder"),
 }));
 jest.mock("@/utils", () => ({
   ensureFolderExists: jest.fn(async () => {}),
@@ -127,6 +132,38 @@ describe("AgentChatPersistenceManager", () => {
     expect(loaded.messages[0].message).toBe("hello world");
     expect(loaded.messages[1].sender).toBe(AI_SENDER);
     expect(loaded.messages[1].message).toBe("hi back");
+  });
+
+  it("writes under the folder captured at entry, not one a mid-save root change swaps in", async () => {
+    // Captured once at entry and threaded through ensure, filename generation,
+    // and the fallback path. Simulate a Copilot-root change landing after the
+    // save starts: the entry read returns the old folder, every later read the
+    // new one. The written path must stay under the old folder so ensure/create
+    // can't straddle two directories.
+    // Only override the entry read; later reads fall back to the default mock
+    // ("test-folder"). The written path must stay under the entry-captured
+    // "old-folder" so ensure/create can't straddle two directories.
+    const folderMock = jest.mocked(getEffectiveConversationsFolder);
+    folderMock.mockReturnValueOnce("old-folder");
+
+    const saved = await manager.saveSession([makeMessage(USER_SENDER, "hi")], "claude", {});
+
+    expect(saved).not.toBeNull();
+    expect(saved!.path.startsWith("old-folder/")).toBe(true);
+    expect(saved!.path).not.toContain("test-folder");
+  });
+
+  it("writes the built-in conversation tag independent of the persisted setting", async () => {
+    // Freeze check: a custom/stale defaultConversationTag must not reach new notes.
+    (getSettings as jest.Mock).mockReturnValueOnce({
+      defaultSaveFolder: "test-folder",
+      defaultConversationTag: "user-custom-tag",
+      defaultConversationNoteName: "{$date}_{$time}__{$topic}",
+    });
+    const saved = await manager.saveSession([makeMessage(USER_SENDER, "hi")], "claude", {});
+    const contents = app.files.get(saved!.path)!.contents!;
+    expect(contents).toContain("tags:\n  - copilot-conversation");
+    expect(contents).not.toContain("user-custom-tag");
   });
 
   it("serializes a mid-stream fan-out turn so an interrupted autosave isn't blank", async () => {

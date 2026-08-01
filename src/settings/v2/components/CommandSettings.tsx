@@ -1,11 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useMemo, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { useCustomCommands } from "@/commands/state";
 import { MobileCard, MobileCardDropdownAction } from "@/components/ui/mobile-card";
-import { CopyPlus, Folder, GripVertical, Info, PenLine, Plus, Trash2 } from "lucide-react";
+import { CopyPlus, GripVertical, Info, PenLine, Plus, Trash2 } from "lucide-react";
 
 import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -39,15 +38,11 @@ import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { EMPTY_COMMAND } from "@/commands/constants";
 import { CustomCommandManager } from "@/commands/customCommandManager";
 import { CustomCommandSettingsModal } from "@/commands/CustomCommandSettingsModal";
-import {
-  generateCopyCommandName,
-  loadAllCustomCommands,
-  sortCommandsByOrder,
-} from "@/commands/customCommandUtils";
+import { generateCopyCommandName, sortCommandsByOrder } from "@/commands/customCommandUtils";
 import { generateDefaultCommands } from "@/commands/migrator";
 import { CustomCommand } from "@/commands/type";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
-import { FolderSearchModal } from "@/components/modals/FolderSearchModal";
+import { deriveCustomPromptsFolder } from "@/settings/copilotFolder";
 import { useApp } from "@/context";
 import { SettingItem } from "@/components/ui/setting-item";
 import { SettingSection } from "@/components/ui/setting-section";
@@ -298,6 +293,9 @@ export const CommandSettings: React.FC = () => {
   }, [rawCommands]);
 
   const settings = useSettingsValue();
+  // Derived from the single Copilot root; the folder is no longer separately
+  // editable, so the banner shows where commands are actually loaded from.
+  const customPromptsFolder = deriveCustomPromptsFolder(settings);
   const containerRef = useRef<HTMLDivElement>(null);
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -312,33 +310,6 @@ export const CommandSettings: React.FC = () => {
 
   const handleUpdate = async (newCommand: CustomCommand, prevCommandTitle: string) => {
     await CustomCommandManager.getInstance().updateCommand(newCommand, prevCommandTitle);
-  };
-
-  // Draft + blur-commit for the custom-prompts folder field. Reason: persisting
-  // on every keystroke would fire updateSetting + a full command reload per
-  // character. Mirrors the draft/blur pattern used by other folder inputs.
-  const persistedPromptsFolder = settings.customPromptsFolder;
-  const [promptsFolderDraft, setPromptsFolderDraft] = useState(persistedPromptsFolder);
-
-  useEffect(() => {
-    /* eslint-disable @eslint-react/hooks-extra/no-direct-set-state-in-use-effect -- resync the local draft when the persisted folder changes underneath us (e.g. Reset Settings) */
-    setPromptsFolderDraft(persistedPromptsFolder);
-    /* eslint-enable @eslint-react/hooks-extra/no-direct-set-state-in-use-effect */
-  }, [persistedPromptsFolder]);
-
-  // Persist the custom-prompts folder and reload commands from the new location.
-  // Shared by the blur-commit on the text input and the folder-picker button.
-  const commitPromptsFolder = (value: string) => {
-    if (value === persistedPromptsFolder) return;
-    updateSetting("customPromptsFolder", value);
-    void loadAllCustomCommands(app).catch((err) => logError("loadAllCustomCommands failed", err));
-  };
-
-  const handlePickPromptsFolder = () => {
-    new FolderSearchModal(app, (folder) => {
-      setPromptsFolderDraft(folder);
-      commitPromptsFolder(folder);
-    }).open();
   };
 
   const handleCreate = async (newCommand: CustomCommand) => {
@@ -436,8 +407,8 @@ export const CommandSettings: React.FC = () => {
 
   return (
     <div className="tw-space-y-4" ref={containerRef}>
-      <section>
-        <div className="tw-mb-4 tw-flex tw-flex-col tw-gap-2">
+      <section className={cn("tw-flex tw-flex-col tw-gap-4")}>
+        <div className="tw-flex tw-flex-col tw-gap-2">
           <div className="tw-text-xl tw-font-bold">Custom Commands</div>
           <div className="tw-text-sm tw-text-muted">
             Preset prompts you trigger from the editor right-click menu or with a <code>/</code>{" "}
@@ -449,44 +420,12 @@ export const CommandSettings: React.FC = () => {
           <Info className="tw-size-5 tw-shrink-0 tw-text-accent" />{" "}
           <div>
             Commands are automatically loaded from .md files in your custom prompts folder{" "}
-            <strong>{settings.customPromptsFolder}</strong>. Modifying the files will also update
-            the command settings.
+            <strong>{customPromptsFolder}</strong>. Modifying the files will also update the command
+            settings.
           </div>
         </div>
 
         <SettingSection>
-          <SettingItem
-            type="custom"
-            title="Custom Prompts Folder Name"
-            description="Folder where custom prompts are stored"
-          >
-            <div className="tw-flex tw-items-center tw-gap-2">
-              <Input
-                value={promptsFolderDraft}
-                onChange={(e) => setPromptsFolderDraft(e.target.value)}
-                onBlur={(e) => commitPromptsFolder(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    commitPromptsFolder(promptsFolderDraft);
-                    (e.target as HTMLInputElement).blur();
-                  }
-                }}
-                placeholder="copilot/copilot-custom-prompts"
-                className="!tw-w-56"
-                aria-label="Custom prompts folder"
-              />
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={handlePickPromptsFolder}
-                title="Pick folder"
-                aria-label="Pick folder"
-              >
-                <Folder className="tw-size-4" />
-              </Button>
-            </div>
-          </SettingItem>
           <SettingItem
             type="switch"
             title="Custom Prompt Templating"

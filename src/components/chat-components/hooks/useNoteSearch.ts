@@ -4,7 +4,7 @@ import { FileText, FileClock } from "lucide-react";
 import fuzzysort from "fuzzysort";
 import { useAllNotes } from "./useAllNotes";
 import { TypeaheadOption } from "@/components/chat-components/TypeaheadMenuContent";
-import { getSettings } from "@/settings/model";
+import { getEffectiveCustomPromptsFolder } from "@/settings/copilotFolder";
 
 export interface NoteSearchOption extends TypeaheadOption {
   file: TFile;
@@ -61,7 +61,7 @@ export function useNoteSearch(
   // Filter and search notes based on query (name only)
   const searchResults = useMemo(() => {
     const mergedConfig = { ...DEFAULT_CONFIG, ...config };
-    const customPromptsFolder = getSettings().customPromptsFolder;
+    const customPromptsFolder = getEffectiveCustomPromptsFolder();
 
     // If no query, return first N notes with custom command notes ranked lower
     if (!query.trim()) {

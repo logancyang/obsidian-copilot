@@ -71,7 +71,7 @@ Each AI response has action buttons:
 
 ### Autosave
 
-By default, Copilot automatically saves your conversations as markdown files in your vault. Each saved chat appears in the `copilot/copilot-conversations/` folder.
+By default, Copilot automatically saves your conversations as markdown files in your vault. Each saved chat appears in the `copilot-conversations/` sub-folder of your Copilot folder (by default `copilot/copilot-conversations/`).
 
 You can turn off autosave in Settings → Basic. When you start a new chat, any unsaved conversation is saved automatically.
 
@@ -145,7 +145,7 @@ On Agent Home, Relevant Notes appears as a shelf tab when the dedicated pane is 
 
 ## Saving a Chat Manually
 
-If autosave is off, or you want to save mid-conversation, click the **Save Chat as Note** button above the chat input box. This saves the current conversation to your configured save folder.
+If autosave is off, or you want to save mid-conversation, click the **Save Chat as Note** button above the chat input box. This saves the current conversation to your Copilot conversations folder (`copilot-conversations/` under your Copilot folder).
 
 ---
 

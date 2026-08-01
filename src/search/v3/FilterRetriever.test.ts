@@ -23,6 +23,7 @@ jest.mock("@/utils", () => ({
 }));
 jest.mock("@/search/searchUtils", () => ({
   isInternalExcludedFile: jest.fn().mockReturnValue(false),
+  isSystemExcludedPath: jest.fn().mockReturnValue(false),
   shouldIndexFile: jest.fn().mockReturnValue(true),
   getMatchingPatterns: jest.fn().mockReturnValue({ inclusions: null, exclusions: null }),
 }));
@@ -77,6 +78,35 @@ describe("FilterRetriever", () => {
       expect(results[0].metadata.score).toBe(1.0);
       expect(results[0].metadata.source).toBe("title-match");
       expect(results[0].pageContent).toBe("Note content here");
+    });
+
+    it("drops an explicitly linked note that lives under a Copilot root", async () => {
+      // Copilot roots are excluded unconditionally, so naming a chat note with
+      // [[...]] must not reach past that: these documents carry
+      // includeInContext: true and nothing downstream drops them.
+      const extractNoteFiles = jest.requireMock("@/utils").extractNoteFiles as jest.Mock;
+      const isSystemExcludedPath = jest.requireMock("@/search/searchUtils")
+        .isSystemExcludedPath as jest.Mock;
+      const chatNote = createTFile("team-ai/copilot-conversations/Topic.md", {
+        mtime: 1000,
+        ctime: 500,
+      });
+      extractNoteFiles.mockReturnValueOnce([chatNote]);
+      isSystemExcludedPath.mockImplementation((path: string) => path.startsWith("team-ai/"));
+
+      const retriever = new FilterRetriever(mockApp as unknown as App, {
+        salientTerms: [],
+        maxK: 30,
+      });
+
+      try {
+        const results = await retriever.getRelevantDocuments("summarise [[Topic]]");
+
+        expect(results.length).toBe(0);
+        expect(mockApp.vault.cachedRead).not.toHaveBeenCalled();
+      } finally {
+        isSystemExcludedPath.mockReturnValue(false);
+      }
     });
 
     it("should return empty when no [[note]] mentions in query", async () => {

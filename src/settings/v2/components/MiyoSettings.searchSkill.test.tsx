@@ -12,13 +12,26 @@ jest.mock("@/agentMode", () => ({
   removeMiyoSearchSkill: (...a: unknown[]) => removeMiyoSearchSkill(...a),
 }));
 
+// Skills folder derives from the configurable Copilot root. Mock the pure
+// deriver so a test can point the root anywhere and assert the toggle installs
+// to the derived path, without pulling in the real obsidian normalizePath.
+jest.mock("@/settings/copilotFolder", () => ({
+  deriveSkillsFolder: (s: { copilotFolder?: string }) =>
+    `${(s.copilotFolder || "copilot").replace(/\/+$/, "")}/skills`,
+}));
+
 // Persisted-settings surface: capture writes and feed a controllable snapshot.
 const updateSetting = jest.fn<void, unknown[]>();
 let currentSettings = { ...DEFAULT_SETTINGS };
 jest.mock("@/settings/model", () => ({
   updateSetting: (...a: unknown[]) => updateSetting(...a),
+  getSettings: () => currentSettings,
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook; name must match the export
   useSettingsValue: () => currentSettings,
+  // The scope-verify key derives the system roots through the real normalizer,
+  // so a test that moves the Copilot root gets the production root set.
+  normalizeRootFolders:
+    jest.requireActual<typeof import("@/settings/model")>("@/settings/model").normalizeRootFolders,
 }));
 
 // Miyo connection status. Defaults to connected; individual tests flip
@@ -55,32 +68,80 @@ jest.mock("@/miyo/MiyoClient", () => ({
   MiyoClient: class {
     isBackendAvailable = async () => mockReachable;
     checkFolderRegistration = async () => mockRegistration;
+    addFolder = async () => ({ path: "/vault" });
   },
 }));
+// Quiet by default so the resync banner doesn't render into unrelated tests;
+// the banner tests flip this on.
+const shouldSurfaceMiyoResync = jest.fn<boolean, unknown[]>(() => false);
 jest.mock("@/miyo/miyoUtils", () => ({
   getMiyoCustomUrl: () => "",
   getMiyoFolderExclusions: () => ({}),
+  getMiyoFolderInclusions: () => ({}),
   getMiyoFolderName: () => "vault",
   isLocalMiyoUrl: () => true,
+  buildMiyoSyncReceipt: () => "receipt",
+  shouldSurfaceMiyoResync: (...a: unknown[]) => shouldSurfaceMiyoResync(...a),
   MIYO_ADD_FOLDER_DEEPLINK_URL: "miyo://add",
   MIYO_DEEPLINK_URL: "miyo://",
+}));
+// The scope-resync module talks to a live Miyo; keep it inert here. The verify
+// verdict defaults to "unknown" (the component then falls back to the local
+// signal); the banner tests pin it to a definite verdict.
+const resyncMiyoFolder = jest.fn<Promise<string>, unknown[]>(async () => "verified");
+// Sessions the register flow presented to the queue, so a test can prove the
+// producer forwarded the plugin's rather than one of its own.
+const enqueuedSessions: unknown[] = [];
+const verifyMiyoScope = jest.fn<Promise<string>, unknown[]>(async () => "unknown");
+jest.mock("@/miyo/miyoResync", () => ({
+  assertCurrentLifecycle: () => undefined,
+  enqueueMiyoFolderMutation: (task: (lifecycle: number) => Promise<unknown>, session: unknown) => {
+    enqueuedSessions.push(session);
+    return task(0);
+  },
+  resyncMiyoFolder: (...a: unknown[]) => resyncMiyoFolder(...a),
+  verifyMiyoScope: (...a: unknown[]) => verifyMiyoScope(...a),
 }));
 // Capture the options the component passes to the modal so a test can invoke the
 // modal's callbacks (onRetry/onAddVault) directly — the Retry button has no
 // busy-guard, which is the real path that fires concurrent enable attempts.
-let lastModalOptions: { onRetry: () => Promise<unknown>; onClose: () => void } | null = null;
+let lastModalOptions: {
+  onRetry: () => Promise<unknown>;
+  onClose: () => void;
+  onAddVault?: () => Promise<unknown>;
+} | null = null;
 jest.mock("@/settings/v2/components/MiyoConnectModal", () => ({
   MiyoConnectModal: class {
-    constructor(_app: unknown, options: { onRetry: () => Promise<unknown>; onClose: () => void }) {
+    constructor(
+      _app: unknown,
+      options: {
+        onRetry: () => Promise<unknown>;
+        onClose: () => void;
+        onAddVault?: () => Promise<unknown>;
+      }
+    ) {
       lastModalOptions = options;
     }
     open = jest.fn();
     close = jest.fn();
   },
 }));
+// Stable identity, matching production: useApp() reads a context value, so the
+// app reference does not change between renders. A fresh object per call would
+// re-fire every app-keyed effect on each render.
+const mockAppInstance = {};
 jest.mock("@/context", () => ({
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook; name must match the export
-  useApp: () => ({}),
+  useApp: () => mockAppInstance,
+}));
+// The Miyo mutation session is owned by the plugin (one per lifecycle) rather
+// than captured by this tab, which mounts lazily. Hoisted so the stand-in keeps
+// production's referential stability: the session is an effect dependency, and a
+// fresh object per render would loop the verify effect forever.
+const mockPluginInstance = { miyoMutationSession: Object.freeze({ lifecycle: 0 }) };
+jest.mock("@/contexts/PluginContext", () => ({
+  // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook; name must match the export
+  usePlugin: () => mockPluginInstance,
 }));
 jest.mock("@/plusUtils", () => ({ createPlusPageUrl: () => "https://example.com" }));
 jest.mock("@/utils/vaultPath", () => ({ getVaultBase: () => "/vault" }));
@@ -117,6 +178,36 @@ beforeEach(() => {
   mockReachable = true;
   mockRegistration = "registered";
   lastModalOptions = null;
+  enqueuedSessions.length = 0;
+});
+
+it("registers through the queue with the plugin's session", async () => {
+  // The Connect modal is a standalone Obsidian Modal that outlives onunload, so
+  // its Add-this-vault callback is the producer most able to act for a closed
+  // lifecycle. It must hand the queue the plugin's session, not a fresh one.
+  mockRegistration = "unregistered";
+  render(<MiyoSettings />);
+
+  fireEvent.click(await screen.findByText("Connect"));
+  await waitFor(() => expect(lastModalOptions).not.toBeNull());
+  expect(lastModalOptions?.onAddVault).toBeDefined();
+
+  await lastModalOptions?.onAddVault?.();
+
+  expect(enqueuedSessions).toEqual([mockPluginInstance.miyoMutationSession]);
+});
+
+it("verifies scope with the plugin's session, not one this tab obtained itself", async () => {
+  // Tabs mount lazily, so a tab first opened after a plugin reload would
+  // otherwise vouch for the incoming lifecycle while holding the outgoing
+  // vault's app. The session has to come from the plugin instance.
+  render(<MiyoSettings />);
+
+  await waitFor(() => expect(verifyMiyoScope).toHaveBeenCalled());
+  expect(verifyMiyoScope).toHaveBeenCalledWith(
+    expect.anything(),
+    mockPluginInstance.miyoMutationSession
+  );
 });
 
 it("installs the skill, commits the flag, and confirms with a Notice on enable", async () => {
@@ -128,6 +219,29 @@ it("installs the skill, commits the flag, and confirms with a Notice on enable",
   await waitFor(() => expect(installMiyoSearchSkill).toHaveBeenCalledTimes(1));
   expect(updateSetting).toHaveBeenCalledWith("enableMiyoSearchSkill", true);
   expect(NoticeMock).toHaveBeenCalledWith("Miyo search skill installed");
+});
+
+it("installs to the folder derived from a non-default Copilot root, not the retired field", async () => {
+  // Regression: a customized root must reach the derived skills folder. The
+  // retired agentMode.skills.folder no longer tracks the root, so installing
+  // against it would write to the wrong directory (and collide with the path
+  // the background seeder uses).
+  currentSettings = {
+    ...DEFAULT_SETTINGS,
+    enableMiyoSearchSkill: false,
+    copilotFolder: "team/copilot",
+    agentMode: {
+      ...DEFAULT_SETTINGS.agentMode,
+      skills: { ...DEFAULT_SETTINGS.agentMode.skills, folder: "copilot/skills" },
+    },
+  };
+  installMiyoSearchSkill.mockResolvedValue("installed");
+  render(<MiyoSettings />);
+
+  fireEvent.click(toggle());
+
+  await waitFor(() => expect(installMiyoSearchSkill).toHaveBeenCalledTimes(1));
+  expect(installMiyoSearchSkill).toHaveBeenCalledWith(expect.anything(), "team/copilot/skills");
 });
 
 it("does NOT commit the flag on a collision, and explains why", async () => {
@@ -418,5 +532,73 @@ describe("Connect — two-phase commit rolls back on a failed health check", () 
     // Without the ownership token, A's superseded revert would write false here.
     expect(updateSetting).not.toHaveBeenCalledWith("enableMiyo", false);
     expect(enableTrueCount()).toBe(2);
+  });
+});
+
+describe("scope resync banner", () => {
+  // The verdict is pinned per test; restore the indefinite default so a pinned
+  // verdict can't leak forward.
+  beforeEach(() => {
+    verifyMiyoScope.mockResolvedValue("unknown");
+  });
+
+  it("stays hidden when the local receipt matches", () => {
+    render(<MiyoSettings />);
+    expect(screen.queryByRole("button", { name: /Resync Miyo/ })).toBeNull();
+  });
+
+  it("shows and runs the resync when the scope went stale", async () => {
+    shouldSurfaceMiyoResync.mockReturnValue(true);
+    render(<MiyoSettings />);
+
+    const button = screen.getByRole("button", { name: /Resync Miyo/ });
+    fireEvent.click(button);
+
+    await waitFor(() => expect(resyncMiyoFolder).toHaveBeenCalledTimes(1));
+    // Same requirement as the verify probe: the Resync click must present the
+    // plugin's session, or a settings tree that outlived its lifecycle could
+    // delete and re-register on the incoming vault's queue.
+    expect(resyncMiyoFolder).toHaveBeenCalledWith(
+      expect.anything(),
+      mockPluginInstance.miyoMutationSession
+    );
+  });
+
+  it("re-verifies when the Copilot root changes while the tab stays mounted", async () => {
+    // A "covered" verdict vetoes the local mismatch signal outright, so the
+    // banner is hidden despite shouldSurfaceMiyoResync saying otherwise.
+    shouldSurfaceMiyoResync.mockReturnValue(true);
+    verifyMiyoScope.mockResolvedValue("covered");
+    const { rerender } = render(<MiyoSettings />);
+    await waitFor(() => expect(verifyMiyoScope).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole("button", { name: /Resync Miyo/ })).toBeNull();
+
+    // A root change reaches the shared settings atom without unmounting this
+    // tab: its Apply persists to disk before flipping the in-memory root, and
+    // the user can be back here by then. A verdict about roots that no longer
+    // apply must stop answering for the ones that do.
+    currentSettings = { ...currentSettings, copilotFolder: "notes/copilot" };
+    verifyMiyoScope.mockResolvedValue("unknown");
+    rerender(<MiyoSettings />);
+
+    await waitFor(() => expect(verifyMiyoScope).toHaveBeenCalledTimes(2));
+    expect(await screen.findByRole("button", { name: /Resync Miyo/ })).toBeTruthy();
+  });
+
+  it("re-verifies when Connect adopts a registration this tab did not create", async () => {
+    // Nothing was registered at load, so the verdict reads "no exposure".
+    verifyMiyoScope.mockResolvedValue("unregistered");
+    mockMiyoBackend = "unavailable";
+    currentSettings = { ...DEFAULT_SETTINGS, enableMiyo: false };
+    render(<MiyoSettings />);
+    await waitFor(() => expect(verifyMiyoScope).toHaveBeenCalledTimes(1));
+
+    // The user registered the vault in the Miyo app and Connect finds it
+    // already there. That record's exclusions are unknown and no local input
+    // moved, so only an explicit re-verify can tell whether it exposes the
+    // Copilot roots.
+    fireEvent.click(await screen.findByText("Connect"));
+
+    await waitFor(() => expect(verifyMiyoScope).toHaveBeenCalledTimes(2));
   });
 });

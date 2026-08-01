@@ -1,11 +1,12 @@
 import { getCurrentProject, ProjectConfig } from "@/aiParams";
-import { AI_SENDER, USER_SENDER } from "@/constants";
+import { AI_SENDER, COPILOT_CONVERSATION_TAG, USER_SENDER } from "@/constants";
 import ChainManager from "@/LLMProviders/chainManager";
 import { parseReasoningBlock } from "@/LLMProviders/chainRunner/utils/AgentReasoningState";
 import { logError, logInfo, logWarn } from "@/logger";
 import { sanitizeVaultPathSegment } from "@/projects/projectUtils";
 import { filterChatHistoryFiles, readChatPathProjectId } from "@/utils/chatHistoryUtils";
 import { getSettings } from "@/settings/model";
+import { getEffectiveConversationsFolder } from "@/settings/copilotFolder";
 import { ChatMessage, MessageContext } from "@/types/message";
 import {
   ensureFolderExists,
@@ -22,6 +23,7 @@ import {
   patchFrontmatter,
   readFrontmatterViaAdapter,
 } from "@/utils/vaultAdapterUtils";
+import { joinPosix } from "@/utils/pathUtils";
 import { App, Notice, TFile } from "obsidian";
 import { MessageRepository } from "./MessageRepository";
 
@@ -62,15 +64,21 @@ export class ChatPersistenceManager {
         return;
       }
 
-      const settings = getSettings();
       const chatContent = this.formatChatContent(messages);
       const firstMessageEpoch = messages[0].timestamp?.epoch || Date.now();
 
+      // Capture the conversations folder once at the start of the save so a
+      // concurrent Copilot-root change can't make this operation ensure one
+      // directory and then generate a path under another. Every folder-derived
+      // path below (existing-file lookup, filename, conflict and fallback
+      // paths) reads this snapshot instead of re-resolving the live setting.
+      const conversationsFolder = getEffectiveConversationsFolder();
+
       // Ensure the save folder exists (supports nested paths) using utility helper.
-      await ensureFolderExists(this.app.vault, settings.defaultSaveFolder);
+      await ensureFolderExists(this.app.vault, conversationsFolder);
 
       // Check if a file with this epoch already exists
-      const existingFile = await this.findFileByEpoch(firstMessageEpoch);
+      const existingFile = await this.findFileByEpoch(firstMessageEpoch, conversationsFolder);
       const existingFrontmatter = existingFile
         ? this.app.metadataCache.getFileCache(existingFile)?.frontmatter
         : undefined;
@@ -95,7 +103,13 @@ export class ChatPersistenceManager {
 
       const preferredFileName = existingFile
         ? existingFile.path
-        : this.generateFileName(currentProject, messages, firstMessageEpoch, existingTopic);
+        : this.generateFileName(
+            currentProject,
+            messages,
+            firstMessageEpoch,
+            conversationsFolder,
+            existingTopic
+          );
 
       const noteContent = this.generateNoteContent(
         chatContent,
@@ -153,7 +167,7 @@ export class ChatPersistenceManager {
               const currentProjectId = currentProject?.id;
               if (currentProjectId && conflictProjectId !== currentProjectId) {
                 // Different project owns this file — generate a unique name instead
-                const rawUniqueName = `${settings.defaultSaveFolder}/${sanitizeVaultPathSegment(currentProjectId)}__chat-${firstMessageEpoch}.md`;
+                const rawUniqueName = `${conversationsFolder}/${sanitizeVaultPathSegment(currentProjectId)}__chat-${firstMessageEpoch}.md`;
                 const uniqueName = await this.resolveChatSavePath(rawUniqueName, currentProject);
                 targetFile = await this.app.vault.create(uniqueName, noteContent);
                 new Notice(`Chat saved as note: ${uniqueName}`);
@@ -204,7 +218,7 @@ export class ChatPersistenceManager {
             const filePrefix = fallbackProject
               ? `${sanitizeVaultPathSegment(fallbackProject.id)}__`
               : "";
-            const rawFallbackName = `${settings.defaultSaveFolder}/${filePrefix}chat-${firstMessageEpoch}.md`;
+            const rawFallbackName = `${conversationsFolder}/${filePrefix}chat-${firstMessageEpoch}.md`;
             // Reason: check ownership to prevent cross-project collision on fallback path
             const fallbackName = await this.resolveChatSavePath(rawFallbackName, currentProject);
 
@@ -322,11 +336,13 @@ export class ChatPersistenceManager {
   }
 
   /**
-   * Get all chat history files from the vault
+   * Get all chat history files from the vault.
+   * @param folder - Conversations folder to list; defaults to the live effective
+   *   folder. A save operation passes the folder it captured at entry so its
+   *   existing-file lookup stays consistent with where it will write.
    */
-  async getChatHistoryFiles(): Promise<TFile[]> {
-    const settings = getSettings();
-    const folderFiles = await listMarkdownFiles(this.app, settings.defaultSaveFolder);
+  async getChatHistoryFiles(folder: string = getEffectiveConversationsFolder()): Promise<TFile[]> {
+    const folderFiles = await listMarkdownFiles(this.app, folder);
     if (folderFiles.length === 0) return [];
 
     const currentProject = getCurrentProject();
@@ -595,9 +611,12 @@ export class ChatPersistenceManager {
 
   /**
    * Find a file by its epoch in the frontmatter.
+   * @param epoch - Frontmatter epoch to match.
+   * @param folder - Conversations folder to search; the caller passes the folder
+   *   it captured at save entry so the lookup matches where it will write.
    */
-  private async findFileByEpoch(epoch: number): Promise<TFile | null> {
-    const files = await this.getChatHistoryFiles();
+  private async findFileByEpoch(epoch: number, folder?: string): Promise<TFile | null> {
+    const files = await this.getChatHistoryFiles(folder);
 
     for (const file of files) {
       // Try metadata cache first (works for non-hidden directories)
@@ -689,12 +708,16 @@ ${conversationSummary}`;
    * @param project - The project context for the filename prefix.
    * @param messages - The conversation messages used to derive the topic.
    * @param firstMessageEpoch - Epoch timestamp of the first message in the chat.
+   * @param folder - Destination conversations folder; passed in (rather than
+   *   re-resolved) so it stays consistent with the rest of a single save even
+   *   if the Copilot root changes concurrently.
    * @param topic - Optional pre-computed topic to use for the filename.
    */
   private generateFileName(
     project: ProjectConfig | null,
     messages: ChatMessage[],
     firstMessageEpoch: number,
+    folder: string,
     topic?: string
   ): string {
     const settings = getSettings();
@@ -776,10 +799,10 @@ ${conversationSummary}`;
       // If still too long, truncate the entire filename more aggressively
       const availableForBasename = SAFE_FILENAME_BYTE_LIMIT - extensionBytes - filePrefixBytes;
       const truncatedBasename = truncateToByteLimit(sanitizedFileName, availableForBasename);
-      return `${settings.defaultSaveFolder}/${filePrefix}${truncatedBasename}.md`;
+      return joinPosix(folder, `${filePrefix}${truncatedBasename}.md`);
     }
 
-    return `${settings.defaultSaveFolder}/${baseNameWithPrefix}`;
+    return joinPosix(folder, baseNameWithPrefix);
   }
 
   /**
@@ -792,7 +815,6 @@ ${conversationSummary}`;
     topic?: string,
     lastAccessedAt?: number
   ): string {
-    const settings = getSettings();
     const currentProject = getCurrentProject();
 
     return `---
@@ -803,7 +825,7 @@ ${lastAccessedAt ? `lastAccessedAt: ${lastAccessedAt}` : ""}
 ${currentProject ? `projectId: "${escapeYamlString(currentProject.id)}"` : ""}
 ${currentProject ? `projectName: "${escapeYamlString(currentProject.name)}"` : ""}
 tags:
-  - ${settings.defaultConversationTag}
+  - ${COPILOT_CONVERSATION_TAG}
 ---
 
 ${chatContent}`;
@@ -915,7 +937,15 @@ ${chatContent}`;
     }
 
     const messages = this.messageRepo.getDisplayMessages();
-    const newPath = this.generateFileName(project, messages, epoch, topic);
+    // Rename within the file's own folder. This runs after async topic
+    // generation, so re-resolving the effective folder here could move an
+    // already-saved chat from the old root into a newly-changed one. Derive the
+    // parent from the file's own path rather than `file.parent`, which is null
+    // for the synthetic TFiles used for hidden-directory chats — falling back to
+    // the live setting there would reopen the same cross-root move.
+    const slashIndex = file.path.lastIndexOf("/");
+    const parentFolder = slashIndex === -1 ? "" : file.path.slice(0, slashIndex);
+    const newPath = this.generateFileName(project, messages, epoch, parentFolder, topic);
 
     if (file.path === newPath) {
       return;

@@ -16,7 +16,7 @@ import {
   CategoryOption,
   EMPTY_AGENT_MENTION_BRANDS,
 } from "./useAtMentionCategories";
-import { getSettings } from "@/settings/model";
+import { getEffectiveCustomPromptsFolder } from "@/settings/copilotFolder";
 import { SelfHostCloudWarningIcon } from "@/components/ui/SelfHostCloudWarningIcon";
 
 // Maximum number of results to show in @ mention search
@@ -273,7 +273,7 @@ export function useAtMentionSearch(
       if (!query) {
         // For notes category with no query, rank custom command notes lower
         if (selectedCategory === "notes") {
-          const customPromptsFolder = getSettings().customPromptsFolder;
+          const customPromptsFolder = getEffectiveCustomPromptsFolder();
           const regularNotes = items.filter(
             (item) =>
               !(

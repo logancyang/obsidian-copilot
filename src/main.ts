@@ -1,4 +1,5 @@
 import type { AgentSessionManager } from "@/agentMode";
+import React from "react";
 // Deep import (not the barrel): these run on the load path for every
 // platform, and the barrel pulls Node-only modules that crash mobile.
 import { isNativeChatId, parseNativeChatId } from "@/utils/nativeChatId";
@@ -15,6 +16,7 @@ import { registerCommands } from "@/commands";
 import CopilotView from "@/components/CopilotView";
 import RelevantNotesView from "@/components/RelevantNotesView";
 import { APPLY_VIEW_TYPE, ApplyView } from "@/components/composer/ApplyView";
+import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { LoadChatHistoryModal } from "@/components/modals/LoadChatHistoryModal";
 
 import { registerContextMenu, registerSymposiumFileMenu } from "@/commands/contextMenu";
@@ -71,7 +73,13 @@ import {
   getSettings,
   setSettings,
   subscribeToSettingsChange,
+  updateSetting,
 } from "@/settings/model";
+import { didMiyoSyncedRootsChange, shouldSurfaceMiyoResync } from "@/miyo/miyoUtils";
+import { type MiyoMutationSession, resetMiyoMutations } from "@/miyo/miyoResync";
+import { ensureCopilotSubfolders, getEffectiveConversationsFolder } from "@/settings/copilotFolder";
+import { buildUpgradeRelocationEntries } from "@/settings/upgradeNotice";
+import { UpgradeRelocationNotice } from "@/settings/UpgradeRelocationNotice";
 import { dehydrateDeviceProfile, hydrateDeviceProfile } from "@/settings/deviceProfiles";
 import { getDeviceId } from "@/utils/deviceId";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
@@ -138,6 +146,18 @@ export default class CopilotPlugin extends Plugin {
   private planPreviewViewType?: typeof import("@/agentMode").PLAN_PREVIEW_VIEW_TYPE;
   private agentModelDiscoveryUnsubscriber?: () => void;
   modelManagement!: ModelManagementApi;
+  // Proof of THIS lifecycle for anything that enqueues a Miyo folder mutation.
+  // Assigned in `onload` right after the queue reset, and read by the settings
+  // UI rather than captured there: settings tabs mount lazily (`TabContent`
+  // renders nothing until selected), so a tab first opened after a reload would
+  // capture the incoming lifecycle while still holding the outgoing vault's
+  // `app`. The plugin instance is one-per-lifecycle by construction, so it is
+  // the honest place for this.
+  //
+  // Assign it exactly once and never recompute it per read: the Miyo tab uses it
+  // as an effect dependency, so a getter that captured on every access would
+  // hand React a new object each render and spin that effect forever.
+  miyoMutationSession!: MiyoMutationSession;
   private ribbonIconEl?: HTMLElement;
   userMemoryManager: UserMemoryManager;
   quickAskController: QuickAskController;
@@ -168,6 +188,13 @@ export default class CopilotPlugin extends Plugin {
     // AFTER the next onload has already initialized — and would then null
     // out the new instance, breaking saves until another full reload.
     resetPersistenceState();
+    // Also reset here, not only in `onunload`: a crash or a hard kill never runs
+    // unload at all, and the module would then start this lifecycle holding the
+    // previous one's queue. Bumping twice is harmless — no task exists yet.
+    // The reset hands back this lifecycle's session; producers read it off the
+    // plugin rather than obtaining one themselves, which is what keeps a stale
+    // settings tree from vouching for the lifecycle it outlived.
+    this.miyoMutationSession = resetMiyoMutations();
     KeychainService.resetInstance();
     KeychainService.getInstance(this.app);
     await this.loadSettings();
@@ -418,6 +445,24 @@ export default class CopilotPlugin extends Plugin {
       void this.systemPromptRegister
         .initialize()
         .then(() => migrateSystemPromptsFromSettings(this.app));
+
+      void this.notifyLegacyUpgradeRelocation();
+
+      // A Copilot root change can leave Miyo's server-side exclusions stale
+      // without anything prompting at the time: one arriving via settings sync
+      // never passes through the settings UI at all, and the UI itself only
+      // points at the Miyo tab. Only a REAL roots change prompts — a receipt
+      // from another device with equal roots stays quiet; the Miyo tab's on-load
+      // verification self-heals it. No `enableMiyo` gate: shouldSurfaceMiyoResync
+      // already treats a non-empty receipt as evidence of a past registration,
+      // and a user who disconnected in Copilot can still be exposed via Relay.
+      const startupSettings = getSettings();
+      if (
+        didMiyoSyncedRootsChange(startupSettings) &&
+        shouldSurfaceMiyoResync(this.app, startupSettings)
+      ) {
+        new Notice("Miyo search needs a resync — open the Miyo settings tab.", 8000);
+      }
     });
 
     // Initialize automatic selection handler
@@ -425,6 +470,38 @@ export default class CopilotPlugin extends Plugin {
 
     // Initialize web selection watcher (Desktop only)
     this.initWebSelectionWatcher();
+  }
+
+  /**
+   * One-time guidance for users upgrading a legacy (v1-v7) vault whose Copilot
+   * data needs relocating (a sub-folder was customized, or the root itself
+   * moved). v4 consolidated every data folder under a single derived root, so
+   * Copilot now reads and writes the derived locations while their old files
+   * stay put. This shows them the old→new paths
+   * and asks them to move files manually; per the maintainer decision it never
+   * moves files itself. The flag is cleared afterwards (whether or not the notice
+   * is shown) so the check runs once. A failed clear-write only repeats the
+   * one-time check on the next restart, which is idempotent.
+   */
+  private async notifyLegacyUpgradeRelocation(): Promise<void> {
+    if (!getSettings().upgradedToV8FromLegacy) return;
+
+    const entries = buildUpgradeRelocationEntries(getSettings());
+    if (entries.length > 0) {
+      // Pre-create the derived sub-folders so the destinations the notice points
+      // at already exist when the user goes to move their files there.
+      await ensureCopilotSubfolders(this.app.vault, getSettings());
+      new ConfirmModal(
+        this.app,
+        () => {},
+        React.createElement(UpgradeRelocationNotice, { entries }),
+        "",
+        "OK",
+        ""
+      ).open();
+    }
+
+    updateSetting("upgradedToV8FromLegacy", false);
   }
 
   /**
@@ -445,12 +522,21 @@ export default class CopilotPlugin extends Plugin {
   }
 
   async onunload() {
+    // End the Miyo mutation lifecycle HERE, as the first statement: everything
+    // above the first `await` runs before the next `onload()` can possibly
+    // start, so this carries none of the late-continuation risk that keeps
+    // `resetPersistenceState()` at load time. Doing it at unload is what makes
+    // the boundary real — waiting for the next load would leave a task from
+    // this vault free to write settings and issue DELETE/POST during an unload
+    // that is never followed by a re-enable, or while another vault is opening.
+    resetMiyoMutations();
+
     // Best-effort flush of pending keychain/data.json writes.
     // Reason: onunload() is void in Obsidian's type system, but awaiting here
     // is no worse than fire-and-forget, and consistent with the log flush below.
-    // (Module-level state + KeychainService singleton reset happen at the
-    // START of the next onload, not here — see comment in onload above for
-    // the late-write race that motivated the move.)
+    // (The KeychainService singleton and the persistence module's own state
+    // reset at the START of the next onload — see the comment there for the
+    // late-write race that motivated it.)
     await flushPersistence();
 
     // Clear all persistent selection highlights before unload
@@ -1056,7 +1142,7 @@ export default class CopilotPlugin extends Plugin {
   }
 
   async getChatHistoryFiles(): Promise<TFile[]> {
-    const folderFiles = await listMarkdownFiles(this.app, getSettings().defaultSaveFolder);
+    const folderFiles = await listMarkdownFiles(this.app, getEffectiveConversationsFolder());
     if (folderFiles.length === 0) return [];
 
     const currentProject = getCurrentProject();
