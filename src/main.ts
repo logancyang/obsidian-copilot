@@ -54,7 +54,7 @@ import { UserMemoryManager } from "@/memory/UserMemoryManager";
 import { clearRecordedPromptPayload } from "@/LLMProviders/chainRunner/utils/promptPayloadRecorder";
 import {
   checkIsPaidUser,
-  refreshSelfHostModeValidation,
+  ENTITLEMENT_REFRESH_INTERVAL_MS,
   verifyCachedEntitlement,
 } from "@/plusUtils";
 import {
@@ -236,12 +236,21 @@ export default class CopilotPlugin extends Plugin {
     // Initialize BrevilabsClient
     this.brevilabsClient = BrevilabsClient.getInstance();
     this.brevilabsClient.setPluginVersion(this.manifest.version);
-    // Re-verify the cached entitlement token offline so the strict Plus gate
-    // fails closed against an edited data.json until the signature re-proves
-    // itself. The network re-validation below overrides with the server's token.
+    // Re-verify the cached entitlement token offline so the strict Plus and
+    // self-host gates fail closed against an edited data.json until the
+    // signature re-proves itself. The network re-validation below overrides
+    // with the server's token.
     void verifyCachedEntitlement();
     void checkIsPaidUser(this.app);
-    void refreshSelfHostModeValidation();
+    // Entitlement tokens expire (~14 days), and the gates honor that expiry even
+    // mid-session. Without a refresh, an Obsidian window left open past `exp`
+    // loses self-host — which silently reroutes web search and document parsing
+    // through the cloud — despite the user being online and still entitled.
+    // Each /license call mints a fresh token, so re-validating daily keeps an
+    // online session current; offline users still lapse at `exp`, as intended.
+    this.registerInterval(
+      window.setInterval(() => void checkIsPaidUser(this.app), ENTITLEMENT_REFRESH_INTERVAL_MS)
+    );
 
     // Initialize ProjectManager
     this.projectManager = ProjectManager.getInstance(this.app, this);

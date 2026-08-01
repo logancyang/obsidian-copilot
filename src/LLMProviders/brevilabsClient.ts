@@ -267,9 +267,15 @@ export class BrevilabsClient {
     app?: App,
     context?: Record<string, unknown>
   ): Promise<{ isValid: boolean | undefined; plan?: string }> {
+    // Identity this response will belong to. Validations can overlap (startup,
+    // a send-boundary re-check, the user pasting a different key), and every
+    // branch below mutates global entitlement state, so a response that outlives
+    // the key it was requested for must be discarded rather than applied.
+    const requestedLicenseKey = getSettings().plusLicenseKey;
+
     // Build the request body with proper structure
     const requestBody: Record<string, unknown> = {
-      license_key: await getDecryptedKey(getSettings().plusLicenseKey),
+      license_key: await getDecryptedKey(requestedLicenseKey),
     };
 
     // Safely spread context if provided, ensuring no conflicts with required fields
@@ -298,6 +304,14 @@ export class BrevilabsClient {
       true,
       true
     );
+
+    // The key changed under us while this was in flight, so this answer is about
+    // a license the user no longer has. Applying it would let a slow response for
+    // an eligible key land after a downgraded key's, restoring revoked features
+    // (and the token that carries them) for the rest of that token's lifetime.
+    if (getSettings().plusLicenseKey !== requestedLicenseKey) {
+      return { isValid: undefined };
+    }
 
     if (error) {
       if (error.message === "Invalid license key") {
