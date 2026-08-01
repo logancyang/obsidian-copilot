@@ -28,10 +28,10 @@ import {
   applyEntitlement,
   canUseMultiAgent,
   checkIsPaidUser,
+  isPlusEnabled,
   isSelfHostModeValid,
   markPaidPendingEntitlement,
   turnOffPaid,
-  turnOnPaid,
   useIsSelfHostEligible,
   verifyCachedEntitlement,
 } from "@/plusUtils";
@@ -148,7 +148,6 @@ describe("plusUtils", () => {
     it.each([
       ["turnOffPaid", turnOffPaid],
       ["markPaidPendingEntitlement", markPaidPendingEntitlement],
-      ["turnOnPaid", turnOnPaid],
     ])("revokes self-host once %s drops the token", async (_name, clear) => {
       await verifySessionFeatures(["multi_agent", "self_host"]);
       mockGetSettings.mockReturnValue(tokenBackedSettings({ enableSelfHostMode: true }));
@@ -166,15 +165,34 @@ describe("plusUtils", () => {
     });
   });
 
+  describe("markPaidPendingEntitlement()", () => {
+    it("keeps paid access while clearing the entitlement and withholding strict features", async () => {
+      await verifySessionFeatures(["multi_agent", "self_host"]);
+      mockGetSettings.mockReturnValue(
+        tokenBackedSettings({ enableSelfHostMode: true, isPaidUser: true, isPlusUser: true })
+      );
+      expect(isPlusEnabled()).toBe(true);
+      expect(isSelfHostModeValid()).toBe(true);
+
+      markPaidPendingEntitlement();
+
+      const pendingState = {
+        isPaidUser: true,
+        isPlusUser: false,
+        entitlementToken: "",
+        entitlementExpiresAt: 0,
+      };
+      expect(mockSetSettings).toHaveBeenCalledWith(pendingState);
+      mockGetSettings.mockReturnValue(buildSettings({ enableSelfHostMode: true, ...pendingState }));
+      expect(isPlusEnabled()).toBe(false);
+      expect(isSelfHostModeValid()).toBe(false);
+    });
+  });
+
   describe("canUseMultiAgent()", () => {
     it("returns false for a free user", () => {
       mockGetSettings.mockReturnValue(buildSettings({ isPlusUser: false }));
       expect(canUseMultiAgent()).toBe(false);
-    });
-
-    it("returns true for a Plus user on the tokenless fallback", () => {
-      mockGetSettings.mockReturnValue(buildSettings({ isPlusUser: true }));
-      expect(canUseMultiAgent()).toBe(true);
     });
 
     it("returns false for a Lite user (paid but below Plus)", () => {
@@ -217,10 +235,10 @@ describe("plusUtils", () => {
       mockGetSettings.mockReturnValue(buildSettings({ userId: "user-123" }));
     });
 
-    it("grants Plus and self-host for a Believer token carrying both features", async () => {
+    it("grants Plus and self-host for a Supporter token carrying both features", async () => {
       mockVerifyEntitlement.mockResolvedValue({
         user_id: "user-123",
-        plan: "believer",
+        plan: "supporter",
         tier: "plus",
         features: ["multi_agent", "self_host"],
         iat: 0,
@@ -261,11 +279,11 @@ describe("plusUtils", () => {
       expect(isSelfHostModeValid()).toBe(false);
     });
 
-    it("grants Plus without self-host for a Pro token", async () => {
+    it("grants Plus without self-host for a Plus token", async () => {
       mockVerifyEntitlement.mockResolvedValue({
         user_id: "user-123",
-        plan: "pro",
-        tier: "pro",
+        plan: "plus",
+        tier: "plus",
         features: ["multi_agent"],
         iat: 0,
         exp: FUTURE_EXP_SECONDS,
