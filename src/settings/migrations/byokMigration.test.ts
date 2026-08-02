@@ -570,6 +570,41 @@ describe("executeByokMigration", () => {
     });
   });
 
+  it("reconciles the provider-wide credential before a hydrated model override", async () => {
+    const provider = ChatModelProviders.OPENAI;
+    const existing = byokProvider({
+      providerType: "openai-compatible",
+      baseUrl: "https://api.openai.com/v1",
+      apiKeyKeychainId: "current-keychain-id",
+      origin: { kind: "byok", catalogProviderId: "openai" },
+    });
+    const { api, setupProvider, getApiKey, addModels } = makeApi([existing]);
+    getApiKey.mockResolvedValue("provider-key");
+
+    await executeByokMigration(
+      api,
+      settingsWith(
+        [
+          model({ name: "custom-gpt", provider, apiKey: "model-override-key" }),
+          model({ name: "gpt-4o", provider }),
+        ],
+        { openAIApiKey: "provider-key" }
+      )
+    );
+
+    expect(addModels).toHaveBeenCalledWith({
+      providerId: existing.providerId,
+      models: [{ id: "gpt-4o", displayName: "gpt-4o" }],
+      autoEnrollIn: ["chat", "opencode"],
+    });
+    expect(setupProvider).toHaveBeenCalledWith(
+      expect.objectContaining({
+        apiKey: "model-override-key",
+        models: [{ id: "custom-gpt", displayName: "custom-gpt" }],
+      })
+    );
+  });
+
   it("continues after a per-provider failure", async () => {
     const { api, setupProvider } = makeApi();
     setupProvider.mockRejectedValueOnce(new Error("keychain unavailable"));

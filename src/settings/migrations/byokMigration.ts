@@ -253,7 +253,7 @@ function resolveCandidate(
     apiKey,
     baseUrl,
     extras: buildExtras(model, settings, mapping.providerType),
-    credentialGroupId: !apiKey && hadDiscardedModelCredential ? modelIdentity : undefined,
+    credentialGroupId: modelApiKey || hadDiscardedModelCredential ? modelIdentity : undefined,
   };
 }
 

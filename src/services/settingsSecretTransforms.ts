@@ -59,10 +59,10 @@ function asRecord(obj: CopilotSettings): Record<string, unknown> {
 // ---------------------------------------------------------------------------
 
 /**
- * Check whether `data.json` (the raw on-disk data) still contains any
- * non-empty sensitive field values.
+ * Check whether a settings snapshot contains any non-empty sensitive values
+ * or provider-scoped Keychain references.
  *
- * @param rawData - The raw data as loaded from disk (before hydration).
+ * @param rawData - Raw or hydrated settings snapshot to inspect.
  */
 export function hasPersistedSecrets(rawData: Record<string, unknown>): boolean {
   // Check top-level sensitive fields
@@ -83,6 +83,15 @@ export function hasPersistedSecrets(rawData: Record<string, unknown>): boolean {
         const value = rec[field];
         if (typeof value === "string" && value.length > 0) return true;
       }
+    }
+  }
+
+  const providers = rawData.providers;
+  if (providers && typeof providers === "object" && !Array.isArray(providers)) {
+    for (const provider of Object.values(providers)) {
+      if (!provider || typeof provider !== "object") continue;
+      const keychainId = (provider as Record<string, unknown>).apiKeyKeychainId;
+      if (typeof keychainId === "string" && keychainId.length > 0) return true;
     }
   }
 

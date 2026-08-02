@@ -291,6 +291,8 @@ export async function resetSettingsPreservingKeychain(
   const resetSnapshot = {
     ...createResetSettingsSnapshot(current),
     providers: current.providers,
+    _keychainVaultId: current._keychainVaultId,
+    settingsVersion: CURRENT_SETTINGS_VERSION,
   };
   await runPersistenceTransaction(async () => {
     await persistSettingsWithoutKeychainChanges(resetSnapshot, saveData);

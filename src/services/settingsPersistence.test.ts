@@ -28,6 +28,8 @@ async function loadModule(overrides: Record<string, unknown> = {}) {
   const resetSnapshot = makeSettings({
     openAIApiKey: "preserved-key",
     providers: { [provider.providerId]: provider },
+    _keychainVaultId: "abcd1234",
+    settingsVersion: 0,
   });
   const settingsModel = {
     createResetSettingsSnapshot: jest.fn(() => resetSnapshot),
@@ -283,8 +285,13 @@ describe("settingsPersistence", () => {
       expect(keychain.setSecretById).not.toHaveBeenCalled();
       expect(saveData).toHaveBeenCalledTimes(1);
       expect(saveData.mock.calls[0][0].openAIApiKey).toBe("");
+      expect(saveData.mock.calls[0][0]._keychainVaultId).toBe("abcd1234");
+      expect(saveData.mock.calls[0][0].settingsVersion).toBe(CURRENT_SETTINGS_VERSION);
       expect(saveData.mock.calls[0][0].providers).toEqual(resetSnapshot.providers);
-      expect(settingsModel.setSettings).toHaveBeenCalledWith(resetSnapshot);
+      expect(settingsModel.setSettings).toHaveBeenCalledWith({
+        ...resetSnapshot,
+        settingsVersion: CURRENT_SETTINGS_VERSION,
+      });
     });
 
     it("leaves memory and Keychain untouched when the stripped disk save fails", async () => {

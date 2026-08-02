@@ -61,10 +61,18 @@ describe("settingsSecretTransforms", () => {
         expected: true,
       },
       {
+        name: "detects a provider-scoped Keychain reference",
+        rawData: {
+          providers: { byok: { apiKeyKeychainId: "copilot-vabcd1234-provider-byok" } },
+        },
+        expected: true,
+      },
+      {
         name: "ignores malformed model entries and non-secret fields",
         rawData: {
           activeModels: [null, "bad-entry", { name: "gpt-4", provider: "openai" }],
           activeEmbeddingModels: [{ name: "embed", provider: "openai", apiKey: "" }],
+          providers: { keyless: { apiKeyKeychainId: null }, malformed: "bad-entry" },
         },
         expected: false,
       },
