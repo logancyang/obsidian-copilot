@@ -616,6 +616,53 @@ function preserveModelSecrets(defaults: CustomModel[], current: CustomModel[]): 
   });
 }
 
+function preserveBackendEnvOverrides(
+  current: CopilotSettings["agentMode"]["backends"]
+): CopilotSettings["agentMode"]["backends"] {
+  const preserved: CopilotSettings["agentMode"]["backends"] = {};
+  for (const backendId of ["opencode", "claude", "codex"] as const) {
+    const envOverrides = current[backendId]?.envOverrides;
+    if (envOverrides && Object.keys(envOverrides).length > 0) {
+      preserved[backendId] = { envOverrides: { ...envOverrides } };
+    }
+  }
+  return preserved;
+}
+
+function preserveDeviceProfileEnvOverrides(
+  current: CopilotSettings["agentMode"]["deviceProfiles"]
+): CopilotSettings["agentMode"]["deviceProfiles"] {
+  if (!current) return undefined;
+  const preserved: NonNullable<CopilotSettings["agentMode"]["deviceProfiles"]> = {};
+  for (const [deviceId, profile] of Object.entries(current)) {
+    const next: DeviceAgentProfile = {};
+    if (profile.codex?.envOverrides) {
+      next.codex = { envOverrides: { ...profile.codex.envOverrides } };
+    }
+    if (profile.opencode?.envOverrides) {
+      next.opencode = { envOverrides: { ...profile.opencode.envOverrides } };
+    }
+    if (profile.claude?.envOverrides) {
+      next.claude = { envOverrides: { ...profile.claude.envOverrides } };
+    }
+    if (Object.keys(next).length > 0) preserved[deviceId] = next;
+  }
+  return Object.keys(preserved).length > 0 ? preserved : undefined;
+}
+
+function preserveAgentModeCredentialStructure(
+  current: CopilotSettings["agentMode"]
+): CopilotSettings["agentMode"] {
+  const deviceProfiles = preserveDeviceProfileEnvOverrides(current.deviceProfiles);
+  return {
+    ...DEFAULT_SETTINGS.agentMode,
+    byok: { ...current.byok },
+    mcpServers: [...current.mcpServers],
+    backends: preserveBackendEnvOverrides(current.backends),
+    ...(deviceProfiles ? { deviceProfiles } : {}),
+  };
+}
+
 /**
  * Build the default settings snapshot used by Reset Settings while retaining
  * hydrated credentials for fields and built-in models that remain in memory.
@@ -641,6 +688,7 @@ export function createResetSettingsSnapshot(current: CopilotSettings): CopilotSe
       BUILTIN_EMBEDDING_MODELS.map((model) => ({ ...model, enabled: true })),
       current.activeEmbeddingModels
     ),
+    agentMode: preserveAgentModeCredentialStructure(current.agentMode),
     copilotRootHistory: preservedRootHistory,
   };
   const currentRecord = current as unknown as Record<string, unknown>;

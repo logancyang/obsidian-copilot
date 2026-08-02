@@ -205,6 +205,18 @@ export interface PersistSecretsResult {
   keychainIdsToDelete: string[];
 }
 
+function clearProviderKeychainReferences(settings: CopilotSettings): CopilotSettings {
+  let changed = false;
+  const providers = Object.fromEntries(
+    Object.entries(settings.providers).map(([providerId, provider]) => {
+      if (!provider.apiKeyKeychainId) return [providerId, provider];
+      changed = true;
+      return [providerId, { ...provider, apiKeyKeychainId: null }];
+    })
+  );
+  return changed ? { ...settings, providers } : settings;
+}
+
 /** Callback type for Obsidian's saveData. */
 export type SaveDataFn = (data: CopilotSettings) => Promise<void>;
 
@@ -605,7 +617,7 @@ export class KeychainService {
     }
 
     // 1. Build stripped settings — before touching any durable store.
-    const stripped = stripKeychainFields(current);
+    const stripped = clearProviderKeychainReferences(stripKeychainFields(current));
 
     // 2. Write stripped data.json BEFORE clearing Keychain.
     // Reason: a disk-write failure can then abort without also leaving the

@@ -41,7 +41,11 @@ import type {
   ProviderType,
   SetupProviderInput,
 } from "@/modelManagement";
-import { getModelKeyFromModel, type CopilotSettings } from "@/settings/model";
+import {
+  getModelKeyFromModel,
+  normalizeModelProvider,
+  type CopilotSettings,
+} from "@/settings/model";
 
 // Token-bounded "embed"/"embedding" id match. Mirrors `looksLikeEmbeddingModel`
 // in `@/modelManagement/catalog/catalogTransform`; kept local so this module
@@ -284,7 +288,12 @@ export function planByokMigration(
     }
   >();
 
-  for (const model of settings.activeModels ?? []) {
+  for (const rawModel of settings.activeModels ?? []) {
+    const normalizedProvider = normalizeModelProvider(rawModel.provider);
+    const model =
+      normalizedProvider === rawModel.provider
+        ? rawModel
+        : { ...rawModel, provider: normalizedProvider };
     const candidate = resolveCandidate(model, settings, legacyCredentialPresence);
     if (!candidate) continue;
     const { mapping, apiKey, baseUrl, extras, credentialGroupId } = candidate;

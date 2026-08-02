@@ -58,6 +58,7 @@ function makeSettings(overrides: Partial<CopilotSettings> = {}): CopilotSettings
   return {
     activeModels: [],
     activeEmbeddingModels: [],
+    providers: {},
     ...overrides,
   } as unknown as CopilotSettings;
 }
@@ -440,6 +441,16 @@ describe("keychainService", () => {
           makeSettings({
             openAIApiKey: "sk-123",
             activeModels: [makeModel({ apiKey: "model-secret" })],
+            providers: {
+              byok: {
+                providerId: "byok",
+                providerType: "anthropic",
+                displayName: "Anthropic",
+                origin: { kind: "byok", catalogProviderId: "anthropic" },
+                addedAt: 0,
+                apiKeyKeychainId: `copilot-v${vaultId}-provider-byok`,
+              },
+            },
             agentMode: {
               byok: { anthropic: "agent-secret" },
               mcpServers: [],
@@ -473,6 +484,7 @@ describe("keychainService", () => {
         const savedModels = saved.activeModels as Array<Record<string, unknown>>;
         expect(savedModels[0].apiKey).toBe("");
         expect((saved.agentMode as CopilotSettings["agentMode"]).byok.anthropic).toBe("");
+        expect((saved.providers as CopilotSettings["providers"]).byok.apiKeyKeychainId).toBeNull();
 
         expect(syncMemory).toHaveBeenCalled();
         // Reason: synced memory should also have secrets blanked
@@ -481,6 +493,7 @@ describe("keychainService", () => {
         const syncedModels = synced.activeModels as Array<Record<string, unknown>>;
         expect(syncedModels[0].apiKey).toBe("");
         expect((synced.agentMode as CopilotSettings["agentMode"]).byok.anthropic).toBe("");
+        expect((synced.providers as CopilotSettings["providers"]).byok.apiKeyKeychainId).toBeNull();
         expect(Notice).toHaveBeenCalledWith(
           "All API keys for this vault removed. Please re-enter them."
         );
@@ -520,7 +533,21 @@ describe("keychainService", () => {
           if (id === idB) throw new Error("keychain locked");
         });
 
-        (getSettings as jest.Mock).mockReturnValue(makeSettings({ openAIApiKey: "sk-123" }));
+        (getSettings as jest.Mock).mockReturnValue(
+          makeSettings({
+            openAIApiKey: "sk-123",
+            providers: {
+              byok: {
+                providerId: "byok",
+                providerType: "openai-compatible",
+                displayName: "OpenAI",
+                origin: { kind: "byok", catalogProviderId: "openai" },
+                addedAt: 0,
+                apiKeyKeychainId: idB,
+              },
+            },
+          })
+        );
 
         const saveData = jest.fn().mockResolvedValue(undefined);
         const syncMemory = jest.fn();
@@ -535,6 +562,12 @@ describe("keychainService", () => {
         // Reason: memory MUST be synced even on partial keychain failure, otherwise
         // the next normal persist would write old secrets back from stale memory.
         expect(syncMemory).toHaveBeenCalled();
+        expect(
+          (saveData.mock.calls[0][0] as CopilotSettings).providers.byok.apiKeyKeychainId
+        ).toBeNull();
+        expect(
+          (syncMemory.mock.calls[0][0] as CopilotSettings).providers.byok.apiKeyKeychainId
+        ).toBeNull();
       });
 
       it("refuses to run when Obsidian Keychain is unavailable", async () => {

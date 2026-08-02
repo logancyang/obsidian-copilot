@@ -323,6 +323,26 @@ describe("planByokMigration — scope filters", () => {
 });
 
 describe("planByokMigration — Azure / Bedrock (chat only)", () => {
+  it("normalizes a legacy Azure provider before matching discarded credential signals", () => {
+    const plan = planByokMigration(
+      settingsWith([model({ name: "gpt-4o", provider: "azure_openai" })], {
+        azureOpenAIApiKey: "",
+      }),
+      {
+        providerIds: [ChatModelProviders.AZURE_OPENAI],
+        modelIds: [`gpt-4o|${ChatModelProviders.AZURE_OPENAI}`],
+      }
+    );
+
+    expect(plan).toEqual([
+      expect.objectContaining({
+        providerType: "azure",
+        requiresApiKey: true,
+        models: [{ id: "gpt-4o", displayName: "gpt-4o" }],
+      }),
+    ]);
+  });
+
   it("maps Azure to chat-only with azure extras", () => {
     const plan = planByokMigration(
       settingsWith([model({ name: "gpt-4o", provider: ChatModelProviders.AZURE_OPENAI })], {

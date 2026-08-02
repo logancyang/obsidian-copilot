@@ -27,6 +27,24 @@ async function loadModule(overrides: Record<string, unknown> = {}) {
   } as CopilotSettings["providers"][string];
   const resetSnapshot = makeSettings({
     openAIApiKey: "preserved-key",
+    agentMode: {
+      byok: { anthropic: "agent-key" },
+      mcpServers: [
+        {
+          id: "server-1",
+          enabled: true,
+          name: "remote",
+          transport: "http",
+          url: "https://mcp.example.com",
+          headers: [{ name: "Authorization", value: "Bearer secret" }],
+        },
+      ],
+      activeBackend: "opencode",
+      backends: { codex: { envOverrides: { OPENAI_API_KEY: "agent-env-key" } } },
+      debugFullFrames: false,
+      welcomeDismissed: false,
+      skills: { folder: "copilot/skills" },
+    },
     providers: { [provider.providerId]: provider },
     _keychainVaultId: "abcd1234",
     settingsVersion: 0,
@@ -312,6 +330,13 @@ describe("settingsPersistence", () => {
       expect(saveData.mock.calls[0][0]._keychainVaultId).toBe("abcd1234");
       expect(saveData.mock.calls[0][0].settingsVersion).toBe(CURRENT_SETTINGS_VERSION);
       expect(saveData.mock.calls[0][0].providers).toEqual(resetSnapshot.providers);
+      expect(saveData.mock.calls[0][0].agentMode.byok).toEqual({ anthropic: "" });
+      expect(saveData.mock.calls[0][0].agentMode.backends.codex?.envOverrides).toEqual({
+        OPENAI_API_KEY: "",
+      });
+      expect(
+        (saveData.mock.calls[0][0].agentMode.mcpServers[0] as { headers: unknown }).headers
+      ).toEqual([{ name: "Authorization", value: "" }]);
       expect(settingsModel.setSettings).toHaveBeenCalledWith({
         ...resetSnapshot,
         settingsVersion: CURRENT_SETTINGS_VERSION,

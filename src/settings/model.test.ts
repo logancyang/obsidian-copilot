@@ -948,5 +948,58 @@ describe("model", () => {
       expect(snapshot.openAIApiKey).toBe("provider-key");
       expect(current.temperature).toBe(0.2);
     });
+
+    it("retains Agent Mode credential paths while resetting unrelated preferences", () => {
+      const mcpServer = {
+        id: "server-1",
+        enabled: true,
+        name: "remote",
+        transport: "http",
+        url: "https://mcp.example.com",
+        headers: [{ name: "Authorization", value: "Bearer secret" }],
+      };
+      const current: CopilotSettings = {
+        ...DEFAULT_SETTINGS,
+        agentMode: {
+          ...DEFAULT_SETTINGS.agentMode,
+          byok: { anthropic: "agent-key" },
+          mcpServers: [mcpServer],
+          activeBackend: "claude",
+          backends: {
+            claude: {
+              defaultMode: "plan",
+              envOverrides: { ANTHROPIC_API_KEY: "runtime-key" },
+            },
+          },
+          deviceProfiles: {
+            remote: {
+              opencode: {
+                binaryPath: "/custom/opencode",
+                envOverrides: { OPENAI_API_KEY: "profile-key" },
+              },
+            },
+          },
+          welcomeDismissed: true,
+          skills: { folder: "custom/skills" },
+        },
+      };
+
+      const snapshot = createResetSettingsSnapshot(current);
+
+      expect(snapshot.agentMode).toEqual({
+        ...DEFAULT_SETTINGS.agentMode,
+        byok: { anthropic: "agent-key" },
+        mcpServers: [mcpServer],
+        backends: { claude: { envOverrides: { ANTHROPIC_API_KEY: "runtime-key" } } },
+        deviceProfiles: {
+          remote: { opencode: { envOverrides: { OPENAI_API_KEY: "profile-key" } } },
+        },
+      });
+      expect(snapshot.agentMode.mcpServers).not.toBe(current.agentMode.mcpServers);
+      expect(current.agentMode.backends.claude?.defaultMode).toBe("plan");
+      expect(current.agentMode.deviceProfiles?.remote.opencode?.binaryPath).toBe(
+        "/custom/opencode"
+      );
+    });
   });
 });
