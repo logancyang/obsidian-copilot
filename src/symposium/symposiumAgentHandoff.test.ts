@@ -37,9 +37,9 @@ describe("symposiumAgentHandoff", () => {
       const frame = parsedPreview.querySelector("iframe");
       expect(policy?.getAttribute("content")).toContain("default-src 'none'");
       expect(policy?.getAttribute("content")).toContain("connect-src 'none'");
-      expect(policy?.getAttribute("content")).toContain("script-src 'none'");
+      expect(policy?.getAttribute("content")).toContain("script-src 'unsafe-inline'");
       expect(policy?.getAttribute("content")).toContain("frame-src 'self'");
-      expect(frame?.getAttribute("sandbox")).toBe("");
+      expect(frame?.getAttribute("sandbox")).toBe("allow-same-origin");
       expect(frame?.getAttribute("referrerpolicy")).toBe("no-referrer");
       const srcdoc = frame?.getAttribute("srcdoc") ?? "";
       const parsedContent = new DOMParser().parseFromString(srcdoc, "text/html");
@@ -47,8 +47,12 @@ describe("symposiumAgentHandoff", () => {
         'meta[http-equiv="Content-Security-Policy"]'
       );
       expect(contentPolicy?.getAttribute("content")).toContain("frame-src 'none'");
+      expect(contentPolicy?.getAttribute("content")).toContain("script-src 'none'");
       expect(srcdoc.endsWith(html)).toBe(true);
       expect(parsedPreview.querySelectorAll("iframe")).toHaveLength(1);
+      expect(parsedPreview.querySelector("script")?.textContent).toContain(
+        '["auxclick","click","contextmenu","dragstart","submit"]'
+      );
       await expect(handoff.isPreviewCurrent()).resolves.toBe(true);
       await expect(readFile(absolutePath)).rejects.toMatchObject({ code: "ENOENT" });
 

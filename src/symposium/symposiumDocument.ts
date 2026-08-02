@@ -40,17 +40,50 @@ const ACTIVE_CONTENT_SELECTOR = [
   ".markdown-embed-link",
 ].join(",");
 
+const REVIEW_ACTIVE_CONTENT_SELECTOR = [
+  "applet",
+  "audio",
+  "base",
+  "button",
+  "dialog",
+  "embed",
+  "fencedframe",
+  "form",
+  "frame",
+  "frameset",
+  "iframe",
+  "input",
+  "link",
+  "object",
+  "portal",
+  "script",
+  "select",
+  "template",
+  "textarea",
+  "video",
+  "foreignObject",
+  "animate",
+  "animateMotion",
+  "animateTransform",
+  "set",
+  "html[manifest]",
+].join(",");
+
 const URL_ATTRIBUTES = new Set([
   "action",
   "background",
   "cite",
   "formaction",
   "href",
+  "manifest",
   "poster",
   "ping",
   "src",
   "xlink:href",
 ]);
+
+const UNSAFE_REVIEW_ATTRIBUTES = new Set(["contenteditable", "ping", "srcdoc", "srcset"]);
+const UNSAFE_REVIEW_CSS = /@import|url\s*\(|https?:|\/\/|\\|expression\s*\(|behavior\s*:/i;
 
 const MIN_IMAGE_DATA_URL_PREFIX_BYTES = "data:image/png;base64,".length;
 const IMAGE_DATA_URL_PLACEHOLDER = "data:image/png;base64,A";
@@ -77,12 +110,12 @@ export class SymposiumDocumentTooLargeError extends Error {
   }
 }
 
-/** Reports that finished HTML can navigate away before the user confirms it. */
-export class SymposiumDocumentRedirectError extends Error {
+/** Reports that agent-finished HTML is not passive and self-contained. */
+export class SymposiumDocumentUnsafeError extends Error {
   constructor() {
-    super("Symposium HTML must not contain automatic redirects.");
-    this.name = "SymposiumDocumentRedirectError";
-    Object.setPrototypeOf(this, SymposiumDocumentRedirectError.prototype);
+    super("Symposium HTML must be passive and self-contained.");
+    this.name = "SymposiumDocumentUnsafeError";
+    Object.setPrototypeOf(this, SymposiumDocumentUnsafeError.prototype);
   }
 }
 
@@ -101,7 +134,7 @@ export function createSymposiumDocument(title: string, html: string): SymposiumD
 }
 
 /**
- * Captures agent-finished HTML only when it cannot navigate before confirmation.
+ * Captures agent-finished HTML only when host validation proves it passive and self-contained.
  *
  * @param title The title shown during review and sent with the payload.
  * @param html The complete HTML bytes staged by the agent.
@@ -109,13 +142,75 @@ export function createSymposiumDocument(title: string, html: string): SymposiumD
 export function createSymposiumReviewDocument(title: string, html: string): SymposiumDocument {
   const document = createSymposiumDocument(title, html);
   const parsed = new DOMParser().parseFromString(html, "text/html");
-  const redirects = [...parsed.querySelectorAll<HTMLMetaElement>("meta[http-equiv]")].some(
+  validateReviewHtml(parsed);
+  return document;
+}
+
+function validateReviewHtml(document: Document): void {
+  if (document.querySelector(REVIEW_ACTIVE_CONTENT_SELECTOR)) {
+    throw new SymposiumDocumentUnsafeError();
+  }
+
+  const redirects = [...document.querySelectorAll<HTMLMetaElement>("meta[http-equiv]")].some(
     (meta) => meta.getAttribute("http-equiv")?.trim().toLowerCase() === "refresh"
   );
   if (redirects) {
-    throw new SymposiumDocumentRedirectError();
+    throw new SymposiumDocumentUnsafeError();
   }
-  return document;
+
+  for (const element of document.querySelectorAll<HTMLElement>("*")) {
+    if (element.localName === "style" && hasUnsafeReviewCss(element.textContent ?? "")) {
+      throw new SymposiumDocumentUnsafeError();
+    }
+    for (const attribute of [...element.attributes]) {
+      const name = attribute.name.toLowerCase();
+      if (
+        name.startsWith("on") ||
+        UNSAFE_REVIEW_ATTRIBUTES.has(name) ||
+        (name === "style" && hasUnsafeReviewCss(attribute.value)) ||
+        (attribute.value.toLowerCase().includes("url(") && name !== "href") ||
+        (URL_ATTRIBUTES.has(name) && !isAllowedReviewUrl(element, name, attribute.value))
+      ) {
+        throw new SymposiumDocumentUnsafeError();
+      }
+    }
+  }
+}
+
+function hasUnsafeReviewCss(css: string): boolean {
+  return UNSAFE_REVIEW_CSS.test(css);
+}
+
+function isAllowedReviewUrl(element: Element, attribute: string, rawValue: string): boolean {
+  const value = rawValue.trim();
+  if (!value) {
+    return false;
+  }
+  if (value.startsWith("#")) {
+    return true;
+  }
+
+  const localName = element.localName.toLowerCase();
+  const scheme = value.match(/^([a-z][a-z0-9+.-]*):/i)?.[1]?.toLowerCase();
+  if (localName === "a" && attribute === "href") {
+    return (
+      value.startsWith("//") ||
+      scheme === "http" ||
+      scheme === "https" ||
+      scheme === "mailto" ||
+      scheme === "tel"
+    );
+  }
+  if (localName === "img" && attribute === "src") {
+    return isEmbeddedImageSource(value) && !/^data:image\/svg\+xml/i.test(value);
+  }
+  if (localName === "image" && (attribute === "href" || attribute === "xlink:href")) {
+    return isEmbeddedImageSource(value) && !/^data:image\/svg\+xml/i.test(value);
+  }
+  if (attribute === "cite") {
+    return value.startsWith("//") || scheme === "http" || scheme === "https";
+  }
+  return false;
 }
 
 /**

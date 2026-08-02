@@ -30,7 +30,6 @@ const PREVIEW_CONTENT_SECURITY_DIRECTIVES = [
   "img-src data:",
   "media-src data:",
   "object-src 'none'",
-  "script-src 'none'",
   "style-src 'unsafe-inline'",
 ];
 
@@ -100,13 +99,20 @@ function escapeHtmlAttribute(value: string): string {
     .replaceAll(">", "&gt;");
 }
 
-function createContentSecurityPolicy(frameSource: "'none'" | "'self'"): string {
-  return [...PREVIEW_CONTENT_SECURITY_DIRECTIVES, `frame-src ${frameSource}`].join("; ");
+function createContentSecurityPolicy(
+  frameSource: "'none'" | "'self'",
+  scriptSource: "'none'" | "'unsafe-inline'"
+): string {
+  return [
+    ...PREVIEW_CONTENT_SECURITY_DIRECTIVES,
+    `frame-src ${frameSource}`,
+    `script-src ${scriptSource}`,
+  ].join("; ");
 }
 
 function createBrowserPreview(html: string): string {
-  const shellPolicy = createContentSecurityPolicy("'self'");
-  const contentPolicy = createContentSecurityPolicy("'none'");
+  const shellPolicy = createContentSecurityPolicy("'self'", "'unsafe-inline'");
+  const contentPolicy = createContentSecurityPolicy("'none'", "'none'");
   const sandboxedContent = `<meta http-equiv="Content-Security-Policy" content="${escapeHtmlAttribute(contentPolicy)}">${html}`;
   return `<!doctype html>
 <html>
@@ -118,7 +124,20 @@ function createBrowserPreview(html: string): string {
 <style>html,body,iframe{border:0;height:100%;margin:0;padding:0;width:100%}body{overflow:hidden}iframe{display:block}</style>
 </head>
 <body>
-<iframe title="Symposium HTML preview" sandbox="" referrerpolicy="no-referrer" srcdoc="${escapeHtmlAttribute(sandboxedContent)}"></iframe>
+<iframe title="Symposium HTML preview" sandbox="allow-same-origin" referrerpolicy="no-referrer" srcdoc="${escapeHtmlAttribute(sandboxedContent)}"></iframe>
+<script>
+const frame=document.querySelector("iframe");
+const block=(event)=>event.preventDefault();
+const seal=()=>{
+  const previewDocument=frame.contentDocument;
+  if(!previewDocument)return;
+  for(const eventName of ["auxclick","click","contextmenu","dragstart","submit"]){
+    previewDocument.addEventListener(eventName,block,true);
+  }
+};
+frame.addEventListener("load",seal);
+seal();
+</script>
 </body>
 </html>
 `;

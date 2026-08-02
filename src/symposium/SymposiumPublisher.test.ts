@@ -1113,7 +1113,7 @@ describe("SymposiumPublisher", () => {
         expect(harness.client.publish).not.toHaveBeenCalled();
       });
 
-      it("rejects automatic redirects before opening review", async () => {
+      it("rejects active HTML before opening review", async () => {
         const harness = createHarness();
         harness.readStagedHtml.mockResolvedValueOnce(
           '<!doctype html><meta http-equiv="refresh" content="0;url=https://attacker.example">'
@@ -1126,7 +1126,7 @@ describe("SymposiumPublisher", () => {
 
         expect(outcome).toEqual({
           status: "failed",
-          message: "Symposium HTML must not contain automatic redirects.",
+          message: "Symposium HTML must be passive and self-contained.",
         });
         expect(harness.openModal).not.toHaveBeenCalled();
         expect(harness.client.publish).not.toHaveBeenCalled();

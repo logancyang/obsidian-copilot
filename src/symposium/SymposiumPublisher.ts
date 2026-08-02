@@ -21,8 +21,8 @@ import {
 import {
   buildSymposiumDocument,
   createSymposiumReviewDocument,
-  SymposiumDocumentRedirectError,
   SymposiumDocumentTooLargeError,
+  SymposiumDocumentUnsafeError,
 } from "@/symposium/symposiumDocument";
 import { appendSymposiumLedgerEntry, type SymposiumLedgerEntry } from "@/symposium/symposiumLedger";
 import type { SymposiumAction, SymposiumDocument, SymposiumReceipt } from "@/symposium/types";
@@ -164,7 +164,7 @@ function operationFailure(action: SymposiumAction, error: unknown): SymposiumFai
   }
   if (
     error instanceof SymposiumDocumentTooLargeError ||
-    error instanceof SymposiumDocumentRedirectError
+    error instanceof SymposiumDocumentUnsafeError
   ) {
     return {
       kind: "failure",

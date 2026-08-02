@@ -188,7 +188,7 @@ describe("builtinSkills", () => {
     it("hands finished agent HTML to the host without exposing publication controls", () => {
       const skill = BUILTIN_SKILLS.find((item) => item.name === "symposium-publish");
       expect(skill).toBeDefined();
-      expect(skill!.version).toBe(4);
+      expect(skill!.version).toBe(5);
       expect(skill!.files.map((file) => file.path)).toEqual([
         "symposium-publish.sh",
         "symposium-publish.cmd",
@@ -201,6 +201,8 @@ describe("builtinSkills", () => {
       expect(skill!.skillMd).toContain(SYMPOSIUM_WORKSPACE_ROOT_ENV);
       expect(skill!.skillMd).toContain(SYMPOSIUM_AGENT_HANDOFF_DIR);
       expect(skill!.skillMd).toContain("sandboxed local-browser rendering");
+      expect(skill!.skillMd).toContain("rejects active or externally loaded content");
+      expect(skill!.skillMd).toMatch(/prevents navigation from the\s+browser preview/);
       expect(skill!.skillMd).toContain("never choose an action or document id");
       expect(skill!.skillMd).toContain("create a new complete artifact");
       expect(skill!.skillMd).toContain("previous confirmation never applies");
