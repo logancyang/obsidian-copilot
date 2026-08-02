@@ -51,6 +51,7 @@ import {
   getLegacyByokCredentialPresence,
   loadSettingsWithKeychain,
   persistSettings,
+  refreshLastPersistedSettings,
   resetPersistenceState,
 } from "@/services/settingsPersistence";
 import { UserMemoryManager } from "@/memory/UserMemoryManager";
@@ -1097,7 +1098,9 @@ export default class CopilotPlugin extends Plugin {
     // Mirror this device's `agentMode.deviceProfiles` segment into the flat
     // agent fields the rest of the code reads (GitHub #2539). `saveData` below
     // performs the inverse on the way out.
-    setSettings(hydrateDeviceProfile(settings, getDeviceId()));
+    const runtimeSettings = hydrateDeviceProfile(settings, getDeviceId());
+    setSettings(runtimeSettings);
+    refreshLastPersistedSettings(runtimeSettings);
   }
 
   /**

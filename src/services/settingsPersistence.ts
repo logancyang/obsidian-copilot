@@ -8,7 +8,7 @@
  */
 
 import { DEFAULT_SETTINGS, ProviderSettingsKeyMap, type SettingKeyProviders } from "@/constants";
-import { logWarn } from "@/logger";
+import { logError, logWarn } from "@/logger";
 import { KeychainService } from "@/services/keychainService";
 import { cleanupLegacyFields, stripKeychainFields } from "@/services/settingsSecretTransforms";
 import type { LegacyByokCredentialPresence } from "@/settings/migrations/byokMigration";
@@ -283,22 +283,32 @@ async function persistSettingsWithoutKeychainChanges(
  * Reset non-secret settings transactionally while preserving every Keychain entry.
  *
  * @param saveData - Plugin-bound writer for the stripped reset snapshot.
+ * @returns Whether the reset completed successfully.
  */
 export async function resetSettingsPreservingKeychain(
   saveData: (data: CopilotSettings) => Promise<void>
-): Promise<void> {
-  const current = getSettings();
-  const resetSnapshot = {
-    ...createResetSettingsSnapshot(current),
-    providers: current.providers,
-    _keychainVaultId: current._keychainVaultId,
-    settingsVersion: CURRENT_SETTINGS_VERSION,
-  };
-  await runPersistenceTransaction(async () => {
-    await persistSettingsWithoutKeychainChanges(resetSnapshot, saveData);
-    suppressNextPersistOnce();
-    setSettings(resetSnapshot);
-  });
+): Promise<boolean> {
+  try {
+    const current = getSettings();
+    const resetSnapshot = {
+      ...createResetSettingsSnapshot(current),
+      providers: current.providers,
+      _keychainVaultId: current._keychainVaultId,
+      settingsVersion: CURRENT_SETTINGS_VERSION,
+    };
+    await runPersistenceTransaction(async () => {
+      await persistSettingsWithoutKeychainChanges(resetSnapshot, saveData);
+      suppressNextPersistOnce();
+      setSettings(resetSnapshot);
+    });
+    return true;
+  } catch (error) {
+    logError("Failed to reset Copilot settings.", error);
+    new Notice(
+      "Copilot could not reset settings. Check that the vault is writable, then try again."
+    );
+    return false;
+  }
 }
 
 /**

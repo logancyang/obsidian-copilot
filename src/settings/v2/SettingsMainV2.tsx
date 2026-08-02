@@ -163,7 +163,8 @@ const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin }) => {
 
   const handleReset = () => {
     const modal = new ResetSettingsConfirmModal(plugin.app, async () => {
-      await resetSettingsPreservingKeychain((data) => plugin.saveData(data));
+      const reset = await resetSettingsPreservingKeychain((data) => plugin.saveData(data));
+      if (!reset) return;
       // Increment the key to force re-render of all components
       setResetKey((prev) => prev + 1);
     });

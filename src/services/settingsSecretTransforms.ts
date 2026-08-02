@@ -4,6 +4,8 @@
  * These functions share a single "keychain-covered field set" definition:
  * - Top-level: any key matching `isSensitiveKey()`
  * - Model-level: `apiKey` on each CustomModel
+ * - Agent Mode: secret-shaped nested fields, legacy BYOK values, and MCP
+ *   environment/header values
  *
  * Reason: centralising the field-set avoids drift between the callsites
  * (hasPersistedSecrets, stripKeychainFields, cleanupLegacyFields).
@@ -54,6 +56,78 @@ function asRecord(obj: CopilotSettings): Record<string, unknown> {
   return obj as unknown as Record<string, unknown>;
 }
 
+function isAgentModeSecretPath(path: readonly string[]): boolean {
+  const leaf = path[path.length - 1];
+  if (leaf && isSensitiveKey(leaf)) return true;
+  if (path[0] === "byok" && path.length === 2) return true;
+  if (path[path.length - 2] === "envOverrides") return true;
+  return (
+    path[0] === "mcpServers" &&
+    leaf === "value" &&
+    path.some((segment) => segment === "env" || segment === "headers")
+  );
+}
+
+function arrayPathSegment(parentPath: readonly string[], item: unknown, index: number): string {
+  if (parentPath.length === 1 && parentPath[0] === "mcpServers") {
+    const id = item && typeof item === "object" ? (item as Record<string, unknown>).id : undefined;
+    if (typeof id === "string" && id.length > 0) return `id:${id}`;
+  }
+  return String(index);
+}
+
+function mapAgentModeValue(
+  value: unknown,
+  path: readonly string[],
+  mapper: (path: readonly string[], value: string) => string
+): { value: unknown; changed: boolean } {
+  if (typeof value === "string") {
+    if (!isAgentModeSecretPath(path)) return { value, changed: false };
+    const mapped = mapper(path, value);
+    return { value: mapped, changed: mapped !== value };
+  }
+
+  if (Array.isArray(value)) {
+    let next: unknown[] | undefined;
+    value.forEach((item, index) => {
+      const segment = arrayPathSegment(path, item, index);
+      const mapped = mapAgentModeValue(item, [...path, segment], mapper);
+      if (!mapped.changed) return;
+      next ??= [...value];
+      next[index] = mapped.value;
+    });
+    return next ? { value: next, changed: true } : { value, changed: false };
+  }
+
+  if (!value || typeof value !== "object") return { value, changed: false };
+  let next: Record<string, unknown> | undefined;
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    const mapped = mapAgentModeValue(child, [...path, key], mapper);
+    if (!mapped.changed) continue;
+    next ??= { ...(value as Record<string, unknown>) };
+    next[key] = mapped.value;
+  }
+  return next ? { value: next, changed: true } : { value, changed: false };
+}
+
+/**
+ * Map every Keychain-backed Agent Mode value without mutating the input.
+ * MCP server ids replace array positions in logical paths so reordering servers
+ * does not detach their credentials.
+ *
+ * @param settings - Settings snapshot whose Agent Mode secrets should be mapped.
+ * @param mapper - Replacement callback receiving each stable path and current value.
+ */
+export function mapAgentModeSecrets(
+  settings: CopilotSettings,
+  mapper: (path: readonly string[], value: string) => string
+): CopilotSettings {
+  if (!settings.agentMode) return settings;
+  const mapped = mapAgentModeValue(settings.agentMode, [], mapper);
+  if (!mapped.changed) return settings;
+  return { ...settings, agentMode: mapped.value as CopilotSettings["agentMode"] };
+}
+
 // ---------------------------------------------------------------------------
 // hasPersistedSecrets
 // ---------------------------------------------------------------------------
@@ -85,6 +159,13 @@ export function hasPersistedSecrets(rawData: Record<string, unknown>): boolean {
       }
     }
   }
+
+  let hasAgentModeSecret = false;
+  mapAgentModeSecrets(rawData as unknown as CopilotSettings, (_path, value) => {
+    if (value.length > 0) hasAgentModeSecret = true;
+    return value;
+  });
+  if (hasAgentModeSecret) return true;
 
   const providers = rawData.providers;
   if (providers && typeof providers === "object" && !Array.isArray(providers)) {
@@ -133,7 +214,7 @@ export function stripKeychainFields(settings: CopilotSettings): CopilotSettings 
     out.activeEmbeddingModels = stripModelSecrets(settings.activeEmbeddingModels ?? []);
   }
 
-  return out as unknown as CopilotSettings;
+  return mapAgentModeSecrets(out as unknown as CopilotSettings, () => "");
 }
 
 /** Set secret fields to `""` on each model, returning new array. */

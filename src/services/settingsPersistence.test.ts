@@ -52,11 +52,13 @@ async function loadModule(overrides: Record<string, unknown> = {}) {
     setSecretById: jest.fn(),
     ...overrides,
   };
+  const notice = jest.fn();
 
+  jest.doMock("obsidian", () => ({ Notice: notice }));
   jest.doMock("@/services/keychainService", () => ({
     KeychainService: { getInstance: jest.fn(() => keychain) },
   }));
-  jest.doMock("@/logger", () => ({ logWarn: jest.fn() }));
+  jest.doMock("@/logger", () => ({ logError: jest.fn(), logWarn: jest.fn() }));
   jest.doMock("@/settings/model", () => ({
     ...settingsModel,
     getModelKeyFromModel: (model: { name: string; provider: string }) =>
@@ -67,7 +69,7 @@ async function loadModule(overrides: Record<string, unknown> = {}) {
   }));
 
   const module = await import("@/services/settingsPersistence");
-  return { module, keychain, resetSnapshot, settingsModel };
+  return { module, keychain, notice, resetSnapshot, settingsModel };
 }
 
 describe("settingsPersistence", () => {
@@ -201,6 +203,17 @@ describe("settingsPersistence", () => {
           openAIApiKey: "enc_desk_legacy",
           activeModels: [{ name: "custom", provider: "openai", apiKey: "plaintext-disk-key" }],
           activeEmbeddingModels: [],
+          agentMode: {
+            byok: { anthropic: "nested-disk-key" },
+            mcpServers: [
+              {
+                id: "server-1",
+                transport: "http",
+                headers: [{ name: "Authorization", value: "Bearer disk-token" }],
+              },
+            ],
+            backends: {},
+          },
         },
         saveData
       );
@@ -208,6 +221,11 @@ describe("settingsPersistence", () => {
       const hydrateInput = keychain.hydrateFromKeychain.mock.calls[0][0];
       expect(hydrateInput.openAIApiKey).toBe("");
       expect(hydrateInput.activeModels[0].apiKey).toBe("");
+      expect(hydrateInput.agentMode.byok.anthropic).toBe("");
+      const hydrateMcpServer = hydrateInput.agentMode.mcpServers[0] as {
+        headers: Array<{ value: string }>;
+      };
+      expect(hydrateMcpServer.headers[0].value).toBe("");
       expect(loaded.openAIApiKey).toBe("keychain-key");
       expect(saveData).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -216,6 +234,12 @@ describe("settingsPersistence", () => {
           activeModels: [expect.objectContaining({ apiKey: "" })],
         })
       );
+      const savedAgentMode = (saveData.mock.calls[0][0] as unknown as CopilotSettings).agentMode;
+      const savedMcpServer = savedAgentMode.mcpServers[0] as {
+        headers: Array<{ name: string; value: string }>;
+      };
+      expect(savedAgentMode.byok).toEqual({ anthropic: "" });
+      expect(savedMcpServer.headers).toEqual([{ name: "Authorization", value: "" }]);
       expect(saveData.mock.calls[0][0]).not.toHaveProperty("_keychainOnly");
       expect(module.getLegacyByokCredentialPresence()).toEqual({
         providerIds: ["openai"],
@@ -278,7 +302,7 @@ describe("settingsPersistence", () => {
       const { module, keychain, resetSnapshot, settingsModel } = await loadModule();
       const saveData = jest.fn().mockResolvedValue(undefined);
 
-      await module.resetSettingsPreservingKeychain(saveData);
+      await expect(module.resetSettingsPreservingKeychain(saveData)).resolves.toBe(true);
       await module.persistSettings(resetSnapshot, saveData);
 
       expect(keychain.persistSecrets).not.toHaveBeenCalled();
@@ -295,17 +319,19 @@ describe("settingsPersistence", () => {
     });
 
     it("leaves memory and Keychain untouched when the stripped disk save fails", async () => {
-      const { module, keychain, settingsModel } = await loadModule();
+      const { module, keychain, notice, settingsModel } = await loadModule();
 
-      await expect(
-        module.resetSettingsPreservingKeychain(
-          jest.fn().mockRejectedValue(new Error("disk unavailable"))
-        )
-      ).rejects.toThrow("disk unavailable");
+      const reset = await module.resetSettingsPreservingKeychain(
+        jest.fn().mockRejectedValue(new Error("disk unavailable"))
+      );
 
+      expect(reset).toBe(false);
       expect(keychain.persistSecrets).not.toHaveBeenCalled();
       expect(keychain.setSecretById).not.toHaveBeenCalled();
       expect(settingsModel.setSettings).not.toHaveBeenCalled();
+      expect(notice).toHaveBeenCalledWith(
+        "Copilot could not reset settings. Check that the vault is writable, then try again."
+      );
     });
   });
 
