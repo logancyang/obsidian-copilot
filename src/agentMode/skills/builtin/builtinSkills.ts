@@ -494,7 +494,7 @@ const FETCH_X = relaySkill({
   scriptFile: "fetch-x.sh",
 });
 
-const SYMPOSIUM_PUBLISH_VERSION = 2;
+const SYMPOSIUM_PUBLISH_VERSION = 3;
 const SYMPOSIUM_PUBLISH: BuiltinSkill = {
   name: "symposium-publish",
   version: SYMPOSIUM_PUBLISH_VERSION,
@@ -533,9 +533,10 @@ On Windows, use the \`.cmd\` wrapper (prefix it with \`&\` in PowerShell):
 & "/absolute/path/to/this/skill/directory/symposium-publish.cmd" "Notes/source.md" "${SYMPOSIUM_AGENT_HANDOFF_DIR}/unique.html"
 \`\`\`
 
-The wrapper blocks while Obsidian consumes the staged artifact and shows the exact staged page,
-source, and title in a sandboxed review. Obsidian removes the artifact and
-alone reads the current note identity to choose whether confirmation publishes or
+The wrapper blocks while Obsidian consumes the staged artifact and shows its source,
+title, and a link to the exact captured page in the user's default browser. Obsidian
+removes the original artifact, removes its temporary browser preview after the review,
+and alone reads the current note identity to choose whether confirmation publishes or
 updates; never choose an action or document id.
 
 - \`cancelled\`: stop. No request was sent.

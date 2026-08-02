@@ -188,7 +188,7 @@ describe("builtinSkills", () => {
     it("hands finished agent HTML to the host without exposing publication controls", () => {
       const skill = BUILTIN_SKILLS.find((item) => item.name === "symposium-publish");
       expect(skill).toBeDefined();
-      expect(skill!.version).toBe(2);
+      expect(skill!.version).toBe(3);
       expect(skill!.files.map((file) => file.path)).toEqual([
         "symposium-publish.sh",
         "symposium-publish.cmd",
@@ -200,12 +200,13 @@ describe("builtinSkills", () => {
       expect(skill!.skillMd).toContain(`\`${SYMPOSIUM_MAX_HTML_BYTES}\` bytes`);
       expect(skill!.skillMd).toContain(SYMPOSIUM_WORKSPACE_ROOT_ENV);
       expect(skill!.skillMd).toContain(SYMPOSIUM_AGENT_HANDOFF_DIR);
-      expect(skill!.skillMd).toContain("exact staged page");
-      expect(skill!.skillMd).toContain("sandboxed review");
+      expect(skill!.skillMd).toContain("link to the exact captured page");
+      expect(skill!.skillMd).toContain("default browser");
       expect(skill!.skillMd).toContain("never choose an action or document id");
       expect(skill!.skillMd).toContain("create a new complete artifact");
       expect(skill!.skillMd).toContain("previous confirmation never applies");
-      expect(skill!.skillMd).toContain("removes the artifact");
+      expect(skill!.skillMd).toContain("removes the original artifact");
+      expect(skill!.skillMd).toContain("removes its temporary browser preview");
       expect(skill!.skillMd).toContain("Do not bypass the review or publish directly");
       expect(skill!.skillMd).not.toContain("SYMPOSIUM_TOKEN");
       expect(skill!.skillMd).not.toContain(PLUS_ENV.licenseKey);

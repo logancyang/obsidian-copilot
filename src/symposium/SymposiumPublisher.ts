@@ -10,6 +10,7 @@ import { getDecryptedKey } from "@/encryptionService";
 import { logWarn } from "@/logger";
 import { getSettings } from "@/settings/model";
 import { SymposiumClient, SymposiumClientError } from "@/symposium/SymposiumClient";
+import type { SymposiumAgentHandoff } from "@/symposium/symposiumAgentHandoff";
 import {
   SymposiumFrontmatterParseError,
   getSymposiumDocId,
@@ -43,7 +44,7 @@ interface SymposiumPublisherDependencies {
   client?: SymposiumClientPort;
   loadLicenseKey?: () => Promise<string>;
   buildDocument?: (file: TFile, ownerDocument: Document) => Promise<SymposiumDocument>;
-  consumeAgentHandoff?: (stagedHtmlPath: string) => Promise<string>;
+  consumeAgentHandoff?: (stagedHtmlPath: string) => Promise<SymposiumAgentHandoff>;
   createModal?: (options: SymposiumModalOptions) => SymposiumModalPort;
   recordLedger?: (entry: SymposiumLedgerEntry) => Promise<void>;
 }
@@ -203,6 +204,16 @@ function identityChangedFailure(action: SymposiumAction): SymposiumFailureResult
   };
 }
 
+function previewChangedFailure(action: SymposiumAction): SymposiumFailureResult {
+  return {
+    kind: "failure",
+    action,
+    message: "The local HTML preview changed. Ask the agent to regenerate it before publishing.",
+    accessNotice: false,
+    retryable: false,
+  };
+}
+
 /**
  * Coordinates one note's confirmed Symposium action, remote request, and local identity update.
  *
@@ -216,7 +227,7 @@ export class SymposiumPublisher {
     file: TFile,
     ownerDocument: Document
   ) => Promise<SymposiumDocument>;
-  private readonly consumeAgentHandoff: (stagedHtmlPath: string) => Promise<string>;
+  private readonly consumeAgentHandoff: (stagedHtmlPath: string) => Promise<SymposiumAgentHandoff>;
   private readonly createModal: (options: SymposiumModalOptions) => SymposiumModalPort;
   private readonly recordLedger: (entry: SymposiumLedgerEntry) => Promise<void>;
   private readonly inFlightFiles = new Set<TFile>();
@@ -308,9 +319,9 @@ export class SymposiumPublisher {
     if (!stagedHtmlPath) {
       return agentReviewFailure(INVALID_HANDOFF_PATH_MESSAGE);
     }
-    let html: string;
+    let handoff: SymposiumAgentHandoff;
     try {
-      html = await this.consumeAgentHandoff(stagedHtmlPath);
+      handoff = await this.consumeAgentHandoff(stagedHtmlPath);
     } catch (error) {
       return agentReviewFailure(
         error instanceof Error && error.name === "SymposiumAgentHandoffError"
@@ -319,40 +330,50 @@ export class SymposiumPublisher {
       );
     }
 
-    const sourcePath = normalizeWorkspaceRelativePath(sourcePathInput);
-    if (!sourcePath) {
-      return agentReviewFailure(INVALID_HANDOFF_PATH_MESSAGE);
-    }
-
-    if (this.disposed) {
-      return agentReviewFailure("Symposium publishing is no longer available.");
-    }
-
-    const sourceFile = this.app.vault.getAbstractFileByPath(sourcePath);
-    if (!(sourceFile instanceof TFile) || sourceFile.extension !== "md") {
-      return agentReviewFailure("The Symposium source must be an existing Markdown note.");
-    }
-    const blockedResult = this.blockedPublishResults.get(sourceFile);
-    if (blockedResult) {
-      return agentReviewFailure(blockedResult.message);
-    }
-
-    let document: SymposiumDocument;
-    let docId: string | null = null;
     try {
-      document = createSymposiumReviewDocument(sourceFile.basename, html);
-      docId = await getSymposiumDocId(this.app, sourceFile);
-    } catch (error) {
-      const action: SymposiumAction = docId ? "update" : "publish";
-      return agentReviewFailure(operationFailure(action, error).message);
-    }
+      const sourcePath = normalizeWorkspaceRelativePath(sourcePathInput);
+      if (!sourcePath) {
+        return agentReviewFailure(INVALID_HANDOFF_PATH_MESSAGE);
+      }
 
-    const review: SymposiumDocumentReview = Object.freeze({
-      sourcePath,
-      digest: sha256(document.html),
-      payload: document,
-    });
-    return this.openAgentReview(sourceFile, docId, review);
+      if (this.disposed) {
+        return agentReviewFailure("Symposium publishing is no longer available.");
+      }
+
+      const sourceFile = this.app.vault.getAbstractFileByPath(sourcePath);
+      if (!(sourceFile instanceof TFile) || sourceFile.extension !== "md") {
+        return agentReviewFailure("The Symposium source must be an existing Markdown note.");
+      }
+      const blockedResult = this.blockedPublishResults.get(sourceFile);
+      if (blockedResult) {
+        return agentReviewFailure(blockedResult.message);
+      }
+
+      let document: SymposiumDocument;
+      let docId: string | null = null;
+      try {
+        document = createSymposiumReviewDocument(sourceFile.basename, handoff.html);
+        docId = await getSymposiumDocId(this.app, sourceFile);
+      } catch (error) {
+        const action: SymposiumAction = docId ? "update" : "publish";
+        return agentReviewFailure(operationFailure(action, error).message);
+      }
+
+      const review: SymposiumDocumentReview = Object.freeze({
+        sourcePath,
+        digest: sha256(document.html),
+        payload: document,
+        previewPath: handoff.previewPath,
+        previewUrl: handoff.previewUrl,
+      });
+      return await this.openAgentReview(sourceFile, docId, review, handoff.isPreviewCurrent);
+    } finally {
+      try {
+        await handoff.cleanup();
+      } catch (error) {
+        logWarn("Could not remove the temporary Symposium browser preview.", error);
+      }
+    }
   }
 
   /**
@@ -383,7 +404,7 @@ export class SymposiumPublisher {
    *
    * @param stagedHtmlPath The validated vault-relative staging path.
    */
-  private async consumeDesktopAgentHandoff(stagedHtmlPath: string): Promise<string> {
+  private async consumeDesktopAgentHandoff(stagedHtmlPath: string): Promise<SymposiumAgentHandoff> {
     const { consumeSymposiumAgentHandoff } = await import("@/symposium/symposiumAgentHandoff");
     return consumeSymposiumAgentHandoff(this.getDesktopVaultRoot(), stagedHtmlPath);
   }
@@ -398,11 +419,13 @@ export class SymposiumPublisher {
    * @param file The source note resolved by the host.
    * @param expectedDocId The source identity read immediately before opening review.
    * @param review The frozen document and digest shown to the user.
+   * @param isPreviewCurrent Verifies that the temporary browser file still contains the reviewed bytes.
    */
   private openAgentReview(
     file: TFile,
     expectedDocId: string | null,
-    review: SymposiumDocumentReview
+    review: SymposiumDocumentReview,
+    isPreviewCurrent: () => Promise<boolean>
   ): Promise<AgentSymposiumReviewOutcome> {
     return new Promise((resolve) => {
       let pending = false;
@@ -421,7 +444,14 @@ export class SymposiumPublisher {
         onConfirm: async (action, ownerDocument) => {
           pending = true;
           try {
-            const result = await this.execute(file, expectedDocId, action, ownerDocument, review);
+            const result = await this.execute(
+              file,
+              expectedDocId,
+              action,
+              ownerDocument,
+              review,
+              isPreviewCurrent
+            );
             settle(agentOutcomeFromModalResult(result));
             return result;
           } catch (error) {
@@ -455,7 +485,8 @@ export class SymposiumPublisher {
     expectedDocId: string | null,
     action: SymposiumAction,
     ownerDocument: Document,
-    review?: SymposiumDocumentReview
+    review?: SymposiumDocumentReview,
+    isPreviewCurrent?: () => Promise<boolean>
   ): Promise<SymposiumModalResult> {
     const expectedAction: SymposiumAction = expectedDocId ? "update" : "publish";
     const deleteRequested = !review && action === "delete";
@@ -551,6 +582,9 @@ export class SymposiumPublisher {
           (review && !this.isAgentSourceCurrent(file, review.sourcePath))
         ) {
           return identityChangedFailure(resolvedAction);
+        }
+        if (review && !(await isPreviewCurrent?.())) {
+          return previewChangedFailure(resolvedAction);
         }
         if (!docId) {
           const receipt = await this.client.publish(document, licenseKey);

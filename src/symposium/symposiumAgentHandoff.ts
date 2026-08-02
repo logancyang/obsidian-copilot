@@ -1,5 +1,7 @@
-import { lstat, readFile, unlink } from "node:fs/promises";
+import { lstat, mkdtemp, readFile, rm, unlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import * as path from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { SYMPOSIUM_AGENT_HANDOFF_DIR, SYMPOSIUM_MAX_HTML_BYTES } from "@/symposium/constants";
 
@@ -17,6 +19,17 @@ const UNSAFE_ROOT_MESSAGE =
 const UNSAFE_FILE_MESSAGE =
   "Staged Symposium HTML must be one ordinary .html file inside the vault handoff folder.";
 const CLEANUP_FAILED_MESSAGE = "Copilot could not remove the staged Symposium HTML.";
+const PREVIEW_FOLDER_PREFIX = "copilot-symposium-preview-";
+const PREVIEW_FILE_NAME = "preview.html";
+
+/** Owns the temporary browser preview created from one consumed agent handoff. */
+export interface SymposiumAgentHandoff {
+  readonly html: string;
+  readonly previewPath: string;
+  readonly previewUrl: string;
+  readonly isPreviewCurrent: () => Promise<boolean>;
+  readonly cleanup: () => Promise<void>;
+}
 
 function getDirectHandoffName(stagedHtmlPath: string): string {
   const prefix = `${SYMPOSIUM_AGENT_HANDOFF_DIR}/`;
@@ -67,9 +80,36 @@ async function removeHandoff(stagedPath: string): Promise<void> {
   }
 }
 
+async function createLocalPreview(html: string): Promise<SymposiumAgentHandoff> {
+  const previewRoot = await mkdtemp(path.join(tmpdir(), PREVIEW_FOLDER_PREFIX));
+  const previewPath = path.join(previewRoot, PREVIEW_FILE_NAME);
+  try {
+    await writeFile(previewPath, new TextEncoder().encode(html), { flag: "wx", mode: 0o400 });
+  } catch (error) {
+    await rm(previewRoot, { recursive: true, force: true });
+    throw error;
+  }
+
+  return Object.freeze({
+    html,
+    previewPath,
+    previewUrl: pathToFileURL(previewPath).href,
+    isPreviewCurrent: async () => {
+      try {
+        const stats = await lstat(previewPath);
+        if (!stats.isFile()) return false;
+        return decodeUtf8(Uint8Array.from(await readFile(previewPath))) === html;
+      } catch {
+        return false;
+      }
+    },
+    cleanup: () => rm(previewRoot, { recursive: true, force: true }),
+  });
+}
+
 /**
- * Reads one bounded handoff exactly once and removes it before review can open,
- * so every later publish, cancel, regenerate, or failure outcome is already clean.
+ * Consumes one bounded handoff before review and exposes the captured bytes through a
+ * temporary local file whose lifecycle stays independent of agent-controlled storage.
  *
  * @param vaultRootAbs The absolute desktop vault root that owns the handoff.
  * @param stagedHtmlPath The normalized vault-relative staged HTML path.
@@ -77,11 +117,12 @@ async function removeHandoff(stagedPath: string): Promise<void> {
 export async function consumeSymposiumAgentHandoff(
   vaultRootAbs: string,
   stagedHtmlPath: string
-): Promise<string> {
+): Promise<SymposiumAgentHandoff> {
   const fileName = getDirectHandoffName(stagedHtmlPath);
   const handoffRoot = await getHandoffRoot(vaultRootAbs);
   const stagedPath = path.join(handoffRoot, fileName);
 
+  let html: string;
   try {
     const stats = await lstat(stagedPath);
     if (!stats.isFile()) {
@@ -99,11 +140,13 @@ export async function consumeSymposiumAgentHandoff(
         `Symposium HTML is ${bytes.byteLength} bytes; the limit is ${SYMPOSIUM_MAX_HTML_BYTES} bytes.`
       );
     }
-    return decodeUtf8(Uint8Array.from(bytes));
+    html = decodeUtf8(Uint8Array.from(bytes));
   } catch (error) {
     if (error instanceof SymposiumAgentHandoffError) throw error;
     throw new SymposiumAgentHandoffError(UNSAFE_FILE_MESSAGE);
   } finally {
     await removeHandoff(stagedPath);
   }
+
+  return createLocalPreview(html);
 }

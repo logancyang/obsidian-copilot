@@ -9,6 +9,7 @@ import {
   SymposiumDocumentTooLargeError,
 } from "@/symposium/symposiumDocument";
 import type { SymposiumLedgerEntry } from "@/symposium/symposiumLedger";
+import type { SymposiumAgentHandoff } from "@/symposium/symposiumAgentHandoff";
 import type { SymposiumDocument, SymposiumReceipt } from "@/symposium/types";
 import { sha256 } from "@/utils/hash";
 import { TFile, type App } from "obsidian";
@@ -43,9 +44,11 @@ interface Harness {
   closeModal: jest.Mock;
   openModal: jest.Mock;
   processFrontMatter: jest.Mock;
+  previewIsCurrent: jest.Mock;
   publisher: SymposiumPublisher;
   readStagedHtml: jest.Mock;
   recordLedger: jest.Mock<Promise<void>, [SymposiumLedgerEntry]>;
+  removePreview: jest.Mock;
 }
 
 function createHarness(frontmatter: Record<string, unknown> = {}): Harness {
@@ -57,9 +60,21 @@ function createHarness(frontmatter: Record<string, unknown> = {}): Harness {
     }
   );
   const readStagedHtml = jest.fn().mockResolvedValue(DOCUMENT.html);
+  const previewIsCurrent = jest.fn().mockResolvedValue(true);
+  const removePreview = jest.fn().mockResolvedValue(undefined);
   const consumeAgentHandoff = jest.fn(
-    async (stagedHtmlPath: string): Promise<string> =>
-      (await readStagedHtml(stagedHtmlPath)) as string
+    async (stagedHtmlPath: string): Promise<SymposiumAgentHandoff> => {
+      const html = (await readStagedHtml(stagedHtmlPath)) as string;
+      const fileName = stagedHtmlPath.split("/").at(-1);
+      const previewPath = `/tmp/${fileName}`;
+      return {
+        html,
+        previewPath,
+        previewUrl: `file://${previewPath}`,
+        isPreviewCurrent: previewIsCurrent,
+        cleanup: removePreview,
+      };
+    }
   );
   const app = {
     vault: {
@@ -115,10 +130,12 @@ function createHarness(frontmatter: Record<string, unknown> = {}): Harness {
     modalOptions,
     closeModal,
     openModal,
+    previewIsCurrent,
     processFrontMatter,
     publisher,
     readStagedHtml,
     recordLedger,
+    removePreview,
   };
 }
 
@@ -832,6 +849,8 @@ describe("SymposiumPublisher", () => {
         expect(options.review).toMatchObject({
           sourcePath: harness.file.path,
           digest: sha256(html),
+          previewPath: "/tmp/review.html",
+          previewUrl: "file:///tmp/review.html",
           payload: {
             title: "Architecture",
             html,
@@ -844,6 +863,7 @@ describe("SymposiumPublisher", () => {
         options.onClosed?.();
 
         await expect(outcome).resolves.toEqual({ status: "cancelled" });
+        expect(harness.removePreview).toHaveBeenCalledTimes(1);
         expect(harness.client.publish).not.toHaveBeenCalled();
         expect(harness.client.update).not.toHaveBeenCalled();
         expect(harness.client.delete).not.toHaveBeenCalled();
@@ -859,6 +879,7 @@ describe("SymposiumPublisher", () => {
         first.options.onClosed?.();
 
         await expect(first.outcome).resolves.toEqual({ status: "regenerate" });
+        expect(harness.removePreview).toHaveBeenCalledTimes(1);
         expect(harness.client.publish).not.toHaveBeenCalled();
 
         const second = await startAgentReview(
@@ -873,6 +894,7 @@ describe("SymposiumPublisher", () => {
           status: "published",
           url: RECEIPT.url,
         });
+        expect(harness.removePreview).toHaveBeenCalledTimes(2);
         second.options.onClosed?.();
         expect(harness.client.publish).toHaveBeenCalledTimes(1);
         expect(harness.client.publish).toHaveBeenCalledWith(
@@ -909,6 +931,33 @@ describe("SymposiumPublisher", () => {
         );
         expect(harness.client.publish).not.toHaveBeenCalled();
         expect(harness.frontmatter.symposium).toBe(DOC_URL);
+        expect(harness.previewIsCurrent).toHaveBeenCalledTimes(1);
+      });
+
+      it("rejects confirmation when the local browser preview no longer matches", async () => {
+        const harness = createHarness();
+        harness.previewIsCurrent.mockResolvedValue(false);
+        const review = await startAgentReview(harness);
+
+        const result = await review.options.onConfirm("publish", activeDocument);
+
+        expect(result).toEqual({
+          kind: "failure",
+          action: "publish",
+          message:
+            "The local HTML preview changed. Ask the agent to regenerate it before publishing.",
+          accessNotice: false,
+          retryable: false,
+        });
+        await expect(review.outcome).resolves.toEqual({
+          status: "failed",
+          message:
+            "The local HTML preview changed. Ask the agent to regenerate it before publishing.",
+        });
+        expect(harness.previewIsCurrent).toHaveBeenCalledTimes(1);
+        expect(harness.removePreview).toHaveBeenCalledTimes(1);
+        expect(harness.client.publish).not.toHaveBeenCalled();
+        expect(harness.client.update).not.toHaveBeenCalled();
       });
 
       it("preserves a valid identity and sends zero POSTs when the agent PUT returns 404", async () => {
@@ -1020,6 +1069,7 @@ describe("SymposiumPublisher", () => {
 
         expect(outcome).toMatchObject({ status: "failed" });
         expect(harness.readStagedHtml).toHaveBeenCalledTimes(1);
+        expect(harness.removePreview).toHaveBeenCalledTimes(1);
         expect(harness.openModal).not.toHaveBeenCalled();
       });
 
@@ -1058,6 +1108,7 @@ describe("SymposiumPublisher", () => {
           message: `Symposium HTML is ${SYMPOSIUM_MAX_HTML_BYTES + 1} bytes; the limit is ${SYMPOSIUM_MAX_HTML_BYTES} bytes.`,
         });
         expect(harness.readStagedHtml).toHaveBeenCalledTimes(1);
+        expect(harness.removePreview).toHaveBeenCalledTimes(1);
         expect(harness.openModal).not.toHaveBeenCalled();
         expect(harness.client.publish).not.toHaveBeenCalled();
       });

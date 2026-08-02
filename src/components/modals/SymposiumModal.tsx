@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { openWithSystemDefault } from "@/utils/openWithSystemDefault";
 import { createPluginRoot } from "@/utils/react/createPluginRoot";
 import type { SymposiumAction, SymposiumDocument, SymposiumReceipt } from "@/symposium/types";
 import { App, Modal } from "obsidian";
@@ -37,6 +38,8 @@ export interface SymposiumDocumentReview {
   readonly sourcePath: string;
   readonly digest: string;
   readonly payload: SymposiumDocument;
+  readonly previewPath: string;
+  readonly previewUrl: string;
 }
 
 export interface SymposiumModalOptions {
@@ -51,29 +54,6 @@ export interface SymposiumModalOptions {
 
 interface SymposiumModalContentProps extends SymposiumModalOptions {
   onClose: () => void;
-}
-
-const REVIEW_IFRAME_CSP =
-  "default-src 'none'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:";
-const PREVIEW_NAVIGATION_EVENTS = ["click", "auxclick", "contextmenu", "dragstart"];
-
-function blockPreviewNavigation(event: Event): void {
-  const target = event.target as Element | null;
-  if (
-    event.type === "contextmenu" ||
-    event.type === "dragstart" ||
-    target?.closest?.("a[href], area[href]")
-  ) {
-    event.preventDefault();
-  }
-}
-
-function installPreviewNavigationBlocker(preview: HTMLIFrameElement): void {
-  const previewDocument = preview.contentDocument;
-  if (!previewDocument) return;
-  for (const eventName of PREVIEW_NAVIGATION_EVENTS) {
-    previewDocument.addEventListener(eventName, blockPreviewNavigation, true);
-  }
 }
 
 function actionLabel(action: SymposiumAction): string {
@@ -288,19 +268,27 @@ function SymposiumModalContent({
             <span className="tw-text-muted">SHA-256</span>
             <code className="tw-break-all">{review.digest}</code>
           </div>
-          <iframe
-            sandbox="allow-same-origin"
-            referrerPolicy="no-referrer"
-            {...{ csp: REVIEW_IFRAME_CSP }}
-            onLoad={(event) => installPreviewNavigationBlocker(event.currentTarget)}
-            title="Symposium HTML preview"
-            srcDoc={review.payload.html}
-            className="tw-h-96 tw-w-full tw-rounded-md tw-border tw-border-solid tw-border-border"
-          />
+          <p className="tw-m-0 tw-text-small tw-text-muted">
+            Open the exact local HTML in your default browser, review it, then return here to
+            confirm.
+          </p>
+          <a
+            href={review.previewUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={review.previewPath}
+            className="tw-text-accent tw-underline"
+            onClick={(event) => {
+              event.preventDefault();
+              void openWithSystemDefault(review.previewPath);
+            }}
+          >
+            Open local HTML preview
+          </a>
         </div>
       )}
 
-      <div className="tw-flex tw-justify-end tw-gap-2" aria-label="Symposium actions">
+      <div className="tw-flex tw-flex-wrap tw-justify-end tw-gap-2" aria-label="Symposium actions">
         {confirmationAction ? (
           <>
             {review && onRegenerate && (

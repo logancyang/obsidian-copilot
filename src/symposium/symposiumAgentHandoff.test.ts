@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { consumeSymposiumAgentHandoff } from "@/symposium/symposiumAgentHandoff";
 import { SYMPOSIUM_MAX_HTML_BYTES } from "@/symposium/constants";
@@ -20,13 +21,26 @@ describe("symposiumAgentHandoff", () => {
   });
 
   describe("consumeSymposiumAgentHandoff()", () => {
-    it("returns exact UTF-8 bytes and removes the artifact before review", async () => {
+    it("moves exact UTF-8 bytes into a verifiable temporary browser preview", async () => {
       const html = "\uFEFF<!doctype html><p>Résumé</p>\n";
       const absolutePath = path.join(vaultRoot, ...STAGED_PATH.split("/"));
       await writeFile(absolutePath, new TextEncoder().encode(html));
 
-      await expect(consumeSymposiumAgentHandoff(vaultRoot, STAGED_PATH)).resolves.toBe(html);
+      const handoff = await consumeSymposiumAgentHandoff(vaultRoot, STAGED_PATH);
+
+      expect(Object.isFrozen(handoff)).toBe(true);
+      expect(handoff.html).toBe(html);
+      expect(handoff.previewUrl).toBe(pathToFileURL(handoff.previewPath).href);
+      await expect(readFile(handoff.previewPath, "utf8")).resolves.toBe(html);
+      await expect(handoff.isPreviewCurrent()).resolves.toBe(true);
       await expect(readFile(absolutePath)).rejects.toMatchObject({ code: "ENOENT" });
+
+      await rm(handoff.previewPath);
+      await writeFile(handoff.previewPath, "changed bytes", "utf8");
+      await expect(handoff.isPreviewCurrent()).resolves.toBe(false);
+
+      await handoff.cleanup();
+      await expect(readFile(handoff.previewPath)).rejects.toMatchObject({ code: "ENOENT" });
     });
 
     it("rejects invalid UTF-8 and still removes the artifact", async () => {

