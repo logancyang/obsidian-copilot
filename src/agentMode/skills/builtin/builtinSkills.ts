@@ -494,7 +494,7 @@ const FETCH_X = relaySkill({
   scriptFile: "fetch-x.sh",
 });
 
-const SYMPOSIUM_PUBLISH_VERSION = 3;
+const SYMPOSIUM_PUBLISH_VERSION = 4;
 const SYMPOSIUM_PUBLISH: BuiltinSkill = {
   name: "symposium-publish",
   version: SYMPOSIUM_PUBLISH_VERSION,
@@ -534,10 +534,10 @@ On Windows, use the \`.cmd\` wrapper (prefix it with \`&\` in PowerShell):
 \`\`\`
 
 The wrapper blocks while Obsidian consumes the staged artifact and shows its source,
-title, and a link to the exact captured page in the user's default browser. Obsidian
-removes the original artifact, removes its temporary browser preview after the review,
-and alone reads the current note identity to choose whether confirmation publishes or
-updates; never choose an action or document id.
+title, and a link to a sandboxed local-browser rendering of the exact captured page.
+Obsidian removes the original artifact, removes its temporary browser preview after the
+review, and alone reads the current note identity to choose whether confirmation
+publishes or updates; never choose an action or document id.
 
 - \`cancelled\`: stop. No request was sent.
 - \`regenerate\`: create a new complete artifact and run the wrapper again. The

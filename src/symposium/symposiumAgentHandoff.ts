@@ -21,6 +21,18 @@ const UNSAFE_FILE_MESSAGE =
 const CLEANUP_FAILED_MESSAGE = "Copilot could not remove the staged Symposium HTML.";
 const PREVIEW_FOLDER_PREFIX = "copilot-symposium-preview-";
 const PREVIEW_FILE_NAME = "preview.html";
+const PREVIEW_CONTENT_SECURITY_DIRECTIVES = [
+  "default-src 'none'",
+  "base-uri 'none'",
+  "connect-src 'none'",
+  "font-src data:",
+  "form-action 'none'",
+  "img-src data:",
+  "media-src data:",
+  "object-src 'none'",
+  "script-src 'none'",
+  "style-src 'unsafe-inline'",
+];
 
 /** Owns the temporary browser preview created from one consumed agent handoff. */
 export interface SymposiumAgentHandoff {
@@ -80,11 +92,47 @@ async function removeHandoff(stagedPath: string): Promise<void> {
   }
 }
 
+function escapeHtmlAttribute(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
+function createContentSecurityPolicy(frameSource: "'none'" | "'self'"): string {
+  return [...PREVIEW_CONTENT_SECURITY_DIRECTIVES, `frame-src ${frameSource}`].join("; ");
+}
+
+function createBrowserPreview(html: string): string {
+  const shellPolicy = createContentSecurityPolicy("'self'");
+  const contentPolicy = createContentSecurityPolicy("'none'");
+  const sandboxedContent = `<meta http-equiv="Content-Security-Policy" content="${escapeHtmlAttribute(contentPolicy)}">${html}`;
+  return `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="${escapeHtmlAttribute(shellPolicy)}">
+<meta name="referrer" content="no-referrer">
+<title>Symposium local preview</title>
+<style>html,body,iframe{border:0;height:100%;margin:0;padding:0;width:100%}body{overflow:hidden}iframe{display:block}</style>
+</head>
+<body>
+<iframe title="Symposium HTML preview" sandbox="" referrerpolicy="no-referrer" srcdoc="${escapeHtmlAttribute(sandboxedContent)}"></iframe>
+</body>
+</html>
+`;
+}
+
 async function createLocalPreview(html: string): Promise<SymposiumAgentHandoff> {
   const previewRoot = await mkdtemp(path.join(tmpdir(), PREVIEW_FOLDER_PREFIX));
   const previewPath = path.join(previewRoot, PREVIEW_FILE_NAME);
+  const browserPreview = createBrowserPreview(html);
   try {
-    await writeFile(previewPath, new TextEncoder().encode(html), { flag: "wx", mode: 0o400 });
+    await writeFile(previewPath, new TextEncoder().encode(browserPreview), {
+      flag: "wx",
+      mode: 0o400,
+    });
   } catch (error) {
     await rm(previewRoot, { recursive: true, force: true });
     throw error;
@@ -98,7 +146,7 @@ async function createLocalPreview(html: string): Promise<SymposiumAgentHandoff> 
       try {
         const stats = await lstat(previewPath);
         if (!stats.isFile()) return false;
-        return decodeUtf8(Uint8Array.from(await readFile(previewPath))) === html;
+        return decodeUtf8(Uint8Array.from(await readFile(previewPath))) === browserPreview;
       } catch {
         return false;
       }

@@ -269,8 +269,8 @@ function SymposiumModalContent({
             <code className="tw-break-all">{review.digest}</code>
           </div>
           <p className="tw-m-0 tw-text-small tw-text-muted">
-            Open the exact local HTML in your default browser, review it, then return here to
-            confirm.
+            Open a sandboxed local preview of these exact HTML bytes in your default browser, review
+            it, then return here to confirm.
           </p>
           <a
             href={review.previewUrl}

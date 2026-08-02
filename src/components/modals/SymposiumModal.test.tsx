@@ -144,7 +144,7 @@ describe("SymposiumModal", () => {
         expect(publishModal.contentEl.childElementCount).toBeGreaterThan(0);
       });
 
-      it("links to the exact local HTML in the default browser and cancels without confirming", () => {
+      it("links to the sandboxed local preview in the default browser and cancels without confirming", () => {
         const onConfirm = createConfirmMock();
         const modal = renderModal(onConfirm, null, undefined, undefined, REVIEW, jest.fn());
         const baseClose = (modal as unknown as { baseClose: jest.Mock }).baseClose;
@@ -155,7 +155,9 @@ describe("SymposiumModal", () => {
         expect(screen.getByText(`${REVIEW.payload.byteLength} bytes`)).toBeTruthy();
         expect(screen.getByText(REVIEW.digest)).toBeTruthy();
         expect(screen.queryByTitle("Symposium HTML preview")).toBeNull();
-        expect(screen.getByText(/open the exact local html in your default browser/i)).toBeTruthy();
+        expect(
+          screen.getByText(/open a sandboxed local preview of these exact html bytes/i)
+        ).toBeTruthy();
         const previewLink = screen.getByRole("link", { name: "Open local HTML preview" });
         expect(previewLink.getAttribute("href")).toBe(REVIEW.previewUrl);
         expect(previewLink.getAttribute("title")).toBe(REVIEW.previewPath);

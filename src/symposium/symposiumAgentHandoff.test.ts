@@ -21,8 +21,8 @@ describe("symposiumAgentHandoff", () => {
   });
 
   describe("consumeSymposiumAgentHandoff()", () => {
-    it("moves exact UTF-8 bytes into a verifiable temporary browser preview", async () => {
-      const html = "\uFEFF<!doctype html><p>Résumé</p>\n";
+    it("wraps exact UTF-8 bytes in a verifiable sandboxed browser preview", async () => {
+      const html = '\uFEFF<!doctype html><p data-label="A & B">Résumé</p>\n';
       const absolutePath = path.join(vaultRoot, ...STAGED_PATH.split("/"));
       await writeFile(absolutePath, new TextEncoder().encode(html));
 
@@ -31,7 +31,24 @@ describe("symposiumAgentHandoff", () => {
       expect(Object.isFrozen(handoff)).toBe(true);
       expect(handoff.html).toBe(html);
       expect(handoff.previewUrl).toBe(pathToFileURL(handoff.previewPath).href);
-      await expect(readFile(handoff.previewPath, "utf8")).resolves.toBe(html);
+      const browserPreview = await readFile(handoff.previewPath, "utf8");
+      const parsedPreview = new DOMParser().parseFromString(browserPreview, "text/html");
+      const policy = parsedPreview.querySelector('meta[http-equiv="Content-Security-Policy"]');
+      const frame = parsedPreview.querySelector("iframe");
+      expect(policy?.getAttribute("content")).toContain("default-src 'none'");
+      expect(policy?.getAttribute("content")).toContain("connect-src 'none'");
+      expect(policy?.getAttribute("content")).toContain("script-src 'none'");
+      expect(policy?.getAttribute("content")).toContain("frame-src 'self'");
+      expect(frame?.getAttribute("sandbox")).toBe("");
+      expect(frame?.getAttribute("referrerpolicy")).toBe("no-referrer");
+      const srcdoc = frame?.getAttribute("srcdoc") ?? "";
+      const parsedContent = new DOMParser().parseFromString(srcdoc, "text/html");
+      const contentPolicy = parsedContent.querySelector(
+        'meta[http-equiv="Content-Security-Policy"]'
+      );
+      expect(contentPolicy?.getAttribute("content")).toContain("frame-src 'none'");
+      expect(srcdoc.endsWith(html)).toBe(true);
+      expect(parsedPreview.querySelectorAll("iframe")).toHaveLength(1);
       await expect(handoff.isPreviewCurrent()).resolves.toBe(true);
       await expect(readFile(absolutePath)).rejects.toMatchObject({ code: "ENOENT" });
 
