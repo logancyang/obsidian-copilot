@@ -17,24 +17,34 @@ jest.mock("lucide-react", () => ({
 
 describe("password-input", () => {
   describe("PasswordInput()", () => {
-    it("renders and updates the controlled value verbatim", () => {
+    it("renders and adopts externally updated values verbatim", () => {
       const view = render(<PasswordInput value="initial-value" />);
-      const input = view.container.querySelector("input") as HTMLInputElement;
+      let input = view.container.querySelector("input") as HTMLInputElement;
 
       expect(input.value).toBe("initial-value");
 
       view.rerender(<PasswordInput value="next-value" />);
+      input = view.container.querySelector("input") as HTMLInputElement;
       expect(input.value).toBe("next-value");
     });
 
-    it("forwards user edits to the change callback", () => {
+    it("keeps user edits visible while the parent value is unchanged", () => {
       const onChange = jest.fn();
-      const view = render(<PasswordInput value="" onChange={onChange} />);
+      const view = render(<PasswordInput value="old" onChange={onChange} />);
       const input = view.container.querySelector("input") as HTMLInputElement;
 
       fireEvent.change(input, { target: { value: "sk-new" } });
 
       expect(onChange).toHaveBeenCalledWith("sk-new");
+      expect(input.value).toBe("sk-new");
+
+      view.rerender(<PasswordInput value="old" onChange={onChange} />);
+      expect(input.value).toBe("sk-new");
+
+      view.rerender(<PasswordInput value="external-update" onChange={onChange} />);
+      expect((view.container.querySelector("input") as HTMLInputElement).value).toBe(
+        "external-update"
+      );
     });
 
     it("toggles password visibility unless disabled", () => {

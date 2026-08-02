@@ -23,8 +23,9 @@ export function PasswordInput({
   return (
     <div className={cn("tw-relative", className)}>
       <Input
+        key={value ?? ""}
         type={showPassword ? "text" : "password"}
-        value={value ?? ""}
+        defaultValue={value ?? ""}
         onChange={(e) => onChange?.(e.target.value)}
         placeholder={placeholder}
         disabled={disabled}

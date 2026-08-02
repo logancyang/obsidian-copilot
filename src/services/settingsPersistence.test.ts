@@ -38,6 +38,8 @@ async function loadModule(overrides: Record<string, unknown> = {}) {
   }));
   jest.doMock("@/logger", () => ({ logWarn: jest.fn() }));
   jest.doMock("@/settings/model", () => ({
+    normalizeModelProvider: (provider: string) =>
+      provider === "azure_openai" ? "azure openai" : provider,
     sanitizeSettings: jest.fn((settings: CopilotSettings) => settings),
   }));
 
@@ -56,6 +58,36 @@ describe("settingsPersistence", () => {
       await module.persistSettings(makeSettings(), saveData);
 
       expect(saveData).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("getLegacyByokCredentialProviders()", () => {
+    it("retains only provider identities after legacy disk credentials are discarded", async () => {
+      const { module } = await loadModule();
+
+      await module.loadSettingsWithKeychain(
+        {
+          openAIApiKey: "enc_desk_legacy",
+          azureOpenAIApiKey: "azure-disk-key",
+          activeModels: [
+            { name: "gpt-4o", provider: "openai", apiKey: "" },
+            { name: "claude", provider: "anthropic", apiKey: "plaintext-disk-key" },
+            { name: "gemini", provider: "google", apiKey: "" },
+            { name: "azure-gpt", provider: "azure_openai", apiKey: "" },
+          ],
+          activeEmbeddingModels: [],
+        },
+        jest.fn().mockResolvedValue(undefined)
+      );
+
+      expect(module.getLegacyByokCredentialProviders()).toEqual([
+        "openai",
+        "anthropic",
+        "azure openai",
+      ]);
+
+      module.resetPersistenceState();
+      expect(module.getLegacyByokCredentialProviders()).toEqual([]);
     });
   });
 
@@ -160,6 +192,7 @@ describe("settingsPersistence", () => {
         })
       );
       expect(saveData.mock.calls[0][0]).not.toHaveProperty("_keychainOnly");
+      expect(module.getLegacyByokCredentialProviders()).toEqual(["openai"]);
     });
 
     it("keeps credentials empty when Keychain is unavailable", async () => {

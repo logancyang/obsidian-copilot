@@ -1,7 +1,6 @@
 /**
- * One-time migration: legacy BYOK models + provider keys → the new
- * provider / configured-model / backend data model, so a user's own keys keep
- * working in OpenCode (and Simple Chat) when agent mode lands.
+ * One-time migration: legacy BYOK model metadata and Keychain-hydrated
+ * credentials → the new provider / configured-model / backend data model.
  *
  * Two halves so the mapping logic is trivially unit-testable:
  *  - `planByokMigration` is PURE — legacy settings in, `SetupProviderInput[]`
@@ -13,13 +12,14 @@
  *    configured models → backend enrollment, with its own rollback).
  *
  * Scope (locked with the product owner):
- *  - Credential-driven: every legacy provider with a user-supplied key (or, for
- *    local/openai-format providers, an explicit base URL) and its ENABLED
- *    models — built-in and custom.
+ *  - Credential-driven: every legacy provider with a Keychain-hydrated key, a
+ *    discarded disk-credential presence signal, or (for local/openai-format
+ *    providers) an explicit base URL, plus its ENABLED models.
  *  - Azure / Bedrock migrate to Simple Chat only (OpenCode can't route them).
  *  - Skip embeddings, disabled models, and copilot-plus / github-copilot
  *    (owned by Plus sign-in and agent setup).
- *  - Non-destructive: legacy keys and `activeModels` are left untouched.
+ *  - Disk credential values are never accepted; a presence signal creates a
+ *    keyless descriptor that requires re-entry.
  */
 
 import type { CustomModel } from "@/aiParams";
@@ -135,6 +135,7 @@ const LEGACY_PROVIDER_MAP: Partial<Record<string, LegacyProviderMapping>> = {
 // Frozen enrollment targets — referential stability (see AGENTS.md).
 const ENROLL_CHAT_AND_OPENCODE: readonly BackendType[] = Object.freeze(["chat", "opencode"]);
 const ENROLL_CHAT_ONLY: readonly BackendType[] = Object.freeze(["chat"]);
+const EMPTY_LEGACY_CREDENTIAL_PROVIDERS: readonly string[] = Object.freeze([]);
 
 /** Trim, drop a trailing slash, lowercase — for grouping / dedup comparison. */
 function normalizeUrl(url: string | undefined): string {
@@ -197,7 +198,11 @@ interface ResolvedCandidate {
  * Decide whether a single legacy model migrates, and resolve its credential /
  * base URL / extras. Returns `null` for anything out of scope.
  */
-function resolveCandidate(model: CustomModel, settings: CopilotSettings): ResolvedCandidate | null {
+function resolveCandidate(
+  model: CustomModel,
+  settings: CopilotSettings,
+  legacyCredentialProviders: readonly string[]
+): ResolvedCandidate | null {
   const mapping = LEGACY_PROVIDER_MAP[model.provider];
   if (!mapping) return null; // unknown / copilot-plus / github-copilot
   if (!model.enabled) return null; // disabled models skipped per scope
@@ -215,7 +220,9 @@ function resolveCandidate(model: CustomModel, settings: CopilotSettings): Resolv
     if (!baseUrl) return null;
   } else {
     baseUrl = model.baseUrl?.trim() || defaultBaseUrlFor(model.provider);
-    if (!apiKey) return null; // key-based providers need a usable key
+    // A stripped legacy disk credential is only a presence signal: retain the
+    // descriptor so the user can re-enter its key, but never import the value.
+    if (!apiKey && !legacyCredentialProviders.includes(model.provider)) return null;
   }
 
   return { mapping, apiKey, baseUrl, extras: buildExtras(model, settings, mapping.providerType) };
@@ -230,15 +237,21 @@ function toModelInfo(model: CustomModel): ModelInfo {
  * into one provider per `(providerType, catalogProviderId, baseUrl, apiKey)` so
  * distinct credentials become distinct provider instances; model ids are
  * de-duped within a group (last wins) to satisfy `bulkSet`.
+ *
+ * @param settings - Hydrated runtime settings whose credential values come only from Keychain.
+ * @param legacyCredentialProviders - Provider IDs that had a discarded disk credential.
  */
-export function planByokMigration(settings: CopilotSettings): SetupProviderInput[] {
+export function planByokMigration(
+  settings: CopilotSettings,
+  legacyCredentialProviders: readonly string[] = EMPTY_LEGACY_CREDENTIAL_PROVIDERS
+): SetupProviderInput[] {
   const groups = new Map<
     string,
     { input: SetupProviderInput; modelsById: Map<string, ModelInfo> }
   >();
 
   for (const model of settings.activeModels ?? []) {
-    const candidate = resolveCandidate(model, settings);
+    const candidate = resolveCandidate(model, settings, legacyCredentialProviders);
     if (!candidate) continue;
     const { mapping, apiKey, baseUrl, extras } = candidate;
 
@@ -296,12 +309,17 @@ function isDuplicateByok(provider: Provider, descriptor: SetupProviderInput): bo
  * descriptors that match an existing BYOK provider, and creates the rest via
  * `ByokSetupApi.setupProvider`. Never throws: a single provider failure is
  * logged and the rest proceed (the version bump in the caller is unconditional).
+ *
+ * @param api - Model-management boundary used to create providers and models.
+ * @param settings - Hydrated runtime settings to migrate.
+ * @param legacyCredentialProviders - Provider IDs whose disk credentials require re-entry.
  */
 export async function executeByokMigration(
   api: ModelManagementApi,
-  settings: CopilotSettings
+  settings: CopilotSettings,
+  legacyCredentialProviders: readonly string[] = EMPTY_LEGACY_CREDENTIAL_PROVIDERS
 ): Promise<void> {
-  const descriptors = planByokMigration(settings);
+  const descriptors = planByokMigration(settings, legacyCredentialProviders);
   if (descriptors.length === 0) {
     logInfo("[byok-migration] no legacy BYOK providers to migrate");
     return;

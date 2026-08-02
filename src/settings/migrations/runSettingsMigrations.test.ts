@@ -6,7 +6,7 @@
 
 import type { CustomModel } from "@/aiParams";
 import { ChatModelProviders, DEFAULT_COPILOT_FOLDER, DEFAULT_SETTINGS } from "@/constants";
-import type { ModelManagementApi } from "@/modelManagement";
+import type { ModelManagementApi, SetupProviderInput } from "@/modelManagement";
 import { getSettings, setSettings, type CopilotSettings } from "@/settings/model";
 import { Platform } from "obsidian";
 
@@ -39,7 +39,10 @@ function settings(
 }
 
 function makeApi() {
-  const setupProvider = jest.fn(async () => ({ providerId: "p1", configuredModelIds: ["cm1"] }));
+  const setupProvider = jest.fn(async (_input: SetupProviderInput) => ({
+    providerId: "p1",
+    configuredModelIds: ["cm1"],
+  }));
   const api = {
     providerRegistry: { listByOrigin: jest.fn(() => []) },
     setup: { byok: { setupProvider } },
@@ -69,6 +72,28 @@ it("runs when settingsVersion is undefined (pre-versioned install)", async () =>
 
   expect(setupProvider).toHaveBeenCalledTimes(1);
   expect(mockSetSettings).toHaveBeenCalledWith({ settingsVersion: CURRENT_SETTINGS_VERSION });
+});
+
+it("preserves legacy BYOK metadata when its discarded disk credential requires re-entry", async () => {
+  mockGetSettings.mockReturnValue(
+    settings({ settingsVersion: undefined, anthropicApiKey: "" }, [
+      {
+        name: "claude-sonnet-4-5",
+        provider: ChatModelProviders.ANTHROPIC,
+        enabled: true,
+        isBuiltIn: false,
+      },
+    ])
+  );
+  const { api, setupProvider } = makeApi();
+
+  await runSettingsMigrations(api, [ChatModelProviders.ANTHROPIC]);
+
+  const descriptor = setupProvider.mock.calls[0]?.[0];
+  expect(descriptor).toEqual(
+    expect.objectContaining({ catalogProviderId: "anthropic", requiresApiKey: true })
+  );
+  expect(descriptor?.apiKey).toBeUndefined();
 });
 
 it("runs when settingsVersion is the orphaned prototype value 2", async () => {

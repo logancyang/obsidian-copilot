@@ -7,12 +7,12 @@
  * being decrypted or imported.
  */
 
-import { DEFAULT_SETTINGS } from "@/constants";
+import { DEFAULT_SETTINGS, ProviderSettingsKeyMap, type SettingKeyProviders } from "@/constants";
 import { logWarn } from "@/logger";
 import { KeychainService } from "@/services/keychainService";
 import { cleanupLegacyFields, stripKeychainFields } from "@/services/settingsSecretTransforms";
 import { CURRENT_SETTINGS_VERSION } from "@/settings/migrations/version";
-import { type CopilotSettings, sanitizeSettings } from "@/settings/model";
+import { type CopilotSettings, normalizeModelProvider, sanitizeSettings } from "@/settings/model";
 import { Notice } from "obsidian";
 
 let writeQueue: Promise<void> = Promise.resolve();
@@ -20,6 +20,8 @@ let lastPersistedSettings: CopilotSettings | undefined;
 let suppressNextPersist = false;
 let transactionEpoch = 0;
 const pendingTombstones = new Set<string>();
+const EMPTY_LEGACY_BYOK_CREDENTIAL_PROVIDERS: readonly string[] = Object.freeze([]);
+let legacyByokCredentialProviders = EMPTY_LEGACY_BYOK_CREDENTIAL_PROVIDERS;
 
 /** Keychain vault IDs are 8 lowercase hex chars. */
 const KEYCHAIN_VAULT_ID_RE = /^[a-f0-9]{8}$/;
@@ -35,6 +37,36 @@ function cloneRawSettings(rawData: unknown): CopilotSettings {
     return {} as CopilotSettings;
   }
   return structuredClone(rawData) as CopilotSettings;
+}
+
+/**
+ * Record only which legacy BYOK providers had a disk credential so their
+ * non-secret model metadata can migrate without retaining the credential.
+ */
+function collectLegacyByokCredentialProviders(settings: CopilotSettings): readonly string[] {
+  const settingsRecord = settings as unknown as Record<string, unknown>;
+  const providers = new Set<string>();
+
+  for (const model of settings.activeModels ?? []) {
+    const modelRecord = model as unknown as Record<string, unknown>;
+    const rawProvider = modelRecord.provider;
+    if (typeof rawProvider !== "string") continue;
+    const provider = normalizeModelProvider(rawProvider);
+
+    const keyField = ProviderSettingsKeyMap[provider as SettingKeyProviders];
+    const topLevelValue = keyField ? settingsRecord[keyField] : undefined;
+    const modelValue = modelRecord.apiKey;
+    if (
+      (typeof topLevelValue === "string" && topLevelValue.length > 0) ||
+      (typeof modelValue === "string" && modelValue.length > 0)
+    ) {
+      providers.add(provider);
+    }
+  }
+
+  return providers.size > 0
+    ? Object.freeze([...providers])
+    : EMPTY_LEGACY_BYOK_CREDENTIAL_PROVIDERS;
 }
 
 /** Build the canonical data.json shape without importing any disk secret. */
@@ -58,6 +90,16 @@ export function resetPersistenceState(): void {
   suppressNextPersist = false;
   transactionEpoch = 0;
   pendingTombstones.clear();
+  legacyByokCredentialProviders = EMPTY_LEGACY_BYOK_CREDENTIAL_PROVIDERS;
+}
+
+/**
+ * Return provider IDs whose legacy disk credentials were discarded at load.
+ * The one-time BYOK migration uses this non-secret presence signal to retain
+ * provider and model descriptors that require credential re-entry.
+ */
+export function getLegacyByokCredentialProviders(): readonly string[] {
+  return legacyByokCredentialProviders;
 }
 
 /** Refresh the last known-good settings baseline used by Keychain rollback. */
@@ -112,6 +154,7 @@ export async function loadSettingsWithKeychain(
 ): Promise<CopilotSettings> {
   const isFreshInstall = rawData == null;
   const rawSettings = cloneRawSettings(rawData);
+  legacyByokCredentialProviders = collectLegacyByokCredentialProviders(rawSettings);
   const keychain = KeychainService.getInstance();
   const persistedVaultId = rawSettings._keychainVaultId;
   const vaultId = isValidKeychainVaultId(persistedVaultId)

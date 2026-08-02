@@ -240,6 +240,22 @@ describe("planByokMigration — scope filters", () => {
     expect(plan).toEqual([]);
   });
 
+  it("preserves a keyless descriptor when a discarded disk credential requires re-entry", () => {
+    const plan = planByokMigration(
+      settingsWith([model({ name: "gpt-4o", provider: ChatModelProviders.OPENAI })], {
+        openAIApiKey: "",
+      }),
+      [ChatModelProviders.OPENAI]
+    );
+
+    expect(byCatalog(plan, "openai")).toMatchObject({
+      providerType: "openai-compatible",
+      requiresApiKey: true,
+      models: [{ id: "gpt-4o", displayName: "gpt-4o" }],
+    });
+    expect(byCatalog(plan, "openai")?.apiKey).toBeUndefined();
+  });
+
   it("includes enabled built-in models when the provider has a key", () => {
     const plan = planByokMigration(
       settingsWith(
