@@ -49,6 +49,10 @@ describe("password-input", () => {
       expect(updatedInput).toBe(input);
       expect(updatedInput.value).toBe("external-update");
       expect(input.ownerDocument.activeElement).toBe(input);
+
+      view.rerender(<PasswordInput value="old" onChange={onChange} />);
+      expect(input.value).toBe("old");
+      expect(input.ownerDocument.activeElement).toBe(input);
     });
 
     it("toggles password visibility unless disabled", () => {

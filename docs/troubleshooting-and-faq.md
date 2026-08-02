@@ -186,10 +186,11 @@ Any missing or incorrect field will cause errors.
 
 If your settings get into a bad state, you can reset:
 
-1. Go to **Settings → Copilot** → find the reset option
-2. Or delete the `data.json` file from the plugin folder: `.obsidian/plugins/copilot/data.json`
+1. Go to **Settings → Copilot** → find the reset option.
 
 ⚠️ Resetting clears your non-secret settings, but it does **not** erase keys from the Obsidian Keychain. To erase them, use **Settings → Copilot → Advanced → API Key Storage → Delete All Keys**. Back up your keys first.
+
+Do not delete `.obsidian/plugins/copilot/data.json` as a substitute for the in-app reset. That file contains the vault's Keychain namespace; deleting it can make existing credentials unreachable and require you to re-enter them.
 
 ### API Key Storage
 

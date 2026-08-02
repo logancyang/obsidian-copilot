@@ -287,7 +287,11 @@ async function persistSettingsWithoutKeychainChanges(
 export async function resetSettingsPreservingKeychain(
   saveData: (data: CopilotSettings) => Promise<void>
 ): Promise<void> {
-  const resetSnapshot = createResetSettingsSnapshot(getSettings());
+  const current = getSettings();
+  const resetSnapshot = {
+    ...createResetSettingsSnapshot(current),
+    providers: current.providers,
+  };
   await runPersistenceTransaction(async () => {
     await persistSettingsWithoutKeychainChanges(resetSnapshot, saveData);
     suppressNextPersistOnce();

@@ -29,6 +29,9 @@ export function PasswordInput({
     externalValue,
     inputValue: externalValue,
   }));
+  if (inputState.externalValue !== externalValue) {
+    setInputState({ externalValue, inputValue: externalValue });
+  }
   const inputValue =
     inputState.externalValue === externalValue ? inputState.inputValue : externalValue;
 

@@ -6,6 +6,7 @@ import {
   DEFAULT_SETTINGS,
   SEND_SHORTCUT,
 } from "@/constants";
+import type { Provider } from "@/modelManagement";
 import {
   createResetSettingsSnapshot,
   normalizeRootFolders,
@@ -902,10 +903,19 @@ describe("model", () => {
   describe("resetSettings()", () => {
     it("preserves credentials and root history while resetting non-secret settings", () => {
       const builtIn = BUILTIN_CHAT_MODELS[0];
+      const provider: Provider = {
+        providerId: "byok-openai",
+        providerType: "openai-compatible",
+        displayName: "OpenAI",
+        origin: { kind: "byok", catalogProviderId: "openai" },
+        addedAt: 0,
+        apiKeyKeychainId: "copilot-vabcd1234-provider-byok-openai",
+      };
       settingsStore.set(settingsAtom, {
         ...DEFAULT_SETTINGS,
         openAIApiKey: "provider-key",
         activeModels: [{ ...builtIn, apiKey: "model-key" }],
+        providers: { [provider.providerId]: provider },
         copilotFolder: "team-ai",
         copilotRootHistory: ["copilot", "ai"],
       });
@@ -918,6 +928,7 @@ describe("model", () => {
       expect(after.activeModels.find((model) => model.name === builtIn.name)?.apiKey).toBe(
         "model-key"
       );
+      expect(after.providers).toEqual({});
       // Legacy + historical + pre-reset active root all survive the reset.
       expect(new Set(after.copilotRootHistory)).toEqual(new Set(["copilot", "ai", "team-ai"]));
     });

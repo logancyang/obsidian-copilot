@@ -17,10 +17,21 @@ function makeSettings(overrides: Partial<CopilotSettings> = {}): CopilotSettings
 async function loadModule(overrides: Record<string, unknown> = {}) {
   jest.resetModules();
 
-  const resetSnapshot = makeSettings({ openAIApiKey: "preserved-key" });
+  const provider = {
+    providerId: "byok-provider",
+    providerType: "openai-compatible",
+    displayName: "OpenAI",
+    origin: { kind: "byok", catalogProviderId: "openai" },
+    addedAt: 0,
+    apiKeyKeychainId: "copilot-vabcd1234-provider-byok-provider",
+  } as CopilotSettings["providers"][string];
+  const resetSnapshot = makeSettings({
+    openAIApiKey: "preserved-key",
+    providers: { [provider.providerId]: provider },
+  });
   const settingsModel = {
     createResetSettingsSnapshot: jest.fn(() => resetSnapshot),
-    getSettings: jest.fn(() => makeSettings({ openAIApiKey: "current-key" })),
+    getSettings: jest.fn(() => resetSnapshot),
     setSettings: jest.fn(),
   };
 
@@ -272,6 +283,7 @@ describe("settingsPersistence", () => {
       expect(keychain.setSecretById).not.toHaveBeenCalled();
       expect(saveData).toHaveBeenCalledTimes(1);
       expect(saveData.mock.calls[0][0].openAIApiKey).toBe("");
+      expect(saveData.mock.calls[0][0].providers).toEqual(resetSnapshot.providers);
       expect(settingsModel.setSettings).toHaveBeenCalledWith(resetSnapshot);
     });
 
