@@ -205,6 +205,8 @@ interface ResolvedCandidate {
   apiKey?: string;
   baseUrl?: string;
   extras?: Record<string, unknown>;
+  /** Prevent a discarded model override from folding into the provider-wide keyless group. */
+  credentialGroupId?: string;
 }
 
 /**
@@ -224,7 +226,14 @@ function resolveCandidate(
   const keyField = ProviderSettingsKeyMap[model.provider as SettingKeyProviders];
   const rawKey = keyField ? settings[keyField] : undefined;
   const topLevelKey = typeof rawKey === "string" ? rawKey.trim() : "";
-  const apiKey = model.apiKey?.trim() || topLevelKey || undefined;
+  const modelIdentity = getModelKeyFromModel(model);
+  const hadDiscardedModelCredential = legacyCredentialPresence.modelIds.includes(modelIdentity);
+  const hadDiscardedProviderCredential = legacyCredentialPresence.providerIds.includes(
+    model.provider
+  );
+  const modelApiKey = model.apiKey?.trim();
+  const apiKey =
+    modelApiKey || (!hadDiscardedModelCredential ? topLevelKey || undefined : undefined);
 
   let baseUrl: string | undefined;
   if (mapping.requiresBaseUrl) {
@@ -235,13 +244,17 @@ function resolveCandidate(
     baseUrl = model.baseUrl?.trim() || defaultBaseUrlFor(model.provider);
     // A stripped legacy disk credential is only a presence signal: retain the
     // descriptor so the user can re-enter its key, but never import the value.
-    const hadDiscardedCredential =
-      legacyCredentialPresence.providerIds.includes(model.provider) ||
-      legacyCredentialPresence.modelIds.includes(getModelKeyFromModel(model));
+    const hadDiscardedCredential = hadDiscardedProviderCredential || hadDiscardedModelCredential;
     if (!apiKey && !hadDiscardedCredential) return null;
   }
 
-  return { mapping, apiKey, baseUrl, extras: buildExtras(model, settings, mapping.providerType) };
+  return {
+    mapping,
+    apiKey,
+    baseUrl,
+    extras: buildExtras(model, settings, mapping.providerType),
+    credentialGroupId: !apiKey && hadDiscardedModelCredential ? modelIdentity : undefined,
+  };
 }
 
 function toModelInfo(model: CustomModel): ModelInfo {
@@ -250,9 +263,10 @@ function toModelInfo(model: CustomModel): ModelInfo {
 
 /**
  * Pure: legacy settings → BYOK provider-setup descriptors. Models are grouped
- * into one provider per `(providerType, catalogProviderId, baseUrl, apiKey)` so
- * distinct credentials become distinct provider instances; model ids are
- * de-duped within a group (last wins) to satisfy `bulkSet`.
+ * into one provider per `(providerType, catalogProviderId, baseUrl, credential)`
+ * so distinct credentials become distinct provider instances. Discarded
+ * per-model overrides use their model identity as the credential discriminator;
+ * model ids are de-duped within a group (last wins) to satisfy `bulkSet`.
  *
  * @param settings - Hydrated runtime settings whose credential values come only from Keychain.
  * @param legacyCredentialPresence - Provider-wide and model-specific discarded credential identities.
@@ -269,13 +283,14 @@ export function planByokMigration(
   for (const model of settings.activeModels ?? []) {
     const candidate = resolveCandidate(model, settings, legacyCredentialPresence);
     if (!candidate) continue;
-    const { mapping, apiKey, baseUrl, extras } = candidate;
+    const { mapping, apiKey, baseUrl, extras, credentialGroupId } = candidate;
 
     const groupKey = [
       mapping.providerType,
       mapping.catalogProviderId ?? "",
       normalizeUrl(baseUrl),
       apiKey ?? "",
+      credentialGroupId ?? "",
     ].join(" ");
 
     let group = groups.get(groupKey);

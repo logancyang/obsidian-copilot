@@ -71,7 +71,8 @@ function collectLegacyByokCredentialPresence(
     const modelValue = modelRecord.apiKey;
     if (typeof topLevelValue === "string" && topLevelValue.length > 0) {
       providerIds.add(provider);
-    } else if (
+    }
+    if (
       typeof modelValue === "string" &&
       modelValue.length > 0 &&
       typeof modelRecord.name === "string"

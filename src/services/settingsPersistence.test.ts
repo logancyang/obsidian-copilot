@@ -72,7 +72,7 @@ describe("settingsPersistence", () => {
           openAIApiKey: "enc_desk_legacy",
           azureOpenAIApiKey: "azure-disk-key",
           activeModels: [
-            { name: "gpt-4o", provider: "openai", apiKey: "" },
+            { name: "gpt-4o", provider: "openai", apiKey: "model-disk-key" },
             { name: "claude", provider: "anthropic", apiKey: "plaintext-disk-key" },
             { name: "gemini", provider: "google", apiKey: "" },
             { name: "azure-gpt", provider: "azure_openai", apiKey: "" },
@@ -84,7 +84,7 @@ describe("settingsPersistence", () => {
 
       expect(module.getLegacyByokCredentialPresence()).toEqual({
         providerIds: ["openai", "azure openai"],
-        modelIds: ["claude|anthropic"],
+        modelIds: ["gpt-4o|openai", "claude|anthropic"],
       });
 
       module.resetPersistenceState();
@@ -198,7 +198,7 @@ describe("settingsPersistence", () => {
       expect(saveData.mock.calls[0][0]).not.toHaveProperty("_keychainOnly");
       expect(module.getLegacyByokCredentialPresence()).toEqual({
         providerIds: ["openai"],
-        modelIds: [],
+        modelIds: ["custom|openai"],
       });
     });
 

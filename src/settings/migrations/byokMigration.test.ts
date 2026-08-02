@@ -273,6 +273,28 @@ describe("planByokMigration — scope filters", () => {
     ]);
   });
 
+  it("keeps a discarded model override separate from its provider credential", () => {
+    const provider = ChatModelProviders.OPENAI;
+    const plan = planByokMigration(
+      settingsWith([model({ name: "gpt-4o", provider }), model({ name: "custom-gpt", provider })], {
+        openAIApiKey: "keychain-provider-key",
+      }),
+      { providerIds: [provider], modelIds: [`custom-gpt|${provider}`] }
+    );
+
+    expect(plan).toHaveLength(2);
+    expect(plan.map(({ apiKey, models }) => ({ apiKey, models }))).toEqual([
+      {
+        apiKey: "keychain-provider-key",
+        models: [{ id: "gpt-4o", displayName: "gpt-4o" }],
+      },
+      {
+        apiKey: undefined,
+        models: [{ id: "custom-gpt", displayName: "custom-gpt" }],
+      },
+    ]);
+  });
+
   it("includes enabled built-in models when the provider has a key", () => {
     const plan = planByokMigration(
       settingsWith(
