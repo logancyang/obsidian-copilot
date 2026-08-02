@@ -31,7 +31,7 @@ const EMPTY_MANAGED_ENV: Readonly<Record<string, string>> = Object.freeze({});
  *   a key on file. Absent otherwise, so the relay skills exit with the upgrade
  *   prompt.
  * - **Host review** (`SYMPOSIUM_WORKSPACE_ROOT`): owning workspace used to
- *   stage HTML and select its Obsidian renderer from the wrapper's cwd.
+ *   stage HTML and derive the wrapper's explicit Obsidian CLI vault target.
  * - **Miyo** (`MIYO_URL`): the user's custom/remote Miyo server URL when set, so
  *   the bundled `miyo` CLI targets their configured service instead of local
  *   loopback discovery (the only way Miyo works on mobile or against a remote

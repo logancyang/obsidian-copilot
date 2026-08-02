@@ -150,11 +150,22 @@ describe("SymposiumModal", () => {
         expect(screen.getByText(REVIEW.digest)).toBeTruthy();
         const preview = screen.getByTitle("Symposium HTML preview");
         expect(preview.getAttribute("srcdoc")).toBe(REVIEW_HTML);
-        expect(preview.getAttribute("sandbox")).toBe("");
+        expect(preview.getAttribute("sandbox")).toBe("allow-same-origin");
         expect(preview.getAttribute("referrerpolicy")).toBe("no-referrer");
         expect(preview.getAttribute("csp")).toBe(
           "default-src 'none'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:"
         );
+
+        const previewDocument = (preview as HTMLIFrameElement).contentDocument;
+        if (!previewDocument) throw new Error("Expected a same-origin preview document");
+        const link = previewDocument.createElement("a");
+        link.href = "https://attacker.example/?data=note";
+        link.textContent = "Link";
+        previewDocument.body.append(link);
+        fireEvent.load(preview);
+        expect(
+          link.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }))
+        ).toBe(false);
         expectButtonsInSameRow("Ask agent to regenerate", "No, cancel", "Yes, publish");
 
         fireEvent.click(screen.getByRole("button", { name: "No, cancel" }));

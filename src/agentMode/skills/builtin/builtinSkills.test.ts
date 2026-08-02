@@ -224,7 +224,6 @@ describe("builtinSkills", () => {
         expect(script).not.toContain("symposiumPublisher");
         expect(script).toContain(SYMPOSIUM_WORKSPACE_ROOT_ENV);
         expect(script).not.toContain("SYMPOSIUM_VAULT_NAME");
-        expect(script).not.toContain("vault=$VAULT_NAME");
         expect(script).toContain("A compatible Obsidian CLI is unavailable.");
         expect(script).not.toContain("COPILOT_OBSIDIAN_CLI:-obsidian");
         expect(script).not.toContain("SYMPOSIUM_TOKEN");
@@ -234,14 +233,16 @@ describe("builtinSkills", () => {
 
       const sh = scriptOf("symposium-publish", ".sh");
       expect(sh).toContain('cd "$WORKSPACE_ROOT"');
-      expect(sh).toContain('CLI_OUTPUT=$("$OBSIDIAN_CLI" eval');
+      expect(sh).toContain("VAULT_NAME=${WORKSPACE_ROOT%/}");
+      expect(sh).toContain('CLI_OUTPUT=$("$OBSIDIAN_CLI" "vault=$VAULT_NAME" eval');
       expect(sh).toContain("sed -n '/^=> {/p' | sed -n '$p'");
       expect(sh).not.toContain("trap cleanup");
       expect(sh).not.toContain("rm -f");
 
       const ps1 = scriptOf("symposium-publish", ".ps1");
       expect(ps1).toContain("Set-Location -LiteralPath $WORKSPACE_ROOT");
-      expect(ps1).toContain("$CLI_OUTPUT = & $OBSIDIAN_CLI 'eval'");
+      expect(ps1).toContain("$VAULT_NAME = Split-Path -Leaf (Get-Location).Path");
+      expect(ps1).toContain("$CLI_OUTPUT = & $OBSIDIAN_CLI \"vault=$VAULT_NAME\" 'eval'");
       expect(ps1).toContain("Where-Object { ([string]$_).StartsWith('=> {') }");
       expect(ps1).not.toContain("finally {");
       expect(ps1).not.toContain("Remove-Item");

@@ -55,6 +55,22 @@ interface SymposiumModalContentProps extends SymposiumModalOptions {
 
 const REVIEW_IFRAME_CSP =
   "default-src 'none'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:";
+const PREVIEW_NAVIGATION_EVENTS = ["click", "auxclick", "contextmenu", "dragstart"];
+
+function blockPreviewNavigation(event: Event): void {
+  const target = event.target as Element | null;
+  if (target?.closest?.("a[href], area[href]")) {
+    event.preventDefault();
+  }
+}
+
+function installPreviewNavigationBlocker(preview: HTMLIFrameElement): void {
+  const previewDocument = preview.contentDocument;
+  if (!previewDocument) return;
+  for (const eventName of PREVIEW_NAVIGATION_EVENTS) {
+    previewDocument.addEventListener(eventName, blockPreviewNavigation, true);
+  }
+}
 
 function actionLabel(action: SymposiumAction): string {
   return `${action[0].toUpperCase()}${action.slice(1)}`;
@@ -269,9 +285,10 @@ function SymposiumModalContent({
             <code className="tw-break-all">{review.digest}</code>
           </div>
           <iframe
-            sandbox=""
+            sandbox="allow-same-origin"
             referrerPolicy="no-referrer"
             {...{ csp: REVIEW_IFRAME_CSP }}
+            onLoad={(event) => installPreviewNavigationBlocker(event.currentTarget)}
             title="Symposium HTML preview"
             srcDoc={review.payload.html}
             className="tw-h-96 tw-w-full tw-rounded-md tw-border tw-border-solid tw-border-border"

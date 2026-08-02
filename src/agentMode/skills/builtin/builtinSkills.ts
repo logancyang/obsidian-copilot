@@ -571,12 +571,18 @@ cd "$WORKSPACE_ROOT" || {
   printf '%s\\n' "The owning Obsidian workspace is unavailable." >&2
   exit 1
 }
+VAULT_NAME=\${WORKSPACE_ROOT%/}
+VAULT_NAME=\${VAULT_NAME##*/}
+[ -n "$VAULT_NAME" ] || {
+  printf '%s\\n' "The owning Obsidian vault is unavailable." >&2
+  exit 1
+}
 
 SOURCE_B64=$(printf '%s' "$SOURCE" | base64 | tr -d '\\r\\n')
 HTML_B64=$(printf '%s' "$STAGED_HTML" | base64 | tr -d '\\r\\n')
 CODE="(()=>{const decode=(value)=>new TextDecoder().decode(Uint8Array.from(atob(value),(char)=>char.charCodeAt(0)));const bridge=app.plugins.plugins.copilot?.symposiumAgentBridge;if(!bridge)throw new Error('Copilot Symposium host is unavailable.');return bridge.reviewAgentPublish(decode('$SOURCE_B64'),decode('$HTML_B64')).then(JSON.stringify);})()"
 
-CLI_OUTPUT=$("$OBSIDIAN_CLI" eval "code=$CODE") || exit $?
+CLI_OUTPUT=$("$OBSIDIAN_CLI" "vault=$VAULT_NAME" eval "code=$CODE") || exit $?
 CLI_RESULT=$(printf '%s\\n' "$CLI_OUTPUT" | sed -n '/^=> {/p' | sed -n '$p')
 case "$CLI_RESULT" in
   "=> {"*)
@@ -618,11 +624,13 @@ $EXIT_CODE = 0
 try {
   if (-not $OBSIDIAN_CLI) { throw 'A compatible Obsidian CLI is unavailable.' }
   Set-Location -LiteralPath $WORKSPACE_ROOT
+  $VAULT_NAME = Split-Path -Leaf (Get-Location).Path
+  if (-not $VAULT_NAME) { throw 'The owning Obsidian vault is unavailable.' }
   $SOURCE_B64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($SOURCE))
   $HTML_B64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($STAGED_HTML))
   $CODE = "(()=>{const decode=(value)=>new TextDecoder().decode(Uint8Array.from(atob(value),(char)=>char.charCodeAt(0)));const bridge=app.plugins.plugins.copilot?.symposiumAgentBridge;if(!bridge)throw new Error('Copilot Symposium host is unavailable.');return bridge.reviewAgentPublish(decode('$SOURCE_B64'),decode('$HTML_B64')).then(JSON.stringify);})()"
 
-  $CLI_OUTPUT = & $OBSIDIAN_CLI 'eval' "code=$CODE"
+  $CLI_OUTPUT = & $OBSIDIAN_CLI "vault=$VAULT_NAME" 'eval' "code=$CODE"
   if ($LASTEXITCODE -ne 0) { throw 'Copilot could not complete the Symposium review.' }
   $CLI_RESULT = [string](@($CLI_OUTPUT | Where-Object { ([string]$_).StartsWith('=> {') })[-1])
   if (-not $CLI_RESULT.StartsWith('=> {')) {
