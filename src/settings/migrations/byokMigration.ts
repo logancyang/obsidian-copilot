@@ -344,7 +344,7 @@ function isDuplicateByok(provider: Provider, descriptor: SetupProviderInput): bo
 }
 
 /**
- * Side-effecting executor. Builds a one-shot plan from `settings`, skips
+ * Side-effecting executor. Builds a one-shot plan from `settings`, reconciles
  * descriptors that match an existing BYOK provider, and creates the rest via
  * `ByokSetupApi.setupProvider`. Never throws: a single provider failure is
  * logged and the rest proceed (the version bump in the caller is unconditional).
@@ -368,7 +368,7 @@ export async function executeByokMigration(
   // matches so additional groups sharing its provider identity still migrate.
   const unmatchedExisting = [...api.providerRegistry.listByOrigin("byok")];
   let created = 0;
-  let skipped = 0;
+  let reconciled = 0;
   let failed = 0;
 
   for (const descriptor of descriptors) {
@@ -376,9 +376,30 @@ export async function executeByokMigration(
       isDuplicateByok(provider, descriptor)
     );
     if (duplicateIndex >= 0) {
-      unmatchedExisting.splice(duplicateIndex, 1);
-      skipped++;
-      logInfo(`[byok-migration] skipping already-present provider "${descriptor.displayName}"`);
+      const [provider] = unmatchedExisting.splice(duplicateIndex, 1);
+      try {
+        if (descriptor.apiKey) {
+          await api.providerRegistry.setApiKey(provider.providerId, descriptor.apiKey);
+        }
+        const configuredModelIds = await api.setup.byok.addModels({
+          providerId: provider.providerId,
+          models: descriptor.models,
+          autoEnrollIn: descriptor.autoEnrollIn,
+        });
+        for (const backend of descriptor.autoEnrollIn ?? ENROLL_CHAT_AND_OPENCODE) {
+          for (const configuredModelId of configuredModelIds) {
+            await api.backendConfigRegistry.enableModel(backend, configuredModelId);
+          }
+        }
+        reconciled++;
+        logInfo(`[byok-migration] reconciled existing provider "${descriptor.displayName}"`);
+      } catch (err) {
+        failed++;
+        logError(
+          `[byok-migration] failed to reconcile "${descriptor.displayName}"; continuing`,
+          err
+        );
+      }
       continue;
     }
     try {
@@ -394,7 +415,5 @@ export async function executeByokMigration(
     }
   }
 
-  logInfo(
-    `[byok-migration] done: ${created} migrated, ${skipped} already present, ${failed} failed`
-  );
+  logInfo(`[byok-migration] done: ${created} migrated, ${reconciled} reconciled, ${failed} failed`);
 }

@@ -12,7 +12,12 @@
 
 import type { CustomModel } from "@/aiParams";
 import { ChatModelProviders, DEFAULT_SETTINGS } from "@/constants";
-import type { ModelManagementApi, Provider, SetupProviderInput } from "@/modelManagement";
+import type {
+  ModelInfo,
+  ModelManagementApi,
+  Provider,
+  SetupProviderInput,
+} from "@/modelManagement";
 import type { CopilotSettings } from "@/settings/model";
 
 import { executeByokMigration, planByokMigration } from "./byokMigration";
@@ -401,12 +406,18 @@ describe("executeByokMigration", () => {
       providerId: `prov-${++idSeq}`,
       configuredModelIds: input.models.map((_, i) => `cm-${idSeq}-${i}`),
     }));
+    const setApiKey = jest.fn().mockResolvedValue(undefined);
+    const addModels = jest.fn(async (input: { models: readonly ModelInfo[] }) =>
+      input.models.map((_, index) => `existing-cm-${index}`)
+    );
+    const enableModel = jest.fn().mockResolvedValue(undefined);
     const listByOrigin = jest.fn((kind: string) => existing.filter((p) => p.origin.kind === kind));
     const api = {
-      providerRegistry: { listByOrigin },
-      setup: { byok: { setupProvider } },
+      providerRegistry: { listByOrigin, setApiKey },
+      backendConfigRegistry: { enableModel },
+      setup: { byok: { setupProvider, addModels } },
     } as unknown as ModelManagementApi;
-    return { api, setupProvider };
+    return { api, setupProvider, setApiKey, addModels, enableModel };
   }
 
   function byokProvider(overrides: Partial<Provider>): Provider {
@@ -436,7 +447,7 @@ describe("executeByokMigration", () => {
     expect(setupProvider).toHaveBeenCalledTimes(2);
   });
 
-  it("skips a descriptor that duplicates an existing BYOK provider", async () => {
+  it("reuses a matching BYOK provider while creating unrelated descriptors", async () => {
     const existing = byokProvider({
       providerType: "anthropic",
       baseUrl: "https://api.anthropic.com",
@@ -456,6 +467,34 @@ describe("executeByokMigration", () => {
     // Anthropic deduped; only OpenAI created.
     expect(setupProvider).toHaveBeenCalledTimes(1);
     expect(setupProvider.mock.calls[0][0]).toMatchObject({ catalogProviderId: "openai" });
+  });
+
+  it("reconciles credentials, models, and backend enrollment on an existing provider", async () => {
+    const existing = byokProvider({
+      providerType: "anthropic",
+      baseUrl: "https://api.anthropic.com",
+      origin: { kind: "byok", catalogProviderId: "anthropic" },
+    });
+    const { api, setupProvider, setApiKey, addModels, enableModel } = makeApi([existing]);
+
+    await executeByokMigration(
+      api,
+      settingsWith([model({ name: "claude", provider: ChatModelProviders.ANTHROPIC })], {
+        anthropicApiKey: "keychain-key",
+      })
+    );
+
+    expect(setupProvider).not.toHaveBeenCalled();
+    expect(setApiKey).toHaveBeenCalledWith(existing.providerId, "keychain-key");
+    expect(addModels).toHaveBeenCalledWith({
+      providerId: existing.providerId,
+      models: [{ id: "claude", displayName: "claude" }],
+      autoEnrollIn: ["chat", "opencode"],
+    });
+    expect(enableModel.mock.calls).toEqual([
+      ["chat", "existing-cm-0"],
+      ["opencode", "existing-cm-0"],
+    ]);
   });
 
   it("uses one existing provider for only one planned credential group", async () => {
