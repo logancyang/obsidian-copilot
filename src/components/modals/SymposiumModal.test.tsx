@@ -152,6 +152,9 @@ describe("SymposiumModal", () => {
         expect(preview.getAttribute("srcdoc")).toBe(REVIEW_HTML);
         expect(preview.getAttribute("sandbox")).toBe("");
         expect(preview.getAttribute("referrerpolicy")).toBe("no-referrer");
+        expect(preview.getAttribute("csp")).toBe(
+          "default-src 'none'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:"
+        );
         expectButtonsInSameRow("Ask agent to regenerate", "No, cancel", "Yes, publish");
 
         fireEvent.click(screen.getByRole("button", { name: "No, cancel" }));

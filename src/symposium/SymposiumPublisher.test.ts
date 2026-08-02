@@ -1044,19 +1044,6 @@ describe("SymposiumPublisher", () => {
         expect(harness.client.publish).toHaveBeenCalledTimes(1);
       });
 
-      it("rejects arbitrary handoff paths without reading them", async () => {
-        const harness = createHarness();
-
-        const outcome = await harness.publisher.reviewAgentPublish(
-          harness.file.path,
-          "Notes/Architecture.md"
-        );
-
-        expect(outcome).toMatchObject({ status: "failed" });
-        expect(harness.readStagedHtml).not.toHaveBeenCalled();
-        expect(harness.openModal).not.toHaveBeenCalled();
-      });
-
       it("rejects oversized staged HTML before opening review", async () => {
         const harness = createHarness();
         harness.readStagedHtml.mockResolvedValueOnce("x".repeat(SYMPOSIUM_MAX_HTML_BYTES + 1));

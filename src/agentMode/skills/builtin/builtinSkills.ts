@@ -2,7 +2,6 @@ import type { BackendId } from "@/agentMode/session/types";
 import {
   SYMPOSIUM_AGENT_HANDOFF_DIR,
   SYMPOSIUM_MAX_HTML_BYTES,
-  SYMPOSIUM_VAULT_NAME_ENV,
   SYMPOSIUM_WORKSPACE_ROOT_ENV,
 } from "@/symposium/constants";
 import { OBSIDIAN_SKILLS } from "./obsidianSkills";
@@ -534,10 +533,10 @@ On Windows, use the \`.cmd\` wrapper (prefix it with \`&\` in PowerShell):
 & "/absolute/path/to/this/skill/directory/symposium-publish.cmd" "Notes/source.md" "${SYMPOSIUM_AGENT_HANDOFF_DIR}/unique.html"
 \`\`\`
 
-The wrapper blocks while Obsidian shows the source, title, and exact staged page
-in a sandboxed review. Obsidian alone reads the current note identity and chooses
-whether confirmation publishes or updates; never choose an action or document id.
-The wrapper removes the staged artifact after any completed or rejected handoff.
+The wrapper blocks while Obsidian consumes the staged artifact and shows the exact staged page,
+source, and title in a sandboxed review. Obsidian removes the artifact and
+alone reads the current note identity to choose whether confirmation publishes or
+updates; never choose an action or document id.
 
 - \`cancelled\`: stop. No request was sent.
 - \`regenerate\`: create a new complete artifact and run the wrapper again. The
@@ -558,41 +557,13 @@ STAGED_HTML=\${2:-}
 
 OBSIDIAN_CLI=\${COPILOT_OBSIDIAN_CLI:-}
 WORKSPACE_ROOT=\${${SYMPOSIUM_WORKSPACE_ROOT_ENV}:-}
-VAULT_NAME=\${${SYMPOSIUM_VAULT_NAME_ENV}:-}
 [ -n "$WORKSPACE_ROOT" ] || {
   printf '%s\\n' "The owning Obsidian workspace is unavailable." >&2
   exit 1
 }
 
-case "$STAGED_HTML" in
-  "${SYMPOSIUM_AGENT_HANDOFF_DIR}/"*.html) ;;
-  *)
-    printf '%s\\n' "The staged HTML path is outside the Symposium handoff folder." >&2
-    exit 1
-    ;;
-esac
-STAGED_NAME=\${STAGED_HTML#"${SYMPOSIUM_AGENT_HANDOFF_DIR}/"}
-case "$STAGED_NAME" in
-  ""|*/*|*\\\\*)
-    printf '%s\\n' "The staged HTML path must name one direct handoff file." >&2
-    exit 1
-    ;;
-esac
-
-STAGED_ABS="$WORKSPACE_ROOT/$STAGED_HTML"
-cleanup() {
-  if [ ! -L "$WORKSPACE_ROOT/.symposium" ] && [ ! -L "$WORKSPACE_ROOT/${SYMPOSIUM_AGENT_HANDOFF_DIR}" ]; then
-    rm -f "$STAGED_ABS"
-  fi
-}
-trap cleanup 0
-
 [ -n "$OBSIDIAN_CLI" ] || {
   printf '%s\\n' "A compatible Obsidian CLI is unavailable." >&2
-  exit 1
-}
-[ -n "$VAULT_NAME" ] || {
-  printf '%s\\n' "The owning Obsidian vault is unavailable." >&2
   exit 1
 }
 
@@ -605,7 +576,7 @@ SOURCE_B64=$(printf '%s' "$SOURCE" | base64 | tr -d '\\r\\n')
 HTML_B64=$(printf '%s' "$STAGED_HTML" | base64 | tr -d '\\r\\n')
 CODE="(()=>{const decode=(value)=>new TextDecoder().decode(Uint8Array.from(atob(value),(char)=>char.charCodeAt(0)));const bridge=app.plugins.plugins.copilot?.symposiumAgentBridge;if(!bridge)throw new Error('Copilot Symposium host is unavailable.');return bridge.reviewAgentPublish(decode('$SOURCE_B64'),decode('$HTML_B64')).then(JSON.stringify);})()"
 
-CLI_OUTPUT=$("$OBSIDIAN_CLI" "vault=$VAULT_NAME" eval "code=$CODE") || exit $?
+CLI_OUTPUT=$("$OBSIDIAN_CLI" eval "code=$CODE") || exit $?
 CLI_RESULT=$(printf '%s\\n' "$CLI_OUTPUT" | sed -n '/^=> {/p' | sed -n '$p')
 case "$CLI_RESULT" in
   "=> {"*)
@@ -638,35 +609,20 @@ if ($args.Count -ne 2 -or -not $SOURCE -or -not $STAGED_HTML) {
 
 $OBSIDIAN_CLI = [Environment]::GetEnvironmentVariable('COPILOT_OBSIDIAN_CLI')
 $WORKSPACE_ROOT = [Environment]::GetEnvironmentVariable('${SYMPOSIUM_WORKSPACE_ROOT_ENV}')
-$VAULT_NAME = [Environment]::GetEnvironmentVariable('${SYMPOSIUM_VAULT_NAME_ENV}')
 if (-not $WORKSPACE_ROOT) {
   [Console]::Error.WriteLine('The owning Obsidian workspace is unavailable.')
   exit 1
 }
 
-$NORMALIZED_STAGED = $STAGED_HTML.Replace('\\', '/')
-$HANDOFF_PREFIX = '${SYMPOSIUM_AGENT_HANDOFF_DIR}/'
-$STAGED_NAME = if ($NORMALIZED_STAGED.StartsWith($HANDOFF_PREFIX)) {
-  $NORMALIZED_STAGED.Substring($HANDOFF_PREFIX.Length)
-} else { '' }
-if (-not $STAGED_NAME -or $STAGED_NAME.Contains('/') -or -not $STAGED_NAME.EndsWith('.html')) {
-  [Console]::Error.WriteLine('The staged HTML path must name one direct Symposium handoff file.')
-  exit 1
-}
-
-$STAGED_ABS = Join-Path $WORKSPACE_ROOT $NORMALIZED_STAGED
-$SYMPOSIUM_ROOT = Join-Path $WORKSPACE_ROOT '.symposium'
-$HANDOFF_ROOT = Join-Path $WORKSPACE_ROOT '${SYMPOSIUM_AGENT_HANDOFF_DIR}'
 $EXIT_CODE = 0
 try {
   if (-not $OBSIDIAN_CLI) { throw 'A compatible Obsidian CLI is unavailable.' }
-  if (-not $VAULT_NAME) { throw 'The owning Obsidian vault is unavailable.' }
   Set-Location -LiteralPath $WORKSPACE_ROOT
   $SOURCE_B64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($SOURCE))
-  $HTML_B64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($NORMALIZED_STAGED))
+  $HTML_B64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($STAGED_HTML))
   $CODE = "(()=>{const decode=(value)=>new TextDecoder().decode(Uint8Array.from(atob(value),(char)=>char.charCodeAt(0)));const bridge=app.plugins.plugins.copilot?.symposiumAgentBridge;if(!bridge)throw new Error('Copilot Symposium host is unavailable.');return bridge.reviewAgentPublish(decode('$SOURCE_B64'),decode('$HTML_B64')).then(JSON.stringify);})()"
 
-  $CLI_OUTPUT = & $OBSIDIAN_CLI "vault=$VAULT_NAME" 'eval' "code=$CODE"
+  $CLI_OUTPUT = & $OBSIDIAN_CLI 'eval' "code=$CODE"
   if ($LASTEXITCODE -ne 0) { throw 'Copilot could not complete the Symposium review.' }
   $CLI_RESULT = [string](@($CLI_OUTPUT | Where-Object { ([string]$_).StartsWith('=> {') })[-1])
   if (-not $CLI_RESULT.StartsWith('=> {')) {
@@ -677,19 +633,6 @@ try {
 } catch {
   [Console]::Error.WriteLine($_.Exception.Message)
   $EXIT_CODE = 1
-} finally {
-  $ROOTS_ARE_ORDINARY = $true
-  foreach ($ROOT in @($SYMPOSIUM_ROOT, $HANDOFF_ROOT)) {
-    if (Test-Path -LiteralPath $ROOT) {
-      $ITEM = Get-Item -LiteralPath $ROOT -Force
-      if (($ITEM.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
-        $ROOTS_ARE_ORDINARY = $false
-      }
-    }
-  }
-  if ($ROOTS_ARE_ORDINARY) {
-    Remove-Item -LiteralPath $STAGED_ABS -Force -ErrorAction SilentlyContinue
-  }
 }
 exit $EXIT_CODE
 `,

@@ -108,15 +108,8 @@ export async function saveSymposiumLink(
     if (!isFrontmatterProperties(frontmatter)) {
       throw new SymposiumFrontmatterParseError();
     }
-    const currentDocId = parseSymposiumDocId(frontmatter[SYMPOSIUM_PROPERTY]);
-    if (Object.prototype.hasOwnProperty.call(frontmatter, SYMPOSIUM_PROPERTY) && !currentDocId) {
-      return;
-    }
-    if (currentDocId === receipt.docId) {
-      saved = true;
-      return;
-    }
     if (Object.prototype.hasOwnProperty.call(frontmatter, SYMPOSIUM_PROPERTY)) {
+      saved = parseSymposiumDocId(frontmatter[SYMPOSIUM_PROPERTY]) === receipt.docId;
       return;
     }
     frontmatter[SYMPOSIUM_PROPERTY] = receipt.url;

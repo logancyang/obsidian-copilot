@@ -1,12 +1,11 @@
 import * as os from "node:os";
-import * as path from "node:path";
 import { BREVILABS_API_BASE_URL } from "@/constants";
 import { getDecryptedKey } from "@/encryptionService";
 import { logWarn } from "@/logger";
 import { getSettings } from "@/settings/model";
 import { getMiyoCustomUrl } from "@/miyo/miyoUtils";
 import { PLUS_ENV } from "@/agentMode/skills/builtin/builtinSkills";
-import { SYMPOSIUM_VAULT_NAME_ENV, SYMPOSIUM_WORKSPACE_ROOT_ENV } from "@/symposium/constants";
+import { SYMPOSIUM_WORKSPACE_ROOT_ENV } from "@/symposium/constants";
 import {
   COPILOT_OBSIDIAN_CLI_ENV,
   resolveObsidianCliPath,
@@ -31,8 +30,8 @@ const EMPTY_MANAGED_ENV: Readonly<Record<string, string>> = Object.freeze({});
  *   base URL + user id + client version, only for an active Plus subscriber with
  *   a key on file. Absent otherwise, so the relay skills exit with the upgrade
  *   prompt.
- * - **Host review** (`SYMPOSIUM_WORKSPACE_ROOT`, `SYMPOSIUM_VAULT_NAME`):
- *   owning workspace coordinates used to stage HTML and target its renderer.
+ * - **Host review** (`SYMPOSIUM_WORKSPACE_ROOT`): owning workspace used to
+ *   stage HTML and select its Obsidian renderer from the wrapper's cwd.
  * - **Miyo** (`MIYO_URL`): the user's custom/remote Miyo server URL when set, so
  *   the bundled `miyo` CLI targets their configured service instead of local
  *   loopback discovery (the only way Miyo works on mobile or against a remote
@@ -47,10 +46,7 @@ export async function buildBuiltinSkillEnv(
   const settings = getSettings();
   const env: Record<string, string> = {};
 
-  if (workspaceRootAbs) {
-    env[SYMPOSIUM_WORKSPACE_ROOT_ENV] = workspaceRootAbs;
-    env[SYMPOSIUM_VAULT_NAME_ENV] = path.basename(path.normalize(workspaceRootAbs));
-  }
+  if (workspaceRootAbs) env[SYMPOSIUM_WORKSPACE_ROOT_ENV] = workspaceRootAbs;
 
   const obsidianCliPath = resolveObsidianCliPath({
     platform: process.platform,

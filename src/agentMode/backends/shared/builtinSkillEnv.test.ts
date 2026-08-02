@@ -4,7 +4,7 @@ import { getDecryptedKey } from "@/encryptionService";
 import { getMiyoCustomUrl } from "@/miyo/miyoUtils";
 import { BREVILABS_API_BASE_URL } from "@/constants";
 import { PLUS_ENV } from "@/agentMode/skills/builtin/builtinSkills";
-import { SYMPOSIUM_VAULT_NAME_ENV, SYMPOSIUM_WORKSPACE_ROOT_ENV } from "@/symposium/constants";
+import { SYMPOSIUM_WORKSPACE_ROOT_ENV } from "@/symposium/constants";
 import {
   COPILOT_OBSIDIAN_CLI_ENV,
   resolveObsidianCliPath,
@@ -92,7 +92,6 @@ describe("builtinSkillEnv", () => {
 
       expect(await buildBuiltinSkillEnv("", "/vault")).toEqual({
         [SYMPOSIUM_WORKSPACE_ROOT_ENV]: "/vault",
-        [SYMPOSIUM_VAULT_NAME_ENV]: "vault",
       });
       expect(mockGetDecryptedKey).not.toHaveBeenCalled();
     });

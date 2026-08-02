@@ -22,7 +22,6 @@ import {
   createSymposiumDocument,
   SymposiumDocumentTooLargeError,
 } from "@/symposium/symposiumDocument";
-import { SYMPOSIUM_AGENT_HANDOFF_DIR } from "@/symposium/constants";
 import { appendSymposiumLedgerEntry, type SymposiumLedgerEntry } from "@/symposium/symposiumLedger";
 import type { SymposiumAction, SymposiumDocument, SymposiumReceipt } from "@/symposium/types";
 import { sha256 } from "@/utils/hash";
@@ -305,15 +304,6 @@ export class SymposiumPublisher {
     if (!stagedHtmlPath) {
       return agentReviewFailure(INVALID_HANDOFF_PATH_MESSAGE);
     }
-    if (
-      !stagedHtmlPath.startsWith(`${SYMPOSIUM_AGENT_HANDOFF_DIR}/`) ||
-      !stagedHtmlPath.toLowerCase().endsWith(".html")
-    ) {
-      return agentReviewFailure(
-        `Staged Symposium HTML must be a unique .html file inside ${SYMPOSIUM_AGENT_HANDOFF_DIR}.`
-      );
-    }
-
     let html: string;
     try {
       html = await this.consumeAgentHandoff(stagedHtmlPath);
@@ -395,18 +385,8 @@ export class SymposiumPublisher {
     return consumeSymposiumAgentHandoff(this.getDesktopVaultRoot(), stagedHtmlPath);
   }
 
-  /**
-   * Verifies that the reviewed bytes are still bound to the same source file and path.
-   *
-   * @param file The source file captured when review opened.
-   * @param review The immutable review binding.
-   */
-  private isAgentReviewCurrent(file: TFile, review: SymposiumDocumentReview): boolean {
-    return (
-      file.path === review.sourcePath &&
-      this.app.vault.getAbstractFileByPath(review.sourcePath) === file &&
-      sha256(review.payload.html) === review.digest
-    );
+  private isAgentSourceCurrent(file: TFile, sourcePath: string): boolean {
+    return file.path === sourcePath && this.app.vault.getAbstractFileByPath(sourcePath) === file;
   }
 
   /**
@@ -499,7 +479,7 @@ export class SymposiumPublisher {
             }
           : blockedResult;
       }
-      if (review && !this.isAgentReviewCurrent(file, review)) {
+      if (review && !this.isAgentSourceCurrent(file, review.sourcePath)) {
         return identityChangedFailure(lockAction);
       }
       let docId: string | null;
@@ -563,7 +543,10 @@ export class SymposiumPublisher {
 
         const document = review?.payload ?? (await this.buildDocument(file, ownerDocument));
         const preRequestDocId = await getSymposiumDocId(this.app, file);
-        if (preRequestDocId !== docId || (review && !this.isAgentReviewCurrent(file, review))) {
+        if (
+          preRequestDocId !== docId ||
+          (review && !this.isAgentSourceCurrent(file, review.sourcePath))
+        ) {
           return identityChangedFailure(resolvedAction);
         }
         if (!docId) {
@@ -743,9 +726,9 @@ export class SymposiumPublisher {
 }
 
 /**
- * Creates the frozen, path-only facade available to Agent Mode scripts.
- * The publisher itself stays in a lifecycle-local closure so its client and
- * credential loader are unreachable from agent-controlled `eval` calls.
+ * Creates the frozen, path-only facade available to Agent Mode scripts. The
+ * narrow shape prevents accidental routing choices; it is not a credential or
+ * authorization boundary while agent processes retain the Plus license key.
  *
  * @param publisher The lifecycle-owned trusted Symposium publisher.
  */

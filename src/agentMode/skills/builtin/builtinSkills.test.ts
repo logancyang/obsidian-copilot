@@ -8,7 +8,6 @@ import {
 import {
   SYMPOSIUM_AGENT_HANDOFF_DIR,
   SYMPOSIUM_MAX_HTML_BYTES,
-  SYMPOSIUM_VAULT_NAME_ENV,
   SYMPOSIUM_WORKSPACE_ROOT_ENV,
 } from "@/symposium/constants";
 
@@ -205,7 +204,7 @@ describe("builtinSkills", () => {
       expect(skill!.skillMd).toContain("never choose an action or document id");
       expect(skill!.skillMd).toContain("create a new complete artifact");
       expect(skill!.skillMd).toContain("previous confirmation never applies");
-      expect(skill!.skillMd).toContain("removes the staged artifact");
+      expect(skill!.skillMd).toContain("removes the artifact");
       expect(skill!.skillMd).toContain("Do not bypass the review or publish directly");
       expect(skill!.skillMd).not.toContain("SYMPOSIUM_TOKEN");
       expect(skill!.skillMd).not.toContain(PLUS_ENV.licenseKey);
@@ -223,8 +222,8 @@ describe("builtinSkills", () => {
         expect(script).toContain("symposiumAgentBridge");
         expect(script).not.toContain("symposiumPublisher");
         expect(script).toContain(SYMPOSIUM_WORKSPACE_ROOT_ENV);
-        expect(script).toContain(SYMPOSIUM_VAULT_NAME_ENV);
-        expect(script).toContain("vault=$VAULT_NAME");
+        expect(script).not.toContain("SYMPOSIUM_VAULT_NAME");
+        expect(script).not.toContain("vault=$VAULT_NAME");
         expect(script).toContain("A compatible Obsidian CLI is unavailable.");
         expect(script).not.toContain("COPILOT_OBSIDIAN_CLI:-obsidian");
         expect(script).not.toContain("SYMPOSIUM_TOKEN");
@@ -234,17 +233,17 @@ describe("builtinSkills", () => {
 
       const sh = scriptOf("symposium-publish", ".sh");
       expect(sh).toContain('cd "$WORKSPACE_ROOT"');
-      expect(sh).toContain('CLI_OUTPUT=$("$OBSIDIAN_CLI" "vault=$VAULT_NAME" eval');
+      expect(sh).toContain('CLI_OUTPUT=$("$OBSIDIAN_CLI" eval');
       expect(sh).toContain("sed -n '/^=> {/p' | sed -n '$p'");
-      expect(sh).toContain("trap cleanup 0");
-      expect(sh).toContain('rm -f "$STAGED_ABS"');
+      expect(sh).not.toContain("trap cleanup");
+      expect(sh).not.toContain("rm -f");
 
       const ps1 = scriptOf("symposium-publish", ".ps1");
       expect(ps1).toContain("Set-Location -LiteralPath $WORKSPACE_ROOT");
-      expect(ps1).toContain("$CLI_OUTPUT = & $OBSIDIAN_CLI \"vault=$VAULT_NAME\" 'eval'");
+      expect(ps1).toContain("$CLI_OUTPUT = & $OBSIDIAN_CLI 'eval'");
       expect(ps1).toContain("Where-Object { ([string]$_).StartsWith('=> {') }");
-      expect(ps1).toContain("finally {");
-      expect(ps1).toContain("Remove-Item -LiteralPath $STAGED_ABS");
+      expect(ps1).not.toContain("finally {");
+      expect(ps1).not.toContain("Remove-Item");
     });
   });
 

@@ -53,6 +53,9 @@ interface SymposiumModalContentProps extends SymposiumModalOptions {
   onClose: () => void;
 }
 
+const REVIEW_IFRAME_CSP =
+  "default-src 'none'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:";
+
 function actionLabel(action: SymposiumAction): string {
   return `${action[0].toUpperCase()}${action.slice(1)}`;
 }
@@ -266,10 +269,11 @@ function SymposiumModalContent({
             <code className="tw-break-all">{review.digest}</code>
           </div>
           <iframe
-            title="Symposium HTML preview"
-            srcDoc={review.payload.html}
             sandbox=""
             referrerPolicy="no-referrer"
+            {...{ csp: REVIEW_IFRAME_CSP }}
+            title="Symposium HTML preview"
+            srcDoc={review.payload.html}
             className="tw-h-96 tw-w-full tw-rounded-md tw-border tw-border-solid tw-border-border"
           />
         </div>
