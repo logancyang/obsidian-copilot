@@ -1,32 +1,15 @@
-/**
- * Tests for `syncCopilotPlusProvider` — the sign-in/sign-out bridge that
- * reconciles the singleton Copilot Plus provider.
- *
- * The register/unregister decision must key on paid sign-in state (`isPaidUser`
- * + a raw stored key), NOT on whether that key decrypts. A decrypt failure
- * (safeStorage unavailable, vault synced to another machine) returns "" from
- * `getDecryptedKey`; treating that as sign-out would tear down the persisted
- * provider + user curation. These tests pin that down.
- */
-
+import type { ModelManagementApi } from "@/modelManagement/createModelManagement";
+import type { RegisterPlusProviderInput } from "@/modelManagement/setup/CopilotPlusSetupApi";
 import {
   COPILOT_PLUS_DEFAULT_ENABLED_MODELS,
   COPILOT_PLUS_MODELS,
   syncCopilotPlusProvider,
-} from "./copilotPlusSync";
-
-import type { ModelManagementApi } from "@/modelManagement/createModelManagement";
-import type { RegisterPlusProviderInput } from "@/modelManagement/setup/CopilotPlusSetupApi";
+} from "@/modelManagement/setup/copilotPlusSync";
 
 jest.mock("@/logger", () => ({
   logInfo: jest.fn(),
   logWarn: jest.fn(),
   logError: jest.fn(),
-}));
-
-const getDecryptedKey = jest.fn<Promise<string>, [string]>();
-jest.mock("@/encryptionService", () => ({
-  getDecryptedKey: (k: string) => getDecryptedKey(k),
 }));
 
 function makeApi() {
@@ -41,31 +24,9 @@ function makeApi() {
   return { api, registerPlusProvider, unregisterPlusProvider };
 }
 
-beforeEach(() => {
-  getDecryptedKey.mockReset();
-});
-
-describe("syncCopilotPlusProvider", () => {
-  it("registers with the decrypted token when signed in with a decryptable key", async () => {
-    getDecryptedKey.mockResolvedValue("decrypted-token");
-    const { api, registerPlusProvider, unregisterPlusProvider } = makeApi();
-
-    await syncCopilotPlusProvider(api, true, "enc_desk_raw");
-
-    expect(getDecryptedKey).toHaveBeenCalledWith("enc_desk_raw");
-    expect(unregisterPlusProvider).not.toHaveBeenCalled();
-    expect(registerPlusProvider).toHaveBeenCalledTimes(1);
-    expect(registerPlusProvider.mock.calls[0][0]).toMatchObject({
-      apiKey: "decrypted-token",
-      models: COPILOT_PLUS_MODELS,
-      // Only the default-on subset (flash) auto-enrolls; the rest ship off.
-      autoEnrollModelIds: COPILOT_PLUS_DEFAULT_ENABLED_MODELS,
-    });
-  });
-
-  it("curated list ships the full lineup but defaults only copilot-plus-flash to on", () => {
-    const ids = COPILOT_PLUS_MODELS.map((m) => m.id);
-    expect(ids).toEqual([
+describe("copilotPlusSync", () => {
+  it("defines the curated lineup and default-enabled model", () => {
+    expect(COPILOT_PLUS_MODELS.map((model) => model.id)).toEqual([
       "copilot-plus-flash",
       "kimi-k2.6",
       "glm-5.2",
@@ -77,61 +38,57 @@ describe("syncCopilotPlusProvider", () => {
     expect(COPILOT_PLUS_DEFAULT_ENABLED_MODELS).toEqual(["copilot-plus-flash"]);
   });
 
-  it("flags every reasoning-capable model except kimi-k2.6 so the effort picker shows", () => {
-    const reasoningById = Object.fromEntries(
-      COPILOT_PLUS_MODELS.map((m) => [m.id, m.reasoning === true])
-    );
-    expect(reasoningById).toEqual({
-      "copilot-plus-flash": true,
-      "kimi-k2.6": false, // Azure model without effort support (matches backend)
-      "glm-5.2": true,
-      "kimi-k2.7-code": true,
-      "deepseek-v4-pro": true,
-      "mimo-v2.5": true,
-      "minimax-m2.7": true,
+  describe("syncCopilotPlusProvider()", () => {
+    it("registers with the Keychain-hydrated token when signed in", async () => {
+      const { api, registerPlusProvider, unregisterPlusProvider } = makeApi();
+
+      await syncCopilotPlusProvider(api, true, "hydrated-token");
+
+      expect(unregisterPlusProvider).not.toHaveBeenCalled();
+      expect(registerPlusProvider).toHaveBeenCalledWith(
+        expect.objectContaining({
+          apiKey: "hydrated-token",
+          models: COPILOT_PLUS_MODELS,
+          autoEnrollModelIds: COPILOT_PLUS_DEFAULT_ENABLED_MODELS,
+        })
+      );
     });
-  });
 
-  it("still registers (never tears down) when the stored key fails to decrypt, leaving the token untouched", async () => {
-    // Decrypt failure: getDecryptedKey returns "" but the raw key is present
-    // and the user is still a Plus user.
-    getDecryptedKey.mockResolvedValue("");
-    const { api, registerPlusProvider, unregisterPlusProvider } = makeApi();
+    it("marks reasoning support for the models that expose an effort picker", () => {
+      const reasoningById = Object.fromEntries(
+        COPILOT_PLUS_MODELS.map((model) => [model.id, model.reasoning === true])
+      );
+      expect(reasoningById).toEqual({
+        "copilot-plus-flash": true,
+        "kimi-k2.6": false,
+        "glm-5.2": true,
+        "kimi-k2.7-code": true,
+        "deepseek-v4-pro": true,
+        "mimo-v2.5": true,
+        "minimax-m2.7": true,
+      });
+    });
 
-    await syncCopilotPlusProvider(api, true, "enc_desk_raw");
+    it.each([
+      { isPaidUser: false, licenseKey: "hydrated-token" },
+      { isPaidUser: true, licenseKey: "" },
+    ])(
+      "unregisters when paid state or credential is missing",
+      async ({ isPaidUser, licenseKey }) => {
+        const { api, registerPlusProvider, unregisterPlusProvider } = makeApi();
 
-    expect(unregisterPlusProvider).not.toHaveBeenCalled();
-    expect(registerPlusProvider).toHaveBeenCalledTimes(1);
-    // `undefined` makes registerPlusProvider leave the existing keychain token
-    // in place rather than overwriting it with "".
-    expect(registerPlusProvider.mock.calls[0][0].apiKey).toBeUndefined();
-  });
+        await syncCopilotPlusProvider(api, isPaidUser, licenseKey);
 
-  it("unregisters when not a Plus user", async () => {
-    const { api, registerPlusProvider, unregisterPlusProvider } = makeApi();
+        expect(registerPlusProvider).not.toHaveBeenCalled();
+        expect(unregisterPlusProvider).toHaveBeenCalledTimes(1);
+      }
+    );
 
-    await syncCopilotPlusProvider(api, false, "enc_desk_raw");
+    it("contains background reconciliation failures", async () => {
+      const { api, registerPlusProvider } = makeApi();
+      registerPlusProvider.mockRejectedValueOnce(new Error("boom"));
 
-    expect(registerPlusProvider).not.toHaveBeenCalled();
-    expect(unregisterPlusProvider).toHaveBeenCalledTimes(1);
-    // No need to decrypt on the teardown path.
-    expect(getDecryptedKey).not.toHaveBeenCalled();
-  });
-
-  it("unregisters when signed in but no key is stored", async () => {
-    const { api, registerPlusProvider, unregisterPlusProvider } = makeApi();
-
-    await syncCopilotPlusProvider(api, true, "");
-
-    expect(registerPlusProvider).not.toHaveBeenCalled();
-    expect(unregisterPlusProvider).toHaveBeenCalledTimes(1);
-  });
-
-  it("swallows errors (best-effort background reconcile)", async () => {
-    getDecryptedKey.mockResolvedValue("decrypted-token");
-    const { api, registerPlusProvider } = makeApi();
-    registerPlusProvider.mockRejectedValueOnce(new Error("boom"));
-
-    await expect(syncCopilotPlusProvider(api, true, "enc_desk_raw")).resolves.toBeUndefined();
+      await expect(syncCopilotPlusProvider(api, true, "hydrated-token")).resolves.toBeUndefined();
+    });
   });
 });

@@ -7,10 +7,6 @@ jest.mock("@/settings/model", () => ({
   getSettings: (): unknown => mockGetSettings(),
 }));
 
-jest.mock("@/encryptionService", () => ({
-  getDecryptedKey: (key: string) => Promise.resolve(key),
-}));
-
 jest.mock("@/logger", () => ({
   logInfo: jest.fn(),
   logError: jest.fn(),

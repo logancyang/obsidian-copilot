@@ -1,4 +1,3 @@
-import { getDecryptedKey } from "@/encryptionService";
 import { logError, logInfo, logWarn } from "@/logger";
 import type { MiyoHealthResponse } from "@/miyo/miyoHealth";
 import { MiyoServiceDiscovery } from "@/miyo/MiyoServiceDiscovery";
@@ -637,9 +636,7 @@ export class MiyoClient {
     const settings = this.authSnapshot ?? getSettings();
     const headers: Record<string, string> = {};
 
-    const licenseKey = settings.plusLicenseKey
-      ? await getDecryptedKey(settings.plusLicenseKey)
-      : "";
+    const licenseKey = settings.plusLicenseKey;
     if (licenseKey) {
       headers.Authorization = `Bearer ${licenseKey}`;
     }

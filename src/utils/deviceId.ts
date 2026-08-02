@@ -11,8 +11,6 @@
  *     MachineGuid, /etc/machine-id): spawning system commands to read a
  *     hardware fingerprint raises privacy concerns and hardware identity isn't
  *     needed to solve a sync-collision problem.
- *   - Mirrors the existing per-device WebCrypto key precedent in
- *     `encryptionService.ts` (`obsidian-copilot:webcrypto-key:v1`).
  *
  * Caveat: because the id lives in app-local storage rather than hardware, it
  * resets if the user clears app data or reinstalls Obsidian. On reset the

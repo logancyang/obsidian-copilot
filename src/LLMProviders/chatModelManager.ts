@@ -7,7 +7,6 @@ import {
   ModelCapability,
   ProviderInfo,
 } from "@/constants";
-import { getDecryptedKey } from "@/encryptionService";
 import { logError, logInfo } from "@/logger";
 import { isPaidEnabled } from "@/plusUtils";
 import {
@@ -237,7 +236,7 @@ export default class ChatModelManager {
         configuration: {
           baseURL: customModel.baseUrl,
           fetch: customModel.enableCors ? safeFetch : undefined,
-          organization: await getDecryptedKey(customModel.openAIOrgId || settings.openAIOrgId),
+          organization: customModel.openAIOrgId || settings.openAIOrgId,
         },
         ...this.getOpenAISpecialConfig(
           modelName,
@@ -389,7 +388,7 @@ export default class ChatModelManager {
         // MUST NOT use /v1 in the baseUrl for ollama
         baseUrl: customModel.baseUrl || "http://localhost:11434",
         headers: {
-          Authorization: `Bearer ${await getDecryptedKey(customModel.apiKey || "default-key")}`,
+          Authorization: `Bearer ${customModel.apiKey || "default-key"}`,
         },
         // Route through Obsidian's requestUrl (safeFetch) to bypass CORS / mixed-content
         // restrictions — required on mobile (WKWebView) when calling http:// Ollama hosts.
@@ -559,7 +558,7 @@ export default class ChatModelManager {
     legacyApiKey: string,
     allowLegacyCredentialFallback: boolean
   ): Promise<string> {
-    return getDecryptedKey(modelApiKey || (allowLegacyCredentialFallback ? legacyApiKey : ""));
+    return modelApiKey || (allowLegacyCredentialFallback ? legacyApiKey : "");
   }
 
   /**
@@ -638,7 +637,7 @@ export default class ChatModelManager {
       );
     }
 
-    const apiKey = await getDecryptedKey(apiKeySource);
+    const apiKey = apiKeySource;
 
     const explicitRegion = customModel.bedrockRegion?.trim();
     const settingsRegion = settings.amazonBedrockRegion?.trim();

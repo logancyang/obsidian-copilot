@@ -1,5 +1,4 @@
 import { getSettings, setSettings } from "@/settings/model";
-import { getDecryptedKey } from "@/encryptionService";
 import { GitHubCopilotModelResponse } from "@/settings/providerModels";
 import { requestUrl, type RequestUrlResponse } from "obsidian";
 import { AuthCancelledError } from "./errors";
@@ -337,9 +336,6 @@ export class GitHubCopilotProvider {
       throw new Error("No GitHub access token available");
     }
 
-    // Decrypt token if it was encrypted
-    token = await getDecryptedKey(token);
-
     const res = await requestUrl({
       url: COPILOT_TOKEN_URL,
       method: "GET",
@@ -410,8 +406,7 @@ export class GitHubCopilotProvider {
     if (settings.githubCopilotToken && !isExpired) {
       // Reset refresh attempts on successful token use
       this.refreshAttempts = 0;
-      // Decrypt token before returning
-      return await getDecryptedKey(settings.githubCopilotToken);
+      return settings.githubCopilotToken;
     }
 
     // Need to refresh

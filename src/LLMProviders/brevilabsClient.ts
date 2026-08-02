@@ -1,5 +1,4 @@
 import { BREVILABS_API_BASE_URL } from "@/constants";
-import { getDecryptedKey } from "@/encryptionService";
 import { MissingPlusLicenseError } from "@/error";
 import { logInfo } from "@/logger";
 import { applyEntitlement, markPaidPendingEntitlement, turnOffPaid } from "@/plusUtils";
@@ -207,7 +206,7 @@ export class BrevilabsClient {
       "X-Client-Version": this.pluginVersion,
     };
     if (!excludeAuthHeader) {
-      headers.Authorization = `Bearer ${await getDecryptedKey(getSettings().plusLicenseKey)}`;
+      headers.Authorization = `Bearer ${getSettings().plusLicenseKey}`;
     }
     const response = await requestUrl({
       url: url.toString(),
@@ -242,7 +241,7 @@ export class BrevilabsClient {
         method: "POST",
         headers: {
           "Content-Type": contentType,
-          Authorization: `Bearer ${await getDecryptedKey(getSettings().plusLicenseKey)}`,
+          Authorization: `Bearer ${getSettings().plusLicenseKey}`,
           "X-Client-Version": this.pluginVersion,
         },
         body,
@@ -274,7 +273,7 @@ export class BrevilabsClient {
 
     // Build the request body with proper structure
     const requestBody: Record<string, unknown> = {
-      license_key: await getDecryptedKey(requestedLicenseKey),
+      license_key: requestedLicenseKey,
     };
 
     // Safely spread context if provided, ensuring no conflicts with required fields

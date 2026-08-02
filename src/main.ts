@@ -209,9 +209,9 @@ export default class CopilotPlugin extends Plugin {
     });
     // Register/unregister the Copilot Plus provider (and its models) to match
     // Plus state, so Plus models surface in the chat + opencode pickers. The
-    // license key (raw/encrypted) is decrypted inside the sync for the relay's
-    // Bearer token. Idempotent, so the redundant initial call below + per-change
-    // calls are safe. Serialized through `plusSyncChain` so a fast
+    // license key is already hydrated from Keychain by the settings boundary.
+    // Idempotent, so the redundant initial call below + per-change calls are
+    // safe. Serialized through `plusSyncChain` so a fast
     // sign-out→sign-in (each its own settings change) settles in issue order,
     // not in whichever overlapping reconcile happens to finish last.
     let plusSyncChain: Promise<void> = Promise.resolve();

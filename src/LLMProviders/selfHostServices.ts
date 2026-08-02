@@ -1,5 +1,4 @@
 import { type Youtube4llmResponse } from "@/LLMProviders/brevilabsClient";
-import { getDecryptedKey } from "@/encryptionService";
 import { logError, logInfo } from "@/logger";
 import { getSettings } from "@/settings/model";
 import { safeFetchNoThrow } from "@/utils";
@@ -133,10 +132,10 @@ export async function selfHostWebSearch(query: string): Promise<SelfHostWebSearc
   const settings = getSettings();
   switch (settings.selfHostSearchProvider) {
     case "perplexity":
-      return perplexitySonarSearch(query, await getDecryptedKey(settings.perplexityApiKey));
+      return perplexitySonarSearch(query, settings.perplexityApiKey);
     case "firecrawl":
     default:
-      return firecrawlSearch(query, await getDecryptedKey(settings.firecrawlApiKey));
+      return firecrawlSearch(query, settings.firecrawlApiKey);
   }
 }
 
@@ -146,7 +145,7 @@ export async function selfHostWebSearch(query: string): Promise<SelfHostWebSearc
  */
 export async function selfHostYoutube4llm(url: string): Promise<Youtube4llmResponse> {
   const startTime = Date.now();
-  const apiKey = await getDecryptedKey(getSettings().supadataApiKey);
+  const apiKey = getSettings().supadataApiKey;
 
   const transcriptUrl = `${SUPADATA_TRANSCRIPT_URL}?url=${encodeURIComponent(url)}&mode=auto&text=true`;
 

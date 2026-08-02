@@ -10,7 +10,6 @@
  */
 
 import { BREVILABS_MODELS_BASE_URL, ChatModels } from "@/constants";
-import { getDecryptedKey } from "@/encryptionService";
 import { logError } from "@/logger";
 import type { ModelManagementApi } from "@/modelManagement/createModelManagement";
 import type { ModelInfo } from "@/modelManagement/types/catalog";
@@ -105,14 +104,8 @@ export const COPILOT_PLUS_DEFAULT_ENABLED_MODELS: readonly string[] = Object.fre
  * a failure is logged, not thrown, since this runs as background reconciliation
  * off a settings change.
  *
- * `licenseKey` is the RAW stored key (still encrypted on disk) — the same value
- * the rest of the plugin gates on (`brevilabsClient`, `plusUtils`). The
- * register/unregister decision keys on sign-in state (`isPaidUser` + a stored
- * key), NOT on whether that key happens to decrypt: a decrypt failure (Electron
- * `safeStorage` unavailable, a vault synced to another machine) must not tear
- * down the persisted provider + the user's curation. Decryption is only for the
- * relay Bearer token, and a failed decrypt leaves the previously-stored token
- * untouched rather than overwriting it with "".
+ * `licenseKey` is already hydrated from Obsidian Keychain by the settings
+ * persistence boundary.
  */
 export async function syncCopilotPlusProvider(
   api: ModelManagementApi,
@@ -121,15 +114,11 @@ export async function syncCopilotPlusProvider(
 ): Promise<void> {
   try {
     if (isPaidUser && licenseKey) {
-      const token = await getDecryptedKey(licenseKey);
       await api.setup.copilotPlus.registerPlusProvider({
         providerType: "openai-compatible",
         displayName: "Copilot Plus",
         baseUrl: BREVILABS_MODELS_BASE_URL,
-        // Only refresh the stored relay token when decryption succeeded; ""
-        // would clobber a previously-good keychain entry, and `undefined` makes
-        // `registerPlusProvider` leave the existing token in place.
-        apiKey: token || undefined,
+        apiKey: licenseKey,
         models: COPILOT_PLUS_MODELS,
         autoEnrollModelIds: COPILOT_PLUS_DEFAULT_ENABLED_MODELS,
       });

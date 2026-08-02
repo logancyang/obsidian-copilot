@@ -5,10 +5,6 @@ jest.mock("@/settings/model", () => ({
   getSettings: () => mockGetSettings(),
 }));
 
-jest.mock("@/encryptionService", () => ({
-  getDecryptedKey: async (key: string) => key,
-}));
-
 const mockApplyEntitlement = jest.fn<Promise<boolean>, [string]>();
 const mockMarkPaidPendingEntitlement = jest.fn<void, []>();
 const mockTurnOffPaid = jest.fn<void, [unknown?]>();
