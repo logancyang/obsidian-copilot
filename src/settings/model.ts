@@ -146,16 +146,16 @@ export interface CopilotSettings {
   defaultConversationNoteName: string;
   // Any valid paid license (Lite and above). undefined means never checked.
   isPaidUser: boolean | undefined;
-  // Tier >= Plus (Plus, Pro, Believer, Supporter; excludes Lite). Derived from
-  // the signed entitlement token when present, else mirrors isPaidUser as a
-  // safe fallback. undefined means never checked. See plusUtils + entitlement/.
+  // Tier >= Plus (Plus, Pro, Believer, Supporter; excludes Lite). Current
+  // validations derive it from a verified signed entitlement; undefined means
+  // never checked. See plusUtils + entitlement/.
   isPlusUser: boolean | undefined;
   // Raw server-signed entitlement token (JWS). Tamper-evident, so safe to persist
-  // and trust offline until its `exp`. Empty when the server hasn't issued one.
+  // and trust offline until its `exp`. Empty when no verified token is stored.
   entitlementToken: string;
-  // Epoch ms when the entitlement token expires (0 = none / tokenless fallback).
-  // The strict isPlusUser gate honors this so multi-agent locks at expiry even
-  // while offline. Derived from the token's `exp`.
+  // Epoch ms when the entitlement token expires (0 = no verified entitlement).
+  // The reactive tier UI reads this; strict gates use the in-memory verified
+  // claims. Derived from the token's `exp`.
   entitlementExpiresAt: number;
   inlineEditCommands: LegacyCommandSettings[] | undefined;
   projectList: Array<ProjectConfig>;
