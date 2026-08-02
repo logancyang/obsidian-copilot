@@ -59,7 +59,11 @@ const PREVIEW_NAVIGATION_EVENTS = ["click", "auxclick", "contextmenu", "dragstar
 
 function blockPreviewNavigation(event: Event): void {
   const target = event.target as Element | null;
-  if (target?.closest?.("a[href], area[href]")) {
+  if (
+    event.type === "contextmenu" ||
+    event.type === "dragstart" ||
+    target?.closest?.("a[href], area[href]")
+  ) {
     event.preventDefault();
   }
 }
