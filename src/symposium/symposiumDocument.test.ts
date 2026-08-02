@@ -213,6 +213,26 @@ describe("symposiumDocument", () => {
       expect(app.vault.getFiles).not.toHaveBeenCalled();
     });
 
+    it("omits rendered frontmatter and properties from the public document", async () => {
+      const app = createApp({
+        markdown: "---\ntitle: Private metadata\ntags: [internal]\n---\n# Public body",
+      });
+      const file = createFile("Notes/Public body.md");
+      renderMock.mockImplementation(async (_app, _markdown, element) => {
+        appendHtml(
+          element,
+          '<div class="metadata-container">Properties UI</div><pre class="frontmatter language-yaml"><code>title: Private metadata</code></pre><h1>Public body</h1>'
+        );
+      });
+
+      const result = await buildSymposiumDocument(app, file, createComponent(), document);
+
+      expect(result.html).not.toContain("metadata-container");
+      expect(result.html).not.toContain("frontmatter");
+      expect(result.html).not.toContain("Private metadata");
+      expect(result.html).toContain("<h1>Public body</h1>");
+    });
+
     it("removes active content and dangerous attributes while retaining safe external links", async () => {
       const app = createApp();
       const file = createFile("Unsafe.md");

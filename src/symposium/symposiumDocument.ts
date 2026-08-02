@@ -6,7 +6,7 @@ import { App, Component, MarkdownRenderer, TFile } from "obsidian";
 
 export { SYMPOSIUM_MAX_HTML_BYTES };
 
-const ACTIVE_CONTENT_SELECTOR = [
+const PUBLISH_REMOVAL_SELECTOR = [
   "base",
   "button",
   "embed",
@@ -38,6 +38,8 @@ const ACTIVE_CONTENT_SELECTOR = [
   ".edit-block-button",
   ".heading-collapse-indicator",
   ".markdown-embed-link",
+  ".frontmatter",
+  ".metadata-container",
 ].join(",");
 
 const REVIEW_ACTIVE_CONTENT_SELECTOR = [
@@ -264,7 +266,7 @@ export async function buildSymposiumDocument(
 
   normalizeMath(article);
   normalizeTaskCheckboxes(article);
-  removeActiveContent(article);
+  removeUnsupportedContent(article);
   normalizeInternalLinks(article);
   const budgetArticle = article.cloneNode(true) as HTMLElement;
   sanitizeAttributes(budgetArticle);
@@ -303,8 +305,8 @@ function normalizeTaskCheckboxes(root: HTMLElement): void {
   });
 }
 
-function removeActiveContent(root: HTMLElement): void {
-  root.querySelectorAll(ACTIVE_CONTENT_SELECTOR).forEach((element) => element.remove());
+function removeUnsupportedContent(root: HTMLElement): void {
+  root.querySelectorAll(PUBLISH_REMOVAL_SELECTOR).forEach((element) => element.remove());
 }
 
 function normalizeInternalLinks(root: HTMLElement): void {

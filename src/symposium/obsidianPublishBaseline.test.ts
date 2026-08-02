@@ -8,6 +8,10 @@ describe("obsidianPublishBaseline", () => {
       expect(OBSIDIAN_PUBLISH_BASELINE).toContain(".markdown-rendered pre");
       expect(OBSIDIAN_PUBLISH_BASELINE).toContain(".markdown-rendered .callout");
       expect(OBSIDIAN_PUBLISH_BASELINE).toContain(".markdown-rendered .markdown-embed");
+      expect(OBSIDIAN_PUBLISH_BASELINE).toContain(".markdown-rendered .canvas-minimap path");
+      expect(OBSIDIAN_PUBLISH_BASELINE).toContain(".markdown-rendered .canvas-minimap rect");
+      expect(OBSIDIAN_PUBLISH_BASELINE).toContain("fill: var(--background-primary)");
+      expect(OBSIDIAN_PUBLISH_BASELINE).toContain("stroke: var(--text-muted)");
       expect(OBSIDIAN_PUBLISH_BASELINE).toContain(".symposium-missing-asset");
     });
 
