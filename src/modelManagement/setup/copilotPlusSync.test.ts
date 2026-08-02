@@ -25,7 +25,7 @@ function makeApi() {
 }
 
 describe("copilotPlusSync", () => {
-  it("defines the curated lineup and default-enabled model", () => {
+  it("defines the curated lineup and default-enabled models", () => {
     expect(COPILOT_PLUS_MODELS.map((model) => model.id)).toEqual([
       "copilot-plus-flash",
       "kimi-k2.6",
@@ -35,7 +35,11 @@ describe("copilotPlusSync", () => {
       "mimo-v2.5",
       "minimax-m2.7",
     ]);
-    expect(COPILOT_PLUS_DEFAULT_ENABLED_MODELS).toEqual(["copilot-plus-flash"]);
+    expect(COPILOT_PLUS_DEFAULT_ENABLED_MODELS).toEqual([
+      "copilot-plus-flash",
+      "deepseek-v4-pro",
+      "glm-5.2",
+    ]);
   });
 
   describe("syncCopilotPlusProvider()", () => {
