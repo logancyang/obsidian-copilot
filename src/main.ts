@@ -47,11 +47,9 @@ import {
 } from "@/modelManagement";
 import { KeychainService } from "@/services/keychainService";
 import {
-  flushPersistence,
-  getLegacyByokCredentialPresence,
-  loadSettingsWithKeychain,
   persistSettings,
-  refreshLastPersistedSettings,
+  loadSettingsWithKeychain,
+  flushPersistence,
   resetPersistenceState,
 } from "@/services/settingsPersistence";
 import { UserMemoryManager } from "@/memory/UserMemoryManager";
@@ -253,7 +251,7 @@ export default class CopilotPlugin extends Plugin {
     // agent/model-discovery init below — so migrated BYOK providers are present
     // when OpenCode first enumerates models. Awaited for deterministic ordering;
     // it's a fast, one-time, no-op for already-migrated/fresh vaults.
-    await runSettingsMigrations(this.modelManagement, getLegacyByokCredentialPresence());
+    await runSettingsMigrations(this.modelManagement);
     this.addSettingTab(new CopilotSettingTab(this.app, this));
 
     // Core plugin initialization
@@ -1098,9 +1096,7 @@ export default class CopilotPlugin extends Plugin {
     // Mirror this device's `agentMode.deviceProfiles` segment into the flat
     // agent fields the rest of the code reads (GitHub #2539). `saveData` below
     // performs the inverse on the way out.
-    const runtimeSettings = hydrateDeviceProfile(settings, getDeviceId());
-    setSettings(runtimeSettings);
-    refreshLastPersistedSettings(runtimeSettings);
+    setSettings(hydrateDeviceProfile(settings, getDeviceId()));
   }
 
   /**

@@ -1,6 +1,7 @@
 /**
- * One-time migration: legacy BYOK model metadata and Keychain-hydrated
- * credentials → the new provider / configured-model / backend data model.
+ * One-time migration: legacy BYOK models + provider keys → the new
+ * provider / configured-model / backend data model, so a user's own keys keep
+ * working in OpenCode (and Simple Chat) when agent mode lands.
  *
  * Two halves so the mapping logic is trivially unit-testable:
  *  - `planByokMigration` is PURE — legacy settings in, `SetupProviderInput[]`
@@ -12,14 +13,13 @@
  *    configured models → backend enrollment, with its own rollback).
  *
  * Scope (locked with the product owner):
- *  - Credential-driven: every legacy provider with a Keychain-hydrated key, a
- *    discarded disk-credential presence signal, or (for local/openai-format
- *    providers) an explicit base URL, plus its ENABLED models.
+ *  - Credential-driven: every legacy provider with a user-supplied key (or, for
+ *    local/openai-format providers, an explicit base URL) and its ENABLED
+ *    models — built-in and custom.
  *  - Azure / Bedrock migrate to Simple Chat only (OpenCode can't route them).
  *  - Skip embeddings, disabled models, and copilot-plus / github-copilot
  *    (owned by Plus sign-in and agent setup).
- *  - Disk credential values are never accepted; a presence signal creates a
- *    keyless descriptor that requires re-entry.
+ *  - Non-destructive: legacy keys and `activeModels` are left untouched.
  */
 
 import type { CustomModel } from "@/aiParams";
@@ -41,11 +41,7 @@ import type {
   ProviderType,
   SetupProviderInput,
 } from "@/modelManagement";
-import {
-  getModelKeyFromModel,
-  normalizeModelProvider,
-  type CopilotSettings,
-} from "@/settings/model";
+import type { CopilotSettings } from "@/settings/model";
 
 // Token-bounded "embed"/"embedding" id match. Mirrors `looksLikeEmbeddingModel`
 // in `@/modelManagement/catalog/catalogTransform`; kept local so this module
@@ -139,20 +135,6 @@ const LEGACY_PROVIDER_MAP: Partial<Record<string, LegacyProviderMapping>> = {
 // Frozen enrollment targets — referential stability (see AGENTS.md).
 const ENROLL_CHAT_AND_OPENCODE: readonly BackendType[] = Object.freeze(["chat", "opencode"]);
 const ENROLL_CHAT_ONLY: readonly BackendType[] = Object.freeze(["chat"]);
-const EMPTY_CREDENTIAL_IDENTITIES: readonly string[] = Object.freeze([]);
-
-/** Non-secret evidence that discarded disk credentials once configured BYOK metadata. */
-export interface LegacyByokCredentialPresence {
-  /** Providers that had a top-level credential applying to all their models. */
-  providerIds: readonly string[];
-  /** Exact `name|provider` identities that had a per-model credential. */
-  modelIds: readonly string[];
-}
-
-const EMPTY_LEGACY_CREDENTIAL_PRESENCE: LegacyByokCredentialPresence = Object.freeze({
-  providerIds: EMPTY_CREDENTIAL_IDENTITIES,
-  modelIds: EMPTY_CREDENTIAL_IDENTITIES,
-});
 
 /** Trim, drop a trailing slash, lowercase — for grouping / dedup comparison. */
 function normalizeUrl(url: string | undefined): string {
@@ -209,19 +191,13 @@ interface ResolvedCandidate {
   apiKey?: string;
   baseUrl?: string;
   extras?: Record<string, unknown>;
-  /** Prevent a discarded model override from folding into the provider-wide keyless group. */
-  credentialGroupId?: string;
 }
 
 /**
  * Decide whether a single legacy model migrates, and resolve its credential /
  * base URL / extras. Returns `null` for anything out of scope.
  */
-function resolveCandidate(
-  model: CustomModel,
-  settings: CopilotSettings,
-  legacyCredentialPresence: LegacyByokCredentialPresence
-): ResolvedCandidate | null {
+function resolveCandidate(model: CustomModel, settings: CopilotSettings): ResolvedCandidate | null {
   const mapping = LEGACY_PROVIDER_MAP[model.provider];
   if (!mapping) return null; // unknown / copilot-plus / github-copilot
   if (!model.enabled) return null; // disabled models skipped per scope
@@ -230,14 +206,7 @@ function resolveCandidate(
   const keyField = ProviderSettingsKeyMap[model.provider as SettingKeyProviders];
   const rawKey = keyField ? settings[keyField] : undefined;
   const topLevelKey = typeof rawKey === "string" ? rawKey.trim() : "";
-  const modelIdentity = getModelKeyFromModel(model);
-  const hadDiscardedModelCredential = legacyCredentialPresence.modelIds.includes(modelIdentity);
-  const hadDiscardedProviderCredential = legacyCredentialPresence.providerIds.includes(
-    model.provider
-  );
-  const modelApiKey = model.apiKey?.trim();
-  const apiKey =
-    modelApiKey || (!hadDiscardedModelCredential ? topLevelKey || undefined : undefined);
+  const apiKey = model.apiKey?.trim() || topLevelKey || undefined;
 
   let baseUrl: string | undefined;
   if (mapping.requiresBaseUrl) {
@@ -246,19 +215,10 @@ function resolveCandidate(
     if (!baseUrl) return null;
   } else {
     baseUrl = model.baseUrl?.trim() || defaultBaseUrlFor(model.provider);
-    // A stripped legacy disk credential is only a presence signal: retain the
-    // descriptor so the user can re-enter its key, but never import the value.
-    const hadDiscardedCredential = hadDiscardedProviderCredential || hadDiscardedModelCredential;
-    if (!apiKey && !hadDiscardedCredential) return null;
+    if (!apiKey) return null; // key-based providers need a usable key
   }
 
-  return {
-    mapping,
-    apiKey,
-    baseUrl,
-    extras: buildExtras(model, settings, mapping.providerType),
-    credentialGroupId: modelApiKey || hadDiscardedModelCredential ? modelIdentity : undefined,
-  };
+  return { mapping, apiKey, baseUrl, extras: buildExtras(model, settings, mapping.providerType) };
 }
 
 function toModelInfo(model: CustomModel): ModelInfo {
@@ -267,43 +227,26 @@ function toModelInfo(model: CustomModel): ModelInfo {
 
 /**
  * Pure: legacy settings → BYOK provider-setup descriptors. Models are grouped
- * into one provider per `(providerType, catalogProviderId, baseUrl, credential)`
- * so distinct credentials become distinct provider instances. Discarded
- * per-model overrides use their model identity as the credential discriminator;
- * model ids are de-duped within a group (last wins) to satisfy `bulkSet`.
- *
- * @param settings - Hydrated runtime settings whose credential values come only from Keychain.
- * @param legacyCredentialPresence - Provider-wide and model-specific discarded credential identities.
+ * into one provider per `(providerType, catalogProviderId, baseUrl, apiKey)` so
+ * distinct credentials become distinct provider instances; model ids are
+ * de-duped within a group (last wins) to satisfy `bulkSet`.
  */
-export function planByokMigration(
-  settings: CopilotSettings,
-  legacyCredentialPresence: LegacyByokCredentialPresence = EMPTY_LEGACY_CREDENTIAL_PRESENCE
-): SetupProviderInput[] {
+export function planByokMigration(settings: CopilotSettings): SetupProviderInput[] {
   const groups = new Map<
     string,
-    {
-      input: SetupProviderInput;
-      modelsById: Map<string, ModelInfo>;
-      credentialGroupId?: string;
-    }
+    { input: SetupProviderInput; modelsById: Map<string, ModelInfo> }
   >();
 
-  for (const rawModel of settings.activeModels ?? []) {
-    const normalizedProvider = normalizeModelProvider(rawModel.provider);
-    const model =
-      normalizedProvider === rawModel.provider
-        ? rawModel
-        : { ...rawModel, provider: normalizedProvider };
-    const candidate = resolveCandidate(model, settings, legacyCredentialPresence);
+  for (const model of settings.activeModels ?? []) {
+    const candidate = resolveCandidate(model, settings);
     if (!candidate) continue;
-    const { mapping, apiKey, baseUrl, extras, credentialGroupId } = candidate;
+    const { mapping, apiKey, baseUrl, extras } = candidate;
 
     const groupKey = [
       mapping.providerType,
       mapping.catalogProviderId ?? "",
       normalizeUrl(baseUrl),
       apiKey ?? "",
-      credentialGroupId ?? "",
     ].join(" ");
 
     let group = groups.get(groupKey);
@@ -322,7 +265,7 @@ export function planByokMigration(
       if (baseUrl) input.baseUrl = baseUrl;
       if (apiKey) input.apiKey = apiKey;
       if (extras) input.extras = extras;
-      group = { input, modelsById: new Map(), credentialGroupId };
+      group = { input, modelsById: new Map() };
       groups.set(groupKey, group);
     }
 
@@ -330,14 +273,10 @@ export function planByokMigration(
     group.modelsById.set(info.id, info);
   }
 
-  // Existing rows represent the provider-wide legacy setup unless proven
-  // otherwise, so let dedup consume those groups before model overrides.
-  return [...groups.values()]
-    .sort((a, b) => Number(!!a.credentialGroupId) - Number(!!b.credentialGroupId))
-    .map(({ input, modelsById }) => ({
-      ...input,
-      models: [...modelsById.values()],
-    }));
+  return [...groups.values()].map(({ input, modelsById }) => ({
+    ...input,
+    models: [...modelsById.values()],
+  }));
 }
 
 /** A pre-existing BYOK provider equivalent to a planned descriptor (same
@@ -353,80 +292,32 @@ function isDuplicateByok(provider: Provider, descriptor: SetupProviderInput): bo
 }
 
 /**
- * Side-effecting executor. Builds a one-shot plan from `settings`, reconciles
+ * Side-effecting executor. Builds a one-shot plan from `settings`, skips
  * descriptors that match an existing BYOK provider, and creates the rest via
  * `ByokSetupApi.setupProvider`. Never throws: a single provider failure is
  * logged and the rest proceed (the version bump in the caller is unconditional).
- *
- * @param api - Model-management boundary used to create providers and models.
- * @param settings - Hydrated runtime settings to migrate.
- * @param legacyCredentialPresence - Provider-wide and model-specific credentials requiring re-entry.
  */
 export async function executeByokMigration(
   api: ModelManagementApi,
-  settings: CopilotSettings,
-  legacyCredentialPresence: LegacyByokCredentialPresence = EMPTY_LEGACY_CREDENTIAL_PRESENCE
+  settings: CopilotSettings
 ): Promise<void> {
-  const descriptors = planByokMigration(settings, legacyCredentialPresence);
+  const descriptors = planByokMigration(settings);
   if (descriptors.length === 0) {
     logInfo("[byok-migration] no legacy BYOK providers to migrate");
     return;
   }
 
-  // Each existing row can satisfy only one planned credential group. Consume
-  // matches so additional groups sharing its provider identity still migrate.
-  const unmatchedExisting = [...api.providerRegistry.listByOrigin("byok")];
+  // Snapshot existing BYOK providers once; the planner already de-dups within
+  // this run, so a stale snapshot only matters for pre-existing rows.
+  const existing = api.providerRegistry.listByOrigin("byok");
   let created = 0;
-  let reconciled = 0;
+  let skipped = 0;
   let failed = 0;
 
   for (const descriptor of descriptors) {
-    const duplicateIndex = unmatchedExisting.findIndex((provider) =>
-      isDuplicateByok(provider, descriptor)
-    );
-    if (duplicateIndex >= 0) {
-      const [provider] = unmatchedExisting.splice(duplicateIndex, 1);
-      try {
-        if (descriptor.apiKey) {
-          const existingApiKey = await api.providerRegistry.getApiKey(provider.providerId);
-          if (!existingApiKey?.trim()) {
-            await api.providerRegistry.setApiKey(provider.providerId, descriptor.apiKey);
-          }
-        }
-        if (descriptor.extras) {
-          const mergedExtras = { ...provider.extras };
-          let extrasChanged = false;
-          for (const [key, value] of Object.entries(descriptor.extras)) {
-            const existingValue = mergedExtras[key];
-            if (existingValue !== undefined && existingValue !== null && existingValue !== "") {
-              continue;
-            }
-            mergedExtras[key] = value;
-            extrasChanged = true;
-          }
-          if (extrasChanged) {
-            await api.providerRegistry.update(provider.providerId, { extras: mergedExtras });
-          }
-        }
-        const configuredModelIds = await api.setup.byok.addModels({
-          providerId: provider.providerId,
-          models: descriptor.models,
-          autoEnrollIn: descriptor.autoEnrollIn,
-        });
-        for (const backend of descriptor.autoEnrollIn ?? ENROLL_CHAT_AND_OPENCODE) {
-          for (const configuredModelId of configuredModelIds) {
-            await api.backendConfigRegistry.enableModel(backend, configuredModelId);
-          }
-        }
-        reconciled++;
-        logInfo(`[byok-migration] reconciled existing provider "${descriptor.displayName}"`);
-      } catch (err) {
-        failed++;
-        logError(
-          `[byok-migration] failed to reconcile "${descriptor.displayName}"; continuing`,
-          err
-        );
-      }
+    if (existing.some((provider) => isDuplicateByok(provider, descriptor))) {
+      skipped++;
+      logInfo(`[byok-migration] skipping already-present provider "${descriptor.displayName}"`);
       continue;
     }
     try {
@@ -442,5 +333,7 @@ export async function executeByokMigration(
     }
   }
 
-  logInfo(`[byok-migration] done: ${created} migrated, ${reconciled} reconciled, ${failed} failed`);
+  logInfo(
+    `[byok-migration] done: ${created} migrated, ${skipped} already present, ${failed} failed`
+  );
 }

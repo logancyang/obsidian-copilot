@@ -7,21 +7,12 @@
  * being decrypted or imported.
  */
 
-import { DEFAULT_SETTINGS, ProviderSettingsKeyMap, type SettingKeyProviders } from "@/constants";
-import { logError, logWarn } from "@/logger";
+import { DEFAULT_SETTINGS } from "@/constants";
+import { logWarn } from "@/logger";
 import { KeychainService } from "@/services/keychainService";
 import { cleanupLegacyFields, stripKeychainFields } from "@/services/settingsSecretTransforms";
-import type { LegacyByokCredentialPresence } from "@/settings/migrations/byokMigration";
 import { CURRENT_SETTINGS_VERSION } from "@/settings/migrations/version";
-import {
-  type CopilotSettings,
-  createResetSettingsSnapshot,
-  getSettings,
-  getModelKeyFromModel,
-  normalizeModelProvider,
-  sanitizeSettings,
-  setSettings,
-} from "@/settings/model";
+import { type CopilotSettings, sanitizeSettings } from "@/settings/model";
 import { Notice } from "obsidian";
 
 let writeQueue: Promise<void> = Promise.resolve();
@@ -29,12 +20,6 @@ let lastPersistedSettings: CopilotSettings | undefined;
 let suppressNextPersist = false;
 let transactionEpoch = 0;
 const pendingTombstones = new Set<string>();
-const EMPTY_CREDENTIAL_IDENTITIES: readonly string[] = Object.freeze([]);
-const EMPTY_LEGACY_BYOK_CREDENTIAL_PRESENCE: LegacyByokCredentialPresence = Object.freeze({
-  providerIds: EMPTY_CREDENTIAL_IDENTITIES,
-  modelIds: EMPTY_CREDENTIAL_IDENTITIES,
-});
-let legacyByokCredentialPresence = EMPTY_LEGACY_BYOK_CREDENTIAL_PRESENCE;
 
 /** Keychain vault IDs are 8 lowercase hex chars. */
 const KEYCHAIN_VAULT_ID_RE = /^[a-f0-9]{8}$/;
@@ -50,47 +35,6 @@ function cloneRawSettings(rawData: unknown): CopilotSettings {
     return {} as CopilotSettings;
   }
   return structuredClone(rawData) as CopilotSettings;
-}
-
-/**
- * Record only which legacy BYOK providers had a disk credential so their
- * non-secret model metadata can migrate without retaining the credential.
- */
-function collectLegacyByokCredentialPresence(
-  settings: CopilotSettings
-): LegacyByokCredentialPresence {
-  const settingsRecord = settings as unknown as Record<string, unknown>;
-  const providerIds = new Set<string>();
-  const modelIds = new Set<string>();
-
-  for (const model of settings.activeModels ?? []) {
-    const modelRecord = model as unknown as Record<string, unknown>;
-    const rawProvider = modelRecord.provider;
-    if (typeof rawProvider !== "string") continue;
-    const provider = normalizeModelProvider(rawProvider);
-
-    const keyField = ProviderSettingsKeyMap[provider as SettingKeyProviders];
-    const topLevelValue = keyField ? settingsRecord[keyField] : undefined;
-    const modelValue = modelRecord.apiKey;
-    if (typeof topLevelValue === "string" && topLevelValue.length > 0) {
-      providerIds.add(provider);
-    }
-    if (
-      typeof modelValue === "string" &&
-      modelValue.length > 0 &&
-      typeof modelRecord.name === "string"
-    ) {
-      modelIds.add(getModelKeyFromModel({ ...model, provider }));
-    }
-  }
-
-  if (providerIds.size === 0 && modelIds.size === 0) {
-    return EMPTY_LEGACY_BYOK_CREDENTIAL_PRESENCE;
-  }
-  return Object.freeze({
-    providerIds: Object.freeze([...providerIds]),
-    modelIds: Object.freeze([...modelIds]),
-  });
 }
 
 /** Build the canonical data.json shape without importing any disk secret. */
@@ -114,16 +58,6 @@ export function resetPersistenceState(): void {
   suppressNextPersist = false;
   transactionEpoch = 0;
   pendingTombstones.clear();
-  legacyByokCredentialPresence = EMPTY_LEGACY_BYOK_CREDENTIAL_PRESENCE;
-}
-
-/**
- * Return provider-wide and model-specific identities whose legacy disk
- * credentials were discarded at load. The one-time BYOK migration uses this
- * non-secret signal to retain only descriptors that require credential re-entry.
- */
-export function getLegacyByokCredentialPresence(): LegacyByokCredentialPresence {
-  return legacyByokCredentialPresence;
 }
 
 /** Refresh the last known-good settings baseline used by Keychain rollback. */
@@ -178,7 +112,6 @@ export async function loadSettingsWithKeychain(
 ): Promise<CopilotSettings> {
   const isFreshInstall = rawData == null;
   const rawSettings = cloneRawSettings(rawData);
-  legacyByokCredentialPresence = collectLegacyByokCredentialPresence(rawSettings);
   const keychain = KeychainService.getInstance();
   const persistedVaultId = rawSettings._keychainVaultId;
   const vaultId = isValidKeychainVaultId(persistedVaultId)
@@ -266,48 +199,6 @@ async function persistKeychainSettings(
       logWarn("Failed to roll back Keychain after settings persistence failed.", rollbackError);
     }
     throw error;
-  }
-}
-
-/** Save a stripped settings snapshot without changing any Keychain entry. */
-async function persistSettingsWithoutKeychainChanges(
-  settings: CopilotSettings,
-  saveData: (data: CopilotSettings) => Promise<void>
-): Promise<void> {
-  const cleaned = cleanupLegacyFields(settings);
-  await saveData(stripKeychainFields(cleaned));
-  lastPersistedSettings = structuredClone(cleaned);
-}
-
-/**
- * Reset non-secret settings transactionally while preserving every Keychain entry.
- *
- * @param saveData - Plugin-bound writer for the stripped reset snapshot.
- * @returns Whether the reset completed successfully.
- */
-export async function resetSettingsPreservingKeychain(
-  saveData: (data: CopilotSettings) => Promise<void>
-): Promise<boolean> {
-  try {
-    const current = getSettings();
-    const resetSnapshot = {
-      ...createResetSettingsSnapshot(current),
-      providers: current.providers,
-      _keychainVaultId: current._keychainVaultId,
-      settingsVersion: CURRENT_SETTINGS_VERSION,
-    };
-    await runPersistenceTransaction(async () => {
-      await persistSettingsWithoutKeychainChanges(resetSnapshot, saveData);
-      suppressNextPersistOnce();
-      setSettings(resetSnapshot);
-    });
-    return true;
-  } catch (error) {
-    logError("Failed to reset Copilot settings.", error);
-    new Notice(
-      "Copilot could not reset settings. Check that the vault is writable, then try again."
-    );
-    return false;
   }
 }
 

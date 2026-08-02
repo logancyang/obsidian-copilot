@@ -17,44 +17,6 @@ function makeSettings(overrides: Partial<CopilotSettings> = {}): CopilotSettings
 async function loadModule(overrides: Record<string, unknown> = {}) {
   jest.resetModules();
 
-  const provider = {
-    providerId: "byok-provider",
-    providerType: "openai-compatible",
-    displayName: "OpenAI",
-    origin: { kind: "byok", catalogProviderId: "openai" },
-    addedAt: 0,
-    apiKeyKeychainId: "copilot-vabcd1234-provider-byok-provider",
-  } as CopilotSettings["providers"][string];
-  const resetSnapshot = makeSettings({
-    openAIApiKey: "preserved-key",
-    agentMode: {
-      byok: { anthropic: "agent-key" },
-      mcpServers: [
-        {
-          id: "server-1",
-          enabled: true,
-          name: "remote",
-          transport: "http",
-          url: "https://mcp.example.com",
-          headers: [{ name: "Authorization", value: "Bearer secret" }],
-        },
-      ],
-      activeBackend: "opencode",
-      backends: { codex: { envOverrides: { OPENAI_API_KEY: "agent-env-key" } } },
-      debugFullFrames: false,
-      welcomeDismissed: false,
-      skills: { folder: "copilot/skills" },
-    },
-    providers: { [provider.providerId]: provider },
-    _keychainVaultId: "abcd1234",
-    settingsVersion: 0,
-  });
-  const settingsModel = {
-    createResetSettingsSnapshot: jest.fn(() => resetSnapshot),
-    getSettings: jest.fn(() => resetSnapshot),
-    setSettings: jest.fn(),
-  };
-
   const keychain = {
     isAvailable: jest.fn().mockReturnValue(true),
     getVaultId: jest.fn().mockReturnValue("abcd1234"),
@@ -70,24 +32,17 @@ async function loadModule(overrides: Record<string, unknown> = {}) {
     setSecretById: jest.fn(),
     ...overrides,
   };
-  const notice = jest.fn();
 
-  jest.doMock("obsidian", () => ({ Notice: notice }));
   jest.doMock("@/services/keychainService", () => ({
     KeychainService: { getInstance: jest.fn(() => keychain) },
   }));
-  jest.doMock("@/logger", () => ({ logError: jest.fn(), logWarn: jest.fn() }));
+  jest.doMock("@/logger", () => ({ logWarn: jest.fn() }));
   jest.doMock("@/settings/model", () => ({
-    ...settingsModel,
-    getModelKeyFromModel: (model: { name: string; provider: string }) =>
-      `${model.name}|${model.provider}`,
-    normalizeModelProvider: (provider: string) =>
-      provider === "azure_openai" ? "azure openai" : provider,
     sanitizeSettings: jest.fn((settings: CopilotSettings) => settings),
   }));
 
   const module = await import("@/services/settingsPersistence");
-  return { module, keychain, notice, resetSnapshot, settingsModel };
+  return { module, keychain };
 }
 
 describe("settingsPersistence", () => {
@@ -101,38 +56,6 @@ describe("settingsPersistence", () => {
       await module.persistSettings(makeSettings(), saveData);
 
       expect(saveData).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  describe("getLegacyByokCredentialPresence()", () => {
-    it("separates provider-wide and model-specific identities after disk credentials are discarded", async () => {
-      const { module } = await loadModule();
-
-      await module.loadSettingsWithKeychain(
-        {
-          openAIApiKey: "enc_desk_legacy",
-          azureOpenAIApiKey: "azure-disk-key",
-          activeModels: [
-            { name: "gpt-4o", provider: "openai", apiKey: "model-disk-key" },
-            { name: "claude", provider: "anthropic", apiKey: "plaintext-disk-key" },
-            { name: "gemini", provider: "google", apiKey: "" },
-            { name: "azure-gpt", provider: "azure_openai", apiKey: "" },
-          ],
-          activeEmbeddingModels: [],
-        },
-        jest.fn().mockResolvedValue(undefined)
-      );
-
-      expect(module.getLegacyByokCredentialPresence()).toEqual({
-        providerIds: ["openai", "azure openai"],
-        modelIds: ["gpt-4o|openai", "claude|anthropic"],
-      });
-
-      module.resetPersistenceState();
-      expect(module.getLegacyByokCredentialPresence()).toEqual({
-        providerIds: [],
-        modelIds: [],
-      });
     });
   });
 
@@ -221,17 +144,6 @@ describe("settingsPersistence", () => {
           openAIApiKey: "enc_desk_legacy",
           activeModels: [{ name: "custom", provider: "openai", apiKey: "plaintext-disk-key" }],
           activeEmbeddingModels: [],
-          agentMode: {
-            byok: { anthropic: "nested-disk-key" },
-            mcpServers: [
-              {
-                id: "server-1",
-                transport: "http",
-                headers: [{ name: "Authorization", value: "Bearer disk-token" }],
-              },
-            ],
-            backends: {},
-          },
         },
         saveData
       );
@@ -239,11 +151,6 @@ describe("settingsPersistence", () => {
       const hydrateInput = keychain.hydrateFromKeychain.mock.calls[0][0];
       expect(hydrateInput.openAIApiKey).toBe("");
       expect(hydrateInput.activeModels[0].apiKey).toBe("");
-      expect(hydrateInput.agentMode.byok.anthropic).toBe("");
-      const hydrateMcpServer = hydrateInput.agentMode.mcpServers[0] as {
-        headers: Array<{ value: string }>;
-      };
-      expect(hydrateMcpServer.headers[0].value).toBe("");
       expect(loaded.openAIApiKey).toBe("keychain-key");
       expect(saveData).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -252,17 +159,7 @@ describe("settingsPersistence", () => {
           activeModels: [expect.objectContaining({ apiKey: "" })],
         })
       );
-      const savedAgentMode = (saveData.mock.calls[0][0] as unknown as CopilotSettings).agentMode;
-      const savedMcpServer = savedAgentMode.mcpServers[0] as {
-        headers: Array<{ name: string; value: string }>;
-      };
-      expect(savedAgentMode.byok).toEqual({ anthropic: "" });
-      expect(savedMcpServer.headers).toEqual([{ name: "Authorization", value: "" }]);
       expect(saveData.mock.calls[0][0]).not.toHaveProperty("_keychainOnly");
-      expect(module.getLegacyByokCredentialPresence()).toEqual({
-        providerIds: ["openai"],
-        modelIds: ["custom|openai"],
-      });
     });
 
     it("keeps credentials empty when Keychain is unavailable", async () => {
@@ -312,51 +209,6 @@ describe("settingsPersistence", () => {
         "new-key"
       );
       expect(saveData.mock.calls[0][0].openAIApiKey).toBe("");
-    });
-  });
-
-  describe("resetSettingsPreservingKeychain()", () => {
-    it("writes stripped defaults and updates memory without diffing Keychain entries", async () => {
-      const { module, keychain, resetSnapshot, settingsModel } = await loadModule();
-      const saveData = jest.fn().mockResolvedValue(undefined);
-
-      await expect(module.resetSettingsPreservingKeychain(saveData)).resolves.toBe(true);
-      await module.persistSettings(resetSnapshot, saveData);
-
-      expect(keychain.persistSecrets).not.toHaveBeenCalled();
-      expect(keychain.setSecretById).not.toHaveBeenCalled();
-      expect(saveData).toHaveBeenCalledTimes(1);
-      expect(saveData.mock.calls[0][0].openAIApiKey).toBe("");
-      expect(saveData.mock.calls[0][0]._keychainVaultId).toBe("abcd1234");
-      expect(saveData.mock.calls[0][0].settingsVersion).toBe(CURRENT_SETTINGS_VERSION);
-      expect(saveData.mock.calls[0][0].providers).toEqual(resetSnapshot.providers);
-      expect(saveData.mock.calls[0][0].agentMode.byok).toEqual({ anthropic: "" });
-      expect(saveData.mock.calls[0][0].agentMode.backends.codex?.envOverrides).toEqual({
-        OPENAI_API_KEY: "",
-      });
-      expect(
-        (saveData.mock.calls[0][0].agentMode.mcpServers[0] as { headers: unknown }).headers
-      ).toEqual([{ name: "Authorization", value: "" }]);
-      expect(settingsModel.setSettings).toHaveBeenCalledWith({
-        ...resetSnapshot,
-        settingsVersion: CURRENT_SETTINGS_VERSION,
-      });
-    });
-
-    it("leaves memory and Keychain untouched when the stripped disk save fails", async () => {
-      const { module, keychain, notice, settingsModel } = await loadModule();
-
-      const reset = await module.resetSettingsPreservingKeychain(
-        jest.fn().mockRejectedValue(new Error("disk unavailable"))
-      );
-
-      expect(reset).toBe(false);
-      expect(keychain.persistSecrets).not.toHaveBeenCalled();
-      expect(keychain.setSecretById).not.toHaveBeenCalled();
-      expect(settingsModel.setSettings).not.toHaveBeenCalled();
-      expect(notice).toHaveBeenCalledWith(
-        "Copilot could not reset settings. Check that the vault is writable, then try again."
-      );
     });
   });
 

@@ -194,7 +194,7 @@ Do not delete `.obsidian/plugins/copilot/data.json` as a substitute for the in-a
 
 ### API Key Storage
 
-Copilot v4 stores API keys, license keys, authentication tokens, and Agent Mode/MCP credential values only in the **Obsidian Keychain**. These credentials are not stored in `data.json`.
+Copilot v4 stores API keys, license keys, and authentication tokens only in the **Obsidian Keychain**. These credentials are not stored in `data.json`.
 
 Credentials left in `data.json` by an older Copilot version are removed without being imported. If a key was never saved to this device's Obsidian Keychain, re-enter it in the relevant settings section after upgrading.
 

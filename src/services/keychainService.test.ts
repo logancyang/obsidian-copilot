@@ -23,7 +23,7 @@ jest.mock("@/utils/hash", () => ({
     // Uses a simple char-code sum to produce reproducible 32-char hex strings.
     let sum = 0;
     for (let i = 0; i < value.length; i++) sum += value.charCodeAt(i);
-    return sum.toString(16).padStart(8, "0").repeat(4);
+    return sum.toString(16).padStart(32, "0");
   }),
 }));
 
@@ -35,17 +35,54 @@ jest.mock("@/settings/model", () => {
   };
 });
 
-jest.mock("@/services/settingsSecretTransforms", () => {
-  const actual = jest.requireActual<object>("@/services/settingsSecretTransforms");
-  return {
-    ...actual,
-    // Keep the canonical list minimal so single-field hydration tests do not
-    // query every default provider credential.
-    TOP_LEVEL_SECRET_FIELDS: ["openAIApiKey"] as const,
-  };
-});
-
-jest.mock("@/utils/deviceId", () => ({ getDeviceId: jest.fn(() => "device-test") }));
+jest.mock("@/services/settingsSecretTransforms", () => ({
+  MODEL_SECRET_FIELDS: ["apiKey"] as const,
+  isSensitiveKey: jest.fn((key: string) => {
+    const lower = key.toLowerCase();
+    const normalized = lower.replace(/[_-]/g, "");
+    return (
+      normalized.includes("apikey") ||
+      lower.endsWith("token") ||
+      lower.endsWith("accesstoken") ||
+      lower.endsWith("secret") ||
+      lower.endsWith("password") ||
+      lower.endsWith("licensekey")
+    );
+  }),
+  // Reason: stub the canonical secret-field list used by hydrateFromKeychain.
+  // Keep it minimal so tests targeting a single field don't accidentally
+  // trigger hydration for every default provider.
+  TOP_LEVEL_SECRET_FIELDS: ["openAIApiKey"] as const,
+  stripKeychainFields: jest.fn((settings: Record<string, unknown>) => {
+    const out = { ...settings };
+    // Reason: mirror the real isSensitiveKey heuristic for top-level fields
+    for (const key of Object.keys(out)) {
+      const lower = key.toLowerCase();
+      const normalized = lower.replace(/[_-]/g, "");
+      const isSensitive =
+        normalized.includes("apikey") ||
+        lower.endsWith("token") ||
+        lower.endsWith("accesstoken") ||
+        lower.endsWith("secret") ||
+        lower.endsWith("password") ||
+        lower.endsWith("licensekey");
+      if (isSensitive) out[key] = "";
+    }
+    if (Array.isArray(out.activeModels)) {
+      out.activeModels = (out.activeModels as Array<Record<string, unknown>>).map((m) => ({
+        ...m,
+        apiKey: "",
+      }));
+    }
+    if (Array.isArray(out.activeEmbeddingModels)) {
+      out.activeEmbeddingModels = (out.activeEmbeddingModels as Array<Record<string, unknown>>).map(
+        (m) => ({ ...m, apiKey: "" })
+      );
+    }
+    return out;
+  }),
+  cleanupLegacyFields: jest.fn((settings: Record<string, unknown>) => ({ ...settings })),
+}));
 
 import { FileSystemAdapter, Notice, type App } from "obsidian";
 import { getSettings } from "@/settings/model";
@@ -58,7 +95,6 @@ function makeSettings(overrides: Partial<CopilotSettings> = {}): CopilotSettings
   return {
     activeModels: [],
     activeEmbeddingModels: [],
-    providers: {},
     ...overrides,
   } as unknown as CopilotSettings;
 }
@@ -284,51 +320,6 @@ describe("keychainService", () => {
           "legacy-value"
         );
       });
-
-      it("hydrates nested Agent Mode credentials from the keychain", async () => {
-        const secretStorage = makeSecretStorage();
-        secretStorage.getSecret.mockImplementation((id: string) =>
-          id.includes("agent-") ? "nested-key" : null
-        );
-        const service = KeychainService.getInstance(makeApp({ secretStorage }));
-
-        const result = await service.hydrateFromKeychain(
-          makeSettings({
-            agentMode: {
-              byok: { anthropic: "" },
-              mcpServers: [
-                {
-                  id: "server-1",
-                  transport: "http",
-                  headers: [{ name: "Authorization", value: "" }],
-                },
-              ],
-              activeBackend: "opencode",
-              backends: {},
-              deviceProfiles: {
-                "device-test": {
-                  codex: { envOverrides: { OPENAI_API_KEY: "", HOME: "/tmp/home" } },
-                },
-              },
-              debugFullFrames: false,
-              welcomeDismissed: false,
-              skills: { folder: "copilot/skills" },
-            },
-          })
-        );
-
-        expect(result.settings.agentMode.byok.anthropic).toBe("nested-key");
-        expect(
-          (
-            result.settings.agentMode.mcpServers[0] as {
-              headers: Array<{ value: string }>;
-            }
-          ).headers[0].value
-        ).toBe("nested-key");
-        expect(
-          result.settings.agentMode.deviceProfiles?.["device-test"]?.codex?.envOverrides
-        ).toEqual({ OPENAI_API_KEY: "nested-key", HOME: "nested-key" });
-      });
     });
 
     // ---------------------------------------------------------------------------
@@ -380,45 +371,6 @@ describe("keychainService", () => {
         expect(prev.openAIApiKey).toBe("sk-prev");
         expect(prev.activeModels[0].apiKey).toBe("chat-prev");
       });
-
-      it("stores nested Agent Mode credentials under their persistent device profile paths", () => {
-        const service = KeychainService.getInstance(makeApp());
-        const current = makeSettings({
-          agentMode: {
-            byok: { anthropic: "agent-key" },
-            mcpServers: [],
-            activeBackend: "opencode",
-            backends: {
-              codex: { envOverrides: { OPENAI_API_KEY: "new-key", HOME: "/tmp/home" } },
-            },
-            deviceProfiles: {
-              "device-test": {
-                codex: { envOverrides: { OPENAI_API_KEY: "old-profile-key" } },
-              },
-            },
-            debugFullFrames: false,
-            welcomeDismissed: false,
-            skills: { folder: "copilot/skills" },
-          },
-        });
-        const previous = makeSettings({
-          agentMode: {
-            ...current.agentMode,
-            byok: { anthropic: "old-agent-key", google: "deleted-agent-key" },
-            backends: { codex: { envOverrides: { OPENAI_API_KEY: "old-key" } } },
-          },
-        });
-
-        const result = service.persistSecrets(current, previous);
-        const nestedValues = result.secretEntries
-          .filter(([id]) => id.includes("-agent-"))
-          .map(([, value]) => value);
-
-        expect(nestedValues).toEqual(expect.arrayContaining(["agent-key", "new-key"]));
-        expect(nestedValues).not.toContain("old-profile-key");
-        expect(nestedValues).not.toContain("old-key");
-        expect(result.keychainIdsToDelete.some((id) => id.includes("-agent-"))).toBe(true);
-      });
     });
 
     // ---------------------------------------------------------------------------
@@ -441,25 +393,6 @@ describe("keychainService", () => {
           makeSettings({
             openAIApiKey: "sk-123",
             activeModels: [makeModel({ apiKey: "model-secret" })],
-            providers: {
-              byok: {
-                providerId: "byok",
-                providerType: "anthropic",
-                displayName: "Anthropic",
-                origin: { kind: "byok", catalogProviderId: "anthropic" },
-                addedAt: 0,
-                apiKeyKeychainId: `copilot-v${vaultId}-provider-byok`,
-              },
-            },
-            agentMode: {
-              byok: { anthropic: "agent-secret" },
-              mcpServers: [],
-              activeBackend: "opencode",
-              backends: {},
-              debugFullFrames: false,
-              welcomeDismissed: false,
-              skills: { folder: "copilot/skills" },
-            },
           })
         );
 
@@ -483,8 +416,6 @@ describe("keychainService", () => {
         expect(saved.openAIApiKey).toBe("");
         const savedModels = saved.activeModels as Array<Record<string, unknown>>;
         expect(savedModels[0].apiKey).toBe("");
-        expect((saved.agentMode as CopilotSettings["agentMode"]).byok.anthropic).toBe("");
-        expect((saved.providers as CopilotSettings["providers"]).byok.apiKeyKeychainId).toBeNull();
 
         expect(syncMemory).toHaveBeenCalled();
         // Reason: synced memory should also have secrets blanked
@@ -492,8 +423,6 @@ describe("keychainService", () => {
         expect(synced.openAIApiKey).toBe("");
         const syncedModels = synced.activeModels as Array<Record<string, unknown>>;
         expect(syncedModels[0].apiKey).toBe("");
-        expect((synced.agentMode as CopilotSettings["agentMode"]).byok.anthropic).toBe("");
-        expect((synced.providers as CopilotSettings["providers"]).byok.apiKeyKeychainId).toBeNull();
         expect(Notice).toHaveBeenCalledWith(
           "All API keys for this vault removed. Please re-enter them."
         );
@@ -533,21 +462,7 @@ describe("keychainService", () => {
           if (id === idB) throw new Error("keychain locked");
         });
 
-        (getSettings as jest.Mock).mockReturnValue(
-          makeSettings({
-            openAIApiKey: "sk-123",
-            providers: {
-              byok: {
-                providerId: "byok",
-                providerType: "openai-compatible",
-                displayName: "OpenAI",
-                origin: { kind: "byok", catalogProviderId: "openai" },
-                addedAt: 0,
-                apiKeyKeychainId: idB,
-              },
-            },
-          })
-        );
+        (getSettings as jest.Mock).mockReturnValue(makeSettings({ openAIApiKey: "sk-123" }));
 
         const saveData = jest.fn().mockResolvedValue(undefined);
         const syncMemory = jest.fn();
@@ -562,12 +477,6 @@ describe("keychainService", () => {
         // Reason: memory MUST be synced even on partial keychain failure, otherwise
         // the next normal persist would write old secrets back from stale memory.
         expect(syncMemory).toHaveBeenCalled();
-        expect(
-          (saveData.mock.calls[0][0] as CopilotSettings).providers.byok.apiKeyKeychainId
-        ).toBeNull();
-        expect(
-          (syncMemory.mock.calls[0][0] as CopilotSettings).providers.byok.apiKeyKeychainId
-        ).toBeNull();
       });
 
       it("refuses to run when Obsidian Keychain is unavailable", async () => {

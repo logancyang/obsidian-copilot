@@ -3,7 +3,6 @@ import {
   cleanupLegacyFields,
   hasPersistedSecrets,
   isSensitiveKey,
-  mapAgentModeSecrets,
   stripKeychainFields,
 } from "@/services/settingsSecretTransforms";
 
@@ -13,21 +12,6 @@ function makeSettings(overrides: Partial<CopilotSettings> = {}): CopilotSettings
     activeEmbeddingModels: [],
     ...overrides,
   } as unknown as CopilotSettings;
-}
-
-function makeAgentMode(
-  overrides: Partial<CopilotSettings["agentMode"]> = {}
-): CopilotSettings["agentMode"] {
-  return {
-    byok: {},
-    mcpServers: [],
-    activeBackend: "opencode",
-    backends: {},
-    debugFullFrames: false,
-    welcomeDismissed: false,
-    skills: { folder: "copilot/skills" },
-    ...overrides,
-  };
 }
 
 describe("settingsSecretTransforms", () => {
@@ -77,70 +61,15 @@ describe("settingsSecretTransforms", () => {
         expected: true,
       },
       {
-        name: "detects a provider-scoped Keychain reference",
-        rawData: {
-          providers: { byok: { apiKeyKeychainId: "copilot-vabcd1234-provider-byok" } },
-        },
-        expected: true,
-      },
-      {
-        name: "detects nested Agent Mode credentials",
-        rawData: {
-          agentMode: makeAgentMode({
-            byok: { anthropic: "agent-key" },
-            backends: { codex: { envOverrides: { OPENAI_API_KEY: "env-key" } } },
-          }),
-        },
-        expected: true,
-      },
-      {
         name: "ignores malformed model entries and non-secret fields",
         rawData: {
           activeModels: [null, "bad-entry", { name: "gpt-4", provider: "openai" }],
           activeEmbeddingModels: [{ name: "embed", provider: "openai", apiKey: "" }],
-          providers: { keyless: { apiKeyKeychainId: null }, malformed: "bad-entry" },
         },
         expected: false,
       },
     ])("$name", ({ rawData, expected }) => {
       expect(hasPersistedSecrets(rawData as Record<string, unknown>)).toBe(expected);
-    });
-  });
-
-  describe("mapAgentModeSecrets()", () => {
-    it("maps nested credentials without changing non-secret values or mutating input", () => {
-      const settings = makeSettings({
-        agentMode: makeAgentMode({
-          byok: { anthropic: "byok-key" },
-          backends: {
-            codex: { envOverrides: { OPENAI_API_KEY: "env-key", HOME: "/tmp/home" } },
-          },
-          mcpServers: [
-            {
-              id: "server-1",
-              transport: "http",
-              headers: [{ name: "Authorization", value: "Bearer token" }],
-            },
-          ],
-        }),
-      });
-
-      const paths: string[] = [];
-      const mapped = mapAgentModeSecrets(settings, (path, value) => {
-        paths.push(path.join("/"));
-        return `mapped:${value}`;
-      });
-
-      expect(mapped.agentMode.byok.anthropic).toBe("mapped:byok-key");
-      expect(mapped.agentMode.backends.codex?.envOverrides).toEqual({
-        OPENAI_API_KEY: "mapped:env-key",
-        HOME: "mapped:/tmp/home",
-      });
-      expect(
-        (mapped.agentMode.mcpServers[0] as { headers: Array<{ value: string }> }).headers[0].value
-      ).toBe("mapped:Bearer token");
-      expect(paths).toContain("mcpServers/id:server-1/headers/0/value");
-      expect(settings.agentMode.byok.anthropic).toBe("byok-key");
     });
   });
 
@@ -153,12 +82,6 @@ describe("settingsSecretTransforms", () => {
         activeEmbeddingModels: [
           { name: "embed", provider: "openai", apiKey: "embed-secret", enabled: true },
         ],
-        agentMode: makeAgentMode({
-          byok: { anthropic: "agent-secret" },
-          backends: {
-            codex: { envOverrides: { OPENAI_API_KEY: "env-secret", HOME: "/tmp/home" } },
-          },
-        }),
       });
 
       const result = stripKeychainFields(settings);
@@ -168,14 +91,8 @@ describe("settingsSecretTransforms", () => {
       expect(result.defaultModelKey).toBe("gpt-4|openai");
       expect(result.activeModels[0].apiKey).toBe("");
       expect(result.activeEmbeddingModels[0].apiKey).toBe("");
-      expect(result.agentMode.byok.anthropic).toBe("");
-      expect(result.agentMode.backends.codex?.envOverrides).toEqual({
-        OPENAI_API_KEY: "",
-        HOME: "",
-      });
       expect(settings.openAIApiKey).toBe("sk-123");
       expect(settings.activeModels[0].apiKey).toBe("chat-secret");
-      expect(settings.agentMode.byok.anthropic).toBe("agent-secret");
     });
 
     it("preserves sparse settings without adding model arrays", () => {

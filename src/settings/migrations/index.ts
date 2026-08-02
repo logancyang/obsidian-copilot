@@ -16,37 +16,25 @@ import { seedDocProcessorBackend } from "@/miyo/miyoUtils";
 import type { ModelManagementApi } from "@/modelManagement";
 import { getSettings, normalizeRootFolders, setSettings } from "@/settings/model";
 
-import { executeByokMigration, type LegacyByokCredentialPresence } from "./byokMigration";
+import { executeByokMigration } from "./byokMigration";
 import { planRequiresApiKeyBackfill } from "./requiresApiKeyMigration";
 import { CURRENT_SETTINGS_VERSION } from "./version";
 
 export { CURRENT_SETTINGS_VERSION } from "./version";
 
-const EMPTY_CREDENTIAL_IDENTITIES: readonly string[] = Object.freeze([]);
-const EMPTY_LEGACY_CREDENTIAL_PRESENCE: LegacyByokCredentialPresence = Object.freeze({
-  providerIds: EMPTY_CREDENTIAL_IDENTITIES,
-  modelIds: EMPTY_CREDENTIAL_IDENTITIES,
-});
-
 /**
  * Run pending one-time migrations and stamp the new version. No-op when
  * settings are already at/above the target (migrated vaults, fresh installs).
- *
- * @param api - Model-management boundary used by migrations that create providers or models.
- * @param legacyCredentialPresence - Provider-wide and model-specific credentials requiring re-entry.
  */
-export async function runSettingsMigrations(
-  api: ModelManagementApi,
-  legacyCredentialPresence: LegacyByokCredentialPresence = EMPTY_LEGACY_CREDENTIAL_PRESENCE
-): Promise<void> {
+export async function runSettingsMigrations(api: ModelManagementApi): Promise<void> {
   const fromVersion = getSettings().settingsVersion ?? 0;
   if (fromVersion >= CURRENT_SETTINGS_VERSION) return;
 
   logInfo(`[settings-migration] migrating from v${fromVersion} to v${CURRENT_SETTINGS_VERSION}`);
 
-  // v≤4: legacy BYOK descriptors → the model-management data model.
+  // v≤4: legacy BYOK models + keys → the model-management data model.
   if (fromVersion < 4) {
-    await executeByokMigration(api, getSettings(), legacyCredentialPresence);
+    await executeByokMigration(api, getSettings());
   }
 
   // v5: backfill the explicit `requiresApiKey` flag onto rows that predate it,

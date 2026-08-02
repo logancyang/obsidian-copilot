@@ -1,14 +1,11 @@
 import {
-  BUILTIN_CHAT_MODELS,
   COPILOT_FOLDER_ROOT,
   DEFAULT_QA_EXCLUSIONS_SETTING,
   DEFAULT_SYSTEM_PROMPT,
   DEFAULT_SETTINGS,
   SEND_SHORTCUT,
 } from "@/constants";
-import type { Provider } from "@/modelManagement";
 import {
-  createResetSettingsSnapshot,
   normalizeRootFolders,
   resetSettings,
   sanitizeEnvOverrides,
@@ -901,21 +898,9 @@ describe("model", () => {
   });
 
   describe("resetSettings()", () => {
-    it("preserves credentials and root history while resetting non-secret settings", () => {
-      const builtIn = BUILTIN_CHAT_MODELS[0];
-      const provider: Provider = {
-        providerId: "byok-openai",
-        providerType: "openai-compatible",
-        displayName: "OpenAI",
-        origin: { kind: "byok", catalogProviderId: "openai" },
-        addedAt: 0,
-        apiKeyKeychainId: "copilot-vabcd1234-provider-byok-openai",
-      };
+    it("preserves historical roots and folds in the pre-reset active root", () => {
       settingsStore.set(settingsAtom, {
         ...DEFAULT_SETTINGS,
-        openAIApiKey: "provider-key",
-        activeModels: [{ ...builtIn, apiKey: "model-key" }],
-        providers: { [provider.providerId]: provider },
         copilotFolder: "team-ai",
         copilotRootHistory: ["copilot", "ai"],
       });
@@ -924,82 +909,8 @@ describe("model", () => {
 
       const after = settingsStore.get(settingsAtom);
       expect(after.copilotFolder).toBe(DEFAULT_SETTINGS.copilotFolder);
-      expect(after.openAIApiKey).toBe("provider-key");
-      expect(after.activeModels.find((model) => model.name === builtIn.name)?.apiKey).toBe(
-        "model-key"
-      );
-      expect(after.providers).toEqual({});
       // Legacy + historical + pre-reset active root all survive the reset.
       expect(new Set(after.copilotRootHistory)).toEqual(new Set(["copilot", "ai", "team-ai"]));
-    });
-  });
-
-  describe("createResetSettingsSnapshot()", () => {
-    it("returns defaults without mutating the current settings", () => {
-      const current = {
-        ...DEFAULT_SETTINGS,
-        temperature: 0.2,
-        openAIApiKey: "provider-key",
-      };
-
-      const snapshot = createResetSettingsSnapshot(current);
-
-      expect(snapshot.temperature).toBe(DEFAULT_SETTINGS.temperature);
-      expect(snapshot.openAIApiKey).toBe("provider-key");
-      expect(current.temperature).toBe(0.2);
-    });
-
-    it("retains Agent Mode credential paths while resetting unrelated preferences", () => {
-      const mcpServer = {
-        id: "server-1",
-        enabled: true,
-        name: "remote",
-        transport: "http",
-        url: "https://mcp.example.com",
-        headers: [{ name: "Authorization", value: "Bearer secret" }],
-      };
-      const current: CopilotSettings = {
-        ...DEFAULT_SETTINGS,
-        agentMode: {
-          ...DEFAULT_SETTINGS.agentMode,
-          byok: { anthropic: "agent-key" },
-          mcpServers: [mcpServer],
-          activeBackend: "claude",
-          backends: {
-            claude: {
-              defaultMode: "plan",
-              envOverrides: { ANTHROPIC_API_KEY: "runtime-key" },
-            },
-          },
-          deviceProfiles: {
-            remote: {
-              opencode: {
-                binaryPath: "/custom/opencode",
-                envOverrides: { OPENAI_API_KEY: "profile-key" },
-              },
-            },
-          },
-          welcomeDismissed: true,
-          skills: { folder: "custom/skills" },
-        },
-      };
-
-      const snapshot = createResetSettingsSnapshot(current);
-
-      expect(snapshot.agentMode).toEqual({
-        ...DEFAULT_SETTINGS.agentMode,
-        byok: { anthropic: "agent-key" },
-        mcpServers: [mcpServer],
-        backends: { claude: { envOverrides: { ANTHROPIC_API_KEY: "runtime-key" } } },
-        deviceProfiles: {
-          remote: { opencode: { envOverrides: { OPENAI_API_KEY: "profile-key" } } },
-        },
-      });
-      expect(snapshot.agentMode.mcpServers).not.toBe(current.agentMode.mcpServers);
-      expect(current.agentMode.backends.claude?.defaultMode).toBe("plan");
-      expect(current.agentMode.deviceProfiles?.remote.opencode?.binaryPath).toBe(
-        "/custom/opencode"
-      );
     });
   });
 });

@@ -12,12 +12,7 @@
 
 import type { CustomModel } from "@/aiParams";
 import { ChatModelProviders, DEFAULT_SETTINGS } from "@/constants";
-import type {
-  ModelInfo,
-  ModelManagementApi,
-  Provider,
-  SetupProviderInput,
-} from "@/modelManagement";
+import type { ModelManagementApi, Provider, SetupProviderInput } from "@/modelManagement";
 import type { CopilotSettings } from "@/settings/model";
 
 import { executeByokMigration, planByokMigration } from "./byokMigration";
@@ -245,61 +240,6 @@ describe("planByokMigration — scope filters", () => {
     expect(plan).toEqual([]);
   });
 
-  it("preserves a keyless descriptor when a discarded disk credential requires re-entry", () => {
-    const plan = planByokMigration(
-      settingsWith([model({ name: "gpt-4o", provider: ChatModelProviders.OPENAI })], {
-        openAIApiKey: "",
-      }),
-      { providerIds: [ChatModelProviders.OPENAI], modelIds: [] }
-    );
-
-    expect(byCatalog(plan, "openai")).toMatchObject({
-      providerType: "openai-compatible",
-      requiresApiKey: true,
-      models: [{ id: "gpt-4o", displayName: "gpt-4o" }],
-    });
-    expect(byCatalog(plan, "openai")?.apiKey).toBeUndefined();
-  });
-
-  it("limits a discarded per-model credential to that exact model descriptor", () => {
-    const plan = planByokMigration(
-      settingsWith(
-        [
-          model({ name: "gpt-4o", provider: ChatModelProviders.OPENAI }),
-          model({ name: "custom-gpt", provider: ChatModelProviders.OPENAI }),
-        ],
-        { openAIApiKey: "" }
-      ),
-      { providerIds: [], modelIds: [`custom-gpt|${ChatModelProviders.OPENAI}`] }
-    );
-
-    expect(byCatalog(plan, "openai")?.models).toEqual([
-      { id: "custom-gpt", displayName: "custom-gpt" },
-    ]);
-  });
-
-  it("keeps a discarded model override separate from its provider credential", () => {
-    const provider = ChatModelProviders.OPENAI;
-    const plan = planByokMigration(
-      settingsWith([model({ name: "gpt-4o", provider }), model({ name: "custom-gpt", provider })], {
-        openAIApiKey: "keychain-provider-key",
-      }),
-      { providerIds: [provider], modelIds: [`custom-gpt|${provider}`] }
-    );
-
-    expect(plan).toHaveLength(2);
-    expect(plan.map(({ apiKey, models }) => ({ apiKey, models }))).toEqual([
-      {
-        apiKey: "keychain-provider-key",
-        models: [{ id: "gpt-4o", displayName: "gpt-4o" }],
-      },
-      {
-        apiKey: undefined,
-        models: [{ id: "custom-gpt", displayName: "custom-gpt" }],
-      },
-    ]);
-  });
-
   it("includes enabled built-in models when the provider has a key", () => {
     const plan = planByokMigration(
       settingsWith(
@@ -323,26 +263,6 @@ describe("planByokMigration — scope filters", () => {
 });
 
 describe("planByokMigration — Azure / Bedrock (chat only)", () => {
-  it("normalizes a legacy Azure provider before matching discarded credential signals", () => {
-    const plan = planByokMigration(
-      settingsWith([model({ name: "gpt-4o", provider: "azure_openai" })], {
-        azureOpenAIApiKey: "",
-      }),
-      {
-        providerIds: [ChatModelProviders.AZURE_OPENAI],
-        modelIds: [`gpt-4o|${ChatModelProviders.AZURE_OPENAI}`],
-      }
-    );
-
-    expect(plan).toEqual([
-      expect.objectContaining({
-        providerType: "azure",
-        requiresApiKey: true,
-        models: [{ id: "gpt-4o", displayName: "gpt-4o" }],
-      }),
-    ]);
-  });
-
   it("maps Azure to chat-only with azure extras", () => {
     const plan = planByokMigration(
       settingsWith([model({ name: "gpt-4o", provider: ChatModelProviders.AZURE_OPENAI })], {
@@ -426,20 +346,12 @@ describe("executeByokMigration", () => {
       providerId: `prov-${++idSeq}`,
       configuredModelIds: input.models.map((_, i) => `cm-${idSeq}-${i}`),
     }));
-    const getApiKey = jest.fn().mockResolvedValue(null);
-    const setApiKey = jest.fn().mockResolvedValue(undefined);
-    const update = jest.fn().mockResolvedValue(undefined);
-    const addModels = jest.fn(async (input: { models: readonly ModelInfo[] }) =>
-      input.models.map((_, index) => `existing-cm-${index}`)
-    );
-    const enableModel = jest.fn().mockResolvedValue(undefined);
     const listByOrigin = jest.fn((kind: string) => existing.filter((p) => p.origin.kind === kind));
     const api = {
-      providerRegistry: { listByOrigin, getApiKey, setApiKey, update },
-      backendConfigRegistry: { enableModel },
-      setup: { byok: { setupProvider, addModels } },
+      providerRegistry: { listByOrigin },
+      setup: { byok: { setupProvider } },
     } as unknown as ModelManagementApi;
-    return { api, setupProvider, getApiKey, setApiKey, update, addModels, enableModel };
+    return { api, setupProvider };
   }
 
   function byokProvider(overrides: Partial<Provider>): Provider {
@@ -469,7 +381,7 @@ describe("executeByokMigration", () => {
     expect(setupProvider).toHaveBeenCalledTimes(2);
   });
 
-  it("reuses a matching BYOK provider while creating unrelated descriptors", async () => {
+  it("skips a descriptor that duplicates an existing BYOK provider", async () => {
     const existing = byokProvider({
       providerType: "anthropic",
       baseUrl: "https://api.anthropic.com",
@@ -489,140 +401,6 @@ describe("executeByokMigration", () => {
     // Anthropic deduped; only OpenAI created.
     expect(setupProvider).toHaveBeenCalledTimes(1);
     expect(setupProvider.mock.calls[0][0]).toMatchObject({ catalogProviderId: "openai" });
-  });
-
-  it("reconciles credentials, models, and backend enrollment on an existing provider", async () => {
-    const existing = byokProvider({
-      providerType: "anthropic",
-      baseUrl: "https://api.anthropic.com",
-      origin: { kind: "byok", catalogProviderId: "anthropic" },
-    });
-    const { api, setupProvider, getApiKey, setApiKey, addModels, enableModel } = makeApi([
-      existing,
-    ]);
-
-    await executeByokMigration(
-      api,
-      settingsWith([model({ name: "claude", provider: ChatModelProviders.ANTHROPIC })], {
-        anthropicApiKey: "keychain-key",
-      })
-    );
-
-    expect(setupProvider).not.toHaveBeenCalled();
-    expect(getApiKey).toHaveBeenCalledWith(existing.providerId);
-    expect(setApiKey).toHaveBeenCalledWith(existing.providerId, "keychain-key");
-    expect(addModels).toHaveBeenCalledWith({
-      providerId: existing.providerId,
-      models: [{ id: "claude", displayName: "claude" }],
-      autoEnrollIn: ["chat", "opencode"],
-    });
-    expect(enableModel.mock.calls).toEqual([
-      ["chat", "existing-cm-0"],
-      ["opencode", "existing-cm-0"],
-    ]);
-  });
-
-  it("preserves the current credential when an existing provider already has one", async () => {
-    const existing = byokProvider({
-      baseUrl: "https://api.anthropic.com",
-      apiKeyKeychainId: "current-keychain-id",
-    });
-    const { api, getApiKey, setApiKey } = makeApi([existing]);
-    getApiKey.mockResolvedValue("current-key");
-
-    await executeByokMigration(
-      api,
-      settingsWith([model({ name: "claude", provider: ChatModelProviders.ANTHROPIC })], {
-        anthropicApiKey: "legacy-key",
-      })
-    );
-
-    expect(getApiKey).toHaveBeenCalledWith(existing.providerId);
-    expect(setApiKey).not.toHaveBeenCalled();
-  });
-
-  it("backfills missing provider extras without replacing current values", async () => {
-    const existing = byokProvider({
-      providerType: "azure",
-      origin: { kind: "byok" },
-      extras: { azureInstanceName: "current-instance" },
-    });
-    const { api, update } = makeApi([existing]);
-
-    await executeByokMigration(
-      api,
-      settingsWith([model({ name: "gpt-4o", provider: ChatModelProviders.AZURE_OPENAI })], {
-        azureOpenAIApiKey: "keychain-key",
-        azureOpenAIApiInstanceName: "legacy-instance",
-        azureOpenAIApiDeploymentName: "legacy-deployment",
-        azureOpenAIApiVersion: "2024-06-01",
-      })
-    );
-
-    expect(update).toHaveBeenCalledWith(existing.providerId, {
-      extras: {
-        azureInstanceName: "current-instance",
-        azureDeploymentName: "legacy-deployment",
-        azureApiVersion: "2024-06-01",
-      },
-    });
-  });
-
-  it("uses one existing provider for only one planned credential group", async () => {
-    const provider = ChatModelProviders.OPENAI;
-    const existing = byokProvider({
-      providerType: "openai-compatible",
-      baseUrl: "https://api.openai.com/v1",
-      origin: { kind: "byok", catalogProviderId: "openai" },
-    });
-    const { api, setupProvider } = makeApi([existing]);
-
-    await executeByokMigration(
-      api,
-      settingsWith([model({ name: "custom-gpt", provider }), model({ name: "gpt-4o", provider })]),
-      { providerIds: [provider], modelIds: [`custom-gpt|${provider}`] }
-    );
-
-    expect(setupProvider).toHaveBeenCalledTimes(1);
-    expect(setupProvider.mock.calls[0][0]).toMatchObject({
-      catalogProviderId: "openai",
-      models: [{ id: "custom-gpt", displayName: "custom-gpt" }],
-    });
-  });
-
-  it("reconciles the provider-wide credential before a hydrated model override", async () => {
-    const provider = ChatModelProviders.OPENAI;
-    const existing = byokProvider({
-      providerType: "openai-compatible",
-      baseUrl: "https://api.openai.com/v1",
-      apiKeyKeychainId: "current-keychain-id",
-      origin: { kind: "byok", catalogProviderId: "openai" },
-    });
-    const { api, setupProvider, getApiKey, addModels } = makeApi([existing]);
-    getApiKey.mockResolvedValue("provider-key");
-
-    await executeByokMigration(
-      api,
-      settingsWith(
-        [
-          model({ name: "custom-gpt", provider, apiKey: "model-override-key" }),
-          model({ name: "gpt-4o", provider }),
-        ],
-        { openAIApiKey: "provider-key" }
-      )
-    );
-
-    expect(addModels).toHaveBeenCalledWith({
-      providerId: existing.providerId,
-      models: [{ id: "gpt-4o", displayName: "gpt-4o" }],
-      autoEnrollIn: ["chat", "opencode"],
-    });
-    expect(setupProvider).toHaveBeenCalledWith(
-      expect.objectContaining({
-        apiKey: "model-override-key",
-        models: [{ id: "custom-gpt", displayName: "custom-gpt" }],
-      })
-    );
   });
 
   it("continues after a per-provider failure", async () => {

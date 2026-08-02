@@ -74,23 +74,20 @@ settings in memory and would otherwise overwrite the file on its next save.
 With no argument it uses `scripts/test-fixtures/data.clean-onboarding.json`: no
 coding agent and no BYOK model configured (empty `providers` / `configuredModels`
 / `backends`), for testing the agent onboarding flow from a clean slate. The
-fixture contains no credential values. Copilot still hydrates matching entries
-from this device's Obsidian Keychain, so use **Advanced → API Key Storage →
-Delete All Keys** first when a test requires a completely clean credential
-state. The source file is validated as JSON before the target is touched.
+fixture omits `_keychainOnly`, so the plugin loads in disk mode and ignores any
+API keys left in the OS keychain from prior runs — a deterministic clean state.
+The source file is validated as JSON before the target is touched.
 
 ### `data.legacy-byok.json` — one-time BYOK migration
 
 `npm run test:reset-data -- scripts/test-fixtures/data.legacy-byok.json` loads a
 pre-versioned legacy install (no `settingsVersion`; legacy `activeModels` +
 top-level provider keys; empty new slices apart from one pre-seeded BYOK
-Anthropic provider that proves dedup). Copilot v4 strips the fixture's legacy
-disk credentials instead of importing them. Use this fixture to verify model
-metadata migration and the required credential re-entry experience; do not
-expect its fake `sk-test-…` values to reach runtime or Keychain. On the next
-plugin load, `runSettingsMigrations` converts eligible legacy model metadata
-into the new `providers` / `configuredModels` / `backends` shape and stamps
-`settingsVersion`. After reset, read back and verify the migrated shape:
+Anthropic provider that proves dedup). On the next plugin load,
+`runSettingsMigrations` converts the legacy BYOK providers/models into the new
+`providers` / `configuredModels` / `backends` shape so they work in OpenCode, and
+stamps `settingsVersion`. It runs in disk mode with obvious fake `sk-test-…`
+keys. After reset, read back and verify the migrated shape:
 
 ```bash
 $OBS vault=$VAULT eval code='app.plugins.plugins.copilot.loadData().then(d=>JSON.stringify({
@@ -99,16 +96,16 @@ $OBS vault=$VAULT eval code='app.plugins.plugins.copilot.loadData().then(d=>JSON
   configuredModels: d.configuredModels.map(m=>m.info.id),
   chat: d.backends.chat?.enabledModels?.length,
   opencode: d.backends.opencode?.enabledModels?.length,
-  diskSecrets: { anthropicApiKey: d.anthropicApiKey, activeModelApiKeys: d.activeModels.map(m=>m.apiKey) }
+  legacyUntouched: { anthropicApiKey: d.anthropicApiKey, activeModels: d.activeModels.length }
 }))'
 ```
 
-Expect: `settingsVersion` stamped; migrated provider descriptors carry a
-`catalogProviderId`; `backends.opencode.enabledModels` excludes the embedding
-(`BAAI/bge-m3`) and Bedrock rows; exactly one Anthropic BYOK provider remains
-(the pre-seeded one — its descriptor deduped, not re-created); every value in
-`diskSecrets` is empty. A second reload must not change `settingsVersion` or
-create duplicates (the version gate holds).
+Expect: `settingsVersion` stamped; routable providers carry a `catalogProviderId`
+and a key; `backends.opencode.enabledModels` is non-empty and excludes the
+embedding (`BAAI/bge-m3`) and Bedrock rows; exactly one Anthropic BYOK provider
+(the pre-seeded one — its descriptor deduped, not re-created); legacy
+`anthropicApiKey` and `activeModels` untouched. A second reload must not change
+`settingsVersion` or create duplicates (the version gate holds).
 
 ## 0. Golden rule: pick the right window first
 

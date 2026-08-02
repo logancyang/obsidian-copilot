@@ -6,7 +6,7 @@ import { TabProvider, useTab } from "@/contexts/TabContext";
 import { useLatestVersion } from "@/hooks/useLatestVersion";
 import CopilotPlugin from "@/main";
 import { ByokPanel, ModelManagementProvider } from "@/modelManagement";
-import { resetSettingsPreservingKeychain } from "@/services/settingsPersistence";
+import { resetSettings } from "@/settings/model";
 import { CommandSettings } from "@/settings/v2/components/CommandSettings";
 import { Bot, Cog, Command, Cpu, Server, ShieldCheck, Sparkle, Wrench } from "lucide-react";
 import React from "react";
@@ -162,9 +162,8 @@ const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin }) => {
   const { latestVersion, hasUpdate } = useLatestVersion(plugin.manifest.version);
 
   const handleReset = () => {
-    const modal = new ResetSettingsConfirmModal(plugin.app, async () => {
-      const reset = await resetSettingsPreservingKeychain((data) => plugin.saveData(data));
-      if (!reset) return;
+    const modal = new ResetSettingsConfirmModal(plugin.app, () => {
+      resetSettings();
       // Increment the key to force re-render of all components
       setResetKey((prev) => prev + 1);
     });

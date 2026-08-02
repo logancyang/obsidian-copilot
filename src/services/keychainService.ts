@@ -5,14 +5,11 @@ import {
   stripKeychainFields,
   cleanupLegacyFields,
   isSensitiveKey,
-  mapAgentModeSecrets,
   MODEL_SECRET_FIELDS,
   TOP_LEVEL_SECRET_FIELDS,
 } from "@/services/settingsSecretTransforms";
 import { Notice } from "obsidian";
 import { md5 } from "@/utils/hash";
-import { getDeviceId } from "@/utils/deviceId";
-import { dehydrateDeviceProfile } from "@/settings/deviceProfiles";
 // Reason: do NOT import logInfo/logWarn/logError here. The logger depends on
 // getSettings(), but this module runs during settings loading (before setSettings).
 // Use console.* directly for all logging in this file.
@@ -184,12 +181,6 @@ function toModelKeychainId(
   return prefix + normalizedModel;
 }
 
-function toAgentModeKeychainId(vaultId: string, path: readonly string[]): string {
-  const prefix = `copilot-v${vaultId}-agent-`;
-  const budget = MAX_SECRET_ID_LENGTH - prefix.length;
-  return prefix + normalizeKeychainId(JSON.stringify(path), budget);
-}
-
 /** Result of a keychain-only hydrate pass. */
 export interface HydrateResult {
   settings: CopilotSettings;
@@ -203,18 +194,6 @@ export interface PersistSecretsResult {
   secretEntries: Array<[string, string]>;
   /** Keychain IDs of deleted models to clear. */
   keychainIdsToDelete: string[];
-}
-
-function clearProviderKeychainReferences(settings: CopilotSettings): CopilotSettings {
-  let changed = false;
-  const providers = Object.fromEntries(
-    Object.entries(settings.providers).map(([providerId, provider]) => {
-      if (!provider.apiKeyKeychainId) return [providerId, provider];
-      changed = true;
-      return [providerId, { ...provider, apiKeyKeychainId: null }];
-    })
-  );
-  return changed ? { ...settings, providers } : settings;
 }
 
 /** Callback type for Obsidian's saveData. */
@@ -434,19 +413,6 @@ export class KeychainService {
     hydrated.activeEmbeddingModels = embeddingResult.models;
     hadFailures = hadFailures || embeddingResult.hadFailures;
 
-    const withAgentModeSecrets = mapAgentModeSecrets(hydrated, (path, currentValue) => {
-      let keychainValue: string | null;
-      try {
-        keychainValue = this.getSecretById(toAgentModeKeychainId(this.vaultId, path));
-      } catch (e) {
-        console.warn(`Keychain read failed for Agent Mode secret "${path.join(".")}".`, e);
-        hadFailures = true;
-        return currentValue;
-      }
-      return keychainValue ?? currentValue;
-    });
-    hydrated.agentMode = withAgentModeSecrets.agentMode;
-
     if (hadFailures) {
       console.warn("Keychain hydrate: some keychain reads failed — values left as-is.");
     }
@@ -498,23 +464,6 @@ export class KeychainService {
       prevSettings?.activeEmbeddingModels,
       clearedSecretIds
     );
-
-    const agentModeSecrets = this.collectAgentModeSecretValues(settings);
-    const previousAgentModeSecrets = prevSettings
-      ? this.collectAgentModeSecretValues(prevSettings)
-      : new Map<string, string>();
-    for (const [id, value] of agentModeSecrets) {
-      if (value.length > 0) {
-        secretEntries.push([id, value]);
-      } else if ((previousAgentModeSecrets.get(id)?.length ?? 0) > 0) {
-        clearedSecretIds.push(id);
-      }
-    }
-    for (const [id, value] of previousAgentModeSecrets) {
-      if (value.length > 0 && !agentModeSecrets.has(id)) {
-        clearedSecretIds.push(id);
-      }
-    }
 
     // Find deleted models to clean up
     const keychainIdsToDelete = [
@@ -617,7 +566,7 @@ export class KeychainService {
     }
 
     // 1. Build stripped settings — before touching any durable store.
-    const stripped = clearProviderKeychainReferences(stripKeychainFields(current));
+    const stripped = stripKeychainFields(current);
 
     // 2. Write stripped data.json BEFORE clearing Keychain.
     // Reason: a disk-write failure can then abort without also leaving the
@@ -667,16 +616,6 @@ export class KeychainService {
   // ---------------------------------------------------------------------------
   // Private helpers
   // ---------------------------------------------------------------------------
-
-  private collectAgentModeSecretValues(settings: CopilotSettings): Map<string, string> {
-    const values = new Map<string, string>();
-    const persistentSettings = dehydrateDeviceProfile(settings, getDeviceId());
-    mapAgentModeSecrets(persistentSettings, (path, value) => {
-      values.set(toAgentModeKeychainId(this.vaultId, path), value);
-      return value;
-    });
-    return values;
-  }
 
   /** Hydrate model-level secrets for a scope (read-only). */
   private async hydrateModelSecrets(
