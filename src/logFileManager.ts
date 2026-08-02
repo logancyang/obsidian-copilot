@@ -3,7 +3,7 @@ import { App, TFile } from "obsidian";
 import { ensureFolderExists } from "@/utils";
 import { getSettings } from "@/settings/model";
 import { getEffectiveCopilotFolder } from "@/settings/copilotFolder";
-import { isSensitiveKey } from "@/encryptionService";
+import { isSensitiveKey } from "@/services/settingsSecretTransforms";
 
 type LogLevel = "INFO" | "WARN" | "ERROR";
 

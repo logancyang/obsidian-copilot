@@ -1,7 +1,5 @@
 import * as os from "node:os";
 import { BREVILABS_API_BASE_URL } from "@/constants";
-import { getDecryptedKey } from "@/encryptionService";
-import { logWarn } from "@/logger";
 import { getSettings } from "@/settings/model";
 import { getMiyoCustomUrl } from "@/miyo/miyoUtils";
 import { PLUS_ENV } from "@/agentMode/skills/builtin/builtinSkills";
@@ -62,19 +60,12 @@ export async function buildBuiltinSkillEnv(
 
   // Copilot Plus relay env — gated on an active subscription with a usable key.
   if (settings.isPaidUser && settings.plusLicenseKey) {
-    try {
-      const licenseKey = await getDecryptedKey(settings.plusLicenseKey);
-      if (licenseKey) {
-        // Relay skills still require the raw Plus credential in the agent process.
-        // Do not create service-specific aliases; scoped agent credentials remain separate work.
-        env[PLUS_ENV.licenseKey] = licenseKey;
-        env[PLUS_ENV.baseUrl] = BREVILABS_API_BASE_URL;
-        env[PLUS_ENV.userId] = settings.userId ?? "";
-        env[PLUS_ENV.clientVersion] = clientVersion;
-      }
-    } catch (e) {
-      logWarn("[AgentMode] could not decrypt Copilot Plus license key for agent env", e);
-    }
+    // Relay skills still require the raw Plus credential in the agent process.
+    // Do not create service-specific aliases; scoped agent credentials remain separate work.
+    env[PLUS_ENV.licenseKey] = settings.plusLicenseKey;
+    env[PLUS_ENV.baseUrl] = BREVILABS_API_BASE_URL;
+    env[PLUS_ENV.userId] = settings.userId ?? "";
+    env[PLUS_ENV.clientVersion] = clientVersion;
   }
 
   return Object.keys(env).length === 0 ? EMPTY_MANAGED_ENV : env;

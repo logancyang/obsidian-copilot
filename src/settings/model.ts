@@ -121,8 +121,6 @@ export interface CopilotSettings {
   chatNoteContextTags: string[];
   enableIndexSync: boolean;
   debug: boolean;
-  /** @deprecated Removed — keychain is now the sole encryption mechanism. */
-  enableEncryption?: never;
   maxSourceChunks: number;
   enableInlineCitations: boolean;
   qaExclusions: string;
@@ -250,16 +248,6 @@ export interface CopilotSettings {
   autoCompactThreshold: number;
   /** Folder where converted document markdown files are saved */
   convertedDocOutputFolder: string;
-  /**
-   * When `true`, the OS keychain is the single source of truth for secrets;
-   * data.json must never contain plaintext secret values.
-   *
-   * Set on:
-   * - Fresh installs (no prior data.json) when keychain is available
-   * - User clicking "Migrate to Keychain" in Advanced Settings
-   * - `forgetAllSecrets` (after stripping disk + clearing keychain)
-   */
-  _keychainOnly?: boolean;
   /**
    * Stable namespace ID for keychain entries, persisted once on first use.
    * Reason: using a persisted ID (instead of deriving from vault path) means
@@ -617,12 +605,12 @@ export function getSettings(): Readonly<CopilotSettings> {
  * Resets the settings to the default values.
  *
  * DESIGN NOTE — does NOT clear secrets from the Obsidian Keychain. Reset only
- * rewrites `data.json` to defaults; a keychain-only vault keeps its OS keychain
+ * rewrites `data.json` to defaults while leaving its Obsidian Keychain
  * entries. "Delete All Keys" (Advanced Settings → API Key Storage, backed by
  * `KeychainService.forgetAllSecrets`) is the dedicated path for erasing keychain
  * secrets. Wiring that async transaction into this synchronous reset would pull
  * the keychain service and its callbacks through `SettingsMainV2`, and is
- * intentionally left out of the first-stage migration.
+ * intentionally left out of the synchronous reset path.
  * If a future review flags this again, point them at this note.
  */
 export function resetSettings(): void {

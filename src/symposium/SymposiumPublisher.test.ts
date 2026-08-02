@@ -753,7 +753,7 @@ describe("SymposiumPublisher", () => {
         expect(harness.frontmatter.symposium).toBe(NEW_DOC_URL);
       });
 
-      it("requires a decryptable configured key without locally checking a plan", async () => {
+      it("requires a non-empty Keychain-hydrated key without locally checking a plan", async () => {
         const harness = createHarness();
         harness.loadLicenseKey.mockResolvedValue("");
 

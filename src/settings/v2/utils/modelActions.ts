@@ -1,6 +1,5 @@
 import { CustomModel } from "@/aiParams";
 import { ChatModelProviders, SettingKeyProviders } from "@/constants";
-import { getDecryptedKey } from "@/encryptionService";
 import { GitHubCopilotProvider } from "@/LLMProviders/githubCopilot/GitHubCopilotProvider";
 import ProjectManager from "@/LLMProviders/projectManager";
 import { logError } from "@/logger";
@@ -37,14 +36,9 @@ export async function fetchModelsForProvider(
     }
 
     // Standard API key based providers
-    let apiKey = getApiKeyForProvider(provider);
+    const apiKey = getApiKeyForProvider(provider);
     if (!apiKey) {
       return { success: false, models: [], error: "API key not configured" };
-    }
-
-    apiKey = await getDecryptedKey(apiKey);
-    if (!apiKey) {
-      return { success: false, models: [], error: "Failed to decrypt API key" };
     }
 
     let url = getProviderInfo(provider).listModelURL;

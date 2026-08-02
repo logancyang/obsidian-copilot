@@ -1,4 +1,3 @@
-import { getDecryptedKey } from "@/encryptionService";
 import { logInfo } from "@/logger";
 import { MiyoClient } from "@/miyo/MiyoClient";
 import { MiyoServiceDiscovery } from "@/miyo/MiyoServiceDiscovery";
@@ -12,10 +11,6 @@ jest.mock("obsidian", () => ({
 
 jest.mock("@/settings/model", () => ({
   getSettings: jest.fn(),
-}));
-
-jest.mock("@/encryptionService", () => ({
-  getDecryptedKey: jest.fn(async (value: string) => value),
 }));
 
 const mockResolveBaseUrl = jest.fn();
@@ -39,7 +34,6 @@ describe("MiyoClient", () => {
   const mockedGetSettings = getSettings as jest.MockedFunction<typeof getSettings>;
   const mockedGetInstance = MiyoServiceDiscovery.getInstance as unknown as jest.Mock;
   const mockedLogInfo = logInfo as jest.MockedFunction<typeof logInfo>;
-  const mockedGetDecryptedKey = getDecryptedKey as jest.MockedFunction<typeof getDecryptedKey>;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -47,7 +41,6 @@ describe("MiyoClient", () => {
       plusLicenseKey: "plus-test-license",
       debug: false,
     } as CopilotSettings);
-    mockedGetDecryptedKey.mockResolvedValue("plus-test-license");
     mockResolveBaseUrl.mockResolvedValue("http://127.0.0.1:8742");
     mockedGetInstance.mockReturnValue({
       resolveBaseUrl: mockResolveBaseUrl,
@@ -271,8 +264,6 @@ describe("MiyoClient", () => {
         plusLicenseKey: "key-of-a-different-vault",
         debug: false,
       } as CopilotSettings);
-      mockedGetDecryptedKey.mockImplementation(async (value: string) => value);
-
       await client.addFolder({ path: "/Users/me/vault" });
 
       expect(mockedRequestUrl).toHaveBeenCalledWith(
@@ -288,8 +279,6 @@ describe("MiyoClient", () => {
         json: { path: "/Users/me/vault" },
         text: "",
       } as RequestUrlResponse);
-      mockedGetDecryptedKey.mockImplementation(async (value: string) => value);
-
       await new MiyoClient().addFolder({ path: "/Users/me/vault" });
 
       expect(mockedRequestUrl).toHaveBeenCalledWith(
@@ -372,9 +361,9 @@ describe("MiyoClient", () => {
     });
 
     it("refuses addFolder after the URL and credentials resolve, so nothing is sent", async () => {
-      // The caller's own check runs before this method; resolution and
-      // decryption are awaits, so only a hook here can stop a request whose
-      // caller went stale in between.
+      // The caller's own check runs before this method; URL resolution is
+      // asynchronous, so only a hook here can stop a request whose caller went
+      // stale in between.
       mockedRequestUrl.mockResolvedValue({
         status: 201,
         json: { path: "/Users/me/vault" },
@@ -389,7 +378,6 @@ describe("MiyoClient", () => {
       ).rejects.toThrow("lifecycle expired");
 
       expect(mockResolveBaseUrl).toHaveBeenCalled();
-      expect(mockedGetDecryptedKey).toHaveBeenCalled();
       expect(mockedRequestUrl).not.toHaveBeenCalled();
     });
   });

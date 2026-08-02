@@ -484,7 +484,6 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
                 setApiKey(v);
                 setVerification(null);
               }}
-              autoDecrypt={false}
               placeholder={state.mode === "edit" ? "No API key set" : "Paste your API key"}
             />
             <Button variant="secondary" onClick={handleTest} disabled={testing}>

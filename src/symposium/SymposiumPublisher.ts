@@ -6,7 +6,6 @@ import {
   type SymposiumModalResult,
   type SymposiumPersistenceResult,
 } from "@/components/modals/SymposiumModal";
-import { getDecryptedKey } from "@/encryptionService";
 import { logWarn } from "@/logger";
 import { getSettings } from "@/settings/model";
 import { SymposiumClient, SymposiumClientError } from "@/symposium/SymposiumClient";
@@ -137,8 +136,7 @@ function agentOutcomeFromModalResult(result: SymposiumModalResult): AgentSymposi
 }
 
 async function loadConfiguredLicenseKey(): Promise<string> {
-  const configuredKey = getSettings().plusLicenseKey;
-  return configuredKey ? (await getDecryptedKey(configuredKey)).trim() : "";
+  return getSettings().plusLicenseKey.trim();
 }
 
 async function buildDocumentWithComponent(
