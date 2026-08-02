@@ -1,5 +1,6 @@
 import { EMPTY_AGENT_MENTION_BRANDS } from "@/components/chat-components/hooks/useAtMentionCategories";
 import { AgentChatInput } from "@/agentMode/ui/AgentChatInput";
+import { AGENT_PROMPT_SUGGESTIONS } from "@/agentMode/ui/agentPromptSuggestions";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type { AgentInputDraftControls } from "@/agentMode/ui/hooks/useAgentInputDrafts";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -33,15 +34,18 @@ jest.mock("@/agentMode/ui/mentionedAgents", () => ({
 // key hits (send-flow regression tests).
 let capturedAgentBrands: ReadonlyArray<unknown> | undefined;
 let capturedTopRightAccessory: React.ReactNode | undefined;
+let capturedPlaceholderPrompts: ReadonlyArray<string> | undefined;
 jest.mock("@/components/chat-components/ChatInput", () => ({
   __esModule: true,
   default: (props: {
     agentBrands?: ReadonlyArray<unknown>;
     topRightAccessory?: React.ReactNode;
+    placeholderPrompts?: ReadonlyArray<string>;
     handleSendMessage?: () => void;
   }) => {
     capturedAgentBrands = props.agentBrands;
     capturedTopRightAccessory = props.topRightAccessory;
+    capturedPlaceholderPrompts = props.placeholderPrompts;
     return (
       <>
         {props.topRightAccessory}
@@ -169,6 +173,37 @@ describe("AgentChatInput identity and agent-mention gate", () => {
       makeDraft()
     );
     expect(capturedAgentBrands).toBe(EMPTY_AGENT_MENTION_BRANDS);
+  });
+});
+
+describe("AgentChatInput sample-prompt placeholder", () => {
+  const backend = () =>
+    ({ sendMessage: jest.fn(), cancel: jest.fn() }) as unknown as AgentChatBackend;
+
+  beforeEach(() => {
+    capturedPlaceholderPrompts = undefined;
+    mockUseCanUseMultiAgent.mockReturnValue(true);
+  });
+
+  it("offers the sample prompts on an untouched landing", () => {
+    renderInput(backend(), makeDraft({ input: "" }), { isLanding: true });
+    expect(capturedPlaceholderPrompts).toBe(AGENT_PROMPT_SUGGESTIONS);
+  });
+
+  it("withholds them in a conversation, where the composer is no longer a landing", () => {
+    renderInput(backend(), makeDraft({ input: "" }), { isLanding: false });
+    expect(capturedPlaceholderPrompts).toBeUndefined();
+  });
+
+  it("offers them again once a draft is cleared, including a suggestion the user took", () => {
+    const chat = backend();
+    const view = renderInput(chat, makeDraft({ input: "" }), { isLanding: true });
+
+    // Accepting a suggestion (or typing) fills the composer — Lexical hides the
+    // placeholder while it holds text.
+    view.rerender(inputNode(chat, makeDraft({ input: "Summarize my week" }), { isLanding: true }));
+    view.rerender(inputNode(chat, makeDraft({ input: "" }), { isLanding: true }));
+    expect(capturedPlaceholderPrompts).toBe(AGENT_PROMPT_SUGGESTIONS);
   });
 });
 

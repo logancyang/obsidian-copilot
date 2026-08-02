@@ -32,6 +32,7 @@ import { ActiveNotePillSyncPlugin } from "./plugins/ActiveNotePillSyncPlugin";
 import { WebTabPillSyncPlugin } from "./plugins/WebTabPillSyncPlugin";
 import { AgentPillSyncPlugin } from "./plugins/AgentPillSyncPlugin";
 import { PastePlugin } from "./plugins/PastePlugin";
+import { PromptSuggestionPlaceholder } from "./PromptSuggestionPlaceholder";
 import { TextInsertionPlugin } from "./plugins/TextInsertionPlugin";
 import { useChatInput } from "@/context/ChatInputContext";
 import { cn } from "@/lib/utils";
@@ -47,6 +48,13 @@ interface LexicalEditorProps {
   onChange: (value: string) => void;
   onSubmit: () => void;
   placeholder?: string;
+  /**
+   * Sample prompts to type out in the placeholder, one at a time, while the
+   * editor is empty (Tab accepts the one on screen). When set and non-empty it
+   * replaces `placeholder`. Must be referentially stable — see
+   * {@link PromptSuggestionPlaceholder}.
+   */
+  placeholderPrompts?: readonly string[];
   disabled?: boolean;
   className?: string;
   onNotesChange?: (notes: { path: string; basename: string }[]) => void;
@@ -87,6 +95,7 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
   onChange,
   onSubmit,
   placeholder = "Type a message...",
+  placeholderPrompts,
   disabled = false,
   className = "",
   onNotesChange,
@@ -197,7 +206,11 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
               }
               placeholder={
                 <div className="tw-pointer-events-none tw-absolute tw-left-2 tw-top-0 tw-select-none tw-text-sm tw-text-muted/60">
-                  {placeholder}
+                  {placeholderPrompts && placeholderPrompts.length > 0 ? (
+                    <PromptSuggestionPlaceholder prompts={placeholderPrompts} />
+                  ) : (
+                    placeholder
+                  )}
                 </div>
               }
               ErrorBoundary={LexicalErrorBoundary}

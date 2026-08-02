@@ -53,6 +53,9 @@ import { $createAgentPillNode } from "./pills/AgentPillNode";
 const ACCENT_CIRCLE_BUTTON_CLASS =
   "tw-rounded-full tw-bg-interactive-accent tw-text-on-accent hover:tw-bg-interactive-accent-hover";
 
+const DEFAULT_PLACEHOLDER =
+  "Your AI assistant for Obsidian • @ to add context • / for custom prompts";
+
 export interface ChatInputProps {
   /**
    * Accessory rendered in a structural column to the right of the
@@ -64,6 +67,10 @@ export interface ChatInputProps {
    * consolidate into a config object, not more props.
    */
   topRightAccessory?: React.ReactNode;
+  /** Overrides the default composer placeholder copy. */
+  placeholder?: string;
+  /** Forwarded to the editor's placeholder slot — see {@link LexicalEditor}. */
+  placeholderPrompts?: readonly string[];
   inputMessage: string;
   setInputMessage: (message: string) => void;
   handleSendMessage: (metadata?: {
@@ -220,6 +227,8 @@ export interface ChatInputHandle {
 const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput(
   {
     topRightAccessory,
+    placeholder = DEFAULT_PLACEHOLDER,
+    placeholderPrompts,
     inputMessage,
     setInputMessage,
     handleSendMessage,
@@ -879,9 +888,8 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
               onEditorReady={onEditorReady}
               onImagePaste={onAddImage}
               onTagSelected={onTagSelected}
-              placeholder={
-                "Your AI assistant for Obsidian • @ to add context • / for custom prompts"
-              }
+              placeholder={placeholder}
+              placeholderPrompts={placeholderPrompts}
               disabled={isProjectLoading}
               isCopilotPlus={isCopilotPlus}
               showTools={showAtMentionTools}
