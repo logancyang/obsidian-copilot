@@ -84,6 +84,8 @@ const URL_ATTRIBUTES = new Set([
 
 const UNSAFE_REVIEW_ATTRIBUTES = new Set(["contenteditable", "ping", "srcdoc", "srcset"]);
 const UNSAFE_REVIEW_CSS = /@import|url\s*\(|https?:|\/\/|\\|expression\s*\(|behavior\s*:/i;
+const CSS_COMMENT = /\/\*[\s\S]*?\*\//g;
+const LOCAL_FRAGMENT_URL = /url\s*\(\s*(["']?)#[^\s)"']+\1\s*\)/gi;
 
 const MIN_IMAGE_DATA_URL_PREFIX_BYTES = "data:image/png;base64,".length;
 const IMAGE_DATA_URL_PLACEHOLDER = "data:image/png;base64,A";
@@ -112,8 +114,11 @@ export class SymposiumDocumentTooLargeError extends Error {
 
 /** Reports that agent-finished HTML is not passive and self-contained. */
 export class SymposiumDocumentUnsafeError extends Error {
-  constructor() {
-    super("Symposium HTML must be passive and self-contained.");
+  /**
+   * @param reason The specific active or external construct the author must remove.
+   */
+  constructor(reason: string) {
+    super(`Symposium HTML ${reason}`);
     this.name = "SymposiumDocumentUnsafeError";
     Object.setPrototypeOf(this, SymposiumDocumentUnsafeError.prototype);
   }
@@ -147,38 +152,53 @@ export function createSymposiumReviewDocument(title: string, html: string): Symp
 }
 
 function validateReviewHtml(document: Document): void {
-  if (document.querySelector(REVIEW_ACTIVE_CONTENT_SELECTOR)) {
-    throw new SymposiumDocumentUnsafeError();
+  const activeElement = document.querySelector(REVIEW_ACTIVE_CONTENT_SELECTOR);
+  if (activeElement) {
+    throw new SymposiumDocumentUnsafeError(
+      `contains unsupported <${activeElement.localName}> content.`
+    );
   }
 
   const redirects = [...document.querySelectorAll<HTMLMetaElement>("meta[http-equiv]")].some(
     (meta) => meta.getAttribute("http-equiv")?.trim().toLowerCase() === "refresh"
   );
   if (redirects) {
-    throw new SymposiumDocumentUnsafeError();
+    throw new SymposiumDocumentUnsafeError("contains an automatic redirect.");
   }
 
   for (const element of document.querySelectorAll<HTMLElement>("*")) {
     if (element.localName === "style" && hasUnsafeReviewCss(element.textContent ?? "")) {
-      throw new SymposiumDocumentUnsafeError();
+      throw new SymposiumDocumentUnsafeError(
+        "contains an external CSS resource; embed it or remove it."
+      );
     }
     for (const attribute of [...element.attributes]) {
       const name = attribute.name.toLowerCase();
+      if (name.startsWith("on") || UNSAFE_REVIEW_ATTRIBUTES.has(name)) {
+        throw new SymposiumDocumentUnsafeError(
+          `contains unsupported attribute "${attribute.name}" on <${element.localName}>.`
+        );
+      }
       if (
-        name.startsWith("on") ||
-        UNSAFE_REVIEW_ATTRIBUTES.has(name) ||
-        (name === "style" && hasUnsafeReviewCss(attribute.value)) ||
-        (attribute.value.toLowerCase().includes("url(") && name !== "href") ||
-        (URL_ATTRIBUTES.has(name) && !isAllowedReviewUrl(element, name, attribute.value))
+        (name === "style" || attribute.value.toLowerCase().includes("url(")) &&
+        hasUnsafeReviewCss(attribute.value)
       ) {
-        throw new SymposiumDocumentUnsafeError();
+        throw new SymposiumDocumentUnsafeError(
+          `contains an external CSS resource in "${attribute.name}" on <${element.localName}>.`
+        );
+      }
+      if (URL_ATTRIBUTES.has(name) && !isAllowedReviewUrl(element, name, attribute.value)) {
+        throw new SymposiumDocumentUnsafeError(
+          `contains unsupported URL attribute "${attribute.name}" on <${element.localName}>.`
+        );
       }
     }
   }
 }
 
 function hasUnsafeReviewCss(css: string): boolean {
-  return UNSAFE_REVIEW_CSS.test(css);
+  const staticCss = css.replace(CSS_COMMENT, "").replace(LOCAL_FRAGMENT_URL, "");
+  return UNSAFE_REVIEW_CSS.test(staticCss);
 }
 
 function isAllowedReviewUrl(element: Element, attribute: string, rawValue: string): boolean {

@@ -188,7 +188,7 @@ describe("builtinSkills", () => {
     it("hands finished agent HTML to the host without exposing publication controls", () => {
       const skill = BUILTIN_SKILLS.find((item) => item.name === "symposium-publish");
       expect(skill).toBeDefined();
-      expect(skill!.version).toBe(5);
+      expect(skill!.version).toBe(6);
       expect(skill!.files.map((file) => file.path)).toEqual([
         "symposium-publish.sh",
         "symposium-publish.cmd",
@@ -208,7 +208,9 @@ describe("builtinSkills", () => {
       expect(skill!.skillMd).toContain("previous confirmation never applies");
       expect(skill!.skillMd).toContain("removes the original artifact");
       expect(skill!.skillMd).toContain("removes its temporary browser preview");
-      expect(skill!.skillMd).toContain("Do not bypass the review or publish directly");
+      expect(skill!.skillMd).toContain("bypass the review");
+      expect(skill!.skillMd).toContain("stop after this attempt");
+      expect(skill!.skillMd).toContain("rewrite valid CSS");
       expect(skill!.skillMd).not.toContain("SYMPOSIUM_TOKEN");
       expect(skill!.skillMd).not.toContain(PLUS_ENV.licenseKey);
       expect(skill!.skillMd).not.toContain("/api/v1/docs");

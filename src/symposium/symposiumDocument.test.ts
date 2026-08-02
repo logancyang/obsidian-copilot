@@ -94,10 +94,10 @@ describe("symposiumDocument", () => {
   describe("SymposiumDocumentUnsafeError", () => {
     describe("constructor()", () => {
       it("describes active or remote content as invalid finished HTML", () => {
-        const error = new SymposiumDocumentUnsafeError();
+        const error = new SymposiumDocumentUnsafeError("contains a script.");
 
         expect(error).toBeInstanceOf(Error);
-        expect(error.message).toBe("Symposium HTML must be passive and self-contained.");
+        expect(error.message).toBe("Symposium HTML contains a script.");
       });
     });
   });
@@ -128,7 +128,7 @@ describe("symposiumDocument", () => {
   describe("createSymposiumReviewDocument()", () => {
     it("returns exact immutable passive HTML with embedded styling and assets", () => {
       const html =
-        '<!doctype html><html><head><style>body{color:#123}</style></head><body><a href="https://example.com">Source</a><img src="data:image/png;base64,iVBORw0KGgo="><svg><circle cx="1" cy="1" r="1"></circle></svg></body></html>';
+        '<!doctype html><html><head><style>:root{--ink:#123}@media (prefers-color-scheme:dark){:root{--ink:#eee}}circle{fill:var(--ink);filter:url("#shadow")}</style></head><body><a href="https://example.com">Source</a><img src="data:image/png;base64,iVBORw0KGgo="><svg><defs><filter id="shadow"></filter><linearGradient id="paint"></linearGradient></defs><circle cx="1" cy="1" r="1" fill="url(#paint)"></circle></svg></body></html>';
 
       const result = createSymposiumReviewDocument("Review", html);
 
