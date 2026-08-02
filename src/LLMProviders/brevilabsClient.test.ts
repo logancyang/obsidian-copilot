@@ -11,12 +11,10 @@ jest.mock("@/encryptionService", () => ({
 
 const mockApplyEntitlement = jest.fn<Promise<boolean>, [string]>();
 const mockMarkPaidPendingEntitlement = jest.fn<void, []>();
-const mockTurnOnPaid = jest.fn<void, []>();
 const mockTurnOffPaid = jest.fn<void, [unknown?]>();
 jest.mock("@/plusUtils", () => ({
   applyEntitlement: (token: string) => mockApplyEntitlement(token),
   markPaidPendingEntitlement: () => mockMarkPaidPendingEntitlement(),
-  turnOnPaid: () => mockTurnOnPaid(),
   turnOffPaid: (app?: unknown) => mockTurnOffPaid(app),
 }));
 
@@ -41,7 +39,7 @@ function stubRequest(outcome: RequestOutcome, onRequest?: () => void): void {
   };
 }
 
-const VALID_LICENSE_RESPONSE = { entitlement: "signed-token", plan: "believer" };
+const VALID_LICENSE_RESPONSE = { entitlement: "signed-token", plan: "supporter" };
 
 describe("brevilabsClient", () => {
   describe("BrevilabsClient", () => {
@@ -57,27 +55,34 @@ describe("brevilabsClient", () => {
 
         const result = await BrevilabsClient.getInstance().validateLicenseKey();
 
-        expect(result).toEqual({ isValid: true, plan: "believer" });
+        expect(result).toEqual({ isValid: true, plan: "supporter" });
         expect(mockApplyEntitlement).toHaveBeenCalledWith("signed-token");
+        expect(mockMarkPaidPendingEntitlement).not.toHaveBeenCalled();
       });
 
       it("falls back to paid-pending when the server's token cannot be verified", async () => {
         mockApplyEntitlement.mockResolvedValue(false);
         stubRequest({ data: VALID_LICENSE_RESPONSE, error: null });
 
-        await BrevilabsClient.getInstance().validateLicenseKey();
+        const result = await BrevilabsClient.getInstance().validateLicenseKey();
 
+        expect(result).toEqual({ isValid: true, plan: "supporter" });
+        expect(mockApplyEntitlement).toHaveBeenCalledWith("signed-token");
         expect(mockMarkPaidPendingEntitlement).toHaveBeenCalled();
       });
 
-      it("marks a tokenless valid license as paid", async () => {
-        stubRequest({ data: { plan: "plus" }, error: null });
+      it.each(["lite", "plus"])(
+        "marks a tokenless %s license as paid pending entitlement",
+        async (plan) => {
+          stubRequest({ data: { plan }, error: null });
 
-        await BrevilabsClient.getInstance().validateLicenseKey();
+          const result = await BrevilabsClient.getInstance().validateLicenseKey();
 
-        expect(mockTurnOnPaid).toHaveBeenCalled();
-        expect(mockApplyEntitlement).not.toHaveBeenCalled();
-      });
+          expect(result).toEqual({ isValid: true, plan });
+          expect(mockMarkPaidPendingEntitlement).toHaveBeenCalled();
+          expect(mockApplyEntitlement).not.toHaveBeenCalled();
+        }
+      );
 
       it("revokes entitlement when the server rejects the key", async () => {
         stubRequest({ data: null, error: new Error("Invalid license key") });
@@ -100,7 +105,6 @@ describe("brevilabsClient", () => {
 
         expect(result).toEqual({ isValid: undefined });
         expect(mockApplyEntitlement).not.toHaveBeenCalled();
-        expect(mockTurnOnPaid).not.toHaveBeenCalled();
         expect(mockMarkPaidPendingEntitlement).not.toHaveBeenCalled();
       });
 

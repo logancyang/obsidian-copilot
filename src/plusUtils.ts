@@ -71,10 +71,11 @@ export function isPaidEnabled(): boolean {
 }
 
 /**
- * True once the PERSISTED expiry has passed (0 = tokenless fallback, never
- * expired). This reads editable state, so it only ever tightens the reactive
- * `useIsPlusUser` render gate — the strict gates take expiry from the signed
- * claims in {@link VerifiedEntitlement}, which an edited `data.json` can't move.
+ * True once the persisted signed-entitlement expiry has passed. Zero means no
+ * token-derived expiry is stored. Because this reads editable state, it only
+ * tightens the reactive `useIsPlusUser` render gate — the strict gates take
+ * expiry from the signed claims in {@link VerifiedEntitlement}, which an edited
+ * `data.json` can't move.
  */
 function isEntitlementExpired(settings: CopilotSettings): boolean {
   return settings.entitlementExpiresAt > 0 && Date.now() >= settings.entitlementExpiresAt;
@@ -93,9 +94,9 @@ function isEntitlementExpired(settings: CopilotSettings): boolean {
  * `exp` for as long as the session lived.
  *
  * `token` is what settings must still hold for the proof to apply. That is how
- * the paths that drop the token (turnOffPaid, markPaidPendingEntitlement,
- * turnOnPaid) revoke these capabilities without touching this state: no stored
- * token can match `""` while carrying features.
+ * the paths that drop the token (turnOffPaid and markPaidPendingEntitlement)
+ * revoke these capabilities without touching this state: no stored token can
+ * match `""` while carrying features.
  */
 interface VerifiedEntitlement {
   token: string;
@@ -153,8 +154,8 @@ export function isPlusEnabled(): boolean {
   if (settings.entitlementExpiresAt > 0) {
     return hasVerifiedFeature("multi_agent");
   }
-  // Tokenless fallback (server has not issued a signed entitlement yet): no
-  // artifact exists to verify, so honor the license-confirmed flag as before.
+  // Preserve an existing tokenless state until an authoritative validation
+  // replaces it. Current tokenless successes persist this flag as false.
   return settings.isPlusUser === true;
 }
 
@@ -202,7 +203,7 @@ export async function ensureMultiAgentEntitlement(
     return true;
   }
   // Re-verify so a stale-false cache for a real Plus user still gets through;
-  // `validateLicenseKey` applies the signed entitlement (or fallback) to settings.
+  // `validateLicenseKey` applies the signed entitlement or paid-pending state.
   await BrevilabsClient.getInstance().validateLicenseKey(app, {
     feature: "multi_agent_per_turn",
     ...context,
@@ -367,27 +368,9 @@ export function navigateToPlusPage(medium: PlusUtmMedium): void {
 }
 
 /**
- * Mark the user as paid via the no-token fallback path (valid license, but the
- * server didn't issue a signed entitlement yet). Sets both flags true and clears
- * any stale token. `isPlusUser` mirrors `isPaidUser` here because no sub-Plus
- * paid tier exists until the server ships tokens + Lite/Pro together — so this is
- * safe and preserves today's behavior. See "Copilot Entitlement Token Design".
- */
-export function turnOnPaid(): void {
-  setSettings({
-    isPaidUser: true,
-    isPlusUser: true,
-    entitlementToken: "",
-    entitlementExpiresAt: 0,
-  });
-}
-
-/**
- * Paid license confirmed by the server, but its entitlement token could not be
- * verified (verifying key not shipped yet / kid rotation). Grant paid so general
- * Plus features keep working, but WITHHOLD the strict gate — otherwise an
- * unverifiable Lite token would bypass the multi-agent gate. Fails closed for
- * multi-agent until the matching public key ships.
+ * Paid license confirmed by the server, but no entitlement token was supplied
+ * or the supplied token could not be verified. Keep broad paid access while
+ * withholding strict features until a signed entitlement verifies.
  */
 export function markPaidPendingEntitlement(): void {
   setSettings({
