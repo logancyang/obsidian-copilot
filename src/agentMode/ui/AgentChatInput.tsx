@@ -3,6 +3,10 @@ import { GLOBAL_SCOPE } from "@/agentMode/session/scope";
 import { expandCustomCommandPrefix } from "@/agentMode/session/expandCustomCommandPrefix";
 import { resolveActiveNoteToken } from "@/agentMode/session/resolveActiveNoteToken";
 import type { PromptContent } from "@/agentMode/session/types";
+import {
+  AGENT_COMPOSER_PLACEHOLDER,
+  AGENT_PROMPT_SUGGESTIONS,
+} from "@/agentMode/ui/agentPromptSuggestions";
 import type {
   AgentInputDraftControls,
   QueuedAgentMessage,
@@ -95,6 +99,12 @@ interface AgentChatInputProps {
    * top-right accessory column (see the DESIGN NOTE at the mount point).
    */
   contextStatusIndicator?: React.ReactNode;
+  /**
+   * This session has no user-visible messages yet. Gates the rotating sample
+   * prompts to the landing — the one surface where they showcase rather than
+   * distract.
+   */
+  isLanding?: boolean;
 }
 
 // Stable no-op handler for required ChatInput props that don't apply to
@@ -196,6 +206,7 @@ export const AgentChatInput = memo(function AgentChatInput({
   contextLoadBlocking = false,
   disabled = false,
   contextStatusIndicator,
+  isLanding = false,
 }: AgentChatInputProps) {
   const eventTarget = useContext(EventTargetContext);
 
@@ -564,6 +575,12 @@ export const AgentChatInput = memo(function AgentChatInput({
         <ChatInput
           key={chatInputId}
           isAgentMode
+          placeholder={AGENT_COMPOSER_PLACEHOLDER}
+          // Whether the composer is empty is not this component's business:
+          // the placeholder slot only exists while it is, so a landing can
+          // offer suggestions unconditionally and get "gone while they type,
+          // back once they clear it" for free.
+          placeholderPrompts={isLanding ? AGENT_PROMPT_SUGGESTIONS : undefined}
           inputMessage={inputMessage}
           setInputMessage={setInputMessage}
           handleSendMessage={(meta) => handleSendMessage(meta?.webTabs)}
