@@ -94,10 +94,15 @@ describe("symposiumDocument", () => {
   describe("SymposiumDocumentUnsafeError", () => {
     describe("constructor()", () => {
       it("describes active or remote content as invalid finished HTML", () => {
-        const error = new SymposiumDocumentUnsafeError("contains a script.");
+        const error = new SymposiumDocumentUnsafeError([
+          "remove unsupported <script>",
+          'embed or remove "src" on <img>',
+        ]);
 
         expect(error).toBeInstanceOf(Error);
-        expect(error.message).toBe("Symposium HTML contains a script.");
+        expect(error.message).toBe(
+          'Symposium HTML is not publishable: remove unsupported <script>; embed or remove "src" on <img>.'
+        );
       });
     });
   });
@@ -157,6 +162,15 @@ describe("symposiumDocument", () => {
 
       expect(() => createSymposiumReviewDocument("Unsafe", html)).toThrow(
         SymposiumDocumentUnsafeError
+      );
+    });
+
+    it("reports every actionable violation in one failure", () => {
+      const html =
+        '<!doctype html><script></script><img src="https://attacker.example/pixel"><p onclick="alert(1)">Review</p>';
+
+      expect(() => createSymposiumReviewDocument("Unsafe", html)).toThrow(
+        'remove unsupported <script>; embed or remove "src" on <img>; remove "onclick" from <p>'
       );
     });
   });

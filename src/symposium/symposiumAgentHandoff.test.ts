@@ -74,6 +74,22 @@ describe("symposiumAgentHandoff", () => {
       await expect(readFile(absolutePath)).rejects.toMatchObject({ code: "ENOENT" });
     });
 
+    it("preserves rejected HTML for one targeted correction", async () => {
+      const absolutePath = path.join(vaultRoot, ...STAGED_PATH.split("/"));
+      const rejected = '<!doctype html><script></script><img src="https://example.com/pixel">';
+      await writeFile(absolutePath, rejected, "utf8");
+
+      await expect(consumeSymposiumAgentHandoff(vaultRoot, STAGED_PATH)).rejects.toThrow(
+        `remove unsupported <script>; embed or remove "src" on <img>. Edit this staged file and retry once: ${STAGED_PATH}`
+      );
+      await expect(readFile(absolutePath, "utf8")).resolves.toBe(rejected);
+
+      await writeFile(absolutePath, "<!doctype html><p>Corrected</p>", "utf8");
+      const handoff = await consumeSymposiumAgentHandoff(vaultRoot, STAGED_PATH);
+      await expect(readFile(absolutePath)).rejects.toMatchObject({ code: "ENOENT" });
+      await handoff.cleanup();
+    });
+
     it("rejects an oversized artifact before reading and still removes it", async () => {
       const absolutePath = path.join(vaultRoot, ...STAGED_PATH.split("/"));
       await writeFile(absolutePath, new Uint8Array(SYMPOSIUM_MAX_HTML_BYTES + 1).fill(0x61));

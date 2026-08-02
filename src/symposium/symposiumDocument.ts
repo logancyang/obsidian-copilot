@@ -115,10 +115,14 @@ export class SymposiumDocumentTooLargeError extends Error {
 /** Reports that agent-finished HTML is not passive and self-contained. */
 export class SymposiumDocumentUnsafeError extends Error {
   /**
-   * @param reason The specific active or external construct the author must remove.
+   * @param issues The specific active or external constructs the author must remove.
    */
-  constructor(reason: string) {
-    super(`Symposium HTML ${reason}`);
+  constructor(issues: readonly string[]) {
+    const visibleIssues = issues.slice(0, 8);
+    const remainder = issues.length - visibleIssues.length;
+    super(
+      `Symposium HTML is not publishable: ${visibleIssues.join("; ")}${remainder > 0 ? `; plus ${remainder} more` : ""}.`
+    );
     this.name = "SymposiumDocumentUnsafeError";
     Object.setPrototypeOf(this, SymposiumDocumentUnsafeError.prototype);
   }
@@ -146,53 +150,57 @@ export function createSymposiumDocument(title: string, html: string): SymposiumD
  */
 export function createSymposiumReviewDocument(title: string, html: string): SymposiumDocument {
   const document = createSymposiumDocument(title, html);
-  const parsed = new DOMParser().parseFromString(html, "text/html");
-  validateReviewHtml(parsed);
+  validateSymposiumReviewHtml(html);
   return document;
 }
 
-function validateReviewHtml(document: Document): void {
-  const activeElement = document.querySelector(REVIEW_ACTIVE_CONTENT_SELECTOR);
-  if (activeElement) {
-    throw new SymposiumDocumentUnsafeError(
-      `contains unsupported <${activeElement.localName}> content.`
-    );
+/**
+ * Reports every bounded, actionable violation found in one agent-staged document.
+ *
+ * @param html The complete staged HTML that must remain passive and self-contained.
+ */
+export function validateSymposiumReviewHtml(html: string): void {
+  const document = new DOMParser().parseFromString(html, "text/html");
+  const issues = new Set<string>();
+
+  for (const activeElement of document.querySelectorAll(REVIEW_ACTIVE_CONTENT_SELECTOR)) {
+    issues.add(`remove unsupported <${activeElement.localName}>`);
   }
 
   const redirects = [...document.querySelectorAll<HTMLMetaElement>("meta[http-equiv]")].some(
     (meta) => meta.getAttribute("http-equiv")?.trim().toLowerCase() === "refresh"
   );
   if (redirects) {
-    throw new SymposiumDocumentUnsafeError("contains an automatic redirect.");
+    issues.add("remove the automatic redirect");
   }
 
   for (const element of document.querySelectorAll<HTMLElement>("*")) {
     if (element.localName === "style" && hasUnsafeReviewCss(element.textContent ?? "")) {
-      throw new SymposiumDocumentUnsafeError(
-        "contains an external CSS resource; embed it or remove it."
-      );
+      issues.add("embed or remove the external CSS resource in <style>");
     }
     for (const attribute of [...element.attributes]) {
       const name = attribute.name.toLowerCase();
       if (name.startsWith("on") || UNSAFE_REVIEW_ATTRIBUTES.has(name)) {
-        throw new SymposiumDocumentUnsafeError(
-          `contains unsupported attribute "${attribute.name}" on <${element.localName}>.`
-        );
+        issues.add(`remove "${attribute.name}" from <${element.localName}>`);
+        continue;
       }
       if (
         (name === "style" || attribute.value.toLowerCase().includes("url(")) &&
         hasUnsafeReviewCss(attribute.value)
       ) {
-        throw new SymposiumDocumentUnsafeError(
-          `contains an external CSS resource in "${attribute.name}" on <${element.localName}>.`
+        issues.add(
+          `embed or remove the external CSS resource in "${attribute.name}" on <${element.localName}>`
         );
+        continue;
       }
       if (URL_ATTRIBUTES.has(name) && !isAllowedReviewUrl(element, name, attribute.value)) {
-        throw new SymposiumDocumentUnsafeError(
-          `contains unsupported URL attribute "${attribute.name}" on <${element.localName}>.`
-        );
+        issues.add(`embed or remove "${attribute.name}" on <${element.localName}>`);
       }
     }
+  }
+
+  if (issues.size > 0) {
+    throw new SymposiumDocumentUnsafeError([...issues]);
   }
 }
 

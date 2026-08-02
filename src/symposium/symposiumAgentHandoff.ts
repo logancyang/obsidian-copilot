@@ -4,6 +4,10 @@ import * as path from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { SYMPOSIUM_AGENT_HANDOFF_DIR, SYMPOSIUM_MAX_HTML_BYTES } from "@/symposium/constants";
+import {
+  SymposiumDocumentUnsafeError,
+  validateSymposiumReviewHtml,
+} from "@/symposium/symposiumDocument";
 
 /** Signals that a filesystem-backed agent handoff cannot be consumed safely. */
 class SymposiumAgentHandoffError extends Error {
@@ -209,11 +213,22 @@ export async function consumeSymposiumAgentHandoff(
     }
     html = decodeUtf8(Uint8Array.from(bytes));
   } catch (error) {
+    await removeHandoff(stagedPath);
     if (error instanceof SymposiumAgentHandoffError) throw error;
     throw new SymposiumAgentHandoffError(UNSAFE_FILE_MESSAGE);
-  } finally {
-    await removeHandoff(stagedPath);
   }
 
+  try {
+    validateSymposiumReviewHtml(html);
+  } catch (error) {
+    if (error instanceof SymposiumDocumentUnsafeError) {
+      throw new SymposiumAgentHandoffError(
+        `${error.message} Edit this staged file and retry once: ${stagedHtmlPath}`
+      );
+    }
+    throw error;
+  }
+
+  await removeHandoff(stagedPath);
   return createLocalPreview(html);
 }

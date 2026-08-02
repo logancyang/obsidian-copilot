@@ -1126,7 +1126,7 @@ describe("SymposiumPublisher", () => {
 
         expect(outcome).toEqual({
           status: "failed",
-          message: "Symposium HTML contains an automatic redirect.",
+          message: "Symposium HTML is not publishable: remove the automatic redirect.",
         });
         expect(harness.openModal).not.toHaveBeenCalled();
         expect(harness.client.publish).not.toHaveBeenCalled();
