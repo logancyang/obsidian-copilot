@@ -17,6 +17,7 @@ import {
   EmbeddingModelProviders,
   SEND_SHORTCUT,
 } from "@/constants";
+import { MODEL_SECRET_FIELDS, TOP_LEVEL_SECRET_FIELDS } from "@/services/settingsSecretTransforms";
 
 /**
  * We used to store commands in the settings file with the following interface.
@@ -601,20 +602,27 @@ export function getSettings(): Readonly<CopilotSettings> {
   return settingsStore.get(settingsAtom);
 }
 
+function preserveModelSecrets(defaults: CustomModel[], current: CustomModel[]): CustomModel[] {
+  const currentById = new Map(current.map((model) => [getModelKeyFromModel(model), model]));
+  return defaults.map((model) => {
+    const previous = currentById.get(getModelKeyFromModel(model));
+    if (!previous) return model;
+    const preserved = { ...model };
+    for (const field of MODEL_SECRET_FIELDS) {
+      const value = previous[field];
+      if (typeof value === "string") preserved[field] = value;
+    }
+    return preserved;
+  });
+}
+
 /**
- * Resets the settings to the default values.
+ * Build the default settings snapshot used by Reset Settings while retaining
+ * hydrated credentials for fields and built-in models that remain in memory.
  *
- * DESIGN NOTE — does NOT clear secrets from the Obsidian Keychain. Reset only
- * rewrites `data.json` to defaults while leaving its Obsidian Keychain
- * entries. "Delete All Keys" (Advanced Settings → API Key Storage, backed by
- * `KeychainService.forgetAllSecrets`) is the dedicated path for erasing keychain
- * secrets. Wiring that async transaction into this synchronous reset would pull
- * the keychain service and its callbacks through `SettingsMainV2`, and is
- * intentionally left out of the synchronous reset path.
- * If a future review flags this again, point them at this note.
+ * @param current - Settings active immediately before the reset.
  */
-export function resetSettings(): void {
-  const current = getSettings();
+export function createResetSettingsSnapshot(current: CopilotSettings): CopilotSettings {
   // Reset is a deterministic path, not best-effort: preserve the root-exclusion
   // history and fold in the pre-reset active root before it is replaced by the
   // default. Otherwise a reset would drop every historical root and leave that
@@ -625,11 +633,28 @@ export function resetSettings(): void {
   ]);
   const defaultSettingsWithBuiltIns = {
     ...DEFAULT_SETTINGS,
-    activeModels: BUILTIN_CHAT_MODELS.map((model) => ({ ...model, enabled: true })),
-    activeEmbeddingModels: BUILTIN_EMBEDDING_MODELS.map((model) => ({ ...model, enabled: true })),
+    activeModels: preserveModelSecrets(
+      BUILTIN_CHAT_MODELS.map((model) => ({ ...model, enabled: true })),
+      current.activeModels
+    ),
+    activeEmbeddingModels: preserveModelSecrets(
+      BUILTIN_EMBEDDING_MODELS.map((model) => ({ ...model, enabled: true })),
+      current.activeEmbeddingModels
+    ),
     copilotRootHistory: preservedRootHistory,
   };
-  setSettings(defaultSettingsWithBuiltIns);
+  const currentRecord = current as unknown as Record<string, unknown>;
+  const resetRecord = defaultSettingsWithBuiltIns as unknown as Record<string, unknown>;
+  for (const key of TOP_LEVEL_SECRET_FIELDS) {
+    const value = currentRecord[key];
+    if (typeof value === "string") resetRecord[key] = value;
+  }
+  return defaultSettingsWithBuiltIns;
+}
+
+/** Reset in-memory settings to defaults while retaining currently hydrated credentials. */
+export function resetSettings(): void {
+  setSettings(createResetSettingsSnapshot(getSettings()));
 }
 
 /**

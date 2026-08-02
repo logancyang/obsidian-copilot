@@ -1,4 +1,5 @@
 import {
+  BUILTIN_CHAT_MODELS,
   COPILOT_FOLDER_ROOT,
   DEFAULT_QA_EXCLUSIONS_SETTING,
   DEFAULT_SYSTEM_PROMPT,
@@ -6,6 +7,7 @@ import {
   SEND_SHORTCUT,
 } from "@/constants";
 import {
+  createResetSettingsSnapshot,
   normalizeRootFolders,
   resetSettings,
   sanitizeEnvOverrides,
@@ -898,9 +900,12 @@ describe("model", () => {
   });
 
   describe("resetSettings()", () => {
-    it("preserves historical roots and folds in the pre-reset active root", () => {
+    it("preserves credentials and root history while resetting non-secret settings", () => {
+      const builtIn = BUILTIN_CHAT_MODELS[0];
       settingsStore.set(settingsAtom, {
         ...DEFAULT_SETTINGS,
+        openAIApiKey: "provider-key",
+        activeModels: [{ ...builtIn, apiKey: "model-key" }],
         copilotFolder: "team-ai",
         copilotRootHistory: ["copilot", "ai"],
       });
@@ -909,8 +914,28 @@ describe("model", () => {
 
       const after = settingsStore.get(settingsAtom);
       expect(after.copilotFolder).toBe(DEFAULT_SETTINGS.copilotFolder);
+      expect(after.openAIApiKey).toBe("provider-key");
+      expect(after.activeModels.find((model) => model.name === builtIn.name)?.apiKey).toBe(
+        "model-key"
+      );
       // Legacy + historical + pre-reset active root all survive the reset.
       expect(new Set(after.copilotRootHistory)).toEqual(new Set(["copilot", "ai", "team-ai"]));
+    });
+  });
+
+  describe("createResetSettingsSnapshot()", () => {
+    it("returns defaults without mutating the current settings", () => {
+      const current = {
+        ...DEFAULT_SETTINGS,
+        temperature: 0.2,
+        openAIApiKey: "provider-key",
+      };
+
+      const snapshot = createResetSettingsSnapshot(current);
+
+      expect(snapshot.temperature).toBe(DEFAULT_SETTINGS.temperature);
+      expect(snapshot.openAIApiKey).toBe("provider-key");
+      expect(current.temperature).toBe(0.2);
     });
   });
 });

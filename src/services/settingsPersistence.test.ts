@@ -17,6 +17,13 @@ function makeSettings(overrides: Partial<CopilotSettings> = {}): CopilotSettings
 async function loadModule(overrides: Record<string, unknown> = {}) {
   jest.resetModules();
 
+  const resetSnapshot = makeSettings({ openAIApiKey: "preserved-key" });
+  const settingsModel = {
+    createResetSettingsSnapshot: jest.fn(() => resetSnapshot),
+    getSettings: jest.fn(() => makeSettings({ openAIApiKey: "current-key" })),
+    setSettings: jest.fn(),
+  };
+
   const keychain = {
     isAvailable: jest.fn().mockReturnValue(true),
     getVaultId: jest.fn().mockReturnValue("abcd1234"),
@@ -38,6 +45,7 @@ async function loadModule(overrides: Record<string, unknown> = {}) {
   }));
   jest.doMock("@/logger", () => ({ logWarn: jest.fn() }));
   jest.doMock("@/settings/model", () => ({
+    ...settingsModel,
     getModelKeyFromModel: (model: { name: string; provider: string }) =>
       `${model.name}|${model.provider}`,
     normalizeModelProvider: (provider: string) =>
@@ -46,7 +54,7 @@ async function loadModule(overrides: Record<string, unknown> = {}) {
   }));
 
   const module = await import("@/services/settingsPersistence");
-  return { module, keychain };
+  return { module, keychain, resetSnapshot, settingsModel };
 }
 
 describe("settingsPersistence", () => {
@@ -249,6 +257,36 @@ describe("settingsPersistence", () => {
         "new-key"
       );
       expect(saveData.mock.calls[0][0].openAIApiKey).toBe("");
+    });
+  });
+
+  describe("resetSettingsPreservingKeychain()", () => {
+    it("writes stripped defaults and updates memory without diffing Keychain entries", async () => {
+      const { module, keychain, resetSnapshot, settingsModel } = await loadModule();
+      const saveData = jest.fn().mockResolvedValue(undefined);
+
+      await module.resetSettingsPreservingKeychain(saveData);
+      await module.persistSettings(resetSnapshot, saveData);
+
+      expect(keychain.persistSecrets).not.toHaveBeenCalled();
+      expect(keychain.setSecretById).not.toHaveBeenCalled();
+      expect(saveData).toHaveBeenCalledTimes(1);
+      expect(saveData.mock.calls[0][0].openAIApiKey).toBe("");
+      expect(settingsModel.setSettings).toHaveBeenCalledWith(resetSnapshot);
+    });
+
+    it("leaves memory and Keychain untouched when the stripped disk save fails", async () => {
+      const { module, keychain, settingsModel } = await loadModule();
+
+      await expect(
+        module.resetSettingsPreservingKeychain(
+          jest.fn().mockRejectedValue(new Error("disk unavailable"))
+        )
+      ).rejects.toThrow("disk unavailable");
+
+      expect(keychain.persistSecrets).not.toHaveBeenCalled();
+      expect(keychain.setSecretById).not.toHaveBeenCalled();
+      expect(settingsModel.setSettings).not.toHaveBeenCalled();
     });
   });
 

@@ -277,7 +277,11 @@ export function planByokMigration(
 ): SetupProviderInput[] {
   const groups = new Map<
     string,
-    { input: SetupProviderInput; modelsById: Map<string, ModelInfo> }
+    {
+      input: SetupProviderInput;
+      modelsById: Map<string, ModelInfo>;
+      credentialGroupId?: string;
+    }
   >();
 
   for (const model of settings.activeModels ?? []) {
@@ -309,7 +313,7 @@ export function planByokMigration(
       if (baseUrl) input.baseUrl = baseUrl;
       if (apiKey) input.apiKey = apiKey;
       if (extras) input.extras = extras;
-      group = { input, modelsById: new Map() };
+      group = { input, modelsById: new Map(), credentialGroupId };
       groups.set(groupKey, group);
     }
 
@@ -317,10 +321,14 @@ export function planByokMigration(
     group.modelsById.set(info.id, info);
   }
 
-  return [...groups.values()].map(({ input, modelsById }) => ({
-    ...input,
-    models: [...modelsById.values()],
-  }));
+  // Existing rows represent the provider-wide legacy setup unless proven
+  // otherwise, so let dedup consume those groups before model overrides.
+  return [...groups.values()]
+    .sort((a, b) => Number(!!a.credentialGroupId) - Number(!!b.credentialGroupId))
+    .map(({ input, modelsById }) => ({
+      ...input,
+      models: [...modelsById.values()],
+    }));
 }
 
 /** A pre-existing BYOK provider equivalent to a planned descriptor (same
@@ -356,15 +364,19 @@ export async function executeByokMigration(
     return;
   }
 
-  // Snapshot existing BYOK providers once; the planner already de-dups within
-  // this run, so a stale snapshot only matters for pre-existing rows.
-  const existing = api.providerRegistry.listByOrigin("byok");
+  // Each existing row can satisfy only one planned credential group. Consume
+  // matches so additional groups sharing its provider identity still migrate.
+  const unmatchedExisting = [...api.providerRegistry.listByOrigin("byok")];
   let created = 0;
   let skipped = 0;
   let failed = 0;
 
   for (const descriptor of descriptors) {
-    if (existing.some((provider) => isDuplicateByok(provider, descriptor))) {
+    const duplicateIndex = unmatchedExisting.findIndex((provider) =>
+      isDuplicateByok(provider, descriptor)
+    );
+    if (duplicateIndex >= 0) {
+      unmatchedExisting.splice(duplicateIndex, 1);
       skipped++;
       logInfo(`[byok-migration] skipping already-present provider "${descriptor.displayName}"`);
       continue;

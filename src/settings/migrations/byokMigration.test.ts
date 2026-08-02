@@ -458,6 +458,28 @@ describe("executeByokMigration", () => {
     expect(setupProvider.mock.calls[0][0]).toMatchObject({ catalogProviderId: "openai" });
   });
 
+  it("uses one existing provider for only one planned credential group", async () => {
+    const provider = ChatModelProviders.OPENAI;
+    const existing = byokProvider({
+      providerType: "openai-compatible",
+      baseUrl: "https://api.openai.com/v1",
+      origin: { kind: "byok", catalogProviderId: "openai" },
+    });
+    const { api, setupProvider } = makeApi([existing]);
+
+    await executeByokMigration(
+      api,
+      settingsWith([model({ name: "custom-gpt", provider }), model({ name: "gpt-4o", provider })]),
+      { providerIds: [provider], modelIds: [`custom-gpt|${provider}`] }
+    );
+
+    expect(setupProvider).toHaveBeenCalledTimes(1);
+    expect(setupProvider.mock.calls[0][0]).toMatchObject({
+      catalogProviderId: "openai",
+      models: [{ id: "custom-gpt", displayName: "custom-gpt" }],
+    });
+  });
+
   it("continues after a per-provider failure", async () => {
     const { api, setupProvider } = makeApi();
     setupProvider.mockRejectedValueOnce(new Error("keychain unavailable"));

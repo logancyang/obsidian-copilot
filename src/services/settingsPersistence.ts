@@ -15,9 +15,12 @@ import type { LegacyByokCredentialPresence } from "@/settings/migrations/byokMig
 import { CURRENT_SETTINGS_VERSION } from "@/settings/migrations/version";
 import {
   type CopilotSettings,
+  createResetSettingsSnapshot,
+  getSettings,
   getModelKeyFromModel,
   normalizeModelProvider,
   sanitizeSettings,
+  setSettings,
 } from "@/settings/model";
 import { Notice } from "obsidian";
 
@@ -264,6 +267,32 @@ async function persistKeychainSettings(
     }
     throw error;
   }
+}
+
+/** Save a stripped settings snapshot without changing any Keychain entry. */
+async function persistSettingsWithoutKeychainChanges(
+  settings: CopilotSettings,
+  saveData: (data: CopilotSettings) => Promise<void>
+): Promise<void> {
+  const cleaned = cleanupLegacyFields(settings);
+  await saveData(stripKeychainFields(cleaned));
+  lastPersistedSettings = structuredClone(cleaned);
+}
+
+/**
+ * Reset non-secret settings transactionally while preserving every Keychain entry.
+ *
+ * @param saveData - Plugin-bound writer for the stripped reset snapshot.
+ */
+export async function resetSettingsPreservingKeychain(
+  saveData: (data: CopilotSettings) => Promise<void>
+): Promise<void> {
+  const resetSnapshot = createResetSettingsSnapshot(getSettings());
+  await runPersistenceTransaction(async () => {
+    await persistSettingsWithoutKeychainChanges(resetSnapshot, saveData);
+    suppressNextPersistOnce();
+    setSettings(resetSnapshot);
+  });
 }
 
 /**
