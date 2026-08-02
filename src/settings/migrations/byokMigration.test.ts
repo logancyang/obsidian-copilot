@@ -245,7 +245,7 @@ describe("planByokMigration — scope filters", () => {
       settingsWith([model({ name: "gpt-4o", provider: ChatModelProviders.OPENAI })], {
         openAIApiKey: "",
       }),
-      [ChatModelProviders.OPENAI]
+      { providerIds: [ChatModelProviders.OPENAI], modelIds: [] }
     );
 
     expect(byCatalog(plan, "openai")).toMatchObject({
@@ -254,6 +254,23 @@ describe("planByokMigration — scope filters", () => {
       models: [{ id: "gpt-4o", displayName: "gpt-4o" }],
     });
     expect(byCatalog(plan, "openai")?.apiKey).toBeUndefined();
+  });
+
+  it("limits a discarded per-model credential to that exact model descriptor", () => {
+    const plan = planByokMigration(
+      settingsWith(
+        [
+          model({ name: "gpt-4o", provider: ChatModelProviders.OPENAI }),
+          model({ name: "custom-gpt", provider: ChatModelProviders.OPENAI }),
+        ],
+        { openAIApiKey: "" }
+      ),
+      { providerIds: [], modelIds: [`custom-gpt|${ChatModelProviders.OPENAI}`] }
+    );
+
+    expect(byCatalog(plan, "openai")?.models).toEqual([
+      { id: "custom-gpt", displayName: "custom-gpt" },
+    ]);
   });
 
   it("includes enabled built-in models when the provider has a key", () => {

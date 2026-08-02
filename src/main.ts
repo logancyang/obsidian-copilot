@@ -48,7 +48,7 @@ import {
 import { KeychainService } from "@/services/keychainService";
 import {
   flushPersistence,
-  getLegacyByokCredentialProviders,
+  getLegacyByokCredentialPresence,
   loadSettingsWithKeychain,
   persistSettings,
   resetPersistenceState,
@@ -252,7 +252,7 @@ export default class CopilotPlugin extends Plugin {
     // agent/model-discovery init below — so migrated BYOK providers are present
     // when OpenCode first enumerates models. Awaited for deterministic ordering;
     // it's a fast, one-time, no-op for already-migrated/fresh vaults.
-    await runSettingsMigrations(this.modelManagement, getLegacyByokCredentialProviders());
+    await runSettingsMigrations(this.modelManagement, getLegacyByokCredentialPresence());
     this.addSettingTab(new CopilotSettingTab(this.app, this));
 
     // Core plugin initialization

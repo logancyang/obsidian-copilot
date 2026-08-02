@@ -24,7 +24,9 @@ describe("password-input", () => {
       expect(input.value).toBe("initial-value");
 
       view.rerender(<PasswordInput value="next-value" />);
-      input = view.container.querySelector("input") as HTMLInputElement;
+      const updatedInput = view.container.querySelector("input") as HTMLInputElement;
+      expect(updatedInput).toBe(input);
+      input = updatedInput;
       expect(input.value).toBe("next-value");
     });
 
@@ -32,6 +34,7 @@ describe("password-input", () => {
       const onChange = jest.fn();
       const view = render(<PasswordInput value="old" onChange={onChange} />);
       const input = view.container.querySelector("input") as HTMLInputElement;
+      input.focus();
 
       fireEvent.change(input, { target: { value: "sk-new" } });
 
@@ -42,9 +45,10 @@ describe("password-input", () => {
       expect(input.value).toBe("sk-new");
 
       view.rerender(<PasswordInput value="external-update" onChange={onChange} />);
-      expect((view.container.querySelector("input") as HTMLInputElement).value).toBe(
-        "external-update"
-      );
+      const updatedInput = view.container.querySelector("input") as HTMLInputElement;
+      expect(updatedInput).toBe(input);
+      expect(updatedInput.value).toBe("external-update");
+      expect(input.ownerDocument.activeElement).toBe(input);
     });
 
     it("toggles password visibility unless disabled", () => {

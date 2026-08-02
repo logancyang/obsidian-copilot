@@ -41,7 +41,7 @@ import type {
   ProviderType,
   SetupProviderInput,
 } from "@/modelManagement";
-import type { CopilotSettings } from "@/settings/model";
+import { getModelKeyFromModel, type CopilotSettings } from "@/settings/model";
 
 // Token-bounded "embed"/"embedding" id match. Mirrors `looksLikeEmbeddingModel`
 // in `@/modelManagement/catalog/catalogTransform`; kept local so this module
@@ -135,7 +135,20 @@ const LEGACY_PROVIDER_MAP: Partial<Record<string, LegacyProviderMapping>> = {
 // Frozen enrollment targets — referential stability (see AGENTS.md).
 const ENROLL_CHAT_AND_OPENCODE: readonly BackendType[] = Object.freeze(["chat", "opencode"]);
 const ENROLL_CHAT_ONLY: readonly BackendType[] = Object.freeze(["chat"]);
-const EMPTY_LEGACY_CREDENTIAL_PROVIDERS: readonly string[] = Object.freeze([]);
+const EMPTY_CREDENTIAL_IDENTITIES: readonly string[] = Object.freeze([]);
+
+/** Non-secret evidence that discarded disk credentials once configured BYOK metadata. */
+export interface LegacyByokCredentialPresence {
+  /** Providers that had a top-level credential applying to all their models. */
+  providerIds: readonly string[];
+  /** Exact `name|provider` identities that had a per-model credential. */
+  modelIds: readonly string[];
+}
+
+const EMPTY_LEGACY_CREDENTIAL_PRESENCE: LegacyByokCredentialPresence = Object.freeze({
+  providerIds: EMPTY_CREDENTIAL_IDENTITIES,
+  modelIds: EMPTY_CREDENTIAL_IDENTITIES,
+});
 
 /** Trim, drop a trailing slash, lowercase — for grouping / dedup comparison. */
 function normalizeUrl(url: string | undefined): string {
@@ -201,7 +214,7 @@ interface ResolvedCandidate {
 function resolveCandidate(
   model: CustomModel,
   settings: CopilotSettings,
-  legacyCredentialProviders: readonly string[]
+  legacyCredentialPresence: LegacyByokCredentialPresence
 ): ResolvedCandidate | null {
   const mapping = LEGACY_PROVIDER_MAP[model.provider];
   if (!mapping) return null; // unknown / copilot-plus / github-copilot
@@ -222,7 +235,10 @@ function resolveCandidate(
     baseUrl = model.baseUrl?.trim() || defaultBaseUrlFor(model.provider);
     // A stripped legacy disk credential is only a presence signal: retain the
     // descriptor so the user can re-enter its key, but never import the value.
-    if (!apiKey && !legacyCredentialProviders.includes(model.provider)) return null;
+    const hadDiscardedCredential =
+      legacyCredentialPresence.providerIds.includes(model.provider) ||
+      legacyCredentialPresence.modelIds.includes(getModelKeyFromModel(model));
+    if (!apiKey && !hadDiscardedCredential) return null;
   }
 
   return { mapping, apiKey, baseUrl, extras: buildExtras(model, settings, mapping.providerType) };
@@ -239,11 +255,11 @@ function toModelInfo(model: CustomModel): ModelInfo {
  * de-duped within a group (last wins) to satisfy `bulkSet`.
  *
  * @param settings - Hydrated runtime settings whose credential values come only from Keychain.
- * @param legacyCredentialProviders - Provider IDs that had a discarded disk credential.
+ * @param legacyCredentialPresence - Provider-wide and model-specific discarded credential identities.
  */
 export function planByokMigration(
   settings: CopilotSettings,
-  legacyCredentialProviders: readonly string[] = EMPTY_LEGACY_CREDENTIAL_PROVIDERS
+  legacyCredentialPresence: LegacyByokCredentialPresence = EMPTY_LEGACY_CREDENTIAL_PRESENCE
 ): SetupProviderInput[] {
   const groups = new Map<
     string,
@@ -251,7 +267,7 @@ export function planByokMigration(
   >();
 
   for (const model of settings.activeModels ?? []) {
-    const candidate = resolveCandidate(model, settings, legacyCredentialProviders);
+    const candidate = resolveCandidate(model, settings, legacyCredentialPresence);
     if (!candidate) continue;
     const { mapping, apiKey, baseUrl, extras } = candidate;
 
@@ -312,14 +328,14 @@ function isDuplicateByok(provider: Provider, descriptor: SetupProviderInput): bo
  *
  * @param api - Model-management boundary used to create providers and models.
  * @param settings - Hydrated runtime settings to migrate.
- * @param legacyCredentialProviders - Provider IDs whose disk credentials require re-entry.
+ * @param legacyCredentialPresence - Provider-wide and model-specific credentials requiring re-entry.
  */
 export async function executeByokMigration(
   api: ModelManagementApi,
   settings: CopilotSettings,
-  legacyCredentialProviders: readonly string[] = EMPTY_LEGACY_CREDENTIAL_PROVIDERS
+  legacyCredentialPresence: LegacyByokCredentialPresence = EMPTY_LEGACY_CREDENTIAL_PRESENCE
 ): Promise<void> {
-  const descriptors = planByokMigration(settings, legacyCredentialProviders);
+  const descriptors = planByokMigration(settings, legacyCredentialPresence);
   if (descriptors.length === 0) {
     logInfo("[byok-migration] no legacy BYOK providers to migrate");
     return;

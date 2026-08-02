@@ -11,6 +11,11 @@ interface PasswordInputProps {
   className?: string;
 }
 
+interface PasswordInputState {
+  externalValue: string;
+  inputValue: string;
+}
+
 export function PasswordInput({
   value,
   onChange,
@@ -19,14 +24,24 @@ export function PasswordInput({
   className,
 }: PasswordInputProps) {
   const [showPassword, setShowPassword] = useState(false);
+  const externalValue = value ?? "";
+  const [inputState, setInputState] = useState<PasswordInputState>(() => ({
+    externalValue,
+    inputValue: externalValue,
+  }));
+  const inputValue =
+    inputState.externalValue === externalValue ? inputState.inputValue : externalValue;
 
   return (
     <div className={cn("tw-relative", className)}>
       <Input
-        key={value ?? ""}
         type={showPassword ? "text" : "password"}
-        defaultValue={value ?? ""}
-        onChange={(e) => onChange?.(e.target.value)}
+        value={inputValue}
+        onChange={(e) => {
+          const nextValue = e.target.value;
+          setInputState({ externalValue, inputValue: nextValue });
+          onChange?.(nextValue);
+        }}
         placeholder={placeholder}
         disabled={disabled}
         className={cn("tw-w-full !tw-pr-7")}

@@ -38,6 +38,8 @@ async function loadModule(overrides: Record<string, unknown> = {}) {
   }));
   jest.doMock("@/logger", () => ({ logWarn: jest.fn() }));
   jest.doMock("@/settings/model", () => ({
+    getModelKeyFromModel: (model: { name: string; provider: string }) =>
+      `${model.name}|${model.provider}`,
     normalizeModelProvider: (provider: string) =>
       provider === "azure_openai" ? "azure openai" : provider,
     sanitizeSettings: jest.fn((settings: CopilotSettings) => settings),
@@ -61,8 +63,8 @@ describe("settingsPersistence", () => {
     });
   });
 
-  describe("getLegacyByokCredentialProviders()", () => {
-    it("retains only provider identities after legacy disk credentials are discarded", async () => {
+  describe("getLegacyByokCredentialPresence()", () => {
+    it("separates provider-wide and model-specific identities after disk credentials are discarded", async () => {
       const { module } = await loadModule();
 
       await module.loadSettingsWithKeychain(
@@ -80,14 +82,16 @@ describe("settingsPersistence", () => {
         jest.fn().mockResolvedValue(undefined)
       );
 
-      expect(module.getLegacyByokCredentialProviders()).toEqual([
-        "openai",
-        "anthropic",
-        "azure openai",
-      ]);
+      expect(module.getLegacyByokCredentialPresence()).toEqual({
+        providerIds: ["openai", "azure openai"],
+        modelIds: ["claude|anthropic"],
+      });
 
       module.resetPersistenceState();
-      expect(module.getLegacyByokCredentialProviders()).toEqual([]);
+      expect(module.getLegacyByokCredentialPresence()).toEqual({
+        providerIds: [],
+        modelIds: [],
+      });
     });
   });
 
@@ -192,7 +196,10 @@ describe("settingsPersistence", () => {
         })
       );
       expect(saveData.mock.calls[0][0]).not.toHaveProperty("_keychainOnly");
-      expect(module.getLegacyByokCredentialProviders()).toEqual(["openai"]);
+      expect(module.getLegacyByokCredentialPresence()).toEqual({
+        providerIds: ["openai"],
+        modelIds: [],
+      });
     });
 
     it("keeps credentials empty when Keychain is unavailable", async () => {

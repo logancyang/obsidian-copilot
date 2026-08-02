@@ -87,7 +87,10 @@ it("preserves legacy BYOK metadata when its discarded disk credential requires r
   );
   const { api, setupProvider } = makeApi();
 
-  await runSettingsMigrations(api, [ChatModelProviders.ANTHROPIC]);
+  await runSettingsMigrations(api, {
+    providerIds: [ChatModelProviders.ANTHROPIC],
+    modelIds: [],
+  });
 
   const descriptor = setupProvider.mock.calls[0]?.[0];
   expect(descriptor).toEqual(
