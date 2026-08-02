@@ -166,10 +166,26 @@ async function startAgentReview(
   return { outcome, options };
 }
 
+async function startAgentManage(harness: Harness): Promise<{
+  outcome: Promise<Awaited<ReturnType<SymposiumPublisher["reviewAgentManage"]>>>;
+  options: SymposiumModalOptions;
+}> {
+  const outcome = harness.publisher.reviewAgentManage(harness.file.path);
+  for (let turn = 0; turn < 20 && harness.modalOptions.length === 0; turn += 1) {
+    await Promise.resolve();
+  }
+  const options = harness.modalOptions.at(-1);
+  if (!options) throw new Error("Expected agent management modal");
+  return { outcome, options };
+}
+
 describe("SymposiumPublisher", () => {
   describe("createSymposiumAgentBridge()", () => {
-    it("exposes one frozen path-only operation that delegates to the trusted publisher", async () => {
+    it("exposes frozen path-only operations that delegate to the trusted publisher", async () => {
       const harness = createHarness();
+      const manage = jest
+        .spyOn(harness.publisher, "reviewAgentManage")
+        .mockResolvedValue({ status: "cancelled" });
       const review = jest
         .spyOn(harness.publisher, "reviewAgentPublish")
         .mockResolvedValue({ status: "cancelled" });
@@ -177,7 +193,11 @@ describe("SymposiumPublisher", () => {
       const bridge = createSymposiumAgentBridge(harness.publisher);
 
       expect(Object.isFrozen(bridge)).toBe(true);
-      expect(Object.keys(bridge)).toEqual(["reviewAgentPublish"]);
+      expect(Object.keys(bridge)).toEqual(["reviewAgentManage", "reviewAgentPublish"]);
+      await expect(bridge.reviewAgentManage("Notes/Architecture.md")).resolves.toEqual({
+        status: "cancelled",
+      });
+      expect(manage).toHaveBeenCalledWith("Notes/Architecture.md");
       await expect(
         bridge.reviewAgentPublish("Notes/Architecture.md", ".symposium/handoffs/review.html")
       ).resolves.toEqual({ status: "cancelled" });
@@ -832,6 +852,63 @@ describe("SymposiumPublisher", () => {
 
         expect(harness.openModal).not.toHaveBeenCalled();
         expect(harness.modalOptions).toHaveLength(0);
+      });
+    });
+
+    describe("reviewAgentManage()", () => {
+      it("opens host management and deletes only after the user chooses Delete", async () => {
+        const harness = createHarness({ symposium: DOC_URL, tags: ["shared"] });
+        const { outcome, options } = await startAgentManage(harness);
+
+        expect(options).toMatchObject({
+          fileName: "Architecture",
+          docId: DOC_ID,
+        });
+        expect(options.review).toBeUndefined();
+        expect(harness.client.delete).not.toHaveBeenCalled();
+
+        const result = await options.onConfirm("delete", activeDocument);
+
+        expect(result).toEqual({ kind: "success", action: "delete" });
+        await expect(outcome).resolves.toEqual({ status: "deleted" });
+        expect(harness.client.delete).toHaveBeenCalledWith(DOC_ID, "decrypted-license");
+        expect(harness.buildDocument).not.toHaveBeenCalled();
+        expect(harness.frontmatter).toEqual({ tags: ["shared"] });
+        expect(harness.recordLedger).toHaveBeenCalledWith({
+          docId: DOC_ID,
+          status: "unpublished",
+          notePath: harness.file.path,
+          url: null,
+          publishedAt: null,
+          version: null,
+          contentHash: null,
+        });
+      });
+
+      it("cancels without sending a request and rejects notes without a manageable identity", async () => {
+        const published = createHarness({ symposium: DOC_URL });
+        const management = await startAgentManage(published);
+
+        management.options.onClosed?.();
+
+        await expect(management.outcome).resolves.toEqual({ status: "cancelled" });
+        expect(published.client.publish).not.toHaveBeenCalled();
+        expect(published.client.update).not.toHaveBeenCalled();
+        expect(published.client.delete).not.toHaveBeenCalled();
+
+        const unpublished = createHarness();
+        await expect(
+          unpublished.publisher.reviewAgentManage(unpublished.file.path)
+        ).resolves.toEqual({
+          status: "failed",
+          message: "This note does not have a valid Symposium link to manage.",
+        });
+        await expect(
+          unpublished.publisher.reviewAgentManage("../outside.md")
+        ).resolves.toMatchObject({
+          status: "failed",
+        });
+        expect(unpublished.openModal).not.toHaveBeenCalled();
       });
     });
 

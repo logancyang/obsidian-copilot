@@ -188,31 +188,36 @@ describe("builtinSkills", () => {
     it("hands finished agent HTML to the host without exposing publication controls", () => {
       const skill = BUILTIN_SKILLS.find((item) => item.name === "symposium-publish");
       expect(skill).toBeDefined();
-      expect(skill!.version).toBe(7);
+      expect(skill!.version).toBe(8);
       expect(skill!.files.map((file) => file.path)).toEqual([
         "symposium-publish.sh",
         "symposium-publish.cmd",
         "symposium-publish.ps1",
       ]);
       expect(skill!.skillMd).toContain("Require one existing Markdown source file");
+      expect(skill!.skillMd).toContain("delete, remove, or");
+      expect(skill!.skillMd).toContain("the user alone chooses Update or Delete");
+      expect(skill!.skillMd).toContain("never render the raw frontmatter block");
+      expect(skill!.skillMd).toContain("Never tell the user to delete the page at its public URL");
       expect(skill!.skillMd).toMatch(/static HTML or\s+SVG/);
       expect(skill!.skillMd).toContain("handlers, redirects, or external assets");
       expect(skill!.skillMd).toContain(`\`${SYMPOSIUM_MAX_HTML_BYTES}\` bytes`);
       expect(skill!.skillMd).toContain(SYMPOSIUM_WORKSPACE_ROOT_ENV);
       expect(skill!.skillMd).toContain(SYMPOSIUM_AGENT_HANDOFF_DIR);
-      expect(skill!.skillMd).toContain("sandboxed local-browser rendering");
-      expect(skill!.skillMd).toContain("rejects active or externally loaded content");
+      expect(skill!.skillMd).toMatch(/sandboxed\s+local-browser rendering/);
+      expect(skill!.skillMd).toMatch(/rejects active or\s+externally loaded content/);
       expect(skill!.skillMd).toMatch(/prevents navigation from the\s+browser preview/);
-      expect(skill!.skillMd).toContain("never choose an action or document id");
+      expect(skill!.skillMd).toMatch(/never\s+choose an action or document id/);
       expect(skill!.skillMd).toContain("create a new complete artifact");
       expect(skill!.skillMd).toContain("previous confirmation never applies");
-      expect(skill!.skillMd).toContain("removes the original artifact");
+      expect(skill!.skillMd).toMatch(/removes the\s+original artifact/);
       expect(skill!.skillMd).toContain("removes its temporary browser preview");
       expect(skill!.skillMd).toContain("bypass the review");
       expect(skill!.skillMd).toContain("address every listed issue");
       expect(skill!.skillMd).toContain("retry exactly once");
       expect(skill!.skillMd).toContain("Never invent a cause");
       expect(skill!.skillMd).toMatch(/create\s+another filename/);
+      expect(skill!.skillMd).toContain("`deleted`");
       expect(skill!.skillMd).not.toContain("SYMPOSIUM_TOKEN");
       expect(skill!.skillMd).not.toContain(PLUS_ENV.licenseKey);
       expect(skill!.skillMd).not.toContain("/api/v1/docs");
@@ -224,6 +229,7 @@ describe("builtinSkills", () => {
         scriptOf("symposium-publish", ".sh"),
         scriptOf("symposium-publish", ".ps1"),
       ]) {
+        expect(script).toContain("reviewAgentManage");
         expect(script).toContain("reviewAgentPublish");
         expect(script).toContain("then(JSON.stringify)");
         expect(script).toContain("symposiumAgentBridge");

@@ -52,11 +52,13 @@ interface SymposiumPublisherDependencies {
 /** Result returned to the agent wrapper after the host-owned review closes. */
 export type AgentSymposiumReviewOutcome =
   | { status: "cancelled" | "regenerate" }
+  | { status: "deleted" }
   | { status: "published" | "updated"; url: string; message?: string }
   | { status: "failed"; message: string };
 
 /** Narrow runtime surface exposed to agent-controlled Obsidian CLI evaluations. */
 export interface SymposiumAgentBridge {
+  readonly reviewAgentManage: (sourcePathInput: string) => Promise<AgentSymposiumReviewOutcome>;
   readonly reviewAgentPublish: (
     sourcePathInput: string,
     stagedHtmlPathInput: string
@@ -113,6 +115,9 @@ function agentReviewFailure(message: string): AgentSymposiumReviewOutcome {
  * @param result The completed host publication or persistence result.
  */
 function agentOutcomeFromModalResult(result: SymposiumModalResult): AgentSymposiumReviewOutcome {
+  if (result.kind === "success" && result.action === "delete") {
+    return { status: "deleted" };
+  }
   if (
     (result.kind === "success" || result.kind === "persistence") &&
     result.action !== "delete" &&
@@ -124,6 +129,7 @@ function agentOutcomeFromModalResult(result: SymposiumModalResult): AgentSymposi
       ...(result.kind === "persistence" ? { message: result.message } : {}),
     };
   }
+
   if (result.kind === "failure" || result.kind === "persistence") {
     return agentReviewFailure(result.message);
   }
@@ -305,6 +311,42 @@ export class SymposiumPublisher {
   }
 
   /**
+   * Opens the existing host-owned management modal for a published source note.
+   * The agent supplies only the source path; the user chooses Update or Delete in Obsidian.
+   *
+   * @param sourcePathInput The Markdown source path relative to the owning vault.
+   */
+  async reviewAgentManage(sourcePathInput: string): Promise<AgentSymposiumReviewOutcome> {
+    const sourcePath = normalizeWorkspaceRelativePath(sourcePathInput);
+    if (!sourcePath) {
+      return agentReviewFailure(INVALID_HANDOFF_PATH_MESSAGE);
+    }
+    if (this.disposed) {
+      return agentReviewFailure("Symposium publishing is no longer available.");
+    }
+
+    const sourceFile = this.app.vault.getAbstractFileByPath(sourcePath);
+    if (!(sourceFile instanceof TFile) || sourceFile.extension !== "md") {
+      return agentReviewFailure("The Symposium source must be an existing Markdown note.");
+    }
+    const blockedResult = this.blockedPublishResults.get(sourceFile);
+    if (blockedResult) {
+      return agentReviewFailure(blockedResult.message);
+    }
+
+    let docId: string | null;
+    try {
+      docId = await getSymposiumDocId(this.app, sourceFile);
+    } catch (error) {
+      return agentReviewFailure(operationFailure("update", error).message);
+    }
+    if (!docId) {
+      return agentReviewFailure("This note does not have a valid Symposium link to manage.");
+    }
+    return this.openAgentManage(sourceFile, docId);
+  }
+
+  /**
    * Consumes agent-finished HTML and opens a host-owned review before any network request.
    * The bridge accepts paths only; note identity and POST-versus-PUT routing remain inside the host.
    *
@@ -411,6 +453,54 @@ export class SymposiumPublisher {
 
   private isAgentSourceCurrent(file: TFile, sourcePath: string): boolean {
     return file.path === sourcePath && this.app.vault.getAbstractFileByPath(sourcePath) === file;
+  }
+
+  private openAgentManage(
+    file: TFile,
+    expectedDocId: string
+  ): Promise<AgentSymposiumReviewOutcome> {
+    return new Promise((resolve) => {
+      let pending = false;
+      let settled = false;
+      const settle = (outcome: AgentSymposiumReviewOutcome): void => {
+        if (settled) return;
+        settled = true;
+        resolve(outcome);
+      };
+
+      let modal: SymposiumModalPort;
+      modal = this.createModal({
+        fileName: file.basename,
+        docId: expectedDocId,
+        onConfirm: async (action, ownerDocument) => {
+          pending = true;
+          try {
+            const result = await this.execute(file, expectedDocId, action, ownerDocument);
+            settle(agentOutcomeFromModalResult(result));
+            return result;
+          } catch (error) {
+            const result = operationFailure(action, error);
+            settle(agentOutcomeFromModalResult(result));
+            return result;
+          } finally {
+            pending = false;
+          }
+        },
+        onClosed: () => {
+          this.modals.delete(modal);
+          if (!pending) {
+            settle({ status: "cancelled" });
+          }
+        },
+      });
+      this.modals.add(modal);
+      try {
+        modal.open();
+      } catch {
+        this.modals.delete(modal);
+        settle(agentReviewFailure("Copilot could not open Symposium management."));
+      }
+    });
   }
 
   /**
@@ -773,6 +863,7 @@ export function createSymposiumAgentBridge(
   publisher: SymposiumPublisher
 ): Readonly<SymposiumAgentBridge> {
   return Object.freeze({
+    reviewAgentManage: (sourcePathInput: string) => publisher.reviewAgentManage(sourcePathInput),
     reviewAgentPublish: (sourcePathInput: string, stagedHtmlPathInput: string) =>
       publisher.reviewAgentPublish(sourcePathInput, stagedHtmlPathInput),
   });
