@@ -379,7 +379,25 @@ export async function executeByokMigration(
       const [provider] = unmatchedExisting.splice(duplicateIndex, 1);
       try {
         if (descriptor.apiKey) {
-          await api.providerRegistry.setApiKey(provider.providerId, descriptor.apiKey);
+          const existingApiKey = await api.providerRegistry.getApiKey(provider.providerId);
+          if (!existingApiKey?.trim()) {
+            await api.providerRegistry.setApiKey(provider.providerId, descriptor.apiKey);
+          }
+        }
+        if (descriptor.extras) {
+          const mergedExtras = { ...provider.extras };
+          let extrasChanged = false;
+          for (const [key, value] of Object.entries(descriptor.extras)) {
+            const existingValue = mergedExtras[key];
+            if (existingValue !== undefined && existingValue !== null && existingValue !== "") {
+              continue;
+            }
+            mergedExtras[key] = value;
+            extrasChanged = true;
+          }
+          if (extrasChanged) {
+            await api.providerRegistry.update(provider.providerId, { extras: mergedExtras });
+          }
         }
         const configuredModelIds = await api.setup.byok.addModels({
           providerId: provider.providerId,

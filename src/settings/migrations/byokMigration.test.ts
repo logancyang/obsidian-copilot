@@ -406,18 +406,20 @@ describe("executeByokMigration", () => {
       providerId: `prov-${++idSeq}`,
       configuredModelIds: input.models.map((_, i) => `cm-${idSeq}-${i}`),
     }));
+    const getApiKey = jest.fn().mockResolvedValue(null);
     const setApiKey = jest.fn().mockResolvedValue(undefined);
+    const update = jest.fn().mockResolvedValue(undefined);
     const addModels = jest.fn(async (input: { models: readonly ModelInfo[] }) =>
       input.models.map((_, index) => `existing-cm-${index}`)
     );
     const enableModel = jest.fn().mockResolvedValue(undefined);
     const listByOrigin = jest.fn((kind: string) => existing.filter((p) => p.origin.kind === kind));
     const api = {
-      providerRegistry: { listByOrigin, setApiKey },
+      providerRegistry: { listByOrigin, getApiKey, setApiKey, update },
       backendConfigRegistry: { enableModel },
       setup: { byok: { setupProvider, addModels } },
     } as unknown as ModelManagementApi;
-    return { api, setupProvider, setApiKey, addModels, enableModel };
+    return { api, setupProvider, getApiKey, setApiKey, update, addModels, enableModel };
   }
 
   function byokProvider(overrides: Partial<Provider>): Provider {
@@ -475,7 +477,9 @@ describe("executeByokMigration", () => {
       baseUrl: "https://api.anthropic.com",
       origin: { kind: "byok", catalogProviderId: "anthropic" },
     });
-    const { api, setupProvider, setApiKey, addModels, enableModel } = makeApi([existing]);
+    const { api, setupProvider, getApiKey, setApiKey, addModels, enableModel } = makeApi([
+      existing,
+    ]);
 
     await executeByokMigration(
       api,
@@ -485,6 +489,7 @@ describe("executeByokMigration", () => {
     );
 
     expect(setupProvider).not.toHaveBeenCalled();
+    expect(getApiKey).toHaveBeenCalledWith(existing.providerId);
     expect(setApiKey).toHaveBeenCalledWith(existing.providerId, "keychain-key");
     expect(addModels).toHaveBeenCalledWith({
       providerId: existing.providerId,
@@ -495,6 +500,52 @@ describe("executeByokMigration", () => {
       ["chat", "existing-cm-0"],
       ["opencode", "existing-cm-0"],
     ]);
+  });
+
+  it("preserves the current credential when an existing provider already has one", async () => {
+    const existing = byokProvider({
+      baseUrl: "https://api.anthropic.com",
+      apiKeyKeychainId: "current-keychain-id",
+    });
+    const { api, getApiKey, setApiKey } = makeApi([existing]);
+    getApiKey.mockResolvedValue("current-key");
+
+    await executeByokMigration(
+      api,
+      settingsWith([model({ name: "claude", provider: ChatModelProviders.ANTHROPIC })], {
+        anthropicApiKey: "legacy-key",
+      })
+    );
+
+    expect(getApiKey).toHaveBeenCalledWith(existing.providerId);
+    expect(setApiKey).not.toHaveBeenCalled();
+  });
+
+  it("backfills missing provider extras without replacing current values", async () => {
+    const existing = byokProvider({
+      providerType: "azure",
+      origin: { kind: "byok" },
+      extras: { azureInstanceName: "current-instance" },
+    });
+    const { api, update } = makeApi([existing]);
+
+    await executeByokMigration(
+      api,
+      settingsWith([model({ name: "gpt-4o", provider: ChatModelProviders.AZURE_OPENAI })], {
+        azureOpenAIApiKey: "keychain-key",
+        azureOpenAIApiInstanceName: "legacy-instance",
+        azureOpenAIApiDeploymentName: "legacy-deployment",
+        azureOpenAIApiVersion: "2024-06-01",
+      })
+    );
+
+    expect(update).toHaveBeenCalledWith(existing.providerId, {
+      extras: {
+        azureInstanceName: "current-instance",
+        azureDeploymentName: "legacy-deployment",
+        azureApiVersion: "2024-06-01",
+      },
+    });
   });
 
   it("uses one existing provider for only one planned credential group", async () => {
