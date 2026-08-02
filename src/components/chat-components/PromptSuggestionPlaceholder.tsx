@@ -16,6 +16,12 @@ interface PromptSuggestionPlaceholderProps {
    * pool and restarts the rotation.
    */
   prompts: readonly string[];
+  /**
+   * Id of this component's screen-reader description, which the composer points
+   * at with `aria-describedby`. Supplied by the caller because the element that
+   * needs describing is the editor, not anything rendered here.
+   */
+  descriptionId: string;
 }
 
 /**
@@ -33,6 +39,7 @@ interface PromptSuggestionPlaceholderProps {
  */
 export const PromptSuggestionPlaceholder: React.FC<PromptSuggestionPlaceholderProps> = ({
   prompts,
+  descriptionId,
 }) => {
   const [editor] = useLexicalComposerContext();
   const pool = useMemo(() => shufflePrompts(prompts), [prompts]);
@@ -79,10 +86,13 @@ export const PromptSuggestionPlaceholder: React.FC<PromptSuggestionPlaceholderPr
     );
   }, [editor, acceptText]);
 
-  // aria-hidden: decorative motion. The composer is already labelled, and a
-  // string that rewrites itself every 45ms is noise to a screen reader. The
-  // hint is a sibling of the prompt, not a child, so the prompt keeps its own
-  // text node — the chip must not read as part of the suggestion.
+  // The animation is hidden from assistive tech — a string that rewrites itself
+  // every 45ms is noise — but Tab is bound whenever a prompt is loaded, so what
+  // that key will do has to be announced anyway. The description carries the
+  // whole prompt (what Tab actually commits) and changes once per rotation
+  // rather than per character. The hint is a sibling of the prompt, not a
+  // child, so the prompt keeps its own text node — the chip must not read as
+  // part of the suggestion.
   return (
     <>
       <span aria-hidden="true">{visible}</span>
@@ -94,6 +104,9 @@ export const PromptSuggestionPlaceholder: React.FC<PromptSuggestionPlaceholderPr
           ⇥ Tab
         </span>
       )}
+      <span id={descriptionId} className="tw-sr-only">
+        {acceptText ? `Suggested prompt: ${acceptText}. Press Tab to insert it.` : ""}
+      </span>
     </>
   );
 };

@@ -16,6 +16,7 @@ import React from "react";
 // promptTypewriter.test.ts.
 const PROMPT = "hi there";
 const PROMPTS = Object.freeze([PROMPT]);
+const DESCRIPTION_ID = "suggestion-description";
 const { typeMs, deleteMs, holdMs, gapMs } = TYPEWRITER_TIMINGS;
 
 let editor: LexicalEditorType;
@@ -38,7 +39,7 @@ function renderPlaceholder() {
       }}
     >
       <EditorCapture />
-      <PromptSuggestionPlaceholder prompts={PROMPTS} />
+      <PromptSuggestionPlaceholder prompts={PROMPTS} descriptionId={DESCRIPTION_ID} />
     </LexicalComposer>
   );
   // Stand in for TextInsertionPlugin, which owns this command in the real
@@ -121,13 +122,39 @@ describe("PromptSuggestionPlaceholder", () => {
   it("surfaces the Tab affordance only while a prompt is fully shown", () => {
     renderPlaceholder();
     advance(typeMs);
-    expect(screen.queryByText(/Tab/)).toBeNull();
+    expect(screen.queryByText("⇥ Tab")).toBeNull();
 
     for (let i = 1; i < PROMPT.length; i++) advance(typeMs);
-    expect(screen.getByText(/Tab/)).toBeTruthy();
+    expect(screen.getByText("⇥ Tab")).toBeTruthy();
 
     advance(holdMs);
-    expect(screen.queryByText(/Tab/)).toBeNull();
+    expect(screen.queryByText("⇥ Tab")).toBeNull();
+  });
+
+  it("describes the whole prompt and its shortcut from the first typed character", () => {
+    const { container } = renderPlaceholder();
+    const description = () => container.querySelector(`#${DESCRIPTION_ID}`)?.textContent;
+
+    advance(typeMs);
+    expect(screen.getByText("h")).toBeTruthy();
+    // Announced before Tab is ever pressed, and naming what Tab commits —
+    // not the single character currently on screen.
+    expect(description()).toBe(`Suggested prompt: ${PROMPT}. Press Tab to insert it.`);
+
+    // Stable while the animation runs: a per-character description would make
+    // the composer unusable with a screen reader.
+    advance(typeMs);
+    advance(typeMs);
+    expect(description()).toBe(`Suggested prompt: ${PROMPT}. Press Tab to insert it.`);
+  });
+
+  it("describes nothing in the beat between two prompts, where Tab is unbound", () => {
+    const { container } = renderPlaceholder();
+    typeOutPrompt();
+    advance(holdMs);
+    for (let i = 1; i < PROMPT.length; i++) advance(deleteMs);
+
+    expect(container.querySelector(`#${DESCRIPTION_ID}`)?.textContent).toBe("");
   });
 
   it("commits the whole prompt on Tab even when only part of it is typed", () => {

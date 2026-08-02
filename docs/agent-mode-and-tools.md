@@ -26,6 +26,16 @@ When the autonomous agent is enabled, Copilot can:
 
 The agent activates automatically when you're in **Copilot Plus** mode. You don't need to do anything special — just ask your question.
 
+## Sample Prompts in the Message Box
+
+When you open a new agent chat and the message box is empty, Copilot types out sample prompts there one at a time — each appears character by character, pauses so you can read it, clears itself, and gives way to the next. They are examples of what the agent can do with your vault, not something being sent.
+
+- Press **Tab** while a suggestion is on screen to drop the whole prompt into the message box. Nothing is sent: edit it first, or press Enter to send it as-is.
+- Start typing at any point and the suggestions disappear. Clear the box again and they come back.
+- Once the conversation has started, the suggestions stop for that chat.
+
+If you've turned on reduced motion in your operating system, the prompts still rotate but appear and disappear whole instead of typing out.
+
 ## Choosing an Operating Mode
 
 The mode picker beside the message box controls how much the active agent can do:
