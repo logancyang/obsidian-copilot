@@ -19,7 +19,8 @@ import {
 } from "@/symposium/symposiumFrontmatter";
 import {
   buildSymposiumDocument,
-  createSymposiumDocument,
+  createSymposiumReviewDocument,
+  SymposiumDocumentRedirectError,
   SymposiumDocumentTooLargeError,
 } from "@/symposium/symposiumDocument";
 import { appendSymposiumLedgerEntry, type SymposiumLedgerEntry } from "@/symposium/symposiumLedger";
@@ -160,7 +161,10 @@ function operationFailure(action: SymposiumAction, error: unknown): SymposiumFai
       retryable: false,
     };
   }
-  if (error instanceof SymposiumDocumentTooLargeError) {
+  if (
+    error instanceof SymposiumDocumentTooLargeError ||
+    error instanceof SymposiumDocumentRedirectError
+  ) {
     return {
       kind: "failure",
       action,
@@ -336,7 +340,7 @@ export class SymposiumPublisher {
     let document: SymposiumDocument;
     let docId: string | null = null;
     try {
-      document = createSymposiumDocument(sourceFile.basename, html);
+      document = createSymposiumReviewDocument(sourceFile.basename, html);
       docId = await getSymposiumDocId(this.app, sourceFile);
     } catch (error) {
       const action: SymposiumAction = docId ? "update" : "publish";
@@ -380,8 +384,7 @@ export class SymposiumPublisher {
    * @param stagedHtmlPath The validated vault-relative staging path.
    */
   private async consumeDesktopAgentHandoff(stagedHtmlPath: string): Promise<string> {
-    const { consumeSymposiumAgentHandoff } =
-      await import("@/agentMode/symposium/symposiumAgentHandoff");
+    const { consumeSymposiumAgentHandoff } = await import("@/symposium/symposiumAgentHandoff");
     return consumeSymposiumAgentHandoff(this.getDesktopVaultRoot(), stagedHtmlPath);
   }
 

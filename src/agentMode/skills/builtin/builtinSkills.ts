@@ -512,7 +512,7 @@ metadata:
 Require one existing Markdown source file. Finish a complete, self-contained,
 passive HTML document before asking Obsidian to review it. Render source-specific
 content such as Mermaid and Obsidian Bases into static HTML or SVG, embed images,
-and include no scripts, frames, forms, handlers, or external assets. The exact
+and include no scripts, frames, forms, handlers, redirects, or external assets. The exact
 UTF-8 HTML must not exceed \`${SYMPOSIUM_MAX_HTML_BYTES}\` bytes.
 
 Write those final bytes to a new unique \`.html\` file under

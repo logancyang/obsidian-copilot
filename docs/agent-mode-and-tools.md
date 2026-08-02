@@ -92,7 +92,7 @@ Unlike chat, Agent Mode parses through the Miyo CLI rather than the Miyo server,
 
 ### Publish to Symposium
 
-Ask Claude, Codex, or OpenCode to publish an existing Markdown note as a web page. The agent finishes a self-contained HTML document, including static Mermaid and Bases output, before handing it to Copilot. Copilot consumes the staged file, then shows those exact finished bytes in a sandboxed, network-blocked preview with their source note, title, size, and fingerprint. Nothing is sent to Symposium until you explicitly confirm that review.
+Ask Claude, Codex, or OpenCode to publish an existing Markdown note as a web page. The agent finishes a self-contained HTML document, including static Mermaid and Bases output, before handing it to Copilot. Copilot rejects pages that can redirect automatically, then consumes the staged file and shows those exact finished bytes in a sandboxed, network-blocked preview with their source note, title, size, and fingerprint. Nothing is sent to Symposium until you explicitly confirm that review.
 
 Copilot removes each staged artifact as soon as it has captured the reviewed bytes, so canceling the review, asking the agent to regenerate, or encountering a later failure leaves no handoff behind and sends nothing. Regenerated HTML is a new handoff and must pass through a fresh review. Copilot reads the source note's current `symposium` property itself: a note without an identity creates a page, while a note with a valid identity can only update that page. A failed update never creates a replacement page or changes the existing identity.
 

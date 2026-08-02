@@ -196,6 +196,7 @@ describe("builtinSkills", () => {
       ]);
       expect(skill!.skillMd).toContain("Require one existing Markdown source file");
       expect(skill!.skillMd).toMatch(/static HTML or\s+SVG/);
+      expect(skill!.skillMd).toContain("handlers, redirects, or external assets");
       expect(skill!.skillMd).toContain(`\`${SYMPOSIUM_MAX_HTML_BYTES}\` bytes`);
       expect(skill!.skillMd).toContain(SYMPOSIUM_WORKSPACE_ROOT_ENV);
       expect(skill!.skillMd).toContain(SYMPOSIUM_AGENT_HANDOFF_DIR);

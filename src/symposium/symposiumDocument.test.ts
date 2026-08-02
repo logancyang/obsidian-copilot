@@ -2,7 +2,9 @@
 import {
   buildSymposiumDocument,
   createSymposiumDocument,
+  createSymposiumReviewDocument,
   SYMPOSIUM_MAX_HTML_BYTES,
+  SymposiumDocumentRedirectError,
   SymposiumDocumentTooLargeError,
 } from "@/symposium/symposiumDocument";
 import { App, Component, MarkdownRenderer, TFile } from "obsidian";
@@ -89,6 +91,17 @@ describe("symposiumDocument", () => {
     });
   });
 
+  describe("SymposiumDocumentRedirectError", () => {
+    describe("constructor()", () => {
+      it("describes automatic navigation as invalid finished HTML", () => {
+        const error = new SymposiumDocumentRedirectError();
+
+        expect(error).toBeInstanceOf(Error);
+        expect(error.message).toBe("Symposium HTML must not contain automatic redirects.");
+      });
+    });
+  });
+
   describe("createSymposiumDocument()", () => {
     it("freezes the exact HTML string and its UTF-8 byte length", () => {
       const html = "<!doctype html><html><body>Résumé</body></html>\n";
@@ -108,6 +121,26 @@ describe("symposiumDocument", () => {
 
       expect(() => createSymposiumDocument("Too large", html)).toThrow(
         SymposiumDocumentTooLargeError
+      );
+    });
+  });
+
+  describe("createSymposiumReviewDocument()", () => {
+    it("returns the exact immutable document when no automatic redirect is present", () => {
+      const html = "<!doctype html><html><body>Review</body></html>";
+
+      const result = createSymposiumReviewDocument("Review", html);
+
+      expect(result.html).toBe(html);
+      expect(Object.isFrozen(result)).toBe(true);
+    });
+
+    it("rejects case-insensitive meta refresh navigation before review", () => {
+      const html =
+        '<!doctype html><html><head><meta content="0;url=https://attacker.example/leak" HTTP-EQUIV=" Refresh "></head></html>';
+
+      expect(() => createSymposiumReviewDocument("Redirect", html)).toThrow(
+        SymposiumDocumentRedirectError
       );
     });
   });

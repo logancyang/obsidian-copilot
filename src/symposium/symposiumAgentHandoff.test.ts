@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 
-import { consumeSymposiumAgentHandoff } from "@/agentMode/symposium/symposiumAgentHandoff";
+import { consumeSymposiumAgentHandoff } from "@/symposium/symposiumAgentHandoff";
 import { SYMPOSIUM_MAX_HTML_BYTES } from "@/symposium/constants";
 
 const STAGED_PATH = ".symposium/handoffs/review.html";

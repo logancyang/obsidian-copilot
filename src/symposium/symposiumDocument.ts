@@ -77,6 +77,15 @@ export class SymposiumDocumentTooLargeError extends Error {
   }
 }
 
+/** Reports that finished HTML can navigate away before the user confirms it. */
+export class SymposiumDocumentRedirectError extends Error {
+  constructor() {
+    super("Symposium HTML must not contain automatic redirects.");
+    this.name = "SymposiumDocumentRedirectError";
+    Object.setPrototypeOf(this, SymposiumDocumentRedirectError.prototype);
+  }
+}
+
 /**
  * Captures one exact HTML string as the immutable payload reviewed and sent to Symposium.
  *
@@ -89,6 +98,24 @@ export function createSymposiumDocument(title: string, html: string): SymposiumD
     throw new SymposiumDocumentTooLargeError(byteLength);
   }
   return Object.freeze({ title, html, byteLength });
+}
+
+/**
+ * Captures agent-finished HTML only when it cannot navigate before confirmation.
+ *
+ * @param title The title shown during review and sent with the payload.
+ * @param html The complete HTML bytes staged by the agent.
+ */
+export function createSymposiumReviewDocument(title: string, html: string): SymposiumDocument {
+  const document = createSymposiumDocument(title, html);
+  const parsed = new DOMParser().parseFromString(html, "text/html");
+  const redirects = [...parsed.querySelectorAll<HTMLMetaElement>("meta[http-equiv]")].some(
+    (meta) => meta.getAttribute("http-equiv")?.trim().toLowerCase() === "refresh"
+  );
+  if (redirects) {
+    throw new SymposiumDocumentRedirectError();
+  }
+  return document;
 }
 
 /**

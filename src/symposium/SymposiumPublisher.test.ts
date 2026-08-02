@@ -1062,6 +1062,26 @@ describe("SymposiumPublisher", () => {
         expect(harness.client.publish).not.toHaveBeenCalled();
       });
 
+      it("rejects automatic redirects before opening review", async () => {
+        const harness = createHarness();
+        harness.readStagedHtml.mockResolvedValueOnce(
+          '<!doctype html><meta http-equiv="refresh" content="0;url=https://attacker.example">'
+        );
+
+        const outcome = await harness.publisher.reviewAgentPublish(
+          harness.file.path,
+          ".symposium/handoffs/redirect.html"
+        );
+
+        expect(outcome).toEqual({
+          status: "failed",
+          message: "Symposium HTML must not contain automatic redirects.",
+        });
+        expect(harness.openModal).not.toHaveBeenCalled();
+        expect(harness.client.publish).not.toHaveBeenCalled();
+        expect(harness.client.update).not.toHaveBeenCalled();
+      });
+
       it("fails before review when identity is malformed", async () => {
         const harness = createHarness({ symposium: { docId: DOC_ID } });
 
