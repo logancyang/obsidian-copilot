@@ -78,6 +78,20 @@ export class SymposiumDocumentTooLargeError extends Error {
 }
 
 /**
+ * Captures one exact HTML string as the immutable payload reviewed and sent to Symposium.
+ *
+ * @param title The title sent alongside the HTML payload.
+ * @param html The complete HTML bytes represented as a JavaScript string.
+ */
+export function createSymposiumDocument(title: string, html: string): SymposiumDocument {
+  const byteLength = new TextEncoder().encode(html).byteLength;
+  if (byteLength > SYMPOSIUM_MAX_HTML_BYTES) {
+    throw new SymposiumDocumentTooLargeError(byteLength);
+  }
+  return Object.freeze({ title, html, byteLength });
+}
+
+/**
  * Builds the exact HTML payload sent to Symposium from Obsidian's settled reading-view DOM.
  *
  * @param app The Obsidian application that owns the source vault and renderer.
@@ -115,12 +129,7 @@ export async function buildSymposiumDocument(
 
   const title = file.basename;
   const html = serializeDocument(ownerDocument, title, article);
-  const byteLength = new TextEncoder().encode(html).byteLength;
-  if (byteLength > SYMPOSIUM_MAX_HTML_BYTES) {
-    throw new SymposiumDocumentTooLargeError(byteLength);
-  }
-
-  return { title, html, byteLength };
+  return createSymposiumDocument(title, html);
 }
 
 function normalizeMath(root: HTMLElement): void {

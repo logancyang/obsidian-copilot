@@ -103,6 +103,8 @@ Copilot appends successful publishes, updates, and withdrawals to the hidden Mar
 
 If Publish or Delete succeeds but the note's property cannot be updated, reopening the dialog resumes that local change without contacting Symposium again. If the initial publish response is lost, Copilot blocks another attempt until the plugin reloads to avoid creating a duplicate page.
 
+Updates fail closed. If Symposium rejects an update for any reason, including when the remote page is missing, Copilot preserves the note's existing `symposium` property and does not create a replacement page.
+
 Copilot stops before publishing when a note's frontmatter is malformed or is not a YAML property map.
 
 ---

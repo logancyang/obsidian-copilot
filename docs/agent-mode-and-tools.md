@@ -92,9 +92,13 @@ Unlike chat, Agent Mode parses through the Miyo CLI rather than the Miyo server,
 
 ### Publish to Symposium
 
-Ask Claude, Codex, or OpenCode to publish an existing Markdown note as a web page. The agent creates self-contained HTML, renders Mermaid and Bases as static content, then asks for explicit confirmation because the resulting link is public.
+Ask Claude, Codex, or OpenCode to publish an existing Markdown note as a web page. The agent finishes a self-contained HTML document, including static Mermaid and Bases output, before handing it to Copilot. Copilot then shows those exact finished bytes in a sandboxed preview with their source note, title, size, and fingerprint. Nothing is sent to Symposium until you explicitly confirm that review.
 
-The skill handles initial publishing only. It appends the receipt to the hidden history file `.symposium/publish-history.md` and stores the full public link in the required source note's `symposium` property. Use **Publish file to Symposium** to update or withdraw the page.
+Canceling the review or asking the agent to regenerate sends nothing, and the handoff wrapper removes the staged artifact after every result. Regenerated HTML is a new handoff and must pass through a fresh review. Copilot reads the source note's current `symposium` property itself: a note without an identity creates a page, while a note with a valid identity can only update that page. A failed update never creates a replacement page or changes the existing identity.
+
+After a successful publish or update, Copilot appends the receipt to `.symposium/publish-history.md` and stores or preserves the full public link in the source note's `symposium` property. Use **Publish file to Symposium** to withdraw the page.
+
+The Symposium skill does not give the agent a Symposium credential or API endpoint. Agent Mode still passes the raw `COPILOT_PLUS_LICENSE_KEY` to agent processes for other Copilot Plus relay tools; removing that broader exposure is tracked separately in [logancyang/obsidian-copilot-preview#105](https://github.com/logancyang/obsidian-copilot-preview/issues/105).
 
 ### Always-Enabled Tools
 

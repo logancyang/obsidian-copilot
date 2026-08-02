@@ -118,23 +118,27 @@ describe("symposiumFrontmatter", () => {
   });
 
   describe("saveSymposiumLink()", () => {
-    it("writes or replaces the property with the public link through processFrontMatter", async () => {
-      const { app, frontmatter, processFrontMatter } = createApp({
-        symposium: OTHER_DOC_URL,
-        tags: ["public"],
-      });
+    it("writes the public link when the reserved property is absent", async () => {
+      const { app, frontmatter, processFrontMatter } = createApp({ tags: ["public"] });
 
-      await expect(saveSymposiumLink(app, file, RECEIPT, OTHER_DOC_ID)).resolves.toBe(true);
+      await expect(saveSymposiumLink(app, file, RECEIPT)).resolves.toBe(true);
 
       expect(processFrontMatter).toHaveBeenCalledWith(file, expect.any(Function));
       expect(frontmatter).toEqual({ symposium: DOC_URL, tags: ["public"] });
+    });
+
+    it("treats an already-saved receipt identity as idempotent", async () => {
+      const { app, frontmatter } = createApp({ symposium: DOC_URL });
+
+      await expect(saveSymposiumLink(app, file, RECEIPT)).resolves.toBe(true);
+      expect(frontmatter.symposium).toBe(DOC_URL);
     });
 
     it("rejects a receipt whose link does not contain its id before changing the note", async () => {
       const { app, processFrontMatter } = createApp();
 
       await expect(
-        saveSymposiumLink(app, file, { ...RECEIPT, url: OTHER_DOC_URL }, null)
+        saveSymposiumLink(app, file, { ...RECEIPT, url: OTHER_DOC_URL })
       ).rejects.toThrow("Cannot save an invalid Symposium document link.");
       expect(processFrontMatter).not.toHaveBeenCalled();
     });
@@ -142,7 +146,7 @@ describe("symposiumFrontmatter", () => {
     it("does not overwrite an identity that changed after the remote action began", async () => {
       const { app, frontmatter } = createApp({ symposium: OTHER_DOC_URL });
 
-      await expect(saveSymposiumLink(app, file, RECEIPT, null)).resolves.toBe(false);
+      await expect(saveSymposiumLink(app, file, RECEIPT)).resolves.toBe(false);
       expect(frontmatter.symposium).toBe(OTHER_DOC_URL);
     });
 
@@ -150,7 +154,7 @@ describe("symposiumFrontmatter", () => {
       const existingValue = { url: "https://example.com/symposium" };
       const { app, frontmatter } = createApp({ symposium: existingValue });
 
-      await expect(saveSymposiumLink(app, file, RECEIPT, null)).resolves.toBe(false);
+      await expect(saveSymposiumLink(app, file, RECEIPT)).resolves.toBe(false);
       expect(frontmatter.symposium).toBe(existingValue);
     });
 
@@ -160,7 +164,7 @@ describe("symposiumFrontmatter", () => {
       );
       const app = { fileManager: { processFrontMatter } } as unknown as App;
 
-      await expect(saveSymposiumLink(app, file, RECEIPT, null)).rejects.toBeInstanceOf(
+      await expect(saveSymposiumLink(app, file, RECEIPT)).rejects.toBeInstanceOf(
         SymposiumFrontmatterParseError
       );
     });

@@ -4,7 +4,7 @@ import { getDecryptedKey } from "@/encryptionService";
 import { getMiyoCustomUrl } from "@/miyo/miyoUtils";
 import { BREVILABS_API_BASE_URL } from "@/constants";
 import { PLUS_ENV } from "@/agentMode/skills/builtin/builtinSkills";
-import { SYMPOSIUM_TOKEN_ENV, SYMPOSIUM_WORKSPACE_ROOT_ENV } from "@/symposium/constants";
+import { SYMPOSIUM_VAULT_NAME_ENV, SYMPOSIUM_WORKSPACE_ROOT_ENV } from "@/symposium/constants";
 import {
   COPILOT_OBSIDIAN_CLI_ENV,
   resolveObsidianCliPath,
@@ -48,11 +48,11 @@ describe("builtinSkillEnv", () => {
 
       expect(env).toEqual({
         [PLUS_ENV.licenseKey]: "plain-key",
-        [SYMPOSIUM_TOKEN_ENV]: "plain-key",
         [PLUS_ENV.baseUrl]: BREVILABS_API_BASE_URL,
         [PLUS_ENV.userId]: "user-123",
         [PLUS_ENV.clientVersion]: "4.0.0",
       });
+      expect(env).not.toHaveProperty("SYMPOSIUM_TOKEN");
     });
 
     it("returns empty when the user is not a Plus subscriber", async () => {
@@ -92,6 +92,7 @@ describe("builtinSkillEnv", () => {
 
       expect(await buildBuiltinSkillEnv("", "/vault")).toEqual({
         [SYMPOSIUM_WORKSPACE_ROOT_ENV]: "/vault",
+        [SYMPOSIUM_VAULT_NAME_ENV]: "vault",
       });
       expect(mockGetDecryptedKey).not.toHaveBeenCalled();
     });
@@ -118,7 +119,6 @@ describe("builtinSkillEnv", () => {
       expect(await buildBuiltinSkillEnv("4.0.0")).toEqual({
         MIYO_URL: "http://miyo.example:8742",
         [PLUS_ENV.licenseKey]: "plain-key",
-        [SYMPOSIUM_TOKEN_ENV]: "plain-key",
         [PLUS_ENV.baseUrl]: BREVILABS_API_BASE_URL,
         [PLUS_ENV.userId]: "user-123",
         [PLUS_ENV.clientVersion]: "4.0.0",

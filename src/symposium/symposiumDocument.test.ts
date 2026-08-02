@@ -1,6 +1,7 @@
 /* eslint-disable obsidianmd/prefer-active-doc -- jsdom tests explicitly pass their single document realm */
 import {
   buildSymposiumDocument,
+  createSymposiumDocument,
   SYMPOSIUM_MAX_HTML_BYTES,
   SymposiumDocumentTooLargeError,
 } from "@/symposium/symposiumDocument";
@@ -85,6 +86,29 @@ describe("symposiumDocument", () => {
         expect(error).toBeInstanceOf(Error);
         expect(error.byteLength).toBe(SYMPOSIUM_MAX_HTML_BYTES + 1);
       });
+    });
+  });
+
+  describe("createSymposiumDocument()", () => {
+    it("freezes the exact HTML string and its UTF-8 byte length", () => {
+      const html = "<!doctype html><html><body>Résumé</body></html>\n";
+
+      const result = createSymposiumDocument("Review", html);
+
+      expect(result).toEqual({
+        title: "Review",
+        html,
+        byteLength: new TextEncoder().encode(html).byteLength,
+      });
+      expect(Object.isFrozen(result)).toBe(true);
+    });
+
+    it("rejects HTML whose UTF-8 encoding exceeds the existing byte limit", () => {
+      const html = "é".repeat(Math.floor(SYMPOSIUM_MAX_HTML_BYTES / 2) + 1);
+
+      expect(() => createSymposiumDocument("Too large", html)).toThrow(
+        SymposiumDocumentTooLargeError
+      );
     });
   });
 

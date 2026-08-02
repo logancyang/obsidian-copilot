@@ -124,7 +124,11 @@ import {
   trashFile,
 } from "@/utils/vaultAdapterUtils";
 import { v4 as uuidv4 } from "uuid";
-import { SymposiumPublisher } from "@/symposium/SymposiumPublisher";
+import {
+  createSymposiumAgentBridge,
+  type SymposiumAgentBridge,
+  SymposiumPublisher,
+} from "@/symposium/SymposiumPublisher";
 
 // Removed unused FileTrackingState interface
 
@@ -146,6 +150,8 @@ export default class CopilotPlugin extends Plugin {
   private planPreviewViewType?: typeof import("@/agentMode").PLAN_PREVIEW_VIEW_TYPE;
   private agentModelDiscoveryUnsubscriber?: () => void;
   modelManagement!: ModelManagementApi;
+  /** Frozen path-only facade available to Agent Mode's Obsidian CLI bridge. */
+  symposiumAgentBridge?: Readonly<SymposiumAgentBridge>;
   // Proof of THIS lifecycle for anything that enqueues a Miyo folder mutation.
   // Assigned in `onload` right after the queue reset, and read by the settings
   // UI rather than captured there: settings tabs mount lazily (`TabContent`
@@ -392,12 +398,19 @@ export default class CopilotPlugin extends Plugin {
     );
 
     const symposiumPublisher = new SymposiumPublisher(this.app);
+    const symposiumAgentBridge = createSymposiumAgentBridge(symposiumPublisher);
+    this.symposiumAgentBridge = symposiumAgentBridge;
     const publishFile = (file: TFile): void => {
       void symposiumPublisher
         .open(file)
         .catch((error) => logError("Failed to open Symposium publishing.", error));
     };
-    this.register(() => symposiumPublisher.dispose());
+    this.register(() => {
+      symposiumPublisher.dispose();
+      if (this.symposiumAgentBridge === symposiumAgentBridge) {
+        this.symposiumAgentBridge = undefined;
+      }
+    });
     registerCommands(this, publishFile);
     registerSymposiumFileMenu(this, publishFile);
 

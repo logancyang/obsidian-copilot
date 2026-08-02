@@ -1,7 +1,7 @@
 export interface SymposiumDocument {
-  title: string;
-  html: string;
-  byteLength: number;
+  readonly title: string;
+  readonly html: string;
+  readonly byteLength: number;
 }
 
 export interface SymposiumReceipt {
