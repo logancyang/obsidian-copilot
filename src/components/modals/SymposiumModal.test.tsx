@@ -1,9 +1,13 @@
 import type {
+  SymposiumDocumentReview,
   SymposiumModalOptions,
   SymposiumModalResult,
 } from "@/components/modals/SymposiumModal";
 import type { SymposiumReceipt } from "@/symposium/types";
+import { openWithSystemDefault } from "@/utils/openWithSystemDefault";
 import { act, fireEvent, screen } from "@testing-library/react";
+
+jest.mock("@/utils/openWithSystemDefault", () => ({ openWithSystemDefault: jest.fn() }));
 
 jest.mock("obsidian", () => ({
   App: class App {},
@@ -40,6 +44,18 @@ const RECEIPT: SymposiumReceipt = {
   url: `https://symposium.md/d/${DOC_ID}?server=exact`,
   version: 2,
 };
+const REVIEW_HTML = "<!doctype html><html><body>Exact review</body></html>\n";
+const REVIEW: SymposiumDocumentReview = {
+  sourcePath: "Notes/Architecture.md",
+  digest: "a".repeat(64),
+  previewPath: "/tmp/copilot-symposium-preview/preview.html",
+  previewUrl: "file:///tmp/copilot-symposium-preview/preview.html",
+  payload: Object.freeze({
+    title: "Architecture",
+    html: REVIEW_HTML,
+    byteLength: new TextEncoder().encode(REVIEW_HTML).byteLength,
+  }),
+};
 
 const mountedModals: SymposiumModal[] = [];
 
@@ -51,13 +67,17 @@ function renderModal(
   onConfirm: jest.MockedFunction<SymposiumModalOptions["onConfirm"]>,
   docId: string | null = null,
   onClosed?: () => void,
-  initialResult?: SymposiumModalResult
+  initialResult?: SymposiumModalResult,
+  review?: SymposiumDocumentReview,
+  onRegenerate?: () => void
 ): SymposiumModal {
   const modal = new SymposiumModal({} as App, {
     fileName: "Architecture",
     docId,
+    review,
     initialResult,
     onConfirm,
+    onRegenerate,
     onClosed,
   });
   activeDocument.body.appendChild(modal.contentEl);
@@ -92,6 +112,7 @@ describe("SymposiumModal", () => {
     }
     activeDocument.body.innerHTML = "";
     jest.restoreAllMocks();
+    jest.clearAllMocks();
   });
 
   describe("SymposiumModal", () => {
@@ -121,6 +142,67 @@ describe("SymposiumModal", () => {
         await clickButton("Yes, publish");
         expect(onConfirm).toHaveBeenCalledWith("publish", activeDocument);
         expect(publishModal.contentEl.childElementCount).toBeGreaterThan(0);
+      });
+
+      it("links to the sandboxed local preview in the default browser and cancels without confirming", () => {
+        const onConfirm = createConfirmMock();
+        const modal = renderModal(onConfirm, null, undefined, undefined, REVIEW, jest.fn());
+        const baseClose = (modal as unknown as { baseClose: jest.Mock }).baseClose;
+
+        expect(screen.getByText("Review “Architecture”")).toBeTruthy();
+        expect(screen.getByText(REVIEW.sourcePath)).toBeTruthy();
+        expect(screen.getByText(REVIEW.payload.title)).toBeTruthy();
+        expect(screen.getByText(`${REVIEW.payload.byteLength} bytes`)).toBeTruthy();
+        expect(screen.getByText(REVIEW.digest)).toBeTruthy();
+        expect(screen.queryByTitle("Symposium HTML preview")).toBeNull();
+        expect(
+          screen.getByText(/open a sandboxed local preview of these exact html bytes/i)
+        ).toBeTruthy();
+        const previewLink = screen.getByRole("link", { name: "Open local HTML preview" });
+        expect(previewLink.getAttribute("href")).toBe(REVIEW.previewUrl);
+        expect(previewLink.getAttribute("title")).toBe(REVIEW.previewPath);
+        expect(previewLink.getAttribute("target")).toBe("_blank");
+        expect(previewLink.getAttribute("rel")).toBe("noopener noreferrer");
+        fireEvent.click(previewLink);
+        expect(openWithSystemDefault).toHaveBeenCalledWith(REVIEW.previewPath);
+        expectButtonsInSameRow("Ask agent to regenerate", "No, cancel", "Yes, publish");
+
+        fireEvent.click(screen.getByRole("button", { name: "No, cancel" }));
+
+        expect(baseClose).toHaveBeenCalledTimes(1);
+        expect(onConfirm).not.toHaveBeenCalled();
+      });
+
+      it("returns regeneration without reusing the current confirmation", () => {
+        const onConfirm = createConfirmMock();
+        const onRegenerate = jest.fn();
+        const modal = renderModal(onConfirm, DOC_ID, undefined, undefined, REVIEW, onRegenerate);
+        const baseClose = (modal as unknown as { baseClose: jest.Mock }).baseClose;
+
+        expect(screen.getByRole("button", { name: "Yes, update" })).toBeTruthy();
+        expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
+        fireEvent.click(screen.getByRole("button", { name: "Ask agent to regenerate" }));
+
+        expect(onRegenerate).toHaveBeenCalledTimes(1);
+        expect(baseClose).toHaveBeenCalledTimes(1);
+        expect(onConfirm).not.toHaveBeenCalled();
+      });
+
+      it("treats a confirmed agent review failure as terminal instead of retrying unseen state", async () => {
+        const onConfirm = createConfirmMock().mockResolvedValue({
+          kind: "failure",
+          action: "update",
+          message: "Symposium is temporarily unavailable.",
+          accessNotice: false,
+          retryable: true,
+        });
+        renderModal(onConfirm, DOC_ID, undefined, undefined, REVIEW, jest.fn());
+
+        await clickButton("Yes, update");
+
+        expect(await screen.findByText("Update failed")).toBeTruthy();
+        expect(screen.getByText("Symposium is temporarily unavailable.")).toBeTruthy();
+        expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
       });
 
       it("allows native close while a confirmed action is pending", async () => {

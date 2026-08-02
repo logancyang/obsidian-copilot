@@ -1,8 +1,7 @@
 import type { BackendId } from "@/agentMode/session/types";
 import {
-  SYMPOSIUM_API_ORIGIN,
+  SYMPOSIUM_AGENT_HANDOFF_DIR,
   SYMPOSIUM_MAX_HTML_BYTES,
-  SYMPOSIUM_TOKEN_ENV,
   SYMPOSIUM_WORKSPACE_ROOT_ENV,
 } from "@/symposium/constants";
 import { OBSIDIAN_SKILLS } from "./obsidianSkills";
@@ -495,14 +494,14 @@ const FETCH_X = relaySkill({
   scriptFile: "fetch-x.sh",
 });
 
-const SYMPOSIUM_PUBLISH_VERSION = 1;
+const SYMPOSIUM_PUBLISH_VERSION = 8;
 const SYMPOSIUM_PUBLISH: BuiltinSkill = {
   name: "symposium-publish",
   version: SYMPOSIUM_PUBLISH_VERSION,
   enabledAgents: ["claude", "codex", "opencode"],
   skillMd: `---
 name: symposium-publish
-description: Convert an existing source Markdown file into standalone HTML and publish it as a public Symposium page. Use when the user asks to publish or share Markdown as a web page. Handles initial publishing only; existing pages require the host's update or delete flow.
+description: Publish, update, or withdraw an existing Markdown note through Symposium's host-owned review flow. Use when the user asks to publish, share, update, delete, remove, or withdraw a Symposium page.
 metadata:
   copilot-enabled-agents: claude, codex, opencode
   copilot-builtin-version: "${SYMPOSIUM_PUBLISH_VERSION}"
@@ -510,65 +509,182 @@ metadata:
 
 # Publish Markdown to Symposium
 
-Require one existing Markdown source file. If its \`symposium\` frontmatter
-property is present, stop: this skill performs initial publishing only.
+Require one existing Markdown source file. When the user asks to delete, remove, or
+withdraw its current Symposium page, do not generate HTML. Run the host wrapper with
+only the vault-relative source-note path. Obsidian reads the note's current identity
+and opens its existing management modal; the user alone chooses Update or Delete.
+Never tell the user to delete the page at its public URL.
 
-Convert the note into a complete, self-contained, passive HTML document. Render
-source-specific content such as Mermaid and Obsidian Bases into static HTML or
-SVG, embed images, and include no scripts, frames, forms, handlers, or external
-assets. If its UTF-8 encoding exceeds \`${SYMPOSIUM_MAX_HTML_BYTES}\` bytes, stop
-without asking for confirmation or sending a request.
+For publishing or updating, finish a complete, self-contained,
+passive HTML document before asking Obsidian to review it. Render source-specific
+content such as Mermaid and Obsidian Bases into static HTML or SVG, embed images,
+and include no scripts, frames, forms, handlers, redirects, or external assets. Treat
+YAML frontmatter as note metadata: never render the raw frontmatter block as page
+content. The exact UTF-8 HTML must not exceed \`${SYMPOSIUM_MAX_HTML_BYTES}\` bytes.
 
-Show the source note, title, and a concise preview. Explain that the resulting
-link is public and ask an explicit Yes/No confirmation. If the agent has no
-question UI, ask conversationally and stop until the user answers. A previous
-request to publish is not confirmation. On No, send nothing.
+Write those final bytes to a new unique \`.html\` file under
+\`${SYMPOSIUM_WORKSPACE_ROOT_ENV}/${SYMPOSIUM_AGENT_HANDOFF_DIR}/\`, creating that
+directory first when it does not exist. Do not show a prose substitute or ask
+for confirmation in chat. Instead run the host wrapper with exactly two
+vault-relative paths: the source note and the staged HTML.
 
-On Yes, read \`${SYMPOSIUM_TOKEN_ENV}\` from the environment without printing
-or storing it. If it is empty or absent, stop without making a request and
-report that Symposium authentication is unavailable. Recheck that the source
-still exists and has no \`symposium\` property, then use available HTTP tooling
-to POST exactly once to \`${SYMPOSIUM_API_ORIGIN}/api/v1/docs\` with Bearer
-authorization and JSON \`{"title": <title>, "html": <html>}\`. Send
-\`Accept: application/json\` and \`Content-Type: application/json\`, and set
-\`User-Agent: Symposium-Agent\`; Python \`urllib\`'s default client signature is
-blocked by Cloudflare. Do not retry if the request may have reached the server.
+On macOS or Linux:
 
-Report that Symposium rejected the token only when the response is JSON and
-\`error.code\` is \`unauthorized\`. A non-JSON 403, including a Cloudflare 1xxx
-error, is an edge/client rejection and says nothing about token validity. Any
-other non-201 response is a publish failure.
-
-A 201 receipt is valid only when \`docId\` is 16 lowercase Crockford characters,
-\`url\` is HTTPS with path \`/d/<docId>\`, and \`version\` is a positive safe integer.
-Treat a malformed 201 as ambiguous and non-retryable. Before updating the source
-note, append a \`published\` row containing that receipt, the source path, current
-UTC time, and the HTML SHA-256 to \`.symposium/publish-history.md\` under the
-publishing root. Use \`${SYMPOSIUM_WORKSPACE_ROOT_ENV}\` when it is nonempty;
-otherwise use the current workspace root. Do not substitute a project-scoped
-session's working directory for a host-provided root. Use direct filesystem
-operations because hidden directories are not ordinary indexed notes. Create
-the directory and file when absent. Use this header:
-
-\`\`\`markdown
-| Document ID | Status | Note | URL | Published at (UTC) | Version | Content SHA-256 |
-| --- | --- | --- | --- | --- | ---: | --- |
+\`\`\`bash
+sh "/absolute/path/to/this/skill/directory/symposium-publish.sh" "Notes/source.md" "${SYMPOSIUM_AGENT_HANDOFF_DIR}/unique.html"
 \`\`\`
 
-If the file exists, append only when it begins with that exact
-header. Escape existing backslashes, then pipes, and replace line breaks with
-spaces in every cell. Append in column order without rewriting old rows. If
-this advisory write fails, continue.
+For withdrawal, omit the staged-HTML argument:
 
-Finally re-read the source and set its \`symposium\` text property to the
-server's full \`url\` only if the property is still absent. Prefer a host's
-structured frontmatter API when available; otherwise make the smallest direct
-file edit without replacing concurrent changes. If that fails, do not publish
-again; report the URL and id so they remain recoverable.
-Return the server's \`url\` verbatim. Never put the token in the note, HTML,
-ledger, command arguments, or chat.
+\`\`\`bash
+sh "/absolute/path/to/this/skill/directory/symposium-publish.sh" "Notes/source.md"
+\`\`\`
+
+On Windows, use the \`.cmd\` wrapper (prefix it with \`&\` in PowerShell):
+
+\`\`\`powershell
+& "/absolute/path/to/this/skill/directory/symposium-publish.cmd" "Notes/source.md" "${SYMPOSIUM_AGENT_HANDOFF_DIR}/unique.html"
+\`\`\`
+
+Omit the staged-HTML argument on Windows for withdrawal as well.
+
+With only the source path, the wrapper blocks while Obsidian shows its host-owned
+Update/Delete management modal. With a staged HTML path, it blocks while Obsidian
+consumes the artifact and shows its source, title, and a link to a sandboxed
+local-browser rendering of the exact captured page. Obsidian rejects active or
+externally loaded content, prevents navigation from the browser preview, removes the
+original artifact, removes its temporary browser preview after review, and alone reads
+the current note identity to choose whether confirmation publishes or updates; never
+choose an action or document id.
+
+- \`cancelled\`: stop. No request was sent.
+- \`regenerate\`: create a new complete artifact and run the wrapper again. The
+  previous confirmation never applies to regenerated bytes.
+- \`published\` or \`updated\`: return the host-provided public URL verbatim.
+- \`deleted\`: report that the host withdrew the page and removed its note identity.
+- \`failed\`: if the host says to edit the staged file, address every listed issue in
+  that same file and retry exactly once. Otherwise, or if that retry fails, stop and
+  report the exact host message. Never invent a cause, change unrelated styling, create
+  another filename, bypass the review, or publish directly.
 `,
-  files: [],
+  files: [
+    {
+      path: "symposium-publish.sh",
+      content: `#!/bin/sh
+SOURCE=\${1:-}
+STAGED_HTML=\${2:-}
+case "$#" in
+  1) ;;
+  2) ;;
+  *)
+    printf '%s\\n' "Usage: sh symposium-publish.sh <source-note-path> [staged-html-path]" >&2
+    exit 1
+    ;;
+esac
+[ -n "$SOURCE" ] && { [ "$#" -eq 1 ] || [ -n "$STAGED_HTML" ]; } || {
+  printf '%s\\n' "Usage: sh symposium-publish.sh <source-note-path> [staged-html-path]" >&2
+  exit 1
+}
+
+OBSIDIAN_CLI=\${COPILOT_OBSIDIAN_CLI:-}
+WORKSPACE_ROOT=\${${SYMPOSIUM_WORKSPACE_ROOT_ENV}:-}
+[ -n "$WORKSPACE_ROOT" ] || {
+  printf '%s\\n' "The owning Obsidian workspace is unavailable." >&2
+  exit 1
+}
+
+[ -n "$OBSIDIAN_CLI" ] || {
+  printf '%s\\n' "A compatible Obsidian CLI is unavailable." >&2
+  exit 1
+}
+
+cd "$WORKSPACE_ROOT" || {
+  printf '%s\\n' "The owning Obsidian workspace is unavailable." >&2
+  exit 1
+}
+VAULT_NAME=\${WORKSPACE_ROOT%/}
+VAULT_NAME=\${VAULT_NAME##*/}
+[ -n "$VAULT_NAME" ] || {
+  printf '%s\\n' "The owning Obsidian vault is unavailable." >&2
+  exit 1
+}
+
+SOURCE_B64=$(printf '%s' "$SOURCE" | base64 | tr -d '\\r\\n')
+if [ "$#" -eq 1 ]; then
+  CODE="(()=>{const decode=(value)=>new TextDecoder().decode(Uint8Array.from(atob(value),(char)=>char.charCodeAt(0)));const bridge=app.plugins.plugins.copilot?.symposiumAgentBridge;if(!bridge)throw new Error('Copilot Symposium host is unavailable.');return bridge.reviewAgentManage(decode('$SOURCE_B64')).then(JSON.stringify);})()"
+else
+  HTML_B64=$(printf '%s' "$STAGED_HTML" | base64 | tr -d '\\r\\n')
+  CODE="(()=>{const decode=(value)=>new TextDecoder().decode(Uint8Array.from(atob(value),(char)=>char.charCodeAt(0)));const bridge=app.plugins.plugins.copilot?.symposiumAgentBridge;if(!bridge)throw new Error('Copilot Symposium host is unavailable.');return bridge.reviewAgentPublish(decode('$SOURCE_B64'),decode('$HTML_B64')).then(JSON.stringify);})()"
+fi
+
+CLI_OUTPUT=$("$OBSIDIAN_CLI" "vault=$VAULT_NAME" eval "code=$CODE") || exit $?
+CLI_RESULT=$(printf '%s\\n' "$CLI_OUTPUT" | sed -n '/^=> {/p' | sed -n '$p')
+case "$CLI_RESULT" in
+  "=> {"*)
+    OUTCOME=\${CLI_RESULT#"=> "}
+    printf '%s\\n' "$OUTCOME"
+    exit 0
+    ;;
+  *)
+    printf '%s\\n' "Copilot could not complete the Symposium review." >&2
+    exit 1
+    ;;
+esac
+`,
+    },
+    {
+      path: "symposium-publish.cmd",
+      content: cmdLauncher("symposium-publish.ps1"),
+    },
+    {
+      path: "symposium-publish.ps1",
+      content: `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
+
+$SOURCE = if ($args.Count -ge 1) { $args[0] } else { '' }
+$STAGED_HTML = if ($args.Count -ge 2) { $args[1] } else { '' }
+if (($args.Count -ne 1 -and $args.Count -ne 2) -or -not $SOURCE -or ($args.Count -eq 2 -and -not $STAGED_HTML)) {
+  [Console]::Error.WriteLine('Usage: symposium-publish.ps1 <source-note-path> [staged-html-path]')
+  exit 1
+}
+
+$OBSIDIAN_CLI = [Environment]::GetEnvironmentVariable('COPILOT_OBSIDIAN_CLI')
+$WORKSPACE_ROOT = [Environment]::GetEnvironmentVariable('${SYMPOSIUM_WORKSPACE_ROOT_ENV}')
+if (-not $WORKSPACE_ROOT) {
+  [Console]::Error.WriteLine('The owning Obsidian workspace is unavailable.')
+  exit 1
+}
+
+$EXIT_CODE = 0
+try {
+  if (-not $OBSIDIAN_CLI) { throw 'A compatible Obsidian CLI is unavailable.' }
+  Set-Location -LiteralPath $WORKSPACE_ROOT
+  $VAULT_NAME = Split-Path -Leaf (Get-Location).Path
+  if (-not $VAULT_NAME) { throw 'The owning Obsidian vault is unavailable.' }
+  $SOURCE_B64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($SOURCE))
+  if ($args.Count -eq 1) {
+    $CODE = "(()=>{const decode=(value)=>new TextDecoder().decode(Uint8Array.from(atob(value),(char)=>char.charCodeAt(0)));const bridge=app.plugins.plugins.copilot?.symposiumAgentBridge;if(!bridge)throw new Error('Copilot Symposium host is unavailable.');return bridge.reviewAgentManage(decode('$SOURCE_B64')).then(JSON.stringify);})()"
+  } else {
+    $HTML_B64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($STAGED_HTML))
+    $CODE = "(()=>{const decode=(value)=>new TextDecoder().decode(Uint8Array.from(atob(value),(char)=>char.charCodeAt(0)));const bridge=app.plugins.plugins.copilot?.symposiumAgentBridge;if(!bridge)throw new Error('Copilot Symposium host is unavailable.');return bridge.reviewAgentPublish(decode('$SOURCE_B64'),decode('$HTML_B64')).then(JSON.stringify);})()"
+  }
+
+  $CLI_OUTPUT = & $OBSIDIAN_CLI "vault=$VAULT_NAME" 'eval' "code=$CODE"
+  if ($LASTEXITCODE -ne 0) { throw 'Copilot could not complete the Symposium review.' }
+  $CLI_RESULT = [string](@($CLI_OUTPUT | Where-Object { ([string]$_).StartsWith('=> {') })[-1])
+  if (-not $CLI_RESULT.StartsWith('=> {')) {
+    throw 'Copilot could not complete the Symposium review.'
+  }
+  $OUTCOME = $CLI_RESULT.Substring(3)
+  [Console]::Out.Write($OUTCOME)
+} catch {
+  [Console]::Error.WriteLine($_.Exception.Message)
+  $EXIT_CODE = 1
+}
+exit $EXIT_CODE
+`,
+    },
+  ],
 };
 
 /** All always-seeded plugin-shipped skills, in display order. */

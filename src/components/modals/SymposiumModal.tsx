@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
+import { openWithSystemDefault } from "@/utils/openWithSystemDefault";
 import { createPluginRoot } from "@/utils/react/createPluginRoot";
-import type { SymposiumAction, SymposiumReceipt } from "@/symposium/types";
+import type { SymposiumAction, SymposiumDocument, SymposiumReceipt } from "@/symposium/types";
 import { App, Modal } from "obsidian";
 import React, { useState } from "react";
 import type { Root } from "react-dom/client";
@@ -32,11 +33,22 @@ export type SymposiumModalResult =
   | SymposiumFailureResult
   | SymposiumPersistenceResult;
 
+/** Immutable host-owned data shown before an agent-authored document can be sent. */
+export interface SymposiumDocumentReview {
+  readonly sourcePath: string;
+  readonly digest: string;
+  readonly payload: SymposiumDocument;
+  readonly previewPath: string;
+  readonly previewUrl: string;
+}
+
 export interface SymposiumModalOptions {
   fileName: string;
   docId: string | null;
+  review?: SymposiumDocumentReview;
   initialResult?: SymposiumModalResult;
   onConfirm: (action: SymposiumAction, ownerDocument: Document) => Promise<SymposiumModalResult>;
+  onRegenerate?: () => void;
   onClosed?: () => void;
 }
 
@@ -105,12 +117,14 @@ function SymposiumReceiptView({ receipt, actions }: SymposiumReceiptViewProps) {
 function SymposiumModalContent({
   fileName,
   docId,
+  review,
   initialResult,
   onConfirm,
+  onRegenerate,
   onClose,
 }: SymposiumModalContentProps) {
   const [confirmationAction, setConfirmationAction] = useState<SymposiumAction | null>(
-    docId ? null : "publish"
+    review ? (docId ? "update" : "publish") : docId ? null : "publish"
   );
   const [result, setResult] = useState<SymposiumModalResult | null>(initialResult ?? null);
   const [workingAction, setWorkingAction] = useState<SymposiumAction | null>(null);
@@ -178,7 +192,7 @@ function SymposiumModalContent({
           <Button variant="secondary" onClick={onClose}>
             Close
           </Button>
-          {result.retryable && (
+          {result.retryable && !review && (
             <Button onClick={retry} disabled={working}>
               {working ? "Retrying…" : "Retry"}
             </Button>
@@ -221,10 +235,13 @@ function SymposiumModalContent({
   }
 
   const heading = confirmationAction
-    ? `${actionLabel(confirmationAction)} “${fileName}”?`
+    ? review
+      ? `Review “${review.payload.title}”`
+      : `${actionLabel(confirmationAction)} “${fileName}”?`
     : `Manage “${fileName}”`;
-  const description =
-    confirmationAction === "delete"
+  const description = review
+    ? `These exact HTML bytes will ${confirmationAction === "update" ? "replace the current public page" : "become public"} only after you confirm.`
+    : confirmationAction === "delete"
       ? "Yes withdraws the link and deletes Symposium’s stored copy. Previously fetched or cached copies cannot be recalled."
       : confirmationAction === "update"
         ? "Yes replaces the current public page with this note’s latest content."
@@ -239,9 +256,53 @@ function SymposiumModalContent({
         <p className="tw-mb-0 tw-mt-2 tw-text-muted">{description}</p>
       </div>
 
-      <div className="tw-flex tw-justify-end tw-gap-2" aria-label="Symposium actions">
+      {review && (
+        <div className="tw-flex tw-flex-col tw-gap-2">
+          <div className="tw-grid tw-grid-cols-[auto,1fr] tw-gap-x-3 tw-gap-y-1 tw-text-small">
+            <span className="tw-text-muted">Source</span>
+            <code className="tw-break-all">{review.sourcePath}</code>
+            <span className="tw-text-muted">Title</span>
+            <span>{review.payload.title}</span>
+            <span className="tw-text-muted">HTML</span>
+            <span>{review.payload.byteLength} bytes</span>
+            <span className="tw-text-muted">SHA-256</span>
+            <code className="tw-break-all">{review.digest}</code>
+          </div>
+          <p className="tw-m-0 tw-text-small tw-text-muted">
+            Open a sandboxed local preview of these exact HTML bytes in your default browser, review
+            it, then return here to confirm.
+          </p>
+          <a
+            href={review.previewUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={review.previewPath}
+            className="tw-text-accent tw-underline"
+            onClick={(event) => {
+              event.preventDefault();
+              void openWithSystemDefault(review.previewPath);
+            }}
+          >
+            Open local HTML preview
+          </a>
+        </div>
+      )}
+
+      <div className="tw-flex tw-flex-wrap tw-justify-end tw-gap-2" aria-label="Symposium actions">
         {confirmationAction ? (
           <>
+            {review && onRegenerate && (
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  onRegenerate();
+                  onClose();
+                }}
+                disabled={working}
+              >
+                Ask agent to regenerate
+              </Button>
+            )}
             <Button variant="secondary" onClick={onClose} disabled={working}>
               No, cancel
             </Button>
