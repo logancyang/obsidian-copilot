@@ -15,7 +15,6 @@ import {
   extractLegacyDiskSecrets,
   mergeLegacyDiskSecrets,
   stripKeychainFields,
-  type LegacyDiskSecrets,
 } from "@/services/settingsSecretTransforms";
 import { CURRENT_SETTINGS_VERSION } from "@/settings/migrations/version";
 import { type CopilotSettings, sanitizeSettings } from "@/settings/model";
@@ -25,8 +24,11 @@ let writeQueue: Promise<void> = Promise.resolve();
 let lastPersistedSettings: CopilotSettings | undefined;
 let suppressNextPersist = false;
 let transactionEpoch = 0;
-let legacyDiskSecrets: LegacyDiskSecrets | undefined;
+let readDiskData: DiskReader | undefined;
 const pendingTombstones = new Set<string>();
+
+/** Reads the raw on-disk data.json, bypassing any in-memory settings state. */
+export type DiskReader = () => Promise<unknown>;
 
 /** Keychain vault IDs are 8 lowercase hex chars. */
 const KEYCHAIN_VAULT_ID_RE = /^[a-f0-9]{8}$/;
@@ -64,19 +66,8 @@ export function resetPersistenceState(): void {
   lastPersistedSettings = undefined;
   suppressNextPersist = false;
   transactionEpoch = 0;
-  legacyDiskSecrets = undefined;
+  readDiskData = undefined;
   pendingTombstones.clear();
-}
-
-/**
- * Stop carrying pre-v4 disk secrets into later saves.
- *
- * Call this after the user deliberately erases their credentials. That flow
- * writes a stripped data.json of its own, so leaving the snapshot in place
- * would resurrect the values it just removed on the very next save.
- */
-export function forgetLegacyDiskSecrets(): void {
-  legacyDiskSecrets = undefined;
 }
 
 /** Refresh the last known-good settings baseline used by Keychain rollback. */
@@ -126,11 +117,16 @@ export async function flushPersistence(): Promise<void> {
  *
  * @param rawData - Untrusted data returned by Obsidian's loadData().
  * @param saveData - Plugin-bound writer used to seed data.json on a fresh install.
+ * @param loadData - Re-reads data.json, so each save can preserve the secrets
+ *   the file holds at that moment rather than a snapshot that may have gone
+ *   stale (another device erasing credentials on a synced vault, say).
  */
 export async function loadSettingsWithKeychain(
   rawData: unknown,
-  saveData: (data: CopilotSettings) => Promise<void>
+  saveData: (data: CopilotSettings) => Promise<void>,
+  loadData: DiskReader
 ): Promise<CopilotSettings> {
+  readDiskData = loadData;
   const isFreshInstall = rawData == null;
   const rawSettings = cloneRawSettings(rawData);
   const keychain = KeychainService.getInstance();
@@ -150,8 +146,6 @@ export async function loadSettingsWithKeychain(
         "Copilot could not write its settings file. Check that the vault is writable, then restart Obsidian."
       );
     }
-  } else {
-    legacyDiskSecrets = extractLegacyDiskSecrets(rawSettings as unknown as Record<string, unknown>);
   }
 
   const runtimeSource = isFreshInstall ? structuredClone(DEFAULT_SETTINGS) : rawSettings;
@@ -212,7 +206,14 @@ async function persistKeychainSettings(
       }
     }
 
-    await saveData(mergeLegacyDiskSecrets(stripKeychainFields(cleaned), legacyDiskSecrets));
+    // Reason: read the file here, not at load. data.json is the authority on
+    // what still needs preserving, and a value cached at startup goes stale the
+    // moment anything else writes it — Delete All Keys, or another device on a
+    // synced vault. A failed read aborts the save rather than writing a
+    // snapshot that could silently drop credentials.
+    const onDisk = readDiskData ? await readDiskData() : undefined;
+    const legacy = onDisk ? extractLegacyDiskSecrets(onDisk as Record<string, unknown>) : undefined;
+    await saveData(mergeLegacyDiskSecrets(stripKeychainFields(cleaned), legacy));
     lastPersistedSettings = structuredClone(cleaned);
     for (const id of replayedTombstones) {
       pendingTombstones.delete(id);

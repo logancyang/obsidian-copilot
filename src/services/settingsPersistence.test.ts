@@ -42,6 +42,9 @@ async function loadModule(overrides: Record<string, unknown> = {}) {
     getModelKeyFromModel: jest.fn(
       (model: { name?: string; provider?: string }) => `${model.name}|${model.provider}`
     ),
+    normalizeModelProvider: jest.fn((provider: string) =>
+      provider === "azure_openai" ? "azure openai" : provider
+    ),
   }));
 
   const module = await import("@/services/settingsPersistence");
@@ -148,7 +151,8 @@ describe("settingsPersistence", () => {
           activeModels: [{ name: "custom", provider: "openai", apiKey: "plaintext-disk-key" }],
           activeEmbeddingModels: [],
         },
-        saveData
+        saveData,
+        jest.fn().mockResolvedValue(null)
       );
 
       const hydrateInput = keychain.hydrateFromKeychain.mock.calls[0][0];
@@ -167,7 +171,8 @@ describe("settingsPersistence", () => {
           openAIApiKey: "plaintext-disk-key",
           activeModels: [{ name: "custom", provider: "openai", apiKey: "model-disk-key" }],
         },
-        saveData
+        saveData,
+        jest.fn().mockResolvedValue(null)
       );
 
       expect(saveData).not.toHaveBeenCalled();
@@ -179,7 +184,8 @@ describe("settingsPersistence", () => {
 
       const loaded = await module.loadSettingsWithKeychain(
         { _keychainVaultId: "1234abcd", openAIApiKey: "plaintext-disk-key" },
-        jest.fn().mockResolvedValue(undefined)
+        jest.fn().mockResolvedValue(undefined),
+        jest.fn().mockResolvedValue(null)
       );
 
       expect(loaded.openAIApiKey).toBe("");
@@ -190,7 +196,7 @@ describe("settingsPersistence", () => {
       const { module, keychain } = await loadModule();
       const saveData = jest.fn().mockResolvedValue(undefined);
 
-      await module.loadSettingsWithKeychain(null, saveData);
+      await module.loadSettingsWithKeychain(null, saveData, jest.fn().mockResolvedValue(null));
 
       expect(keychain.setVaultId).toHaveBeenCalledWith("abcd1234");
       expect(saveData).toHaveBeenCalledWith({
@@ -223,33 +229,20 @@ describe("settingsPersistence", () => {
     });
   });
 
-  describe("forgetLegacyDiskSecrets()", () => {
-    it("stops carrying pre-v4 disk values into later saves", async () => {
-      const { module } = await loadModule();
-      await module.loadSettingsWithKeychain(
-        { _keychainVaultId: "1234abcd", openAIApiKey: "plaintext-disk-key" },
-        jest.fn().mockResolvedValue(undefined)
-      );
-      const saveData = jest.fn().mockResolvedValue(undefined);
-
-      module.forgetLegacyDiskSecrets();
-      await module.persistSettings(makeSettings(), saveData);
-
-      expect(saveData.mock.calls[0][0].openAIApiKey).toBe("");
-    });
-  });
-
   describe("persistSettings()", () => {
-    it("preserves pre-v4 disk credentials the session does not own", async () => {
+    it("preserves disk credentials the session does not own", async () => {
+      const onDisk = {
+        _keychainVaultId: "1234abcd",
+        openAIApiKey: "plaintext-disk-key",
+        activeModels: [{ name: "custom", provider: "openai", apiKey: "model-disk-key" }],
+        activeEmbeddingModels: [],
+      };
       const { module } = await loadModule();
+      const loadData = jest.fn().mockResolvedValue(onDisk);
       await module.loadSettingsWithKeychain(
-        {
-          _keychainVaultId: "1234abcd",
-          openAIApiKey: "plaintext-disk-key",
-          activeModels: [{ name: "custom", provider: "openai", apiKey: "model-disk-key" }],
-          activeEmbeddingModels: [],
-        },
-        jest.fn().mockResolvedValue(undefined)
+        onDisk,
+        jest.fn().mockResolvedValue(undefined),
+        loadData
       );
       const saveData = jest.fn().mockResolvedValue(undefined);
 
@@ -268,19 +261,65 @@ describe("settingsPersistence", () => {
       expect(written.activeModels[0].apiKey).toBe("model-disk-key");
     });
 
-    it("keeps a credential entered this session out of data.json without dropping the pre-v4 value", async () => {
+    it("restores a legacy azure_openai embedding key under its sanitized identity", async () => {
+      const onDisk = {
+        _keychainVaultId: "1234abcd",
+        activeModels: [],
+        activeEmbeddingModels: [
+          { name: "ada", provider: "azure_openai", apiKey: "embed-disk-key" },
+        ],
+      };
       const { module } = await loadModule();
       await module.loadSettingsWithKeychain(
-        { _keychainVaultId: "1234abcd", openAIApiKey: "plaintext-disk-key" },
-        jest.fn().mockResolvedValue(undefined)
+        onDisk,
+        jest.fn().mockResolvedValue(undefined),
+        jest.fn().mockResolvedValue(onDisk)
       );
       const saveData = jest.fn().mockResolvedValue(undefined);
 
-      await module.persistSettings(makeSettings({ openAIApiKey: "typed-this-session" }), saveData);
+      // Reason: sanitizeSettings() rewrites the legacy provider before this
+      // point, so the in-memory model carries the normalized identity.
+      await module.persistSettings(
+        makeSettings({
+          activeEmbeddingModels: [{ name: "ada", provider: "azure openai", apiKey: "" }],
+        } as unknown as Partial<CopilotSettings>),
+        saveData
+      );
 
-      const written = saveData.mock.calls[0][0] as { openAIApiKey: string };
-      expect(written.openAIApiKey).not.toBe("typed-this-session");
-      expect(written.openAIApiKey).toBe("plaintext-disk-key");
+      const written = saveData.mock.calls[0][0] as {
+        activeEmbeddingModels: Array<{ apiKey: string }>;
+      };
+      expect(written.activeEmbeddingModels[0].apiKey).toBe("embed-disk-key");
+    });
+
+    it("does not resurrect credentials another session already erased from disk", async () => {
+      const { module } = await loadModule();
+      const loadData = jest
+        .fn()
+        .mockResolvedValue({ _keychainVaultId: "1234abcd", openAIApiKey: "" });
+      await module.loadSettingsWithKeychain(
+        { _keychainVaultId: "1234abcd", openAIApiKey: "plaintext-disk-key" },
+        jest.fn().mockResolvedValue(undefined),
+        loadData
+      );
+      const saveData = jest.fn().mockResolvedValue(undefined);
+
+      await module.persistSettings(makeSettings(), saveData);
+
+      expect((saveData.mock.calls[0][0] as { openAIApiKey: string }).openAIApiKey).toBe("");
+    });
+
+    it("aborts the save when the disk read fails rather than dropping secrets", async () => {
+      const { module } = await loadModule();
+      await module.loadSettingsWithKeychain(
+        { _keychainVaultId: "1234abcd", openAIApiKey: "plaintext-disk-key" },
+        jest.fn().mockResolvedValue(undefined),
+        jest.fn().mockRejectedValue(new Error("read failed"))
+      );
+      const saveData = jest.fn().mockResolvedValue(undefined);
+
+      await expect(module.persistSettings(makeSettings(), saveData)).rejects.toThrow("read failed");
+      expect(saveData).not.toHaveBeenCalled();
     });
 
     it("tombstones cleared credentials and never writes them to data.json", async () => {

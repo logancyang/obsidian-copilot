@@ -1092,7 +1092,11 @@ export default class CopilotPlugin extends Plugin {
     // `dehydrateDeviceProfile` override below via `super.saveData` — routing it
     // through `this.saveData` would read the absent flat fields as "cleared"
     // and delete this device's `deviceProfiles` segment (GitHub #2539).
-    const settings = await loadSettingsWithKeychain(rawData, (d) => super.saveData(d));
+    const settings = await loadSettingsWithKeychain(
+      rawData,
+      (d) => super.saveData(d),
+      () => this.loadData()
+    );
     // Mirror this device's `agentMode.deviceProfiles` segment into the flat
     // agent fields the rest of the code reads (GitHub #2539). `saveData` below
     // performs the inverse on the way out.

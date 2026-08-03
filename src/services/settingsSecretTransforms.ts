@@ -10,7 +10,11 @@
  */
 
 import { DEFAULT_SETTINGS } from "@/constants";
-import { getModelKeyFromModel, type CopilotSettings } from "@/settings/model";
+import {
+  getModelKeyFromModel,
+  normalizeModelProvider,
+  type CopilotSettings,
+} from "@/settings/model";
 import { type CustomModel } from "@/aiParams";
 // Reason: do NOT import from @/logger here. The logger depends on getSettings(),
 // but this module runs during settings loading (before setSettings).
@@ -144,27 +148,41 @@ function stripModelSecrets(models: CustomModel[]): CustomModel[] {
 // Legacy disk secrets
 // ---------------------------------------------------------------------------
 
-/** Model-scope lists whose entries can carry their own secret fields. */
-const MODEL_SCOPE_KEYS = ["activeModels", "activeEmbeddingModels"] as const;
+/**
+ * Model-scope lists whose entries can carry their own secret fields, each
+ * paired with the identity `sanitizeSettings()` will give its models.
+ *
+ * Reason: sanitize rewrites `activeEmbeddingModels[].provider` through
+ * `normalizeModelProvider()` and leaves `activeModels` alone. Keying a raw
+ * disk model the same way for both scopes would miss in one direction or the
+ * other — a legacy `azure_openai` embedding model would be captured under an
+ * identity the merge never looks up, dropping its only on-disk key.
+ */
+const MODEL_SCOPES = {
+  activeModels: (model: CustomModel) => getModelKeyFromModel(model),
+  activeEmbeddingModels: (model: CustomModel) =>
+    getModelKeyFromModel({ ...model, provider: normalizeModelProvider(model.provider) }),
+} as const;
 
-type ModelScopeKey = (typeof MODEL_SCOPE_KEYS)[number];
+const MODEL_SCOPE_KEYS = Object.keys(MODEL_SCOPES) as ModelScopeKey[];
+
+type ModelScopeKey = keyof typeof MODEL_SCOPES;
 
 /**
- * Secret values that a pre-v4 `data.json` already held on disk.
+ * Secret values a `data.json` currently holds that this session does not own.
  *
  * v4 hydrates credentials from the Keychain and never reads these values, but
- * every save rewrites the whole file. Without a record of what was there, the
- * first save after upgrading would blank fields that may be the user's only
- * copy of a key. Capturing them at load lets the save path put them back
- * exactly as found.
+ * every save rewrites the whole file. Reading them back out immediately before
+ * each write lets the save put them down again exactly as found, so upgrading
+ * cannot blank a field that may be the user's only copy of a key.
  */
 export interface LegacyDiskSecrets {
   topLevel: Record<string, string>;
-  /** Model secrets keyed by scope, then by `getModelKeyFromModel()` identity. */
+  /** Model secrets keyed by scope, then by that scope's sanitized identity. */
   models: Record<ModelScopeKey, Record<string, Record<string, string>>>;
 }
 
-/** True when the snapshot holds nothing worth merging back. */
+/** True when the file holds nothing worth merging back. */
 function isEmptyLegacyDiskSecrets(legacy: LegacyDiskSecrets): boolean {
   return (
     Object.keys(legacy.topLevel).length === 0 &&
@@ -203,7 +221,7 @@ export function extractLegacyDiskSecrets(rawData: Record<string, unknown>): Lega
           }
         }
         if (Object.keys(fields).length > 0) {
-          byIdentity[getModelKeyFromModel(model as CustomModel)] = fields;
+          byIdentity[MODEL_SCOPES[scope](model as CustomModel)] = fields;
         }
       }
     }
@@ -243,7 +261,7 @@ export function mergeLegacyDiskSecrets(
     if (!Array.isArray(list)) continue;
     out[scope] = (list as unknown[]).map((model) => {
       if (!model || typeof model !== "object") return model;
-      const fields = byIdentity[getModelKeyFromModel(model as CustomModel)];
+      const fields = byIdentity[MODEL_SCOPES[scope](model as CustomModel)];
       if (!fields) return model;
       const copy = { ...model } as Record<string, unknown>;
       for (const [field, value] of Object.entries(fields)) {

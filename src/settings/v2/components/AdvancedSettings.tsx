@@ -9,7 +9,6 @@ import { flushRecordedPromptPayloadToLog } from "@/LLMProviders/chainRunner/util
 import { getCopilotSaveData } from "@/settings/copilotSaveData";
 import { KeychainService } from "@/services/keychainService";
 import {
-  forgetLegacyDiskSecrets,
   refreshLastPersistedSettings,
   runPersistenceTransaction,
   suppressNextPersistOnce,
@@ -155,22 +154,11 @@ export const AdvancedSettings: React.FC = () => {
       // Reason: run inside the persistence queue to prevent interleaving
       // with normal saves that could restore old secrets.
       await runPersistenceTransaction(() =>
-        keychain.forgetAllSecrets(
-          // Reason: the stripped write is the only authority on whether
-          // data.json still holds pre-v4 credentials, and how the transaction
-          // settles does not report it — a failed write returns normally, and a
-          // failed Keychain clear throws after the write already succeeded.
-          // Dropping the snapshot here ties it to the write itself.
-          async (data) => {
-            await saveData(data);
-            forgetLegacyDiskSecrets();
-          },
-          (nextSettings) => {
-            refreshLastPersistedSettings(nextSettings as CopilotSettings);
-            suppressNextPersistOnce();
-            setSettings(nextSettings);
-          }
-        )
+        keychain.forgetAllSecrets(saveData, (nextSettings) => {
+          refreshLastPersistedSettings(nextSettings as CopilotSettings);
+          suppressNextPersistOnce();
+          setSettings(nextSettings);
+        })
       );
     } catch (error) {
       logError("Failed to forget secrets.", error);
