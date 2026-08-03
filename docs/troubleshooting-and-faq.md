@@ -212,18 +212,9 @@ Copilot v4 stores API keys, license keys, and authentication tokens only in the 
 
 If your vault still had credentials in `data.json` when you upgraded, Copilot copied that file to `data-v3-credentials-backup-<id>.json` in the same plugin folder before clearing it, and showed you the exact path once on startup. Copilot never reads, decrypts, or imports that backup; it exists purely so your keys are not lost.
 
-Open it and check what your key values look like:
+Open it, paste each key into the matching field in Settings, and delete the file once they all work.
 
-- **Readable keys** (for example `sk-...`): paste each one into the matching field in Settings. Once every key is re-entered and working, you can delete the backup.
-- **Values beginning with `enc_`**: these were encrypted by an older Copilot version, and v4 cannot decrypt them. Pasting one into Settings would store the ciphertext itself as your key, which will not work. **Do not delete the backup.**
-
-  The simplest recovery is to re-issue those keys from each provider's dashboard and enter the new ones normally.
-
-  If you would rather recover the originals, note that the values can only be decrypted by Copilot v3 **on the device that encrypted them**, and that v4 has already cleared them from `data.json`, so simply installing v3 again will show empty fields. You have to put the file back first:
-  1. Close Obsidian, and pause vault sync so the next steps are not overwritten or copied to other devices.
-  2. In `.obsidian/plugins/copilot/`, copy `data.json` somewhere safe, then replace it with your `data-v3-credentials-backup-<id>.json` file (renaming that copy to `data.json`).
-  3. Downgrade the Copilot plugin to the v3 release you were using, reopen the vault, and read your keys from Settings.
-  4. Restore the `data.json` you set aside, upgrade back to v4, re-enable sync, and enter the recovered keys normally.
+Values that begin with `enc_` were encrypted by an older Copilot version and cannot be read back. Get fresh keys from those providers and enter the new ones instead.
 
 The Obsidian Keychain is per device. If you sync your vault to another device, you may need to re-enter API keys there.
 

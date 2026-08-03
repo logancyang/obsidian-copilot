@@ -157,13 +157,13 @@ export async function loadSettingsWithKeychain(
       // this same startup can complete the strip, so a path shown only on a
       // successful first write would never be shown at all in that case.
       if (backup.status === "backed-up") {
-        // Reason: `enc_*` values cannot be re-entered — pasting ciphertext
-        // stores it verbatim as the key — so the usual "copy across, then
-        // delete" advice would destroy the only copy a v3 device can decrypt.
+        // Reason: `enc_*` values cannot be pasted back in, since v4 stores
+        // ciphertext verbatim as the key. Those users need fresh keys, so the
+        // "copy them across" instruction would send them in circles.
         new Notice(
           backup.encrypted
-            ? `Copilot moved credential storage to the Obsidian Keychain. Your previous keys were copied to ${backup.path}, but some are encrypted and cannot be pasted back in. Keep that file and see Troubleshooting → API Key Storage before deleting anything.`
-            : `Copilot moved credential storage to the Obsidian Keychain. Your previous keys were copied to ${backup.path} — re-enter them in Settings, then delete that file.`,
+            ? `Copilot moved credential storage to the Obsidian Keychain. Your previous keys were copied to ${backup.path}, but some are encrypted and cannot be read back. Get fresh keys from those providers and enter them in Settings.`
+            : `Copilot moved credential storage to the Obsidian Keychain. Your previous keys were copied to ${backup.path}. Re-enter them in Settings, then delete that file.`,
           15000
         );
       }

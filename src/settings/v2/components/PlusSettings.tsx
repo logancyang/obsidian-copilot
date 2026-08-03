@@ -45,12 +45,11 @@ export function PlusSettings() {
           >
             Copilot paid plans
           </a>{" "}
-          bring <strong className="tw-font-semibold tw-text-normal">premium chat models</strong>,{" "}
-          <strong className="tw-font-semibold tw-text-normal">PDF and image understanding</strong>,
-          and <strong className="tw-font-semibold tw-text-normal">web search</strong> into your
-          vault. <strong className="tw-font-semibold tw-text-normal">Agent Mode</strong> goes
-          further, letting Claude Code, Codex, and opencode work through your notes on their own.
-          Pair it with{" "}
+          add <strong className="tw-font-semibold tw-text-normal">premium chat models</strong>,{" "}
+          <strong className="tw-font-semibold tw-text-normal">document understanding</strong>,{" "}
+          <strong className="tw-font-semibold tw-text-normal">advanced web search</strong>, and{" "}
+          <strong className="tw-font-semibold tw-text-normal">multi-agent capabilities</strong> to
+          your Copilot agentic experience. Pair it with{" "}
           <a
             href={MIYO_HOMEPAGE_URL}
             target="_blank"
@@ -59,7 +58,7 @@ export function PlusSettings() {
           >
             Miyo
           </a>{" "}
-          and your knowledge base stays on your machine.
+          and turn your vault into a centralized workspace for all your AI tools across devices.
         </div>
       </div>
 
