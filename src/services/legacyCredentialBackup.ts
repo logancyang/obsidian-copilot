@@ -14,9 +14,25 @@
  */
 
 import { hasPersistedSecrets } from "@/services/settingsSecretTransforms";
+import { sha256 } from "@/utils/hash";
 
-/** File name written next to `data.json`, inside the plugin folder. */
-export const LEGACY_BACKUP_FILENAME = "data-v3-credentials-backup.json";
+/** Prefix of the backup file written next to `data.json`, in the plugin folder. */
+export const LEGACY_BACKUP_PREFIX = "data-v3-credentials-backup";
+
+/**
+ * Name the backup after the bytes it contains.
+ *
+ * Reason: the file name has to answer "is this snapshot already saved?" on its
+ * own. A fixed name cannot: a second launch would find the earlier file and
+ * treat it as proof, even when `data.json` has since changed (a prior strip
+ * failed and Sync then delivered different credentials from a device still on
+ * v3), and would clear credentials that appear in no backup. Deriving the name
+ * from the contents makes a hit mean "these exact bytes are already saved" and
+ * gives any different snapshot its own file, so nothing is ever overwritten.
+ */
+export function legacyBackupFilename(contents: string): string {
+  return `${LEGACY_BACKUP_PREFIX}-${sha256(contents).slice(0, 8)}.json`;
+}
 
 /** Filesystem operations the rescue needs, so it stays testable and app-free. */
 export interface LegacyBackupFileIO {
@@ -34,8 +50,9 @@ export type LegacyBackupResult =
  * Copy `data.json` verbatim before v4 strips its credentials.
  *
  * A `failed` result means the caller must leave `data.json` alone: the file is
- * still the only copy of those keys. An existing backup is never overwritten,
- * so a rerun cannot replace a good copy with a worse one.
+ * still the only copy of those keys. The backup is named after its contents,
+ * so a rerun over unchanged data reuses the existing file, a changed
+ * `data.json` gets its own, and no backup is ever overwritten.
  *
  * @param rawData - Raw `data.json` contents as loaded from disk.
  * @param pluginDir - Plugin folder that holds `data.json`.
@@ -53,12 +70,12 @@ export async function backupLegacyCredentials(
     return { status: "not-needed" };
   }
 
-  const path = `${pluginDir}/${LEGACY_BACKUP_FILENAME}`;
+  const contents = JSON.stringify(rawData, null, 2);
+  const path = `${pluginDir}/${legacyBackupFilename(contents)}`;
   try {
-    if (await io.exists(path)) {
-      return { status: "backed-up", path };
+    if (!(await io.exists(path))) {
+      await io.write(path, contents);
     }
-    await io.write(path, JSON.stringify(rawData, null, 2));
     return { status: "backed-up", path };
   } catch (error) {
     return { status: "failed", error };

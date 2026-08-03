@@ -1,7 +1,14 @@
-import { backupLegacyCredentials, LEGACY_BACKUP_FILENAME } from "@/services/legacyCredentialBackup";
+import {
+  backupLegacyCredentials,
+  legacyBackupFilename,
+  LEGACY_BACKUP_PREFIX,
+} from "@/services/legacyCredentialBackup";
 
 const PLUGIN_DIR = "vault-config/plugins/copilot";
-const BACKUP_PATH = `${PLUGIN_DIR}/${LEGACY_BACKUP_FILENAME}`;
+
+function backupPathFor(rawData: unknown): string {
+  return `${PLUGIN_DIR}/${legacyBackupFilename(JSON.stringify(rawData, null, 2))}`;
+}
 
 function makeIO(overrides: Partial<{ exists: jest.Mock; write: jest.Mock }> = {}) {
   return {
@@ -11,6 +18,18 @@ function makeIO(overrides: Partial<{ exists: jest.Mock; write: jest.Mock }> = {}
 }
 
 describe("legacyCredentialBackup", () => {
+  describe("legacyBackupFilename()", () => {
+    it("names distinct snapshots distinctly and identical ones identically", () => {
+      const a = legacyBackupFilename('{"openAIApiKey":"one"}');
+      const b = legacyBackupFilename('{"openAIApiKey":"two"}');
+
+      expect(a).not.toBe(b);
+      expect(a).toBe(legacyBackupFilename('{"openAIApiKey":"one"}'));
+      expect(a.startsWith(LEGACY_BACKUP_PREFIX)).toBe(true);
+      expect(a.endsWith(".json")).toBe(true);
+    });
+  });
+
   describe("backupLegacyCredentials()", () => {
     it("copies the raw file verbatim when it still holds credentials", async () => {
       const io = makeIO();
@@ -22,8 +41,11 @@ describe("legacyCredentialBackup", () => {
 
       const result = await backupLegacyCredentials(rawData, PLUGIN_DIR, io);
 
-      expect(result).toEqual({ status: "backed-up", path: BACKUP_PATH });
-      expect(io.write).toHaveBeenCalledWith(BACKUP_PATH, JSON.stringify(rawData, null, 2));
+      expect(result).toEqual({ status: "backed-up", path: backupPathFor(rawData) });
+      expect(io.write).toHaveBeenCalledWith(
+        backupPathFor(rawData),
+        JSON.stringify(rawData, null, 2)
+      );
     });
 
     it("preserves encrypted values without decrypting them", async () => {
@@ -54,13 +76,33 @@ describe("legacyCredentialBackup", () => {
       expect(io.write).not.toHaveBeenCalled();
     });
 
-    it("keeps an existing backup rather than overwriting it", async () => {
+    it("reuses the existing backup when the same snapshot is already saved", async () => {
+      const rawData = { openAIApiKey: "sk-legacy" };
       const io = makeIO({ exists: jest.fn().mockResolvedValue(true) });
 
-      const result = await backupLegacyCredentials({ openAIApiKey: "sk-legacy" }, PLUGIN_DIR, io);
+      const result = await backupLegacyCredentials(rawData, PLUGIN_DIR, io);
 
-      expect(result).toEqual({ status: "backed-up", path: BACKUP_PATH });
+      expect(result).toEqual({ status: "backed-up", path: backupPathFor(rawData) });
       expect(io.write).not.toHaveBeenCalled();
+    });
+
+    it("gives a changed data.json its own backup instead of trusting the earlier one", async () => {
+      const earlier = { openAIApiKey: "sk-first" };
+      const current = { openAIApiKey: "sk-second" };
+      // Reason: a prior launch backed up `earlier` and failed to strip, then
+      // Sync delivered `current` from a device still on v3. Treating any
+      // existing backup as proof would clear keys no backup holds.
+      const io = makeIO({
+        exists: jest.fn(async (path: string) => path === backupPathFor(earlier)),
+      });
+
+      const result = await backupLegacyCredentials(current, PLUGIN_DIR, io);
+
+      expect(result).toEqual({ status: "backed-up", path: backupPathFor(current) });
+      expect(io.write).toHaveBeenCalledWith(
+        backupPathFor(current),
+        JSON.stringify(current, null, 2)
+      );
     });
 
     it("reports failure when the backup cannot be written", async () => {

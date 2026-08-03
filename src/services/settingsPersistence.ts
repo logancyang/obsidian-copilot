@@ -21,6 +21,7 @@ let writeQueue: Promise<void> = Promise.resolve();
 let lastPersistedSettings: CopilotSettings | undefined;
 let suppressNextPersist = false;
 let transactionEpoch = 0;
+let legacyCredentialsUnprotected = false;
 const pendingTombstones = new Set<string>();
 
 /** Keychain vault IDs are 8 lowercase hex chars. */
@@ -59,6 +60,7 @@ export function resetPersistenceState(): void {
   lastPersistedSettings = undefined;
   suppressNextPersist = false;
   transactionEpoch = 0;
+  legacyCredentialsUnprotected = false;
   pendingTombstones.clear();
 }
 
@@ -129,8 +131,11 @@ export async function loadSettingsWithKeychain(
   if (JSON.stringify(rawSettings) !== JSON.stringify(diskSettings)) {
     const backup = await backupLegacyCredentials(rawData);
     if (backup.status === "failed") {
-      // Reason: data.json is still the only copy of these credentials, so it
-      // must survive intact until a backup exists. Retried on the next load.
+      // Reason: data.json is still the only copy of these credentials, so
+      // nothing may overwrite it for the rest of this session - not this write,
+      // and not the ordinary settings writes that migrations and the settings
+      // subscriber trigger moments later. Retried on the next load.
+      legacyCredentialsUnprotected = true;
       new Notice(
         "Copilot could not back up the API keys stored in data.json, so it left the file untouched. Check that the vault is writable, then restart Obsidian."
       );
@@ -208,7 +213,12 @@ async function persistKeychainSettings(
       }
     }
 
-    await saveData(stripKeychainFields(cleaned));
+    // Reason: see the load path. Keychain writes still apply, so a key entered
+    // now is stored; only data.json is held back, because it is the sole copy
+    // of credentials no backup captured.
+    if (!legacyCredentialsUnprotected) {
+      await saveData(stripKeychainFields(cleaned));
+    }
     lastPersistedSettings = structuredClone(cleaned);
     for (const id of replayedTombstones) {
       pendingTombstones.delete(id);

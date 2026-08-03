@@ -191,9 +191,6 @@ describe("settingsPersistence", () => {
         settingsVersion: CURRENT_SETTINGS_VERSION,
       });
     });
-  });
-
-  describe("loadSettingsWithKeychain() backup guard", () => {
     it("leaves data.json intact when the credential backup fails", async () => {
       const { module } = await loadModule();
       const saveData = jest.fn().mockResolvedValue(undefined);
@@ -218,6 +215,46 @@ describe("settingsPersistence", () => {
       );
 
       expect(saveData.mock.calls[0][0].openAIApiKey).toBe("");
+    });
+
+    it("blocks later settings writes too when the credential backup fails", async () => {
+      const { module } = await loadModule();
+      await module.loadSettingsWithKeychain(
+        { _keychainVaultId: "1234abcd", openAIApiKey: "plaintext-disk-key" },
+        jest.fn().mockResolvedValue(undefined),
+        jest.fn().mockResolvedValue({ status: "failed", error: new Error("read-only") })
+      );
+      const saveData = jest.fn().mockResolvedValue(undefined);
+
+      // Reason: migrations and the settings subscriber both persist moments
+      // after load, which is what would otherwise erase the only copy.
+      await module.persistSettings(makeSettings(), saveData);
+
+      expect(saveData).not.toHaveBeenCalled();
+    });
+
+    it("still writes Keychain entries while data.json is held back", async () => {
+      const { module, keychain } = await loadModule({
+        persistSecrets: jest.fn().mockReturnValue({
+          secretEntries: [["copilot-vabcd1234-open-a-i-api-key", "re-entered"]],
+          keychainIdsToDelete: [],
+        }),
+      });
+      await module.loadSettingsWithKeychain(
+        { _keychainVaultId: "1234abcd", openAIApiKey: "plaintext-disk-key" },
+        jest.fn().mockResolvedValue(undefined),
+        jest.fn().mockResolvedValue({ status: "failed", error: new Error("read-only") })
+      );
+
+      await module.persistSettings(
+        makeSettings({ openAIApiKey: "re-entered" }),
+        jest.fn().mockResolvedValue(undefined)
+      );
+
+      expect(keychain.setSecretById).toHaveBeenCalledWith(
+        "copilot-vabcd1234-open-a-i-api-key",
+        "re-entered"
+      );
     });
   });
 
