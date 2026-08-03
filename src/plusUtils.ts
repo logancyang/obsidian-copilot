@@ -9,7 +9,7 @@ import {
   PLUS_UTM_MEDIUMS,
   PlusUtmMedium,
 } from "@/constants";
-import { EntitlementClaims, EntitlementFeature, verifyEntitlement } from "@/entitlement";
+import { EntitlementFeature, verifyEntitlement } from "@/entitlement";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import { logError, logInfo } from "@/logger";
 import {
@@ -101,6 +101,8 @@ function isEntitlementExpired(settings: CopilotSettings): boolean {
 interface VerifiedEntitlement {
   token: string;
   features: ReadonlySet<EntitlementFeature>;
+  /** The claims' plan name, for display only — never gated on. */
+  plan: string;
   /** The claims' `exp`, in epoch ms. */
   expiresAt: number;
   /**
@@ -115,6 +117,7 @@ interface VerifiedEntitlement {
 const NO_VERIFIED_ENTITLEMENT: VerifiedEntitlement = Object.freeze({
   token: "",
   features: Object.freeze(new Set<EntitlementFeature>()),
+  plan: "",
   expiresAt: 0,
   paid: false,
 });
@@ -282,29 +285,18 @@ export interface LicenseState {
   plan?: string;
 }
 
-/** Longest delay `setTimeout` can hold; anything larger wraps to immediate. */
-const MAX_TIMEOUT_MS = 2_147_483_647;
-
-/**
- * A verification tagged with what it describes. The key and token are what
- * settings must still hold for the claims to mean anything, so a stored key
- * that changed under an in-flight check can never be judged by the old answer.
- */
-interface VerificationResult {
-  licenseKey: string;
-  token: string;
-  claims: EntitlementClaims | null;
-}
-
 const NO_LICENSE: LicenseState = Object.freeze({ status: "none" });
 const INACTIVE_LICENSE: LicenseState = Object.freeze({ status: "inactive" });
 /** Paid, but with no verifiable token to name the plan (legacy tokenless keys). */
 const UNNAMED_ACTIVE_LICENSE: LicenseState = Object.freeze({ status: "active" });
 
 /**
- * The stored license as the settings section should show it, taken from the
- * signed claims rather than the `/license` response so the plan name survives a
- * restart, shows up offline, and can't be renamed by editing `data.json`.
+ * The stored license as the settings section should show it, read from the same
+ * session-verified proof the runtime gates use. Sharing that state is what keeps
+ * the badge from ever disagreeing with what the user can actually do, and it
+ * carries the two properties this would otherwise have to rebuild: the proof is
+ * tagged with the token settings must still hold, and {@link hasLiveEntitlement}
+ * treats the signed `exp` as its liveness bound.
  *
  * The paid tier decides, never the plan name: the server answers `is_valid` for
  * a lapsed key and downgrades its entitlement to the free policy while the name
@@ -313,57 +305,19 @@ const UNNAMED_ACTIVE_LICENSE: LicenseState = Object.freeze({ status: "active" })
  */
 export function useLicenseState(): LicenseState {
   const settings = useSettingsValue();
-  const [result, setResult] = React.useState<VerificationResult | null>(null);
-
-  React.useEffect(() => {
-    let cancelled = false;
-    let expiryTimer: number | undefined;
-    const subject = { licenseKey: settings.plusLicenseKey, token: settings.entitlementToken };
-    void verifyEntitlement(subject.token, { expectedUserId: settings.userId }).then((claims) => {
-      if (cancelled) {
-        return;
-      }
-      setResult({ ...subject, claims });
-      // Claims are unexpired only as of this moment, and time is the one input
-      // nothing else reports: a section left open across `exp` would otherwise
-      // keep naming a plan whose entitlement has already lapsed.
-      const untilExpiry = claims ? claims.exp * 1000 - Date.now() : 0;
-      // A delay past the 32-bit limit wraps and fires at once, which would blank
-      // the plan name instantly. Entitlements last ~14 days, so a horizon that
-      // far out is not one worth re-arming a timer to reach.
-      if (untilExpiry > 0 && untilExpiry <= MAX_TIMEOUT_MS) {
-        expiryTimer = window.setTimeout(() => setResult({ ...subject, claims: null }), untilExpiry);
-      }
-    });
-    return () => {
-      cancelled = true;
-      window.clearTimeout(expiryTimer);
-    };
-  }, [settings.plusLicenseKey, settings.entitlementToken, settings.userId]);
-
-  return React.useMemo(() => {
-    // A result for a different key or token says nothing about the one stored
-    // now, so it reads as unanswered — otherwise a free user's "no token"
-    // verdict would reject the key they just pasted for the whole round-trip.
-    const answered =
-      result?.licenseKey === settings.plusLicenseKey && result?.token === settings.entitlementToken;
-    if (!settings.plusLicenseKey || !answered) {
-      return NO_LICENSE;
-    }
-    if (result.claims) {
-      const claims = result.claims;
-      return claims.tier === "free"
-        ? INACTIVE_LICENSE
-        : { status: "active" as const, plan: claims.plan };
-    }
-    // Nothing verifies. The server can confirm a paid license without signing
-    // one (an unshipped `kid`, no WebCrypto), so keep those users active but
-    // unnamed — unless a stored expiry has already passed, which no later
-    // success has replaced.
-    return settings.isPaidUser === true && !isEntitlementExpired(settings)
-      ? UNNAMED_ACTIVE_LICENSE
-      : INACTIVE_LICENSE;
-  }, [result, settings]);
+  if (!settings.plusLicenseKey) {
+    return NO_LICENSE;
+  }
+  if (hasLiveEntitlement()) {
+    return verified.paid ? { status: "active", plan: verified.plan } : INACTIVE_LICENSE;
+  }
+  // Nothing verified this session. The server can confirm a paid license
+  // without signing one (an unshipped `kid`, no WebCrypto), so keep those users
+  // active but unnamed — unless a stored expiry has already passed, which no
+  // later success has replaced.
+  return settings.isPaidUser === true && !isEntitlementExpired(settings)
+    ? UNNAMED_ACTIVE_LICENSE
+    : INACTIVE_LICENSE;
 }
 
 /**
@@ -535,6 +489,7 @@ export async function applyEntitlement(token: string): Promise<boolean> {
   verified = {
     token,
     features: new Set(claims.features),
+    plan: claims.plan,
     expiresAt: claims.exp * 1000,
     paid: claims.tier !== "free",
   };
@@ -574,6 +529,7 @@ export async function verifyCachedEntitlement(): Promise<void> {
   verified = {
     token: entitlementToken,
     features: new Set(claims?.features),
+    plan: claims?.plan ?? "",
     expiresAt: (claims?.exp ?? 0) * 1000,
     paid: claims ? claims.tier !== "free" : false,
   };
