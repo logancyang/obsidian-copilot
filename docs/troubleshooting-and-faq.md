@@ -186,19 +186,18 @@ Any missing or incorrect field will cause errors.
 
 If your settings get into a bad state, you can reset:
 
-1. Go to **Settings → Copilot** → find the reset option.
+1. Go to **Settings → Copilot** → find the reset option
+2. Or delete the `data.json` file from the plugin folder: `.obsidian/plugins/copilot/data.json`
 
-⚠️ Resetting clears your non-secret settings, but it does **not** erase keys from the Obsidian Keychain. To erase them, use **Settings → Copilot → Advanced → API Key Storage → Delete All Keys**. Back up your keys first.
-
-Do not delete `.obsidian/plugins/copilot/data.json` as a substitute for the in-app reset. That file contains the vault's Keychain namespace; deleting it can make existing credentials unreachable and require you to re-enter them.
+⚠️ Resetting clears all your settings. API keys are stored in the Obsidian Keychain and can be deleted via **Settings → Copilot → Advanced → API Key Storage → Delete All Keys**. Back up your keys first.
 
 ### API Key Storage
 
-Copilot v4 stores API keys, license keys, and authentication tokens only in the **Obsidian Keychain**. These credentials are not stored in `data.json`.
+Starting with Copilot v4, API keys are stored exclusively in the **Obsidian Keychain** (requires Obsidian 1.11.4+). They are **not** stored in `data.json`.
 
-Credentials left in `data.json` by an older Copilot version are removed without being imported. If a key was never saved to this device's Obsidian Keychain, re-enter it in the relevant settings section after upgrading.
+**For pre-v4 users**: If your vault had API keys saved in `data.json` before upgrading, those values remain in the file but are never read or decrypted by Copilot. They are preserved but unused. To delete them, use **Settings → Copilot → Advanced → API Key Storage → Delete All Keys**.
 
-The Obsidian Keychain is per device. If you sync your vault to another device, you may need to re-enter API keys there.
+The Obsidian Keychain is per-device. If you sync your vault to another device, you need to re-enter API keys there.
 
 ### Debug Mode and Logs
 
@@ -259,7 +258,7 @@ Yes. You can have API keys configured for multiple providers simultaneously and 
 
 ### Where are my saved chats stored?
 
-Chat conversations are saved as markdown files in your vault, in the `copilot-conversations/` sub-folder of your Copilot folder (by default `copilot/copilot-conversations/`). To change where new chats are saved, change the root in **Settings → Copilot → Basic → Copilot folder location** — every Copilot sub-folder derives from it. Changing the root affects only new chats; conversations you have already saved stay in the old folder unless you move them yourself.
+Chat conversations are saved as markdown files in your vault, in the folder `copilot/copilot-conversations/` by default. You can change this folder in **Settings → Copilot → Basic → Default save folder**.
 
 ### How do I clear the Copilot cache?
 
@@ -267,15 +266,13 @@ Use **Command palette → Clear Copilot cache**. This clears cached responses an
 
 ### What is the `copilot/` folder in my vault?
 
-The `copilot/` folder is your Copilot folder — the default root the plugin uses to store its own files:
+The `copilot/` folder is created by the plugin and stores:
 - `copilot-conversations/` — Saved chat histories
 - `copilot-custom-prompts/` — Your custom commands
 - `system-prompts/` — Your custom system prompts
 - `memory/` — Saved AI memories (if enabled)
-- `skills/` — Agent skills
-- `projects/` — Project files
 
-You can rename this root in **Settings → Copilot → Basic → Copilot folder location**; all of the sub-folders above derive from it. The Copilot folder is automatically excluded from vault search to avoid cluttering results. If you change the root, the old folder is not moved for you and stays excluded from search permanently — any folder that has ever been your Copilot folder is kept out of search results even after you switch away from it.
+This folder is automatically excluded from vault search to avoid cluttering results.
 
 ### How do I switch modes?
 
