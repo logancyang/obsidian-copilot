@@ -1,10 +1,8 @@
 import type { CopilotSettings } from "@/settings/model";
 import {
   cleanupLegacyFields,
-  extractLegacyDiskSecrets,
   hasPersistedSecrets,
   isSensitiveKey,
-  mergeLegacyDiskSecrets,
   stripKeychainFields,
 } from "@/services/settingsSecretTransforms";
 
@@ -104,78 +102,6 @@ describe("settingsSecretTransforms", () => {
       expect(record.openAIApiKey).toBe("");
       expect(record.activeModels).toBeUndefined();
       expect(record.activeEmbeddingModels).toBeUndefined();
-    });
-  });
-
-  describe("extractLegacyDiskSecrets()", () => {
-    it("records every non-empty top-level and model secret found on disk", () => {
-      const legacy = extractLegacyDiskSecrets({
-        openAIApiKey: "disk-key",
-        anthropicApiKey: "",
-        someOtherField: "not-a-secret",
-        activeModels: [
-          { name: "custom", provider: "openai", apiKey: "model-key" },
-          { name: "bare", provider: "openai", apiKey: "" },
-        ],
-        activeEmbeddingModels: [{ name: "embed", provider: "openai", apiKey: "embed-key" }],
-      });
-
-      expect(legacy.topLevel).toEqual({ openAIApiKey: "disk-key" });
-      expect(legacy.models.activeModels).toEqual({ "custom|openai": { apiKey: "model-key" } });
-      expect(legacy.models.activeEmbeddingModels).toEqual({
-        "embed|openai": { apiKey: "embed-key" },
-      });
-    });
-
-    it("captures nothing to merge back when the file holds no secrets", () => {
-      const legacy = extractLegacyDiskSecrets({
-        openAIApiKey: "",
-        activeModels: [{ name: "custom", provider: "openai" }],
-      });
-      const stripped = stripKeychainFields(makeSettings({ openAIApiKey: "" }));
-
-      expect(mergeLegacyDiskSecrets(stripped, legacy)).toBe(stripped);
-    });
-  });
-
-  describe("mergeLegacyDiskSecrets()", () => {
-    it("restores captured disk values into a stripped snapshot", () => {
-      const legacy = extractLegacyDiskSecrets({
-        openAIApiKey: "disk-key",
-        activeModels: [{ name: "custom", provider: "openai", apiKey: "model-key" }],
-      });
-      const stripped = stripKeychainFields(
-        makeSettings({
-          openAIApiKey: "",
-          activeModels: [{ name: "custom", provider: "openai", apiKey: "" }],
-        } as unknown as Partial<CopilotSettings>)
-      );
-
-      const merged = mergeLegacyDiskSecrets(stripped, legacy) as unknown as Record<string, unknown>;
-
-      expect(merged.openAIApiKey).toBe("disk-key");
-      expect((merged.activeModels as Array<{ apiKey: string }>)[0].apiKey).toBe("model-key");
-    });
-
-    it("drops a captured value whose model no longer exists in settings", () => {
-      const legacy = extractLegacyDiskSecrets({
-        activeModels: [{ name: "removed", provider: "openai", apiKey: "model-key" }],
-      });
-      const stripped = stripKeychainFields(
-        makeSettings({
-          activeModels: [{ name: "kept", provider: "openai", apiKey: "" }],
-        } as unknown as Partial<CopilotSettings>)
-      );
-
-      const merged = mergeLegacyDiskSecrets(stripped, legacy) as unknown as Record<string, unknown>;
-
-      expect((merged.activeModels as Array<{ apiKey: string }>)[0].apiKey).toBe("");
-    });
-
-    it("returns the snapshot unchanged when there is nothing captured", () => {
-      const stripped = stripKeychainFields(makeSettings({ openAIApiKey: "" }));
-
-      expect(mergeLegacyDiskSecrets(stripped, undefined)).toBe(stripped);
     });
   });
 

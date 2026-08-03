@@ -10,11 +10,7 @@
  */
 
 import { DEFAULT_SETTINGS } from "@/constants";
-import {
-  getModelKeyFromModel,
-  normalizeModelProvider,
-  type CopilotSettings,
-} from "@/settings/model";
+import { type CopilotSettings } from "@/settings/model";
 import { type CustomModel } from "@/aiParams";
 // Reason: do NOT import from @/logger here. The logger depends on getSettings(),
 // but this module runs during settings loading (before setSettings).
@@ -142,136 +138,6 @@ function stripModelSecrets(models: CustomModel[]): CustomModel[] {
     }
     return copy as unknown as CustomModel;
   });
-}
-
-// ---------------------------------------------------------------------------
-// Legacy disk secrets
-// ---------------------------------------------------------------------------
-
-/**
- * Model-scope lists whose entries can carry their own secret fields, each
- * paired with the identity `sanitizeSettings()` will give its models.
- *
- * Reason: sanitize rewrites `activeEmbeddingModels[].provider` through
- * `normalizeModelProvider()` and leaves `activeModels` alone. Keying a raw
- * disk model the same way for both scopes would miss in one direction or the
- * other — a legacy `azure_openai` embedding model would be captured under an
- * identity the merge never looks up, dropping its only on-disk key.
- */
-const MODEL_SCOPES = {
-  activeModels: (model: CustomModel) => getModelKeyFromModel(model),
-  activeEmbeddingModels: (model: CustomModel) =>
-    getModelKeyFromModel({ ...model, provider: normalizeModelProvider(model.provider) }),
-} as const;
-
-const MODEL_SCOPE_KEYS = Object.keys(MODEL_SCOPES) as ModelScopeKey[];
-
-type ModelScopeKey = keyof typeof MODEL_SCOPES;
-
-/**
- * Secret values a `data.json` currently holds that this session does not own.
- *
- * v4 hydrates credentials from the Keychain and never reads these values, but
- * every save rewrites the whole file. Reading them back out immediately before
- * each write lets the save put them down again exactly as found, so upgrading
- * cannot blank a field that may be the user's only copy of a key.
- */
-export interface LegacyDiskSecrets {
-  topLevel: Record<string, string>;
-  /** Model secrets keyed by scope, then by that scope's sanitized identity. */
-  models: Record<ModelScopeKey, Record<string, Record<string, string>>>;
-}
-
-/** True when the file holds nothing worth merging back. */
-function isEmptyLegacyDiskSecrets(legacy: LegacyDiskSecrets): boolean {
-  return (
-    Object.keys(legacy.topLevel).length === 0 &&
-    MODEL_SCOPE_KEYS.every((scope) => Object.keys(legacy.models[scope]).length === 0)
-  );
-}
-
-/**
- * Record every non-empty secret value present in a raw `data.json`.
- *
- * @param rawData - The raw data as loaded from disk, before any stripping.
- */
-export function extractLegacyDiskSecrets(rawData: Record<string, unknown>): LegacyDiskSecrets {
-  const topLevel: Record<string, string> = {};
-  for (const key of Object.keys(rawData)) {
-    if (!isSensitiveKey(key)) continue;
-    const value = rawData[key];
-    if (typeof value === "string" && value.length > 0) {
-      topLevel[key] = value;
-    }
-  }
-
-  const models = {} as LegacyDiskSecrets["models"];
-  for (const scope of MODEL_SCOPE_KEYS) {
-    const byIdentity: Record<string, Record<string, string>> = {};
-    const list = rawData[scope];
-    if (Array.isArray(list)) {
-      for (const model of list) {
-        if (!model || typeof model !== "object") continue;
-        const rec = model as Record<string, unknown>;
-        const fields: Record<string, string> = {};
-        for (const field of MODEL_SECRET_FIELDS) {
-          const value = rec[field];
-          if (typeof value === "string" && value.length > 0) {
-            fields[field] = value;
-          }
-        }
-        if (Object.keys(fields).length > 0) {
-          byIdentity[MODEL_SCOPES[scope](model as CustomModel)] = fields;
-        }
-      }
-    }
-    models[scope] = byIdentity;
-  }
-
-  return { topLevel, models };
-}
-
-/**
- * Put previously-on-disk secret values back into a settings snapshot bound for
- * `data.json`, so writing it cannot destroy what the user already had.
- *
- * Only empty fields are filled: a value this session actually owns always wins,
- * and a field the user cleared on purpose stays cleared for this session's own
- * secrets. A model dropped from settings has nowhere to carry its legacy value,
- * so its entry is simply not written back.
- *
- * @param settings - The snapshot about to be persisted, already stripped.
- * @param legacy - Values captured from disk at load, or undefined to merge nothing.
- */
-export function mergeLegacyDiskSecrets(
-  settings: CopilotSettings,
-  legacy: LegacyDiskSecrets | undefined
-): CopilotSettings {
-  if (!legacy || isEmptyLegacyDiskSecrets(legacy)) return settings;
-
-  const out = asRecord({ ...settings });
-  for (const [key, value] of Object.entries(legacy.topLevel)) {
-    if (!out[key]) out[key] = value;
-  }
-
-  for (const scope of MODEL_SCOPE_KEYS) {
-    const byIdentity = legacy.models[scope];
-    if (Object.keys(byIdentity).length === 0) continue;
-    const list = out[scope];
-    if (!Array.isArray(list)) continue;
-    out[scope] = (list as unknown[]).map((model) => {
-      if (!model || typeof model !== "object") return model;
-      const fields = byIdentity[MODEL_SCOPES[scope](model as CustomModel)];
-      if (!fields) return model;
-      const copy = { ...model } as Record<string, unknown>;
-      for (const [field, value] of Object.entries(fields)) {
-        if (!copy[field]) copy[field] = value;
-      }
-      return copy;
-    });
-  }
-
-  return out as unknown as CopilotSettings;
 }
 
 // ---------------------------------------------------------------------------

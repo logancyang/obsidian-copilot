@@ -14,6 +14,8 @@ function makeSettings(overrides: Partial<CopilotSettings> = {}): CopilotSettings
   } as unknown as CopilotSettings;
 }
 
+const backedUp = jest.fn().mockResolvedValue({ status: "not-needed" });
+
 async function loadModule(overrides: Record<string, unknown> = {}) {
   jest.resetModules();
 
@@ -39,12 +41,6 @@ async function loadModule(overrides: Record<string, unknown> = {}) {
   jest.doMock("@/logger", () => ({ logWarn: jest.fn() }));
   jest.doMock("@/settings/model", () => ({
     sanitizeSettings: jest.fn((settings: CopilotSettings) => settings),
-    getModelKeyFromModel: jest.fn(
-      (model: { name?: string; provider?: string }) => `${model.name}|${model.provider}`
-    ),
-    normalizeModelProvider: jest.fn((provider: string) =>
-      provider === "azure_openai" ? "azure openai" : provider
-    ),
   }));
 
   const module = await import("@/services/settingsPersistence");
@@ -152,30 +148,21 @@ describe("settingsPersistence", () => {
           activeEmbeddingModels: [],
         },
         saveData,
-        jest.fn().mockResolvedValue(null)
+        backedUp
       );
 
       const hydrateInput = keychain.hydrateFromKeychain.mock.calls[0][0];
       expect(hydrateInput.openAIApiKey).toBe("");
       expect(hydrateInput.activeModels[0].apiKey).toBe("");
       expect(loaded.openAIApiKey).toBe("keychain-key");
-    });
-
-    it("leaves an existing data.json untouched", async () => {
-      const { module } = await loadModule();
-      const saveData = jest.fn().mockResolvedValue(undefined);
-
-      await module.loadSettingsWithKeychain(
-        {
+      expect(saveData).toHaveBeenCalledWith(
+        expect.objectContaining({
           _keychainVaultId: "1234abcd",
-          openAIApiKey: "plaintext-disk-key",
-          activeModels: [{ name: "custom", provider: "openai", apiKey: "model-disk-key" }],
-        },
-        saveData,
-        jest.fn().mockResolvedValue(null)
+          openAIApiKey: "",
+          activeModels: [expect.objectContaining({ apiKey: "" })],
+        })
       );
-
-      expect(saveData).not.toHaveBeenCalled();
+      expect(saveData.mock.calls[0][0]).not.toHaveProperty("_keychainOnly");
     });
 
     it("keeps credentials empty when Keychain is unavailable", async () => {
@@ -185,7 +172,7 @@ describe("settingsPersistence", () => {
       const loaded = await module.loadSettingsWithKeychain(
         { _keychainVaultId: "1234abcd", openAIApiKey: "plaintext-disk-key" },
         jest.fn().mockResolvedValue(undefined),
-        jest.fn().mockResolvedValue(null)
+        backedUp
       );
 
       expect(loaded.openAIApiKey).toBe("");
@@ -196,13 +183,41 @@ describe("settingsPersistence", () => {
       const { module, keychain } = await loadModule();
       const saveData = jest.fn().mockResolvedValue(undefined);
 
-      await module.loadSettingsWithKeychain(null, saveData, jest.fn().mockResolvedValue(null));
+      await module.loadSettingsWithKeychain(null, saveData, backedUp);
 
       expect(keychain.setVaultId).toHaveBeenCalledWith("abcd1234");
       expect(saveData).toHaveBeenCalledWith({
         _keychainVaultId: "abcd1234",
         settingsVersion: CURRENT_SETTINGS_VERSION,
       });
+    });
+  });
+
+  describe("loadSettingsWithKeychain() backup guard", () => {
+    it("leaves data.json intact when the credential backup fails", async () => {
+      const { module } = await loadModule();
+      const saveData = jest.fn().mockResolvedValue(undefined);
+
+      await module.loadSettingsWithKeychain(
+        { _keychainVaultId: "1234abcd", openAIApiKey: "plaintext-disk-key" },
+        saveData,
+        jest.fn().mockResolvedValue({ status: "failed", error: new Error("read-only") })
+      );
+
+      expect(saveData).not.toHaveBeenCalled();
+    });
+
+    it("strips data.json once the credentials are backed up", async () => {
+      const { module } = await loadModule();
+      const saveData = jest.fn().mockResolvedValue(undefined);
+
+      await module.loadSettingsWithKeychain(
+        { _keychainVaultId: "1234abcd", openAIApiKey: "plaintext-disk-key" },
+        saveData,
+        jest.fn().mockResolvedValue({ status: "backed-up", path: "plugins/copilot/backup.json" })
+      );
+
+      expect(saveData.mock.calls[0][0].openAIApiKey).toBe("");
     });
   });
 
@@ -230,98 +245,6 @@ describe("settingsPersistence", () => {
   });
 
   describe("persistSettings()", () => {
-    it("preserves disk credentials the session does not own", async () => {
-      const onDisk = {
-        _keychainVaultId: "1234abcd",
-        openAIApiKey: "plaintext-disk-key",
-        activeModels: [{ name: "custom", provider: "openai", apiKey: "model-disk-key" }],
-        activeEmbeddingModels: [],
-      };
-      const { module } = await loadModule();
-      const loadData = jest.fn().mockResolvedValue(onDisk);
-      await module.loadSettingsWithKeychain(
-        onDisk,
-        jest.fn().mockResolvedValue(undefined),
-        loadData
-      );
-      const saveData = jest.fn().mockResolvedValue(undefined);
-
-      await module.persistSettings(
-        makeSettings({
-          activeModels: [{ name: "custom", provider: "openai", apiKey: "" }],
-        } as unknown as Partial<CopilotSettings>),
-        saveData
-      );
-
-      const written = saveData.mock.calls[0][0] as {
-        openAIApiKey: string;
-        activeModels: Array<{ apiKey: string }>;
-      };
-      expect(written.openAIApiKey).toBe("plaintext-disk-key");
-      expect(written.activeModels[0].apiKey).toBe("model-disk-key");
-    });
-
-    it("restores a legacy azure_openai embedding key under its sanitized identity", async () => {
-      const onDisk = {
-        _keychainVaultId: "1234abcd",
-        activeModels: [],
-        activeEmbeddingModels: [
-          { name: "ada", provider: "azure_openai", apiKey: "embed-disk-key" },
-        ],
-      };
-      const { module } = await loadModule();
-      await module.loadSettingsWithKeychain(
-        onDisk,
-        jest.fn().mockResolvedValue(undefined),
-        jest.fn().mockResolvedValue(onDisk)
-      );
-      const saveData = jest.fn().mockResolvedValue(undefined);
-
-      // Reason: sanitizeSettings() rewrites the legacy provider before this
-      // point, so the in-memory model carries the normalized identity.
-      await module.persistSettings(
-        makeSettings({
-          activeEmbeddingModels: [{ name: "ada", provider: "azure openai", apiKey: "" }],
-        } as unknown as Partial<CopilotSettings>),
-        saveData
-      );
-
-      const written = saveData.mock.calls[0][0] as {
-        activeEmbeddingModels: Array<{ apiKey: string }>;
-      };
-      expect(written.activeEmbeddingModels[0].apiKey).toBe("embed-disk-key");
-    });
-
-    it("does not resurrect credentials another session already erased from disk", async () => {
-      const { module } = await loadModule();
-      const loadData = jest
-        .fn()
-        .mockResolvedValue({ _keychainVaultId: "1234abcd", openAIApiKey: "" });
-      await module.loadSettingsWithKeychain(
-        { _keychainVaultId: "1234abcd", openAIApiKey: "plaintext-disk-key" },
-        jest.fn().mockResolvedValue(undefined),
-        loadData
-      );
-      const saveData = jest.fn().mockResolvedValue(undefined);
-
-      await module.persistSettings(makeSettings(), saveData);
-
-      expect((saveData.mock.calls[0][0] as { openAIApiKey: string }).openAIApiKey).toBe("");
-    });
-
-    it("aborts the save when the disk read fails rather than dropping secrets", async () => {
-      const { module } = await loadModule();
-      await module.loadSettingsWithKeychain(
-        { _keychainVaultId: "1234abcd", openAIApiKey: "plaintext-disk-key" },
-        jest.fn().mockResolvedValue(undefined),
-        jest.fn().mockRejectedValue(new Error("read failed"))
-      );
-      const saveData = jest.fn().mockResolvedValue(undefined);
-
-      await expect(module.persistSettings(makeSettings(), saveData)).rejects.toThrow("read failed");
-      expect(saveData).not.toHaveBeenCalled();
-    });
-
     it("tombstones cleared credentials and never writes them to data.json", async () => {
       const { module, keychain } = await loadModule({
         persistSecrets: jest.fn().mockReturnValue({
