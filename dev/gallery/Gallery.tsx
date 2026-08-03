@@ -176,18 +176,17 @@ function StoryTree({
 
         return (
           <li key={node.path}>
-            <button
+            <Button
               aria-label={`Show ${node.path} contact sheet`}
               aria-pressed={subtreeSelected}
-              className={cn(
-                "tw-w-full tw-cursor-pointer tw-rounded-md tw-border-none tw-bg-transparent tw-px-2 tw-py-1.5 tw-text-left tw-text-ui-small tw-font-semibold tw-text-normal hover:tw-bg-modifier-hover focus-visible:tw-outline-none focus-visible:tw-ring-2 focus-visible:tw-ring-ring",
-                subtreeSelected && "tw-text-accent tw-bg-interactive-accent/10"
-              )}
+              className="tw-w-full tw-justify-between tw-text-left tw-font-semibold"
               onClick={() => onSelectSubtree(node.path)}
+              size="sm"
               type="button"
+              variant={subtreeSelected ? "default" : "ghost2"}
             >
               {node.label}
-            </button>
+            </Button>
 
             {(node.stories.length > 0 || node.children.size > 0) && (
               <div className="tw-ml-3 tw-border-l tw-border-solid tw-border-border tw-pl-2">
@@ -195,21 +194,22 @@ function StoryTree({
                   const selected = story.id === selectedStoryId && !showContactSheet;
 
                   return (
-                    <button
+                    <Button
                       aria-current={selected ? "true" : undefined}
                       className={cn(
-                        "tw-my-0.5 tw-flex tw-w-full tw-cursor-pointer tw-items-center tw-justify-between tw-gap-2 tw-rounded-md tw-border-none tw-bg-transparent tw-px-2 tw-py-1.5 tw-text-left tw-text-ui-smaller tw-text-normal hover:tw-bg-modifier-hover focus-visible:tw-outline-none focus-visible:tw-ring-2 focus-visible:tw-ring-ring",
-                        selected &&
-                          "tw-bg-interactive-accent tw-font-semibold tw-text-on-accent hover:tw-bg-interactive-accent-hover"
+                        "tw-my-0.5 tw-w-full tw-justify-between tw-text-left",
+                        selected && "tw-font-semibold"
                       )}
                       data-gallery-story-button={story.id}
                       key={story.id}
                       onClick={() => onSelectStory(story)}
+                      size="sm"
                       type="button"
+                      variant={selected ? "default" : "ghost2"}
                     >
                       <span>{story.name}</span>
                       {selected && <span className="tw-text-smallest">Selected</span>}
-                    </button>
+                    </Button>
                   );
                 })}
                 {node.children.size > 0 && (

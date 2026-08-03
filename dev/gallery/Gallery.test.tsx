@@ -256,11 +256,16 @@ describe("Gallery", () => {
       expect(
         within(navigation).getByRole("button", { name: "Show UI contact sheet" })
       ).toBeTruthy();
-      expect(
-        within(navigation)
-          .getByRole("button", { name: "Default Selected" })
-          .getAttribute("aria-current")
-      ).toBe("true");
+      const selectedStoryButton = within(navigation).getByRole("button", {
+        name: "Default Selected",
+      });
+      expect(selectedStoryButton.getAttribute("aria-current")).toBe("true");
+      expect(selectedStoryButton.classList.contains("mod-cta")).toBe(true);
+
+      const unselectedStoryButton = within(navigation).getByRole("button", { name: "Status" });
+      expect(unselectedStoryButton.classList.contains("clickable-icon")).toBe(true);
+      expect(unselectedStoryButton.classList.contains("tw-bg-transparent")).toBe(true);
+      expect(unselectedStoryButton.classList.contains("mod-cta")).toBe(false);
       expect(gallery.getByText("Agent Mode/Agent Welcome Card/Default")).toBeTruthy();
       expect(gallery.container.querySelectorAll("[data-gallery-story-id]")).toHaveLength(1);
       expect(
@@ -310,6 +315,9 @@ describe("Gallery", () => {
 
       fireEvent.click(gallery.getByRole("button", { name: "Show UI contact sheet" }));
 
+      expect(
+        gallery.getByRole("button", { name: "Show UI contact sheet" }).classList.contains("mod-cta")
+      ).toBe(true);
       expect(gallery.getByText("Current subtree")).toBeTruthy();
       expect(gallery.getByText("2 leaf stories · 1 non-leaf skipped")).toBeTruthy();
       expect(
