@@ -8,6 +8,7 @@ import {
   getVaultRelativeMiyoPath,
   getSearchBackend,
 } from "@/miyo/miyoUtils";
+import { createCopilotPatternFilter } from "@/search/searchUtils";
 import { getSettings, type CopilotSettings } from "@/settings/model";
 import VectorStoreManager from "@/search/vectorStoreManager";
 
@@ -18,6 +19,10 @@ jest.mock("@/noteUtils", () => ({
 
 jest.mock("@/settings/model", () => ({
   getSettings: jest.fn(),
+}));
+
+jest.mock("@/search/searchUtils", () => ({
+  createCopilotPatternFilter: jest.fn(),
 }));
 
 const mockGetDocumentsByPath = jest.fn();
@@ -79,6 +84,9 @@ function createMarkdownFile(path: string): TFile {
 describe("findRelevantNotes", () => {
   const mockedGetSettings = getSettings as jest.MockedFunction<typeof getSettings>;
   const mockedGetSearchBackend = getSearchBackend as jest.MockedFunction<typeof getSearchBackend>;
+  const mockedCreateCopilotPatternFilter = createCopilotPatternFilter as jest.MockedFunction<
+    typeof createCopilotPatternFilter
+  >;
   const mockedGetLinkedNotes = getLinkedNotes as jest.MockedFunction<typeof getLinkedNotes>;
   const mockedGetBacklinkedNotes = getBacklinkedNotes as jest.MockedFunction<
     typeof getBacklinkedNotes
@@ -101,6 +109,7 @@ describe("findRelevantNotes", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockedGetSearchBackend.mockReturnValue("keyword");
+    mockedCreateCopilotPatternFilter.mockReturnValue(() => true);
     mockedGetSettings.mockReturnValue({
       debug: false,
       miyoServerUrl: "",
@@ -253,6 +262,30 @@ describe("findRelevantNotes", () => {
       folderName: "vault",
       limit: 20,
     });
+  });
+
+  it("applies the live Copilot scope to semantic and linked candidates", async () => {
+    mockedGetSearchBackend.mockReturnValue("miyo");
+    mockResolveBaseUrl.mockResolvedValue("http://127.0.0.1:8742");
+    mockSearchRelated.mockResolvedValue({
+      results: [
+        { id: "allowed", path: "vault/beta.md", score: 0.8 },
+        { id: "excluded", path: "vault/alpha.md", score: 0.9 },
+      ],
+    });
+    mockedGetLinkedNotes.mockReturnValue([createMarkdownFile("linked-only.md")]);
+    const isAllowed = jest.fn((path: string) => path === "beta.md");
+    mockedCreateCopilotPatternFilter.mockReturnValue(isAllowed);
+
+    const result = await findRelevantNotes({ app: window.app, filePath: "source.md" });
+
+    expect(result.map((entry) => entry.note.path)).toEqual(["beta.md"]);
+    expect(mockedCreateCopilotPatternFilter).toHaveBeenCalledWith(window.app);
+    expect(isAllowed.mock.calls.map(([path]) => path)).toEqual([
+      "beta.md",
+      "alpha.md",
+      "linked-only.md",
+    ]);
   });
 
   it("falls back to Miyo when Orama docs exist but have no embeddings and have content", async () => {

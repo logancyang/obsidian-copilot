@@ -10,6 +10,7 @@ import {
 import { getBacklinkedNotes, getLinkedNotes } from "@/noteUtils";
 import { DBOperations } from "@/search/dbOperations";
 import type { SemanticIndexDocument } from "@/search/indexBackend/SemanticIndexBackend";
+import { createCopilotPatternFilter } from "@/search/searchUtils";
 import VectorStoreManager from "@/search/vectorStoreManager";
 import { getSettings } from "@/settings/model";
 import { InternalTypedDocument, Orama, Result } from "@orama/orama";
@@ -264,12 +265,13 @@ export type RelevantNoteEntry = {
 };
 
 /**
- * Finds the relevant notes for the given file path.
+ * Finds relevant notes for a file while enforcing Copilot's live search scope
+ * across semantic and link-derived candidates.
  *
  * @param app - The Obsidian app instance.
  * @param filePath - The file path to find relevant notes for.
- * @returns The relevant notes hits for the given file path. Empty array if no
- *   relevant notes are found or the index does not exist.
+ * @returns Relevant-note hits allowed by the current inclusion/exclusion rules.
+ *   Empty when no allowed notes are found or the index does not exist.
  */
 export async function findRelevantNotes({
   app,
@@ -292,14 +294,16 @@ export async function findRelevantNotes({
   // the bottom (they render without a meter in the UI).
   const candidatePaths = new Set<string>([...similarityScoreMap.keys(), ...noteLinks.keys()]);
   candidatePaths.delete(filePath);
-  const sortedPaths = Array.from(candidatePaths).sort((aPath, bPath) => {
-    const aScore = similarityScoreMap.get(aPath);
-    const bScore = similarityScoreMap.get(bPath);
-    if (aScore == null && bScore == null) return 0;
-    if (aScore == null) return 1;
-    if (bScore == null) return -1;
-    return bScore - aScore;
-  });
+  const sortedPaths = Array.from(candidatePaths)
+    .filter(createCopilotPatternFilter(app))
+    .sort((aPath, bPath) => {
+      const aScore = similarityScoreMap.get(aPath);
+      const bScore = similarityScoreMap.get(bPath);
+      if (aScore == null && bScore == null) return 0;
+      if (aScore == null) return 1;
+      if (bScore == null) return -1;
+      return bScore - aScore;
+    });
   return sortedPaths
     .map((path) => {
       const file = app.vault.getAbstractFileByPath(path);
