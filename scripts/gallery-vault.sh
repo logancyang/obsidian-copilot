@@ -60,6 +60,7 @@ PLUGIN_ID_JSON="$(node -e 'process.stdout.write(JSON.stringify(process.argv[1]))
 
 PLUGIN_DIR="$VAULT_PATH/.obsidian/plugins/$PLUGIN_ID"
 mkdir -p "$PLUGIN_DIR"
+touch "$PLUGIN_DIR/.hotreload"
 
 echo "==> Linking gallery artifacts into $PLUGIN_DIR"
 for artifact in main.js manifest.json styles.css; do
