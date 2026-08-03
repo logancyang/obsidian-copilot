@@ -305,11 +305,22 @@ const UNNAMED_ACTIVE_LICENSE: LicenseState = Object.freeze({ status: "active" })
  */
 export function useLicenseState(): LicenseState {
   const settings = useSettingsValue();
+  // The fixed states are frozen constants; a named plan is the one result that
+  // has to be built, so it is kept until the name itself changes. Keying on the
+  // returned value rather than on `settings` is what stops the cache from
+  // outliving a proof that changed without one.
+  const namedActive = React.useRef<LicenseState | null>(null);
   if (!settings.plusLicenseKey) {
     return NO_LICENSE;
   }
   if (hasLiveEntitlement()) {
-    return verified.paid ? { status: "active", plan: verified.plan } : INACTIVE_LICENSE;
+    if (!verified.paid) {
+      return INACTIVE_LICENSE;
+    }
+    if (namedActive.current?.plan !== verified.plan) {
+      namedActive.current = { status: "active", plan: verified.plan };
+    }
+    return namedActive.current;
   }
   // Nothing verified this session. The server can confirm a paid license
   // without signing one (an unshipped `kid`, no WebCrypto), so keep those users

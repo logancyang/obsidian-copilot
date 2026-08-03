@@ -479,6 +479,17 @@ describe("plusUtils", () => {
       expect(result.current).toEqual({ status: "active", plan: "believer" });
     });
 
+    it("returns the same object across renders while the plan is unchanged", async () => {
+      await verifySessionClaims({ plan: "believer", tier: "plus" });
+      mockGetSettings.mockReturnValue(tokenBackedSettings({ plusLicenseKey: "key" }));
+
+      const { result, rerender } = renderHook(() => useLicenseState());
+      const first = result.current;
+      rerender();
+
+      expect(result.current).toBe(first);
+    });
+
     it("reports inactive for a lapsed key the server downgraded to the free tier", async () => {
       // The server keeps answering is_valid for a lapsed key but issues a
       // free-tier entitlement that still names the plan, so the tier — not the
