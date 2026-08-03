@@ -9,6 +9,7 @@ import { flushRecordedPromptPayloadToLog } from "@/LLMProviders/chainRunner/util
 import { getCopilotSaveData } from "@/settings/copilotSaveData";
 import { KeychainService } from "@/services/keychainService";
 import {
+  forgetLegacyDiskSecrets,
   refreshLastPersistedSettings,
   runPersistenceTransaction,
   suppressNextPersistOnce,
@@ -160,6 +161,11 @@ export const AdvancedSettings: React.FC = () => {
           setSettings(nextSettings);
         })
       );
+
+      // Reason: only after a clean run, which is the one case where the
+      // stripped file is known to be written. The paths that fail early leave
+      // data.json untouched, so the snapshot must survive to protect it.
+      forgetLegacyDiskSecrets();
     } catch (error) {
       logError("Failed to forget secrets.", error);
       new Notice("Failed to remove API keys. Please try again.");

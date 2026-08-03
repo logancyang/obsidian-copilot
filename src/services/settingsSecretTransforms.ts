@@ -10,7 +10,7 @@
  */
 
 import { DEFAULT_SETTINGS } from "@/constants";
-import { type CopilotSettings } from "@/settings/model";
+import { getModelKeyFromModel, type CopilotSettings } from "@/settings/model";
 import { type CustomModel } from "@/aiParams";
 // Reason: do NOT import from @/logger here. The logger depends on getSettings(),
 // but this module runs during settings loading (before setSettings).
@@ -138,6 +138,122 @@ function stripModelSecrets(models: CustomModel[]): CustomModel[] {
     }
     return copy as unknown as CustomModel;
   });
+}
+
+// ---------------------------------------------------------------------------
+// Legacy disk secrets
+// ---------------------------------------------------------------------------
+
+/** Model-scope lists whose entries can carry their own secret fields. */
+const MODEL_SCOPE_KEYS = ["activeModels", "activeEmbeddingModels"] as const;
+
+type ModelScopeKey = (typeof MODEL_SCOPE_KEYS)[number];
+
+/**
+ * Secret values that a pre-v4 `data.json` already held on disk.
+ *
+ * v4 hydrates credentials from the Keychain and never reads these values, but
+ * every save rewrites the whole file. Without a record of what was there, the
+ * first save after upgrading would blank fields that may be the user's only
+ * copy of a key. Capturing them at load lets the save path put them back
+ * exactly as found.
+ */
+export interface LegacyDiskSecrets {
+  topLevel: Record<string, string>;
+  /** Model secrets keyed by scope, then by `getModelKeyFromModel()` identity. */
+  models: Record<ModelScopeKey, Record<string, Record<string, string>>>;
+}
+
+/** True when the snapshot holds nothing worth merging back. */
+export function isEmptyLegacyDiskSecrets(legacy: LegacyDiskSecrets): boolean {
+  return (
+    Object.keys(legacy.topLevel).length === 0 &&
+    MODEL_SCOPE_KEYS.every((scope) => Object.keys(legacy.models[scope]).length === 0)
+  );
+}
+
+/**
+ * Record every non-empty secret value present in a raw `data.json`.
+ *
+ * @param rawData - The raw data as loaded from disk, before any stripping.
+ */
+export function extractLegacyDiskSecrets(rawData: Record<string, unknown>): LegacyDiskSecrets {
+  const topLevel: Record<string, string> = {};
+  for (const key of Object.keys(rawData)) {
+    if (!isSensitiveKey(key)) continue;
+    const value = rawData[key];
+    if (typeof value === "string" && value.length > 0) {
+      topLevel[key] = value;
+    }
+  }
+
+  const models = {} as LegacyDiskSecrets["models"];
+  for (const scope of MODEL_SCOPE_KEYS) {
+    const byIdentity: Record<string, Record<string, string>> = {};
+    const list = rawData[scope];
+    if (Array.isArray(list)) {
+      for (const model of list) {
+        if (!model || typeof model !== "object") continue;
+        const rec = model as Record<string, unknown>;
+        const fields: Record<string, string> = {};
+        for (const field of MODEL_SECRET_FIELDS) {
+          const value = rec[field];
+          if (typeof value === "string" && value.length > 0) {
+            fields[field] = value;
+          }
+        }
+        if (Object.keys(fields).length > 0) {
+          byIdentity[getModelKeyFromModel(model as CustomModel)] = fields;
+        }
+      }
+    }
+    models[scope] = byIdentity;
+  }
+
+  return { topLevel, models };
+}
+
+/**
+ * Put previously-on-disk secret values back into a settings snapshot bound for
+ * `data.json`, so writing it cannot destroy what the user already had.
+ *
+ * Only empty fields are filled: a value this session actually owns always wins,
+ * and a field the user cleared on purpose stays cleared for this session's own
+ * secrets. A model dropped from settings has nowhere to carry its legacy value,
+ * so its entry is simply not written back.
+ *
+ * @param settings - The snapshot about to be persisted, already stripped.
+ * @param legacy - Values captured from disk at load, or undefined to merge nothing.
+ */
+export function mergeLegacyDiskSecrets(
+  settings: CopilotSettings,
+  legacy: LegacyDiskSecrets | undefined
+): CopilotSettings {
+  if (!legacy || isEmptyLegacyDiskSecrets(legacy)) return settings;
+
+  const out = asRecord({ ...settings });
+  for (const [key, value] of Object.entries(legacy.topLevel)) {
+    if (!out[key]) out[key] = value;
+  }
+
+  for (const scope of MODEL_SCOPE_KEYS) {
+    const byIdentity = legacy.models[scope];
+    if (Object.keys(byIdentity).length === 0) continue;
+    const list = out[scope];
+    if (!Array.isArray(list)) continue;
+    out[scope] = (list as unknown[]).map((model) => {
+      if (!model || typeof model !== "object") return model;
+      const fields = byIdentity[getModelKeyFromModel(model as CustomModel)];
+      if (!fields) return model;
+      const copy = { ...model } as Record<string, unknown>;
+      for (const [field, value] of Object.entries(fields)) {
+        if (!copy[field]) copy[field] = value;
+      }
+      return copy;
+    });
+  }
+
+  return out as unknown as CopilotSettings;
 }
 
 // ---------------------------------------------------------------------------

@@ -1,16 +1,23 @@
 /**
  * Keychain-only settings persistence.
  *
- * Runtime settings are hydrated from Obsidian Keychain. Persisted settings
- * retain only non-secret values and the stable vault namespace used to locate
- * Keychain entries. Values already present in data.json are discarded without
- * being decrypted or imported.
+ * Runtime settings are hydrated from Obsidian Keychain. Values already present
+ * in data.json are never read into runtime and never decrypted or imported.
+ * They are also never destroyed: an existing data.json is left exactly as
+ * found, and secrets it already held are carried through every later save.
  */
 
 import { DEFAULT_SETTINGS } from "@/constants";
 import { logWarn } from "@/logger";
 import { KeychainService } from "@/services/keychainService";
-import { cleanupLegacyFields, stripKeychainFields } from "@/services/settingsSecretTransforms";
+import {
+  cleanupLegacyFields,
+  extractLegacyDiskSecrets,
+  isEmptyLegacyDiskSecrets,
+  mergeLegacyDiskSecrets,
+  stripKeychainFields,
+  type LegacyDiskSecrets,
+} from "@/services/settingsSecretTransforms";
 import { CURRENT_SETTINGS_VERSION } from "@/settings/migrations/version";
 import { type CopilotSettings, sanitizeSettings } from "@/settings/model";
 import { Notice } from "obsidian";
@@ -19,6 +26,7 @@ let writeQueue: Promise<void> = Promise.resolve();
 let lastPersistedSettings: CopilotSettings | undefined;
 let suppressNextPersist = false;
 let transactionEpoch = 0;
+let legacyDiskSecrets: LegacyDiskSecrets | undefined;
 const pendingTombstones = new Set<string>();
 
 /** Keychain vault IDs are 8 lowercase hex chars. */
@@ -57,7 +65,19 @@ export function resetPersistenceState(): void {
   lastPersistedSettings = undefined;
   suppressNextPersist = false;
   transactionEpoch = 0;
+  legacyDiskSecrets = undefined;
   pendingTombstones.clear();
+}
+
+/**
+ * Stop carrying pre-v4 disk secrets into later saves.
+ *
+ * Call this after the user deliberately erases their credentials. That flow
+ * writes a stripped data.json of its own, so leaving the snapshot in place
+ * would resurrect the values it just removed on the very next save.
+ */
+export function forgetLegacyDiskSecrets(): void {
+  legacyDiskSecrets = undefined;
 }
 
 /** Refresh the last known-good settings baseline used by Keychain rollback. */
@@ -99,12 +119,14 @@ export async function flushPersistence(): Promise<void> {
 /**
  * Load settings without trusting secrets from data.json.
  *
- * The raw disk copy is cleaned before any credential reaches runtime. Keychain
- * hydration starts from that stripped baseline, so missing or unavailable
- * Keychain entries remain empty instead of falling back to disk values.
+ * The in-memory copy is stripped before any credential reaches runtime, so
+ * Keychain hydration starts from a baseline that cannot fall back to disk
+ * values. An existing data.json is not rewritten here: the strip that matters
+ * is the in-memory one, and rewriting the file would destroy credentials that
+ * may be the user's only copy.
  *
  * @param rawData - Untrusted data returned by Obsidian's loadData().
- * @param saveData - Plugin-bound writer used to remove disk secrets and persist the vault ID.
+ * @param saveData - Plugin-bound writer used to seed data.json on a fresh install.
  */
 export async function loadSettingsWithKeychain(
   rawData: unknown,
@@ -119,15 +141,19 @@ export async function loadSettingsWithKeychain(
     : keychain.getVaultId();
   keychain.setVaultId(vaultId);
 
-  const diskSettings = buildDiskSettings(rawData, vaultId, isFreshInstall);
-  if (JSON.stringify(rawSettings) !== JSON.stringify(diskSettings)) {
+  // Reason: only a fresh install gets a write here, to seed the file with the
+  // Keychain namespace. An existing data.json is left byte-for-byte alone.
+  if (isFreshInstall) {
     try {
-      await saveData(diskSettings);
+      await saveData(buildDiskSettings(rawData, vaultId, true));
     } catch {
       new Notice(
-        "Copilot could not remove API keys from data.json. Check that the vault is writable, then restart Obsidian."
+        "Copilot could not write its settings file. Check that the vault is writable, then restart Obsidian."
       );
     }
+  } else {
+    const captured = extractLegacyDiskSecrets(rawSettings as unknown as Record<string, unknown>);
+    legacyDiskSecrets = isEmptyLegacyDiskSecrets(captured) ? undefined : captured;
   }
 
   const runtimeSource = isFreshInstall ? structuredClone(DEFAULT_SETTINGS) : rawSettings;
@@ -153,7 +179,8 @@ export async function loadSettingsWithKeychain(
 }
 
 /**
- * Write secrets to Keychain and save a stripped data.json snapshot.
+ * Write secrets to Keychain and save a data.json snapshot carrying no secret
+ * this session owns, while preserving any the file already held.
  * Partial Keychain writes are rolled back to the last known-good snapshot.
  */
 async function persistKeychainSettings(
@@ -187,7 +214,7 @@ async function persistKeychainSettings(
       }
     }
 
-    await saveData(stripKeychainFields(cleaned));
+    await saveData(mergeLegacyDiskSecrets(stripKeychainFields(cleaned), legacyDiskSecrets));
     lastPersistedSettings = structuredClone(cleaned);
     for (const id of replayedTombstones) {
       pendingTombstones.delete(id);
