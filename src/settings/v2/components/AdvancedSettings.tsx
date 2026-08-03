@@ -155,17 +155,23 @@ export const AdvancedSettings: React.FC = () => {
       // Reason: run inside the persistence queue to prevent interleaving
       // with normal saves that could restore old secrets.
       await runPersistenceTransaction(() =>
-        keychain.forgetAllSecrets(saveData, (nextSettings) => {
-          refreshLastPersistedSettings(nextSettings as CopilotSettings);
-          suppressNextPersistOnce();
-          setSettings(nextSettings);
-        })
+        keychain.forgetAllSecrets(
+          // Reason: the stripped write is the only authority on whether
+          // data.json still holds pre-v4 credentials, and how the transaction
+          // settles does not report it — a failed write returns normally, and a
+          // failed Keychain clear throws after the write already succeeded.
+          // Dropping the snapshot here ties it to the write itself.
+          async (data) => {
+            await saveData(data);
+            forgetLegacyDiskSecrets();
+          },
+          (nextSettings) => {
+            refreshLastPersistedSettings(nextSettings as CopilotSettings);
+            suppressNextPersistOnce();
+            setSettings(nextSettings);
+          }
+        )
       );
-
-      // Reason: only after a clean run, which is the one case where the
-      // stripped file is known to be written. The paths that fail early leave
-      // data.json untouched, so the snapshot must survive to protect it.
-      forgetLegacyDiskSecrets();
     } catch (error) {
       logError("Failed to forget secrets.", error);
       new Notice("Failed to remove API keys. Please try again.");
