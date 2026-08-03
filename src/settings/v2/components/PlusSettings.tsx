@@ -25,15 +25,12 @@ function getPlusUsageMock(): { currentPct: number; weeklyPct: number } | null {
 }
 
 /**
- * Labels for plans whose stored name is not what we want to show a customer.
- * Supporter and legacy Believer are one lifetime purchase as far as anyone
- * outside billing is concerned, and no signal the client receives separates
- * them anyway. Anything absent here shows its own name.
+ * The one plan whose stored name is not what we show a customer: `believer`
+ * covers both the legacy Believer and the newer Supporter purchase, and nothing
+ * the client — or the billing data behind it — can separate them. Every other
+ * plan shows its own name.
  */
-const PLAN_LABELS: Record<string, string> = {
-  believer: "Lifetime",
-  supporter: "Lifetime",
-};
+const LIFETIME_PLAN = "believer";
 
 export function PlusSettings() {
   const app = useApp();
@@ -51,7 +48,7 @@ export function PlusSettings() {
         <span>Copilot License</span>
         {license.status === "active" && (
           <Badge className="tw-rounded-full tw-bg-success tw-capitalize tw-text-success">
-            {license.plan ? (PLAN_LABELS[license.plan] ?? license.plan) : "Active"}
+            {license.plan === LIFETIME_PLAN ? "Lifetime" : (license.plan ?? "Active")}
           </Badge>
         )}
         {license.status === "inactive" && (
