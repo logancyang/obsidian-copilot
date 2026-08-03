@@ -9,8 +9,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ModelDisplay } from "@/components/ui/model-display";
 import { SelfHostCloudWarningIcon } from "@/components/ui/SelfHostCloudWarningIcon";
-import { getModelKeyFromModel, useSettingsValue } from "@/settings/model";
-import { checkModelApiKey, err2String } from "@/utils";
+import { checkModelApiKey, err2String } from "@/lib/model-display-utils";
+import type { ModelApiKeySettings } from "@/lib/model-display-utils";
+import { getModelKeyFromModel } from "@/lib/model-key";
 import type { CustomModel } from "@/aiParams";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -69,11 +70,15 @@ interface ModelSelectorProps {
   value: string;
   onChange: (modelKey: string) => void;
   /**
-   * Optional override for the list of models to show. When provided, the
-   * selector skips the BYOK API-key check — the caller is responsible for
-   * marking unusable entries via `_disabledReason`.
+   * Models to show. Agent-backed callers can supply synthesized entries and
+   * mark unusable rows with `_disabledReason`.
    */
-  models?: ModelSelectorEntry[];
+  models: ModelSelectorEntry[];
+  /**
+   * Settings snapshot used for BYOK checks. Omit when the model provider owns
+   * authentication and `_disabledReason` is the only availability gate.
+   */
+  apiKeySettings?: Readonly<ModelApiKeySettings>;
 }
 
 export function ModelSelector({
@@ -84,18 +89,15 @@ export function ModelSelector({
   value,
   onChange,
   models,
+  apiKeySettings,
 }: ModelSelectorProps) {
   const [modelError, setModelError] = useState<string | null>(null);
-  const settings = useSettingsValue();
 
-  const showModels: ModelSelectorEntry[] = models ?? settings.activeModels;
-  const skipApiKeyCheck = models !== undefined;
-
-  const currentModel = showModels.find(
+  const currentModel = models.find(
     (model) => (model.enabled ?? true) && getModelKeyFromModel(model) === value
   );
 
-  const visible = showModels.filter((model) => model.enabled !== false);
+  const visible = models.filter((model) => model.enabled !== false);
   let lastGroup: string | undefined;
 
   return (
@@ -129,7 +131,9 @@ export function ModelSelector({
       <DropdownMenuContent align="start" className="tw-max-h-64 tw-overflow-y-auto">
         {visible.map((model) => {
           const disabledReason = model._disabledReason;
-          const hasApiKey = skipApiKeyCheck ? true : checkModelApiKey(model, settings).hasApiKey;
+          const hasApiKey = apiKeySettings
+            ? checkModelApiKey(model, apiKeySettings).hasApiKey
+            : true;
           const itemDisabled = Boolean(disabledReason) || !hasApiKey;
           const rightLabel = disabledReason ?? (!hasApiKey ? "Needs API key" : null);
           const showHeader = model._group !== undefined && model._group !== lastGroup;
@@ -161,7 +165,7 @@ export function ModelSelector({
                     const msg = `Model switch failed: ` + err2String(error);
                     setModelError(msg);
                     // Restore to the last valid model
-                    const lastValidModel = showModels.find(
+                    const lastValidModel = models.find(
                       (m) => m.enabled !== false && getModelKeyFromModel(m) === value
                     );
                     if (lastValidModel) {

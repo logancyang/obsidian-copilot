@@ -10,8 +10,9 @@
  */
 
 import { Button } from "@/components/ui/button";
-import { type UrlItem, parseUrlsFromText } from "@/utils/urlTagUtils";
-import { TruncatedText } from "@/components/TruncatedText";
+import { parseUrlsFromText } from "@/lib/url-tag";
+import type { UrlItem } from "@/lib/url-tag";
+import { TruncatedText } from "@/components/ui/truncated-text";
 import { ClipboardPaste, Globe, Link, X } from "lucide-react";
 import React, {
   useCallback,

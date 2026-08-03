@@ -7,26 +7,22 @@ import { ChainType } from "@/chainType";
 import {
   ALLOWED_NOTE_CONTEXT_EXTENSIONS,
   ChatModelProviders,
-  EmbeddingModelProviders,
   ModelCapability,
   NOMIC_EMBED_TEXT,
   Provider,
   ProviderInfo,
   ProviderMetadata,
-  SettingKeyProviders,
   TEXT_READABLE_EXTENSIONS,
 } from "@/constants";
 import { logInfo, logWarn } from "@/logger";
-import { CopilotSettings } from "@/settings/model";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { Document } from "@langchain/core/documents";
 import { MemoryVariables } from "@langchain/core/memory";
 import { DateTime } from "luxon";
 import { App, MarkdownView, Notice, TFile, Vault, normalizePath, requestUrl } from "obsidian";
 import { CustomModel } from "./aiParams";
-import { getApiKeyForProvider } from "@/utils/modelUtils";
 import { formatUsageCapError } from "@/utils/usageCapError";
-export { err2String } from "@/errorFormat";
+export { checkModelApiKey, err2String, getProviderLabel } from "@/lib/model-display-utils";
 
 /**
  * Unified type for fetch implementation.
@@ -844,11 +840,6 @@ export function getProviderInfo(provider: string): ProviderMetadata {
   };
 }
 
-export function getProviderLabel(provider: string, model?: CustomModel): string {
-  const baseLabel = ProviderInfo[provider as Provider]?.label || provider;
-  return baseLabel + (model?.believerExclusive && baseLabel === "Copilot Plus" ? "(Believer)" : "");
-}
-
 /**
  * Cleans a message by removing Think blocks, Action blocks (writeFile), tool call markers,
  * and agent reasoning blocks for copying to clipboard or inserting at cursor.
@@ -1140,77 +1131,6 @@ export function getMessageRole(
   defaultRole: "system" | "human" = "system"
 ): "system" | "human" {
   return isOSeriesModel(model) ? "human" : defaultRole;
-}
-
-export function getNeedSetKeyProvider(): Provider[] {
-  // List of providers to exclude
-  const excludeProviders: Provider[] = [
-    ChatModelProviders.OPENAI_FORMAT,
-    ChatModelProviders.OLLAMA,
-    ChatModelProviders.LM_STUDIO,
-    ChatModelProviders.AZURE_OPENAI,
-    ChatModelProviders.GITHUB_COPILOT,
-    EmbeddingModelProviders.COPILOT_PLUS,
-    EmbeddingModelProviders.COPILOT_PLUS_JINA,
-  ];
-
-  return (Object.keys(ProviderInfo) as Provider[]).filter((key) => !excludeProviders.includes(key));
-}
-
-export function checkModelApiKey(
-  model: CustomModel,
-  settings: Readonly<CopilotSettings>
-): {
-  hasApiKey: boolean;
-  errorNotice?: string;
-} {
-  const provider = model.provider as ChatModelProviders;
-  if (provider === ChatModelProviders.AMAZON_BEDROCK) {
-    const apiKey = model.apiKey || settings.amazonBedrockApiKey;
-    if (!apiKey) {
-      return {
-        hasApiKey: false,
-        errorNotice:
-          "Amazon Bedrock API key is missing. Please add a key in Settings > Copilot > BYOK or update the model configuration.",
-      };
-    }
-
-    // Region defaults to us-east-1 if not specified, so API key is the only required check
-    return { hasApiKey: true };
-  }
-
-  // GitHub Copilot uses OAuth, not API key
-  if (provider === ChatModelProviders.GITHUB_COPILOT) {
-    const hasAuth = Boolean(
-      model.apiKey || settings.githubCopilotToken || settings.githubCopilotAccessToken
-    );
-    if (!hasAuth) {
-      return {
-        hasApiKey: false,
-        errorNotice:
-          "GitHub Copilot is not authenticated. Please connect it in Settings > Copilot > BYOK.",
-      };
-    }
-    return { hasApiKey: true };
-  }
-
-  const needSetKeyPath = !!getNeedSetKeyProvider().find((p) => p === provider);
-  const hasNoApiKey = !getApiKeyForProvider(model.provider as SettingKeyProviders, model);
-
-  // For Providers that require setting a key in the dialog, an inspection is necessary.
-  if (needSetKeyPath && hasNoApiKey) {
-    const notice =
-      `Please configure API Key for ${model.name} in settings first.` +
-      "\nPath: Settings > Copilot > BYOK";
-    return {
-      hasApiKey: false,
-      errorNotice: notice,
-    };
-  }
-
-  return {
-    hasApiKey: true,
-  };
 }
 
 /**

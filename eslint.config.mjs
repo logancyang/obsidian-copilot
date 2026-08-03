@@ -185,6 +185,44 @@ export default [
     },
   },
 
+  {
+    files: ["src/components/ui/**/*.{ts,tsx}"],
+    // Tests may reach further; stories deliberately may not — a story that needs
+    // plugin state to build a fixture is reporting a coupled component.
+    ignores: ["src/components/ui/**/*.test.{ts,tsx}"],
+    rules: {
+      "@typescript-eslint/consistent-type-imports": "error",
+      "@typescript-eslint/no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              // Allowlist, not denylist: almost every src/ directory holds a store or
+              // singleton somewhere, so enumerating the bad ones will always lag.
+              group: [
+                "@/*",
+                "!@/components",
+                "!@/components/ui",
+                "!@/components/ui/*",
+                "!@/lib",
+                "!@/lib/*",
+                "!@/constants",
+              ],
+              allowTypeImports: true,
+              message:
+                "src/components/ui must not import values outside @/components/ui, @/lib, " +
+                "and @/constants. Type-only imports are always fine. If a primitive needs " +
+                "plugin state, take it as a prop; if it needs a helper, move the helper to " +
+                "@/lib. Reaching into @/settings, @/aiParams, @/utils, or @/agentMode couples " +
+                "a presentational component to the plugin runtime and makes it unrenderable " +
+                "and untestable in isolation.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+
   // Test files need Jest globals
   {
     files: ["**/*.test.{js,jsx,ts,tsx}", "jest.setup.js", "__mocks__/**"],

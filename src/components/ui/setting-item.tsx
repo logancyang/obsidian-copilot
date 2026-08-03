@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { SettingSwitch } from "@/components/ui/setting-switch";
 import { ChevronDown } from "lucide-react";
 import { SettingSlider } from "@/components/ui/setting-slider";
-import { debounce } from "@/utils";
+import { debounce } from "@/lib/debounce";
 
 // 定义输入控件的类型
 type InputType =

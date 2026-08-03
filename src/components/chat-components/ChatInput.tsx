@@ -8,6 +8,7 @@ import {
 import { ChainType } from "@/chainType";
 import { Button } from "@/components/ui/button";
 import { ModelSelector, type ModelSelectorEntry } from "@/components/ui/ModelSelector";
+import { useSettingsValue } from "@/settings/model";
 import type { CopilotMode } from "@/agentMode";
 import { isPlusChain } from "@/utils";
 import {
@@ -274,6 +275,7 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
   const containerRef = useRef<HTMLDivElement>(null);
   const lexicalEditorRef = useRef<LexicalEditorType | null>(null);
   const [currentModelKey, setCurrentModelKey] = useModelKey();
+  const settings = useSettingsValue();
   const [currentChain] = useChainType();
   const [isProjectLoading] = useProjectLoading();
   const [currentActiveNote, setCurrentActiveNote] = useState<TFile | null>(() => {
@@ -948,7 +950,8 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
               size="fit"
               disabled={modelPickerOverride?.disabled ?? disableModelSwitch}
               value={modelPickerOverride?.value ?? getDisplayModelKey()}
-              models={modelPickerOverride?.models}
+              models={modelPickerOverride?.models ?? settings.activeModels}
+              apiKeySettings={modelPickerOverride ? undefined : settings}
               onChange={
                 modelPickerOverride?.onChange ??
                 ((modelKey) => {
