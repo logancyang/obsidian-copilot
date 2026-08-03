@@ -3,7 +3,6 @@ import {
   cleanupLegacyFields,
   extractLegacyDiskSecrets,
   hasPersistedSecrets,
-  isEmptyLegacyDiskSecrets,
   isSensitiveKey,
   mergeLegacyDiskSecrets,
   stripKeychainFields,
@@ -128,13 +127,14 @@ describe("settingsSecretTransforms", () => {
       });
     });
 
-    it("reports an empty snapshot when the file holds no secrets", () => {
+    it("captures nothing to merge back when the file holds no secrets", () => {
       const legacy = extractLegacyDiskSecrets({
         openAIApiKey: "",
         activeModels: [{ name: "custom", provider: "openai" }],
       });
+      const stripped = stripKeychainFields(makeSettings({ openAIApiKey: "" }));
 
-      expect(isEmptyLegacyDiskSecrets(legacy)).toBe(true);
+      expect(mergeLegacyDiskSecrets(stripped, legacy)).toBe(stripped);
     });
   });
 

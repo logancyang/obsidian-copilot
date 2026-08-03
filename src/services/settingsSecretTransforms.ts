@@ -165,7 +165,7 @@ export interface LegacyDiskSecrets {
 }
 
 /** True when the snapshot holds nothing worth merging back. */
-export function isEmptyLegacyDiskSecrets(legacy: LegacyDiskSecrets): boolean {
+function isEmptyLegacyDiskSecrets(legacy: LegacyDiskSecrets): boolean {
   return (
     Object.keys(legacy.topLevel).length === 0 &&
     MODEL_SCOPE_KEYS.every((scope) => Object.keys(legacy.models[scope]).length === 0)

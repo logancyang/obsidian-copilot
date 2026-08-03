@@ -13,7 +13,6 @@ import { KeychainService } from "@/services/keychainService";
 import {
   cleanupLegacyFields,
   extractLegacyDiskSecrets,
-  isEmptyLegacyDiskSecrets,
   mergeLegacyDiskSecrets,
   stripKeychainFields,
   type LegacyDiskSecrets,
@@ -152,8 +151,7 @@ export async function loadSettingsWithKeychain(
       );
     }
   } else {
-    const captured = extractLegacyDiskSecrets(rawSettings as unknown as Record<string, unknown>);
-    legacyDiskSecrets = isEmptyLegacyDiskSecrets(captured) ? undefined : captured;
+    legacyDiskSecrets = extractLegacyDiskSecrets(rawSettings as unknown as Record<string, unknown>);
   }
 
   const runtimeSource = isFreshInstall ? structuredClone(DEFAULT_SETTINGS) : rawSettings;
