@@ -282,6 +282,17 @@ export interface LicenseState {
   plan?: string;
 }
 
+/**
+ * A verification tagged with what it describes. The key and token are what
+ * settings must still hold for the claims to mean anything, so a stored key
+ * that changed under an in-flight check can never be judged by the old answer.
+ */
+interface VerificationResult {
+  licenseKey: string;
+  token: string;
+  claims: EntitlementClaims | null;
+}
+
 const NO_LICENSE: LicenseState = Object.freeze({ status: "none" });
 const INACTIVE_LICENSE: LicenseState = Object.freeze({ status: "inactive" });
 /** Paid, but with no verifiable token to name the plan (legacy tokenless keys). */
@@ -299,28 +310,34 @@ const UNNAMED_ACTIVE_LICENSE: LicenseState = Object.freeze({ status: "active" })
  */
 export function useLicenseState(): LicenseState {
   const settings = useSettingsValue();
-  // `undefined` until the first verification answers, so a paying user never
-  // sees their license called inactive for the moment that check is in flight.
-  const [claims, setClaims] = React.useState<EntitlementClaims | null | undefined>(undefined);
+  const [result, setResult] = React.useState<VerificationResult | null>(null);
 
   React.useEffect(() => {
     let cancelled = false;
-    void verifyEntitlement(settings.entitlementToken, {
-      expectedUserId: settings.userId,
-    }).then((verifiedClaims) => {
+    const subject = { licenseKey: settings.plusLicenseKey, token: settings.entitlementToken };
+    void verifyEntitlement(subject.token, { expectedUserId: settings.userId }).then((claims) => {
       if (!cancelled) {
-        setClaims(verifiedClaims);
+        setResult({ ...subject, claims });
       }
     });
     return () => {
       cancelled = true;
     };
-  }, [settings.entitlementToken, settings.userId]);
+  }, [settings.plusLicenseKey, settings.entitlementToken, settings.userId]);
 
   return React.useMemo(() => {
-    if (!settings.plusLicenseKey || claims === undefined) {
+    // A result for a different key or token says nothing about the one stored
+    // now, so it reads as unanswered — otherwise a free user's "no token"
+    // verdict would reject the key they just pasted for the whole round-trip.
+    const answered =
+      result?.licenseKey === settings.plusLicenseKey && result?.token === settings.entitlementToken;
+    if (!settings.plusLicenseKey || !answered) {
       return NO_LICENSE;
     }
+    // Claims were unexpired when verified, which is not the same as now: a
+    // settings tab left open past `exp` must stop reporting the plan its gates
+    // have already closed.
+    const claims = result.claims && result.claims.exp * 1000 > Date.now() ? result.claims : null;
     if (claims) {
       return claims.tier === "free"
         ? INACTIVE_LICENSE
@@ -333,7 +350,7 @@ export function useLicenseState(): LicenseState {
     return settings.isPaidUser === true && !isEntitlementExpired(settings)
       ? UNNAMED_ACTIVE_LICENSE
       : INACTIVE_LICENSE;
-  }, [claims, settings]);
+  }, [result, settings]);
 }
 
 /**

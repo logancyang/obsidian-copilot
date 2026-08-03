@@ -530,6 +530,48 @@ describe("plusUtils", () => {
       expect(result.current).toEqual({ status: "active" });
     });
 
+    it("does not judge a newly entered key by the previous verification", async () => {
+      // A free user's empty token resolves to "nothing verified" immediately.
+      // Pasting a key must not be answered by that verdict while its own check
+      // is still in flight, or the badge rejects a license they just bought.
+      mockVerifyEntitlement.mockResolvedValueOnce(null).mockReturnValueOnce(new Promise(() => {}));
+      mockGetSettings.mockReturnValue(buildSettings({ userId: "user-123" }));
+
+      const { result, rerender } = renderHook(() => useLicenseState());
+      await waitFor(() => expect(mockVerifyEntitlement).toHaveBeenCalledTimes(1));
+
+      mockGetSettings.mockReturnValue(buildSettings({ userId: "user-123", plusLicenseKey: "key" }));
+      rerender();
+
+      expect(result.current.status).toBe("none");
+    });
+
+    it("stops reporting the plan once the verified claims reach their expiry", async () => {
+      // Claims are only unexpired as of the moment they verified; a settings tab
+      // left open past `exp` must not keep naming a plan whose gates have closed.
+      mockVerifyEntitlement.mockResolvedValue({
+        user_id: "user-123",
+        plan: "plus",
+        tier: "plus",
+        features: ["multi_agent"],
+        iat: 0,
+        exp: PAST_EXP_SECONDS,
+      });
+      mockGetSettings.mockReturnValue(
+        buildSettings({
+          userId: "user-123",
+          plusLicenseKey: "key",
+          entitlementToken: "token",
+          entitlementExpiresAt: PAST_EXP_SECONDS * 1000,
+          isPaidUser: true,
+        })
+      );
+
+      const { result } = renderHook(() => useLicenseState());
+
+      await waitFor(() => expect(result.current.status).toBe("inactive"));
+    });
+
     it("shows nothing until the first verification answers", () => {
       // A paying user must never see their license called inactive for the
       // moment the check is in flight.
