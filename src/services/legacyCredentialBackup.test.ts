@@ -10,10 +10,13 @@ function backupPathFor(rawData: unknown): string {
   return `${PLUGIN_DIR}/${legacyBackupFilename(JSON.stringify(rawData, null, 2))}`;
 }
 
-function makeIO(overrides: Partial<{ exists: jest.Mock; write: jest.Mock }> = {}) {
+function makeIO(
+  overrides: Partial<{ exists: jest.Mock; write: jest.Mock; rename: jest.Mock }> = {}
+) {
   return {
     exists: overrides.exists ?? jest.fn().mockResolvedValue(false),
     write: overrides.write ?? jest.fn().mockResolvedValue(undefined),
+    rename: overrides.rename ?? jest.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -43,8 +46,12 @@ describe("legacyCredentialBackup", () => {
 
       expect(result).toEqual({ status: "backed-up", path: backupPathFor(rawData) });
       expect(io.write).toHaveBeenCalledWith(
-        backupPathFor(rawData),
+        `${backupPathFor(rawData)}.writing`,
         JSON.stringify(rawData, null, 2)
+      );
+      expect(io.rename).toHaveBeenCalledWith(
+        `${backupPathFor(rawData)}.writing`,
+        backupPathFor(rawData)
       );
     });
 
@@ -100,9 +107,31 @@ describe("legacyCredentialBackup", () => {
 
       expect(result).toEqual({ status: "backed-up", path: backupPathFor(current) });
       expect(io.write).toHaveBeenCalledWith(
-        backupPathFor(current),
+        `${backupPathFor(current)}.writing`,
         JSON.stringify(current, null, 2)
       );
+    });
+
+    it("never leaves a partial file at the final path when the write is interrupted", async () => {
+      const rawData = { openAIApiKey: "sk-legacy" };
+      const io = makeIO({ write: jest.fn().mockRejectedValue(new Error("disk full")) });
+
+      const result = await backupLegacyCredentials(rawData, PLUGIN_DIR, io);
+
+      // Reason: a truncated file at the final path would be read as proof on
+      // the next launch, and data.json would be stripped against it.
+      expect(result.status).toBe("failed");
+      expect(io.rename).not.toHaveBeenCalled();
+      expect(io.write.mock.calls[0][0]).toBe(`${backupPathFor(rawData)}.writing`);
+    });
+
+    it("reports failure when the backup cannot be renamed into place", async () => {
+      const error = new Error("rename failed");
+      const io = makeIO({ rename: jest.fn().mockRejectedValue(error) });
+
+      const result = await backupLegacyCredentials({ openAIApiKey: "sk-legacy" }, PLUGIN_DIR, io);
+
+      expect(result).toEqual({ status: "failed", error });
     });
 
     it("reports failure when the backup cannot be written", async () => {

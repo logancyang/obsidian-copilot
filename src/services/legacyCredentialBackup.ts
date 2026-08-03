@@ -38,6 +38,7 @@ export function legacyBackupFilename(contents: string): string {
 export interface LegacyBackupFileIO {
   exists: (path: string) => Promise<boolean>;
   write: (path: string, contents: string) => Promise<void>;
+  rename: (from: string, to: string) => Promise<void>;
 }
 
 /** Outcome of a rescue attempt, which decides whether stripping may proceed. */
@@ -50,9 +51,10 @@ export type LegacyBackupResult =
  * Copy `data.json` verbatim before v4 strips its credentials.
  *
  * A `failed` result means the caller must leave `data.json` alone: the file is
- * still the only copy of those keys. The backup is named after its contents,
- * so a rerun over unchanged data reuses the existing file, a changed
- * `data.json` gets its own, and no backup is ever overwritten.
+ * still the only copy of those keys. The backup is named after its contents and
+ * renamed into place only once fully written, so its presence proves those
+ * exact bytes are saved: a rerun over unchanged data reuses it, a changed
+ * `data.json` gets its own file, and no backup is ever overwritten.
  *
  * @param rawData - Raw `data.json` contents as loaded from disk.
  * @param pluginDir - Plugin folder that holds `data.json`.
@@ -74,7 +76,13 @@ export async function backupLegacyCredentials(
   const path = `${pluginDir}/${legacyBackupFilename(contents)}`;
   try {
     if (!(await io.exists(path))) {
-      await io.write(path, contents);
+      // Reason: write to a staging name and rename into place, so the final
+      // path only ever exists once the bytes are complete. Writing directly
+      // would leave a truncated file if the write is interrupted, and the next
+      // launch would read that path's existence as proof and strip data.json.
+      const staging = `${path}.writing`;
+      await io.write(staging, contents);
+      await io.rename(staging, path);
     }
     return { status: "backed-up", path };
   } catch (error) {

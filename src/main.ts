@@ -1100,6 +1100,7 @@ export default class CopilotPlugin extends Plugin {
         backupLegacyCredentials(raw, this.manifest.dir ?? "", {
           exists: (path) => this.app.vault.adapter.exists(path),
           write: (path, contents) => this.app.vault.adapter.write(path, contents),
+          rename: (from, to) => this.app.vault.adapter.rename(from, to),
         })
     );
     // Mirror this device's `agentMode.deviceProfiles` segment into the flat
