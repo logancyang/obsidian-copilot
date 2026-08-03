@@ -1,8 +1,25 @@
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { mountPluginViewRoot, type PluginViewRootHandle } from "@/utils/react/mountPluginViewRoot";
 import { ItemView, Plugin, type WorkspaceLeaf } from "obsidian";
+import * as React from "react";
 
 export const GALLERY_VIEWTYPE = "copilot-component-gallery";
 
+const BUTTON_VARIANTS = [
+  "default",
+  "destructive",
+  "secondary",
+  "ghost",
+  "link",
+  "success",
+  "ghost2",
+] as const;
+const BUTTON_SIZES = ["default", "sm", "lg", "icon", "fit"] as const;
+
 class GalleryView extends ItemView {
+  private viewRoot: PluginViewRootHandle | null = null;
+
   getViewType(): string {
     return GALLERY_VIEWTYPE;
   }
@@ -16,7 +33,33 @@ class GalleryView extends ItemView {
   }
 
   async onOpen(): Promise<void> {
-    this.contentEl.setText("Gallery: 0 stories");
+    this.viewRoot = mountPluginViewRoot(this.containerEl, this.app, () => this.renderTree());
+  }
+
+  private renderTree(): React.ReactNode {
+    return React.createElement(
+      "div",
+      { className: cn("tw-flex tw-flex-col tw-gap-4 tw-p-4") },
+      BUTTON_VARIANTS.map((variant) =>
+        React.createElement(
+          "section",
+          {
+            "aria-label": `${variant} Button variant`,
+            className: cn("tw-flex tw-flex-wrap tw-items-center tw-gap-2"),
+            key: variant,
+          },
+          React.createElement("span", null, variant),
+          BUTTON_SIZES.map((size) =>
+            React.createElement(Button, { key: size, size, variant }, size)
+          )
+        )
+      )
+    );
+  }
+
+  async onClose(): Promise<void> {
+    this.viewRoot?.unmount();
+    this.viewRoot = null;
   }
 }
 
