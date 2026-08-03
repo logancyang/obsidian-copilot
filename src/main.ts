@@ -46,6 +46,7 @@ import {
   type ModelManagementApi,
 } from "@/modelManagement";
 import { KeychainService } from "@/services/keychainService";
+import { backupLegacyCredentials } from "@/services/legacyCredentialBackup";
 import {
   persistSettings,
   loadSettingsWithKeychain,
@@ -1092,7 +1093,16 @@ export default class CopilotPlugin extends Plugin {
     // `dehydrateDeviceProfile` override below via `super.saveData` — routing it
     // through `this.saveData` would read the absent flat fields as "cleared"
     // and delete this device's `deviceProfiles` segment (GitHub #2539).
-    const settings = await loadSettingsWithKeychain(rawData, (d) => super.saveData(d));
+    const settings = await loadSettingsWithKeychain(
+      rawData,
+      (d) => super.saveData(d),
+      (raw) =>
+        backupLegacyCredentials(raw, this.manifest.dir ?? "", {
+          exists: (path) => this.app.vault.adapter.exists(path),
+          write: (path, contents) => this.app.vault.adapter.write(path, contents),
+          rename: (from, to) => this.app.vault.adapter.rename(from, to),
+        })
+    );
     // Mirror this device's `agentMode.deviceProfiles` segment into the flat
     // agent fields the rest of the code reads (GitHub #2539). `saveData` below
     // performs the inverse on the way out.

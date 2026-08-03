@@ -175,9 +175,7 @@ export interface CopilotSettings {
   /** When true, omit folder_name from Miyo search requests so all indexed content is searched */
   miyoSearchAll: boolean;
   /** URL endpoint for the self-host mode backend */
-  selfHostUrl: string;
   /** API key for the self-host mode backend (if required) */
-  selfHostApiKey: string;
   /** Custom Miyo server URL, e.g. "http://192.168.1.10:8742" (empty = use local service discovery) */
   miyoServerUrl: string;
   /**
@@ -674,8 +672,6 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   const rawSettings = settingsToSanitize as unknown as Record<string, unknown>;
   const {
     enableSelfHostedSearch: legacyEnableSelfHostedSearch,
-    selfHostedSearchUrl: legacySelfHostedSearchUrl,
-    selfHostedSearchApiKey: legacySelfHostedSearchApiKey,
     enableMiyoSearch: legacyEnableMiyoSearch,
   } = rawSettings;
 
@@ -711,12 +707,6 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
     sanitizedSettings.enableSelfHostMode === undefined
   ) {
     sanitizedSettings.enableSelfHostMode = legacyEnableSelfHostedSearch as boolean;
-  }
-  if (legacySelfHostedSearchUrl !== undefined && !sanitizedSettings.selfHostUrl) {
-    sanitizedSettings.selfHostUrl = legacySelfHostedSearchUrl as string;
-  }
-  if (legacySelfHostedSearchApiKey !== undefined && !sanitizedSettings.selfHostApiKey) {
-    sanitizedSettings.selfHostApiKey = legacySelfHostedSearchApiKey as string;
   }
 
   // Migration: Rename legacy enableMiyoSearch to enableMiyo.

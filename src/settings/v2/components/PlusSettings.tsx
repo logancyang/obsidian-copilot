@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PasswordInput } from "@/components/ui/password-input";
 import { MIYO_HOMEPAGE_URL, PLUS_UTM_MEDIUMS } from "@/constants";
-import { checkIsPaidUser, navigateToPlusPage, useIsPaidUser } from "@/plusUtils";
+import { checkIsPaidUser, createPlusPageUrl, navigateToPlusPage, useIsPaidUser } from "@/plusUtils";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import { ExternalLink, Loader2 } from "lucide-react";
 import React, { useState } from "react";
@@ -30,22 +30,26 @@ export function PlusSettings() {
   return (
     <section className="tw-flex tw-flex-col tw-gap-4 tw-rounded-xl tw-border tw-border-solid tw-p-4 tw-shadow-sm tw-bg-interactive-accent/10 tw-border-interactive-accent/40">
       <div className="tw-flex tw-items-center tw-justify-between tw-gap-2 tw-text-lg tw-font-semibold">
-        <span>Copilot Plus</span>
+        <span>Copilot License</span>
         {isPaidUser && (
           <Badge className="tw-rounded-full tw-bg-success tw-text-success">Active</Badge>
         )}
       </div>
       <div className="tw-flex tw-flex-col tw-gap-2 tw-text-sm tw-text-muted">
         <div>
-          Copilot Plus brings top-tier AI right into Obsidian —{" "}
-          <strong className="tw-font-semibold tw-text-normal">premium chat models</strong>,{" "}
-          <strong className="tw-font-semibold tw-text-normal">PDF &amp; image understanding</strong>
-          , and <strong className="tw-font-semibold tw-text-normal">web search</strong>. The new{" "}
-          <strong className="tw-font-semibold tw-text-normal">Agent Mode</strong> connects powerful
-          agent tools like <strong className="tw-font-semibold tw-text-normal">Claude Code</strong>,{" "}
-          <strong className="tw-font-semibold tw-text-normal">Codex</strong>, and{" "}
-          <strong className="tw-font-semibold tw-text-normal">opencode</strong>, letting AI work
-          autonomously inside your vault. You can also pair it with{" "}
+          <a
+            href={createPlusPageUrl(PLUS_UTM_MEDIUMS.SETTINGS)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="tw-font-semibold tw-text-accent"
+          >
+            Copilot paid plans
+          </a>{" "}
+          add <strong className="tw-font-semibold tw-text-normal">premium chat models</strong>,{" "}
+          <strong className="tw-font-semibold tw-text-normal">document understanding</strong>,{" "}
+          <strong className="tw-font-semibold tw-text-normal">advanced web search</strong>, and{" "}
+          <strong className="tw-font-semibold tw-text-normal">multi-agent capabilities</strong> to
+          your Copilot agentic experience. Pair it with{" "}
           <a
             href={MIYO_HOMEPAGE_URL}
             target="_blank"
@@ -53,8 +57,8 @@ export function PlusSettings() {
             className="tw-font-semibold tw-text-accent"
           >
             Miyo
-          </a>
-          , a local knowledge base that keeps all your data on your own machine.
+          </a>{" "}
+          and turn your vault into a centralized workspace for all your AI tools across devices.
         </div>
       </div>
 
@@ -64,10 +68,7 @@ export function PlusSettings() {
           avoids flashing this block while the paid status is still resolving. */}
       {isPaidUser === false && (
         <div className="tw-flex tw-flex-col tw-gap-2 tw-rounded-lg tw-border tw-border-solid tw-bg-primary tw-p-3 tw-border-interactive-accent/30">
-          <div className="tw-text-sm tw-text-normal">
-            Unlock the full experience for a few dollars a month — a low-cost plan gets you chat
-            context, PDF &amp; image support, web search, and exclusive models.
-          </div>
+          <div className="tw-text-sm tw-text-normal">All of it for a few dollars a month.</div>
           <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-2">
             <Button
               className="tw-text-xs md:tw-text-sm"

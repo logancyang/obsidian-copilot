@@ -1,9 +1,7 @@
-import { logInfo, logWarn } from "@/logger";
-import { isSelfHostModeValid } from "@/plusUtils";
+import { logInfo } from "@/logger";
 import { getSearchBackend } from "@/miyo/miyoUtils";
 import { getSettings, CopilotSettings } from "@/settings/model";
 import { App } from "obsidian";
-import { SelfHostRetriever, VectorSearchBackend } from "./selfHostRetriever";
 import { MiyoSemanticRetriever } from "./miyo/MiyoSemanticRetriever";
 import { MergedSemanticRetriever } from "./v3/MergedSemanticRetriever";
 import { TieredLexicalRetriever } from "./v3/TieredLexicalRetriever";
@@ -51,7 +49,7 @@ interface NormalizedRetrieverOptions {
  */
 export interface RetrieverSelectionResult {
   retriever: DocumentRetriever;
-  type: "self_hosted" | "semantic" | "lexical";
+  type: "semantic" | "lexical";
   reason: string;
 }
 
@@ -89,40 +87,10 @@ export interface DocumentRetriever {
  *
  * Priority order:
  * 1. Miyo-backed semantic search (self-host mode + Miyo toggle)
- * 2. Self-host mode backend (if registered)
- * 3. Semantic search / MergedSemanticRetriever (if enabled)
- * 4. Lexical search / TieredLexicalRetriever (default)
+ * 2. Semantic search / MergedSemanticRetriever (if enabled)
+ * 3. Lexical search / TieredLexicalRetriever (default)
  */
 export class RetrieverFactory {
-  private static selfHostedBackend: VectorSearchBackend | null = null;
-
-  /**
-   * Register a self-host mode vector search backend.
-   * This should be called during plugin initialization if self-host mode is configured.
-   *
-   * @param backend - The vector search backend implementation (e.g., Miyo)
-   */
-  static registerSelfHostedBackend(backend: VectorSearchBackend): void {
-    RetrieverFactory.selfHostedBackend = backend;
-    logInfo("RetrieverFactory: Self-hosted backend registered");
-  }
-
-  /**
-   * Clear the registered self-hosted backend.
-   * Call this when disabling self-host mode or during cleanup.
-   */
-  static clearSelfHostedBackend(): void {
-    RetrieverFactory.selfHostedBackend = null;
-    logInfo("RetrieverFactory: Self-hosted backend cleared");
-  }
-
-  /**
-   * Check if a self-hosted backend is registered.
-   */
-  static hasSelfHostedBackend(): boolean {
-    return RetrieverFactory.selfHostedBackend !== null;
-  }
-
   /**
    * Create a retriever based on current settings.
    *
@@ -149,50 +117,6 @@ export class RetrieverFactory {
         retriever,
         type: "semantic",
         reason: "Miyo search is enabled",
-      };
-    }
-
-    // Self-host mode handling - requires valid validation (within grace period)
-    if (isSelfHostModeValid()) {
-      // If URL is configured, try to use self-host backend (API key is optional)
-      if (currentSettings.selfHostUrl) {
-        const backend = await RetrieverFactory.getSelfHostedBackend(currentSettings);
-        if (backend) {
-          const retriever = new SelfHostRetriever(app, backend, normalizedOptions);
-          logInfo("RetrieverFactory: Using self-host mode backend");
-          return {
-            retriever,
-            type: "self_hosted",
-            reason: "Self-host mode is enabled and backend is available",
-          };
-        }
-        logWarn("RetrieverFactory: Self-host mode backend unavailable, falling back");
-      } else {
-        logInfo("RetrieverFactory: Self-host mode enabled but URL not configured, falling back");
-      }
-
-      // Self-host mode fallback: use semantic if enabled, otherwise lexical
-      if (currentSettings.enableSemanticSearchV3) {
-        const retriever = new MergedSemanticRetriever(app, normalizedOptions);
-        logInfo(
-          "RetrieverFactory: Using MergedSemanticRetriever (semantic search fallback for self-host mode)"
-        );
-        return {
-          retriever,
-          type: "semantic",
-          reason: "Self-host mode fallback to semantic search",
-        };
-      }
-
-      // Semantic search not enabled, fall back to lexical
-      const retriever = new TieredLexicalRetriever(app, normalizedOptions);
-      logInfo(
-        "RetrieverFactory: Using TieredLexicalRetriever (lexical search fallback for self-host mode)"
-      );
-      return {
-        retriever,
-        type: "lexical",
-        reason: "Self-host mode fallback to lexical search (semantic disabled)",
       };
     }
 
@@ -248,64 +172,17 @@ export class RetrieverFactory {
   }
 
   /**
-   * Get the self-hosted vector search backend.
-   * Returns the registered backend if available.
-   *
-   * @param _settings - Settings containing backend configuration (reserved for future use)
-   * @returns The vector search backend instance, or null if unavailable
-   */
-  private static async getSelfHostedBackend(
-    _settings: CopilotSettings
-  ): Promise<VectorSearchBackend | null> {
-    // Return registered backend if available
-    if (RetrieverFactory.selfHostedBackend) {
-      try {
-        const isAvailable = await RetrieverFactory.selfHostedBackend.isAvailable();
-        if (isAvailable) {
-          return RetrieverFactory.selfHostedBackend;
-        }
-        logWarn("RetrieverFactory: Registered backend is not available");
-      } catch (error) {
-        logWarn("RetrieverFactory: Error checking backend availability:", error);
-      }
-    }
-
-    // No backend registered and we can't create one without implementation
-    // This is a placeholder until a concrete backend (e.g., Miyo) is implemented
-    logWarn(
-      "RetrieverFactory: No self-hosted backend available. " +
-        "Register a VectorSearchBackend implementation via RetrieverFactory.registerSelfHostedBackend()"
-    );
-    return null;
-  }
-
-  /**
    * Get the current retriever type based on settings without creating an instance.
    * Useful for UI display or debugging.
    *
    * @param settings - Optional settings override
    * @returns The type of retriever that would be created
    */
-  static getRetrieverType(
-    settings?: Partial<CopilotSettings>
-  ): "self_hosted" | "semantic" | "lexical" {
+  static getRetrieverType(settings?: Partial<CopilotSettings>): "semantic" | "lexical" {
     const currentSettings = settings ? { ...getSettings(), ...settings } : getSettings();
 
     if (RetrieverFactory.shouldUseMiyo(currentSettings)) {
       return "semantic";
-    }
-
-    // Self-host mode handling - requires valid validation (within grace period)
-    if (isSelfHostModeValid()) {
-      // URL configured with backend available → self_hosted (API key is optional)
-      if (currentSettings.selfHostUrl && RetrieverFactory.selfHostedBackend) {
-        return "self_hosted";
-      }
-      // Self-host mode enabled but not ready → check semantic setting
-      if (currentSettings.enableSemanticSearchV3) {
-        return "semantic";
-      }
-      return "lexical";
     }
 
     // Standard mode

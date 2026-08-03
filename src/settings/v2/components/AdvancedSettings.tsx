@@ -10,6 +10,7 @@ import { getCopilotSaveData } from "@/settings/copilotSaveData";
 import { KeychainService } from "@/services/keychainService";
 import {
   refreshLastPersistedSettings,
+  releaseLegacyCredentialHold,
   runPersistenceTransaction,
   suppressNextPersistOnce,
 } from "@/services/settingsPersistence";
@@ -137,7 +138,9 @@ export const AdvancedSettings: React.FC = () => {
         app,
         () => resolve(true),
         "This will remove all API keys for this vault from the Obsidian Keychain, data.json, " +
-          "and memory. You will need to re-enter them.",
+          "and memory. You will need to re-enter them. Any credential backup files written " +
+          "during the v4 upgrade are left in place — delete those yourself once you no longer " +
+          "need them.",
         "\u26A0\uFE0F Forget All Secrets",
         "Remove",
         "Cancel",
@@ -154,11 +157,21 @@ export const AdvancedSettings: React.FC = () => {
       // Reason: run inside the persistence queue to prevent interleaving
       // with normal saves that could restore old secrets.
       await runPersistenceTransaction(() =>
-        keychain.forgetAllSecrets(saveData, (nextSettings) => {
-          refreshLastPersistedSettings(nextSettings as CopilotSettings);
-          suppressNextPersistOnce();
-          setSettings(nextSettings);
-        })
+        keychain.forgetAllSecrets(
+          // Reason: this write strips data.json outside the normal save path,
+          // so once it resolves any pre-v4 credentials it was holding back are
+          // gone and ordinary saves can resume. Tied to the write itself, not
+          // to how the transaction settles, because only the write knows.
+          async (data) => {
+            await saveData(data);
+            releaseLegacyCredentialHold();
+          },
+          (nextSettings) => {
+            refreshLastPersistedSettings(nextSettings as CopilotSettings);
+            suppressNextPersistOnce();
+            setSettings(nextSettings);
+          }
+        )
       );
     } catch (error) {
       logError("Failed to forget secrets.", error);

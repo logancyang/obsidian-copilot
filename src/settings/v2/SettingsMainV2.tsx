@@ -8,7 +8,7 @@ import CopilotPlugin from "@/main";
 import { ByokPanel, ModelManagementProvider } from "@/modelManagement";
 import { resetSettings } from "@/settings/model";
 import { CommandSettings } from "@/settings/v2/components/CommandSettings";
-import { Bot, Cog, Command, Cpu, Server, ShieldCheck, Sparkle, Wrench } from "lucide-react";
+import { Bot, Cog, Command, Cpu, ShieldCheck, Sigma, Sparkle, Wrench } from "lucide-react";
 import React from "react";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { AdvancedSettings } from "./components/AdvancedSettings";
@@ -80,7 +80,7 @@ const icons: Record<TabId, JSX.Element> = {
   basic: <Cog className="tw-size-5" />,
   byok: <Cpu className="tw-size-5" />,
   agent: <Bot className="tw-size-5" />,
-  miyo: <Server className="tw-size-5" />,
+  miyo: <Sigma className="tw-size-5" />,
   selfhost: <ShieldCheck className="tw-size-5" />,
   command: <Command className="tw-size-5" />,
   skills: <Sparkle className="tw-size-5" />,

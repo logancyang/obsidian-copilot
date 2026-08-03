@@ -14,6 +14,8 @@ function makeSettings(overrides: Partial<CopilotSettings> = {}): CopilotSettings
   } as unknown as CopilotSettings;
 }
 
+const backedUp = jest.fn().mockResolvedValue({ status: "not-needed" });
+
 async function loadModule(overrides: Record<string, unknown> = {}) {
   jest.resetModules();
 
@@ -145,7 +147,8 @@ describe("settingsPersistence", () => {
           activeModels: [{ name: "custom", provider: "openai", apiKey: "plaintext-disk-key" }],
           activeEmbeddingModels: [],
         },
-        saveData
+        saveData,
+        backedUp
       );
 
       const hydrateInput = keychain.hydrateFromKeychain.mock.calls[0][0];
@@ -168,7 +171,8 @@ describe("settingsPersistence", () => {
 
       const loaded = await module.loadSettingsWithKeychain(
         { _keychainVaultId: "1234abcd", openAIApiKey: "plaintext-disk-key" },
-        jest.fn().mockResolvedValue(undefined)
+        jest.fn().mockResolvedValue(undefined),
+        backedUp
       );
 
       expect(loaded.openAIApiKey).toBe("");
@@ -179,13 +183,99 @@ describe("settingsPersistence", () => {
       const { module, keychain } = await loadModule();
       const saveData = jest.fn().mockResolvedValue(undefined);
 
-      await module.loadSettingsWithKeychain(null, saveData);
+      await module.loadSettingsWithKeychain(null, saveData, backedUp);
 
       expect(keychain.setVaultId).toHaveBeenCalledWith("abcd1234");
       expect(saveData).toHaveBeenCalledWith({
         _keychainVaultId: "abcd1234",
         settingsVersion: CURRENT_SETTINGS_VERSION,
       });
+    });
+    it("leaves data.json intact when the credential backup fails", async () => {
+      const { module } = await loadModule();
+      const saveData = jest.fn().mockResolvedValue(undefined);
+
+      await module.loadSettingsWithKeychain(
+        { _keychainVaultId: "1234abcd", openAIApiKey: "plaintext-disk-key" },
+        saveData,
+        jest.fn().mockResolvedValue({ status: "failed", error: new Error("read-only") })
+      );
+
+      expect(saveData).not.toHaveBeenCalled();
+    });
+
+    it("strips data.json once the credentials are backed up", async () => {
+      const { module } = await loadModule();
+      const saveData = jest.fn().mockResolvedValue(undefined);
+
+      await module.loadSettingsWithKeychain(
+        { _keychainVaultId: "1234abcd", openAIApiKey: "plaintext-disk-key" },
+        saveData,
+        jest.fn().mockResolvedValue({
+          status: "backed-up",
+          path: "plugins/copilot/backup.json",
+          encrypted: false,
+        })
+      );
+
+      expect(saveData.mock.calls[0][0].openAIApiKey).toBe("");
+    });
+
+    it("rejects later settings writes rather than skipping them when the backup fails", async () => {
+      const { module, keychain } = await loadModule({
+        persistSecrets: jest.fn().mockReturnValue({
+          secretEntries: [["copilot-vabcd1234-open-a-i-api-key", "re-entered"]],
+          keychainIdsToDelete: [],
+        }),
+      });
+      await module.loadSettingsWithKeychain(
+        { _keychainVaultId: "1234abcd", openAIApiKey: "plaintext-disk-key" },
+        jest.fn().mockResolvedValue(undefined),
+        jest.fn().mockResolvedValue({ status: "failed", error: new Error("read-only") })
+      );
+      const saveData = jest.fn().mockResolvedValue(undefined);
+
+      // Reason: migrations and the settings subscriber both persist moments
+      // after load. Resolving quietly would report an unwritten file as saved,
+      // which `applyCopilotRootChange()` treats as durable.
+      await expect(module.persistSettings(makeSettings(), saveData)).rejects.toThrow(
+        "cannot save settings"
+      );
+      expect(saveData).not.toHaveBeenCalled();
+      expect(keychain.setSecretById).not.toHaveBeenCalled();
+    });
+
+    it("rejects a durable transaction while the hold is active", async () => {
+      const { module } = await loadModule();
+      await module.loadSettingsWithKeychain(
+        { _keychainVaultId: "1234abcd", openAIApiKey: "plaintext-disk-key" },
+        jest.fn().mockResolvedValue(undefined),
+        jest.fn().mockResolvedValue({ status: "failed", error: new Error("read-only") })
+      );
+
+      await expect(
+        module.persistSettingsWithinTransaction(
+          makeSettings(),
+          jest.fn().mockResolvedValue(undefined)
+        )
+      ).rejects.toThrow("cannot save settings");
+    });
+  });
+
+  describe("releaseLegacyCredentialHold()", () => {
+    it("resumes writing once a dedicated flow has stripped data.json", async () => {
+      const { module } = await loadModule();
+      await module.loadSettingsWithKeychain(
+        { _keychainVaultId: "1234abcd", openAIApiKey: "plaintext-disk-key" },
+        jest.fn().mockResolvedValue(undefined),
+        jest.fn().mockResolvedValue({ status: "failed", error: new Error("read-only") })
+      );
+      const saveData = jest.fn().mockResolvedValue(undefined);
+
+      module.releaseLegacyCredentialHold();
+      await module.persistSettings(makeSettings(), saveData);
+
+      expect(saveData).toHaveBeenCalledTimes(1);
     });
   });
 
