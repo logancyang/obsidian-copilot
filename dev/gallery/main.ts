@@ -1,21 +1,15 @@
-import { Button } from "@/components/ui/button";
+import type { Meta, StoryObj } from "@/lib/story";
 import { cn } from "@/lib/utils";
 import { mountPluginViewRoot, type PluginViewRootHandle } from "@/utils/react/mountPluginViewRoot";
 import { ItemView, Plugin, type WorkspaceLeaf } from "obsidian";
 import * as React from "react";
+import { modules } from "./stories";
 
 export const GALLERY_VIEWTYPE = "copilot-component-gallery";
 
-const BUTTON_VARIANTS = [
-  "default",
-  "destructive",
-  "secondary",
-  "ghost",
-  "link",
-  "success",
-  "ghost2",
-] as const;
-const BUTTON_SIZES = ["default", "sm", "lg", "icon", "fit"] as const;
+interface StoryModule extends Record<string, unknown> {
+  default: Meta<Record<string, unknown>>;
+}
 
 class GalleryView extends ItemView {
   private viewRoot: PluginViewRootHandle | null = null;
@@ -33,27 +27,71 @@ class GalleryView extends ItemView {
   }
 
   async onOpen(): Promise<void> {
-    this.viewRoot = mountPluginViewRoot(this.containerEl, this.app, () => this.renderTree());
+    const storyModules = await Promise.all(Object.values(modules).map((load) => load()));
+    this.viewRoot = mountPluginViewRoot(this.containerEl, this.app, () =>
+      this.renderTree(storyModules)
+    );
   }
 
-  private renderTree(): React.ReactNode {
+  private renderTree(storyModules: unknown[]): React.ReactNode {
     return React.createElement(
       "div",
       { className: cn("tw-flex tw-flex-col tw-gap-4 tw-p-4") },
-      BUTTON_VARIANTS.map((variant) =>
-        React.createElement(
+      storyModules.map((storyModule) => {
+        const mod = storyModule as StoryModule;
+        const meta = mod.default;
+        const displayTitle = meta.title.split("/").join(" / ");
+        const stories = Object.entries(mod).filter(([exportName]) => exportName !== "default");
+
+        return React.createElement(
           "section",
           {
-            "aria-label": `${variant} Button variant`,
-            className: cn("tw-flex tw-flex-wrap tw-items-center tw-gap-2"),
-            key: variant,
+            "aria-label": `${displayTitle} stories`,
+            className: cn("tw-flex tw-flex-col tw-gap-3 tw-rounded-md tw-border tw-p-4"),
+            key: meta.title,
           },
-          React.createElement("span", null, variant),
-          BUTTON_SIZES.map((size) =>
-            React.createElement(Button, { key: size, size, variant }, size)
-          )
-        )
-      )
+          React.createElement(
+            "header",
+            { className: cn("tw-flex tw-items-center tw-justify-between tw-gap-2") },
+            React.createElement("h2", null, displayTitle),
+            React.createElement(
+              "span",
+              null,
+              `${stories.length} ${stories.length === 1 ? "story" : "stories"}`
+            )
+          ),
+          stories.map(([exportName, value]) => {
+            const story = value as StoryObj<Record<string, unknown>>;
+            const args = { ...meta.args, ...story.args };
+            const gallery = { ...meta.parameters?.gallery, ...story.parameters?.gallery };
+            const storyId = `${meta.title}/${exportName}`;
+            let node: React.ReactNode;
+
+            if (story.render) {
+              node = story.render(args);
+            } else if (meta.component) {
+              node = React.createElement(meta.component, args);
+            } else {
+              throw new Error(`Story "${storyId}" must define render or meta.component`);
+            }
+
+            return React.createElement(
+              "section",
+              {
+                "aria-label": `${exportName} story`,
+                "data-gallery-coverage": gallery.coverage,
+                "data-gallery-host": gallery.host,
+                "data-gallery-layout": gallery.layout,
+                "data-gallery-width": gallery.width,
+                className: cn("tw-flex tw-flex-col tw-gap-2"),
+                key: storyId,
+              },
+              React.createElement("h3", null, exportName),
+              node
+            );
+          })
+        );
+      })
     );
   }
 

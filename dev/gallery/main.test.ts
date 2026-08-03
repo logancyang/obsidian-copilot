@@ -1,3 +1,4 @@
+import * as buttonStories from "@/components/ui/button.stories";
 import { mountPluginViewRoot, type PluginViewRootHandle } from "@/utils/react/mountPluginViewRoot";
 import { render, within } from "@testing-library/react";
 import GalleryPlugin, { GALLERY_VIEWTYPE } from "./main";
@@ -51,6 +52,7 @@ interface GalleryViewContract {
   getViewType(): string;
   onClose(): Promise<void>;
   onOpen(): Promise<void>;
+  renderTree(storyModules: unknown[]): ReactNode;
 }
 
 describe("main", () => {
@@ -126,7 +128,7 @@ describe("main", () => {
     });
 
     describe("onOpen()", () => {
-      it("mounts all Button variants and sizes in the gallery content", async () => {
+      it("loads and renders every named Button story export with merged metadata", async () => {
         await view.onOpen();
 
         expect(mountViewRoot).toHaveBeenCalledWith(view.containerEl, app, expect.any(Function));
@@ -145,15 +147,90 @@ describe("main", () => {
           "ghost2",
         ];
         const sizes = ["default", "sm", "lg", "icon", "fit"];
+        const storyNames = Object.keys(buttonStories).filter(
+          (exportName) => exportName !== "default"
+        );
+        const buttonGroup = gallery.getByRole("region", { name: "UI / Button stories" });
+        const disabledStory = within(buttonGroup).getByRole("region", {
+          name: "Disabled story",
+        });
+        const variantsStory = within(buttonGroup).getByRole("region", {
+          name: "Variants story",
+        });
+        const sizesStory = within(buttonGroup).getByRole("region", { name: "Sizes story" });
 
-        expect(gallery.getAllByRole("button")).toHaveLength(35);
-        for (const variant of variants) {
-          const row = within(gallery.getByRole("region", { name: `${variant} Button variant` }));
-          expect(row.getByText(variant, { selector: "span" })).toBeTruthy();
-          expect(row.getAllByRole("button").map((button) => button.textContent)).toEqual(sizes);
+        expect(
+          within(buttonGroup).getByRole("heading", { level: 2, name: "UI / Button" })
+        ).toBeTruthy();
+        expect(within(buttonGroup).getByText(`${storyNames.length} stories`)).toBeTruthy();
+        expect(within(buttonGroup).getAllByRole("region")).toHaveLength(storyNames.length);
+        for (const storyName of storyNames) {
+          expect(
+            within(
+              within(buttonGroup).getByRole("region", { name: `${storyName} story` })
+            ).getByRole("heading", { level: 3, name: storyName })
+          ).toBeTruthy();
         }
 
+        const disabledButton = within(disabledStory).getByRole("button", { name: "Working…" });
+        expect((disabledButton as HTMLButtonElement).disabled).toBe(true);
+        expect(disabledButton.getAttribute("type")).toBe("button");
+        expect(disabledStory.dataset.galleryHost).toBe("leaf");
+        expect(disabledStory.dataset.galleryLayout).toBe("padded");
+        expect(disabledStory.dataset.galleryWidth).toBe("300");
+        expect(
+          within(variantsStory)
+            .getAllByRole("button")
+            .map((button) => button.textContent)
+        ).toEqual(variants);
+        expect(
+          within(sizesStory)
+            .getAllByRole("button")
+            .map((button) => button.textContent)
+        ).toEqual(sizes);
+
         gallery.unmount();
+      });
+    });
+
+    describe("renderTree()", () => {
+      it("groups multiple modules under human-readable titles with named story counts", () => {
+        const gallery = render(
+          view.renderTree([
+            {
+              default: { title: "UI/First" },
+              Only: { render: () => "First story" },
+            },
+            {
+              default: { title: "Forms/Inputs/Second" },
+              Empty: { render: () => "Empty story" },
+              Filled: { render: () => "Filled story" },
+            },
+          ]) as ReactElement
+        );
+
+        const firstGroup = gallery.getByRole("region", { name: "UI / First stories" });
+        const secondGroup = gallery.getByRole("region", {
+          name: "Forms / Inputs / Second stories",
+        });
+
+        expect(within(firstGroup).getByText("1 story")).toBeTruthy();
+        expect(within(secondGroup).getByText("2 stories")).toBeTruthy();
+        expect(within(firstGroup).getByRole("region", { name: "Only story" })).toBeTruthy();
+        expect(within(secondGroup).getByRole("region", { name: "Filled story" })).toBeTruthy();
+
+        gallery.unmount();
+      });
+
+      it("rejects a story without a render function or meta component", () => {
+        expect(() =>
+          view.renderTree([
+            {
+              default: { title: "UI/MissingComponent" },
+              Broken: {},
+            },
+          ])
+        ).toThrow('Story "UI/MissingComponent/Broken" must define render or meta.component');
       });
     });
 
