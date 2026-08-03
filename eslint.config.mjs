@@ -11,6 +11,8 @@ export default [
       "node_modules/**",
       "main.js",
       "styles.css",
+      "dev/gallery/main.js",
+      "dev/gallery/styles.css",
       "data.json",
       "designdocs/**",
       "docs/**",
