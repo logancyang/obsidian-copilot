@@ -26,6 +26,13 @@ Copilot Plus is a subscription that enables:
 3. Enter your license key in the **Copilot Plus License Key** field
 4. Features unlock automatically
 
+The badge at the top of the license section names your plan once the key is
+working — **Plus**, **Lite**, or **Lifetime** for a Believer or Supporter
+purchase. It reads **Inactive** whenever the stored key grants nothing: a
+subscription that ended, a key that was revoked or mistyped, or a plan whose
+included access has run out. The plans link in that section is where you renew
+or upgrade.
+
 ---
 
 ## Copilot Plus Flash Model

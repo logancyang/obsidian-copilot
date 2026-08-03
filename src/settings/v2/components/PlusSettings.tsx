@@ -4,7 +4,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PasswordInput } from "@/components/ui/password-input";
 import { MIYO_HOMEPAGE_URL, PLUS_UTM_MEDIUMS } from "@/constants";
-import { checkIsPaidUser, createPlusPageUrl, navigateToPlusPage, useIsPaidUser } from "@/plusUtils";
+import {
+  checkIsPaidUser,
+  createPlusPageUrl,
+  navigateToPlusPage,
+  useIsPaidUser,
+  useLicenseState,
+} from "@/plusUtils";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import { ExternalLink, Loader2 } from "lucide-react";
 import React, { useState } from "react";
@@ -18,12 +24,25 @@ function getPlusUsageMock(): { currentPct: number; weeklyPct: number } | null {
   return null;
 }
 
+/**
+ * The one plan whose stored name is not what we show a customer: `believer`
+ * covers both the legacy Believer and the newer Supporter purchase, and nothing
+ * the client — or the billing data behind it — can separate them. Every other
+ * plan shows its own name.
+ */
+const LIFETIME_PLAN = "believer";
+
 export function PlusSettings() {
   const app = useApp();
   const settings = useSettingsValue();
   const [error, setError] = useState<string | null>(null);
   const [isChecking, setIsChecking] = useState(false);
   const isPaidUser = useIsPaidUser();
+  const license = useLicenseState();
+  // A key being validated is unknown, not rejected. The hook only sees the
+  // stored token, which is still empty until the server answers, so it would
+  // otherwise report a freshly pasted key as inactive for the whole round-trip.
+  const licenseStatus = isChecking ? "none" : license.status;
   const [localLicenseKey, setLocalLicenseKey] = useState(settings.plusLicenseKey);
   const usageData = getPlusUsageMock();
 
@@ -31,8 +50,13 @@ export function PlusSettings() {
     <section className="tw-flex tw-flex-col tw-gap-4 tw-rounded-xl tw-border tw-border-solid tw-p-4 tw-shadow-sm tw-bg-interactive-accent/10 tw-border-interactive-accent/40">
       <div className="tw-flex tw-items-center tw-justify-between tw-gap-2 tw-text-lg tw-font-semibold">
         <span>Copilot License</span>
-        {isPaidUser && (
-          <Badge className="tw-rounded-full tw-bg-success tw-text-success">Active</Badge>
+        {licenseStatus === "active" && (
+          <Badge className="tw-rounded-full tw-bg-success tw-capitalize tw-text-success">
+            {license.plan === LIFETIME_PLAN ? "Lifetime" : (license.plan ?? "Active")}
+          </Badge>
+        )}
+        {licenseStatus === "inactive" && (
+          <Badge className="tw-rounded-full tw-bg-error tw-text-error">Inactive</Badge>
         )}
       </div>
       <div className="tw-flex tw-flex-col tw-gap-2 tw-text-sm tw-text-muted">
@@ -62,11 +86,13 @@ export function PlusSettings() {
         </div>
       </div>
 
-      {/* Free-user value + upsell. Gated on `isPaidUser === false` (not
-          `!isPaidUser`): the flag is `boolean | undefined`, defaulting to false
-          and staying on a cached value through network errors, so `=== false`
-          avoids flashing this block while the paid status is still resolving. */}
-      {isPaidUser === false && (
+      {/* One pitch for everyone without working access — never paid, or paid
+          once and no longer. Both want the same thing from this screen, and the
+          badge already says which they are. `isPaidUser === false` (not
+          `!isPaidUser`) keeps it from flashing while the flag is still
+          undefined; the status covers a key that stopped working while the
+          cached flag still reads paid. */}
+      {(isPaidUser === false || licenseStatus === "inactive") && !isChecking && (
         <div className="tw-flex tw-flex-col tw-gap-2 tw-rounded-lg tw-border tw-border-solid tw-bg-primary tw-p-3 tw-border-interactive-accent/30">
           <div className="tw-text-sm tw-text-normal">All of it for a few dollars a month.</div>
           <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-2">

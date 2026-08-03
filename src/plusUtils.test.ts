@@ -33,6 +33,7 @@ import {
   markPaidPendingEntitlement,
   turnOffPaid,
   useIsSelfHostEligible,
+  useLicenseState,
   verifyCachedEntitlement,
 } from "@/plusUtils";
 import { renderHook, waitFor } from "@testing-library/react";
@@ -76,6 +77,26 @@ function tokenBackedSettings(overrides: Partial<CopilotSettings> = {}): CopilotS
     entitlementExpiresAt: Date.now() + 60_000,
     ...overrides,
   });
+}
+
+/**
+ * Drive the module's verified proof from a token whose claims are given, the
+ * way the real startup path does.
+ */
+async function verifySessionClaims(
+  claims: Partial<{ plan: string; tier: string; features: string[]; exp: number }>
+): Promise<void> {
+  mockVerifyEntitlement.mockResolvedValue({
+    user_id: "user-123",
+    plan: "believer",
+    tier: "plus",
+    features: [],
+    iat: 0,
+    exp: FUTURE_EXP_SECONDS,
+    ...claims,
+  });
+  mockGetSettings.mockReturnValue(buildSettings({ userId: "user-123", entitlementToken: "token" }));
+  await verifyCachedEntitlement();
 }
 
 describe("plusUtils", () => {
@@ -445,6 +466,83 @@ describe("plusUtils", () => {
       mockValidateLicenseKey.mockRejectedValue(new Error("net::ERR_INTERNET_DISCONNECTED"));
 
       expect(await checkIsPaidUser()).toBe(false);
+    });
+  });
+
+  describe("useLicenseState()", () => {
+    it("names the plan the session-verified entitlement carries", async () => {
+      await verifySessionClaims({ plan: "believer", tier: "plus" });
+      mockGetSettings.mockReturnValue(tokenBackedSettings({ plusLicenseKey: "key" }));
+
+      const { result } = renderHook(() => useLicenseState());
+
+      expect(result.current).toEqual({ status: "active", plan: "believer" });
+    });
+
+    it("returns the same object across renders while the plan is unchanged", async () => {
+      await verifySessionClaims({ plan: "believer", tier: "plus" });
+      mockGetSettings.mockReturnValue(tokenBackedSettings({ plusLicenseKey: "key" }));
+
+      const { result, rerender } = renderHook(() => useLicenseState());
+      const first = result.current;
+      rerender();
+
+      expect(result.current).toBe(first);
+    });
+
+    it("reports inactive for a lapsed key the server downgraded to the free tier", async () => {
+      // The server keeps answering is_valid for a lapsed key but issues a
+      // free-tier entitlement that still names the plan, so the tier — not the
+      // plan name — is what says this user has nothing.
+      await verifySessionClaims({ plan: "plus", tier: "free" });
+      mockGetSettings.mockReturnValue(
+        tokenBackedSettings({ plusLicenseKey: "key", isPaidUser: false })
+      );
+
+      const { result } = renderHook(() => useLicenseState());
+
+      expect(result.current).toEqual({ status: "inactive" });
+    });
+
+    it("reports inactive once the signed expiry has passed", async () => {
+      // Shares the gates' liveness bound, so a section left open across `exp`
+      // stops naming a plan whose entitlement has already closed.
+      await verifySessionClaims({ plan: "plus", tier: "plus", exp: PAST_EXP_SECONDS });
+      mockGetSettings.mockReturnValue(tokenBackedSettings({ plusLicenseKey: "key" }));
+
+      const { result } = renderHook(() => useLicenseState());
+
+      expect(result.current).toEqual({ status: "inactive" });
+    });
+
+    it("reports inactive for a stored key the server rejected outright", async () => {
+      // turnOffPaid clears the token and the expiry, so nothing but the key and
+      // the downgraded flag survive an invalid or revoked key.
+      mockGetSettings.mockReturnValue(
+        buildSettings({ userId: "user-123", plusLicenseKey: "key", isPaidUser: false })
+      );
+
+      const { result } = renderHook(() => useLicenseState());
+
+      expect(result.current).toEqual({ status: "inactive" });
+    });
+
+    it("keeps a paid key active when the server confirmed it without signing a token", () => {
+      mockGetSettings.mockReturnValue(
+        buildSettings({ userId: "user-123", plusLicenseKey: "key", isPaidUser: true })
+      );
+
+      const { result } = renderHook(() => useLicenseState());
+
+      expect(result.current).toEqual({ status: "active" });
+    });
+
+    it("shows nothing when no license key is stored", () => {
+      mockGetSettings.mockReturnValue(buildSettings({ userId: "user-123", isPaidUser: false }));
+
+      const { result } = renderHook(() => useLicenseState());
+
+      expect(result.current).toEqual({ status: "none" });
     });
   });
 

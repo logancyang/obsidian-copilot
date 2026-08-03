@@ -101,6 +101,8 @@ function isEntitlementExpired(settings: CopilotSettings): boolean {
 interface VerifiedEntitlement {
   token: string;
   features: ReadonlySet<EntitlementFeature>;
+  /** The claims' plan name, for display only — never gated on. */
+  plan: string;
   /** The claims' `exp`, in epoch ms. */
   expiresAt: number;
   /**
@@ -115,6 +117,7 @@ interface VerifiedEntitlement {
 const NO_VERIFIED_ENTITLEMENT: VerifiedEntitlement = Object.freeze({
   token: "",
   features: Object.freeze(new Set<EntitlementFeature>()),
+  plan: "",
   expiresAt: 0,
   paid: false,
 });
@@ -261,6 +264,71 @@ export async function checkIsPaidUser(
     return { isValid: undefined };
   });
   return result.isValid ?? (hasLiveEntitlement() && verified.paid);
+}
+
+/**
+ * What the license section should report about the stored license key.
+ * `none` means there is nothing to say — no key, or the first check has not
+ * answered yet. Everything a stored key can be other than working is `inactive`:
+ * lapsed, revoked, mistyped, or past the offline window all leave the user in
+ * the same place, with the same thing to do about it.
+ */
+export type LicenseStatus = "none" | "active" | "inactive";
+
+/** Stored license as the settings UI should present it. */
+export interface LicenseState {
+  status: LicenseStatus;
+  /**
+   * Plan the entitlement names, lowercased by the server (e.g. `"believer"`).
+   * Absent when no token verifies, which is why callers need a generic label.
+   */
+  plan?: string;
+}
+
+const NO_LICENSE: LicenseState = Object.freeze({ status: "none" });
+const INACTIVE_LICENSE: LicenseState = Object.freeze({ status: "inactive" });
+/** Paid, but with no verifiable token to name the plan (legacy tokenless keys). */
+const UNNAMED_ACTIVE_LICENSE: LicenseState = Object.freeze({ status: "active" });
+
+/**
+ * The stored license as the settings section should show it, read from the same
+ * session-verified proof the runtime gates use. Sharing that state is what keeps
+ * the badge from ever disagreeing with what the user can actually do, and it
+ * carries the two properties this would otherwise have to rebuild: the proof is
+ * tagged with the token settings must still hold, and {@link hasLiveEntitlement}
+ * treats the signed `exp` as its liveness bound.
+ *
+ * The paid tier decides, never the plan name: the server answers `is_valid` for
+ * a lapsed key and downgrades its entitlement to the free policy while the name
+ * still says what lapsed, so reading the name would call a former subscriber a
+ * Plus user.
+ */
+export function useLicenseState(): LicenseState {
+  const settings = useSettingsValue();
+  // The fixed states are frozen constants; a named plan is the one result that
+  // has to be built, so it is kept until the name itself changes. Keying on the
+  // returned value rather than on `settings` is what stops the cache from
+  // outliving a proof that changed without one.
+  const namedActive = React.useRef<LicenseState | null>(null);
+  if (!settings.plusLicenseKey) {
+    return NO_LICENSE;
+  }
+  if (hasLiveEntitlement()) {
+    if (!verified.paid) {
+      return INACTIVE_LICENSE;
+    }
+    if (namedActive.current?.plan !== verified.plan) {
+      namedActive.current = { status: "active", plan: verified.plan };
+    }
+    return namedActive.current;
+  }
+  // Nothing verified this session. The server can confirm a paid license
+  // without signing one (an unshipped `kid`, no WebCrypto), so keep those users
+  // active but unnamed — unless a stored expiry has already passed, which no
+  // later success has replaced.
+  return settings.isPaidUser === true && !isEntitlementExpired(settings)
+    ? UNNAMED_ACTIVE_LICENSE
+    : INACTIVE_LICENSE;
 }
 
 /**
@@ -432,6 +500,7 @@ export async function applyEntitlement(token: string): Promise<boolean> {
   verified = {
     token,
     features: new Set(claims.features),
+    plan: claims.plan,
     expiresAt: claims.exp * 1000,
     paid: claims.tier !== "free",
   };
@@ -471,6 +540,7 @@ export async function verifyCachedEntitlement(): Promise<void> {
   verified = {
     token: entitlementToken,
     features: new Set(claims?.features),
+    plan: claims?.plan ?? "",
     expiresAt: (claims?.exp ?? 0) * 1000,
     paid: claims ? claims.tier !== "free" : false,
   };
