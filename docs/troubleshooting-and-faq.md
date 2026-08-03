@@ -215,7 +215,15 @@ If your vault still had credentials in `data.json` when you upgraded, Copilot co
 Open it and check what your key values look like:
 
 - **Readable keys** (for example `sk-...`): paste each one into the matching field in Settings. Once every key is re-entered and working, you can delete the backup.
-- **Values beginning with `enc_`**: these were encrypted by an older Copilot version, and v4 cannot decrypt them. Pasting one into Settings would store the ciphertext itself as your key, which will not work. **Do not delete the backup.** Recover instead by re-issuing the keys from each provider's dashboard, or by opening the vault with Copilot v3 on the device that originally encrypted them (decryption is device-specific) and copying the values out from there before upgrading again.
+- **Values beginning with `enc_`**: these were encrypted by an older Copilot version, and v4 cannot decrypt them. Pasting one into Settings would store the ciphertext itself as your key, which will not work. **Do not delete the backup.**
+
+  The simplest recovery is to re-issue those keys from each provider's dashboard and enter the new ones normally.
+
+  If you would rather recover the originals, note that the values can only be decrypted by Copilot v3 **on the device that encrypted them**, and that v4 has already cleared them from `data.json`, so simply installing v3 again will show empty fields. You have to put the file back first:
+  1. Close Obsidian, and pause vault sync so the next steps are not overwritten or copied to other devices.
+  2. In `.obsidian/plugins/copilot/`, copy `data.json` somewhere safe, then replace it with your `data-v3-credentials-backup-<id>.json` file (renaming that copy to `data.json`).
+  3. Downgrade the Copilot plugin to the v3 release you were using, reopen the vault, and read your keys from Settings.
+  4. Restore the `data.json` you set aside, upgrade back to v4, re-enable sync, and enter the recovered keys normally.
 
 The Obsidian Keychain is per device. If you sync your vault to another device, you may need to re-enter API keys there.
 

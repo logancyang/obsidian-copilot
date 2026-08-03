@@ -44,8 +44,21 @@ export interface LegacyBackupFileIO {
 /** Outcome of a rescue attempt, which decides whether stripping may proceed. */
 export type LegacyBackupResult =
   | { status: "not-needed" }
-  | { status: "backed-up"; path: string }
+  /** `encrypted` marks a copy holding `enc_*` values, which cannot simply be re-entered. */
+  | { status: "backed-up"; path: string; encrypted: boolean }
   | { status: "failed"; error: unknown };
+
+/**
+ * Whether a backup holds values encrypted by the pre-v4 encryption toggle.
+ *
+ * Reason: the only credential shape this module inspects, and only because
+ * recovery differs entirely for it. A readable key is re-entered and the backup
+ * deleted; an `enc_*` value cannot be re-entered at all, so telling its owner to
+ * delete the file would destroy the sole copy their v3 device could decrypt.
+ */
+function holdsEncryptedValues(contents: string): boolean {
+  return /"enc_[a-z]+_/.test(contents);
+}
 
 /**
  * Copy `data.json` verbatim before v4 strips its credentials.
@@ -84,7 +97,7 @@ export async function backupLegacyCredentials(
       await io.write(staging, contents);
       await io.rename(staging, path);
     }
-    return { status: "backed-up", path };
+    return { status: "backed-up", path, encrypted: holdsEncryptedValues(contents) };
   } catch (error) {
     return { status: "failed", error };
   }

@@ -44,7 +44,11 @@ describe("legacyCredentialBackup", () => {
 
       const result = await backupLegacyCredentials(rawData, PLUGIN_DIR, io);
 
-      expect(result).toEqual({ status: "backed-up", path: backupPathFor(rawData) });
+      expect(result).toEqual({
+        status: "backed-up",
+        path: backupPathFor(rawData),
+        encrypted: false,
+      });
       expect(io.write).toHaveBeenCalledWith(
         `${backupPathFor(rawData)}.writing`,
         JSON.stringify(rawData, null, 2)
@@ -55,12 +59,19 @@ describe("legacyCredentialBackup", () => {
       );
     });
 
-    it("preserves encrypted values without decrypting them", async () => {
+    it("preserves encrypted values without decrypting them, and flags them", async () => {
       const io = makeIO();
 
-      await backupLegacyCredentials({ openAIApiKey: "enc_desk_abc123" }, PLUGIN_DIR, io);
+      const result = await backupLegacyCredentials(
+        { openAIApiKey: "enc_desk_abc123" },
+        PLUGIN_DIR,
+        io
+      );
 
       expect(io.write.mock.calls[0][1]).toContain("enc_desk_abc123");
+      // Reason: the flag drives the startup notice, which must not tell these
+      // users to delete the file after re-entering values they cannot re-enter.
+      expect(result).toMatchObject({ status: "backed-up", encrypted: true });
     });
 
     it("reports no backup needed when the file holds no credentials", async () => {
@@ -89,7 +100,11 @@ describe("legacyCredentialBackup", () => {
 
       const result = await backupLegacyCredentials(rawData, PLUGIN_DIR, io);
 
-      expect(result).toEqual({ status: "backed-up", path: backupPathFor(rawData) });
+      expect(result).toEqual({
+        status: "backed-up",
+        path: backupPathFor(rawData),
+        encrypted: false,
+      });
       expect(io.write).not.toHaveBeenCalled();
     });
 
@@ -105,7 +120,7 @@ describe("legacyCredentialBackup", () => {
 
       const result = await backupLegacyCredentials(current, PLUGIN_DIR, io);
 
-      expect(result).toEqual({ status: "backed-up", path: backupPathFor(current) });
+      expect(result).toMatchObject({ status: "backed-up", path: backupPathFor(current) });
       expect(io.write).toHaveBeenCalledWith(
         `${backupPathFor(current)}.writing`,
         JSON.stringify(current, null, 2)

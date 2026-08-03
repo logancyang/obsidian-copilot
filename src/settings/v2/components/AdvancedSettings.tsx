@@ -138,7 +138,9 @@ export const AdvancedSettings: React.FC = () => {
         app,
         () => resolve(true),
         "This will remove all API keys for this vault from the Obsidian Keychain, data.json, " +
-          "and memory. You will need to re-enter them.",
+          "and memory. You will need to re-enter them. Any credential backup files written " +
+          "during the v4 upgrade are left in place — delete those yourself once you no longer " +
+          "need them.",
         "\u26A0\uFE0F Forget All Secrets",
         "Remove",
         "Cancel",

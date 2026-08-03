@@ -211,7 +211,11 @@ describe("settingsPersistence", () => {
       await module.loadSettingsWithKeychain(
         { _keychainVaultId: "1234abcd", openAIApiKey: "plaintext-disk-key" },
         saveData,
-        jest.fn().mockResolvedValue({ status: "backed-up", path: "plugins/copilot/backup.json" })
+        jest.fn().mockResolvedValue({
+          status: "backed-up",
+          path: "plugins/copilot/backup.json",
+          encrypted: false,
+        })
       );
 
       expect(saveData.mock.calls[0][0].openAIApiKey).toBe("");
