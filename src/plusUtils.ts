@@ -265,10 +265,12 @@ export async function checkIsPaidUser(
 
 /**
  * What the license section should report about the stored license key.
- * `none` also covers "not resolved yet", so the UI shows nothing rather than
- * guessing while the first validation is in flight.
+ * `none` means there is nothing to say — no key, or the first check has not
+ * answered yet. Everything a stored key can be other than working is `inactive`:
+ * lapsed, revoked, mistyped, or past the offline window all leave the user in
+ * the same place, with the same thing to do about it.
  */
-export type LicenseStatus = "none" | "active" | "expired";
+export type LicenseStatus = "none" | "active" | "inactive";
 
 /** Stored license as the settings UI should present it. */
 export interface LicenseState {
@@ -281,24 +283,25 @@ export interface LicenseState {
 }
 
 const NO_LICENSE: LicenseState = Object.freeze({ status: "none" });
-const EXPIRED_LICENSE: LicenseState = Object.freeze({ status: "expired" });
+const INACTIVE_LICENSE: LicenseState = Object.freeze({ status: "inactive" });
 /** Paid, but with no verifiable token to name the plan (legacy tokenless keys). */
 const UNNAMED_ACTIVE_LICENSE: LicenseState = Object.freeze({ status: "active" });
 
 /**
- * The stored license as the settings badge should show it, taken from the
+ * The stored license as the settings section should show it, taken from the
  * signed claims rather than the `/license` response so the plan name survives a
  * restart, shows up offline, and can't be renamed by editing `data.json`.
  *
- * A lapsed key is `expired`, not `none`: the server keeps answering `is_valid`
- * for it but downgrades the entitlement to the free policy, so the paid tier —
- * not the plan name, which still names the plan that lapsed — is what separates
- * a paying user from one who needs to renew. A stored token whose offline
- * window ran out reads the same way, since nothing has re-confirmed the plan.
+ * The paid tier decides, never the plan name: the server answers `is_valid` for
+ * a lapsed key and downgrades its entitlement to the free policy while the name
+ * still says what lapsed, so reading the name would call a former subscriber a
+ * Plus user.
  */
 export function useLicenseState(): LicenseState {
   const settings = useSettingsValue();
-  const [claims, setClaims] = React.useState<EntitlementClaims | null>(null);
+  // `undefined` until the first verification answers, so a paying user never
+  // sees their license called inactive for the moment that check is in flight.
+  const [claims, setClaims] = React.useState<EntitlementClaims | null | undefined>(undefined);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -315,21 +318,21 @@ export function useLicenseState(): LicenseState {
   }, [settings.entitlementToken, settings.userId]);
 
   return React.useMemo(() => {
-    if (!settings.plusLicenseKey) {
+    if (!settings.plusLicenseKey || claims === undefined) {
       return NO_LICENSE;
     }
     if (claims) {
       return claims.tier === "free"
-        ? EXPIRED_LICENSE
+        ? INACTIVE_LICENSE
         : { status: "active" as const, plan: claims.plan };
     }
-    // No claims to read: either the token is gone (an authoritative negative
-    // cleared it) or it no longer verifies. Both are "was a license, isn't
-    // entitled now" once the persisted flags say so.
-    if (isEntitlementExpired(settings) || settings.isPaidUser === false) {
-      return EXPIRED_LICENSE;
-    }
-    return settings.isPaidUser === true ? UNNAMED_ACTIVE_LICENSE : NO_LICENSE;
+    // Nothing verifies. The server can confirm a paid license without signing
+    // one (an unshipped `kid`, no WebCrypto), so keep those users active but
+    // unnamed — unless a stored expiry has already passed, which no later
+    // success has replaced.
+    return settings.isPaidUser === true && !isEntitlementExpired(settings)
+      ? UNNAMED_ACTIVE_LICENSE
+      : INACTIVE_LICENSE;
   }, [claims, settings]);
 }
 
