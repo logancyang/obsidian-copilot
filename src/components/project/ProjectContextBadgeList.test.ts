@@ -1,4 +1,4 @@
-import { buildBadgeItems, removePattern } from "./ProjectContextBadgeList";
+import { buildBadgeItems, getBadgeLabel, removePattern } from "./ProjectContextBadgeList";
 
 describe("buildBadgeItems", () => {
   it("returns empty array for empty/undefined input", () => {
@@ -7,8 +7,8 @@ describe("buildBadgeItems", () => {
   });
 
   it("categorizes patterns by type", () => {
-    // Encoded: folder, #tag, [[note]], *.pdf
-    const value = "my-folder,%23tag,%5B%5Bnote%5D%5D,*.pdf";
+    // Encoded: folder, #tag, [[note]], *.pdf, [Topics:Physics], [Topics:]
+    const value = "my-folder,%23tag,%5B%5Bnote%5D%5D,*.pdf,%5BTopics%3APhysics%5D,%5BTopics%3A%5D";
     const items = buildBadgeItems(value);
 
     expect(items).toEqual([
@@ -16,6 +16,8 @@ describe("buildBadgeItems", () => {
       { pattern: "#tag", type: "tag" },
       { pattern: "[[note]]", type: "note" },
       { pattern: "*.pdf", type: "extension" },
+      { pattern: "[Topics:Physics]", type: "property" },
+      { pattern: "[Topics:]", type: "property" },
     ]);
   });
 
@@ -77,6 +79,14 @@ describe("removePattern", () => {
     expect(result).not.toContain("*.pdf");
   });
 
+  it("removes a property pattern", () => {
+    const value = "%5BTopics%3APhysics%5D,%23tag1";
+    const result = removePattern(value, "[Topics:Physics]", "property");
+
+    expect(result).toContain("%23tag1");
+    expect(decodeURIComponent(result)).not.toContain("[Topics:Physics]");
+  });
+
   it("returns empty string when removing the last pattern", () => {
     const value = "my-folder";
     const result = removePattern(value, "my-folder", "folder");
@@ -87,5 +97,27 @@ describe("removePattern", () => {
   it("handles undefined input", () => {
     const result = removePattern(undefined, "my-folder", "folder");
     expect(result).toBe("");
+  });
+});
+
+describe("getBadgeLabel", () => {
+  it("renders a property pattern as `key: value`", () => {
+    expect(getBadgeLabel({ pattern: "[Topics:Physics]", type: "property" })).toBe(
+      "Topics: Physics"
+    );
+  });
+
+  it("renders a key-only property pattern as `key: (any)`", () => {
+    expect(getBadgeLabel({ pattern: "[Topics:]", type: "property" })).toBe("Topics: (any)");
+  });
+
+  it("returns the raw pattern for non-property types", () => {
+    expect(getBadgeLabel({ pattern: "#tag", type: "tag" })).toBe("#tag");
+    expect(getBadgeLabel({ pattern: "my-folder", type: "folder" })).toBe("my-folder");
+  });
+
+  it("falls back to the raw pattern when a property pattern cannot be parsed", () => {
+    // A malformed pattern that slipped through as `property`: no crash, show it verbatim.
+    expect(getBadgeLabel({ pattern: "not-a-property", type: "property" })).toBe("not-a-property");
   });
 });

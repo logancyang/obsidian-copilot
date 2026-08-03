@@ -29,6 +29,13 @@ export interface ManifestSources {
   notes: ManifestPathEntry[];
   extensions: string[];
   tags: string[];
+  /**
+   * Property inclusion patterns (e.g. `[Topics:Physics]`), listed as source
+   * labels. Property-matched notes are also enumerated under "Included notes",
+   * but a broad property can overflow the entry cap; the label ensures the agent
+   * still knows which frontmatter query produced them even when notes are cut.
+   */
+  properties: string[];
   webUrls: string[];
   youtubeUrls: string[];
   /** Present cache files, used to resolve snapshot pointers + list file snapshots. */
@@ -74,6 +81,7 @@ export function buildProjectContextBlock(sources: ManifestSources): string {
 
   const lines: ManifestLine[] = [
     ...sources.folders.map((e) => line("Included folders", pathText(e))),
+    ...sources.properties.map((p) => line("Included properties", p)),
     ...sources.notes.map((e) => line("Included notes", pathText(e))),
     ...sources.extensions.map((p) => line("Included file types", `\`${p}\``)),
     ...sources.tags.map((t) => line("Included tags", t)),

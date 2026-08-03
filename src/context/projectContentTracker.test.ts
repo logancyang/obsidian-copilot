@@ -29,24 +29,32 @@ jest.mock("@/projects/state", () => ({
 
 type Handler = (file: unknown, oldPath?: string) => void;
 
-/** A fake vault that records event handlers so a test can fire them by hand. */
-function makeApp(): { app: App; fire: (event: string, file: unknown, oldPath?: string) => void } {
+/** A fake vault + metadata cache that record event handlers so a test can fire
+ * them by hand. Vault and metadata cache use separate `offref` mocks so a test can
+ * assert teardown routes each ref to its own emitter. */
+function makeApp(): {
+  app: App;
+  fire: (event: string, file: unknown, oldPath?: string) => void;
+  vaultOffref: jest.Mock;
+  metadataOffref: jest.Mock;
+} {
   const handlers = new Map<string, Handler[]>();
+  const register = (event: string, handler: Handler) => {
+    const list = handlers.get(event) ?? [];
+    list.push(handler);
+    handlers.set(event, list);
+    return { event };
+  };
+  const vaultOffref = jest.fn();
+  const metadataOffref = jest.fn();
   const app = {
-    vault: {
-      on: (event: string, handler: Handler) => {
-        const list = handlers.get(event) ?? [];
-        list.push(handler);
-        handlers.set(event, list);
-        return { event };
-      },
-      offref: jest.fn(),
-    },
+    vault: { on: register, offref: vaultOffref },
+    metadataCache: { on: register, offref: metadataOffref },
   } as unknown as App;
   const fire = (event: string, file: unknown, oldPath?: string) => {
     for (const handler of handlers.get(event) ?? []) handler(file, oldPath);
   };
-  return { app, fire };
+  return { app, fire, vaultOffref, metadataOffref };
 }
 
 function record(id: string, contextSource: Record<string, string>): ProjectFileRecord {
@@ -161,6 +169,77 @@ describe("ProjectContentTracker", () => {
     tracker.flushNow();
 
     expect(tracker.getEpoch("a")).toBe(0);
+    tracker.dispose();
+  });
+
+  it("conservatively dirties a property-declaring project on ANY markdown change (frontmatter is unresolvable from a path)", () => {
+    // Editing a note's frontmatter is a plain markdown modify; the changed file is
+    // out of any folder scope, but the project includes notes by a property whose
+    // value can't be read from the path — so it dirties conservatively, like a tag.
+    mockRecords(record("a", { inclusions: "[Topics:Physics]" }));
+    const { app, fire } = makeApp();
+    const tracker = new ProjectContentTracker(app);
+
+    fire("modify", file("Anywhere/note.md"));
+    tracker.flushNow();
+
+    expect(tracker.getEpoch("a")).toBe(1);
+    tracker.dispose();
+  });
+
+  it("does NOT dirty a property-declaring project on a non-markdown change out of scope", () => {
+    mockRecords(record("a", { inclusions: "[Topics:Physics]" }));
+    const { app, fire } = makeApp();
+    const tracker = new ProjectContentTracker(app);
+
+    fire("modify", file("Anywhere/image.png"));
+    tracker.flushNow();
+
+    expect(tracker.getEpoch("a")).toBe(0);
+    tracker.dispose();
+  });
+
+  it("does NOT dirty a property-declaring project on a markdown change under a system Copilot root", () => {
+    // The vault `modify` half of the same rule the metadata event follows: a note
+    // under the Copilot root (chat autosave, on by default) is dropped by
+    // `shouldIndexFile`, so it can never enter a property source's note set.
+    mockRecords(record("a", { inclusions: "[Topics:Physics]" }));
+    const { app, fire } = makeApp();
+    const tracker = new ProjectContentTracker(app);
+
+    fire("modify", file("copilot/copilot-conversations/chat.md"));
+    tracker.flushNow();
+
+    expect(tracker.getEpoch("a")).toBe(0);
+    tracker.dispose();
+  });
+
+  it("still dirties a TAG-declaring project under a system Copilot root (tag scope is unchanged)", () => {
+    // The system-root skip is property-specific; tags keep their pre-existing
+    // broader rule, so this must not regress when the two predicates split.
+    mockRecords(record("a", { inclusions: "#physics" }));
+    const { app, fire } = makeApp();
+    const tracker = new ProjectContentTracker(app);
+
+    fire("modify", file("copilot/copilot-conversations/chat.md"));
+    tracker.flushNow();
+
+    expect(tracker.getEpoch("a")).toBe(1);
+    tracker.dispose();
+  });
+
+  it("conservatively dirties a project declaring a property EXCLUSION on a markdown change out of folder scope", () => {
+    // A note inside the included folder can flip its excluded status when its
+    // frontmatter changes; the change fires for a note OUTSIDE the folder, yet the
+    // property exclusion still forces a conservative dirty (over-dirty is safe).
+    mockRecords(record("a", { inclusions: "Notes", exclusions: "[Draft:true]" }));
+    const { app, fire } = makeApp();
+    const tracker = new ProjectContentTracker(app);
+
+    fire("modify", file("Anywhere/note.md"));
+    tracker.flushNow();
+
+    expect(tracker.getEpoch("a")).toBe(1);
     tracker.dispose();
   });
 
@@ -298,5 +377,106 @@ describe("ProjectContentTracker", () => {
     tracker.flushNow();
 
     expect(tracker.getEpoch("a")).toBe(0);
+  });
+
+  describe("metadata-cache (property freshness)", () => {
+    it("re-dirties a property-inclusion project on a metadata change once the cache is fresh", () => {
+      mockRecords(record("p", { inclusions: "[Topics:Physics]" }));
+      const { app, fire } = makeApp();
+      const tracker = new ProjectContentTracker(app);
+
+      // A frontmatter edit fires vault `modify` first (cache still stale), then the
+      // metadata cache `changed` once it has re-parsed. Flushing between them (as a
+      // send/open would) lands each in its own drain; the SECOND bump is the one that
+      // re-resolves the property source against fresh frontmatter.
+      fire("modify", file("Notes/a.md"));
+      tracker.flushNow();
+      fire("changed", file("Notes/a.md"));
+      tracker.flushNow();
+
+      expect(tracker.getEpoch("p")).toBe(2);
+      tracker.dispose();
+    });
+
+    it("collapses a modify and its metadata change in one debounce window to a single bump", () => {
+      mockRecords(record("p", { inclusions: "[Topics:Physics]" }));
+      const { app, fire } = makeApp();
+      const tracker = new ProjectContentTracker(app);
+
+      fire("modify", file("Notes/a.md"));
+      fire("changed", file("Notes/a.md"));
+      tracker.flushNow();
+
+      expect(tracker.getEpoch("p")).toBe(1);
+      tracker.dispose();
+    });
+
+    it("ignores a metadata change for projects that declare no property inclusion", () => {
+      mockRecords(
+        record("folderProj", { inclusions: "Notes" }),
+        record("tagProj", { inclusions: "#physics" }),
+        record("propProj", { inclusions: "[Topics:Physics]" })
+      );
+      const { app, fire } = makeApp();
+      const tracker = new ProjectContentTracker(app);
+
+      fire("changed", file("Notes/a.md"));
+      tracker.flushNow();
+
+      expect(tracker.getEpoch("folderProj")).toBe(0);
+      expect(tracker.getEpoch("tagProj")).toBe(0);
+      expect(tracker.getEpoch("propProj")).toBe(1);
+      tracker.dispose();
+    });
+
+    it("ignores a metadata change on an internal Copilot file", () => {
+      mockRecords(record("p", { inclusions: "[Topics:Physics]" }));
+      const { app, fire } = makeApp();
+      const tracker = new ProjectContentTracker(app);
+
+      fire("changed", file("copilot/copilot-log.md"));
+      tracker.flushNow();
+
+      expect(tracker.getEpoch("p")).toBe(0);
+      tracker.dispose();
+    });
+
+    it("ignores a metadata change under a system Copilot root that property enumeration cannot reach", () => {
+      // Chat autosave writes frontmatter-bearing notes into the Copilot root every
+      // few seconds. `shouldIndexFile` always drops them, so they can never join a
+      // property source's note set and must not dirty the project.
+      mockRecords(record("p", { inclusions: "[Topics:Physics]" }));
+      const { app, fire } = makeApp();
+      const tracker = new ProjectContentTracker(app);
+
+      fire("changed", file("copilot/copilot-conversations/chat.md"));
+      tracker.flushNow();
+
+      expect(tracker.getEpoch("p")).toBe(0);
+      tracker.dispose();
+    });
+
+    it("tears down the metadata-cache listener via metadataCache.offref on dispose", () => {
+      mockRecords(record("p", { inclusions: "[Topics:Physics]" }));
+      const { app, metadataOffref, vaultOffref } = makeApp();
+      const tracker = new ProjectContentTracker(app);
+
+      tracker.dispose();
+
+      expect(metadataOffref).toHaveBeenCalledTimes(1);
+      expect(vaultOffref).toHaveBeenCalled();
+    });
+
+    it("stays inert to metadata events after dispose", () => {
+      mockRecords(record("p", { inclusions: "[Topics:Physics]" }));
+      const { app, fire } = makeApp();
+      const tracker = new ProjectContentTracker(app);
+      tracker.dispose();
+
+      fire("changed", file("Notes/a.md"));
+      tracker.flushNow();
+
+      expect(tracker.getEpoch("p")).toBe(0);
+    });
   });
 });

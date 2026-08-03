@@ -7,6 +7,8 @@ import {
   getModelInfo,
   getNotesFromPath,
   getNotesFromTags,
+  getPropertyValuesFromNote,
+  noteHasProperty,
   getUtf8ByteLength,
   insertAtCursor,
   isFolderMatch,
@@ -340,6 +342,95 @@ describe("getNotesFromTags", () => {
     const result = getNotesFromTags(mockApp, tags);
 
     expect(result).toEqual([]); // Should return empty since inline tags are ignored
+  });
+});
+
+describe("getPropertyValuesFromNote()", () => {
+  // getPropertyValuesFromNote only reads app.metadataCache.getFileCache(file),
+  // which is mocked per-case, so the file argument itself is never inspected.
+  const file = new TFile();
+  const withFrontmatter = (frontmatter: Record<string, unknown>) =>
+    mockMetadataCache.getFileCache.mockReturnValue({ frontmatter });
+
+  beforeEach(() => {
+    mockMetadataCache.getFileCache.mockReset();
+  });
+
+  it("returns each element of a list property as a string", () => {
+    withFrontmatter({ Topics: ["Physics", "Math"] });
+    expect(getPropertyValuesFromNote(mockApp, file, "Topics")).toEqual(["Physics", "Math"]);
+  });
+
+  it("wraps a scalar property in a single-element array", () => {
+    withFrontmatter({ Subject: "Einstein" });
+    expect(getPropertyValuesFromNote(mockApp, file, "Subject")).toEqual(["Einstein"]);
+  });
+
+  it("stringifies non-string scalar values", () => {
+    withFrontmatter({ Year: 2024 });
+    expect(getPropertyValuesFromNote(mockApp, file, "Year")).toEqual(["2024"]);
+  });
+
+  it("returns an empty array when the key is absent", () => {
+    withFrontmatter({ Topics: ["Physics"] });
+    expect(getPropertyValuesFromNote(mockApp, file, "Subject")).toEqual([]);
+  });
+
+  it("returns an empty array when the note has no frontmatter", () => {
+    mockMetadataCache.getFileCache.mockReturnValue({});
+    expect(getPropertyValuesFromNote(mockApp, file, "Topics")).toEqual([]);
+  });
+
+  it("drops non-scalar values instead of collapsing them to [object Object]", () => {
+    withFrontmatter({ meta: { owner: "Alice" } });
+    expect(getPropertyValuesFromNote(mockApp, file, "meta")).toEqual([]);
+  });
+
+  it("keeps only the scalar elements of a mixed list", () => {
+    withFrontmatter({ Topics: ["Physics", { nested: true }, 2024] });
+    expect(getPropertyValuesFromNote(mockApp, file, "Topics")).toEqual(["Physics", "2024"]);
+  });
+
+  it("returns an empty array for a key inherited from Object.prototype", () => {
+    withFrontmatter({ Topics: "Physics" });
+    expect(getPropertyValuesFromNote(mockApp, file, "constructor")).toEqual([]);
+  });
+});
+
+describe("noteHasProperty()", () => {
+  const file = new TFile();
+
+  beforeEach(() => {
+    mockMetadataCache.getFileCache.mockReset();
+  });
+
+  it("returns true when the key is present with a value", () => {
+    mockMetadataCache.getFileCache.mockReturnValue({ frontmatter: { Topics: "Physics" } });
+    expect(noteHasProperty(mockApp, file, "Topics")).toBe(true);
+  });
+
+  it("returns true when the key is present but its value is empty or null", () => {
+    mockMetadataCache.getFileCache.mockReturnValue({ frontmatter: { Topics: null } });
+    expect(noteHasProperty(mockApp, file, "Topics")).toBe(true);
+
+    mockMetadataCache.getFileCache.mockReturnValue({ frontmatter: { Topics: [] } });
+    expect(noteHasProperty(mockApp, file, "Topics")).toBe(true);
+  });
+
+  it("returns false when the key is absent", () => {
+    mockMetadataCache.getFileCache.mockReturnValue({ frontmatter: { Subject: "x" } });
+    expect(noteHasProperty(mockApp, file, "Topics")).toBe(false);
+  });
+
+  it("returns false when the note has no frontmatter", () => {
+    mockMetadataCache.getFileCache.mockReturnValue({});
+    expect(noteHasProperty(mockApp, file, "Topics")).toBe(false);
+  });
+
+  it("returns false for a key inherited from Object.prototype", () => {
+    mockMetadataCache.getFileCache.mockReturnValue({ frontmatter: { Topics: "Physics" } });
+    expect(noteHasProperty(mockApp, file, "constructor")).toBe(false);
+    expect(noteHasProperty(mockApp, file, "toString")).toBe(false);
   });
 });
 

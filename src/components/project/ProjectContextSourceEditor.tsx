@@ -1,12 +1,16 @@
 import type { ProjectConfig } from "@/aiParams";
 import { AddUrlPopover } from "@/components/project/AddUrlPopover";
 import { ContextChip } from "@/components/project/ContextChip";
-import { buildBadgeItems, removePattern } from "@/components/project/ProjectContextBadgeList";
+import {
+  buildBadgeItems,
+  getBadgeLabel,
+  removePattern,
+} from "@/components/project/ProjectContextBadgeList";
 import { UrlTypeIcon } from "@/components/project/UrlTypeIcon";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { parseProjectUrls, serializeProjectUrls, type UrlItem } from "@/utils/urlTagUtils";
-import { FileText, Folder, Hash, Inbox, Settings, Tag } from "lucide-react";
+import { FileText, Folder, Hash, Inbox, Settings, SlidersHorizontal, Tag } from "lucide-react";
 import React, { useLayoutEffect, useMemo, useRef, useState } from "react";
 
 type ContextSource = NonNullable<ProjectConfig["contextSource"]>;
@@ -43,6 +47,7 @@ const FILE_CHIP_CONFIG = {
   tag: { Icon: Tag, colorClass: "tw-text-context-manager-orange" },
   note: { Icon: FileText, colorClass: "tw-text-context-manager-blue" },
   extension: { Icon: Hash, colorClass: "tw-text-context-manager-green" },
+  property: { Icon: SlidersHorizontal, colorClass: "tw-text-context-manager-purple" },
 } as const;
 
 /**
@@ -139,7 +144,7 @@ export function ProjectContextSourceEditor({
             key={`file:${item.type}:${item.pattern}`}
             icon={<Icon className="tw-size-3.5" />}
             colorClass={colorClass}
-            label={item.pattern}
+            label={getBadgeLabel(item)}
             onRemove={() => handleRemoveFile(item.pattern, item.type)}
           />
         );
@@ -168,7 +173,7 @@ export function ProjectContextSourceEditor({
         key={`ex:${item.type}:${item.pattern}`}
         icon={<Icon className="tw-size-3.5" />}
         colorClass={colorClass}
-        label={item.pattern}
+        label={getBadgeLabel(item)}
         dim
         onRemove={() => handleRemoveExclusion(item.pattern, item.type)}
       />
@@ -212,7 +217,9 @@ export function ProjectContextSourceEditor({
                 : "No context yet"}
             </div>
             <div className="tw-text-xs tw-text-muted">
-              {droppable ? "or use Manage to add inclusion / tag / URL" : "Add via + URL or Manage"}
+              {droppable
+                ? "or use Manage to add inclusion / tag / property / URL"
+                : "Add via + URL or Manage"}
             </div>
           </div>
         ) : (
@@ -324,8 +331,8 @@ export function ProjectContextSourceEditor({
   return (
     <div className="tw-flex tw-flex-col tw-gap-2">
       <div className="tw-text-sm tw-text-muted">
-        Define patterns to include specific files, folders or tags in the project context. You can
-        also add web pages or YouTube videos.
+        Define patterns to include specific files, folders, tags or properties in the project
+        context. You can also add web pages or YouTube videos.
       </div>
       {editorBox}
     </div>

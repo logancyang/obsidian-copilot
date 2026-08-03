@@ -4,6 +4,7 @@ import type { ProjectFileRecord } from "@/projects/type";
 import {
   getMatchingPatterns,
   isInternalExcludedPath,
+  isSystemExcludedPath,
   type PatternCategory,
 } from "@/search/searchUtils";
 import { debounce, type DebouncedFunction } from "@/utils/debounce";
@@ -18,7 +19,7 @@ const DEBOUNCE_MS = 2000;
  * a queued pre-rename event. Snapshotting the strings at enqueue time keeps the
  * old/new paths correct.
  */
-type VaultEventKind = "create" | "modify" | "delete" | "rename";
+type VaultEventKind = "create" | "modify" | "delete" | "rename" | "metadata";
 
 interface PendingChange {
   kind: VaultEventKind;
@@ -43,6 +44,7 @@ interface PendingChange {
  */
 export class ProjectContentTracker {
   private readonly vaultRefs: EventRef[] = [];
+  private readonly metadataRefs: EventRef[] = [];
   private readonly pending: PendingChange[] = [];
   private readonly epochs = new Map<string, number>();
   private readonly listeners = new Set<(projectId: string) => void>();
@@ -63,6 +65,17 @@ export class ProjectContentTracker {
       this.app.vault.on("rename", (file: TAbstractFile, oldPath: string) =>
         this.enqueue("rename", file, oldPath)
       )
+    );
+    // The metadata cache re-parses a note's frontmatter asynchronously, AFTER the
+    // vault `modify` event. A property source resolved on `modify` would read the
+    // stale cache and never re-resolve, staying permanently out of date. The
+    // `changed` event fires once the cache is current, so enqueue it as a distinct
+    // `metadata` kind that (see changeAffectsProject) re-dirties ONLY property-
+    // inclusion projects — no other source reads the cache, so none should react.
+    // Registered on the metadata cache, a different emitter than the vault, so its
+    // refs are tracked and torn down separately (metadataCache.offref).
+    this.metadataRefs.push(
+      this.app.metadataCache.on("changed", (file: TFile) => this.enqueue("metadata", file))
     );
   }
 
@@ -104,6 +117,8 @@ export class ProjectContentTracker {
     this.debouncedDrain.cancel();
     for (const ref of this.vaultRefs) this.app.vault.offref(ref);
     this.vaultRefs.length = 0;
+    for (const ref of this.metadataRefs) this.app.metadataCache.offref(ref);
+    this.metadataRefs.length = 0;
     this.pending.length = 0;
     this.listeners.clear();
     this.epochs.clear();
@@ -169,20 +184,44 @@ function changeAffectsProject(change: PendingChange, record: ProjectFileRecord):
   // A project with no inclusions materializes nothing, so nothing can dirty it.
   if (!inclusions) return false;
 
+  // A `metadata` event means the cache finished re-parsing a note's frontmatter —
+  // the moment a property source can resolve against fresh data. It matters ONLY to
+  // projects that ENUMERATE notes from frontmatter, i.e. that declare a property
+  // INCLUSION (resolvePropertyNotePaths). Tags carry a static label and never read
+  // the cache; folder/note/extension match by path; a bare property exclusion never
+  // enumerates. So this event dirties a project iff it declares a property inclusion
+  // and the changed file is a real markdown note that property enumeration can reach
+  // — every other source is left untouched, avoiding needless invalidation and
+  // startup-index churn.
+  if (change.kind === "metadata") {
+    return (
+      (inclusions.propertyPatterns?.length ?? 0) > 0 &&
+      change.isMarkdown &&
+      isPropertyCandidatePath(change.path)
+    );
+  }
+
   const paths = change.oldPath ? [change.path, change.oldPath] : [change.path];
   // Only a folder RENAME or DELETE can change which files exist under a scope; a
   // folder CREATE is an empty directory with no members, so it can't dirty anything.
   const folderMembershipEvent =
     change.isFolder && (change.kind === "rename" || change.kind === "delete");
 
-  // Tag membership can't be recovered from a path (and the metadata cache may not
-  // have parsed a just-edited file yet), so conservatively dirty a tag-declaring
-  // project on ANY event that could change which files carry a tag: a markdown
-  // change (checked on BOTH rename sides — a `.md → .txt` rename leaves tag scope)
-  // or a folder rename/delete that could move tagged notes. Skip when every side is
-  // an internal Copilot file (a `project.md` edit must not spray notes) — but keep
-  // it when one side is a user path (an internal ↔ user rename still counts).
-  if (declaresTagPattern(inclusions, exclusions) && paths.some((p) => !isInternalExcludedPath(p))) {
+  // A tag's membership and a property's value both live in a note's frontmatter/
+  // metadata and can't be recovered from a path (the metadata cache may also not
+  // have re-parsed a just-edited file yet), so conservatively dirty a project that
+  // declares EITHER on any event that could change which files carry a tag or hold
+  // a property value: a markdown change (checked on BOTH rename sides — a
+  // `.md → .txt` rename leaves frontmatter scope) or a folder rename/delete that
+  // could move such notes. Each source uses its own reachability rule: a tag only
+  // skips internal Copilot files, while a property additionally skips the system
+  // Copilot roots its enumeration can never return (see isPropertyCandidatePath).
+  // Keep the event when ANY side is reachable — an internal ↔ user rename counts.
+  const tagReaches =
+    declaresTagPattern(inclusions, exclusions) && paths.some((p) => !isInternalExcludedPath(p));
+  const propertyReaches =
+    declaresPropertyPattern(inclusions, exclusions) && paths.some(isPropertyCandidatePath);
+  if (tagReaches || propertyReaches) {
     const touchesMarkdown = change.isMarkdown || paths.some((p) => p.toLowerCase().endsWith(".md"));
     if (touchesMarkdown || folderMembershipEvent) return true;
   }
@@ -218,11 +257,47 @@ function changeAffectsProject(change: PendingChange, record: ProjectFileRecord):
   return paths.some((path) => fileMatchesInclusions(path, inclusions));
 }
 
+/**
+ * Whether a project declares a tag source. Tag membership lives in a note's
+ * frontmatter/metadata and can't be resolved from a path alone, so a project
+ * declaring one must be dirtied conservatively on any metadata-bearing change.
+ * Checks exclusions too: a tag EXCLUSION also shifts the materialized set when a
+ * note's frontmatter changes.
+ */
 function declaresTagPattern(
   inclusions: PatternCategory,
   exclusions: PatternCategory | null
 ): boolean {
   return (inclusions.tagPatterns?.length ?? 0) > 0 || (exclusions?.tagPatterns?.length ?? 0) > 0;
+}
+
+/**
+ * Whether a project declares a property source, the property counterpart of
+ * {@link declaresTagPattern}. Kept separate from the tag check because the two
+ * reach different files: property enumeration runs through `shouldIndexFile`, so
+ * it can never return a note under a system Copilot root, while tags keep their
+ * pre-existing broader rule.
+ */
+function declaresPropertyPattern(
+  inclusions: PatternCategory,
+  exclusions: PatternCategory | null
+): boolean {
+  return (
+    (inclusions.propertyPatterns?.length ?? 0) > 0 ||
+    (exclusions?.propertyPatterns?.length ?? 0) > 0
+  );
+}
+
+/**
+ * Whether a path is one that property enumeration could ever return. Mirrors the
+ * `shouldIndexFile` exclusions `resolvePropertyNotePaths` runs through: internal
+ * Copilot files and the system Copilot roots (active and historical) are always
+ * dropped there, so a change to one cannot alter a property source's note set.
+ * Without the system-root half, Copilot's own chat autosave — on by default, and
+ * frontmatter-bearing — would dirty every property project every few seconds.
+ */
+function isPropertyCandidatePath(path: string): boolean {
+  return !isInternalExcludedPath(path) && !isSystemExcludedPath(path);
 }
 
 function fileMatchesInclusions(path: string, inclusions: PatternCategory): boolean {

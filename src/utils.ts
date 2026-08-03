@@ -231,6 +231,61 @@ export function getTagsFromNote(app: App, file: TFile, frontmatterOnly = true): 
 }
 
 /**
+ * Read the values of a single frontmatter property from a note. Backs the
+ * Project "Property" context source, which includes notes by a user-defined
+ * frontmatter field (e.g. `Topics: Physics`) rather than by tag — the taxonomy
+ * some vaults use in place of tags, which forbid spaces and slugs.
+ *
+ * @param app - The Obsidian app instance.
+ * @param file - The note whose frontmatter is read.
+ * @param key - The frontmatter property name to read.
+ * @returns The property's values as strings: each element for a list property,
+ * a single element for a scalar, and an empty array when the key is absent.
+ */
+export function getPropertyValuesFromNote(app: App, file: TFile, key: string): string[] {
+  const frontmatter = app.metadataCache.getFileCache(file)?.frontmatter;
+  // Reason: `hasOwnProperty` (not `in`) so an absent key never reads an inherited
+  // member — e.g. `key: "constructor"` on a note without it would otherwise
+  // surface the prototype's function value.
+  if (!frontmatter || !Object.hasOwn(frontmatter, key)) {
+    return [];
+  }
+  const raw = (frontmatter as Record<string, unknown>)[key];
+  // Reason: only scalars round-trip through the `[key:value]` grammar. An object
+  // value would collapse to "[object Object]" (many distinct maps → one indistinct
+  // value), so drop non-scalars here rather than match on an ambiguous string.
+  const values: unknown[] = Array.isArray(raw) ? (raw as unknown[]) : [raw];
+  const scalars = values.filter(isScalarPropertyValue);
+  return scalars.map((value) => String(value));
+}
+
+/** Whether a frontmatter value is a scalar that the `[key:value]` grammar can represent. */
+function isScalarPropertyValue(value: unknown): value is string | number | boolean {
+  const type = typeof value;
+  return type === "string" || type === "number" || type === "boolean";
+}
+
+/**
+ * Whether a note declares a frontmatter property, regardless of its value.
+ * Backs the key-only Project property source (`[key:]`): a note with an empty
+ * or null-valued key (e.g. `Topics:` or `Topics: []`) still has the key and so
+ * must match, which a values-length check would miss.
+ *
+ * @param app - The Obsidian app instance.
+ * @param file - The note whose frontmatter is inspected.
+ * @param key - The frontmatter property name to look for.
+ * @returns True when the note's frontmatter contains the key.
+ */
+export function noteHasProperty(app: App, file: TFile, key: string): boolean {
+  const frontmatter: Record<string, unknown> | undefined =
+    app.metadataCache.getFileCache(file)?.frontmatter;
+  // Reason: `hasOwnProperty` (not `in`) so `[constructor:]` / `[toString:]` match
+  // only notes that actually declare that key, not every note whose frontmatter
+  // inherits it from Object.prototype.
+  return frontmatter != null && Object.hasOwn(frontmatter, key);
+}
+
+/**
  * Get notes from tags.
  * @param app - The Obsidian app instance.
  * @param tags - The tags to get notes from. Tags should be with the hash symbol.

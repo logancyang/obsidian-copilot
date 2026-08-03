@@ -16,6 +16,7 @@ function sources(over: Partial<ManifestSources> = {}): ManifestSources {
     notes: [],
     extensions: [],
     tags: [],
+    properties: [],
     webUrls: [],
     youtubeUrls: [],
     materialized: [],
@@ -120,5 +121,20 @@ describe("buildProjectContextBlock", () => {
   it("omits the truncation note when under the cap", () => {
     const md = buildProjectContextBlock(sources({ folders: [abs("A"), abs("B")] }));
     expect(md).not.toContain("omitted");
+  });
+
+  it("lists a property inclusion as a source label", () => {
+    const md = buildProjectContextBlock(sources({ properties: ["[Topics:Physics]"] }));
+    expect(md).toContain("Included properties");
+    expect(md).toContain("[Topics:Physics]");
+  });
+
+  it("keeps the property label visible when matched notes overflow the entry cap", () => {
+    const manyNotes = Array.from({ length: MAX_MANIFEST_ENTRIES + 5 }, (_, i) => abs(`n${i}.md`));
+    const md = buildProjectContextBlock(
+      sources({ notes: manyNotes, properties: ["[Topics:Physics]"] })
+    );
+    expect(md).toContain("Included properties");
+    expect(md).toContain("[Topics:Physics]");
   });
 });

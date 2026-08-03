@@ -10,7 +10,9 @@ import {
 import { useAgentProcessingItems } from "@/components/project/useAgentProcessingItems";
 import { openAgentCachedItemPreview, openCachedProjectFile } from "@/utils/cacheFileOpener";
 import { ProjectFileSelectModal } from "@/components/modals/ProjectFileSelectModal";
+import { PropertySearchModal } from "@/components/modals/PropertySearchModal";
 import { TagSearchModal } from "@/components/modals/TagSearchModal";
+import { getBadgeLabel } from "@/components/project/ProjectContextBadgeList";
 import { TruncatedText } from "@/components/TruncatedText";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -40,6 +42,7 @@ import {
   Loader2,
   Plus,
   PlusCircle,
+  SlidersHorizontal,
   TagIcon,
   XIcon,
 } from "lucide-react";
@@ -79,6 +82,7 @@ type ActiveSection =
   | "folders"
   | "files"
   | "extensions"
+  | "properties"
   | "ignoreFiles"
   | "search"
   | "links"
@@ -434,6 +438,10 @@ function CategoryItemCard({
       IconComponent = TagIcon;
       iconColorClassName = "tw-text-context-manager-orange";
       break;
+    case "property":
+      IconComponent = SlidersHorizontal;
+      iconColorClassName = "tw-text-context-manager-purple";
+      break;
     case "folder":
       IconComponent = FolderIcon;
       iconColorClassName = "tw-text-context-manager-yellow";
@@ -498,6 +506,7 @@ interface GroupListItem {
   tags: Record<string, Array<GroupItem>>;
   folders: Record<string, Array<GroupItem>>;
   extensions: Record<string, Array<GroupItem>>;
+  properties: Record<string, Array<GroupItem>>;
   notes: Array<GroupItem>;
 }
 
@@ -508,7 +517,7 @@ interface IgnoreItems {
 interface CategoryItem {
   id: string;
   name: string;
-  type: "tag" | "folder" | "files" | "ignoreFiles" | "web" | "youtube";
+  type: "tag" | "folder" | "files" | "property" | "ignoreFiles" | "web" | "youtube";
   originalId?: string;
   count: number;
 }
@@ -632,7 +641,7 @@ function ContextManage({
       const processPatternGroup = (
         file: TFile,
         patterns: string[] | undefined,
-        patternType: "tagPatterns" | "folderPatterns" | "extensionPatterns",
+        patternType: "tagPatterns" | "folderPatterns" | "extensionPatterns" | "propertyPatterns",
         targetGroup: Record<string, Array<GroupItem>>
       ) => {
         if (patterns) {
@@ -655,6 +664,7 @@ function ContextManage({
       const tags: Record<string, Array<GroupItem>> = {};
       const folders: Record<string, Array<GroupItem>> = {};
       const extensions: Record<string, Array<GroupItem>> = {};
+      const properties: Record<string, Array<GroupItem>> = {};
       const notes: Array<GroupItem> = [];
 
       (inclusionPatterns?.tagPatterns ?? []).forEach((tag) => {
@@ -665,6 +675,9 @@ function ContextManage({
       });
       (inclusionPatterns?.extensionPatterns ?? []).forEach((extension) => {
         extensions[extension] = [];
+      });
+      (inclusionPatterns?.propertyPatterns ?? []).forEach((property) => {
+        properties[property] = [];
       });
 
       // Traverse the files and populate them into corresponding groups
@@ -681,6 +694,14 @@ function ContextManage({
           inclusionPatterns?.extensionPatterns,
           "extensionPatterns",
           extensions
+        );
+
+        // property
+        processPatternGroup(
+          file,
+          inclusionPatterns?.propertyPatterns,
+          "propertyPatterns",
+          properties
         );
 
         // note/file
@@ -706,6 +727,7 @@ function ContextManage({
         tags,
         folders,
         extensions,
+        properties,
         notes,
       };
     },
@@ -774,6 +796,7 @@ function ContextManage({
       const tagPatterns = Object.keys(list.tags);
       const folderPatterns = Object.keys(list.folders);
       const extensionPatterns = Object.keys(list.extensions);
+      const propertyPatterns = Object.keys(list.properties);
       const notePatterns = list.notes
         .map((note) => {
           const file = app.vault.getAbstractFileByPath(note.id);
@@ -787,6 +810,7 @@ function ContextManage({
         tagPatterns,
         folderPatterns,
         extensionPatterns,
+        propertyPatterns,
         notePatterns,
       });
     },
@@ -826,6 +850,7 @@ function ContextManage({
       groupList.tags,
       groupList.folders,
       groupList.extensions,
+      groupList.properties,
       { notes: groupList.notes },
     ];
 
@@ -975,6 +1000,27 @@ function ContextManage({
       return [];
     }
 
+    if (activeSection === "properties" && activeItem) {
+      const propertyFiles = groupList.properties[activeItem];
+      if (propertyFiles) {
+        return propertyFiles;
+      }
+      return [];
+    }
+
+    // Clicking the Properties header (agent Links variant) lists every property.
+    if (activeSection === "properties") {
+      return sortItems(
+        Object.entries(groupList.properties).map(([propertyId, files]) => ({
+          id: `property:${propertyId}`,
+          name: getBadgeLabel({ pattern: propertyId, type: "property" }),
+          type: "property",
+          originalId: propertyId,
+          count: files.length,
+        }))
+      );
+    }
+
     if (activeSection === "ignoreFiles") {
       return Array.from(ignoreItems.files).map((file) => ({
         id: file.path,
@@ -1000,6 +1046,16 @@ function ContextManage({
           name: folderId,
           type: "folder",
           originalId: folderId,
+          count: files.length,
+        }))
+      );
+
+      const propertyItems = sortItems(
+        Object.entries(groupList.properties).map(([propertyId, files]) => ({
+          id: `property:${propertyId}`,
+          name: getBadgeLabel({ pattern: propertyId, type: "property" }),
+          type: "property",
+          originalId: propertyId,
           count: files.length,
         }))
       );
@@ -1045,7 +1101,14 @@ function ContextManage({
           : []),
       ];
 
-      return [...linkItems, ...tagItems, ...folderItems, ...filesItem, ...ignoreFilesItem];
+      return [
+        ...linkItems,
+        ...tagItems,
+        ...propertyItems,
+        ...folderItems,
+        ...filesItem,
+        ...ignoreFilesItem,
+      ];
     }
 
     return [];
@@ -1060,6 +1123,7 @@ function ContextManage({
     groupList.folders,
     groupList.notes,
     groupList.extensions,
+    groupList.properties,
     ignoreItems.files,
     sortItems,
     enableLinks,
@@ -1084,7 +1148,7 @@ function ContextManage({
 
   const addPatternToGroup = useCallback(
     (
-      groupType: "tags" | "folders" | "extensions",
+      groupType: "tags" | "folders" | "extensions" | "properties",
       pattern: string,
       patternConfig: PatternCategory
     ) => {
@@ -1121,6 +1185,7 @@ function ContextManage({
         tags: { ...groupList.tags },
         folders: { ...groupList.folders },
         extensions: { ...groupList.extensions },
+        properties: { ...groupList.properties },
         notes: [...groupList.notes],
       };
 
@@ -1133,6 +1198,7 @@ function ContextManage({
       removeFileFromGroupObject(newGroupList.tags);
       removeFileFromGroupObject(newGroupList.folders);
       removeFileFromGroupObject(newGroupList.extensions);
+      removeFileFromGroupObject(newGroupList.properties);
 
       // Remove file from notes
       newGroupList.notes = newGroupList.notes.filter((item) => item.id !== filePath);
@@ -1175,6 +1241,7 @@ function ContextManage({
         tag: createDeleteHandler("tags"),
         folder: createDeleteHandler("folders"),
         extension: createDeleteHandler("extensions"),
+        property: createDeleteHandler("properties"),
       },
 
       add: {
@@ -1182,6 +1249,16 @@ function ContextManage({
           new TagSearchModal(app, (tagName) => {
             const tagPattern = getTagPattern(tagName);
             addPatternToGroup("tags", tagPattern, { tagPatterns: [tagPattern] });
+          }).open();
+        },
+
+        property: () => {
+          // The modal builds the `[key:value]` pattern from real vault data; add it
+          // straight to the group keyed by that pattern (mirrors the tag flow).
+          new PropertySearchModal(app, (propertyPattern) => {
+            addPatternToGroup("properties", propertyPattern, {
+              propertyPatterns: [propertyPattern],
+            });
           }).open();
         },
 
@@ -1255,6 +1332,10 @@ function ContextManage({
           setActiveState("tags", tagId);
         },
 
+        property: (propertyId: string) => {
+          setActiveState("properties", propertyId);
+        },
+
         folder: (folderId: string) => {
           setActiveState("folders", folderId);
         },
@@ -1285,6 +1366,8 @@ function ContextManage({
     (item: CategoryItem) => {
       if (item.type === "tag" && item.originalId) {
         groupHandlers.click.tag(item.originalId);
+      } else if (item.type === "property" && item.originalId) {
+        groupHandlers.click.property(item.originalId);
       } else if (item.type === "folder" && item.originalId) {
         groupHandlers.click.folder(item.originalId);
       } else if (item.type === "files") {
@@ -1307,6 +1390,10 @@ function ContextManage({
       return `Tag: ${activeItem}`;
     }
     if (activeSection === "tags") return "Tags";
+    if (activeSection === "properties" && activeItem) {
+      return `Property: ${getBadgeLabel({ pattern: activeItem, type: "property" })}`;
+    }
+    if (activeSection === "properties") return "Properties";
     if (activeSection === "folders" && activeItem) {
       return `Folder: ${activeItem}`;
     }
@@ -1323,7 +1410,9 @@ function ContextManage({
   // entries on the right. Those are CategoryItems, so the right pane must use the
   // category-card branch (not the file ItemCard branch) for these states.
   const showingCategoryItems =
-    !searchTerm && !activeItem && (activeSection === "tags" || activeSection === "folders");
+    !searchTerm &&
+    !activeItem &&
+    (activeSection === "tags" || activeSection === "folders" || activeSection === "properties");
 
   const handleDeleteItem = (e: React.MouseEvent, item: GroupItem) => {
     e.stopPropagation();
@@ -1442,6 +1531,29 @@ function ContextManage({
                   onDeleteItem={(e, item) => groupHandlers.delete.tag(e, item)}
                   tooltip="must be in note property"
                   onSectionClick={enableLinks ? () => setActiveState("tags", null) : undefined}
+                />
+
+                <Separator />
+
+                {/* Properties Section — includes notes by a frontmatter property
+                    (e.g. Topics: Physics), the taxonomy some vaults use instead of tags. */}
+                <SectionList
+                  title="Properties"
+                  IconComponent={SlidersHorizontal}
+                  iconColorClassName="tw-text-context-manager-purple"
+                  items={makeSectionItem(groupList.properties, (pattern) =>
+                    getBadgeLabel({ pattern, type: "property" })
+                  )}
+                  activeItem={activeItem}
+                  activeSection={activeSection}
+                  sectionType="properties"
+                  onItemClick={groupHandlers.click.property}
+                  onAddClick={groupHandlers.add.property}
+                  onDeleteItem={(e, item) => groupHandlers.delete.property(e, item)}
+                  tooltip="Include notes by a frontmatter property, e.g. Topics: Physics"
+                  onSectionClick={
+                    enableLinks ? () => setActiveState("properties", null) : undefined
+                  }
                 />
 
                 <Separator />
