@@ -530,10 +530,11 @@ describe("plusUtils", () => {
       expect(result.current).toEqual({ status: "active" });
     });
 
-    it("does not judge a newly entered key by the previous verification", async () => {
-      // A free user's empty token resolves to "nothing verified" immediately.
-      // Pasting a key must not be answered by that verdict while its own check
-      // is still in flight, or the badge rejects a license they just bought.
+    it("does not answer a changed key with the previous key's verdict", async () => {
+      // The result carries the key it describes, so a verdict for the old key
+      // reads as unanswered until the new one's check lands. The settings
+      // section covers the rest of that window, where the stored token is still
+      // empty and the server has not answered yet.
       mockVerifyEntitlement.mockResolvedValueOnce(null).mockReturnValueOnce(new Promise(() => {}));
       mockGetSettings.mockReturnValue(buildSettings({ userId: "user-123" }));
 
@@ -546,30 +547,44 @@ describe("plusUtils", () => {
       expect(result.current.status).toBe("none");
     });
 
-    it("stops reporting the plan once the verified claims reach their expiry", async () => {
-      // Claims are only unexpired as of the moment they verified; a settings tab
-      // left open past `exp` must not keep naming a plan whose gates have closed.
+    it("stops naming the plan when the claims expire while the section stays open", async () => {
+      // Nothing re-renders merely because time passed, so the expiry has to be
+      // its own invalidation source: a settings tab left open across `exp` must
+      // not keep naming a plan whose entitlement gates have already closed.
       mockVerifyEntitlement.mockResolvedValue({
         user_id: "user-123",
         plan: "plus",
         tier: "plus",
         features: ["multi_agent"],
         iat: 0,
-        exp: PAST_EXP_SECONDS,
+        exp: (Date.now() + 50) / 1000,
       });
-      mockGetSettings.mockReturnValue(
-        buildSettings({
-          userId: "user-123",
-          plusLicenseKey: "key",
-          entitlementToken: "token",
-          entitlementExpiresAt: PAST_EXP_SECONDS * 1000,
-          isPaidUser: true,
-        })
-      );
+      mockGetSettings.mockReturnValue(tokenBackedSettings({ plusLicenseKey: "key" }));
 
       const { result } = renderHook(() => useLicenseState());
 
+      await waitFor(() => expect(result.current.status).toBe("active"));
       await waitFor(() => expect(result.current.status).toBe("inactive"));
+    });
+
+    it("keeps naming the plan when the expiry is further out than a timer can hold", async () => {
+      // A delay past the 32-bit limit wraps to immediate, which would blank the
+      // badge the moment it rendered.
+      mockVerifyEntitlement.mockResolvedValue({
+        user_id: "user-123",
+        plan: "plus",
+        tier: "plus",
+        features: ["multi_agent"],
+        iat: 0,
+        exp: FUTURE_EXP_SECONDS,
+      });
+      mockGetSettings.mockReturnValue(tokenBackedSettings({ plusLicenseKey: "key" }));
+
+      const { result } = renderHook(() => useLicenseState());
+
+      await waitFor(() => expect(result.current).toEqual({ status: "active", plan: "plus" }));
+      await new Promise((resolve) => window.setTimeout(resolve, 20));
+      expect(result.current).toEqual({ status: "active", plan: "plus" });
     });
 
     it("shows nothing until the first verification answers", () => {

@@ -282,6 +282,9 @@ export interface LicenseState {
   plan?: string;
 }
 
+/** Longest delay `setTimeout` can hold; anything larger wraps to immediate. */
+const MAX_TIMEOUT_MS = 2_147_483_647;
+
 /**
  * A verification tagged with what it describes. The key and token are what
  * settings must still hold for the claims to mean anything, so a stored key
@@ -314,14 +317,27 @@ export function useLicenseState(): LicenseState {
 
   React.useEffect(() => {
     let cancelled = false;
+    let expiryTimer: number | undefined;
     const subject = { licenseKey: settings.plusLicenseKey, token: settings.entitlementToken };
     void verifyEntitlement(subject.token, { expectedUserId: settings.userId }).then((claims) => {
-      if (!cancelled) {
-        setResult({ ...subject, claims });
+      if (cancelled) {
+        return;
+      }
+      setResult({ ...subject, claims });
+      // Claims are unexpired only as of this moment, and time is the one input
+      // nothing else reports: a section left open across `exp` would otherwise
+      // keep naming a plan whose entitlement has already lapsed.
+      const untilExpiry = claims ? claims.exp * 1000 - Date.now() : 0;
+      // A delay past the 32-bit limit wraps and fires at once, which would blank
+      // the plan name instantly. Entitlements last ~14 days, so a horizon that
+      // far out is not one worth re-arming a timer to reach.
+      if (untilExpiry > 0 && untilExpiry <= MAX_TIMEOUT_MS) {
+        expiryTimer = window.setTimeout(() => setResult({ ...subject, claims: null }), untilExpiry);
       }
     });
     return () => {
       cancelled = true;
+      window.clearTimeout(expiryTimer);
     };
   }, [settings.plusLicenseKey, settings.entitlementToken, settings.userId]);
 
@@ -334,11 +350,8 @@ export function useLicenseState(): LicenseState {
     if (!settings.plusLicenseKey || !answered) {
       return NO_LICENSE;
     }
-    // Claims were unexpired when verified, which is not the same as now: a
-    // settings tab left open past `exp` must stop reporting the plan its gates
-    // have already closed.
-    const claims = result.claims && result.claims.exp * 1000 > Date.now() ? result.claims : null;
-    if (claims) {
+    if (result.claims) {
+      const claims = result.claims;
       return claims.tier === "free"
         ? INACTIVE_LICENSE
         : { status: "active" as const, plan: claims.plan };

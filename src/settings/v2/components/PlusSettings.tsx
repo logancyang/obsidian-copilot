@@ -39,6 +39,10 @@ export function PlusSettings() {
   const [isChecking, setIsChecking] = useState(false);
   const isPaidUser = useIsPaidUser();
   const license = useLicenseState();
+  // A key being validated is unknown, not rejected. The hook only sees the
+  // stored token, which is still empty until the server answers, so it would
+  // otherwise report a freshly pasted key as inactive for the whole round-trip.
+  const licenseStatus = isChecking ? "none" : license.status;
   const [localLicenseKey, setLocalLicenseKey] = useState(settings.plusLicenseKey);
   const usageData = getPlusUsageMock();
 
@@ -46,12 +50,12 @@ export function PlusSettings() {
     <section className="tw-flex tw-flex-col tw-gap-4 tw-rounded-xl tw-border tw-border-solid tw-p-4 tw-shadow-sm tw-bg-interactive-accent/10 tw-border-interactive-accent/40">
       <div className="tw-flex tw-items-center tw-justify-between tw-gap-2 tw-text-lg tw-font-semibold">
         <span>Copilot License</span>
-        {license.status === "active" && (
+        {licenseStatus === "active" && (
           <Badge className="tw-rounded-full tw-bg-success tw-capitalize tw-text-success">
             {license.plan === LIFETIME_PLAN ? "Lifetime" : (license.plan ?? "Active")}
           </Badge>
         )}
-        {license.status === "inactive" && (
+        {licenseStatus === "inactive" && (
           <Badge className="tw-rounded-full tw-bg-error tw-text-error">Inactive</Badge>
         )}
       </div>
@@ -88,7 +92,7 @@ export function PlusSettings() {
           `!isPaidUser`) keeps it from flashing while the flag is still
           undefined; the status covers a key that stopped working while the
           cached flag still reads paid. */}
-      {(isPaidUser === false || license.status === "inactive") && (
+      {(isPaidUser === false || licenseStatus === "inactive") && !isChecking && (
         <div className="tw-flex tw-flex-col tw-gap-2 tw-rounded-lg tw-border tw-border-solid tw-bg-primary tw-p-3 tw-border-interactive-accent/30">
           <div className="tw-text-sm tw-text-normal">All of it for a few dollars a month.</div>
           <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-2">
