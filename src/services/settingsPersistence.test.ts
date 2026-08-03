@@ -256,7 +256,9 @@ describe("settingsPersistence", () => {
         )
       ).rejects.toThrow("cannot save settings");
     });
+  });
 
+  describe("releaseLegacyCredentialHold()", () => {
     it("resumes writing once a dedicated flow has stripped data.json", async () => {
       const { module } = await loadModule();
       await module.loadSettingsWithKeychain(
