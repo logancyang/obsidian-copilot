@@ -64,6 +64,19 @@ export function resetPersistenceState(): void {
   pendingTombstones.clear();
 }
 
+/**
+ * Allow data.json writes again after a dedicated flow has stripped it.
+ *
+ * The hold means unbacked pre-v4 credentials are still on disk. Delete All Keys
+ * writes its own stripped file outside the normal save path, so once that write
+ * succeeds there is nothing left to protect. Call this only from that success
+ * path: never releasing merely blocks writes until the next launch, while
+ * releasing early destroys the credentials the hold exists for.
+ */
+export function releaseLegacyCredentialHold(): void {
+  legacyCredentialsUnprotected = false;
+}
+
 /** Refresh the last known-good settings baseline used by Keychain rollback. */
 export function refreshLastPersistedSettings(data: CopilotSettings): void {
   lastPersistedSettings = structuredClone(data);
@@ -140,14 +153,17 @@ export async function loadSettingsWithKeychain(
         "Copilot could not back up the API keys stored in data.json, so it left the file untouched. Check that the vault is writable, then restart Obsidian."
       );
     } else {
+      // Reason: announce the copy before attempting the strip. A later write in
+      // this same startup can complete the strip, so a path shown only on a
+      // successful first write would never be shown at all in that case.
+      if (backup.status === "backed-up") {
+        new Notice(
+          `Copilot moved credential storage to the Obsidian Keychain. Your previous keys were copied to ${backup.path} — re-enter them in Settings, then delete that file.`,
+          15000
+        );
+      }
       try {
         await saveData(diskSettings);
-        if (backup.status === "backed-up") {
-          new Notice(
-            `Copilot moved credential storage to the Obsidian Keychain. Your previous keys were copied to ${backup.path} — re-enter them in Settings, then delete that file.`,
-            15000
-          );
-        }
       } catch {
         new Notice(
           "Copilot could not remove API keys from data.json. Check that the vault is writable, then restart Obsidian."
@@ -187,6 +203,17 @@ async function persistKeychainSettings(
   saveData: (data: CopilotSettings) => Promise<void>,
   prev: CopilotSettings | undefined
 ): Promise<void> {
+  // Reason: reject rather than skip. Callers treat a resolved persist as
+  // durable - `applyCopilotRootChange()` activates the new root only once this
+  // resolves - so returning quietly would report an unwritten file as saved.
+  // Thrown before any Keychain write, so nothing is half-applied.
+  if (legacyCredentialsUnprotected) {
+    throw new Error(
+      "Copilot cannot save settings until it can back up the API keys still in data.json. " +
+        "Check that the vault is writable, then restart Obsidian."
+    );
+  }
+
   const keychain = KeychainService.getInstance();
   const cleaned = cleanupLegacyFields(settings);
   const keychainDiffBase = lastPersistedSettings ?? prev;
@@ -213,12 +240,7 @@ async function persistKeychainSettings(
       }
     }
 
-    // Reason: see the load path. Keychain writes still apply, so a key entered
-    // now is stored; only data.json is held back, because it is the sole copy
-    // of credentials no backup captured.
-    if (!legacyCredentialsUnprotected) {
-      await saveData(stripKeychainFields(cleaned));
-    }
+    await saveData(stripKeychainFields(cleaned));
     lastPersistedSettings = structuredClone(cleaned);
     for (const id of replayedTombstones) {
       pendingTombstones.delete(id);

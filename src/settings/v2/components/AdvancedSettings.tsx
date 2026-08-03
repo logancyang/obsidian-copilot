@@ -10,6 +10,7 @@ import { getCopilotSaveData } from "@/settings/copilotSaveData";
 import { KeychainService } from "@/services/keychainService";
 import {
   refreshLastPersistedSettings,
+  releaseLegacyCredentialHold,
   runPersistenceTransaction,
   suppressNextPersistOnce,
 } from "@/services/settingsPersistence";
@@ -154,11 +155,21 @@ export const AdvancedSettings: React.FC = () => {
       // Reason: run inside the persistence queue to prevent interleaving
       // with normal saves that could restore old secrets.
       await runPersistenceTransaction(() =>
-        keychain.forgetAllSecrets(saveData, (nextSettings) => {
-          refreshLastPersistedSettings(nextSettings as CopilotSettings);
-          suppressNextPersistOnce();
-          setSettings(nextSettings);
-        })
+        keychain.forgetAllSecrets(
+          // Reason: this write strips data.json outside the normal save path,
+          // so once it resolves any pre-v4 credentials it was holding back are
+          // gone and ordinary saves can resume. Tied to the write itself, not
+          // to how the transaction settles, because only the write knows.
+          async (data) => {
+            await saveData(data);
+            releaseLegacyCredentialHold();
+          },
+          (nextSettings) => {
+            refreshLastPersistedSettings(nextSettings as CopilotSettings);
+            suppressNextPersistOnce();
+            setSettings(nextSettings);
+          }
+        )
       );
     } catch (error) {
       logError("Failed to forget secrets.", error);
