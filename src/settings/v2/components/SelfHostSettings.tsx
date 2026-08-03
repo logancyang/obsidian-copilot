@@ -157,32 +157,10 @@ export const SelfHostSettings: React.FC = () => {
 
         <SettingSection label="Self-hosted models">
           <SettingItem
-            type="text"
-            title="Self-hosted search endpoint"
-            description="Point vault search at your own server instead of Copilot cloud."
-            value={settings.selfHostUrl}
-            onChange={(value) => updateSetting("selfHostUrl", value)}
-            placeholder="https://localhost:8000"
-            disabled={!selfHostOn}
-          />
-
-          <SettingItem
             type="custom"
             title="LLM & embedding models"
             description={
-              <span>
-                Add local / self-hosted models as an OpenAI-compatible endpoint in{" "}
-                <Button
-                  variant="link"
-                  size="fit"
-                  className="tw-align-baseline"
-                  onClick={() => setSelectedTab(BYOK_TAB_ID)}
-                  disabled={!selfHostOn}
-                >
-                  BYOK
-                </Button>
-                .
-              </span>
+              <span>Add local / self-hosted models as an OpenAI-compatible endpoint in BYOK.</span>
             }
           >
             {/* Pure navigation, not a truth-source write. Still needs an explicit
