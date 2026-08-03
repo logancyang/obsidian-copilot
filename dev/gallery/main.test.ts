@@ -5,6 +5,20 @@ import GalleryPlugin, { GALLERY_VIEWTYPE } from "./main";
 import type { App, Command, PluginManifest, WorkspaceLeaf } from "obsidian";
 import { createElement, useState, type ReactElement, type ReactNode } from "react";
 
+jest.mock(
+  "./stories.generated",
+  () => ({
+    modules: [
+      {
+        componentId: "@/components/ui/button",
+        load: () => Promise.resolve(jest.requireActual("@/components/ui/button.stories")),
+      },
+    ],
+    presentationalComponentCount: 3,
+  }),
+  { virtual: true }
+);
+
 jest.mock("@/utils/react/mountPluginViewRoot", () => ({
   mountPluginViewRoot: jest.fn(),
 }));
@@ -52,7 +66,12 @@ interface GalleryViewContract {
   getViewType(): string;
   onClose(): Promise<void>;
   onOpen(): Promise<void>;
-  renderTree(storyModules: unknown[]): ReactNode;
+  renderTree(
+    storyModules: Array<{
+      componentId: string | null;
+      storyModule: unknown;
+    }>
+  ): ReactNode;
 }
 
 describe("main", () => {
@@ -150,6 +169,9 @@ describe("main", () => {
         const storyNames = Object.keys(buttonStories).filter(
           (exportName) => exportName !== "default"
         );
+        expect(
+          gallery.getByText("3 presentational components · 1 with stories · 2 missing")
+        ).toBeTruthy();
         const buttonGroup = gallery.getByRole("region", { name: "UI / Button stories" });
         const disabledStory = within(buttonGroup).getByRole("region", {
           name: "Disabled story",
@@ -198,13 +220,19 @@ describe("main", () => {
         const gallery = render(
           view.renderTree([
             {
-              default: { title: "UI/First" },
-              Only: { render: () => "First story" },
+              componentId: "@/components/ui/first",
+              storyModule: {
+                default: { title: "UI/First" },
+                Only: { render: () => "First story" },
+              },
             },
             {
-              default: { title: "Forms/Inputs/Second" },
-              Empty: { render: () => "Empty story" },
-              Filled: { render: () => "Filled story" },
+              componentId: null,
+              storyModule: {
+                default: { title: "Forms/Inputs/Second" },
+                Empty: { render: () => "Empty story" },
+                Filled: { render: () => "Filled story" },
+              },
             },
           ]) as ReactElement
         );
@@ -222,12 +250,55 @@ describe("main", () => {
         gallery.unmount();
       });
 
+      it("excludes meta-level coverage opt-outs without counting wired stories", () => {
+        const gallery = render(
+          view.renderTree([
+            {
+              componentId: "@/components/ui/covered",
+              storyModule: {
+                default: { title: "UI/Covered" },
+                Example: {
+                  parameters: { gallery: { coverage: false } },
+                  render: () => "Covered story",
+                },
+              },
+            },
+            {
+              componentId: "@/components/ui/opted-out",
+              storyModule: {
+                default: {
+                  title: "UI/OptedOut",
+                  parameters: { gallery: { coverage: false } },
+                },
+                Example: { render: () => "Opted-out story" },
+              },
+            },
+            {
+              componentId: null,
+              storyModule: {
+                default: { title: "Feature/Wired" },
+                Example: { render: () => "Bonus story" },
+              },
+            },
+          ]) as ReactElement
+        );
+
+        expect(
+          gallery.getByText("2 presentational components · 1 with stories · 1 missing")
+        ).toBeTruthy();
+
+        gallery.unmount();
+      });
+
       it("rejects a story without a render function or meta component", () => {
         expect(() =>
           view.renderTree([
             {
-              default: { title: "UI/MissingComponent" },
-              Broken: {},
+              componentId: "@/components/ui/missing-component",
+              storyModule: {
+                default: { title: "UI/MissingComponent" },
+                Broken: {},
+              },
             },
           ])
         ).toThrow('Story "UI/MissingComponent/Broken" must define render or meta.component');
