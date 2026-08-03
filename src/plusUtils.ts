@@ -9,7 +9,7 @@ import {
   PLUS_UTM_MEDIUMS,
   PlusUtmMedium,
 } from "@/constants";
-import { EntitlementFeature, verifyEntitlement } from "@/entitlement";
+import { EntitlementClaims, EntitlementFeature, verifyEntitlement } from "@/entitlement";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import { logError, logInfo } from "@/logger";
 import {
@@ -261,6 +261,76 @@ export async function checkIsPaidUser(
     return { isValid: undefined };
   });
   return result.isValid ?? (hasLiveEntitlement() && verified.paid);
+}
+
+/**
+ * What the license section should report about the stored license key.
+ * `none` also covers "not resolved yet", so the UI shows nothing rather than
+ * guessing while the first validation is in flight.
+ */
+export type LicenseStatus = "none" | "active" | "expired";
+
+/** Stored license as the settings UI should present it. */
+export interface LicenseState {
+  status: LicenseStatus;
+  /**
+   * Plan the entitlement names, lowercased by the server (e.g. `"believer"`).
+   * Absent when no token verifies, which is why callers need a generic label.
+   */
+  plan?: string;
+}
+
+const NO_LICENSE: LicenseState = Object.freeze({ status: "none" });
+const EXPIRED_LICENSE: LicenseState = Object.freeze({ status: "expired" });
+/** Paid, but with no verifiable token to name the plan (legacy tokenless keys). */
+const UNNAMED_ACTIVE_LICENSE: LicenseState = Object.freeze({ status: "active" });
+
+/**
+ * The stored license as the settings badge should show it, taken from the
+ * signed claims rather than the `/license` response so the plan name survives a
+ * restart, shows up offline, and can't be renamed by editing `data.json`.
+ *
+ * A lapsed key is `expired`, not `none`: the server keeps answering `is_valid`
+ * for it but downgrades the entitlement to the free policy, so the paid tier —
+ * not the plan name, which still names the plan that lapsed — is what separates
+ * a paying user from one who needs to renew. A stored token whose offline
+ * window ran out reads the same way, since nothing has re-confirmed the plan.
+ */
+export function useLicenseState(): LicenseState {
+  const settings = useSettingsValue();
+  const [claims, setClaims] = React.useState<EntitlementClaims | null>(null);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    void verifyEntitlement(settings.entitlementToken, {
+      expectedUserId: settings.userId,
+    }).then((verifiedClaims) => {
+      if (!cancelled) {
+        setClaims(verifiedClaims);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [settings.entitlementToken, settings.userId]);
+
+  return React.useMemo(() => {
+    if (!settings.plusLicenseKey) {
+      return NO_LICENSE;
+    }
+    if (claims) {
+      return claims.tier === "free"
+        ? EXPIRED_LICENSE
+        : { status: "active" as const, plan: claims.plan };
+    }
+    // No claims to read: either the token is gone (an authoritative negative
+    // cleared it) or it no longer verifies. Both are "was a license, isn't
+    // entitled now" once the persisted flags say so.
+    if (isEntitlementExpired(settings) || settings.isPaidUser === false) {
+      return EXPIRED_LICENSE;
+    }
+    return settings.isPaidUser === true ? UNNAMED_ACTIVE_LICENSE : NO_LICENSE;
+  }, [claims, settings]);
 }
 
 /**

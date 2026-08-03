@@ -4,7 +4,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PasswordInput } from "@/components/ui/password-input";
 import { MIYO_HOMEPAGE_URL, PLUS_UTM_MEDIUMS } from "@/constants";
-import { checkIsPaidUser, createPlusPageUrl, navigateToPlusPage, useIsPaidUser } from "@/plusUtils";
+import {
+  checkIsPaidUser,
+  createPlusPageUrl,
+  navigateToPlusPage,
+  useIsPaidUser,
+  useLicenseState,
+} from "@/plusUtils";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import { ExternalLink, Loader2 } from "lucide-react";
 import React, { useState } from "react";
@@ -24,6 +30,11 @@ export function PlusSettings() {
   const [error, setError] = useState<string | null>(null);
   const [isChecking, setIsChecking] = useState(false);
   const isPaidUser = useIsPaidUser();
+  const license = useLicenseState();
+  // Applying a key stores it before the server answers, and an unresolved key
+  // reads as lapsed — so without this a first-time subscriber would be told
+  // their brand-new license had expired for as long as validation takes.
+  const isExpired = license.status === "expired" && !isChecking;
   const [localLicenseKey, setLocalLicenseKey] = useState(settings.plusLicenseKey);
   const usageData = getPlusUsageMock();
 
@@ -31,9 +42,12 @@ export function PlusSettings() {
     <section className="tw-flex tw-flex-col tw-gap-4 tw-rounded-xl tw-border tw-border-solid tw-p-4 tw-shadow-sm tw-bg-interactive-accent/10 tw-border-interactive-accent/40">
       <div className="tw-flex tw-items-center tw-justify-between tw-gap-2 tw-text-lg tw-font-semibold">
         <span>Copilot License</span>
-        {isPaidUser && (
-          <Badge className="tw-rounded-full tw-bg-success tw-text-success">Active</Badge>
+        {license.status === "active" && (
+          <Badge className="tw-rounded-full tw-bg-success tw-capitalize tw-text-success">
+            {license.plan ?? "Active"}
+          </Badge>
         )}
+        {isExpired && <Badge className="tw-rounded-full tw-bg-error tw-text-error">Expired</Badge>}
       </div>
       <div className="tw-flex tw-flex-col tw-gap-2 tw-text-sm tw-text-muted">
         <div>
@@ -62,11 +76,32 @@ export function PlusSettings() {
         </div>
       </div>
 
+      {/* A lapsed license reads as unpaid, so it would otherwise land in the
+          new-user upsell below — which sells plans this user already bought and
+          never says the license stopped working. */}
+      {isExpired && (
+        <div className="tw-flex tw-flex-col tw-gap-2 tw-rounded-lg tw-border tw-border-solid tw-bg-primary tw-p-3 tw-border-interactive-accent/30">
+          <div className="tw-text-sm tw-text-normal">
+            Your license has expired. Premium models, document understanding, advanced web search,
+            and multi-agent capabilities stay off until you{" "}
+            <a
+              href={createPlusPageUrl(PLUS_UTM_MEDIUMS.EXPIRED_SETTINGS)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="tw-font-semibold tw-text-accent"
+            >
+              renew your subscription
+            </a>
+            .
+          </div>
+        </div>
+      )}
+
       {/* Free-user value + upsell. Gated on `isPaidUser === false` (not
           `!isPaidUser`): the flag is `boolean | undefined`, defaulting to false
           and staying on a cached value through network errors, so `=== false`
           avoids flashing this block while the paid status is still resolving. */}
-      {isPaidUser === false && (
+      {isPaidUser === false && !isExpired && (
         <div className="tw-flex tw-flex-col tw-gap-2 tw-rounded-lg tw-border tw-border-solid tw-bg-primary tw-p-3 tw-border-interactive-accent/30">
           <div className="tw-text-sm tw-text-normal">All of it for a few dollars a month.</div>
           <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-2">

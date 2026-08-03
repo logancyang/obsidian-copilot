@@ -185,6 +185,7 @@ export const LOADING_MESSAGES = {
 export const PLUS_UTM_MEDIUMS = {
   SETTINGS: "settings",
   EXPIRED_MODAL: "expired_modal",
+  EXPIRED_SETTINGS: "expired_settings",
   CHAT_MODE_SELECT: "chat_mode_select",
   MODE_SELECT_TOOLTIP: "mode_select_tooltip",
   MULTI_AGENT: "multi_agent",
