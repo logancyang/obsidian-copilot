@@ -10,6 +10,14 @@ describe("package.json", () => {
     readFileSync(path.resolve(process.cwd(), "package.json"), "utf8")
   ) as PackageJson;
 
+  describe("gallery:css", () => {
+    it("prepares a gallery-only source before Tailwind watches or builds it", () => {
+      expect(packageJson.scripts["gallery:css"]).toBe(
+        "node scripts/prepare-gallery-css.mjs && npx tailwindcss -i dev/gallery/styles.source.css -o dev/gallery/styles.css --content './src/**/*.{js,ts,jsx,tsx},./dev/gallery/**/*.{js,ts,jsx,tsx}'"
+      );
+    });
+  });
+
   describe("gallery:dev", () => {
     it("generates the current story index before starting both artifact watchers", () => {
       expect(packageJson.scripts["gallery:stories"]).toBe("node scripts/gen-gallery-stories.mjs");

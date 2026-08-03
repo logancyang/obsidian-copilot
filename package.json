@@ -8,7 +8,7 @@
     "dev:tailwind": "npx tailwindcss -i src/styles/tailwind.css -o styles.css --watch",
     "dev:esbuild": "node esbuild.config.mjs",
     "gallery:stories": "node scripts/gen-gallery-stories.mjs",
-    "gallery:css": "npx tailwindcss -i src/styles/tailwind.css -o dev/gallery/styles.css",
+    "gallery:css": "node scripts/prepare-gallery-css.mjs && npx tailwindcss -i dev/gallery/styles.source.css -o dev/gallery/styles.css --content './src/**/*.{js,ts,jsx,tsx},./dev/gallery/**/*.{js,ts,jsx,tsx}'",
     "gallery:esbuild": "node dev/gallery/esbuild.config.mjs",
     "gallery:dev": "npm run gallery:stories && run-p \"gallery:css -- --watch --poll\" \"gallery:esbuild -- --watch\"",
     "gallery:build": "npm run gallery:stories && npm run gallery:css && npm run gallery:esbuild -- production",
