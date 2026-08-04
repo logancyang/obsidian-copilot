@@ -394,8 +394,12 @@ function renderLeafStory(
     >
       {showHeading && (
         <header className="tw-flex tw-items-baseline tw-justify-between tw-gap-2">
-          <h3 className="tw-m-0 tw-text-ui-small tw-font-semibold">{story.name}</h3>
-          <code className="tw-text-smallest tw-text-muted">{story.id}</code>
+          <h3 className="tw-m-0 tw-min-w-0 tw-break-words tw-text-ui-small tw-font-semibold">
+            {story.name}
+          </h3>
+          <code className="tw-min-w-0 tw-break-all tw-text-right tw-text-smallest tw-text-muted">
+            {story.id}
+          </code>
         </header>
       )}
       <div className={getLayoutClassName(story.layout)}>{renderStoryContent(story)}</div>

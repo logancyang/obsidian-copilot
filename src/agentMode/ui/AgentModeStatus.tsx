@@ -1,11 +1,10 @@
-import { Button } from "@/components/ui/button";
+import { AgentStatusCard } from "@/agentMode/ui/AgentStatusCard";
 import {
   useBackendAuthState,
   useBackendInstallState,
   useSessionBackendDescriptor,
 } from "@/agentMode/ui/useBackendDescriptor";
 import { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
-import { cn } from "@/lib/utils";
 import { logError } from "@/logger";
 import type CopilotPlugin from "@/main";
 import { Notice } from "obsidian";
@@ -55,74 +54,46 @@ export const AgentModeStatus: React.FC<Props> = ({ manager, plugin, onInstallCli
 
   if (installState.kind === "absent") {
     return (
-      <div className="tw-flex tw-items-center tw-justify-between tw-rounded tw-bg-secondary tw-px-3 tw-py-2 tw-text-xs">
-        <span className="tw-text-muted">{descriptor.displayName} not installed</span>
-        <Button variant="default" size="sm" onClick={onInstallClick}>
-          Install {descriptor.displayName}
-        </Button>
-      </div>
+      <AgentStatusCard
+        message={`${descriptor.displayName} not installed`}
+        action={{ label: `Install ${descriptor.displayName}`, onClick: onInstallClick }}
+      />
     );
   }
 
   if (installState.kind === "checking") {
-    return (
-      <div
-        className={cn(
-          "tw-flex tw-items-center tw-justify-between tw-gap-2 tw-rounded",
-          "tw-bg-secondary tw-px-3 tw-py-2 tw-text-xs tw-text-muted"
-        )}
-      >
-        <span>Checking {descriptor.displayName} version…</span>
-      </div>
-    );
+    return <AgentStatusCard message={`Checking ${descriptor.displayName} version…`} />;
   }
 
   if (installState.kind === "incompatible") {
     const canUpgrade = descriptor.upgrade !== undefined;
     return (
-      <div
-        className={cn(
-          "tw-flex tw-items-center tw-justify-between tw-gap-2 tw-rounded",
-          "tw-bg-callout-warning/20 tw-px-3 tw-py-2 tw-text-xs tw-text-warning"
-        )}
-        role="alert"
-      >
-        <span>{installState.message}</span>
-        <Button
-          className="tw-shrink-0"
-          variant="default"
-          size="sm"
-          disabled={canUpgrade && upgrading}
-          onClick={canUpgrade ? handleUpgrade : () => descriptor.openInstallUI(plugin)}
-        >
-          {canUpgrade
+      <AgentStatusCard
+        tone="warning"
+        message={installState.message}
+        action={{
+          label: canUpgrade
             ? upgrading
               ? "Upgrading…"
               : "Upgrade"
-            : `Configure ${descriptor.displayName}`}
-        </Button>
-      </div>
+            : `Configure ${descriptor.displayName}`,
+          disabled: canUpgrade && upgrading,
+          onClick: canUpgrade ? handleUpgrade : () => descriptor.openInstallUI(plugin),
+        }}
+      />
     );
   }
 
   if (installState.kind === "error") {
     return (
-      <div
-        className="tw-flex tw-items-center tw-justify-between tw-gap-2 tw-rounded tw-bg-secondary tw-px-3 tw-py-2 tw-text-xs"
-        role="alert"
-      >
-        <span className="tw-min-w-0 tw-flex-1 tw-break-words tw-text-error">
-          {installState.message}
-        </span>
-        <Button
-          className="tw-shrink-0"
-          variant="ghost"
-          size="sm"
-          onClick={() => descriptor.openInstallUI(plugin)}
-        >
-          Configure {descriptor.displayName}
-        </Button>
-      </div>
+      <AgentStatusCard
+        tone="error"
+        message={installState.message}
+        action={{
+          label: `Configure ${descriptor.displayName}`,
+          onClick: () => descriptor.openInstallUI(plugin),
+        }}
+      />
     );
   }
 
@@ -131,25 +102,20 @@ export const AgentModeStatus: React.FC<Props> = ({ manager, plugin, onInstallCli
   // opens the browser itself; we show its printed URL as a clickable fallback.
   if (descriptor.auth && auth.status && !auth.status.signedIn) {
     return (
-      <div className="tw-flex tw-items-center tw-justify-between tw-rounded tw-bg-secondary tw-px-3 tw-py-2 tw-text-xs">
-        {auth.signingIn ? (
-          <>
-            <span className="tw-text-muted">Signing in to {descriptor.displayName}…</span>
-            {auth.url && (
-              <a href={auth.url} target="_blank" rel="noopener noreferrer">
-                Open sign-in page
-              </a>
-            )}
-          </>
-        ) : (
-          <>
-            <span className="tw-text-muted">{descriptor.displayName} not signed in</span>
-            <Button variant="default" size="sm" onClick={auth.signIn}>
-              Sign in to {descriptor.displayName}
-            </Button>
-          </>
-        )}
-      </div>
+      <AgentStatusCard
+        message={
+          auth.signingIn
+            ? `Signing in to ${descriptor.displayName}…`
+            : `${descriptor.displayName} not signed in`
+        }
+        action={
+          auth.signingIn
+            ? auth.url
+              ? { label: "Open sign-in page", href: auth.url }
+              : undefined
+            : { label: `Sign in to ${descriptor.displayName}`, onClick: auth.signIn }
+        }
+      />
     );
   }
 
@@ -169,14 +135,10 @@ export const AgentModeStatus: React.FC<Props> = ({ manager, plugin, onInstallCli
   };
 
   return (
-    <div
-      className="tw-flex tw-items-center tw-justify-between tw-gap-2 tw-rounded tw-bg-secondary tw-px-3 tw-py-2 tw-text-xs"
-      role="alert"
-    >
-      <span className="tw-min-w-0 tw-flex-1 tw-break-words tw-text-error">{bootError}</span>
-      <Button className="tw-shrink-0" variant="ghost" size="sm" onClick={handleRetry}>
-        Retry
-      </Button>
-    </div>
+    <AgentStatusCard
+      tone="error"
+      message={bootError}
+      action={{ label: "Retry", onClick: handleRetry }}
+    />
   );
 };

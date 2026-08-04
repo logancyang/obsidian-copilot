@@ -473,6 +473,38 @@ describe("Gallery", () => {
       expect(gallery.container.querySelectorAll("[data-gallery-story-id]")).toHaveLength(1);
     });
 
+    it("allows contact sheet headings and long exact story ids to wrap", () => {
+      const storyId = "Agent Mode/Agent Status Card/IncompatibleWarning";
+      const catalog = {
+        componentCount: 1,
+        coveredCount: 1,
+        stories: [makeStory(storyId)],
+      };
+      const gallery = render(
+        <GalleryHarness
+          catalog={catalog}
+          initialState={{
+            contactSheet: true,
+            selectedStoryId: storyId,
+            selectedSubtree: "Agent Mode/Agent Status Card",
+            width: 300,
+          }}
+        />
+      );
+      const story = gallery.container.querySelector(`[data-gallery-story-id="${storyId}"]`);
+      const header = story?.querySelector("header");
+      const heading = header?.querySelector("h3");
+      const exactId = header?.querySelector("code");
+
+      expect(heading?.textContent).toBe("IncompatibleWarning");
+      expect(heading?.classList.contains("tw-min-w-0")).toBe(true);
+      expect(heading?.classList.contains("tw-break-words")).toBe(true);
+      expect(exactId?.textContent).toBe(storyId);
+      expect(exactId?.classList.contains("tw-min-w-0")).toBe(true);
+      expect(exactId?.classList.contains("tw-break-all")).toBe(true);
+      expect(exactId?.classList.contains("tw-text-right")).toBe(true);
+    });
+
     it("opens a selected modal once until the user selects away and back", () => {
       const onHostChange = jest.fn<void, Parameters<GalleryHostChange>>();
       const gallery = render(
