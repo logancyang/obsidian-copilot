@@ -11,6 +11,7 @@ import {
   type CopilotSettings,
 } from "@/settings/model";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
+import { NO_SETUP_HIGHLIGHTS } from "@/agentMode/session/descriptor";
 import { MethodUnsupportedError } from "@/agentMode/session/errors";
 import { claudeBinarySearchDirs, resolveClaudeBinary } from "./claudeBinaryResolver";
 import { getClaudeAuthStatus, signInToClaude } from "./claudeAuth";
@@ -196,6 +197,9 @@ export const ClaudeBackendDescriptor: BackendDescriptor = {
   Icon: ClaudeLogo,
   // Cloud agent — flagged with a cloud-egress warning while Self-Host Mode is on.
   selfHostable: false,
+  setupDescription:
+    "Anthropic models, billed to your Claude Code subscription. Runs the claude CLI already on your machine.",
+  setupHighlights: NO_SETUP_HIGHLIGHTS,
   skillsProjectDir: ".claude/skills",
   crossDiscoveredAgents: [],
   restartOnManagedSkillsChange: false,
