@@ -190,12 +190,8 @@ class GalleryView extends ItemView {
 
     this.activeHost = null;
     activeHost.close();
-    for (let attempt = 0; attempt < STORY_MOUNT_ATTEMPTS; attempt += 1) {
-      if (!this.findMountedStory(activeHost.storyId)) {
-        return;
-      }
-      await waitForLayout(this.containerEl.win);
-    }
+    await waitForLayout(this.containerEl.win);
+    await waitForLayout(this.containerEl.win);
   }
 
   private async renderStory(

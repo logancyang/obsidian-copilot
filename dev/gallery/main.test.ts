@@ -188,7 +188,7 @@ describe("main", () => {
     view.containerEl.remove();
   });
 
-  function installImperativeRenderSimulation(): jest.Mock {
+  function installImperativeRenderSimulation(retainedClosedStoryId?: string): jest.Mock {
     activeDocument.body.append(view.containerEl);
     const closeHost = jest.fn();
     const rerender = jest.mocked(viewRoot.rerender);
@@ -230,7 +230,11 @@ describe("main", () => {
       if (story.host !== "leaf") {
         onHostChange(story.id, () => {
           closeHost(story.id);
-          storyElement.remove();
+          if (story.id === retainedClosedStoryId) {
+            storyElement.dataset.state = "closed";
+          } else {
+            storyElement.remove();
+          }
           onHostChange(story.id, null);
         });
       }
@@ -381,6 +385,28 @@ describe("main", () => {
           width: 340,
         });
         expect(requestSaveLayout).not.toHaveBeenCalled();
+      });
+
+      it("advances after a closed popover node remains mounted", async () => {
+        await view.onOpen();
+        const layoutFrames = jest.spyOn(view.containerEl.win, "requestAnimationFrame");
+        const closeHost = installImperativeRenderSimulation(
+          "Gallery/Host Environments/ResponseActions"
+        );
+
+        try {
+          const reports = await view.auditStories([300]);
+
+          expect(closeHost).toHaveBeenCalledWith("Gallery/Host Environments/ResponseActions");
+          expect(reports[0].findings).toContainEqual({
+            story: "Gallery/Test Probes/Broken",
+            check: "render-failure",
+            detail: "boom",
+          });
+          expect(layoutFrames.mock.calls.length).toBeLessThan(100);
+        } finally {
+          layoutFrames.mockRestore();
+        }
       });
     });
 
