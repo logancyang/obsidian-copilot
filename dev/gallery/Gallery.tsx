@@ -1,6 +1,10 @@
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ReactModal } from "@/components/modals/ReactModal";
+import { useApp } from "@/context";
 import type { GalleryParameters, GalleryWidth, Host, Layout } from "@/lib/story";
 import { cn } from "@/lib/utils";
+import type { App } from "obsidian";
 import * as React from "react";
 
 export const GALLERY_WIDTHS = [300, 340, 400, 600] as const;
@@ -74,6 +78,10 @@ interface StoryTreeProps {
   showContactSheet: boolean;
 }
 
+interface StoryHostProps {
+  story: StoryDefinition;
+}
+
 const DEFAULT_WIDTH: GalleryWidth = 400;
 
 function isGalleryWidth(value: unknown): value is GalleryWidth {
@@ -138,7 +146,103 @@ function getLayoutClassName(layout: Layout): string {
   );
 }
 
-function renderStory(story: StoryDefinition, showHeading: boolean): React.ReactElement {
+class GalleryStoryModal extends ReactModal {
+  constructor(
+    app: App,
+    private readonly story: StoryDefinition
+  ) {
+    super(app, story.name);
+  }
+
+  protected renderContent(): React.ReactElement {
+    return (
+      <div
+        data-gallery-host="modal"
+        data-gallery-host-content
+        data-gallery-story-id={this.story.id}
+      >
+        {this.story.render()}
+      </div>
+    );
+  }
+}
+
+function ModalStoryHost({ story }: StoryHostProps): React.ReactElement {
+  const app = useApp();
+  const activeModal = React.useRef<GalleryStoryModal | null>(null);
+  const openModal = React.useCallback(() => {
+    activeModal.current?.close();
+    const modal = new GalleryStoryModal(app, story);
+    activeModal.current = modal;
+    modal.open();
+  }, [app, story]);
+
+  React.useEffect(() => {
+    openModal();
+    return () => {
+      activeModal.current?.close();
+      activeModal.current = null;
+    };
+  }, [openModal]);
+
+  return (
+    <div className="tw-flex tw-flex-col tw-items-start tw-gap-2 tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-primary tw-p-4">
+      <p className="tw-m-0 tw-text-ui-smaller tw-text-muted">
+        This story is mounted in a native Obsidian modal.
+      </p>
+      <Button onClick={openModal} type="button">
+        Reopen modal story
+      </Button>
+    </div>
+  );
+}
+
+function PopoverStoryHost({ story }: StoryHostProps): React.ReactElement {
+  const [open, setOpen] = React.useState(true);
+  const [portalContainer, setPortalContainer] = React.useState<HTMLElement | null>(null);
+  const rememberTrigger = React.useCallback((trigger: HTMLButtonElement | null) => {
+    setPortalContainer(trigger?.doc.body ?? null);
+  }, []);
+
+  return (
+    <div className="tw-flex tw-min-h-32 tw-items-start tw-justify-center tw-p-4">
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button ref={rememberTrigger} type="button">
+            Toggle popover story
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent
+          align="start"
+          container={portalContainer}
+          data-gallery-host="popover"
+          data-gallery-host-content
+          data-gallery-story-id={story.id}
+        >
+          {story.render()}
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+}
+
+/* eslint-disable tailwindcss/no-custom-classname -- These are Obsidian's native settings host classes, not gallery styling. */
+function SettingsTabStoryHost({ story }: StoryHostProps): React.ReactElement {
+  return (
+    <div className="modal mod-settings" data-gallery-host-content>
+      <div className="modal-content">
+        <div className="vertical-tabs">
+          <div className="vertical-tab-content-container">
+            <div className="vertical-tab-content">{story.render()}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+/* eslint-enable tailwindcss/no-custom-classname */
+
+function renderLeafStory(story: StoryDefinition, showHeading: boolean): React.ReactElement {
   return (
     <section
       aria-label={`${story.name} story`}
@@ -156,6 +260,49 @@ function renderStory(story: StoryDefinition, showHeading: boolean): React.ReactE
       )}
       <div className={getLayoutClassName(story.layout)}>{story.render()}</div>
     </section>
+  );
+}
+
+function renderSelectedStory(story: StoryDefinition): React.ReactElement {
+  if (story.host === "leaf") {
+    return renderLeafStory(story, false);
+  }
+
+  return (
+    <section
+      aria-label={`${story.name} story`}
+      className="tw-flex tw-flex-col tw-gap-2"
+      data-gallery-host={story.host}
+      data-gallery-layout={story.layout}
+      data-gallery-story-id={story.id}
+      key={story.id}
+    >
+      {story.host === "modal" && <ModalStoryHost story={story} />}
+      {story.host === "popover" && <PopoverStoryHost story={story} />}
+      {story.host === "settings-tab" && <SettingsTabStoryHost story={story} />}
+    </section>
+  );
+}
+
+function renderHostCard(
+  story: StoryDefinition,
+  onOpen: (story: StoryDefinition) => void
+): React.ReactElement {
+  return (
+    <article
+      className="tw-flex tw-flex-col tw-gap-2 tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-primary tw-p-4"
+      data-gallery-host-card={story.host}
+      key={story.id}
+    >
+      <div className="tw-flex tw-items-baseline tw-justify-between tw-gap-2">
+        <h3 className="tw-m-0 tw-text-ui-small tw-font-semibold">{story.name}</h3>
+        <span className="tw-text-smallest tw-text-muted">{story.host}</span>
+      </div>
+      <code className="tw-text-smallest tw-text-muted">{story.id}</code>
+      <Button onClick={() => onOpen(story)} size="sm" type="button">
+        Open {story.host} story
+      </Button>
+    </article>
   );
 }
 
@@ -350,11 +497,11 @@ export function Gallery({ catalog, onStateChange, state }: GalleryProps): React.
         (story) => story.host === "leaf" && storyBelongsToSubtree(story, selectedSubtree)
       )
     : [];
-  const skippedHostCount = selectedSubtree
+  const hostCardStories = selectedSubtree
     ? catalog.stories.filter(
         (story) => story.host !== "leaf" && storyBelongsToSubtree(story, selectedSubtree)
-      ).length
-    : 0;
+      )
+    : [];
 
   const selectStory = (story: StoryDefinition) => {
     onStateChange({
@@ -489,7 +636,10 @@ export function Gallery({ catalog, onStateChange, state }: GalleryProps): React.
               <p className="tw-m-0 tw-text-ui-smaller tw-text-muted">
                 {contactSheetStories.length} leaf{" "}
                 {contactSheetStories.length === 1 ? "story" : "stories"}
-                {skippedHostCount > 0 && ` · ${skippedHostCount} non-leaf skipped`}
+                {hostCardStories.length > 0 &&
+                  ` · ${hostCardStories.length} non-leaf ${
+                    hostCardStories.length === 1 ? "launcher" : "launchers"
+                  }`}
               </p>
             )}
           </div>
@@ -540,15 +690,18 @@ export function Gallery({ catalog, onStateChange, state }: GalleryProps): React.
               data-gallery-width={state.width}
             >
               {state.contactSheet ? (
-                contactSheetStories.length > 0 ? (
-                  contactSheetStories.map((story) => renderStory(story, true))
+                contactSheetStories.length > 0 || hostCardStories.length > 0 ? (
+                  <>
+                    {contactSheetStories.map((story) => renderLeafStory(story, true))}
+                    {hostCardStories.map((story) => renderHostCard(story, selectStory))}
+                  </>
                 ) : (
                   <p className="tw-m-0 tw-text-ui-smaller tw-text-muted">
-                    This subtree has no leaf-hosted stories to render inline.
+                    This subtree has no stories.
                   </p>
                 )
               ) : selectedStory ? (
-                renderStory(selectedStory, false)
+                renderSelectedStory(selectedStory)
               ) : (
                 <p className="tw-m-0 tw-text-ui-smaller tw-text-muted">No story selected.</p>
               )}

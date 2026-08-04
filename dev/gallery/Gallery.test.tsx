@@ -1,7 +1,10 @@
 import * as agentWelcomeStories from "@/agentMode/ui/AgentWelcomeCard.stories";
+import * as galleryHostStories from "@/components/gallery-hosts.stories";
 import * as badgeStories from "@/components/ui/badge.stories";
 import * as buttonStories from "@/components/ui/button.stories";
+import { AppContext } from "@/context";
 import { fireEvent, render, within } from "@testing-library/react";
+import type { App } from "obsidian";
 import * as React from "react";
 import {
   createGalleryCatalog,
@@ -12,6 +15,46 @@ import {
   type StoryDefinition,
 } from "./Gallery";
 import type { GalleryParameters, GalleryWidth, Host, Layout } from "@/lib/story";
+
+jest.mock("@/components/modals/ReactModal", () => {
+  const close = jest.fn();
+  const open = jest.fn();
+
+  return {
+    ReactModal: class ReactModal {
+      app: App;
+      title: string | undefined;
+
+      constructor(app: App, title?: string) {
+        this.app = app;
+        this.title = title;
+      }
+
+      close(): void {
+        close(this);
+      }
+
+      open(): void {
+        open(this);
+      }
+    },
+    galleryModalMock: { close, open },
+  };
+});
+
+interface GalleryModalMock {
+  close: jest.Mock;
+  open: jest.Mock;
+}
+
+function getGalleryModalMock(): GalleryModalMock {
+  const modalModule = jest.requireMock<{
+    galleryModalMock: GalleryModalMock;
+  }>("@/components/modals/ReactModal");
+  return modalModule.galleryModalMock;
+}
+
+const GALLERY_APP = {} as App;
 
 function makeStory(
   id: string,
@@ -46,8 +89,13 @@ function makeCatalog(): GalleryCatalog {
       makeStory("Agent Mode/Agent Welcome Card/Default", { layout: "fullscreen" }),
       makeStory("UI/Badge/Status", { layout: "centered" }),
       makeStory("UI/Button/Modal", { host: "modal" }),
+      makeStory("UI/Button/Popover", { host: "popover" }),
       makeStory("UI/Button/Primary", {
         node: <button type="button">Primary example</button>,
+      }),
+      makeStory("UI/Setting Item/Preferences", {
+        host: "settings-tab",
+        node: <div>Settings example</div>,
       }),
     ],
   };
@@ -62,18 +110,28 @@ function GalleryHarness({ catalog, initialState }: GalleryHarnessProps): React.R
   const [state, setState] = React.useState(() =>
     resolveGalleryViewState(initialState, catalog.stories)
   );
-  return <Gallery catalog={catalog} onStateChange={setState} state={state} />;
+  return (
+    <AppContext.Provider value={GALLERY_APP}>
+      <Gallery catalog={catalog} onStateChange={setState} state={state} />
+    </AppContext.Provider>
+  );
 }
 
 describe("Gallery", () => {
+  beforeEach(() => {
+    getGalleryModalMock().close.mockClear();
+    getGalleryModalMock().open.mockClear();
+  });
+
   describe("createGalleryCatalog()", () => {
-    it("normalizes three real component modules across two ui roots and renders their stories", () => {
+    it("normalizes permanent component and host modules and renders their stories", () => {
       const catalog = createGalleryCatalog(
         [
           {
             componentId: "@/agentMode/ui/AgentWelcomeCard",
             storyModule: agentWelcomeStories,
           },
+          { componentId: null, storyModule: galleryHostStories },
           { componentId: "@/components/ui/badge", storyModule: badgeStories },
           { componentId: "@/components/ui/button", storyModule: buttonStories },
         ],
@@ -85,6 +143,10 @@ describe("Gallery", () => {
       expect(catalog.stories.map((story) => story.id)).toEqual([
         "Agent Mode/Agent Welcome Card/Default",
         "Agent Mode/Agent Welcome Card/Narrow",
+        "Gallery/Host Environments/DefaultLeaf",
+        "Gallery/Host Environments/DeleteConfirmation",
+        "Gallery/Host Environments/ModelPreferences",
+        "Gallery/Host Environments/ResponseActions",
         "UI/Badge/Status",
         "UI/Badge/Variants",
         "UI/Button/Disabled",
@@ -104,7 +166,9 @@ describe("Gallery", () => {
       renderedSizes.unmount();
 
       for (const story of catalog.stories) {
-        const renderedStory = render(<>{story.render()}</>);
+        const renderedStory = render(
+          <AppContext.Provider value={GALLERY_APP}>{story.render()}</AppContext.Provider>
+        );
         if (story.id.startsWith("Agent Mode/")) {
           fireEvent.click(renderedStory.getByRole("button", { name: "Dismiss" }));
           fireEvent.click(renderedStory.getByRole("button", { name: "New project" }));
@@ -352,7 +416,7 @@ describe("Gallery", () => {
       expect(gallery.getByText("UI/Button/Modal")).toBeTruthy();
     });
 
-    it("renders a selected title subtree as a leaf-only contact sheet", () => {
+    it("renders leaf stories and non-leaf launch cards in a selected contact sheet", () => {
       const gallery = render(<GalleryHarness catalog={makeCatalog()} />);
 
       fireEvent.click(gallery.getByRole("button", { name: "Show UI contact sheet" }));
@@ -361,7 +425,7 @@ describe("Gallery", () => {
         gallery.getByRole("button", { name: "Show UI contact sheet" }).classList.contains("mod-cta")
       ).toBe(true);
       expect(gallery.getByText("Current subtree")).toBeTruthy();
-      expect(gallery.getByText("2 leaf stories · 1 non-leaf skipped")).toBeTruthy();
+      expect(gallery.getByText("2 leaf stories · 3 non-leaf launchers")).toBeTruthy();
       expect(
         gallery.container.querySelector('[data-gallery-story-id="UI/Badge/Status"]')
       ).toBeTruthy();
@@ -371,10 +435,65 @@ describe("Gallery", () => {
       expect(
         gallery.container.querySelector('[data-gallery-story-id="UI/Button/Modal"]')
       ).toBeNull();
+      expect(gallery.container.querySelectorAll("[data-gallery-host-card]")).toHaveLength(3);
+
+      fireEvent.click(gallery.getByRole("button", { name: "Open modal story" }));
+      expect(getGalleryModalMock().open).toHaveBeenCalledTimes(1);
+      expect(gallery.getByText("UI/Button/Modal")).toBeTruthy();
+      expect(gallery.getByRole("button", { name: "Modal Selected" })).toBeTruthy();
+
+      fireEvent.click(gallery.getByRole("button", { name: "Show UI contact sheet" }));
 
       fireEvent.click(gallery.getByRole("button", { name: "Show selected story" }));
-      expect(gallery.getByText("Agent Mode/Agent Welcome Card/Default")).toBeTruthy();
+      expect(gallery.getByText("UI/Button/Modal")).toBeTruthy();
       expect(gallery.container.querySelectorAll("[data-gallery-story-id]")).toHaveLength(1);
+    });
+
+    it("opens a selected modal once until the user selects away and back", () => {
+      const gallery = render(<GalleryHarness catalog={makeCatalog()} />);
+
+      fireEvent.click(gallery.getByRole("button", { name: "Modal" }));
+      expect(getGalleryModalMock().open).toHaveBeenCalledTimes(1);
+      expect(gallery.queryByText("UI/Button/Modal content")).toBeNull();
+      expect(gallery.getByRole("button", { name: "Reopen modal story" })).toBeTruthy();
+
+      const modal = getGalleryModalMock().open.mock.calls[0][0] as { close(): void };
+      modal.close();
+      fireEvent.click(gallery.getByRole("button", { name: "300" }));
+      expect(getGalleryModalMock().open).toHaveBeenCalledTimes(1);
+      expect(gallery.getByRole("button", { name: "Modal Selected" })).toBeTruthy();
+
+      fireEvent.click(gallery.getByRole("button", { name: "Primary" }));
+      fireEvent.click(gallery.getByRole("button", { name: "Modal" }));
+      expect(getGalleryModalMock().open).toHaveBeenCalledTimes(2);
+    });
+
+    it("anchors a real popover to the selected story trigger", () => {
+      const gallery = render(<GalleryHarness catalog={makeCatalog()} />);
+
+      fireEvent.click(gallery.getByRole("button", { name: "Popover" }));
+
+      const trigger = gallery.getByRole("button", { name: "Toggle popover story" });
+      expect(trigger.getAttribute("aria-expanded")).toBe("true");
+      expect(gallery.getByText("UI/Button/Popover content")).toBeTruthy();
+      expect(
+        activeDocument.body.querySelector(
+          '[data-gallery-host-content][data-gallery-host="popover"]'
+        )
+      ).toBeTruthy();
+    });
+
+    it("renders settings stories under native settings-tab ancestry", () => {
+      const gallery = render(<GalleryHarness catalog={makeCatalog()} />);
+
+      fireEvent.click(gallery.getByRole("button", { name: "Preferences" }));
+
+      expect(gallery.getByText("Settings example")).toBeTruthy();
+      expect(
+        gallery.container.querySelector(
+          ".modal.mod-settings .modal-content .vertical-tabs .vertical-tab-content-container .vertical-tab-content"
+        )
+      ).toBeTruthy();
     });
 
     it("selects exact width attributes and applies padded, centered, and fullscreen layouts", () => {
