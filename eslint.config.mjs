@@ -225,6 +225,41 @@ export default [
     },
   },
 
+  {
+    files: ["dev/gallery/**/*.{ts,tsx}", "src/**/*.stories.{ts,tsx}"],
+    // Test fixtures intentionally import production stories and contexts but are
+    // erased from the gallery bundle, so only runtime gallery code needs this fence.
+    ignores: ["dev/gallery/**/*.test.{ts,tsx}"],
+    rules: {
+      "@typescript-eslint/no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              regex: "^\\.\\./",
+              allowTypeImports: true,
+              message:
+                "Gallery runtime and stories may not bypass the production import fence " +
+                "with parent-relative value imports. Use an allowed @/ path instead.",
+            },
+            {
+              regex:
+                "^@/(?!(?:(?:.*/)?ui/|components/modals/ReactModal$|" +
+                "components/gallery-hosts\\.fixtures$|context$|lib/[^/]+$|" +
+                "utils/react/mountPluginViewRoot$)).*",
+              allowTypeImports: true,
+              message:
+                "The gallery may only import production values from UI primitives, " +
+                "shared libraries, and its explicit Obsidian host/provider seams. " +
+                "Type-only imports are always fine. If a component needs plugin state " +
+                "to render, pass that state as story data instead of widening this boundary.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+
   // Test files need Jest globals
   {
     files: ["**/*.test.{js,jsx,ts,tsx}", "jest.setup.js", "__mocks__/**"],
