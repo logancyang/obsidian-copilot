@@ -396,6 +396,41 @@ For more aggressive resets, manipulate files directly on disk under the vault
 path (from `app.vault.adapter.basePath`) and then call
 `$OBS vault=$VAULT reload` to make Obsidian re-scan.
 
+## Component gallery agent loop
+
+When the development-only component gallery plugin is loaded, its typed
+`window.__gallery` handle can select and audit stories without screenshots.
+Every async call below sets both `awaitPromise` and `returnByValue`; omitting
+either produces a CDP promise/remote-object description instead of the resolved
+value.
+
+```bash
+# Discover exact story ids.
+$OBS vault=$VAULT dev:cdp method=Runtime.evaluate params='{"expression":"window.__gallery.list()","returnByValue":true}'
+
+# Render one story and wait until its effects and layout have settled.
+$OBS vault=$VAULT dev:cdp method=Runtime.evaluate params='{"expression":"window.__gallery.show(\"UI/Button/Variants\",{width:300}).then(()=>true)","awaitPromise":true,"returnByValue":true}'
+
+# Address the mounted case by its stable identity and requested width.
+$OBS vault=$VAULT dev:dom selector='[data-story="UI/Button/Variants"][data-story-width="300"]' all
+
+# Sweep an exact width array. The resolved value is one AuditReport per width.
+$OBS vault=$VAULT dev:cdp method=Runtime.evaluate params='{"expression":"window.__gallery.audit({widths:[300,340,400,600]})","awaitPromise":true,"returnByValue":true}'
+```
+
+`audit()` returns an array shaped as
+`[{theme,width,findings:[{story,check,detail}]}]`. Requested widths may be any
+positive finite pixel values; the four values above match the gallery's visible
+buttons. Theme is intentionally read-only through this handle: switch the
+Obsidian appearance setting, then run the same array sweep again. A complete
+automated pass ends by checking uncaught errors separately:
+
+```bash
+$OBS vault=$VAULT dev:errors clear
+$OBS vault=$VAULT dev:cdp method=Runtime.evaluate params='{"expression":"window.__gallery.audit({widths:[300,340,400,600]})","awaitPromise":true,"returnByValue":true}'
+$OBS vault=$VAULT dev:errors
+```
+
 ## 6. Typical e2e flow
 
 A minimal smoke-test scaffold:

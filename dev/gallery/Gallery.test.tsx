@@ -3,13 +3,14 @@ import * as galleryHostStories from "@/components/gallery-hosts.stories";
 import * as badgeStories from "@/components/ui/badge.stories";
 import * as buttonStories from "@/components/ui/button.stories";
 import { AppContext } from "@/context";
-import { fireEvent, render, within } from "@testing-library/react";
+import { act, fireEvent, render, within } from "@testing-library/react";
 import type { App } from "obsidian";
 import * as React from "react";
 import {
   createGalleryCatalog,
   Gallery,
   type GalleryCatalog,
+  type GalleryHostChange,
   type GalleryViewState,
   resolveGalleryViewState,
   type StoryDefinition,
@@ -23,6 +24,7 @@ jest.mock("@/components/modals/ReactModal", () => {
   return {
     ReactModal: class ReactModal {
       app: App;
+      contentEl = activeDocument.createElement("div");
       title: string | undefined;
 
       constructor(app: App, title?: string) {
@@ -104,15 +106,25 @@ function makeCatalog(): GalleryCatalog {
 interface GalleryHarnessProps {
   catalog: GalleryCatalog;
   initialState?: Partial<GalleryViewState>;
+  onHostChange?: GalleryHostChange;
 }
 
-function GalleryHarness({ catalog, initialState }: GalleryHarnessProps): React.ReactElement {
+function GalleryHarness({
+  catalog,
+  initialState,
+  onHostChange,
+}: GalleryHarnessProps): React.ReactElement {
   const [state, setState] = React.useState(() =>
     resolveGalleryViewState(initialState, catalog.stories)
   );
   return (
     <AppContext.Provider value={GALLERY_APP}>
-      <Gallery catalog={catalog} onStateChange={setState} state={state} />
+      <Gallery
+        catalog={catalog}
+        onHostChange={onHostChange}
+        onStateChange={setState}
+        state={state}
+      />
     </AppContext.Provider>
   );
 }
@@ -323,7 +335,7 @@ describe("Gallery", () => {
             contactSheet: "yes",
             selectedStoryId: "Missing/Story",
             selectedSubtree: "Missing",
-            width: 999,
+            width: -1,
           },
           stories
         )
@@ -379,6 +391,11 @@ describe("Gallery", () => {
       expect(unselectedStoryButton.classList.contains("mod-cta")).toBe(false);
       expect(gallery.getByText("Agent Mode/Agent Welcome Card/Default")).toBeTruthy();
       expect(gallery.container.querySelectorAll("[data-gallery-story-id]")).toHaveLength(1);
+      expect(
+        gallery.container.querySelector(
+          '[data-story="Agent Mode/Agent Welcome Card/Default"][data-story-width="400"]'
+        )
+      ).toBeTruthy();
       expect(
         gallery.getByText("Switch themes in Obsidian settings; the gallery follows.")
       ).toBeTruthy();
@@ -456,15 +473,21 @@ describe("Gallery", () => {
     });
 
     it("opens a selected modal once until the user selects away and back", () => {
-      const gallery = render(<GalleryHarness catalog={makeCatalog()} />);
+      const onHostChange = jest.fn<void, Parameters<GalleryHostChange>>();
+      const gallery = render(
+        <GalleryHarness catalog={makeCatalog()} onHostChange={onHostChange} />
+      );
 
       fireEvent.click(gallery.getByRole("button", { name: "Modal" }));
       expect(getGalleryModalMock().open).toHaveBeenCalledTimes(1);
       expect(gallery.queryByText("UI/Button/Modal content")).toBeNull();
       expect(gallery.getByRole("button", { name: "Reopen modal story" })).toBeTruthy();
 
-      const modal = getGalleryModalMock().open.mock.calls[0][0] as { close(): void };
-      modal.close();
+      const closeModal = onHostChange.mock.calls.find(
+        ([storyId, close]) => storyId === "UI/Button/Modal" && close
+      )?.[1];
+      closeModal?.();
+      expect(getGalleryModalMock().close).toHaveBeenCalled();
       fireEvent.click(gallery.getByRole("button", { name: "300" }));
       expect(getGalleryModalMock().open).toHaveBeenCalledTimes(1);
       expect(gallery.getByRole("button", { name: "Modal Selected" })).toBeTruthy();
@@ -507,8 +530,71 @@ describe("Gallery", () => {
       gallery.unmount();
     });
 
-    it("anchors a real popover to the selected story trigger", () => {
+    it("places stable story and width selectors on every actual host case", () => {
       const gallery = render(<GalleryHarness catalog={makeCatalog()} />);
+
+      fireEvent.click(gallery.getByRole("button", { name: "Modal" }));
+      const modal = getGalleryModalMock().open.mock.calls[0][0] as {
+        renderContent(): React.ReactElement;
+      };
+      const modalContent = render(modal.renderContent());
+      expect(
+        modalContent.container.querySelector(
+          '[data-story="UI/Button/Modal"][data-story-width="400"]'
+        )
+      ).toBeTruthy();
+      modalContent.unmount();
+
+      fireEvent.click(gallery.getByRole("button", { name: "Popover" }));
+      expect(
+        activeDocument.body.querySelector(
+          '[data-gallery-host="popover"][data-story="UI/Button/Popover"][data-story-width="400"]'
+        )
+      ).toBeTruthy();
+
+      fireEvent.click(gallery.getByRole("button", { name: "Preferences" }));
+      expect(
+        gallery.container.querySelector(
+          '[data-gallery-host="settings-tab"][data-story="UI/Setting Item/Preferences"][data-story-width="400"]'
+        )
+      ).toBeTruthy();
+    });
+
+    it("contains a throwing story and recovers when another keyed story is selected", () => {
+      const renderError = jest.spyOn(console, "error").mockImplementation(() => undefined);
+      const catalog: GalleryCatalog = {
+        componentCount: 1,
+        coveredCount: 1,
+        stories: [
+          makeStory("UI/Test/Broken", {
+            node: undefined,
+          }),
+          makeStory("UI/Test/Healthy"),
+        ],
+      };
+      catalog.stories[0].render = () => {
+        throw new Error("boom");
+      };
+
+      const gallery = render(<GalleryHarness catalog={catalog} />);
+
+      expect(
+        gallery.container.querySelector(
+          '[data-story="UI/Test/Broken"] [data-story-render-error="boom"]'
+        )
+      ).toBeTruthy();
+      fireEvent.click(gallery.getByRole("button", { name: "Healthy" }));
+      expect(gallery.getByText("UI/Test/Healthy content")).toBeTruthy();
+      expect(gallery.container.querySelector("[data-story-render-error]")).toBeNull();
+
+      renderError.mockRestore();
+    });
+
+    it("anchors a real popover to the selected story trigger", () => {
+      const onHostChange = jest.fn<void, Parameters<GalleryHostChange>>();
+      const gallery = render(
+        <GalleryHarness catalog={makeCatalog()} onHostChange={onHostChange} />
+      );
 
       fireEvent.click(gallery.getByRole("button", { name: "Popover" }));
 
@@ -520,10 +606,23 @@ describe("Gallery", () => {
           '[data-gallery-host-content][data-gallery-host="popover"]'
         )
       ).toBeTruthy();
+
+      const closePopover = onHostChange.mock.calls.find(
+        ([storyId, close]) => storyId === "UI/Button/Popover" && close
+      )?.[1];
+      act(() => closePopover?.());
+      expect(
+        activeDocument.body.querySelector(
+          '[data-gallery-host-content][data-gallery-host="popover"]'
+        )
+      ).toBeNull();
     });
 
     it("renders settings stories under native settings-tab ancestry", () => {
-      const gallery = render(<GalleryHarness catalog={makeCatalog()} />);
+      const onHostChange = jest.fn<void, Parameters<GalleryHostChange>>();
+      const gallery = render(
+        <GalleryHarness catalog={makeCatalog()} onHostChange={onHostChange} />
+      );
 
       fireEvent.click(gallery.getByRole("button", { name: "Preferences" }));
 
@@ -533,6 +632,12 @@ describe("Gallery", () => {
           ".modal.mod-settings .modal-content .vertical-tabs .vertical-tab-content-container .vertical-tab-content"
         )
       ).toBeTruthy();
+
+      const closeSettings = onHostChange.mock.calls.find(
+        ([storyId, close]) => storyId === "UI/Setting Item/Preferences" && close
+      )?.[1];
+      act(() => closeSettings?.());
+      expect(gallery.queryByText("Settings example")).toBeNull();
     });
 
     it("selects exact width attributes and applies padded, centered, and fullscreen layouts", () => {
@@ -542,6 +647,7 @@ describe("Gallery", () => {
       expect(canvas?.dataset.galleryWidth).toBe("400");
       fireEvent.click(gallery.getByRole("button", { name: "300" }));
       expect(canvas?.dataset.galleryWidth).toBe("300");
+      expect(canvas?.style.width).toBe("300px");
       expect(gallery.getByText("Current width:").parentElement?.textContent).toContain("300px");
 
       const fullscreenContent = gallery.container.querySelector<HTMLElement>(
@@ -569,6 +675,18 @@ describe("Gallery", () => {
       expect(paddedContent?.classList.contains("tw-rounded-md")).toBe(true);
       expect(paddedContent?.classList.contains("tw-border")).toBe(true);
       expect(paddedContent?.classList.contains("tw-p-4")).toBe(true);
+    });
+
+    it("uses a positive external width without adding another width control", () => {
+      const gallery = render(
+        <GalleryHarness catalog={makeCatalog()} initialState={{ width: 512 }} />
+      );
+      const canvas = gallery.container.querySelector<HTMLElement>(".copilot-gallery-canvas");
+
+      expect(canvas?.dataset.galleryWidth).toBe("512");
+      expect(canvas?.style.width).toBe("512px");
+      expect(gallery.getAllByRole("button", { name: /^(300|340|400|600)$/ })).toHaveLength(4);
+      expect(gallery.container.querySelector('[data-story-width="512"]')).toBeTruthy();
     });
   });
 });

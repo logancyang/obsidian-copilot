@@ -9,6 +9,7 @@ import * as React from "react";
 
 export const GALLERY_WIDTHS = [300, 340, 400, 600] as const;
 
+export type GalleryHostChange = (storyId: string, close: (() => void) | null) => void;
 interface StoryModuleMeta {
   args?: object;
   component?: React.ElementType;
@@ -53,12 +54,14 @@ export interface GalleryViewState {
   contactSheet: boolean;
   selectedStoryId: string | null;
   selectedSubtree: string | null;
-  width: GalleryWidth;
+  width: number;
 }
 
 interface GalleryProps {
   catalog: GalleryCatalog;
+  onHostChange?: GalleryHostChange;
   onStateChange: (state: GalleryViewState) => void;
+  renderRevision?: number;
   state: GalleryViewState;
 }
 
@@ -79,13 +82,15 @@ interface StoryTreeProps {
 }
 
 interface StoryHostProps {
+  onHostChange?: GalleryHostChange;
   story: StoryDefinition;
+  width: number;
 }
 
 const DEFAULT_WIDTH: GalleryWidth = 400;
 
-function isGalleryWidth(value: unknown): value is GalleryWidth {
-  return GALLERY_WIDTHS.some((width) => width === value);
+function isPositiveWidth(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
 }
 
 function storyBelongsToSubtree(story: StoryDefinition, subtree: string): boolean {
@@ -146,10 +151,57 @@ function getLayoutClassName(layout: Layout): string {
   );
 }
 
+interface StoryErrorBoundaryProps {
+  children: React.ReactNode;
+  storyId: string;
+}
+
+interface StoryErrorBoundaryState {
+  error: string | null;
+}
+
+class StoryErrorBoundary extends React.Component<StoryErrorBoundaryProps, StoryErrorBoundaryState> {
+  state: StoryErrorBoundaryState = { error: null };
+
+  static getDerivedStateFromError(error: unknown): StoryErrorBoundaryState {
+    return { error: error instanceof Error ? error.message : String(error) };
+  }
+
+  render(): React.ReactNode {
+    if (this.state.error !== null) {
+      return (
+        <div
+          className="tw-rounded-md tw-border tw-border-solid tw-border-error tw-bg-error tw-p-3 tw-text-error"
+          data-story-render-error={this.state.error}
+          role="alert"
+        >
+          {this.props.storyId}: {this.state.error}
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+function StoryContent({ story }: { story: StoryDefinition }): React.ReactElement {
+  return <>{story.render()}</>;
+}
+
+function renderStoryContent(story: StoryDefinition): React.ReactElement {
+  return (
+    <StoryErrorBoundary key={story.id} storyId={story.id}>
+      <StoryContent story={story} />
+    </StoryErrorBoundary>
+  );
+}
+
 class GalleryStoryModal extends ReactModal {
   constructor(
     app: App,
-    private readonly story: StoryDefinition
+    private readonly story: StoryDefinition,
+    private width: number,
+    private readonly onDidClose: () => void
   ) {
     super(app, story.name);
   }
@@ -160,30 +212,59 @@ class GalleryStoryModal extends ReactModal {
         data-gallery-host="modal"
         data-gallery-host-content
         data-gallery-story-id={this.story.id}
+        data-story={this.story.id}
+        data-story-width={this.width}
       >
-        {this.story.render()}
+        {renderStoryContent(this.story)}
       </div>
     );
   }
+
+  onClose(): void {
+    super.onClose();
+    this.onDidClose();
+  }
+
+  setWidth(width: number): void {
+    this.width = width;
+    const storyElement = this.contentEl.querySelector<HTMLElement>("[data-story]");
+    if (storyElement) {
+      storyElement.dataset.storyWidth = String(width);
+    }
+  }
 }
 
-function ModalStoryHost({ story }: StoryHostProps): React.ReactElement {
+function ModalStoryHost({ onHostChange, story, width }: StoryHostProps): React.ReactElement {
   const app = useApp();
   const activeModal = React.useRef<GalleryStoryModal | null>(null);
+  const widthRef = React.useRef(width);
+  widthRef.current = width;
   const openModal = React.useCallback(() => {
     activeModal.current?.close();
-    const modal = new GalleryStoryModal(app, story);
+    const modal = new GalleryStoryModal(app, story, widthRef.current, () => {
+      if (activeModal.current === modal) {
+        activeModal.current = null;
+        onHostChange?.(story.id, null);
+      }
+    });
     activeModal.current = modal;
     modal.open();
-  }, [app, story]);
+    onHostChange?.(story.id, () => modal.close());
+  }, [app, onHostChange, story]);
 
   React.useEffect(() => {
     openModal();
     return () => {
-      activeModal.current?.close();
+      const modal = activeModal.current;
       activeModal.current = null;
+      modal?.close();
+      onHostChange?.(story.id, null);
     };
-  }, [openModal]);
+  }, [onHostChange, openModal, story.id]);
+
+  React.useEffect(() => {
+    activeModal.current?.setWidth(width);
+  }, [width]);
 
   return (
     <div className="tw-flex tw-flex-col tw-items-start tw-gap-2 tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-primary tw-p-4">
@@ -197,12 +278,17 @@ function ModalStoryHost({ story }: StoryHostProps): React.ReactElement {
   );
 }
 
-function PopoverStoryHost({ story }: StoryHostProps): React.ReactElement {
+function PopoverStoryHost({ onHostChange, story, width }: StoryHostProps): React.ReactElement {
   const [open, setOpen] = React.useState(true);
   const [portalContainer, setPortalContainer] = React.useState<HTMLElement | null>(null);
   const rememberTrigger = React.useCallback((trigger: HTMLButtonElement | null) => {
     setPortalContainer(trigger?.doc.body ?? null);
   }, []);
+
+  React.useEffect(() => {
+    onHostChange?.(story.id, open ? () => setOpen(false) : null);
+    return () => onHostChange?.(story.id, null);
+  }, [onHostChange, open, story.id]);
 
   return (
     <div className="tw-flex tw-min-h-32 tw-items-start tw-justify-center tw-p-4">
@@ -218,8 +304,10 @@ function PopoverStoryHost({ story }: StoryHostProps): React.ReactElement {
           data-gallery-host="popover"
           data-gallery-host-content
           data-gallery-story-id={story.id}
+          data-story={story.id}
+          data-story-width={width}
         >
-          {story.render()}
+          {renderStoryContent(story)}
         </PopoverContent>
       </Popover>
     </div>
@@ -227,13 +315,31 @@ function PopoverStoryHost({ story }: StoryHostProps): React.ReactElement {
 }
 
 /* eslint-disable tailwindcss/no-custom-classname -- These are Obsidian's native settings host classes, not gallery styling. */
-function SettingsTabStoryHost({ story }: StoryHostProps): React.ReactElement {
+function SettingsTabStoryHost({ onHostChange, story, width }: StoryHostProps): React.ReactElement {
+  const [open, setOpen] = React.useState(true);
+
+  React.useEffect(() => {
+    onHostChange?.(story.id, open ? () => setOpen(false) : null);
+    return () => onHostChange?.(story.id, null);
+  }, [onHostChange, open, story.id]);
+
+  if (!open) {
+    return <></>;
+  }
+
   return (
-    <div className="modal mod-settings" data-gallery-host-content>
+    <div
+      className="modal mod-settings"
+      data-gallery-host="settings-tab"
+      data-gallery-host-content
+      data-gallery-story-id={story.id}
+      data-story={story.id}
+      data-story-width={width}
+    >
       <div className="modal-content">
         <div className="vertical-tabs">
           <div className="vertical-tab-content-container">
-            <div className="vertical-tab-content">{story.render()}</div>
+            <div className="vertical-tab-content">{renderStoryContent(story)}</div>
           </div>
         </div>
       </div>
@@ -242,14 +348,21 @@ function SettingsTabStoryHost({ story }: StoryHostProps): React.ReactElement {
 }
 /* eslint-enable tailwindcss/no-custom-classname */
 
-function renderLeafStory(story: StoryDefinition, showHeading: boolean): React.ReactElement {
+function renderLeafStory(
+  story: StoryDefinition,
+  showHeading: boolean,
+  width: number,
+  renderRevision = 0
+): React.ReactElement {
   return (
     <section
       aria-label={`${story.name} story`}
       data-gallery-host={story.host}
       data-gallery-layout={story.layout}
       data-gallery-story-id={story.id}
-      key={story.id}
+      data-story={story.id}
+      data-story-width={width}
+      key={`${story.id}:${renderRevision}`}
       className={cn("tw-flex tw-flex-col tw-gap-2", story.layout === "fullscreen" && "tw-h-full")}
     >
       {showHeading && (
@@ -258,14 +371,19 @@ function renderLeafStory(story: StoryDefinition, showHeading: boolean): React.Re
           <code className="tw-text-smallest tw-text-muted">{story.id}</code>
         </header>
       )}
-      <div className={getLayoutClassName(story.layout)}>{story.render()}</div>
+      <div className={getLayoutClassName(story.layout)}>{renderStoryContent(story)}</div>
     </section>
   );
 }
 
-function renderSelectedStory(story: StoryDefinition): React.ReactElement {
+function renderSelectedStory(
+  story: StoryDefinition,
+  width: number,
+  renderRevision: number,
+  onHostChange?: GalleryHostChange
+): React.ReactElement {
   if (story.host === "leaf") {
-    return renderLeafStory(story, false);
+    return renderLeafStory(story, false, width, renderRevision);
   }
 
   return (
@@ -275,11 +393,17 @@ function renderSelectedStory(story: StoryDefinition): React.ReactElement {
       data-gallery-host={story.host}
       data-gallery-layout={story.layout}
       data-gallery-story-id={story.id}
-      key={story.id}
+      key={`${story.id}:${renderRevision}`}
     >
-      {story.host === "modal" && <ModalStoryHost story={story} />}
-      {story.host === "popover" && <PopoverStoryHost story={story} />}
-      {story.host === "settings-tab" && <SettingsTabStoryHost story={story} />}
+      {story.host === "modal" && (
+        <ModalStoryHost onHostChange={onHostChange} story={story} width={width} />
+      )}
+      {story.host === "popover" && (
+        <PopoverStoryHost onHostChange={onHostChange} story={story} width={width} />
+      )}
+      {story.host === "settings-tab" && (
+        <SettingsTabStoryHost onHostChange={onHostChange} story={story} width={width} />
+      )}
     </section>
   );
 }
@@ -464,9 +588,9 @@ export function resolveGalleryViewState(
   const selectedSubtree = selectedSubtreeIsValid
     ? requestedSubtree
     : (selectedStory?.title ?? null);
-  const width = isGalleryWidth(state.width)
+  const width = isPositiveWidth(state.width)
     ? state.width
-    : isGalleryWidth(selectedStory?.width)
+    : isPositiveWidth(selectedStory?.width)
       ? selectedStory.width
       : DEFAULT_WIDTH;
 
@@ -483,7 +607,13 @@ export function resolveGalleryViewState(
  *
  * @param props - Catalog, persisted state, and the callback used to save user navigation changes.
  */
-export function Gallery({ catalog, onStateChange, state }: GalleryProps): React.ReactElement {
+export function Gallery({
+  catalog,
+  onHostChange,
+  onStateChange,
+  renderRevision = 0,
+  state,
+}: GalleryProps): React.ReactElement {
   const [filter, setFilter] = React.useState("");
   const filteredStories = React.useMemo(
     () => catalog.stories.filter((story) => storyMatchesFilter(story, filter)),
@@ -688,11 +818,12 @@ export function Gallery({ catalog, onStateChange, state }: GalleryProps): React.
                 selectedStory?.layout === "fullscreen" && !state.contactSheet && "tw-h-full"
               )}
               data-gallery-width={state.width}
+              style={{ width: state.width }}
             >
               {state.contactSheet ? (
                 contactSheetStories.length > 0 || hostCardStories.length > 0 ? (
                   <>
-                    {contactSheetStories.map((story) => renderLeafStory(story, true))}
+                    {contactSheetStories.map((story) => renderLeafStory(story, true, state.width))}
                     {hostCardStories.map((story) => renderHostCard(story, selectStory))}
                   </>
                 ) : (
@@ -701,7 +832,7 @@ export function Gallery({ catalog, onStateChange, state }: GalleryProps): React.
                   </p>
                 )
               ) : selectedStory ? (
-                renderSelectedStory(selectedStory)
+                renderSelectedStory(selectedStory, state.width, renderRevision, onHostChange)
               ) : (
                 <p className="tw-m-0 tw-text-ui-smaller tw-text-muted">No story selected.</p>
               )}
