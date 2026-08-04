@@ -89,7 +89,7 @@ function makeCatalog(): GalleryCatalog {
     coveredCount: 4,
     stories: [
       makeStory("Agent Mode/Agent Welcome Card/Default", { layout: "fullscreen" }),
-      makeStory("UI/Badge/Status", { layout: "centered" }),
+      makeStory("UI/Badge/Status", { layout: "centered", width: 340 }),
       makeStory("UI/Button/Modal", { host: "modal" }),
       makeStory("UI/Button/Popover", { host: "popover" }),
       makeStory("UI/Button/Primary", {
@@ -368,6 +368,22 @@ describe("Gallery", () => {
   });
 
   describe("Gallery()", () => {
+    it("uses explicit single-side dividers for gallery chrome", () => {
+      const gallery = render(<GalleryHarness catalog={makeCatalog()} />);
+      const dividers = gallery.container.querySelectorAll(
+        ".copilot-divider-b, .copilot-gallery-divider-l, .copilot-gallery-divider-r"
+      );
+
+      expect(gallery.container.querySelectorAll(".copilot-divider-b")).toHaveLength(3);
+      expect(gallery.container.querySelectorAll(".copilot-gallery-divider-r")).toHaveLength(1);
+      expect(
+        gallery.container.querySelectorAll(".copilot-gallery-divider-l").length
+      ).toBeGreaterThan(0);
+      for (const divider of dividers) {
+        expect(divider.classList.contains("tw-border-solid")).toBe(false);
+      }
+    });
+
     it("visibly exposes nested components, story switches, selected styling, and the current id", () => {
       const gallery = render(<GalleryHarness catalog={makeCatalog()} />);
       const navigation = gallery.getByRole("complementary", {
@@ -397,9 +413,20 @@ describe("Gallery", () => {
           '[data-story="Agent Mode/Agent Welcome Card/Default"][data-story-width="400"]'
         )
       ).toBeTruthy();
+      expect(gallery.queryByText("Current width:")).toBeNull();
       expect(
-        gallery.getByText("Switch themes in Obsidian settings; the gallery follows.")
-      ).toBeTruthy();
+        gallery.queryByText("Switch themes in Obsidian settings; the gallery follows.")
+      ).toBeNull();
+      expect(
+        within(navigation).queryByRole("button", {
+          name: /Show (selected story|subtree contact sheet)/,
+        })
+      ).toBeNull();
+      expect(
+        within(navigation).queryByText((_content, element) =>
+          Boolean(element?.tagName === "P" && element.textContent?.startsWith("Subtree:"))
+        )
+      ).toBeNull();
     });
 
     it("filters by component title or story name and restores the tree when cleared", () => {
@@ -468,9 +495,41 @@ describe("Gallery", () => {
 
       fireEvent.click(gallery.getByRole("button", { name: "Show UI contact sheet" }));
 
-      fireEvent.click(gallery.getByRole("button", { name: "Show selected story" }));
+      fireEvent.click(gallery.getByRole("button", { name: "Modal" }));
       expect(gallery.getByText("UI/Button/Modal")).toBeTruthy();
       expect(gallery.container.querySelectorAll("[data-gallery-story-id]")).toHaveLength(1);
+    });
+
+    it("allows contact sheet headings and long exact story ids to wrap", () => {
+      const storyId = "Agent Mode/Agent Status Card/IncompatibleWarning";
+      const catalog = {
+        componentCount: 1,
+        coveredCount: 1,
+        stories: [makeStory(storyId)],
+      };
+      const gallery = render(
+        <GalleryHarness
+          catalog={catalog}
+          initialState={{
+            contactSheet: true,
+            selectedStoryId: storyId,
+            selectedSubtree: "Agent Mode/Agent Status Card",
+            width: 300,
+          }}
+        />
+      );
+      const story = gallery.container.querySelector(`[data-gallery-story-id="${storyId}"]`);
+      const header = story?.querySelector("header");
+      const heading = header?.querySelector("h3");
+      const exactId = header?.querySelector("code");
+
+      expect(heading?.textContent).toBe("IncompatibleWarning");
+      expect(heading?.classList.contains("tw-min-w-0")).toBe(true);
+      expect(heading?.classList.contains("tw-break-words")).toBe(true);
+      expect(exactId?.textContent).toBe(storyId);
+      expect(exactId?.classList.contains("tw-min-w-0")).toBe(true);
+      expect(exactId?.classList.contains("tw-break-all")).toBe(true);
+      expect(exactId?.classList.contains("tw-text-right")).toBe(true);
     });
 
     it("opens a selected modal once until the user selects away and back", () => {
@@ -649,7 +708,7 @@ describe("Gallery", () => {
       fireEvent.click(gallery.getByRole("button", { name: "300" }));
       expect(canvas?.dataset.galleryWidth).toBe("300");
       expect(canvas?.style.width).toBe("300px");
-      expect(gallery.getByText("Current width:").parentElement?.textContent).toContain("300px");
+      expect(gallery.queryByText("Current width:")).toBeNull();
 
       const fullscreenContent = gallery.container.querySelector<HTMLElement>(
         '[data-gallery-story-id="Agent Mode/Agent Welcome Card/Default"] > div'
@@ -662,9 +721,11 @@ describe("Gallery", () => {
       expect(canvas?.parentElement?.parentElement?.classList.contains("tw-p-4")).toBe(false);
 
       fireEvent.click(gallery.getByRole("button", { name: "Status" }));
+      expect(canvas?.dataset.galleryWidth).toBe("300");
       const centeredContent = gallery.container.querySelector<HTMLElement>(
         '[data-gallery-story-id="UI/Badge/Status"] > div'
       );
+      expect(centeredContent?.parentElement?.dataset.storyWidth).toBe("300");
       expect(centeredContent?.classList.contains("tw-items-center")).toBe(true);
       expect(centeredContent?.classList.contains("tw-justify-center")).toBe(true);
       expect(centeredContent?.classList.contains("tw-p-4")).toBe(true);
@@ -678,14 +739,62 @@ describe("Gallery", () => {
       expect(paddedContent?.classList.contains("tw-p-4")).toBe(true);
     });
 
-    it("uses a positive external width without adding another width control", () => {
+    it("applies a valid custom width across stories and rejects invalid drafts", () => {
+      const gallery = render(<GalleryHarness catalog={makeCatalog()} />);
+      const canvas = gallery.container.querySelector<HTMLElement>(".copilot-gallery-canvas");
+      const customWidth = gallery.getByRole("spinbutton", {
+        name: "Custom story width in pixels",
+      }) as HTMLInputElement;
+      const applyCustomWidth = gallery.getByRole("button", { name: "Apply custom width" });
+
+      expect(customWidth.value).toBe("");
+      expect(applyCustomWidth.hasAttribute("disabled")).toBe(true);
+
+      customWidth.focus();
+      fireEvent.change(customWidth, { target: { value: "1920" } });
+      fireEvent.keyDown(customWidth, { key: "Enter" });
+      expect(canvas?.dataset.galleryWidth).toBe("1920");
+      expect(canvas?.style.width).toBe("1920px");
+      expect(customWidth.value).toBe("1920");
+      expect(gallery.container.ownerDocument.activeElement).toBe(customWidth);
+
+      fireEvent.change(customWidth, { target: { value: "1440" } });
+      applyCustomWidth.focus();
+      fireEvent.click(applyCustomWidth);
+      expect(canvas?.dataset.galleryWidth).toBe("1440");
+      expect(customWidth.value).toBe("1440");
+      expect(gallery.container.ownerDocument.activeElement).toBe(applyCustomWidth);
+
+      fireEvent.click(gallery.getByRole("button", { name: "Status" }));
+      expect(canvas?.dataset.galleryWidth).toBe("1440");
+      expect(
+        gallery.container.querySelector('[data-story="UI/Badge/Status"][data-story-width="1440"]')
+      ).toBeTruthy();
+
+      fireEvent.change(customWidth, { target: { value: "0" } });
+      expect(applyCustomWidth.hasAttribute("disabled")).toBe(true);
+      fireEvent.blur(customWidth);
+      expect(customWidth.value).toBe("1440");
+      expect(canvas?.dataset.galleryWidth).toBe("1440");
+
+      fireEvent.click(gallery.getByRole("button", { name: "600" }));
+      expect(customWidth.value).toBe("");
+      fireEvent.click(gallery.getByRole("button", { name: "Primary" }));
+      expect(canvas?.dataset.galleryWidth).toBe("600");
+    });
+
+    it("shows a positive external width in the custom input without adding a preset", () => {
       const gallery = render(
         <GalleryHarness catalog={makeCatalog()} initialState={{ width: 512 }} />
       );
       const canvas = gallery.container.querySelector<HTMLElement>(".copilot-gallery-canvas");
+      const customWidth = gallery.getByRole("spinbutton", {
+        name: "Custom story width in pixels",
+      }) as HTMLInputElement;
 
       expect(canvas?.dataset.galleryWidth).toBe("512");
       expect(canvas?.style.width).toBe("512px");
+      expect(customWidth.value).toBe("512");
       expect(gallery.getAllByRole("button", { name: /^(300|340|400|600)$/ })).toHaveLength(4);
       expect(gallery.container.querySelector('[data-story-width="512"]')).toBeTruthy();
     });

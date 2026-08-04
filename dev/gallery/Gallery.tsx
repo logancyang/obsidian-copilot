@@ -89,10 +89,91 @@ interface StoryHostProps {
   width: number;
 }
 
+interface CustomWidthControlProps {
+  onApply: (width: number) => void;
+  width: number;
+}
+
+interface CustomWidthDraft {
+  sourceWidth: number;
+  value: string;
+}
+
 const DEFAULT_WIDTH: GalleryWidth = 400;
 
 function isPositiveWidth(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value > 0;
+}
+
+function CustomWidthControl({ onApply, width }: CustomWidthControlProps): React.ReactElement {
+  const widthIsPreset = GALLERY_WIDTHS.some((presetWidth) => presetWidth === width);
+  const defaultDraft = widthIsPreset ? "" : String(width);
+  const [draftState, setDraftState] = React.useState<CustomWidthDraft>(() => ({
+    sourceWidth: width,
+    value: defaultDraft,
+  }));
+  if (draftState.sourceWidth !== width) {
+    setDraftState({ sourceWidth: width, value: defaultDraft });
+  }
+  const draft = draftState.sourceWidth === width ? draftState.value : defaultDraft;
+  const parsedWidth = Number(draft);
+  const draftIsValid =
+    draft.trim() !== "" && Number.isInteger(parsedWidth) && isPositiveWidth(parsedWidth);
+
+  const apply = () => {
+    if (draftIsValid) {
+      onApply(parsedWidth);
+    }
+  };
+
+  const resetInvalidDraft = () => {
+    if (!draftIsValid) {
+      setDraftState({ sourceWidth: width, value: defaultDraft });
+    }
+  };
+
+  return (
+    <>
+      <input
+        aria-invalid={draft !== "" && !draftIsValid}
+        aria-label="Custom story width in pixels"
+        className={cn(
+          "tw-h-6 tw-w-24 tw-rounded-md tw-border tw-border-solid tw-bg-primary tw-px-2 tw-text-center tw-text-ui-smaller tw-text-normal focus:tw-border-border-focus focus:tw-outline-none",
+          widthIsPreset ? "tw-border-border" : "tw-border-interactive-accent",
+          draft !== "" && !draftIsValid && "tw-border-error"
+        )}
+        inputMode="numeric"
+        min={1}
+        onBlur={resetInvalidDraft}
+        onChange={(event) =>
+          setDraftState({ sourceWidth: width, value: event.currentTarget.value })
+        }
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            apply();
+          } else if (event.key === "Escape") {
+            setDraftState({ sourceWidth: width, value: defaultDraft });
+          }
+        }}
+        placeholder="Custom px"
+        step={1}
+        title="Enter 1920 for a 1080p-wide viewport"
+        type="number"
+        value={draft}
+      />
+      <Button
+        aria-label="Apply custom width"
+        disabled={!draftIsValid}
+        onClick={apply}
+        size="sm"
+        type="button"
+        variant="secondary"
+      >
+        Apply
+      </Button>
+    </>
+  );
 }
 
 function storyBelongsToSubtree(story: StoryDefinition, subtree: string): boolean {
@@ -394,8 +475,12 @@ function renderLeafStory(
     >
       {showHeading && (
         <header className="tw-flex tw-items-baseline tw-justify-between tw-gap-2">
-          <h3 className="tw-m-0 tw-text-ui-small tw-font-semibold">{story.name}</h3>
-          <code className="tw-text-smallest tw-text-muted">{story.id}</code>
+          <h3 className="tw-m-0 tw-min-w-0 tw-break-words tw-text-ui-small tw-font-semibold">
+            {story.name}
+          </h3>
+          <code className="tw-min-w-0 tw-break-all tw-text-right tw-text-smallest tw-text-muted">
+            {story.id}
+          </code>
         </header>
       )}
       <div className={getLayoutClassName(story.layout)}>{renderStoryContent(story)}</div>
@@ -497,7 +582,7 @@ function StoryTree({
             </Button>
 
             {(node.stories.length > 0 || node.children.size > 0) && (
-              <div className="tw-ml-3 tw-border-l tw-border-solid tw-border-border tw-pl-2">
+              <div className="copilot-gallery-divider-l tw-ml-3 tw-pl-2">
                 {node.stories.map((story) => {
                   const selected = story.id === selectedStoryId && !showContactSheet;
 
@@ -672,14 +757,12 @@ export function Gallery({
         (story) => story.host !== "leaf" && storyBelongsToSubtree(story, selectedSubtree)
       )
     : [];
-
   const selectStory = (story: StoryDefinition) => {
     onStateChange({
       ...state,
       contactSheet: false,
       selectedStoryId: story.id,
       selectedSubtree: story.title,
-      width: story.width ?? state.width,
     });
   };
 
@@ -721,22 +804,14 @@ export function Gallery({
     onStateChange({ ...state, contactSheet: true, selectedSubtree: path });
   };
 
-  const toggleContactSheet = () => {
-    onStateChange({
-      ...state,
-      contactSheet: !state.contactSheet,
-      selectedSubtree,
-    });
-  };
-
   return (
     <div className="tw-flex tw-h-full tw-min-h-0 tw-bg-primary tw-text-normal">
       <aside
         aria-label="Component and story navigation"
-        className="tw-flex tw-w-64 tw-shrink-0 tw-flex-col tw-border-r tw-border-solid tw-border-border tw-bg-secondary"
+        className="copilot-gallery-divider-r tw-flex tw-w-64 tw-shrink-0 tw-flex-col tw-bg-secondary"
         onKeyDown={handleTreeKeyDown}
       >
-        <header className="tw-flex tw-flex-col tw-gap-1 tw-border-b tw-border-solid tw-border-border tw-p-3">
+        <header className="copilot-divider-b tw-flex tw-flex-col tw-gap-1 tw-p-3">
           <h1 className="tw-m-0 tw-text-ui-medium tw-font-semibold">Component gallery</h1>
           <p className="tw-m-0 tw-text-smallest tw-text-muted" data-gallery-coverage-summary>
             {catalog.componentCount} presentational components · {catalog.coveredCount} with stories
@@ -744,7 +819,7 @@ export function Gallery({
           </p>
         </header>
 
-        <div className="tw-flex tw-flex-col tw-gap-2 tw-border-b tw-border-solid tw-border-border tw-p-3">
+        <div className="copilot-divider-b tw-p-3">
           <label className="tw-flex tw-flex-col tw-gap-1 tw-text-ui-smaller tw-font-medium">
             Filter components and stories
             <input
@@ -756,18 +831,6 @@ export function Gallery({
               value={filter}
             />
           </label>
-          <Button
-            aria-pressed={state.contactSheet}
-            onClick={toggleContactSheet}
-            size="sm"
-            type="button"
-            variant={state.contactSheet ? "default" : "secondary"}
-          >
-            {state.contactSheet ? "Show selected story" : "Show subtree contact sheet"}
-          </Button>
-          <p className="tw-m-0 tw-text-smallest tw-text-muted">
-            Subtree: <strong>{selectedSubtree ?? "None"}</strong>
-          </p>
         </div>
 
         <nav aria-label="Story tree" className="tw-min-h-0 tw-flex-1 tw-overflow-y-auto tw-p-2">
@@ -787,7 +850,7 @@ export function Gallery({
       </aside>
 
       <main className="tw-flex tw-min-w-0 tw-flex-1 tw-flex-col tw-overflow-hidden">
-        <header className="tw-flex tw-flex-wrap tw-items-start tw-justify-between tw-gap-3 tw-border-b tw-border-solid tw-border-border tw-p-4">
+        <header className="copilot-divider-b tw-flex tw-flex-wrap tw-items-start tw-justify-between tw-gap-3 tw-p-4">
           <div className="tw-min-w-0">
             <p className="tw-m-0 tw-text-smallest tw-font-semibold tw-uppercase tw-text-muted">
               {state.contactSheet ? "Current subtree" : "Current story"}
@@ -814,8 +877,11 @@ export function Gallery({
             )}
           </div>
 
-          <div className="tw-flex tw-flex-col tw-items-end tw-gap-1">
-            <div aria-label="Story width" className="tw-flex tw-flex-wrap tw-justify-end tw-gap-1">
+          <div className="tw-flex tw-items-center tw-justify-end">
+            <div
+              aria-label="Story width"
+              className="tw-flex tw-flex-wrap tw-items-center tw-justify-end tw-gap-1"
+            >
               {GALLERY_WIDTHS.map((width) => (
                 <Button
                   aria-pressed={state.width === width}
@@ -828,13 +894,11 @@ export function Gallery({
                   {width}
                 </Button>
               ))}
+              <CustomWidthControl
+                onApply={(width) => onStateChange({ ...state, width })}
+                width={state.width}
+              />
             </div>
-            <p className="tw-m-0 tw-text-smallest tw-text-muted">
-              Current width: <strong>{state.width}px</strong>
-            </p>
-            <p className="tw-m-0 tw-text-smallest tw-text-muted">
-              Switch themes in Obsidian settings; the gallery follows.
-            </p>
           </div>
         </header>
 
