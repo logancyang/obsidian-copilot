@@ -298,7 +298,10 @@ describe("main", () => {
         const gallery = render(renderView() as ReactElement);
 
         expect(gallery.getByText("UI/Button/Sizes")).toBeTruthy();
-        expect(gallery.getByText("Current width:").parentElement?.textContent).toContain("300px");
+        expect(gallery.getByRole("button", { name: "300" }).getAttribute("aria-pressed")).toBe(
+          "true"
+        );
+        expect(gallery.queryByText("Current width:")).toBeNull();
         expect(gallery.container.querySelectorAll("[data-gallery-story-id]")).toHaveLength(1);
         expect(
           gallery.container.querySelector('[data-gallery-story-id="UI/Button/Sizes"]')
@@ -422,13 +425,13 @@ describe("main", () => {
         }
         const gallery = render(renderView() as ReactElement);
 
-        fireEvent.click(gallery.getByRole("button", { name: "Sizes" }));
-        gallery.rerender(renderView() as ReactElement);
         fireEvent.click(gallery.getByRole("button", { name: "600" }));
+        gallery.rerender(renderView() as ReactElement);
+        fireEvent.click(gallery.getByRole("button", { name: "Disabled" }));
 
         expect(view.getState()).toMatchObject({
           contactSheet: false,
-          selectedStoryId: "UI/Button/Sizes",
+          selectedStoryId: "UI/Button/Disabled",
           selectedSubtree: "UI/Button",
           width: 600,
         });
