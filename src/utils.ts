@@ -230,6 +230,9 @@ export function getTagsFromNote(app: App, file: TFile, frontmatterOnly = true): 
   return Array.from(allTags);
 }
 
+/** Canonical empty array for property values, frozen for referential stability. */
+const EMPTY_PROPERTY_VALUES = Object.freeze([]) as unknown as string[];
+
 /**
  * Read the values of a single frontmatter property from a note. Backs the
  * Project "Property" context source, which includes notes by a user-defined
@@ -248,7 +251,7 @@ export function getPropertyValuesFromNote(app: App, file: TFile, key: string): s
   // member — e.g. `key: "constructor"` on a note without it would otherwise
   // surface the prototype's function value.
   if (!frontmatter || !Object.hasOwn(frontmatter, key)) {
-    return [];
+    return EMPTY_PROPERTY_VALUES;
   }
   const raw = (frontmatter as Record<string, unknown>)[key];
   // Reason: only scalars round-trip through the `[key:value]` grammar. An object
