@@ -10,8 +10,10 @@ const badgeVariants = cva(
       variant: {
         default: "tw-bg-primary-alt tw-shadow",
         secondary: "tw-bg-secondary-alt",
-        destructive: "tw-bg-modifier-error tw-shadow",
+        destructive: "tw-bg-modifier-error tw-text-on-accent tw-shadow",
         outline: "tw-border tw-border-solid tw-border-border",
+        success: "tw-bg-success tw-text-success",
+        accent: "tw-bg-interactive-accent tw-text-on-accent",
       },
     },
     defaultVariants: {

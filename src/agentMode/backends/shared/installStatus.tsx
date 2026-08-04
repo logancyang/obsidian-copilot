@@ -1,14 +1,11 @@
 import type { InstallState } from "@/agentMode/session/types";
 import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
 import { Check } from "lucide-react";
 import React from "react";
 
 interface InstallBadgeSpec {
   label: string;
-  variant: "outline" | "destructive";
-  /** Extra text color class layered on the badge. */
-  className?: string;
+  variant: "outline" | "destructive" | "success";
   /** Render a leading check glyph (ready state). */
   showCheck?: boolean;
   /** Tooltip text (error message). */
@@ -21,7 +18,7 @@ interface InstallBadgeSpec {
  */
 export function installBadge(state: InstallState): InstallBadgeSpec | null {
   if (state.kind === "ready") {
-    return { label: "Ready", variant: "outline", className: "tw-text-success", showCheck: true };
+    return { label: "Ready", variant: "success", showCheck: true };
   }
   if (state.kind === "checking") {
     return { label: "Checking…", variant: "outline" };
@@ -43,7 +40,7 @@ export const InstallBadge: React.FC<{ state: InstallState }> = ({ state }) => {
   const spec = installBadge(state);
   if (!spec) return null;
   return (
-    <Badge variant={spec.variant} className={cn("tw-gap-1", spec.className)} title={spec.title}>
+    <Badge variant={spec.variant} className="tw-gap-1" title={spec.title}>
       {spec.showCheck && <Check className="tw-size-icon-xs" />}
       {spec.label}
     </Badge>
