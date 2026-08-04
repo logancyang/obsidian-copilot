@@ -3,7 +3,7 @@ import { mountPluginViewRoot, type PluginViewRootHandle } from "@/utils/react/mo
 import { render, within } from "@testing-library/react";
 import GalleryPlugin, { GALLERY_VIEWTYPE } from "./main";
 import type { App, Command, PluginManifest, WorkspaceLeaf } from "obsidian";
-import type { ReactElement, ReactNode } from "react";
+import { createElement, useState, type ReactElement, type ReactNode } from "react";
 
 jest.mock("@/utils/react/mountPluginViewRoot", () => ({
   mountPluginViewRoot: jest.fn(),
@@ -231,6 +231,28 @@ describe("main", () => {
             },
           ])
         ).toThrow('Story "UI/MissingComponent/Broken" must define render or meta.component');
+      });
+
+      it("renders story functions through React and uses their authored display names", () => {
+        function HookStory(): ReactElement {
+          const [label] = useState("Hook-backed story");
+          return createElement("span", null, label);
+        }
+
+        const gallery = render(
+          view.renderTree([
+            {
+              default: { title: "UI/HookStory" },
+              ExportName: { name: "Display name", render: HookStory },
+            },
+          ]) as ReactElement
+        );
+
+        const story = gallery.getByRole("region", { name: "Display name story" });
+        expect(within(story).getByRole("heading", { level: 3, name: "Display name" })).toBeTruthy();
+        expect(within(story).getByText("Hook-backed story")).toBeTruthy();
+
+        gallery.unmount();
       });
     });
 

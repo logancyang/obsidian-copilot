@@ -1,4 +1,4 @@
-import type { ComponentType, ReactNode } from "react";
+import type { ComponentType } from "react";
 
 export type Host = "leaf" | "modal" | "popover" | "settings-tab";
 export type Layout = "padded" | "centered" | "fullscreen";
@@ -20,6 +20,6 @@ export interface Meta<P = unknown> {
 export interface StoryObj<P = unknown> {
   name?: string;
   args?: Partial<P>;
-  render?: (args: P) => ReactNode;
+  render?: ComponentType<Partial<P>>;
   parameters?: GalleryParameters;
 }

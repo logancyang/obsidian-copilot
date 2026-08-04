@@ -65,10 +65,11 @@ class GalleryView extends ItemView {
             const args = { ...meta.args, ...story.args };
             const gallery = { ...meta.parameters?.gallery, ...story.parameters?.gallery };
             const storyId = `${meta.title}/${exportName}`;
+            const displayName = story.name ?? exportName;
             let node: React.ReactNode;
 
             if (story.render) {
-              node = story.render(args);
+              node = React.createElement(story.render, args);
             } else if (meta.component) {
               node = React.createElement(meta.component, args);
             } else {
@@ -78,7 +79,7 @@ class GalleryView extends ItemView {
             return React.createElement(
               "section",
               {
-                "aria-label": `${exportName} story`,
+                "aria-label": `${displayName} story`,
                 "data-gallery-coverage": gallery.coverage,
                 "data-gallery-host": gallery.host,
                 "data-gallery-layout": gallery.layout,
@@ -86,7 +87,7 @@ class GalleryView extends ItemView {
                 className: cn("tw-flex tw-flex-col tw-gap-2"),
                 key: storyId,
               },
-              React.createElement("h3", null, exportName),
+              React.createElement("h3", null, displayName),
               node
             );
           })
