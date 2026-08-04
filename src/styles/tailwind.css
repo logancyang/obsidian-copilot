@@ -877,7 +877,8 @@ body.is-mobile
   .workspace-tab-container
   :is(
     .workspace-leaf-content[data-type="copilot-chat-view"],
-    .workspace-leaf-content[data-type="copilot-agent-chat-view"]
+    .workspace-leaf-content[data-type="copilot-agent-chat-view"],
+    .workspace-leaf-content[data-type="copilot-component-gallery"]
   )
   .view-content {
   padding-bottom: var(--size-4-1) !important;
@@ -889,7 +890,8 @@ body.is-mobile
     .workspace-tab-container
     :is(
       .workspace-leaf-content[data-type="copilot-chat-view"],
-      .workspace-leaf-content[data-type="copilot-agent-chat-view"]
+      .workspace-leaf-content[data-type="copilot-agent-chat-view"],
+      .workspace-leaf-content[data-type="copilot-component-gallery"]
     )
     .view-content {
     padding-bottom: calc(
