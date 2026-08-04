@@ -8,6 +8,7 @@ import {
   createPatternSettingsValue,
   getDecodedPatterns,
   getMatchingPatterns,
+  getPropertyPattern,
   getSystemExcludedFolders,
   isInternalExcludedPath,
   parsePropertyPattern,
@@ -728,6 +729,20 @@ describe("searchUtils", () => {
       } finally {
         Object.assign(platform, restore);
       }
+    });
+  });
+
+  describe("getPropertyPattern()", () => {
+    it("returns [key:value] when value is provided", () => {
+      expect(getPropertyPattern("Topics", "Physics")).toBe("[Topics:Physics]");
+    });
+
+    it("returns [key:] when value is omitted", () => {
+      expect(getPropertyPattern("Topics")).toBe("[Topics:]");
+    });
+
+    it("returns [key:] when value is empty string", () => {
+      expect(getPropertyPattern("Topics", "")).toBe("[Topics:]");
     });
   });
 });
