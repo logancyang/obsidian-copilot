@@ -20,6 +20,7 @@ Copilot for Obsidian is an AI-powered assistant plugin that integrates various L
 
 - **Always write generalizable solutions.** No hardcoded folder names, file patterns, or special-case logic (no "piano notes" / "daily notes" branches). Make varying behavior configurable, not hardcoded.
 - **Never modify AI prompt content** — system prompts, model adapter prompts, etc. — unless the user explicitly asks.
+- **Use stories for user-visible React work.** When a feature adds or changes a component or a meaningful visual state, add or update its adjacent `*.stories.tsx` file and verify the rendered states in the component gallery. Stories complement unit tests; non-visual changes do not require one. Follow the [`Component gallery workflow`](./designdocs/agents/TESTING_GUIDE.md#component-gallery-workflow).
 - **Referential stability.** Never return a freshly-allocated `[]` / `{}` for an "empty" slice; return a frozen module-level constant (canonical examples: `EMPTY_PROVIDERS` / `EMPTY_CONFIGURED_MODELS` / `EMPTY_BACKENDS` in `src/settings/model.ts`).
 - **Structure unit tests by module, class, and callable.** Use exactly one top-level `describe("moduleName", ...)` for the module under test; do not split the same subject across multiple top-level `describe` blocks. Within that module suite, wrap each class's tests in exactly one `describe("ClassName", ...)` so method ownership remains visible, then give each method exactly one nested `describe("methodName()", ...)` group. Keep module-level functions directly under the module suite, with exactly one `describe("functionName()", ...)` group per function. Merge cases that exercise the same callable. Separate same-callable groups only when a material test-lifecycle constraint makes merging misleading, and document that reason next to the groups. Write `it(...)` descriptions that state the observable behavior without requiring the reader to inspect the test body.
 - **Pair every production TypeScript function and method with unit coverage.** Directly test exported and public callables; cover private and module-local helpers through their observable public contract unless direct isolation materially improves clarity. Test-only helper functions are exempt.
@@ -35,14 +36,15 @@ Copilot for Obsidian is an AI-powered assistant plugin that integrates various L
 
 Read the matching guide when your task touches that area — they aren't loaded by default.
 
-| When you're…                                                          | Read                                                                               |
-| --------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| writing or altering tests, or doing E2E via the Obsidian CLI          | [`designdocs/agents/TESTING_GUIDE.md`](./designdocs/agents/TESTING_GUIDE.md)       |
-| writing code: DI/structure, TypeScript, React, comments, CSS/Tailwind | [`designdocs/agents/STYLE_GUIDE.md`](./designdocs/agents/STYLE_GUIDE.md)           |
-| touching plugin runtime: the `app`, network requests, popout windows  | [`designdocs/agents/PLUGIN_DEV_GUIDE.md`](./designdocs/agents/PLUGIN_DEV_GUIDE.md) |
-| using a specific LLM provider (e.g. AWS Bedrock)                      | [`designdocs/agents/VENDOR_GUIDE.md`](./designdocs/agents/VENDOR_GUIDE.md)         |
-| running a multi-step dev session                                      | [`designdocs/agents/PROCESS_GUIDE.md`](./designdocs/agents/PROCESS_GUIDE.md)       |
-| changing user-facing behavior                                         | [`designdocs/agents/DOCS_GUIDE.md`](./designdocs/agents/DOCS_GUIDE.md)             |
+| When you're…                                                          | Read                                                                                            |
+| --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| writing or altering tests, or doing E2E via the Obsidian CLI          | [`designdocs/agents/TESTING_GUIDE.md`](./designdocs/agents/TESTING_GUIDE.md)                    |
+| building or changing user-visible React components or visual states   | [`Component gallery workflow`](./designdocs/agents/TESTING_GUIDE.md#component-gallery-workflow) |
+| writing code: DI/structure, TypeScript, React, comments, CSS/Tailwind | [`designdocs/agents/STYLE_GUIDE.md`](./designdocs/agents/STYLE_GUIDE.md)                        |
+| touching plugin runtime: the `app`, network requests, popout windows  | [`designdocs/agents/PLUGIN_DEV_GUIDE.md`](./designdocs/agents/PLUGIN_DEV_GUIDE.md)              |
+| using a specific LLM provider (e.g. AWS Bedrock)                      | [`designdocs/agents/VENDOR_GUIDE.md`](./designdocs/agents/VENDOR_GUIDE.md)                      |
+| running a multi-step dev session                                      | [`designdocs/agents/PROCESS_GUIDE.md`](./designdocs/agents/PROCESS_GUIDE.md)                    |
+| changing user-facing behavior                                         | [`designdocs/agents/DOCS_GUIDE.md`](./designdocs/agents/DOCS_GUIDE.md)                          |
 
 ## Important notes
 

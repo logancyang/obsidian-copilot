@@ -396,7 +396,46 @@ For more aggressive resets, manipulate files directly on disk under the vault
 path (from `app.vault.adapter.basePath`) and then call
 `$OBS vault=$VAULT reload` to make Obsidian re-scan.
 
-## Component gallery agent loop
+## Component gallery workflow
+
+Use the component gallery whenever a feature adds or changes a user-visible React component or a meaningful visual state. A story is not required for non-visual backend, data, or tooling changes. Gallery verification complements callable-level unit coverage; it does not replace it.
+
+### Authoring stories
+
+1. Add or update a `*.stories.tsx` file beside the component. The generated gallery index discovers `src/**/*.stories.tsx`; do not edit `dev/gallery/stories.generated.ts`.
+2. Import `Meta` and `StoryObj` from `@/lib/story`, declare component metadata with `satisfies Meta<Props>`, and type every named story as `StoryObj<Props>`.
+3. Cover the load-bearing states a user can actually see: default, empty, loading, success, error, disabled, overflow-prone content, or other states introduced by the feature. Use realistic copy and fixture props rather than production stores or runtime singletons.
+4. Prefer `args` for ordinary prop states and `render` for compositions. Hook-backed render functions are supported. Keep fixtures deterministic and actions inert unless interaction is the behavior under test.
+5. Choose `parameters.gallery.host` (`leaf`, `modal`, `popover`, or `settings-tab`), `layout` (`padded`, `centered`, or `fullscreen`), and an optional supported `width` (`300`, `340`, `400`, or `600`) that match the real component boundary. Use `coverage: false` only for an intentional presentational-component opt-out.
+6. If a component cannot render without plugin state, extract or expose a presentational boundary that accepts the required data as props; do not widen the Gallery import fence to reach settings, stores, or runtime singletons.
+
+A minimal adjacent story looks like this:
+
+```tsx
+import type { Meta, StoryObj } from "@/lib/story";
+import { StatusCard, type StatusCardProps } from "./StatusCard";
+
+const meta = {
+  title: "Feature/Status Card",
+  component: StatusCard,
+  parameters: { gallery: { host: "leaf", layout: "padded", width: 300 } },
+} satisfies Meta<StatusCardProps>;
+export default meta;
+
+export const Error: StoryObj<StatusCardProps> = {
+  args: { message: "The operation could not be completed.", tone: "error" },
+};
+```
+
+Before live verification, run the focused unit tests for the changed component and story contract, then build the development plugin:
+
+```bash
+npm run gallery:build
+```
+
+Deploy only to the explicit Gallery test vault with `npm run gallery:vault`. Confirm the target is `copilot-test-vault` before trusting or changing live state; never use the focused/default vault.
+
+### Agent verification loop
 
 When the development-only component gallery plugin is loaded, its typed
 `window.__gallery` handle can select and audit stories without screenshots.
