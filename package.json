@@ -8,7 +8,7 @@
     "dev:tailwind": "npx tailwindcss -i src/styles/tailwind.css -o styles.css --watch",
     "dev:esbuild": "node esbuild.config.mjs",
     "gallery:css": "npx tailwindcss -i src/styles/tailwind.css -o dev/gallery/styles.css",
-    "gallery:build": "npm run gallery:css && node dev/gallery/esbuild.config.mjs production",
+    "gallery:build": "node scripts/gen-gallery-stories.mjs && npm run gallery:css && node dev/gallery/esbuild.config.mjs production",
     "gallery:vault": "npm run gallery:build && bash scripts/gallery-vault.sh",
     "build": "npm run build:tailwind && npm run build:esbuild || exit 1",
     "build:tailwind": "npx tailwindcss -i src/styles/tailwind.css -o styles.css --minify",
