@@ -120,7 +120,7 @@ any subcommand) and binds the call to a specific renderer.
 
 ```bash
 OBS=/Applications/Obsidian.app/Contents/MacOS/obsidian
-VAULT=copilot-test-vault   # use $COPILOT_TEST_VAULT_PATH's basename
+VAULT="$(basename "$COPILOT_TEST_VAULT_PATH")"
 
 $OBS vault=$VAULT vault           # echoes name/path of the targeted vault
 ```
@@ -433,7 +433,7 @@ Before live verification, run the focused unit tests for the changed component a
 npm run gallery:build
 ```
 
-Deploy only to the explicit Gallery test vault with `npm run gallery:vault`. Confirm the target is `copilot-test-vault` before trusting or changing live state; never use the focused/default vault.
+Deploy to the non-production test vault configured by `COPILOT_TEST_VAULT_PATH` with `npm run gallery:vault`. Before any CLI or UI mutation, verify that the resolved vault name and path match that configuration; never rely on the implicitly focused renderer.
 
 ### Agent verification loop
 
@@ -480,7 +480,7 @@ A minimal smoke-test scaffold:
 
 ```bash
 OBS=/Applications/Obsidian.app/Contents/MacOS/obsidian
-VAULT=copilot-test-vault
+VAULT="$(basename "$COPILOT_TEST_VAULT_PATH")"
 
 # 1. Preflight — verify target + build
 $OBS vault=$VAULT eval code='JSON.stringify({
