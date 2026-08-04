@@ -58,19 +58,64 @@ if [[ ! "$PLUGIN_ID" =~ ^[a-z0-9-]+$ ]]; then
 fi
 PLUGIN_ID_JSON="$(node -e 'process.stdout.write(JSON.stringify(process.argv[1]))' "$PLUGIN_ID")"
 
-PLUGIN_DIR="$VAULT_PATH/.obsidian/plugins/$PLUGIN_ID"
-mkdir -p "$PLUGIN_DIR"
-
-echo "==> Linking gallery artifacts into $PLUGIN_DIR"
+GALLERY_SOURCE_DIR="$WORKTREE_ROOT/dev/gallery"
 for artifact in main.js manifest.json styles.css; do
-  source_path="$WORKTREE_ROOT/dev/gallery/$artifact"
-  if [[ "$artifact" != "styles.css" && ! -f "$source_path" ]]; then
+  source_path="$GALLERY_SOURCE_DIR/$artifact"
+  if [[ ! -f "$source_path" ]]; then
     echo "error: expected gallery artifact missing: $source_path" >&2
     exit 1
   fi
-  rm -f "$PLUGIN_DIR/$artifact"
-  ln -s "$source_path" "$PLUGIN_DIR/$artifact"
 done
+touch "$GALLERY_SOURCE_DIR/.hotreload"
+
+PLUGIN_ROOT="$VAULT_PATH/.obsidian/plugins"
+PLUGIN_DIR="$PLUGIN_ROOT/$PLUGIN_ID"
+mkdir -p "$PLUGIN_ROOT"
+
+preflight_legacy_plugin_dir() {
+  local entry
+  local entry_name
+
+  while IFS= read -r -d '' entry; do
+    entry_name="${entry##*/}"
+    case "$entry_name" in
+      main.js|manifest.json|styles.css)
+        if [[ ! -L "$entry" ]]; then
+          echo "error: refusing to replace gallery directory with non-symlink artifact: $entry" >&2
+          return 1
+        fi
+        ;;
+      .hotreload)
+        if [[ ! -f "$entry" || -L "$entry" ]]; then
+          echo "error: refusing to replace gallery directory with invalid marker: $entry" >&2
+          return 1
+        fi
+        ;;
+      *)
+        echo "error: refusing to replace gallery directory with unexpected entry: $entry" >&2
+        return 1
+        ;;
+    esac
+  done < <(find "$PLUGIN_DIR" -mindepth 1 -maxdepth 1 -print0)
+}
+
+echo "==> Linking gallery plugin directory at $PLUGIN_DIR"
+if [[ -L "$PLUGIN_DIR" ]]; then
+  rm -f "$PLUGIN_DIR"
+elif [[ -d "$PLUGIN_DIR" ]]; then
+  preflight_legacy_plugin_dir
+  for entry_name in main.js manifest.json styles.css .hotreload; do
+    entry_path="$PLUGIN_DIR/$entry_name"
+    if [[ -e "$entry_path" || -L "$entry_path" ]]; then
+      rm -f "$entry_path"
+    fi
+  done
+  rmdir "$PLUGIN_DIR"
+elif [[ -e "$PLUGIN_DIR" ]]; then
+  echo "error: refusing to replace non-directory gallery plugin path: $PLUGIN_DIR" >&2
+  exit 1
+fi
+ln -s "$GALLERY_SOURCE_DIR" "$PLUGIN_DIR"
 
 echo "==> Reloading gallery plugin in Obsidian (vault dir: $VAULT_PATH)"
 if [[ ! -x "$OBSIDIAN_BIN" ]]; then
