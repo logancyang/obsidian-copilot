@@ -1,6 +1,15 @@
-import { backendRegistry, getActiveBackendDescriptor } from "@/agentMode/backends/registry";
+import {
+  backendRegistry,
+  getActiveBackendDescriptor,
+  listBackendDescriptors,
+} from "@/agentMode/backends/registry";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
-import type { BackendAuthStatus, BackendDescriptor, InstallState } from "@/agentMode/session/types";
+import type {
+  BackendAuthStatus,
+  BackendDescriptor,
+  BackendId,
+  InstallState,
+} from "@/agentMode/session/types";
 import { logError } from "@/logger";
 import { useSettingsValue } from "@/settings/model";
 import { Notice } from "obsidian";
@@ -87,6 +96,49 @@ export function useBackendInstallState(
     void signature;
     return descriptor.getInstallState(settings);
   }, [descriptor, settings, signature]);
+}
+
+/**
+ * Same contract as `useBackendInstallState`, widened to every registered
+ * backend at once, for surfaces that list all agents side by side. One store
+ * subscription fans out to every descriptor and the snapshot is the joined
+ * signature, so a descriptor that allocates a fresh state object per read still
+ * cannot force a rerender — and the returned record keeps its identity until a
+ * backend's readiness actually changes.
+ * @param plugin - The plugin instance used to subscribe to backend-specific readiness changes.
+ */
+export function useBackendInstallStates(plugin: CopilotPlugin): Record<BackendId, InstallState> {
+  const settings = useSettingsValue();
+  const subscribe = React.useCallback(
+    (listener: () => void) => {
+      const unsubscribes = listBackendDescriptors().map((descriptor) =>
+        descriptor.subscribeInstallState(plugin, listener)
+      );
+      return () => {
+        for (const unsubscribe of unsubscribes) unsubscribe();
+      };
+    },
+    [plugin]
+  );
+  const getSnapshot = React.useCallback(
+    () =>
+      listBackendDescriptors()
+        .map(
+          (descriptor) =>
+            `${descriptor.id}=${installStateSignature(descriptor.getInstallState(settings))}`
+        )
+        .join("|"),
+    [settings]
+  );
+  const signature = React.useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  return React.useMemo(() => {
+    void signature;
+    const states = {} as Record<BackendId, InstallState>;
+    for (const descriptor of listBackendDescriptors()) {
+      states[descriptor.id] = descriptor.getInstallState(settings);
+    }
+    return states;
+  }, [settings, signature]);
 }
 
 export interface BackendAuthUiState {
