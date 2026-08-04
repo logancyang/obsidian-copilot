@@ -1,4 +1,5 @@
 import { CustomModel, ProjectConfig } from "@/aiParams";
+import { getModelKeyFromModel } from "@/lib/model-key";
 import { atom, createStore, useAtomValue } from "jotai";
 import { v4 as uuidv4 } from "uuid";
 
@@ -17,6 +18,8 @@ import {
   EmbeddingModelProviders,
   SEND_SHORTCUT,
 } from "@/constants";
+
+export { getModelKeyFromModel } from "@/lib/model-key";
 
 /**
  * We used to store commands in the settings file with the following interface.
@@ -1453,20 +1456,6 @@ function mergeAllActiveModelsWithCoreModels(settings: CopilotSettings): CopilotS
     mergeActiveModels(settings.activeEmbeddingModels, BUILTIN_EMBEDDING_MODELS)
   );
   return settings;
-}
-
-/**
- * Get a unique model key from a CustomModel instance.
- * Format: modelName|provider
- *
- * Agent Mode picker entries optionally carry `_backendId` (set by the picker
- * for synthesized agent models). When present, the key is prefixed with
- * the backend id so two backends reporting the same agent-native model id
- * (e.g. both surfacing a `sonnet` alias) get distinct keys / React ids.
- */
-export function getModelKeyFromModel(model: CustomModel & { _backendId?: string }): string {
-  const base = `${model.name}|${model.provider}`;
-  return model._backendId ? `${model._backendId}:${base}` : base;
 }
 
 function mergeActiveModels(

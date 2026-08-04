@@ -11,6 +11,7 @@ import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { ActionButtons } from "./action-buttons";
 import { MODAL_MIN_HEIGHT_COMPACT, MODAL_MIN_HEIGHT_EXPANDED } from "./constants";
 import { Button } from "@/components/ui/button";
+import { useSettingsValue } from "@/settings/model";
 
 interface MenuCommandModalProps {
   open: boolean;
@@ -89,6 +90,7 @@ export function MenuCommandModal({
   onIncludeNoteContextChange,
   renderMarkdown,
 }: MenuCommandModalProps) {
+  const settings = useSettingsValue();
   // P0 Fix: Treat streaming as "loading" state to show Stop button
   const actionState =
     contentState.type === "loading"
@@ -188,7 +190,8 @@ export function MenuCommandModal({
               variant="ghost"
               value={selectedModel}
               onChange={onSelectModel}
-              models={models}
+              models={models ?? settings.activeModels}
+              apiKeySettings={models ? undefined : settings}
               disabled={isBusy}
             />
             {onIncludeNoteContextChange && (
