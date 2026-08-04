@@ -3,6 +3,7 @@ export type AuditCheck =
   | "off-token-color"
   | "overflow"
   | "render-failure"
+  | "unsupported-color"
   | "zero-size";
 
 export interface AuditFinding {
@@ -26,9 +27,25 @@ interface Color {
 
 const COLOR_TOKEN_NAME =
   /(?:color|background|text|interactive|accent|icon|link|tag|code|canvas|graph|input|divider|border)/i;
-const MINIMUM_CONTRAST_RATIO = 4.5;
+const NORMAL_TEXT_CONTRAST_RATIO = 4.5;
+const LARGE_TEXT_CONTRAST_RATIO = 3;
 
 function parseComputedColor(value: string): Color | null {
+  const colorFunction = value
+    .trim()
+    .match(/^color\(srgb\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)(?:\s*\/\s*([\d.]+%?))?\)$/i);
+  if (colorFunction) {
+    const alphaValue = colorFunction[4] ?? "1";
+    const alpha = Number.parseFloat(alphaValue) / (alphaValue.endsWith("%") ? 100 : 1);
+    const color = {
+      r: Number.parseFloat(colorFunction[1]) * 255,
+      g: Number.parseFloat(colorFunction[2]) * 255,
+      b: Number.parseFloat(colorFunction[3]) * 255,
+      a: alpha,
+    };
+    return Object.values(color).every(Number.isFinite) && alpha >= 0 ? color : null;
+  }
+
   const match = value.trim().match(/^rgba?\((.*)\)$/i);
   if (!match) {
     return null;
@@ -44,7 +61,7 @@ function parseComputedColor(value: string): Color | null {
   const alphaPart = parts[3];
   const alpha = alphaPart ? Number.parseFloat(alphaPart) / (alphaPart.endsWith("%") ? 100 : 1) : 1;
   const color = { r: channel(parts[0]), g: channel(parts[1]), b: channel(parts[2]), a: alpha };
-  return parts.length >= 3 && Object.values(color).every(Number.isFinite) && alpha > 0
+  return parts.length >= 3 && Object.values(color).every(Number.isFinite) && alpha >= 0
     ? color
     : null;
 }
@@ -106,10 +123,41 @@ function contrastRatio(foreground: Color, background: Color): number {
   return (lighter + 0.05) / (darker + 0.05);
 }
 
-function hasDirectText(element: HTMLElement): boolean {
-  return [...element.childNodes].some(
+function hasRenderedText(element: HTMLElement): boolean {
+  const directText = [...element.childNodes].some(
     (node) => node.nodeType === 3 && Boolean(node.textContent?.trim())
   );
+  if (directText) {
+    return true;
+  }
+  if (element.tagName === "INPUT" || element.tagName === "TEXTAREA") {
+    const control = element as HTMLInputElement | HTMLTextAreaElement;
+    return Boolean(control.value.trim() || control.placeholder.trim());
+  }
+  if (element.tagName === "SELECT") {
+    return Boolean((element as HTMLSelectElement).selectedOptions[0]?.textContent?.trim());
+  }
+  return false;
+}
+
+function effectiveOpacity(element: HTMLElement): number {
+  let opacity = 1;
+  let current: HTMLElement | null = element;
+  while (current) {
+    const parsed = Number.parseFloat(current.win.getComputedStyle(current).opacity);
+    if (Number.isFinite(parsed)) {
+      opacity *= parsed;
+    }
+    current = current.parentElement;
+  }
+  return opacity;
+}
+
+function minimumContrast(styles: CSSStyleDeclaration): number {
+  const size = Number.parseFloat(styles.fontSize);
+  const weight = Number.parseInt(styles.fontWeight, 10);
+  const isLarge = size >= 24 || (size >= 18.66 && weight >= 700);
+  return isLarge ? LARGE_TEXT_CONTRAST_RATIO : NORMAL_TEXT_CONTRAST_RATIO;
 }
 
 function effectiveBackground(element: HTMLElement): Color | null {
@@ -131,6 +179,44 @@ function effectiveBackground(element: HTMLElement): Color | null {
 function elementName(element: HTMLElement): string {
   const tag = element.tagName.toLocaleLowerCase();
   return element.id ? `${tag}#${element.id}` : tag;
+}
+
+interface InspectedColor {
+  color: Color | null;
+  role: string;
+  value: string;
+}
+
+function inspectedColors(element: HTMLElement, styles: CSSStyleDeclaration): InspectedColor[] {
+  const values: Array<[string, string]> = [
+    ["background", styles.backgroundColor],
+    ...(hasRenderedText(element)
+      ? ([["foreground", styles.color]] as Array<[string, string]>)
+      : []),
+    ["border-top", styles.borderTopColor],
+    ["border-right", styles.borderRightColor],
+    ["border-bottom", styles.borderBottomColor],
+    ["border-left", styles.borderLeftColor],
+    ["outline", styles.outlineColor],
+    ["fill", styles.fill],
+    ["stroke", styles.stroke],
+  ];
+  const colors = values.map(([role, value]) => ({ color: parseComputedColor(value), role, value }));
+
+  for (const [role, value] of [
+    ["box-shadow", styles.boxShadow],
+    ["text-shadow", styles.textShadow],
+  ] as const) {
+    for (const match of value.matchAll(/(?:rgba?\([^)]*\)|color\(srgb[^)]*\))/gi)) {
+      colors.push({ color: parseComputedColor(match[0]), role, value: match[0] });
+    }
+  }
+  return colors;
+}
+
+function hasVisibleUnsupportedColor(value: string): boolean {
+  const normalized = value.trim().toLocaleLowerCase();
+  return Boolean(normalized && normalized !== "none" && normalized !== "transparent");
 }
 
 /**
@@ -170,21 +256,28 @@ export function resolveObsidianColorTokens(doc: Document): ReadonlySet<string> {
  *
  * @param storyElement - The sole mounted case carrying its stable story identity.
  * @param tokenColors - Resolved theme colors used to distinguish token-backed styles from literals.
+ * @param additionalRoots - Story-owned portal roots mounted outside the primary story element.
  */
 export function inspectStoryCase(
   storyElement: HTMLElement,
-  tokenColors: ReadonlySet<string> = resolveObsidianColorTokens(storyElement.doc)
+  tokenColors: ReadonlySet<string> = resolveObsidianColorTokens(storyElement.doc),
+  additionalRoots: HTMLElement[] = []
 ): AuditFinding[] {
   const story = storyElement.dataset.story ?? "unknown-story";
   const findings: AuditFinding[] = [];
   const rect = storyElement.getBoundingClientRect();
 
-  if (storyElement.scrollWidth > storyElement.clientWidth) {
-    findings.push({
-      story,
-      check: "overflow",
-      detail: `scrollWidth ${storyElement.scrollWidth} > clientWidth ${storyElement.clientWidth}`,
-    });
+  const roots = [storyElement, ...additionalRoots.filter((root) => root.isConnected)];
+  for (const root of roots) {
+    if (root.scrollWidth > root.clientWidth) {
+      findings.push({
+        story,
+        check: "overflow",
+        detail: `scrollWidth ${root.scrollWidth} > clientWidth ${root.clientWidth}${
+          root === storyElement ? "" : ` on ${elementName(root)}`
+        }`,
+      });
+    }
   }
   if (rect.width === 0 || rect.height === 0) {
     findings.push({
@@ -194,9 +287,9 @@ export function inspectStoryCase(
     });
   }
 
-  const failure = storyElement.matches("[data-story-render-error]")
-    ? storyElement
-    : storyElement.querySelector<HTMLElement>("[data-story-render-error]");
+  const failure = roots
+    .flatMap((root) => [root, ...root.querySelectorAll<HTMLElement>("[data-story-render-error]")])
+    .find((element) => element.matches("[data-story-render-error]"));
   if (failure) {
     findings.push({
       story,
@@ -206,15 +299,27 @@ export function inspectStoryCase(
   }
 
   const reportedColors = new Set<string>();
-  for (const element of [storyElement, ...storyElement.querySelectorAll<HTMLElement>("*")]) {
+  const elements = roots.flatMap((root) => [root, ...root.querySelectorAll<HTMLElement>("*")]);
+  for (const element of [...new Set(elements)]) {
     const styles = element.win.getComputedStyle(element);
-    const background = parseComputedColor(styles.backgroundColor);
-    const foreground = hasDirectText(element) ? parseComputedColor(styles.color) : null;
+    const foreground = hasRenderedText(element) ? parseComputedColor(styles.color) : null;
 
-    for (const [role, color, value] of [
-      ["background", background, styles.backgroundColor],
-      ["foreground", foreground, styles.color],
-    ] as const) {
+    for (const { color, role, value } of inspectedColors(element, styles)) {
+      if (!color && hasVisibleUnsupportedColor(value)) {
+        const key = `unsupported:${role}:${value}`;
+        if (!reportedColors.has(key)) {
+          reportedColors.add(key);
+          findings.push({
+            story,
+            check: "unsupported-color",
+            detail: `${role} ${value} on ${elementName(element)}`,
+          });
+        }
+        continue;
+      }
+      if (color?.a === 0) {
+        continue;
+      }
       if (!color || tokenColors.size === 0 || tokenColors.has(colorKey(color))) {
         continue;
       }
@@ -233,12 +338,17 @@ export function inspectStoryCase(
     if (!foreground || !backgroundBehindText || backgroundBehindText.a < 0.999) {
       continue;
     }
-    const ratio = contrastRatio(composite(foreground, backgroundBehindText), backgroundBehindText);
-    if (ratio < MINIMUM_CONTRAST_RATIO) {
+    const visibleForeground = { ...foreground, a: foreground.a * effectiveOpacity(element) };
+    const ratio = contrastRatio(
+      composite(visibleForeground, backgroundBehindText),
+      backgroundBehindText
+    );
+    const requiredRatio = minimumContrast(styles);
+    if (ratio < requiredRatio) {
       findings.push({
         story,
         check: "contrast",
-        detail: `${ratio.toFixed(1)}:1, needs ${MINIMUM_CONTRAST_RATIO}:1 on ${elementName(element)}`,
+        detail: `${ratio.toFixed(1)}:1, needs ${requiredRatio}:1 on ${elementName(element)}`,
       });
     }
   }

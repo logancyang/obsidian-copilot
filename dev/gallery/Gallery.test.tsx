@@ -123,6 +123,7 @@ function GalleryHarness({
         catalog={catalog}
         onHostChange={onHostChange}
         onStateChange={setState}
+        ownerId="test-gallery"
         state={state}
       />
     </AppContext.Provider>
@@ -538,19 +539,19 @@ describe("Gallery", () => {
         renderContent(): React.ReactElement;
       };
       const modalContent = render(modal.renderContent());
-      expect(
-        modalContent.container.querySelector(
-          '[data-story="UI/Button/Modal"][data-story-width="400"]'
-        )
-      ).toBeTruthy();
+      const modalStory = modalContent.container.querySelector<HTMLElement>(
+        '[data-story="UI/Button/Modal"][data-story-width="400"]'
+      );
+      expect(modalStory?.dataset.galleryOwner).toBe("test-gallery");
+      expect(modalStory?.style.width).toBe("400px");
       modalContent.unmount();
 
       fireEvent.click(gallery.getByRole("button", { name: "Popover" }));
-      expect(
-        activeDocument.body.querySelector(
-          '[data-gallery-host="popover"][data-story="UI/Button/Popover"][data-story-width="400"]'
-        )
-      ).toBeTruthy();
+      const popoverStory = activeDocument.body.querySelector<HTMLElement>(
+        '[data-gallery-host="popover"][data-story="UI/Button/Popover"][data-story-width="400"]'
+      );
+      expect(popoverStory?.dataset.galleryOwner).toBe("test-gallery");
+      expect(popoverStory?.style.width).toBe("400px");
 
       fireEvent.click(gallery.getByRole("button", { name: "Preferences" }));
       expect(

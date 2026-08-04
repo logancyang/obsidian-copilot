@@ -202,9 +202,10 @@ describe("main", () => {
           stories: Array<{ host: string; id: string }>;
         };
         onHostChange: (storyId: string, close: (() => void) | null) => void;
+        ownerId: string;
         state: GalleryViewState;
       }>;
-      const { catalog, onHostChange, state } = tree.props;
+      const { catalog, onHostChange, ownerId, state } = tree.props;
       const story = catalog.stories.find((candidate) => candidate.id === state.selectedStoryId);
       view.contentEl.replaceChildren();
       if (!story || state.contactSheet) {
@@ -214,6 +215,7 @@ describe("main", () => {
       const storyElement = activeDocument.createElement("div");
       storyElement.dataset.story = story.id;
       storyElement.dataset.storyWidth = String(state.width);
+      storyElement.dataset.galleryOwner = ownerId;
       if (story.id === "Gallery/Test Probes/Broken") {
         storyElement.dataset.storyRenderError = "boom";
       }
@@ -687,6 +689,20 @@ describe("main", () => {
     });
 
     describe("onunload()", () => {
+      it("cancels the active host and rejects work still queued for the plugin", async () => {
+        await view.onOpen();
+        const closeHost = installImperativeRenderSimulation();
+        (leaf as unknown as { view: GalleryViewContract }).view = view;
+        getLeavesOfType.mockReturnValue([leaf]);
+        const handle = window.__gallery as GalleryHandle;
+
+        await handle.show("Gallery/Host Environments/ResponseActions", { width: 300 });
+        plugin.onunload();
+
+        expect(closeHost).toHaveBeenCalledWith("Gallery/Host Environments/ResponseActions");
+        await expect(handle.show("UI/Button/Sizes")).rejects.toMatchObject({ name: "AbortError" });
+      });
+
       it("removes only the handle still owned by the unloading plugin instance", async () => {
         const firstHandle = window.__gallery;
         const replacement = new GalleryPlugin(app, {

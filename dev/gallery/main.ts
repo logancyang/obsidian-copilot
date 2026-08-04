@@ -49,6 +49,10 @@ interface ActiveHost {
 
 const EMPTY_STORY_IDS = Object.freeze([]) as unknown as string[];
 const STORY_MOUNT_ATTEMPTS = 100;
+const STABLE_LAYOUT_TURNS = 3;
+const STORY_PORTAL_SELECTOR =
+  '[data-radix-portal], [data-radix-popper-content-wrapper], [role="dialog"]';
+let nextGalleryOwnerId = 0;
 
 interface GalleryWindow extends Window {
   MessageChannel: typeof MessageChannel;
@@ -62,27 +66,56 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function waitForLayout(win: Window): Promise<void> {
+function abortError(): DOMException {
+  return new DOMException("Gallery operation was cancelled", "AbortError");
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw abortError();
+  }
+}
+
+function waitForLayout(win: Window, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) {
+    return Promise.reject(abortError());
+  }
   const MessageChannelConstructor = (win as Partial<GalleryWindow>).MessageChannel;
   if (
     MessageChannelConstructor &&
     (!win.document.hasFocus() || win.document.visibilityState !== "visible")
   ) {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       const channel = new MessageChannelConstructor();
+      const abort = () => {
+        channel.port1.close();
+        channel.port2.close();
+        reject(abortError());
+      };
       channel.port1.onmessage = () => {
+        signal?.removeEventListener("abort", abort);
         channel.port1.close();
         channel.port2.close();
         resolve();
       };
+      signal?.addEventListener("abort", abort, { once: true });
       channel.port2.postMessage(undefined);
     });
   }
 
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     let settled = false;
     let frame = 0;
     let timeout = 0;
+    const abort = () => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      win.clearTimeout(timeout);
+      win.cancelAnimationFrame(frame);
+      reject(abortError());
+    };
     const finish = () => {
       if (settled) {
         return;
@@ -90,8 +123,10 @@ function waitForLayout(win: Window): Promise<void> {
       settled = true;
       win.clearTimeout(timeout);
       win.cancelAnimationFrame(frame);
+      signal?.removeEventListener("abort", abort);
       resolve();
     };
+    signal?.addEventListener("abort", abort, { once: true });
     frame = win.requestAnimationFrame(finish);
     timeout = win.setTimeout(finish, 50);
   });
@@ -99,7 +134,10 @@ function waitForLayout(win: Window): Promise<void> {
 
 class GalleryView extends ItemView {
   private activeHost: ActiveHost | null = null;
+  private isOpen = false;
+  private readonly ownerId = `gallery-${++nextGalleryOwnerId}`;
   private persistedState: unknown;
+  private portalBaseline = new Set<HTMLElement>();
   private renderRevision = 0;
   private state: GalleryViewState;
   private viewRoot: PluginViewRootHandle | null = null;
@@ -139,6 +177,7 @@ class GalleryView extends ItemView {
   }
 
   async onOpen(): Promise<void> {
+    this.isOpen = true;
     this.state = resolveGalleryViewState(this.persistedState, this.catalog.stories);
     this.rememberState(this.state);
     this.viewRoot = mountPluginViewRoot(this.containerEl, this.app, () => this.renderTree());
@@ -147,6 +186,7 @@ class GalleryView extends ItemView {
   private renderTree(): React.ReactNode {
     return React.createElement(Gallery, {
       catalog: this.catalog,
+      ownerId: this.ownerId,
       onHostChange: this.handleHostChange,
       onStateChange: (state) => this.updateState(state),
       renderRevision: this.renderRevision,
@@ -181,19 +221,50 @@ class GalleryView extends ItemView {
       [...this.containerEl.doc.querySelectorAll<HTMLElement>("[data-story]")].find(
         (element) =>
           element.dataset.story === storyId &&
+          element.dataset.galleryOwner === this.ownerId &&
           (width === undefined || element.dataset.storyWidth === String(width))
       ) ?? null
     );
   }
 
-  private async waitForMountedStory(storyId: string, width: number): Promise<HTMLElement> {
+  private storySnapshot(story: HTMLElement): string {
+    const ownedPortals = this.findStoryPortals();
+    return [story, ...ownedPortals]
+      .map((element) => {
+        const rect = element.getBoundingClientRect();
+        return `${element.outerHTML.length}:${rect.width}:${rect.height}:${element.scrollWidth}:${element.scrollHeight}`;
+      })
+      .join("|");
+  }
+
+  private findStoryPortals(): HTMLElement[] {
+    const explicit = [
+      ...this.containerEl.doc.querySelectorAll<HTMLElement>(
+        `[data-gallery-owner="${this.ownerId}"]`
+      ),
+    ];
+    const newlyMounted = [
+      ...this.containerEl.doc.querySelectorAll<HTMLElement>(STORY_PORTAL_SELECTOR),
+    ].filter((element) => !this.portalBaseline.has(element));
+    return [...new Set([...explicit, ...newlyMounted])];
+  }
+
+  private async waitForMountedStory(
+    storyId: string,
+    width: number,
+    signal?: AbortSignal
+  ): Promise<HTMLElement> {
     const win = this.containerEl.win;
+    let previousSnapshot = "";
+    let stableTurns = 0;
     for (let attempt = 0; attempt < STORY_MOUNT_ATTEMPTS; attempt += 1) {
-      await waitForLayout(win);
+      await waitForLayout(win, signal);
       const mounted = this.findMountedStory(storyId, width);
       if (mounted) {
-        await waitForLayout(win);
-        if (mounted.isConnected) {
+        const snapshot = this.storySnapshot(mounted);
+        stableTurns = snapshot === previousSnapshot ? stableTurns + 1 : 0;
+        previousSnapshot = snapshot;
+        if (mounted.isConnected && stableTurns >= STABLE_LAYOUT_TURNS) {
           return mounted;
         }
       }
@@ -202,7 +273,7 @@ class GalleryView extends ItemView {
     throw new Error(`Story "${storyId}" did not mount at ${width}px`);
   }
 
-  private async closeActiveHost(): Promise<void> {
+  private async closeActiveHost(signal?: AbortSignal): Promise<void> {
     const activeHost = this.activeHost;
     if (!activeHost) {
       return;
@@ -210,21 +281,26 @@ class GalleryView extends ItemView {
 
     this.activeHost = null;
     activeHost.close();
-    await waitForLayout(this.containerEl.win);
-    await waitForLayout(this.containerEl.win);
+    await waitForLayout(this.containerEl.win, signal);
+    await waitForLayout(this.containerEl.win, signal);
   }
 
   private async renderStory(
     storyId: string,
     width: number,
-    persist: boolean
+    persist: boolean,
+    signal?: AbortSignal
   ): Promise<HTMLElement> {
     const story = this.catalog.stories.find((candidate) => candidate.id === storyId);
     if (!story) {
       throw new Error(`Unknown gallery story "${storyId}"`);
     }
 
-    await this.closeActiveHost();
+    throwIfAborted(signal);
+    await this.closeActiveHost(signal);
+    this.portalBaseline = new Set(
+      this.containerEl.doc.querySelectorAll<HTMLElement>(STORY_PORTAL_SELECTOR)
+    );
     const nextState = {
       ...this.state,
       contactSheet: false,
@@ -239,19 +315,19 @@ class GalleryView extends ItemView {
       this.state = resolveGalleryViewState(nextState, this.catalog.stories);
       this.viewRoot?.rerender();
     }
-    return this.waitForMountedStory(story.id, width);
+    return this.waitForMountedStory(story.id, width, signal);
   }
 
-  async showStory(storyId: string, width?: number): Promise<void> {
+  async showStory(storyId: string, width?: number, signal?: AbortSignal): Promise<void> {
     const requestedWidth = width ?? this.state.width;
     if (!isPositiveWidth(requestedWidth)) {
       throw new Error("Gallery width must be a positive finite number");
     }
-    await this.renderStory(storyId, requestedWidth, true);
+    await this.renderStory(storyId, requestedWidth, true, signal);
   }
 
-  async auditStories(widths: number[]): Promise<AuditReport[]> {
-    const previousState = this.state;
+  async auditStories(widths: number[], signal?: AbortSignal): Promise<AuditReport[]> {
+    const previousState = resolveGalleryViewState(this.persistedState, this.catalog.stories);
     const reports: AuditReport[] = [];
     const vaultWithConfig = this.app.vault as unknown as
       | { getConfig?: (key: string) => unknown }
@@ -262,12 +338,16 @@ class GalleryView extends ItemView {
 
     try {
       for (const width of widths) {
+        throwIfAborted(signal);
         const findings: AuditFinding[] = [];
 
         for (const story of this.catalog.stories) {
           try {
-            const mounted = await this.renderStory(story.id, width, false);
-            findings.push(...inspectStoryCase(mounted, tokenColors));
+            const mounted = await this.renderStory(story.id, width, false, signal);
+            const portals = this.findStoryPortals().filter(
+              (element) => element !== mounted && !mounted.contains(element)
+            );
+            findings.push(...inspectStoryCase(mounted, tokenColors, portals));
           } catch (error) {
             findings.push({
               story: story.id,
@@ -275,7 +355,7 @@ class GalleryView extends ItemView {
               detail: errorMessage(error),
             });
           } finally {
-            await this.closeActiveHost();
+            await this.closeActiveHost(signal);
           }
         }
 
@@ -286,19 +366,28 @@ class GalleryView extends ItemView {
         });
       }
     } finally {
-      await this.closeActiveHost();
-      this.renderTemporaryState(previousState);
-      await waitForLayout(this.containerEl.win);
+      await this.closeActiveHost().catch(() => undefined);
+      if (this.isOpen) {
+        this.renderTemporaryState(previousState);
+        await waitForLayout(this.containerEl.win, signal);
+      }
     }
 
     return reports;
   }
 
   async onClose(): Promise<void> {
+    this.isOpen = false;
     await this.closeActiveHost();
-    this.rememberState(this.state);
+    this.rememberState(resolveGalleryViewState(this.persistedState, this.catalog.stories));
     this.viewRoot?.unmount();
     this.viewRoot = null;
+  }
+
+  cancelOperations(): void {
+    const activeHost = this.activeHost;
+    this.activeHost = null;
+    activeHost?.close();
   }
 }
 
@@ -311,6 +400,8 @@ export default class GalleryPlugin extends Plugin {
   private externalOperationQueue: Promise<void> = Promise.resolve();
   private galleryHandle: GalleryHandle | null = null;
   private lastGalleryState = resolveGalleryViewState(null, []);
+  private operationAbortController = new AbortController();
+  private readonly views = new Set<GalleryView>();
 
   async onload(): Promise<void> {
     const storyModules = await Promise.all(
@@ -322,13 +413,13 @@ export default class GalleryPlugin extends Plugin {
     this.catalog = createGalleryCatalog(storyModules, presentationalComponentCount);
     this.lastGalleryState = resolveGalleryViewState(this.lastGalleryState, this.catalog.stories);
 
-    this.registerView(
-      GALLERY_VIEWTYPE,
-      (leaf: WorkspaceLeaf) =>
-        new GalleryView(leaf, this.catalog, this.lastGalleryState, (state) => {
-          this.lastGalleryState = state;
-        })
-    );
+    this.registerView(GALLERY_VIEWTYPE, (leaf: WorkspaceLeaf) => {
+      const view = new GalleryView(leaf, this.catalog, this.lastGalleryState, (state) => {
+        this.lastGalleryState = state;
+      });
+      this.views.add(view);
+      return view;
+    });
     this.addCommand({
       id: "open-component-gallery",
       name: "Open component gallery",
@@ -350,9 +441,9 @@ export default class GalleryPlugin extends Plugin {
         if (options?.width !== undefined && !isPositiveWidth(options.width)) {
           throw new Error("Gallery width must be a positive finite number");
         }
-        await this.enqueueExternalOperation(async () => {
+        await this.enqueueExternalOperation(async (signal) => {
           const view = await this.openControlledView();
-          await view.showStory(id, options?.width);
+          await view.showStory(id, options?.width, signal);
         });
       },
       audit: async (options) => {
@@ -361,17 +452,21 @@ export default class GalleryPlugin extends Plugin {
           throw new Error("Gallery audit widths must be positive finite numbers");
         }
         const widths = [...new Set(requestedWidths)];
-        return this.enqueueExternalOperation(async () => {
+        return this.enqueueExternalOperation(async (signal) => {
           const view = await this.openControlledView();
-          return view.auditStories(widths);
+          return view.auditStories(widths, signal);
         });
       },
     };
     window.__gallery = this.galleryHandle;
   }
 
-  private enqueueExternalOperation<T>(operation: () => Promise<T>): Promise<T> {
-    const result = this.externalOperationQueue.then(operation);
+  private enqueueExternalOperation<T>(operation: (signal: AbortSignal) => Promise<T>): Promise<T> {
+    const signal = this.operationAbortController.signal;
+    const result = this.externalOperationQueue.then(() => {
+      throwIfAborted(signal);
+      return operation(signal);
+    });
     this.externalOperationQueue = result.then(
       () => undefined,
       () => undefined
@@ -400,6 +495,9 @@ export default class GalleryPlugin extends Plugin {
   }
 
   onunload(): void {
+    this.operationAbortController.abort();
+    this.views.forEach((view) => view.cancelOperations());
+    this.views.clear();
     if (window.__gallery === this.galleryHandle) {
       delete window.__gallery;
     }

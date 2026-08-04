@@ -84,6 +84,59 @@ describe("audit", () => {
 
       expect(inspectStoryCase(story, new Set(["255,255,255,1.000", "0,0,0,1.000"]))).toEqual([]);
     });
+
+    it("audits form-control text through ancestor opacity while applying the large-text threshold", () => {
+      const story = activeDocument.createElement("div");
+      story.dataset.story = "UI/Test/Typography";
+      story.style.backgroundColor = "rgb(255, 255, 255)";
+      const input = activeDocument.createElement("input");
+      input.value = "Visible value";
+      input.style.color = "rgb(170, 170, 170)";
+      input.style.opacity = "0.5";
+      const heading = activeDocument.createElement("strong");
+      heading.textContent = "Large text";
+      heading.style.color = "rgb(136, 136, 136)";
+      heading.style.fontSize = "24px";
+      heading.style.fontWeight = "700";
+      story.append(input, heading);
+      activeDocument.body.append(story);
+      setDimensions(story, { clientWidth: 300, height: 40, scrollWidth: 300, width: 300 });
+
+      const findings = inspectStoryCase(story, new Set());
+
+      expect(findings).toContainEqual(
+        expect.objectContaining({ story: "UI/Test/Typography", check: "contrast" })
+      );
+      expect(findings.filter(({ check }) => check === "contrast")).toHaveLength(1);
+      expect(findings.find(({ check }) => check === "contrast")?.detail).toContain(
+        "needs 4.5:1 on input"
+      );
+    });
+
+    it("includes story-owned portal overflow and non-text visual colors", () => {
+      const story = activeDocument.createElement("div");
+      story.dataset.story = "UI/Test/Portal";
+      story.style.backgroundColor = "rgb(255, 255, 255)";
+      activeDocument.body.append(story);
+      setDimensions(story, { clientWidth: 300, height: 40, scrollWidth: 300, width: 300 });
+      const portal = activeDocument.createElement("div");
+      portal.style.borderTopColor = "rgb(255, 0, 0)";
+      activeDocument.body.append(portal);
+      setDimensions(portal, { clientWidth: 200, height: 20, scrollWidth: 240, width: 200 });
+
+      const findings = inspectStoryCase(story, new Set(["255,255,255,1.000"]), [portal]);
+
+      expect(findings).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ story: "UI/Test/Portal", check: "overflow" }),
+        ])
+      );
+      expect(
+        findings.some(
+          ({ check, detail }) => check === "off-token-color" && detail.includes("border-top")
+        )
+      ).toBe(true);
+    });
   });
 
   describe("getGalleryTheme()", () => {
