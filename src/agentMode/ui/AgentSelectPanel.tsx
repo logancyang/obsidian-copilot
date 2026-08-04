@@ -6,7 +6,7 @@ import React from "react";
 
 interface Props {
   plugin: CopilotPlugin;
-  manager: AgentSessionManager | null | undefined;
+  manager: AgentSessionManager;
 }
 
 /**
