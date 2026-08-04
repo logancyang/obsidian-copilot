@@ -1,11 +1,9 @@
 import { Button } from "@/components/ui/button";
-import type { GalleryParameters, Host, Layout } from "@/lib/story";
+import type { GalleryParameters, GalleryWidth, Host, Layout } from "@/lib/story";
 import { cn } from "@/lib/utils";
 import * as React from "react";
 
 export const GALLERY_WIDTHS = [300, 340, 400, 600] as const;
-
-export type GalleryWidth = (typeof GALLERY_WIDTHS)[number];
 
 interface StoryModuleMeta {
   args?: object;
@@ -22,7 +20,7 @@ interface StoryModuleStory {
   args?: object;
   name?: string;
   parameters?: GalleryParameters;
-  render?: (args: object) => React.ReactNode;
+  render?: React.ComponentType<object>;
 }
 
 export interface LoadedStoryModule {
@@ -38,7 +36,7 @@ export interface StoryDefinition {
   name: string;
   render(): React.ReactNode;
   title: string;
-  width?: number;
+  width?: GalleryWidth;
 }
 
 export interface GalleryCatalog {
@@ -136,7 +134,7 @@ function getLayoutClassName(layout: Layout): string {
     layout === "padded" && "tw-rounded-md tw-border tw-border-solid tw-border-border tw-p-4",
     layout === "centered" &&
       "tw-flex tw-min-h-64 tw-items-center tw-justify-center tw-rounded-md tw-border tw-border-solid tw-border-border tw-p-4",
-    layout === "fullscreen" && "tw-min-h-full tw-w-full"
+    layout === "fullscreen" && "tw-size-full"
   );
 }
 
@@ -148,7 +146,7 @@ function renderStory(story: StoryDefinition, showHeading: boolean): React.ReactE
       data-gallery-layout={story.layout}
       data-gallery-story-id={story.id}
       key={story.id}
-      className="tw-flex tw-flex-col tw-gap-2"
+      className={cn("tw-flex tw-flex-col tw-gap-2", story.layout === "fullscreen" && "tw-h-full")}
     >
       {showHeading && (
         <header className="tw-flex tw-items-baseline tw-justify-between tw-gap-2">
@@ -247,11 +245,12 @@ export function createGalleryCatalog(
 
   for (const { componentId, storyModule } of storyModules) {
     const meta = storyModule.default;
+    const hasStories = Object.keys(storyModule).some((exportName) => exportName !== "default");
 
     if (componentId) {
       if (meta.parameters?.gallery?.coverage === false) {
         optedOutComponentIds.add(componentId);
-      } else {
+      } else if (hasStories) {
         coveredComponentIds.add(componentId);
       }
     }
@@ -277,7 +276,9 @@ export function createGalleryCatalog(
         layout: gallery.layout ?? "padded",
         name: story.name ?? exportName,
         render: () =>
-          story.render ? story.render(args) : React.createElement(meta.component!, args),
+          story.render
+            ? React.createElement(story.render, args)
+            : React.createElement(meta.component!, args),
         title: meta.title,
         width: gallery.width,
       });
@@ -361,7 +362,7 @@ export function Gallery({ catalog, onStateChange, state }: GalleryProps): React.
       contactSheet: false,
       selectedStoryId: story.id,
       selectedSubtree: story.title,
-      width: isGalleryWidth(story.width) ? story.width : state.width,
+      width: story.width ?? state.width,
     });
   };
 
@@ -381,17 +382,22 @@ export function Gallery({ catalog, onStateChange, state }: GalleryProps): React.
     }
 
     event.preventDefault();
-    const selectedIndex = filteredStories.findIndex((story) => story.id === state.selectedStoryId);
+    const siblingStories = filteredStories.filter((story) => story.title === selectedStory?.title);
+    if (siblingStories.length === 0) {
+      return;
+    }
+
+    const selectedIndex = siblingStories.findIndex((story) => story.id === state.selectedStoryId);
     const direction = event.key === "ArrowDown" ? 1 : -1;
     const nextIndex =
       selectedIndex < 0
         ? direction > 0
           ? 0
-          : filteredStories.length - 1
-        : (selectedIndex + direction + filteredStories.length) % filteredStories.length;
-    const nextStory = filteredStories[nextIndex];
+          : siblingStories.length - 1
+        : (selectedIndex + direction + siblingStories.length) % siblingStories.length;
+    const nextStory = siblingStories[nextIndex];
     selectStory(nextStory);
-    buttons[nextIndex]?.focus();
+    buttons.find((button) => button.dataset.galleryStoryButton === nextStory.id)?.focus();
   };
 
   const selectSubtree = (path: string) => {
@@ -512,10 +518,25 @@ export function Gallery({ catalog, onStateChange, state }: GalleryProps): React.
           </div>
         </header>
 
-        <div className="tw-min-h-0 tw-flex-1 tw-overflow-auto tw-p-4">
-          <div className="tw-flex tw-min-w-max tw-justify-center">
+        <div
+          className={cn(
+            "tw-min-h-0 tw-flex-1 tw-overflow-auto",
+            selectedStory?.layout === "fullscreen" && !state.contactSheet ? "tw-h-full" : "tw-p-4"
+          )}
+        >
+          <div
+            className={cn(
+              "tw-flex tw-justify-center",
+              selectedStory?.layout === "fullscreen" && !state.contactSheet
+                ? "tw-h-full tw-min-w-0"
+                : "tw-min-w-max"
+            )}
+          >
             <div
-              className="copilot-gallery-canvas tw-flex tw-flex-col tw-gap-4"
+              className={cn(
+                "copilot-gallery-canvas tw-flex tw-flex-col tw-gap-4",
+                selectedStory?.layout === "fullscreen" && !state.contactSheet && "tw-h-full"
+              )}
               data-gallery-width={state.width}
             >
               {state.contactSheet ? (

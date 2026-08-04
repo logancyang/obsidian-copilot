@@ -11,7 +11,7 @@ import {
   resolveGalleryViewState,
   type StoryDefinition,
 } from "./Gallery";
-import type { Host, Layout } from "@/lib/story";
+import type { GalleryParameters, GalleryWidth, Host, Layout } from "@/lib/story";
 
 function makeStory(
   id: string,
@@ -20,7 +20,7 @@ function makeStory(
     layout?: Layout;
     name?: string;
     node?: React.ReactNode;
-    width?: number;
+    width?: GalleryWidth;
   } = {}
 ): StoryDefinition {
   const segments = id.split("/");
@@ -147,17 +147,58 @@ describe("Gallery", () => {
               Example: { render: () => "Bonus story" },
             },
           },
+          {
+            componentId: "@/components/ui/empty",
+            storyModule: {
+              default: { title: "UI/Empty" },
+            },
+          },
         ],
-        3
+        4
       );
 
-      expect(catalog).toMatchObject({ componentCount: 2, coveredCount: 1 });
+      expect(catalog).toMatchObject({ componentCount: 3, coveredCount: 1 });
       expect(catalog.stories.find((story) => story.id === "UI/Covered/Example")).toMatchObject({
         host: "leaf",
         layout: "padded",
         name: "Renamed example",
         width: 340,
       });
+    });
+
+    it("renders hook-backed stories through React", () => {
+      function HookStory(): React.ReactElement {
+        const [label] = React.useState("Hook-backed story");
+        return <span>{label}</span>;
+      }
+
+      const catalog = createGalleryCatalog(
+        [
+          {
+            componentId: null,
+            storyModule: {
+              default: { title: "UI/HookStory" },
+              Example: { render: HookStory },
+            },
+          },
+        ],
+        0
+      );
+
+      const story = render(<>{catalog.stories[0].render()}</>);
+      expect(story.getByText("Hook-backed story")).toBeTruthy();
+      story.unmount();
+    });
+
+    it("rejects unsupported story widths at compile time", () => {
+      const parameters: GalleryParameters = {
+        gallery: {
+          // @ts-expect-error The gallery offers only its declared viewport presets to stories.
+          width: 500,
+        },
+      };
+
+      expect(parameters.gallery?.width).toBe(500);
     });
 
     it("rejects a story without a render function or meta component", () => {
@@ -292,7 +333,7 @@ describe("Gallery", () => {
       expect(gallery.getByRole("button", { name: "Primary" })).toBeTruthy();
     });
 
-    it("switches one rendered story with mouse clicks and up/down arrow keys", () => {
+    it("switches rendered stories with mouse clicks and keeps arrow keys among siblings", () => {
       const gallery = render(<GalleryHarness catalog={makeCatalog()} />);
 
       fireEvent.click(gallery.getByRole("button", { name: "Status" }));
@@ -302,12 +343,13 @@ describe("Gallery", () => {
       const statusButton = gallery.getByRole("button", { name: "Status Selected" });
       statusButton.focus();
       fireEvent.keyDown(statusButton, { key: "ArrowDown" });
-      expect(gallery.getByText("UI/Button/Modal")).toBeTruthy();
+      expect(gallery.getByText("UI/Badge/Status")).toBeTruthy();
 
-      fireEvent.keyDown(gallery.getByRole("button", { name: "Modal Selected" }), {
+      fireEvent.click(gallery.getByRole("button", { name: "Primary" }));
+      fireEvent.keyDown(gallery.getByRole("button", { name: "Primary Selected" }), {
         key: "ArrowUp",
       });
-      expect(gallery.getByText("UI/Badge/Status")).toBeTruthy();
+      expect(gallery.getByText("UI/Button/Modal")).toBeTruthy();
     });
 
     it("renders a selected title subtree as a leaf-only contact sheet", () => {
@@ -347,8 +389,12 @@ describe("Gallery", () => {
       const fullscreenContent = gallery.container.querySelector<HTMLElement>(
         '[data-gallery-story-id="Agent Mode/Agent Welcome Card/Default"] > div'
       );
-      expect(fullscreenContent?.classList.contains("tw-w-full")).toBe(true);
+      const fullscreenStory = fullscreenContent?.parentElement;
+      expect(fullscreenContent?.classList.contains("tw-size-full")).toBe(true);
       expect(fullscreenContent?.classList.contains("tw-p-4")).toBe(false);
+      expect(fullscreenStory?.classList.contains("tw-h-full")).toBe(true);
+      expect(canvas?.classList.contains("tw-h-full")).toBe(true);
+      expect(canvas?.parentElement?.parentElement?.classList.contains("tw-p-4")).toBe(false);
 
       fireEvent.click(gallery.getByRole("button", { name: "Status" }));
       const centeredContent = gallery.container.querySelector<HTMLElement>(
