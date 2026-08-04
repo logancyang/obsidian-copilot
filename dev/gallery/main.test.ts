@@ -63,7 +63,9 @@ jest.mock("obsidian", () => {
     }
   }
 
-  return { ItemView, Plugin };
+  class Modal {}
+
+  return { ItemView, Modal, Plugin };
 });
 
 interface GalleryViewContract {
