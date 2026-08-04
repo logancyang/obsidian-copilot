@@ -1,11 +1,13 @@
 import { BinaryPathSetting } from "@/agentMode/backends/shared/BinaryPathSetting";
-import { ConfigDialogShell, ConfigSection } from "@/agentMode/backends/shared/ConfigDialogShell";
-import { InstallStatusLine } from "@/agentMode/backends/shared/installStatus";
+import {
+  ConfigDialogShell,
+  ConfigSection,
+  ConfigWarningStrip,
+} from "@/agentMode/backends/shared/ConfigDialogShell";
 import {
   AbortError,
   computeInstallState,
   InstallOptions,
-  isOpencodeVersionOutdated,
   ProgressEvent,
   toOpencodeInstallState,
 } from "@/agentMode/backends/opencode/OpencodeBinaryManager";
@@ -17,7 +19,6 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { formatBinaryPathForDisplay } from "@/utils/binaryPath";
 import { OPENCODE_PINNED_VERSION } from "@/constants";
-import { cn } from "@/lib/utils";
 import { logError } from "@/logger";
 import { useSettingsValue } from "@/settings/model";
 import { App, Notice } from "obsidian";
@@ -208,10 +209,6 @@ const OpencodeConfigBody: React.FC<{
   const customPath = customInstall?.path ?? "";
 
   const sessionState = toOpencodeInstallState(local);
-  const detail = local.kind === "installed" ? `opencode v${local.version}` : undefined;
-
-  const installedVersion = local.kind === "installed" ? local.version : null;
-  const outdated = !!installedVersion && isOpencodeVersionOutdated(installedVersion);
   const [upgradeRun, setUpgradeRun] = React.useState<RunState>({ kind: "idle" });
   const handleUpgrade = React.useCallback(() => {
     setUpgradeRun({ kind: "running", progress: null });
@@ -251,34 +248,32 @@ const OpencodeConfigBody: React.FC<{
 
   return (
     <ConfigDialogShell
-      status={<InstallStatusLine state={sessionState} detail={detail} />}
+      title="Configure opencode"
+      state={sessionState}
+      warning={
+        <ConfigWarningStrip
+          state={sessionState}
+          action={
+            upgradeRun.kind === "running" ? (
+              <>
+                <p className="tw-my-0 tw-text-xs">{phaseLabel(upgradeRun.progress)}</p>
+                <Progress value={phaseProgress(upgradeRun.progress) ?? 0} />
+              </>
+            ) : (
+              <div className="tw-flex tw-items-center tw-justify-end tw-gap-2">
+                {upgradeRun.kind === "error" && (
+                  <span className="tw-text-xs tw-text-error">{upgradeRun.message}</span>
+                )}
+                <Button variant="default" size="sm" onClick={handleUpgrade}>
+                  {isCustom ? "Run opencode upgrade" : "Upgrade to latest"}
+                </Button>
+              </div>
+            )
+          }
+        />
+      }
       onClose={onClose}
     >
-      {outdated && (
-        <div
-          className={cn(
-            "tw-flex tw-flex-col tw-gap-2 tw-rounded tw-bg-callout-warning/20 tw-p-3",
-            "tw-text-sm tw-text-warning"
-          )}
-          role="alert"
-        >
-          {upgradeRun.kind === "running" ? (
-            <>
-              <p className="tw-my-0 tw-text-xs">{phaseLabel(upgradeRun.progress)}</p>
-              <Progress value={phaseProgress(upgradeRun.progress) ?? 0} />
-            </>
-          ) : (
-            <div className="tw-flex tw-items-center tw-justify-end tw-gap-2">
-              {upgradeRun.kind === "error" && (
-                <span className="tw-text-xs tw-text-error">{upgradeRun.message}</span>
-              )}
-              <Button variant="default" size="sm" onClick={handleUpgrade}>
-                {isCustom ? "Run opencode upgrade" : "Upgrade to latest"}
-              </Button>
-            </div>
-          )}
-        </div>
-      )}
       <ConfigSection title="Download managed binary">
         <p className="tw-my-0 tw-text-sm tw-text-muted">
           Let Copilot download and manage the official opencode binary from its GitHub repo.
@@ -324,7 +319,8 @@ export class OpencodeInstallModal extends ReactModal {
     private readonly manager: OpencodeBinaryManager,
     private readonly hostInfo: { platform: string; arch: string }
   ) {
-    super(app, "Configure opencode");
+    // No native title: the shell renders it beside the status badge.
+    super(app);
   }
 
   protected renderContent(close: () => void): React.ReactElement {

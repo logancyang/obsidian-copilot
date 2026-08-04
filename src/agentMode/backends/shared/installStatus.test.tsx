@@ -1,5 +1,7 @@
 import type { InstallState } from "@/agentMode/session/types";
-import { installBadge } from "./installStatus";
+import { render, screen } from "@testing-library/react";
+import React from "react";
+import { ConfigStatusBadge, installBadge } from "./installStatus";
 
 describe("installStatus", () => {
   describe("installBadge()", () => {
@@ -50,6 +52,35 @@ describe("installStatus", () => {
         label: "Checking…",
         variant: "outline",
       });
+    });
+  });
+
+  describe("ConfigStatusBadge()", () => {
+    it.each<[InstallState["kind"], string, InstallState]>([
+      ["ready", "Ready", { kind: "ready", source: "managed" }],
+      ["absent", "Not set up", { kind: "absent" }],
+      [
+        "incompatible",
+        "Update required",
+        {
+          kind: "incompatible",
+          source: "custom",
+          currentVersion: "2.1.205",
+          minVersion: "2.1.206",
+          message: "Claude 2.1.205 is not supported.",
+        },
+      ],
+      ["checking", "Checking…", { kind: "checking", source: "managed" }],
+      ["error", "Error", { kind: "error", message: "boom" }],
+    ])("labels a %s install '%s'", (_kind, label, state) => {
+      render(<ConfigStatusBadge state={state} />);
+      expect(screen.getByText(label)).toBeTruthy();
+    });
+
+    it("names 'Not set up' where the settings card stays silent, so a dialog never looks blank", () => {
+      render(<ConfigStatusBadge state={{ kind: "absent" }} />);
+      expect(screen.getByText("Not set up")).toBeTruthy();
+      expect(installBadge({ kind: "absent" })).toBeNull();
     });
   });
 });

@@ -44,7 +44,7 @@ export {
   isOpencodeZenWireId,
 } from "./backends/opencode/opencodeModelResolve";
 export type { OpencodeProviderMapping } from "./backends/opencode/opencodeModelResolve";
-export { installBadge, InstallBadge, InstallStatusLine } from "./backends/shared/installStatus";
+export { installBadge, InstallBadge } from "./backends/shared/installStatus";
 export type {
   BackendState,
   CopilotMode,

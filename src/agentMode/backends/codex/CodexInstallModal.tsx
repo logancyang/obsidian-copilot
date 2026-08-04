@@ -1,7 +1,10 @@
 import { BinaryPathSetting } from "@/agentMode/backends/shared/BinaryPathSetting";
-import { ConfigDialogShell, ConfigSection } from "@/agentMode/backends/shared/ConfigDialogShell";
+import {
+  ConfigDialogShell,
+  ConfigSection,
+  ConfigWarningStrip,
+} from "@/agentMode/backends/shared/ConfigDialogShell";
 import { InstallCommandRow } from "@/agentMode/backends/shared/InstallCommandRow";
-import { InstallStatusLine } from "@/agentMode/backends/shared/installStatus";
 import { binaryPathInstallState } from "@/agentMode/backends/shared/simpleBinaryBackend";
 import { ReactModal } from "@/components/modals/ReactModal";
 import { useSettingsValue } from "@/settings/model";
@@ -43,7 +46,17 @@ const CodexConfigBody: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   }, []);
 
   return (
-    <ConfigDialogShell status={<InstallStatusLine state={sessionState} />} onClose={onClose}>
+    <ConfigDialogShell
+      title="Configure Codex"
+      state={sessionState}
+      warning={
+        <ConfigWarningStrip
+          state={sessionState}
+          detail="Update it with the install command below, then reopen this dialog."
+        />
+      }
+      onClose={onClose}
+    >
       <ConfigSection title="Install codex-acp">
         <InstallCommandRow command={CODEX_INSTALL_COMMAND} />
       </ConfigSection>
@@ -77,7 +90,8 @@ const CodexConfigBody: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 /** Configure dialog for the Codex backend. Opened via `descriptor.openInstallUI`. */
 export class CodexInstallModal extends ReactModal {
   constructor(app: App) {
-    super(app, "Configure Codex");
+    // No native title: the shell renders it beside the status badge.
+    super(app);
   }
 
   protected renderContent(close: () => void): React.ReactElement {

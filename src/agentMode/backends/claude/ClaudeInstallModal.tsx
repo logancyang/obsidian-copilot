@@ -1,7 +1,10 @@
 import { BinaryPathSetting } from "@/agentMode/backends/shared/BinaryPathSetting";
-import { ConfigDialogShell, ConfigSection } from "@/agentMode/backends/shared/ConfigDialogShell";
+import {
+  ConfigDialogShell,
+  ConfigSection,
+  ConfigWarningStrip,
+} from "@/agentMode/backends/shared/ConfigDialogShell";
 import { InstallCommandRow } from "@/agentMode/backends/shared/InstallCommandRow";
-import { InstallStatusLine } from "@/agentMode/backends/shared/installStatus";
 import { ReactModal } from "@/components/modals/ReactModal";
 import { getSettings, setSettings, useSettingsValue } from "@/settings/model";
 import { validateExecutableFile } from "@/utils/detectBinary";
@@ -54,7 +57,17 @@ const ClaudeConfigBody: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   }, []);
 
   return (
-    <ConfigDialogShell status={<InstallStatusLine state={sessionState} />} onClose={onClose}>
+    <ConfigDialogShell
+      title="Configure Claude"
+      state={sessionState}
+      warning={
+        <ConfigWarningStrip
+          state={sessionState}
+          detail="Update it with the install command below, then reopen this dialog."
+        />
+      }
+      onClose={onClose}
+    >
       <ConfigSection title="Install Claude Code">
         <InstallCommandRow command={CLAUDE_INSTALL_COMMAND} />
       </ConfigSection>
@@ -93,7 +106,8 @@ const ClaudeConfigBody: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 /** Configure dialog for the Claude backend. Opened via `descriptor.openInstallUI`. */
 export class ClaudeInstallModal extends ReactModal {
   constructor(app: App) {
-    super(app, "Configure Claude");
+    // No native title: the shell renders it beside the status badge.
+    super(app);
   }
 
   protected renderContent(close: () => void): React.ReactElement {
