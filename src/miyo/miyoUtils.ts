@@ -172,33 +172,35 @@ const EMPTY_MIYO_FOLDER_INCLUSIONS: MiyoFolderInclusions = Object.freeze({});
  * filter is a whitelist: per the folder API, if `include_folders` OR
  * `include_patterns` is non-empty, a file is in scope ONLY if it's under an
  * include folder or matches an include pattern. So dropping an un-mappable
- * inclusion (a `#tag` / `[[note]]`, which Miyo can't express) while still sending
- * the mappable ones would OVER-restrict — Miyo would index only the folders we
- * mapped and silently drop everything the tag/note inclusion was meant to keep.
- * That is the harmful direction (missing search results).
+ * inclusion (a `#tag` / `[[note]]` / `[key:value]`, which Miyo can't express)
+ * while still sending the mappable ones would OVER-restrict — Miyo would index
+ * only the folders we mapped and silently drop everything the un-mappable
+ * inclusion was meant to keep. That is the harmful direction (missing search
+ * results).
  *
  * So we send includes ONLY when `qaInclusions` maps CLEANLY AND COMPLETELY to
- * folder/extension terms (no tag or note components). If any tag/note pattern is
- * present, we send NO include filter at all — Miyo indexes the whole vault and
- * Copilot\'s own filters narrow results at query time. Under-indexing never
- * happens; at worst Miyo indexes a little extra, matching the exclusions bias.
+ * folder/extension terms (no tag, note, or property components). If any such
+ * pattern is present, we send NO include filter at all — Miyo indexes the whole
+ * vault and Copilot\'s own filters narrow results at query time. Under-indexing
+ * never happens; at worst Miyo indexes a little extra, matching the exclusions bias.
  *
  * @param qaInclusions - The raw `qaInclusions` settings string.
  * @returns Include fields to merge into the add-folder request; frozen-empty when
- *          nothing maps or when a tag/note pattern forces the whole-vault fallback.
+ *          nothing maps or when a tag/note/property pattern forces the whole-vault
+ *          fallback.
  */
 export function getMiyoFolderInclusions(qaInclusions: string): MiyoFolderInclusions {
   if (!qaInclusions.trim()) {
     return EMPTY_MIYO_FOLDER_INCLUSIONS;
   }
 
-  const { tagPatterns, notePatterns, extensionPatterns, folderPatterns } = categorizePatterns(
-    getDecodedPatterns(qaInclusions)
-  );
+  const { tagPatterns, notePatterns, propertyPatterns, extensionPatterns, folderPatterns } =
+    categorizePatterns(getDecodedPatterns(qaInclusions));
 
-  // Any tag/note inclusion → whitelist can\'t represent it → fall back to
-  // no-filter (index everything) rather than over-restrict.
-  if (tagPatterns.length > 0 || notePatterns.length > 0) {
+  // Any tag/note/property inclusion → whitelist can\'t represent it → fall back to
+  // no-filter (index everything) rather than over-restrict. A property matches on
+  // frontmatter, which no folder/extension term can express.
+  if (tagPatterns.length > 0 || notePatterns.length > 0 || propertyPatterns.length > 0) {
     return EMPTY_MIYO_FOLDER_INCLUSIONS;
   }
 

@@ -338,6 +338,13 @@ describe("getMiyoFolderInclusions", () => {
     expect(getMiyoFolderInclusions("[[Daily]], *.md")).toEqual({});
   });
 
+  it("FALLS BACK to no filter when a [key:value] property inclusion is present", () => {
+    // A frontmatter match has no folder/extension equivalent, so whitelisting only
+    // "Research" would drop every [Topics:Physics] note living outside it.
+    expect(getMiyoFolderInclusions("[Topics:Physics], Research")).toEqual({});
+    expect(getMiyoFolderInclusions("[Subject:], *.md")).toEqual({});
+  });
+
   it("drops root/parent pointers from include_folders", () => {
     expect(getMiyoFolderInclusions("./")).toEqual({});
     expect(getMiyoFolderInclusions("projects, .")).toEqual({ include_folders: ["projects"] });
