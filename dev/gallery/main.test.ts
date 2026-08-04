@@ -234,6 +234,12 @@ describe("main", () => {
                 Filled: { render: () => "Filled story" },
               },
             },
+            {
+              componentId: "@/components/ui/empty",
+              storyModule: {
+                default: { title: "UI/Empty" },
+              },
+            },
           ]) as ReactElement
         );
 
@@ -244,6 +250,9 @@ describe("main", () => {
 
         expect(within(firstGroup).getByText("1 story")).toBeTruthy();
         expect(within(secondGroup).getByText("2 stories")).toBeTruthy();
+        expect(
+          gallery.getByText("3 presentational components · 1 with stories · 2 missing")
+        ).toBeTruthy();
         expect(within(firstGroup).getByRole("region", { name: "Only story" })).toBeTruthy();
         expect(within(secondGroup).getByRole("region", { name: "Filled story" })).toBeTruthy();
 
@@ -313,8 +322,11 @@ describe("main", () => {
         const gallery = render(
           view.renderTree([
             {
-              default: { title: "UI/HookStory" },
-              ExportName: { name: "Display name", render: HookStory },
+              componentId: null,
+              storyModule: {
+                default: { title: "UI/HookStory" },
+                ExportName: { name: "Display name", render: HookStory },
+              },
             },
           ]) as ReactElement
         );

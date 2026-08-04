@@ -83,10 +83,10 @@ describe("gen-gallery-stories", () => {
         "utf8"
       );
 
-      expect(output).toContain("export const presentationalComponentCount = 4;");
+      expect(output).toContain("export const presentationalComponentCount = 5;");
       expect(output).toContain('componentId: "@/components/ui/button"');
       expect(output).toContain(
-        'componentId: null,\n    load: (): Promise<unknown> => import("@/future/ui/FutureCard.stories")'
+        'componentId: "@/future/ui/FutureCard",\n    load: (): Promise<unknown> => import("@/future/ui/FutureCard.stories")'
       );
     });
   });

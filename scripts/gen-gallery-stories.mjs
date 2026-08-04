@@ -3,12 +3,7 @@ import path from "node:path";
 import process from "node:process";
 
 const GENERATED_FILE = "dev/gallery/stories.generated.ts";
-const PRESENTATIONAL_COMPONENT_PATTERNS = [
-  "src/components/ui/**/*.tsx",
-  "src/agentMode/ui/**/*.tsx",
-  "src/modelManagement/ui/**/*.tsx",
-  "src/agentMode/skills/ui/**/*.tsx",
-];
+const PRESENTATIONAL_COMPONENT_PATTERNS = ["src/**/ui/**/*.tsx"];
 const STORY_PATTERNS = ["src/**/*.stories.tsx"];
 
 function isPresentationalComponent(filePath) {

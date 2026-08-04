@@ -54,7 +54,7 @@ class GalleryView extends ItemView {
 
       if (storyModule.default.parameters?.gallery?.coverage === false) {
         optedOutComponentIds.add(componentId);
-      } else {
+      } else if (Object.keys(storyModule).some((exportName) => exportName !== "default")) {
         coveredComponentIds.add(componentId);
       }
     }
