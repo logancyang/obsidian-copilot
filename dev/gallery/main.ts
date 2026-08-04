@@ -292,6 +292,7 @@ class GalleryView extends ItemView {
  */
 export default class GalleryPlugin extends Plugin {
   private catalog: GalleryCatalog = createGalleryCatalog([], 0);
+  private externalOperationQueue: Promise<void> = Promise.resolve();
   private galleryHandle: GalleryHandle | null = null;
   private lastGalleryState = resolveGalleryViewState(null, []);
 
@@ -333,8 +334,10 @@ export default class GalleryPlugin extends Plugin {
         if (options?.width !== undefined && !isPositiveWidth(options.width)) {
           throw new Error("Gallery width must be a positive finite number");
         }
-        const view = await this.openControlledView();
-        await view.showStory(id, options?.width);
+        await this.enqueueExternalOperation(async () => {
+          const view = await this.openControlledView();
+          await view.showStory(id, options?.width);
+        });
       },
       audit: async (options) => {
         const requestedWidths = options?.widths ?? [...GALLERY_WIDTHS];
@@ -342,11 +345,22 @@ export default class GalleryPlugin extends Plugin {
           throw new Error("Gallery audit widths must be positive finite numbers");
         }
         const widths = [...new Set(requestedWidths)];
-        const view = await this.openControlledView();
-        return view.auditStories(widths);
+        return this.enqueueExternalOperation(async () => {
+          const view = await this.openControlledView();
+          return view.auditStories(widths);
+        });
       },
     };
     window.__gallery = this.galleryHandle;
+  }
+
+  private enqueueExternalOperation<T>(operation: () => Promise<T>): Promise<T> {
+    const result = this.externalOperationQueue.then(operation);
+    this.externalOperationQueue = result.then(
+      () => undefined,
+      () => undefined
+    );
+    return result;
   }
 
   private async openControlledView(): Promise<GalleryView> {

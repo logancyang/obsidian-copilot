@@ -520,6 +520,65 @@ describe("main", () => {
         expect(revealLeaf).not.toHaveBeenCalled();
       });
 
+      it("serializes external operations, restores prior state, and continues after rejection", async () => {
+        const previousState = {
+          contactSheet: false,
+          selectedStoryId: "UI/Button/Variants",
+          selectedSubtree: "UI/Button",
+          width: 340,
+        };
+        await view.setState(previousState);
+        await view.onOpen();
+        installImperativeRenderSimulation();
+        (leaf as unknown as { view: GalleryViewContract }).view = view;
+        getLeavesOfType.mockReturnValue([leaf]);
+        const handle = window.__gallery as GalleryHandle;
+        const originalShowStory: GalleryViewContract["showStory"] = view.showStory;
+        let markAuditStarted: () => void = () => undefined;
+        let releaseAudit: () => void = () => undefined;
+        const auditStarted = new Promise<void>((resolve) => {
+          markAuditStarted = resolve;
+        });
+        const auditRelease = new Promise<void>((resolve) => {
+          releaseAudit = resolve;
+        });
+        jest.spyOn(view, "auditStories").mockImplementationOnce(async () => {
+          await originalShowStory.call(view, "Gallery/Host Environments/DeleteConfirmation", 300);
+          markAuditStarted();
+          await auditRelease;
+          await view.setState(previousState);
+          throw new Error("audit failed");
+        });
+        const stateBeforeShow: GalleryViewState[] = [];
+        const showStory = jest.spyOn(view, "showStory").mockImplementation(async (id, width) => {
+          stateBeforeShow.push(view.getState());
+          await originalShowStory.call(view, id, width);
+        });
+
+        const firstOperation = handle.audit({ widths: [300] });
+        await auditStarted;
+        const secondOperation = handle.show("UI/Button/Sizes", { width: 512 });
+        await Promise.resolve();
+
+        expect(showStory).not.toHaveBeenCalled();
+        expect(view.getState()).toMatchObject({
+          selectedStoryId: "Gallery/Host Environments/DeleteConfirmation",
+          width: 300,
+        });
+
+        releaseAudit();
+        await expect(firstOperation).rejects.toThrow("audit failed");
+        await secondOperation;
+
+        expect(stateBeforeShow).toEqual([previousState]);
+        expect(view.getState()).toEqual({
+          contactSheet: false,
+          selectedStoryId: "UI/Button/Sizes",
+          selectedSubtree: "UI/Button",
+          width: 512,
+        });
+      });
+
       it("opens and reveals a gallery leaf with the last ItemView state", async () => {
         await view.setState({
           selectedStoryId: "UI/Button/Variants",

@@ -400,9 +400,10 @@ path (from `app.vault.adapter.basePath`) and then call
 
 When the development-only component gallery plugin is loaded, its typed
 `window.__gallery` handle can select and audit stories without screenshots.
-Every async call below sets both `awaitPromise` and `returnByValue`; omitting
-either produces a CDP promise/remote-object description instead of the resolved
-value.
+Short async calls can set both `awaitPromise` and `returnByValue`. For a full
+audit, store the eventual result in the page and poll it: the Obsidian CLI can
+return before a long-running CDP promise settles even when `awaitPromise` is
+set.
 
 ```bash
 # Discover exact story ids.
@@ -414,8 +415,11 @@ $OBS vault=$VAULT dev:cdp method=Runtime.evaluate params='{"expression":"window.
 # Address the mounted case by its stable identity and requested width.
 $OBS vault=$VAULT dev:dom selector='[data-story="UI/Button/Variants"][data-story-width="300"]' all
 
-# Sweep an exact width array. The resolved value is one AuditReport per width.
-$OBS vault=$VAULT dev:cdp method=Runtime.evaluate params='{"expression":"window.__gallery.audit({widths:[300,340,400,600]})","awaitPromise":true,"returnByValue":true}'
+# Start an exact width sweep without relying on the CLI connection to await it.
+$OBS vault=$VAULT dev:cdp method=Runtime.evaluate params='{"expression":"window.__galleryRun={status:\"pending\"};window.__gallery.audit({widths:[300,340,400,600]}).then(value=>{window.__galleryRun={status:\"fulfilled\",value}},reason=>{window.__galleryRun={status:\"rejected\",reason:String(reason?.stack??reason)}});true","returnByValue":true}'
+
+# Repeat until status is fulfilled or rejected. A fulfilled value has one AuditReport per width.
+$OBS vault=$VAULT dev:cdp method=Runtime.evaluate params='{"expression":"window.__galleryRun","returnByValue":true}'
 ```
 
 `audit()` returns an array shaped as
@@ -427,7 +431,7 @@ automated pass ends by checking uncaught errors separately:
 
 ```bash
 $OBS vault=$VAULT dev:errors clear
-$OBS vault=$VAULT dev:cdp method=Runtime.evaluate params='{"expression":"window.__gallery.audit({widths:[300,340,400,600]})","awaitPromise":true,"returnByValue":true}'
+# Run the store-and-poll sweep above and wait for a fulfilled or rejected status.
 $OBS vault=$VAULT dev:errors
 ```
 
