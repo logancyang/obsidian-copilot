@@ -3,6 +3,7 @@
   "entry": [
     "src/main.ts",
     "dev/gallery/main.ts",
+    "src/**/*.stories.{ts,tsx}",
     "scripts/printPromptDebug.js",
     "scripts/printPromptDebugEntry.ts"
   ],

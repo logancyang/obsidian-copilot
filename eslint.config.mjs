@@ -226,7 +226,7 @@ export default [
   },
 
   {
-    files: ["dev/gallery/**/*.{ts,tsx}"],
+    files: ["dev/gallery/**/*.{ts,tsx}", "src/**/*.stories.{ts,tsx}"],
     // Test fixtures intentionally import production stories and contexts but are
     // erased from the gallery bundle, so only runtime gallery code needs this fence.
     ignores: ["dev/gallery/**/*.test.{ts,tsx}"],
@@ -236,20 +236,17 @@ export default [
         {
           patterns: [
             {
-              group: [
-                "@/*",
-                "!@/components",
-                "!@/components/ui",
-                "!@/components/ui/*",
-                "!@/components/modals",
-                "!@/components/modals/ReactModal",
-                "!@/context",
-                "!@/lib",
-                "!@/lib/*",
-                "!@/utils",
-                "!@/utils/react",
-                "!@/utils/react/mountPluginViewRoot",
-              ],
+              regex: "^\\.\\./",
+              allowTypeImports: true,
+              message:
+                "Gallery runtime and stories may not bypass the production import fence " +
+                "with parent-relative value imports. Use an allowed @/ path instead.",
+            },
+            {
+              regex:
+                "^@/(?!(?:(?:.*/)?ui/|components/modals/ReactModal$|" +
+                "components/gallery-hosts\\.fixtures$|context$|lib/[^/]+$|" +
+                "utils/react/mountPluginViewRoot$)).*",
               allowTypeImports: true,
               message:
                 "The gallery may only import production values from UI primitives, " +
