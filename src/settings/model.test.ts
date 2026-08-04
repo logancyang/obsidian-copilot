@@ -4,6 +4,7 @@ import {
   DEFAULT_SYSTEM_PROMPT,
   DEFAULT_SETTINGS,
   SEND_SHORTCUT,
+  BUILTIN_CHAT_MODELS,
 } from "@/constants";
 import {
   normalizeRootFolders,
@@ -15,7 +16,9 @@ import {
   settingsStore,
   validateCopilotFolder,
   CopilotSettings,
+  getModelKeyFromModel,
 } from "@/settings/model";
+import { CustomModel } from "@/aiParams";
 import { getEffectiveUserPrompt, getSystemPrompt } from "@/system-prompts/systemPromptBuilder";
 import * as systemPromptsState from "@/system-prompts/state";
 import * as settingsModel from "@/settings/model";
@@ -915,6 +918,162 @@ describe("model", () => {
       expect(after.copilotFolder).toBe(DEFAULT_SETTINGS.copilotFolder);
       // Legacy + historical + pre-reset active root all survive the reset.
       expect(new Set(after.copilotRootHistory)).toEqual(new Set(["copilot", "ai", "team-ai"]));
+    });
+
+    it("preserves providers with keychain credentials", () => {
+      settingsStore.set(settingsAtom, {
+        ...DEFAULT_SETTINGS,
+        providers: {
+          byok_openai: {
+            providerId: "byok_openai",
+            providerType: "openai-compatible",
+            displayName: "My OpenAI",
+            apiKeyKeychainId: "keychain-id-123",
+            origin: { kind: "byok" },
+            addedAt: Date.now(),
+          },
+          byok_anthropic: {
+            providerId: "byok_anthropic",
+            providerType: "anthropic",
+            displayName: "No Key",
+            origin: { kind: "byok" },
+            addedAt: Date.now(),
+          },
+        },
+      });
+
+      resetSettings();
+
+      const after = settingsStore.get(settingsAtom);
+      expect(after.providers.byok_openai).toBeDefined();
+      expect(after.providers.byok_openai.apiKeyKeychainId).toBe("keychain-id-123");
+      expect(after.providers.byok_anthropic).toBeUndefined();
+    });
+
+    it("preserves builtin model credentials but resets other fields", () => {
+      const customGpt4: CustomModel = {
+        ...BUILTIN_CHAT_MODELS[0],
+        enabled: false,
+        apiKey: "sk-saved",
+        temperature: 0.9,
+      };
+      settingsStore.set(settingsAtom, {
+        ...DEFAULT_SETTINGS,
+        activeModels: [customGpt4],
+      });
+
+      resetSettings();
+
+      const after = settingsStore.get(settingsAtom);
+      const restored = after.activeModels.find(
+        (m) => getModelKeyFromModel(m) === getModelKeyFromModel(BUILTIN_CHAT_MODELS[0])
+      );
+      expect(restored).toBeDefined();
+      expect(restored!.apiKey).toBe("sk-saved");
+      expect(restored!.enabled).toBe(BUILTIN_CHAT_MODELS[0].enabled);
+      expect(restored!.temperature).toBe(BUILTIN_CHAT_MODELS[0].temperature);
+    });
+
+    it("preserves custom models with credentials in disk mode", () => {
+      const customModel: CustomModel = {
+        name: "my-llama",
+        provider: "openai",
+        enabled: true,
+        apiKey: "sk-custom",
+        baseUrl: "http://localhost:1234",
+      };
+      settingsStore.set(settingsAtom, {
+        ...DEFAULT_SETTINGS,
+        _keychainOnly: false,
+        activeModels: [customModel],
+      });
+
+      resetSettings();
+
+      const after = settingsStore.get(settingsAtom);
+      const restored = after.activeModels.find((m) => m.name === "my-llama");
+      expect(restored).toBeDefined();
+      expect(restored!.apiKey).toBe("sk-custom");
+    });
+
+    it("drops custom models without credentials in disk mode", () => {
+      const customModel: CustomModel = {
+        name: "ollama-llama",
+        provider: "ollama",
+        enabled: true,
+      };
+      settingsStore.set(settingsAtom, {
+        ...DEFAULT_SETTINGS,
+        _keychainOnly: false,
+        activeModels: [customModel],
+      });
+
+      resetSettings();
+
+      const after = settingsStore.get(settingsAtom);
+      const restored = after.activeModels.find((m) => m.name === "ollama-llama");
+      expect(restored).toBeUndefined();
+    });
+
+    it("preserves ALL custom models in keychainOnly mode", () => {
+      const withKey: CustomModel = {
+        name: "custom-gpt",
+        provider: "openai",
+        enabled: true,
+        apiKey: "sk-key",
+      };
+      const withoutKey: CustomModel = {
+        name: "ollama-llama",
+        provider: "ollama",
+        enabled: true,
+      };
+      settingsStore.set(settingsAtom, {
+        ...DEFAULT_SETTINGS,
+        _keychainOnly: true,
+        activeModels: [withKey, withoutKey],
+      });
+
+      resetSettings();
+
+      const after = settingsStore.get(settingsAtom);
+      expect(after.activeModels.find((m) => m.name === "custom-gpt")).toBeDefined();
+      expect(after.activeModels.find((m) => m.name === "ollama-llama")).toBeDefined();
+    });
+
+    it("filters out null/undefined top-level secrets", () => {
+      settingsStore.set(settingsAtom, {
+        ...DEFAULT_SETTINGS,
+        openAIApiKey: "valid-key",
+        anthropicApiKey: null as unknown as string,
+        googleApiKey: undefined as unknown as string,
+      });
+
+      resetSettings();
+
+      const after = settingsStore.get(settingsAtom);
+      expect(after.openAIApiKey).toBe("valid-key");
+      expect(after.anthropicApiKey).toBe(DEFAULT_SETTINGS.anthropicApiKey);
+      expect(after.googleApiKey).toBe(DEFAULT_SETTINGS.googleApiKey);
+    });
+
+    it("filters out null/undefined model secrets", () => {
+      const modelWithNull: CustomModel = {
+        ...BUILTIN_CHAT_MODELS[0],
+        apiKey: null as unknown as string,
+      };
+      settingsStore.set(settingsAtom, {
+        ...DEFAULT_SETTINGS,
+        activeModels: [modelWithNull],
+      });
+
+      resetSettings();
+
+      const after = settingsStore.get(settingsAtom);
+      const restored = after.activeModels.find(
+        (m) => getModelKeyFromModel(m) === getModelKeyFromModel(BUILTIN_CHAT_MODELS[0])
+      );
+      expect(restored).toBeDefined();
+      expect(restored!.apiKey).toBe(BUILTIN_CHAT_MODELS[0].apiKey);
     });
   });
 });

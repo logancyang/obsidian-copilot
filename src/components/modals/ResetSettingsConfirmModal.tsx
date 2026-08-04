@@ -6,9 +6,10 @@ export class ResetSettingsConfirmModal extends ConfirmModal {
     super(
       app,
       onConfirm,
-      "Resetting settings will clear all settings and restore the default values. " +
-        'API keys are not cleared by this action — use "Delete All Keys" in Advanced Settings ' +
-        "→ API Key Storage if you also want to remove them. Are you sure you want to continue?",
+      "Resetting settings will restore the default values. Your API keys are kept, along with " +
+        'the provider and model entries needed to use them — use "Delete All Keys" in Advanced ' +
+        "Settings → API Key Storage if you also want to remove them. " +
+        "Are you sure you want to continue?",
       "Reset Settings"
     );
   }

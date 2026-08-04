@@ -5,6 +5,11 @@ import { v4 as uuidv4 } from "uuid";
 import type { CopilotMode, ModelSelection } from "@/agentMode";
 import { type ChainType } from "@/chainType";
 import type { BackendConfig, BackendType, ConfiguredModel, Provider } from "@/modelManagement";
+import {
+  isKeychainOnly,
+  MODEL_SECRET_FIELDS,
+  TOP_LEVEL_SECRET_FIELDS,
+} from "@/services/settingsSecretTransforms";
 import { type SortStrategy, isSortStrategy } from "@/utils/recentUsageManager";
 import {
   AGENT_MAX_ITERATIONS_LIMIT,
@@ -618,19 +623,120 @@ export function getSettings(): Readonly<CopilotSettings> {
 }
 
 /**
- * Resets the settings to the default values.
+ * Overlay the preserved secret fields of `source` onto a default model row.
  *
- * DESIGN NOTE — does NOT clear secrets from the Obsidian Keychain. Reset only
- * rewrites `data.json` to defaults; a keychain-only vault keeps its OS keychain
- * entries. "Delete All Keys" (Advanced Settings → API Key Storage, backed by
- * `KeychainService.forgetAllSecrets`) is the dedicated path for erasing keychain
- * secrets. Wiring that async transaction into this synchronous reset would pull
- * the keychain service and its callbacks through `SettingsMainV2`, and is
- * intentionally left out of the first-stage migration.
- * If a future review flags this again, point them at this note.
+ * Reason: a builtin model's identity and parameters belong to the shipped
+ * default, but its credential belongs to the user. Copying only the secret
+ * fields resets everything else (enabled state, temperature, baseUrl) while
+ * keeping the key usable.
+ *
+ * @param defaultModel - The freshly built default row that owns the identity.
+ * @param source - The pre-reset row supplying the credential.
+ */
+function withPreservedModelSecrets(defaultModel: CustomModel, source: CustomModel): CustomModel {
+  const merged = { ...defaultModel } as unknown as Record<string, unknown>;
+  const sourceRecord = source as unknown as Record<string, unknown>;
+  for (const field of MODEL_SECRET_FIELDS) {
+    const value = sourceRecord[field];
+    if (typeof value === "string" && value.length > 0) {
+      merged[field] = value;
+    }
+  }
+  return merged as unknown as CustomModel;
+}
+
+/** Whether a model row carries a non-empty value in any secret field. */
+function hasModelSecret(model: CustomModel): boolean {
+  const record = model as unknown as Record<string, unknown>;
+  return MODEL_SECRET_FIELDS.some((field) => {
+    const value = record[field];
+    return typeof value === "string" && value.length > 0;
+  });
+}
+
+/**
+ * Rebuild one model list for reset: builtin rows return to their defaults but
+ * keep their secrets, and credential-bearing custom rows survive intact.
+ *
+ * @param defaultModels - Builtin rows as a fresh install would have them.
+ * @param currentModels - The pre-reset rows to harvest credentials from.
+ * @param keychainOnly - Whether the OS keychain is the source of truth for secrets.
+ */
+function preserveModelCredentials(
+  defaultModels: CustomModel[],
+  currentModels: CustomModel[],
+  keychainOnly: boolean
+): CustomModel[] {
+  const currentByKey = new Map(currentModels.map((model) => [getModelKeyFromModel(model), model]));
+  const defaultKeys = new Set(defaultModels.map((model) => getModelKeyFromModel(model)));
+
+  const restoredBuiltIns = defaultModels.map((defaultModel) => {
+    const previous = currentByKey.get(getModelKeyFromModel(defaultModel));
+    return previous ? withPreservedModelSecrets(defaultModel, previous) : defaultModel;
+  });
+
+  // Reason: in keychain-only mode a failed keychain read leaves `apiKey` empty,
+  // and the persistence layer relies on "empty-vs-empty never tombstones" to
+  // protect the entry. Dropping the row then strands the keychain entry with no
+  // `name|provider` identity to reattach it to, so keep every custom row. In
+  // disk mode an empty secret really means no secret, so those rows can go.
+  //
+  // DESIGN NOTE: This conservatively keeps ALL custom models in keychainOnly mode,
+  // including legitimately credential-less models (Ollama, LM Studio). Safely
+  // distinguishing "keychain read failed" from "never had a credential" would
+  // require per-model keychain state tracking or explicit pointer fields, which
+  // is substantial. The current policy errs toward keeping rows (reset is not a
+  // cleanup tool) rather than risking credential loss. Codex review 2026-08-04.
+  // If a future review flags this again, point them at this note.
+  const customModels = currentModels.filter(
+    (model) =>
+      !defaultKeys.has(getModelKeyFromModel(model)) && (keychainOnly || hasModelSecret(model))
+  );
+
+  return [...restoredBuiltIns, ...customModels];
+}
+
+/**
+ * Keep only the provider rows that own a credential, so reset does not orphan
+ * the keychain entries those rows point at.
+ *
+ * Selection is by pointer truthiness rather than `requiresApiKey`: Plus sign-in
+ * creates its provider with `requiresApiKey: false` and then stores the license
+ * key via `setApiKey`, so filtering on that flag would silently drop a real
+ * credential. Whole rows survive because `baseUrl` / `extras` / `providerType`
+ * are what make the key usable; keyless rows (Ollama, LMStudio) carry nothing
+ * and are reset away.
+ *
+ * @param providers - The pre-reset provider rows.
+ */
+function preserveProvidersWithCredentials(
+  providers: Record<string, Provider> | undefined
+): Record<string, Provider> {
+  const preserved = Object.entries(providers ?? {}).filter(
+    ([, provider]) => !!provider?.apiKeyKeychainId
+  );
+  return preserved.length > 0 ? Object.fromEntries(preserved) : EMPTY_PROVIDERS;
+}
+
+/**
+ * Resets the settings to the default values while preserving credentials.
+ *
+ * Reset restores every non-credential setting to its default, but deliberately
+ * carries forward the user's API keys: the top-level secret fields, the secrets
+ * on builtin model rows, custom model rows that carry a credential, and the
+ * provider rows that own a keychain pointer. Reset is not a way to erase
+ * secrets — "Delete All Keys" (Advanced Settings → API Key Storage, backed by
+ * `KeychainService.forgetAllSecrets`) is the dedicated path for that, and it
+ * also clears the OS keychain, which reset never touches.
+ *
+ * `configuredModels` and `backends` are cleared: they hold only provider foreign
+ * keys and model descriptors, never credentials. A preserved provider with no
+ * configured models is a legal state that the setup paths reconcile.
  */
 export function resetSettings(): void {
   const current = getSettings();
+  const currentRecord = current as unknown as Record<string, unknown>;
+  const keychainOnly = isKeychainOnly(current);
   // Reset is a deterministic path, not best-effort: preserve the root-exclusion
   // history and fold in the pre-reset active root before it is replaced by the
   // default. Otherwise a reset would drop every historical root and leave that
@@ -639,10 +745,27 @@ export function resetSettings(): void {
     ...(Array.isArray(current.copilotRootHistory) ? current.copilotRootHistory : []),
     current.copilotFolder,
   ]);
+  const preservedTopLevelSecrets: Record<string, unknown> = {};
+  for (const field of TOP_LEVEL_SECRET_FIELDS) {
+    const value = currentRecord[field];
+    if (typeof value === "string" && value.length > 0) {
+      preservedTopLevelSecrets[field] = value;
+    }
+  }
   const defaultSettingsWithBuiltIns = {
     ...DEFAULT_SETTINGS,
-    activeModels: BUILTIN_CHAT_MODELS.map((model) => ({ ...model, enabled: true })),
-    activeEmbeddingModels: BUILTIN_EMBEDDING_MODELS.map((model) => ({ ...model, enabled: true })),
+    ...preservedTopLevelSecrets,
+    activeModels: preserveModelCredentials(
+      BUILTIN_CHAT_MODELS.map((model) => ({ ...model, enabled: true })),
+      current.activeModels ?? [],
+      keychainOnly
+    ),
+    activeEmbeddingModels: preserveModelCredentials(
+      BUILTIN_EMBEDDING_MODELS.map((model) => ({ ...model, enabled: true })),
+      current.activeEmbeddingModels ?? [],
+      keychainOnly
+    ),
+    providers: preserveProvidersWithCredentials(current.providers),
     copilotRootHistory: preservedRootHistory,
   };
   setSettings(defaultSettingsWithBuiltIns);
