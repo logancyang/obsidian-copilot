@@ -50,6 +50,10 @@ interface ActiveHost {
 const EMPTY_STORY_IDS = Object.freeze([]) as unknown as string[];
 const STORY_MOUNT_ATTEMPTS = 100;
 
+interface GalleryWindow extends Window {
+  MessageChannel: typeof MessageChannel;
+}
+
 function isPositiveWidth(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value > 0;
 }
@@ -59,6 +63,22 @@ function errorMessage(error: unknown): string {
 }
 
 function waitForLayout(win: Window): Promise<void> {
+  const MessageChannelConstructor = (win as Partial<GalleryWindow>).MessageChannel;
+  if (
+    MessageChannelConstructor &&
+    (!win.document.hasFocus() || win.document.visibilityState !== "visible")
+  ) {
+    return new Promise((resolve) => {
+      const channel = new MessageChannelConstructor();
+      channel.port1.onmessage = () => {
+        channel.port1.close();
+        channel.port2.close();
+        resolve();
+      };
+      channel.port2.postMessage(undefined);
+    });
+  }
+
   return new Promise((resolve) => {
     let settled = false;
     let frame = 0;

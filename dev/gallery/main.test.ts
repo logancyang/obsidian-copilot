@@ -5,6 +5,7 @@ import type { AuditReport } from "./audit";
 import type { GalleryViewState } from "./Gallery";
 import type { App, Command, PluginManifest, WorkspaceLeaf } from "obsidian";
 import type { ReactElement, ReactNode } from "react";
+import { MessageChannel as TestMessageChannel } from "worker_threads";
 
 jest.mock(
   "./stories.generated",
@@ -386,28 +387,6 @@ describe("main", () => {
         });
         expect(requestSaveLayout).not.toHaveBeenCalled();
       });
-
-      it("advances after a closed popover node remains mounted", async () => {
-        await view.onOpen();
-        const layoutFrames = jest.spyOn(view.containerEl.win, "requestAnimationFrame");
-        const closeHost = installImperativeRenderSimulation(
-          "Gallery/Host Environments/ResponseActions"
-        );
-
-        try {
-          const reports = await view.auditStories([300]);
-
-          expect(closeHost).toHaveBeenCalledWith("Gallery/Host Environments/ResponseActions");
-          expect(reports[0].findings).toContainEqual({
-            story: "Gallery/Test Probes/Broken",
-            check: "render-failure",
-            detail: "boom",
-          });
-          expect(layoutFrames.mock.calls.length).toBeLessThan(100);
-        } finally {
-          layoutFrames.mockRestore();
-        }
-      });
     });
 
     describe("onOpen()", () => {
@@ -531,6 +510,55 @@ describe("main", () => {
           selectedStoryId: "UI/Button/Sizes",
           width: 512,
         });
+      });
+
+      it("settles a background audit after restoring state with a retained closed popover", async () => {
+        const previousState = {
+          contactSheet: false,
+          selectedStoryId: "Gallery/Host Environments/DefaultLeaf",
+          selectedSubtree: "Gallery/Host Environments",
+          width: 340,
+        };
+        await view.setState(previousState);
+        await view.onOpen();
+        const closeHost = installImperativeRenderSimulation(
+          "Gallery/Host Environments/ResponseActions"
+        );
+        (leaf as unknown as { view: GalleryViewContract }).view = view;
+        getLeavesOfType.mockReturnValue([leaf]);
+        const handle = window.__gallery as GalleryHandle;
+        const win = view.containerEl.win;
+        const messageChannelDescriptor = Object.getOwnPropertyDescriptor(win, "MessageChannel");
+        Object.defineProperty(win, "MessageChannel", {
+          configurable: true,
+          value: TestMessageChannel,
+        });
+        const documentHasFocus = jest.spyOn(activeDocument, "hasFocus").mockReturnValue(false);
+        const animationFrame = jest.spyOn(win, "requestAnimationFrame").mockReturnValue(1);
+        const timeout = jest.spyOn(win, "setTimeout").mockReturnValue(1);
+
+        try {
+          const reports = await handle.audit({ widths: [300] });
+
+          expect(closeHost).toHaveBeenCalledWith("Gallery/Host Environments/ResponseActions");
+          expect(reports[0].findings).toContainEqual({
+            story: "Gallery/Test Probes/Broken",
+            check: "render-failure",
+            detail: "boom",
+          });
+          expect(view.getState()).toEqual(previousState);
+          expect(animationFrame).not.toHaveBeenCalled();
+          expect(timeout).not.toHaveBeenCalled();
+        } finally {
+          animationFrame.mockRestore();
+          timeout.mockRestore();
+          documentHasFocus.mockRestore();
+          if (messageChannelDescriptor) {
+            Object.defineProperty(win, "MessageChannel", messageChannelDescriptor);
+          } else {
+            Reflect.deleteProperty(win, "MessageChannel");
+          }
+        }
       });
 
       it("rejects invalid external widths before opening a view", async () => {
