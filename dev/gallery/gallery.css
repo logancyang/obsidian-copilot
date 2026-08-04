@@ -19,3 +19,14 @@
 .copilot-gallery-canvas[data-gallery-width="600"] {
   width: 600px;
 }
+
+/* Tailwind Preflight is disabled, so a side-width utility plus `border-solid`
+   activates the browser's default border width on every other side. The
+   production stylesheet already supplies the matching bottom divider. */
+.copilot-gallery-divider-l {
+  border-left: 1px solid var(--background-modifier-border);
+}
+
+.copilot-gallery-divider-r {
+  border-right: 1px solid var(--background-modifier-border);
+}

@@ -368,6 +368,22 @@ describe("Gallery", () => {
   });
 
   describe("Gallery()", () => {
+    it("uses explicit single-side dividers for gallery chrome", () => {
+      const gallery = render(<GalleryHarness catalog={makeCatalog()} />);
+      const dividers = gallery.container.querySelectorAll(
+        ".copilot-divider-b, .copilot-gallery-divider-l, .copilot-gallery-divider-r"
+      );
+
+      expect(gallery.container.querySelectorAll(".copilot-divider-b")).toHaveLength(3);
+      expect(gallery.container.querySelectorAll(".copilot-gallery-divider-r")).toHaveLength(1);
+      expect(
+        gallery.container.querySelectorAll(".copilot-gallery-divider-l").length
+      ).toBeGreaterThan(0);
+      for (const divider of dividers) {
+        expect(divider.classList.contains("tw-border-solid")).toBe(false);
+      }
+    });
+
     it("visibly exposes nested components, story switches, selected styling, and the current id", () => {
       const gallery = render(<GalleryHarness catalog={makeCatalog()} />);
       const navigation = gallery.getByRole("complementary", {
