@@ -1,29 +1,59 @@
 import { mountPluginViewRoot, type PluginViewRootHandle } from "@/utils/react/mountPluginViewRoot";
 import { fireEvent, render } from "@testing-library/react";
-import GalleryPlugin, { GALLERY_VIEWTYPE } from "./main";
+import GalleryPlugin, { GALLERY_VIEWTYPE, type GalleryHandle } from "./main";
+import type { AuditReport } from "./audit";
 import type { GalleryViewState } from "./Gallery";
 import type { App, Command, PluginManifest, WorkspaceLeaf } from "obsidian";
 import type { ReactElement, ReactNode } from "react";
+import { MessageChannel as TestMessageChannel } from "worker_threads";
 
 jest.mock(
   "./stories.generated",
-  () => ({
-    modules: [
-      {
-        componentId: "@/agentMode/ui/AgentWelcomeCard",
-        load: () => Promise.resolve(jest.requireActual("@/agentMode/ui/AgentWelcomeCard.stories")),
-      },
-      {
-        componentId: "@/components/ui/badge",
-        load: () => Promise.resolve(jest.requireActual("@/components/ui/badge.stories")),
-      },
-      {
-        componentId: "@/components/ui/button",
-        load: () => Promise.resolve(jest.requireActual("@/components/ui/button.stories")),
-      },
-    ],
-    presentationalComponentCount: 5,
-  }),
+  () => {
+    const loaders = [
+      jest.fn(() => Promise.resolve(jest.requireActual("@/agentMode/ui/AgentWelcomeCard.stories"))),
+      jest.fn(() => Promise.resolve(jest.requireActual("@/components/ui/badge.stories"))),
+      jest.fn(() => Promise.resolve(jest.requireActual("@/components/ui/button.stories"))),
+      jest.fn(() => Promise.resolve(jest.requireActual("@/components/gallery-hosts.stories"))),
+      jest.fn(() =>
+        Promise.resolve({
+          default: { title: "Gallery/Test Probes" },
+          Broken: {
+            render: () => {
+              throw new Error("boom");
+            },
+          },
+          Overflow: { render: () => "Overflow probe" },
+        })
+      ),
+    ];
+    return {
+      modules: [
+        {
+          componentId: "@/agentMode/ui/AgentWelcomeCard",
+          load: loaders[0],
+        },
+        {
+          componentId: "@/components/ui/badge",
+          load: loaders[1],
+        },
+        {
+          componentId: "@/components/ui/button",
+          load: loaders[2],
+        },
+        {
+          componentId: null,
+          load: loaders[3],
+        },
+        {
+          componentId: null,
+          load: loaders[4],
+        },
+      ],
+      galleryGeneratedMock: { loaders },
+      presentationalComponentCount: 5,
+    };
+  },
   { virtual: true }
 );
 
@@ -69,6 +99,7 @@ jest.mock("obsidian", () => {
 });
 
 interface GalleryViewContract {
+  auditStories(widths: number[]): Promise<AuditReport[]>;
   containerEl: HTMLElement;
   contentEl: HTMLElement;
   getDisplayText(): string;
@@ -78,6 +109,7 @@ interface GalleryViewContract {
   onClose(): Promise<void>;
   onOpen(): Promise<void>;
   setState(state: unknown): Promise<void>;
+  showStory(storyId: string, width?: number): Promise<void>;
 }
 
 interface RecordedViewState {
@@ -86,11 +118,18 @@ interface RecordedViewState {
   type: string;
 }
 
+function getGeneratedMock(): { loaders: jest.Mock[] } {
+  return jest.requireMock<{ galleryGeneratedMock: { loaders: jest.Mock[] } }>("./stories.generated")
+    .galleryGeneratedMock;
+}
+
 describe("main", () => {
   let app: App;
   let command: Command;
   let createView: ((leaf: WorkspaceLeaf) => GalleryViewContract) | undefined;
   let getLeaf: jest.Mock;
+  let getLeavesOfType: jest.Mock;
+  let getVaultConfig: jest.Mock;
   let leaf: WorkspaceLeaf;
   let mountViewRoot: jest.MockedFunction<typeof mountPluginViewRoot>;
   let plugin: GalleryPlugin;
@@ -103,6 +142,7 @@ describe("main", () => {
   let viewRoot: PluginViewRootHandle;
 
   beforeEach(async () => {
+    getGeneratedMock().loaders.forEach((loader) => loader.mockClear());
     viewRoot = {
       rerender: jest.fn(),
       unmount: jest.fn(),
@@ -116,9 +156,12 @@ describe("main", () => {
     requestSaveLayout = jest.fn();
     setViewState = jest.fn<Promise<void>, [RecordedViewState]>().mockResolvedValue(undefined);
     getLeaf = jest.fn();
+    getLeavesOfType = jest.fn().mockReturnValue([]);
+    getVaultConfig = jest.fn().mockReturnValue("");
     revealLeaf = jest.fn();
     app = {
-      workspace: { getLeaf, requestSaveLayout, revealLeaf },
+      vault: { getConfig: getVaultConfig },
+      workspace: { getLeaf, getLeavesOfType, requestSaveLayout, revealLeaf },
     } as unknown as App;
     leaf = { app, setViewState } as unknown as WorkspaceLeaf;
     getLeaf.mockReturnValue(leaf);
@@ -140,6 +183,68 @@ describe("main", () => {
     }
     view = createView(leaf);
   });
+
+  afterEach(() => {
+    plugin.onunload();
+    view.containerEl.remove();
+  });
+
+  function installImperativeRenderSimulation(retainedClosedStoryId?: string): jest.Mock {
+    activeDocument.body.append(view.containerEl);
+    const closeHost = jest.fn();
+    const rerender = jest.mocked(viewRoot.rerender);
+    rerender.mockImplementation(() => {
+      if (!renderView) {
+        throw new Error("Gallery view did not provide a React tree");
+      }
+      const tree = renderView() as ReactElement<{
+        catalog: {
+          stories: Array<{ host: string; id: string }>;
+        };
+        onHostChange: (storyId: string, close: (() => void) | null) => void;
+        ownerId: string;
+        state: GalleryViewState;
+      }>;
+      const { catalog, onHostChange, ownerId, state } = tree.props;
+      const story = catalog.stories.find((candidate) => candidate.id === state.selectedStoryId);
+      view.contentEl.replaceChildren();
+      if (!story || state.contactSheet) {
+        return;
+      }
+
+      const storyElement = activeDocument.createElement("div");
+      storyElement.dataset.story = story.id;
+      storyElement.dataset.storyWidth = String(state.width);
+      storyElement.dataset.galleryOwner = ownerId;
+      if (story.id === "Gallery/Test Probes/Broken") {
+        storyElement.dataset.storyRenderError = "boom";
+      }
+      Object.defineProperties(storyElement, {
+        clientWidth: { configurable: true, value: state.width },
+        scrollWidth: {
+          configurable: true,
+          value:
+            story.id === "Gallery/Test Probes/Overflow" && state.width === 300 ? 412 : state.width,
+        },
+      });
+      storyElement.getBoundingClientRect = () => ({ height: 40, width: state.width }) as DOMRect;
+      view.contentEl.append(storyElement);
+
+      if (story.host !== "leaf") {
+        onHostChange(story.id, () => {
+          closeHost(story.id);
+          if (story.id === retainedClosedStoryId) {
+            storyElement.dataset.state = "closed";
+          } else {
+            storyElement.remove();
+          }
+          onHostChange(story.id, null);
+        });
+      }
+    });
+    rerender();
+    return closeHost;
+  }
 
   describe("GalleryView", () => {
     describe("getViewType()", () => {
@@ -200,6 +305,89 @@ describe("main", () => {
         ).toBeTruthy();
 
         gallery.unmount();
+      });
+    });
+
+    describe("showStory()", () => {
+      it("mounts an exact story at a positive dynamic width and persists the selection", async () => {
+        await view.onOpen();
+        installImperativeRenderSimulation();
+
+        await view.showStory("UI/Button/Variants", 512);
+
+        expect(view.getState()).toEqual({
+          contactSheet: false,
+          selectedStoryId: "UI/Button/Variants",
+          selectedSubtree: "UI/Button",
+          width: 512,
+        });
+        expect(
+          view.contentEl.querySelector('[data-story="UI/Button/Variants"][data-story-width="512"]')
+        ).toBeTruthy();
+        expect(requestSaveLayout).toHaveBeenCalledTimes(1);
+      });
+
+      it("rejects unknown stories and non-positive widths before changing the view", async () => {
+        await view.onOpen();
+        installImperativeRenderSimulation();
+        const previousState = view.getState();
+
+        await expect(view.showStory("Missing/Story", 300)).rejects.toThrow(
+          'Unknown gallery story "Missing/Story"'
+        );
+        await expect(view.showStory("UI/Button/Variants", 0)).rejects.toThrow(
+          "Gallery width must be a positive finite number"
+        );
+        expect(view.getState()).toEqual(previousState);
+      });
+    });
+
+    describe("auditStories()", () => {
+      it("sweeps one case per width, reports test-only probes, closes hosts, and restores state", async () => {
+        await view.setState({
+          contactSheet: false,
+          selectedStoryId: "UI/Button/Variants",
+          selectedSubtree: "UI/Button",
+          width: 340,
+        });
+        await view.onOpen();
+        const closeHost = installImperativeRenderSimulation();
+        getVaultConfig.mockReturnValue("Things");
+        requestSaveLayout.mockClear();
+
+        const reports = await view.auditStories([300, 512]);
+
+        expect(reports).toHaveLength(2);
+        expect(reports.map(({ width }) => width)).toEqual([300, 512]);
+        expect(reports.every(({ theme }) => theme === "Things-light")).toBe(true);
+        expect(getVaultConfig).toHaveBeenCalledWith("cssTheme");
+        expect(reports[0].findings).toEqual(
+          expect.arrayContaining([
+            {
+              story: "Gallery/Test Probes/Broken",
+              check: "render-failure",
+              detail: "boom",
+            },
+            {
+              story: "Gallery/Test Probes/Overflow",
+              check: "overflow",
+              detail: "scrollWidth 412 > clientWidth 300",
+            },
+          ])
+        );
+        expect(
+          reports[1].findings.some(
+            ({ story, check }) => story === "Gallery/Test Probes/Overflow" && check === "overflow"
+          )
+        ).toBe(false);
+        expect(closeHost).toHaveBeenCalledTimes(6);
+        expect(view.getState()).toEqual({
+          contactSheet: false,
+          selectedStoryId: "UI/Button/Variants",
+          selectedSubtree: "UI/Button",
+          width: 340,
+        });
+        expect(requestSaveLayout).not.toHaveBeenCalled();
       });
     });
 
@@ -270,6 +458,181 @@ describe("main", () => {
           id: "open-component-gallery",
           name: "Open component gallery",
         });
+        expect(typeof window.__gallery?.audit).toBe("function");
+        expect(typeof window.__gallery?.list).toBe("function");
+        expect(typeof window.__gallery?.show).toBe("function");
+      });
+
+      it("loads the generated catalog once and shares it across gallery views", async () => {
+        const firstView = view;
+        const secondView = createView?.(leaf);
+        if (!secondView) {
+          throw new Error("Second gallery view was not created");
+        }
+
+        await firstView.onOpen();
+        await secondView.onOpen();
+
+        expect(firstView.getState().selectedStoryId).toBe("Agent Mode/Agent Welcome Card/Default");
+        expect(secondView.getState().selectedStoryId).toBe("Agent Mode/Agent Welcome Card/Default");
+        expect(mountViewRoot).toHaveBeenCalledTimes(2);
+        expect(getGeneratedMock().loaders.every((loader) => loader.mock.calls.length === 1)).toBe(
+          true
+        );
+      });
+
+      it("lists every story and drives an existing revealed view through the typed handle", async () => {
+        await view.onOpen();
+        installImperativeRenderSimulation();
+        (leaf as unknown as { view: GalleryViewContract }).view = view;
+        getLeavesOfType.mockReturnValue([leaf]);
+        const handle = window.__gallery as GalleryHandle;
+
+        expect(handle.list()).toEqual([
+          "Agent Mode/Agent Welcome Card/Default",
+          "Agent Mode/Agent Welcome Card/Narrow",
+          "Gallery/Host Environments/DefaultLeaf",
+          "Gallery/Host Environments/DeleteConfirmation",
+          "Gallery/Host Environments/ModelPreferences",
+          "Gallery/Host Environments/ResponseActions",
+          "Gallery/Test Probes/Broken",
+          "Gallery/Test Probes/Overflow",
+          "UI/Badge/Status",
+          "UI/Badge/Variants",
+          "UI/Button/Disabled",
+          "UI/Button/Sizes",
+          "UI/Button/Variants",
+        ]);
+
+        await handle.show("UI/Button/Sizes", { width: 512 });
+
+        expect(getLeaf).not.toHaveBeenCalled();
+        expect(revealLeaf).toHaveBeenCalledWith(leaf);
+        expect(view.getState()).toMatchObject({
+          selectedStoryId: "UI/Button/Sizes",
+          width: 512,
+        });
+      });
+
+      it("settles a background audit after restoring state with a retained closed popover", async () => {
+        const previousState = {
+          contactSheet: false,
+          selectedStoryId: "Gallery/Host Environments/DefaultLeaf",
+          selectedSubtree: "Gallery/Host Environments",
+          width: 340,
+        };
+        await view.setState(previousState);
+        await view.onOpen();
+        const closeHost = installImperativeRenderSimulation(
+          "Gallery/Host Environments/ResponseActions"
+        );
+        (leaf as unknown as { view: GalleryViewContract }).view = view;
+        getLeavesOfType.mockReturnValue([leaf]);
+        const handle = window.__gallery as GalleryHandle;
+        const win = view.containerEl.win;
+        const messageChannelDescriptor = Object.getOwnPropertyDescriptor(win, "MessageChannel");
+        Object.defineProperty(win, "MessageChannel", {
+          configurable: true,
+          value: TestMessageChannel,
+        });
+        const documentHasFocus = jest.spyOn(activeDocument, "hasFocus").mockReturnValue(false);
+        const animationFrame = jest.spyOn(win, "requestAnimationFrame").mockReturnValue(1);
+        const timeout = jest.spyOn(win, "setTimeout").mockReturnValue(1);
+
+        try {
+          const reports = await handle.audit({ widths: [300] });
+
+          expect(closeHost).toHaveBeenCalledWith("Gallery/Host Environments/ResponseActions");
+          expect(reports[0].findings).toContainEqual({
+            story: "Gallery/Test Probes/Broken",
+            check: "render-failure",
+            detail: "boom",
+          });
+          expect(view.getState()).toEqual(previousState);
+          expect(animationFrame).not.toHaveBeenCalled();
+          expect(timeout).not.toHaveBeenCalled();
+        } finally {
+          animationFrame.mockRestore();
+          timeout.mockRestore();
+          documentHasFocus.mockRestore();
+          if (messageChannelDescriptor) {
+            Object.defineProperty(win, "MessageChannel", messageChannelDescriptor);
+          } else {
+            Reflect.deleteProperty(win, "MessageChannel");
+          }
+        }
+      });
+
+      it("rejects invalid external widths before opening a view", async () => {
+        const handle = window.__gallery as GalleryHandle;
+
+        await expect(handle.show("UI/Button/Sizes", { width: Number.NaN })).rejects.toThrow(
+          "Gallery width must be a positive finite number"
+        );
+        await expect(handle.audit({ widths: [300, -1] })).rejects.toThrow(
+          "Gallery audit widths must be positive finite numbers"
+        );
+        expect(getLeaf).not.toHaveBeenCalled();
+        expect(revealLeaf).not.toHaveBeenCalled();
+      });
+
+      it("serializes external operations, restores prior state, and continues after rejection", async () => {
+        const previousState = {
+          contactSheet: false,
+          selectedStoryId: "UI/Button/Variants",
+          selectedSubtree: "UI/Button",
+          width: 340,
+        };
+        await view.setState(previousState);
+        await view.onOpen();
+        installImperativeRenderSimulation();
+        (leaf as unknown as { view: GalleryViewContract }).view = view;
+        getLeavesOfType.mockReturnValue([leaf]);
+        const handle = window.__gallery as GalleryHandle;
+        const originalShowStory: GalleryViewContract["showStory"] = view.showStory;
+        let markAuditStarted: () => void = () => undefined;
+        let releaseAudit: () => void = () => undefined;
+        const auditStarted = new Promise<void>((resolve) => {
+          markAuditStarted = resolve;
+        });
+        const auditRelease = new Promise<void>((resolve) => {
+          releaseAudit = resolve;
+        });
+        jest.spyOn(view, "auditStories").mockImplementationOnce(async () => {
+          await originalShowStory.call(view, "Gallery/Host Environments/DeleteConfirmation", 300);
+          markAuditStarted();
+          await auditRelease;
+          await view.setState(previousState);
+          throw new Error("audit failed");
+        });
+        const stateBeforeShow: GalleryViewState[] = [];
+        const showStory = jest.spyOn(view, "showStory").mockImplementation(async (id, width) => {
+          stateBeforeShow.push(view.getState());
+          await originalShowStory.call(view, id, width);
+        });
+
+        const firstOperation = handle.audit({ widths: [300] });
+        await auditStarted;
+        const secondOperation = handle.show("UI/Button/Sizes", { width: 512 });
+        await Promise.resolve();
+
+        expect(showStory).not.toHaveBeenCalled();
+        expect(view.getState()).toMatchObject({
+          selectedStoryId: "Gallery/Host Environments/DeleteConfirmation",
+          width: 300,
+        });
+
+        releaseAudit();
+        await expect(firstOperation).rejects.toThrow("audit failed");
+        await secondOperation;
+
+        expect(stateBeforeShow).toEqual([previousState]);
+        expect(view.getState()).toEqual({
+          contactSheet: false,
+          selectedStoryId: "UI/Button/Sizes",
+          selectedSubtree: "UI/Button",
+          width: 512,
+        });
       });
 
       it("opens and reveals a gallery leaf with the last ItemView state", async () => {
@@ -322,6 +685,38 @@ describe("main", () => {
         ).toBeTruthy();
 
         reopenedGallery.unmount();
+      });
+    });
+
+    describe("onunload()", () => {
+      it("cancels the active host and rejects work still queued for the plugin", async () => {
+        await view.onOpen();
+        const closeHost = installImperativeRenderSimulation();
+        (leaf as unknown as { view: GalleryViewContract }).view = view;
+        getLeavesOfType.mockReturnValue([leaf]);
+        const handle = window.__gallery as GalleryHandle;
+
+        await handle.show("Gallery/Host Environments/ResponseActions", { width: 300 });
+        plugin.onunload();
+
+        expect(closeHost).toHaveBeenCalledWith("Gallery/Host Environments/ResponseActions");
+        await expect(handle.show("UI/Button/Sizes")).rejects.toMatchObject({ name: "AbortError" });
+      });
+
+      it("removes only the handle still owned by the unloading plugin instance", async () => {
+        const firstHandle = window.__gallery;
+        const replacement = new GalleryPlugin(app, {
+          id: "copilot-component-gallery",
+        } as PluginManifest);
+        await replacement.onload();
+        const replacementHandle = window.__gallery;
+
+        plugin.onunload();
+        expect(window.__gallery).toBe(replacementHandle);
+        expect(window.__gallery).not.toBe(firstHandle);
+
+        replacement.onunload();
+        expect(window.__gallery).toBeUndefined();
       });
     });
   });
