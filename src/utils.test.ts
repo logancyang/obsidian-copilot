@@ -396,6 +396,30 @@ describe("utils", () => {
       withFrontmatter({ Topics: "Physics" });
       expect(getPropertyValuesFromNote(mockApp, file, "constructor")).toEqual([]);
     });
+
+    it("returns the canonical empty array for null values", () => {
+      withFrontmatter({ Topics: null });
+      const result1 = getPropertyValuesFromNote(mockApp, file, "Topics");
+      const result2 = getPropertyValuesFromNote(mockApp, file, "Topics");
+      expect(result1).toEqual([]);
+      expect(result1).toBe(result2); // referential stability
+    });
+
+    it("returns the canonical empty array for empty list values", () => {
+      withFrontmatter({ Topics: [] });
+      const result1 = getPropertyValuesFromNote(mockApp, file, "Topics");
+      const result2 = getPropertyValuesFromNote(mockApp, file, "Topics");
+      expect(result1).toEqual([]);
+      expect(result1).toBe(result2); // referential stability
+    });
+
+    it("returns the canonical empty array for non-scalar-only lists", () => {
+      withFrontmatter({ Topics: [{ nested: true }, { another: "object" }] });
+      const result1 = getPropertyValuesFromNote(mockApp, file, "Topics");
+      const result2 = getPropertyValuesFromNote(mockApp, file, "Topics");
+      expect(result1).toEqual([]);
+      expect(result1).toBe(result2); // referential stability
+    });
   });
 
   describe("noteHasProperty()", () => {

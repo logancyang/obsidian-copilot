@@ -98,12 +98,15 @@ export function buildProjectContextBlock(sources: ManifestSources): string {
 
   const out: string[] = [
     "<project_context>",
-    "Context sources for this project, with absolute paths. Folders, tags, and",
-    "properties are listed as sources, not expanded into member files — use your own",
-    "search (grep/glob/read) to enumerate them. Materialized snapshots of URLs, YouTube",
-    "transcripts, and PDFs/images are shown inline as an absolute path after the",
-    "source, formatted `<source> → <absolute path>` — read that path directly. A source",
-    "with no path isn't cached (not yet converted or conversion failed); use the source itself.",
+    "Context sources for this project, with absolute paths. Folders and tags are",
+    "listed as sources, not expanded into member files — use your own search",
+    "(grep/glob/read) to enumerate them. Properties are listed as source labels and",
+    'also expanded into matching notes under "Included notes" (a property pattern\'s',
+    "label is listed so it survives the entry cap; its resolved notes appear below).",
+    "Materialized snapshots of URLs, YouTube transcripts, and PDFs/images are shown",
+    "inline as an absolute path after the source, formatted `<source> → <absolute path>`",
+    "— read that path directly. A source with no path isn't cached (not yet converted",
+    "or conversion failed); use the source itself.",
   ];
 
   let currentSection = "";

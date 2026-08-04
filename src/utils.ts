@@ -259,6 +259,9 @@ export function getPropertyValuesFromNote(app: App, file: TFile, key: string): s
   // value), so drop non-scalars here rather than match on an ambiguous string.
   const values: unknown[] = Array.isArray(raw) ? (raw as unknown[]) : [raw];
   const scalars = values.filter(isScalarPropertyValue);
+  if (scalars.length === 0) {
+    return EMPTY_PROPERTY_VALUES;
+  }
   return scalars.map((value) => String(value));
 }
 
