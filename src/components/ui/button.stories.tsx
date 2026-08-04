@@ -40,7 +40,7 @@ export const Variants: StoryObj<ButtonProps> = {
 
 export const Sizes: StoryObj<ButtonProps> = {
   render: () => (
-    <div className="tw-flex tw-items-center tw-gap-2">
+    <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-2">
       {SIZES.map((size) => (
         <Button key={size} size={size}>
           {size}

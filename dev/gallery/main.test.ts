@@ -1,20 +1,28 @@
-import * as buttonStories from "@/components/ui/button.stories";
 import { mountPluginViewRoot, type PluginViewRootHandle } from "@/utils/react/mountPluginViewRoot";
-import { render, within } from "@testing-library/react";
+import { fireEvent, render } from "@testing-library/react";
 import GalleryPlugin, { GALLERY_VIEWTYPE } from "./main";
+import type { GalleryViewState } from "./Gallery";
 import type { App, Command, PluginManifest, WorkspaceLeaf } from "obsidian";
-import { createElement, useState, type ReactElement, type ReactNode } from "react";
+import type { ReactElement, ReactNode } from "react";
 
 jest.mock(
   "./stories.generated",
   () => ({
     modules: [
       {
+        componentId: "@/agentMode/ui/AgentWelcomeCard",
+        load: () => Promise.resolve(jest.requireActual("@/agentMode/ui/AgentWelcomeCard.stories")),
+      },
+      {
+        componentId: "@/components/ui/badge",
+        load: () => Promise.resolve(jest.requireActual("@/components/ui/badge.stories")),
+      },
+      {
         componentId: "@/components/ui/button",
         load: () => Promise.resolve(jest.requireActual("@/components/ui/button.stories")),
       },
     ],
-    presentationalComponentCount: 3,
+    presentationalComponentCount: 5,
   }),
   { virtual: true }
 );
@@ -63,15 +71,17 @@ interface GalleryViewContract {
   contentEl: HTMLElement;
   getDisplayText(): string;
   getIcon(): string;
+  getState(): GalleryViewState;
   getViewType(): string;
   onClose(): Promise<void>;
   onOpen(): Promise<void>;
-  renderTree(
-    storyModules: Array<{
-      componentId: string | null;
-      storyModule: unknown;
-    }>
-  ): ReactNode;
+  setState(state: unknown): Promise<void>;
+}
+
+interface RecordedViewState {
+  active?: boolean;
+  state?: unknown;
+  type: string;
 }
 
 describe("main", () => {
@@ -84,8 +94,9 @@ describe("main", () => {
   let plugin: GalleryPlugin;
   let registerView: jest.Mock;
   let renderView: (() => ReactNode) | undefined;
+  let requestSaveLayout: jest.Mock;
   let revealLeaf: jest.Mock;
-  let setViewState: jest.Mock;
+  let setViewState: jest.Mock<Promise<void>, [RecordedViewState]>;
   let view: GalleryViewContract;
   let viewRoot: PluginViewRootHandle;
 
@@ -100,11 +111,12 @@ describe("main", () => {
       renderView = renderTree;
       return viewRoot;
     });
-    setViewState = jest.fn().mockResolvedValue(undefined);
+    requestSaveLayout = jest.fn();
+    setViewState = jest.fn<Promise<void>, [RecordedViewState]>().mockResolvedValue(undefined);
     getLeaf = jest.fn();
     revealLeaf = jest.fn();
     app = {
-      workspace: { getLeaf, revealLeaf },
+      workspace: { getLeaf, requestSaveLayout, revealLeaf },
     } as unknown as App;
     leaf = { app, setViewState } as unknown as WorkspaceLeaf;
     getLeaf.mockReturnValue(leaf);
@@ -146,194 +158,91 @@ describe("main", () => {
       });
     });
 
+    describe("getState()", () => {
+      it("returns the selected story, subtree, width, and contact-sheet state", async () => {
+        await view.setState({
+          contactSheet: true,
+          selectedStoryId: "UI/Button/Sizes",
+          selectedSubtree: "UI",
+          width: 600,
+        });
+
+        expect(view.getState()).toEqual({
+          contactSheet: true,
+          selectedStoryId: "UI/Button/Sizes",
+          selectedSubtree: "UI",
+          width: 600,
+        });
+      });
+    });
+
+    describe("setState()", () => {
+      it("restores a persisted story before opening and renders only that story", async () => {
+        await view.setState({
+          selectedStoryId: "UI/Button/Sizes",
+          selectedSubtree: "UI/Button",
+          width: 300,
+        });
+        await view.onOpen();
+
+        if (!renderView) {
+          throw new Error("Gallery view did not provide a React tree");
+        }
+        const gallery = render(renderView() as ReactElement);
+
+        expect(gallery.getByText("UI/Button/Sizes")).toBeTruthy();
+        expect(gallery.getByText("Current width:").parentElement?.textContent).toContain("300px");
+        expect(gallery.container.querySelectorAll("[data-gallery-story-id]")).toHaveLength(1);
+        expect(
+          gallery.container.querySelector('[data-gallery-story-id="UI/Button/Sizes"]')
+        ).toBeTruthy();
+
+        gallery.unmount();
+      });
+    });
+
     describe("onOpen()", () => {
-      it("loads and renders every named Button story export with merged metadata", async () => {
+      it("shows a visible nested list, selected marker, exact current id, and one story", async () => {
         await view.onOpen();
 
         expect(mountViewRoot).toHaveBeenCalledWith(view.containerEl, app, expect.any(Function));
         if (!renderView) {
           throw new Error("Gallery view did not provide a React tree");
         }
-
         const gallery = render(renderView() as ReactElement);
-        const variants = [
-          "default",
-          "destructive",
-          "secondary",
-          "ghost",
-          "link",
-          "success",
-          "ghost2",
-        ];
-        const sizes = ["default", "sm", "lg", "icon", "fit"];
-        const storyNames = Object.keys(buttonStories).filter(
-          (exportName) => exportName !== "default"
-        );
-        expect(
-          gallery.getByText("3 presentational components · 1 with stories · 2 missing")
-        ).toBeTruthy();
-        const buttonGroup = gallery.getByRole("region", { name: "UI / Button stories" });
-        const disabledStory = within(buttonGroup).getByRole("region", {
-          name: "Disabled story",
-        });
-        const variantsStory = within(buttonGroup).getByRole("region", {
-          name: "Variants story",
-        });
-        const sizesStory = within(buttonGroup).getByRole("region", { name: "Sizes story" });
 
         expect(
-          within(buttonGroup).getByRole("heading", { level: 2, name: "UI / Button" })
+          gallery.getByText("5 presentational components · 3 with stories · 2 missing")
         ).toBeTruthy();
-        expect(within(buttonGroup).getByText(`${storyNames.length} stories`)).toBeTruthy();
-        expect(within(buttonGroup).getAllByRole("region")).toHaveLength(storyNames.length);
-        for (const storyName of storyNames) {
-          expect(
-            within(
-              within(buttonGroup).getByRole("region", { name: `${storyName} story` })
-            ).getByRole("heading", { level: 3, name: storyName })
-          ).toBeTruthy();
+        expect(gallery.getByRole("button", { name: "Show Agent Mode contact sheet" })).toBeTruthy();
+        expect(gallery.getByRole("button", { name: "Show UI contact sheet" })).toBeTruthy();
+        expect(gallery.getByRole("button", { name: "Default Selected" }).textContent).toContain(
+          "Selected"
+        );
+        expect(gallery.getByText("Agent Mode/Agent Welcome Card/Default")).toBeTruthy();
+        expect(gallery.container.querySelectorAll("[data-gallery-story-id]")).toHaveLength(1);
+
+        gallery.unmount();
+      });
+
+      it("persists mouse and width changes through ItemView state", async () => {
+        await view.onOpen();
+        if (!renderView) {
+          throw new Error("Gallery view did not provide a React tree");
         }
+        const gallery = render(renderView() as ReactElement);
 
-        const disabledButton = within(disabledStory).getByRole("button", { name: "Working…" });
-        expect((disabledButton as HTMLButtonElement).disabled).toBe(true);
-        expect(disabledButton.getAttribute("type")).toBe("button");
-        expect(disabledStory.dataset.galleryHost).toBe("leaf");
-        expect(disabledStory.dataset.galleryLayout).toBe("padded");
-        expect(disabledStory.dataset.galleryWidth).toBe("300");
-        expect(
-          within(variantsStory)
-            .getAllByRole("button")
-            .map((button) => button.textContent)
-        ).toEqual(variants);
-        expect(
-          within(sizesStory)
-            .getAllByRole("button")
-            .map((button) => button.textContent)
-        ).toEqual(sizes);
+        fireEvent.click(gallery.getByRole("button", { name: "Sizes" }));
+        gallery.rerender(renderView() as ReactElement);
+        fireEvent.click(gallery.getByRole("button", { name: "600" }));
 
-        gallery.unmount();
-      });
-    });
-
-    describe("renderTree()", () => {
-      it("groups multiple modules under human-readable titles with named story counts", () => {
-        const gallery = render(
-          view.renderTree([
-            {
-              componentId: "@/components/ui/first",
-              storyModule: {
-                default: { title: "UI/First" },
-                Only: { render: () => "First story" },
-              },
-            },
-            {
-              componentId: null,
-              storyModule: {
-                default: { title: "Forms/Inputs/Second" },
-                Empty: { render: () => "Empty story" },
-                Filled: { render: () => "Filled story" },
-              },
-            },
-            {
-              componentId: "@/components/ui/empty",
-              storyModule: {
-                default: { title: "UI/Empty" },
-              },
-            },
-          ]) as ReactElement
-        );
-
-        const firstGroup = gallery.getByRole("region", { name: "UI / First stories" });
-        const secondGroup = gallery.getByRole("region", {
-          name: "Forms / Inputs / Second stories",
+        expect(view.getState()).toMatchObject({
+          contactSheet: false,
+          selectedStoryId: "UI/Button/Sizes",
+          selectedSubtree: "UI/Button",
+          width: 600,
         });
-
-        expect(within(firstGroup).getByText("1 story")).toBeTruthy();
-        expect(within(secondGroup).getByText("2 stories")).toBeTruthy();
-        expect(
-          gallery.getByText("3 presentational components · 1 with stories · 2 missing")
-        ).toBeTruthy();
-        expect(within(firstGroup).getByRole("region", { name: "Only story" })).toBeTruthy();
-        expect(within(secondGroup).getByRole("region", { name: "Filled story" })).toBeTruthy();
-
-        gallery.unmount();
-      });
-
-      it("excludes meta-level coverage opt-outs without counting wired stories", () => {
-        const gallery = render(
-          view.renderTree([
-            {
-              componentId: "@/components/ui/covered",
-              storyModule: {
-                default: { title: "UI/Covered" },
-                Example: {
-                  parameters: { gallery: { coverage: false } },
-                  render: () => "Covered story",
-                },
-              },
-            },
-            {
-              componentId: "@/components/ui/opted-out",
-              storyModule: {
-                default: {
-                  title: "UI/OptedOut",
-                  parameters: { gallery: { coverage: false } },
-                },
-                Example: { render: () => "Opted-out story" },
-              },
-            },
-            {
-              componentId: null,
-              storyModule: {
-                default: { title: "Feature/Wired" },
-                Example: { render: () => "Bonus story" },
-              },
-            },
-          ]) as ReactElement
-        );
-
-        expect(
-          gallery.getByText("2 presentational components · 1 with stories · 1 missing")
-        ).toBeTruthy();
-
-        gallery.unmount();
-      });
-
-      it("rejects a story without a render function or meta component", () => {
-        expect(() =>
-          view.renderTree([
-            {
-              componentId: "@/components/ui/missing-component",
-              storyModule: {
-                default: { title: "UI/MissingComponent" },
-                Broken: {},
-              },
-            },
-          ])
-        ).toThrow('Story "UI/MissingComponent/Broken" must define render or meta.component');
-      });
-
-      it("renders story functions through React and uses their authored display names", () => {
-        function HookStory(): ReactElement {
-          const [label] = useState("Hook-backed story");
-          return createElement("span", null, label);
-        }
-
-        const gallery = render(
-          view.renderTree([
-            {
-              componentId: null,
-              storyModule: {
-                default: { title: "UI/HookStory" },
-                ExportName: { name: "Display name", render: HookStory },
-              },
-            },
-          ]) as ReactElement
-        );
-
-        const story = gallery.getByRole("region", { name: "Display name story" });
-        expect(within(story).getByRole("heading", { level: 3, name: "Display name" })).toBeTruthy();
-        expect(within(story).getByText("Hook-backed story")).toBeTruthy();
+        expect(requestSaveLayout).toHaveBeenCalledTimes(2);
 
         gallery.unmount();
       });
@@ -361,12 +270,56 @@ describe("main", () => {
         });
       });
 
-      it("opens and reveals the gallery in a new tab", async () => {
+      it("opens and reveals a gallery leaf with the last ItemView state", async () => {
+        await view.setState({
+          selectedStoryId: "UI/Button/Variants",
+          selectedSubtree: "UI/Button",
+          width: 340,
+        });
+
         await command.callback?.();
 
         expect(getLeaf).toHaveBeenCalledWith("tab");
-        expect(setViewState).toHaveBeenCalledWith({ type: GALLERY_VIEWTYPE, active: true });
+        expect(setViewState).toHaveBeenCalledWith({
+          type: GALLERY_VIEWTYPE,
+          state: {
+            contactSheet: false,
+            selectedStoryId: "UI/Button/Variants",
+            selectedSubtree: "UI/Button",
+            width: 340,
+          },
+          active: true,
+        });
         expect(revealLeaf).toHaveBeenCalledWith(leaf);
+      });
+
+      it("restores the selected story after its prior tab closes and the command reopens it", async () => {
+        await view.onOpen();
+        if (!renderView || !createView) {
+          throw new Error("Gallery view did not initialize");
+        }
+        const firstGallery = render(renderView() as ReactElement);
+        fireEvent.click(firstGallery.getByRole("button", { name: "Sizes" }));
+        firstGallery.rerender(renderView() as ReactElement);
+        await view.onClose();
+        firstGallery.unmount();
+
+        await command.callback?.();
+        const reopenedViewState: unknown = setViewState.mock.calls.at(-1)?.[0].state;
+        const reopenedView = createView(leaf);
+        await reopenedView.setState(reopenedViewState);
+        await reopenedView.onOpen();
+        if (!renderView) {
+          throw new Error("Reopened gallery view did not provide a React tree");
+        }
+        const reopenedGallery = render(renderView() as ReactElement);
+
+        expect(reopenedGallery.getByText("UI/Button/Sizes")).toBeTruthy();
+        expect(
+          reopenedGallery.container.querySelector('[data-gallery-story-id="UI/Button/Sizes"]')
+        ).toBeTruthy();
+
+        reopenedGallery.unmount();
       });
     });
   });

@@ -2,10 +2,11 @@ import type { ComponentType } from "react";
 
 export type Host = "leaf" | "modal" | "popover" | "settings-tab";
 export type Layout = "padded" | "centered" | "fullscreen";
+export type GalleryWidth = 300 | 340 | 400 | 600;
 
 /** Namespaced so it can never collide with a real Storybook addon's parameters. */
 export interface GalleryParameters {
-  gallery?: { host?: Host; layout?: Layout; width?: number; coverage?: boolean };
+  gallery?: { host?: Host; layout?: Layout; width?: GalleryWidth; coverage?: boolean };
 }
 
 /** Strict subset of CSF3 ComponentAnnotations. */
