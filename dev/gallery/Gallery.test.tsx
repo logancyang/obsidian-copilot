@@ -419,7 +419,7 @@ describe("Gallery", () => {
       fireEvent.keyDown(gallery.getByRole("button", { name: "Primary Selected" }), {
         key: "ArrowUp",
       });
-      expect(gallery.getByText("UI/Button/Modal")).toBeTruthy();
+      expect(gallery.getByText("UI/Button/Popover")).toBeTruthy();
     });
 
     it("renders leaf stories and non-leaf launch cards in a selected contact sheet", () => {
@@ -472,6 +472,39 @@ describe("Gallery", () => {
       fireEvent.click(gallery.getByRole("button", { name: "Primary" }));
       fireEvent.click(gallery.getByRole("button", { name: "Modal" }));
       expect(getGalleryModalMock().open).toHaveBeenCalledTimes(2);
+    });
+
+    it("renders modal-hosted hook stories inside React's lifecycle", () => {
+      function HookStory(): React.ReactElement {
+        const [label] = React.useState("Hook-backed modal");
+        return <span>{label}</span>;
+      }
+
+      const catalog = createGalleryCatalog(
+        [
+          {
+            componentId: null,
+            storyModule: {
+              default: {
+                title: "UI/ModalHooks",
+                parameters: { gallery: { host: "modal" } },
+              },
+              Example: { render: HookStory },
+            },
+          },
+        ],
+        0
+      );
+      const gallery = render(<GalleryHarness catalog={catalog} />);
+      const modal = getGalleryModalMock().open.mock.calls[0][0] as unknown as {
+        renderContent(): React.ReactElement;
+      };
+
+      const modalContent = render(modal.renderContent());
+      expect(modalContent.getByText("Hook-backed modal")).toBeTruthy();
+
+      modalContent.unmount();
+      gallery.unmount();
     });
 
     it("anchors a real popover to the selected story trigger", () => {
