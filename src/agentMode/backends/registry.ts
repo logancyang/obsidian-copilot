@@ -37,10 +37,11 @@ let displayOrderCache: BackendDescriptor[] | null = null;
  */
 export function backendDisplayOrder(): BackendDescriptor[] {
   if (!displayOrderCache) {
-    const ids: BackendId[] = ["opencode", "claude", "codex"];
-    displayOrderCache = ids
-      .map((id) => backendRegistry[id])
-      .filter((descriptor): descriptor is BackendDescriptor => descriptor !== undefined);
+    displayOrderCache = [
+      OpencodeBackendDescriptor,
+      ClaudeBackendDescriptor,
+      CodexBackendDescriptor,
+    ];
   }
   return displayOrderCache;
 }
