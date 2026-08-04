@@ -154,6 +154,12 @@ describe("Gallery", () => {
         "UI/Button/Variants",
       ]);
       expect(catalog.stories.find((story) => story.id.endsWith("/Narrow"))?.width).toBe(300);
+      expect(
+        catalog.stories.find((story) => story.id === "Gallery/Host Environments/DefaultLeaf")
+      ).toMatchObject({ host: "leaf", layout: "fullscreen" });
+      expect(
+        catalog.stories.find((story) => story.id === "Gallery/Host Environments/DeleteConfirmation")
+      ).toMatchObject({ host: "modal", layout: "padded" });
       expect(catalog.stories.find((story) => story.id === "UI/Badge/Status")?.layout).toBe(
         "centered"
       );

@@ -13,6 +13,7 @@ const meta = {
 export default meta;
 
 export const DefaultLeaf: StoryObj = {
+  parameters: { gallery: { layout: "fullscreen" } },
   render: () => (
     <GalleryProviders>
       <div className="tw-flex tw-flex-col tw-gap-3">
