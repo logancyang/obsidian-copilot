@@ -1,6 +1,7 @@
 import { AgentChatControls } from "@/agentMode/ui/AgentChatControls";
 import { AgentHome } from "@/agentMode/ui/AgentHome";
 import { AgentModeStatus } from "@/agentMode/ui/AgentModeStatus";
+import { AgentSelectPanel } from "@/agentMode/ui/AgentSelectPanel";
 import {
   useActiveBackendDescriptor,
   useBackendInstallState,
@@ -106,13 +107,37 @@ export const AgentModeChat: React.FC<Props> = ({
     );
   }
 
-  // No active session (binary missing, booting, or boot error). Render the
-  // chain switcher above the status pill so the user can still leave Agent
-  // Mode without going through settings or the command palette.
+  // No active session (binary missing, booting, or boot error). The agent
+  // select view is a *cold-start* surface, so it takes the pane over only when
+  // nothing is actively erroring and the agent that would run isn't set up —
+  // the mirror image of the auto-spawn gate above. Two states deliberately keep
+  // the compact card instead:
+  //  - any `lastError`: a crashed agent, expired credentials, or a failed resume
+  //    is a runtime failure, not "no agent is set up". Replacing a working
+  //    panel with a setup screen would misdiagnose it, and the card's Retry /
+  //    Configure action is the fix. `lastError` therefore wins when both are
+  //    true — `AgentModeStatus` still checks install state first internally, so
+  //    an absent backend keeps its Install call to action there.
+  //  - `checking`: transient and Claude-only. Flashing the select view and
+  //    swapping it out is worse than the one-line "Checking … version…".
+  const isColdStart =
+    manager.getLastError() === null &&
+    (installState.kind === "absent" ||
+      installState.kind === "incompatible" ||
+      installState.kind === "error");
+
+  // Render the chain switcher below either surface so the user can still leave
+  // Agent Mode without going through settings or the command palette.
   return (
     <div className="tw-flex tw-size-full tw-flex-col tw-overflow-hidden">
       <div className="tw-flex-1" />
-      <AgentModeStatus manager={manager} plugin={plugin} onInstallClick={handleInstall} />
+      {isColdStart ? (
+        <div className="tw-min-h-0 tw-overflow-y-auto tw-p-2">
+          <AgentSelectPanel plugin={plugin} manager={manager} />
+        </div>
+      ) : (
+        <AgentModeStatus manager={manager} plugin={plugin} onInstallClick={handleInstall} />
+      )}
       <AgentChatControls />
     </div>
   );

@@ -15,6 +15,7 @@ import type {
   EffortOption,
   EnabledModelCredentialState,
   EnabledModelEntry,
+  InstallState,
   ModelEntry,
   ModelState,
 } from "@/agentMode/session/types";
@@ -183,6 +184,32 @@ function credentialDisabledReason(
   return undefined;
 }
 
+/**
+ * Map a backend's readiness to a `_disabledReason` for every row it
+ * contributes, or `undefined` when its rows stay selectable. Picking a model on
+ * a backend that isn't set up can only end in a failed spawn, so the picker says
+ * so up front instead of letting the user find out by losing their pane.
+ *
+ * `checking` stays selectable: it is a transient probe that resolves on its own,
+ * and labelling a backend "not set up" for the moment it takes to read a version
+ * would be wrong more often than it is right. `error` reads `Setup error` rather
+ * than the preload placeholder's `Unavailable` — the distinction matters because
+ * this one is fixed in the backend's Configure dialog, not by waiting.
+ */
+export function backendReadinessReason(state: InstallState): string | undefined {
+  switch (state.kind) {
+    case "absent":
+      return "Not set up";
+    case "incompatible":
+      return "Update required";
+    case "error":
+      return "Setup error";
+    case "checking":
+    case "ready":
+      return undefined;
+  }
+}
+
 export function synthesizeAgentEntry(
   baseModelId: string,
   humanName: string,
@@ -314,6 +341,27 @@ export function buildPickerEntries(
         entries.push(synthesizePreloadPlaceholder(descriptor, "pending"));
       } else if (preloadStatus === "ready" || preloadStatus === "error") {
         entries.push(synthesizePreloadPlaceholder(descriptor, "error"));
+      }
+    }
+    // Mark every row of a backend that can't run, so a doomed cross-backend
+    // pick is never offered as if it were selectable. This overwrites a
+    // per-model credential reason on purpose: an agent that isn't set up is the
+    // root cause, and "Add API key" would send the user to the wrong fix.
+    // The *active* backend is exempt — its rows are the running session's own
+    // selection, and disabling them would strand the current model (the merged
+    // picker seeds its draft from selectable rows only, so it would silently
+    // draft a different backend's model instead).
+    // Readiness is read from `settings`, which is already a dependency of the
+    // caller's memo, so every settings-driven transition (path saved, binary
+    // installed) relabels. The one transition that isn't settings-driven is
+    // Claude's async version probe, and it starts from `checking` — which
+    // carries no label — so it can never leave a row stuck as unselectable.
+    if (!isActiveBackend) {
+      const readiness = backendReadinessReason(descriptor.getInstallState(settings));
+      if (readiness) {
+        for (let i = sectionStart; i < entries.length; i++) {
+          entries[i]._disabledReason = readiness;
+        }
       }
     }
     // Flag this backend's rows when Self-Host Mode marks it as cloud. Registry
