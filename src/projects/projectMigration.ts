@@ -3,11 +3,14 @@ import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { logError, logInfo, logWarn } from "@/logger";
 import { COPILOT_PROJECT_ID, PROJECTS_UNSUPPORTED_FOLDER_NAME } from "@/projects/constants";
 import { reconcileLegacyAgentsResidue } from "@/projects/legacyAgentsResidue";
-import { deriveProjectFolderName, sanitizeVaultPathSegment } from "@/projects/projectPaths";
+import {
+  deriveProjectFolderName,
+  getProjectAnchorFromConfigPath,
+  sanitizeVaultPathSegment,
+} from "@/projects/projectPaths";
 import {
   ensureProjectFrontmatter,
   getProjectConfigFilePath,
-  getProjectFolderPath,
   getProjectsFolder,
   getProjectsUnsupportedFolder,
   readFrontmatterFieldFromFile,
@@ -17,7 +20,7 @@ import {
 import { addPendingFileWrite, removePendingFileWrite } from "@/projects/state";
 import { getSettings, updateSetting } from "@/settings/model";
 import { ensureFolderExists, stripFrontmatter } from "@/utils";
-import { App, Notice, parseYaml, TFile, TFolder, Vault } from "obsidian";
+import { App, Notice, normalizePath, parseYaml, TFile, TFolder, Vault } from "obsidian";
 import { trashFile } from "@/utils/vaultAdapterUtils";
 
 /**
@@ -40,10 +43,13 @@ function normalizeLineEndings(content: string): string {
 async function saveFailedProjectToUnsupported(
   vault: Vault,
   project: ProjectConfig,
-  reason: string
+  reason: string,
+  projectsFolder: string
 ): Promise<boolean> {
   try {
-    const unsupportedFolder = getProjectsUnsupportedFolder();
+    const unsupportedFolder = normalizePath(
+      `${projectsFolder}/${PROJECTS_UNSUPPORTED_FOLDER_NAME}`
+    );
     await ensureFolderExists(vault, unsupportedFolder);
 
     const safeId = sanitizeVaultPathSegment(project.id || "unknown") || "unknown";
@@ -144,14 +150,17 @@ async function rollbackCreatedFile(app: App, filePath: string, folderPath: strin
 async function writeProjectToVaultFile(
   app: App,
   project: ProjectConfig,
-  folderName: string
+  folderName: string,
+  projectsFolder: string
 ): Promise<TFile> {
   const vault = app.vault;
-  const projectsFolder = getProjectsFolder();
   await ensureFolderExists(vault, projectsFolder);
   await ensureFolderExists(vault, `${projectsFolder}/${folderName}`);
 
-  const filePath = getProjectConfigFilePath(folderName);
+  // Reuse the root this call already ensured rather than re-reading the live
+  // one: a Copilot root change between the ensure and here would write outside
+  // the directory that was just created.
+  const filePath = getProjectConfigFilePath(folderName, projectsFolder);
 
   const folderPath = `${projectsFolder}/${folderName}`;
 
@@ -241,6 +250,10 @@ function getMigrationFolderName(projectId: string, projectName?: string): string
  * @param app - Obsidian App instance
  */
 export async function migrateProjectsFromSettingsToVault(app: App): Promise<void> {
+  // One root for the whole pass. This runs on layout-ready and loops with awaits
+  // per project, so re-reading the live root mid-pass could plan against one
+  // tree and write into another.
+  const passProjectsFolder = getProjectsFolder();
   const vault = app.vault;
   const settings = getSettings();
   const legacyProjects = settings.projectList || [];
@@ -265,14 +278,19 @@ export async function migrateProjectsFromSettingsToVault(app: App): Promise<void
     // Dirty data defense: skip empty ids
     if (!id) {
       logWarn("[Projects] Skip migrating project with empty id");
-      await saveFailedProjectToUnsupported(vault, project, "empty project id");
+      await saveFailedProjectToUnsupported(vault, project, "empty project id", passProjectsFolder);
       continue;
     }
 
     // Dirty data defense: skip duplicate ids
     if (seenIds.has(id)) {
       logWarn(`[Projects] Skip migrating duplicate project id: ${id}`);
-      await saveFailedProjectToUnsupported(vault, project, `duplicate project id: ${id}`);
+      await saveFailedProjectToUnsupported(
+        vault,
+        project,
+        `duplicate project id: ${id}`,
+        passProjectsFolder
+      );
       continue;
     }
     seenIds.add(id);
@@ -290,12 +308,13 @@ export async function migrateProjectsFromSettingsToVault(app: App): Promise<void
       await saveFailedProjectToUnsupported(
         vault,
         project,
-        `folder name collision: "${folderName}" already used by id="${firstIdForFolder}"`
+        `folder name collision: "${folderName}" already used by id="${firstIdForFolder}"`,
+        passProjectsFolder
       );
       continue;
     }
     seenFolderNames.set(folderKey, id);
-    const filePath = getProjectConfigFilePath(folderName);
+    const filePath = getProjectConfigFilePath(folderName, passProjectsFolder);
 
     // Retry-safety: if target file already exists from a prior partial migration, skip it
     // but only if the frontmatter id matches (to avoid treating conflict files as successful)
@@ -377,7 +396,8 @@ export async function migrateProjectsFromSettingsToVault(app: App): Promise<void
         await saveFailedProjectToUnsupported(
           vault,
           project,
-          `existing file content mismatch at ${filePath} (delete/rename the file and re-run migration)`
+          `existing file content mismatch at ${filePath} (delete/rename the file and re-run migration)`,
+          passProjectsFolder
         );
         continue;
       }
@@ -389,29 +409,35 @@ export async function migrateProjectsFromSettingsToVault(app: App): Promise<void
       await saveFailedProjectToUnsupported(
         vault,
         project,
-        `target file exists at ${filePath} with mismatched id="${existingId}"`
+        `target file exists at ${filePath} with mismatched id="${existingId}"`,
+        passProjectsFolder
       );
       continue;
     }
 
     try {
-      const file = await writeProjectToVaultFile(app, project, folderName);
+      const file = await writeProjectToVaultFile(app, project, folderName, passProjectsFolder);
 
       const verified = await verifyMigratedContent(vault, file, project.systemPrompt || "");
       if (!verified) {
         // Reason: rollback the just-created file to prevent a permanent retry-failure loop.
         // Without this, the existing-file branch on next restart re-detects, re-verifies,
         // and fails again indefinitely.
-        const folderPath = `${getProjectsFolder()}/${folderName}`;
+        const folderPath = `${passProjectsFolder}/${folderName}`;
         await rollbackCreatedFile(app, file.path, folderPath);
-        await saveFailedProjectToUnsupported(vault, project, "content verification mismatch");
+        await saveFailedProjectToUnsupported(
+          vault,
+          project,
+          "content verification mismatch",
+          passProjectsFolder
+        );
       } else {
         migratedEntries.push(project);
       }
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       logError(`[Projects] Failed to migrate project id=${id}`, error);
-      await saveFailedProjectToUnsupported(vault, project, msg);
+      await saveFailedProjectToUnsupported(vault, project, msg, passProjectsFolder);
     }
   }
 
@@ -518,7 +544,6 @@ async function migrateProjectFolderNames(app: App): Promise<void> {
   if (records.length === 0) return;
 
   let renamed = 0;
-  const projectsFolder = getProjectsFolder();
   // Reason: track reserved lowercase folder names to prevent case-insensitive collisions
   // (e.g. "Foo" and "foo" both targeting the same path on macOS/Windows).
   // Matches the same guard used in createProject() and updateProject().
@@ -540,12 +565,16 @@ async function migrateProjectFolderNames(app: App): Promise<void> {
 
     if (safeFolderName === record.folderName) continue; // Already correct
 
-    const newFolderPath = `${projectsFolder}/${safeFolderName}`;
-    const oldFolderPath = getProjectFolderPath(record.folderName);
+    // Anchored on the record's own config path, not the live root: this loop
+    // awaits a rename per project, and a Copilot root change mid-loop would
+    // otherwise pair a source in one tree with a destination in another.
+    const { projectsRoot: recordProjectsRoot, projectFolderPath: oldFolderPath } =
+      getProjectAnchorFromConfigPath(record.filePath);
+    const newFolderPath = `${recordProjectsRoot}/${safeFolderName}`;
     const oldFilePath = record.filePath;
     // Reason: a folder rename preserves the config basename (`project.md`), so the new path
     // is just the same config name under the renamed folder.
-    const newFilePath = getProjectConfigFilePath(safeFolderName);
+    const newFilePath = getProjectConfigFilePath(safeFolderName, recordProjectsRoot);
 
     // Reason: case-insensitive collision guard — skip if another project already
     // occupies or is targeting this lowercase folder name (cross-platform safety).

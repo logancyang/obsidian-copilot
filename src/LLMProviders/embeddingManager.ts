@@ -1,6 +1,5 @@
 import { CustomModel } from "@/aiParams";
 import { BREVILABS_MODELS_BASE_URL, EmbeddingModelProviders, ProviderInfo } from "@/constants";
-import { getDecryptedKey } from "@/encryptionService";
 import { CustomError } from "@/error";
 import { logInfo } from "@/logger";
 import { getModelKeyFromModel, getSettings, subscribeToSettingsChange } from "@/settings/model";
@@ -209,7 +208,7 @@ export default class EmbeddingManager {
     } = {
       [EmbeddingModelProviders.COPILOT_PLUS]: {
         modelName,
-        apiKey: await getDecryptedKey(settings.plusLicenseKey),
+        apiKey: settings.plusLicenseKey,
         timeout: 10000,
         batchSize: getSettings().embeddingBatchSize,
         configuration: {
@@ -219,7 +218,7 @@ export default class EmbeddingManager {
       },
       [EmbeddingModelProviders.COPILOT_PLUS_JINA]: {
         model: modelName,
-        apiKey: await getDecryptedKey(settings.plusLicenseKey),
+        apiKey: settings.plusLicenseKey,
         timeout: 10000,
         batchSize: getSettings().embeddingBatchSize,
         dimensions: customModel.dimensions,
@@ -230,7 +229,7 @@ export default class EmbeddingManager {
       },
       [EmbeddingModelProviders.OPENAI]: {
         modelName,
-        apiKey: await getDecryptedKey(customModel.apiKey || settings.openAIApiKey),
+        apiKey: customModel.apiKey || settings.openAIApiKey,
         timeout: 10000,
         batchSize: getSettings().embeddingBatchSize,
         configuration: {
@@ -240,7 +239,7 @@ export default class EmbeddingManager {
       },
       [EmbeddingModelProviders.COHEREAI]: {
         modelName,
-        apiKey: await getDecryptedKey(customModel.apiKey || settings.cohereApiKey),
+        apiKey: customModel.apiKey || settings.cohereApiKey,
         timeout: 10000,
         batchSize: getSettings().embeddingBatchSize,
         configuration: {
@@ -250,11 +249,11 @@ export default class EmbeddingManager {
       },
       [EmbeddingModelProviders.GOOGLE]: {
         modelName: modelName,
-        apiKey: await getDecryptedKey(settings.googleApiKey),
+        apiKey: settings.googleApiKey,
       },
       [EmbeddingModelProviders.AZURE_OPENAI]: {
         modelName,
-        azureOpenAIApiKey: await getDecryptedKey(customModel.apiKey || settings.azureOpenAIApiKey),
+        azureOpenAIApiKey: customModel.apiKey || settings.azureOpenAIApiKey,
         azureOpenAIApiInstanceName:
           customModel.azureOpenAIApiInstanceName || settings.azureOpenAIApiInstanceName,
         azureOpenAIApiDeploymentName:
@@ -267,12 +266,12 @@ export default class EmbeddingManager {
         model: modelName,
         truncate: true,
         headers: {
-          Authorization: `Bearer ${await getDecryptedKey(customModel.apiKey || "default-key")}`,
+          Authorization: `Bearer ${customModel.apiKey || "default-key"}`,
         },
       },
       [EmbeddingModelProviders.LM_STUDIO]: {
         modelName,
-        openAIApiKey: await getDecryptedKey(customModel.apiKey || "default-key"),
+        openAIApiKey: customModel.apiKey || "default-key",
         configuration: {
           baseURL: customModel.baseUrl || "http://localhost:1234/v1",
           fetch: customModel.enableCors ? safeFetch : undefined,
@@ -280,7 +279,7 @@ export default class EmbeddingManager {
       },
       [EmbeddingModelProviders.OPENAI_FORMAT]: {
         modelName,
-        openAIApiKey: await getDecryptedKey(customModel.apiKey || ""),
+        openAIApiKey: customModel.apiKey || "",
         batchSize: getSettings().embeddingBatchSize,
         configuration: {
           baseURL: customModel.baseUrl,
@@ -290,7 +289,7 @@ export default class EmbeddingManager {
       },
       [EmbeddingModelProviders.SILICONFLOW]: {
         modelName,
-        apiKey: await getDecryptedKey(customModel.apiKey || settings.siliconflowApiKey),
+        apiKey: customModel.apiKey || settings.siliconflowApiKey,
         batchSize: getSettings().embeddingBatchSize,
         configuration: {
           baseURL: customModel.baseUrl || ProviderInfo[EmbeddingModelProviders.SILICONFLOW].host,
@@ -299,7 +298,7 @@ export default class EmbeddingManager {
       },
       [EmbeddingModelProviders.OPENROUTERAI]: {
         modelName,
-        apiKey: await getDecryptedKey(customModel.apiKey || settings.openRouterAiApiKey),
+        apiKey: customModel.apiKey || settings.openRouterAiApiKey,
         batchSize: getSettings().embeddingBatchSize,
         configuration: {
           baseURL: customModel.baseUrl || "https://openrouter.ai/api/v1",

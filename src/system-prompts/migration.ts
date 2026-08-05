@@ -2,6 +2,7 @@ import { App, TFile, Vault } from "obsidian";
 import {
   ensurePromptFrontmatter,
   getPromptFilePath,
+  getPromptFilePathInFolder,
   getSystemPromptsFolder,
   loadAllSystemPrompts,
 } from "@/system-prompts/systemPromptUtils";
@@ -154,7 +155,8 @@ export async function migrateSystemPromptsFromSettings(app: App): Promise<void> 
     // Generate a unique name if default name already exists
     // Reason: Prevents data loss when file exists with different content
     const promptName = generateUniquePromptName(MIGRATED_PROMPT_NAME, vault);
-    const filePath = getPromptFilePath(promptName);
+    // Same folder that was just ensured, not a fresh lookup.
+    const filePath = getPromptFilePathInFolder(promptName, folder);
 
     if (promptName !== MIGRATED_PROMPT_NAME) {
       logInfo(`Default name already exists, using unique name: "${promptName}"`);

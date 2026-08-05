@@ -30,6 +30,10 @@ jest.mock("@/settings/model", () => ({
   updateSetting: jest.fn(),
 }));
 
+jest.mock("@/settings/copilotFolder", () => ({
+  getEffectiveSkillsFolder: () => skillsFolder,
+}));
+
 jest.mock("./discoverManagedSkills", () => ({
   discoverManagedSkills: jest.fn(),
 }));

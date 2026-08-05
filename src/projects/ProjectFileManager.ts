@@ -19,6 +19,7 @@ import {
 import { ProjectFileRecord } from "@/projects/type";
 import {
   fetchAllProjects,
+  getProjectAnchorFromConfigPath,
   getProjectConfigFilePath,
   getProjectFolderPath,
   getProjectsFolder,
@@ -356,6 +357,14 @@ export class ProjectFileManager {
 
     let filePath = existing.filePath;
     let folderName = existing.folderName;
+    // Every path below derives from the record's OWN location, never the live
+    // projects root. A Copilot root change activates immediately while
+    // ProjectRegister reloads its cache on a 1s trailing debounce, so an update
+    // started in that window would otherwise rename and write inside a
+    // different tree — destructively when the new root is a previously-used one
+    // that already holds a project of this name.
+    const { projectsRoot } = getProjectAnchorFromConfigPath(existing.filePath);
+    const projectFolderIn = (name: string) => normalizePath(`${projectsRoot}/${name}`);
 
     // Reason: when the project name changes, the folder should be renamed to match.
     // This keeps vault browsing intuitive (folder = project name).
@@ -363,10 +372,10 @@ export class ProjectFileManager {
     let oldFilePathForPending: string | null = null;
 
     if (nextFolderName !== existing.folderName) {
-      const newFolderPath = getProjectFolderPath(nextFolderName);
+      const newFolderPath = projectFolderIn(nextFolderName);
       // Reason: a folder rename keeps the config basename (`project.md`), so the new config
       // path is just `project.md` under the renamed folder.
-      const newFilePath = getProjectConfigFilePath(nextFolderName);
+      const newFilePath = getProjectConfigFilePath(nextFolderName, projectsRoot);
 
       // Check collision: cache (case-insensitive) + filesystem
       const folderKey = nextFolderName.toLowerCase();
@@ -382,7 +391,7 @@ export class ProjectFileManager {
       // (e.g. "foo" → "Foo") reports the old folder as "already existing". Skip the
       // disk-conflict check when the paths differ only in case.
       const isCaseOnlyRename =
-        newFolderPath.toLowerCase() === getProjectFolderPath(existing.folderName).toLowerCase();
+        newFolderPath.toLowerCase() === projectFolderIn(existing.folderName).toLowerCase();
       if (!isCaseOnlyRename && (await this.vault.adapter.exists(newFolderPath))) {
         throw new Error(`Cannot rename project folder: "${newFolderPath}" already exists on disk`);
       }
@@ -393,7 +402,7 @@ export class ProjectFileManager {
       addPendingFileWrite(newFilePath);
 
       try {
-        const oldFolderPath = getProjectFolderPath(existing.folderName);
+        const oldFolderPath = projectFolderIn(existing.folderName);
         // Reason: use vault-cache-aware rename when possible, adapter fallback for hidden folders
         const folderObj = this.vault.getAbstractFileByPath(oldFolderPath);
         if (folderObj instanceof TFolder) {
@@ -433,8 +442,8 @@ export class ProjectFileManager {
       // migration completed), materialize it now so the update can proceed.
       if (!file) {
         logInfo(`[Projects] Materializing missing vault file for project: ${normalizedId}`);
-        const folderPath = getProjectFolderPath(folderName);
-        await ensureFolderExists(this.vault, getProjectsFolder());
+        const folderPath = projectFolderIn(folderName);
+        await ensureFolderExists(this.vault, projectsRoot);
         await ensureFolderExists(this.vault, folderPath);
         file = await this.vault.create(filePath, nextProject.systemPrompt || "");
         materialized = true;
@@ -465,8 +474,7 @@ export class ProjectFileManager {
             lastUsedMs,
           });
         } catch (fmError) {
-          if (materialized)
-            await this.rollbackCreatedFile(filePath, getProjectFolderPath(folderName));
+          if (materialized) await this.rollbackCreatedFile(filePath, projectFolderIn(folderName));
           throw fmError;
         }
 
@@ -505,8 +513,8 @@ export class ProjectFileManager {
       // to prevent leaving the project in an inconsistent location.
       if (oldFilePathForPending && folderName !== existing.folderName) {
         try {
-          const oldFolderPath = getProjectFolderPath(existing.folderName);
-          const newFolderPath = getProjectFolderPath(folderName);
+          const oldFolderPath = projectFolderIn(existing.folderName);
+          const newFolderPath = projectFolderIn(folderName);
           // Reason: use vault.rename() for cached folders (same as forward rename) so
           // the vault cache stays consistent. Fall back to adapter for hidden folders.
           const renamedFolder = this.vault.getAbstractFileByPath(newFolderPath);
@@ -548,7 +556,10 @@ export class ProjectFileManager {
       return;
     }
 
-    const folderPath = getProjectFolderPath(existing.folderName);
+    // From the record's own config path: deleting via the live root would target
+    // a same-named project in a different tree during the window after a root
+    // change but before ProjectRegister reloads its cache.
+    const { projectFolderPath: folderPath } = getProjectAnchorFromConfigPath(existing.filePath);
 
     try {
       addPendingFileWrite(existing.filePath);

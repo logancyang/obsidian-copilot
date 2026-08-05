@@ -11,13 +11,12 @@ jest.mock("@/settings/model", () => ({
   useSettingsValue: () => currentSettings,
 }));
 
-// Plan-eligibility + validation surface. Eligible by default so the sub-section
-// fields aren't blocked by the toggle's own gating.
+// Entitlement surface. Eligible by default so the sub-section fields aren't
+// blocked by the toggle's own gating.
 let mockEligible: boolean | undefined = true;
 jest.mock("@/plusUtils", () => ({
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook
   useIsSelfHostEligible: () => mockEligible,
-  validateSelfHostMode: jest.fn(async () => true),
 }));
 
 jest.mock("@/contexts/TabContext", () => ({
@@ -32,6 +31,7 @@ const setSettings = (over: Partial<typeof DEFAULT_SETTINGS>) => {
 };
 
 const providerSelect = () => screen.getByRole<HTMLSelectElement>("combobox");
+const enableToggle = () => screen.getByRole("switch");
 
 describe("SelfHostSettings", () => {
   beforeEach(() => {
@@ -86,5 +86,37 @@ describe("SelfHostSettings", () => {
     render(<SelfHostSettings />);
 
     expect(providerSelect().disabled).toBe(false);
+  });
+
+  it("persists the toggle directly when the entitlement grants self-host", () => {
+    render(<SelfHostSettings />);
+    fireEvent.click(enableToggle());
+
+    expect(updateSetting).toHaveBeenCalledWith("enableSelfHostMode", true);
+  });
+
+  it.each([
+    ["the entitlement does not grant self-host", false],
+    ["the entitlement check has not settled yet", undefined],
+  ])("ignores clicks on the enable toggle while %s", (_case, eligible) => {
+    mockEligible = eligible;
+    render(<SelfHostSettings />);
+
+    expect(enableToggle().getAttribute("aria-disabled")).toBe("true");
+    fireEvent.click(enableToggle());
+    expect(updateSetting).not.toHaveBeenCalledWith("enableSelfHostMode", true);
+  });
+
+  it("lets an ineligible user turn self-host mode back off", () => {
+    // A token that stops verifying leaves the preference on (it is not an
+    // authoritative "not entitled"), so gating this direction too would strand
+    // the user with self-host stuck on and the toggle unreachable.
+    mockEligible = false;
+    setSettings({ enableSelfHostMode: true });
+    render(<SelfHostSettings />);
+
+    expect(enableToggle().getAttribute("aria-disabled")).not.toBe("true");
+    fireEvent.click(enableToggle());
+    expect(updateSetting).toHaveBeenCalledWith("enableSelfHostMode", false);
   });
 });

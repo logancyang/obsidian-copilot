@@ -6,9 +6,14 @@ import {
   SEND_SHORTCUT,
 } from "@/constants";
 import {
+  normalizeRootFolders,
+  resetSettings,
   sanitizeEnvOverrides,
   sanitizeQaExclusions,
   sanitizeSettings,
+  settingsAtom,
+  settingsStore,
+  validateCopilotFolder,
   CopilotSettings,
 } from "@/settings/model";
 import { getEffectiveUserPrompt, getSystemPrompt } from "@/system-prompts/systemPromptBuilder";
@@ -51,10 +56,15 @@ describe("sanitizeQaExclusions", () => {
 
     const sanitized = sanitizeQaExclusions(rawValue);
 
-    expect(sanitized.split(",")).toEqual([
-      encodeURIComponent("folder/"),
-      encodeURIComponent(COPILOT_FOLDER_ROOT),
-    ]);
+    expect(sanitized.split(",")).toEqual([encodeURIComponent("folder/")]);
+  });
+
+  it("no longer force-injects the copilot root (system exclusion covers it)", () => {
+    const rawValue = encodeURIComponent("folder");
+
+    const sanitized = sanitizeQaExclusions(rawValue);
+
+    expect(sanitized.split(",")).toEqual([encodeURIComponent("folder")]);
   });
 });
 
@@ -415,6 +425,26 @@ describe("sanitizeSettings - legacy Miyo settings cleanup", () => {
     expect("enableMiyoSearch" in sanitizedRecord).toBe(false);
   });
 
+  it("defaults a missing or malformed miyoSyncedExclusions to an empty receipt", () => {
+    const withoutReceipt = {
+      ...DEFAULT_SETTINGS,
+      miyoSyncedExclusions: undefined,
+    } as unknown as CopilotSettings;
+    expect(sanitizeSettings(withoutReceipt).miyoSyncedExclusions).toBe("");
+
+    const malformed = {
+      ...DEFAULT_SETTINGS,
+      miyoSyncedExclusions: 42,
+    } as unknown as CopilotSettings;
+    expect(sanitizeSettings(malformed).miyoSyncedExclusions).toBe("");
+
+    const preserved = {
+      ...DEFAULT_SETTINGS,
+      miyoSyncedExclusions: '{"device":"d","roots":[]}',
+    };
+    expect(sanitizeSettings(preserved).miyoSyncedExclusions).toBe('{"device":"d","roots":[]}');
+  });
+
   it("preserves embedding provider migrations while stripping obsolete Miyo keys", () => {
     const legacySettings = {
       ...DEFAULT_SETTINGS,
@@ -439,22 +469,18 @@ describe("sanitizeSettings - legacy Miyo settings cleanup", () => {
 });
 
 describe("sanitizeSettings - legacy self-host migration", () => {
-  it("renames legacy enableSelfHostedSearch=true to enableSelfHostMode without fabricating a receipt", () => {
+  it("renames legacy enableSelfHostedSearch=true to enableSelfHostMode", () => {
     const legacy = {
       ...DEFAULT_SETTINGS,
       enableSelfHostMode: undefined,
       enableSelfHostedSearch: true,
-      selfHostModeValidatedAt: null,
-      selfHostValidationCount: 0,
     } as unknown as CopilotSettings;
 
     const sanitized = sanitizeSettings(legacy);
 
+    // Only the user preference carries over; entitlement comes from the signed
+    // token, so there is no local receipt for sanitize to seed.
     expect(sanitized.enableSelfHostMode).toBe(true);
-    // The toggle alone gates self-host tools (isSelfHostModeValid), so sanitize
-    // must not invent a validation receipt — the receipt stays untouched.
-    expect(sanitized.selfHostModeValidatedAt).toBeNull();
-    expect(sanitized.selfHostValidationCount).toBe(0);
   });
 });
 
@@ -665,5 +691,226 @@ describe("sanitizeSettings - docProcessorBackend (v6 field)", () => {
       docProcessorBackend: "miyo",
     });
     expect(out.docProcessorBackend).toBe("miyo");
+  });
+});
+
+describe("model", () => {
+  describe("sanitizeSettings()", () => {
+    it("defaults to the historical root when empty", () => {
+      const out = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        copilotFolder: "",
+      });
+      expect(out.copilotFolder).toBe(DEFAULT_SETTINGS.copilotFolder);
+    });
+
+    it("defaults to the historical root when whitespace-only", () => {
+      const out = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        copilotFolder: "   ",
+      });
+      expect(out.copilotFolder).toBe(DEFAULT_SETTINGS.copilotFolder);
+    });
+
+    it("trims surrounding whitespace from a custom value", () => {
+      const out = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        copilotFolder: "  my-ai  ",
+      });
+      expect(out.copilotFolder).toBe("my-ai");
+    });
+
+    it("preserves a nested custom value", () => {
+      const out = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        copilotFolder: "notes/ai",
+      });
+      expect(out.copilotFolder).toBe("notes/ai");
+    });
+
+    it("rejects a parent-traversal path", () => {
+      const out = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        copilotFolder: "../escape",
+      });
+      expect(out.copilotFolder).toBe(DEFAULT_SETTINGS.copilotFolder);
+    });
+
+    it("rejects a Windows drive-absolute path", () => {
+      const out = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        copilotFolder: "C:/Users/evil",
+      });
+      expect(out.copilotFolder).toBe(DEFAULT_SETTINGS.copilotFolder);
+    });
+
+    it("rejects a Unix-absolute path", () => {
+      const out = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        copilotFolder: "/etc/passwd",
+      });
+      expect(out.copilotFolder).toBe(DEFAULT_SETTINGS.copilotFolder);
+    });
+    it("unions the active root into a normalized, deduped history", () => {
+      const out = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        copilotFolder: "team-ai",
+        copilotRootHistory: ["copilot", "ai", "copilot"],
+      });
+      expect(new Set(out.copilotRootHistory)).toEqual(new Set(["copilot", "ai", "team-ai"]));
+    });
+
+    it("guarantees the active root is present even when history is missing", () => {
+      const raw = { ...DEFAULT_SETTINGS, copilotFolder: "ai" } as unknown as Record<
+        string,
+        unknown
+      >;
+      delete raw.copilotRootHistory;
+      const out = sanitizeSettings(raw as unknown as CopilotSettings);
+      expect(out.copilotRootHistory).toContain("ai");
+    });
+
+    it("coerces a non-boolean upgrade flag to the default", () => {
+      const out = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        upgradedToV8FromLegacy: undefined,
+      } as unknown as CopilotSettings);
+      expect(out.upgradedToV8FromLegacy).toBe(false);
+    });
+
+    it("preserves a true upgrade flag", () => {
+      const out = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        upgradedToV8FromLegacy: true,
+      });
+      expect(out.upgradedToV8FromLegacy).toBe(true);
+    });
+  });
+
+  describe("validateCopilotFolder()", () => {
+    it("rejects empty and whitespace-only values", () => {
+      expect(validateCopilotFolder("").ok).toBe(false);
+      expect(validateCopilotFolder("   ").ok).toBe(false);
+    });
+
+    it("accepts a simple relative folder and trims it", () => {
+      expect(validateCopilotFolder("  my-ai  ")).toEqual({ ok: true, folder: "my-ai" });
+    });
+
+    it("accepts a nested relative folder and strips a trailing slash", () => {
+      expect(validateCopilotFolder("notes/ai/")).toEqual({ ok: true, folder: "notes/ai" });
+    });
+
+    it("rejects parent-traversal, absolute, and drive-letter paths", () => {
+      expect(validateCopilotFolder("../escape").ok).toBe(false);
+      expect(validateCopilotFolder("a/../b").ok).toBe(false);
+      expect(validateCopilotFolder("/etc/passwd").ok).toBe(false);
+      expect(validateCopilotFolder("C:/Users/evil").ok).toBe(false);
+    });
+
+    it("rejects a lone dot segment", () => {
+      expect(validateCopilotFolder("a/./b").ok).toBe(false);
+    });
+
+    it("rejects the Obsidian config folder case-insensitively", () => {
+      // eslint-disable-next-line obsidianmd/hardcoded-config-path -- the test asserts rejection of the conventional config dir literal
+      expect(validateCopilotFolder(".obsidian").ok).toBe(false);
+      expect(validateCopilotFolder(".Obsidian/plugins").ok).toBe(false);
+    });
+
+    it("rejects Windows-illegal characters in any segment", () => {
+      expect(validateCopilotFolder("a/b<c").ok).toBe(false);
+      expect(validateCopilotFolder('a/b"c').ok).toBe(false);
+      expect(validateCopilotFolder("a/b|c").ok).toBe(false);
+    });
+
+    it("rejects Windows-reserved device names in any segment, any case, with or without extension", () => {
+      expect(validateCopilotFolder("NUL").ok).toBe(false);
+      expect(validateCopilotFolder("team/CON").ok).toBe(false);
+      expect(validateCopilotFolder("con.md").ok).toBe(false);
+      expect(validateCopilotFolder("Com1").ok).toBe(false);
+      // Names that merely CONTAIN a reserved word stay valid.
+      expect(validateCopilotFolder("console").ok).toBe(true);
+      expect(validateCopilotFolder("nul-notes").ok).toBe(true);
+    });
+
+    it("rejects segments ending with a dot or space on every platform", () => {
+      expect(validateCopilotFolder("copilot.").ok).toBe(false);
+      expect(validateCopilotFolder("team /ai").ok).toBe(false);
+      expect(validateCopilotFolder("team./ai").ok).toBe(false);
+    });
+
+    it("agrees with sanitizeSettings on the copilotFolder fallback contract", () => {
+      // sanitizeSettings must coerce every value validateCopilotFolder rejects to
+      // the default; a value it accepts must survive verbatim.
+      for (const value of ["../escape", "/etc/passwd", "C:/x", "", "NUL", "copilot."]) {
+        const out = sanitizeSettings({ ...DEFAULT_SETTINGS, copilotFolder: value });
+        expect(out.copilotFolder).toBe(DEFAULT_SETTINGS.copilotFolder);
+      }
+      const kept = sanitizeSettings({ ...DEFAULT_SETTINGS, copilotFolder: "team/ai" });
+      expect(kept.copilotFolder).toBe("team/ai");
+    });
+  });
+
+  describe("normalizeRootFolders()", () => {
+    it("preserves case and strips trailing slashes without lowercasing", () => {
+      expect(normalizeRootFolders(["Copilot/", "ai//"])).toEqual(["Copilot", "ai"]);
+    });
+
+    it("dedupes case-sensitively, preserving first-seen order", () => {
+      expect(normalizeRootFolders(["copilot", "ai", "copilot", "Copilot"])).toEqual([
+        "copilot",
+        "ai",
+        "Copilot",
+      ]);
+    });
+
+    it("drops empty, non-string, and vault-escaping entries", () => {
+      expect(
+        normalizeRootFolders([
+          "",
+          "   ",
+          undefined,
+          "../escape",
+          "a/../b",
+          "/etc",
+          "C:\\Users\\Josh",
+          "notes/ai",
+        ])
+      ).toEqual(["notes/ai"]);
+    });
+
+    it("collapses interior duplicate slashes into the matcher's canonical form", () => {
+      expect(normalizeRootFolders(["a//b"])).toEqual(["a/b"]);
+    });
+
+    it("strips interior single-dot segments into the matcher's canonical form", () => {
+      expect(normalizeRootFolders(["a/./b"])).toEqual(["a/b"]);
+    });
+
+    it("leaves an already-canonical legitimate root unchanged", () => {
+      expect(normalizeRootFolders(["a/b"])).toEqual(["a/b"]);
+    });
+
+    it("canonicalizes before deduping and traversal filtering", () => {
+      expect(normalizeRootFolders(["a//b", "a/./b", "x/../y", "a/b"])).toEqual(["a/b"]);
+    });
+  });
+
+  describe("resetSettings()", () => {
+    it("preserves historical roots and folds in the pre-reset active root", () => {
+      settingsStore.set(settingsAtom, {
+        ...DEFAULT_SETTINGS,
+        copilotFolder: "team-ai",
+        copilotRootHistory: ["copilot", "ai"],
+      });
+
+      resetSettings();
+
+      const after = settingsStore.get(settingsAtom);
+      expect(after.copilotFolder).toBe(DEFAULT_SETTINGS.copilotFolder);
+      // Legacy + historical + pre-reset active root all survive the reset.
+      expect(new Set(after.copilotRootHistory)).toEqual(new Set(["copilot", "ai", "team-ai"]));
+    });
   });
 });

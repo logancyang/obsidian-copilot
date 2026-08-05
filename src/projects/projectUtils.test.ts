@@ -12,6 +12,13 @@ jest.mock("@/settings/model", () => ({
   getSettings: jest.fn(() => ({ projectsFolder: "copilot-projects" })),
 }));
 
+// getProjectsFolder derives from copilotFolder in production; shim the derived
+// accessor to the folder these tests configure via getSettings().projectsFolder.
+jest.mock("@/settings/copilotFolder", () => {
+  const { getSettings } = jest.requireMock<typeof import("@/settings/model")>("@/settings/model");
+  return { getEffectiveProjectsFolder: jest.fn(() => getSettings().projectsFolder) };
+});
+
 jest.mock("@/projects/state", () => ({
   addPendingFileWrite: jest.fn(),
   removePendingFileWrite: jest.fn(),

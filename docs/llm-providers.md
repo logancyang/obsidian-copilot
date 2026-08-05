@@ -14,6 +14,8 @@ Copilot includes 16 built-in AI providers, and you can add an unlimited number o
 
 You can configure multiple providers simultaneously and switch between them by changing the default model.
 
+Copilot stores provider credentials in this device's Obsidian Keychain. Synced vault settings do not transfer credentials to another device, so enter the required keys separately on each device.
+
 ---
 
 ## Cloud Providers

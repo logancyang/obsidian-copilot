@@ -5,6 +5,7 @@ import {
   fetchAllSystemPrompts,
   generateCopyPromptName,
   getPromptFilePath,
+  getPromptFilePathInFolder,
   getSystemPromptsFolder,
   loadAllSystemPrompts,
   validatePromptName,
@@ -76,8 +77,11 @@ export class SystemPromptManager {
       throw new Error(error);
     }
 
-    const filePath = getPromptFilePath(prompt.title);
+    // One folder for the whole create: resolving it again for the file path
+    // could ensure one directory and create the prompt in another if the
+    // Copilot root moves in between.
     const folderPath = getSystemPromptsFolder();
+    const filePath = getPromptFilePathInFolder(prompt.title, folderPath);
 
     try {
       addPendingFileWrite(filePath);

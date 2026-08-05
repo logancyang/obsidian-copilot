@@ -1,11 +1,3 @@
-// isSelfHostModeValidFor is a pure predicate over the passed settings; keep the
-// real implementation so seedDocProcessorBackend tests drive it via the settings
-// snapshot (proving purity) rather than through a global mock.
-jest.mock("@/plusUtils", () => ({
-  isSelfHostModeValidFor: (settings: { enableSelfHostMode?: boolean }): boolean =>
-    settings.enableSelfHostMode === true,
-}));
-
 // miyoUtils imports isMiyoAvailableForCapability (used by resolveDocProcessorBackend,
 // which is covered end-to-end in FileParserManager.test.ts). Stub the status store
 // so importing the module here doesn't pull in the real store.
@@ -15,17 +7,28 @@ jest.mock("@/miyo/miyoStatusStore", () => ({
   refreshMiyoStatus: jest.fn(),
 }));
 
+// Pin the device id so receipts built in different test runs stay comparable.
+jest.mock("@/utils/deviceId", () => ({
+  getDeviceId: jest.fn(() => "device-A"),
+}));
+
 import { Platform, type App } from "obsidian";
 import type { CopilotSettings } from "@/settings/model";
 import {
+  buildMiyoSyncReceipt,
+  didMiyoSyncedRootsChange,
   getMiyoFilePath,
   getMiyoFolderExclusions,
   getMiyoFolderInclusions,
   getMiyoFolderName,
   getSearchBackend,
   getVaultRelativeMiyoPath,
+  hasUserQaPatterns,
+  isCurrentVaultMiyoPath,
   isLocalMiyoUrl,
+  isMiyoScopeMismatch,
   seedDocProcessorBackend,
+  shouldSurfaceMiyoResync,
 } from "@/miyo/miyoUtils";
 
 /** Minimal settings stub; the accessors only read the fields set per-test. */
@@ -85,6 +88,29 @@ describe("getVaultRelativeMiyoPath", () => {
 
   it("returns the normalized path when the vault folder name is empty", () => {
     expect(getVaultRelativeMiyoPath(buildApp(""), "notes\\foo.md")).toBe("notes/foo.md");
+  });
+});
+
+describe("isCurrentVaultMiyoPath", () => {
+  const buildApp = (vaultName: string): App =>
+    ({
+      vault: {
+        getName: () => vaultName,
+      },
+    }) as unknown as App;
+
+  it("owns a raw path prefixed with the current vault's folder name", () => {
+    expect(isCurrentVaultMiyoPath(buildApp("MyVault"), "MyVault/copilot/x.md")).toBe(true);
+  });
+
+  it("disowns a raw path prefixed with another folder's name, even one matching a system root", () => {
+    // "copilot" is the default Copilot root NAME — but as a raw prefix it is
+    // another Miyo folder's namespace, not this vault's content.
+    expect(isCurrentVaultMiyoPath(buildApp("MyVault"), "copilot/notes/foo.md")).toBe(false);
+  });
+
+  it("claims ownership when no folder name is resolvable (conservative: filters still apply)", () => {
+    expect(isCurrentVaultMiyoPath(buildApp(""), "notes/foo.md")).toBe(true);
   });
 });
 
@@ -315,5 +341,177 @@ describe("getMiyoFolderInclusions", () => {
   it("drops root/parent pointers from include_folders", () => {
     expect(getMiyoFolderInclusions("./")).toEqual({});
     expect(getMiyoFolderInclusions("projects, .")).toEqual({ include_folders: ["projects"] });
+  });
+});
+
+/** App whose vault reports the given name; enough for the receipt helpers. */
+const appNamed = (name: string): App => ({ vault: { getName: () => name } }) as unknown as App;
+
+/** Settings stub for the sync-receipt helpers. */
+const receiptSettings = (over: Partial<CopilotSettings> = {}): CopilotSettings =>
+  ({
+    copilotFolder: "copilot",
+    copilotRootHistory: ["copilot"],
+    miyoServerUrl: "",
+    qaInclusions: "",
+    qaExclusions: "copilot",
+    enableMiyo: false,
+    miyoSyncedExclusions: "",
+    ...over,
+  }) as unknown as CopilotSettings;
+
+describe("buildMiyoSyncReceipt", () => {
+  it("binds device, url, folder, and the sorted system roots", () => {
+    const receipt = JSON.parse(
+      buildMiyoSyncReceipt(
+        appNamed("my-vault"),
+        receiptSettings({ copilotFolder: "team/ai", copilotRootHistory: ["zeta", "alpha"] })
+      )
+    ) as { device: string; url: string; folder: string; roots: string[] };
+    expect(receipt.device).toBe("device-A");
+    expect(receipt.url).toBe("");
+    expect(receipt.folder).toBe("my-vault");
+    expect(receipt.roots).toEqual([...receipt.roots].sort());
+    expect(receipt.roots).toContain("team/ai");
+  });
+
+  it("yields the same receipt regardless of history order", () => {
+    // Obsidian Sync can reorder copilotRootHistory on merge; content-equal
+    // histories must not fake a mismatch.
+    const a = buildMiyoSyncReceipt(
+      appNamed("v"),
+      receiptSettings({ copilotRootHistory: ["one", "two"] })
+    );
+    const b = buildMiyoSyncReceipt(
+      appNamed("v"),
+      receiptSettings({ copilotRootHistory: ["two", "one"] })
+    );
+    expect(a).toBe(b);
+  });
+});
+
+describe("isMiyoScopeMismatch", () => {
+  it("matches when the stored receipt equals the current expected receipt", () => {
+    const app = appNamed("v");
+    const settings = receiptSettings();
+    const synced = receiptSettings({ miyoSyncedExclusions: buildMiyoSyncReceipt(app, settings) });
+    expect(isMiyoScopeMismatch(app, synced)).toBe(false);
+  });
+
+  it("mismatches after the root changes", () => {
+    const app = appNamed("v");
+    const before = buildMiyoSyncReceipt(app, receiptSettings());
+    const after = receiptSettings({
+      copilotFolder: "team/ai",
+      copilotRootHistory: ["copilot", "team/ai"],
+      miyoSyncedExclusions: before,
+    });
+    expect(isMiyoScopeMismatch(app, after)).toBe(true);
+  });
+
+  it("mismatches when the receipt was written by another device", () => {
+    const app = appNamed("v");
+    const settings = receiptSettings();
+    const foreign = buildMiyoSyncReceipt(app, settings).replace("device-A", "device-B");
+    expect(isMiyoScopeMismatch(app, receiptSettings({ miyoSyncedExclusions: foreign }))).toBe(true);
+  });
+
+  it("treats a missing receipt field as mismatch", () => {
+    const settings = receiptSettings();
+    delete (settings as unknown as Record<string, unknown>).miyoSyncedExclusions;
+    expect(isMiyoScopeMismatch(appNamed("v"), settings)).toBe(true);
+  });
+});
+
+describe("shouldSurfaceMiyoResync", () => {
+  it("surfaces for a mismatch while Miyo is enabled", () => {
+    expect(shouldSurfaceMiyoResync(appNamed("v"), receiptSettings({ enableMiyo: true }))).toBe(
+      true
+    );
+  });
+
+  it("surfaces for a mismatch with a past registration even when Miyo is disabled", () => {
+    // Disconnected in Copilot but still registered server-side: Relay can still
+    // read, so the prompt must not disappear.
+    const app = appNamed("v");
+    const stale = buildMiyoSyncReceipt(app, receiptSettings()).replace("device-A", "device-B");
+    expect(shouldSurfaceMiyoResync(app, receiptSettings({ miyoSyncedExclusions: stale }))).toBe(
+      true
+    );
+  });
+
+  it("stays quiet for a never-registered user", () => {
+    expect(shouldSurfaceMiyoResync(appNamed("v"), receiptSettings())).toBe(false);
+  });
+
+  it("stays quiet when the receipt is current", () => {
+    const app = appNamed("v");
+    const settings = receiptSettings({ enableMiyo: true });
+    const synced = receiptSettings({
+      enableMiyo: true,
+      miyoSyncedExclusions: buildMiyoSyncReceipt(app, settings),
+    });
+    expect(shouldSurfaceMiyoResync(app, synced)).toBe(false);
+  });
+});
+
+describe("didMiyoSyncedRootsChange", () => {
+  it("returns false with no receipt", () => {
+    expect(didMiyoSyncedRootsChange(receiptSettings())).toBe(false);
+  });
+
+  it("returns true after the roots actually change", () => {
+    const receipt = buildMiyoSyncReceipt(appNamed("v"), receiptSettings());
+    const changed = receiptSettings({
+      copilotFolder: "team/ai",
+      copilotRootHistory: ["copilot", "team/ai"],
+      miyoSyncedExclusions: receipt,
+    });
+    expect(didMiyoSyncedRootsChange(changed)).toBe(true);
+  });
+
+  it("returns false for a device-only mismatch (roots unchanged)", () => {
+    // Another device's receipt with identical roots: the settings tab's on-load
+    // verification self-heals this silently; no startup nag.
+    const foreign = buildMiyoSyncReceipt(appNamed("v"), receiptSettings()).replace(
+      "device-A",
+      "device-B"
+    );
+    expect(didMiyoSyncedRootsChange(receiptSettings({ miyoSyncedExclusions: foreign }))).toBe(
+      false
+    );
+  });
+
+  it("returns false for a malformed receipt", () => {
+    expect(didMiyoSyncedRootsChange(receiptSettings({ miyoSyncedExclusions: "not-json" }))).toBe(
+      false
+    );
+  });
+});
+
+describe("hasUserQaPatterns", () => {
+  it("returns false for the default exclusions (system root only)", () => {
+    expect(hasUserQaPatterns(receiptSettings())).toBe(false);
+  });
+
+  it("returns false when exclusions hold only system roots, even with trailing slashes", () => {
+    const settings = receiptSettings({
+      copilotFolder: "team/ai",
+      copilotRootHistory: ["copilot", "team/ai"],
+      qaExclusions: encodeURIComponent("copilot/") + "," + encodeURIComponent("team/ai"),
+    });
+    expect(hasUserQaPatterns(settings)).toBe(false);
+  });
+
+  it("returns true when the user added their own exclusion", () => {
+    expect(hasUserQaPatterns(receiptSettings({ qaExclusions: "copilot,journal" }))).toBe(true);
+  });
+
+  it("returns true when any inclusion is set", () => {
+    expect(hasUserQaPatterns(receiptSettings({ qaInclusions: "projects" }))).toBe(true);
+  });
+
+  it("returns false when exclusions were cleared entirely", () => {
+    expect(hasUserQaPatterns(receiptSettings({ qaExclusions: "" }))).toBe(false);
   });
 });

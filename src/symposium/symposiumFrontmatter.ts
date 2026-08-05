@@ -93,13 +93,11 @@ export async function getSymposiumDocId(app: App, file: TFile): Promise<string |
  * @param app The Obsidian application that owns the note.
  * @param file The note whose publication identity should be saved.
  * @param receipt The validated publication receipt returned by Symposium.
- * @param expectedDocId The identity that was current when the remote action began.
  */
 export async function saveSymposiumLink(
   app: App,
   file: TFile,
-  receipt: SymposiumReceipt,
-  expectedDocId: string | null
+  receipt: SymposiumReceipt
 ): Promise<boolean> {
   if (parseSymposiumDocId(receipt.url) !== receipt.docId) {
     throw new Error("Cannot save an invalid Symposium document link.");
@@ -110,15 +108,8 @@ export async function saveSymposiumLink(
     if (!isFrontmatterProperties(frontmatter)) {
       throw new SymposiumFrontmatterParseError();
     }
-    const currentDocId = parseSymposiumDocId(frontmatter[SYMPOSIUM_PROPERTY]);
-    if (Object.prototype.hasOwnProperty.call(frontmatter, SYMPOSIUM_PROPERTY) && !currentDocId) {
-      return;
-    }
-    if (currentDocId === receipt.docId) {
-      saved = true;
-      return;
-    }
-    if (currentDocId !== expectedDocId) {
+    if (Object.prototype.hasOwnProperty.call(frontmatter, SYMPOSIUM_PROPERTY)) {
+      saved = parseSymposiumDocId(frontmatter[SYMPOSIUM_PROPERTY]) === receipt.docId;
       return;
     }
     frontmatter[SYMPOSIUM_PROPERTY] = receipt.url;

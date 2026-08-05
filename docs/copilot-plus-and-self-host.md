@@ -26,6 +26,13 @@ Copilot Plus is a subscription that enables:
 3. Enter your license key in the **Copilot Plus License Key** field
 4. Features unlock automatically
 
+The badge at the top of the license section names your plan once the key is
+working — **Plus**, **Lite**, or **Lifetime** for a Believer or Supporter
+purchase. It reads **Inactive** whenever the stored key grants nothing: a
+subscription that ended, a key that was revoked or mistyped, or a plan whose
+included access has run out. The plans link in that section is where you renew
+or upgrade.
+
 ---
 
 ## Copilot Plus Flash Model
@@ -64,7 +71,7 @@ You can ask Copilot to explicitly remember specific facts about you:
 Copilot saves this to a memory file in your vault and references it in future conversations.
 
 - **Enable**: **Settings → Copilot → Plus → Reference Saved Memories** (on by default)
-- **Memory folder**: **Settings → Copilot → Plus → Memory Folder Name** — default: `copilot/memory`
+- **Memory folder**: memories are stored in the `memory/` sub-folder of your Copilot folder — default `copilot/memory`. It follows the Copilot folder location (**Settings → Copilot → Basic → Copilot folder location**).
 - **Update memory tool**: The AI can add, update, or remove memories when you ask
 
 ---
@@ -99,9 +106,11 @@ Self-Host Mode lets you replace Copilot's cloud services with your own infrastru
 
 1. Go to **Settings → Copilot → Plus**
 2. Under **Self-Host Mode**, toggle **Enable Self-Host Mode**
-3. Copilot validates your license. If valid, the toggle activates.
+3. Copilot checks your plan. The toggle stays locked if your plan doesn't include Self-Host Mode.
 4. Toggle **Enable Miyo** to use the Miyo desktop app for local search, PDF parsing, and context.
 5. *(Optional)* Set **Custom Miyo Server URL** only if Miyo is running on a remote machine. Leave blank to use automatic local service discovery.
+
+**Working offline**: Self-Host Mode keeps working without an internet connection for a while after your last online check, and renews itself automatically whenever you're online. How long that offline period lasts currently varies, so reconnect when you can rather than relying on a fixed window.
 
 ### Web Search in Self-Host Mode
 

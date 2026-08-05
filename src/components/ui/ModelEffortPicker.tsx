@@ -6,8 +6,8 @@ import { FreeModelWarningIcon } from "@/components/ui/FreeModelWarningIcon";
 import { SelfHostCloudWarningIcon } from "@/components/ui/SelfHostCloudWarningIcon";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ModelDisplay } from "@/components/ui/model-display";
-import { type ModelSelectorEntry } from "@/components/ui/ModelSelector";
-import { getModelKeyFromModel } from "@/settings/model";
+import type { ModelSelectorEntry } from "@/components/ui/ModelSelector";
+import { getModelKeyFromModel } from "@/lib/model-key";
 import { cn } from "@/lib/utils";
 
 export interface ModelEffortPickerOverride {

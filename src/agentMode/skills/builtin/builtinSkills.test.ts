@@ -6,9 +6,8 @@ import {
   PLUS_ENV,
 } from "./builtinSkills";
 import {
-  SYMPOSIUM_API_ORIGIN,
+  SYMPOSIUM_AGENT_HANDOFF_DIR,
   SYMPOSIUM_MAX_HTML_BYTES,
-  SYMPOSIUM_TOKEN_ENV,
   SYMPOSIUM_WORKSPACE_ROOT_ENV,
 } from "@/symposium/constants";
 
@@ -186,44 +185,79 @@ describe("builtinSkills", () => {
       expect(ps1).toContain("@{ pdf = $PDF; user_id = $USER_ID }");
     });
 
-    it("publishes confirmed agent-generated HTML and retains the link on its source note", () => {
+    it("hands finished agent HTML to the host without exposing publication controls", () => {
       const skill = BUILTIN_SKILLS.find((item) => item.name === "symposium-publish");
       expect(skill).toBeDefined();
-      expect(skill!.files).toEqual([]);
+      expect(skill!.version).toBe(8);
+      expect(skill!.files.map((file) => file.path)).toEqual([
+        "symposium-publish.sh",
+        "symposium-publish.cmd",
+        "symposium-publish.ps1",
+      ]);
       expect(skill!.skillMd).toContain("Require one existing Markdown source file");
+      expect(skill!.skillMd).toContain("delete, remove, or");
+      expect(skill!.skillMd).toContain("the user alone chooses Update or Delete");
+      expect(skill!.skillMd).toContain("never render the raw frontmatter block");
+      expect(skill!.skillMd).toContain("Never tell the user to delete the page at its public URL");
       expect(skill!.skillMd).toMatch(/static HTML or\s+SVG/);
+      expect(skill!.skillMd).toContain("handlers, redirects, or external assets");
       expect(skill!.skillMd).toContain(`\`${SYMPOSIUM_MAX_HTML_BYTES}\` bytes`);
-      expect(skill!.skillMd).toContain("ask an explicit Yes/No confirmation");
-      expect(skill!.skillMd).toContain("A previous");
-      expect(skill!.skillMd).toContain("request to publish is not confirmation");
-      expect(skill!.skillMd).toContain(SYMPOSIUM_TOKEN_ENV);
-      expect(skill!.skillMd).not.toContain(PLUS_ENV.licenseKey);
-      expect(skill!.skillMd).toContain("empty or absent");
-      expect(skill!.skillMd).toContain(`${SYMPOSIUM_API_ORIGIN}/api/v1/docs`);
-      expect(skill!.skillMd).toContain("POST exactly once");
-      expect(skill!.skillMd).toContain("Accept: application/json");
-      expect(skill!.skillMd).toContain("`User-Agent: Symposium-Agent`");
-      expect(skill!.skillMd).toContain("error.code");
-      expect(skill!.skillMd).toContain("Cloudflare 1xxx");
-      expect(skill!.skillMd).toContain("says nothing about token validity");
-      expect(skill!.skillMd).toContain("positive safe integer");
-      expect(skill!.skillMd).toContain("/d/<docId>");
-      expect(skill!.skillMd).toContain("malformed");
-      expect(skill!.skillMd).toContain("ambiguous and non-retryable");
-      expect(skill!.skillMd).toContain(".symposium/publish-history.md");
       expect(skill!.skillMd).toContain(SYMPOSIUM_WORKSPACE_ROOT_ENV);
-      expect(skill!.skillMd).toContain("project-scoped");
-      expect(skill!.skillMd).toContain("| Document ID | Status | Note | URL |");
-      expect(skill!.skillMd).toContain("direct filesystem");
-      expect(skill!.skillMd).toContain("append only when it begins with that exact");
-      expect(skill!.skillMd).toContain("Escape existing backslashes");
-      expect(skill!.skillMd).toContain("structured frontmatter API");
-      expect(skill!.skillMd).toContain("server's full `url`");
-      expect(skill!.skillMd).toMatch(/only if the property is still\s+absent/);
-      expect(skill!.skillMd).toContain("server's `url` verbatim");
-      expect(skill!.skillMd).not.toContain("Copilot Plus");
-      expect(skill!.skillMd).not.toContain("Copilot-Obsidian");
-      expect(skill!.skillMd).not.toContain("Obsidian CLI");
+      expect(skill!.skillMd).toContain(SYMPOSIUM_AGENT_HANDOFF_DIR);
+      expect(skill!.skillMd).toMatch(/sandboxed\s+local-browser rendering/);
+      expect(skill!.skillMd).toMatch(/rejects active or\s+externally loaded content/);
+      expect(skill!.skillMd).toMatch(/prevents navigation from the\s+browser preview/);
+      expect(skill!.skillMd).toMatch(/never\s+choose an action or document id/);
+      expect(skill!.skillMd).toContain("create a new complete artifact");
+      expect(skill!.skillMd).toContain("previous confirmation never applies");
+      expect(skill!.skillMd).toMatch(/removes the\s+original artifact/);
+      expect(skill!.skillMd).toContain("removes its temporary browser preview");
+      expect(skill!.skillMd).toContain("bypass the review");
+      expect(skill!.skillMd).toContain("address every listed issue");
+      expect(skill!.skillMd).toContain("retry exactly once");
+      expect(skill!.skillMd).toContain("Never invent a cause");
+      expect(skill!.skillMd).toMatch(/create\s+another filename/);
+      expect(skill!.skillMd).toContain("`deleted`");
+      expect(skill!.skillMd).not.toContain("SYMPOSIUM_TOKEN");
+      expect(skill!.skillMd).not.toContain(PLUS_ENV.licenseKey);
+      expect(skill!.skillMd).not.toContain("/api/v1/docs");
+      expect(skill!.skillMd).not.toContain("Bearer");
+      expect(skill!.skillMd).not.toContain("POST exactly");
+      expect(skill!.skillMd).not.toContain("publish-history.md");
+
+      for (const script of [
+        scriptOf("symposium-publish", ".sh"),
+        scriptOf("symposium-publish", ".ps1"),
+      ]) {
+        expect(script).toContain("reviewAgentManage");
+        expect(script).toContain("reviewAgentPublish");
+        expect(script).toContain("then(JSON.stringify)");
+        expect(script).toContain("symposiumAgentBridge");
+        expect(script).not.toContain("symposiumPublisher");
+        expect(script).toContain(SYMPOSIUM_WORKSPACE_ROOT_ENV);
+        expect(script).not.toContain("SYMPOSIUM_VAULT_NAME");
+        expect(script).toContain("A compatible Obsidian CLI is unavailable.");
+        expect(script).not.toContain("COPILOT_OBSIDIAN_CLI:-obsidian");
+        expect(script).not.toContain("SYMPOSIUM_TOKEN");
+        expect(script).not.toContain(PLUS_ENV.licenseKey);
+        expect(script).not.toContain("/api/v1/docs");
+      }
+
+      const sh = scriptOf("symposium-publish", ".sh");
+      expect(sh).toContain('cd "$WORKSPACE_ROOT"');
+      expect(sh).toContain("VAULT_NAME=${WORKSPACE_ROOT%/}");
+      expect(sh).toContain('CLI_OUTPUT=$("$OBSIDIAN_CLI" "vault=$VAULT_NAME" eval');
+      expect(sh).toContain("sed -n '/^=> {/p' | sed -n '$p'");
+      expect(sh).not.toContain("trap cleanup");
+      expect(sh).not.toContain("rm -f");
+
+      const ps1 = scriptOf("symposium-publish", ".ps1");
+      expect(ps1).toContain("Set-Location -LiteralPath $WORKSPACE_ROOT");
+      expect(ps1).toContain("$VAULT_NAME = Split-Path -Leaf (Get-Location).Path");
+      expect(ps1).toContain("$CLI_OUTPUT = & $OBSIDIAN_CLI \"vault=$VAULT_NAME\" 'eval'");
+      expect(ps1).toContain("Where-Object { ([string]$_).StartsWith('=> {') }");
+      expect(ps1).not.toContain("finally {");
+      expect(ps1).not.toContain("Remove-Item");
     });
   });
 

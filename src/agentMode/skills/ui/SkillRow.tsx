@@ -13,8 +13,7 @@ import type { AgentBrand, BackendId } from "@/agentMode/session/types";
 import { Button } from "@/components/ui/button";
 import { useApp } from "@/context";
 import { logError } from "@/logger";
-import { getSettings } from "@/settings/model";
-import { DEFAULT_SKILLS_FOLDER } from "@/agentMode/skills/agentPaths";
+import { getEffectiveSkillsFolder } from "@/settings/copilotFolder";
 import { SkillManager } from "@/agentMode/skills/SkillManager";
 import { decideToggleAction } from "@/agentMode/skills/toggleDecision";
 import { formatSkillDisplayName } from "@/agentMode/skills/mergeDiscovery";
@@ -708,7 +707,5 @@ function buildConsolidateActionLines(args: BuildConsolidateLinesArgs): MigrateAc
  * falling back to the spec default when settings are missing.
  */
 function resolveCanonicalSkillsFolderRel(): string {
-  const folder = getSettings().agentMode?.skills?.folder;
-  if (typeof folder === "string" && folder.length > 0) return folder;
-  return DEFAULT_SKILLS_FOLDER;
+  return getEffectiveSkillsFolder();
 }

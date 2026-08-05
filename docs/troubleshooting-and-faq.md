@@ -200,17 +200,21 @@ Any missing or incorrect field will cause errors.
 
 If your settings get into a bad state, you can reset:
 
-1. Go to **Settings → Copilot** → find the reset option
-2. Or delete the `data.json` file from the plugin folder: `.obsidian/plugins/copilot/data.json`
+1. Go to **Settings → Copilot** → find the reset option.
 
-⚠️ Resetting clears all your settings. API keys kept in `data.json` (standard storage) are removed, but keys stored in the Obsidian Keychain are **not** — to erase those, use **Settings → Copilot → Advanced → API Key Storage → Delete All Keys**. Back up your keys first.
+⚠️ Resetting clears your non-secret settings, but it does **not** erase keys from the Obsidian Keychain. To erase them, use **Settings → Copilot → Advanced → API Key Storage → Delete All Keys**. Back up your keys first.
+
+Do not delete `.obsidian/plugins/copilot/data.json` as a substitute for the in-app reset. That file contains the vault's Keychain namespace; deleting it can make existing credentials unreachable and require you to re-enter them.
 
 ### API Key Storage
 
-Copilot has two ways to store API keys:
+Copilot v4 stores API keys, license keys, and authentication tokens only in the **Obsidian Keychain**. These credentials are not stored in `data.json`.
 
-- **Standard storage**: API keys are saved in `data.json` in plain text. Existing vaults stay in this mode until you choose to migrate.
-- **Obsidian Keychain**: New installs use this by default. You can also switch an existing vault by going to **Settings → Copilot → Advanced → API Key Storage** and clicking **Migrate to Obsidian Keychain**. After migration, `data.json` no longer contains your API keys.
+If your vault still had credentials in `data.json` when you upgraded, Copilot copied that file to `data-v3-credentials-backup-<id>.json` in the same plugin folder before clearing it, and showed you the exact path once on startup. Copilot never reads, decrypts, or imports that backup; it exists purely so your keys are not lost.
+
+Open it, paste each key into the matching field in Settings, and delete the file once they all work.
+
+Values that begin with `enc_` were encrypted by an older Copilot version and cannot be read back. Get fresh keys from those providers and enter the new ones instead.
 
 The Obsidian Keychain is per device. If you sync your vault to another device, you may need to re-enter API keys there.
 
@@ -277,7 +281,7 @@ Yes. You can have API keys configured for multiple providers simultaneously and 
 
 ### Where are my saved chats stored?
 
-Chat conversations are saved as markdown files in your vault, in the folder `copilot/copilot-conversations/` by default. You can change this folder in **Settings → Copilot → Basic → Default save folder**.
+Chat conversations are saved as markdown files in your vault, in the `copilot-conversations/` sub-folder of your Copilot folder (by default `copilot/copilot-conversations/`). To change where new chats are saved, change the root in **Settings → Copilot → Basic → Copilot folder location** — every Copilot sub-folder derives from it. Changing the root affects only new chats; conversations you have already saved stay in the old folder unless you move them yourself.
 
 ### How do I clear the Copilot cache?
 
@@ -285,14 +289,16 @@ Use **Command palette → Clear Copilot cache**. This clears cached responses an
 
 ### What is the `copilot/` folder in my vault?
 
-The `copilot/` folder is created by the plugin and stores:
+The `copilot/` folder is your Copilot folder — the default root the plugin uses to store its own files:
 
 - `copilot-conversations/` — Saved chat histories
 - `copilot-custom-prompts/` — Your custom commands
 - `system-prompts/` — Your custom system prompts
 - `memory/` — Saved AI memories (if enabled)
+- `skills/` — Agent skills
+- `projects/` — Project files
 
-This folder is automatically excluded from vault search to avoid cluttering results.
+You can rename this root in **Settings → Copilot → Basic → Copilot folder location**; all of the sub-folders above derive from it. The Copilot folder is automatically excluded from vault search to avoid cluttering results. If you change the root, the old folder is not moved for you and stays excluded from search permanently — any folder that has ever been your Copilot folder is kept out of search results even after you switch away from it.
 
 ### How do I switch modes?
 

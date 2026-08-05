@@ -34,10 +34,9 @@ export const createUpdateMemoryTool = (app: App) =>
           };
         }
 
-        const memoryFilePath = memoryManager.getSavedMemoriesFilePath();
         return {
           success: true,
-          message: `Memory updated successfully into ${memoryFilePath}: ${result.content}`,
+          message: `Memory updated successfully into ${result.filePath}: ${result.content}`,
         };
       } catch (error: unknown) {
         logError("[updateMemoryTool] Error updating memory:", error);

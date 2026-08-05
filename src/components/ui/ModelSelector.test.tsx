@@ -1,18 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import React from "react";
-import { ModelSelector, type ModelSelectorEntry } from "./ModelSelector";
-
-// The selector reads settings for its default model list + BYOK key check; a
-// stub keeps the test to the closed-trigger rendering under test.
-jest.mock("@/settings/model", () => ({
-  // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook; name must match the export
-  useSettingsValue: () => ({ activeModels: [] }),
-  getModelKeyFromModel: (m: { name: string; provider: string }) => `${m.name}|${m.provider}`,
-}));
-jest.mock("@/utils", () => ({
-  checkModelApiKey: () => ({ hasApiKey: true }),
-  err2String: (e: unknown) => String(e),
-}));
+import { ModelSelector } from "./ModelSelector";
+import type { ModelSelectorEntry } from "./ModelSelector";
 // Stub the warning icon to a testid — the real one wraps a Radix tooltip whose
 // text only renders on hover, so we assert presence, not the tooltip copy. Also
 // capture props to confirm the trigger passes stopPropagation=false (otherwise
@@ -32,25 +21,25 @@ const model = (over: Partial<ModelSelectorEntry>): ModelSelectorEntry => ({
   ...over,
 });
 
-describe("ModelSelector — closed-trigger self-host warning", () => {
-  beforeEach(() => {
-    cloudWarningProps.length = 0;
-  });
+describe("ModelSelector", () => {
+  describe("ModelSelector()", () => {
+    beforeEach(() => {
+      cloudWarningProps.length = 0;
+    });
 
-  it("shows the cloud-egress warning on the collapsed trigger when the current model needs it", () => {
-    const cloud = model({ _needsSelfHostWarning: true });
-    render(<ModelSelector value="gpt-5|openai" onChange={jest.fn()} models={[cloud]} />);
+    it("shows the cloud-egress warning on the collapsed trigger when the current model needs it", () => {
+      const cloud = model({ _needsSelfHostWarning: true });
+      render(<ModelSelector value="gpt-5|openai" onChange={jest.fn()} models={[cloud]} />);
 
-    // Rendered without opening the dropdown — the trigger itself carries it.
-    expect(screen.getByTestId("cloud-warning")).toBeTruthy();
-    // The trigger click must fall through to open the picker.
-    expect(cloudWarningProps.some((p) => p.stopPropagation === false)).toBe(true);
-  });
+      expect(screen.getByTestId("cloud-warning")).toBeTruthy();
+      expect(cloudWarningProps.some((p) => p.stopPropagation === false)).toBe(true);
+    });
 
-  it("does NOT show the warning when the current model is self-hostable", () => {
-    const local = model({ _needsSelfHostWarning: false });
-    render(<ModelSelector value="gpt-5|openai" onChange={jest.fn()} models={[local]} />);
+    it("hides the warning when the current model is self-hostable", () => {
+      const local = model({ _needsSelfHostWarning: false });
+      render(<ModelSelector value="gpt-5|openai" onChange={jest.fn()} models={[local]} />);
 
-    expect(screen.queryByTestId("cloud-warning")).toBeNull();
+      expect(screen.queryByTestId("cloud-warning")).toBeNull();
+    });
   });
 });

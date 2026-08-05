@@ -7,7 +7,7 @@ import {
 } from "@/system-prompts/constants";
 import { UserSystemPrompt } from "@/system-prompts/type";
 import { App, normalizePath, TAbstractFile, TFile } from "obsidian";
-import { getSettings } from "@/settings/model";
+import { getEffectiveSystemPromptsFolder } from "@/settings/copilotFolder";
 import { stripFrontmatter } from "@/utils";
 import {
   updateCachedSystemPrompts,
@@ -53,10 +53,10 @@ export function validatePromptName(
 }
 
 /**
- * Get the system prompts folder path from settings
+ * Get the system prompts folder path, derived from the configurable copilotFolder root.
  */
 export function getSystemPromptsFolder(): string {
-  return normalizePath(getSettings().userSystemPromptsFolder);
+  return getEffectiveSystemPromptsFolder();
 }
 
 /**
@@ -67,11 +67,17 @@ export function getPromptFilePath(title: string): string {
 }
 
 /**
- * Get the file path for a system prompt by title in a specific folder
+ * Get the file path for a system prompt by title in a specific folder.
+ *
+ * Callers that create or move a prompt should pass `folder` explicitly and use
+ * the same value they ensured: the prompts folder derives from the Copilot root,
+ * so resolving it twice around an `await` can ensure one directory and write
+ * into another.
+ *
  * @param title - The title of the prompt
  * @param folder - Optional folder path (defaults to current settings folder)
  */
-function getPromptFilePathInFolder(title: string, folder?: string): string {
+export function getPromptFilePathInFolder(title: string, folder?: string): string {
   const folderPath = folder ? normalizePath(folder) : getSystemPromptsFolder();
   return normalizePath(`${folderPath}/${title}.md`);
 }

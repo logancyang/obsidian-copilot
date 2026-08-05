@@ -4,10 +4,14 @@ import {
   isMiyoAvailableForCapability,
   refreshMiyoStatus,
 } from "@/miyo/miyoStatusStore";
-import { shouldUseMiyo } from "@/miyo/miyoRuntimePolicy";
-import { isSelfHostModeValidFor } from "@/plusUtils";
-import { categorizePatterns, getDecodedPatterns } from "@/search/searchUtils";
+import { getMiyoCustomUrl, shouldUseMiyo } from "@/miyo/miyoRuntimePolicy";
+import {
+  categorizePatterns,
+  getDecodedPatterns,
+  getSystemExcludedFolders,
+} from "@/search/searchUtils";
 import { CopilotSettings, getSettings } from "@/settings/model";
+import { getDeviceId } from "@/utils/deviceId";
 import { App } from "obsidian";
 
 // Re-exported from miyoRuntimePolicy so callers keep importing these from
@@ -249,16 +253,18 @@ export function getSearchBackend(settings: CopilotSettings = getSettings()): "ke
  * circular (it would read the very field being computed) and non-deterministic
  * (it would depend on runtime connectivity at migration time).
  *
- * Both inputs are read from the passed `settings` (via the pure
- * {@link isSelfHostModeValidFor}), so the result depends only on that snapshot.
+ * Reads the raw toggles off the passed `settings` rather than the runtime
+ * `isSelfHostModeValid()` gate, which additionally consults the entitlement
+ * verified this session — a migration must not depend on whether that
+ * asynchronous verification has landed yet.
  *
  * @param settings - Settings being migrated.
- * @returns "miyo" when self-host mode is valid and Miyo is enabled, else "plus".
+ * @returns "miyo" when self-host mode and Miyo are both enabled, else "plus".
  */
 export function seedDocProcessorBackend(
   settings: CopilotSettings = getSettings()
 ): "plus" | "miyo" {
-  return isSelfHostModeValidFor(settings) && settings.enableMiyo ? "miyo" : "plus";
+  return settings.enableSelfHostMode && settings.enableMiyo ? "miyo" : "plus";
 }
 
 /**
@@ -373,4 +379,168 @@ export function getVaultRelativeMiyoPath(app: App, miyoPath: string): string {
   }
 
   return normalizedMiyoPath;
+}
+
+/**
+ * Whether a RAW Miyo result path belongs to the current vault's registered
+ * folder. Ownership must be decided before {@link getVaultRelativeMiyoPath}
+ * strips the prefix: raw paths are unambiguous (this vault's results carry the
+ * vault's folder name, other folders carry theirs), but once stripped, an
+ * external folder that happens to share a name with a vault-relative folder
+ * (e.g. a Miyo folder literally named "copilot") becomes indistinguishable
+ * from in-vault content.
+ *
+ * @param app - Obsidian application instance.
+ * @param miyoPath - Raw path as returned by Miyo, before prefix-stripping.
+ */
+export function isCurrentVaultMiyoPath(app: App, miyoPath: string): boolean {
+  const folderName = getMiyoFolderName(app);
+  if (!folderName) {
+    // No resolvable folder name (mobile/remote): claim ownership so the
+    // privacy filters still apply — the conservative direction.
+    return true;
+  }
+  return normalizeFilesystemPath(miyoPath).startsWith(`${folderName}/`);
+}
+
+/**
+ * Build the sync receipt recorded after the system root exclusions were
+ * successfully pushed to the registered Miyo folder. The receipt self-identifies
+ * its target — device, Miyo endpoint, folder name — alongside the sorted roots:
+ *
+ * - `device`: `data.json` syncs across devices but each device talks to its own
+ *   Miyo, so a receipt written on device A must read as stale on device B.
+ *   Embedding the device id makes that automatic without a device-local store.
+ * - `url` / `folder`: switching the Miyo server or renaming the vault targets a
+ *   different registration, which the old receipt must not vouch for.
+ * - `roots` are sorted so an Obsidian Sync merge that reorders
+ *   `copilotRootHistory` (content unchanged) cannot fake a mismatch and trigger
+ *   a pointless destructive re-registration.
+ *
+ * @param app - Active Obsidian app; names the registered folder.
+ * @param settings - Settings snapshot to derive the current scope from.
+ */
+export function buildMiyoSyncReceipt(app: App, settings: CopilotSettings): string {
+  return JSON.stringify({
+    device: getDeviceId(),
+    url: getMiyoCustomUrl(settings),
+    folder: getMiyoFolderName(app),
+    roots: [...getSystemExcludedFolders(settings)].sort(),
+  });
+}
+
+/** Parsed shape of a stored sync receipt. */
+export interface MiyoSyncReceipt {
+  device: string;
+  url: string;
+  folder: string;
+  roots: string[];
+}
+
+/**
+ * Parse a stored sync receipt, or null when absent/malformed. Callers use the
+ * identity fields to decide whether the receipt vouches for the registration
+ * they are looking at (same device, endpoint, and folder name).
+ *
+ * DESIGN NOTE — a foreign receipt proves NOTHING about this device's Miyo.
+ * `miyoSyncedExclusions` syncs via data.json, but each device talks to its own
+ * Miyo server. After device B resyncs, its receipt arrives here with current
+ * roots — yet THIS device's Miyo may still hold the old scope, and its Relay
+ * can keep exposing new-root content. The receipt's `device` field makes that
+ * detectable (mismatch → banner, and #4 keeps over-fetching conservatively),
+ * but the startup roots-change notice deliberately stays quiet for
+ * device-only mismatches to avoid nagging when this device's server is in
+ * fact fine. The Miyo tab's on-load `verifyMiyoScope` is the self-heal entry
+ * point — and the exposure window lasts until the user opens that tab.
+ * An EMPTY receipt is the same shape of unknown: a registration made before
+ * receipts existed leaves no local evidence, and a migration cannot
+ * synthesize a truthful one (the server's scope is unknowable offline;
+ * fabricating a receipt would falsely mark it synced). Empty stays the
+ * conservative state — mismatch holds, the retriever over-fetches, the Miyo
+ * tab's on-load verify self-heals or forces the banner, and the root-change
+ * trigger runs a read-only live probe for the disconnected-with-empty-receipt
+ * case. The startup roots-change notice still needs a parseable receipt:
+ * noticing on every empty receipt would nag the entire pre-receipt user base
+ * whose scopes are in fact fine.
+ * Follow-up (out of scope here): a timeout-bounded startup live-verify for
+ * foreign receipts. If a future review flags this again, point them here.
+ *
+ * @param stored - Raw `miyoSyncedExclusions` value.
+ */
+export function parseMiyoSyncReceipt(stored: unknown): MiyoSyncReceipt | null {
+  if (typeof stored !== "string" || stored.length === 0) return null;
+  try {
+    const parsed = JSON.parse(stored) as Partial<MiyoSyncReceipt>;
+    if (
+      typeof parsed.device !== "string" ||
+      typeof parsed.url !== "string" ||
+      typeof parsed.folder !== "string" ||
+      !Array.isArray(parsed.roots)
+    ) {
+      return null;
+    }
+    return parsed as MiyoSyncReceipt;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Whether the recorded sync receipt no longer matches the current expected
+ * scope — i.e. Miyo's server-side exclusions may be stale. Errors and missing
+ * fields read as mismatch: the consequences of a false positive are a benign
+ * over-fetch and a verify-first resync, while a false negative leaks.
+ */
+export function isMiyoScopeMismatch(app: App, settings: CopilotSettings): boolean {
+  try {
+    const stored =
+      typeof settings.miyoSyncedExclusions === "string" ? settings.miyoSyncedExclusions : "";
+    return stored !== buildMiyoSyncReceipt(app, settings);
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * Whether the resync prompt (banner / post-root-change notice) should surface.
+ * Requires a mismatch plus evidence Miyo is in play: `enableMiyo`, or a
+ * non-empty receipt proving a past registration — a user who disconnected in
+ * Copilot but left Miyo + Relay running is still exposed and must not lose the
+ * prompt.
+ */
+export function shouldSurfaceMiyoResync(app: App, settings: CopilotSettings): boolean {
+  const stored =
+    typeof settings.miyoSyncedExclusions === "string" ? settings.miyoSyncedExclusions : "";
+  return isMiyoScopeMismatch(app, settings) && (settings.enableMiyo === true || stored !== "");
+}
+
+/**
+ * Whether the system roots differ from those in the recorded receipt — the
+ * signal for the one-time startup notice when a root change arrived via
+ * settings sync without passing through the settings UI. A mismatch caused only
+ * by another device's receipt (roots equal, device differs) stays silent; the
+ * Miyo tab's on-load verification self-heals that case without nagging.
+ */
+export function didMiyoSyncedRootsChange(settings: CopilotSettings): boolean {
+  const receipt = parseMiyoSyncReceipt(settings.miyoSyncedExclusions);
+  if (!receipt) return false;
+  const current = [...getSystemExcludedFolders(settings)].sort();
+  return JSON.stringify(receipt.roots) !== JSON.stringify(current);
+}
+
+/**
+ * Whether the user has QA patterns of their own — beyond the system root
+ * exclusions — that the Miyo retriever's local filter can act on. Drives the
+ * over-fetch decision: with no user patterns and a synced scope, the server
+ * already omits everything the local filter would drop.
+ *
+ * `qaExclusions` defaults to the Copilot root, so raw non-emptiness is not a
+ * signal; system-root entries are subtracted before judging.
+ */
+export function hasUserQaPatterns(settings: CopilotSettings): boolean {
+  if ((settings.qaInclusions || "").trim().length > 0) return true;
+  const raw = (settings.qaExclusions || "").trim();
+  if (raw.length === 0) return false;
+  const system = new Set(getSystemExcludedFolders(settings));
+  return getDecodedPatterns(raw).some((pattern) => !system.has(pattern.replace(/\/+$/, "")));
 }

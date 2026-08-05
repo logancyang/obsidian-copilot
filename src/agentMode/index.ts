@@ -3,8 +3,8 @@ import os from "node:os";
 import * as path from "node:path";
 import type CopilotPlugin from "@/main";
 import { logError } from "@/logger";
-import { DEFAULT_SKILLS_FOLDER } from "@/constants";
 import { getSettings, subscribeToSettingsChange, type CopilotSettings } from "@/settings/model";
+import { deriveSkillsFolder, getEffectiveSkillsFolder } from "@/settings/copilotFolder";
 import { subscribeToSystemPromptChange } from "@/system-prompts/state";
 import { copilotAppDataDir, getVaultId } from "@/utils/appPaths";
 import { buildAgentSystemPrompt } from "./backends/shared/agentSystemPrompt";
@@ -350,8 +350,10 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     // appear in the new folder without a reload) or when Miyo availability
     // flips (so each gated Miyo skill is seeded/pruned to match). Both run the
     // same gate-aware seed pass against the current folder.
-    const prevFolder = prev.agentMode?.skills?.folder ?? DEFAULT_SKILLS_FOLDER;
-    const nextFolder = next.agentMode?.skills?.folder ?? DEFAULT_SKILLS_FOLDER;
+    // Reason: the skills folder is derived from the configurable copilotFolder
+    // root; compare derived paths rather than the retired agentMode.skills.folder.
+    const prevFolder = deriveSkillsFolder(prev);
+    const nextFolder = deriveSkillsFolder(next);
     // `enableMiyoSearchSkill` and `docProcessorBackend` are the two gates
     // `planManagedBuiltins` reads, and each also selects prompt steering that
     // codex/opencode bake at spawn. `enableMiyo` / `miyoServerUrl` are still
@@ -416,11 +418,9 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
   // Seed plugin-shipped builtin skills into the canonical folder, THEN run
   // discovery so the first pass picks them up and fans them out to the agent
   // dirs. Non-blocking for plugin load.
-  void seedManagedBuiltins(getSettings().agentMode?.skills?.folder ?? DEFAULT_SKILLS_FOLDER).catch(
-    (error) => {
-      logError("[Skills] Initial discovery pass failed", error);
-    }
-  );
+  void seedManagedBuiltins(getEffectiveSkillsFolder()).catch((error) => {
+    logError("[Skills] Initial discovery pass failed", error);
+  });
   // Non-blocking — plugin load should not wait on disk reconcile.
   for (const descriptor of listBackendDescriptors()) {
     descriptor

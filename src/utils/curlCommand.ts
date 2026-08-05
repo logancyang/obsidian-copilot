@@ -1,6 +1,5 @@
 import { CustomModel } from "@/aiParams";
 import { ChatModelProviders, EmbeddingModelProviders, ProviderInfo } from "@/constants";
-import { getDecryptedKey } from "@/encryptionService";
 
 // ============================================================================
 // Types
@@ -80,7 +79,7 @@ function getProviderCurlBaseURL(provider: string): string {
 
 /**
  * Resolves API key for curl generation.
- * Falls back to placeholder when key is missing or cannot be decrypted.
+ * Falls back to a placeholder when the hydrated key is missing.
  */
 async function resolveApiKeyForCurl(
   apiKeyInput: string | undefined
@@ -93,17 +92,7 @@ async function resolveApiKeyForCurl(
     return { apiKey: "<YOUR_API_KEY>", warnings };
   }
 
-  try {
-    const decrypted = (await getDecryptedKey(trimmed))?.trim();
-    if (!decrypted) {
-      warnings.push("API key could not be decrypted; using placeholder.");
-      return { apiKey: "<YOUR_API_KEY>", warnings };
-    }
-    return { apiKey: decrypted, warnings };
-  } catch {
-    warnings.push("API key could not be decrypted; using placeholder.");
-    return { apiKey: "<YOUR_API_KEY>", warnings };
-  }
+  return { apiKey: trimmed, warnings };
 }
 
 /** Strips OpenAI-style endpoint suffixes to avoid duplication */
@@ -245,18 +234,9 @@ async function buildOpenAICompatibleRequestSpec(
     Authorization: `Bearer ${apiKeyResolved.apiKey}`,
   };
 
-  // Add OpenAI org ID if present (may be encrypted at rest)
+  // Add OpenAI org ID if present.
   if (model.openAIOrgId?.trim()) {
-    try {
-      const orgId = (await getDecryptedKey(model.openAIOrgId))?.trim();
-      if (orgId) {
-        headers["OpenAI-Organization"] = orgId;
-      } else {
-        warnings.push("OpenAI organization ID could not be decrypted; omitting header.");
-      }
-    } catch {
-      warnings.push("OpenAI organization ID could not be decrypted; omitting header.");
-    }
+    headers["OpenAI-Organization"] = model.openAIOrgId.trim();
   }
 
   // Add OpenRouter-specific headers (see chatModelManager.ts:259-262)

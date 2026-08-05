@@ -4,8 +4,15 @@ import { BaseRetriever } from "@langchain/core/retrievers";
 import { App } from "obsidian";
 import { logInfo, logWarn } from "@/logger";
 import { MiyoClient, MiyoSearchFilter, MiyoSearchResult } from "@/miyo/MiyoClient";
-import { getMiyoCustomUrl, getMiyoFolderName, getVaultRelativeMiyoPath } from "@/miyo/miyoUtils";
-import { createCopilotPatternFilter, hasActiveCopilotPatterns } from "@/search/searchUtils";
+import {
+  getMiyoCustomUrl,
+  getMiyoFolderName,
+  getVaultRelativeMiyoPath,
+  hasUserQaPatterns,
+  isCurrentVaultMiyoPath,
+  isMiyoScopeMismatch,
+} from "@/miyo/miyoUtils";
+import { createCopilotPatternFilter } from "@/search/searchUtils";
 import { getSettings } from "@/settings/model";
 import { RETURN_ALL_LIMIT } from "@/search/v3/SearchCore";
 
@@ -88,6 +95,15 @@ export class MiyoSemanticRetriever extends BaseRetriever {
     const excludedPaths: string[] = [];
     for (const chunk of chunks) {
       const path = chunk.metadata.path as string;
+      // Another vault's results (search-all) never go through Copilot's QA
+      // rules: those rules — including the system-root exclusion — are defined
+      // over THIS vault's namespace, and an external folder that merely shares
+      // a root's name (e.g. "copilot") must not be swallowed by them. Absent
+      // flag (fail-closed) means "ours" and gets filtered.
+      if (chunk.metadata.fromCurrentVault === false) {
+        allowed.push(chunk);
+        continue;
+      }
       if (isAllowed(path)) {
         allowed.push(chunk);
       } else {
@@ -115,12 +131,23 @@ export class MiyoSemanticRetriever extends BaseRetriever {
   private async searchMiyo(query: string): Promise<Document[]> {
     try {
       const baseUrl = await this.client.resolveBaseUrl(getMiyoCustomUrl(getSettings()));
-      // Over-fetch candidates only when inclusion/exclusion filtering can drop
-      // results (or the caller wants everything), so filtering still leaves
-      // enough chunks to fill finalK and the set is capped afterwards. Without
-      // an active filter, bound the request to finalK so default searches don't
-      // transfer up to RETURN_ALL_LIMIT chunks for no filtering benefit.
-      const limit = this.returnAll || hasActiveCopilotPatterns() ? RETURN_ALL_LIMIT : this.finalK;
+      // Over-fetch candidates only when the local filter can actually drop
+      // results: user-authored qa patterns (the server never sees tag/note
+      // patterns, and edited patterns lag its registration snapshot), or a
+      // stale Miyo scope (the server may return system-root content the filter
+      // must remove). With a synced scope and no user patterns, the server
+      // already omits everything the filter would drop, so a small 2× margin —
+      // covering post-fetch chunk dedup, which Miyo does not guarantee against —
+      // replaces the former always-RETURN_ALL_LIMIT fetch. The margin is
+      // best-effort by design: finalK is an upper bound, not a fill guarantee
+      // (the similarity threshold already returns fewer), and a retry-on-
+      // shortfall second request would add tail latency for a duplicate
+      // density no real payload has shown.
+      const settings = getSettings();
+      const limit =
+        this.returnAll || hasUserQaPatterns(settings) || isMiyoScopeMismatch(this.app, settings)
+          ? RETURN_ALL_LIMIT
+          : Math.min(this.finalK * 2, RETURN_ALL_LIMIT);
       const filters = this.buildSearchFilters();
       if (getSettings().debug) {
         logInfo("MiyoSemanticRetriever: search params:", {
@@ -132,7 +159,8 @@ export class MiyoSemanticRetriever extends BaseRetriever {
           filters,
         });
       }
-      const folderName = getSettings().miyoSearchAll ? undefined : getMiyoFolderName(this.app);
+      const searchAll = settings.miyoSearchAll;
+      const folderName = searchAll ? undefined : getMiyoFolderName(this.app);
       const response = await this.client.search(baseUrl, folderName, query, limit, filters);
 
       const rawResults = response.results || [];
@@ -144,7 +172,7 @@ export class MiyoSemanticRetriever extends BaseRetriever {
         );
       }
 
-      return filteredResults.map((result) => this.toDocument(result));
+      return filteredResults.map((result) => this.toDocument(result, searchAll));
     } catch (error) {
       logWarn(`MiyoSemanticRetriever: search failed: ${error}`);
       return [];
@@ -175,10 +203,17 @@ export class MiyoSemanticRetriever extends BaseRetriever {
    * Convert Miyo search results to LangChain Documents.
    *
    * @param result - Miyo search result item.
+   * @param searchAll - Whether the originating query spanned all Miyo folders
+   *   (snapshotted at request time so a mid-request settings flip can't change
+   *   how this batch's ownership is judged).
    * @returns LangChain Document instance.
    */
-  private toDocument(result: MiyoSearchResult): Document {
+  private toDocument(result: MiyoSearchResult, searchAll: boolean): Document {
     const relativePath = getVaultRelativeMiyoPath(this.app, result.path);
+    // A folder-scoped query only ever returns this vault's content, so it is
+    // always ours — even if a result arrives without the folder prefix. Only
+    // an unrestricted (search-all) query needs the raw-path ownership check.
+    const fromCurrentVault = !searchAll || isCurrentVaultMiyoPath(this.app, result.path);
     const metadata = result.metadata ?? {};
     const chunkId =
       metadata.chunkId ||
@@ -202,6 +237,9 @@ export class MiyoSemanticRetriever extends BaseRetriever {
         created_at: result.created_at,
         nchars: result.nchars,
         chunkId,
+        // After ...metadata so a server-supplied field can never override the
+        // locally-computed ownership verdict.
+        fromCurrentVault,
       },
     });
   }

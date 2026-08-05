@@ -11,6 +11,8 @@ export default [
       "node_modules/**",
       "main.js",
       "styles.css",
+      "dev/gallery/main.js",
+      "dev/gallery/styles.css",
       "data.json",
       "designdocs/**",
       "docs/**",
@@ -185,6 +187,79 @@ export default [
     },
   },
 
+  {
+    files: ["src/components/ui/**/*.{ts,tsx}"],
+    // Tests may reach further; stories deliberately may not — a story that needs
+    // plugin state to build a fixture is reporting a coupled component.
+    ignores: ["src/components/ui/**/*.test.{ts,tsx}"],
+    rules: {
+      "@typescript-eslint/consistent-type-imports": "error",
+      "@typescript-eslint/no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              // Allowlist, not denylist: almost every src/ directory holds a store or
+              // singleton somewhere, so enumerating the bad ones will always lag.
+              group: [
+                "@/*",
+                "!@/components",
+                "!@/components/ui",
+                "!@/components/ui/*",
+                "!@/lib",
+                "!@/lib/*",
+                "!@/constants",
+              ],
+              allowTypeImports: true,
+              message:
+                "src/components/ui must not import values outside @/components/ui, @/lib, " +
+                "and @/constants. Type-only imports are always fine. If a primitive needs " +
+                "plugin state, take it as a prop; if it needs a helper, move the helper to " +
+                "@/lib. Reaching into @/settings, @/aiParams, @/utils, or @/agentMode couples " +
+                "a presentational component to the plugin runtime and makes it unrenderable " +
+                "and untestable in isolation.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+
+  {
+    files: ["dev/gallery/**/*.{ts,tsx}", "src/**/*.stories.{ts,tsx}"],
+    // Test fixtures intentionally import production stories and contexts but are
+    // erased from the gallery bundle, so only runtime gallery code needs this fence.
+    ignores: ["dev/gallery/**/*.test.{ts,tsx}"],
+    rules: {
+      "@typescript-eslint/no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              regex: "^\\.\\./",
+              allowTypeImports: true,
+              message:
+                "Gallery runtime and stories may not bypass the production import fence " +
+                "with parent-relative value imports. Use an allowed @/ path instead.",
+            },
+            {
+              regex:
+                "^@/(?!(?:(?:.*/)?ui/|components/modals/ReactModal$|" +
+                "components/gallery-hosts\\.fixtures$|context$|lib/[^/]+$|" +
+                "utils/react/mountPluginViewRoot$)).*",
+              allowTypeImports: true,
+              message:
+                "The gallery may only import production values from UI primitives, " +
+                "shared libraries, and its explicit Obsidian host/provider seams. " +
+                "Type-only imports are always fine. If a component needs plugin state " +
+                "to render, pass that state as story data instead of widening this boundary.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+
   // Test files need Jest globals
   {
     files: ["**/*.test.{js,jsx,ts,tsx}", "jest.setup.js", "__mocks__/**"],
@@ -257,7 +332,8 @@ export default [
   // `Platform.isMobile` at runtime in main.ts.
   // detectBinary / binaryPath / nodeToolBinDirs / rendererEventsShim are
   // sibling utilities pulled in by agent-mode wiring and share the same
-  // Electron-renderer assumptions.
+  // Electron-renderer assumptions. The Symposium handoff consumer is likewise
+  // desktop-only, but remains in the host publishing layer.
   {
     files: [
       "src/agentMode/**",
@@ -268,6 +344,7 @@ export default [
       "src/utils/rendererEventsShim.ts",
       "src/utils/issueReport.ts",
       "src/utils/opencodeLog.ts",
+      "src/symposium/symposiumAgentHandoff.ts",
     ],
     rules: {
       "import/no-nodejs-modules": "off",

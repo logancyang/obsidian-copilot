@@ -5,6 +5,40 @@ import type { App } from "obsidian";
 import React from "react";
 import { SkillRow } from "./SkillRow";
 
+// The migration/consolidate paths resolve the destination from the derived
+// skills folder. Mock the accessor so a test can assert the confirm dialog
+// shows the derived path (and not the retired agentMode.skills.folder).
+const getEffectiveSkillsFolder = jest.fn(() => "copilot/skills");
+jest.mock("@/settings/copilotFolder", () => ({
+  getEffectiveSkillsFolder: () => getEffectiveSkillsFolder(),
+}));
+
+// Narrow SkillManager mock: only the members the consolidate path reads before
+// opening the confirm dialog. No disk, no real migration.
+const resolveCanonicalNameForMigration = jest.fn((name: string) => name);
+const getSuppressMigrationConfirm = jest.fn(() => false);
+jest.mock("@/agentMode/skills/SkillManager", () => ({
+  SkillManager: {
+    getInstance: () => ({
+      resolveCanonicalNameForMigration: (name: string) => resolveCanonicalNameForMigration(name),
+      getSuppressMigrationConfirm: () => getSuppressMigrationConfirm(),
+      consolidateMirroredSkill: jest.fn(),
+    }),
+  },
+}));
+
+// Capture the options the consolidate flow passes to the confirm modal so the
+// test can inspect the action lines without opening a real Obsidian modal.
+let lastMigrateModalOptions: { actionLines: { verb: string; detail: string }[] } | null = null;
+jest.mock("./MigrateSkillConfirmModal", () => ({
+  MigrateSkillConfirmModal: class {
+    constructor(_app: unknown, options: { actionLines: { verb: string; detail: string }[] }) {
+      lastMigrateModalOptions = options;
+    }
+    open = jest.fn();
+  },
+}));
+
 // Radix DropdownMenu portals resolve `activeDocument` at render time, and its
 // trigger relies on Pointer Capture + PointerEvent, neither of which jsdom
 // implements. Polyfill the minimum so the menu can actually open in the test.
@@ -56,34 +90,82 @@ function renderRow(onRevealInVault: () => void) {
   return { ...utils, containerRef };
 }
 
-describe("SkillRow overflow menu", () => {
-  afterEach(() => {
-    activeDocument.body.removeAttribute(SCROLL_LOCK_ATTR);
+describe("SkillRow", () => {
+  describe("overflow menu", () => {
+    afterEach(() => {
+      activeDocument.body.removeAttribute(SCROLL_LOCK_ATTR);
+    });
+
+    // Regression guard for issue #118: a modal dropdown engages
+    // react-remove-scroll's document-level wheel listener. "Reveal in vault"
+    // moves focus into the file-explorer leaf, which can interrupt the menu's
+    // close/unmount and strand that listener, killing wheel scrolling vault-wide
+    // until restart. Keeping the menu non-modal means the lock is never engaged.
+    it("does not engage a body scroll lock when the menu opens", () => {
+      renderRow(() => {});
+
+      openMenu();
+
+      // The menu is open (its items are mounted)…
+      expect(screen.getByText("Reveal in vault")).not.toBeNull();
+      // …but the body must not be scroll-locked.
+      expect(activeDocument.body.hasAttribute(SCROLL_LOCK_ATTR)).toBe(false);
+    });
+
+    it("invokes the reveal handler when Reveal in vault is selected", () => {
+      const onRevealInVault = jest.fn();
+      renderRow(onRevealInVault);
+
+      openMenu();
+      fireEvent.click(screen.getByText("Reveal in vault"));
+
+      expect(onRevealInVault).toHaveBeenCalledTimes(1);
+    });
   });
 
-  // Regression guard for issue #118: a modal dropdown engages
-  // react-remove-scroll's document-level wheel listener. "Reveal in vault"
-  // moves focus into the file-explorer leaf, which can interrupt the menu's
-  // close/unmount and strand that listener, killing wheel scrolling vault-wide
-  // until restart. Keeping the menu non-modal means the lock is never engaged.
-  it("does not engage a body scroll lock when the menu opens", () => {
-    renderRow(() => {});
+  describe("migrate-to-shared-folder confirmation", () => {
+    const mirroredSkill: Skill = {
+      name: "writing-helper",
+      description: "Helps with writing.",
+      filePath: "/vault/.claude/skills/writing-helper/SKILL.md",
+      dirPath: "/vault/.claude/skills/writing-helper",
+      body: "",
+      enabledAgents: [],
+      location: { kind: "project", agentDirs: ["claude", "codex"] },
+    };
 
-    openMenu();
+    function renderMirroredRow() {
+      const containerRef: React.RefObject<HTMLDivElement> = { current: null };
+      return render(
+        <AppContext.Provider value={{} as App}>
+          <div ref={containerRef} />
+          <SkillRow
+            skill={mirroredSkill}
+            agents={[]}
+            agentDirsProjectRel={{ claude: ".claude/skills", codex: ".codex/skills" }}
+            onRevealInVault={() => {}}
+            containerRef={containerRef}
+          />
+        </AppContext.Provider>
+      );
+    }
 
-    // The menu is open (its items are mounted)…
-    expect(screen.getByText("Reveal in vault")).not.toBeNull();
-    // …but the body must not be scroll-locked.
-    expect(activeDocument.body.hasAttribute(SCROLL_LOCK_ATTR)).toBe(false);
-  });
+    afterEach(() => {
+      lastMigrateModalOptions = null;
+    });
 
-  it("invokes the reveal handler when Reveal in vault is selected", () => {
-    const onRevealInVault = jest.fn();
-    renderRow(onRevealInVault);
+    it("targets the folder derived from the Copilot root, not the retired skills field", () => {
+      // Regression: the confirm dialog's Move line must point at the derived
+      // skills folder. A non-default root exposed the bug — the old resolver read
+      // agentMode.skills.folder, which no longer tracks the root.
+      getEffectiveSkillsFolder.mockReturnValue("team/copilot/skills");
+      renderMirroredRow();
 
-    openMenu();
-    fireEvent.click(screen.getByText("Reveal in vault"));
+      openMenu();
+      fireEvent.click(screen.getByText("Migrate to shared folder"));
 
-    expect(onRevealInVault).toHaveBeenCalledTimes(1);
+      const moveLine = lastMigrateModalOptions?.actionLines.find((line) => line.verb === "Move");
+      expect(moveLine?.detail).toContain("<vault>/team/copilot/skills/writing-helper/");
+    });
   });
 });

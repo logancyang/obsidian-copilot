@@ -1,28 +1,159 @@
+import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { Button } from "@/components/ui/button";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { Input } from "@/components/ui/input";
 import { SettingItem } from "@/components/ui/setting-item";
 import { SettingSection } from "@/components/ui/setting-section";
 import { DEFAULT_OPEN_AREA, SEND_SHORTCUT } from "@/constants";
+import { useApp } from "@/context";
+import { usePlugin } from "@/contexts/PluginContext";
 import { cn } from "@/lib/utils";
-import { updateSetting, useSettingsValue } from "@/settings/model";
+import { verifyMiyoScope } from "@/miyo/miyoResync";
+import { shouldSurfaceMiyoResync } from "@/miyo/miyoUtils";
+import { ensureCopilotSubfolders } from "@/settings/copilotFolder";
+import {
+  applyCopilotRootChange,
+  copilotRootContainsNotes,
+  findCopilotRootFileConflict,
+  isKnownCopilotRoot,
+} from "@/settings/copilotRootChange";
+import {
+  getSettings,
+  updateSetting,
+  useSettingsValue,
+  validateCopilotFolder,
+} from "@/settings/model";
 import { PlusSettings } from "@/settings/v2/components/PlusSettings";
 import { formatDateTime } from "@/utils";
-import { Loader2 } from "lucide-react";
+import { revealFolderInExplorer } from "@/utils/revealFolderInExplorer";
+import { Folder, FolderSync, Loader2 } from "lucide-react";
 import { Notice } from "obsidian";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 
-// Read-only preview of the unified Copilot folder (PR-3 makes it editable and
-// wires the real setting). Sub-folders derive from this root. The row is hidden
-// until PR-3 lands — see the commented block in the render below.
-// const COPILOT_FOLDER_PLACEHOLDER = "copilot";
+/**
+ * Body of the "Change Copilot folder" confirmation modal. Leads with a
+ * folder-sync icon header, then states the two things the user must know before
+ * committing: files are not moved, and the old root stays permanently excluded
+ * from search.
+ */
+function CopilotFolderChangeNotice({ oldRoot, newRoot }: { oldRoot: string; newRoot: string }) {
+  return (
+    <div className="tw-flex tw-flex-col tw-gap-4">
+      <div className="tw-flex tw-items-center tw-gap-3 tw-text-normal">
+        <FolderSync className="tw-size-6 tw-shrink-0 tw-text-accent" />
+        <h2 className="tw-m-0 tw-text-xl tw-font-bold">Change Copilot folder</h2>
+      </div>
+      <p className="tw-m-0 tw-text-muted">
+        Copilot will keep new chats and data under <code>{newRoot}/</code>. Your files aren&apos;t
+        moved — your old data stays in <strong className="tw-text-normal">{oldRoot}/</strong>, which
+        stays permanently excluded from search. Move it over if you want; Obsidian updates the
+        links.
+      </p>
+    </div>
+  );
+}
 
 export const BasicSettings: React.FC = () => {
+  const app = useApp();
   const settings = useSettingsValue();
+  // From the plugin, not captured here: this tab mounts the first time the user
+  // selects it, so a tab first opened after a reload would vouch for the
+  // incoming lifecycle while still holding the outgoing vault's `app`.
+  const { miyoMutationSession } = usePlugin();
   const [isChecking, setIsChecking] = useState(false);
   const [conversationNoteName, setConversationNoteName] = useState(
     settings.defaultConversationNoteName || "{$date}_{$time}__{$topic}"
   );
+
+  // Draft + explicit Apply for the Copilot root. Reason: persisting on every
+  // keystroke would re-point every derived sub-folder and trigger reload
+  // watchers per character; a root change also needs an up-front confirmation.
+  const persistedRoot = settings.copilotFolder;
+  const [folderDraft, setFolderDraft] = useState(persistedRoot);
+
+  useEffect(() => {
+    /* eslint-disable @eslint-react/hooks-extra/no-direct-set-state-in-use-effect -- resync the draft when the persisted root changes underneath us (e.g. Reset Settings or a completed change) */
+    setFolderDraft(persistedRoot);
+    /* eslint-enable @eslint-react/hooks-extra/no-direct-set-state-in-use-effect */
+  }, [persistedRoot]);
+
+  const applyFolderChange = () => {
+    const validation = validateCopilotFolder(folderDraft);
+    if (!validation.ok) {
+      new Notice(`Invalid Copilot folder: ${validation.reason}`, 5000);
+      return;
+    }
+    const folder = validation.folder;
+    if (folder === persistedRoot) {
+      new Notice("That's already the Copilot folder.", 3000);
+      return;
+    }
+    // Reason: a path (or ancestor) occupied by an existing FILE would accept
+    // and persist fine, but every folder creation under it fails from then on
+    // — the first visible symptom being a failed chat save much later.
+    const conflict = findCopilotRootFileConflict(app, folder);
+    if (conflict) {
+      new Notice(
+        `"${conflict}" is an existing file, so "${folder}" can't be used as a folder. Choose another location.`,
+        8000
+      );
+      return;
+    }
+    // Reason: a root that already holds ordinary notes would be excluded from
+    // search wholesale once activated, silently hiding those notes. A root
+    // Copilot used before is exempt — its only Markdown is Copilot's own
+    // leftover data (chats/memory/prompts), and it stays QA-excluded via
+    // history, so re-activating it hides nothing new.
+    if (
+      !isKnownCopilotRoot(folder, settings.copilotRootHistory) &&
+      copilotRootContainsNotes(app, folder)
+    ) {
+      new Notice(
+        `"${folder}" already contains notes. Choose a folder that isn't used for regular notes, otherwise those notes would be excluded from search.`,
+        8000
+      );
+      return;
+    }
+    new ConfirmModal(
+      app,
+      () => {
+        void applyCopilotRootChange(app, folder)
+          .then(() => {
+            // The root moved, so Miyo's server-side exclusions no longer match.
+            // Surface it and stop there: changing a local folder setting must
+            // not mutate a remote registration on its own, and the Miyo tab's
+            // banner carries the explicit Resync. Reads fresh settings — the
+            // React `settings` closure predates the root change.
+            const fresh = getSettings();
+            const notice = () =>
+              new Notice("Miyo search needs a resync — open the Miyo settings tab.", 6000);
+            if (shouldSurfaceMiyoResync(app, fresh)) {
+              notice();
+            } else if (fresh.miyoSyncedExclusions === "") {
+              // No local evidence — but a registration made before receipts
+              // existed leaves none, and neither does one whose receipt a
+              // Reset Settings wiped. Such a vault is still indexed, and its
+              // Relay can read the new root, while nothing local would ever
+              // report it: the startup notice is gated on the same empty
+              // receipt. Only asking the server can tell that apart from
+              // "never used Miyo". Read-only — it never mutates the
+              // registration; a covering record just self-heals the receipt.
+              void verifyMiyoScope(app, miyoMutationSession).then((scope) => {
+                if (scope === "stale") notice();
+              });
+            }
+          })
+          .then(() => ensureCopilotSubfolders(app.vault, { copilotFolder: folder }))
+          .then(() => new Notice(`Copilot folder changed to "${folder}".`, 4000))
+          .catch(() => new Notice("Failed to change the Copilot folder. Check the logs.", 5000));
+      },
+      <CopilotFolderChangeNotice oldRoot={persistedRoot} newRoot={folder} />,
+      "",
+      "Change folder",
+      "Cancel",
+      () => setFolderDraft(persistedRoot)
+    ).open();
+  };
 
   const applyCustomNoteFormat = () => {
     setIsChecking(true);
@@ -92,38 +223,6 @@ export const BasicSettings: React.FC = () => {
           ]}
         />
 
-        {/* Copilot folder location — hidden until the next phase (PR-3) makes it
-            editable and wires the real `copilotFolder` setting + migration.
-            Shipping a disabled read-only preview now would just confuse users, so
-            keep it out of the UI until it does something. Restore this block when
-            PR-3 lands. */}
-        {/*
-        <SettingItem
-          type="custom"
-          title="Copilot folder location"
-          description="Where Copilot keeps conversations, prompts, memory and more. All sub-folders derive from this."
-        >
-          <div className="tw-flex tw-items-center tw-gap-2">
-            <Input
-              type="text"
-              value={COPILOT_FOLDER_PLACEHOLDER}
-              disabled
-              readOnly
-              className="tw-w-full sm:tw-w-[160px]"
-            />
-            <Button
-              variant="secondary"
-              size="icon"
-              disabled
-              aria-label="Open Copilot folder"
-              title="Open Copilot folder"
-            >
-              <Folder className="tw-size-4" />
-            </Button>
-          </div>
-        </SettingItem>
-        */}
-
         <SettingItem
           type="select"
           title="Send Shortcut"
@@ -150,6 +249,45 @@ export const BasicSettings: React.FC = () => {
             { label: "Shift + Enter", value: SEND_SHORTCUT.SHIFT_ENTER },
           ]}
         />
+
+        <SettingItem
+          type="custom"
+          title="Copilot folder location"
+          description="Where Copilot keeps conversations, prompts, memory and more. All sub-folders derive from this."
+        >
+          <div className="tw-flex tw-items-center tw-gap-2">
+            <Input
+              type="text"
+              value={folderDraft}
+              onChange={(e) => setFolderDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  applyFolderChange();
+                }
+              }}
+              placeholder="copilot"
+              className="tw-w-full sm:tw-w-[160px]"
+              aria-label="Copilot folder"
+            />
+            <Button
+              variant="secondary"
+              onClick={applyFolderChange}
+              aria-label="Apply Copilot folder"
+            >
+              Apply
+            </Button>
+            <Button
+              variant="secondary"
+              size="icon"
+              onClick={() => revealFolderInExplorer(app, settings.copilotFolder)}
+              aria-label="Open Copilot folder"
+              title="Open Copilot folder"
+            >
+              <Folder className="tw-size-4" />
+            </Button>
+          </div>
+        </SettingItem>
       </SettingSection>
 
       {/* Saving Conversations Section */}
@@ -160,24 +298,6 @@ export const BasicSettings: React.FC = () => {
           description="Writes each chat to a Markdown note in your vault after every user message and AI response. With this off, agent chats still appear in Recent Chats from session history; only the Markdown note is skipped."
           checked={settings.autosaveChat}
           onCheckedChange={(checked) => updateSetting("autosaveChat", checked)}
-        />
-
-        <SettingItem
-          type="text"
-          title="Default Conversation Folder Name"
-          description="The default folder name where chat conversations will be saved. Default is 'copilot/copilot-conversations'"
-          value={settings.defaultSaveFolder}
-          onChange={(value) => updateSetting("defaultSaveFolder", value)}
-          placeholder="copilot/copilot-conversations"
-        />
-
-        <SettingItem
-          type="text"
-          title="Default Conversation Tag"
-          description="The default tag to be used when saving a conversation. Default is 'ai-conversations'"
-          value={settings.defaultConversationTag}
-          onChange={(value) => updateSetting("defaultConversationTag", value)}
-          placeholder="ai-conversations"
         />
 
         <SettingItem

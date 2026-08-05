@@ -4,13 +4,21 @@ import { SegmentedControl } from "@/components/ui/segmented-control";
 import { SettingItem } from "@/components/ui/setting-item";
 import { SettingSection } from "@/components/ui/setting-section";
 import { SettingSwitch } from "@/components/ui/setting-switch";
-import { DEFAULT_SKILLS_FOLDER, MIYO_HOMEPAGE_URL } from "@/constants";
+import { MIYO_HOMEPAGE_URL } from "@/constants";
 import { useApp } from "@/context";
+import { usePlugin } from "@/contexts/PluginContext";
 import { cn } from "@/lib/utils";
 import { logWarn } from "@/logger";
 import { MiyoClient } from "@/miyo/MiyoClient";
 import { type CapabilityStatus, refreshMiyoStatus } from "@/miyo/miyoStatusStore";
 import {
+  assertCurrentLifecycle,
+  enqueueMiyoFolderMutation,
+  resyncMiyoFolder,
+  verifyMiyoScope,
+} from "@/miyo/miyoResync";
+import {
+  buildMiyoSyncReceipt,
   getMiyoCustomUrl,
   getMiyoFolderExclusions,
   getMiyoFolderInclusions,
@@ -18,9 +26,11 @@ import {
   isLocalMiyoUrl,
   MIYO_CHATS_DEEPLINK_URL,
   MIYO_CONNECT_DEEPLINK_URL,
+  shouldSurfaceMiyoResync,
 } from "@/miyo/miyoUtils";
 import { useMiyoStatus } from "@/miyo/useMiyoStatus";
-import { updateSetting, useSettingsValue } from "@/settings/model";
+import { deriveSkillsFolder } from "@/settings/copilotFolder";
+import { getSettings, updateSetting, useSettingsValue } from "@/settings/model";
 import {
   type ConnectOutcome,
   type ConnectStep,
@@ -29,7 +39,7 @@ import {
 import { MiyoStatusRow } from "@/settings/v2/components/MiyoStatusRow";
 import { err2String } from "@/utils";
 import { getVaultBase } from "@/utils/vaultPath";
-import { extractAppIgnoreSettings } from "@/search/searchUtils";
+import { extractAppIgnoreSettings, getSystemExcludedFolders } from "@/search/searchUtils";
 import { ArrowUpRight, ChevronRight, CornerDownRight, TriangleAlert } from "lucide-react";
 import { Notice, Platform } from "obsidian";
 import React, { useCallback, useEffect, useRef, useState } from "react";
@@ -124,6 +134,11 @@ export const MiyoSettings: React.FC = () => {
   const settings = useSettingsValue();
   const status = useMiyoStatus();
 
+  // From the plugin, not captured here: this tab mounts the first time the user
+  // selects it, which in a settings tree that outlived a reload is a different
+  // lifecycle than the one this tree belongs to.
+  const { miyoMutationSession } = usePlugin();
+
   // Draft + blur commit so we persist once on blur, not on every keystroke.
   const [urlDraft, setUrlDraft] = useState(settings.miyoServerUrl || "");
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -213,6 +228,109 @@ export const MiyoSettings: React.FC = () => {
   useEffect(() => {
     void refresh(false);
   }, [refresh]);
+
+  // ── Miyo scope resync ──
+  // Server-verified staleness from the on-mount check; null = unverified /
+  // unreachable → the banner falls back to the local receipt-mismatch signal.
+  const [serverScopeStale, setServerScopeStale] = useState<boolean | null>(null);
+  const [resyncPending, setResyncPending] = useState(false);
+  const [scopeVerifyNonce, setScopeVerifyNonce] = useState(0);
+
+  // Forces the verify below to run again when the live record may have changed
+  // without any local input moving — see the call sites for the two cases.
+  const invalidateScopeVerdict = useCallback(() => setScopeVerifyNonce((n) => n + 1), []);
+
+  // Verify the live record on mount AND whenever an input the verdict was
+  // derived from moves underneath it: the Miyo endpoint, the system roots the
+  // record is checked against, or an explicit invalidation. The verdict is a
+  // sticky veto — a `false` suppresses the local mismatch banner outright — so
+  // a verdict formed against inputs that no longer hold must not answer for the
+  // current ones; it is reset before re-verifying (the `cancelled` flag drops
+  // results from a superseded run). Keying on the roots also covers the async
+  // tail of a root change: `applyCopilotRootChange` persists to disk before it
+  // flips the in-memory root, and the user can open this tab inside that window,
+  // so the new root can land while this component stays mounted.
+  //
+  // The live record outranks local signals in both directions: a covering
+  // record silently self-heals a mismatched receipt (e.g. another device's
+  // receipt arrived via sync), and a stale record forces the banner even when
+  // local state looks clean (Reset Settings wiped the receipt, or the
+  // registration predates receipts).
+  const miyoEndpointUrl = getMiyoCustomUrl(settings);
+  // Only the system roots: they are what the record is checked against
+  // (`miyoRecordCoversSystemRoots`). The receipt is deliberately NOT part of
+  // this key — a "covered" verdict writes the receipt itself, which would
+  // re-trigger the effect forever.
+  const verifiedRootsKey = [...getSystemExcludedFolders(settings)].sort().join("\n");
+  useEffect(() => {
+    /* eslint-disable @eslint-react/hooks-extra/no-direct-set-state-in-use-effect -- reset the stale verdict when the inputs it was derived from change underneath us */
+    setServerScopeStale(null);
+    /* eslint-enable @eslint-react/hooks-extra/no-direct-set-state-in-use-effect */
+    // No local-only gate: the verify is a read-only lookup that works against a
+    // remote Miyo too, and it's the only way a remote user's banner can ever
+    // clear (they have no local register flow to write a receipt). Unreachable
+    // endpoints resolve to "unknown" and fall back to the local signal. Only
+    // the Resync button's delete/re-add stays gated on canAutoAddVault.
+    let cancelled = false;
+    void verifyMiyoScope(app, miyoMutationSession).then((verdict) => {
+      if (cancelled || !mountedRef.current) return;
+      if (verdict === "stale") setServerScopeStale(true);
+      else if (verdict === "covered" || verdict === "unregistered") setServerScopeStale(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [app, miyoEndpointUrl, miyoMutationSession, verifiedRootsKey, scopeVerifyNonce]);
+
+  const handleResync = useCallback(async () => {
+    setResyncPending(true);
+    try {
+      const outcome = await resyncMiyoFolder(app, miyoMutationSession);
+      if (!mountedRef.current) return;
+      switch (outcome) {
+        case "verified":
+          new Notice("Miyo is already in sync with your Copilot folders.");
+          setServerScopeStale(false);
+          break;
+        case "resynced":
+          new Notice("Miyo resynced — excluded folders updated, re-index started.");
+          setServerScopeStale(false);
+          break;
+        case "resynced-scan-failed":
+          new Notice("Miyo resynced; indexing will catch up on Miyo's next scan.");
+          setServerScopeStale(false);
+          break;
+        case "resynced-grants-reset":
+          // The rebuild could not recover this folder's Miyo-side permissions,
+          // so they were reset to off. Say so plainly: a user who had remote
+          // read enabled would otherwise keep believing it still is.
+          new Notice(
+            "Miyo resynced. This folder's registration had to be rebuilt, so its " +
+              "remote read and write access were turned off — re-enable them in the Miyo app if you want them.",
+            10000
+          );
+          setServerScopeStale(false);
+          break;
+        case "conflict":
+          new Notice(
+            "Miyo reports a conflicting registration (possibly under this vault's previous name). " +
+              "Remove it in the Miyo app, then retry."
+          );
+          break;
+        case "unregistered":
+          // Nothing on the server exposes this vault, so the stale banner can
+          // clear; re-registering is the register flow's job (explicit consent).
+          new Notice("This vault isn't registered with Miyo. Reconnect to register it.");
+          setServerScopeStale(false);
+          break;
+        case "failed":
+          new Notice("Couldn't resync Miyo. Make sure Miyo is running, then retry.");
+          break;
+      }
+    } finally {
+      if (mountedRef.current) setResyncPending(false);
+    }
+  }, [app, miyoMutationSession]);
 
   // Direct reachability probe that BYPASSES the shouldUseMiyo gate. The status
   // store only probes once Miyo is enabled (its snapshot reflects the *effective*
@@ -330,22 +448,77 @@ export const MiyoSettings: React.FC = () => {
       //     needs either a query-time userIgnoreFilters filter in the retriever or
       //     an idempotent folder-filter re-sync; both are out of this PR's scope.
       //     If a review flags this again, point them at this note.
-      await new MiyoClient().addFolder(
-        {
-          path: vaultBase,
-          // Remote read (Relay) is enabled by default so a user who turns on
-          // Miyo's Relay connector — itself an explicit, paid, signed-in opt-in
-          // (ChatGPT/Claude linked once) — gets cloud access to this vault without
-          // re-configuring it per folder. It's inert until Relay is actually on, so
-          // it doesn't expose anything on its own; the register modal states this
-          // plainly rather than promising absolute privacy. A user who wants this
-          // vault kept out of Relay can flip allow_remote_read off per folder in Miyo.
-          allow_remote_read: true,
-          ...getMiyoFolderInclusions(settings.qaInclusions),
-          ...getMiyoFolderExclusions(settings.qaExclusions, extractAppIgnoreSettings(app)),
-        },
-        customUrl || undefined
-      );
+      // Serialized with resync runs: the Resync button's DELETE/POST must never
+      // interleave with this registration. The task reads settings when it RUNS,
+      // not when it is queued — it can sit behind an
+      // in-flight mutation, and a root/endpoint change landing in that window
+      // would otherwise be submitted as an already-stale scope (with a receipt
+      // vouching for it). Mirrors resyncMiyoFolder's execution-time fresh read;
+      // the receipt is built from the same snapshot as the submitted body so it
+      // always describes what the server actually holds.
+      const submission = await enqueueMiyoFolderMutation(async (lifecycle) => {
+        const fresh = getSettings();
+        const freshUrl = getMiyoCustomUrl(fresh);
+        // DESIGN NOTE — a remote flip mid-queue surfaces as the retryable
+        // "error" outcome, NOT as a "manual" modal transition. Reaching this
+        // throw needs a double race: the modal blocks local edits, so only a
+        // synced-in endpoint change can land here, and only while the mutation
+        // chain is already busy. Recovery is close-and-reopen (canAutoAdd
+        // re-derives to false → manual deeplink guidance); nothing was
+        // submitted to the wrong target. Extending MiyoConnectModal's outcome
+        // routing with a mid-flight canAutoAdd downgrade for this corner is
+        // deliberately rejected — and a direct deeplink open after the queued
+        // await would have lost user activation anyway.
+        // If a future review flags this again, point them at this note.
+        if (!isLocalMiyoUrl(freshUrl)) {
+          throw new Error(
+            "Miyo endpoint switched to a remote target while registration was queued"
+          );
+        }
+        // Snapshot the credential alongside the endpoint: this registration is
+        // queued and can outlive the vault that asked for it, while the auth
+        // header is otherwise read live per request. The lifecycle check rides
+        // on `addFolder`'s `beforeRequest` below — it fires after URL resolution
+        // and decryption, so unlike a check here it cannot go stale before the
+        // POST leaves. It is separate from `superseded()` above: that tracks the
+        // UI's own attempt generation, this one whether the vault is still open.
+        const created = await new MiyoClient({ plusLicenseKey: fresh.plusLicenseKey }).addFolder(
+          {
+            path: vaultBase,
+            // Remote read (Relay) is enabled by default so a user who turns on
+            // Miyo's Relay connector — itself an explicit, paid, signed-in opt-in
+            // (ChatGPT/Claude linked once) — gets cloud access to this vault without
+            // re-configuring it per folder. It's inert until Relay is actually on, so
+            // it doesn't expose anything on its own; the register modal states this
+            // plainly rather than promising absolute privacy. A user who wants this
+            // vault kept out of Relay can flip allow_remote_read off per folder in Miyo.
+            allow_remote_read: true,
+            ...getMiyoFolderInclusions(fresh.qaInclusions),
+            // Project the always-on system root exclusions (active + historical
+            // Copilot roots) alongside Obsidian's own ignore folders, so a former
+            // root's content isn't uploaded for indexing. This is a registration-
+            // time snapshot; MiyoSemanticRetriever re-applies the LIVE scope
+            // (createCopilotPatternFilter, which also enforces these roots) at
+            // query time, so correctness never depends on the snapshot.
+            ...getMiyoFolderExclusions(fresh.qaExclusions, [
+              ...getSystemExcludedFolders(fresh),
+              ...extractAppIgnoreSettings(app),
+            ]),
+          },
+          freshUrl || undefined,
+          () => assertCurrentLifecycle(lifecycle)
+        );
+        return { created, receipt: buildMiyoSyncReceipt(app, fresh) };
+      }, miyoMutationSession);
+      // Record the sync receipt only for a fresh 201 — a 409 (already
+      // registered) means the server holds an EARLIER snapshot whose exclusions
+      // are unknown and possibly stale; marking it synced would silence the
+      // resync prompt over a stale scope. Written before the enable step and
+      // regardless of `superseded()`: the server-side registration DID happen
+      // with this exact body, whatever the UI does afterwards.
+      if (submission.created !== null) {
+        updateSetting("miyoSyncedExclusions", submission.receipt);
+      }
     } catch (error) {
       logWarn(`Miyo add-folder failed: ${err2String(error)}`);
       return "error";
@@ -355,10 +528,15 @@ export const MiyoSettings: React.FC = () => {
     // confirm reachability is "unreachable" (guide the user to start Miyo), never
     // "error" (which reads as "couldn't register" and contradicts the server).
     if (superseded()) return "unreachable";
+    // The record just changed (201) or turned out to pre-exist with unknown
+    // exclusions (409, which deliberately leaves the receipt empty above). The
+    // standing verdict was formed against the record as it was before either,
+    // so it must not keep vetoing the banner.
+    invalidateScopeVerdict();
     const available = await enableMiyoBackend(superseded);
     if (superseded()) return "unreachable";
     return available ? "added" : "unreachable";
-  }, [app, settings, enableMiyoBackend]);
+  }, [app, settings, enableMiyoBackend, invalidateScopeVerdict, miyoMutationSession]);
 
   // One connection attempt: probe reachability, then (if reachable) check whether
   // this vault is registered with Miyo. An unregistered vault is NOT auto-added —
@@ -389,6 +567,11 @@ export const MiyoSettings: React.FC = () => {
     // Registered → enable. Re-check the guard right before the settings write so a
     // cancel/unmount that landed during the check can't flip enableMiyo on.
     if (superseded()) return "superseded";
+    // This tab never registered the vault, so the record is one the user created
+    // in the Miyo app — its exclusions are unknown and no local input moved to
+    // signal that. Re-verify instead of trusting a verdict formed when the
+    // record was absent (or was a different record entirely).
+    invalidateScopeVerdict();
     const available = await enableMiyoBackend(superseded);
     // A newer attempt may have started during the enable refresh — don't let this
     // stale result drive the UI (close the modal / bounce a step). enableMiyoBackend
@@ -397,7 +580,7 @@ export const MiyoSettings: React.FC = () => {
     // Miyo may have dropped between registration and this refresh; only claim
     // "connected" when the backend is actually available now.
     return available ? "connected" : "unreachable";
-  }, [app, settings, probeReachable, enableMiyoBackend]);
+  }, [app, settings, probeReachable, enableMiyoBackend, invalidateScopeVerdict]);
 
   // Wraps attemptConnection with the shared error affordance so both entry points
   // (Connect button, modal Retry) surface the same Notice on an indeterminate
@@ -479,6 +662,11 @@ export const MiyoSettings: React.FC = () => {
   // `miyo-search` folder, or a write failure, must leave the toggle off rather
   // than claim success. A generation token drops a superseded flip (rapid
   // on/off, or unmount) so it can't commit stale state or fire a late Notice.
+  // Derive the skills folder from the configurable Copilot root rather than the
+  // retired `agentMode.skills.folder`, which no longer tracks the root: a
+  // non-default root would otherwise install/remove the skill in the wrong
+  // directory (and collide with the derived path the background seeder uses).
+  const skillsFolder = deriveSkillsFolder(settings);
   const handleToggleSearchSkill = useCallback(
     async (next: boolean) => {
       const attempt = (skillAttemptRef.current += 1);
@@ -489,7 +677,6 @@ export const MiyoSettings: React.FC = () => {
       const superseded = () => skillAttemptRef.current !== attempt;
       const unmounted = () => !mountedRef.current;
       setPendingSkillEnabled(next);
-      const folder = settings.agentMode?.skills?.folder ?? DEFAULT_SKILLS_FOLDER;
       try {
         // Import the agent-mode barrel lazily: it pulls in Node-only modules and
         // must never be evaluated on mobile (see main.ts). This handler only runs
@@ -499,7 +686,7 @@ export const MiyoSettings: React.FC = () => {
         // Nothing has touched disk yet, so bailing here can't diverge disk from flag.
         if (superseded() || unmounted()) return;
         if (next) {
-          const result = await installMiyoSearchSkill(app, folder);
+          const result = await installMiyoSearchSkill(app, skillsFolder);
           if (superseded()) return;
           if (result === "installed") {
             // Persist regardless of unmount: the files ARE on disk now.
@@ -515,7 +702,7 @@ export const MiyoSettings: React.FC = () => {
             new Notice("Couldn't install the Miyo search skill. Please try again.");
           }
         } else {
-          const result = await removeMiyoSearchSkill(app, folder);
+          const result = await removeMiyoSearchSkill(app, skillsFolder);
           if (superseded()) return;
           if (result === "failed") {
             // The skill is still on disk — keep the flag on so UI and disk agree,
@@ -543,7 +730,7 @@ export const MiyoSettings: React.FC = () => {
         if (!superseded() && !unmounted()) setPendingSkillEnabled(null);
       }
     },
-    [app, settings.agentMode?.skills?.folder]
+    [app, skillsFolder]
   );
 
   const commitUrl = useCallback(() => {
@@ -580,6 +767,29 @@ export const MiyoSettings: React.FC = () => {
       <div className="tw-text-sm tw-text-muted">
         Local, private context that stays on your machine — unlimited, no credits.
       </div>
+
+      {(serverScopeStale === true ||
+        (serverScopeStale === null && shouldSurfaceMiyoResync(app, settings))) && (
+        <div className="tw-flex tw-items-center tw-gap-2 tw-rounded-lg tw-border tw-border-solid tw-px-3 tw-py-2.5 tw-text-xs tw-text-warning tw-bg-warning/10 tw-border-warning/30">
+          <TriangleAlert className="tw-size-4 tw-shrink-0" />
+          <span className="tw-flex-1">
+            Miyo&apos;s excluded folders don&apos;t match your Copilot folder — chats could be
+            indexed and exposed. Resync to update them.
+          </span>
+          {canAutoAddVault() ? (
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={resyncPending}
+              onClick={() => void handleResync()}
+            >
+              {resyncPending ? "Resyncing…" : "Resync Miyo"}
+            </Button>
+          ) : (
+            <span className="tw-shrink-0">Remove and re-add this folder in the Miyo app.</span>
+          )}
+        </div>
+      )}
 
       {/* Connection */}
       <SettingSection label="Connection">

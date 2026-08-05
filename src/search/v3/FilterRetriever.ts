@@ -1,6 +1,11 @@
 import { logInfo, logWarn } from "@/logger";
 import { getSettings } from "@/settings/model";
-import { isInternalExcludedFile, shouldIndexFile, getMatchingPatterns } from "@/search/searchUtils";
+import {
+  getMatchingPatterns,
+  isInternalExcludedFile,
+  isSystemExcludedPath,
+  shouldIndexFile,
+} from "@/search/searchUtils";
 import { extractNoteFiles } from "@/utils";
 import { Document } from "@langchain/core/documents";
 import { App, TFile, getAllTags } from "obsidian";
@@ -276,7 +281,14 @@ export class FilterRetriever {
     const chunks: Document[] = [];
 
     for (const file of noteFiles) {
-      if (isInternalExcludedFile(file)) {
+      // A Copilot root is excluded unconditionally, so an explicit [[link]] must
+      // not reach past it either: these documents are returned with
+      // `includeInContext: true` and nothing downstream drops them, so a linked
+      // chat note would otherwise be handed to the model verbatim. Deliberately
+      // NOT the full `shouldIndexFile` — that would also subject explicit links
+      // to the user's own qaInclusions/qaExclusions, which they have always been
+      // able to override by naming a file directly.
+      if (isInternalExcludedFile(file) || isSystemExcludedPath(file.path)) {
         continue;
       }
       try {

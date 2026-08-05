@@ -1,26 +1,11 @@
-jest.mock("@/encryptionService", () => ({
-  isSensitiveKey: jest.fn((key: string) => {
-    const lower = key.toLowerCase();
-    const normalized = lower.replace(/[_-]/g, "");
-    return (
-      normalized.includes("apikey") ||
-      lower.endsWith("token") ||
-      lower.endsWith("accesstoken") ||
-      lower.endsWith("secret") ||
-      lower.endsWith("password") ||
-      lower.endsWith("licensekey")
-    );
-  }),
-}));
-
 import type { CopilotSettings } from "@/settings/model";
 import {
   cleanupLegacyFields,
   hasPersistedSecrets,
+  isSensitiveKey,
   stripKeychainFields,
-} from "./settingsSecretTransforms";
+} from "@/services/settingsSecretTransforms";
 
-/** Create a lightweight settings object for transform tests. */
 function makeSettings(overrides: Partial<CopilotSettings> = {}): CopilotSettings {
   return {
     activeModels: [],
@@ -29,186 +14,123 @@ function makeSettings(overrides: Partial<CopilotSettings> = {}): CopilotSettings
   } as unknown as CopilotSettings;
 }
 
-/** JSON-safe clone helper for mutation assertions. */
-function clone<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value)) as T;
-}
+describe("settingsSecretTransforms", () => {
+  describe("isSensitiveKey()", () => {
+    it.each([
+      "openAIApiKey",
+      "api_key",
+      "githubCopilotToken",
+      "accessToken",
+      "clientSecret",
+      "password",
+      "plusLicenseKey",
+    ])("recognizes %s as sensitive", (key) => {
+      expect(isSensitiveKey(key)).toBe(true);
+    });
 
-describe("hasPersistedSecrets", () => {
-  it.each([
-    {
-      name: "detects a non-empty top-level sensitive field",
-      rawData: { openAIApiKey: "sk-123", temperature: 0.7 },
-      expected: true,
-    },
-    {
-      name: "ignores empty top-level secret values",
-      rawData: { openAIApiKey: "", temperature: 0.7 },
-      expected: false,
-    },
-    {
-      name: "detects model-level apiKey in activeModels",
-      rawData: {
-        activeModels: [{ name: "gpt-4", provider: "openai", apiKey: "model-secret" }],
+    it.each(["defaultModelKey", "temperature", "userId", "apiVersion"])(
+      "does not classify %s as sensitive",
+      (key) => {
+        expect(isSensitiveKey(key)).toBe(false);
+      }
+    );
+  });
+
+  describe("hasPersistedSecrets()", () => {
+    it.each([
+      {
+        name: "detects a top-level secret",
+        rawData: { openAIApiKey: "sk-123", temperature: 0.7 },
+        expected: true,
       },
-      expected: true,
-    },
-    {
-      name: "detects model-level apiKey in activeEmbeddingModels",
-      rawData: {
+      {
+        name: "ignores an empty top-level secret",
+        rawData: { openAIApiKey: "", temperature: 0.7 },
+        expected: false,
+      },
+      {
+        name: "detects a chat-model secret",
+        rawData: { activeModels: [{ name: "gpt-4", provider: "openai", apiKey: "secret" }] },
+        expected: true,
+      },
+      {
+        name: "detects an embedding-model secret",
+        rawData: {
+          activeEmbeddingModels: [{ name: "embed", provider: "openai", apiKey: "secret" }],
+        },
+        expected: true,
+      },
+      {
+        name: "ignores malformed model entries and non-secret fields",
+        rawData: {
+          activeModels: [null, "bad-entry", { name: "gpt-4", provider: "openai" }],
+          activeEmbeddingModels: [{ name: "embed", provider: "openai", apiKey: "" }],
+        },
+        expected: false,
+      },
+    ])("$name", ({ rawData, expected }) => {
+      expect(hasPersistedSecrets(rawData as Record<string, unknown>)).toBe(expected);
+    });
+  });
+
+  describe("stripKeychainFields()", () => {
+    it("clears top-level and model secrets without mutating the input", () => {
+      const settings = makeSettings({
+        openAIApiKey: "sk-123",
+        defaultModelKey: "gpt-4|openai",
+        activeModels: [{ name: "gpt-4", provider: "openai", apiKey: "chat-secret", enabled: true }],
         activeEmbeddingModels: [
-          { name: "text-embedding-3-small", provider: "openai", apiKey: "embed-secret" },
+          { name: "embed", provider: "openai", apiKey: "embed-secret", enabled: true },
         ],
-      },
-      expected: true,
-    },
-    {
-      name: "ignores non-objects and non-secret fields",
-      rawData: {
-        googleApiKey: "",
-        activeModels: [null, "bad-entry", { name: "gpt-4", provider: "openai" }],
-        activeEmbeddingModels: [{ name: "embed", provider: "openai", apiKey: "" }],
-      },
-      expected: false,
-    },
-  ])("$name", ({ rawData, expected }) => {
-    const before = clone(rawData);
-    expect(hasPersistedSecrets(rawData as unknown as Record<string, unknown>)).toBe(expected);
-    // Reason: hasPersistedSecrets should be read-only
-    expect(rawData).toEqual(before);
-  });
-});
+      });
 
-describe("stripKeychainFields", () => {
-  it("strips top-level and model-level secrets", () => {
-    const settings = makeSettings({
-      openAIApiKey: "sk-123",
-      googleApiKey: "g-123",
-      defaultModelKey: "gpt-4|openai",
-      activeModels: [
-        { name: "gpt-4", provider: "openai", apiKey: "chat-secret", enabled: true },
-        { name: "claude-3", provider: "anthropic", apiKey: "chat-secret-2", enabled: true },
-      ],
-      activeEmbeddingModels: [
-        { name: "text-embed", provider: "openai", apiKey: "embed-secret", enabled: true },
-      ],
-    });
-    const before = clone(settings);
+      const result = stripKeychainFields(settings);
 
-    const result = stripKeychainFields(settings);
-
-    expect(result).not.toBe(settings);
-    expect(result.openAIApiKey).toBe("");
-    expect(result.googleApiKey).toBe("");
-    expect((result as unknown as Record<string, unknown>).defaultModelKey).toBe("gpt-4|openai");
-    expect(result.activeModels[0].apiKey).toBe("");
-    expect(result.activeModels[1].apiKey).toBe("");
-    expect(result.activeEmbeddingModels[0].apiKey).toBe("");
-    // Reason: model objects and arrays must be new references to avoid mutation
-    expect(result.activeModels).not.toBe(settings.activeModels);
-    expect(result.activeModels[0]).not.toBe(settings.activeModels[0]);
-    expect(result.activeEmbeddingModels).not.toBe(settings.activeEmbeddingModels);
-    // Reason: original should be untouched
-    expect(settings).toEqual(before);
-  });
-
-  it("preserves non-secret fields when there is nothing to strip", () => {
-    const settings = makeSettings({
-      temperature: 0.2,
-      defaultConversationTag: "copilot",
+      expect(result).not.toBe(settings);
+      expect(result.openAIApiKey).toBe("");
+      expect(result.defaultModelKey).toBe("gpt-4|openai");
+      expect(result.activeModels[0].apiKey).toBe("");
+      expect(result.activeEmbeddingModels[0].apiKey).toBe("");
+      expect(settings.openAIApiKey).toBe("sk-123");
+      expect(settings.activeModels[0].apiKey).toBe("chat-secret");
     });
 
-    const result = stripKeychainFields(settings);
+    it("preserves sparse settings without adding model arrays", () => {
+      const result = stripKeychainFields({ openAIApiKey: "secret" } as CopilotSettings);
+      const record = result as unknown as Record<string, unknown>;
 
-    expect((result as unknown as Record<string, unknown>).temperature).toBe(0.2);
-    expect((result as unknown as Record<string, unknown>).defaultConversationTag).toBe("copilot");
-  });
-});
-
-describe("cleanupLegacyFields", () => {
-  it("returns a shallow copy without mutating the original", () => {
-    const settings = makeSettings({ openAIApiKey: "sk-123" });
-    const before = clone(settings);
-
-    const result = cleanupLegacyFields(settings);
-
-    expect(result).not.toBe(settings);
-    expect(result.openAIApiKey).toBe("sk-123");
-    expect(settings).toEqual(before);
-  });
-
-  it("preserves _keychainVaultId and _keychainOnly", () => {
-    const settings = makeSettings({
-      _keychainVaultId: "abc12345",
-      _keychainOnly: true,
+      expect(record.openAIApiKey).toBe("");
+      expect(record.activeModels).toBeUndefined();
+      expect(record.activeEmbeddingModels).toBeUndefined();
     });
-
-    const result = cleanupLegacyFields(settings);
-    const rec = result as unknown as Record<string, unknown>;
-
-    expect(rec._keychainVaultId).toBe("abc12345");
-    expect(rec._keychainOnly).toBe(true);
   });
 
-  it("strips removed migration fields (_keychainMigratedAt, _migrationModalDismissed)", () => {
-    const settings = makeSettings({
-      _keychainMigratedAt: "2026-04-01T00:00:00.000Z",
-      _migrationModalDismissed: true,
-    } as unknown as Partial<CopilotSettings>);
+  describe("cleanupLegacyFields()", () => {
+    it("removes every legacy encryption and migration marker", () => {
+      const settings = makeSettings({
+        _keychainVaultId: "abc12345",
+        _someFutureField: "future-value",
+        enableEncryption: true,
+        _keychainMigrated: true,
+        _keychainMigratedAt: "2026-04-01T00:00:00.000Z",
+        _migrationModalDismissed: true,
+        _diskSecretsCleared: true,
+        _keychainOnly: true,
+      } as unknown as Partial<CopilotSettings>);
 
-    const result = cleanupLegacyFields(settings);
-    const rec = result as unknown as Record<string, unknown>;
+      const result = cleanupLegacyFields(settings) as unknown as Record<string, unknown>;
 
-    expect(rec._keychainMigratedAt).toBeUndefined();
-    expect(rec._migrationModalDismissed).toBeUndefined();
-  });
-
-  it("migrates legacy _diskSecretsCleared → _keychainOnly", () => {
-    const settings = makeSettings({
-      _diskSecretsCleared: true,
-    } as unknown as Partial<CopilotSettings>);
-
-    const result = cleanupLegacyFields(settings);
-    const rec = result as unknown as Record<string, unknown>;
-
-    expect(rec._keychainOnly).toBe(true);
-    // Reason: the legacy field name must be dropped so it never resurfaces.
-    expect(rec._diskSecretsCleared).toBeUndefined();
-  });
-
-  it("prefers an explicit _keychainOnly when both fields are present", () => {
-    const settings = makeSettings({
-      _diskSecretsCleared: true,
-      _keychainOnly: false,
-    } as unknown as Partial<CopilotSettings>);
-
-    const result = cleanupLegacyFields(settings);
-    const rec = result as unknown as Record<string, unknown>;
-
-    expect(rec._keychainOnly).toBe(false);
-    expect(rec._diskSecretsCleared).toBeUndefined();
-  });
-
-  // Reason: the multi-device downgrade story (older plugin version syncing the
-  // vault while a newer device has flipped `_keychainOnly = true`) relies on
-  // every persistence path being "spread, then delete known-legacy" rather
-  // than "rebuild from a whitelist". A future refactor that whitelists
-  // recognised keys would silently drop `_keychainOnly` on the older device,
-  // and on the next sync the newer device would lose its keychain-only mode
-  // without warning. This test pins the behaviour so such a refactor fails
-  // loudly here instead of in production.
-  it("preserves unknown future fields (downgrade safety regression)", () => {
-    const settings = makeSettings({
-      _keychainOnly: true,
-      _someFutureField: "future-value",
-      anotherUnknownField: 42,
-    } as unknown as Partial<CopilotSettings>);
-
-    const result = cleanupLegacyFields(settings);
-    const rec = result as unknown as Record<string, unknown>;
-
-    expect(rec._keychainOnly).toBe(true);
-    expect(rec._someFutureField).toBe("future-value");
-    expect(rec.anotherUnknownField).toBe(42);
+      expect(result).toMatchObject({
+        _keychainVaultId: "abc12345",
+        _someFutureField: "future-value",
+      });
+      expect(result.enableEncryption).toBeUndefined();
+      expect(result._keychainMigrated).toBeUndefined();
+      expect(result._keychainMigratedAt).toBeUndefined();
+      expect(result._migrationModalDismissed).toBeUndefined();
+      expect(result._diskSecretsCleared).toBeUndefined();
+      expect(result._keychainOnly).toBeUndefined();
+      expect(settings as unknown as Record<string, unknown>).toHaveProperty("_keychainOnly", true);
+    });
   });
 });

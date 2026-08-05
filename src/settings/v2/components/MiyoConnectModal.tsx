@@ -292,7 +292,7 @@ export class MiyoConnectModal extends Modal {
     super(app);
     this.step = options.initialStep;
     // setTitle is intentionally omitted — the body's IconTile + heading serve as
-    // the title, matching MigrateConfirmModal's headerless layout and the design
+    // the title, matching the other headerless settings modals and the design
     // (a plain content dialog, no native title bar).
   }
 

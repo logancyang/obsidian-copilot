@@ -46,6 +46,9 @@ export const AI_SENDER = "ai";
 
 // Default folder names
 export const COPILOT_FOLDER_ROOT = "copilot";
+// Configurable root all Copilot sub-folders derive from (PR-乙). Defaults to
+// the historical hardcoded root so existing vaults keep their layout.
+export const DEFAULT_COPILOT_FOLDER = COPILOT_FOLDER_ROOT;
 const DEFAULT_CHAT_HISTORY_FOLDER = `${COPILOT_FOLDER_ROOT}/copilot-conversations`;
 const DEFAULT_CUSTOM_PROMPTS_FOLDER = `${COPILOT_FOLDER_ROOT}/copilot-custom-prompts`;
 const DEFAULT_MEMORY_FOLDER = `${COPILOT_FOLDER_ROOT}/memory`;
@@ -53,6 +56,20 @@ const DEFAULT_SYSTEM_PROMPTS_FOLDER = `${COPILOT_FOLDER_ROOT}/system-prompts`;
 const DEFAULT_PROJECTS_FOLDER = `${COPILOT_FOLDER_ROOT}/projects`;
 export const DEFAULT_SKILLS_FOLDER = `${COPILOT_FOLDER_ROOT}/skills`;
 const DEFAULT_CONVERTED_DOC_OUTPUT_FOLDER = "";
+// Built-in tag written into every saved conversation's frontmatter. Frozen as a
+// constant: no code reads the tag to identify conversations — they are keyed by
+// folder + epoch — so built-in history is unaffected by the freeze.
+//
+// DESIGN NOTE (accepted compatibility break): a vault that had customized the
+// old `defaultConversationTag` keeps that value in data.json, but it is no
+// longer read, and existing notes are never rewritten. Such a vault therefore
+// ends up with two markers, and the user's own tag-based queries, searches and
+// automations see only the older half. That cost was accepted deliberately to
+// converge on one built-in marker; grandfathering the persisted value was
+// rejected because a hidden setting would then steer output forever. Batch
+// remediation is tracked in obsidian-copilot-preview#224.
+// If a future review flags this again, point them at this note.
+export const COPILOT_CONVERSATION_TAG = "copilot-conversation";
 export const DEFAULT_QA_EXCLUSIONS_SETTING = COPILOT_FOLDER_ROOT;
 export const DEFAULT_SYSTEM_PROMPT = `You are Obsidian Copilot, a helpful assistant that integrates AI to Obsidian note-taking.
   1. Never mention that you do not have access to something. Always rely on the user provided context.
@@ -996,6 +1013,14 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   openAIProxyBaseUrl: "",
   openAIEmbeddingProxyBaseUrl: "",
   stream: true,
+  copilotFolder: DEFAULT_COPILOT_FOLDER,
+  // Every folder ever activated as the Copilot root (seeded with the legacy
+  // root in the v8 migration). Kept append-only so each historical root stays
+  // permanently excluded from QA indexing even after the root is changed.
+  copilotRootHistory: [],
+  // True only when a legacy (v1-v7) vault was migrated to v8; WS-D reads it to
+  // decide whether to show the one-time folder-relocation prompt, then clears it.
+  upgradedToV8FromLegacy: false,
   defaultSaveFolder: DEFAULT_CHAT_HISTORY_FOLDER,
   defaultConversationTag: "copilot-conversation",
   autosaveChat: true,
@@ -1039,11 +1064,8 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   enableMiyo: false,
   enableMiyoSearchSkill: false,
   miyoSearchAll: false,
-  selfHostModeValidatedAt: null,
-  selfHostValidationCount: 0,
-  selfHostUrl: "",
-  selfHostApiKey: "",
   miyoServerUrl: "",
+  miyoSyncedExclusions: "",
   selfHostSearchProvider: "firecrawl",
   firecrawlApiKey: "",
   perplexityApiKey: "",

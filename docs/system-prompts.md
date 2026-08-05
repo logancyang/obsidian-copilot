@@ -67,13 +67,12 @@ Chat mode custom system prompts let you add instructions on top of its built-in 
 
 ### Where They're Stored
 
-Custom system prompts are stored as markdown files in your vault, in the folder:
-
+Custom system prompts are stored as markdown files in your vault, in the `system-prompts/` sub-folder of your Copilot folder:
 ```
 copilot/system-prompts/
 ```
 
-You can change this folder in **Settings → Copilot → Advanced → System Prompts Folder Name**.
+This location is derived from your Copilot folder. To move it, change the root in **Settings → Copilot → Basic → Copilot folder location** — every Copilot sub-folder follows that root, so it is no longer configured on its own. Changing the root affects only where new prompts are saved; existing prompt files stay where they are unless you move them yourself.
 
 ### Creating a System Prompt
 

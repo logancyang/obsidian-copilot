@@ -1,0 +1,9 @@
+{
+  "id": "copilot-component-gallery",
+  "name": "Copilot Component Gallery (dev)",
+  "version": "0.0.1",
+  "minAppVersion": "1.11.4",
+  "isDesktopOnly": false,
+  "description": "Development-only gallery for Copilot UI primitives. Not for distribution.",
+  "author": "Logan Yang"
+}

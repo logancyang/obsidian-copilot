@@ -15,5 +15,6 @@
  *   5   → backfill `Provider.requiresApiKey` on flagless rows.
  *   6   → seed `docProcessorBackend` from effective Miyo state.
  *   7   → seed `enableMiyoSearchSkill` from persisted `enableMiyo` intent.
+ *   8   → seed `copilotFolder` root so derived sub-folder accessors resolve.
  */
-export const CURRENT_SETTINGS_VERSION = 7;
+export const CURRENT_SETTINGS_VERSION = 8;

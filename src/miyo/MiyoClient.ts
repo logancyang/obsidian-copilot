@@ -1,8 +1,7 @@
-import { getDecryptedKey } from "@/encryptionService";
 import { logError, logInfo, logWarn } from "@/logger";
 import type { MiyoHealthResponse } from "@/miyo/miyoHealth";
 import { MiyoServiceDiscovery } from "@/miyo/MiyoServiceDiscovery";
-import { getSettings } from "@/settings/model";
+import { type CopilotSettings, getSettings } from "@/settings/model";
 import { err2String, withTimeout } from "@/utils";
 import { requestUrl } from "obsidian";
 
@@ -184,10 +183,20 @@ export class MiyoClient {
 
   private discovery: MiyoServiceDiscovery;
 
+  private readonly authSnapshot?: Pick<CopilotSettings, "plusLicenseKey">;
+
   /**
    * Create a new Miyo client instance.
+   *
+   * @param authSnapshot - Credentials captured when the caller's work began.
+   *   Callers whose requests can outlive the settings they started under —
+   *   a multi-request mutation that straddles a vault switch — pass their own
+   *   snapshot so every request carries the credential of the vault that asked
+   *   for it. Omitted, each request reads the live settings, which is what
+   *   short-lived callers want.
    */
-  constructor() {
+  constructor(authSnapshot?: Pick<CopilotSettings, "plusLicenseKey">) {
+    this.authSnapshot = authSnapshot;
     this.discovery = MiyoServiceDiscovery.getInstance();
   }
 
@@ -277,11 +286,16 @@ export class MiyoClient {
    *
    * @param request - Folder registration body; `path` must be absolute.
    * @param overrideUrl - Explicit base URL (from settings) or empty for discovery.
+   * @param beforeRequest - Invoked once the URL and credentials are resolved and
+   *   immediately before the request goes out; throw from it to call the
+   *   registration off. Exists because resolution and decryption are awaits, so
+   *   a caller's earlier check can go stale before anything is sent.
    * @returns The created folder record on 201, or `null` when already registered.
    */
   public async addFolder(
     request: MiyoAddFolderRequest,
-    overrideUrl?: string
+    overrideUrl?: string,
+    beforeRequest?: () => void
   ): Promise<MiyoFolderEntry | null> {
     let response: Awaited<ReturnType<typeof requestUrl>>;
     try {
@@ -289,6 +303,9 @@ export class MiyoClient {
       const url = new URL("/v0/folder", baseUrl);
       const headers = await this.buildHeaders();
       const body = JSON.stringify(request);
+      // Last point at which this registration can still be called off: once
+      // `requestUrl` has it, Obsidian offers no way to abort.
+      beforeRequest?.();
       logInfo("Miyo request:", {
         method: "POST",
         url: url.toString(),
@@ -343,6 +360,65 @@ export class MiyoClient {
       method: "GET",
       query: { path: folderName },
     });
+  }
+
+  /**
+   * Remove a folder registration (`DELETE /v0/folder`), which also purges the
+   * folder's indexed documents (verified empirically: a post-delete global
+   * search returns no leftovers).
+   *
+   * 404 is a success: the caller's goal — no registration under that name —
+   * already holds (e.g. a prior resync deleted it but never got to re-add).
+   * The identifier is the record's canonical `path`, which is the folder NAME,
+   * not the absolute path (also verified against a live registration).
+   *
+   * @param folderName - Registered folder name (see getMiyoFolderName).
+   * @param overrideUrl - Explicit base URL (from settings) or empty for discovery.
+   * @param beforeRequest - Invoked once the URL and credentials are resolved and
+   *   immediately before the request goes out; throw from it to call the deletion
+   *   off. Exists because resolution and decryption are awaits, so a caller's
+   *   earlier check can go stale before anything is sent.
+   */
+  public async deleteFolder(
+    folderName: string,
+    overrideUrl?: string,
+    beforeRequest?: () => void
+  ): Promise<void> {
+    const baseUrl = await this.resolveBaseUrl(overrideUrl);
+    const headers = await this.buildHeaders();
+    const url = new URL("/v0/folder", baseUrl);
+    // Last point at which this deletion can still be called off: once
+    // `requestUrl` has it, Obsidian offers no way to abort.
+    beforeRequest?.();
+    logInfo("Miyo request:", {
+      method: "DELETE",
+      url: url.toString(),
+      hasBody: true,
+      hasAuthorizationHeader: Boolean(headers.Authorization),
+    });
+    const response = await requestUrl({
+      url: url.toString(),
+      method: "DELETE",
+      headers,
+      contentType: "application/json",
+      body: JSON.stringify({ path: folderName }),
+      throw: false,
+    });
+    if (response.status === 404) {
+      logInfo("Miyo folder already unregistered; delete is a no-op");
+      return;
+    }
+    if (response.status >= 400) {
+      const detail =
+        this.parseResponseJson<{ detail?: string }>(response.json, response.text)?.detail ||
+        response.text ||
+        "";
+      throw new Error(
+        detail
+          ? `Miyo delete-folder failed with status ${response.status}: ${detail}`
+          : `Miyo delete-folder failed with status ${response.status}`
+      );
+    }
   }
 
   /**
@@ -557,12 +633,10 @@ export class MiyoClient {
    * @returns Headers object for requestUrl.
    */
   private async buildHeaders(): Promise<Record<string, string>> {
-    const settings = getSettings();
+    const settings = this.authSnapshot ?? getSettings();
     const headers: Record<string, string> = {};
 
-    const licenseKey = settings.plusLicenseKey
-      ? await getDecryptedKey(settings.plusLicenseKey)
-      : "";
+    const licenseKey = settings.plusLicenseKey;
     if (licenseKey) {
       headers.Authorization = `Bearer ${licenseKey}`;
     }

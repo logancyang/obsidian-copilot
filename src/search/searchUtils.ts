@@ -1,13 +1,15 @@
+import { COPILOT_FOLDER_ROOT } from "@/constants";
 import { CustomError } from "@/error";
 import { AGENTS_FILE_NAME, CLAUDE_FILE_NAME } from "@/instructions/agentsFile";
 import { PROJECT_CONFIG_FILE_NAME } from "@/projects/constants";
 import EmbeddingsManager from "@/LLMProviders/embeddingManager";
 import { logError, logInfo, logWarn } from "@/logger";
-import { getSettings } from "@/settings/model";
+import { getSettings, normalizeRootFolders, type CopilotSettings } from "@/settings/model";
+import { getEffectiveProjectsFolder } from "@/settings/copilotFolder";
 import { logFileManager } from "@/logFileManager";
 import { getTagsFromNote, stripHash } from "@/utils";
 import { Embeddings } from "@langchain/core/embeddings";
-import { App, TFile } from "obsidian";
+import { App, Platform, TFile } from "obsidian";
 
 export interface PatternCategory {
   tagPatterns?: string[];
@@ -139,6 +141,74 @@ export function getMatchingPatterns(options?: {
 }
 
 /**
+ * The Copilot root folders excluded from QA indexing independent of the user's
+ * patterns: `copilot`, the active root, and every root ever activated
+ * ({@link CopilotSettings.copilotRootHistory}). Always-on privacy invariant so
+ * content under any current OR former root never enters the index.
+ *
+ * @param settings - Current Copilot settings.
+ * @returns Normalized, deduped root folders to exclude (never empty).
+ */
+export function getSystemExcludedFolders(settings: CopilotSettings): string[] {
+  const history = Array.isArray(settings.copilotRootHistory) ? settings.copilotRootHistory : [];
+  return normalizeRootFolders([COPILOT_FOLDER_ROOT, settings.copilotFolder, ...history]);
+}
+
+/**
+ * Whether a vault-relative path falls under any live system-excluded Copilot root.
+ *
+ * Case-folded on case-insensitive filesystems, unlike the user's own qa*
+ * patterns. A stored root keeps whatever spelling it was configured with —
+ * nothing reconciles it against the real path, and an external sync, an OS-level
+ * case-only rename, or simply typing `TeamAI` when the disk holds `teamai/` is
+ * enough to make them differ. Comparing exact-case there fails OPEN, letting
+ * chats under a Copilot root reach QA indexing and Miyo results. Folding is
+ * confined to these roots: `qaExclusions` is the user's own literal, and on a
+ * case-sensitive volume `Notes/` and `notes/` really are two folders — so this
+ * gates on the platform, accepting that a case-sensitive APFS volume may
+ * over-exclude, which fails closed.
+ */
+export function isSystemExcludedPath(filePath: string): boolean {
+  return matchSystemRoots(filePath, getSystemExcludedFolders(getSettings()));
+}
+
+/** Whether the host filesystem treats paths case-insensitively. */
+function hasCaseInsensitiveFilesystem(): boolean {
+  return Platform.isWin || Platform.isMacOS || Platform.isIosApp;
+}
+
+/**
+ * Match a raw path against Copilot roots the way the exclusion boundary does.
+ *
+ * Separate from {@link matchFilePathWithFolders} so the case-folding stays off
+ * the user-pattern path — see {@link isSystemExcludedPath} for why.
+ *
+ * Exported for COVERAGE questions only — "does this root cover that path" — so a
+ * guard deciding whether a candidate root would swallow the user's notes agrees
+ * with the boundary that later enforces it.
+ *
+ * Deliberately NOT for IDENTITY questions such as "is this candidate the root I
+ * used before" (see `isKnownCopilotRoot`). The platform check here is a
+ * heuristic that treats every macOS volume as case-insensitive, which is safe
+ * while it only ever over-excludes. Reused to grant an exemption it inverts:
+ * on a case-sensitive volume it would accept a genuinely different folder as
+ * "already known" and skip the content guard entirely.
+ *
+ * @param filePath - Vault-relative path, as the vault or Miyo reported it.
+ * @param systemRoots - Roots from {@link getSystemExcludedFolders}, or a
+ *   candidate root being evaluated before it is committed.
+ */
+export function matchSystemRoots(filePath: string, systemRoots: string[]): boolean {
+  if (!hasCaseInsensitiveFilesystem()) {
+    return matchFilePathWithFolders(filePath, systemRoots);
+  }
+  return matchFilePathWithFolders(
+    filePath.toLowerCase(),
+    systemRoots.map((root) => root.toLowerCase())
+  );
+}
+
+/**
  * Should index the file based on the inclusions and exclusions patterns.
  * @param file - The file to check.
  * @param inclusions - The inclusions patterns.
@@ -157,6 +227,10 @@ export function shouldIndexFile(
   if (isInternalExcludedFile(file)) {
     return false;
   }
+  // Exclude the system Copilot roots (active + historical) before user patterns.
+  if (isSystemExcludedPath(file.path)) {
+    return false;
+  }
   if (exclusions && matchFilePathWithPatterns(app, file, exclusions)) {
     return false;
   }
@@ -173,39 +247,33 @@ export function shouldIndexFile(
 }
 
 /**
- * Build a predicate that decides whether a vault-relative path passes Copilot's
- * QA inclusion/exclusion rules. The active patterns are resolved once so the
- * predicate can be reused across many results. Paths that don't resolve to a
- * vault {@link TFile} are kept, since the rules can't be evaluated for them.
+ * Build a predicate deciding whether a vault-relative path passes Copilot's QA
+ * rules (resolved once for reuse). Unresolvable paths are kept, but the system
+ * root exclusion is applied to the raw path first, so a former root's content is
+ * dropped even with no user QA patterns configured.
  *
  * @param app - The Obsidian app instance.
  * @returns Predicate returning true when the path should be kept.
  */
 export function createCopilotPatternFilter(app: App): (path: string) => boolean {
+  const systemExcludedFolders = getSystemExcludedFolders(getSettings());
   const { inclusions, exclusions } = getMatchingPatterns();
-  if (!inclusions && !exclusions) {
-    return () => true;
-  }
   return (path: string) => {
+    // System root exclusion runs first on the raw path (no TFile), holding even
+    // in the no-user-pattern fast path below. Case-folded where the filesystem
+    // is — see isSystemExcludedPath.
+    if (matchSystemRoots(path, systemExcludedFolders)) {
+      return false;
+    }
+    if (!inclusions && !exclusions) {
+      return true;
+    }
     const file = app.vault.getAbstractFileByPath(path);
     if (!(file instanceof TFile)) {
       return true;
     }
     return shouldIndexFile(app, file, inclusions, exclusions);
   };
-}
-
-/**
- * Whether any QA inclusion/exclusion pattern is currently configured. Callers
- * use this to decide whether {@link createCopilotPatternFilter} can actually
- * remove results — when nothing is configured the filter is a no-op, so there
- * is no point over-fetching candidates to compensate for it.
- *
- * @returns True when at least one inclusion or exclusion pattern is active.
- */
-export function hasActiveCopilotPatterns(): boolean {
-  const { inclusions, exclusions } = getMatchingPatterns();
-  return Boolean(inclusions || exclusions);
 }
 
 /**
@@ -420,8 +488,10 @@ function getInternalExcludePaths(): string[] {
  * Any file whose path starts with one of these prefixes is considered internal.
  */
 function getInternalExcludeFolderPrefixes(): string[] {
-  const settings = getSettings();
-  const projectsFolder = (settings.projectsFolder || "").trim();
+  // Reason: derive the projects folder from the configurable root instead of the
+  // retired `settings.projectsFolder`, so a custom root excludes its own
+  // project-config files rather than the stale default path.
+  const projectsFolder = getEffectiveProjectsFolder().trim();
   if (projectsFolder) {
     // Reason: normalize to forward slashes, collapse duplicates, strip trailing slash,
     // then append exactly one "/" for prefix matching. Mirrors normalizePath behavior

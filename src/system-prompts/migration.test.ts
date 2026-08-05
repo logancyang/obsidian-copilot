@@ -30,6 +30,9 @@ jest.mock("@/logger", () => ({
 jest.mock("@/system-prompts/systemPromptUtils", () => ({
   getSystemPromptsFolder: jest.fn(() => "SystemPrompts"),
   getPromptFilePath: jest.fn((title: string) => `SystemPrompts/${title}.md`),
+  getPromptFilePathInFolder: jest.fn(
+    (title: string, folder?: string) => `${folder ?? "SystemPrompts"}/${title}.md`
+  ),
   ensurePromptFrontmatter: jest.fn(),
   loadAllSystemPrompts: jest.fn(),
 }));

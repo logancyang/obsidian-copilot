@@ -23,10 +23,6 @@ Atoms are extremely small, typically around 100 picometers across. A human hair 
 // Increase test timeout to 30 seconds
 jest.setTimeout(30000);
 
-jest.mock("../encryptionService", () => ({
-  getDecryptedKey: jest.fn().mockImplementation((key) => Promise.resolve(key)),
-}));
-
 // TODO(@logancyang, @wenzhengjiang): Re-enable once composer is revamped.
 // Currently skipped due to flaky 503 errors from Gemini API causing CI failures.
 describe.skip("Composer Instructions - Integration Tests", () => {

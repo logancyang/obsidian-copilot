@@ -26,6 +26,16 @@ When the autonomous agent is enabled, Copilot can:
 
 The agent activates automatically when you're in **Copilot Plus** mode. You don't need to do anything special — just ask your question.
 
+## Sample Prompts in the Message Box
+
+When you open a new agent chat and the message box is empty, Copilot types out sample prompts there one at a time — each appears character by character, pauses so you can read it, clears itself, and gives way to the next. They are examples of what the agent can do with your vault, not something being sent.
+
+- Press **Tab** while a suggestion is on screen to drop the whole prompt into the message box. Nothing is sent: edit it first, or press Enter to send it as-is.
+- Start typing at any point and the suggestions disappear. Clear the box again and they come back.
+- Once the conversation has started, the suggestions stop for that chat.
+
+If you've turned on reduced motion in your operating system, the prompts still rotate but appear and disappear whole instead of typing out.
+
 ## Choosing an Operating Mode
 
 The mode picker beside the message box controls how much the active agent can do:
@@ -92,9 +102,17 @@ Unlike chat, Agent Mode parses through the Miyo CLI rather than the Miyo server,
 
 ### Publish to Symposium
 
-Ask Claude, Codex, or OpenCode to publish an existing Markdown note as a web page. The agent creates self-contained HTML, renders Mermaid and Bases as static content, then asks for explicit confirmation because the resulting link is public.
+Ask Claude, Codex, or OpenCode to publish an existing Markdown note as a web page. The agent finishes a self-contained HTML document, including static Mermaid and Bases output, before handing it to Copilot. Copilot rejects scripts, forms, frames, handlers, redirects, executable URLs, externally loaded assets, and CSS resource URLs before consuming the staged file. It then shows the source note, title, size, fingerprint, and a link that opens a sandboxed rendering of those exact captured bytes in your default browser. The full-page preview remains scrollable, but navigation, context menus, dragging, and submissions are blocked. Return to Obsidian after reviewing the page; nothing is sent to Symposium until you explicitly confirm.
 
-The skill handles initial publishing only. It appends the receipt to the hidden history file `.symposium/publish-history.md` and stores the full public link in the required source note's `symposium` property. Use **Publish file to Symposium** to update or withdraw the page.
+Ask the agent to delete, remove, or withdraw an existing Symposium page to open the same host-owned management flow without generating HTML. Copilot reads the note's current identity, then you choose **Delete** in Obsidian; the agent cannot supply the action or document id. The public URL itself is not a deletion interface.
+
+When staged HTML fails validation, Copilot leaves that file in place and reports every actionable issue in one bounded message. The agent may correct that same file and retry once; it does not create new filenames or repeatedly simplify unrelated styling.
+
+Copilot removes each agent-staged artifact as soon as it captures the reviewed bytes and removes the temporary browser preview when the review ends. It verifies that the local preview still matches the captured payload immediately before publishing. Canceling the review, asking the agent to regenerate, changing the preview file, or encountering a later failure sends nothing. Regenerated HTML is a new handoff and must pass through a fresh review. Copilot reads the source note's current `symposium` property itself: a note without an identity creates a page, while a note with a valid identity can only update that page. A failed update never creates a replacement page or changes the existing identity.
+
+After a successful publish or update, Copilot appends the receipt to `.symposium/publish-history.md` and stores or preserves the full public link in the source note's `symposium` property. Use **Publish file to Symposium** to withdraw the page.
+
+The Symposium skill does not give the agent a Symposium credential or API endpoint. Agent Mode still passes the raw `COPILOT_PLUS_LICENSE_KEY` to agent processes for other Copilot Plus relay tools; removing that broader exposure is tracked separately in [logancyang/obsidian-copilot-preview#105](https://github.com/logancyang/obsidian-copilot-preview/issues/105).
 
 ### Always-Enabled Tools
 

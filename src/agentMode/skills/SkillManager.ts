@@ -1,5 +1,6 @@
 import { logError, logInfo, logWarn } from "@/logger";
 import { getSettings, updateSetting } from "@/settings/model";
+import { getEffectiveSkillsFolder } from "@/settings/copilotFolder";
 import { atom, createStore, useAtomValue } from "jotai";
 import { FileSystemAdapter, type App, type EventRef, type TAbstractFile } from "obsidian";
 import { normalizeAbsPath, parentDir } from "@/utils/pathUtils";
@@ -1211,16 +1212,13 @@ function stableHash(value: string): string {
 }
 
 /**
- * Resolve `agentMode.skills.folder` defensively. Settings validation
- * normally guarantees a well-formed value, but the UI may render before
- * settings hydration finishes; fall back to the default in that window.
+ * Resolve the effective skills folder, derived from the configurable copilotFolder
+ * root. Settings validation normally guarantees a well-formed root, but the UI may
+ * render before settings hydration finishes; the derivation falls back to the
+ * default in that window.
  */
 function resolveSkillsFolder(): string {
-  const raw = getSettings().agentMode?.skills?.folder;
-  if (typeof raw !== "string" || raw.trim().length === 0) {
-    return DEFAULT_SKILLS_FOLDER;
-  }
-  return raw;
+  return getEffectiveSkillsFolder();
 }
 
 /**

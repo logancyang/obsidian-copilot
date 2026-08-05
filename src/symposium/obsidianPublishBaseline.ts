@@ -172,6 +172,25 @@ body {
   background: var(--background-secondary);
 }
 
+.markdown-rendered .canvas-minimap {
+  display: block;
+  width: 100%;
+  border-radius: 0.4rem;
+  background: var(--background-secondary);
+}
+
+.markdown-rendered .canvas-minimap path {
+  fill: none;
+  stroke: var(--text-muted);
+  stroke-width: 2;
+}
+
+.markdown-rendered .canvas-minimap rect {
+  fill: var(--background-primary);
+  stroke: var(--text-muted);
+  stroke-width: 2;
+}
+
 .markdown-rendered math[display="block"],
 .markdown-rendered .math {
   max-width: 100%;

@@ -120,7 +120,7 @@ any subcommand) and binds the call to a specific renderer.
 
 ```bash
 OBS=/Applications/Obsidian.app/Contents/MacOS/obsidian
-VAULT=copilot-test-vault   # use $COPILOT_TEST_VAULT_PATH's basename
+VAULT="$(basename "$COPILOT_TEST_VAULT_PATH")"
 
 $OBS vault=$VAULT vault           # echoes name/path of the targeted vault
 ```
@@ -396,13 +396,91 @@ For more aggressive resets, manipulate files directly on disk under the vault
 path (from `app.vault.adapter.basePath`) and then call
 `$OBS vault=$VAULT reload` to make Obsidian re-scan.
 
+## Component gallery workflow
+
+Use the component gallery whenever a feature adds or changes a user-visible React component or a meaningful visual state. A story is not required for non-visual backend, data, or tooling changes. Gallery verification complements callable-level unit coverage; it does not replace it.
+
+### Authoring stories
+
+1. Add or update a `*.stories.tsx` file beside the component. The generated gallery index discovers `src/**/*.stories.tsx`; do not edit `dev/gallery/stories.generated.ts`.
+2. Import `Meta` and `StoryObj` from `@/lib/story`, declare component metadata with `satisfies Meta<Props>`, and type every named story as `StoryObj<Props>`.
+3. Cover the load-bearing states a user can actually see: default, empty, loading, success, error, disabled, overflow-prone content, or other states introduced by the feature. Use realistic copy and fixture props rather than production stores or runtime singletons.
+4. Prefer `args` for ordinary prop states and `render` for compositions. Hook-backed render functions are supported. Keep fixtures deterministic and actions inert unless interaction is the behavior under test.
+5. Choose `parameters.gallery.host` (`leaf`, `modal`, `popover`, or `settings-tab`), `layout` (`padded`, `centered`, or `fullscreen`), and an optional supported `width` (`300`, `340`, `400`, or `600`) that match the real component boundary. Use `coverage: false` only for an intentional presentational-component opt-out.
+6. If a component cannot render without plugin state, extract or expose a presentational boundary that accepts the required data as props; do not widen the Gallery import fence to reach settings, stores, or runtime singletons.
+
+A minimal adjacent story looks like this:
+
+```tsx
+import type { Meta, StoryObj } from "@/lib/story";
+import { StatusCard, type StatusCardProps } from "./StatusCard";
+
+const meta = {
+  title: "Feature/Status Card",
+  component: StatusCard,
+  parameters: { gallery: { host: "leaf", layout: "padded", width: 300 } },
+} satisfies Meta<StatusCardProps>;
+export default meta;
+
+export const Error: StoryObj<StatusCardProps> = {
+  args: { message: "The operation could not be completed.", tone: "error" },
+};
+```
+
+Before live verification, run the focused unit tests for the changed component and story contract, then build the development plugin:
+
+```bash
+npm run gallery:build
+```
+
+Deploy to the non-production test vault configured by `COPILOT_TEST_VAULT_PATH` with `npm run gallery:vault`. Before any CLI or UI mutation, verify that the resolved vault name and path match that configuration; never rely on the implicitly focused renderer.
+
+### Agent verification loop
+
+When the development-only component gallery plugin is loaded, its typed
+`window.__gallery` handle can select and audit stories without screenshots.
+Short async calls can set both `awaitPromise` and `returnByValue`. For a full
+audit, store the eventual result in the page and poll it: the Obsidian CLI can
+return before a long-running CDP promise settles even when `awaitPromise` is
+set.
+
+```bash
+# Discover exact story ids.
+$OBS vault=$VAULT dev:cdp method=Runtime.evaluate params='{"expression":"window.__gallery.list()","returnByValue":true}'
+
+# Render one story and wait until its effects and layout have settled.
+$OBS vault=$VAULT dev:cdp method=Runtime.evaluate params='{"expression":"window.__gallery.show(\"UI/Button/Variants\",{width:300}).then(()=>true)","awaitPromise":true,"returnByValue":true}'
+
+# Address the mounted case by its stable identity and requested width.
+$OBS vault=$VAULT dev:dom selector='[data-story="UI/Button/Variants"][data-story-width="300"]' all
+
+# Start an exact width sweep without relying on the CLI connection to await it.
+$OBS vault=$VAULT dev:cdp method=Runtime.evaluate params='{"expression":"window.__galleryRun={status:\"pending\"};window.__gallery.audit({widths:[300,340,400,600]}).then(value=>{window.__galleryRun={status:\"fulfilled\",value}},reason=>{window.__galleryRun={status:\"rejected\",reason:String(reason?.stack??reason)}});true","returnByValue":true}'
+
+# Repeat until status is fulfilled or rejected. A fulfilled value has one AuditReport per width.
+$OBS vault=$VAULT dev:cdp method=Runtime.evaluate params='{"expression":"window.__galleryRun","returnByValue":true}'
+```
+
+`audit()` returns an array shaped as
+`[{theme,width,findings:[{story,check,detail}]}]`. Requested widths may be any
+positive finite pixel values; the four values above match the gallery's visible
+buttons. Theme is intentionally read-only through this handle: switch the
+Obsidian appearance setting, then run the same array sweep again. A complete
+automated pass ends by checking uncaught errors separately:
+
+```bash
+$OBS vault=$VAULT dev:errors clear
+# Run the store-and-poll sweep above and wait for a fulfilled or rejected status.
+$OBS vault=$VAULT dev:errors
+```
+
 ## 6. Typical e2e flow
 
 A minimal smoke-test scaffold:
 
 ```bash
 OBS=/Applications/Obsidian.app/Contents/MacOS/obsidian
-VAULT=copilot-test-vault
+VAULT="$(basename "$COPILOT_TEST_VAULT_PATH")"
 
 # 1. Preflight — verify target + build
 $OBS vault=$VAULT eval code='JSON.stringify({

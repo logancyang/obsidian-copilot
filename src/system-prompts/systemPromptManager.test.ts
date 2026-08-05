@@ -28,6 +28,11 @@ jest.mock("@/utils", () => ({
 jest.mock("@/system-prompts/systemPromptUtils", () => ({
   validatePromptName: jest.fn(),
   getPromptFilePath: jest.fn(),
+  // createPrompt pins one folder and derives the path from it; the other paths
+  // still use the bare accessor.
+  getPromptFilePathInFolder: jest.fn((title: string, folder?: string) =>
+    folder ? `${folder}/${title}.md` : `SystemPrompts/${title}.md`
+  ),
   getSystemPromptsFolder: jest.fn(() => "SystemPrompts"),
   loadAllSystemPrompts: jest.fn(),
   ensurePromptFrontmatter: jest.fn(),
@@ -127,6 +132,24 @@ describe("SystemPromptManager", () => {
         "SystemPrompts/New Prompt.md"
       );
       (state.getCachedSystemPrompts as jest.Mock).mockReturnValue([]);
+    });
+
+    it("creates the file in the same folder it ensured, even if the root then moves", async () => {
+      // The prompts folder derives from the Copilot root. Resolving it once for
+      // the ensure and again for the file path would create the prompt outside
+      // the directory just created if the root changed in between.
+      const mockedFolder = systemPromptUtils.getSystemPromptsFolder as jest.Mock;
+      mockedFolder.mockReturnValueOnce("SystemPrompts");
+      mockedFolder.mockReturnValue("moved/SystemPrompts");
+      const mockFile = mockTFile({ path: "SystemPrompts/New Prompt.md" });
+      Object.setPrototypeOf(mockFile, TFile.prototype);
+      (mockVault.getAbstractFileByPath as jest.Mock).mockReturnValue(mockFile);
+
+      await manager.createPrompt(newPrompt);
+
+      expect(utils.ensureFolderExists).toHaveBeenCalledWith(mockVault, "SystemPrompts");
+      expect(mockVault.create).toHaveBeenCalledWith("SystemPrompts/New Prompt.md", "Test content");
+      mockedFolder.mockReturnValue("SystemPrompts");
     });
 
     it("creates a new prompt file", async () => {

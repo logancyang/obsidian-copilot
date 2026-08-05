@@ -1,0 +1,121 @@
+import type { CopilotSettings } from "@/settings/model";
+
+const mockGetSettings = jest.fn<Partial<CopilotSettings>, []>();
+jest.mock("@/settings/model", () => ({
+  getSettings: () => mockGetSettings(),
+}));
+
+const mockApplyEntitlement = jest.fn<Promise<boolean>, [string]>();
+const mockMarkPaidPendingEntitlement = jest.fn<void, []>();
+const mockTurnOffPaid = jest.fn<void, [unknown?]>();
+jest.mock("@/plusUtils", () => ({
+  applyEntitlement: (token: string) => mockApplyEntitlement(token),
+  markPaidPendingEntitlement: () => mockMarkPaidPendingEntitlement(),
+  turnOffPaid: (app?: unknown) => mockTurnOffPaid(app),
+}));
+
+import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
+
+interface RequestOutcome {
+  data: unknown;
+  error: Error | null;
+}
+
+/**
+ * Stub the private HTTP layer so the test drives `validateLicenseKey`'s
+ * response handling without touching the network. `onRequest` runs at the
+ * moment the request is in flight, which is where a concurrent key change has
+ * to be injected to reproduce the overlap.
+ */
+function stubRequest(outcome: RequestOutcome, onRequest?: () => void): void {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- reaching the private transport is the point
+  (BrevilabsClient.getInstance() as any).makeRequest = async () => {
+    onRequest?.();
+    return outcome;
+  };
+}
+
+const VALID_LICENSE_RESPONSE = { entitlement: "signed-token", plan: "supporter" };
+
+describe("brevilabsClient", () => {
+  describe("BrevilabsClient", () => {
+    describe("validateLicenseKey()", () => {
+      beforeEach(() => {
+        jest.clearAllMocks();
+        mockApplyEntitlement.mockResolvedValue(true);
+        mockGetSettings.mockReturnValue({ plusLicenseKey: "key-A" });
+      });
+
+      it("applies the signed entitlement when the license key is unchanged", async () => {
+        stubRequest({ data: VALID_LICENSE_RESPONSE, error: null });
+
+        const result = await BrevilabsClient.getInstance().validateLicenseKey();
+
+        expect(result).toEqual({ isValid: true, plan: "supporter" });
+        expect(mockApplyEntitlement).toHaveBeenCalledWith("signed-token");
+        expect(mockMarkPaidPendingEntitlement).not.toHaveBeenCalled();
+      });
+
+      it("falls back to paid-pending when the server's token cannot be verified", async () => {
+        mockApplyEntitlement.mockResolvedValue(false);
+        stubRequest({ data: VALID_LICENSE_RESPONSE, error: null });
+
+        const result = await BrevilabsClient.getInstance().validateLicenseKey();
+
+        expect(result).toEqual({ isValid: true, plan: "supporter" });
+        expect(mockApplyEntitlement).toHaveBeenCalledWith("signed-token");
+        expect(mockMarkPaidPendingEntitlement).toHaveBeenCalled();
+      });
+
+      it.each(["lite", "plus"])(
+        "marks a tokenless %s license as paid pending entitlement",
+        async (plan) => {
+          stubRequest({ data: { plan }, error: null });
+
+          const result = await BrevilabsClient.getInstance().validateLicenseKey();
+
+          expect(result).toEqual({ isValid: true, plan });
+          expect(mockMarkPaidPendingEntitlement).toHaveBeenCalled();
+          expect(mockApplyEntitlement).not.toHaveBeenCalled();
+        }
+      );
+
+      it("revokes entitlement when the server rejects the key", async () => {
+        stubRequest({ data: null, error: new Error("Invalid license key") });
+
+        const result = await BrevilabsClient.getInstance().validateLicenseKey();
+
+        expect(result).toEqual({ isValid: false });
+        expect(mockTurnOffPaid).toHaveBeenCalled();
+      });
+
+      it("discards a success that arrives after the license key changed", async () => {
+        // An eligible key's slow response landing after the user switched to a
+        // different key would otherwise re-grant that key's features — and
+        // re-persist its token — for the rest of the token's lifetime.
+        stubRequest({ data: VALID_LICENSE_RESPONSE, error: null }, () => {
+          mockGetSettings.mockReturnValue({ plusLicenseKey: "key-B" });
+        });
+
+        const result = await BrevilabsClient.getInstance().validateLicenseKey();
+
+        expect(result).toEqual({ isValid: undefined });
+        expect(mockApplyEntitlement).not.toHaveBeenCalled();
+        expect(mockMarkPaidPendingEntitlement).not.toHaveBeenCalled();
+      });
+
+      it("discards a rejection that arrives after the license key changed", async () => {
+        // The mirror case: a stale "Invalid license key" must not revoke the
+        // entitlement the user's newly entered key just earned.
+        stubRequest({ data: null, error: new Error("Invalid license key") }, () => {
+          mockGetSettings.mockReturnValue({ plusLicenseKey: "key-B" });
+        });
+
+        const result = await BrevilabsClient.getInstance().validateLicenseKey();
+
+        expect(result).toEqual({ isValid: undefined });
+        expect(mockTurnOffPaid).not.toHaveBeenCalled();
+      });
+    });
+  });
+});

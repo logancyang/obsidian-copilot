@@ -1,4 +1,5 @@
 import { CustomModel, ProjectConfig } from "@/aiParams";
+import { getModelKeyFromModel } from "@/lib/model-key";
 import { atom, createStore, useAtomValue } from "jotai";
 import { v4 as uuidv4 } from "uuid";
 
@@ -10,7 +11,6 @@ import {
   AGENT_MAX_ITERATIONS_LIMIT,
   BUILTIN_CHAT_MODELS,
   BUILTIN_EMBEDDING_MODELS,
-  COPILOT_FOLDER_ROOT,
   DEFAULT_OPEN_AREA,
   DEFAULT_QA_EXCLUSIONS_SETTING,
   DEFAULT_SETTINGS,
@@ -18,6 +18,8 @@ import {
   EmbeddingModelProviders,
   SEND_SHORTCUT,
 } from "@/constants";
+
+export { getModelKeyFromModel } from "@/lib/model-key";
 
 /**
  * We used to store commands in the settings file with the following interface.
@@ -85,6 +87,33 @@ export interface CopilotSettings {
   openAIProxyBaseUrl: string;
   openAIEmbeddingProxyBaseUrl: string;
   stream: boolean;
+  /** Configurable root folder all Copilot sub-folders derive from (default: "copilot"). */
+  copilotFolder: string;
+  /**
+   * Every folder that has ever been the Copilot root (seeded with the legacy
+   * `copilot` root in the v8 migration). Append-only: once a folder has held
+   * Copilot data it stays here so it remains permanently excluded from QA
+   * indexing, even after the root is changed away from it.
+   *
+   * DESIGN NOTE — this list is best-effort under multi-device Sync. Two offline
+   * devices that each change to a different root can have one branch's history
+   * overwritten by a covering Sync merge; the startup union in
+   * {@link sanitizeSettings} only re-adds THIS device's current root, so a root
+   * that only ever existed on the overwritten device can't be recovered.
+   * Accepted as a residual because changing the root at all is rare, and two
+   * devices concurrently changing to different roots rarer still.
+   *
+   * A second residual — a local persist failure activating a new root in memory
+   * before its history lands on disk — is documented at the activation site in
+   * {@link applyCopilotRootChange}; see that note before re-litigating whether
+   * the switch should persist before activating.
+   */
+  copilotRootHistory: string[];
+  /**
+   * True only when a legacy (v1-v7) vault was migrated to v8. Consumed once by
+   * the v3->v4 upgrade prompt (WS-D), which clears it back to false.
+   */
+  upgradedToV8FromLegacy: boolean;
   defaultSaveFolder: string;
   defaultConversationTag: string;
   autosaveChat: boolean;
@@ -95,8 +124,6 @@ export interface CopilotSettings {
   chatNoteContextTags: string[];
   enableIndexSync: boolean;
   debug: boolean;
-  /** @deprecated Removed — keychain is now the sole encryption mechanism. */
-  enableEncryption?: never;
   maxSourceChunks: number;
   enableInlineCitations: boolean;
   qaExclusions: string;
@@ -120,16 +147,16 @@ export interface CopilotSettings {
   defaultConversationNoteName: string;
   // Any valid paid license (Lite and above). undefined means never checked.
   isPaidUser: boolean | undefined;
-  // Tier >= Plus (Plus, Pro, Believer, Supporter; excludes Lite). Derived from
-  // the signed entitlement token when present, else mirrors isPaidUser as a
-  // safe fallback. undefined means never checked. See plusUtils + entitlement/.
+  // Tier >= Plus (Plus, Pro, Believer, Supporter; excludes Lite). Current
+  // validations derive it from a verified signed entitlement; undefined means
+  // never checked. See plusUtils + entitlement/.
   isPlusUser: boolean | undefined;
   // Raw server-signed entitlement token (JWS). Tamper-evident, so safe to persist
-  // and trust offline until its `exp`. Empty when the server hasn't issued one.
+  // and trust offline until its `exp`. Empty when no verified token is stored.
   entitlementToken: string;
-  // Epoch ms when the entitlement token expires (0 = none / tokenless fallback).
-  // The strict isPlusUser gate honors this so multi-agent locks at expiry even
-  // while offline. Derived from the token's `exp`.
+  // Epoch ms when the entitlement token expires (0 = no verified entitlement).
+  // The reactive tier UI reads this; strict gates use the in-memory verified
+  // claims. Derived from the token's `exp`.
   entitlementExpiresAt: number;
   inlineEditCommands: LegacyCommandSettings[] | undefined;
   projectList: Array<ProjectConfig>;
@@ -150,16 +177,17 @@ export interface CopilotSettings {
   enableMiyoSearchSkill: boolean;
   /** When true, omit folder_name from Miyo search requests so all indexed content is searched */
   miyoSearchAll: boolean;
-  /** Timestamp of last successful Believer validation for self-host mode (null if never validated) */
-  selfHostModeValidatedAt: number | null;
-  /** Count of successful periodic validations (3 = permanently valid) */
-  selfHostValidationCount: number;
   /** URL endpoint for the self-host mode backend */
-  selfHostUrl: string;
   /** API key for the self-host mode backend (if required) */
-  selfHostApiKey: string;
   /** Custom Miyo server URL, e.g. "http://192.168.1.10:8742" (empty = use local service discovery) */
   miyoServerUrl: string;
+  /**
+   * Fingerprint of the system root exclusions last successfully synced to the
+   * registered Miyo folder (empty = never synced). Compared against the current
+   * fingerprint to detect that Miyo's server-side exclusions went stale after a
+   * Copilot root change; see `getMiyoExclusionsFingerprint` in miyoUtils.
+   */
+  miyoSyncedExclusions: string;
   /** Which provider to use for self-host web search */
   selfHostSearchProvider: "firecrawl" | "perplexity";
   /** Firecrawl API key for self-host web search */
@@ -221,16 +249,6 @@ export interface CopilotSettings {
   autoCompactThreshold: number;
   /** Folder where converted document markdown files are saved */
   convertedDocOutputFolder: string;
-  /**
-   * When `true`, the OS keychain is the single source of truth for secrets;
-   * data.json must never contain plaintext secret values.
-   *
-   * Set on:
-   * - Fresh installs (no prior data.json) when keychain is available
-   * - User clicking "Migrate to Keychain" in Advanced Settings
-   * - `forgetAllSecrets` (after stripping disk + clearing keychain)
-   */
-  _keychainOnly?: boolean;
   /**
    * Stable namespace ID for keychain entries, persisted once on first use.
    * Reason: using a persisted ID (instead of deriving from vault path) means
@@ -427,6 +445,56 @@ const EMPTY_PROVIDERS = Object.freeze({}) as unknown as Record<string, Provider>
 const EMPTY_CONFIGURED_MODELS = Object.freeze([]) as unknown as ConfiguredModel[];
 const EMPTY_BACKENDS = Object.freeze({}) as unknown as Partial<Record<BackendType, BackendConfig>>;
 
+/** Frozen fallback for an empty {@link CopilotSettings.copilotRootHistory}. */
+const EMPTY_COPILOT_ROOT_HISTORY = Object.freeze([]) as unknown as string[];
+
+/**
+ * Canonicalize Copilot root-folder paths into the form the QA folder matcher
+ * (`matchFilePathWithFolders`) compares against: forward slashes, collapsed
+ * duplicate separators, no `.` segments, no trailing slash, and case preserved
+ * (the matcher is case-sensitive, so lowercasing here would break exact-root
+ * matching). Collapsing `//` and dropping `.` segments matters because history
+ * entries can arrive from Obsidian Sync merges or hand-edited `data.json` in a
+ * non-`normalizePath` form (e.g. `a//b`, `a/./b`); real file paths are compared
+ * post-`normalizePath`, so an un-collapsed root would fail the prefix match and
+ * silently leak that root's notes into QA. Legitimate roots already pass through
+ * `validateCopilotFolder` free of `//`/`.` segments, so this is a no-op for them
+ * and only repairs anomalous entries. Entries that are empty or escape the vault
+ * root (parent traversal, drive-absolute, or root-absolute paths) are dropped
+ * rather than coerced to a default, and duplicates are removed preserving
+ * first-seen order.
+ *
+ * @param input - Raw root paths; non-string, empty, and unsafe entries are skipped.
+ * @returns A deduped, normalized list, or a frozen empty constant when none survive.
+ */
+export function normalizeRootFolders(input: readonly (string | undefined)[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const raw of input) {
+    if (typeof raw !== "string") continue;
+    // Reason: collapse `//` and strip `.` segments so anomalous history entries
+    // land in the same canonical form the QA matcher compares real paths against.
+    const normalized = raw
+      .trim()
+      .replace(/\\/g, "/")
+      .replace(/\/+/g, "/")
+      .split("/")
+      .filter((segment) => segment !== ".")
+      .join("/")
+      .replace(/\/+$/, "");
+    if (normalized.length === 0) continue;
+    const escapesVault =
+      /(^|\/)\.\.(\/|$)/.test(normalized) ||
+      /^[a-zA-Z]:/.test(normalized) ||
+      normalized.startsWith("/");
+    if (escapesVault) continue;
+    if (seen.has(normalized)) continue;
+    seen.add(normalized);
+    result.push(normalized);
+  }
+  return result.length > 0 ? result : EMPTY_COPILOT_ROOT_HISTORY;
+}
+
 /**
  * Resolve a valid embedding model key for the current settings.
  *
@@ -464,7 +532,15 @@ export function setSettings(
 }
 
 /**
- * Normalize QA exclusion patterns and guarantee the Copilot folder root is excluded.
+ * Normalize the user's QA exclusion patterns (dedupe by canonical path key,
+ * preserving a single trailing slash when the user wrote one).
+ *
+ * The Copilot root itself is NOT forced in here anymore: the always-on system
+ * exclusion ({@link getSystemExcludedFolders} in `searchUtils`) permanently
+ * excludes the `copilot` root plus the active and historical roots, so this
+ * function only has to canonicalize what the user typed. A user-supplied
+ * `copilot` entry is kept as-is and simply overlaps the system exclusion.
+ *
  * @param rawValue - Persisted QA exclusion setting value.
  * @returns Encoded QA exclusion patterns string.
  */
@@ -481,18 +557,12 @@ export function sanitizeQaExclusions(rawValue: unknown): string {
   decodedPatterns.forEach((pattern) => {
     const canonical = pattern.replace(/\/+$/, "");
     const canonicalKey = canonical.length > 0 ? canonical : pattern;
-    if (canonicalKey === COPILOT_FOLDER_ROOT) {
-      canonicalToOriginalPattern.set(COPILOT_FOLDER_ROOT, COPILOT_FOLDER_ROOT);
-      return;
-    }
     if (!canonicalToOriginalPattern.has(canonicalKey)) {
       const normalizedValue =
         canonical.length > 0 && pattern.endsWith("/") ? `${canonical}/` : pattern;
       canonicalToOriginalPattern.set(canonicalKey, normalizedValue);
     }
   });
-
-  canonicalToOriginalPattern.set(COPILOT_FOLDER_ROOT, COPILOT_FOLDER_ROOT);
 
   return Array.from(canonicalToOriginalPattern.values())
     .map((pattern) => encodeURIComponent(pattern))
@@ -536,19 +606,29 @@ export function getSettings(): Readonly<CopilotSettings> {
  * Resets the settings to the default values.
  *
  * DESIGN NOTE — does NOT clear secrets from the Obsidian Keychain. Reset only
- * rewrites `data.json` to defaults; a keychain-only vault keeps its OS keychain
+ * rewrites `data.json` to defaults while leaving its Obsidian Keychain
  * entries. "Delete All Keys" (Advanced Settings → API Key Storage, backed by
  * `KeychainService.forgetAllSecrets`) is the dedicated path for erasing keychain
  * secrets. Wiring that async transaction into this synchronous reset would pull
  * the keychain service and its callbacks through `SettingsMainV2`, and is
- * intentionally left out of the first-stage migration.
+ * intentionally left out of the synchronous reset path.
  * If a future review flags this again, point them at this note.
  */
 export function resetSettings(): void {
+  const current = getSettings();
+  // Reset is a deterministic path, not best-effort: preserve the root-exclusion
+  // history and fold in the pre-reset active root before it is replaced by the
+  // default. Otherwise a reset would drop every historical root and leave that
+  // still-on-disk content exposed to QA indexing.
+  const preservedRootHistory = normalizeRootFolders([
+    ...(Array.isArray(current.copilotRootHistory) ? current.copilotRootHistory : []),
+    current.copilotFolder,
+  ]);
   const defaultSettingsWithBuiltIns = {
     ...DEFAULT_SETTINGS,
     activeModels: BUILTIN_CHAT_MODELS.map((model) => ({ ...model, enabled: true })),
     activeEmbeddingModels: BUILTIN_EMBEDDING_MODELS.map((model) => ({ ...model, enabled: true })),
+    copilotRootHistory: preservedRootHistory,
   };
   setSettings(defaultSettingsWithBuiltIns);
 }
@@ -595,8 +675,6 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   const rawSettings = settingsToSanitize as unknown as Record<string, unknown>;
   const {
     enableSelfHostedSearch: legacyEnableSelfHostedSearch,
-    selfHostedSearchUrl: legacySelfHostedSearchUrl,
-    selfHostedSearchApiKey: legacySelfHostedSearchApiKey,
     enableMiyoSearch: legacyEnableMiyoSearch,
   } = rawSettings;
 
@@ -632,12 +710,6 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
     sanitizedSettings.enableSelfHostMode === undefined
   ) {
     sanitizedSettings.enableSelfHostMode = legacyEnableSelfHostedSearch as boolean;
-  }
-  if (legacySelfHostedSearchUrl !== undefined && !sanitizedSettings.selfHostUrl) {
-    sanitizedSettings.selfHostUrl = legacySelfHostedSearchUrl as string;
-  }
-  if (legacySelfHostedSearchApiKey !== undefined && !sanitizedSettings.selfHostApiKey) {
-    sanitizedSettings.selfHostApiKey = legacySelfHostedSearchApiKey as string;
   }
 
   // Migration: Rename legacy enableMiyoSearch to enableMiyo.
@@ -720,6 +792,11 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   // Ensure miyoServerUrl has a default value
   if (typeof sanitizedSettings.miyoServerUrl !== "string") {
     sanitizedSettings.miyoServerUrl = DEFAULT_SETTINGS.miyoServerUrl;
+  }
+
+  // Ensure miyoSyncedExclusions has a default value
+  if (typeof sanitizedSettings.miyoSyncedExclusions !== "string") {
+    sanitizedSettings.miyoSyncedExclusions = DEFAULT_SETTINGS.miyoSyncedExclusions;
   }
 
   // Ensure selfHostSearchProvider is a valid value
@@ -852,6 +929,34 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   // Ensure defaultSendShortcut has a valid value
   if (!Object.values(SEND_SHORTCUT).includes(sanitizedSettings.defaultSendShortcut)) {
     sanitizedSettings.defaultSendShortcut = DEFAULT_SETTINGS.defaultSendShortcut;
+  }
+
+  // Coerce copilotFolder to a valid vault-relative path. validateCopilotFolder
+  // is the single source of truth for root syntax (empty, traversal, absolute,
+  // .obsidian, control/Windows-illegal chars) shared with the settings UI; an
+  // invalid persisted value falls back to the default rather than being trusted.
+  const copilotFolderValidation = validateCopilotFolder(
+    typeof settingsToSanitize.copilotFolder === "string" ? settingsToSanitize.copilotFolder : ""
+  );
+  sanitizedSettings.copilotFolder = copilotFolderValidation.ok
+    ? copilotFolderValidation.folder
+    : DEFAULT_SETTINGS.copilotFolder;
+
+  // Normalize the append-only root history and idempotently union in the
+  // active root, so this device's current root is always present in its own
+  // history (the load-time self-heal referenced in the field's DESIGN NOTE).
+  // These roots are excluded from QA indexing permanently — see
+  // getSystemExcludedFolders in searchUtils.
+  const rawRootHistory = Array.isArray(settingsToSanitize.copilotRootHistory)
+    ? settingsToSanitize.copilotRootHistory
+    : [];
+  sanitizedSettings.copilotRootHistory = normalizeRootFolders([
+    ...rawRootHistory,
+    sanitizedSettings.copilotFolder,
+  ]);
+
+  if (typeof sanitizedSettings.upgradedToV8FromLegacy !== "boolean") {
+    sanitizedSettings.upgradedToV8FromLegacy = DEFAULT_SETTINGS.upgradedToV8FromLegacy;
   }
 
   // Ensure folder settings fall back to defaults when empty/whitespace
@@ -1012,8 +1117,21 @@ function sanitizeAgentMode(raw: unknown): CopilotSettings["agentMode"] {
  * embedded literal control bytes, which made the source file binary and
  * missed DEL.
  */
+// Names Windows reserves at any path depth, with or without an extension —
+// creating `NUL` or `con.md` fails or misbehaves at the filesystem layer.
+const WINDOWS_RESERVED_NAME_RE = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i;
+
 // eslint-disable-next-line no-control-regex
 const CONTROL_CHAR_RE = /[\u0000-\u001f\u007f]/;
+
+/**
+ * The conventional Obsidian config-folder name, rejected as a Copilot root so a
+ * misconfigured root can't collide with Obsidian's own config. This is a pure,
+ * Vault-less syntax check, so it can only guard the near-universal default —
+ * users who relocated their config dir get no false positive here.
+ */
+// eslint-disable-next-line obsidianmd/hardcoded-config-path -- pure validator has no Vault to read configDir; guard the conventional default
+const CONVENTIONAL_OBSIDIAN_CONFIG_DIR = ".obsidian";
 
 /**
  * Validate a user-entered "Skills folder" value against the rules in
@@ -1080,6 +1198,98 @@ export function validateSkillsFolder(
     }
   }
 
+  return { ok: true, folder: cleaned };
+}
+
+/**
+ * Validate a user-entered Copilot root folder (`copilotFolder`) for syntax
+ * only — the reusable check shared by `sanitizeSettings` (every load / Sync /
+ * hand-edited data.json passes through it) and the settings UI for early
+ * feedback before Apply. Vault-content checks that need App/Vault access
+ * (rejecting a root that already holds ordinary notes) live in
+ * `copilotRootChange`, not here.
+ *
+ * Unlike {@link validateSkillsFolder}, absolute and drive-letter paths are
+ * rejected rather than stripped: the root is the trust boundary every derived
+ * sub-folder inherits, so a leading-slash value is treated as a mistake to
+ * surface, not silently rewritten. The `.obsidian` config folder is rejected
+ * to keep Copilot data from colliding with Obsidian's own config.
+ *
+ * @param value Raw user input.
+ * @returns `{ ok: true, folder }` with the trimmed, trailing-slash-stripped
+ *   value, or `{ ok: false, reason }` carrying a UI-ready message.
+ */
+export function validateCopilotFolder(
+  value: string
+): { ok: true; folder: string } | { ok: false; reason: string } {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return { ok: false, reason: "Folder name cannot be empty." };
+  }
+  const trimmed = value.trim();
+  // Reject (do not strip) absolute and drive-letter paths so a root can never
+  // escape the vault; a stray leading slash is surfaced as an error instead.
+  if (/^[/\\]/.test(trimmed) || /^[a-zA-Z]:/.test(trimmed)) {
+    return { ok: false, reason: "Folder path must be relative to the vault root." };
+  }
+  const cleaned = trimmed.replace(/\\/g, "/").replace(/\/+$/, "");
+  if (cleaned.length === 0) {
+    return { ok: false, reason: "Folder name cannot be empty." };
+  }
+  for (const segment of cleaned.split("/")) {
+    if (segment.length === 0) {
+      return { ok: false, reason: "Folder path cannot contain empty segments (//)." };
+    }
+    if (segment === "..") {
+      return { ok: false, reason: 'Folder path cannot contain ".." segments.' };
+    }
+    if (segment === ".") {
+      return { ok: false, reason: 'Folder path cannot contain "." segments.' };
+    }
+    // DESIGN NOTE — leading-dot (hidden) folder names are deliberately
+    // ACCEPTED.
+    // Trigger: a root such as `.copilot` places every derived store under a
+    // path Obsidian omits from the Vault cache.
+    // Assessment: chat, projects, and skills carry adapter-backed hidden-path
+    // support. Custom commands and system prompts do not — and the gap is wider
+    // than discovery: `loadAllCustomCommands` / `loadAllSystemPrompts` enumerate
+    // `vault.getFiles()`, while their create/update/delete paths also rely on
+    // cached `TFile`s, metadataCache, and `processFrontMatter`. Under a hidden
+    // root both can therefore read as empty AND fail to edit reliably.
+    // Scope: the Vault-cache limitation predates this PR — the old
+    // `customPromptsFolder` / `userSystemPromptsFolder` settings accepted hidden
+    // paths too. What the single-root design adds is the coupling: a root chosen
+    // for the supported hidden-chat capability now drags these two along.
+    // Why not fixed here: rejecting dot segments would regress supported hidden
+    // chats, and a scanner-only patch would leave them listable but not
+    // editable — real support needs adapter-backed CRUD plus frontmatter
+    // handling. Deferred as a follow-up.
+    // If a future review flags this again, point them at this note.
+    if (segment.toLowerCase() === CONVENTIONAL_OBSIDIAN_CONFIG_DIR) {
+      return {
+        ok: false,
+        reason: "Folder path cannot use the Obsidian config folder.",
+      };
+    }
+    if (CONTROL_CHAR_RE.test(segment)) {
+      return { ok: false, reason: "Folder path contains illegal control characters." };
+    }
+    if (/[<>:"|?*]/.test(segment)) {
+      return {
+        ok: false,
+        reason: 'Folder path contains characters not allowed in folder names (< > : " | ? *).',
+      };
+    }
+    // Rejected on every platform, not just Windows: vaults sync across
+    // machines, so a root that persists fine on macOS would then fail every
+    // folder creation on a Windows device — the same silent, persistent
+    // write-failure mode as pointing the root at an existing file.
+    if (/[. ]$/.test(segment)) {
+      return { ok: false, reason: "Folder names cannot end with a dot or space." };
+    }
+    if (WINDOWS_RESERVED_NAME_RE.test(segment)) {
+      return { ok: false, reason: `"${segment}" is a name reserved by Windows.` };
+    }
+  }
   return { ok: true, folder: cleaned };
 }
 
@@ -1246,20 +1456,6 @@ function mergeAllActiveModelsWithCoreModels(settings: CopilotSettings): CopilotS
     mergeActiveModels(settings.activeEmbeddingModels, BUILTIN_EMBEDDING_MODELS)
   );
   return settings;
-}
-
-/**
- * Get a unique model key from a CustomModel instance.
- * Format: modelName|provider
- *
- * Agent Mode picker entries optionally carry `_backendId` (set by the picker
- * for synthesized agent models). When present, the key is prefixed with
- * the backend id so two backends reporting the same agent-native model id
- * (e.g. both surfacing a `sonnet` alias) get distinct keys / React ids.
- */
-export function getModelKeyFromModel(model: CustomModel & { _backendId?: string }): string {
-  const base = `${model.name}|${model.provider}`;
-  return model._backendId ? `${model._backendId}:${base}` : base;
 }
 
 function mergeActiveModels(

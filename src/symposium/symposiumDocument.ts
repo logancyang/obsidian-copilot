@@ -6,7 +6,7 @@ import { App, Component, MarkdownRenderer, TFile } from "obsidian";
 
 export { SYMPOSIUM_MAX_HTML_BYTES };
 
-const ACTIVE_CONTENT_SELECTOR = [
+const PUBLISH_REMOVAL_SELECTOR = [
   "base",
   "button",
   "embed",
@@ -38,6 +38,37 @@ const ACTIVE_CONTENT_SELECTOR = [
   ".edit-block-button",
   ".heading-collapse-indicator",
   ".markdown-embed-link",
+  ".frontmatter",
+  ".metadata-container",
+].join(",");
+
+const REVIEW_ACTIVE_CONTENT_SELECTOR = [
+  "applet",
+  "audio",
+  "base",
+  "button",
+  "dialog",
+  "embed",
+  "fencedframe",
+  "form",
+  "frame",
+  "frameset",
+  "iframe",
+  "input",
+  "link",
+  "object",
+  "portal",
+  "script",
+  "select",
+  "template",
+  "textarea",
+  "video",
+  "foreignObject",
+  "animate",
+  "animateMotion",
+  "animateTransform",
+  "set",
+  "html[manifest]",
 ].join(",");
 
 const URL_ATTRIBUTES = new Set([
@@ -46,11 +77,17 @@ const URL_ATTRIBUTES = new Set([
   "cite",
   "formaction",
   "href",
+  "manifest",
   "poster",
   "ping",
   "src",
   "xlink:href",
 ]);
+
+const UNSAFE_REVIEW_ATTRIBUTES = new Set(["contenteditable", "ping", "srcdoc", "srcset"]);
+const UNSAFE_REVIEW_CSS = /@import|url\s*\(|https?:|\/\/|\\|expression\s*\(|behavior\s*:/i;
+const CSS_COMMENT = /\/\*[\s\S]*?\*\//g;
+const LOCAL_FRAGMENT_URL = /url\s*\(\s*(["']?)#[^\s)"']+\1\s*\)/gi;
 
 const MIN_IMAGE_DATA_URL_PREFIX_BYTES = "data:image/png;base64,".length;
 const IMAGE_DATA_URL_PLACEHOLDER = "data:image/png;base64,A";
@@ -77,6 +114,135 @@ export class SymposiumDocumentTooLargeError extends Error {
   }
 }
 
+/** Reports that agent-finished HTML is not passive and self-contained. */
+export class SymposiumDocumentUnsafeError extends Error {
+  /**
+   * @param issues The specific active or external constructs the author must remove.
+   */
+  constructor(issues: readonly string[]) {
+    const visibleIssues = issues.slice(0, 8);
+    const remainder = issues.length - visibleIssues.length;
+    super(
+      `Symposium HTML is not publishable: ${visibleIssues.join("; ")}${remainder > 0 ? `; plus ${remainder} more` : ""}.`
+    );
+    this.name = "SymposiumDocumentUnsafeError";
+    Object.setPrototypeOf(this, SymposiumDocumentUnsafeError.prototype);
+  }
+}
+
+/**
+ * Captures one exact HTML string as the immutable payload reviewed and sent to Symposium.
+ *
+ * @param title The title sent alongside the HTML payload.
+ * @param html The complete HTML bytes represented as a JavaScript string.
+ */
+export function createSymposiumDocument(title: string, html: string): SymposiumDocument {
+  const byteLength = new TextEncoder().encode(html).byteLength;
+  if (byteLength > SYMPOSIUM_MAX_HTML_BYTES) {
+    throw new SymposiumDocumentTooLargeError(byteLength);
+  }
+  return Object.freeze({ title, html, byteLength });
+}
+
+/**
+ * Captures agent-finished HTML only when host validation proves it passive and self-contained.
+ *
+ * @param title The title shown during review and sent with the payload.
+ * @param html The complete HTML bytes staged by the agent.
+ */
+export function createSymposiumReviewDocument(title: string, html: string): SymposiumDocument {
+  const document = createSymposiumDocument(title, html);
+  validateSymposiumReviewHtml(html);
+  return document;
+}
+
+/**
+ * Reports every bounded, actionable violation found in one agent-staged document.
+ *
+ * @param html The complete staged HTML that must remain passive and self-contained.
+ */
+export function validateSymposiumReviewHtml(html: string): void {
+  const document = new DOMParser().parseFromString(html, "text/html");
+  const issues = new Set<string>();
+
+  for (const activeElement of document.querySelectorAll(REVIEW_ACTIVE_CONTENT_SELECTOR)) {
+    issues.add(`remove unsupported <${activeElement.localName}>`);
+  }
+
+  const redirects = [...document.querySelectorAll<HTMLMetaElement>("meta[http-equiv]")].some(
+    (meta) => meta.getAttribute("http-equiv")?.trim().toLowerCase() === "refresh"
+  );
+  if (redirects) {
+    issues.add("remove the automatic redirect");
+  }
+
+  for (const element of document.querySelectorAll<HTMLElement>("*")) {
+    if (element.localName === "style" && hasUnsafeReviewCss(element.textContent ?? "")) {
+      issues.add("embed or remove the external CSS resource in <style>");
+    }
+    for (const attribute of [...element.attributes]) {
+      const name = attribute.name.toLowerCase();
+      if (name.startsWith("on") || UNSAFE_REVIEW_ATTRIBUTES.has(name)) {
+        issues.add(`remove "${attribute.name}" from <${element.localName}>`);
+        continue;
+      }
+      if (
+        (name === "style" || attribute.value.toLowerCase().includes("url(")) &&
+        hasUnsafeReviewCss(attribute.value)
+      ) {
+        issues.add(
+          `embed or remove the external CSS resource in "${attribute.name}" on <${element.localName}>`
+        );
+        continue;
+      }
+      if (URL_ATTRIBUTES.has(name) && !isAllowedReviewUrl(element, name, attribute.value)) {
+        issues.add(`embed or remove "${attribute.name}" on <${element.localName}>`);
+      }
+    }
+  }
+
+  if (issues.size > 0) {
+    throw new SymposiumDocumentUnsafeError([...issues]);
+  }
+}
+
+function hasUnsafeReviewCss(css: string): boolean {
+  const staticCss = css.replace(CSS_COMMENT, "").replace(LOCAL_FRAGMENT_URL, "");
+  return UNSAFE_REVIEW_CSS.test(staticCss);
+}
+
+function isAllowedReviewUrl(element: Element, attribute: string, rawValue: string): boolean {
+  const value = rawValue.trim();
+  if (!value) {
+    return false;
+  }
+  if (value.startsWith("#")) {
+    return true;
+  }
+
+  const localName = element.localName.toLowerCase();
+  const scheme = value.match(/^([a-z][a-z0-9+.-]*):/i)?.[1]?.toLowerCase();
+  if (localName === "a" && attribute === "href") {
+    return (
+      value.startsWith("//") ||
+      scheme === "http" ||
+      scheme === "https" ||
+      scheme === "mailto" ||
+      scheme === "tel"
+    );
+  }
+  if (localName === "img" && attribute === "src") {
+    return isEmbeddedImageSource(value) && !/^data:image\/svg\+xml/i.test(value);
+  }
+  if (localName === "image" && (attribute === "href" || attribute === "xlink:href")) {
+    return isEmbeddedImageSource(value) && !/^data:image\/svg\+xml/i.test(value);
+  }
+  if (attribute === "cite") {
+    return value.startsWith("//") || scheme === "http" || scheme === "https";
+  }
+  return false;
+}
+
 /**
  * Builds the exact HTML payload sent to Symposium from Obsidian's settled reading-view DOM.
  *
@@ -100,7 +266,7 @@ export async function buildSymposiumDocument(
 
   normalizeMath(article);
   normalizeTaskCheckboxes(article);
-  removeActiveContent(article);
+  removeUnsupportedContent(article);
   normalizeInternalLinks(article);
   const budgetArticle = article.cloneNode(true) as HTMLElement;
   sanitizeAttributes(budgetArticle);
@@ -115,12 +281,7 @@ export async function buildSymposiumDocument(
 
   const title = file.basename;
   const html = serializeDocument(ownerDocument, title, article);
-  const byteLength = new TextEncoder().encode(html).byteLength;
-  if (byteLength > SYMPOSIUM_MAX_HTML_BYTES) {
-    throw new SymposiumDocumentTooLargeError(byteLength);
-  }
-
-  return { title, html, byteLength };
+  return createSymposiumDocument(title, html);
 }
 
 function normalizeMath(root: HTMLElement): void {
@@ -144,8 +305,8 @@ function normalizeTaskCheckboxes(root: HTMLElement): void {
   });
 }
 
-function removeActiveContent(root: HTMLElement): void {
-  root.querySelectorAll(ACTIVE_CONTENT_SELECTOR).forEach((element) => element.remove());
+function removeUnsupportedContent(root: HTMLElement): void {
+  root.querySelectorAll(PUBLISH_REMOVAL_SELECTOR).forEach((element) => element.remove());
 }
 
 function normalizeInternalLinks(root: HTMLElement): void {

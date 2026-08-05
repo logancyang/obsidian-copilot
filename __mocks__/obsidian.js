@@ -45,6 +45,11 @@ module.exports = {
     isDesktop: true,
     isDesktopApp: true,
     isMobile: false,
+    // Filesystem case sensitivity is behaviour some code branches on; default to
+    // the case-sensitive branch so a test must opt in to folding explicitly.
+    isWin: false,
+    isMacOS: false,
+    isIosApp: false,
   },
   FileSystemAdapter: class FileSystemAdapter {
     constructor(basePath = "/vault") {

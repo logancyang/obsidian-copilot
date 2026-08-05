@@ -16,6 +16,7 @@ import {
   setSelectedPromptTitle,
 } from "@/system-prompts/state";
 import { getSettings, subscribeToSettingsChange, updateSetting } from "@/settings/model";
+import { deriveSystemPromptsFolder } from "@/settings/copilotFolder";
 import { SystemPromptManager } from "@/system-prompts/systemPromptManager";
 import { debounce } from "@/utils/debounce";
 import { logError, logInfo } from "@/logger";
@@ -83,13 +84,17 @@ export class SystemPromptRegister {
     prev: ReturnType<typeof getSettings>,
     next: ReturnType<typeof getSettings>
   ): void => {
-    const folderChanged = prev.userSystemPromptsFolder !== next.userSystemPromptsFolder;
+    // Reason: the folder is derived from the configurable copilotFolder root, so
+    // compare the derived paths rather than the retired userSystemPromptsFolder field.
+    const prevFolder = deriveSystemPromptsFolder(prev);
+    const nextFolder = deriveSystemPromptsFolder(next);
+    const folderChanged = prevFolder !== nextFolder;
     const defaultChanged = prev.defaultSystemPromptTitle !== next.defaultSystemPromptTitle;
 
     // Handle default change first, using the old folder path if folder also changed
     // This ensures we can find the old default file before the folder changes
     if (defaultChanged) {
-      const oldFolder = folderChanged ? prev.userSystemPromptsFolder : undefined;
+      const oldFolder = folderChanged ? prevFolder : undefined;
       void this.handleDefaultPromptChange(
         prev.defaultSystemPromptTitle,
         next.defaultSystemPromptTitle,
@@ -98,7 +103,7 @@ export class SystemPromptRegister {
     }
 
     if (folderChanged) {
-      this.debouncedFolderChange(next.userSystemPromptsFolder);
+      this.debouncedFolderChange(nextFolder);
     }
   };
 
