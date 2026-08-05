@@ -130,13 +130,23 @@ export const AgentModeChat: React.FC<Props> = ({
   // Agent Mode without going through settings or the command palette.
   return (
     <div className="tw-flex tw-size-full tw-flex-col tw-overflow-hidden">
-      <div className="tw-flex-1" />
       {isColdStart ? (
-        <div className="tw-min-h-0 tw-overflow-y-auto tw-p-2">
-          <AgentSelectPanel plugin={plugin} manager={manager} />
+        // The select view owns the whole free height and centres itself with an
+        // auto margin rather than `justify-center`: auto margins collapse to
+        // zero once the card outgrows the pane, so a short pane scrolls from
+        // the card's top instead of clipping it.
+        <div className="tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-overflow-y-auto tw-p-2">
+          <div className="tw-m-auto tw-w-full">
+            <AgentSelectPanel plugin={plugin} manager={manager} />
+          </div>
         </div>
       ) : (
-        <AgentModeStatus manager={manager} plugin={plugin} onInstallClick={handleInstall} />
+        // The compact status card is a status line for the controls below it,
+        // so it stays pinned to the bottom of the pane.
+        <>
+          <div className="tw-flex-1" />
+          <AgentModeStatus manager={manager} plugin={plugin} onInstallClick={handleInstall} />
+        </>
       )}
       <AgentChatControls />
     </div>
