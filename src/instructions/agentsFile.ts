@@ -1,5 +1,5 @@
 import { logWarn } from "@/logger";
-import { isInVaultCache, resolveFileByPath } from "@/utils/vaultAdapterUtils";
+import { isInVaultCache, resolveFileByPath, trashFile } from "@/utils/vaultAdapterUtils";
 import { App, normalizePath, TFile, TFolder } from "obsidian";
 
 export const AGENTS_FILE_NAME = "AGENTS.md";
@@ -56,6 +56,42 @@ export async function agentsFileIsUninitialized(app: App, folderPath: string): P
     ? await app.vault.read(file)
     : await app.vault.adapter.read(agentsPath);
   return GENERATED_MIRROR_HEADER.test(content);
+}
+
+/**
+ * Delete the instruction wiring Copilot itself generated in `folderPath`: a marker-owned
+ * AGENTS.md mirror and an import-only CLAUDE.md. Files carrying anything the user wrote are
+ * left untouched.
+ *
+ * Project deletion needs this: leaving a stale mirror behind keeps the folder non-empty, and
+ * a same-named project created later would convert that mirror at session start and inherit
+ * the dead project's instructions. Never throws — deletion cleanup is best-effort.
+ *
+ * @param app - Obsidian app that owns the target vault
+ * @param folderPath - Vault-relative folder, or an empty string for the vault root
+ */
+export async function removeGeneratedInstructionFiles(app: App, folderPath: string): Promise<void> {
+  const targets: Array<{ name: string; isGenerated: (content: string) => boolean }> = [
+    { name: AGENTS_FILE_NAME, isGenerated: (content) => GENERATED_MIRROR_HEADER.test(content) },
+    { name: CLAUDE_FILE_NAME, isGenerated: isClaudeImportOnly },
+  ];
+  for (const { name, isGenerated } of targets) {
+    try {
+      const filePath = childPath(folderPath, name);
+      const file = await resolveFileByPath(app, filePath);
+      if (!file) continue;
+      const inCache = isInVaultCache(app, filePath);
+      const content = inCache ? await app.vault.read(file) : await app.vault.adapter.read(filePath);
+      if (!isGenerated(content)) continue;
+      if (inCache) {
+        await trashFile(app, file);
+      } else {
+        await app.vault.adapter.remove(filePath);
+      }
+    } catch (error) {
+      logWarn(`[Instructions] Failed to remove generated ${name} in "${folderPath}"`, error);
+    }
+  }
 }
 
 /**

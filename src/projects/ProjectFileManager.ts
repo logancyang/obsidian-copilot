@@ -1,4 +1,5 @@
 import { ProjectConfig } from "@/aiParams";
+import { removeGeneratedInstructionFiles } from "@/instructions/agentsFile";
 import { ProjectContextCache } from "@/cache/projectContextCache";
 import { logError, logInfo, logWarn } from "@/logger";
 import {
@@ -579,6 +580,11 @@ export class ProjectFileManager {
       // Reason: clear cache immediately after file deletion to prevent phantom project
       // state if the subsequent folder cleanup fails.
       deleteCachedProjectRecordById(normalizedId);
+
+      // Drop Copilot's own instruction wiring (marker-owned mirror, import-only CLAUDE.md) so
+      // the folder can empty and a same-named project created later cannot inherit this one's
+      // instructions through the mirror conversion. User-authored files are preserved.
+      await removeGeneratedInstructionFiles(this.app, folderPath);
 
       // Cleanup: remove the folder only if it is empty after deleting project.md.
       // Best-effort: the project file is already gone, so cleanup failure
