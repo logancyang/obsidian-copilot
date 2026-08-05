@@ -7,6 +7,7 @@ import {
 } from "@/system-prompts/state";
 import type { UserSystemPrompt } from "@/system-prompts/type";
 import { SYMPOSIUM_WORKSPACE_ROOT_ENV } from "@/symposium/constants";
+import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemPrompt";
 import { CodexBackend, toTomlBasicString } from "./CodexBackend";
 
 jest.mock("@/logger", () => ({
@@ -93,6 +94,28 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
     // never templates in SKILL.md authoring instructions.
     expect(value).not.toContain("metadata.copilot-enabled-agents");
     expect(value).not.toContain("copilot/skills/<name>/SKILL.md");
+  });
+
+  it("encodes the shared product prompt into both paths, byte for byte", async () => {
+    const desc = await new CodexBackend().buildSpawnDescriptor({ vaultBasePath: "/vault" });
+    const shared = buildAgentSystemPrompt();
+
+    // `toBe`, not `toContain`: this string is the provider cache prefix, and a containment
+    // check passes while stray bytes push everything after it out of the cache.
+    expect(JSON.parse(desc.env.CODEX_CONFIG as string).developer_instructions).toBe(shared);
+    const cIdx = desc.args.indexOf("-c");
+    expect(desc.args[cIdx + 1]).toBe(`developer_instructions=${toTomlBasicString(shared)}`);
+  });
+
+  it("keeps those bytes identical when the vault path changes", async () => {
+    const backend = new CodexBackend();
+    const a = await backend.buildSpawnDescriptor({ vaultBasePath: "/vault" });
+    const b = await backend.buildSpawnDescriptor({ vaultBasePath: "/somewhere/else/vault" });
+
+    expect(JSON.parse(b.env.CODEX_CONFIG as string).developer_instructions).toBe(
+      JSON.parse(a.env.CODEX_CONFIG as string).developer_instructions
+    );
+    expect(b.args[b.args.indexOf("-c") + 1]).toBe(a.args[a.args.indexOf("-c") + 1]);
   });
 
   it("does not copy Chat mode custom prompts into developer_instructions", async () => {
