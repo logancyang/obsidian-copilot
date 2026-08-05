@@ -64,7 +64,6 @@ jest.mock("@/agentMode", () => ({
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook export
   useBackendInstallState: (descriptor: { getInstallState: () => unknown }) =>
     descriptor.getInstallState(),
-  McpServersPanel: () => <div data-testid="mcp-panel">mcp</div>,
   AgentDefaultModelSetting: ({ descriptor }: { descriptor: { id: string } }) => (
     <div data-testid={`default-model-${descriptor.id}`}>default model</div>
   ),
@@ -125,13 +124,11 @@ describe("AgentSettings", () => {
     expect(tabs).toEqual(["OpenCode", "Claude", "Codex", "Quick Chat"]);
   });
 
-  it("keeps global items (Default backend + MCP) outside the tab strip", () => {
+  it("keeps the default backend picker outside the tab strip", () => {
     render(<AgentSettings />);
     const tablist = screen.getByRole("tablist");
     expect(within(tablist).queryByText("Default backend")).toBeNull();
-    expect(within(tablist).queryByTestId("mcp-panel")).toBeNull();
     expect(screen.getByText("Default backend")).not.toBeNull();
-    expect(screen.getByTestId("mcp-panel")).not.toBeNull();
   });
 
   it("shows the first backend's content by default and the default-model picker above the model list", () => {

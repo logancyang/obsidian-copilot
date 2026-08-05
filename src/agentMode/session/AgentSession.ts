@@ -43,9 +43,7 @@ import { err2String, formatDateTime } from "@/utils";
 import { ensureMultiAgentEntitlement, showMultiAgentUpgradePrompt } from "@/plusUtils";
 import type { App } from "obsidian";
 import { MethodUnsupportedError } from "@/agentMode/session/errors";
-import { resolveMcpServers } from "@/agentMode/session/mcpResolver";
 import { deriveChatTitleFromMessages } from "@/agentMode/session/chatHistoryMerge";
-import { getSettings } from "@/settings/model";
 import { ContextProcessor } from "@/contextProcessor";
 import type { ContextMaterializationResult } from "@/context/projectContextMaterializer";
 import { escapeXml } from "@/LLMProviders/chainRunner/utils/xmlParsing";
@@ -554,7 +552,6 @@ export class AgentSession {
       if (this.disposed) return;
       const resp = await backend.newSession({
         cwd,
-        mcpServers: resolveMcpServers(backend, getSettings().agentMode?.mcpServers),
         // Capture the owning scope alongside cwd so the backend can resolve
         // this project's instructions; GLOBAL_SCOPE for the global workspace.
         projectId: this.projectId,

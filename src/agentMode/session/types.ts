@@ -638,33 +638,6 @@ export interface AskUserQuestionPrompt {
   questions: AgentQuestion[];
 }
 
-// ---- MCP server spec (neutral) -----------------------------------------
-
-/**
- * MCP server descriptor passed to backends in `OpenSessionInput.mcpServers`.
- * Mirrors ACP `McpServer` structurally; backends translate to their wire
- * shape at the boundary.
- */
-export type McpServerSpec =
-  | {
-      name: string;
-      command: string;
-      args: string[];
-      env: Array<{ name: string; value: string }>;
-    }
-  | {
-      type: "http";
-      name: string;
-      url: string;
-      headers: Array<{ name: string; value: string }>;
-    }
-  | {
-      type: "sse";
-      name: string;
-      url: string;
-      headers: Array<{ name: string; value: string }>;
-    };
-
 // ---- Project scope ------------------------------------------------------
 
 /**
@@ -684,7 +657,6 @@ export interface ProjectProfile {
 
 export interface OpenSessionInput {
   cwd: string;
-  mcpServers: McpServerSpec[];
   /**
    * Scope this session belongs to ({@link ProjectScopeId}); captured like
    * `cwd` so the backend can resolve the owning project's instructions.
@@ -710,7 +682,6 @@ export interface OpenSessionOutput {
 export interface ResumeSessionInput {
   sessionId: SessionId;
   cwd: string;
-  mcpServers: McpServerSpec[];
   /** Scope this session belongs to. See {@link OpenSessionInput.projectId}. */
   projectId?: ProjectScopeId;
   /** Extra searchable roots. See {@link OpenSessionInput.additionalDirectories}. */
@@ -722,7 +693,6 @@ export type ResumeSessionOutput = OpenSessionOutput;
 export interface LoadSessionInput {
   sessionId: SessionId;
   cwd: string;
-  mcpServers: McpServerSpec[];
   /** Scope this session belongs to. See {@link OpenSessionInput.projectId}. */
   projectId?: ProjectScopeId;
   /** Extra searchable roots. See {@link OpenSessionInput.additionalDirectories}. */
@@ -849,12 +819,6 @@ export interface BackendProcess {
    * omit it, and the caller then keeps the row.
    */
   sessionExistsLocally?(params: { sessionId: SessionId; cwd: string }): Promise<boolean>;
-  /**
-   * Whether the backend can route MCP servers of the given transport.
-   * ACP runtime probes this from the agent's advertised capabilities; the
-   * Claude SDK adapter accepts http/sse natively.
-   */
-  supportsMcpTransport(transport: "http" | "sse"): boolean;
   /**
    * Whether the backend honors {@link OpenSessionInput.additionalDirectories}
    * (widening the agent's searchable roots on every session-lifecycle request:

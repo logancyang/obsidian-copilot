@@ -2,7 +2,7 @@ import type { BackendId } from "@/agentMode/session/types";
 
 /**
  * Spawn descriptor for an ACP-speaking agent backend. Backends produce these
- * lazily because they may need to read settings (BYOK keys, MCP config) at
+ * lazily because they may need to read settings (BYOK keys, backend config) at
  * spawn time.
  */
 export interface AcpSpawnDescriptor {

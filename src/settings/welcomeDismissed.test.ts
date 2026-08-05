@@ -5,7 +5,7 @@ describe("sanitizeSettings - agentMode.welcomeDismissed", () => {
   it("defaults to false when absent", () => {
     const sanitized = sanitizeSettings({
       ...DEFAULT_SETTINGS,
-      agentMode: { byok: {}, mcpServers: [] } as unknown as CopilotSettings["agentMode"],
+      agentMode: { byok: {} } as unknown as CopilotSettings["agentMode"],
     });
     expect(sanitized.agentMode.welcomeDismissed).toBe(false);
   });
@@ -15,7 +15,6 @@ describe("sanitizeSettings - agentMode.welcomeDismissed", () => {
       ...DEFAULT_SETTINGS,
       agentMode: {
         byok: {},
-        mcpServers: [],
         welcomeDismissed: true,
       } as unknown as CopilotSettings["agentMode"],
     });
@@ -27,7 +26,6 @@ describe("sanitizeSettings - agentMode.welcomeDismissed", () => {
       ...DEFAULT_SETTINGS,
       agentMode: {
         byok: {},
-        mcpServers: [],
         welcomeDismissed: "yes",
       } as unknown as CopilotSettings["agentMode"],
     });

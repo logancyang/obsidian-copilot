@@ -165,5 +165,12 @@ export function cleanupLegacyFields(settings: CopilotSettings): CopilotSettings 
   delete out._migrationModalDismissed;
   delete out._diskSecretsCleared;
   delete out._keychainOnly;
+  // Copilot no longer manages MCP servers. Remove the retired nested config on
+  // every load/save so headers and environment values cannot remain in data.json.
+  if (out.agentMode && typeof out.agentMode === "object" && !Array.isArray(out.agentMode)) {
+    const agentMode = { ...(out.agentMode as Record<string, unknown>) };
+    delete agentMode.mcpServers;
+    out.agentMode = agentMode;
+  }
   return out as unknown as CopilotSettings;
 }

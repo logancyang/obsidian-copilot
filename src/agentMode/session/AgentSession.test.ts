@@ -30,7 +30,7 @@ jest.mock("@/logger", () => ({
   logError: jest.fn(),
 }));
 jest.mock("@/settings/model", () => ({
-  getSettings: jest.fn().mockReturnValue({ agentMode: { mcpServers: [] } }),
+  getSettings: jest.fn().mockReturnValue({ agentMode: {} }),
 }));
 // The authoritative send-boundary paywall (Phase 4) lives in plusUtils; mock it
 // so fan-out tests don't reach the real `isPlusEnabled()`/BrevilabsClient. The
@@ -90,7 +90,6 @@ function makeMockBackend(): MockBackend {
     listSessions: listSessions,
     resumeSession: () => Promise.reject(new MethodUnsupportedError("resume")),
     loadSession: () => Promise.reject(new MethodUnsupportedError("load")),
-    supportsMcpTransport: () => false,
     shutdown: async () => {},
   };
   return {

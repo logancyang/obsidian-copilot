@@ -51,7 +51,6 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
     setSettings({
       agentMode: {
         byok: {},
-        mcpServers: [],
         activeBackend: "codex",
         debugFullFrames: false,
         welcomeDismissed: false,
@@ -125,7 +124,6 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
     setSettings({
       agentMode: {
         byok: {},
-        mcpServers: [],
         activeBackend: "codex",
         debugFullFrames: false,
         welcomeDismissed: false,
@@ -205,7 +203,6 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
     setSettings({
       agentMode: {
         byok: {},
-        mcpServers: [],
         activeBackend: "codex",
         debugFullFrames: false,
         welcomeDismissed: false,
@@ -247,7 +244,6 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
       setSettings({
         agentMode: {
           byok: {},
-          mcpServers: [],
           activeBackend: "codex",
           debugFullFrames: false,
           welcomeDismissed: false,
@@ -277,7 +273,6 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
     setSettings({
       agentMode: {
         byok: {},
-        mcpServers: [],
         activeBackend: "codex",
         debugFullFrames: false,
         welcomeDismissed: false,
@@ -308,7 +303,6 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
     setSettings({
       agentMode: {
         byok: {},
-        mcpServers: [],
         activeBackend: "codex",
         debugFullFrames: false,
         welcomeDismissed: false,

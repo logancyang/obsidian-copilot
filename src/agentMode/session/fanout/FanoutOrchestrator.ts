@@ -38,8 +38,6 @@ export interface FanoutHost {
   getDisplayName(backendId: BackendId): string;
   /** Absolute vault working directory shared by all sub-sessions. */
   getCwd(): string | null;
-  /** Neutral MCP server specs to open each sub-session with. */
-  getMcpServers(proc: BackendProcess): Parameters<BackendProcess["newSession"]>[0]["mcpServers"];
   /**
    * Register a session id as a read-only fan-out sub-session so the shared
    * permission prompter denies write/exec tools for it. Returns an unregister fn.
@@ -263,7 +261,6 @@ export class FanoutOrchestrator {
 
         const opened = await proc.newSession({
           cwd: this.host.getCwd() ?? "",
-          mcpServers: this.host.getMcpServers(proc),
         });
         sessionId = opened.sessionId;
         unregisterReadOnly = this.host.registerReadOnlySession(sessionId);

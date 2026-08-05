@@ -1102,7 +1102,6 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   convertedDocOutputFolder: DEFAULT_CONVERTED_DOC_OUTPUT_FOLDER,
   agentMode: {
     byok: {},
-    mcpServers: [],
     activeBackend: "opencode",
     backends: {},
     // On by default so the diagnostic frame log is already capturing when a
