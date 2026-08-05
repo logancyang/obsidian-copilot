@@ -330,6 +330,9 @@ export const BasicSettings: React.FC = () => {
         {vaultInstructions !== null && (
           <SettingItem
             type="custom"
+            // Rows are vertically centered by default, which leaves the label floating beside
+            // the middle of an editor this tall.
+            className="sm:tw-items-start"
             title="Custom vault instructions"
             description="Your custom instructions for the agent to follow for every vault interaction. Saved to AGENTS.md in your vault root, which you can also edit as a note."
           >

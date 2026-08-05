@@ -582,8 +582,9 @@ export class AddProjectModal extends Modal {
   onOpen() {
     const { contentEl, modalEl } = this;
 
-    // Reason: Ensure the modal is wide enough for card layout and tall enough for ScrollArea
-    modalEl.addClass("!tw-max-h-[85vh]");
+    // Reason: Ensure the modal is wide enough for card layout and tall enough for ScrollArea.
+    // Same min-width as the context modal it opens, so the two read as one dialog family.
+    modalEl.addClass("!tw-max-h-[85vh]", "tw-min-w-[50vw]");
 
     this.root = createPluginRoot(contentEl, this.app);
 
