@@ -2,9 +2,8 @@ import { CHAT_AGENT_VIEWTYPE } from "@/constants";
 import { Button } from "@/components/ui/button";
 import { SettingItem } from "@/components/ui/setting-item";
 import { SettingSection } from "@/components/ui/setting-section";
-import { ObsidianNativeSelect } from "@/components/ui/obsidian-native-select";
+import { LegacyChatPromptsNotice } from "@/settings/v2/components/LegacyChatPromptsNotice";
 import { useApp } from "@/context";
-import { openAgentsFile } from "@/instructions/agentsFile";
 import { logFileManager } from "@/logFileManager";
 import { flushRecordedPromptPayloadToLog } from "@/LLMProviders/chainRunner/utils/promptPayloadRecorder";
 import { getCopilotSaveData } from "@/settings/copilotSaveData";
@@ -23,21 +22,17 @@ import {
   updateSetting,
   useSettingsValue,
 } from "@/settings/model";
-import { ArrowUpRight, Info, Plus, ShieldCheck, Trash2 } from "lucide-react";
+import { Info, ShieldCheck, Trash2 } from "lucide-react";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { Notice } from "obsidian";
 import React, { useCallback, useEffect, useState } from "react";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
-import { getPromptFilePath, SystemPromptAddModal } from "@/system-prompts";
-import { getEffectiveUserPrompt } from "@/system-prompts/systemPromptBuilder";
-import { useSystemPrompts } from "@/system-prompts/state";
 
 const DESKTOP_UNAVAILABLE_FRAME_LOG_PATH = "(Agent Mode frame logs are desktop-only)";
 
 export const AdvancedSettings: React.FC = () => {
   const app = useApp();
   const settings = useSettingsValue();
-  const prompts = useSystemPrompts();
   const [forgetting, setForgetting] = useState(false);
   const [frameLogPath, setFrameLogPath] = useState(DESKTOP_UNAVAILABLE_FRAME_LOG_PATH);
 
@@ -58,44 +53,6 @@ export const AdvancedSettings: React.FC = () => {
 
   const keychainAvailable = KeychainService.getInstance().isAvailable();
   const keychainAppearsEmpty = keychainAvailable && !hasPersistedSecrets(settings);
-
-  const handleOpenVaultInstructions = () => {
-    // Close the settings modal before opening the file
-    (app as unknown as { setting: { close: () => void } }).setting.close();
-    // Seed a missing vault AGENTS.md from the prompt Agent Mode used to inject, mirroring how
-    // a project's file initializes from its `project.md` body: before AGENTS.md was canonical,
-    // the user's selected/default custom prompt WAS their agent instructions, so carrying it
-    // over on first open keeps an existing setup working instead of silently dropping it.
-    // Only used when the file is absent — it never overwrites.
-    void openAgentsFile(app, "", "", true).catch((error) => {
-      logError("Failed to open vault AGENTS.md.", error);
-      new Notice(error instanceof Error ? error.message : "Failed to open AGENTS.md.");
-    });
-  };
-
-  // Check if the default system prompt exists in the current prompts list
-  const defaultPromptExists = prompts.some(
-    (prompt) => prompt.title === settings.defaultSystemPromptTitle
-  );
-
-  const displayValue = defaultPromptExists ? settings.defaultSystemPromptTitle : "";
-
-  const handleSelectChange = (value: string) => {
-    updateSetting("defaultSystemPromptTitle", value);
-  };
-
-  const handleOpenSourceFile = () => {
-    if (!displayValue) return;
-    const filePath = getPromptFilePath(displayValue);
-    // Close the settings modal before opening the file
-    (app as unknown as { setting: { close: () => void } }).setting.close();
-    void app.workspace.openLinkText(filePath, "", true);
-  };
-
-  const handleAddPrompt = () => {
-    const modal = new SystemPromptAddModal(app, prompts);
-    modal.open();
-  };
 
   const handleReportIssue = useCallback(() => {
     // Gate before importing the agentMode barrel: on mobile the barrel pulls in
@@ -199,59 +156,7 @@ export const AdvancedSettings: React.FC = () => {
 
   return (
     <div className="tw-space-y-4">
-      <SettingSection label="Agent instructions">
-        <SettingItem
-          type="custom"
-          title="Vault instructions"
-          description="Agent Mode instructions for the whole vault. Opens (and creates, if missing) AGENTS.md in your vault root."
-        >
-          <Button variant="default" onClick={handleOpenVaultInstructions}>
-            <ArrowUpRight className="tw-size-4" />
-            Open AGENTS.md
-          </Button>
-        </SettingItem>
-      </SettingSection>
-
-      {/* Chat mode keeps its own prompt surface: these files are selected per chat and are
-          unrelated to Agent Mode's AGENTS.md. */}
-      <SettingSection label="Chat system prompts">
-        <SettingItem
-          type="custom"
-          title="Default System Prompt"
-          description="Used by Chat mode for all new conversations. Does not apply to Agent Mode."
-        >
-          <div className="tw-flex tw-items-center tw-gap-2">
-            <ObsidianNativeSelect
-              value={displayValue}
-              onChange={(e) => handleSelectChange(e.target.value)}
-              options={[
-                { label: "None (use built-in prompt)", value: "" },
-                ...prompts.map((prompt) => ({
-                  label:
-                    prompt.title === settings.defaultSystemPromptTitle
-                      ? `${prompt.title} (Default)`
-                      : prompt.title,
-                  value: prompt.title,
-                })),
-              ]}
-              containerClassName="tw-flex-1"
-            />
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handleOpenSourceFile}
-              className="tw-size-5 tw-shrink-0 tw-p-0"
-              title="Open the source file"
-              disabled={!displayValue}
-            >
-              <ArrowUpRight className="tw-size-5" />
-            </Button>
-            <Button variant="default" size="icon" onClick={handleAddPrompt} title="Add new prompt">
-              <Plus className="tw-size-4" />
-            </Button>
-          </div>
-        </SettingItem>
-      </SettingSection>
+      <LegacyChatPromptsNotice />
 
       {/* Others Section */}
       <SettingSection label="Others">

@@ -10,6 +10,8 @@ import { usePlugin } from "@/contexts/PluginContext";
 import { cn } from "@/lib/utils";
 import { verifyMiyoScope } from "@/miyo/miyoResync";
 import { shouldSurfaceMiyoResync } from "@/miyo/miyoUtils";
+import { openAgentsFile } from "@/instructions/agentsFile";
+import { logError } from "@/logger";
 import { ensureCopilotSubfolders } from "@/settings/copilotFolder";
 import {
   applyCopilotRootChange,
@@ -23,10 +25,11 @@ import {
   useSettingsValue,
   validateCopilotFolder,
 } from "@/settings/model";
+import { LegacyChatPromptsNotice } from "@/settings/v2/components/LegacyChatPromptsNotice";
 import { PlusSettings } from "@/settings/v2/components/PlusSettings";
 import { formatDateTime } from "@/utils";
 import { revealFolderInExplorer } from "@/utils/revealFolderInExplorer";
-import { Folder, FolderSync, Loader2 } from "lucide-react";
+import { ArrowUpRight, Folder, FolderSync, Loader2 } from "lucide-react";
 import { Notice } from "obsidian";
 import React, { useEffect, useState } from "react";
 
@@ -76,6 +79,17 @@ export const BasicSettings: React.FC = () => {
     setFolderDraft(persistedRoot);
     /* eslint-enable @eslint-react/hooks-extra/no-direct-set-state-in-use-effect */
   }, [persistedRoot]);
+
+  const handleOpenVaultInstructions = () => {
+    // The settings modal sits above the workspace, so close it or the file opens behind it.
+    (app as unknown as { setting: { close: () => void } }).setting.close();
+    // Empty content on purpose: a vault AGENTS.md starts blank. Nothing is migrated into it,
+    // so what the user sees here is only ever what they wrote.
+    void openAgentsFile(app, "", "", true).catch((error) => {
+      logError("Failed to open vault AGENTS.md.", error);
+      new Notice(error instanceof Error ? error.message : "Failed to open AGENTS.md.");
+    });
+  };
 
   const applyFolderChange = () => {
     const validation = validateCopilotFolder(folderDraft);
@@ -287,6 +301,20 @@ export const BasicSettings: React.FC = () => {
               <Folder className="tw-size-4" />
             </Button>
           </div>
+        </SettingItem>
+      </SettingSection>
+
+      <SettingSection label="Agent instructions">
+        <LegacyChatPromptsNotice />
+        <SettingItem
+          type="custom"
+          title="Vault instructions"
+          description="Agent Mode instructions for the whole vault. Opens (and creates, if missing) AGENTS.md in your vault root."
+        >
+          <Button variant="default" onClick={handleOpenVaultInstructions}>
+            <ArrowUpRight className="tw-size-4" />
+            Open AGENTS.md
+          </Button>
         </SettingItem>
       </SettingSection>
 

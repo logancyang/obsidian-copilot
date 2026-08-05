@@ -12,7 +12,18 @@ jest.mock("@/settings/v2/components/PlusSettings", () => ({ PlusSettings: () => 
 // copilotRootChange.test, so mock it here to observe the UI's decisions.
 jest.mock("@/context", () => ({
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook; name must match the export
-  useApp: () => ({ vault: { getMarkdownFiles: () => [] } }),
+  useApp: () => ({ vault: { getMarkdownFiles: () => [] }, setting: { close: jest.fn() } }),
+}));
+
+const openAgentsFile = jest.fn().mockResolvedValue(undefined);
+jest.mock("@/instructions/agentsFile", () => ({
+  openAgentsFile: (...a: unknown[]) => openAgentsFile(...a),
+}));
+
+const systemPrompts = jest.fn<{ title: string }[], []>().mockReturnValue([]);
+jest.mock("@/system-prompts/state", () => ({
+  // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook; name must match the export
+  useSystemPrompts: () => systemPrompts(),
 }));
 
 // The Miyo mutation session is owned by the plugin (one per lifecycle) rather
@@ -74,6 +85,7 @@ describe("BasicSettings", () => {
     isKnownCopilotRoot.mockReturnValue(false);
     shouldSurfaceMiyoResync.mockReturnValue(false);
     verifyMiyoScope.mockResolvedValue("unregistered");
+    systemPrompts.mockReturnValue([]);
   });
 
   it("binds the Copilot folder input to the persisted root", () => {
@@ -211,5 +223,23 @@ describe("BasicSettings", () => {
     fireEvent.click(screen.getByRole("button", { name: "Apply Copilot folder" }));
     expect(modalCtor).not.toHaveBeenCalled();
     expect(applyCopilotRootChange).not.toHaveBeenCalled();
+  });
+
+  it("opens a blank vault AGENTS.md, never seeded from a Chat prompt", () => {
+    render(<BasicSettings />);
+    fireEvent.click(screen.getByRole("button", { name: /Open AGENTS.md/ }));
+    expect(openAgentsFile).toHaveBeenCalledWith(expect.anything(), "", "", true);
+  });
+
+  it("points a user who saved Chat prompts at the folder still holding them", () => {
+    systemPrompts.mockReturnValue([{ title: "Editor" }, { title: "Researcher" }]);
+    render(<BasicSettings />);
+    expect(screen.getByText(/2 saved system prompts are/)).toBeTruthy();
+    expect(screen.getByText("copilot/system-prompts")).toBeTruthy();
+  });
+
+  it("says nothing about Chat prompts to a user who never saved one", () => {
+    render(<BasicSettings />);
+    expect(screen.queryByText(/saved system prompt/)).toBeNull();
   });
 });
