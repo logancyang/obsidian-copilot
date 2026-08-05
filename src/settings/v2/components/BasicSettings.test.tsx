@@ -243,7 +243,9 @@ describe("BasicSettings", () => {
   it("shows what the vault AGENTS.md already says, so editing starts from the real file", async () => {
     readAgentsFile.mockResolvedValue("Cite every source.");
     render(<BasicSettings />);
-    const editor = await screen.findByPlaceholderText<HTMLTextAreaElement>(/Answer in British/);
+    const editor = await screen.findByRole<HTMLTextAreaElement>("textbox", {
+      name: "Custom vault instructions",
+    });
     expect(editor.value).toBe("Cite every source.");
     expect(readAgentsFile).toHaveBeenCalledWith(expect.anything(), "");
   });
@@ -252,7 +254,7 @@ describe("BasicSettings", () => {
     jest.useFakeTimers();
     try {
       render(<BasicSettings />);
-      const editor = await screen.findByPlaceholderText(/Answer in British/);
+      const editor = await screen.findByRole("textbox", { name: "Custom vault instructions" });
       fireEvent.change(editor, { target: { value: "Always cite." } });
 
       // The debounce is what keeps this from being one vault write per keystroke.
@@ -271,7 +273,7 @@ describe("BasicSettings", () => {
     jest.useFakeTimers();
     try {
       const { unmount } = render(<BasicSettings />);
-      const editor = await screen.findByPlaceholderText(/Answer in British/);
+      const editor = await screen.findByRole("textbox", { name: "Custom vault instructions" });
       fireEvent.change(editor, { target: { value: "Half a thou" } });
       unmount();
 

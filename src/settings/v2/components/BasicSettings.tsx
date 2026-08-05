@@ -10,8 +10,8 @@ import { usePlugin } from "@/contexts/PluginContext";
 import { cn } from "@/lib/utils";
 import { verifyMiyoScope } from "@/miyo/miyoResync";
 import { shouldSurfaceMiyoResync } from "@/miyo/miyoUtils";
-import { Textarea } from "@/components/ui/textarea";
 import { openAgentsFile, writeAgentsFile } from "@/instructions/agentsFile";
+import { InstructionsTextarea } from "@/instructions/InstructionsTextarea";
 import { useAgentsFileDraft } from "@/instructions/useAgentsFileDraft";
 import { logError } from "@/logger";
 import { debounce } from "@/utils/debounce";
@@ -337,14 +337,13 @@ export const BasicSettings: React.FC = () => {
             description="Your custom instructions for the agent to follow for every vault interaction. Saved to AGENTS.md in your vault root, which you can also edit as a note."
           >
             <div className="tw-flex tw-w-full tw-flex-col tw-items-end tw-gap-2">
-              <Textarea
+              <InstructionsTextarea
+                label="Custom vault instructions"
                 value={vaultInstructions}
-                onChange={(e) => {
-                  setVaultInstructions(e.target.value);
-                  saveVaultInstructions(e.target.value);
+                onChange={(next) => {
+                  setVaultInstructions(next);
+                  saveVaultInstructions(next);
                 }}
-                placeholder="e.g. Answer in British English, and cite the note each claim came from."
-                className="tw-min-h-32 tw-w-full"
               />
               <Button variant="secondary" onClick={handleOpenVaultInstructions}>
                 <ArrowUpRight className="tw-size-4" />

@@ -19,6 +19,7 @@ import { DEFAULT_MODEL_SETTING } from "@/constants";
 import { ProjectContextBadgeList } from "@/components/project/ProjectContextBadgeList";
 import { ProjectContextSourceEditor } from "@/components/project/ProjectContextSourceEditor";
 import { writeAgentsFile } from "@/instructions/agentsFile";
+import { InstructionsTextarea } from "@/instructions/InstructionsTextarea";
 import { useAgentsFileDraft } from "@/instructions/useAgentsFileDraft";
 import { getProjectAnchorFromConfigPath } from "@/projects/projectPaths";
 import { getCachedProjectRecordById } from "@/projects/state";
@@ -394,11 +395,10 @@ function AddProjectModalContent({
                   label="Project instructions"
                   description="Your custom instructions for the agent to follow for every interaction in this project. They take precedence over your vault instructions wherever the two conflict. Saved to AGENTS.md in the project folder, which you can also edit as a note."
                 >
-                  <Textarea
+                  <InstructionsTextarea
+                    label="Project instructions"
                     value={instructions}
-                    onChange={(e) => setInstructions(e.target.value)}
-                    placeholder="e.g. Treat every note in this project as a draft chapter, and keep the tone consistent with the outline."
-                    className="tw-min-h-32"
+                    onChange={setInstructions}
                   />
                 </FormField>
               )}
