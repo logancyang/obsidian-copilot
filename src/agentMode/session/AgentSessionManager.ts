@@ -1929,6 +1929,11 @@ export class AgentSessionManager {
       return;
     }
     if (!record) return;
+    // The vault-root ensure runs for project scope too: Claude only sees a root AGENTS.md
+    // through the sibling CLAUDE.md import, and a user who hand-created the root file gets
+    // that import written on their FIRST session, not just a global one. Creates nothing
+    // when no root AGENTS.md exists.
+    await ensureAgentsFileForDiscovery(this.app, "", "");
     await moveProjectPromptToAgentsFile(this.app, record);
     // Anchored on the record's own path, matching `resolveScopeCwd`: the folder the agent
     // will actually open is `dirname(record.filePath)`, which is not the live projects root
