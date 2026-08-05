@@ -12,7 +12,10 @@ const badgeVariants = cva(
         secondary: "tw-bg-secondary-alt",
         destructive: "tw-bg-modifier-error tw-text-on-accent tw-shadow",
         outline: "tw-border tw-border-solid tw-border-border",
-        success: "tw-bg-success tw-text-success",
+        // Label stays on the base's body ink: `--text-success` is a bright green
+        // tuned for the plain background and measures ~2.2:1 on this tint in
+        // light themes. The tint and the caller's check glyph carry the meaning.
+        success: "tw-bg-success",
         accent: "tw-bg-interactive-accent tw-text-on-accent",
       },
     },
