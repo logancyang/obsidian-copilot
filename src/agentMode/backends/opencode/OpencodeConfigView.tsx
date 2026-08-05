@@ -196,6 +196,7 @@ export const OpencodeConfigView: React.FC<OpencodeConfigViewProps> = ({
         options={SOURCE_OPTIONS}
         value={source}
         onChange={onSourceChange}
+        disabled={managed.run.kind === "running"}
       />
       {source === "managed" ? (
         <>

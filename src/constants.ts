@@ -960,14 +960,11 @@ export const RESTRICTION_MESSAGES = {
     `${extension.toUpperCase()} files are not supported in the current mode.`,
 } as const;
 
-export const OPENCODE_PINNED_VERSION = "1.16.0";
-export const OPENCODE_RELEASE_TAG = `v${OPENCODE_PINNED_VERSION}`;
-/**
- * Minimum opencode the plugin supports. v1.15.13 introduced the config-option
- * model catalog we consume, and v1.16.0 made ACP `session/cancel` abort the
- * backing turn so a stopped session remains reusable.
- */
-export const OPENCODE_MIN_ACP_VERSION = "1.16.0";
+export {
+  OPENCODE_MIN_ACP_VERSION,
+  OPENCODE_PINNED_VERSION,
+  OPENCODE_RELEASE_TAG,
+} from "@/lib/opencodeVersion";
 export const OPENCODE_RELEASE_URL_TEMPLATE =
   "https://github.com/sst/opencode/releases/download/v{version}/{asset}";
 export const OPENCODE_RELEASE_API_URL_TEMPLATE =

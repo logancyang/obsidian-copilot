@@ -159,6 +159,23 @@ describe("OpencodeConfigView", () => {
       expect(actions.cancelInstall).toHaveBeenCalledTimes(1);
     });
 
+    it("keeps the source choice disabled while a managed install is running", () => {
+      const { onSourceChange } = renderView({
+        managed: {
+          ...MANAGED,
+          run: { kind: "running", label: "Extracting archive…", percent: 98 },
+        },
+      });
+
+      const customSource = screen.getByRole<HTMLButtonElement>("radio", {
+        name: "My own binary",
+      });
+      expect(customSource.disabled).toBe(true);
+      fireEvent.click(customSource);
+      expect(onSourceChange).not.toHaveBeenCalled();
+      expect(screen.getByRole("button", { name: "Cancel" })).toBeTruthy();
+    });
+
     it("surfaces a failed install without hiding the retry", () => {
       renderView({ managed: { ...MANAGED, run: { kind: "error", message: "tar exited with 1" } } });
 

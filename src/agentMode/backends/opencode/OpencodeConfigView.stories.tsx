@@ -4,6 +4,7 @@ import {
   type OpencodeConfigViewProps,
   type OpencodeManagedInfo,
 } from "@/agentMode/backends/opencode/OpencodeConfigView";
+import { OPENCODE_PINNED_VERSION } from "@/lib/opencodeVersion";
 import type { InstallState } from "@/agentMode/session/types";
 import type { Meta, StoryObj } from "@/lib/story";
 
@@ -19,7 +20,7 @@ const ACTIONS: OpencodeConfigActions = {
 
 const MANAGED: OpencodeManagedInfo = {
   platform: "darwin-arm64",
-  version: "0.15.6",
+  version: OPENCODE_PINNED_VERSION,
   destination: "~/.obsidian-copilot/opencode",
   run: { kind: "idle" },
 };
@@ -28,8 +29,8 @@ const OUTDATED: InstallState = {
   kind: "incompatible",
   source: "managed",
   currentVersion: "0.14.2",
-  minVersion: "0.15.6",
-  message: "opencode v0.14.2 is not supported. Copilot requires opencode v0.15.6 or newer.",
+  minVersion: OPENCODE_PINNED_VERSION,
+  message: `opencode v0.14.2 is not supported. Copilot requires opencode v${OPENCODE_PINNED_VERSION} or newer.`,
 };
 
 const meta = {

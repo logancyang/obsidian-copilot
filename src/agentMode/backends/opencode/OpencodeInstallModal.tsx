@@ -14,7 +14,7 @@ import { detectOpencodeCliPath } from "@/agentMode/backends/opencode/descriptor"
 import { ReactModal } from "@/components/modals/ReactModal";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { formatBinaryPathForDisplay } from "@/utils/binaryPath";
-import { OPENCODE_PINNED_VERSION } from "@/constants";
+import { OPENCODE_PINNED_VERSION } from "@/lib/opencodeVersion";
 import { logError } from "@/logger";
 import { useSettingsValue } from "@/settings/model";
 import { App, Notice } from "obsidian";
