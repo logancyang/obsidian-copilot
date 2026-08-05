@@ -62,7 +62,11 @@ const ClaudeConfigContainer: React.FC<{
       onClearPath={onClearPath}
       detect={() => Promise.resolve(detectClaudeCliPath())}
       searchedDirs={claudeCliDetectionSearchDirs}
-      auth={descriptor.auth ? { onSignIn: auth.signIn, signingIn: auth.signingIn } : undefined}
+      auth={
+        descriptor.auth
+          ? { onSignIn: auth.signIn, signingIn: auth.signingIn, url: auth.url }
+          : undefined
+      }
       onClose={onClose}
     />
   );

@@ -4,6 +4,8 @@ import React from "react";
 import { CodexConfigView, type CodexConfigViewProps } from "./CodexConfigView";
 import { CODEX_AUTH_COMMAND, CODEX_INSTALL_COMMAND } from "./cliSetup";
 
+const DEFAULT_PROMPT = process.platform === "win32" ? "PS> " : "$ ";
+
 const OUTDATED: InstallState = {
   kind: "incompatible",
   source: "custom",
@@ -16,7 +18,7 @@ const OUTDATED: InstallState = {
 const commandBlock =
   (command: string) =>
   (_content: string, element: Element | null): boolean =>
-    element?.tagName === "CODE" && element.textContent === `$ ${command}`;
+    element?.tagName === "CODE" && element.textContent === `${DEFAULT_PROMPT}${command}`;
 
 const renderView = (overrides: Partial<CodexConfigViewProps> = {}): void => {
   render(

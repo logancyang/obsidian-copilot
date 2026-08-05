@@ -23,7 +23,7 @@ const meta = {
     onClearPath: () => undefined,
     detect: () => Promise.resolve(null),
     searchedDirs: () => [],
-    auth: { onSignIn: () => undefined, signingIn: false },
+    auth: { onSignIn: () => undefined, signingIn: false, url: null },
     onClose: () => undefined,
   },
   // The real dialog fills its modal edge to edge, so the story asks for a width
@@ -52,7 +52,20 @@ export const SigningIn: StoryObj<ClaudeConfigViewProps> = {
   args: {
     state: { kind: "ready", source: "custom" },
     binaryPath: "/Users/zero/.local/bin/claude",
-    auth: { onSignIn: () => undefined, signingIn: true },
+    auth: { onSignIn: () => undefined, signingIn: true, url: null },
+  },
+};
+
+/** The CLI printed a URL because it could not open the OAuth page itself. */
+export const OAuthFallback: StoryObj<ClaudeConfigViewProps> = {
+  args: {
+    state: { kind: "ready", source: "custom" },
+    binaryPath: "/Users/zero/.local/bin/claude",
+    auth: {
+      onSignIn: () => undefined,
+      signingIn: true,
+      url: "https://claude.ai/oauth/authorize?code=example",
+    },
   },
 };
 

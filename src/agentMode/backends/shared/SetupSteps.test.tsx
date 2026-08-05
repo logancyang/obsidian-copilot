@@ -2,11 +2,13 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 import { CommandBlock, SetupStep } from "./SetupSteps";
 
+const DEFAULT_PROMPT = process.platform === "win32" ? "PS> " : "$ ";
+
 /** Match the `<code>` block that renders exactly this command behind the shell prompt. */
 const commandBlock =
-  (command: string) =>
+  (command: string, prompt = DEFAULT_PROMPT) =>
   (_content: string, element: Element | null): boolean =>
-    element?.tagName === "CODE" && element.textContent === `$ ${command}`;
+    element?.tagName === "CODE" && element.textContent === `${prompt}${command}`;
 
 describe("SetupSteps", () => {
   describe("CommandBlock()", () => {
@@ -24,6 +26,16 @@ describe("SetupSteps", () => {
       render(<CommandBlock command="codex login" />);
 
       expect(screen.getByText(commandBlock("codex login"))).toBeTruthy();
+    });
+
+    it("identifies PowerShell commands with a PowerShell prompt", () => {
+      render(
+        <CommandBlock command="irm https://example.com/install.ps1 | iex" shell="powershell" />
+      );
+
+      expect(
+        screen.getByText(commandBlock("irm https://example.com/install.ps1 | iex", "PS> "))
+      ).toBeTruthy();
     });
 
     it("copies the command verbatim and confirms in the button's own label", () => {

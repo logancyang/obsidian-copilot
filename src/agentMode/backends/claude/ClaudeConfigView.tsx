@@ -17,6 +17,8 @@ export interface ClaudeAuthProps {
   onSignIn: () => void;
   /** True while a sign-in is running, so the button can't be fired twice. */
   signingIn: boolean;
+  /** Browser fallback printed by the CLI when it cannot open OAuth itself. */
+  url: string | null;
 }
 
 export interface ClaudeConfigViewProps {
@@ -101,7 +103,14 @@ export const ClaudeConfigView: React.FC<ClaudeConfigViewProps> = ({
           <CommandBlock
             command={CLAUDE_AUTH_COMMAND}
             action={
-              auth && (
+              auth &&
+              (auth.signingIn && auth.url ? (
+                <Button asChild variant="secondary" size="sm">
+                  <a href={auth.url} target="_blank" rel="noopener noreferrer">
+                    Open sign-in page
+                  </a>
+                </Button>
+              ) : (
                 <Button
                   variant="secondary"
                   size="sm"
@@ -110,7 +119,7 @@ export const ClaudeConfigView: React.FC<ClaudeConfigViewProps> = ({
                 >
                   {auth.signingIn ? "Signing in…" : "Sign in"}
                 </Button>
-              )
+              ))
             }
           />
           <p className="tw-my-0 tw-text-sm tw-text-muted">

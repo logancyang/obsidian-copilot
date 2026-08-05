@@ -5,9 +5,13 @@ import React from "react";
 /** How long "Copied" stays up before the button reverts to its resting label. */
 const COPIED_LABEL_MS = 1400;
 
+export type CommandShell = "posix" | "powershell";
+
 interface CommandBlockProps {
   /** Shell command shown after the prompt and copied verbatim. */
   command: string;
+  /** Override the platform-derived prompt when rendering another platform's command. */
+  shell?: CommandShell;
   /** Extra control rendered after Copy, for an in-app equivalent of the command. */
   action?: React.ReactNode;
 }
@@ -18,9 +22,13 @@ interface CommandBlockProps {
  * it. Confirmation lives in the button's own label instead of a notice, so the
  * feedback stays where the user is looking.
  */
-export const CommandBlock: React.FC<CommandBlockProps> = ({ command, action }) => {
+export const CommandBlock: React.FC<CommandBlockProps> = ({ command, shell, action }) => {
   const [copied, setCopied] = React.useState(false);
   const timerRef = React.useRef<number | null>(null);
+  const prompt =
+    (shell ?? (process.platform === "win32" ? "powershell" : "posix")) === "powershell"
+      ? "PS> "
+      : "$ ";
 
   React.useEffect(
     () => () => {
@@ -43,7 +51,7 @@ export const CommandBlock: React.FC<CommandBlockProps> = ({ command, action }) =
       {/* Obsidian styles bare `code` with its own background and padding, which
           would draw a second block inside this one. */}
       <code className="tw-min-w-0 tw-flex-1 tw-break-all tw-bg-transparent tw-px-0 tw-py-0.5 tw-text-xs tw-leading-5">
-        <span className="tw-select-none tw-text-faint">$ </span>
+        <span className="tw-select-none tw-text-faint">{prompt}</span>
         {command}
       </code>
       <div className="tw-flex tw-shrink-0 tw-items-center tw-gap-1">

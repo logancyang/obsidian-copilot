@@ -1,4 +1,4 @@
-import { CommandBlock, SetupStep } from "@/agentMode/backends/shared/SetupSteps";
+import { CommandBlock, SetupStep, type CommandShell } from "@/agentMode/backends/shared/SetupSteps";
 import { Button } from "@/components/ui/button";
 import type { Meta, StoryObj } from "@/lib/story";
 import * as React from "react";
@@ -8,16 +8,18 @@ interface SetupStepsStoryProps {
   installCommand: string;
   /** Extra control beside Copy on the sign-in command. */
   action?: React.ReactNode;
+  /** Prompt convention for the platform whose commands the story renders. */
+  shell?: CommandShell;
 }
 
 /** The two-step "don't have it yet" block the CLI dialogs compose. */
-const SetupStepsBlock: React.FC<SetupStepsStoryProps> = ({ installCommand, action }) => (
+const SetupStepsBlock: React.FC<SetupStepsStoryProps> = ({ installCommand, action, shell }) => (
   <div className="tw-flex tw-flex-col tw-gap-4">
     <SetupStep index={1} title="Install it">
-      <CommandBlock command={installCommand} />
+      <CommandBlock command={installCommand} shell={shell} />
     </SetupStep>
     <SetupStep index={2} title="Sign in">
-      <CommandBlock command="claude auth login --claudeai" action={action} />
+      <CommandBlock command="claude auth login --claudeai" shell={shell} action={action} />
       <p className="tw-my-0 tw-text-sm tw-text-muted">
         Copilot inherits whatever credentials the Claude Code CLI holds — there is no key to paste
         here.
@@ -55,5 +57,6 @@ export const LongCommand: StoryObj<SetupStepsStoryProps> = {
   args: {
     installCommand:
       "irm https://gist.githubusercontent.com/logancyang/7a87eb38d91015eac567521f8cc9c729/raw/install-claude-agent-mode-windows.ps1 | iex",
+    shell: "powershell",
   },
 };

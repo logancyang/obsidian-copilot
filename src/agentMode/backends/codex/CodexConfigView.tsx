@@ -2,6 +2,7 @@ import {
   CODEX_AUTH_COMMAND,
   CODEX_BINARY_NAME,
   CODEX_INSTALL_COMMAND,
+  codexBinaryPathPlaceholder,
 } from "@/agentMode/backends/codex/cliSetup";
 import { BinaryPathSetting } from "@/agentMode/backends/shared/BinaryPathSetting";
 import {
@@ -65,7 +66,7 @@ export const CodexConfigView: React.FC<CodexConfigViewProps> = ({
       </p>
       <BinaryPathSetting
         binaryName={CODEX_BINARY_NAME}
-        placeholder="/absolute/path/to/codex-acp"
+        placeholder={codexBinaryPathPlaceholder(process.platform)}
         initialPath={binaryPath}
         notFoundHint={`${CODEX_BINARY_NAME} not found in known install locations or PATH. Run the install command below, then click Auto-detect again.`}
         onSave={onSavePath}

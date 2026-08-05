@@ -4,6 +4,8 @@ import React from "react";
 import { ClaudeConfigView, type ClaudeConfigViewProps } from "./ClaudeConfigView";
 import { CLAUDE_AUTH_COMMAND, CLAUDE_INSTALL_COMMAND } from "./cliSetup";
 
+const DEFAULT_PROMPT = process.platform === "win32" ? "PS> " : "$ ";
+
 const OUTDATED: InstallState = {
   kind: "incompatible",
   source: "custom",
@@ -16,7 +18,7 @@ const OUTDATED: InstallState = {
 const commandBlock =
   (command: string) =>
   (_content: string, element: Element | null): boolean =>
-    element?.tagName === "CODE" && element.textContent === `$ ${command}`;
+    element?.tagName === "CODE" && element.textContent === `${DEFAULT_PROMPT}${command}`;
 
 const renderView = (overrides: Partial<ClaudeConfigViewProps> = {}): HTMLElement => {
   const { container } = render(
@@ -55,17 +57,32 @@ describe("ClaudeConfigView", () => {
 
     it("offers the in-app sign-in beside the command when the backend can run it", () => {
       const onSignIn = jest.fn();
-      renderView({ auth: { onSignIn, signingIn: false } });
+      renderView({ auth: { onSignIn, signingIn: false, url: null } });
 
       expect(screen.getByRole("button", { name: "Sign in" })).toBeTruthy();
     });
 
     it("blocks a second sign-in while one is already running", () => {
-      renderView({ auth: { onSignIn: jest.fn(), signingIn: true } });
+      renderView({ auth: { onSignIn: jest.fn(), signingIn: true, url: null } });
 
       expect(screen.getByRole<HTMLButtonElement>("button", { name: "Signing in…" }).disabled).toBe(
         true
       );
+    });
+
+    it("offers the OAuth fallback link when the CLI cannot open a browser", () => {
+      renderView({
+        auth: {
+          onSignIn: jest.fn(),
+          signingIn: true,
+          url: "https://claude.ai/oauth/authorize?code=example",
+        },
+      });
+
+      expect(screen.getByRole("link", { name: "Open sign-in page" }).getAttribute("href")).toBe(
+        "https://claude.ai/oauth/authorize?code=example"
+      );
+      expect(screen.queryByRole("button", { name: "Signing in…" })).toBeNull();
     });
 
     it("shows the command alone when Copilot cannot drive the sign-in", () => {
