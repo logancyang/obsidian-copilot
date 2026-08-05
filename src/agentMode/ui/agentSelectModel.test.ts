@@ -1,4 +1,3 @@
-import { NO_SETUP_HIGHLIGHTS } from "@/agentMode/session/descriptor";
 import type { BackendDescriptor, BackendId, InstallState } from "@/agentMode/session/types";
 import {
   buildAgentSelectRows,
@@ -11,15 +10,11 @@ function descriptor(id: BackendId, overrides: Partial<BackendDescriptor> = {}): 
     id,
     displayName: id,
     setupDescription: `${id} description`,
-    setupHighlights: NO_SETUP_HIGHLIGHTS,
     ...overrides,
   } as BackendDescriptor;
 }
 
-const OPENCODE = descriptor("opencode", {
-  displayName: "opencode",
-  setupHighlights: Object.freeze(["Copilot Plus models", "Your own provider key"]),
-});
+const OPENCODE = descriptor("opencode", { displayName: "opencode" });
 const CLAUDE = descriptor("claude", { displayName: "Claude" });
 const CODEX = descriptor("codex", { displayName: "Codex" });
 const DISPLAY_ORDER = [OPENCODE, CLAUDE, CODEX];
@@ -38,7 +33,6 @@ function rowWith(overrides: Partial<AgentSelectRow> = {}): AgentSelectRow {
     id: "opencode",
     name: "opencode",
     description: "opencode description",
-    highlights: NO_SETUP_HIGHLIGHTS,
     status: "absent",
     recommended: false,
     statusMessage: null,
@@ -108,20 +102,11 @@ describe("agentSelectModel", () => {
       expect(rows.filter((row) => row.recommended).map((row) => row.id)).toEqual(["opencode"]);
     });
 
-    it("copies name, description, and highlights from the descriptor", () => {
+    it("copies the name and description from the descriptor", () => {
       const [row] = buildAgentSelectRows([OPENCODE], {}, "opencode");
 
       expect(row.name).toBe("opencode");
       expect(row.description).toBe("opencode description");
-      expect(row.highlights).toEqual(["Copilot Plus models", "Your own provider key"]);
-    });
-
-    it("reuses one array identity for every empty highlights list across calls", () => {
-      const first = buildAgentSelectRows(DISPLAY_ORDER, {}, "opencode");
-      const second = buildAgentSelectRows(DISPLAY_ORDER, {}, "opencode");
-
-      expect(first[1].highlights).toBe(NO_SETUP_HIGHLIGHTS);
-      expect(second[2].highlights).toBe(first[1].highlights);
     });
 
     it("returns one shared frozen slice when there are no descriptors", () => {

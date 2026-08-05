@@ -20,7 +20,6 @@ jest.mock("@/agentMode/backends/registry", () => {
     id,
     displayName,
     setupDescription: `${displayName} description`,
-    setupHighlights: [],
     openInstallUI,
   });
   const order = [make("opencode", "opencode"), make("claude", "Claude"), make("codex", "Codex")];

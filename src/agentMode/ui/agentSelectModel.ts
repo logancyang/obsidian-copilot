@@ -12,7 +12,6 @@ export interface AgentSelectRow {
   id: BackendId;
   name: string;
   description: string;
-  highlights: ReadonlyArray<string>;
   status: AgentSelectStatus;
   /** True for the single backend a first-run user is steered to. */
   recommended: boolean;
@@ -85,10 +84,6 @@ export function buildAgentSelectRows(
       id: descriptor.id,
       name: descriptor.displayName,
       description: descriptor.setupDescription,
-      // Handed through by reference: descriptors own frozen arrays (the empty
-      // case is the shared `NO_SETUP_HIGHLIGHTS`), so rebuilding rows never
-      // hands consumers a fresh identity for unchanged highlights.
-      highlights: descriptor.setupHighlights,
       status: toSelectStatus(state.kind),
       recommended: descriptor.id === recommendedId,
       statusMessage: statusMessageOf(state),
