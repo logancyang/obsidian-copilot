@@ -171,7 +171,7 @@ export const AgentSelectView: React.FC<AgentSelectViewProps> = ({
         })}
       </div>
 
-      <div className="tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-2 tw-border-t tw-border-solid tw-border-border tw-pt-3">
+      <div className="copilot-divider-t tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-2 tw-pt-3">
         <span className="tw-min-w-0 tw-flex-1 tw-break-words tw-text-ui-smaller tw-text-muted">
           {footerNote}
         </span>
