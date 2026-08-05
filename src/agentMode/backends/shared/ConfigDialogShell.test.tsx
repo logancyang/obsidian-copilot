@@ -1,7 +1,7 @@
 import type { InstallState } from "@/agentMode/session/types";
 import { render, screen } from "@testing-library/react";
 import React from "react";
-import { ConfigDialogShell, ConfigWarningStrip } from "./ConfigDialogShell";
+import { ConfigDialogShell, ConfigSection, ConfigWarningStrip } from "./ConfigDialogShell";
 
 const OUTDATED: InstallState = {
   kind: "incompatible",
@@ -56,6 +56,57 @@ describe("ConfigDialogShell", () => {
       expect(
         alert.compareDocumentPosition(screen.getByText("body")) & Node.DOCUMENT_POSITION_FOLLOWING
       ).toBeTruthy();
+    });
+
+    it("keeps every band a full-width sibling that pads itself", () => {
+      const { container } = render(
+        <ConfigDialogShell
+          title="Configure opencode"
+          state={{ kind: "absent" }}
+          onClose={jest.fn()}
+        >
+          <ConfigSection title="Download managed binary">
+            <p>body</p>
+          </ConfigSection>
+        </ConfigDialogShell>
+      );
+
+      // Padding on the container instead of the bands would inset every
+      // divider, leaving a gap at both ends of each hairline. The marker class
+      // is what the stylesheet keys off to strip the host modal's padding.
+      const shell = container.firstElementChild as HTMLElement;
+      expect(shell.className).toContain("copilot-config-dialog");
+      expect(shell.className).not.toMatch(/tw-p[xl]?-/);
+      const footer = shell.lastElementChild as HTMLElement;
+      expect(footer.className).toContain("copilot-divider-t");
+      expect(footer.className).toContain("tw-bg-secondary");
+      expect(footer.textContent).toBe("Done");
+    });
+  });
+
+  describe("ConfigSection()", () => {
+    it("renders its body in a self-padded band under a hairline divider", () => {
+      const { container } = render(
+        <ConfigSection title="Use your own binary">
+          <p>body</p>
+        </ConfigSection>
+      );
+
+      const band = container.firstElementChild as HTMLElement;
+      expect(band.className).toContain("copilot-divider-t");
+      expect(band.className).toContain("tw-p-4");
+      expect(band.textContent).toBe("Use your own binarybody");
+    });
+
+    it("drops the section heading when no title is given", () => {
+      const { container } = render(
+        <ConfigSection>
+          <p>body</p>
+        </ConfigSection>
+      );
+
+      expect(container.firstElementChild?.children.length).toBe(1);
+      expect(screen.getByText("body")).toBeTruthy();
     });
   });
 

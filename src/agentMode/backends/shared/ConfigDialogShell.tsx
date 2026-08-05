@@ -24,6 +24,11 @@ interface ConfigDialogShellProps {
  * bespoke) bodies. Rendered inside a per-agent `ReactModal` subclass — it is not
  * itself a modal, but it does own the title, which is why its subclasses leave
  * Obsidian's native title element empty.
+ *
+ * Every band owns its own padding so the dividers between them run edge to edge.
+ * The `copilot-config-dialog` marker class is what makes that hold: a stylesheet
+ * rule keys off it to zero the padding the hosting modal would otherwise
+ * contribute, which would inset every divider by a theme-dependent amount.
  */
 export const ConfigDialogShell: React.FC<ConfigDialogShellProps> = ({
   title,
@@ -33,16 +38,16 @@ export const ConfigDialogShell: React.FC<ConfigDialogShellProps> = ({
   footer,
   onClose,
 }) => (
-  <div className="tw-flex tw-flex-col tw-gap-4">
-    <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-2">
+  <div className="copilot-config-dialog tw-flex tw-flex-col">
+    <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-2 tw-px-4 tw-pb-3 tw-pt-4">
       <h3 className="tw-m-0 tw-text-ui-medium tw-font-semibold tw-leading-tight tw-text-normal">
         {title}
       </h3>
       <ConfigStatusBadge state={state} />
     </div>
-    {warning}
-    <div className="tw-flex tw-flex-col tw-gap-4">{children}</div>
-    <div className="tw-flex tw-justify-end tw-gap-2 tw-border-[0px] tw-border-t tw-border-solid tw-border-border tw-pt-4">
+    {warning && <div className="tw-px-4 tw-pb-3">{warning}</div>}
+    {children}
+    <div className="copilot-divider-t tw-flex tw-justify-end tw-gap-2 tw-bg-secondary tw-px-4 tw-py-3">
       {footer ?? (
         <Button variant="default" size="default" onClick={onClose}>
           Done
@@ -97,7 +102,7 @@ export const ConfigSection: React.FC<{ title?: string; children: React.ReactNode
   title,
   children,
 }) => (
-  <div className="tw-flex tw-flex-col tw-gap-2 tw-border-[0px] tw-border-t tw-border-solid tw-border-border tw-pt-4">
+  <div className="copilot-divider-t tw-flex tw-flex-col tw-gap-2 tw-p-4">
     {title && <div className="tw-text-sm tw-font-medium">{title}</div>}
     {children}
   </div>

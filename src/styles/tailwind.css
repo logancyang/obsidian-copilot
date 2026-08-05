@@ -26,6 +26,22 @@ If your plugin does not need CSS, delete this file.
   max-width: calc(100vw - 2rem);
 }
 
+/* Agent Configure dialogs draw their own full-bleed bands (header, sections,
+   footer), so the hosting modal must contribute no padding of its own —
+   otherwise every band's divider stops short of both edges. Keying off the
+   body rather than a class the modal has to remember means every host that
+   renders the shell opts in, the component gallery included. Themes disagree
+   about which element carries the padding, hence both targets. */
+.modal:has(.copilot-config-dialog),
+.modal:has(.copilot-config-dialog) .modal-content {
+  padding: 0;
+}
+
+/* The shell owns the title, so the native (empty) header must not reserve space. */
+.modal:has(.copilot-config-dialog) .modal-header {
+  margin-bottom: 0;
+}
+
 /* Single-side dividers. Preflight is off, so `tw-border-b tw-border-solid`
    leaks `border-style: solid` to all sides and renders all four borders. */
 .copilot-divider-b {
