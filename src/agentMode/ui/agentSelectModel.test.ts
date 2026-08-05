@@ -131,7 +131,7 @@ describe("agentSelectModel", () => {
     it("offers to start a chat on an installed agent without claiming authentication", () => {
       expect(resolveAgentSelectCta(rowWith({ status: "installed" }))).toEqual({
         label: "Start chat",
-        note: "Installed. Start this agent to check sign-in and begin chatting.",
+        note: null,
         action: "start",
       });
     });

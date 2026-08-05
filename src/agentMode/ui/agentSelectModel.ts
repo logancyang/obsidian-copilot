@@ -24,15 +24,13 @@ export interface AgentSelectRow {
 /** What the view's single call to action does for the selected row. */
 export type AgentSelectAction = "start" | "configure" | "wait";
 
-/** Label, explanatory note, and behavior of the select view's one call to action. */
+/** Label, optional explanatory note, and behavior of the select view's one call to action. */
 export interface AgentSelectCta {
   label: string;
-  /** Footer text beside the button, explaining what pressing it will do. */
-  note: string;
+  /** Footer text beside the button when the selected agent needs attention. */
+  note: string | null;
   action: AgentSelectAction;
 }
-
-const INSTALLED_NOTE = "Installed. Start this agent to check sign-in and begin chatting.";
 
 const EMPTY_AGENT_SELECT_ROWS: readonly AgentSelectRow[] = Object.freeze([]);
 
@@ -103,7 +101,7 @@ export function resolveAgentSelectCta(row: AgentSelectRow): AgentSelectCta {
     };
   }
   if (row.status === "installed") {
-    return { label: "Start chat", note: INSTALLED_NOTE, action: "start" };
+    return { label: "Start chat", note: null, action: "start" };
   }
   return {
     label: "Configure",

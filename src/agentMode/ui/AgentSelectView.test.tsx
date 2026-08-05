@@ -131,5 +131,12 @@ describe("AgentSelectView", () => {
 
       expect(screen.getByText("Ready to go.")).toBeTruthy();
     });
+
+    it("omits the footer note when the selected agent needs no attention", () => {
+      renderView({ footerNote: null, ctaLabel: "Start chat" });
+
+      expect(screen.queryByText("opencode isn't set up on this machine yet.")).toBeNull();
+      expect(screen.getByRole("button", { name: "Start chat" })).toBeTruthy();
+    });
   });
 });
