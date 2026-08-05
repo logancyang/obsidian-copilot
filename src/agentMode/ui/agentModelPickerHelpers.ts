@@ -351,11 +351,9 @@ export function buildPickerEntries(
     // selection, and disabling them would strand the current model (the merged
     // picker seeds its draft from selectable rows only, so it would silently
     // draft a different backend's model instead).
-    // Readiness is read from `settings`, which is already a dependency of the
-    // caller's memo, so every settings-driven transition (path saved, binary
-    // installed) relabels. The one transition that isn't settings-driven is
-    // Claude's async version probe, and it starts from `checking` — which
-    // carries no label — so it can never leave a row stuck as unselectable.
+    // The caller subscribes to every descriptor's install-state store as well
+    // as settings, so async compatibility probes relabel these rows even when
+    // no persisted setting changed.
     if (!isActiveBackend) {
       const readiness = backendReadinessReason(descriptor.getInstallState(settings));
       if (readiness) {

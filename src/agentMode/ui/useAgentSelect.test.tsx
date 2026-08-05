@@ -103,7 +103,7 @@ describe("useAgentSelect", () => {
       expect(manager.getOrCreateActiveSession).not.toHaveBeenCalled();
     });
 
-    it("persists the choice and spawns a session when starting a connected agent", () => {
+    it("persists the choice and spawns a session when starting an installed agent", () => {
       const manager = makeManager();
       const { result } = render({ claude: { kind: "ready", source: "custom" } }, manager);
       act(() => result.current.select("claude"));

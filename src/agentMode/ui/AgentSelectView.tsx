@@ -24,7 +24,7 @@ interface StatusBadgeSpec {
  */
 const STATUS_BADGES: Partial<Record<AgentSelectStatus, StatusBadgeSpec>> = {
   checking: { label: "Checking…", variant: "secondary", Icon: LoaderCircle },
-  connected: { label: "Connected", variant: "success", Icon: Check },
+  installed: { label: "Installed", variant: "success", Icon: Check },
   outdated: { label: "Update required", variant: "destructive", Icon: AlertTriangle },
   error: { label: "Error", variant: "destructive", Icon: AlertTriangle },
 };

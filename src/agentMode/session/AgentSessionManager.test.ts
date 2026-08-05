@@ -475,6 +475,53 @@ describe("AgentSessionManager warm-backend reuse", () => {
     expect(opts).not.toHaveProperty("backendSessionId");
   });
 
+  it("waits for an in-flight preload and adopts its process instead of spawning a second one", async () => {
+    let resolvePreload!: () => void;
+    let preloadSettled = false;
+    const preloadPromise = new Promise<void>((resolve) => {
+      resolvePreload = resolve;
+    });
+    const warmProc = makeMockBackendProcess();
+    const descriptor = buildDescriptor();
+    const preloader = {
+      getCachedModelCatalog: jest.fn(() => null),
+      getEffortCatalog: jest.fn(() => null),
+      preload: jest.fn(() => preloadPromise),
+      refresh: jest.fn(() => null),
+      subscribe: jest.fn(() => () => {}),
+      shutdown: jest.fn(),
+      clearCached: jest.fn(),
+      takeWarm: jest.fn(() => (preloadSettled ? { proc: warmProc } : null)),
+      getWarmProcs: jest.fn(() => []),
+    };
+    const mgr = new AgentSessionManager(
+      buildApp(),
+      buildPlugin() as unknown as ConstructorParameters<typeof AgentSessionManager>[1],
+      {
+        permissionPrompter: jest.fn(),
+        resolveDescriptor: (id) => (id === descriptor.id ? descriptor : undefined),
+        modelPreloader: preloader as unknown as ConstructorParameters<
+          typeof AgentSessionManager
+        >[2]["modelPreloader"],
+      }
+    );
+    mgr.registerPreload("opencode", preloadPromise);
+
+    const sessionPromise = mgr.createSession();
+    await Promise.resolve();
+
+    expect(preloader.preload).toHaveBeenCalledWith("opencode");
+    expect(descriptor.createBackendProcess).not.toHaveBeenCalled();
+
+    preloadSettled = true;
+    resolvePreload();
+    await sessionPromise;
+
+    expect(preloader.takeWarm).toHaveBeenCalledWith("opencode");
+    expect(descriptor.createBackendProcess).not.toHaveBeenCalled();
+    expect(mockBackendStart).not.toHaveBeenCalled();
+  });
+
   it("falls back to a fresh spawn when no warm entry is available", async () => {
     // takeWarm returning null is the second-and-later session path.
     const mgr = buildManager();
