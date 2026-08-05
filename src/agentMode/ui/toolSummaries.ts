@@ -116,7 +116,7 @@ function statusSuffix(parts: ToolCallPart[]): string {
   return ` · ${bits.join(" · ")}`;
 }
 
-function pluralize(n: number, singular: string, plural?: string): string {
+export function pluralize(n: number, singular: string, plural?: string): string {
   return `${n} ${n === 1 ? singular : (plural ?? `${singular}s`)}`;
 }
 
@@ -136,7 +136,7 @@ function targetFromTitle(part: ToolCallPart): string {
  * snake_case / kebab-case into words, lowercase, then capitalize the first
  * letter. "AskUserQuestion" → "Ask user question"; "query-docs" → "Query docs".
  */
-function humanizeToolName(name: string): string {
+export function humanizeToolName(name: string): string {
   const words = name
     .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
