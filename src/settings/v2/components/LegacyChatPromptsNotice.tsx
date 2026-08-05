@@ -2,6 +2,34 @@ import { getEffectiveSystemPromptsFolder } from "@/settings/copilotFolder";
 import { useSystemPrompts } from "@/system-prompts/state";
 import React from "react";
 
+export interface LegacyChatPromptsNoticeViewProps {
+  /** How many saved Chat system prompt files the user has; zero renders nothing. */
+  promptCount: number;
+  /** Vault-relative folder still holding those files, shown verbatim. */
+  folderPath: string;
+}
+
+/**
+ * Presentational half of {@link LegacyChatPromptsNotice}: the migration copy for a given
+ * prompt count and folder. Split from the store-connected wrapper so the component gallery
+ * can render both states from fixture props.
+ */
+export const LegacyChatPromptsNoticeView: React.FC<LegacyChatPromptsNoticeViewProps> = ({
+  promptCount,
+  folderPath,
+}) => {
+  if (promptCount === 0) return null;
+
+  return (
+    <div className="tw-mb-3 tw-rounded-md tw-border tw-border-border tw-bg-secondary tw-px-3 tw-py-2 tw-text-ui-smaller tw-text-muted">
+      Agent Mode now reads your instructions from <code>AGENTS.md</code>. Your{" "}
+      {promptCount === 1 ? "saved system prompt is" : `${promptCount} saved system prompts are`}{" "}
+      still in <code>{folderPath}</code> — open one there and paste anything you want the agent to
+      keep following.
+    </div>
+  );
+};
+
 /**
  * Tells a user who had Chat system prompts where those files still are.
  *
@@ -15,16 +43,10 @@ import React from "react";
  */
 export const LegacyChatPromptsNotice: React.FC = () => {
   const prompts = useSystemPrompts();
-  if (prompts.length === 0) return null;
-
   return (
-    <div className="tw-mb-3 tw-rounded-md tw-border tw-border-border tw-bg-secondary tw-px-3 tw-py-2 tw-text-ui-smaller tw-text-muted">
-      Agent Mode now reads your instructions from <code>AGENTS.md</code>. Your{" "}
-      {prompts.length === 1
-        ? "saved system prompt is"
-        : `${prompts.length} saved system prompts are`}{" "}
-      still in <code>{getEffectiveSystemPromptsFolder()}</code> — open one there and paste anything
-      you want the agent to keep following.
-    </div>
+    <LegacyChatPromptsNoticeView
+      promptCount={prompts.length}
+      folderPath={getEffectiveSystemPromptsFolder()}
+    />
   );
 };
