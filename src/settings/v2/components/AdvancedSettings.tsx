@@ -67,7 +67,7 @@ export const AdvancedSettings: React.FC = () => {
     // the user's selected/default custom prompt WAS their agent instructions, so carrying it
     // over on first open keeps an existing setup working instead of silently dropping it.
     // Only used when the file is absent — it never overwrites.
-    void openAgentsFile(app, "", getEffectiveUserPrompt(), true).catch((error) => {
+    void openAgentsFile(app, "", "", true).catch((error) => {
       logError("Failed to open vault AGENTS.md.", error);
       new Notice(error instanceof Error ? error.message : "Failed to open AGENTS.md.");
     });

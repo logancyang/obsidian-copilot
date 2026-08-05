@@ -1,5 +1,5 @@
 import React from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 // activeDocument global (Radix popover portals into it).
 beforeAll(() => {
@@ -30,6 +30,10 @@ jest.mock("@/agentMode/ui/AgentProjectRowActions", () => ({
 const openAgentsFile = jest.fn().mockResolvedValue(undefined);
 jest.mock("@/instructions/agentsFile", () => ({
   openAgentsFile: (...args: unknown[]) => openAgentsFile(...args),
+}));
+const moveProjectPromptToAgentsFile = jest.fn().mockResolvedValue(undefined);
+jest.mock("@/projects/moveProjectPrompt", () => ({
+  moveProjectPromptToAgentsFile: (...args: unknown[]) => moveProjectPromptToAgentsFile(...args),
 }));
 
 import { TFile, TFolder } from "obsidian";
@@ -105,13 +109,21 @@ describe("ProjectInfoPopover", () => {
     expect(screen.getAllByText("AGENTS.md")).toHaveLength(1);
   });
 
-  it("opens the project AGENTS.md file with the legacy body as missing-file content", async () => {
+  it("moves any legacy project.md text in before opening the file", async () => {
     renderPopover(null);
     fireEvent.click(await screen.findByText("AGENTS.md"));
+
+    await waitFor(() => expect(openAgentsFile).toHaveBeenCalled());
+    expect(moveProjectPromptToAgentsFile).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ folderName: "proj-1" })
+    );
+    // Empty content: the move already put the real text on disk, and this must never
+    // overwrite a file the user wrote themselves.
     expect(openAgentsFile).toHaveBeenCalledWith(
       expect.anything(),
       "copilot/projects/proj-1",
-      "be helpful",
+      "",
       true
     );
   });

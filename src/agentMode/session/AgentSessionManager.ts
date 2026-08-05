@@ -75,6 +75,7 @@ import {
 import { ProjectContentTracker } from "@/context/projectContentTracker";
 import { buildProjectContextUpdatesBlock } from "@/context/contextUpdatesBlockBuilder";
 import { ensureAgentsFileForDiscovery } from "@/instructions/agentsFile";
+import { moveProjectPromptToAgentsFile } from "@/projects/moveProjectPrompt";
 import { getProjectFolderPath } from "@/projects/projectPaths";
 import { ProjectFileManager } from "@/projects/ProjectFileManager";
 import type {
@@ -1910,9 +1911,10 @@ export class AgentSessionManager {
 
   /**
    * Initialize the scope's canonical instruction files so the backend discovers them from
-   * cwd. Global scope only ever adds the Claude import next to an AGENTS.md the user wrote
-   * themselves (there is no legacy vault-level body to migrate); a project additionally
-   * initializes from its `project.md` body. Best-effort — never rejects.
+   * cwd. Neither scope invents instructions: the vault file only ever gains its Claude
+   * import next to an AGENTS.md the user wrote themselves, and a project only materializes
+   * one when it has legacy `project.md` prompt text to move there. Best-effort — never
+   * rejects.
    */
   private async ensureScopeInstructions(
     projectId: ProjectScopeId,
@@ -1923,11 +1925,8 @@ export class AgentSessionManager {
       return;
     }
     if (!record) return;
-    await ensureAgentsFileForDiscovery(
-      this.app,
-      getProjectFolderPath(record.folderName),
-      record.project.systemPrompt ?? ""
-    );
+    await moveProjectPromptToAgentsFile(this.app, record);
+    await ensureAgentsFileForDiscovery(this.app, getProjectFolderPath(record.folderName), "");
   }
 
   /**

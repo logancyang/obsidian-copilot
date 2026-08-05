@@ -5,6 +5,7 @@ import { AddProjectModal } from "@/components/modals/project/AddProjectModal";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { openAgentsFile } from "@/instructions/agentsFile";
+import { moveProjectPromptToAgentsFile } from "@/projects/moveProjectPrompt";
 import { cn } from "@/lib/utils";
 import { logError } from "@/logger";
 import { getProjectFolderPath } from "@/projects/projectPaths";
@@ -140,15 +141,14 @@ function ProjectFilesSection({ app, project, onClose }: ProjectFilesSectionProps
     const record = getCachedProjectRecordById(project.id);
     if (!record) return;
     onClose();
-    void openAgentsFile(
-      app,
-      getProjectFolderPath(record.folderName),
-      record.project.systemPrompt ?? "",
-      true
-    ).catch((error) => {
-      logError("[ProjectInfoPopover] Failed to open project AGENTS.md", error);
-      new Notice("Failed to open project AGENTS.md.");
-    });
+    // Move any legacy `project.md` text in first, so opening the file shows the user their
+    // real instructions rather than a blank page they would have to re-type.
+    void moveProjectPromptToAgentsFile(app, record)
+      .then(() => openAgentsFile(app, getProjectFolderPath(record.folderName), "", true))
+      .catch((error) => {
+        logError("[ProjectInfoPopover] Failed to open project AGENTS.md", error);
+        new Notice("Failed to open project AGENTS.md.");
+      });
   };
 
   return (
