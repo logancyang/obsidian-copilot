@@ -8,7 +8,7 @@ groups.
 ## The problem
 
 A turn's `AgentMessagePart[]` interleaves tool calls, reasoning, and prose. The
-shipping trail compacts only **runs of consecutive same-`toolKey` tool calls**,
+trail used to compact only **runs of consecutive same-`toolKey` tool calls**,
 which almost never fires: the agent emits a `thought` between nearly every pair
 of tool calls, and a thought breaks the run. The result is one row per tool call
 plus one row per thought, and the turn's actual writing ends up buried under
@@ -89,6 +89,17 @@ Reasoning duration is **not** derivable from the parts — `kind: "thought"`
 carries no timestamps. The caller measures it live and passes `thinkingMs` to
 `summarizeActivity`, the same way `ReasoningBlock` measures its own timer today.
 
+### Measured at pane width
+
+Rendered in a real leaf pane, a three-family line plus `thought for Xs` runs
+about 59 characters and needs ~377px. A chat leaf gives the line 228px at 300px
+wide and 328px at 400px, so roughly 36–51 characters fit and the tail truncates;
+it only fits whole at 600px. Truncation is graceful — the families the agent
+spent the most on are named first and the full detail is one click away — but
+the cap of three families is tuned for row count, not for pane width. Narrowing
+it, or moving the reasoning duration off the line, is unvalidated: both change
+what the replay measured.
+
 ## Interaction invariants
 
 These are what make grouping safe where the removed auto-fold was not:
@@ -109,15 +120,16 @@ group's position never changes once it exists, and appending a member does not
 change its id. Keying React state by array index instead would remount an open
 group whenever the node list changed shape.
 
-## Planned deletions
+## What grouping replaced
 
-Activity groups subsume `AggregateCard` and the homogeneous `aggregate` render
-node. When grouping is wired into `AgentTrailView`, all three of these go:
+Activity groups subsume the homogeneous `aggregate` render node, so the
+compaction branch of `foldNodes`, `toolKeyFor`, `AggregateCard.tsx`, and
+`ToolSummary.aggregate` with its per-family implementations are all gone.
+`buildAgentTrail` is now purely structural — one node per part, sub-agents
+absorbing their children — and every run of peers is pooled by
+`foldActivityGroups` a layer up.
 
-- the `aggregate` branch of `foldNodes` in `agentTrail.ts`
-- `AggregateCard.tsx`
-- `ToolSummary.aggregate` and its ~20 per-family implementations in
-  `toolSummaries.ts`
-
-Until then `aggregate` nodes still exist, so `foldActivityGroups` flattens them
-back into their member parts. That branch is deleted along with the rest.
+`AgentTrailView` owns what a group cannot own itself: `useTrailExpansion` holds
+open/closed state above the node list (see invariant 2), and each group gets its
+own `useThinkingClock` via a per-group child component, because the trail's
+node list is a loop and hooks are not.

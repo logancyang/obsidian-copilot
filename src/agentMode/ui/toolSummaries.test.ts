@@ -63,29 +63,6 @@ describe("lookupToolSummary", () => {
     expect(lookupToolSummary(windows).collapsedLine(windows, CTX)).toBe("Read …/draft.md");
   });
 
-  it("aggregates Edits with combined +/- line counts and counts notes", () => {
-    const e1 = tool({
-      vendorToolName: "Edit",
-      output: [{ type: "diff", path: "a.md", oldText: "x\ny\nz", newText: "x\ny" }],
-    });
-    const e2 = tool({
-      vendorToolName: "Edit",
-      output: [{ type: "diff", path: "b.md", oldText: null, newText: "a\nb\nc\nd" }],
-    });
-    const s = lookupToolSummary(e1).aggregate([e1, e2]);
-    expect(s.line).toBe("Edited 2 notes");
-    // e1: -3 / +2; e2: -0 / +4
-    expect(s.outcome).toBe("+6 / −3 lines");
-  });
-
-  it("surfaces mixed status in the aggregate line", () => {
-    const ok = tool({ vendorToolName: "Edit", status: "completed" });
-    const bad = tool({ vendorToolName: "Edit", status: "failed" });
-    const s = lookupToolSummary(ok).aggregate([ok, ok, bad]);
-    expect(s.line).toContain("3 notes");
-    expect(s.line).toContain("failed");
-  });
-
   it("recognizes opencode task tool by data shape", () => {
     const t = tool({
       title: "find jazz voicings",
@@ -174,16 +151,6 @@ describe("lookupToolSummary", () => {
       locations: [{ path: "/Users/me/vault/notes/x.md" }],
     });
     expect(lookupToolSummary(t).collapsedLine(t, CTX)).toBe("srv · Read notes/x.md");
-  });
-
-  it("keeps the 'server ·' prefix on the compacted aggregate line", () => {
-    // Two consecutive MCP reads fold into an AggregateCard, which renders
-    // `summary.aggregate(parts).line` rather than `collapsedLine`. The server
-    // prefix must survive compaction so the aggregate doesn't masquerade as a
-    // native "Read 2 notes".
-    const r1 = tool({ vendorToolName: "Read", mcpServer: "srv" });
-    const r2 = tool({ vendorToolName: "Read", mcpServer: "srv" });
-    expect(lookupToolSummary(r1).aggregate([r1, r2]).line).toBe("srv · Read 2 notes");
   });
 
   it("shows an ACP backend's friendly multi-word title verbatim", () => {
@@ -278,12 +245,6 @@ describe("lookupToolSummary", () => {
       input: { skill: "copilot-read-pdf", args: "notes/foo.pdf — read chapter one" },
     });
     expect(lookupToolSummary(t).expandedDetails?.(t)).toBe("notes/foo.pdf — read chapter one");
-  });
-
-  it("aggregates consecutive skill calls", () => {
-    const s1 = tool({ vendorToolName: "Skill", status: "completed", input: { skill: "a" } });
-    const s2 = tool({ vendorToolName: "Skill", status: "completed", input: { skill: "b" } });
-    expect(lookupToolSummary(s1).aggregate([s1, s2]).line).toBe("Ran 2 skills");
   });
 
   it("hides the duplicated vendor name while Read input is still streaming", () => {

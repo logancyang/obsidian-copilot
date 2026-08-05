@@ -81,12 +81,6 @@ export function foldActivityGroups(nodes: RenderNode[]): GroupedTrailNode[] {
           run.push(node);
         }
         break;
-      case "aggregate":
-        // Transitional: homogeneous aggregates are subsumed by grouping and go
-        // away with the `aggregate` node type. Until then, flatten them back so
-        // their members can pool with neighbours of other families.
-        for (const part of node.parts) run.push({ type: "action", part });
-        break;
       default:
         flush();
         out.push(node);

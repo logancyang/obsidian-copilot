@@ -11,12 +11,9 @@ import { useApp } from "@/context";
 
 interface ActionCardProps {
   part: ToolCallPart;
-  /** When true, render the collapsed-only inline-row variant used inside an
-   *  AggregateCard's expanded list. The card has no border/bg of its own. */
-  inline?: boolean;
 }
 
-export const ActionCard: React.FC<ActionCardProps> = ({ part, inline }) => {
+export const ActionCard: React.FC<ActionCardProps> = ({ part }) => {
   const app = useApp();
   const [open, setOpen] = useState(false);
   const summary = lookupToolSummary(part);
@@ -41,10 +38,8 @@ export const ActionCard: React.FC<ActionCardProps> = ({ part, inline }) => {
     expandable && "tw-cursor-pointer hover:tw-text-normal"
   );
 
-  const wrapperClasses = cn("tw-flex tw-flex-col tw-gap-0.5", inline ? "tw-py-1" : "tw-my-1");
-
   return (
-    <div className={wrapperClasses}>
+    <div className="tw-my-1 tw-flex tw-flex-col tw-gap-0.5">
       <div
         className={headerClasses}
         onClick={expandable ? () => setOpen((v) => !v) : undefined}

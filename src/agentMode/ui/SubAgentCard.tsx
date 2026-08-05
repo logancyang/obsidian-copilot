@@ -1,7 +1,8 @@
 import React, { useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { App } from "obsidian";
-import type { ToolCallPart, RenderNode } from "@/agentMode/ui/agentTrail";
+import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
+import type { GroupedTrailNode } from "@/agentMode/ui/activityGroups";
 import { StatusBadge } from "@/agentMode/ui/ActionCard";
 import { AgentMarkdownText } from "@/agentMode/ui/AgentMarkdownText";
 import {
@@ -12,12 +13,12 @@ import {
 
 interface SubAgentCardProps {
   parent: ToolCallPart;
-  childNodes: RenderNode[];
+  childNodes: GroupedTrailNode[];
   truncated?: boolean;
   app: App;
   // Passed in by AgentTrail rather than imported, so this file never has to
   // know about the concrete card components AgentTrail dispatches to.
-  renderNode: (node: RenderNode, key: string | number) => React.ReactNode;
+  renderNode: (node: GroupedTrailNode, key: string | number) => React.ReactNode;
 }
 
 /**
@@ -111,14 +112,18 @@ interface ChildCounts {
   reasoning: number;
 }
 
-function countChildren(nodes: RenderNode[]): ChildCounts {
+function countChildren(nodes: GroupedTrailNode[]): ChildCounts {
   let tools = 0;
   let reasoning = 0;
   for (const n of nodes) {
-    if (n.type === "action") tools += 1;
-    else if (n.type === "aggregate") tools += n.parts.length;
-    else if (n.type === "subagent") tools += 1;
+    if (n.type === "action" || n.type === "subagent") tools += 1;
     else if (n.type === "reasoning") reasoning += 1;
+    else if (n.type === "activityGroup") {
+      for (const m of n.members) {
+        if (m.type === "action") tools += 1;
+        else reasoning += 1;
+      }
+    }
     // `text` and `plan` are intentionally not counted — the sub-agent header
     // surfaces *work* done (tools + reasoning), not narration. Streamed prose
     // and plan checklists still render in the expanded body.
