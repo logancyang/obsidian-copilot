@@ -40,7 +40,7 @@ Agent Mode uses the standard `AGENTS.md` file:
 - Project instructions live at `<project>/AGENTS.md`.
 - Project instructions are more specific and take precedence over vault instructions.
 
-Go to **Settings → Copilot → Advanced → Vault instructions → Open AGENTS.md** to open the
+Go to **Settings → Copilot → Basic → Agent instructions → Open AGENTS.md** to open the
 vault file. In a project, open the project info popover and select **AGENTS.md**.
 
 Copilot uses Obsidian's normal Markdown editor rather than a separate Settings editor. If a file
@@ -80,17 +80,9 @@ This location is derived from your Copilot folder. To move it, change the root i
 
 ### Creating a System Prompt
 
-#### From Settings
-
-1. Go to **Settings → Copilot → Advanced → Chat system prompts**
-2. Click the `+` button next to **Default System Prompt**
-3. Enter a title for the prompt (e.g., "Academic Writing")
-4. A new markdown file is created in your system prompts folder
-5. Open the file and write your instructions
-
-#### From the System Prompts Folder
-
-Create any `.md` file in the `copilot/system-prompts/` folder. Its filename (without `.md`) becomes the prompt's title.
+Create any `.md` file in the `copilot/system-prompts/` folder, like any other note. Its
+filename (without `.md`) becomes the prompt's title, and the file body is the prompt. New
+files appear in the chat prompt picker automatically.
 
 ### Writing Good System Prompts
 
@@ -115,27 +107,17 @@ You are a Zettelkasten assistant helping me build a knowledge base.
 
 ---
 
-## Setting a Global Default (Chat Mode)
+## Choosing a Prompt (Gear Icon)
 
-You can set one of your custom prompts as the chat-mode default — it will be used for all new
-chat conversations:
-
-1. Go to **Settings → Copilot → Advanced → Chat system prompts**
-2. Under **Default System Prompt**, select your prompt from the dropdown
-3. Any new conversation will start with this prompt active
-
-To stop using a custom default, select **None (use built-in prompt)** from the dropdown. This
-setting applies to Chat mode only — Agent Mode reads `AGENTS.md` instead.
-
----
-
-## Per-Session Override (Gear Icon)
-
-You can override the system prompt for just the current conversation:
+Prompts are selected per conversation:
 
 1. Click the **gear icon** in the chat panel toolbar
-2. Select a different system prompt (or type a one-off prompt directly)
-3. This applies to the current session only and resets when you start a new chat
+2. Select a system prompt from the list, or **None (use built-in prompt)**
+3. The selection applies to the current session and resets when you start a new chat
+
+The Settings section that set a global chat default was removed. A default chosen in an
+earlier version keeps applying to new chats until you pick a different prompt (or **None**)
+in a conversation. This applies to Chat mode only — Agent Mode reads `AGENTS.md` instead.
 
 ---
 

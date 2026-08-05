@@ -516,25 +516,31 @@ function getInternalExcludeFolderPrefixes(): string[] {
  * @param filePath - Full path to the file in the vault
  */
 export function isInternalExcludedPath(filePath: string): boolean {
-  const excludes = new Set(getInternalExcludePaths());
-  if (excludes.has(filePath)) return true;
+  // Case-folded the same way (and behind the same gate) as matchSystemRoots: on a
+  // case-insensitive filesystem, `agents.md` IS the file the backends read when they ask for
+  // `AGENTS.md`, so an exact-case comparison would let a live instruction file into search.
+  const fold = hasCaseInsensitiveFilesystem()
+    ? (value: string) => value.toLowerCase()
+    : (value: string) => value;
+  const foldedPath = fold(filePath);
+  const excludes = new Set(getInternalExcludePaths().map(fold));
+  if (excludes.has(foldedPath)) return true;
 
   // Reason: only exclude internal project files (project.md configs and unsupported/ backups),
   // not user-created files that may live alongside project configs in the projects folder.
   // Check exact depth: only <projectsFolder>/<folderName>/project.md (one level deep).
   const prefixes = getInternalExcludeFolderPrefixes();
   if (prefixes.length === 0) return false;
-  for (const prefix of prefixes) {
-    if (!filePath.startsWith(prefix)) continue;
-    const relativePath = filePath.slice(prefix.length);
+  const internalBasenames = [PROJECT_CONFIG_FILE_NAME, AGENTS_FILE_NAME, CLAUDE_FILE_NAME].map(
+    fold
+  );
+  for (const prefix of prefixes.map(fold)) {
+    if (!foldedPath.startsWith(prefix)) continue;
+    const relativePath = foldedPath.slice(prefix.length);
     const parts = relativePath.split("/");
     // Exact match: <folderName>/<file> (2 segments). Exclude the metadata record and
     // instruction files so internal guidance does not leak into semantic search results.
-    if (
-      parts.length === 2 &&
-      [PROJECT_CONFIG_FILE_NAME, AGENTS_FILE_NAME, CLAUDE_FILE_NAME].includes(parts[1])
-    )
-      return true;
+    if (parts.length === 2 && internalBasenames.includes(parts[1])) return true;
     if (relativePath.startsWith("unsupported/") || relativePath === "unsupported") return true;
   }
   return false;

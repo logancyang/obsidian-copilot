@@ -623,6 +623,22 @@ describe("searchUtils", () => {
       expect(filter("mycopilot/note.md")).toBe(true);
     });
 
+    it("excludes differently-cased instruction files where the filesystem is case-insensitive", () => {
+      // On macOS a pre-existing `agents.md` IS the file the backends read when they ask for
+      // `AGENTS.md`, so exact-case comparison would let live instructions into search.
+      (obsidian.Platform as { isMacOS: boolean }).isMacOS = true;
+      (settingsModel.getSettings as jest.Mock).mockReturnValue({
+        qaInclusions: "",
+        qaExclusions: "",
+        copilotFolder: "copilot",
+        copilotRootHistory: ["copilot"],
+      });
+      const filter = createCopilotPatternFilter(window.app);
+      expect(filter("agents.md")).toBe(false);
+      expect(filter("Claude.md")).toBe(false);
+      expect(filter("Copilot/Projects/Research/agents.md")).toBe(false);
+    });
+
     it("excludes a differently-cased root where the filesystem is case-insensitive", () => {
       // On macOS/Windows, "Copilot/" and "copilot/" are the same folder. Nothing
       // reconciles the stored spelling against the real one, so comparing
