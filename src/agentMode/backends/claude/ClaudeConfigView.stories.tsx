@@ -56,11 +56,6 @@ export const SigningIn: StoryObj<ClaudeConfigViewProps> = {
   },
 };
 
-/** No auth capability — what the same body looks like without the in-app button. */
-export const WithoutInAppSignIn: StoryObj<ClaudeConfigViewProps> = {
-  args: { auth: undefined },
-};
-
 /** A long path must not push Auto-detect and Apply out of the band. */
 export const LongPath: StoryObj<ClaudeConfigViewProps> = {
   args: {
