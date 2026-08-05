@@ -242,10 +242,21 @@ export default [
                 "Gallery runtime and stories may not bypass the production import fence " +
                 "with parent-relative value imports. Use an allowed @/ path instead.",
             },
+            // `ConfigDialogShell`, `SetupSteps`, and the three `*ConfigView`s are
+            // pure presentational components that would live under a `ui/` folder
+            // if the agent-mode boundary rules let a backend import from `ui/` —
+            // a backend's dialog body has to stay in `backends/<id>/`. Each is
+            // named explicitly rather than by folder so the allowance can't drift
+            // into the rest of `shared/` or into a backend's plugin-coupled modules.
             {
               regex:
                 "^@/(?!(?:(?:.*/)?ui/|components/modals/ReactModal$|" +
                 "components/gallery-hosts\\.fixtures$|context$|lib/[^/]+$|" +
+                "agentMode/backends/shared/ConfigDialogShell$|" +
+                "agentMode/backends/shared/SetupSteps$|" +
+                "agentMode/backends/opencode/OpencodeConfigView$|" +
+                "agentMode/backends/claude/ClaudeConfigView$|" +
+                "agentMode/backends/codex/CodexConfigView$|" +
                 "utils/react/mountPluginViewRoot$)).*",
               allowTypeImports: true,
               message:

@@ -1,36 +1,24 @@
-import { BinaryPathSetting } from "@/agentMode/backends/shared/BinaryPathSetting";
-import {
-  ConfigDialogShell,
-  ConfigSection,
-  ConfigWarningStrip,
-} from "@/agentMode/backends/shared/ui/ConfigDialogShell";
-import { InstallCommandRow } from "@/agentMode/backends/shared/InstallCommandRow";
+import { CodexConfigView } from "@/agentMode/backends/codex/CodexConfigView";
 import { binaryPathInstallState } from "@/agentMode/backends/shared/simpleBinaryBackend";
 import { ReactModal } from "@/components/modals/ReactModal";
 import { useSettingsValue } from "@/settings/model";
 import { validateExecutableFile } from "@/utils/detectBinary";
 import { App, Notice } from "obsidian";
 import React from "react";
-import {
-  CODEX_BINARY_NAME,
-  CODEX_INSTALL_COMMAND,
-  codexAcpDetectionSearchDirs,
-  detectCodexAcpPath,
-  updateCodexFields,
-} from "./descriptor";
+import { codexAcpDetectionSearchDirs, detectCodexAcpPath, updateCodexFields } from "./descriptor";
 
 /**
- * Configure dialog for the Codex backend. Copilot spawns the native
- * `codex-acp` ACP adapter. The dialog configures the codex-acp path
- * and gives auth guidance; `codex login` owns the user's auth state.
+ * Stateful half of the Codex Configure dialog: the only place that reads
+ * settings, validates a pasted path, and raises notices. Everything it computes
+ * is handed to {@link CodexConfigView} as plain data.
  */
-const CodexConfigBody: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+const CodexConfigContainer: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const settings = useSettingsValue();
   const binaryPath = settings.agentMode?.backends?.codex?.binaryPath ?? "";
   // Existence-checked (same as descriptor.getInstallState): a synced-but-missing
   // path reads "absent" here too, not a stale "Ready", so the dialog guides the
   // user to re-detect or clear the dead path instead of looking configured.
-  const sessionState = binaryPathInstallState(binaryPath);
+  const state = binaryPathInstallState(binaryPath);
 
   const onSavePath = React.useCallback(async (path: string): Promise<string | null> => {
     const err = await validateExecutableFile(path);
@@ -40,50 +28,21 @@ const CodexConfigBody: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     return null;
   }, []);
 
-  const clearCodexPath = React.useCallback((): void => {
+  const onClearPath = React.useCallback((): void => {
     updateCodexFields({ binaryPath: undefined });
     new Notice("Codex binary path cleared.");
   }, []);
 
   return (
-    <ConfigDialogShell
-      title="Configure Codex"
-      state={sessionState}
-      warning={
-        <ConfigWarningStrip
-          state={sessionState}
-          detail="Update it with the install command below, then reopen this dialog."
-        />
-      }
+    <CodexConfigView
+      state={state}
+      binaryPath={binaryPath}
+      onSavePath={onSavePath}
+      onClearPath={onClearPath}
+      detect={detectCodexAcpPath}
+      searchedDirs={codexAcpDetectionSearchDirs}
       onClose={onClose}
-    >
-      <ConfigSection title="Install codex-acp">
-        <InstallCommandRow command={CODEX_INSTALL_COMMAND} />
-      </ConfigSection>
-
-      <ConfigSection title="Use your own binary">
-        <p className="tw-my-0 tw-text-sm tw-text-muted">
-          Use an existing <code>{CODEX_BINARY_NAME}</code> binary you have on disk.
-        </p>
-        <BinaryPathSetting
-          binaryName={CODEX_BINARY_NAME}
-          placeholder="/absolute/path/to/codex-acp.exe"
-          initialPath={binaryPath}
-          notFoundHint={`${CODEX_BINARY_NAME} not found in known install locations or PATH. Run the install command above, then click Auto-detect again.`}
-          detect={detectCodexAcpPath}
-          searchedDirs={codexAcpDetectionSearchDirs}
-          onSave={onSavePath}
-          onClear={clearCodexPath}
-          persistOnAutoDetect
-        />
-      </ConfigSection>
-
-      <ConfigSection title="Authentication">
-        <p className="tw-my-0 tw-text-sm tw-text-muted">
-          Codex inherits auth from your local <code>codex login</code> credentials.
-        </p>
-      </ConfigSection>
-    </ConfigDialogShell>
+    />
   );
 };
 
@@ -94,6 +53,6 @@ export class CodexInstallModal extends ReactModal {
   }
 
   protected renderContent(close: () => void): React.ReactElement {
-    return <CodexConfigBody onClose={close} />;
+    return <CodexConfigContainer onClose={close} />;
   }
 }

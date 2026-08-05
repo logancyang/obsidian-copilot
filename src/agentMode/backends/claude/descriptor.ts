@@ -13,6 +13,7 @@ import {
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import { MethodUnsupportedError } from "@/agentMode/session/errors";
 import { claudeBinarySearchDirs, resolveClaudeBinary } from "./claudeBinaryResolver";
+import { CLAUDE_INSTALL_COMMAND } from "./cliSetup";
 import { getClaudeAuthStatus, signInToClaude } from "./claudeAuth";
 import { assertClaudeVersionSupported } from "./claudeVersion";
 import { agentOriginEnabledModelEntries } from "@/agentMode/backends/shared/agentEnabledModels";
@@ -36,11 +37,6 @@ import {
   claudeCompatibilityStore,
   type ClaudeCompatibilityInput,
 } from "./claudeCompatibilityStore";
-
-export const CLAUDE_INSTALL_COMMAND =
-  process.platform === "win32"
-    ? "irm https://gist.githubusercontent.com/logancyang/7a87eb38d91015eac567521f8cc9c729/raw/install-claude-agent-mode-windows.ps1 | iex"
-    : "npm install -g @anthropic-ai/claude-code";
 
 const ABSENT_INSTALL_STATE: InstallState = Object.freeze({ kind: "absent" });
 
@@ -249,7 +245,7 @@ export const ClaudeBackendDescriptor: BackendDescriptor = {
   },
 
   openInstallUI(plugin: CopilotPlugin): void {
-    new ClaudeInstallModal(plugin.app).open();
+    new ClaudeInstallModal(plugin.app, ClaudeBackendDescriptor).open();
   },
 
   auth: {

@@ -1,0 +1,71 @@
+import {
+  ClaudeConfigView,
+  type ClaudeConfigViewProps,
+} from "@/agentMode/backends/claude/ClaudeConfigView";
+import type { InstallState } from "@/agentMode/session/types";
+import type { Meta, StoryObj } from "@/lib/story";
+
+const OUTDATED: InstallState = {
+  kind: "incompatible",
+  source: "custom",
+  currentVersion: "2.1.205",
+  minVersion: "2.1.206",
+  message: "Claude 2.1.205 is not supported. Copilot requires 2.1.206 or newer.",
+};
+
+const meta = {
+  title: "Agent Mode/Claude Config View",
+  component: ClaudeConfigView,
+  args: {
+    state: { kind: "absent" },
+    binaryPath: "",
+    onSavePath: () => Promise.resolve(null),
+    onClearPath: () => undefined,
+    detect: () => Promise.resolve(null),
+    searchedDirs: () => [],
+    auth: { onSignIn: () => undefined, signingIn: false },
+    onClose: () => undefined,
+  },
+  // The real dialog fills its modal edge to edge, so the story asks for a width
+  // the modal clamps to its own — anything narrower hides the full-bleed bands.
+  parameters: { gallery: { host: "modal", layout: "padded", width: 600 } },
+} satisfies Meta<ClaudeConfigViewProps>;
+export default meta;
+
+/** First run: no CLI found, so the path field is empty and the steps below explain why. */
+export const NotSetUp: StoryObj<ClaudeConfigViewProps> = {};
+
+export const Ready: StoryObj<ClaudeConfigViewProps> = {
+  args: {
+    state: { kind: "ready", source: "custom" },
+    binaryPath: "/Users/zero/.local/bin/claude",
+  },
+};
+
+/** No managed upgrade path here — the strip sends the user to the install command below. */
+export const UpdateRequired: StoryObj<ClaudeConfigViewProps> = {
+  args: { state: OUTDATED, binaryPath: "/Users/zero/.local/bin/claude" },
+};
+
+/** Sign-in in flight: the in-app button is busy, the command stays copyable. */
+export const SigningIn: StoryObj<ClaudeConfigViewProps> = {
+  args: {
+    state: { kind: "ready", source: "custom" },
+    binaryPath: "/Users/zero/.local/bin/claude",
+    auth: { onSignIn: () => undefined, signingIn: true },
+  },
+};
+
+/** No auth capability — what the same body looks like without the in-app button. */
+export const WithoutInAppSignIn: StoryObj<ClaudeConfigViewProps> = {
+  args: { auth: undefined },
+};
+
+/** A long path must not push Auto-detect and Apply out of the band. */
+export const LongPath: StoryObj<ClaudeConfigViewProps> = {
+  args: {
+    state: { kind: "ready", source: "custom" },
+    binaryPath:
+      "/Users/zero/Library/Application Support/fnm/node-versions/v22.11.0/installation/bin/claude",
+  },
+};
