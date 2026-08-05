@@ -11,7 +11,6 @@ const mockState: AgentSelectState = {
       id: "opencode",
       name: "opencode",
       description: "opencode description",
-      highlights: [],
       status: "absent",
       recommended: true,
       statusMessage: null,
