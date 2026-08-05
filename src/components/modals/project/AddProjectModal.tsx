@@ -18,6 +18,10 @@ import { SystemPromptSyntaxInstruction } from "@/components/SystemPromptSyntaxIn
 import { DEFAULT_MODEL_SETTING } from "@/constants";
 import { ProjectContextBadgeList } from "@/components/project/ProjectContextBadgeList";
 import { ProjectContextSourceEditor } from "@/components/project/ProjectContextSourceEditor";
+import { writeAgentsFile } from "@/instructions/agentsFile";
+import { useAgentsFileDraft } from "@/instructions/useAgentsFileDraft";
+import { getProjectAnchorFromConfigPath } from "@/projects/projectPaths";
+import { getCachedProjectRecordById } from "@/projects/state";
 import { err2String, randomUUID } from "@/utils";
 import { Settings } from "lucide-react";
 import { type UrlItem, parseProjectUrls, serializeProjectUrls } from "@/utils/urlTagUtils";
@@ -53,6 +57,18 @@ interface AddProjectModalContentProps {
   /** Portal target for the context editor's +URL popover — the modal's own
    * `contentEl`, so the popover (layer 30) stacks above this modal (layer 50). */
   popoverContainer?: HTMLElement | null;
+}
+
+/**
+ * Folder holding a saved project's AGENTS.md, or null for a project that has none yet.
+ *
+ * Anchored on the record's own config path rather than the live projects root: a Copilot
+ * folder change activates before the project cache reloads, and during that window the live
+ * root names a different tree than the one this project actually sits in.
+ */
+function projectInstructionsFolder(projectId: string | undefined): string | null {
+  const record = projectId ? getCachedProjectRecordById(projectId) : undefined;
+  return record ? getProjectAnchorFromConfigPath(record.filePath).projectFolderPath : null;
 }
 
 function AddProjectModalContent({
@@ -105,6 +121,14 @@ function AddProjectModalContent({
           UsageTimestamps: Date.now(),
         }
   );
+
+  // Agent projects keep their instructions in the project's AGENTS.md, so this field edits
+  // that file instead of `formData.systemPrompt`. CAG keeps the legacy field below.
+  const instructionsFolder = useMemo(
+    () => (agentMode ? projectInstructionsFolder(initialProject?.id) : null),
+    [agentMode, initialProject?.id]
+  );
+  const [instructions, setInstructions] = useAgentsFileDraft(app, instructionsFolder);
 
   // URL items derived from formData for UrlTagInput
   const urlItems = useMemo(
@@ -284,6 +308,13 @@ function AddProjectModalContent({
 
     try {
       setIsSubmitting(true);
+      // Written before the save, not after: renaming a project renames its folder, and
+      // Obsidian carries the folder's contents along, so a file placed here ends up in the
+      // right place either way. Writing afterwards would have to guess the new folder from a
+      // project cache that has not refreshed yet.
+      if (instructionsFolder !== null && instructions !== null) {
+        await writeAgentsFile(app, instructionsFolder, instructions);
+      }
       await onSave(saveData);
     } catch (e) {
       new Notice(err2String(e));
@@ -353,6 +384,20 @@ function AddProjectModalContent({
                     onChange={(e) => handleInputChange("systemPrompt", e.target.value)}
                     onBlur={() => setTouched((prev) => ({ ...prev, systemPrompt: true }))}
                     placeholder="Enter your project system prompt here... Use {[[Note Name]]} to include note contents."
+                    className="tw-min-h-32"
+                  />
+                </FormField>
+              )}
+
+              {instructions !== null && (
+                <FormField
+                  label="Project instructions"
+                  description="Your custom instructions for the agent to follow for every interaction in this project. They take precedence over your vault instructions wherever the two conflict. Saved to AGENTS.md in the project folder, which you can also edit as a note."
+                >
+                  <Textarea
+                    value={instructions}
+                    onChange={(e) => setInstructions(e.target.value)}
+                    placeholder="e.g. Treat every note in this project as a draft chapter, and keep the tone consistent with the outline."
                     className="tw-min-h-32"
                   />
                 </FormField>

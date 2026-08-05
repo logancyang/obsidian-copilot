@@ -4,6 +4,8 @@ import {
   removeGeneratedInstructionFiles,
   ensureAgentsFileForDiscovery,
   openAgentsFile,
+  readAgentsFile,
+  writeAgentsFile,
 } from "@/instructions/agentsFile";
 import { App, TFile, TFolder } from "obsidian";
 
@@ -139,6 +141,84 @@ describe("agentsFile", () => {
     it("is false once the file is the user's own", async () => {
       const { app } = makeApp({ "Projects/Research/AGENTS.md": "The user's own rules" });
       expect(await agentsFileIsUninitialized(app, "Projects/Research")).toBe(false);
+    });
+  });
+
+  describe("readAgentsFile()", () => {
+    it("returns an empty string when the folder has no AGENTS.md", async () => {
+      const { app } = makeApp();
+      expect(await readAgentsFile(app, "Projects/Research")).toBe("");
+    });
+
+    it("returns the file body verbatim", async () => {
+      const { app } = makeApp({ "AGENTS.md": "Cite every source.\n" });
+      expect(await readAgentsFile(app, "")).toBe("Cite every source.\n");
+    });
+
+    it("hides a legacy mirror's marker so an editor shows only the instructions", async () => {
+      const marker =
+        "<!-- copilot:generated-agents-mirror v1 — Auto-generated; do not edit here. -->";
+      const { app } = makeApp({
+        "Projects/Research/AGENTS.md": `${marker}\n\nCite every source.`,
+      });
+      expect(await readAgentsFile(app, "Projects/Research")).toBe("Cite every source.");
+    });
+  });
+
+  describe("writeAgentsFile()", () => {
+    it("creates the instruction files for a folder that had none", async () => {
+      const { app, state } = makeApp();
+
+      await writeAgentsFile(app, "", "Cite every source.");
+
+      expect(state.files.get("AGENTS.md")).toBe("Cite every source.");
+      expect(state.files.get("CLAUDE.md")).toBe("@AGENTS.md\n");
+    });
+
+    it("replaces the body of a file the user already had", async () => {
+      const { app, state } = makeApp({ "AGENTS.md": "Old rules", "CLAUDE.md": "@AGENTS.md\n" });
+
+      await writeAgentsFile(app, "", "New rules");
+
+      expect(state.files.get("AGENTS.md")).toBe("New rules");
+    });
+
+    it("writes nothing when a blank draft would create a file out of nothing", async () => {
+      const { app, state } = makeApp();
+
+      await writeAgentsFile(app, "", "   ");
+
+      expect(state.files.has("AGENTS.md")).toBe(false);
+      expect(state.files.has("CLAUDE.md")).toBe(false);
+    });
+
+    it("clears an existing file when the user empties the editor", async () => {
+      const { app, state } = makeApp({ "AGENTS.md": "Old rules" });
+
+      await writeAgentsFile(app, "", "");
+
+      expect(state.files.get("AGENTS.md")).toBe("");
+    });
+
+    it("takes over a legacy mirror, leaving no marker behind", async () => {
+      const marker =
+        "<!-- copilot:generated-agents-mirror v1 — Auto-generated; do not edit here. -->";
+      const { app, state } = makeApp({
+        "Projects/Research/AGENTS.md": `${marker}\n\nOld rules`,
+      });
+
+      await writeAgentsFile(app, "Projects/Research", "New rules");
+
+      expect(state.files.get("Projects/Research/AGENTS.md")).toBe("New rules");
+    });
+
+    it("does not rewrite a file whose content already matches", async () => {
+      const { app, state } = makeApp({ "AGENTS.md": "Same rules", "CLAUDE.md": "@AGENTS.md\n" });
+
+      await writeAgentsFile(app, "", "Same rules");
+
+      expect(app.vault.modify).not.toHaveBeenCalled();
+      expect(state.files.get("AGENTS.md")).toBe("Same rules");
     });
   });
 

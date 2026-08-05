@@ -10,8 +10,11 @@ import { usePlugin } from "@/contexts/PluginContext";
 import { cn } from "@/lib/utils";
 import { verifyMiyoScope } from "@/miyo/miyoResync";
 import { shouldSurfaceMiyoResync } from "@/miyo/miyoUtils";
-import { openAgentsFile } from "@/instructions/agentsFile";
+import { Textarea } from "@/components/ui/textarea";
+import { openAgentsFile, writeAgentsFile } from "@/instructions/agentsFile";
+import { useAgentsFileDraft } from "@/instructions/useAgentsFileDraft";
 import { logError } from "@/logger";
+import { debounce } from "@/utils/debounce";
 import { ensureCopilotSubfolders } from "@/settings/copilotFolder";
 import {
   applyCopilotRootChange,
@@ -31,7 +34,7 @@ import { formatDateTime } from "@/utils";
 import { revealFolderInExplorer } from "@/utils/revealFolderInExplorer";
 import { ArrowUpRight, Folder, FolderSync, Loader2 } from "lucide-react";
 import { Notice } from "obsidian";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 
 /**
  * Body of the "Change Copilot folder" confirmation modal. Leads with a
@@ -80,7 +83,25 @@ export const BasicSettings: React.FC = () => {
     /* eslint-enable @eslint-react/hooks-extra/no-direct-set-state-in-use-effect */
   }, [persistedRoot]);
 
+  const [vaultInstructions, setVaultInstructions] = useAgentsFileDraft(app, "");
+
+  // Settings have no Save button, so the file follows the textarea. Debounced because the
+  // alternative is one vault write per keystroke; flushed on unmount so closing the tab
+  // mid-sentence still lands the last edit.
+  const saveVaultInstructions = useMemo(
+    () =>
+      debounce((next: string) => {
+        void writeAgentsFile(app, "", next).catch((error) => {
+          logError("Failed to save vault instructions.", error);
+          new Notice("Failed to save AGENTS.md.");
+        });
+      }, 1000),
+    [app]
+  );
+  useEffect(() => () => saveVaultInstructions.flush(), [saveVaultInstructions]);
+
   const handleOpenVaultInstructions = () => {
+    saveVaultInstructions.flush();
     // The settings modal sits above the workspace, so close it or the file opens behind it.
     (app as unknown as { setting: { close: () => void } }).setting.close();
     // Empty content on purpose: a vault AGENTS.md starts blank. Nothing is migrated into it,
@@ -304,18 +325,31 @@ export const BasicSettings: React.FC = () => {
         </SettingItem>
       </SettingSection>
 
-      <SettingSection label="Agent instructions">
+      <SettingSection label="Custom instructions">
         <LegacyChatPromptsNotice />
-        <SettingItem
-          type="custom"
-          title="Vault instructions"
-          description="Agent Mode instructions for the whole vault. Opens (and creates, if missing) AGENTS.md in your vault root."
-        >
-          <Button variant="default" onClick={handleOpenVaultInstructions}>
-            <ArrowUpRight className="tw-size-4" />
-            Open AGENTS.md
-          </Button>
-        </SettingItem>
+        {vaultInstructions !== null && (
+          <SettingItem
+            type="custom"
+            title="Custom vault instructions"
+            description="Your custom instructions for the agent to follow for every vault interaction. Saved to AGENTS.md in your vault root, which you can also edit as a note."
+          >
+            <div className="tw-flex tw-w-full tw-flex-col tw-items-end tw-gap-2">
+              <Textarea
+                value={vaultInstructions}
+                onChange={(e) => {
+                  setVaultInstructions(e.target.value);
+                  saveVaultInstructions(e.target.value);
+                }}
+                placeholder="e.g. Answer in British English, and cite the note each claim came from."
+                className="tw-min-h-32 tw-w-full"
+              />
+              <Button variant="secondary" onClick={handleOpenVaultInstructions}>
+                <ArrowUpRight className="tw-size-4" />
+                Open AGENTS.md
+              </Button>
+            </div>
+          </SettingItem>
+        )}
       </SettingSection>
 
       {/* Saving Conversations Section */}

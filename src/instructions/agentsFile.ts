@@ -52,10 +52,50 @@ export async function agentsFileIsUninitialized(app: App, folderPath: string): P
   const agentsPath = childPath(folderPath, AGENTS_FILE_NAME);
   const file = await resolveFileByPath(app, agentsPath);
   if (!file) return true;
-  const content = isInVaultCache(app, agentsPath)
-    ? await app.vault.read(file)
-    : await app.vault.adapter.read(agentsPath);
-  return GENERATED_MIRROR_HEADER.test(content);
+  return GENERATED_MIRROR_HEADER.test(await readFileContent(app, agentsPath, file));
+}
+
+/**
+ * Read a folder's instruction text for editing, or an empty string when the folder has no
+ * AGENTS.md.
+ *
+ * A legacy generated mirror's marker line is stripped, so an editor shows the instructions
+ * themselves rather than Copilot's bookkeeping comment. Saving that text back through
+ * {@link writeAgentsFile} then leaves an ordinary user-owned file with no marker.
+ *
+ * @param app - Obsidian app that owns the target vault
+ * @param folderPath - Vault-relative folder, or an empty string for the vault root
+ */
+export async function readAgentsFile(app: App, folderPath: string): Promise<string> {
+  const agentsPath = childPath(folderPath, AGENTS_FILE_NAME);
+  const file = await resolveFileByPath(app, agentsPath);
+  if (!file) return "";
+  const content = await readFileContent(app, agentsPath, file);
+  return content.replace(GENERATED_MIRROR_HEADER, "$1");
+}
+
+/**
+ * Save edited instruction text as the folder's AGENTS.md, creating the file and its Claude
+ * import when the folder has none yet.
+ *
+ * Blank text for a folder with no AGENTS.md writes nothing, so opening an instructions editor
+ * and closing it without typing leaves the vault exactly as it was — the same "never conjure
+ * a file out of nothing" rule {@link ensureAgentsFileForDiscovery} follows.
+ *
+ * @param app - Obsidian app that owns the target vault
+ * @param folderPath - Vault-relative folder, or an empty string for the vault root
+ * @param content - The text to become the whole file body
+ */
+export async function writeAgentsFile(
+  app: App,
+  folderPath: string,
+  content: string
+): Promise<void> {
+  const agentsPath = childPath(folderPath, AGENTS_FILE_NAME);
+  if (!(await resolveFileByPath(app, agentsPath)) && !content.trim()) return;
+  const file = await ensureAgentsFile(app, folderPath, content);
+  if ((await readFileContent(app, agentsPath, file)) === content) return;
+  await writeFileContent(app, agentsPath, file, content);
 }
 
 /**
@@ -80,10 +120,8 @@ export async function removeGeneratedInstructionFiles(app: App, folderPath: stri
       const filePath = childPath(folderPath, name);
       const file = await resolveFileByPath(app, filePath);
       if (!file) continue;
-      const inCache = isInVaultCache(app, filePath);
-      const content = inCache ? await app.vault.read(file) : await app.vault.adapter.read(filePath);
-      if (!isGenerated(content)) continue;
-      if (inCache) {
+      if (!isGenerated(await readFileContent(app, filePath, file))) continue;
+      if (isInVaultCache(app, filePath)) {
         await trashFile(app, file);
       } else {
         await app.vault.adapter.remove(filePath);
@@ -181,6 +219,30 @@ function childPath(folderPath: string, fileName: string): string {
   return normalizePath(folderPath ? `${folderPath}/${fileName}` : fileName);
 }
 
+/**
+ * A file under a dot-folder is never in the vault cache, so these two route through the
+ * adapter for those and through the vault for everything else. Reading or writing a cached
+ * file via the adapter would bypass Obsidian's own file state and strand open editors.
+ */
+async function readFileContent(app: App, filePath: string, file: TFile): Promise<string> {
+  return isInVaultCache(app, filePath)
+    ? await app.vault.read(file)
+    : await app.vault.adapter.read(filePath);
+}
+
+async function writeFileContent(
+  app: App,
+  filePath: string,
+  file: TFile,
+  content: string
+): Promise<void> {
+  if (isInVaultCache(app, filePath)) {
+    await app.vault.modify(file, content);
+  } else {
+    await app.vault.adapter.write(filePath, content);
+  }
+}
+
 async function ensureFile(app: App, filePath: string, content: string): Promise<TFile> {
   const existing = await resolveFileByPath(app, filePath);
   if (existing) return existing;
@@ -204,18 +266,16 @@ async function ensureClaudeReference(app: App, claudePath: string): Promise<void
     return;
   }
 
-  const content = isInVaultCache(app, claudePath)
-    ? await app.vault.read(file)
-    : await app.vault.adapter.read(claudePath);
+  const content = await readFileContent(app, claudePath, file);
   if (CLAUDE_REFERENCE_PATTERN.test(content)) return;
 
   const separator = content.length === 0 ? "" : content.endsWith("\n") ? "\n" : "\n\n";
-  const nextContent = `${content}${separator}${CLAUDE_AGENTS_REFERENCE}\n`;
-  if (isInVaultCache(app, claudePath)) {
-    await app.vault.modify(file, nextContent);
-  } else {
-    await app.vault.adapter.write(claudePath, nextContent);
-  }
+  await writeFileContent(
+    app,
+    claudePath,
+    file,
+    `${content}${separator}${CLAUDE_AGENTS_REFERENCE}\n`
+  );
 }
 
 async function convertLegacyGeneratedFile(
@@ -224,9 +284,7 @@ async function convertLegacyGeneratedFile(
   file: TFile,
   initialContent: string
 ): Promise<void> {
-  const content = isInVaultCache(app, agentsPath)
-    ? await app.vault.read(file)
-    : await app.vault.adapter.read(agentsPath);
+  const content = await readFileContent(app, agentsPath, file);
   const match = content.match(GENERATED_MIRROR_HEADER);
   if (!match) return;
 
@@ -236,9 +294,5 @@ async function convertLegacyGeneratedFile(
   const nextContent = initialContent
     ? `${match[1]}${initialContent}`
     : `${match[1]}${content.slice(match[0].length)}`;
-  if (isInVaultCache(app, agentsPath)) {
-    await app.vault.modify(file, nextContent);
-  } else {
-    await app.vault.adapter.write(agentsPath, nextContent);
-  }
+  await writeFileContent(app, agentsPath, file, nextContent);
 }

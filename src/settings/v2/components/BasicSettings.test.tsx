@@ -1,7 +1,7 @@
 import { DEFAULT_SETTINGS } from "@/constants";
 import { settingsAtom, settingsStore } from "@/settings/model";
 import { BasicSettings } from "@/settings/v2/components/BasicSettings";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { Notice } from "obsidian";
 import React from "react";
 
@@ -10,14 +10,23 @@ jest.mock("@/settings/v2/components/PlusSettings", () => ({ PlusSettings: () => 
 
 // App is threaded via useApp; the root-change orchestration is unit-tested in
 // copilotRootChange.test, so mock it here to observe the UI's decisions.
-jest.mock("@/context", () => ({
-  // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook; name must match the export
-  useApp: () => ({ vault: { getMarkdownFiles: () => [] }, setting: { close: jest.fn() } }),
-}));
+jest.mock("@/context", () => {
+  // One object for the whole suite: the real useApp reads a context-provided singleton, so a
+  // fresh object per render would hand hooks a changing dependency Obsidian never gives them.
+  const app = { vault: { getMarkdownFiles: () => [] }, setting: { close: jest.fn() } };
+  return {
+    // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook; name must match the export
+    useApp: () => app,
+  };
+});
 
 const openAgentsFile = jest.fn<Promise<void>, unknown[]>().mockResolvedValue(undefined);
+const readAgentsFile = jest.fn<Promise<string>, unknown[]>().mockResolvedValue("");
+const writeAgentsFile = jest.fn<Promise<void>, unknown[]>().mockResolvedValue(undefined);
 jest.mock("@/instructions/agentsFile", () => ({
   openAgentsFile: (...a: unknown[]): Promise<void> => openAgentsFile(...a),
+  readAgentsFile: (...a: unknown[]): Promise<string> => readAgentsFile(...a),
+  writeAgentsFile: (...a: unknown[]): Promise<void> => writeAgentsFile(...a),
 }));
 
 const systemPrompts = jest.fn<{ title: string }[], []>().mockReturnValue([]);
@@ -225,10 +234,51 @@ describe("BasicSettings", () => {
     expect(applyCopilotRootChange).not.toHaveBeenCalled();
   });
 
-  it("opens a blank vault AGENTS.md, never seeded from a Chat prompt", () => {
+  it("opens a blank vault AGENTS.md, never seeded from a Chat prompt", async () => {
     render(<BasicSettings />);
-    fireEvent.click(screen.getByRole("button", { name: /Open AGENTS.md/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Open AGENTS.md/ }));
     expect(openAgentsFile).toHaveBeenCalledWith(expect.anything(), "", "", true);
+  });
+
+  it("shows what the vault AGENTS.md already says, so editing starts from the real file", async () => {
+    readAgentsFile.mockResolvedValue("Cite every source.");
+    render(<BasicSettings />);
+    const editor = await screen.findByPlaceholderText<HTMLTextAreaElement>(/Answer in British/);
+    expect(editor.value).toBe("Cite every source.");
+    expect(readAgentsFile).toHaveBeenCalledWith(expect.anything(), "");
+  });
+
+  it("saves an edit back to the vault AGENTS.md once typing settles", async () => {
+    jest.useFakeTimers();
+    try {
+      render(<BasicSettings />);
+      const editor = await screen.findByPlaceholderText(/Answer in British/);
+      fireEvent.change(editor, { target: { value: "Always cite." } });
+
+      // The debounce is what keeps this from being one vault write per keystroke.
+      expect(writeAgentsFile).not.toHaveBeenCalled();
+      act(() => {
+        jest.advanceTimersByTime(1000);
+      });
+
+      expect(writeAgentsFile).toHaveBeenCalledWith(expect.anything(), "", "Always cite.");
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("does not lose a pending edit when the tab closes mid-sentence", async () => {
+    jest.useFakeTimers();
+    try {
+      const { unmount } = render(<BasicSettings />);
+      const editor = await screen.findByPlaceholderText(/Answer in British/);
+      fireEvent.change(editor, { target: { value: "Half a thou" } });
+      unmount();
+
+      expect(writeAgentsFile).toHaveBeenCalledWith(expect.anything(), "", "Half a thou");
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it("points a user who saved Chat prompts at the folder still holding them", () => {
