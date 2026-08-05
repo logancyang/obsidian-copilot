@@ -12,6 +12,7 @@ import {
   COPILOT_MIYO_DOCUMENT_STEERING,
   COPILOT_MIYO_SEARCH_STEERING,
   COPILOT_PLUS_DOCUMENT_STEERING,
+  COPILOT_INSTRUCTION_PRECEDENCE,
   COPILOT_PROJECT_WORKSPACE_POLICY,
   COPILOT_PLUS_TOOLS_STEERING,
   COPILOT_PROMPT_BASE,
@@ -159,6 +160,49 @@ describe("agentSystemPrompt", () => {
       const prompt = buildAgentSystemPrompt();
       expect(prompt).not.toContain("<project_instructions>");
       expect(prompt).not.toMatch(/<project_context>[\s\S]*<\/project_context>/);
+    });
+
+    it("tells the agent that a project AGENTS.md outranks the vault one", () => {
+      expect(buildAgentSystemPrompt()).toContain(COPILOT_INSTRUCTION_PRECEDENCE);
+    });
+
+    it("keeps the precedence rule through the builtin toggle, like the workspace policy", () => {
+      setDisableBuiltinSystemPrompt(true);
+      expect(buildAgentSystemPrompt()).toContain(COPILOT_INSTRUCTION_PRECEDENCE);
+    });
+
+    // The cache contract: this string is a provider cache prefix, so anything that is not
+    // product source or a product capability toggle must leave it byte-identical. `toBe`,
+    // not `toContain` — a containment assertion still passes while extra bytes shift
+    // everything after it out of the cached prefix.
+    it("emits identical bytes no matter which Chat prompt is selected", () => {
+      const baseline = buildAgentSystemPrompt();
+
+      updateCachedSystemPrompts([makePrompt("Haiku", "respond in haiku")]);
+      setSelectedPromptTitle("Haiku");
+      setDefaultSystemPromptTitle("Haiku");
+
+      expect(buildAgentSystemPrompt()).toBe(baseline);
+    });
+
+    it("emits identical bytes across vaults, projects, models and sessions", () => {
+      const baseline = buildAgentSystemPrompt();
+
+      // Everything a session carries that is not product configuration. None of these is an
+      // argument to the builder today; this asserts none of them becomes one.
+      updateSetting("defaultModelKey", "some-other-model|anthropic");
+      updateSetting("projectsFolder", "vault-b/projects");
+      updateSetting("defaultSaveFolder", "vault-b/chats");
+
+      expect(buildAgentSystemPrompt()).toBe(baseline);
+    });
+
+    it("carries no vault path, date, model id or session id", () => {
+      const prompt = buildAgentSystemPrompt();
+
+      expect(prompt).not.toMatch(/\/Users\/|[A-Z]:\\/);
+      expect(prompt).not.toMatch(/\b20\d{2}-\d{2}-\d{2}\b/);
+      expect(prompt).not.toMatch(/\bsession[-_ ]?id\b/i);
     });
   });
 

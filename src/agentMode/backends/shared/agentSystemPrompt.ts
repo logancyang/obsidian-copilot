@@ -18,14 +18,19 @@
  *      Then `COPILOT_MIYO_SEARCH_STEERING` — appended only when the dedicated
  *      Miyo search-skill setting is enabled. Task-planning guidance follows as
  *      another internal behavior layer.
- *   2. `COPILOT_PROJECT_WORKSPACE_POLICY` and the pill-syntax directive
- *      (`buildPillSyntaxDirective`) — always present; they teach the agent where
- *      a project session may write and how to read the chat editor's
- *      `[[note]]`/`{folder}` tokens, which is functional wiring rather than
- *      "builtin framing" the user toggles.
+ *   2. `COPILOT_PROJECT_WORKSPACE_POLICY`, `COPILOT_INSTRUCTION_PRECEDENCE`, and
+ *      the pill-syntax directive (`buildPillSyntaxDirective`) — always present;
+ *      they teach the agent where a project session may write, which AGENTS.md
+ *      wins on conflict, and how to read the chat editor's `[[note]]`/`{folder}`
+ *      tokens, which is functional wiring rather than "builtin framing" the user
+ *      toggles.
  *
  * User-authored Agent Mode instructions live in AGENTS.md and are discovered
  * from the session working directory instead of being copied into this prompt.
+ * The output is therefore byte-identical across vaults, projects, paths, dates,
+ * models, and sessions — only product source edits and the capability toggles
+ * above may change it. That invariant is what makes the prompt a stable cache
+ * prefix; see `agentSystemPrompt.test.ts` for the assertions that hold it.
  *
  * `COPILOT_PROMPT_BASE` content is curated, not invented. Two existing Copilot
  * prompts cover most of what's needed:
@@ -124,6 +129,19 @@ When the conversation includes a \`<project_context>\` block:
 - Read and search inside the working directory by default. The configured context sources in \`<project_context>\` are also opted in even when they live outside it. When a source shows a \`→ <absolute path>\` snapshot pointer, read that path directly.
 - Don't reach for unrelated files outside the working directory or configured context sources unless the instructions or user name a specific file or location.`;
 
+/**
+ * Resolves conflicts between the two AGENTS.md scopes. Each harness loads instruction files
+ * with its own rules — opencode 1.16.0 collects every ancestor AGENTS.md nearest-first, so
+ * the project file arrives *before* the vault one — and none of those orders is configurable
+ * through a documented seam. Stating the rule in prompt text is therefore the only place the
+ * precedence holds for every backend at once, and it costs the same bytes in all of them.
+ *
+ * Always sent, like the workspace policy above: it describes how to read the user's own
+ * instructions, not Copilot framing the user opted out of.
+ */
+export const COPILOT_INSTRUCTION_PRECEDENCE = `## AGENTS.md precedence
+The user's own instructions reach you as AGENTS.md files, in whatever order this runtime loads them. Judge them by scope, not by the order they appear in: an AGENTS.md inside the current project folder is more specific than the one at the vault root, so follow the project file wherever the two conflict.`;
+
 export const COPILOT_PROMPT_BASE = `You are Obsidian Copilot, an AI assistant that helps users work with their Obsidian vault — markdown notes for knowledge management, writing, and research. You are NOT a software-engineering agent or CLI coding tool. The working directory is the user's Obsidian vault, or a project folder within it: a collection of markdown notes, not a code repository. Disregard any framing in environment metadata that suggests otherwise.
 
 ## Grounding
@@ -207,6 +225,7 @@ export function buildAgentSystemPrompt(): string {
 
   // Outside the toggle on purpose — see COPILOT_PROJECT_WORKSPACE_POLICY.
   parts.push(COPILOT_PROJECT_WORKSPACE_POLICY);
+  parts.push(COPILOT_INSTRUCTION_PRECEDENCE);
   parts.push(buildPillSyntaxDirective());
 
   return parts.join("\n\n");
