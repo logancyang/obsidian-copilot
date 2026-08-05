@@ -17,7 +17,10 @@ jest.mock("@/projects/state", () => ({
 }));
 
 jest.mock("@/projects/projectPaths", () => ({
-  getProjectFolderPath: (folderName: string) => `copilot/projects/${folderName}`,
+  getProjectAnchorFromConfigPath: (configPath: string) => ({
+    projectFolderPath: configPath.split("/").slice(0, -1).join("/"),
+    projectsRoot: configPath.split("/").slice(0, -2).join("/"),
+  }),
 }));
 // Keep the edit/reveal collaborators inert — exercised elsewhere.
 jest.mock("@/components/modals/project/AddProjectModal", () => ({
@@ -59,7 +62,13 @@ function makeFolder(names: string[]) {
 }
 
 function renderPopover(todoList: AgentTodoListEntry[] | null, folderNames: string[] = []) {
-  getCachedProjectRecordById.mockReturnValue({ folderName: "proj-1", project: PROJECT });
+  // The popover resolves the folder from the record's own config path, so the record must
+  // carry one — the live projects root is deliberately not consulted.
+  getCachedProjectRecordById.mockReturnValue({
+    folderName: "proj-1",
+    filePath: "copilot/projects/proj-1/project.md",
+    project: PROJECT,
+  });
   const openFile = jest.fn().mockResolvedValue(undefined);
   const app = {
     vault: {

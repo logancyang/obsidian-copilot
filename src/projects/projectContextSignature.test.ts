@@ -6,6 +6,7 @@ import {
   contextDirtyKeyMatchesConfig,
   getProjectContextSignature,
   getProjectLandingCaptureSignature,
+  landingCaptureIsVerifiable,
   normalizeProjectContextSource,
 } from "./projectContextSignature";
 
@@ -49,7 +50,9 @@ function makeApp(agentsFiles: Record<string, { mtime: number; size: number }> = 
   } as unknown as App;
 }
 
-const AGENTS_PATH = "copilot/projects/One/AGENTS.md";
+// Beside the record's own `project.md`, which is where the session cwd points, NOT under the
+// live projects root the record may no longer belong to.
+const AGENTS_PATH = "Projects/One/AGENTS.md";
 const noAgents = makeApp();
 
 describe("normalizeProjectContextSource", () => {
@@ -106,6 +109,32 @@ describe("getProjectContextSignature", () => {
 });
 
 describe("getProjectLandingCaptureSignature", () => {
+  it("resolves AGENTS.md beside the record's own project.md, not under the live root", () => {
+    // A Copilot-folder change activates before ProjectRegister reloads its cache. The session
+    // cwd follows the record, so the fingerprint has to watch the file in that same folder.
+    const record = makeRecord(makeProject(), "old-root/projects/One/project.md");
+    const app = makeApp({ "old-root/projects/One/AGENTS.md": { mtime: 1000, size: 40 } });
+
+    expect(getProjectLandingCaptureSignature(app, record)).toContain("agents:1000:40");
+  });
+
+  it("refuses to fingerprint a project under a hidden Copilot root", () => {
+    // Obsidian never indexes a dot-folder, so an edit to the real AGENTS.md is invisible here
+    // and the legacy body is empty once the move ran. Reporting a fingerprint that can never
+    // change would let a stale empty landing be reused forever.
+    const record = makeRecord(makeProject(), ".copilot/projects/One/project.md");
+
+    const signature = getProjectLandingCaptureSignature(noAgents, record);
+
+    expect(signature).toContain("agents:unverifiable");
+    expect(landingCaptureIsVerifiable(signature)).toBe(false);
+    expect(
+      landingCaptureIsVerifiable(
+        getProjectLandingCaptureSignature(noAgents, makeRecord(makeProject()))
+      )
+    ).toBe(true);
+  });
+
   it("tracks the project's AGENTS.md, not the inert project.md body", () => {
     // AGENTS.md is what every backend actually reads from the session cwd, so an edit to it
     // must invalidate an empty landing...

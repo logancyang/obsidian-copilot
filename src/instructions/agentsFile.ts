@@ -15,6 +15,34 @@ const CLAUDE_AGENTS_REFERENCE = "@AGENTS.md";
 const CLAUDE_REFERENCE_PATTERN = /^[ \t>-]*@\.?\/?AGENTS\.md[ \t]*$/im;
 
 /**
+ * Header an older build stamped on the project AGENTS.md files it generated from `project.md`.
+ * Its presence is what tells a Copilot-owned mirror apart from a file the user wrote.
+ */
+const GENERATED_MIRROR_HEADER = /^(\uFEFF?)<!-- copilot:generated-agents-mirror [^\r\n]* -->\r?\n\r?\n/;
+
+/**
+ * Whether this folder's AGENTS.md is still Copilot's to initialize: either absent, or the
+ * marker-owned mirror an older build generated from `project.md`.
+ *
+ * Callers with legacy text to place need this because "the file exists" is not the same as
+ * "the user owns it". A generated mirror is content {@link ensureAgentsFile} will replace, so
+ * treating it as user-authored strands the legacy text and leaves the mirror to be blanked by
+ * a later ensure that has nothing to put in it.
+ *
+ * @param app - Obsidian app that owns the target vault
+ * @param folderPath - Vault-relative folder, or an empty string for the vault root
+ */
+export async function agentsFileIsUninitialized(app: App, folderPath: string): Promise<boolean> {
+  const agentsPath = childPath(folderPath, AGENTS_FILE_NAME);
+  const file = await resolveFileByPath(app, agentsPath);
+  if (!file) return true;
+  const content = isInVaultCache(app, agentsPath)
+    ? await app.vault.read(file)
+    : await app.vault.adapter.read(agentsPath);
+  return GENERATED_MIRROR_HEADER.test(content);
+}
+
+/**
  * Ensure a folder has an editable AGENTS.md and a Claude import for it.
  *
  * User-authored files are preserved. A legacy Copilot-generated mirror is converted back to
@@ -147,12 +175,15 @@ async function convertLegacyGeneratedFile(
   const content = isInVaultCache(app, agentsPath)
     ? await app.vault.read(file)
     : await app.vault.adapter.read(agentsPath);
-  const match = content.match(
-    /^(\uFEFF?)<!-- copilot:generated-agents-mirror [^\r\n]* -->\r?\n\r?\n/
-  );
+  const match = content.match(GENERATED_MIRROR_HEADER);
   if (!match) return;
 
-  const nextContent = `${match[1]}${initialContent}`;
+  // Keep the mirror's own body when the caller brought nothing to put in its place. The
+  // mirror is generated content, but under it sits the only copy of instructions a project
+  // whose `project.md` body was already consumed still has; replacing it with "" deletes them.
+  const nextContent = initialContent
+    ? `${match[1]}${initialContent}`
+    : `${match[1]}${content.slice(match[0].length)}`;
   if (isInVaultCache(app, agentsPath)) {
     await app.vault.modify(file, nextContent);
   } else {

@@ -1,4 +1,5 @@
 import {
+  agentsFileIsUninitialized,
   ensureAgentsFile,
   ensureAgentsFileForDiscovery,
   openAgentsFile,
@@ -96,6 +97,42 @@ describe("agentsFile", () => {
       await ensureAgentsFile(app, "Projects/Research", "Fallback rules");
 
       expect(state.files.get("Projects/Research/AGENTS.md")).toBe("Fallback rules");
+    });
+
+    it("keeps a generated mirror's body when there is nothing to replace it with", async () => {
+      // Once the project's legacy body has been moved out, later ensures pass "". Replacing
+      // the mirror with that empties the only copy of the user's project instructions, and
+      // the backend then reads a blank AGENTS.md.
+      const marker =
+        "<!-- copilot:generated-agents-mirror v1 — Auto-generated; do not edit here. -->";
+      const { app, state } = makeApp({
+        "Projects/Research/AGENTS.md": `${marker}\n\nExisting instructions`,
+      });
+
+      await ensureAgentsFile(app, "Projects/Research", "");
+
+      expect(state.files.get("Projects/Research/AGENTS.md")).toBe("Existing instructions");
+    });
+  });
+
+  describe("agentsFileIsUninitialized()", () => {
+    it("is true when the file is absent", async () => {
+      const { app } = makeApp();
+      expect(await agentsFileIsUninitialized(app, "Projects/Research")).toBe(true);
+    });
+
+    it("is true for a generated mirror, which is Copilot's own output to replace", async () => {
+      const marker =
+        "<!-- copilot:generated-agents-mirror v1 — Auto-generated; do not edit here. -->";
+      const { app } = makeApp({
+        "Projects/Research/AGENTS.md": `${marker}\n\nExisting instructions`,
+      });
+      expect(await agentsFileIsUninitialized(app, "Projects/Research")).toBe(true);
+    });
+
+    it("is false once the file is the user's own", async () => {
+      const { app } = makeApp({ "Projects/Research/AGENTS.md": "The user's own rules" });
+      expect(await agentsFileIsUninitialized(app, "Projects/Research")).toBe(false);
     });
   });
 

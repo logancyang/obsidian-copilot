@@ -8,7 +8,7 @@ import { openAgentsFile } from "@/instructions/agentsFile";
 import { moveProjectPromptToAgentsFile } from "@/projects/moveProjectPrompt";
 import { cn } from "@/lib/utils";
 import { logError } from "@/logger";
-import { getProjectFolderPath } from "@/projects/projectPaths";
+import { getProjectAnchorFromConfigPath } from "@/projects/projectPaths";
 import { ProjectFileManager } from "@/projects/ProjectFileManager";
 import { getCachedProjectRecordById } from "@/projects/state";
 import {
@@ -116,7 +116,9 @@ function ProjectFilesSection({ app, project, onClose }: ProjectFilesSectionProps
   const [outputsOpen, setOutputsOpen] = useState(false);
   const files = useMemo(() => {
     const record = getCachedProjectRecordById(project.id);
-    const folderPath = record ? getProjectFolderPath(record.folderName) : null;
+    const folderPath = record
+      ? getProjectAnchorFromConfigPath(record.filePath).projectFolderPath
+      : null;
     const folder = folderPath ? app.vault.getAbstractFileByPath(folderPath) : null;
     if (!(folder instanceof TFolder)) return [];
     return folder.children
@@ -144,7 +146,14 @@ function ProjectFilesSection({ app, project, onClose }: ProjectFilesSectionProps
     // Move any legacy `project.md` text in first, so opening the file shows the user their
     // real instructions rather than a blank page they would have to re-type.
     void moveProjectPromptToAgentsFile(app, record)
-      .then(() => openAgentsFile(app, getProjectFolderPath(record.folderName), "", true))
+      .then(() =>
+        openAgentsFile(
+          app,
+          getProjectAnchorFromConfigPath(record.filePath).projectFolderPath,
+          "",
+          true
+        )
+      )
       .catch((error) => {
         logError("[ProjectInfoPopover] Failed to open project AGENTS.md", error);
         new Notice("Failed to open project AGENTS.md.");

@@ -71,12 +71,13 @@ import {
   contextDirtyKeyMatchesConfig,
   getProjectContextSignature,
   getProjectLandingCaptureSignature,
+  landingCaptureIsVerifiable,
 } from "@/projects/projectContextSignature";
 import { ProjectContentTracker } from "@/context/projectContentTracker";
 import { buildProjectContextUpdatesBlock } from "@/context/contextUpdatesBlockBuilder";
 import { ensureAgentsFileForDiscovery } from "@/instructions/agentsFile";
 import { moveProjectPromptToAgentsFile } from "@/projects/moveProjectPrompt";
-import { getProjectFolderPath } from "@/projects/projectPaths";
+import { getProjectAnchorFromConfigPath } from "@/projects/projectPaths";
 import { ProjectFileManager } from "@/projects/ProjectFileManager";
 import type {
   AgentQuestionAnswers,
@@ -1871,7 +1872,10 @@ export class AgentSessionManager {
    */
   private pickReusableLandingSession(projectId: ProjectScopeId): AgentSession | null {
     const expected = this.currentLandingCaptureSignature(projectId);
-    if (!expected) return null;
+    // An unverifiable signature (instruction file outside the vault cache) cannot prove the
+    // candidate still matches the scope's instructions, so spawn fresh rather than hand back
+    // a backend that may have read the file before the user's last edit.
+    if (!expected || !landingCaptureIsVerifiable(expected)) return null;
     const isReusable = (session: AgentSession): boolean =>
       this.isReusableLandingShell(session, projectId) &&
       !this.detachedFromTabIds.has(session.internalId) &&
@@ -1926,7 +1930,14 @@ export class AgentSessionManager {
     }
     if (!record) return;
     await moveProjectPromptToAgentsFile(this.app, record);
-    await ensureAgentsFileForDiscovery(this.app, getProjectFolderPath(record.folderName), "");
+    // Anchored on the record's own path, matching `resolveScopeCwd`: the folder the agent
+    // will actually open is `dirname(record.filePath)`, which is not the live projects root
+    // for the moment after a Copilot-folder change.
+    await ensureAgentsFileForDiscovery(
+      this.app,
+      getProjectAnchorFromConfigPath(record.filePath).projectFolderPath,
+      ""
+    );
   }
 
   /**

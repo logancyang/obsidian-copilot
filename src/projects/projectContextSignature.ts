@@ -1,6 +1,6 @@
 import type { ProjectConfig } from "@/aiParams";
 import { AGENTS_FILE_NAME } from "@/instructions/agentsFile";
-import { getProjectFolderPath } from "@/projects/projectPaths";
+import { getProjectAnchorFromConfigPath } from "@/projects/projectPaths";
 import type { ProjectFileRecord } from "@/projects/type";
 import { App, normalizePath, TFile } from "obsidian";
 
@@ -87,6 +87,22 @@ export function getProjectContextSignature(record: ProjectFileRecord): string {
  * re-materialization (glob/URL/PDF conversion) and must stay insensitive to instructions (see
  * its DESIGN NOTE) — folding them in there would re-materialize on every prompt edit.
  */
+/** Instructions fingerprint for a scope whose instruction file Obsidian does not index. */
+const UNVERIFIABLE_INSTRUCTIONS = "agents:unverifiable";
+
+/**
+ * Whether a landing-capture signature actually pins the scope's instructions.
+ *
+ * False when the instruction file lives outside the vault cache, where edits to it cannot be
+ * observed. A caller reusing an empty landing session on an unverifiable signature would hand
+ * the user a backend that read the file before their last edit, so treat it as "spawn fresh".
+ *
+ * @param signature - A value from {@link getProjectLandingCaptureSignature}, or null off-project
+ */
+export function landingCaptureIsVerifiable(signature: string | null): boolean {
+  return signature !== null && !signature.includes(UNVERIFIABLE_INSTRUCTIONS);
+}
+
 export function getProjectLandingCaptureSignature(app: App, record: ProjectFileRecord): string {
   return JSON.stringify({
     context: getProjectContextSignature(record),
@@ -95,11 +111,22 @@ export function getProjectLandingCaptureSignature(app: App, record: ProjectFileR
 }
 
 function getInstructionsFingerprint(app: App, record: ProjectFileRecord): string {
-  const agentsPath = normalizePath(
-    `${getProjectFolderPath(record.folderName)}/${AGENTS_FILE_NAME}`
-  );
+  // Anchored on the record's own path, matching `resolveScopeCwd`: the file the agent reads
+  // is under `dirname(record.filePath)`, which is not the live projects root for the moment
+  // after a Copilot-folder change.
+  const projectFolderPath = getProjectAnchorFromConfigPath(record.filePath).projectFolderPath;
+  const agentsPath = normalizePath(`${projectFolderPath}/${AGENTS_FILE_NAME}`);
   const file = app.vault.getAbstractFileByPath(agentsPath);
   if (file instanceof TFile) return `agents:${file.stat.mtime}:${file.stat.size}`;
+  // A project under a hidden Copilot root (`.copilot`, deliberately supported — see the
+  // DESIGN NOTE in `validateCopilotFolder`) is never indexed, so an edit to its real
+  // AGENTS.md is invisible from here and the legacy body is empty once the move ran. Say so
+  // rather than report a fingerprint that can never change: `landingCaptureIsVerifiable`
+  // turns this into "spawn fresh" at the reuse gate. Tested on the path rather than the
+  // cache, which is also empty for a folder Obsidian simply has not indexed yet.
+  if (agentsPath.split("/").some((segment) => segment.startsWith("."))) {
+    return UNVERIFIABLE_INSTRUCTIONS;
+  }
   // Compared verbatim (no `normalizeMultiline`): `project.md` preserves the body's
   // whitespace, so a whitespace-only edit is a real change to what the file would be
   // initialized with.

@@ -9,7 +9,10 @@ jest.mock("@/projects/ProjectFileManager", () => ({
 }));
 
 jest.mock("@/projects/projectPaths", () => ({
-  getProjectFolderPath: (folderName: string) => `copilot-projects/${folderName}`,
+  getProjectAnchorFromConfigPath: (configPath: string) => ({
+    projectFolderPath: configPath.split("/").slice(0, -1).join("/"),
+    projectsRoot: configPath.split("/").slice(0, -2).join("/"),
+  }),
 }));
 
 jest.mock("@/logger", () => ({
@@ -50,13 +53,15 @@ function makeApp(initialFiles: Record<string, string> = {}) {
   return { app: app as unknown as App, files };
 }
 
-function makeRecord(systemPrompt: string): ProjectFileRecord {
+function makeRecord(systemPrompt: string, filePath = "copilot-projects/Research/project.md") {
   return {
     folderName: "Research",
-    filePath: "copilot-projects/Research/project.md",
+    filePath,
     project: { id: "p1", name: "Research", systemPrompt },
   } as unknown as ProjectFileRecord;
 }
+
+const MIRROR_HEADER = "<!-- copilot:generated-agents-mirror v1 -->\n\n";
 
 describe("moveProjectPrompt", () => {
   describe("moveProjectPromptToAgentsFile()", () => {
@@ -84,6 +89,34 @@ describe("moveProjectPrompt", () => {
 
       expect(files.has("copilot-projects/Research/AGENTS.md")).toBe(false);
       expect(mockUpdateProject).not.toHaveBeenCalled();
+    });
+
+    it("writes beside the record's own project.md, not under the live projects root", async () => {
+      // A Copilot-folder change activates before ProjectRegister reloads its cache, so a
+      // record can name the old tree while the live root already names the new one. The
+      // session cwd follows the record, so the file has to as well.
+      const { app, files } = makeApp();
+
+      await moveProjectPromptToAgentsFile(
+        app,
+        makeRecord("Cite every source.", "old-root/projects/Research/project.md")
+      );
+
+      expect(files.get("old-root/projects/Research/AGENTS.md")).toBe("Cite every source.");
+      expect(files.has("copilot-projects/Research/AGENTS.md")).toBe(false);
+    });
+
+    it("converts a legacy generated mirror rather than treating it as the user's file", async () => {
+      // The mirror is Copilot's own output. Leaving it in place would strand the legacy text
+      // AND leave the mirror for a later blank ensure to overwrite.
+      const { app, files } = makeApp({
+        "copilot-projects/Research/AGENTS.md": `${MIRROR_HEADER}stale generated body`,
+      });
+
+      await moveProjectPromptToAgentsFile(app, makeRecord("Cite every source."));
+
+      expect(files.get("copilot-projects/Research/AGENTS.md")).toBe("Cite every source.");
+      expect(mockUpdateProject).toHaveBeenCalledTimes(1);
     });
 
     it("never overwrites an existing AGENTS.md, and leaves project.md alone when it cannot", async () => {
