@@ -10,7 +10,6 @@ const OPENCODE: AgentSelectRow = {
   name: "opencode",
   description:
     "Copilot Plus models, or any model on your own provider key. Copilot can download and manage the binary for you.",
-  highlights: ["Copilot Plus models", "Your own provider key"],
   status: "absent",
   recommended: true,
   statusMessage: null,
@@ -21,7 +20,6 @@ const CLAUDE: AgentSelectRow = {
   name: "Claude",
   description:
     "Anthropic models, billed to your Claude Code subscription. Runs the claude CLI already on your machine.",
-  highlights: [],
   status: "absent",
   recommended: false,
   statusMessage: null,
@@ -32,7 +30,6 @@ const CODEX: AgentSelectRow = {
   name: "Codex",
   description:
     "OpenAI models, billed to your ChatGPT subscription. Runs the codex-acp adapter on your machine.",
-  highlights: [],
   status: "absent",
   recommended: false,
   statusMessage: null,

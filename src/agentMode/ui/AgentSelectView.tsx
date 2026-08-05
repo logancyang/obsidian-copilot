@@ -150,15 +150,6 @@ export const AgentSelectView: React.FC<AgentSelectViewProps> = ({
                 <span className="tw-break-words tw-text-ui-smaller tw-text-muted">
                   {row.description}
                 </span>
-                {row.highlights.length > 0 && (
-                  <span className="tw-flex tw-flex-wrap tw-gap-1">
-                    {row.highlights.map((highlight) => (
-                      <Badge key={highlight} variant="outline">
-                        {highlight}
-                      </Badge>
-                    ))}
-                  </span>
-                )}
               </span>
             </button>
           );

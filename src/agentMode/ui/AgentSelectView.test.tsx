@@ -7,7 +7,6 @@ function row(overrides: Partial<AgentSelectRow> & Pick<AgentSelectRow, "id">): A
   return {
     name: overrides.id,
     description: `${overrides.id} description`,
-    highlights: [],
     status: "absent",
     recommended: false,
     statusMessage: null,
@@ -16,7 +15,7 @@ function row(overrides: Partial<AgentSelectRow> & Pick<AgentSelectRow, "id">): A
 }
 
 const ROWS: readonly AgentSelectRow[] = [
-  row({ id: "opencode", highlights: ["Copilot Plus models"], recommended: true }),
+  row({ id: "opencode", recommended: true }),
   row({ id: "claude" }),
   row({ id: "codex" }),
 ];
@@ -73,11 +72,10 @@ describe("AgentSelectView", () => {
       expect(screen.queryByText(/not found/i)).toBeNull();
     });
 
-    it("renders the recommendation and highlight badges of the rows that carry them", () => {
+    it("renders the recommendation badge on the row that carries it", () => {
       renderView();
 
       expect(screen.getAllByText("Recommended")).toHaveLength(1);
-      expect(screen.getByText("Copilot Plus models")).toBeTruthy();
     });
 
     it("reports the clicked agent without running the call to action", () => {
