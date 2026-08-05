@@ -33,17 +33,20 @@ const CODEX_ERROR: InstallState = {
 
 const UPDATE_HINT = "Update it with the install command below, then reopen this dialog.";
 
+// Deliberately generic: each agent's Configure dialog composes its own body, so
+// borrowing one agent's controls here would read as that agent's approved design.
 const BODY = (
   <>
-    <ConfigSection title="Download managed binary">
+    <ConfigSection title="First section">
       <p className="tw-my-0 tw-text-sm tw-text-muted">
-        Let Copilot download and manage the official opencode binary from its GitHub repo.
+        Placeholder body. Agents fill their sections with their own controls; the shell only
+        guarantees the band's padding and the hairline above it.
       </p>
     </ConfigSection>
-    <ConfigSection title="Use your own binary">
+    <ConfigSection title="Second section">
       <p className="tw-my-0 tw-text-sm tw-text-muted">
-        Point Agent Mode at a binary you already have on disk. Useful for self-builders or
-        air-gapped machines.
+        A second band shows the divider between neighbours, which should reach both edges of the
+        modal rather than stopping short of them.
       </p>
     </ConfigSection>
   </>

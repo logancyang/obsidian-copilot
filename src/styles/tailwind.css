@@ -37,9 +37,16 @@ If your plugin does not need CSS, delete this file.
   padding: 0;
 }
 
-/* The shell owns the title, so the native (empty) header must not reserve space. */
+/* The shell owns the title, so the native header must not reserve space, and a
+   host that sets a title anyway must not stack a second heading above the
+   shell's own. Suppressing it here rather than per host keeps every future
+   caller correct by default. */
 .modal:has(.copilot-config-dialog) .modal-header {
   margin-bottom: 0;
+}
+
+.modal:has(.copilot-config-dialog) .modal-title {
+  display: none;
 }
 
 /* Single-side dividers. Preflight is off, so `tw-border-b tw-border-solid`
