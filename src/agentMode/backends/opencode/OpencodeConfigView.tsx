@@ -8,6 +8,7 @@ import type { InstallState } from "@/agentMode/session/types";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { SegmentedControl, type SegmentedControlOption } from "@/components/ui/segmented-control";
+import { cn } from "@/lib/utils";
 import React from "react";
 
 /** Which of the two setup paths a binary came from. Mirrors the persisted `binarySource`. */
@@ -92,7 +93,7 @@ const OpencodeManagedInstall: React.FC<{
   if (run.kind === "running") {
     return (
       <div className="tw-flex tw-flex-col tw-gap-2">
-        <p className="tw-text-sm">{run.label}</p>
+        <p className="tw-my-0 tw-text-sm">{run.label}</p>
         <Progress value={run.percent} />
         <div className="tw-flex tw-justify-end">
           <Button variant="ghost" size="default" onClick={actions.cancelInstall}>
@@ -105,7 +106,9 @@ const OpencodeManagedInstall: React.FC<{
 
   return (
     <div className="tw-flex tw-flex-col tw-gap-2">
-      <dl className="tw-grid tw-grid-cols-[max-content_1fr] tw-gap-x-4 tw-gap-y-1 tw-text-sm">
+      {/* Preflight is off, so the browser's own `dl` margins and 40px `dd` indent
+          would survive and push the values out of their grid track. */}
+      <dl className="tw-my-0 tw-grid tw-grid-cols-[max-content_1fr] tw-gap-x-4 tw-gap-y-1 tw-text-sm [&>dd]:tw-ml-0">
         <dt className="tw-text-muted">Platform</dt>
         <dd className="tw-font-mono">{managed.platform}</dd>
         <dt className="tw-text-muted">Version</dt>
@@ -114,7 +117,7 @@ const OpencodeManagedInstall: React.FC<{
         <dd className="tw-break-all tw-font-mono tw-text-xs">{managed.destination}</dd>
       </dl>
       {run.kind === "error" && (
-        <pre className="tw-max-h-32 tw-overflow-auto tw-whitespace-pre-wrap tw-rounded tw-bg-secondary tw-p-2 tw-text-xs tw-text-error">
+        <pre className="tw-my-0 tw-max-h-32 tw-overflow-auto tw-whitespace-pre-wrap tw-rounded tw-bg-secondary tw-p-2 tw-text-xs tw-text-error">
           {run.message}
         </pre>
       )}
@@ -187,6 +190,9 @@ export const OpencodeConfigView: React.FC<OpencodeConfigViewProps> = ({
     <ConfigSection>
       <SegmentedControl
         aria-label="opencode binary source"
+        // Flex items are blockified, which would stretch the control across the
+        // band and leave the segments floating in an empty track.
+        className={cn("tw-self-start")}
         options={SOURCE_OPTIONS}
         value={source}
         onChange={onSourceChange}
