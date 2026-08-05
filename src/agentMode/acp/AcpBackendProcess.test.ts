@@ -424,10 +424,13 @@ describe("AcpBackendProcess", () => {
       const backend = await startBackend();
       await backend.newSession({
         cwd: "/vault",
-        mcpServers: [],
         additionalDirectories: ["/abs/context"],
       });
-      const req = mockNewSession.mock.calls[0][0] as { additionalDirectories?: string[] };
+      const req = mockNewSession.mock.calls[0][0] as {
+        additionalDirectories?: string[];
+        mcpServers: unknown[];
+      };
+      expect(req.mcpServers).toEqual([]);
       expect(req).not.toHaveProperty("additionalDirectories");
     });
 
@@ -439,7 +442,6 @@ describe("AcpBackendProcess", () => {
       const backend = await startBackend();
       await backend.newSession({
         cwd: "/vault",
-        mcpServers: [],
         additionalDirectories: ["/abs/context-a", "/abs/context-b"],
       });
       const req = mockNewSession.mock.calls[0][0] as { additionalDirectories?: string[] };
@@ -452,7 +454,7 @@ describe("AcpBackendProcess", () => {
         agentCapabilities: { sessionCapabilities: { additionalDirectories: {} } },
       };
       const backend = await startBackend();
-      await backend.newSession({ cwd: "/vault", mcpServers: [] });
+      await backend.newSession({ cwd: "/vault" });
       const req = mockNewSession.mock.calls[0][0] as { additionalDirectories?: string[] };
       expect(req).not.toHaveProperty("additionalDirectories");
     });
@@ -468,10 +470,13 @@ describe("AcpBackendProcess", () => {
       await backend.resumeSession({
         sessionId: "s1",
         cwd: "/vault",
-        mcpServers: [],
         additionalDirectories: ["/abs/context-a", "/abs/context-b"],
       });
-      const req = mockResumeSession.mock.calls[0][0] as { additionalDirectories?: string[] };
+      const req = mockResumeSession.mock.calls[0][0] as {
+        additionalDirectories?: string[];
+        mcpServers: unknown[];
+      };
+      expect(req.mcpServers).toEqual([]);
       expect(req.additionalDirectories).toEqual(["/abs/context-a", "/abs/context-b"]);
     });
 
@@ -485,7 +490,6 @@ describe("AcpBackendProcess", () => {
       await backend.resumeSession({
         sessionId: "s1",
         cwd: "/vault",
-        mcpServers: [],
         additionalDirectories: ["/abs/context"],
       });
       const req = mockResumeSession.mock.calls[0][0] as { additionalDirectories?: string[] };
@@ -504,10 +508,13 @@ describe("AcpBackendProcess", () => {
       await backend.loadSession({
         sessionId: "s1",
         cwd: "/vault",
-        mcpServers: [],
         additionalDirectories: ["/abs/context-a", "/abs/context-b"],
       });
-      const req = mockLoadSession.mock.calls[0][0] as { additionalDirectories?: string[] };
+      const req = mockLoadSession.mock.calls[0][0] as {
+        additionalDirectories?: string[];
+        mcpServers: unknown[];
+      };
+      expect(req.mcpServers).toEqual([]);
       expect(req.additionalDirectories).toEqual(["/abs/context-a", "/abs/context-b"]);
     });
   });

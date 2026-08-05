@@ -1,3 +1,4 @@
+import { DEFAULT_SETTINGS } from "@/constants";
 import type { CopilotSettings } from "@/settings/model";
 import {
   cleanupLegacyFields,
@@ -106,7 +107,7 @@ describe("settingsSecretTransforms", () => {
   });
 
   describe("cleanupLegacyFields()", () => {
-    it("removes every legacy encryption and migration marker", () => {
+    it("removes retired settings without mutating the input", () => {
       const settings = makeSettings({
         _keychainVaultId: "abc12345",
         _someFutureField: "future-value",
@@ -116,6 +117,16 @@ describe("settingsSecretTransforms", () => {
         _migrationModalDismissed: true,
         _diskSecretsCleared: true,
         _keychainOnly: true,
+        agentMode: {
+          ...DEFAULT_SETTINGS.agentMode,
+          mcpServers: [
+            {
+              name: "private",
+              transport: "http",
+              headers: [{ name: "Authorization", value: "Bearer secret" }],
+            },
+          ],
+        },
       } as unknown as Partial<CopilotSettings>);
 
       const result = cleanupLegacyFields(settings) as unknown as Record<string, unknown>;
@@ -130,7 +141,9 @@ describe("settingsSecretTransforms", () => {
       expect(result._migrationModalDismissed).toBeUndefined();
       expect(result._diskSecretsCleared).toBeUndefined();
       expect(result._keychainOnly).toBeUndefined();
+      expect((result.agentMode as Record<string, unknown>).mcpServers).toBeUndefined();
       expect(settings as unknown as Record<string, unknown>).toHaveProperty("_keychainOnly", true);
+      expect((settings.agentMode as unknown as Record<string, unknown>).mcpServers).toHaveLength(1);
     });
   });
 });

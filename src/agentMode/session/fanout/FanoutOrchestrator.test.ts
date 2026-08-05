@@ -75,7 +75,6 @@ function makeMockProc(sessionId: string): MockProc {
     listSessions: jest.fn(async () => ({ sessions: [] })),
     resumeSession: jest.fn(),
     loadSession: jest.fn(),
-    supportsMcpTransport: () => false,
     shutdown: async () => {},
   } as unknown as BackendProcess;
   return {
@@ -140,7 +139,6 @@ function makeHost(
     getDefaultSelection: () => null,
     getDisplayName: (backendId) => backendId.toUpperCase(),
     getCwd: () => "/vault",
-    getMcpServers: () => [],
     registerReadOnlySession: (sessionId) => {
       readOnlyRegistered.push(sessionId);
       return () => readOnlyUnregistered.push(sessionId);

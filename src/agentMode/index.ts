@@ -53,10 +53,7 @@ export type {
   ModelSelection,
   ModelState,
 } from "./session/types";
-export type { StoredMcpServer, McpTransport } from "./session/mcpResolver";
-export { sanitizeStoredMcpServers } from "./session/mcpResolver";
 export { AgentDefaultModelSetting } from "./ui/AgentDefaultModelSetting";
-export { McpServersPanel } from "./ui/McpServersPanel";
 export { ModelEnableList } from "./ui/ModelEnableList";
 export type { ModelEnableGroup, ModelEnableRow } from "./ui/ModelEnableList";
 export { PlanPreviewView, PLAN_PREVIEW_VIEW_TYPE } from "./ui/PlanPreviewView";

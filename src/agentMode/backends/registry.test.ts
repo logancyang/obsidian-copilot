@@ -30,7 +30,6 @@ describe("backendRegistry", () => {
       agentMode: {
         enabled: true,
         byok: {},
-        mcpServers: [],
         activeBackend: activeBackend ?? "opencode",
         backends: { opencode: {} },
       },

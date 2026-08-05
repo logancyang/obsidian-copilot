@@ -46,7 +46,6 @@ import {
   cancelInputToAcp,
   decisionToAcpResponse,
   listedSessionFromAcp,
-  mcpServerSpecToAcp,
   promptContentToAcp,
   sessionIdFromAcp,
   sessionIdToAcp,
@@ -65,9 +64,7 @@ export type AcpCapability =
   | "session/set_model"
   | "session/set_mode"
   | "session/set_config_option"
-  | "session/additional_directories"
-  | "mcp/http"
-  | "mcp/sse";
+  | "session/additional_directories";
 
 /**
  * Detect a JSON-RPC -32601 (method not found) error from the ACP SDK. The SDK
@@ -232,12 +229,6 @@ export class AcpBackendProcess implements BackendProcess {
       if (init.agentCapabilities?.loadSession === true) {
         this.capabilities.set("session/load", true);
       }
-      if (init.agentCapabilities?.mcpCapabilities?.http === true) {
-        this.capabilities.set("mcp/http", true);
-      }
-      if (init.agentCapabilities?.mcpCapabilities?.sse === true) {
-        this.capabilities.set("mcp/sse", true);
-      }
       // Experimental ACP capability: presence of the (possibly empty) object
       // means the agent honors `additionalDirectories` on session lifecycle
       // requests. codex 0.135 / opencode 1.2.27 don't advertise it, so they
@@ -246,7 +237,7 @@ export class AcpBackendProcess implements BackendProcess {
         this.capabilities.set("session/additional_directories", true);
       }
       logInfo(
-        `[AgentMode] initialized backend ${this.backend.id} (negotiated protocol v${init.protocolVersion}, listSessions=${this.hasCapability("session/list")}, resumeSession=${this.hasCapability("session/resume")}, loadSession=${this.hasCapability("session/load")}, mcp.http=${this.hasCapability("mcp/http")}, mcp.sse=${this.hasCapability("mcp/sse")}, additionalDirectories=${this.hasCapability("session/additional_directories")})`
+        `[AgentMode] initialized backend ${this.backend.id} (negotiated protocol v${init.protocolVersion}, listSessions=${this.hasCapability("session/list")}, resumeSession=${this.hasCapability("session/resume")}, loadSession=${this.hasCapability("session/load")}, additionalDirectories=${this.hasCapability("session/additional_directories")})`
       );
     } catch (err) {
       logError(
@@ -308,7 +299,7 @@ export class AcpBackendProcess implements BackendProcess {
   async newSession(params: OpenSessionInput): Promise<OpenSessionOutput> {
     const req: NewSessionRequest = {
       cwd: params.cwd,
-      mcpServers: params.mcpServers.map(mcpServerSpecToAcp),
+      mcpServers: [],
       ...this.additionalDirectoriesField(params.additionalDirectories),
     };
     const wireResp = await this.requireConnection().newSession(req);
@@ -363,10 +354,6 @@ export class AcpBackendProcess implements BackendProcess {
 
   hasCapability(cap: AcpCapability): boolean {
     return this.capabilities.get(cap) === true;
-  }
-
-  supportsMcpTransport(transport: "http" | "sse"): boolean {
-    return this.hasCapability(transport === "http" ? "mcp/http" : "mcp/sse");
   }
 
   supportsAdditionalDirectories(): boolean {
@@ -513,7 +500,7 @@ export class AcpBackendProcess implements BackendProcess {
         c.resumeSession({
           sessionId: sessionIdToAcp(params.sessionId),
           cwd: params.cwd,
-          mcpServers: params.mcpServers.map(mcpServerSpecToAcp),
+          mcpServers: [],
           ...this.additionalDirectoriesField(params.additionalDirectories),
         }),
       { mustBeAdvertised: true }
@@ -536,7 +523,7 @@ export class AcpBackendProcess implements BackendProcess {
         c.loadSession({
           sessionId: sessionIdToAcp(params.sessionId),
           cwd: params.cwd,
-          mcpServers: params.mcpServers.map(mcpServerSpecToAcp),
+          mcpServers: [],
           ...this.additionalDirectoriesField(params.additionalDirectories),
         }),
       { mustBeAdvertised: true }

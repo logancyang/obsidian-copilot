@@ -3,7 +3,6 @@ import {
   backendNeedsSelfHostWarning,
   InstallBadge,
   listBackendDescriptors,
-  McpServersPanel,
   useBackendInstallState,
   type BackendDescriptor,
   type BackendId,
@@ -46,9 +45,9 @@ function getScrollableParent(el: HTMLElement): HTMLElement | null {
 
 /**
  * Top-level "Agents" settings tab. Owns the global default-backend picker and
- * the MCP server panel, then a sub-tab strip with one panel per backend plus a
- * Quick Chat panel. Each backend panel curates that backend's default model,
- * enabled models, and binary/auth config.
+ * a sub-tab strip with one panel per backend plus a Quick Chat panel. Each
+ * backend panel curates that backend's default model, enabled models, and
+ * binary/auth config.
  */
 export const AgentSettings: React.FC = () => {
   const settings = useSettingsValue();
@@ -132,8 +131,6 @@ export const AgentSettings: React.FC = () => {
             options={orderedDescriptors.map((d) => ({ label: d.displayName, value: d.id }))}
           />
         </SettingSection>
-
-        <McpServersPanel />
 
         <div className="tw-flex tw-flex-col">
           <div ref={tabStripRef} className="tw-flex tw-flex-wrap tw-gap-1" role="tablist">

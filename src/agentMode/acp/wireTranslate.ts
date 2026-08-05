@@ -9,7 +9,6 @@
 import type {
   CancelNotification,
   ContentBlock,
-  McpServer as AcpMcpServer,
   ModelInfo as AcpModelInfo,
   PermissionOption as AcpPermissionOption,
   Plan as AcpPlan,
@@ -38,7 +37,6 @@ import type {
   BackendState,
   CancelInput,
   ListedSessionInfo,
-  McpServerSpec,
   PermissionDecision,
   PermissionOption,
   PermissionPrompt,
@@ -494,24 +492,6 @@ export function acpDecisionFromResponse(resp: RequestPermissionResponse): Permis
 
 export function decisionToAcpResponse(decision: PermissionDecision): RequestPermissionResponse {
   return decision;
-}
-
-// ---- MCP server --------------------------------------------------------
-
-export function mcpServerSpecToAcp(spec: McpServerSpec): AcpMcpServer {
-  if ("type" in spec && spec.type === "http") {
-    return { type: "http", name: spec.name, url: spec.url, headers: spec.headers };
-  }
-  if ("type" in spec && spec.type === "sse") {
-    return { type: "sse", name: spec.name, url: spec.url, headers: spec.headers };
-  }
-  // stdio
-  return {
-    name: spec.name,
-    command: spec.command,
-    args: spec.args,
-    env: spec.env,
-  };
 }
 
 // ---- SessionId / Cancel -----------------------------------------------

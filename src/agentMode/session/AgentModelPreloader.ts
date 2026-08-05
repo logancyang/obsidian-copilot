@@ -350,12 +350,12 @@ export class AgentModelPreloader {
       strategies.push({
         label: `resumed probe session ${storedId}`,
         sessionId: storedId,
-        run: () => proc.resumeSession({ sessionId: storedId, cwd, mcpServers: [] }),
+        run: () => proc.resumeSession({ sessionId: storedId, cwd }),
       });
       strategies.push({
         label: `loaded probe session ${storedId}`,
         sessionId: storedId,
-        run: () => proc.loadSession({ sessionId: storedId, cwd, mcpServers: [] }),
+        run: () => proc.loadSession({ sessionId: storedId, cwd }),
       });
     }
 
@@ -376,7 +376,7 @@ export class AgentModelPreloader {
       }
     }
 
-    const resp = await proc.newSession({ cwd, mcpServers: [] });
+    const resp = await proc.newSession({ cwd });
     proc.registerSessionHandler(resp.sessionId, () => {});
     logInfo(`[AgentMode] preload ${backendId}: created probe session ${resp.sessionId}`);
     if (descriptor.persistProbeSessionId) {

@@ -6,7 +6,6 @@ type AgentMode = CopilotSettings["agentMode"];
 function makeAgentMode(partial: Partial<AgentMode> = {}): AgentMode {
   return {
     byok: {},
-    mcpServers: [],
     activeBackend: "opencode",
     backends: {},
     debugFullFrames: false,
