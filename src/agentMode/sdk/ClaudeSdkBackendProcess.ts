@@ -404,13 +404,19 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     // preserves the full default system prompt — keeping Claude's tool and
     // planning framing — while layering on the Obsidian-vault identity, the
     // pill-syntax directive, and Copilot's built-in tool guidance.
-    if (session.systemPromptAppend) {
-      options.systemPrompt = {
-        type: "preset",
-        preset: "claude_code",
-        append: session.systemPromptAppend,
-      };
-    }
+    //
+    // `excludeDynamicSections` keeps that whole prefix cacheable: the preset
+    // otherwise stamps working directory, git status, and memory paths into the
+    // system prompt, so switching project or crossing midnight would invalidate
+    // it. The SDK re-injects that content as the first user message, so the
+    // model still has the facts — they just stop sitting in the cached prefix.
+    // Sent unconditionally; it is about the preset, not about our append.
+    options.systemPrompt = {
+      type: "preset",
+      preset: "claude_code",
+      excludeDynamicSections: true,
+      append: session.systemPromptAppend || undefined,
+    };
     if (session.firstPromptStarted) {
       options.resume = params.sessionId;
     } else {

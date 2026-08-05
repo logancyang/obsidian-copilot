@@ -327,8 +327,13 @@ describe("ClaudeSdkBackendProcess", () => {
       // First turn → sessionId is seeded, no resume.
       expect(call.options.sessionId).toBe(sessionId);
       expect(call.options.resume).toBeUndefined();
-      // No skill-creation directive opt passed → no systemPrompt override.
-      expect(call.options.systemPrompt).toBeUndefined();
+      // No append configured, but the preset is still pinned to its cacheable form.
+      expect(call.options.systemPrompt).toEqual({
+        type: "preset",
+        preset: "claude_code",
+        excludeDynamicSections: true,
+        append: undefined,
+      });
     });
 
     it("rejects with Claude's reset message when a success-shaped result reports usage exhaustion", async () => {
@@ -441,6 +446,8 @@ describe("ClaudeSdkBackendProcess", () => {
       expect(opts.systemPrompt).toEqual({
         type: "preset",
         preset: "claude_code",
+        // Keeps cwd, git status and memory paths out of the cached system prefix.
+        excludeDynamicSections: true,
         append: "DO THIS THING WITH SKILLS",
       });
     });
@@ -470,6 +477,7 @@ describe("ClaudeSdkBackendProcess", () => {
       expect(opts.systemPrompt).toEqual({
         type: "preset",
         preset: "claude_code",
+        excludeDynamicSections: true,
         append: "FIRST DIRECTIVE",
       });
     });
