@@ -39,6 +39,22 @@ describe("ConfigDialogShell", () => {
       expect(screen.getByText("Ready")).toBeTruthy();
     });
 
+    it("does not reserve a warning band when a supplied strip has no message", () => {
+      const ready = { kind: "ready", source: "custom" } as const;
+      const { container } = render(
+        <ConfigDialogShell
+          title="Configure Claude"
+          state={ready}
+          warning={<ConfigWarningStrip state={ready} />}
+          onClose={jest.fn()}
+        >
+          <p>body</p>
+        </ConfigDialogShell>
+      );
+
+      expect(container.firstElementChild?.children).toHaveLength(3);
+    });
+
     it("renders the supplied warning between the header and the body", () => {
       render(
         <ConfigDialogShell

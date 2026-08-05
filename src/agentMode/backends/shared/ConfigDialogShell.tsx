@@ -45,7 +45,9 @@ export const ConfigDialogShell: React.FC<ConfigDialogShellProps> = ({
       </h3>
       <ConfigStatusBadge state={state} />
     </div>
-    {warning && <div className="tw-px-4 tw-pb-3">{warning}</div>}
+    {(state.kind === "incompatible" || state.kind === "error") && warning && (
+      <div className="tw-px-4 tw-pb-3">{warning}</div>
+    )}
     {children}
     <div className="copilot-divider-t tw-flex tw-justify-end tw-gap-2 tw-bg-secondary tw-px-4 tw-py-3">
       {footer ?? (
