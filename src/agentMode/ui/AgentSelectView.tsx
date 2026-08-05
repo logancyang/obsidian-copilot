@@ -85,18 +85,12 @@ export const AgentSelectView: React.FC<AgentSelectViewProps> = ({
 
   return (
     <div className="tw-flex tw-w-full tw-flex-col tw-gap-3 tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-secondary tw-p-3">
-      <div className="tw-flex tw-flex-col tw-gap-1">
-        <h3
-          id={headingId}
-          className="tw-m-0 tw-text-ui-medium tw-font-semibold tw-leading-tight tw-text-normal"
-        >
-          Select your agent
-        </h3>
-        <p className="tw-m-0 tw-text-ui-smaller tw-text-muted">
-          An agent runs your tasks on this machine. All three do the same work — what differs is
-          which models you can use and whose plan pays for them.
-        </p>
-      </div>
+      <h3
+        id={headingId}
+        className="tw-m-0 tw-text-ui-medium tw-font-semibold tw-leading-tight tw-text-normal"
+      >
+        Select your agent
+      </h3>
 
       <div role="radiogroup" aria-labelledby={headingId} className="tw-flex tw-flex-col tw-gap-1">
         {rows.map((row, index) => {
