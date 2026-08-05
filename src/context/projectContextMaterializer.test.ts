@@ -116,11 +116,15 @@ describe("ensureProjectContextMaterialized", () => {
     expect(result.projectContextBlock).toBeUndefined();
   });
 
-  it("returns empty when the project has no context sources", async () => {
+  it("still emits a minimal project block when the project has no context sources", async () => {
+    // The product prompt's workspace policy triggers on the block's presence (the prompt is
+    // byte-identical across scopes), so a source-less project must announce itself or the
+    // agent is never told to keep writes under the project's outputs/ folder.
     getRecord.mockReturnValue(record({}));
     const result = await ensureProjectContextMaterialized(fakeApp(), "p1", CWD);
     expect(result.additionalDirectories).toEqual([]);
-    expect(result.projectContextBlock).toBeUndefined();
+    expect(result.projectContextBlock).toContain("<project_context>");
+    expect(result.projectContextBlock).toContain("No context sources are configured");
     expect(mockFs.files.size).toBe(0);
   });
 

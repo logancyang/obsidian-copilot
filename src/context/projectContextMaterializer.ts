@@ -89,6 +89,20 @@ export const EMPTY_CONTEXT_MATERIALIZATION_RESULT: ContextMaterializationResult 
 const EMPTY_RESULT = EMPTY_CONTEXT_MATERIALIZATION_RESULT;
 
 /**
+ * Block for a project that declares no context sources. The product prompt's workspace
+ * policy triggers on the presence of a `<project_context>` block rather than a per-scope
+ * prompt variant — the prompt must stay byte-identical across scopes for the cache
+ * contract — so a source-less project has to announce itself here or the policy is inert
+ * and the agent is never told to keep writes under the project's `outputs/` folder.
+ */
+const EMPTY_PROJECT_CONTEXT_BLOCK = [
+  "<project_context>",
+  "This session runs in a project workspace: the working directory is the project's",
+  "folder. No context sources are configured for this project.",
+  "</project_context>",
+].join("\n");
+
+/**
  * Per-project single-flight guard. Concurrent cold-start sessions for the same
  * project (e.g. the user opens a second chat / a history-load races the first)
  * would otherwise each miss the disk cheap-skip before the first write lands and
@@ -288,7 +302,13 @@ async function runMaterialize(
     // this to avoid clearing a flag a newer edit raised — see the result field).
     const contextSignature = getProjectContextSignature(record);
     const contextSource = record.project.contextSource;
-    if (!contextSource) return { additionalDirectories: EMPTY_DIRECTORIES, contextSignature };
+    if (!contextSource) {
+      return {
+        additionalDirectories: EMPTY_DIRECTORIES,
+        projectContextBlock: EMPTY_PROJECT_CONTEXT_BLOCK,
+        contextSignature,
+      };
+    }
 
     const webUrls = splitLines(contextSource.webUrls);
     const youtubeUrls = splitLines(contextSource.youtubeUrls);
@@ -350,7 +370,13 @@ async function runMaterialize(
       extensions.length > 0 ||
       tags.length > 0 ||
       additionalDirectories.length > 0;
-    if (!hasAnySource) return { additionalDirectories: EMPTY_DIRECTORIES, contextSignature };
+    if (!hasAnySource) {
+      return {
+        additionalDirectories: EMPTY_DIRECTORIES,
+        projectContextBlock: EMPTY_PROJECT_CONTEXT_BLOCK,
+        contextSignature,
+      };
+    }
 
     // Inclusions are resolved; report the count of binary files queued for
     // materialization so the loading card can show "Resolve files (N)".
