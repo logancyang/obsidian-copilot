@@ -594,6 +594,23 @@ describe("searchUtils", () => {
       expect(mockGetAbstractFileByPath).not.toHaveBeenCalledWith("ai/memory/note.md");
     });
 
+    it("excludes root instruction files even with no user patterns configured", () => {
+      // Default QA settings take the no-pattern fast path; the instruction-file
+      // exclusion must hold there too, or vault-root AGENTS.md/CLAUDE.md surface
+      // in relevant-note and Miyo results despite being agent-facing content.
+      (settingsModel.getSettings as jest.Mock).mockReturnValue({
+        qaInclusions: "",
+        qaExclusions: "",
+        copilotFolder: "copilot",
+        copilotRootHistory: ["copilot"],
+      });
+      const filter = createCopilotPatternFilter(window.app);
+      expect(filter("AGENTS.md")).toBe(false);
+      expect(filter("CLAUDE.md")).toBe(false);
+      expect(filter("copilot/projects/Research/AGENTS.md")).toBe(false);
+      expect(filter("notes/AGENTS review.md")).toBe(true);
+    });
+
     it("does not over-match a sibling folder that merely shares the root's prefix", () => {
       (settingsModel.getSettings as jest.Mock).mockReturnValue({
         qaInclusions: "",

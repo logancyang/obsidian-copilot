@@ -265,6 +265,12 @@ export function createCopilotPatternFilter(app: App): (path: string) => boolean 
     if (matchSystemRoots(path, systemExcludedFolders)) {
       return false;
     }
+    // Instruction files (AGENTS.md/CLAUDE.md/project.md) are excluded on the raw
+    // path for the same reason: with no user patterns configured the TFile branch
+    // below never runs, and the agent already receives these files as instructions.
+    if (isInternalExcludedPath(path)) {
+      return false;
+    }
     if (!inclusions && !exclusions) {
       return true;
     }
