@@ -15,9 +15,9 @@ jest.mock("@/context", () => ({
   useApp: () => ({ vault: { getMarkdownFiles: () => [] }, setting: { close: jest.fn() } }),
 }));
 
-const openAgentsFile = jest.fn().mockResolvedValue(undefined);
+const openAgentsFile = jest.fn<Promise<void>, unknown[]>().mockResolvedValue(undefined);
 jest.mock("@/instructions/agentsFile", () => ({
-  openAgentsFile: (...a: unknown[]) => openAgentsFile(...a),
+  openAgentsFile: (...a: unknown[]): Promise<void> => openAgentsFile(...a),
 }));
 
 const systemPrompts = jest.fn<{ title: string }[], []>().mockReturnValue([]);
