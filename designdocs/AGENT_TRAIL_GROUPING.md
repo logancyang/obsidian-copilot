@@ -108,17 +108,21 @@ These are what make grouping safe where the removed auto-fold was not:
    expanded-to-collapsed transition. Nothing the user is reading disappears,
    because it was never expanded to begin with.
 2. **User expansion is sticky.** Once opened, a group stays open for the life of
-   the session, including as new members stream into it.
+   the session, including as new members stream into it. If an opened standalone
+   tool becomes the first member of a group, the group inherits that open state
+   so the details do not disappear during the transition.
 3. **Motion lives only at the live edge.** While a group has work in flight it
    renders one transient row showing the current step, which swaps as the agent
    moves on and retires when the group goes quiet. One row changing, never a
    list collapsing.
 
 Invariant 2 requires a group identity that survives streaming. Groups are
-identified by their **ordinal within the trail**: parts are append-only, so a
-group's position never changes once it exists, and appending a member does not
-change its id. Keying React state by array index instead would remount an open
-group whenever the node list changed shape.
+identified by their **ordinal within their peer trail**, namespaced by the
+containing sub-agent path: parts are append-only, so a group's position never
+changes once it exists, appending a member does not change its id, and a nested
+group cannot share expansion state with a root group. Keying React state by
+array index instead would remount an open group whenever the node list changed
+shape.
 
 ## What grouping replaced
 

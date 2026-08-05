@@ -69,7 +69,6 @@ export const AgentTrail: React.FC<AgentTrailProps> = ({
 
 /** What every node in one trail renders against, regardless of its position. */
 interface TrailContext {
-  isStreaming: boolean;
   app: App;
   /** The trail's trailing part, reference-compared to freeze stale reasoning. */
   lastPart: AgentMessagePart | undefined;
@@ -100,7 +99,6 @@ const LinearTrail: React.FC<{
   // last part is hidden, no reasoning node will match, so all reasoning blocks
   // freeze — which is the right outcome.
   const ctx: TrailContext = {
-    isStreaming,
     app,
     lastPart: parts.length > 0 ? parts[parts.length - 1] : undefined,
     expansion,
@@ -108,33 +106,54 @@ const LinearTrail: React.FC<{
   };
   return (
     <div className="tw-flex tw-flex-col tw-gap-1">
-      {nodes.map((node, i) => renderNode(node, i, ctx, i === nodes.length - 1))}
+      {nodes.map((node, i) =>
+        renderNode(node, i, ctx, isStreaming && i === nodes.length - 1, "root")
+      )}
       {showThinkingTail ? <BottomLoadingIndicator /> : null}
     </div>
   );
 };
 
 /**
- * @param isLast - Whether this node closes its peer list. Only the closing node
- *   of a streaming trail may show motion; an earlier group has finished.
+ * @param atLiveEdge - Whether this node closes every containing peer list in
+ *   the streaming trail. Activity inside an earlier parent has finished.
+ * @param trailId - Stable identity of this peer list, used to keep expansion
+ *   state independent across nesting levels.
  */
 function renderNode(
   node: GroupedTrailNode,
   key: string | number,
   ctx: TrailContext,
-  isLast: boolean
+  atLiveEdge: boolean,
+  trailId: string
 ): React.ReactNode {
   switch (node.type) {
-    case "action":
-      return <ActionCard key={key} part={node.part} />;
+    case "action": {
+      const expansionId = actionExpansionId(trailId, node.part.id);
+      return (
+        <ActionCard
+          key={key}
+          part={node.part}
+          open={ctx.expansion.isOpen(expansionId)}
+          onToggle={() => ctx.expansion.toggle(expansionId)}
+        />
+      );
+    }
     case "activityGroup":
       return (
-        <ActivityGroupRow key={key} group={node} ctx={ctx} atLiveEdge={ctx.isStreaming && isLast} />
+        <ActivityGroupRow
+          key={key}
+          group={node}
+          ctx={ctx}
+          atLiveEdge={atLiveEdge}
+          trailId={trailId}
+        />
       );
     case "subagent": {
       // Peers nest, so a sub-agent's own children group exactly like the root.
       const children = foldActivityGroups(node.children);
       const lastChild = children[children.length - 1];
+      const childTrailId = `${trailId}/subagent:${node.parent.id}`;
       return (
         <SubAgentCard
           key={key}
@@ -142,12 +161,12 @@ function renderNode(
           childNodes={children}
           truncated={node.truncated}
           app={ctx.app}
-          renderNode={(n, k) => renderNode(n, k, ctx, n === lastChild)}
+          renderNode={(n, k) => renderNode(n, k, ctx, atLiveEdge && n === lastChild, childTrailId)}
         />
       );
     }
     case "reasoning": {
-      const isActive = ctx.isStreaming && node.part === ctx.lastPart;
+      const isActive = atLiveEdge && node.part === ctx.lastPart;
       return <ReasoningBlock key={key} part={node.part} isStreaming={isActive} />;
     }
     case "text":
@@ -162,25 +181,55 @@ interface ActivityGroupRowProps {
   /** Whether this group is the one the agent is still working in. */
   atLiveEdge: boolean;
   ctx: TrailContext;
+  trailId: string;
 }
 
 // A component rather than a branch of `renderNode` because each group owns its
 // own thinking clock, and hooks cannot run in a loop.
-const ActivityGroupRow: React.FC<ActivityGroupRowProps> = ({ group, atLiveEdge, ctx }) => {
+const ActivityGroupRow: React.FC<ActivityGroupRowProps> = ({ group, atLiveEdge, ctx, trailId }) => {
   const thinkingMs = useThinkingClock(isReasoningActive(group.members, atLiveEdge));
+  const groupExpansionId = `${trailId}/group:${group.id}`;
+  const memberExpansionIds = group.members.flatMap((member) =>
+    member.type === "action" ? [actionExpansionId(trailId, member.part.id)] : []
+  );
+  const groupOpen =
+    ctx.expansion.isOpen(groupExpansionId) ||
+    memberExpansionIds.some((id) => ctx.expansion.isOpen(id));
+
+  const toggleGroup = () => {
+    if (!groupOpen) {
+      ctx.expansion.toggle(groupExpansionId);
+      return;
+    }
+    if (ctx.expansion.isOpen(groupExpansionId)) ctx.expansion.toggle(groupExpansionId);
+    for (const id of memberExpansionIds) {
+      if (ctx.expansion.isOpen(id)) ctx.expansion.toggle(id);
+    }
+  };
+
   return (
     <ActivityGroupCard
       group={group}
       thinkingMs={thinkingMs}
-      open={ctx.expansion.isOpen(group.id)}
-      onToggle={() => ctx.expansion.toggle(group.id)}
+      open={groupOpen}
+      onToggle={toggleGroup}
       renderMember={(member, i) =>
-        renderNode(member, member.type === "action" ? member.part.id : `thought-${i}`, ctx, false)
+        renderNode(
+          member,
+          member.type === "action" ? member.part.id : `thought-${i}`,
+          ctx,
+          false,
+          trailId
+        )
       }
       liveStep={activityLiveStep(group.members, atLiveEdge, ctx.summaryCtx)}
     />
   );
 };
+
+function actionExpansionId(trailId: string, toolCallId: string): string {
+  return `${trailId}/action:${toolCallId}`;
+}
 
 interface PlanPillProps {
   entries: { content: string; status: "pending" | "in_progress" | "completed" }[];

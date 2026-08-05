@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo } from "react";
 import { ChevronDown, ChevronRight, Loader2, Check, X } from "lucide-react";
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
 import type { AgentToolStatus } from "@/agentMode/session/types";
@@ -11,11 +11,12 @@ import { useApp } from "@/context";
 
 interface ActionCardProps {
   part: ToolCallPart;
+  open: boolean;
+  onToggle: () => void;
 }
 
-export const ActionCard: React.FC<ActionCardProps> = ({ part }) => {
+export const ActionCard: React.FC<ActionCardProps> = ({ part, open, onToggle }) => {
   const app = useApp();
-  const [open, setOpen] = useState(false);
   const summary = lookupToolSummary(part);
   // `vaultBase` is stable for the plugin lifetime, but `getVaultBase` is
   // cheap once cached — memoize to keep the summary inputs referentially
@@ -42,7 +43,7 @@ export const ActionCard: React.FC<ActionCardProps> = ({ part }) => {
     <div className="tw-my-1 tw-flex tw-flex-col tw-gap-0.5">
       <div
         className={headerClasses}
-        onClick={expandable ? () => setOpen((v) => !v) : undefined}
+        onClick={expandable ? onToggle : undefined}
         role={expandable ? "button" : undefined}
       >
         <Icon className="tw-size-3.5 tw-shrink-0 tw-text-muted" />
