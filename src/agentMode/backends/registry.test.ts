@@ -81,15 +81,6 @@ describe("backendRegistry", () => {
         expect(descriptor.setupDescription.length).toBeGreaterThan(0);
       }
     });
-
-    it("highlights model sources only for the backend where the model is a variable", () => {
-      expect(OpencodeBackendDescriptor.setupHighlights).toEqual([
-        "Copilot Plus models",
-        "Your own provider key",
-      ]);
-      expect(ClaudeBackendDescriptor.setupHighlights).toEqual([]);
-      expect(CodexBackendDescriptor.setupHighlights).toEqual([]);
-    });
   });
 
   describe("Self-Host Mode marking", () => {

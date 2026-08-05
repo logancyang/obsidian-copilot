@@ -69,13 +69,6 @@ export interface BackendAuth {
 }
 
 /**
- * Shared empty value for `BackendDescriptor.setupHighlights`, so backends with
- * nothing to highlight all point at one frozen array instead of each allocating
- * their own.
- */
-export const NO_SETUP_HIGHLIGHTS: ReadonlyArray<string> = Object.freeze([]);
-
-/**
  * Backend-agnostic descriptor consumed by `session/` and `ui/`. Each backend
  * exports one of these from its own folder; the registry maps `BackendId →
  * BackendDescriptor`. Adding a new backend is exactly: implement
@@ -121,17 +114,6 @@ export interface BackendDescriptor {
    * Required (not optional) so a new backend must make an explicit decision.
    */
   readonly setupDescription: string;
-
-  /**
-   * Short badge labels rendered under `setupDescription` in the agent select
-   * view, naming the model sources this backend can draw from. Meant for
-   * backends where the model is a variable the user chooses; `[]` is the right
-   * answer when the backend serves exactly one vendor's models and the
-   * description already says so.
-   *
-   * Required (not optional) so a new backend must make an explicit decision.
-   */
-  readonly setupHighlights: ReadonlyArray<string>;
 
   /**
    * Project-relative POSIX path of the directory this backend reads skills

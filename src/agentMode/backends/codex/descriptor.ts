@@ -12,7 +12,6 @@ import { CodexInstallModal } from "./CodexInstallModal";
 import CodexLogo from "./logo.svg";
 import { CodexSettingsPanel } from "./CodexSettingsPanel";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
-import { NO_SETUP_HIGHLIGHTS } from "@/agentMode/session/descriptor";
 import { agentOriginEnabledModelEntries } from "@/agentMode/backends/shared/agentEnabledModels";
 import {
   binaryPathInstallState,
@@ -112,7 +111,6 @@ export const CodexBackendDescriptor: BackendDescriptor = {
   selfHostable: false,
   setupDescription:
     "OpenAI models, billed to your ChatGPT subscription. Runs the codex-acp adapter on your machine.",
-  setupHighlights: NO_SETUP_HIGHLIGHTS,
   skillsProjectDir: ".agents/skills",
   crossDiscoveredAgents: [],
   restartOnManagedSkillsChange: false,

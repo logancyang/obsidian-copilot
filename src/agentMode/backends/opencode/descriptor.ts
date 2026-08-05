@@ -143,7 +143,6 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
   selfHostable: true,
   setupDescription:
     "Copilot Plus models, or any model on your own provider key. Copilot can download and manage the binary for you.",
-  setupHighlights: ["Copilot Plus models", "Your own provider key"],
   skillsProjectDir: ".opencode/skills",
   crossDiscoveredAgents: ["claude", "codex"],
   restartOnManagedSkillsChange: true,
