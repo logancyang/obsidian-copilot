@@ -15,10 +15,26 @@ const CLAUDE_AGENTS_REFERENCE = "@AGENTS.md";
 const CLAUDE_REFERENCE_PATTERN = /^[ \t>-]*@\.?\/?AGENTS\.md[ \t]*$/im;
 
 /**
+ * Whether a CLAUDE.md body is purely the `@AGENTS.md` wiring Copilot writes — import lines
+ * and blank lines, nothing the user authored. UI surfaces use this to hide the wiring file
+ * while still listing a CLAUDE.md that carries the user's own rules, and it reuses the same
+ * line pattern as the append guard above so the two can never disagree about what counts as
+ * an import.
+ *
+ * @param content - The full CLAUDE.md file body
+ */
+export function isClaudeImportOnly(content: string): boolean {
+  return content
+    .split(/\r?\n/)
+    .every((line) => line.trim().length === 0 || CLAUDE_REFERENCE_PATTERN.test(line));
+}
+
+/**
  * Header an older build stamped on the project AGENTS.md files it generated from `project.md`.
  * Its presence is what tells a Copilot-owned mirror apart from a file the user wrote.
  */
-const GENERATED_MIRROR_HEADER = /^(\uFEFF?)<!-- copilot:generated-agents-mirror [^\r\n]* -->\r?\n\r?\n/;
+const GENERATED_MIRROR_HEADER =
+  /^(\uFEFF?)<!-- copilot:generated-agents-mirror [^\r\n]* -->\r?\n\r?\n/;
 
 /**
  * Whether this folder's AGENTS.md is still Copilot's to initialize: either absent, or the

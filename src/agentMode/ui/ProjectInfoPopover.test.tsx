@@ -33,6 +33,8 @@ jest.mock("@/agentMode/ui/AgentProjectRowActions", () => ({
 const openAgentsFile = jest.fn().mockResolvedValue(undefined);
 jest.mock("@/instructions/agentsFile", () => ({
   openAgentsFile: (...args: unknown[]) => openAgentsFile(...args),
+  // Real predicate: CLAUDE.md visibility below asserts on its actual behavior.
+  isClaudeImportOnly: jest.requireActual("@/instructions/agentsFile").isClaudeImportOnly,
 }));
 const moveProjectPromptToAgentsFile = jest.fn().mockResolvedValue(undefined);
 jest.mock("@/projects/moveProjectPrompt", () => ({
@@ -61,7 +63,11 @@ function makeFolder(names: string[]) {
   return folder;
 }
 
-function renderPopover(todoList: AgentTodoListEntry[] | null, folderNames: string[] = []) {
+function renderPopover(
+  todoList: AgentTodoListEntry[] | null,
+  folderNames: string[] = [],
+  fileContents: Record<string, string> = {}
+) {
   // The popover resolves the folder from the record's own config path, so the record must
   // carry one — the live projects root is deliberately not consulted.
   getCachedProjectRecordById.mockReturnValue({
@@ -73,6 +79,7 @@ function renderPopover(todoList: AgentTodoListEntry[] | null, folderNames: strin
   const app = {
     vault: {
       getAbstractFileByPath: jest.fn().mockReturnValue(makeFolder(folderNames)),
+      read: jest.fn(async (file: TFile) => fileContents[file.path.split("/").pop() ?? ""] ?? ""),
     },
     workspace: { getLeaf: jest.fn().mockReturnValue({ openFile }) },
   } as unknown as Parameters<typeof ProjectInfoPopover>[0]["app"];
@@ -108,6 +115,20 @@ describe("ProjectInfoPopover", () => {
     expect(screen.getByText("1/3")).toBeTruthy();
     expect(screen.getByText("step A")).toBeTruthy();
     expect(screen.getByText("step C")).toBeTruthy();
+  });
+
+  it("hides a CLAUDE.md that is only Copilot's @AGENTS.md wiring", async () => {
+    renderPopover(null, ["CLAUDE.md", "draft.md"], { "CLAUDE.md": "@AGENTS.md\n" });
+    expect(await screen.findByText("draft.md")).toBeTruthy();
+    expect(screen.queryByText("CLAUDE.md")).toBeNull();
+  });
+
+  it("lists a CLAUDE.md that carries the user's own rules", async () => {
+    // Claude reads that content as live instructions, so the file must stay reachable.
+    renderPopover(null, ["CLAUDE.md", "draft.md"], {
+      "CLAUDE.md": "# My rules\nAlways answer in French.\n\n@AGENTS.md\n",
+    });
+    expect(await screen.findByText("CLAUDE.md")).toBeTruthy();
   });
 
   it("lists folder files but excludes project.md and a duplicate AGENTS.md row", async () => {

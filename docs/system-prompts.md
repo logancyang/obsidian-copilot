@@ -52,10 +52,13 @@ Changes apply to new agent sessions.
 
 ### Upgrading from an earlier version
 
-Nothing to do — your existing instructions are carried over the first time they are needed:
-
-- A project that had a **Project System Prompt** initializes its `AGENTS.md` from that text.
-- The vault file initializes from whichever custom system prompt Agent Mode was using.
+- A project that had a **Project System Prompt** is migrated automatically: the first time a
+  session starts in it, that text moves into the project's `AGENTS.md` and is removed from the
+  project record, so it lives in exactly one place.
+- The vault-level `AGENTS.md` starts **blank**. Your Chat system prompt files are not copied
+  into it — they remain in the `system-prompts/` sub-folder of your Copilot folder, and
+  Settings shows a notice pointing there. Open one and paste across anything you want Agent
+  Mode to keep following.
 
 Your own hand-written `AGENTS.md` and `CLAUDE.md` files are never replaced.
 
@@ -68,6 +71,7 @@ Chat mode custom system prompts let you add instructions on top of its built-in 
 ### Where They're Stored
 
 Custom system prompts are stored as markdown files in your vault, in the `system-prompts/` sub-folder of your Copilot folder:
+
 ```
 copilot/system-prompts/
 ```

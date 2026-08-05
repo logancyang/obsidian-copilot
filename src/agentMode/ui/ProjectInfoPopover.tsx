@@ -4,7 +4,7 @@ import { ProjectConfig } from "@/aiParams";
 import { AddProjectModal } from "@/components/modals/project/AddProjectModal";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { openAgentsFile } from "@/instructions/agentsFile";
+import { isClaudeImportOnly, openAgentsFile } from "@/instructions/agentsFile";
 import { moveProjectPromptToAgentsFile } from "@/projects/moveProjectPrompt";
 import { cn } from "@/lib/utils";
 import { logError } from "@/logger";
@@ -21,12 +21,14 @@ import {
   Settings,
 } from "lucide-react";
 import { App, Notice, TFile, TFolder } from "obsidian";
-import React, { memo, useMemo, useState } from "react";
+import React, { memo, useEffect, useState } from "react";
 
-// Files the popover represents with its own fixed row, or generates as wiring, rather than
-// listing as plain project files: the metadata record, the instruction file (the AGENTS.md
-// row above), and the CLAUDE.md import Copilot writes next to it.
-const HIDDEN_BASENAMES = new Set(["project.md", "agents.md", "claude.md"]);
+// Files the popover represents with its own fixed row rather than listing as plain project
+// files: the metadata record and the instruction file (the AGENTS.md row above). CLAUDE.md is
+// handled separately below — hidden only while it is purely Copilot's `@AGENTS.md` wiring,
+// listed once the user writes their own rules into it (Claude reads those as live
+// instructions, so the file must stay visible).
+const HIDDEN_BASENAMES = new Set(["project.md", "agents.md"]);
 
 /** Per-extension badge tints, the same project palette tokens rows use. */
 const BADGE_CLASSES: Record<string, string> = {
@@ -114,21 +116,41 @@ interface ProjectFilesSectionProps {
 
 function ProjectFilesSection({ app, project, onClose }: ProjectFilesSectionProps) {
   const [outputsOpen, setOutputsOpen] = useState(false);
-  const files = useMemo(() => {
+  // State rather than a memo: CLAUDE.md's visibility depends on its content (import-only
+  // wiring is hidden, user-authored rules are listed), and reading content is async.
+  const [files, setFiles] = useState<TFile[]>([]);
+  useEffect(() => {
     const record = getCachedProjectRecordById(project.id);
     const folderPath = record
       ? getProjectAnchorFromConfigPath(record.filePath).projectFolderPath
       : null;
     const folder = folderPath ? app.vault.getAbstractFileByPath(folderPath) : null;
-    if (!(folder instanceof TFolder)) return [];
-    return folder.children
-      .filter(
+    let cancelled = false;
+    void (async () => {
+      if (!(folder instanceof TFolder)) {
+        if (!cancelled) setFiles([]);
+        return;
+      }
+      const list = folder.children.filter(
         (child): child is TFile =>
           child instanceof TFile &&
           !child.name.startsWith(".") &&
-          !HIDDEN_BASENAMES.has(child.name.toLowerCase())
-      )
-      .sort((a, b) => a.name.localeCompare(b.name));
+          !HIDDEN_BASENAMES.has(child.name.toLowerCase()) &&
+          child.name.toLowerCase() !== "claude.md"
+      );
+      const claude = folder.children.find(
+        (child): child is TFile =>
+          child instanceof TFile && child.name.toLowerCase() === "claude.md"
+      );
+      if (claude) {
+        const content = await app.vault.read(claude).catch(() => "");
+        if (!isClaudeImportOnly(content)) list.push(claude);
+      }
+      if (!cancelled) setFiles(list.sort((a, b) => a.name.localeCompare(b.name)));
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [app, project.id]);
 
   const handleOpenFile = (file: TFile) => {
