@@ -16,6 +16,8 @@ import { Notice } from "obsidian";
 import React from "react";
 import type CopilotPlugin from "@/main";
 
+const EMPTY_BACKEND_INSTALL_STATES = Object.freeze({}) as Record<BackendId, InstallState>;
+
 function installStateSignature(state: InstallState): string {
   switch (state.kind) {
     case "absent":
@@ -133,8 +135,10 @@ export function useBackendInstallStates(plugin: CopilotPlugin): Record<BackendId
   const signature = React.useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
   return React.useMemo(() => {
     void signature;
+    const descriptors = listBackendDescriptors();
+    if (descriptors.length === 0) return EMPTY_BACKEND_INSTALL_STATES;
     const states = {} as Record<BackendId, InstallState>;
-    for (const descriptor of listBackendDescriptors()) {
+    for (const descriptor of descriptors) {
       states[descriptor.id] = descriptor.getInstallState(settings);
     }
     return states;

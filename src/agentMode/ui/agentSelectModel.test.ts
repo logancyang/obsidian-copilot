@@ -74,14 +74,14 @@ describe("agentSelectModel", () => {
       expect(row.statusMessage).toBeNull();
     });
 
-    it("folds the transient checking state into absent rather than a fifth status", () => {
+    it("reports an in-flight readiness probe as checking", () => {
       const [row] = buildAgentSelectRows(
         [CLAUDE],
         { claude: { kind: "checking", source: "custom" } },
         "opencode"
       );
 
-      expect(row.status).toBe("absent");
+      expect(row.status).toBe("checking");
     });
 
     it("treats a backend with no reported install state as absent", () => {
@@ -120,6 +120,14 @@ describe("agentSelectModel", () => {
   });
 
   describe("resolveAgentSelectCta()", () => {
+    it("keeps a checking agent non-actionable until its probe settles", () => {
+      expect(resolveAgentSelectCta(rowWith({ status: "checking", name: "Claude" }))).toEqual({
+        label: "Checking…",
+        note: "Checking Claude setup…",
+        action: "wait",
+      });
+    });
+
     it("offers to start a chat on a connected agent", () => {
       expect(resolveAgentSelectCta(rowWith({ status: "connected" }))).toEqual({
         label: "Start chat",

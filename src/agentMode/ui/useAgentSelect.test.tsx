@@ -126,6 +126,18 @@ describe("useAgentSelect", () => {
       expect(manager.setDefaultBackend).not.toHaveBeenCalled();
     });
 
+    it("does nothing while the selected backend's readiness check is in flight", () => {
+      const manager = makeManager();
+      const { result } = render({ claude: { kind: "checking", source: "custom" } }, manager);
+      act(() => result.current.select("claude"));
+
+      act(() => result.current.runCta());
+
+      expect(openInstallUI).not.toHaveBeenCalled();
+      expect(manager.setDefaultBackend).not.toHaveBeenCalled();
+      expect(manager.getOrCreateActiveSession).not.toHaveBeenCalled();
+    });
+
     it("logs a failed session spawn instead of rejecting", async () => {
       const failure = new Error("spawn failed");
       const manager = makeManager(Promise.reject(failure));

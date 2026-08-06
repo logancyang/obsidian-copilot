@@ -1,11 +1,9 @@
 import type { BackendDescriptor, BackendId, InstallState } from "@/agentMode/session/types";
 
 /**
- * Readiness of one agent as the select view words it. Deliberately narrower than
- * `InstallState`: the view only distinguishes states the user can act on, and it
- * is never rendered while a readiness check is in flight.
+ * Readiness of one agent as the select view words it.
  */
-export type AgentSelectStatus = "connected" | "outdated" | "absent" | "error";
+export type AgentSelectStatus = "checking" | "connected" | "outdated" | "absent" | "error";
 
 /** One agent row in the select view. */
 export interface AgentSelectRow {
@@ -24,7 +22,7 @@ export interface AgentSelectRow {
 }
 
 /** What the view's single call to action does for the selected row. */
-export type AgentSelectAction = "start" | "configure";
+export type AgentSelectAction = "start" | "configure" | "wait";
 
 /** Label, explanatory note, and behavior of the select view's one call to action. */
 export interface AgentSelectCta {
@@ -41,22 +39,21 @@ const EMPTY_AGENT_SELECT_ROWS: readonly AgentSelectRow[] = Object.freeze([]);
 /**
  * Narrow a backend's install state to the vocabulary the select view renders.
  *
- * `checking` collapses to `absent`: it is a transient state only Claude enters,
- * and Step 5's integration keeps the compact status card on screen for it, so it
- * never reaches this view. Folding it into the most conservative "not usable
- * yet" bucket keeps the UI vocabulary at four states instead of inventing a
- * fifth that nothing renders.
+ * A readiness probe can be in flight for one row while another unavailable
+ * backend causes the chooser to mount, so `checking` must remain distinct and
+ * non-actionable instead of making a temporary absence claim.
  */
 function toSelectStatus(kind: InstallState["kind"]): AgentSelectStatus {
   switch (kind) {
     case "ready":
       return "connected";
+    case "checking":
+      return "checking";
     case "incompatible":
       return "outdated";
     case "error":
       return "error";
     case "absent":
-    case "checking":
       return "absent";
   }
 }
@@ -98,6 +95,13 @@ export function buildAgentSelectRows(
  * @param row - The currently selected row.
  */
 export function resolveAgentSelectCta(row: AgentSelectRow): AgentSelectCta {
+  if (row.status === "checking") {
+    return {
+      label: "Checking…",
+      note: `Checking ${row.name} setup…`,
+      action: "wait",
+    };
+  }
   if (row.status === "connected") {
     return { label: "Start chat", note: READY_NOTE, action: "start" };
   }

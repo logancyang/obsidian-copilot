@@ -58,6 +58,7 @@ export function useAgentSelect(
 
   const runCta = React.useCallback(() => {
     const id = selectedRow.id;
+    if (cta.action === "wait") return;
     if (cta.action === "configure") {
       backendRegistry[id].openInstallUI(plugin);
       return;

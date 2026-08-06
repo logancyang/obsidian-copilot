@@ -5,7 +5,6 @@ import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManage
 import type { BackendDescriptor, InstallState } from "@/agentMode/session/types";
 import type CopilotPlugin from "@/main";
 import type { CopilotSettings } from "@/settings/model";
-import React from "react";
 import {
   useBackendInstallState,
   useBackendInstallStates,
@@ -14,9 +13,11 @@ import {
 
 let mockSettings = {} as CopilotSettings;
 
+/* eslint-disable @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mock name must match */
 jest.mock("@/settings/model", () => ({
-  useSettingsValue: () => React.useMemo(() => mockSettings, []),
+  useSettingsValue: () => mockSettings,
 }));
+/* eslint-enable @eslint-react/hooks-extra/no-unnecessary-use-prefix */
 
 jest.mock("@/agentMode/backends/registry", () => {
   const registry: Record<string, unknown> = {};
@@ -176,6 +177,17 @@ describe("useBackendDescriptor", () => {
   });
 
   describe("useBackendInstallStates()", () => {
+    it("reuses one frozen empty record across settings identity changes", () => {
+      const { result, rerender } = renderHook(() => useBackendInstallStates({} as CopilotPlugin));
+      const first = result.current;
+
+      mockSettings = { ...mockSettings };
+      rerender();
+
+      expect(result.current).toBe(first);
+      expect(Object.isFrozen(result.current)).toBe(true);
+    });
+
     it("reports every registered backend's state keyed by id", () => {
       const opencode = makeInstallDescriptor({ kind: "ready", source: "managed" }, "opencode");
       const claude = makeInstallDescriptor({ kind: "absent" }, "claude");
