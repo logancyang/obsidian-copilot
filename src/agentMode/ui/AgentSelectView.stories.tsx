@@ -1,7 +1,7 @@
-import type { AgentSelectRow } from "@/agentMode/ui/agentSelectModel";
+import { resolveAgentSelectCta, type AgentSelectRow } from "@/agentMode/ui/agentSelectModel";
 import { AgentSelectView } from "@/agentMode/ui/AgentSelectView";
 import type { Meta, StoryObj } from "@/lib/story";
-import type * as React from "react";
+import React from "react";
 
 type AgentSelectViewProps = React.ComponentProps<typeof AgentSelectView>;
 
@@ -35,6 +35,23 @@ const CODEX: AgentSelectRow = {
   statusMessage: null,
 };
 
+const AgentSelectStory: React.FC<AgentSelectViewProps> = (args) => {
+  const [selectedId, setSelectedId] = React.useState(args.selectedId);
+  const selectedRow = args.rows.find((row) => row.id === selectedId) ?? args.rows[0];
+  const cta = resolveAgentSelectCta(selectedRow);
+
+  return (
+    <AgentSelectView
+      {...args}
+      selectedId={selectedId}
+      onSelect={setSelectedId}
+      ctaLabel={cta.label}
+      footerNote={cta.note}
+      ctaDisabled={cta.action === "wait"}
+    />
+  );
+};
+
 const meta = {
   title: "Agent Mode/Agent Select View",
   component: AgentSelectView,
@@ -42,24 +59,29 @@ const meta = {
     rows: [OPENCODE, CLAUDE, CODEX],
     selectedId: "opencode",
     onSelect: () => undefined,
+    ctaLabel: "Configure",
+    footerNote: "opencode isn't set up on this machine yet.",
     onCta: () => undefined,
   },
+  render: (args) => <AgentSelectStory {...args} />,
   parameters: { gallery: { host: "leaf", layout: "padded", width: 300 } },
 } satisfies Meta<AgentSelectViewProps>;
 export default meta;
 
 export const NothingSetUp: StoryObj<AgentSelectViewProps> = {
-  args: {
-    ctaLabel: "Configure",
-    footerNote: "opencode isn't set up on this machine yet.",
-  },
+  args: {},
 };
 
 export const OpencodeConnected: StoryObj<AgentSelectViewProps> = {
   args: {
     rows: [{ ...OPENCODE, status: "connected" }, CLAUDE, CODEX],
-    ctaLabel: "Start chat",
-    footerNote: "Ready to go. You can switch agents any time from the agent picker.",
+  },
+};
+
+export const ClaudeChecking: StoryObj<AgentSelectViewProps> = {
+  args: {
+    rows: [OPENCODE, { ...CLAUDE, status: "checking" }, CODEX],
+    selectedId: "claude",
   },
 };
 
@@ -75,8 +97,6 @@ export const ClaudeUpdateRequired: StoryObj<AgentSelectViewProps> = {
       CODEX,
     ],
     selectedId: "claude",
-    ctaLabel: "Configure",
-    footerNote: "Claude 2.1.205 is not supported. Copilot requires 2.1.206 or newer.",
   },
 };
 
@@ -92,8 +112,6 @@ export const CodexError: StoryObj<AgentSelectViewProps> = {
       },
     ],
     selectedId: "codex",
-    ctaLabel: "Configure",
-    footerNote: "Could not read the Codex binary at /usr/local/bin/codex-acp.",
   },
 };
 
@@ -110,7 +128,5 @@ export const LongAgentName: StoryObj<AgentSelectViewProps> = {
       CLAUDE,
       CODEX,
     ],
-    ctaLabel: "Start chat",
-    footerNote: "Ready to go. You can switch agents any time from the agent picker.",
   },
 };

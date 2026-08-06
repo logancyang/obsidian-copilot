@@ -3,7 +3,7 @@ import type { AgentSelectRow, AgentSelectStatus } from "@/agentMode/ui/agentSele
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { AlertTriangle, Check, type LucideIcon } from "lucide-react";
+import { AlertTriangle, Check, LoaderCircle, type LucideIcon } from "lucide-react";
 import React from "react";
 
 interface StatusBadgeSpec {
@@ -23,6 +23,7 @@ interface StatusBadgeSpec {
  * prose here would only cost width in a 300px leaf.
  */
 const STATUS_BADGES: Partial<Record<AgentSelectStatus, StatusBadgeSpec>> = {
+  checking: { label: "Checking…", variant: "secondary", Icon: LoaderCircle },
   connected: { label: "Connected", variant: "success", Icon: Check },
   outdated: { label: "Update required", variant: "destructive", Icon: AlertTriangle },
   error: { label: "Error", variant: "destructive", Icon: AlertTriangle },
@@ -36,6 +37,8 @@ interface AgentSelectViewProps {
   /** Footer text left of the button, explaining what pressing it will do. */
   footerNote: string;
   onCta: () => void;
+  /** Prevents a transient readiness state from exposing an action. */
+  ctaDisabled?: boolean;
 }
 
 /**
@@ -51,6 +54,7 @@ export const AgentSelectView: React.FC<AgentSelectViewProps> = ({
   ctaLabel,
   footerNote,
   onCta,
+  ctaDisabled = false,
 }) => {
   const headingId = React.useId();
   const rowRefs = React.useRef<(HTMLButtonElement | null)[]>([]);
@@ -141,7 +145,10 @@ export const AgentSelectView: React.FC<AgentSelectViewProps> = ({
                   </span>
                   {status && (
                     <Badge variant={status.variant} className="tw-gap-1">
-                      <status.Icon aria-hidden className="tw-size-3" />
+                      <status.Icon
+                        aria-hidden
+                        className={cn("tw-size-3", row.status === "checking" && "tw-animate-spin")}
+                      />
                       {status.label}
                     </Badge>
                   )}
@@ -160,7 +167,7 @@ export const AgentSelectView: React.FC<AgentSelectViewProps> = ({
         <span className="tw-min-w-0 tw-flex-1 tw-break-words tw-text-ui-smaller tw-text-muted">
           {footerNote}
         </span>
-        <Button size="sm" onClick={onCta} className="tw-shrink-0">
+        <Button size="sm" onClick={onCta} disabled={ctaDisabled} className="tw-shrink-0">
           {ctaLabel}
         </Button>
       </div>

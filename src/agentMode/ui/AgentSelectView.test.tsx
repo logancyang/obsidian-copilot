@@ -54,6 +54,7 @@ describe("AgentSelectView", () => {
     });
 
     it.each<[AgentSelectStatus, string]>([
+      ["checking", "Checking…"],
       ["connected", "Connected"],
       ["outdated", "Update required"],
       ["error", "Error"],
@@ -94,6 +95,14 @@ describe("AgentSelectView", () => {
 
       expect(onCta).toHaveBeenCalledTimes(1);
       expect(onSelect).not.toHaveBeenCalled();
+    });
+
+    it("disables the call to action while readiness is being checked", () => {
+      const { onCta } = renderView({ ctaLabel: "Checking…", ctaDisabled: true });
+
+      fireEvent.click(screen.getByRole("button", { name: "Checking…" }));
+
+      expect(onCta).not.toHaveBeenCalled();
     });
 
     it("moves the selection with the arrow keys, wrapping past both ends", () => {
