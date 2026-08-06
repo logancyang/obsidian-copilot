@@ -81,7 +81,7 @@ interface StoryTreeProps {
   nodes: StoryTreeNode[];
   onSelectStory: (story: StoryDefinition) => void;
   onSelectSubtree: (path: string) => void;
-  onToggleSubtree: (path: string) => void;
+  onToggleSubtree: (path: string, expanded: boolean) => void;
   selectedStoryId: string | null;
   selectedStoryTitle: string | null;
   selectedSubtree: string | null;
@@ -600,7 +600,7 @@ function StoryTree({
                   }
                   className="tw-size-6 tw-shrink-0"
                   disabled={expandAll || containsSelectedStory}
-                  onClick={() => onToggleSubtree(node.path)}
+                  onClick={() => onToggleSubtree(node.path, expanded)}
                   size="icon"
                   type="button"
                   variant="ghost2"
@@ -616,7 +616,12 @@ function StoryTree({
                 aria-label={`Show ${node.path} contact sheet`}
                 aria-pressed={subtreeSelected}
                 className="tw-min-w-0 tw-flex-1 tw-justify-start tw-text-left tw-font-semibold"
-                onClick={() => onSelectSubtree(node.path)}
+                onClick={() => {
+                  onSelectSubtree(node.path);
+                  if (canFold && !expandAll) {
+                    onToggleSubtree(node.path, expanded);
+                  }
+                }}
                 size="sm"
                 type="button"
                 variant={subtreeSelected ? "default" : "ghost2"}
@@ -851,10 +856,10 @@ export function Gallery({
   const selectSubtree = (path: string) => {
     onStateChange({ ...state, contactSheet: true, selectedSubtree: path });
   };
-  const toggleSubtree = (path: string) => {
+  const toggleSubtree = (path: string, expanded: boolean) => {
     setExpandedSubtrees((current) => {
       const next = new Set(current);
-      if (next.has(path)) {
+      if (expanded) {
         next.delete(path);
       } else {
         next.add(path);

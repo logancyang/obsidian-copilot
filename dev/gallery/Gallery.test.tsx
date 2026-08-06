@@ -453,7 +453,7 @@ describe("Gallery", () => {
       expect(unselectedStoryButton.classList.contains("mod-cta")).toBe(false);
     });
 
-    it("keeps top-level subtrees open and folds nested subtrees only from their icons", () => {
+    it("keeps top-level subtrees open and toggles nested subtrees from icons or titles", () => {
       const gallery = render(<GalleryHarness catalog={makeCatalog()} />);
       const navigation = gallery.getByRole("complementary", {
         name: "Component and story navigation",
@@ -481,20 +481,27 @@ describe("Gallery", () => {
       fireEvent.click(selectSubtreeButton("UI/Button"));
       expect(selectSubtreeButton("UI/Button").getAttribute("aria-pressed")).toBe("true");
       expect(
-        within(navigation).getByRole("button", { name: "Unfold UI/Button subtree" })
+        navigation.querySelector('[data-gallery-story-button="UI/Button/Primary"]')
       ).toBeTruthy();
       expect(
         within(navigation).getByRole("button", { name: "Fold UI/Badge subtree" })
+      ).toBeTruthy();
+      expect(
+        within(navigation).getByRole("button", { name: "Fold UI/Button subtree" })
+      ).toBeTruthy();
+
+      fireEvent.click(selectSubtreeButton("UI/Button"));
+      expect(
+        navigation.querySelector('[data-gallery-story-button="UI/Button/Primary"]')
+      ).toBeNull();
+      expect(
+        within(navigation).getByRole("button", { name: "Unfold UI/Button subtree" })
       ).toBeTruthy();
 
       fireEvent.click(within(navigation).getByRole("button", { name: "Unfold UI/Button subtree" }));
       expect(
         navigation.querySelector('[data-gallery-story-button="UI/Button/Primary"]')
       ).toBeTruthy();
-      fireEvent.click(within(navigation).getByRole("button", { name: "Fold UI/Button subtree" }));
-      expect(
-        navigation.querySelector('[data-gallery-story-button="UI/Button/Primary"]')
-      ).toBeNull();
     });
 
     it("filters by component title or story name and refolds to the selected path when cleared", () => {
