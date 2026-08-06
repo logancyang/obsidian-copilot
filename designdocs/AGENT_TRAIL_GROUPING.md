@@ -49,8 +49,8 @@ chrome.
   else's summary. Costs 17 rows across the sample and raises the worst-case wall
   from 2 to 5.
 - **Interactive tool calls** — `AskUserQuestion`, `ExitPlanMode`,
-  `EnterPlanMode`. Folding a question the agent is waiting on would hide the
-  thing the user has to act on.
+  `EnterPlanMode`, and any ACP `switch_mode` tool. Folding a question the
+  agent is waiting on would hide the thing the user has to act on.
 - **Plan checklists.** Status, not work.
 
 ### What folds in
@@ -91,14 +91,13 @@ carries no timestamps. The caller measures it live and passes `thinkingMs` to
 
 ### Measured at pane width
 
-Rendered in a real leaf pane, a three-family line plus `thought for Xs` runs
-about 59 characters and needs ~377px. A chat leaf gives the line 228px at 300px
-wide and 328px at 400px, so roughly 36–51 characters fit and the tail truncates;
-it only fits whole at 600px. Truncation is graceful — the families the agent
-spent the most on are named first and the full detail is one click away — but
-the cap of three families is tuned for row count, not for pane width. Narrowing
-it, or moving the reasoning duration off the line, is unvalidated: both change
-what the replay measured.
+Rendered in a real leaf pane, the longest line the vocabulary can produce —
+all three families plus `thought for Xs` — runs about 59 characters and needs
+~377px. A chat leaf gives the line 228px at 300px wide and 328px at 400px, so
+roughly 36–51 characters fit and the tail truncates; it only fits whole at
+600px. Truncation is graceful — families appear in first-use order and the
+full detail is one click away. Moving the reasoning duration off the line is
+unvalidated: it changes what the replay measured.
 
 ## Interaction invariants
 
