@@ -130,15 +130,22 @@ function GalleryHarness({
   );
 }
 
-/** Walks the folded tree the way a user does: expand every ancestor subtree, then pick the story. */
+/** Walks the tree the way a user does: unfold each nested ancestor, then pick the story. */
 function selectStoryInTree(gallery: RenderResult, storyId: string): void {
   const segments = storyId.split("/");
   segments.pop();
   let path = "";
 
-  for (const segment of segments) {
+  for (const [index, segment] of segments.entries()) {
     path = path ? `${path}/${segment}` : segment;
-    fireEvent.click(gallery.getByRole("button", { name: `Show ${path} contact sheet` }));
+    if (index === 0) {
+      continue;
+    }
+
+    const unfoldButton = gallery.queryByRole("button", { name: `Unfold ${path} subtree` });
+    if (unfoldButton) {
+      fireEvent.click(unfoldButton);
+    }
   }
 
   const storyButton = gallery.container.querySelector<HTMLButtonElement>(
@@ -450,34 +457,48 @@ describe("Gallery", () => {
       expect(unselectedStoryButton.classList.contains("mod-cta")).toBe(false);
     });
 
-    it("keeps every subtree folded except the selected path", () => {
+    it("keeps top-level subtrees open and folds nested subtrees only from their icons", () => {
       const gallery = render(<GalleryHarness catalog={makeCatalog()} />);
       const navigation = gallery.getByRole("complementary", {
         name: "Component and story navigation",
       });
-      const subtreeButton = (path: string) =>
+      const selectSubtreeButton = (path: string) =>
         within(navigation).getByRole("button", { name: `Show ${path} contact sheet` });
 
-      expect(subtreeButton("Agent Mode").getAttribute("aria-expanded")).toBe("true");
-      expect(within(navigation).getByRole("button", { name: "Default Selected" })).toBeTruthy();
-      expect(subtreeButton("UI").getAttribute("aria-expanded")).toBe("false");
       expect(
-        within(navigation).queryByRole("button", { name: "Show UI/Badge contact sheet" })
+        within(navigation).queryByRole("button", { name: /(Fold|Unfold) Agent Mode subtree/ })
       ).toBeNull();
-
-      fireEvent.click(subtreeButton("UI"));
-      expect(subtreeButton("UI").getAttribute("aria-expanded")).toBe("true");
-      expect(subtreeButton("Agent Mode").getAttribute("aria-expanded")).toBe("false");
-      expect(within(navigation).queryByRole("button", { name: "Default" })).toBeNull();
-      expect(subtreeButton("UI/Badge").getAttribute("aria-expanded")).toBe("false");
+      expect(
+        within(navigation).queryByRole("button", { name: /(Fold|Unfold) UI subtree/ })
+      ).toBeNull();
+      expect(within(navigation).getByRole("button", { name: "Default Selected" })).toBeTruthy();
+      expect(selectSubtreeButton("UI/Badge")).toBeTruthy();
+      expect(selectSubtreeButton("UI/Button")).toBeTruthy();
       expect(navigation.querySelector('[data-gallery-story-button="UI/Badge/Status"]')).toBeNull();
 
-      fireEvent.click(subtreeButton("UI/Badge"));
+      fireEvent.click(within(navigation).getByRole("button", { name: "Unfold UI/Badge subtree" }));
       expect(
         navigation.querySelector('[data-gallery-story-button="UI/Badge/Status"]')
       ).toBeTruthy();
-      expect(subtreeButton("UI").getAttribute("aria-expanded")).toBe("true");
-      expect(subtreeButton("UI/Button").getAttribute("aria-expanded")).toBe("false");
+      expect(within(navigation).getByRole("button", { name: "Default Selected" })).toBeTruthy();
+
+      fireEvent.click(selectSubtreeButton("UI/Button"));
+      expect(selectSubtreeButton("UI/Button").getAttribute("aria-pressed")).toBe("true");
+      expect(
+        within(navigation).getByRole("button", { name: "Unfold UI/Button subtree" })
+      ).toBeTruthy();
+      expect(
+        within(navigation).getByRole("button", { name: "Fold UI/Badge subtree" })
+      ).toBeTruthy();
+
+      fireEvent.click(within(navigation).getByRole("button", { name: "Unfold UI/Button subtree" }));
+      expect(
+        navigation.querySelector('[data-gallery-story-button="UI/Button/Primary"]')
+      ).toBeTruthy();
+      fireEvent.click(within(navigation).getByRole("button", { name: "Fold UI/Button subtree" }));
+      expect(
+        navigation.querySelector('[data-gallery-story-button="UI/Button/Primary"]')
+      ).toBeNull();
     });
 
     it("filters by component title or story name and refolds to the selected path when cleared", () => {
@@ -543,6 +564,8 @@ describe("Gallery", () => {
       fireEvent.click(gallery.getByRole("button", { name: "Open modal story" }));
       expect(getGalleryModalMock().open).toHaveBeenCalledTimes(1);
       expect(gallery.getByText("UI/Button/Modal")).toBeTruthy();
+      expect(gallery.getByRole("button", { name: "Unfold UI/Button subtree" })).toBeTruthy();
+      fireEvent.click(gallery.getByRole("button", { name: "Unfold UI/Button subtree" }));
       expect(gallery.getByRole("button", { name: "Modal Selected" })).toBeTruthy();
 
       fireEvent.click(gallery.getByRole("button", { name: "Show UI contact sheet" }));

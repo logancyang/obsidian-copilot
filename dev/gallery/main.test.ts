@@ -123,20 +123,22 @@ function getGeneratedMock(): { loaders: jest.Mock[] } {
     .galleryGeneratedMock;
 }
 
-/** Expands the folded story tree down to a story so its tree button becomes clickable. */
-function expandStoryPath(
-  gallery: RenderResult,
-  storyId: string,
-  rerenderGallery: () => void
-): void {
+/** Unfolds nested ancestors so a story button becomes clickable. */
+function expandStoryPath(gallery: RenderResult, storyId: string): void {
   const segments = storyId.split("/");
   segments.pop();
   let path = "";
 
-  for (const segment of segments) {
+  for (const [index, segment] of segments.entries()) {
     path = path ? `${path}/${segment}` : segment;
-    fireEvent.click(gallery.getByRole("button", { name: `Show ${path} contact sheet` }));
-    rerenderGallery();
+    if (index === 0) {
+      continue;
+    }
+
+    const unfoldButton = gallery.queryByRole("button", { name: `Unfold ${path} subtree` });
+    if (unfoldButton) {
+      fireEvent.click(unfoldButton);
+    }
   }
 }
 
@@ -446,7 +448,7 @@ describe("main", () => {
 
         fireEvent.click(gallery.getByRole("button", { name: "600" }));
         rerenderGallery();
-        expandStoryPath(gallery, "UI/Button/Disabled", rerenderGallery);
+        expandStoryPath(gallery, "UI/Button/Disabled");
         fireEvent.click(gallery.getByRole("button", { name: "Disabled" }));
 
         expect(view.getState()).toMatchObject({
@@ -455,8 +457,8 @@ describe("main", () => {
           selectedSubtree: "UI/Button",
           width: 600,
         });
-        // Width, both subtree expansions, and the story pick each persist.
-        expect(requestSaveLayout).toHaveBeenCalledTimes(4);
+        // Tree folds are view-local; only the width and story pick persist.
+        expect(requestSaveLayout).toHaveBeenCalledTimes(2);
 
         gallery.unmount();
       });
@@ -690,7 +692,7 @@ describe("main", () => {
         }
         const firstGallery = render(renderTree() as ReactElement);
         const rerenderGallery = () => firstGallery.rerender(renderTree() as ReactElement);
-        expandStoryPath(firstGallery, "UI/Button/Sizes", rerenderGallery);
+        expandStoryPath(firstGallery, "UI/Button/Sizes");
         fireEvent.click(firstGallery.getByRole("button", { name: "Sizes" }));
         rerenderGallery();
         await view.onClose();
