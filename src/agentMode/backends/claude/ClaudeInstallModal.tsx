@@ -1,7 +1,11 @@
 import { BinaryPathSetting } from "@/agentMode/backends/shared/BinaryPathSetting";
-import { ConfigDialogShell, ConfigSection } from "@/agentMode/backends/shared/ConfigDialogShell";
+import {
+  ConfigDialogShell,
+  ConfigSection,
+  ConfigWarningStrip,
+} from "@/agentMode/backends/shared/ui/ConfigDialogShell";
 import { InstallCommandRow } from "@/agentMode/backends/shared/InstallCommandRow";
-import { InstallStatusLine } from "@/agentMode/backends/shared/installStatus";
+import { claudeUpdateDetail } from "@/agentMode/backends/claude/claudeUpdateDetail";
 import { ReactModal } from "@/components/modals/ReactModal";
 import { getSettings, setSettings, useSettingsValue } from "@/settings/model";
 import { validateExecutableFile } from "@/utils/detectBinary";
@@ -54,7 +58,14 @@ const ClaudeConfigBody: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   }, []);
 
   return (
-    <ConfigDialogShell status={<InstallStatusLine state={sessionState} />} onClose={onClose}>
+    <ConfigDialogShell
+      title="Configure Claude"
+      state={sessionState}
+      warning={
+        <ConfigWarningStrip state={sessionState} detail={claudeUpdateDetail(sessionState)} />
+      }
+      onClose={onClose}
+    >
       <ConfigSection title="Install Claude Code">
         <InstallCommandRow command={CLAUDE_INSTALL_COMMAND} />
       </ConfigSection>

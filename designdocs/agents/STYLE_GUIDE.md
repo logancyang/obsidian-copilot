@@ -11,6 +11,38 @@ language, comment, styling, and code-structure rules.
 - Prefer const assertions and type inference where appropriate
 - Use interface for object shapes, type for unions/aliases
 
+## Import boundaries
+
+ESLint enforces module boundaries in two forms: layer rules
+(`eslint-plugin-boundaries`, e.g. the agent-mode layers in
+`src/agentMode/AGENTS.md`) and path fences (`no-restricted-imports`
+allowlists, e.g. the gallery/story fence and the `src/components/ui`
+purity fence).
+
+**When a fence rejects an import, fix the structure — never the fence.**
+A rejected import means the file is in the wrong place or the dependency
+points the wrong way. In order of preference:
+
+1. **Move the file** so it fits an existing boundary. Example: the
+   gallery fence admits any `ui/` folder, so a presentational component
+   that needs a story belongs under one — `src/agentMode/skills/ui/` and
+   `src/agentMode/backends/shared/ui/` follow this convention inside
+   layers whose other modules are plugin-coupled.
+2. **Re-route the dependency** — pass plugin state in as props, or
+   extend the contract surface the boundary already exposes (e.g.
+   `BackendDescriptor`) instead of reaching across layers.
+3. **Create a new boundary** when a genuinely new kind of module has
+   appeared: a named folder plus its own lint rule and a documented
+   contract (see "Adding a new layer" in `src/agentMode/AGENTS.md`).
+
+Never widen a fence with a per-file exemption (a `SomeComponent$` regex
+carve-out, an extra `!@/...` negation for one module). Each carve-out
+silently redefines what the boundary means, invites the next one, and
+leaves the file somewhere its folder no longer describes. If none of the
+three options above works, the boundary itself is wrong — change the
+boundary deliberately, in its own reviewed change, with the contract
+comment updated to match.
+
 ## React
 
 - Custom hooks for reusable logic
