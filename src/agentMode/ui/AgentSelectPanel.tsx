@@ -27,6 +27,7 @@ export const AgentSelectPanel: React.FC<Props> = ({ plugin, manager }) => {
       ctaLabel={cta.label}
       footerNote={cta.note}
       onCta={runCta}
+      ctaDisabled={cta.action === "wait"}
     />
   );
 };

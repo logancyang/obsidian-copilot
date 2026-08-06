@@ -187,6 +187,31 @@ function makeManager(opts: {
 
 const emptySettings = {} as CopilotSettings;
 
+function claudeWithInstallState(installState: InstallState): BackendDescriptor {
+  return {
+    ...makeDescriptor("claude", installState),
+    getEnabledModelEntries: () => [
+      { baseModelId: "sonnet", name: "Sonnet", credentialState: "ok" as const },
+    ],
+  };
+}
+
+function noSessionContext(): ModelActiveContext {
+  return {
+    activeSession: null,
+    activeChatUIState: null,
+    activeBackendId: null,
+    activeDescriptor: undefined,
+    activeSessionHasHistory: false,
+    activeModelState: null,
+    activeCurrentEntry: undefined,
+  };
+}
+
+function managerWithSonnet(): AgentSessionManager {
+  return makeManager({ catalogById: { claude: makeCatalog([makeModelEntry("sonnet")]) } });
+}
+
 // ---- buildPickerEntries ----
 
 describe("buildPickerEntries", () => {
@@ -567,6 +592,91 @@ describe("buildPickerEntries", () => {
     const { entries } = buildPickerEntries(manager, [codex], ctx, emptySettings);
     expect(entries[0].name).toBe("ghost-model");
     expect(entries[0]._needsSelfHostWarning).toBe(true);
+  });
+
+  it("marks rows of a backend that isn't set up so the pick can't be made", () => {
+    const { entries } = buildPickerEntries(
+      managerWithSonnet(),
+      [claudeWithInstallState({ kind: "absent" })],
+      noSessionContext(),
+      emptySettings
+    );
+    expect(entries.map((entry) => entry._disabledReason)).toEqual(["Not set up"]);
+  });
+
+  it("marks rows of a backend whose binary is too old", () => {
+    const { entries } = buildPickerEntries(
+      managerWithSonnet(),
+      [
+        claudeWithInstallState({
+          kind: "incompatible",
+          source: "custom",
+          currentVersion: "2.1.205",
+          minVersion: "2.1.206",
+          message: "too old",
+        }),
+      ],
+      noSessionContext(),
+      emptySettings
+    );
+    expect(entries.map((entry) => entry._disabledReason)).toEqual(["Update required"]);
+  });
+
+  it("marks rows of a backend whose readiness check failed", () => {
+    const { entries } = buildPickerEntries(
+      managerWithSonnet(),
+      [claudeWithInstallState({ kind: "error", message: "not executable" })],
+      noSessionContext(),
+      emptySettings
+    );
+    expect(entries.map((entry) => entry._disabledReason)).toEqual(["Setup error"]);
+  });
+
+  it("keeps rows selectable while a readiness check is still in flight", () => {
+    const { entries } = buildPickerEntries(
+      managerWithSonnet(),
+      [claudeWithInstallState({ kind: "checking", source: "custom" })],
+      noSessionContext(),
+      emptySettings
+    );
+    expect(entries.map((entry) => entry._disabledReason)).toEqual([undefined]);
+  });
+
+  it("reports the unset-up backend rather than a per-model credential problem", () => {
+    const claude = {
+      ...makeDescriptor("claude", { kind: "absent" }),
+      getEnabledModelEntries: () => [
+        { baseModelId: "sonnet", name: "Sonnet", credentialState: "missing_key" as const },
+      ],
+    } as unknown as BackendDescriptor;
+
+    const { entries } = buildPickerEntries(
+      managerWithSonnet(),
+      [claude],
+      noSessionContext(),
+      emptySettings
+    );
+
+    // "Add API key" would send the user to the wrong fix while the agent that
+    // would consume the key isn't installed at all.
+    expect(entries[0]._disabledReason).toBe("Not set up");
+  });
+
+  it("regression: never disables the running backend's own rows when its binary goes missing", () => {
+    // The merged picker seeds its draft from selectable rows only, so disabling
+    // the active session's rows would silently draft a different backend's model
+    // and commit it when the popover closes.
+    const claude = claudeWithInstallState({ kind: "absent" });
+    const ctx: ModelActiveContext = {
+      ...noSessionContext(),
+      activeSession: { backendId: "claude" } as unknown as AgentSession,
+      activeBackendId: "claude",
+      activeDescriptor: claude,
+    };
+
+    const { entries } = buildPickerEntries(managerWithSonnet(), [claude], ctx, emptySettings);
+
+    expect(entries.map((entry) => entry._disabledReason)).toEqual([undefined]);
   });
 });
 
@@ -973,116 +1083,5 @@ describe("backendReadinessReason()", () => {
     // Transient: labelling a backend "not set up" for the moment a version probe
     // takes would be wrong more often than right.
     expect(backendReadinessReason({ kind: "checking", source: "custom" })).toBeUndefined();
-  });
-});
-
-describe("buildPickerEntries — backend readiness", () => {
-  function claudeWith(installState: InstallState): BackendDescriptor {
-    return {
-      ...makeDescriptor("claude", installState),
-      getEnabledModelEntries: () => [
-        { baseModelId: "sonnet", name: "Sonnet", credentialState: "ok" as const },
-      ],
-    };
-  }
-
-  function noSessionCtx(): ModelActiveContext {
-    return {
-      activeSession: null,
-      activeChatUIState: null,
-      activeBackendId: null,
-      activeDescriptor: undefined,
-      activeSessionHasHistory: false,
-      activeModelState: null,
-      activeCurrentEntry: undefined,
-    };
-  }
-
-  const managerWithSonnet = () =>
-    makeManager({ catalogById: { claude: makeCatalog([makeModelEntry("sonnet")]) } });
-
-  it("marks rows of a backend that isn't set up so the pick can't be made", () => {
-    const { entries } = buildPickerEntries(
-      managerWithSonnet(),
-      [claudeWith({ kind: "absent" })],
-      noSessionCtx(),
-      emptySettings
-    );
-    expect(entries.map((e) => e._disabledReason)).toEqual(["Not set up"]);
-  });
-
-  it("marks rows of a backend whose binary is too old", () => {
-    const { entries } = buildPickerEntries(
-      managerWithSonnet(),
-      [
-        claudeWith({
-          kind: "incompatible",
-          source: "custom",
-          currentVersion: "2.1.205",
-          minVersion: "2.1.206",
-          message: "too old",
-        }),
-      ],
-      noSessionCtx(),
-      emptySettings
-    );
-    expect(entries.map((e) => e._disabledReason)).toEqual(["Update required"]);
-  });
-
-  it("marks rows of a backend whose readiness check failed", () => {
-    const { entries } = buildPickerEntries(
-      managerWithSonnet(),
-      [claudeWith({ kind: "error", message: "not executable" })],
-      noSessionCtx(),
-      emptySettings
-    );
-    expect(entries.map((e) => e._disabledReason)).toEqual(["Setup error"]);
-  });
-
-  it("keeps rows selectable while a readiness check is still in flight", () => {
-    const { entries } = buildPickerEntries(
-      managerWithSonnet(),
-      [claudeWith({ kind: "checking", source: "custom" })],
-      noSessionCtx(),
-      emptySettings
-    );
-    expect(entries.map((e) => e._disabledReason)).toEqual([undefined]);
-  });
-
-  it("reports the unset-up backend rather than a per-model credential problem", () => {
-    const claude = {
-      ...makeDescriptor("claude", { kind: "absent" }),
-      getEnabledModelEntries: () => [
-        { baseModelId: "sonnet", name: "Sonnet", credentialState: "missing_key" as const },
-      ],
-    } as unknown as BackendDescriptor;
-
-    const { entries } = buildPickerEntries(
-      managerWithSonnet(),
-      [claude],
-      noSessionCtx(),
-      emptySettings
-    );
-
-    // "Add API key" would send the user to the wrong fix while the agent that
-    // would consume the key isn't installed at all.
-    expect(entries[0]._disabledReason).toBe("Not set up");
-  });
-
-  it("regression: never disables the running backend's own rows when its binary goes missing", () => {
-    // The merged picker seeds its draft from selectable rows only, so disabling
-    // the active session's rows would silently draft a different backend's model
-    // and commit it when the popover closes.
-    const claude = claudeWith({ kind: "absent" });
-    const ctx: ModelActiveContext = {
-      ...noSessionCtx(),
-      activeSession: { backendId: "claude" } as unknown as AgentSession,
-      activeBackendId: "claude",
-      activeDescriptor: claude,
-    };
-
-    const { entries } = buildPickerEntries(managerWithSonnet(), [claude], ctx, emptySettings);
-
-    expect(entries.map((e) => e._disabledReason)).toEqual([undefined]);
   });
 });

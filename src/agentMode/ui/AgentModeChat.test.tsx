@@ -17,7 +17,7 @@ let mockInstallState: InstallState = { kind: "ready", source: "custom" };
 // expected here.
 /* eslint-disable @eslint-react/hooks-extra/no-unnecessary-use-prefix */
 jest.mock("@/agentMode/ui/useBackendDescriptor", () => ({
-  useActiveBackendDescriptor: () => ({ id: "claude", openInstallUI: jest.fn() }),
+  useSessionBackendDescriptor: () => ({ id: "claude", openInstallUI: jest.fn() }),
   useBackendInstallState: () => mockInstallState,
 }));
 /* eslint-enable @eslint-react/hooks-extra/no-unnecessary-use-prefix */
@@ -42,6 +42,7 @@ interface ManagerStub {
   scopeSessions: AgentSession[];
   poolSessions: AgentSession[];
   lastError?: string | null;
+  starting?: boolean;
 }
 
 function makeManager({
@@ -49,6 +50,7 @@ function makeManager({
   scopeSessions,
   poolSessions,
   lastError = null,
+  starting = false,
 }: ManagerStub) {
   const getOrCreateActiveSession = jest.fn(async () => session("spawned"));
   const manager = {
@@ -57,7 +59,7 @@ function makeManager({
     getSessions: jest.fn(() => poolSessions),
     getSessionsForScope: jest.fn(() => scopeSessions),
     getActiveProjectId: jest.fn(() => activeProjectId),
-    getIsStarting: jest.fn(() => false),
+    getIsStarting: jest.fn(() => starting),
     getLastError: jest.fn(() => lastError),
     getActiveSession: jest.fn(() => null),
     getActiveChatUIState: jest.fn(() => null),
@@ -74,13 +76,14 @@ function renderChat(manager: AgentSessionManager) {
 }
 
 /** Render the no-session fallback with the given readiness and boot error. */
-function renderFallback(installState: InstallState, lastError: string | null) {
+function renderFallback(installState: InstallState, lastError: string | null, starting = false) {
   mockInstallState = installState;
   const { manager } = makeManager({
     activeProjectId: GLOBAL_SCOPE,
     scopeSessions: [],
     poolSessions: [],
     lastError,
+    starting,
   });
   renderChat(manager);
 }
@@ -166,6 +169,13 @@ describe("AgentModeChat", () => {
       // `checking` resolves on its own; flashing the select view and swapping it
       // straight back out is worse than the card's one-line "Checking…".
       renderFallback({ kind: "checking", source: "custom" }, null);
+
+      expect(screen.getByTestId("status-card")).toBeTruthy();
+      expect(screen.queryByTestId("select-panel")).toBeNull();
+    });
+
+    it("keeps the compact card while a backend session is already starting", () => {
+      renderFallback({ kind: "absent" }, null, true);
 
       expect(screen.getByTestId("status-card")).toBeTruthy();
       expect(screen.queryByTestId("select-panel")).toBeNull();
