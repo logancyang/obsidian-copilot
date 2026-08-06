@@ -82,25 +82,14 @@ export const InFlight: StoryObj<ActivityGroupCardProps> = {
   },
 };
 
-export const ManyFamilies: StoryObj<ActivityGroupCardProps> = {
-  args: {
-    group: group([
-      action("Read Inbox/Clippings.md", { vendorToolName: "Read" }),
-      action("Grep for “embedding”", { vendorToolName: "Grep" }),
-      action("npm run format", { vendorToolName: "Bash" }),
-      action("Fetch https://docs.obsidian.md/Plugins", { vendorToolName: "WebFetch" }),
-      action("List Attachments/", { vendorToolName: "LS" }),
-      THINKING,
-    ]),
-  },
-};
-
+/** Searches, fetches, MCP calls, unregistered tools — all pool as commands. */
 export const LongLine: StoryObj<ActivityGroupCardProps> = {
   args: {
     group: group([
       action("Read Research/Vector Stores.md", { vendorToolName: "Read" }),
       action("Read Research/Chunking.md", { vendorToolName: "Read" }),
-      action("mcp call", { mcpServer: "obsidian-vault-search" }),
+      action("Grep for “embedding”", { vendorToolName: "Grep" }),
+      action("Fetch https://docs.obsidian.md/Plugins", { vendorToolName: "WebFetch" }),
       action("mcp call", { mcpServer: "obsidian-vault-search" }),
       action("Design sync", { vendorToolName: "DesignSyncFromFigmaWorkspace" }),
       THINKING,
