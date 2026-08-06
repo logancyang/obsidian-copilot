@@ -54,7 +54,7 @@ const meta = {
     ),
     controls: <AgentControlsFixture />,
   },
-  parameters: { gallery: { host: "leaf", layout: "fullscreen", width: 300 } },
+  parameters: { gallery: { host: "leaf", layout: "fullscreen" } },
 } satisfies Meta<AgentSelectPaneProps>;
 export default meta;
 
