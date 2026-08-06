@@ -55,7 +55,7 @@ describe("AgentSelectView", () => {
 
     it.each<[AgentSelectStatus, string]>([
       ["checking", "Checking…"],
-      ["connected", "Connected"],
+      ["installed", "Installed"],
       ["outdated", "Update required"],
       ["error", "Error"],
     ])("badges the %s status on the agent's row", (status, label) => {
@@ -67,7 +67,7 @@ describe("AgentSelectView", () => {
     it("shows no status badge for an agent that is not set up", () => {
       renderView({ rows: [row({ id: "claude", status: "absent" })] });
 
-      expect(screen.queryByText("Connected")).toBeNull();
+      expect(screen.queryByText("Installed")).toBeNull();
       expect(screen.queryByText("Update required")).toBeNull();
       expect(screen.queryByText("Error")).toBeNull();
       expect(screen.queryByText(/not found/i)).toBeNull();
@@ -130,6 +130,13 @@ describe("AgentSelectView", () => {
       renderView({ footerNote: "Ready to go." });
 
       expect(screen.getByText("Ready to go.")).toBeTruthy();
+    });
+
+    it("omits the footer note when the selected agent needs no attention", () => {
+      renderView({ footerNote: null, ctaLabel: "Start chat" });
+
+      expect(screen.queryByText("opencode isn't set up on this machine yet.")).toBeNull();
+      expect(screen.getByRole("button", { name: "Start chat" })).toBeTruthy();
     });
   });
 });

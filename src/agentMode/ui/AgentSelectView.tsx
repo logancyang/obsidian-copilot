@@ -24,7 +24,7 @@ interface StatusBadgeSpec {
  */
 const STATUS_BADGES: Partial<Record<AgentSelectStatus, StatusBadgeSpec>> = {
   checking: { label: "Checking…", variant: "secondary", Icon: LoaderCircle },
-  connected: { label: "Connected", variant: "success", Icon: Check },
+  installed: { label: "Installed", variant: "success", Icon: Check },
   outdated: { label: "Update required", variant: "destructive", Icon: AlertTriangle },
   error: { label: "Error", variant: "destructive", Icon: AlertTriangle },
 };
@@ -34,8 +34,8 @@ interface AgentSelectViewProps {
   selectedId: BackendId;
   onSelect: (id: BackendId) => void;
   ctaLabel: string;
-  /** Footer text left of the button, explaining what pressing it will do. */
-  footerNote: string;
+  /** Footer text left of the button when the selected agent needs attention. */
+  footerNote: string | null;
   onCta: () => void;
   /** Prevents a transient readiness state from exposing an action. */
   ctaDisabled?: boolean;
@@ -163,10 +163,17 @@ export const AgentSelectView: React.FC<AgentSelectViewProps> = ({
         })}
       </div>
 
-      <div className="copilot-divider-t tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-2 tw-pt-3">
-        <span className="tw-min-w-0 tw-flex-1 tw-break-words tw-text-ui-smaller tw-text-muted">
-          {footerNote}
-        </span>
+      <div
+        className={cn(
+          "copilot-divider-t tw-flex tw-flex-wrap tw-items-center tw-gap-2 tw-pt-3",
+          footerNote ? "tw-justify-between" : "tw-justify-end"
+        )}
+      >
+        {footerNote && (
+          <span className="tw-min-w-0 tw-flex-1 tw-break-words tw-text-ui-smaller tw-text-muted">
+            {footerNote}
+          </span>
+        )}
         <Button size="sm" onClick={onCta} disabled={ctaDisabled} className="tw-shrink-0">
           {ctaLabel}
         </Button>

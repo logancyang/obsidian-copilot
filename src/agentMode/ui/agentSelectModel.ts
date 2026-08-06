@@ -3,7 +3,7 @@ import type { BackendDescriptor, BackendId, InstallState } from "@/agentMode/ses
 /**
  * Readiness of one agent as the select view words it.
  */
-export type AgentSelectStatus = "checking" | "connected" | "outdated" | "absent" | "error";
+export type AgentSelectStatus = "checking" | "installed" | "outdated" | "absent" | "error";
 
 /** One agent row in the select view. */
 export interface AgentSelectRow {
@@ -14,7 +14,7 @@ export interface AgentSelectRow {
   /** True for the single backend a first-run user is steered to. */
   recommended: boolean;
   /**
-   * Operator-facing detail behind a non-`connected` status, carried straight
+   * Operator-facing detail behind a non-`installed` status, carried straight
    * from `InstallState.message` so version prose is never re-derived here.
    * `null` when the install state has no message to offer.
    */
@@ -24,15 +24,13 @@ export interface AgentSelectRow {
 /** What the view's single call to action does for the selected row. */
 export type AgentSelectAction = "start" | "configure" | "wait";
 
-/** Label, explanatory note, and behavior of the select view's one call to action. */
+/** Label, optional explanatory note, and behavior of the select view's one call to action. */
 export interface AgentSelectCta {
   label: string;
-  /** Footer text beside the button, explaining what pressing it will do. */
-  note: string;
+  /** Footer text beside the button when the selected agent needs attention. */
+  note: string | null;
   action: AgentSelectAction;
 }
-
-const READY_NOTE = "Ready to go. You can switch agents any time from the agent picker.";
 
 const EMPTY_AGENT_SELECT_ROWS: readonly AgentSelectRow[] = Object.freeze([]);
 
@@ -46,7 +44,7 @@ const EMPTY_AGENT_SELECT_ROWS: readonly AgentSelectRow[] = Object.freeze([]);
 function toSelectStatus(kind: InstallState["kind"]): AgentSelectStatus {
   switch (kind) {
     case "ready":
-      return "connected";
+      return "installed";
     case "checking":
       return "checking";
     case "incompatible":
@@ -89,7 +87,7 @@ export function buildAgentSelectRows(
 }
 
 /**
- * Resolve the one call to action the select view ends in. A connected agent can
+ * Resolve the one call to action the select view ends in. An installed agent can
  * be started; everything else routes to that agent's Configure dialog, with the
  * note explaining why.
  * @param row - The currently selected row.
@@ -102,8 +100,8 @@ export function resolveAgentSelectCta(row: AgentSelectRow): AgentSelectCta {
       action: "wait",
     };
   }
-  if (row.status === "connected") {
-    return { label: "Start chat", note: READY_NOTE, action: "start" };
+  if (row.status === "installed") {
+    return { label: "Start chat", note: null, action: "start" };
   }
   return {
     label: "Configure",

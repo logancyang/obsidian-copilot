@@ -74,9 +74,9 @@ export const NothingSetUp: StoryObj<AgentSelectViewProps> = {
   render: AgentSelectStory,
 };
 
-export const OpencodeConnected: StoryObj<AgentSelectViewProps> = {
+export const OpencodeInstalled: StoryObj<AgentSelectViewProps> = {
   args: {
-    rows: [{ ...OPENCODE, status: "connected" }, CLAUDE, CODEX],
+    rows: [{ ...OPENCODE, status: "installed" }, CLAUDE, CODEX],
   },
   render: AgentSelectStory,
 };
@@ -92,7 +92,7 @@ export const ClaudeChecking: StoryObj<AgentSelectViewProps> = {
 export const ClaudeUpdateRequired: StoryObj<AgentSelectViewProps> = {
   args: {
     rows: [
-      { ...OPENCODE, status: "connected" },
+      { ...OPENCODE, status: "installed" },
       {
         ...CLAUDE,
         status: "outdated",
@@ -129,7 +129,7 @@ export const LongAgentName: StoryObj<AgentSelectViewProps> = {
         name: "Very Long Local Agent Backend Name",
         description:
           "Runs every Copilot Plus model plus anything reachable on your own provider key, and Copilot will download, verify, and keep the managed binary up to date for you without leaving the vault.",
-        status: "connected",
+        status: "installed",
       },
       CLAUDE,
       CODEX,

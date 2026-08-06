@@ -26,6 +26,17 @@ When the autonomous agent is enabled, Copilot can:
 
 The agent activates automatically when you're in **Copilot Plus** mode. You don't need to do anything special — just ask your question.
 
+### Starting Agent Mode for the First Time
+
+If the agent Copilot would normally start is not set up and there is no chat or runtime error to recover, Agent Mode opens with **Select your agent**. Each row shows what that agent uses and its current setup state:
+
+- **Installed** can start a chat. Copilot checks sign-in after the agent starts.
+- **Checking…** is temporarily unavailable while Copilot verifies the installation.
+- **Update required** or **Error** opens Configure with the specific recovery guidance.
+- A row without a status badge is not installed and opens Configure.
+
+Selecting a row only previews its action. **Start chat** saves that agent as the default and starts it; **Configure** opens its setup without changing the default. After a chat starts, use the agent and model picker to switch agents or choose one of that agent's models.
+
 ## Sample Prompts in the Message Box
 
 When you open a new agent chat and the message box is empty, Copilot types out sample prompts there one at a time — each appears character by character, pauses so you can read it, clears itself, and gives way to the next. They are examples of what the agent can do with your vault, not something being sent.

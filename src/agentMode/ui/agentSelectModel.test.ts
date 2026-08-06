@@ -42,14 +42,14 @@ function rowWith(overrides: Partial<AgentSelectRow> = {}): AgentSelectRow {
 
 describe("agentSelectModel", () => {
   describe("buildAgentSelectRows()", () => {
-    it("reports a ready backend as connected with no status message", () => {
+    it("reports a ready backend as installed with no status message", () => {
       const [row] = buildAgentSelectRows(
         [OPENCODE],
         { opencode: { kind: "ready", source: "managed" } },
         "opencode"
       );
 
-      expect(row.status).toBe("connected");
+      expect(row.status).toBe("installed");
       expect(row.statusMessage).toBeNull();
     });
 
@@ -128,10 +128,10 @@ describe("agentSelectModel", () => {
       });
     });
 
-    it("offers to start a chat on a connected agent", () => {
-      expect(resolveAgentSelectCta(rowWith({ status: "connected" }))).toEqual({
+    it("offers to start a chat on an installed agent without claiming authentication", () => {
+      expect(resolveAgentSelectCta(rowWith({ status: "installed" }))).toEqual({
         label: "Start chat",
-        note: "Ready to go. You can switch agents any time from the agent picker.",
+        note: null,
         action: "start",
       });
     });
