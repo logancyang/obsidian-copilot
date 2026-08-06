@@ -80,7 +80,7 @@ export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
             onClick={() => navigateToPlusPage(PLUS_UTM_MEDIUMS.MULTI_AGENT)}
           >
             <Sparkles className="tw-size-3 tw-shrink-0" />
-            Mention multiple agents with Copilot Plus
+            Mention multiple agents with @ (needs Plus tier or above)
           </Button>
         )}
       </div>
