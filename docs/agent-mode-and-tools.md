@@ -65,6 +65,15 @@ The mode picker beside the message box controls how much the active agent can do
 
 The available modes depend on the selected agent. Copilot normalizes equivalent modes across supported versions of Claude, Codex, and OpenCode.
 
+With Claude you can decide how much **Auto** actually hands over, under
+**Settings → Copilot → Agent → Claude → Auto mode permissions**:
+
+- **Auto** (default) — Claude judges each request itself, approving routine work and still asking about risky actions.
+- **Accept edits** — file edits are approved automatically; everything else still asks.
+- **Bypass permissions** — nothing is checked. Use it only in a workspace you fully trust.
+
+Changing this takes effect the next time you pick **Auto**, so an open chat keeps the permissions it started with.
+
 When **Default** mode asks for permission, the request stays in the chat until
 you choose an action, cancel the turn, or close the session. Hover or focus a
 persistent action to inspect its detailed permission rule.

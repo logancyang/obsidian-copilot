@@ -1,15 +1,21 @@
 import { EnvOverridesSetting } from "@/agentMode/backends/shared/EnvOverridesSetting";
 import { SettingItem } from "@/components/ui/setting-item";
 import type CopilotPlugin from "@/main";
-import { useSettingsValue } from "@/settings/model";
+import { useSettingsValue, type ClaudeAutoModePermission } from "@/settings/model";
 import type { App } from "obsidian";
 import React from "react";
-import { updateClaudeFields } from "./descriptor";
+import { resolveClaudeAutoModePermission, updateClaudeFields } from "./descriptor";
 
 interface Props {
   plugin: CopilotPlugin;
   app: App;
 }
+
+const AUTO_MODE_OPTIONS: { label: string; value: ClaudeAutoModePermission }[] = [
+  { label: "Auto", value: "auto" },
+  { label: "Accept edits", value: "acceptEdits" },
+  { label: "Bypass permissions", value: "bypassPermissions" },
+];
 
 /**
  * Claude card extras. CLI detection / path / auth configuration lives in the
@@ -21,6 +27,17 @@ export const ClaudeSettingsPanel: React.FC<Props> = () => {
   const settings = useSettingsValue();
   return (
     <>
+      <SettingItem
+        type="select"
+        title="Auto mode permissions"
+        description="What the chat's Auto mode hands over. Auto lets Claude judge each request and still ask about risky ones, Accept edits auto-approves file edits only, and Bypass permissions skips every check."
+        value={resolveClaudeAutoModePermission(settings)}
+        options={AUTO_MODE_OPTIONS}
+        onChange={(value) =>
+          updateClaudeFields({ autoModePermission: value as ClaudeAutoModePermission })
+        }
+      />
+
       <SettingItem
         type="switch"
         title="Show extended thinking"

@@ -397,6 +397,32 @@ describe("sanitizeEnvOverrides", () => {
   });
 });
 
+describe("sanitizeSettings - Claude auto-mode permission", () => {
+  function sanitizeClaudeSlice(autoModePermission: unknown): CopilotSettings {
+    return sanitizeSettings({
+      ...DEFAULT_SETTINGS,
+      agentMode: {
+        enabled: true,
+        byok: {},
+        activeBackend: "claude",
+        backends: { claude: { autoModePermission } },
+      },
+    } as unknown as CopilotSettings);
+  }
+
+  it("keeps a permission mode the Claude SDK understands", () => {
+    const sanitized = sanitizeClaudeSlice("acceptEdits");
+
+    expect(sanitized.agentMode.backends.claude?.autoModePermission).toBe("acceptEdits");
+  });
+
+  it("drops a permission mode outside the supported set so the descriptor default applies", () => {
+    const sanitized = sanitizeClaudeSlice("dontAsk");
+
+    expect(sanitized.agentMode.backends.claude?.autoModePermission).toBeUndefined();
+  });
+});
+
 describe("sanitizeSettings - legacy Miyo settings cleanup", () => {
   it("migrates legacy Miyo settings and strips obsolete remote vault path state", () => {
     const legacySettings = {
