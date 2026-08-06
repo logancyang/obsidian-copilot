@@ -7,7 +7,7 @@ assignees: ""
 ---
 
 - [ ] Disable all other plugins besides Copilot **(required)**
-- [ ] Log file generated via "Copilot: Create Log File" command or Settings -> Advanced -> Create Log File **(required)**
+- [ ] Logs attached **(required)** — the easiest way is Settings → Copilot → Advanced → Debugging & support → **Report an issue**, which packs a screenshot and recent logs, uploads them, and opens a prefilled issue with the link already in it (file that one instead of this form). Otherwise run the "Copilot: Create Log File" command and attach the note it opens here.
 - [ ] Screenshot of note + Copilot chat pane + dev console added **(optional)**
 
 Copilot version:
