@@ -55,7 +55,7 @@ const mockGetCachedModelCatalog = jest.fn();
 const mockPreloadModels = jest.fn();
 
 jest.mock("@/agentMode", () => ({
-  listBackendDescriptors: () => DESCRIPTORS,
+  backendDisplayOrder: () => DESCRIPTORS,
   backendNeedsSelfHostWarning: (
     descriptor: { selfHostable?: boolean },
     settings: { enableSelfHostMode?: boolean }

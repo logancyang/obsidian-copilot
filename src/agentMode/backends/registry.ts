@@ -21,6 +21,32 @@ export const backendRegistry: Record<BackendId, BackendDescriptor> = {
 };
 
 /**
+ * The backend a first-run user is steered to. A single constant rather than a
+ * per-descriptor flag, so two backends can never both claim the title.
+ */
+export const RECOMMENDED_BACKEND_ID: BackendId = "opencode";
+
+let displayOrderCache: BackendDescriptor[] | null = null;
+
+/**
+ * Every registered backend descriptor in the order the UI presents them —
+ * the self-hostable opencode first, then the cloud agents. The one ordering
+ * every setup and settings surface reads, so a backend can't end up ordered
+ * differently in two places. Computed lazily and memoized for the same reason
+ * as `getCloudAgentIds`.
+ */
+export function backendDisplayOrder(): BackendDescriptor[] {
+  if (!displayOrderCache) {
+    displayOrderCache = [
+      OpencodeBackendDescriptor,
+      ClaudeBackendDescriptor,
+      CodexBackendDescriptor,
+    ];
+  }
+  return displayOrderCache;
+}
+
+/**
  * Whether a backend carries a cloud-egress warning under the current Self-Host
  * Mode state. Cloud agents (`selfHostable: false`) are flagged while the mode is
  * on so the UI shows a warning marker beside them; nothing is flagged when the
