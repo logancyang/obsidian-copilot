@@ -1,6 +1,9 @@
 import { openVaultPath } from "@/utils/openVaultPath";
 import { openWithSystemDefault } from "@/utils/openWithSystemDefault";
 import { __resetVaultBaseCache } from "@/utils/vaultPath";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as nodePath from "node:path";
 import { App, FileSystemAdapter } from "obsidian";
 
 jest.mock("@/logger", () => ({ logInfo: jest.fn(), logWarn: jest.fn(), logError: jest.fn() }));
@@ -92,5 +95,79 @@ describe("openVaultPath", () => {
     const app = buildApp();
     openVaultPath(app as unknown as App, "Some Note", { sourcePath: "source.md" });
     expect(app.workspace.openLinkText).toHaveBeenCalledWith("Some Note", "source.md", false);
+  });
+
+  describe("unindexed paths that exist on disk", () => {
+    let vaultDir: string;
+
+    beforeEach(() => {
+      vaultDir = fs.realpathSync(fs.mkdtempSync(nodePath.join(os.tmpdir(), "ovp-vault-")));
+      fs.mkdirSync(nodePath.join(vaultDir, "copilot/skills"), { recursive: true });
+      fs.writeFileSync(nodePath.join(vaultDir, "copilot/skills/voice-profile.md"), "hi");
+      fs.mkdirSync(nodePath.join(vaultDir, ".claude"));
+      fs.symlinkSync(
+        nodePath.join(vaultDir, "copilot/skills"),
+        nodePath.join(vaultDir, ".claude/skills")
+      );
+    });
+
+    afterEach(() => {
+      fs.rmSync(vaultDir, { recursive: true, force: true });
+    });
+
+    it("opens a dot-folder symlink alias as its canonical indexed note", () => {
+      const app = buildApp(vaultDir, ["copilot/skills/voice-profile.md"]);
+      open(app, ".claude/skills/voice-profile.md");
+      expect(app.workspace.openLinkText).toHaveBeenCalledWith(
+        "copilot/skills/voice-profile.md",
+        "",
+        false
+      );
+      expect(openWithSystemDefault).not.toHaveBeenCalled();
+    });
+
+    it("preserves the heading anchor when canonicalizing a symlink alias", () => {
+      const app = buildApp(vaultDir, ["copilot/skills/voice-profile.md"]);
+      open(app, ".claude/skills/voice-profile.md#Closings");
+      expect(app.workspace.openLinkText).toHaveBeenCalledWith(
+        "copilot/skills/voice-profile.md#Closings",
+        "",
+        false
+      );
+    });
+
+    it("opens an existing file with no indexed canonical path via the OS", () => {
+      fs.writeFileSync(nodePath.join(vaultDir, ".claude/settings.json"), "{}");
+      const app = buildApp(vaultDir);
+      open(app, ".claude/settings.json");
+      expect(app.workspace.openLinkText).not.toHaveBeenCalled();
+      expect(openWithSystemDefault).toHaveBeenCalledWith(
+        nodePath.join(vaultDir, ".claude/settings.json")
+      );
+    });
+
+    it("hands a symlink that resolves outside the vault to the OS", () => {
+      const outsideDir = fs.realpathSync(fs.mkdtempSync(nodePath.join(os.tmpdir(), "ovp-out-")));
+      try {
+        fs.writeFileSync(nodePath.join(outsideDir, "secret.md"), "hi");
+        fs.symlinkSync(
+          nodePath.join(outsideDir, "secret.md"),
+          nodePath.join(vaultDir, "escape.md")
+        );
+        const app = buildApp(vaultDir);
+        open(app, "escape.md");
+        expect(app.workspace.openLinkText).not.toHaveBeenCalled();
+        expect(openWithSystemDefault).toHaveBeenCalledWith(nodePath.join(outsideDir, "secret.md"));
+      } finally {
+        fs.rmSync(outsideDir, { recursive: true, force: true });
+      }
+    });
+
+    it("still routes a genuinely missing note through openLinkText's create flow", () => {
+      const app = buildApp(vaultDir);
+      open(app, "Ideas/Not Written Yet");
+      expect(app.workspace.openLinkText).toHaveBeenCalledWith("Ideas/Not Written Yet", "", false);
+      expect(openWithSystemDefault).not.toHaveBeenCalled();
+    });
   });
 });
