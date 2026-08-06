@@ -10,10 +10,13 @@ const REASONING_LABEL = "Reasoning";
  * proves the agent moved on, and no backend emits a "reasoning ended" event.
  *
  * @param members - The group's members, in stream order.
- * @param isStreaming - Whether the trail this group belongs to is still in flight.
+ * @param atLiveEdge - Whether this group is the streaming trail's live edge —
+ *   its last node while the turn is in flight. A whole-trail streaming flag is
+ *   not enough: an earlier group that ends in a `thought` would otherwise stay
+ *   "reasoning" until the entire turn finished.
  */
-export function isReasoningActive(members: ActivityMember[], isStreaming: boolean): boolean {
-  return isStreaming && members[members.length - 1]?.type === "reasoning";
+export function isReasoningActive(members: ActivityMember[], atLiveEdge: boolean): boolean {
+  return atLiveEdge && members[members.length - 1]?.type === "reasoning";
 }
 
 /**
@@ -23,16 +26,17 @@ export function isReasoningActive(members: ActivityMember[], isStreaming: boolea
  * collapses under the user (see `designdocs/AGENT_TRAIL_GROUPING.md`).
  *
  * @param members - The group's members, in stream order.
- * @param isStreaming - Whether the trail this group belongs to is still in flight.
+ * @param atLiveEdge - Whether this group is the streaming trail's live edge;
+ *   see `isReasoningActive`.
  * @param ctx - Vault base used to shorten paths in the tool's own label.
  */
 export function activityLiveStep(
   members: ActivityMember[],
-  isStreaming: boolean,
+  atLiveEdge: boolean,
   ctx?: ToolSummaryContext
 ): string | null {
-  if (!isStreaming) return null;
-  if (isReasoningActive(members, isStreaming)) return REASONING_LABEL;
+  if (!atLiveEdge) return null;
+  if (isReasoningActive(members, atLiveEdge)) return REASONING_LABEL;
   // Tool calls can resolve out of order, so the trailing member is not
   // necessarily the unfinished one — take the latest that has yet to settle.
   for (let i = members.length - 1; i >= 0; i--) {
