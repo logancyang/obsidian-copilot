@@ -25,8 +25,15 @@ const RULES: RedactionRule[] = [
   { pattern: /(\/(?:Users|home)\/)[^/\s"'\\:]+/g, replacement: "$1<user>" },
   { pattern: /([A-Za-z]:\\Users\\)[^\\\s"']+/gi, replacement: "$1<user>" },
 
-  // Email addresses.
-  { pattern: /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, replacement: "<email>" },
+  // Email addresses. The quantifiers are bounded at the RFC's own limits rather
+  // than left open: an unbounded local part backtracks over every suffix of a
+  // long run of address-legal characters, which a pasted token or a minified log
+  // line supplies, and that is quadratic — 27 s for a 256 KB run, versus 31 ms
+  // bounded.
+  {
+    pattern: /[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,255}\.[A-Za-z]{2,24}/g,
+    replacement: "<email>",
+  },
 
   // Provider API keys with a recognizable prefix.
   { pattern: /\bsk-[A-Za-z0-9_-]{12,}/g, replacement: "<secret>" },

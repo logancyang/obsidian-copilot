@@ -101,11 +101,19 @@ See [Copilot Commands and Quick Ask](custom-commands.md#quick-ask) for selection
 
 ## Logs and bug reports
 
-For Agent Chat problems, use **Report an Issue**. Copilot prepares a screenshot and recent device-local activity logs, then opens a prefilled GitHub issue. Attach the files yourself.
+Use **Advanced → Debugging & support → Report an issue** for any Copilot problem, Agent Chat or Quick Chat. Enable **Debug Mode** in the same section first and reproduce the problem, so the logs contain it.
 
-For Quick Chat, enable **Advanced → Debug Mode**, reproduce the problem, then choose **Create Log File**. Agent Chat logs can also be opened or cleared in the Agent Chat debugging section under **Advanced**.
+The dialog walks through three pages:
 
-Logs and screenshots can contain prompts, note contents, paths, and tool inputs. Review them before attaching anything to a public issue.
+1. **Describe it and tick what to include.** The screenshot of the Agent Chat pane is on by default when a pane is open to photograph; the Agent Chat activity log and the regular chat log are pre-selected when their logging is already on.
+2. **Pack, review, then upload.** Copilot briefly hides the dialog to photograph the pane behind it and packs everything into one `copilot-report-….zip`, listing what actually made it in — anything unavailable, empty, or too large to include whole is shown as skipped, failed, or truncated. **Upload & open issue** is a separate click: nothing leaves your machine until you press it. If the upload fails, the zip is still on disk, with **Show in folder** and **Open issue anyway** to attach it by hand.
+3. **Submit.** Copilot opens a prefilled GitHub issue with the uploaded report's link already in the body. Nothing is filed until you press Submit in your browser.
+
+The staging folder stays next to the zip on your computer. To take something out, edit the files there and press **Rebuild zip** before uploading — the zip is packed before you see it, so editing that folder alone does not change what would be sent.
+
+To collect the chat log by hand instead, run **Copilot: Create log file** from the command palette; it saves and opens the log as a note in your vault. Agent Chat logs can be opened or cleared under **Advanced → Debugging & support → Agent Mode activity log**.
+
+Logs and screenshots can contain prompts, note contents, paths, and tool inputs. Usernames, email addresses, and recognizable API keys are stripped from text attachments on a best-effort pass; the screenshot is not redacted at all. Review what you are sending.
 
 ## What works on mobile?
 

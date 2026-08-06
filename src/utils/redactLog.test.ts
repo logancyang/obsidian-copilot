@@ -17,6 +17,14 @@ describe("redactLog", () => {
       expect(redactLogText("from logan@brevilabs.com to a@b.co")).toBe("from <email> to <email>");
     });
 
+    it("stays fast on a long run of address-legal characters instead of backtracking over it", () => {
+      // A pasted token or a minified log line is one unbroken run; with an
+      // unbounded local part this took tens of seconds and froze the renderer.
+      const started = Date.now();
+      expect(redactLogText("A".repeat(256 * 1024))).toBe("A".repeat(256 * 1024));
+      expect(Date.now() - started).toBeLessThan(1000);
+    });
+
     it("replaces provider API keys by their recognizable prefix", () => {
       expect(redactLogText("key sk-ant-abcdef0123456789xyz")).toBe("key <secret>");
       expect(redactLogText("AIzaSyD1234567890abcdefghijk")).toBe("<secret>");
