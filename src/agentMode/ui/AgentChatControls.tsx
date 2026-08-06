@@ -74,13 +74,19 @@ export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
             variant="ghost2"
             size="fit"
             className={cn(
-              "tw-flex tw-min-w-0 tw-items-center tw-gap-1 tw-truncate tw-text-ui-smaller tw-text-muted",
+              "tw-flex tw-min-w-0 tw-items-center tw-gap-1 tw-text-ui-smaller tw-text-muted",
               "hover:tw-text-normal"
             )}
             onClick={() => navigateToPlusPage(PLUS_UTM_MEDIUMS.MULTI_AGENT)}
           >
             <Sparkles className="tw-size-3 tw-shrink-0" />
-            Mention multiple agents with @ (needs Plus tier or above)
+            {/* The label must truncate on its own element: `tw-truncate` on the
+                flex-container button would make the text an anonymous flex item,
+                which `text-overflow` never reaches, so narrow panes would hard-clip
+                the copy instead of ellipsizing it. */}
+            <span className="tw-truncate">
+              Mention multiple agents with @ (needs Plus tier or above)
+            </span>
           </Button>
         )}
       </div>
