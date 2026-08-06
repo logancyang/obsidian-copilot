@@ -116,6 +116,17 @@ describe("activityGroups", () => {
       }
     );
 
+    it("keeps a backend-neutral switch-mode tool out of a group", () => {
+      const grouped = foldActivityGroups([
+        action("a", { toolKind: "read" }),
+        action("b", { toolKind: "execute" }),
+        action("plan", { toolKind: "switch_mode" }),
+        action("c", { toolKind: "read" }),
+        action("d", { toolKind: "execute" }),
+      ]);
+      expect(types(grouped)).toEqual(["activityGroup", "action", "activityGroup"]);
+    });
+
     it("groups an MCP tool that shares a bare name with an interactive native tool", () => {
       const grouped = foldActivityGroups([
         action("a", { vendorToolName: "Read" }),
@@ -171,8 +182,9 @@ describe("activityGroups", () => {
       expect(groupAt(grown, 2).members).toHaveLength(3);
     });
 
-    it("returns an empty trail unchanged", () => {
+    it("returns the same canonical empty trail on every empty call", () => {
       expect(foldActivityGroups([])).toEqual([]);
+      expect(foldActivityGroups([])).toBe(foldActivityGroups([]));
     });
 
     it("groups the interleaved tool-and-reasoning stream a real turn produces", () => {

@@ -35,8 +35,15 @@ export type GroupedTrailNode = RenderNode | ActivityGroupNode;
 function isInteractive(part: ToolCallPart): boolean {
   if (part.mcpServer) return false;
   const name = part.vendorToolName;
-  return name === "AskUserQuestion" || name === "ExitPlanMode" || name === "EnterPlanMode";
+  return (
+    part.toolKind === "switch_mode" ||
+    name === "AskUserQuestion" ||
+    name === "ExitPlanMode" ||
+    name === "EnterPlanMode"
+  );
 }
+
+const EMPTY_GROUPED_TRAIL = Object.freeze([]) as unknown as GroupedTrailNode[];
 
 /**
  * Fold runs of consecutive tool calls and reasoning into activity groups. A run
@@ -46,6 +53,7 @@ function isInteractive(part: ToolCallPart): boolean {
  * @param nodes - The trail as built by `buildAgentTrail`, in stream order.
  */
 export function foldActivityGroups(nodes: RenderNode[]): GroupedTrailNode[] {
+  if (nodes.length === 0) return EMPTY_GROUPED_TRAIL;
   const out: GroupedTrailNode[] = [];
   let run: ActivityMember[] = [];
   let groupCount = 0;
