@@ -1,6 +1,8 @@
 import { ActivityGroupCard } from "@/agentMode/ui/ActivityGroupCard";
 import type { ActivityGroupNode, ActivityMember } from "@/agentMode/ui/activityGroups";
+import { activityLiveStep } from "@/agentMode/ui/activityLiveStep";
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
+import { Button } from "@/components/ui/button";
 import type { Meta, StoryObj } from "@/lib/story";
 import React, { useState } from "react";
 
@@ -113,3 +115,68 @@ const ExpandedDemo: React.FC = () => {
 };
 
 export const Expanded: StoryObj<ActivityGroupCardProps> = { render: ExpandedDemo };
+
+/**
+ * The group as it grows: each frame appends the member the agent just started,
+ * so the live row swaps while the summary line above it thickens. The last
+ * frame is the settled turn, where the live row retires entirely.
+ */
+const LIVE_FRAMES: ActivityMember[][] = [
+  [action("Read Projects/Copilot/Roadmap.md", { vendorToolName: "Read" }), THINKING],
+  [
+    action("Read Projects/Copilot/Roadmap.md", { vendorToolName: "Read" }),
+    THINKING,
+    action("lint", {
+      vendorToolName: "Bash",
+      status: "in_progress",
+      input: { command: "npm run lint" },
+    }),
+  ],
+  [
+    action("Read Projects/Copilot/Roadmap.md", { vendorToolName: "Read" }),
+    THINKING,
+    action("lint", { vendorToolName: "Bash", input: { command: "npm run lint" } }),
+    action("test", {
+      vendorToolName: "Bash",
+      status: "in_progress",
+      input: { command: "npm run test -- activityLiveStep" },
+    }),
+  ],
+  [
+    action("Read Projects/Copilot/Roadmap.md", { vendorToolName: "Read" }),
+    THINKING,
+    action("lint", { vendorToolName: "Bash", input: { command: "npm run lint" } }),
+    action("test", {
+      vendorToolName: "Bash",
+      input: { command: "npm run test -- activityLiveStep" },
+    }),
+  ],
+];
+
+/** Stepped by hand rather than by a timer so the frame under review holds still. */
+const LiveEdgeDemo: React.FC = () => {
+  const [frame, setFrame] = useState(0);
+  const members = LIVE_FRAMES[frame];
+  const isStreaming = frame < LIVE_FRAMES.length - 1;
+  return (
+    <div className="tw-flex tw-flex-col tw-items-start tw-gap-2">
+      <ActivityGroupCard
+        group={group(members)}
+        thinkingMs={4_000}
+        open={false}
+        onToggle={() => undefined}
+        renderMember={renderMember}
+        liveStep={activityLiveStep(members, isStreaming)}
+      />
+      <Button
+        variant="secondary"
+        size="sm"
+        onClick={() => setFrame((f) => (f + 1) % LIVE_FRAMES.length)}
+      >
+        {isStreaming ? "Next step" : "Restart"}
+      </Button>
+    </div>
+  );
+};
+
+export const LiveEdge: StoryObj<ActivityGroupCardProps> = { render: LiveEdgeDemo };
