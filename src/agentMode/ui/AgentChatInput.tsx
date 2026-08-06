@@ -22,9 +22,9 @@ import ChatInput, { type ChatInputProps } from "@/components/chat-components/Cha
 import { EMPTY_AGENT_MENTION_BRANDS } from "@/components/chat-components/hooks/useAtMentionCategories";
 import { useActiveWebTabState } from "@/components/chat-components/hooks/useActiveWebTabState";
 import { Button } from "@/components/ui/button";
-import { ACTIVE_WEB_TAB_MARKER, EVENT_NAMES, PLUS_UTM_MEDIUMS } from "@/constants";
+import { ACTIVE_WEB_TAB_MARKER, EVENT_NAMES } from "@/constants";
 import { cn } from "@/lib/utils";
-import { navigateToPlusPage, useCanUseMultiAgent } from "@/plusUtils";
+import { useCanUseMultiAgent } from "@/plusUtils";
 import { EventTargetContext } from "@/context";
 import { logError, logWarn } from "@/logger";
 import {
@@ -46,7 +46,7 @@ import { getModelKeyFromModel } from "@/settings/model";
 import { modelSupportsVision } from "@/utils";
 import { arrayBufferToBase64 } from "@/utils/base64";
 import { mergeWebTabContexts } from "@/utils/urlNormalization";
-import { Clock, Sparkles, X } from "lucide-react";
+import { Clock, X } from "lucide-react";
 import { App, Notice, TFile } from "obsidian";
 import React, { memo, useCallback, useContext, useEffect, useMemo, useRef } from "react";
 import { v4 as uuidv4 } from "uuid";
@@ -541,7 +541,6 @@ export const AgentChatInput = memo(function AgentChatInput({
       {queuedMessages.length > 0 && (
         <QueuedMessageList messages={queuedMessages} onRemove={handleRemoveQueuedMessage} />
       )}
-      {!canUseMultiAgent && <MultiAgentUpsellHint />}
       <div
         className={
           hasPendingPlanPermission || disabled ? "tw-pointer-events-none tw-opacity-50" : undefined
@@ -623,26 +622,6 @@ export const AgentChatInput = memo(function AgentChatInput({
     </>
   );
 });
-
-/** Upsell shown to free users where the `@`-mention affordance would otherwise be. */
-const MultiAgentUpsellHint: React.FC = () => {
-  return (
-    <div className="tw-flex tw-justify-end tw-px-2 tw-pb-1">
-      <Button
-        variant="ghost2"
-        size="fit"
-        className={cn(
-          "tw-flex tw-items-center tw-text-ui-smaller tw-text-muted",
-          "hover:tw-text-normal"
-        )}
-        onClick={() => navigateToPlusPage(PLUS_UTM_MEDIUMS.MULTI_AGENT)}
-      >
-        <Sparkles className="tw-size-3" />
-        Mention multiple agents with Copilot Plus
-      </Button>
-    </div>
-  );
-};
 
 interface QueuedMessageListProps {
   messages: QueuedAgentMessage[];

@@ -5,8 +5,11 @@ import {
 } from "@/components/chat-components/ChatHistoryPopover";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { PLUS_UTM_MEDIUMS } from "@/constants";
+import { cn } from "@/lib/utils";
+import { navigateToPlusPage, useCanUseMultiAgent } from "@/plusUtils";
 import { useSettingsValue } from "@/settings/model";
-import { Bot, Download, History, MessageCirclePlus } from "lucide-react";
+import { Download, History, MessageCirclePlus, Sparkles } from "lucide-react";
 import React from "react";
 
 const resolveHistoryIcon = (item: ChatHistoryItem) =>
@@ -42,7 +45,9 @@ interface AgentChatControlsProps {
  * (no chain switcher needed), so this only renders New Chat, an optional
  * Save Chat button (when autosave is off), and the chat history popover.
  * Intentionally omits the model picker, project picker, and settings popover
- * — Agent Mode owns its own model/conversation state via ACP.
+ * — Agent Mode owns its own model/conversation state via ACP. The left side
+ * doubles as the multi-agent upsell slot for free users (empty otherwise),
+ * rather than adding a separate row above the composer.
  */
 export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
   onNewChat,
@@ -56,15 +61,28 @@ export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
   usageMeter,
 }) => {
   const settings = useSettingsValue();
+  const canUseMultiAgent = useCanUseMultiAgent();
   const historyAvailable = Boolean(
     chatHistoryItems && onLoadChat && onUpdateChatTitle && onDeleteChat
   );
 
   return (
     <div className="tw-flex tw-w-full tw-items-center tw-justify-between tw-p-1">
-      <div className="tw-ml-1 tw-flex tw-flex-1 tw-items-center tw-gap-1 tw-text-sm tw-text-muted">
-        <Bot className="tw-size-4" />
-        agent (alpha)
+      <div className="tw-ml-1 tw-flex tw-min-w-0 tw-flex-1 tw-items-center tw-gap-1">
+        {!canUseMultiAgent && (
+          <Button
+            variant="ghost2"
+            size="fit"
+            className={cn(
+              "tw-flex tw-min-w-0 tw-items-center tw-gap-1 tw-truncate tw-text-ui-smaller tw-text-muted",
+              "hover:tw-text-normal"
+            )}
+            onClick={() => navigateToPlusPage(PLUS_UTM_MEDIUMS.MULTI_AGENT)}
+          >
+            <Sparkles className="tw-size-3 tw-shrink-0" />
+            Mention multiple agents with Copilot Plus
+          </Button>
+        )}
       </div>
       <div className="tw-flex tw-items-center tw-gap-1">
         {usageMeter}
