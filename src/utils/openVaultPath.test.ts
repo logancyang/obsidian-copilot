@@ -126,6 +126,17 @@ describe("openVaultPath", () => {
       expect(openWithSystemDefault).not.toHaveBeenCalled();
     });
 
+    it("opens a root-relative dot-folder symlink alias as its canonical indexed note", () => {
+      const app = buildApp(vaultDir, ["copilot/skills/voice-profile.md"]);
+      open(app, "/.claude/skills/voice-profile.md");
+      expect(app.workspace.openLinkText).toHaveBeenCalledWith(
+        "copilot/skills/voice-profile.md",
+        "",
+        false
+      );
+      expect(openWithSystemDefault).not.toHaveBeenCalled();
+    });
+
     it("preserves the heading anchor when canonicalizing a symlink alias", () => {
       const app = buildApp(vaultDir, ["copilot/skills/voice-profile.md"]);
       open(app, ".claude/skills/voice-profile.md#Closings");

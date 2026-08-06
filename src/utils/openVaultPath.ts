@@ -117,5 +117,7 @@ function toExistingRootRelativeVaultPath(app: App, href: string): string | null 
   if (!rel) return null;
   const { filePath } = splitAnchor(rel);
   if (!filePath) return null;
-  return app.vault.getAbstractFileByPath(filePath) ? rel : null;
+  return app.vault.getAbstractFileByPath(filePath) || resolveUnindexedVaultPath(app, filePath)
+    ? rel
+    : null;
 }
