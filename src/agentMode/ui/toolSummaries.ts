@@ -116,7 +116,7 @@ function statusSuffix(parts: ToolCallPart[]): string {
   return ` · ${bits.join(" · ")}`;
 }
 
-function pluralize(n: number, singular: string, plural?: string): string {
+export function pluralize(n: number, singular: string, plural?: string): string {
   return `${n} ${n === 1 ? singular : (plural ?? `${singular}s`)}`;
 }
 
