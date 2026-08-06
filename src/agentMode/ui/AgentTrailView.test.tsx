@@ -30,6 +30,7 @@ jest.mock("obsidian", () => {
       register() {}
     },
     App: class {},
+    FileSystemAdapter: class {},
     WorkspaceLeaf: class {},
     Notice: class {},
     Platform: { isMobile: false },
@@ -44,9 +45,11 @@ function makeApp() {
   return { workspace: { getActiveFile: jest.fn(() => null) } } as never;
 }
 
-function renderTrail(props: Partial<React.ComponentProps<typeof AgentTrail>> = {}) {
-  const app = props.app ?? makeApp();
-  const result = render(
+type TrailProps = Partial<React.ComponentProps<typeof AgentTrail>>;
+type TrailApp = React.ComponentProps<typeof AgentTrail>["app"];
+
+function trailElement(app: TrailApp, props: TrailProps) {
+  return (
     <AppContext.Provider value={app}>
       <TooltipProvider>
         <AgentTrail
@@ -59,10 +62,38 @@ function renderTrail(props: Partial<React.ComponentProps<typeof AgentTrail>> = {
       </TooltipProvider>
     </AppContext.Provider>
   );
-  return { ...result, app };
 }
 
-describe("AgentTrail copy / insert actions", () => {
+function renderTrail(props: TrailProps = {}) {
+  const app = props.app ?? makeApp();
+  const result = render(trailElement(app, props));
+  return {
+    ...result,
+    app,
+    rerenderTrail: (next: TrailProps) => result.rerender(trailElement(app, next)),
+  };
+}
+
+type ToolCallPart = Extract<AgentMessagePart, { kind: "tool_call" }>;
+
+function toolCall(id: string, overrides: Partial<ToolCallPart> = {}): ToolCallPart {
+  return { kind: "tool_call", id, title: id, status: "completed", ...overrides };
+}
+
+const READ_A = toolCall("r1", {
+  vendorToolName: "Read",
+  locations: [{ path: "notes/a.md" }],
+});
+const READ_B = toolCall("r2", {
+  vendorToolName: "Read",
+  locations: [{ path: "notes/b.md" }],
+});
+const LINT = toolCall("b1", {
+  vendorToolName: "Bash",
+  input: { command: "npm run lint" },
+});
+
+describe("AgentTrail", () => {
   let writeText: jest.Mock;
 
   beforeEach(() => {
@@ -106,13 +137,6 @@ describe("AgentTrail copy / insert actions", () => {
     expect(screen.queryByTitle("Copy")).toBeNull();
     expect(screen.queryByTitle("Insert / Replace at cursor")).toBeNull();
   });
-});
-
-describe("AgentTrail inline trail (no collapse)", () => {
-  beforeEach(() => {
-    (window as unknown as { activeDocument: Document }).activeDocument = window.document;
-  });
-
   it("renders research inline with no 'Worked for' toggle on a completed research+answer turn", () => {
     renderTrail({
       parts: [
@@ -154,5 +178,175 @@ describe("AgentTrail inline trail (no collapse)", () => {
     });
 
     expect(screen.getByText("Running Count markdown files · 3 tools · 9s")).toBeTruthy();
+  });
+  // Two groups split by prose, with the trailing group still working: the
+  // shape that distinguishes "the live edge" from "an earlier group".
+  const STREAMING_PARTS: AgentMessagePart[] = [
+    READ_A,
+    { kind: "thought", text: "still mulling it over" },
+    text("Halfway there."),
+    READ_B,
+    { ...LINT, status: "in_progress" },
+  ];
+
+  it("shows the live row on the group at the live edge only", () => {
+    renderTrail({ parts: STREAMING_PARTS, isStreaming: true, turnStopReason: undefined });
+
+    expect(screen.getByText("Running `npm run lint`")).toBeTruthy();
+    // The earlier group ends on a thought; treating it as live would leave a
+    // second, permanently spinning row behind the prose.
+    expect(screen.queryByText("Reasoning")).toBeNull();
+  });
+
+  it("keeps trailing reasoning live when the streaming group is expanded", () => {
+    renderTrail({
+      parts: [READ_A, { kind: "thought", text: "still mulling it over" }],
+      isStreaming: true,
+      turnStopReason: undefined,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Read 1 file/ }));
+
+    // The expanded member must report the same in-flight state the collapsed
+    // live row did — not flip to a finished "Thought for" block.
+    expect(screen.getByText("Reasoning")).toBeTruthy();
+    expect(screen.queryByText("Thought for")).toBeNull();
+  });
+
+  it("renders prose between two groups at full size", () => {
+    renderTrail({ parts: STREAMING_PARTS, isStreaming: true, turnStopReason: undefined });
+
+    const prose = screen.getByText("Halfway there.");
+    expect(prose.getAttribute("data-testid")).toBe("agent-md");
+    // Both runs around it stay folded into their own summary rows. The first
+    // group's reasoning went unmeasured (the clock only runs at the live edge),
+    // so its line names the tool work alone.
+    expect(screen.getByText("Read 1 file")).toBeTruthy();
+    expect(screen.getByText("Read 1 file, ran 1 command")).toBeTruthy();
+  });
+
+  it("keeps a group the user opened open as more parts stream into it", () => {
+    const { rerenderTrail } = renderTrail({
+      parts: [READ_A, LINT],
+      isStreaming: true,
+      turnStopReason: undefined,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Read 1 file/ }));
+    expect(screen.getByText("Read notes/a.md")).toBeTruthy();
+
+    rerenderTrail({
+      parts: [READ_A, LINT, READ_B],
+      isStreaming: true,
+      turnStopReason: undefined,
+    });
+
+    const grown = screen.getByRole("button", { name: /Read 2 files/ });
+    expect(grown.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByText("Read notes/b.md")).toBeTruthy();
+  });
+
+  it("groups a sub-agent's children too", () => {
+    renderTrail({
+      parts: [
+        toolCall("task1", {
+          vendorToolName: "Task",
+          input: { subagent_type: "Explore", description: "Look around" },
+        }),
+        { ...READ_A, parentToolCallId: "task1" },
+        { ...LINT, parentToolCallId: "task1" },
+      ],
+    });
+
+    fireEvent.click(screen.getByText('Explore · "Look around"'));
+
+    expect(screen.getByText("2 tools")).toBeTruthy();
+    expect(screen.getByText("Read 1 file, ran 1 command")).toBeTruthy();
+  });
+
+  it("keeps an opened tool visible when streaming turns it into a group", () => {
+    const readWithOutput = {
+      ...READ_A,
+      output: [{ type: "text" as const, text: "file contents" }],
+    };
+    const { rerenderTrail } = renderTrail({
+      parts: [readWithOutput],
+      isStreaming: true,
+      turnStopReason: undefined,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Read notes\/a.md/ }));
+    expect(screen.getByText("file contents")).toBeTruthy();
+
+    rerenderTrail({
+      parts: [readWithOutput, LINT],
+      isStreaming: true,
+      turnStopReason: undefined,
+    });
+
+    const group = screen.getByRole("button", { name: /Read 1 file, ran 1 command/ });
+    expect(group.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByText("file contents")).toBeTruthy();
+
+    fireEvent.click(group);
+    expect(screen.queryByText("file contents")).toBeNull();
+  });
+
+  it("keeps nested group expansion independent from the root trail", () => {
+    renderTrail({
+      parts: [
+        READ_A,
+        LINT,
+        toolCall("task1", {
+          vendorToolName: "Task",
+          input: { subagent_type: "Explore", description: "Look around" },
+        }),
+        { ...READ_B, parentToolCallId: "task1" },
+        {
+          ...toolCall("b2", { vendorToolName: "Bash", input: { command: "npm test" } }),
+          parentToolCallId: "task1",
+        },
+      ],
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Read 1 file, ran 1 command/ }));
+    fireEvent.click(screen.getByText('Explore · "Look around"'));
+
+    const groups = screen.getAllByRole("button", { name: /Read 1 file, ran 1 command/ });
+    expect(groups.map((group) => group.getAttribute("aria-expanded"))).toEqual(["true", "false"]);
+  });
+
+  it("keeps live activity inside an earlier sub-agent quiet", () => {
+    renderTrail({
+      parts: [
+        toolCall("task1", {
+          vendorToolName: "Task",
+          input: { subagent_type: "Explore", description: "Look around" },
+        }),
+        { ...READ_A, parentToolCallId: "task1" },
+        {
+          ...toolCall("child-command", {
+            vendorToolName: "Bash",
+            status: "in_progress",
+            input: { command: "npm run child" },
+          }),
+          parentToolCallId: "task1",
+        },
+        text("Moved on."),
+        READ_B,
+        toolCall("root-command", {
+          vendorToolName: "Bash",
+          status: "in_progress",
+          input: { command: "npm run root" },
+        }),
+      ],
+      isStreaming: true,
+      turnStopReason: undefined,
+    });
+
+    fireEvent.click(screen.getByText('Explore · "Look around"'));
+
+    expect(screen.queryByText("Running `npm run child`")).toBeNull();
+    expect(screen.getByText("Running `npm run root`")).toBeTruthy();
   });
 });

@@ -8,7 +8,7 @@ groups.
 ## The problem
 
 A turn's `AgentMessagePart[]` interleaves tool calls, reasoning, and prose. The
-shipping trail compacts only **runs of consecutive same-`toolKey` tool calls**,
+trail used to compact only **runs of consecutive same-`toolKey` tool calls**,
 which almost never fires: the agent emits a `thought` between nearly every pair
 of tool calls, and a thought breaks the run. The result is one row per tool call
 plus one row per thought, and the turn's actual writing ends up buried under
@@ -49,8 +49,8 @@ chrome.
   else's summary. Costs 17 rows across the sample and raises the worst-case wall
   from 2 to 5.
 - **Interactive tool calls** — `AskUserQuestion`, `ExitPlanMode`,
-  `EnterPlanMode`. Folding a question the agent is waiting on would hide the
-  thing the user has to act on.
+  `EnterPlanMode`, and any ACP `switch_mode` tool. Folding a question the
+  agent is waiting on would hide the thing the user has to act on.
 - **Plan checklists.** Status, not work.
 
 ### What folds in
@@ -88,6 +88,23 @@ row.
 Reasoning duration is **not** derivable from the parts — `kind: "thought"`
 carries no timestamps. The caller measures it live and passes `thinkingMs` to
 `summarizeActivity`, the same way `ReasoningBlock` measures its own timer today.
+Because the clock lives in the group row, spans the row never saw go unmeasured:
+a leading thought only becomes a group when the first tool call arrives (by
+which point the thinking is over), and groups off the live edge never run the
+clock. The line therefore under-counts and never over-counts — accepted, since
+the duration is cosmetic and fixing it would mean timestamping thought parts in
+the session contract. `thought for Xs` simply drops off a line that measured
+nothing; the reasoning text itself stays in the expanded rows.
+
+### Measured at pane width
+
+Rendered in a real leaf pane, the longest line the vocabulary can produce —
+all three families plus `thought for Xs` — runs about 59 characters and needs
+~377px. A chat leaf gives the line 228px at 300px wide and 328px at 400px, so
+roughly 36–51 characters fit and the tail truncates; it only fits whole at
+600px. Truncation is graceful — families appear in first-use order and the
+full detail is one click away. Moving the reasoning duration off the line is
+unvalidated: it changes what the replay measured.
 
 ## Interaction invariants
 
@@ -97,27 +114,42 @@ These are what make grouping safe where the removed auto-fold was not:
    expanded-to-collapsed transition. Nothing the user is reading disappears,
    because it was never expanded to begin with.
 2. **User expansion is sticky.** Once opened, a group stays open for the life of
-   the session, including as new members stream into it.
+   the session, including as new members stream into it. If an opened standalone
+   tool becomes the first member of a group, the group inherits that open state
+   so the details do not disappear during the transition.
 3. **Motion lives only at the live edge.** While a group has work in flight it
    renders one transient row showing the current step, which swaps as the agent
    moves on and retires when the group goes quiet. One row changing, never a
    list collapsing.
 
 Invariant 2 requires a group identity that survives streaming. Groups are
-identified by their **ordinal within the trail**: parts are append-only, so a
-group's position never changes once it exists, and appending a member does not
-change its id. Keying React state by array index instead would remount an open
-group whenever the node list changed shape.
+identified by their **ordinal within their peer trail**, namespaced by the
+containing sub-agent path: parts are append-only, so a group's position never
+changes once it exists, appending a member does not change its id, and a nested
+group cannot share expansion state with a root group. Keying React state by
+array index instead would remount an open group whenever the node list changed
+shape.
 
-## Planned deletions
+Append-only covers reclassification too. The one node that can change type in
+place — a plain action later recognized as a sub-agent launch — can only flip
+while it is the trail's last part: Claude's `Agent`/`Task` carry their vendor
+name from birth, an anonymous opencode task's `subagent_type` arrives with its
+launch input, and sub-agents execute synchronously, so no root part follows a
+launch before its first child streams in. A flip at the tail cannot renumber an
+earlier group and has no later group to hand its ordinal to, which is why the
+ordinal needs no content-derived identity on top. If background sub-agent
+execution returns, this is the assumption to revisit.
 
-Activity groups subsume `AggregateCard` and the homogeneous `aggregate` render
-node. When grouping is wired into `AgentTrailView`, all three of these go:
+## What grouping replaced
 
-- the `aggregate` branch of `foldNodes` in `agentTrail.ts`
-- `AggregateCard.tsx`
-- `ToolSummary.aggregate` and its ~20 per-family implementations in
-  `toolSummaries.ts`
+Activity groups subsume the homogeneous `aggregate` render node, so the
+compaction branch of `foldNodes`, `toolKeyFor`, `AggregateCard.tsx`, and
+`ToolSummary.aggregate` with its per-family implementations are all gone.
+`buildAgentTrail` is now purely structural — one node per part, sub-agents
+absorbing their children — and every run of peers is pooled by
+`foldActivityGroups` a layer up.
 
-Until then `aggregate` nodes still exist, so `foldActivityGroups` flattens them
-back into their member parts. That branch is deleted along with the rest.
+`AgentTrailView` owns what a group cannot own itself: `useTrailExpansion` holds
+open/closed state above the node list (see invariant 2), and each group gets its
+own `useThinkingClock` via a per-group child component, because the trail's
+node list is a loop and hooks are not.

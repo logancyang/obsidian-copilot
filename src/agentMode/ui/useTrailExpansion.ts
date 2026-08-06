@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 
-/** Which activity groups of one trail are showing their members. */
+/** Which expandable rows of one trail are showing their details. */
 export interface TrailExpansion {
   isOpen: (id: string) => boolean;
   toggle: (id: string) => void;
@@ -10,13 +10,14 @@ export interface TrailExpansion {
 const NO_OPEN_IDS: ReadonlySet<string> = new Set();
 
 /**
- * Own the open/closed state of a message's activity groups above the node list.
+ * Own the open/closed state of a message's tool and activity-group rows above
+ * the node list.
  *
  * `foldActivityGroups` returns a differently-shaped array as parts stream in,
  * so a group that held its own state would lose it whenever its position in
  * that array moved. Keying by the group's trail-ordinal id here instead keeps
- * an opened group open while members stream into it: only the user's own
- * toggle ever changes what is open.
+ * an opened row visible while members stream into a group: only the user's own
+ * toggle ever closes it.
  */
 export function useTrailExpansion(): TrailExpansion {
   const [openIds, setOpenIds] = useState(NO_OPEN_IDS);

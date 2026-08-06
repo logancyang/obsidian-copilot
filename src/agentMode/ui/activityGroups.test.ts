@@ -147,19 +147,6 @@ describe("activityGroups", () => {
       expect(types(grouped)).toEqual(["activityGroup", "plan", "activityGroup"]);
     });
 
-    it("pools a homogeneous aggregate's members with their neighbours", () => {
-      const grouped = foldActivityGroups([
-        {
-          type: "aggregate",
-          toolKey: "Read",
-          parts: [tool("r1", { vendorToolName: "Read" }), tool("r2", { vendorToolName: "Read" })],
-        },
-        action("b", { vendorToolName: "Bash" }),
-      ]);
-      expect(types(grouped)).toEqual(["activityGroup"]);
-      expect(groupAt(grouped, 0).members).toHaveLength(3);
-    });
-
     it("numbers groups by position so an id survives members streaming in", () => {
       const first = foldActivityGroups([
         action("a", { vendorToolName: "Read" }),
