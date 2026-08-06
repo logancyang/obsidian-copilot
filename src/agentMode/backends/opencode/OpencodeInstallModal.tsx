@@ -14,17 +14,12 @@ import { detectOpencodeCliPath } from "@/agentMode/backends/opencode/descriptor"
 import { ReactModal } from "@/components/modals/ReactModal";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { formatBinaryPathForDisplay } from "@/utils/binaryPath";
+import { formatBytes } from "@/utils/formatBytes";
 import { OPENCODE_PINNED_VERSION } from "@/agentMode/backends/opencode/ui/opencodeVersion";
 import { logError } from "@/logger";
 import { useSettingsValue } from "@/settings/model";
 import { App, Notice } from "obsidian";
 import React from "react";
-
-const formatBytes = (bytes: number): string => {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-};
 
 /**
  * Turn a binary-manager progress event into the display-ready running state the

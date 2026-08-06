@@ -10,7 +10,7 @@ Copilot includes 16 built-in AI providers, and you can add an unlimited number o
 2. Add a provider
 3. Enter the provider API key and select the models you want to configure
 4. Click Save
-5. Enable models for chat under **Agents → Quick Chat models**
+5. Enable models for chat under **Basic → Agents → Quick Chat models**
 
 You can configure multiple providers simultaneously and switch between them by changing the default model.
 

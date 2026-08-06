@@ -127,7 +127,7 @@ export default class ChainManager {
         );
         if (!resolution.ok) {
           throw new MissingModelKeyError(
-            "No chat model enabled. Enable a model under Settings → Agents → Quick Chat, " +
+            "No chat model enabled. Enable a model under Settings → Basic → Agents → Quick Chat, " +
               "or add one on the Models (BYOK) tab."
           );
         }

@@ -30,7 +30,7 @@ const NOOP = () => {};
 const EMPTY_ENTRY: ModelSelectorEntry = {
   name: "__chat_no_models__",
   provider: "",
-  displayName: "No models — enable under Agents → Quick Chat",
+  displayName: "No models — enable in Basic → Agents → Quick Chat",
   enabled: true,
   _disabledReason: "Add a model",
 };

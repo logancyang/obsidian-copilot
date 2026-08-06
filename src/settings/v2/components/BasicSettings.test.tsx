@@ -8,6 +8,15 @@ import React from "react";
 // Stub the Plus banner to keep its dependency chain out of the test.
 jest.mock("@/settings/v2/components/PlusSettings", () => ({ PlusSettings: () => null }));
 
+// The Agents section is lazily imported behind a desktop gate; stub the module
+// the lazy import resolves to so the test never pulls in the agentMode barrel.
+jest.mock("@/settings/v2/components/AgentSettings", () => ({
+  AgentSettings: () => <div data-testid="agents-section">agents</div>,
+}));
+
+const isDesktopRuntime = jest.fn<boolean, []>().mockReturnValue(true);
+jest.mock("@/utils/desktopRuntime", () => ({ isDesktopRuntime: () => isDesktopRuntime() }));
+
 // App is threaded via useApp; the root-change orchestration is unit-tested in
 // copilotRootChange.test, so mock it here to observe the UI's decisions.
 jest.mock("@/context", () => ({
@@ -74,6 +83,44 @@ describe("BasicSettings", () => {
     isKnownCopilotRoot.mockReturnValue(false);
     shouldSurfaceMiyoResync.mockReturnValue(false);
     verifyMiyoScope.mockResolvedValue("unregistered");
+    isDesktopRuntime.mockReturnValue(true);
+  });
+
+  it("puts the Agents section above General so setup comes before preferences", async () => {
+    render(<BasicSettings />);
+    const agents = await screen.findByTestId("agents-section");
+    const general = screen.getByText("General");
+    // DOCUMENT_POSITION_FOLLOWING means `general` comes after `agents`.
+    expect(agents.compareDocumentPosition(general) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("renders a desktop-only placeholder instead of the Agents section on mobile", async () => {
+    isDesktopRuntime.mockReturnValue(false);
+    render(<BasicSettings />);
+    expect(screen.getByText("Agent settings are available on desktop.")).not.toBeNull();
+    expect(screen.queryByTestId("agents-section")).toBeNull();
+    // The rest of Basic still renders.
+    expect(screen.getByText("General")).not.toBeNull();
+  });
+
+  it("hides the filename template behind a collapsed Advanced disclosure", () => {
+    render(<BasicSettings />);
+    expect(screen.getByRole("button", { name: "Advanced" })).not.toBeNull();
+    expect(screen.queryByText("Conversation Filename Template")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
+    expect(screen.getByText("Conversation Filename Template")).not.toBeNull();
+  });
+
+  it("drops the template disclosure entirely when autosave is off", () => {
+    settingsStore.set(settingsAtom, {
+      ...DEFAULT_SETTINGS,
+      copilotFolder: "copilot",
+      autosaveChat: false,
+    });
+    render(<BasicSettings />);
+    expect(screen.queryByRole("button", { name: "Advanced" })).toBeNull();
+    expect(screen.queryByText("Conversation Filename Template")).toBeNull();
   });
 
   it("binds the Copilot folder input to the persisted root", () => {

@@ -43,7 +43,8 @@ Models may show capability badges:
 ### Managing Models
 
 Go to **Settings → Copilot → Models (BYOK)** to add or edit providers and choose the models
-available from each provider. Then go to **Settings → Copilot → Agents → Quick Chat models** to
+available from each provider. Then go to **Settings → Copilot → Basic → Agents → Quick Chat
+models** to
 control which configured models appear in chat model selectors.
 
 ### Adding Custom Models
@@ -165,7 +166,7 @@ Reduces the likelihood of the model repeating itself.
 Your **default model** is the one Copilot uses when you open a new chat. Set it in:
 **Settings → Copilot → Basic → Default Chat Model**
 
-The dropdown contains models enabled under **Agents → Quick Chat models**.
+The dropdown contains models enabled under **Basic → Agents → Quick Chat models**.
 
 ---
 
