@@ -15,7 +15,7 @@ import {
   resolveGalleryViewState,
   type StoryDefinition,
 } from "./Gallery";
-import type { GalleryParameters, GalleryWidth, Host, Layout } from "@/lib/story";
+import type { GalleryParameters, Host, Layout } from "@/lib/story";
 
 jest.mock("@/components/modals/ReactModal", () => {
   const close = jest.fn();
@@ -65,7 +65,6 @@ function makeStory(
     layout?: Layout;
     name?: string;
     node?: React.ReactNode;
-    width?: GalleryWidth;
   } = {}
 ): StoryDefinition {
   const segments = id.split("/");
@@ -79,7 +78,6 @@ function makeStory(
     name: options.name ?? exportName,
     render: () => options.node ?? <div>{`${id} content`}</div>,
     title: segments.join("/"),
-    width: options.width,
   };
 }
 
@@ -89,7 +87,7 @@ function makeCatalog(): GalleryCatalog {
     coveredCount: 4,
     stories: [
       makeStory("Agent Mode/Agent Welcome Card/Default", { layout: "fullscreen" }),
-      makeStory("UI/Badge/Status", { layout: "centered", width: 340 }),
+      makeStory("UI/Badge/Status", { layout: "centered" }),
       makeStory("UI/Button/Modal", { host: "modal" }),
       makeStory("UI/Button/Popover", { host: "popover" }),
       makeStory("UI/Button/Primary", {
@@ -155,7 +153,6 @@ describe("Gallery", () => {
       expect(catalog.coveredCount).toBe(3);
       expect(catalog.stories.map((story) => story.id)).toEqual([
         "Agent Mode/Agent Welcome Card/Default",
-        "Agent Mode/Agent Welcome Card/Narrow",
         "Gallery/Host Environments/DefaultLeaf",
         "Gallery/Host Environments/DeleteConfirmation",
         "Gallery/Host Environments/ModelPreferences",
@@ -166,7 +163,6 @@ describe("Gallery", () => {
         "UI/Button/Sizes",
         "UI/Button/Variants",
       ]);
-      expect(catalog.stories.find((story) => story.id.endsWith("/Narrow"))?.width).toBe(300);
       expect(
         catalog.stories.find((story) => story.id === "Gallery/Host Environments/DefaultLeaf")
       ).toMatchObject({ host: "leaf", layout: "fullscreen" });
@@ -208,7 +204,7 @@ describe("Gallery", () => {
               },
               Example: {
                 name: "Renamed example",
-                parameters: { gallery: { host: "leaf", width: 340 } },
+                parameters: { gallery: { host: "leaf" } },
                 render: () => "Covered story",
               },
             },
@@ -245,7 +241,6 @@ describe("Gallery", () => {
         host: "leaf",
         layout: "padded",
         name: "Renamed example",
-        width: 340,
       });
     });
 
@@ -273,15 +268,18 @@ describe("Gallery", () => {
       story.unmount();
     });
 
-    it("rejects unsupported story widths at compile time", () => {
+    it("rejects story-declared canvas widths at compile time", () => {
+      // Canvas width is view state owned by the width toolbar, not story metadata:
+      // a declared width would apply to the first render and be silently ignored
+      // afterwards, making two stories that differ only by width indistinguishable.
       const parameters: GalleryParameters = {
         gallery: {
-          // @ts-expect-error The gallery offers only its declared viewport presets to stories.
-          width: 500,
+          // @ts-expect-error Stories cannot pin the canvas width; use the width toolbar.
+          width: 300,
         },
       };
 
-      expect(parameters.gallery?.width).toBe(500);
+      expect(parameters.gallery).toEqual({ width: 300 });
     });
 
     it("rejects a story without a render function or meta component", () => {
@@ -303,17 +301,14 @@ describe("Gallery", () => {
   });
 
   describe("resolveGalleryViewState()", () => {
-    it("restores valid identities and gallery widths", () => {
-      const stories = [
-        makeStory("UI/Button/Default"),
-        makeStory("UI/Button/Narrow", { width: 340 }),
-      ];
+    it("restores valid identities and persisted widths", () => {
+      const stories = [makeStory("UI/Button/Default"), makeStory("UI/Button/Sizes")];
 
       expect(
         resolveGalleryViewState(
           {
             contactSheet: true,
-            selectedStoryId: "UI/Button/Narrow",
+            selectedStoryId: "UI/Button/Sizes",
             selectedSubtree: "UI",
             width: 600,
           },
@@ -321,14 +316,14 @@ describe("Gallery", () => {
         )
       ).toEqual({
         contactSheet: true,
-        selectedStoryId: "UI/Button/Narrow",
+        selectedStoryId: "UI/Button/Sizes",
         selectedSubtree: "UI",
         width: 600,
       });
     });
 
-    it("falls back to an available story, its metadata width, and its title", () => {
-      const stories = [makeStory("UI/Button/Narrow", { width: 340 })];
+    it("falls back to an available story, its title, and the default width", () => {
+      const stories = [makeStory("UI/Button/Sizes")];
 
       expect(
         resolveGalleryViewState(
@@ -342,9 +337,9 @@ describe("Gallery", () => {
         )
       ).toEqual({
         contactSheet: false,
-        selectedStoryId: "UI/Button/Narrow",
+        selectedStoryId: "UI/Button/Sizes",
         selectedSubtree: "UI/Button",
-        width: 340,
+        width: 400,
       });
     });
 

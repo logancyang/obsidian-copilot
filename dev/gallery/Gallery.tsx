@@ -2,12 +2,13 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ReactModal } from "@/components/modals/ReactModal";
 import { useApp } from "@/context";
-import type { GalleryParameters, GalleryWidth, Host, Layout } from "@/lib/story";
+import type { GalleryParameters, Host, Layout } from "@/lib/story";
 import { cn } from "@/lib/utils";
 import type { App } from "obsidian";
 import * as React from "react";
 
 export const GALLERY_WIDTHS = [300, 340, 400, 600] as const;
+type GalleryPresetWidth = (typeof GALLERY_WIDTHS)[number];
 
 export type GalleryHostChange = (storyId: string, close: (() => void) | null) => void;
 interface StoryModuleMeta {
@@ -41,7 +42,6 @@ export interface StoryDefinition {
   name: string;
   render(): React.ReactNode;
   title: string;
-  width?: GalleryWidth;
 }
 
 export interface GalleryCatalog {
@@ -99,7 +99,7 @@ interface CustomWidthDraft {
   value: string;
 }
 
-const DEFAULT_WIDTH: GalleryWidth = 400;
+const DEFAULT_WIDTH: GalleryPresetWidth = 400;
 
 function isPositiveWidth(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value > 0;
@@ -675,7 +675,6 @@ export function createGalleryCatalog(
             ? React.createElement(story.render, args)
             : React.createElement(meta.component!, args),
         title: meta.title,
-        width: gallery.width,
       });
     }
   }
@@ -693,7 +692,7 @@ export function createGalleryCatalog(
  * Restores only valid gallery state and falls back to the first available story when needed.
  *
  * @param value - ItemView state supplied by Obsidian or the current controlled gallery state.
- * @param stories - Available stories used to validate persisted identities and metadata defaults.
+ * @param stories - Available stories used to validate persisted identities.
  */
 export function resolveGalleryViewState(
   value: unknown,
@@ -712,11 +711,7 @@ export function resolveGalleryViewState(
   const selectedSubtree = selectedSubtreeIsValid
     ? requestedSubtree
     : (selectedStory?.title ?? null);
-  const width = isPositiveWidth(state.width)
-    ? state.width
-    : isPositiveWidth(selectedStory?.width)
-      ? selectedStory.width
-      : DEFAULT_WIDTH;
+  const width = isPositiveWidth(state.width) ? state.width : DEFAULT_WIDTH;
 
   return {
     contactSheet: state.contactSheet === true,

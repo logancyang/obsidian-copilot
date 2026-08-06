@@ -493,7 +493,6 @@ describe("main", () => {
 
         expect(handle.list()).toEqual([
           "Agent Mode/Agent Welcome Card/Default",
-          "Agent Mode/Agent Welcome Card/Narrow",
           "Gallery/Host Environments/DefaultLeaf",
           "Gallery/Host Environments/DeleteConfirmation",
           "Gallery/Host Environments/ModelPreferences",

@@ -16,7 +16,3 @@ const meta = {
 export default meta;
 
 export const Default: StoryObj<AgentWelcomeCardProps> = {};
-
-export const Narrow: StoryObj<AgentWelcomeCardProps> = {
-  parameters: { gallery: { width: 300 } },
-};

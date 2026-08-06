@@ -2,11 +2,17 @@ import type { ComponentType } from "react";
 
 export type Host = "leaf" | "modal" | "popover" | "settings-tab";
 export type Layout = "padded" | "centered" | "fullscreen";
-export type GalleryWidth = 300 | 340 | 400 | 600;
 
-/** Namespaced so it can never collide with a real Storybook addon's parameters. */
+/**
+ * Namespaced so it can never collide with a real Storybook addon's parameters.
+ *
+ * Deliberately has no `width`: canvas width is view state owned by the gallery's
+ * width toolbar and persisted per view, so a story that declared one would be
+ * honoured on the very first render and silently ignored from then on. Check a
+ * component at other widths with the toolbar, or sweep them all via `audit()`.
+ */
 export interface GalleryParameters {
-  gallery?: { host?: Host; layout?: Layout; width?: GalleryWidth; coverage?: boolean };
+  gallery?: { host?: Host; layout?: Layout; coverage?: boolean };
 }
 
 /** Strict subset of CSF3 ComponentAnnotations. */
