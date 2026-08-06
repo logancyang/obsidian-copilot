@@ -4,6 +4,7 @@ import { ReactModal } from "@/components/modals/ReactModal";
 import { useApp } from "@/context";
 import type { GalleryParameters, Host, Layout } from "@/lib/story";
 import { cn } from "@/lib/utils";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import type { App } from "obsidian";
 import * as React from "react";
 
@@ -74,9 +75,13 @@ interface StoryTreeNode {
 }
 
 interface StoryTreeProps {
+  depth?: number;
+  expandAll: boolean;
+  expandedSubtrees: ReadonlySet<string>;
   nodes: StoryTreeNode[];
   onSelectStory: (story: StoryDefinition) => void;
   onSelectSubtree: (path: string) => void;
+  onToggleSubtree: (path: string) => void;
   selectedStoryId: string | null;
   selectedSubtree: string | null;
   showContactSheet: boolean;
@@ -176,8 +181,8 @@ function CustomWidthControl({ onApply, width }: CustomWidthControlProps): React.
   );
 }
 
-function storyBelongsToSubtree(story: StoryDefinition, subtree: string): boolean {
-  return story.title === subtree || story.title.startsWith(`${subtree}/`);
+function isWithinSubtree(path: string, subtree: string): boolean {
+  return path === subtree || path.startsWith(`${subtree}/`);
 }
 
 function storyMatchesFilter(story: StoryDefinition, filter: string): boolean {
@@ -555,9 +560,13 @@ function renderHostCard(
 }
 
 function StoryTree({
+  depth = 0,
+  expandAll,
+  expandedSubtrees,
   nodes,
   onSelectStory,
   onSelectSubtree,
+  onToggleSubtree,
   selectedStoryId,
   selectedSubtree,
   showContactSheet,
@@ -566,22 +575,48 @@ function StoryTree({
     <ul className="tw-m-0 tw-flex tw-list-none tw-flex-col tw-gap-1 tw-p-0">
       {nodes.map((node) => {
         const subtreeSelected = showContactSheet && selectedSubtree === node.path;
+        const canFold = depth > 0;
+        const expanded = !canFold || expandAll || expandedSubtrees.has(node.path);
 
         return (
           <li key={node.path}>
-            <Button
-              aria-label={`Show ${node.path} contact sheet`}
-              aria-pressed={subtreeSelected}
-              className="tw-w-full tw-justify-between tw-text-left tw-font-semibold"
-              onClick={() => onSelectSubtree(node.path)}
-              size="sm"
-              type="button"
-              variant={subtreeSelected ? "default" : "ghost2"}
-            >
-              {node.label}
-            </Button>
+            <div className="tw-flex tw-items-center tw-gap-1">
+              {canFold && (
+                <Button
+                  aria-expanded={expanded}
+                  aria-label={
+                    expandAll
+                      ? `${node.path} subtree is expanded while filtering`
+                      : `${expanded ? "Fold" : "Unfold"} ${node.path} subtree`
+                  }
+                  className="tw-size-6 tw-shrink-0"
+                  disabled={expandAll}
+                  onClick={() => onToggleSubtree(node.path)}
+                  size="icon"
+                  type="button"
+                  variant="ghost2"
+                >
+                  {expanded ? (
+                    <ChevronDown className="tw-size-3" />
+                  ) : (
+                    <ChevronRight className="tw-size-3" />
+                  )}
+                </Button>
+              )}
+              <Button
+                aria-label={`Show ${node.path} contact sheet`}
+                aria-pressed={subtreeSelected}
+                className="tw-min-w-0 tw-flex-1 tw-justify-start tw-text-left tw-font-semibold"
+                onClick={() => onSelectSubtree(node.path)}
+                size="sm"
+                type="button"
+                variant={subtreeSelected ? "default" : "ghost2"}
+              >
+                {node.label}
+              </Button>
+            </div>
 
-            {(node.stories.length > 0 || node.children.size > 0) && (
+            {expanded && (node.stories.length > 0 || node.children.size > 0) && (
               <div className="copilot-gallery-divider-l tw-ml-3 tw-pl-2">
                 {node.stories.map((story) => {
                   const selected = story.id === selectedStoryId && !showContactSheet;
@@ -607,9 +642,13 @@ function StoryTree({
                 })}
                 {node.children.size > 0 && (
                   <StoryTree
+                    depth={depth + 1}
+                    expandAll={expandAll}
+                    expandedSubtrees={expandedSubtrees}
                     nodes={[...node.children.values()]}
                     onSelectStory={onSelectStory}
                     onSelectSubtree={onSelectSubtree}
+                    onToggleSubtree={onToggleSubtree}
                     selectedStoryId={selectedStoryId}
                     selectedSubtree={selectedSubtree}
                     showContactSheet={showContactSheet}
@@ -707,7 +746,7 @@ export function resolveGalleryViewState(
   const selectedSubtreeIsValid =
     requestedSubtree !== null &&
     (stories.length === 0 ||
-      stories.some((story) => storyBelongsToSubtree(story, requestedSubtree)));
+      stories.some((story) => isWithinSubtree(story.title, requestedSubtree)));
   const selectedSubtree = selectedSubtreeIsValid
     ? requestedSubtree
     : (selectedStory?.title ?? null);
@@ -742,14 +781,24 @@ export function Gallery({
   const storyTree = React.useMemo(() => buildStoryTree(filteredStories), [filteredStories]);
   const selectedStory = catalog.stories.find((story) => story.id === state.selectedStoryId) ?? null;
   const selectedSubtree = state.selectedSubtree ?? selectedStory?.title ?? null;
+  const [expandedSubtrees, setExpandedSubtrees] = React.useState<ReadonlySet<string>>(() => {
+    const paths = new Set<string>();
+    const segments = selectedStory?.title.split("/") ?? [];
+
+    for (let index = 1; index < segments.length; index += 1) {
+      paths.add(segments.slice(0, index + 1).join("/"));
+    }
+    return paths;
+  });
+
   const contactSheetStories = selectedSubtree
     ? catalog.stories.filter(
-        (story) => story.host === "leaf" && storyBelongsToSubtree(story, selectedSubtree)
+        (story) => story.host === "leaf" && isWithinSubtree(story.title, selectedSubtree)
       )
     : [];
   const hostCardStories = selectedSubtree
     ? catalog.stories.filter(
-        (story) => story.host !== "leaf" && storyBelongsToSubtree(story, selectedSubtree)
+        (story) => story.host !== "leaf" && isWithinSubtree(story.title, selectedSubtree)
       )
     : [];
   const selectStory = (story: StoryDefinition) => {
@@ -798,6 +847,17 @@ export function Gallery({
   const selectSubtree = (path: string) => {
     onStateChange({ ...state, contactSheet: true, selectedSubtree: path });
   };
+  const toggleSubtree = (path: string) => {
+    setExpandedSubtrees((current) => {
+      const next = new Set(current);
+      if (next.has(path)) {
+        next.delete(path);
+      } else {
+        next.add(path);
+      }
+      return next;
+    });
+  };
 
   return (
     <div className="tw-flex tw-h-full tw-min-h-0 tw-bg-primary tw-text-normal">
@@ -831,9 +891,12 @@ export function Gallery({
         <nav aria-label="Story tree" className="tw-min-h-0 tw-flex-1 tw-overflow-y-auto tw-p-2">
           {storyTree.length > 0 ? (
             <StoryTree
+              expandAll={filter.trim() !== ""}
+              expandedSubtrees={expandedSubtrees}
               nodes={storyTree}
               onSelectStory={selectStory}
               onSelectSubtree={selectSubtree}
+              onToggleSubtree={toggleSubtree}
               selectedStoryId={state.selectedStoryId}
               selectedSubtree={selectedSubtree}
               showContactSheet={state.contactSheet}
