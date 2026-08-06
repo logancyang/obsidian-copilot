@@ -94,12 +94,6 @@ Then in either case:
 - "Knows about a specific binary, install path, BYOK keys, vendor models" → `backends/<id>/`
 - "React component or modal" → `ui/` (generic) or `backends/<id>/`
   (backend-specific)
-- "Presentational component with a story" → a nested `ui/` subfolder of
-  its layer (`backends/shared/ui/`, `backends/<id>/ui/`, `skills/ui/`).
-  The gallery import fence admits any `ui/` folder, so gallery-renderable
-  components must live in one — and take plugin state as props, never
-  import it. Do not carve per-file exemptions into the fence instead
-  (see "Import boundaries" in `designdocs/agents/STYLE_GUIDE.md`).
 - "Canonical-store skill discovery, symlink lifecycle, SKILL.md
   parser/serializer, Skills settings tab (reads `backends/registry.ts`
   for the brand list)" → `skills/`
