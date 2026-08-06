@@ -3301,19 +3301,30 @@ export class AgentSessionManager {
     backendId: BackendId,
     descriptor: BackendDescriptor
   ): Promise<BackendProcess> {
-    const existing = this.backends.get(backendId);
-    if (existing && existing.isRunning()) return existing;
-    const inflight = this.starting.get(backendId);
-    if (inflight) return inflight;
+    const installState = descriptor.getInstallState(getSettings());
+    if (installState.kind === "ready" || installState.kind === "checking") {
+      const existing = this.backends.get(backendId);
+      if (existing && existing.isRunning()) return existing;
+      const inflight = this.starting.get(backendId);
+      if (inflight) return inflight;
 
-    const warm = this.preloader.takeWarm(backendId);
-    if (warm) {
-      // Probe subprocess is already started + initialize-handshaken —
-      // wire it into the manager without paying either cost again.
-      this.wirePrompters(warm.proc);
-      this.installBackendExitHandler(backendId, warm.proc, descriptor);
-      this.backends.set(backendId, warm.proc);
-      return warm.proc;
+      const warm = this.preloader.takeWarm(backendId);
+      if (warm) {
+        // Probe subprocess is already started + initialize-handshaken —
+        // wire it into the manager without paying either cost again.
+        this.wirePrompters(warm.proc);
+        this.installBackendExitHandler(backendId, warm.proc, descriptor);
+        this.backends.set(backendId, warm.proc);
+        return warm.proc;
+      }
+    }
+
+    if (installState.kind !== "ready") {
+      const reason =
+        installState.kind === "error"
+          ? installState.message
+          : `${descriptor.displayName} is not ready (${installState.kind}).`;
+      throw new Error(reason);
     }
 
     const proc = descriptor.createBackendProcess({

@@ -261,9 +261,9 @@ function modelCatalog(baseModelId: string): BackendModelCatalog {
 }
 
 function buildManager(
-  modelPreloaderOverrides: Partial<AgentModelPreloader> = {}
+  modelPreloaderOverrides: Partial<AgentModelPreloader> = {},
+  descriptor: BackendDescriptor = buildDescriptor()
 ): AgentSessionManager {
-  const descriptor = buildDescriptor();
   const modelPreloader = {
     getCachedModelCatalog: jest.fn(() => null),
     getEffortCatalog: jest.fn(() => null),
@@ -336,6 +336,47 @@ describe("AgentSessionManager.createSession", () => {
     await mgr.createSession();
     await mgr.createSession();
     await mgr.createSession();
+    expect(mockBackendStart).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not start a backend whose install state is not ready", async () => {
+    const descriptor = {
+      ...buildDescriptor(),
+      getInstallState: jest.fn(() => ({
+        kind: "error",
+        message: "Update the configured adapter.",
+      })),
+    } as unknown as BackendDescriptor;
+    const mgr = buildManager({}, descriptor);
+
+    await expect(mgr.createSession()).rejects.toThrow("Update the configured adapter.");
+    expect(descriptor.createBackendProcess).not.toHaveBeenCalled();
+    expect(mockBackendStart).not.toHaveBeenCalled();
+  });
+
+  it("reuses a running backend while an install-state recheck is in flight", async () => {
+    const descriptor = buildDescriptor();
+    const mgr = buildManager({}, descriptor);
+    await mgr.createSession();
+    (descriptor.getInstallState as jest.Mock).mockReturnValue({
+      kind: "checking",
+      source: "custom",
+    });
+
+    await expect(mgr.createSession()).resolves.toBeDefined();
+    expect(mockBackendStart).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects a settled install error instead of reusing a running backend", async () => {
+    const descriptor = buildDescriptor();
+    const mgr = buildManager({}, descriptor);
+    await mgr.createSession();
+    (descriptor.getInstallState as jest.Mock).mockReturnValue({
+      kind: "error",
+      message: "Update the configured adapter.",
+    });
+
+    await expect(mgr.createSession()).rejects.toThrow("Update the configured adapter.");
     expect(mockBackendStart).toHaveBeenCalledTimes(1);
   });
 
@@ -455,6 +496,21 @@ describe("AgentSessionManager warm-backend reuse", () => {
     // The active session uses the warm process.
     expect(mgr.getActiveSession()).not.toBeNull();
     expect(mgr.getActiveSession()?.backendId).toBe("opencode");
+  });
+
+  it("reuses the warm proc while an install-state recheck is in flight", async () => {
+    const warmProc = makeMockBackendProcess();
+    const { mgr, descriptor } = buildManagerWithWarm(warmProc);
+    (descriptor.getInstallState as jest.Mock).mockReturnValue({
+      kind: "checking",
+      source: "custom",
+    });
+
+    await mgr.createSession();
+
+    expect(mockBackendStart).not.toHaveBeenCalled();
+    expect(descriptor.createBackendProcess).not.toHaveBeenCalled();
+    expect(mgr.getActiveSession()).not.toBeNull();
   });
 
   it("starts a fresh session on the warm proc instead of adopting the probe session", async () => {
@@ -1339,7 +1395,7 @@ describe("AgentSessionManager.applySelection", () => {
     const descriptor = {
       id: "opencode",
       displayName: "opencode",
-      getInstallState: jest.fn(),
+      getInstallState: jest.fn(() => ({ kind: "ready" })),
       subscribeInstallState: jest.fn(),
       openInstallUI: jest.fn(),
       createBackendProcess: jest.fn(() => makeMockBackendProcess()),
@@ -1429,7 +1485,7 @@ describe("AgentSessionManager default-model settings subscription", () => {
     return {
       id: "opencode",
       displayName: "opencode",
-      getInstallState: jest.fn(),
+      getInstallState: jest.fn(() => ({ kind: "ready" })),
       subscribeInstallState: jest.fn(),
       openInstallUI: jest.fn(),
       createBackendProcess: jest.fn(() => makeMockBackendProcess()),
@@ -1809,12 +1865,13 @@ describe("AgentSessionManager.onInstallStateChanged", () => {
   });
 
   it("keeps live and warm backend state while a compatibility check is in flight", async () => {
-    const { mgr, preloader } = buildInstallStateManager({
-      installState: { kind: "checking", source: "custom" },
+    const { mgr, preloader, setInstallState } = buildInstallStateManager({
+      installState: { kind: "ready", source: "custom" },
     });
     await mgr.createSession();
     mockBackendShutdown.mockClear();
 
+    setInstallState({ kind: "checking", source: "custom" });
     await mgr.onInstallStateChanged("opencode");
 
     expect(mockBackendShutdown).not.toHaveBeenCalled();

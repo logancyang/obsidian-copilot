@@ -2,37 +2,59 @@ import { BinaryPathSetting } from "@/agentMode/backends/shared/BinaryPathSetting
 import { ConfigDialogShell, ConfigSection } from "@/agentMode/backends/shared/ConfigDialogShell";
 import { InstallCommandRow } from "@/agentMode/backends/shared/InstallCommandRow";
 import { InstallStatusLine } from "@/agentMode/backends/shared/installStatus";
-import { binaryPathInstallState } from "@/agentMode/backends/shared/simpleBinaryBackend";
 import { ReactModal } from "@/components/modals/ReactModal";
-import { useSettingsValue } from "@/settings/model";
+import { getSettings, useSettingsValue } from "@/settings/model";
 import { validateExecutableFile } from "@/utils/detectBinary";
 import { App, Notice } from "obsidian";
 import React from "react";
 import {
   CODEX_BINARY_NAME,
-  CODEX_INSTALL_COMMAND,
   codexAcpDetectionSearchDirs,
   detectCodexAcpPath,
+  getCodexInstallState,
+  refreshCodexInstallState,
+  subscribeCodexInstallState,
   updateCodexFields,
 } from "./descriptor";
+import { getCodexInstallGuidance } from "./codexCompatibility";
+
+interface CodexConfigBodyProps {
+  onClose: () => void;
+  platform?: NodeJS.Platform;
+}
 
 /**
  * Configure dialog for the Codex backend. Copilot spawns the native
  * `codex-acp` ACP adapter. The dialog configures the codex-acp path
  * and gives auth guidance; `codex login` owns the user's auth state.
  */
-const CodexConfigBody: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+export const CodexConfigBody: React.FC<CodexConfigBodyProps> = ({
+  onClose,
+  platform = process.platform,
+}) => {
   const settings = useSettingsValue();
+  const installGuidance = getCodexInstallGuidance(platform);
   const binaryPath = settings.agentMode?.backends?.codex?.binaryPath ?? "";
-  // Existence-checked (same as descriptor.getInstallState): a synced-but-missing
-  // path reads "absent" here too, not a stale "Ready", so the dialog guides the
-  // user to re-detect or clear the dead path instead of looking configured.
-  const sessionState = binaryPathInstallState(binaryPath);
+  const getInstallStateSnapshot = React.useCallback(
+    () => getCodexInstallState(settings),
+    [settings]
+  );
+  const sessionState = React.useSyncExternalStore(
+    subscribeCodexInstallState,
+    getInstallStateSnapshot
+  );
+  const needsLegacyRemoval = sessionState.kind === "error" || sessionState.kind === "absent";
+
+  React.useEffect(() => {
+    const current = getCodexInstallState(getSettings());
+    void refreshCodexInstallState(getSettings(), current.kind !== "ready");
+  }, []);
 
   const onSavePath = React.useCallback(async (path: string): Promise<string | null> => {
     const err = await validateExecutableFile(path);
     if (err) return err;
     updateCodexFields({ binaryPath: path });
+    await refreshCodexInstallState(getSettings(), true);
     new Notice("Codex binary path saved.");
     return null;
   }, []);
@@ -45,7 +67,22 @@ const CodexConfigBody: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   return (
     <ConfigDialogShell status={<InstallStatusLine state={sessionState} />} onClose={onClose}>
       <ConfigSection title="Install codex-acp">
-        <InstallCommandRow command={CODEX_INSTALL_COMMAND} />
+        {needsLegacyRemoval && installGuidance.removeLegacyCommand && (
+          <InstallCommandRow
+            command={installGuidance.removeLegacyCommand}
+            label="1. Remove the superseded adapter"
+          />
+        )}
+        <InstallCommandRow
+          command={installGuidance.installCommand}
+          label={
+            needsLegacyRemoval
+              ? installGuidance.removeLegacyCommand
+                ? "2. Install the maintained adapter"
+                : "Replace with the maintained adapter (Windows PowerShell)"
+              : undefined
+          }
+        />
       </ConfigSection>
 
       <ConfigSection title="Use your own binary">

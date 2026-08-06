@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import type CopilotPlugin from "@/main";
 import {
+  getSettings,
   subscribeToSettingsChange,
   updateAgentModeBackendFields,
   type CodexBackendSettings,
@@ -13,10 +14,7 @@ import CodexLogo from "./logo.svg";
 import { CodexSettingsPanel } from "./CodexSettingsPanel";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import { agentOriginEnabledModelEntries } from "@/agentMode/backends/shared/agentEnabledModels";
-import {
-  binaryPathInstallState,
-  simpleBinaryBackendProcess,
-} from "@/agentMode/backends/shared/simpleBinaryBackend";
+import { simpleBinaryBackendProcess } from "@/agentMode/backends/shared/simpleBinaryBackend";
 import type {
   EnabledModelEntry,
   ModelSelection,
@@ -26,13 +24,18 @@ import type {
 import type { BackendDescriptor, BackendProcess, InstallState } from "@/agentMode/session/types";
 import { detectBinary } from "@/utils/detectBinary";
 import { codexAcpSearchDirs, resolveCodexAcpBinary } from "./codexBinaryResolver";
+import {
+  CODEX_INSTALL_COMMAND,
+  getCodexCompatibility,
+  refreshCodexCompatibility,
+  subscribeCodexCompatibility,
+} from "./codexCompatibility";
 import { buildCodexModeMapping } from "./codexModeMapping";
 
 export const CODEX_BINARY_NAME = "codex-acp";
-export const CODEX_INSTALL_COMMAND =
-  process.platform === "win32"
-    ? "irm https://gist.githubusercontent.com/logancyang/380ef4dbf9f98900771da76eca3d21e6/raw/install-codex-agent-mode-windows.ps1 | iex"
-    : "npm install -g @agentclientprotocol/codex-acp";
+export { CODEX_INSTALL_COMMAND };
+
+const ABSENT_INSTALL_STATE: InstallState = Object.freeze({ kind: "absent" });
 
 /**
  * Vocabulary mirrors codex-acp's advertised efforts. `minimal` is included
@@ -46,16 +49,40 @@ export function updateCodexFields(partial: Partial<CodexBackendSettings>): void 
 }
 
 function codexAcpResolverEnv(): Parameters<typeof resolveCodexAcpBinary>[0] {
+  const envOverrides = getSettings().agentMode?.backends?.codex?.envOverrides;
   return {
     homeDir: os.homedir(),
     platform: process.platform,
-    env: process.env,
+    env: mergeCodexResolverEnvironment(process.env, envOverrides, process.platform),
     fs: {
       existsSync: (p) => fs.existsSync(p),
       readFileSync: (p, encoding) => fs.readFileSync(p, encoding),
       readdirSync: (p) => fs.readdirSync(p),
     },
   };
+}
+
+function mergeCodexResolverEnvironment(
+  baseEnv: NodeJS.ProcessEnv,
+  envOverrides: Record<string, string> = {},
+  platform: NodeJS.Platform = process.platform
+): NodeJS.ProcessEnv {
+  if (platform !== "win32") return { ...baseEnv, ...envOverrides };
+
+  const env = { ...baseEnv };
+  let effectivePath = Object.entries(baseEnv).find(([key]) => key.toLowerCase() === "path")?.[1];
+  for (const key of Object.keys(env)) {
+    if (key.toLowerCase() === "path") delete env[key];
+  }
+  for (const [key, value] of Object.entries(envOverrides)) {
+    if (key.toLowerCase() === "path") {
+      effectivePath = value;
+    } else {
+      env[key] = value;
+    }
+  }
+  if (effectivePath !== undefined) env.PATH = effectivePath;
+  return env;
 }
 
 export async function detectCodexAcpPath(): Promise<string | null> {
@@ -66,6 +93,48 @@ export async function detectCodexAcpPath(): Promise<string | null> {
 
 export function codexAcpDetectionSearchDirs(): string[] {
   return codexAcpSearchDirs(codexAcpResolverEnv());
+}
+
+/**
+ * Reads the selected Codex adapter's device-local compatibility state.
+ * @param settings - The settings that select the adapter executable.
+ * @param fileExists - The filesystem check used to reject synced paths missing on this device.
+ */
+export function getCodexInstallState(
+  settings: CopilotSettings,
+  fileExists: (binaryPath: string) => boolean = (binaryPath) => fs.existsSync(binaryPath)
+): InstallState {
+  const binaryPath = settings.agentMode?.backends?.codex?.binaryPath;
+  if (!binaryPath || !fileExists(binaryPath)) return ABSENT_INSTALL_STATE;
+  return getCodexCompatibility(binaryPath, settings.agentMode?.backends?.codex?.envOverrides);
+}
+
+/**
+ * Rechecks the selected adapter after configuration or plugin lifecycle changes.
+ * @param settings - The settings that select the adapter executable.
+ * @param force - Whether a settled result should be checked again.
+ * @param fileExists - The filesystem check used to reject missing executables before probing.
+ */
+export function refreshCodexInstallState(
+  settings: CopilotSettings,
+  force = false,
+  fileExists: (binaryPath: string) => boolean = (binaryPath) => fs.existsSync(binaryPath)
+): Promise<InstallState> {
+  const binaryPath = settings.agentMode?.backends?.codex?.binaryPath;
+  if (!binaryPath || !fileExists(binaryPath)) return Promise.resolve(ABSENT_INSTALL_STATE);
+  return refreshCodexCompatibility(binaryPath, {
+    force,
+    envOverrides: settings.agentMode?.backends?.codex?.envOverrides,
+  });
+}
+
+export function subscribeCodexInstallState(listener: () => void): () => void {
+  return subscribeCodexCompatibility(() => {
+    const codex = getSettings().agentMode?.backends?.codex;
+    return codex?.binaryPath
+      ? { binaryPath: codex.binaryPath, envOverrides: codex.envOverrides }
+      : null;
+  }, listener);
 }
 
 /**
@@ -154,7 +223,7 @@ export const CodexBackendDescriptor: BackendDescriptor = {
   },
 
   getInstallState(settings: CopilotSettings): InstallState {
-    return binaryPathInstallState(settings.agentMode?.backends?.codex?.binaryPath);
+    return getCodexInstallState(settings);
   },
 
   getResolvedBinaryPath(settings: CopilotSettings): string | null {
@@ -162,13 +231,27 @@ export const CodexBackendDescriptor: BackendDescriptor = {
   },
 
   subscribeInstallState(_plugin: CopilotPlugin, cb: () => void): () => void {
-    return subscribeToSettingsChange((prev, next) => {
+    const unsubscribeSettings = subscribeToSettingsChange((prev, next) => {
       if (
-        prev.agentMode?.backends?.codex?.binaryPath !== next.agentMode?.backends?.codex?.binaryPath
+        prev.agentMode?.backends?.codex?.binaryPath !==
+          next.agentMode?.backends?.codex?.binaryPath ||
+        prev.agentMode?.backends?.codex?.envOverrides !==
+          next.agentMode?.backends?.codex?.envOverrides
       ) {
+        const refresh = refreshCodexInstallState(next, true);
         cb();
+        void refresh;
       }
     });
+    const unsubscribeCompatibility = subscribeCodexInstallState(cb);
+    return () => {
+      unsubscribeSettings();
+      unsubscribeCompatibility();
+    };
+  },
+
+  async onPluginLoad(): Promise<void> {
+    await refreshCodexInstallState(getSettings(), true);
   },
 
   openInstallUI(plugin: CopilotPlugin): void {

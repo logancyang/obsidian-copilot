@@ -136,6 +136,11 @@ function windowsCandidates(input: NodeToolBinDirsInput): Array<string | null> {
   dirs.push(env.NVM_SYMLINK ?? null);
   dirs.push(env.NVM_HOME ?? null);
 
+  // The official Windows installer places node.exe here. A GUI app that was
+  // already running when Node was installed still has a stale inherited PATH.
+  dirs.push(p.join(env.ProgramFiles ?? "C:\\Program Files", "nodejs"));
+  dirs.push(p.join(env["ProgramFiles(x86)"] ?? "C:\\Program Files (x86)", "nodejs"));
+
   // fnm on Windows puts node.exe directly under the multishell dir (no /bin).
   if (env.FNM_MULTISHELL_PATH) dirs.push(env.FNM_MULTISHELL_PATH);
 
