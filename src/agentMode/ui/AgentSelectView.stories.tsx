@@ -35,19 +35,21 @@ const CODEX: AgentSelectRow = {
   statusMessage: null,
 };
 
-const AgentSelectStory: React.FC<AgentSelectViewProps> = (args) => {
-  const [selectedId, setSelectedId] = React.useState(args.selectedId);
-  const selectedRow = args.rows.find((row) => row.id === selectedId) ?? args.rows[0];
+const AgentSelectStory: React.FC<Partial<AgentSelectViewProps>> = (args) => {
+  const rows = args.rows ?? [OPENCODE, CLAUDE, CODEX];
+  const [selectedId, setSelectedId] = React.useState(args.selectedId ?? "opencode");
+  const selectedRow = rows.find((row) => row.id === selectedId) ?? rows[0];
   const cta = resolveAgentSelectCta(selectedRow);
 
   return (
     <AgentSelectView
-      {...args}
+      rows={rows}
       selectedId={selectedId}
       onSelect={setSelectedId}
       ctaLabel={cta.label}
       footerNote={cta.note}
       ctaDisabled={cta.action === "wait"}
+      onCta={args.onCta ?? (() => undefined)}
     />
   );
 };
@@ -63,19 +65,20 @@ const meta = {
     footerNote: "opencode isn't set up on this machine yet.",
     onCta: () => undefined,
   },
-  render: (args) => <AgentSelectStory {...args} />,
   parameters: { gallery: { host: "leaf", layout: "padded", width: 300 } },
 } satisfies Meta<AgentSelectViewProps>;
 export default meta;
 
 export const NothingSetUp: StoryObj<AgentSelectViewProps> = {
   args: {},
+  render: AgentSelectStory,
 };
 
 export const OpencodeConnected: StoryObj<AgentSelectViewProps> = {
   args: {
     rows: [{ ...OPENCODE, status: "connected" }, CLAUDE, CODEX],
   },
+  render: AgentSelectStory,
 };
 
 export const ClaudeChecking: StoryObj<AgentSelectViewProps> = {
@@ -83,6 +86,7 @@ export const ClaudeChecking: StoryObj<AgentSelectViewProps> = {
     rows: [OPENCODE, { ...CLAUDE, status: "checking" }, CODEX],
     selectedId: "claude",
   },
+  render: AgentSelectStory,
 };
 
 export const ClaudeUpdateRequired: StoryObj<AgentSelectViewProps> = {
@@ -98,6 +102,7 @@ export const ClaudeUpdateRequired: StoryObj<AgentSelectViewProps> = {
     ],
     selectedId: "claude",
   },
+  render: AgentSelectStory,
 };
 
 export const CodexError: StoryObj<AgentSelectViewProps> = {
@@ -113,6 +118,7 @@ export const CodexError: StoryObj<AgentSelectViewProps> = {
     ],
     selectedId: "codex",
   },
+  render: AgentSelectStory,
 };
 
 export const LongAgentName: StoryObj<AgentSelectViewProps> = {
@@ -129,4 +135,5 @@ export const LongAgentName: StoryObj<AgentSelectViewProps> = {
       CODEX,
     ],
   },
+  render: AgentSelectStory,
 };
