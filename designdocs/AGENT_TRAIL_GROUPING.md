@@ -36,8 +36,8 @@ run of machine rows before the next piece of prose.
 ## What an activity group is
 
 A maximal run of consecutive **tool calls and reasoning blocks**, folded into
-one collapsed row summarizing the work: `Ran 1 skill, 12 commands, thought for
-51s`. A run of one member keeps its own row — a single `Read` gets no group
+one collapsed row summarizing the work: `Read 2 files, ran 12 commands, thought
+for 51s`. A run of one member keeps its own row — a single `Read` gets no group
 chrome.
 
 ### What breaks a run
@@ -63,15 +63,27 @@ chrome.
 
 ### How the line reads
 
-Families are named in first-appearance order, capped at three, then `+N more`.
-Two rules came out of the replay:
+The vocabulary is deliberately coarse — three families plus reasoning, named in
+first-appearance order:
 
-- **Unregistered tools keep their own identity.** Bucketing everything
-  unrecognized into "tool calls" produced lines like `Made 16 tool calls` on
-  real sessions, which lean heavily on tools with no built-in summary. They key
-  on their own name instead: `Design sync ×16`. MCP tools key per server.
-- **A verb that repeats the previous phrase's is dropped.** `Ran 1 skill, ran 12
-commands` reads as two facts; `Ran 1 skill, 12 commands` reads as one.
+- **read** — `Read` / `NotebookRead` by vendor name, or the ACP
+  `toolKind: "read"` fallback, so a backend that sends no vendor names still
+  says `read 2 files`.
+- **edit** — `Edit` / `MultiEdit` / `Write` / `NotebookEdit`, or
+  `toolKind: "edit"`.
+- **command** — everything else, no exceptions: shell commands, searches,
+  fetches, skills, MCP calls, tools that do not exist yet.
+
+`Read 2 files, edited 1 file, ran 5 commands, thought for 51s` is the longest
+shape the line can take. An earlier revision named more families (searches,
+fetches, skills), kept unregistered tools under their own name (`Design sync
+×16`), and keyed MCP tools per server — which then needed a family cap with
+`+N more` and verb dedup to stay readable. It was dropped: every new tool was
+new phrasing surface, and the identity the coarse line gives up is one click
+away in the expanded rows, which show each call's own summary. Calling a fetch
+or an MCP call a "command" is a stretch that only lasts until the group is
+opened — and a lone call never enters a group at all, so it keeps its precise
+row.
 
 Reasoning duration is **not** derivable from the parts — `kind: "thought"`
 carries no timestamps. The caller measures it live and passes `thinkingMs` to

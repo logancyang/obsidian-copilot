@@ -219,67 +219,31 @@ describe("activityGroups", () => {
       expect(line).toBe("Ran 1 command, read 1 file");
     });
 
-    it("names an unregistered tool instead of pooling it as an anonymous call", () => {
-      const { line } = summarizeActivity(
-        Array.from({ length: 16 }, (_, i) => member(`d${i}`, { vendorToolName: "DesignSync" }))
-      );
-      expect(line).toBe("Design sync ×16");
-    });
-
-    it("keeps two different unregistered tools apart", () => {
+    it("counts every tool that is not a read or an edit as a command", () => {
       const { line } = summarizeActivity([
-        member("a", { vendorToolName: "DesignSync" }),
-        member("b", { vendorToolName: "TaskOutput" }),
+        member("a", { vendorToolName: "Grep" }),
+        member("b", { vendorToolName: "WebFetch" }),
+        member("c", { vendorToolName: "Skill" }),
+        member("d", { vendorToolName: "DesignSync" }),
+        member("e", { vendorToolName: "search_flows", mcpServer: "mobbin" }),
       ]);
-      expect(line).toBe("Ran design sync, task output");
+      expect(line).toBe("Ran 5 commands");
     });
 
-    it("keys MCP tools by server", () => {
-      const { line } = summarizeActivity([
-        member("a", { vendorToolName: "search_screens", mcpServer: "mobbin" }),
-        member("b", { vendorToolName: "search_flows", mcpServer: "mobbin" }),
-      ]);
-      expect(line).toBe("Mobbin · 2 calls");
-    });
-
-    it("drops a verb that repeats the previous phrase's", () => {
-      const { line } = summarizeActivity([
-        member("s", { vendorToolName: "Skill" }),
-        ...Array.from({ length: 12 }, (_, i) => member(`b${i}`, { vendorToolName: "Bash" })),
-      ]);
-      expect(line).toBe("Ran 1 skill, 12 commands");
-    });
-
-    it("keeps the verb when the repeat is not adjacent", () => {
+    it("adds a later member of an earlier family to its count rather than a new phrase", () => {
       const { line } = summarizeActivity([
         member("b", { vendorToolName: "Bash" }),
         member("r", { vendorToolName: "Read" }),
         member("g", { vendorToolName: "Grep" }),
       ]);
-      expect(line).toBe("Ran 1 command, read 1 file, ran 1 search");
+      expect(line).toBe("Ran 2 commands, read 1 file");
     });
 
-    it("elides families past the cap", () => {
+    it("does not let an MCP tool named like a native read count as one", () => {
       const { line } = summarizeActivity([
-        member("a", { vendorToolName: "Read" }),
-        member("b", { vendorToolName: "Bash" }),
-        member("c", { vendorToolName: "WebFetch" }),
-        member("d", { vendorToolName: "LS" }),
-        member("e", { vendorToolName: "TodoWrite" }),
+        member("a", { vendorToolName: "Read", mcpServer: "srv" }),
       ]);
-      expect(line).toBe("Read 1 file, ran 1 command, fetched 1 URL, +2 more");
-    });
-
-    it("honors a caller-supplied family cap", () => {
-      const { line } = summarizeActivity(
-        [
-          member("a", { vendorToolName: "Read" }),
-          member("b", { vendorToolName: "Bash" }),
-          member("c", { vendorToolName: "WebFetch" }),
-        ],
-        { maxPhrases: 2 }
-      );
-      expect(line).toBe("Read 1 file, ran 1 command, +1 more");
+      expect(line).toBe("Ran 1 command");
     });
 
     it("appends the measured reasoning time", () => {
