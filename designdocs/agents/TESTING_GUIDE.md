@@ -435,7 +435,7 @@ npm run gallery:build
 
 Deploy to the non-production test vault configured by `COPILOT_TEST_VAULT_PATH` with `npm run gallery:vault`. Before any CLI or UI mutation, verify that the resolved vault name and path match that configuration; never rely on the implicitly focused renderer.
 
-The story tree keeps its top-level categories open. Select a category label to show its contact sheet; for nested categories, use the adjacent chevron button to fold or unfold that subtree. Selecting a different story or contact sheet does not close branches you already opened.
+The story tree keeps its top-level categories open. Select a category label to show its contact sheet. For nested categories, the label also folds or unfolds the subtree; use the adjacent chevron when you want to toggle it without changing the selected contact sheet. Selecting a different story or contact sheet does not close branches you already opened.
 
 ### Agent verification loop
 

@@ -414,7 +414,7 @@ describe("main", () => {
     });
 
     describe("onOpen()", () => {
-      it("shows a visible nested list, selected marker, exact current id, and one story", async () => {
+      it("shows a visible nested list, selected styling, exact current id, and one story", async () => {
         await view.onOpen();
 
         expect(mountViewRoot).toHaveBeenCalledWith(view.containerEl, app, expect.any(Function));
@@ -428,9 +428,10 @@ describe("main", () => {
         ).toBeTruthy();
         expect(gallery.getByRole("button", { name: "Show Agent Mode contact sheet" })).toBeTruthy();
         expect(gallery.getByRole("button", { name: "Show UI contact sheet" })).toBeTruthy();
-        expect(gallery.getByRole("button", { name: "Default Selected" }).textContent).toContain(
-          "Selected"
-        );
+        const selectedStory = gallery.getByRole("button", { name: "Default" });
+        expect(selectedStory.getAttribute("aria-current")).toBe("true");
+        expect(selectedStory.classList.contains("mod-cta")).toBe(true);
+        expect(gallery.queryByText("Selected")).toBeNull();
         expect(gallery.getByText("Agent Mode/Agent Welcome Card/Default")).toBeTruthy();
         expect(gallery.container.querySelectorAll("[data-gallery-story-id]")).toHaveLength(1);
 
