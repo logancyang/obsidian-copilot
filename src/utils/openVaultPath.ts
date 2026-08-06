@@ -115,8 +115,7 @@ function toExistingRootRelativeVaultPath(app: App, href: string): string | null 
   if (!href.startsWith("/") || href.startsWith("//")) return null;
   const rel = href.replace(/^\/+/, "");
   if (!rel) return null;
-  const anchorIndex = rel.indexOf("#");
-  const filePath = anchorIndex === -1 ? rel : rel.slice(0, anchorIndex);
+  const { filePath } = splitAnchor(rel);
   if (!filePath) return null;
   return app.vault.getAbstractFileByPath(filePath) ? rel : null;
 }
