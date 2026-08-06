@@ -5,7 +5,7 @@ describe("buildProjectContextUpdatesBlock", () => {
     const block = buildProjectContextUpdatesBlock();
     expect(block).toContain("<project_context_updates>");
     expect(block).toContain("</project_context_updates>");
-    expect(block).toContain("re-check declared folders/tags/files before answering");
+    expect(block).toContain("re-check the declared project context before answering");
   });
 
   it("is a stable, source-agnostic constant (no per-path detail)", () => {

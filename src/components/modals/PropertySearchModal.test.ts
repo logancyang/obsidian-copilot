@@ -172,8 +172,18 @@ describe("PropertySearchModal", () => {
     describe("getItemText()", () => {
       it("labels the any-value choice and shows a real value verbatim", () => {
         const modal = new PropertyValueModal(makeApp([]), "Topics", jest.fn());
-        expect(modal.getItemText(null)).toBe("(any value)");
+        expect(modal.getItemText(null)).toBe("Any value — notes that declare this key");
         expect(modal.getItemText("Physics")).toBe("Physics");
+      });
+
+      it("keeps the any-value label distinct from a note whose value is literally that text", () => {
+        // Both entries are offered together, and they build very different patterns
+        // ([Topics:] vs [Topics:(any value)]), so their labels must never coincide.
+        const app = makeApp([{ path: "Notes/a.md", frontmatter: { Topics: "(any value)" } }]);
+        const modal = new PropertyValueModal(app, "Topics", jest.fn());
+
+        expect(modal.getItems()).toEqual([null, "(any value)"]);
+        expect(modal.getItemText("(any value)")).not.toBe(modal.getItemText(null));
       });
     });
 

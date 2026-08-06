@@ -115,7 +115,7 @@ describe("buildProjectContextBlock", () => {
 
     expect(md).toContain(`Only the first ${MAX_MANIFEST_ENTRIES} of ${folders.length} sources`);
     expect(md).toContain("25 more are omitted");
-    expect(md).toContain("Use folder/tag search");
+    expect(md).toContain("Use the declared context sources above");
   });
 
   it("omits the truncation note when under the cap", () => {

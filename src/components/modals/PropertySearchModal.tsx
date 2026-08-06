@@ -87,15 +87,15 @@ function collectPropertyValues(app: App, key: string): string[] {
   return Array.from(values).sort((a, b) => a.localeCompare(b));
 }
 
-/** A value choice in step two. `null` is the "(any value)" option → key-only pattern. */
+/** A value choice in step two. `null` is the any-value option → key-only pattern. */
 type PropertyValueChoice = string | null;
 
 /**
  * Step two of {@link PropertySearchModal}: pick a value for the already-chosen
- * key, or "(any value)" to match any note that has the key. Opened as a fresh
- * modal by the key picker so its input and placeholder reset cleanly. Exported
- * so the value step's item list and pattern building can be tested in isolation
- * from the key step that normally precedes it.
+ * key, or the any-value option to match any note that has the key. Opened as a
+ * fresh modal by the key picker so its input and placeholder reset cleanly.
+ * Exported so the value step's item list and pattern building can be tested in
+ * isolation from the key step that normally precedes it.
  */
 export class PropertyValueModal extends FuzzySuggestModal<PropertyValueChoice> {
   constructor(
@@ -113,7 +113,10 @@ export class PropertyValueModal extends FuzzySuggestModal<PropertyValueChoice> {
   }
 
   getItemText(choice: PropertyValueChoice): string {
-    return choice === null ? "(any value)" : choice;
+    // Reason: the sentinel's label must not collide with a real value. A note whose
+    // frontmatter literally holds "(any value)" would otherwise render an entry
+    // identical to this option while producing the far narrower `[key:(any value)]`.
+    return choice === null ? "Any value — notes that declare this key" : choice;
   }
 
   onChooseItem(choice: PropertyValueChoice): void {
@@ -124,7 +127,7 @@ export class PropertyValueModal extends FuzzySuggestModal<PropertyValueChoice> {
 /**
  * Two-step picker for the Project "Property" (frontmatter) context source. Step
  * one lists every frontmatter key in the vault; choosing one opens a second
- * picker of that key's values (plus an "(any value)" option that yields the
+ * picker of that key's values (plus an any-value option that yields the
  * key-only pattern). Both steps select from real vault data — never free-typed —
  * so the resulting `[key:value]` pattern always matches at least the note it came
  * from. The finished pattern is delivered through the `onChoose` callback.

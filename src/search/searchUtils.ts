@@ -394,6 +394,18 @@ function matchFilePathWithTags(app: App, file: TFile, tagPatterns: string[]): bo
  * case-insensitively after trimming, and a list property matches when any of
  * its elements matches; a key-only pattern (`[key:]`) matches any note that
  * has the key.
+ *
+ * DESIGN NOTE — the KEY is matched case-sensitively while the VALUE is not.
+ * Obsidian folds only its reserved keys (`tags`, `aliases`, `cssclasses`); a
+ * user-defined key keeps the exact spelling it was written with, and the
+ * metadata cache exposes the raw frontmatter object, so `Topics` and `topics`
+ * are genuinely two keys. The picker enumerates real vault keys, so it offers
+ * whichever spellings actually exist and a chosen one always matches the notes
+ * it came from. Folding keys was considered and rejected: it would have to pick
+ * a winner when both spellings exist with different values, and it would make
+ * `[key:]` match notes the user never declared under that spelling.
+ * If a future review flags the case-sensitive key lookup again, point them here.
+ *
  * @param propertyPatterns - The property patterns to match the note against.
  * @returns True if the note satisfies any property pattern, false otherwise.
  */

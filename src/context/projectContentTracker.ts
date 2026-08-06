@@ -301,6 +301,17 @@ function isPropertyCandidatePath(path: string): boolean {
 }
 
 function fileMatchesInclusions(path: string, inclusions: PatternCategory): boolean {
+  // DESIGN NOTE — no `propertyPatterns` branch here, deliberately.
+  //
+  // Every markdown event on a path property enumeration can reach has already
+  // returned through the `propertyReaches` gate above. A markdown event that
+  // still arrives here is under an internal/system root, which that enumeration
+  // can never return. The only other case is a non-markdown path, and
+  // `resolvePropertyNotePaths` enumerates `vault.getMarkdownFiles()` only — so
+  // creating or deleting a `.pdf` cannot change a property source's note set.
+  // A branch here would be dead code guarding a state that cannot occur.
+  // If a future review flags the missing property case again, point them here.
+  //
   // Internal Copilot files (project.md, the AGENTS.md mirror, the log) can be
   // caught by a `*.md` or projects-folder pattern but must never count as a
   // context source — mirror shouldIndexFile's exclusion for the dead-path case.

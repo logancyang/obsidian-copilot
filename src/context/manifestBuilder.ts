@@ -122,7 +122,7 @@ export function buildProjectContextBlock(sources: ManifestSources): string {
     out.push(
       "",
       `> Only the first ${shown.length} of ${total} sources are listed; ${omitted} more are omitted. ` +
-        `Use folder/tag search (grep/find) to find the rest.`
+        `Use the declared context sources above with grep/glob/read to find the rest.`
     );
   }
   out.push("</project_context>");
