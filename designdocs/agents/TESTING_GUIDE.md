@@ -406,7 +406,7 @@ Use the component gallery whenever a feature adds or changes a user-visible Reac
 2. Import `Meta` and `StoryObj` from `@/lib/story`, declare component metadata with `satisfies Meta<Props>`, and type every named story as `StoryObj<Props>`.
 3. Cover the load-bearing states a user can actually see: default, empty, loading, success, error, disabled, overflow-prone content, or other states introduced by the feature. Use realistic copy and fixture props rather than production stores or runtime singletons.
 4. Prefer `args` for ordinary prop states and `render` for compositions. Hook-backed render functions are supported. Keep fixtures deterministic and actions inert unless interaction is the behavior under test.
-5. Choose `parameters.gallery.host` (`leaf`, `modal`, `popover`, or `settings-tab`), `layout` (`padded`, `centered`, or `fullscreen`), and an optional supported `width` (`300`, `340`, `400`, or `600`) that match the real component boundary. Use `coverage: false` only for an intentional presentational-component opt-out.
+5. Choose `parameters.gallery.host` (`leaf`, `modal`, `popover`, or `settings-tab`) and `layout` (`padded`, `centered`, or `fullscreen`) to match the real component boundary. Use `coverage: false` only for an intentional presentational-component opt-out. Stories cannot pin a canvas width — width is view state owned by the gallery's width toolbar, so check a component at other widths with that toolbar or sweep them all via `audit()`. Never add a story whose only difference from a sibling is the width you wish it rendered at; it will render identically.
 6. If a component cannot render without plugin state, extract or expose a presentational boundary that accepts the required data as props; do not widen the Gallery import fence to reach settings, stores, or runtime singletons.
 
 A minimal adjacent story looks like this:
@@ -418,7 +418,7 @@ import { StatusCard, type StatusCardProps } from "./StatusCard";
 const meta = {
   title: "Feature/Status Card",
   component: StatusCard,
-  parameters: { gallery: { host: "leaf", layout: "padded", width: 300 } },
+  parameters: { gallery: { host: "leaf", layout: "padded" } },
 } satisfies Meta<StatusCardProps>;
 export default meta;
 
