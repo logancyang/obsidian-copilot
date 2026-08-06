@@ -2,7 +2,7 @@ import type { InstallState } from "@/agentMode/session/types";
 import { render, screen } from "@testing-library/react";
 import React from "react";
 import { ClaudeConfigView, type ClaudeConfigViewProps } from "./ClaudeConfigView";
-import { CLAUDE_AUTH_COMMAND, CLAUDE_INSTALL_COMMAND } from "./cliSetup";
+import { CLAUDE_AUTH_COMMAND, CLAUDE_INSTALL_COMMAND } from "@/agentMode/backends/claude/cliSetup";
 
 const DEFAULT_PROMPT = process.platform === "win32" ? "PS> " : "$ ";
 
@@ -92,12 +92,13 @@ describe("ClaudeConfigView", () => {
       expect(screen.getByText(commandBlock(CLAUDE_AUTH_COMMAND))).toBeTruthy();
     });
 
-    it("points an unsupported version at the install command instead of an upgrade button", () => {
+    it("points an unsupported custom binary at its saved path instead of an upgrade button", () => {
       renderView({ state: OUTDATED, binaryPath: "/usr/local/bin/claude" });
 
       const alert = screen.getByRole("alert");
       expect(alert.textContent).toContain("Claude 2.1.205 is not supported");
-      expect(alert.textContent).toContain("install command below");
+      expect(alert.textContent).toContain("Update the binary at the saved path");
+      expect(alert.textContent).toContain("clear the override");
       expect(screen.queryByRole("button", { name: /Upgrade/ })).toBeNull();
     });
 

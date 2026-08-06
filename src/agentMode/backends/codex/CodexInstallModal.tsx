@@ -1,4 +1,4 @@
-import { CodexConfigView } from "@/agentMode/backends/codex/CodexConfigView";
+import { CodexConfigView } from "@/agentMode/backends/codex/ui/CodexConfigView";
 import { binaryPathInstallState } from "@/agentMode/backends/shared/simpleBinaryBackend";
 import { ReactModal } from "@/components/modals/ReactModal";
 import { useSettingsValue } from "@/settings/model";

@@ -9,8 +9,8 @@ import {
   ConfigDialogShell,
   ConfigSection,
   ConfigWarningStrip,
-} from "@/agentMode/backends/shared/ConfigDialogShell";
-import { CommandBlock, SetupStep } from "@/agentMode/backends/shared/SetupSteps";
+} from "@/agentMode/backends/shared/ui/ConfigDialogShell";
+import { CommandBlock, SetupStep } from "@/agentMode/backends/shared/ui/SetupSteps";
 import type { InstallState } from "@/agentMode/session/types";
 import React from "react";
 

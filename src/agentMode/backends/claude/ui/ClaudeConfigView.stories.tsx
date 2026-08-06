@@ -1,7 +1,7 @@
 import {
   ClaudeConfigView,
   type ClaudeConfigViewProps,
-} from "@/agentMode/backends/claude/ClaudeConfigView";
+} from "@/agentMode/backends/claude/ui/ClaudeConfigView";
 import type { InstallState } from "@/agentMode/session/types";
 import type { Meta, StoryObj } from "@/lib/story";
 
@@ -42,7 +42,7 @@ export const Ready: StoryObj<ClaudeConfigViewProps> = {
   },
 };
 
-/** No managed upgrade path here — the strip sends the user to the install command below. */
+/** A custom-path install must be updated in place or cleared so auto-detection can take over. */
 export const UpdateRequired: StoryObj<ClaudeConfigViewProps> = {
   args: { state: OUTDATED, binaryPath: "/Users/zero/.local/bin/claude" },
 };

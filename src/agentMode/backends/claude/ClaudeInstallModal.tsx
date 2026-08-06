@@ -1,10 +1,6 @@
-import { ClaudeConfigView } from "@/agentMode/backends/claude/ClaudeConfigView";
+import { ClaudeConfigView } from "@/agentMode/backends/claude/ui/ClaudeConfigView";
 import type { BackendDescriptor } from "@/agentMode/session/types";
-// A backend's dialog body must live in `backends/<id>/`, so this container cannot
-// reach the shared sign-in hook the way a `ui/` surface would. Re-probing and
-// re-notifying here instead would be a second implementation of the same flow.
-// eslint-disable-next-line boundaries/dependencies -- shared sign-in hook; see above
-import { useBackendAuthState } from "@/agentMode/ui/useBackendDescriptor";
+import { useBackendAuthState } from "@/agentMode/session/useBackendAuthState";
 import { ReactModal } from "@/components/modals/ReactModal";
 import { getSettings, setSettings, useSettingsValue } from "@/settings/model";
 import { validateExecutableFile } from "@/utils/detectBinary";

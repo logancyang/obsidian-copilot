@@ -1,7 +1,7 @@
 import {
   CodexConfigView,
   type CodexConfigViewProps,
-} from "@/agentMode/backends/codex/CodexConfigView";
+} from "@/agentMode/backends/codex/ui/CodexConfigView";
 import type { InstallState } from "@/agentMode/session/types";
 import type { Meta, StoryObj } from "@/lib/story";
 

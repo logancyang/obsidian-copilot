@@ -1,4 +1,8 @@
-import { CommandBlock, SetupStep, type CommandShell } from "@/agentMode/backends/shared/SetupSteps";
+import {
+  CommandBlock,
+  SetupStep,
+  type CommandShell,
+} from "@/agentMode/backends/shared/ui/SetupSteps";
 import { Button } from "@/components/ui/button";
 import type { Meta, StoryObj } from "@/lib/story";
 import * as React from "react";

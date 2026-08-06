@@ -6,7 +6,7 @@ import {
   ConfigSection,
   ConfigWarningStrip,
 } from "@/agentMode/backends/shared/ui/ConfigDialogShell";
-import { CommandBlock, SetupStep } from "@/agentMode/backends/shared/SetupSteps";
+import { CommandBlock, SetupStep } from "@/agentMode/backends/shared/ui/SetupSteps";
 import type { InstallState } from "@/agentMode/session/types";
 import { Button } from "@/components/ui/button";
 import React from "react";
@@ -46,9 +46,9 @@ const PATH_PLACEHOLDER =
  * Configure dialog body for the Claude backend. Leads with the one field that
  * makes the agent work — where the `claude` CLI is — and demotes installing and
  * signing in to a numbered block for the users who still need them. There is no
- * managed install: an unsupported version is fixed by re-running the install
- * command, which is why the warning strip points down here rather than offering
- * an in-dialog upgrade.
+ * managed install: an unsupported auto-detected version is fixed by re-running
+ * the install command, while a custom-path install must be updated in place or
+ * cleared. Neither case offers an in-dialog upgrade.
  *
  * Pure props, so the gallery and unit tests can drive every state;
  * `ClaudeInstallModal` supplies the settings reads, validation, and notices.
@@ -66,12 +66,7 @@ export const ClaudeConfigView: React.FC<ClaudeConfigViewProps> = ({
   <ConfigDialogShell
     title="Configure Claude"
     state={state}
-    warning={
-      <ConfigWarningStrip
-        state={state}
-        detail={claudeUpdateDetail(state)}
-      />
-    }
+    warning={<ConfigWarningStrip state={state} detail={claudeUpdateDetail(state)} />}
     onClose={onClose}
   >
     <ConfigSection title="Claude Code binary">

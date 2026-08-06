@@ -1,7 +1,7 @@
 import { AgentModeStatus } from "@/agentMode/ui/AgentModeStatus";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import type { BackendAuth, BackendDescriptor } from "@/agentMode/session/types";
-import type { BackendAuthUiState } from "@/agentMode/ui/useBackendDescriptor";
+import type { BackendAuthUiState } from "@/agentMode/session/useBackendAuthState";
 import type CopilotPlugin from "@/main";
 import { fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
@@ -19,7 +19,10 @@ jest.mock("@/agentMode/ui/useBackendDescriptor", () => ({
   useSessionBackendDescriptor: () => descriptor,
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks real hook exports
   useBackendInstallState: () => installState,
-  // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks real hook exports
+}));
+
+jest.mock("@/agentMode/session/useBackendAuthState", () => ({
+  // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook export
   useBackendAuthState: () => authState,
 }));
 

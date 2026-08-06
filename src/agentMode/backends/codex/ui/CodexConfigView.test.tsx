@@ -2,7 +2,7 @@ import type { InstallState } from "@/agentMode/session/types";
 import { render, screen } from "@testing-library/react";
 import React from "react";
 import { CodexConfigView, type CodexConfigViewProps } from "./CodexConfigView";
-import { CODEX_AUTH_COMMAND, CODEX_INSTALL_COMMAND } from "./cliSetup";
+import { CODEX_AUTH_COMMAND, CODEX_INSTALL_COMMAND } from "@/agentMode/backends/codex/cliSetup";
 
 const DEFAULT_PROMPT = process.platform === "win32" ? "PS> " : "$ ";
 
