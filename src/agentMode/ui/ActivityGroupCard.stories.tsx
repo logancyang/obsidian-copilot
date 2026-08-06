@@ -51,7 +51,7 @@ const meta = {
     renderMember,
     thinkingMs: 51_000,
   },
-  parameters: { gallery: { host: "leaf", layout: "padded", width: 340 } },
+  parameters: { gallery: { host: "leaf", layout: "padded" } },
 } satisfies Meta<ActivityGroupCardProps>;
 export default meta;
 
