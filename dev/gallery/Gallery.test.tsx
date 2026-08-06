@@ -419,10 +419,11 @@ describe("Gallery", () => {
         within(navigation).getByRole("button", { name: "Show UI contact sheet" })
       ).toBeTruthy();
       const selectedStoryButton = within(navigation).getByRole("button", {
-        name: "Default Selected",
+        name: "Default",
       });
       expect(selectedStoryButton.getAttribute("aria-current")).toBe("true");
       expect(selectedStoryButton.classList.contains("mod-cta")).toBe(true);
+      expect(within(navigation).queryByText("Selected")).toBeNull();
       expect(gallery.getByText("Agent Mode/Agent Welcome Card/Default")).toBeTruthy();
       expect(gallery.container.querySelectorAll("[data-gallery-story-id]")).toHaveLength(1);
       expect(
@@ -466,7 +467,7 @@ describe("Gallery", () => {
       expect(
         within(navigation).queryByRole("button", { name: /(Fold|Unfold) UI subtree/ })
       ).toBeNull();
-      expect(within(navigation).getByRole("button", { name: "Default Selected" })).toBeTruthy();
+      expect(within(navigation).getByRole("button", { name: "Default" })).toBeTruthy();
       expect(selectSubtreeButton("UI/Badge")).toBeTruthy();
       expect(selectSubtreeButton("UI/Button")).toBeTruthy();
       expect(navigation.querySelector('[data-gallery-story-button="UI/Badge/Status"]')).toBeNull();
@@ -475,7 +476,7 @@ describe("Gallery", () => {
       expect(
         navigation.querySelector('[data-gallery-story-button="UI/Badge/Status"]')
       ).toBeTruthy();
-      expect(within(navigation).getByRole("button", { name: "Default Selected" })).toBeTruthy();
+      expect(within(navigation).getByRole("button", { name: "Default" })).toBeTruthy();
 
       fireEvent.click(selectSubtreeButton("UI/Button"));
       expect(selectSubtreeButton("UI/Button").getAttribute("aria-pressed")).toBe("true");
@@ -513,7 +514,7 @@ describe("Gallery", () => {
       fireEvent.change(filter, { target: { value: "" } });
       expect(gallery.queryByRole("button", { name: "Status" })).toBeNull();
       expect(gallery.queryByRole("button", { name: "Primary" })).toBeNull();
-      expect(gallery.getByRole("button", { name: "Default Selected" })).toBeTruthy();
+      expect(gallery.getByRole("button", { name: "Default" })).toBeTruthy();
     });
 
     it("switches rendered stories with mouse clicks and keeps arrow keys among siblings", () => {
@@ -523,13 +524,13 @@ describe("Gallery", () => {
       expect(gallery.getByText("UI/Badge/Status")).toBeTruthy();
       expect(gallery.container.querySelectorAll("[data-gallery-story-id]")).toHaveLength(1);
 
-      const statusButton = gallery.getByRole("button", { name: "Status Selected" });
+      const statusButton = gallery.getByRole("button", { name: "Status" });
       statusButton.focus();
       fireEvent.keyDown(statusButton, { key: "ArrowDown" });
       expect(gallery.getByText("UI/Badge/Status")).toBeTruthy();
 
       selectStoryInTree(gallery, "UI/Button/Primary");
-      fireEvent.keyDown(gallery.getByRole("button", { name: "Primary Selected" }), {
+      fireEvent.keyDown(gallery.getByRole("button", { name: "Primary" }), {
         key: "ArrowUp",
       });
       expect(gallery.getByText("UI/Button/Popover")).toBeTruthy();
@@ -559,9 +560,14 @@ describe("Gallery", () => {
       fireEvent.click(gallery.getByRole("button", { name: "Open modal story" }));
       expect(getGalleryModalMock().open).toHaveBeenCalledTimes(1);
       expect(gallery.getByText("UI/Button/Modal")).toBeTruthy();
-      expect(gallery.getByRole("button", { name: "Unfold UI/Button subtree" })).toBeTruthy();
-      fireEvent.click(gallery.getByRole("button", { name: "Unfold UI/Button subtree" }));
-      expect(gallery.getByRole("button", { name: "Modal Selected" })).toBeTruthy();
+      expect(
+        gallery
+          .getByRole("button", { name: "UI/Button subtree contains selected story" })
+          .hasAttribute("disabled")
+      ).toBe(true);
+      expect(gallery.getByRole("button", { name: "Modal" }).getAttribute("aria-current")).toBe(
+        "true"
+      );
 
       fireEvent.click(gallery.getByRole("button", { name: "Show UI contact sheet" }));
 
@@ -620,7 +626,7 @@ describe("Gallery", () => {
       expect(getGalleryModalMock().close).toHaveBeenCalled();
       fireEvent.click(gallery.getByRole("button", { name: "300" }));
       expect(getGalleryModalMock().open).toHaveBeenCalledTimes(1);
-      expect(gallery.getByRole("button", { name: "Modal Selected" })).toBeTruthy();
+      expect(gallery.getByRole("button", { name: "Modal" })).toBeTruthy();
 
       fireEvent.click(gallery.getByRole("button", { name: "Primary" }));
       fireEvent.click(gallery.getByRole("button", { name: "Modal" }));

@@ -83,6 +83,7 @@ interface StoryTreeProps {
   onSelectSubtree: (path: string) => void;
   onToggleSubtree: (path: string) => void;
   selectedStoryId: string | null;
+  selectedStoryTitle: string | null;
   selectedSubtree: string | null;
   showContactSheet: boolean;
 }
@@ -568,6 +569,7 @@ function StoryTree({
   onSelectSubtree,
   onToggleSubtree,
   selectedStoryId,
+  selectedStoryTitle,
   selectedSubtree,
   showContactSheet,
 }: StoryTreeProps): React.ReactElement {
@@ -576,7 +578,12 @@ function StoryTree({
       {nodes.map((node) => {
         const subtreeSelected = showContactSheet && selectedSubtree === node.path;
         const canFold = depth > 0;
-        const expanded = !canFold || expandAll || expandedSubtrees.has(node.path);
+        const containsSelectedStory =
+          !showContactSheet &&
+          selectedStoryTitle !== null &&
+          isWithinSubtree(selectedStoryTitle, node.path);
+        const expanded =
+          !canFold || expandAll || containsSelectedStory || expandedSubtrees.has(node.path);
 
         return (
           <li key={node.path}>
@@ -587,10 +594,12 @@ function StoryTree({
                   aria-label={
                     expandAll
                       ? `${node.path} subtree is expanded while filtering`
-                      : `${expanded ? "Fold" : "Unfold"} ${node.path} subtree`
+                      : containsSelectedStory
+                        ? `${node.path} subtree contains selected story`
+                        : `${expanded ? "Fold" : "Unfold"} ${node.path} subtree`
                   }
                   className="tw-size-6 tw-shrink-0"
-                  disabled={expandAll}
+                  disabled={expandAll || containsSelectedStory}
                   onClick={() => onToggleSubtree(node.path)}
                   size="icon"
                   type="button"
@@ -636,7 +645,6 @@ function StoryTree({
                       variant={selected ? "default" : "ghost2"}
                     >
                       <span>{story.name}</span>
-                      {selected && <span className="tw-text-smallest">Selected</span>}
                     </Button>
                   );
                 })}
@@ -650,6 +658,7 @@ function StoryTree({
                     onSelectSubtree={onSelectSubtree}
                     onToggleSubtree={onToggleSubtree}
                     selectedStoryId={selectedStoryId}
+                    selectedStoryTitle={selectedStoryTitle}
                     selectedSubtree={selectedSubtree}
                     showContactSheet={showContactSheet}
                   />
@@ -780,16 +789,11 @@ export function Gallery({
   );
   const storyTree = React.useMemo(() => buildStoryTree(filteredStories), [filteredStories]);
   const selectedStory = catalog.stories.find((story) => story.id === state.selectedStoryId) ?? null;
+  const selectedStoryTitle = selectedStory?.title ?? null;
   const selectedSubtree = state.selectedSubtree ?? selectedStory?.title ?? null;
-  const [expandedSubtrees, setExpandedSubtrees] = React.useState<ReadonlySet<string>>(() => {
-    const paths = new Set<string>();
-    const segments = selectedStory?.title.split("/") ?? [];
-
-    for (let index = 1; index < segments.length; index += 1) {
-      paths.add(segments.slice(0, index + 1).join("/"));
-    }
-    return paths;
-  });
+  const [expandedSubtrees, setExpandedSubtrees] = React.useState<ReadonlySet<string>>(
+    () => new Set()
+  );
 
   const contactSheetStories = selectedSubtree
     ? catalog.stories.filter(
@@ -898,6 +902,7 @@ export function Gallery({
               onSelectSubtree={selectSubtree}
               onToggleSubtree={toggleSubtree}
               selectedStoryId={state.selectedStoryId}
+              selectedStoryTitle={selectedStoryTitle}
               selectedSubtree={selectedSubtree}
               showContactSheet={state.contactSheet}
             />
