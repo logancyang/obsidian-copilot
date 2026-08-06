@@ -3,7 +3,7 @@ import {
   ConfigDialogShell,
   ConfigSection,
   ConfigWarningStrip,
-} from "@/agentMode/backends/shared/ConfigDialogShell";
+} from "@/agentMode/backends/shared/ui/ConfigDialogShell";
 import type { InstallState } from "@/agentMode/session/types";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";

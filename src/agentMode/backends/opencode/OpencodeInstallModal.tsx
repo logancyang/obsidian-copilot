@@ -2,7 +2,7 @@ import {
   OpencodeConfigView,
   type OpencodeBinarySource,
   type OpencodeRunState,
-} from "@/agentMode/backends/opencode/OpencodeConfigView";
+} from "@/agentMode/backends/opencode/ui/OpencodeConfigView";
 import {
   AbortError,
   computeInstallState,

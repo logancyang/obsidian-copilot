@@ -3,7 +3,7 @@ import {
   type OpencodeConfigActions,
   type OpencodeConfigViewProps,
   type OpencodeManagedInfo,
-} from "@/agentMode/backends/opencode/OpencodeConfigView";
+} from "@/agentMode/backends/opencode/ui/OpencodeConfigView";
 import { OPENCODE_PINNED_VERSION } from "@/lib/opencodeVersion";
 import type { InstallState } from "@/agentMode/session/types";
 import type { Meta, StoryObj } from "@/lib/story";
