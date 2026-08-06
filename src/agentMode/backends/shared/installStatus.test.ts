@@ -7,8 +7,7 @@ describe("installStatus", () => {
       const spec = installBadge({ kind: "ready", source: "managed" });
       expect(spec).toEqual({
         label: "Ready",
-        variant: "outline",
-        className: "tw-text-success",
+        variant: "success",
         showCheck: true,
       });
     });

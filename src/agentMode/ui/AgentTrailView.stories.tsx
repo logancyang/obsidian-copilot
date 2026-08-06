@@ -84,7 +84,7 @@ const TrailDemo: React.FC<{ parts: AgentMessagePart[]; isStreaming?: boolean }> 
 const meta = {
   title: "Agent Mode/Agent Trail",
   component: AgentTrail,
-  parameters: { gallery: { host: "leaf", layout: "padded", width: 400 } },
+  parameters: { gallery: { host: "leaf", layout: "padded" } },
 } satisfies Meta<AgentTrailProps>;
 export default meta;
 
