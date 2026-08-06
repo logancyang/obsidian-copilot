@@ -3,7 +3,7 @@ import * as galleryHostStories from "@/components/gallery-hosts.stories";
 import * as badgeStories from "@/components/ui/badge.stories";
 import * as buttonStories from "@/components/ui/button.stories";
 import { AppContext } from "@/context";
-import { act, fireEvent, render, within } from "@testing-library/react";
+import { act, fireEvent, render, type RenderResult, within } from "@testing-library/react";
 import type { App } from "obsidian";
 import * as React from "react";
 import {
@@ -128,6 +128,26 @@ function GalleryHarness({
       />
     </AppContext.Provider>
   );
+}
+
+/** Walks the folded tree the way a user does: expand every ancestor subtree, then pick the story. */
+function selectStoryInTree(gallery: RenderResult, storyId: string): void {
+  const segments = storyId.split("/");
+  segments.pop();
+  let path = "";
+
+  for (const segment of segments) {
+    path = path ? `${path}/${segment}` : segment;
+    fireEvent.click(gallery.getByRole("button", { name: `Show ${path} contact sheet` }));
+  }
+
+  const storyButton = gallery.container.querySelector<HTMLButtonElement>(
+    `[data-gallery-story-button="${storyId}"]`
+  );
+  if (!storyButton) {
+    throw new Error(`No story button for ${storyId}`);
+  }
+  fireEvent.click(storyButton);
 }
 
 describe("Gallery", () => {
@@ -401,11 +421,6 @@ describe("Gallery", () => {
       });
       expect(selectedStoryButton.getAttribute("aria-current")).toBe("true");
       expect(selectedStoryButton.classList.contains("mod-cta")).toBe(true);
-
-      const unselectedStoryButton = within(navigation).getByRole("button", { name: "Status" });
-      expect(unselectedStoryButton.classList.contains("clickable-icon")).toBe(true);
-      expect(unselectedStoryButton.classList.contains("tw-bg-transparent")).toBe(true);
-      expect(unselectedStoryButton.classList.contains("mod-cta")).toBe(false);
       expect(gallery.getByText("Agent Mode/Agent Welcome Card/Default")).toBeTruthy();
       expect(gallery.container.querySelectorAll("[data-gallery-story-id]")).toHaveLength(1);
       expect(
@@ -427,9 +442,45 @@ describe("Gallery", () => {
           Boolean(element?.tagName === "P" && element.textContent?.startsWith("Subtree:"))
         )
       ).toBeNull();
+
+      selectStoryInTree(gallery, "UI/Button/Primary");
+      const unselectedStoryButton = within(navigation).getByRole("button", { name: "Modal" });
+      expect(unselectedStoryButton.classList.contains("clickable-icon")).toBe(true);
+      expect(unselectedStoryButton.classList.contains("tw-bg-transparent")).toBe(true);
+      expect(unselectedStoryButton.classList.contains("mod-cta")).toBe(false);
     });
 
-    it("filters by component title or story name and restores the tree when cleared", () => {
+    it("keeps every subtree folded except the selected path", () => {
+      const gallery = render(<GalleryHarness catalog={makeCatalog()} />);
+      const navigation = gallery.getByRole("complementary", {
+        name: "Component and story navigation",
+      });
+      const subtreeButton = (path: string) =>
+        within(navigation).getByRole("button", { name: `Show ${path} contact sheet` });
+
+      expect(subtreeButton("Agent Mode").getAttribute("aria-expanded")).toBe("true");
+      expect(within(navigation).getByRole("button", { name: "Default Selected" })).toBeTruthy();
+      expect(subtreeButton("UI").getAttribute("aria-expanded")).toBe("false");
+      expect(
+        within(navigation).queryByRole("button", { name: "Show UI/Badge contact sheet" })
+      ).toBeNull();
+
+      fireEvent.click(subtreeButton("UI"));
+      expect(subtreeButton("UI").getAttribute("aria-expanded")).toBe("true");
+      expect(subtreeButton("Agent Mode").getAttribute("aria-expanded")).toBe("false");
+      expect(within(navigation).queryByRole("button", { name: "Default" })).toBeNull();
+      expect(subtreeButton("UI/Badge").getAttribute("aria-expanded")).toBe("false");
+      expect(navigation.querySelector('[data-gallery-story-button="UI/Badge/Status"]')).toBeNull();
+
+      fireEvent.click(subtreeButton("UI/Badge"));
+      expect(
+        navigation.querySelector('[data-gallery-story-button="UI/Badge/Status"]')
+      ).toBeTruthy();
+      expect(subtreeButton("UI").getAttribute("aria-expanded")).toBe("true");
+      expect(subtreeButton("UI/Button").getAttribute("aria-expanded")).toBe("false");
+    });
+
+    it("filters by component title or story name and refolds to the selected path when cleared", () => {
       const gallery = render(<GalleryHarness catalog={makeCatalog()} />);
       const filter = gallery.getByRole("searchbox", {
         name: "Filter components and stories",
@@ -444,14 +495,15 @@ describe("Gallery", () => {
       expect(gallery.queryByRole("button", { name: "Status" })).toBeNull();
 
       fireEvent.change(filter, { target: { value: "" } });
-      expect(gallery.getByRole("button", { name: "Status" })).toBeTruthy();
-      expect(gallery.getByRole("button", { name: "Primary" })).toBeTruthy();
+      expect(gallery.queryByRole("button", { name: "Status" })).toBeNull();
+      expect(gallery.queryByRole("button", { name: "Primary" })).toBeNull();
+      expect(gallery.getByRole("button", { name: "Default Selected" })).toBeTruthy();
     });
 
     it("switches rendered stories with mouse clicks and keeps arrow keys among siblings", () => {
       const gallery = render(<GalleryHarness catalog={makeCatalog()} />);
 
-      fireEvent.click(gallery.getByRole("button", { name: "Status" }));
+      selectStoryInTree(gallery, "UI/Badge/Status");
       expect(gallery.getByText("UI/Badge/Status")).toBeTruthy();
       expect(gallery.container.querySelectorAll("[data-gallery-story-id]")).toHaveLength(1);
 
@@ -460,7 +512,7 @@ describe("Gallery", () => {
       fireEvent.keyDown(statusButton, { key: "ArrowDown" });
       expect(gallery.getByText("UI/Badge/Status")).toBeTruthy();
 
-      fireEvent.click(gallery.getByRole("button", { name: "Primary" }));
+      selectStoryInTree(gallery, "UI/Button/Primary");
       fireEvent.keyDown(gallery.getByRole("button", { name: "Primary Selected" }), {
         key: "ArrowUp",
       });
@@ -495,7 +547,7 @@ describe("Gallery", () => {
 
       fireEvent.click(gallery.getByRole("button", { name: "Show UI contact sheet" }));
 
-      fireEvent.click(gallery.getByRole("button", { name: "Modal" }));
+      selectStoryInTree(gallery, "UI/Button/Modal");
       expect(gallery.getByText("UI/Button/Modal")).toBeTruthy();
       expect(gallery.container.querySelectorAll("[data-gallery-story-id]")).toHaveLength(1);
     });
@@ -538,7 +590,7 @@ describe("Gallery", () => {
         <GalleryHarness catalog={makeCatalog()} onHostChange={onHostChange} />
       );
 
-      fireEvent.click(gallery.getByRole("button", { name: "Modal" }));
+      selectStoryInTree(gallery, "UI/Button/Modal");
       expect(getGalleryModalMock().open).toHaveBeenCalledTimes(1);
       expect(gallery.queryByText("UI/Button/Modal content")).toBeNull();
       expect(gallery.getByRole("button", { name: "Reopen modal story" })).toBeTruthy();
@@ -593,7 +645,7 @@ describe("Gallery", () => {
     it("places stable story and width selectors on every actual host case", () => {
       const gallery = render(<GalleryHarness catalog={makeCatalog()} />);
 
-      fireEvent.click(gallery.getByRole("button", { name: "Modal" }));
+      selectStoryInTree(gallery, "UI/Button/Modal");
       const modal = getGalleryModalMock().open.mock.calls[0][0] as {
         renderContent(): React.ReactElement;
       };
@@ -612,7 +664,7 @@ describe("Gallery", () => {
       expect(popoverStory?.dataset.galleryOwner).toBe("test-gallery");
       expect(popoverStory?.style.width).toBe("400px");
 
-      fireEvent.click(gallery.getByRole("button", { name: "Preferences" }));
+      selectStoryInTree(gallery, "UI/Setting Item/Preferences");
       expect(
         gallery.container.querySelector(
           '[data-gallery-host="settings-tab"][data-story="UI/Setting Item/Preferences"][data-story-width="400"]'
@@ -656,7 +708,7 @@ describe("Gallery", () => {
         <GalleryHarness catalog={makeCatalog()} onHostChange={onHostChange} />
       );
 
-      fireEvent.click(gallery.getByRole("button", { name: "Popover" }));
+      selectStoryInTree(gallery, "UI/Button/Popover");
 
       const trigger = gallery.getByRole("button", { name: "Toggle popover story" });
       expect(trigger.getAttribute("aria-expanded")).toBe("true");
@@ -684,7 +736,7 @@ describe("Gallery", () => {
         <GalleryHarness catalog={makeCatalog()} onHostChange={onHostChange} />
       );
 
-      fireEvent.click(gallery.getByRole("button", { name: "Preferences" }));
+      selectStoryInTree(gallery, "UI/Setting Item/Preferences");
 
       expect(gallery.getByText("Settings example")).toBeTruthy();
       expect(
@@ -720,7 +772,7 @@ describe("Gallery", () => {
       expect(canvas?.classList.contains("tw-h-full")).toBe(true);
       expect(canvas?.parentElement?.parentElement?.classList.contains("tw-p-4")).toBe(false);
 
-      fireEvent.click(gallery.getByRole("button", { name: "Status" }));
+      selectStoryInTree(gallery, "UI/Badge/Status");
       expect(canvas?.dataset.galleryWidth).toBe("300");
       const centeredContent = gallery.container.querySelector<HTMLElement>(
         '[data-gallery-story-id="UI/Badge/Status"] > div'
@@ -730,7 +782,7 @@ describe("Gallery", () => {
       expect(centeredContent?.classList.contains("tw-justify-center")).toBe(true);
       expect(centeredContent?.classList.contains("tw-p-4")).toBe(true);
 
-      fireEvent.click(gallery.getByRole("button", { name: "Primary" }));
+      selectStoryInTree(gallery, "UI/Button/Primary");
       const paddedContent = gallery.container.querySelector<HTMLElement>(
         '[data-gallery-story-id="UI/Button/Primary"] > div'
       );
@@ -765,7 +817,7 @@ describe("Gallery", () => {
       expect(customWidth.value).toBe("1440");
       expect(gallery.container.ownerDocument.activeElement).toBe(applyCustomWidth);
 
-      fireEvent.click(gallery.getByRole("button", { name: "Status" }));
+      selectStoryInTree(gallery, "UI/Badge/Status");
       expect(canvas?.dataset.galleryWidth).toBe("1440");
       expect(
         gallery.container.querySelector('[data-story="UI/Badge/Status"][data-story-width="1440"]')
@@ -779,7 +831,7 @@ describe("Gallery", () => {
 
       fireEvent.click(gallery.getByRole("button", { name: "600" }));
       expect(customWidth.value).toBe("");
-      fireEvent.click(gallery.getByRole("button", { name: "Primary" }));
+      selectStoryInTree(gallery, "UI/Button/Primary");
       expect(canvas?.dataset.galleryWidth).toBe("600");
     });
 

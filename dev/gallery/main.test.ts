@@ -1,5 +1,5 @@
 import { mountPluginViewRoot, type PluginViewRootHandle } from "@/utils/react/mountPluginViewRoot";
-import { fireEvent, render } from "@testing-library/react";
+import { fireEvent, render, type RenderResult } from "@testing-library/react";
 import GalleryPlugin, { GALLERY_VIEWTYPE, type GalleryHandle } from "./main";
 import type { AuditReport } from "./audit";
 import type { GalleryViewState } from "./Gallery";
@@ -121,6 +121,23 @@ interface RecordedViewState {
 function getGeneratedMock(): { loaders: jest.Mock[] } {
   return jest.requireMock<{ galleryGeneratedMock: { loaders: jest.Mock[] } }>("./stories.generated")
     .galleryGeneratedMock;
+}
+
+/** Expands the folded story tree down to a story so its tree button becomes clickable. */
+function expandStoryPath(
+  gallery: RenderResult,
+  storyId: string,
+  rerenderGallery: () => void
+): void {
+  const segments = storyId.split("/");
+  segments.pop();
+  let path = "";
+
+  for (const segment of segments) {
+    path = path ? `${path}/${segment}` : segment;
+    fireEvent.click(gallery.getByRole("button", { name: `Show ${path} contact sheet` }));
+    rerenderGallery();
+  }
 }
 
 describe("main", () => {
@@ -420,13 +437,16 @@ describe("main", () => {
 
       it("persists mouse and width changes through ItemView state", async () => {
         await view.onOpen();
-        if (!renderView) {
+        const renderTree = renderView;
+        if (!renderTree) {
           throw new Error("Gallery view did not provide a React tree");
         }
-        const gallery = render(renderView() as ReactElement);
+        const gallery = render(renderTree() as ReactElement);
+        const rerenderGallery = () => gallery.rerender(renderTree() as ReactElement);
 
         fireEvent.click(gallery.getByRole("button", { name: "600" }));
-        gallery.rerender(renderView() as ReactElement);
+        rerenderGallery();
+        expandStoryPath(gallery, "UI/Button/Disabled", rerenderGallery);
         fireEvent.click(gallery.getByRole("button", { name: "Disabled" }));
 
         expect(view.getState()).toMatchObject({
@@ -435,7 +455,8 @@ describe("main", () => {
           selectedSubtree: "UI/Button",
           width: 600,
         });
-        expect(requestSaveLayout).toHaveBeenCalledTimes(2);
+        // Width, both subtree expansions, and the story pick each persist.
+        expect(requestSaveLayout).toHaveBeenCalledTimes(4);
 
         gallery.unmount();
       });
@@ -663,12 +684,15 @@ describe("main", () => {
 
       it("restores the selected story after its prior tab closes and the command reopens it", async () => {
         await view.onOpen();
-        if (!renderView || !createView) {
+        const renderTree = renderView;
+        if (!renderTree || !createView) {
           throw new Error("Gallery view did not initialize");
         }
-        const firstGallery = render(renderView() as ReactElement);
+        const firstGallery = render(renderTree() as ReactElement);
+        const rerenderGallery = () => firstGallery.rerender(renderTree() as ReactElement);
+        expandStoryPath(firstGallery, "UI/Button/Sizes", rerenderGallery);
         fireEvent.click(firstGallery.getByRole("button", { name: "Sizes" }));
-        firstGallery.rerender(renderView() as ReactElement);
+        rerenderGallery();
         await view.onClose();
         firstGallery.unmount();
 
