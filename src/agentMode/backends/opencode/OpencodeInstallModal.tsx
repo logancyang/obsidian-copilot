@@ -14,7 +14,7 @@ import { detectOpencodeCliPath } from "@/agentMode/backends/opencode/descriptor"
 import { ReactModal } from "@/components/modals/ReactModal";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { formatBinaryPathForDisplay } from "@/utils/binaryPath";
-import { OPENCODE_PINNED_VERSION } from "@/lib/opencodeVersion";
+import { OPENCODE_PINNED_VERSION } from "@/agentMode/backends/opencode/ui/opencodeVersion";
 import { logError } from "@/logger";
 import { useSettingsValue } from "@/settings/model";
 import { App, Notice } from "obsidian";
@@ -66,9 +66,10 @@ const errorState = (err: unknown): OpencodeRunState => ({
  * Stateful half of the opencode Configure dialog: the only place that reads
  * settings, drives the binary manager, owns the install/upgrade progress
  * machines, and raises notices. Everything it computes is handed to
- * {@link OpencodeConfigView} as plain data.
+ * {@link OpencodeConfigView} as plain data. Exported so tests can drive the
+ * container directly against the settings store and a mocked manager.
  */
-const OpencodeConfigContainer: React.FC<{
+export const OpencodeConfigContainer: React.FC<{
   manager: OpencodeBinaryManager;
   hostPlatform: string;
   hostArch: string;

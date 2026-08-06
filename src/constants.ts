@@ -960,11 +960,6 @@ export const RESTRICTION_MESSAGES = {
     `${extension.toUpperCase()} files are not supported in the current mode.`,
 } as const;
 
-export {
-  OPENCODE_MIN_ACP_VERSION,
-  OPENCODE_PINNED_VERSION,
-  OPENCODE_RELEASE_TAG,
-} from "@/lib/opencodeVersion";
 export const OPENCODE_RELEASE_URL_TEMPLATE =
   "https://github.com/sst/opencode/releases/download/v{version}/{asset}";
 export const OPENCODE_RELEASE_API_URL_TEMPLATE =

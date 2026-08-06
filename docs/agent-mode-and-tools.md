@@ -37,6 +37,12 @@ If the agent Copilot would normally start is not set up and there is no chat or 
 
 Selecting a row only previews its action. **Start chat** saves that agent as the default and starts it; **Configure** opens its setup without changing the default. After a chat starts, use the agent and model picker to switch agents or choose one of that agent's models.
 
+### Choosing the OpenCode Binary Source
+
+The OpenCode setup dialog (**Settings → Copilot → Agents → opencode → Configure**) offers two ways to provide the binary, shown one at a time: **Managed by Copilot**, where Copilot downloads and updates an official release for you, and **My own binary**, where you point Copilot at an OpenCode you already have installed.
+
+Switching between the two views only changes which controls you see — it never changes the binary in use. The actual switch happens when you act: **Download & install** activates the managed copy, and applying a path under **My own binary** activates yours. Your saved custom path is kept while you browse the managed view, and the dialog tells you whenever the source you're looking at is not the one currently in use.
+
 ## Sample Prompts in the Message Box
 
 When you open a new agent chat and the message box is empty, Copilot types out sample prompts there one at a time — each appears character by character, pauses so you can read it, clears itself, and gives way to the next. They are examples of what the agent can do with your vault, not something being sent.

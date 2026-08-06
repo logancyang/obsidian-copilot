@@ -1,7 +1,8 @@
+// Lives in the backend's ui/ leaf so the gallery story can render the same
+// versions the installer uses without widening the story import fence.
+
 /** opencode release Copilot downloads for a managed installation. */
 export const OPENCODE_PINNED_VERSION = "1.16.0";
-
-export const OPENCODE_RELEASE_TAG = `v${OPENCODE_PINNED_VERSION}`;
 
 /**
  * Oldest opencode release that satisfies Agent Mode's ACP contract. Version

@@ -1,4 +1,4 @@
-import { OPENCODE_MIN_ACP_VERSION, OPENCODE_PINNED_VERSION } from "@/lib/opencodeVersion";
+import { OPENCODE_MIN_ACP_VERSION, OPENCODE_PINNED_VERSION } from "./ui/opencodeVersion";
 import { OPENCODE_RELEASE_API_URL_TEMPLATE } from "@/constants";
 import { compareSemver } from "@/utils/semver";
 import { logError, logInfo, logWarn } from "@/logger";
