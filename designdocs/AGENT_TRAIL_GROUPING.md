@@ -88,6 +88,13 @@ row.
 Reasoning duration is **not** derivable from the parts — `kind: "thought"`
 carries no timestamps. The caller measures it live and passes `thinkingMs` to
 `summarizeActivity`, the same way `ReasoningBlock` measures its own timer today.
+Because the clock lives in the group row, spans the row never saw go unmeasured:
+a leading thought only becomes a group when the first tool call arrives (by
+which point the thinking is over), and groups off the live edge never run the
+clock. The line therefore under-counts and never over-counts — accepted, since
+the duration is cosmetic and fixing it would mean timestamping thought parts in
+the session contract. `thought for Xs` simply drops off a line that measured
+nothing; the reasoning text itself stays in the expanded rows.
 
 ### Measured at pane width
 
@@ -122,6 +129,16 @@ changes once it exists, appending a member does not change its id, and a nested
 group cannot share expansion state with a root group. Keying React state by
 array index instead would remount an open group whenever the node list changed
 shape.
+
+Append-only covers reclassification too. The one node that can change type in
+place — a plain action later recognized as a sub-agent launch — can only flip
+while it is the trail's last part: Claude's `Agent`/`Task` carry their vendor
+name from birth, an anonymous opencode task's `subagent_type` arrives with its
+launch input, and sub-agents execute synchronously, so no root part follows a
+launch before its first child streams in. A flip at the tail cannot renumber an
+earlier group and has no later group to hand its ordinal to, which is why the
+ordinal needs no content-derived identity on top. If background sub-agent
+execution returns, this is the assumption to revisit.
 
 ## What grouping replaced
 
