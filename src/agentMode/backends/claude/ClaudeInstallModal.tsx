@@ -5,6 +5,7 @@ import {
   ConfigWarningStrip,
 } from "@/agentMode/backends/shared/ui/ConfigDialogShell";
 import { InstallCommandRow } from "@/agentMode/backends/shared/InstallCommandRow";
+import { claudeUpdateDetail } from "@/agentMode/backends/claude/claudeUpdateDetail";
 import { ReactModal } from "@/components/modals/ReactModal";
 import { getSettings, setSettings, useSettingsValue } from "@/settings/model";
 import { validateExecutableFile } from "@/utils/detectBinary";
@@ -61,10 +62,7 @@ const ClaudeConfigBody: React.FC<{ onClose: () => void }> = ({ onClose }) => {
       title="Configure Claude"
       state={sessionState}
       warning={
-        <ConfigWarningStrip
-          state={sessionState}
-          detail="Update it with the install command below, then reopen this dialog."
-        />
+        <ConfigWarningStrip state={sessionState} detail={claudeUpdateDetail(sessionState)} />
       }
       onClose={onClose}
     >
@@ -106,8 +104,7 @@ const ClaudeConfigBody: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 /** Configure dialog for the Claude backend. Opened via `descriptor.openInstallUI`. */
 export class ClaudeInstallModal extends ReactModal {
   constructor(app: App) {
-    // No native title: the shell renders it beside the status badge.
-    super(app);
+    super(app, "Configure Claude");
   }
 
   protected renderContent(close: () => void): React.ReactElement {

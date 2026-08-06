@@ -319,8 +319,7 @@ export class OpencodeInstallModal extends ReactModal {
     private readonly manager: OpencodeBinaryManager,
     private readonly hostInfo: { platform: string; arch: string }
   ) {
-    // No native title: the shell renders it beside the status badge.
-    super(app);
+    super(app, "Configure opencode");
   }
 
   protected renderContent(close: () => void): React.ReactElement {

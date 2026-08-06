@@ -90,8 +90,7 @@ const CodexConfigBody: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 /** Configure dialog for the Codex backend. Opened via `descriptor.openInstallUI`. */
 export class CodexInstallModal extends ReactModal {
   constructor(app: App) {
-    // No native title: the shell renders it beside the status badge.
-    super(app);
+    super(app, "Configure Codex");
   }
 
   protected renderContent(close: () => void): React.ReactElement {
