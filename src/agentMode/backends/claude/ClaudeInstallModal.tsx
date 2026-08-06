@@ -3,7 +3,7 @@ import {
   ConfigDialogShell,
   ConfigSection,
   ConfigWarningStrip,
-} from "@/agentMode/backends/shared/ConfigDialogShell";
+} from "@/agentMode/backends/shared/ui/ConfigDialogShell";
 import { InstallCommandRow } from "@/agentMode/backends/shared/InstallCommandRow";
 import { ReactModal } from "@/components/modals/ReactModal";
 import { getSettings, setSettings, useSettingsValue } from "@/settings/model";

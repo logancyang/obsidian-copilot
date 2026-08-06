@@ -2,7 +2,7 @@ import {
   ConfigDialogShell,
   ConfigSection,
   ConfigWarningStrip,
-} from "@/agentMode/backends/shared/ConfigDialogShell";
+} from "@/agentMode/backends/shared/ui/ConfigDialogShell";
 import type { InstallState } from "@/agentMode/session/types";
 import { Button } from "@/components/ui/button";
 import type { Meta, StoryObj } from "@/lib/story";

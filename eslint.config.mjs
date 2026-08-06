@@ -242,15 +242,10 @@ export default [
                 "Gallery runtime and stories may not bypass the production import fence " +
                 "with parent-relative value imports. Use an allowed @/ path instead.",
             },
-            // `ConfigDialogShell` is a pure presentational primitive that would
-            // live under a `ui/` folder if the agent-mode boundary rules let a
-            // backend import from `ui/`. It is named explicitly rather than by
-            // folder so the allowance can't drift into the rest of `shared/`.
             {
               regex:
                 "^@/(?!(?:(?:.*/)?ui/|components/modals/ReactModal$|" +
                 "components/gallery-hosts\\.fixtures$|context$|lib/[^/]+$|" +
-                "agentMode/backends/shared/ConfigDialogShell$|" +
                 "utils/react/mountPluginViewRoot$)).*",
               allowTypeImports: true,
               message:

@@ -3,7 +3,7 @@ import {
   ConfigDialogShell,
   ConfigSection,
   ConfigWarningStrip,
-} from "@/agentMode/backends/shared/ConfigDialogShell";
+} from "@/agentMode/backends/shared/ui/ConfigDialogShell";
 import {
   AbortError,
   computeInstallState,
