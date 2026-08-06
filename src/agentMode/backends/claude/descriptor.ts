@@ -23,13 +23,16 @@ import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemP
 import { buildBuiltinSkillEnv } from "@/agentMode/backends/shared/builtinSkillEnv";
 import { getVaultBase } from "@/utils/vaultPath";
 import type {
+  BackendAuth,
   BackendConfigOption,
+  BackendDescriptor,
+  BackendProcess,
   EnabledModelEntry,
+  InstallState,
   ModeMapping,
   ModelSelection,
   ModelWireCodec,
 } from "@/agentMode/session/types";
-import type { BackendDescriptor, BackendProcess, InstallState } from "@/agentMode/session/types";
 import { ClaudeInstallModal } from "./ClaudeInstallModal";
 import ClaudeLogo from "./logo.svg";
 import { ClaudeSettingsPanel } from "./ClaudeSettingsPanel";
@@ -39,6 +42,12 @@ import {
 } from "./claudeCompatibilityStore";
 
 const ABSENT_INSTALL_STATE: InstallState = Object.freeze({ kind: "absent" });
+
+/** Claude's descriptor contract, whose binary-resolution and auth capabilities are unconditional. */
+export interface ClaudeDescriptor extends BackendDescriptor {
+  auth: BackendAuth;
+  getResolvedBinaryPath(settings: CopilotSettings): string | null;
+}
 
 export function updateClaudeFields(partial: Partial<ClaudeBackendSettings>): void {
   updateAgentModeBackendFields("claude", partial);
@@ -186,7 +195,7 @@ function isClaudePlanModePlanFilePath(absolutePath: string): boolean {
  * Bedrock / Vertex env if configured) — the SDK handles credential
  * resolution through the spawned CLI; we never see or pass the secret.
  */
-export const ClaudeBackendDescriptor: BackendDescriptor = {
+export const ClaudeBackendDescriptor: ClaudeDescriptor = {
   id: "claude",
   displayName: "Claude",
   Icon: ClaudeLogo,

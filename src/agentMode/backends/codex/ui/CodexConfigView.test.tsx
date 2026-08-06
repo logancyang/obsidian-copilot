@@ -1,18 +1,9 @@
-import type { InstallState } from "@/agentMode/session/types";
 import { render, screen } from "@testing-library/react";
 import React from "react";
 import { CodexConfigView, type CodexConfigViewProps } from "./CodexConfigView";
 import { CODEX_AUTH_COMMAND, CODEX_INSTALL_COMMAND } from "@/agentMode/backends/codex/cliSetup";
 
 const DEFAULT_PROMPT = process.platform === "win32" ? "PS> " : "$ ";
-
-const OUTDATED: InstallState = {
-  kind: "incompatible",
-  source: "custom",
-  currentVersion: "0.4.1",
-  minVersion: "0.5.0",
-  message: "codex-acp 0.4.1 is not supported. Copilot requires 0.5.0 or newer.",
-};
 
 /** Match the `<code>` block that renders exactly this command behind the shell prompt. */
 const commandBlock =
@@ -58,15 +49,6 @@ describe("CodexConfigView", () => {
       renderView();
 
       expect(screen.queryByRole("button", { name: "Sign in" })).toBeNull();
-    });
-
-    it("points an unsupported version at the install command instead of an upgrade button", () => {
-      renderView({ state: OUTDATED, binaryPath: "/usr/local/bin/codex-acp" });
-
-      const alert = screen.getByRole("alert");
-      expect(alert.textContent).toContain("codex-acp 0.4.1 is not supported");
-      expect(alert.textContent).toContain("install command below");
-      expect(screen.queryByRole("button", { name: /Upgrade/ })).toBeNull();
     });
 
     it("shows no warning strip while the adapter is healthy", () => {

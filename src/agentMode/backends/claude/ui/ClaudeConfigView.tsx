@@ -24,8 +24,10 @@ export interface ClaudeAuthProps {
 export interface ClaudeConfigViewProps {
   /** Readiness of the resolved CLI; drives the header badge and the warning strip. */
   state: InstallState;
-  /** Persisted path override; empty when the CLI is auto-detected. */
+  /** Resolved CLI path shown in the leading field; empty when no binary is available. */
   binaryPath: string;
+  /** Whether `binaryPath` is a persisted override rather than an auto-detected path. */
+  hasBinaryPathOverride: boolean;
   /** Validate and persist a user-supplied path. Resolves to an error message, or null on success. */
   onSavePath: (path: string) => Promise<string | null>;
   /** Forget the override and fall back to auto-detection. */
@@ -34,8 +36,8 @@ export interface ClaudeConfigViewProps {
   detect: () => Promise<string | null>;
   /** Directories `detect` looked in, listed when it finds nothing. */
   searchedDirs: () => string[];
-  /** Omitted when Copilot cannot drive the CLI's sign-in itself. */
-  auth?: ClaudeAuthProps;
+  /** In-app equivalent of the CLI's sign-in command. */
+  auth: ClaudeAuthProps;
   onClose: () => void;
 }
 
@@ -56,6 +58,7 @@ const PATH_PLACEHOLDER =
 export const ClaudeConfigView: React.FC<ClaudeConfigViewProps> = ({
   state,
   binaryPath,
+  hasBinaryPathOverride,
   onSavePath,
   onClearPath,
   detect,
@@ -78,6 +81,7 @@ export const ClaudeConfigView: React.FC<ClaudeConfigViewProps> = ({
         binaryName="claude"
         placeholder={PATH_PLACEHOLDER}
         initialPath={binaryPath}
+        hasPersistedPath={hasBinaryPathOverride}
         notFoundHint="claude not found in known install locations. Run the install command below, then click Auto-detect again."
         onSave={onSavePath}
         onClear={onClearPath}
@@ -98,8 +102,7 @@ export const ClaudeConfigView: React.FC<ClaudeConfigViewProps> = ({
           <CommandBlock
             command={CLAUDE_AUTH_COMMAND}
             action={
-              auth &&
-              (auth.signingIn && auth.url ? (
+              auth.signingIn && auth.url ? (
                 <Button asChild variant="secondary" size="sm">
                   <a href={auth.url} target="_blank" rel="noopener noreferrer">
                     Open sign-in page
@@ -114,7 +117,7 @@ export const ClaudeConfigView: React.FC<ClaudeConfigViewProps> = ({
                 >
                   {auth.signingIn ? "Signing in…" : "Sign in"}
                 </Button>
-              ))
+              )
             }
           />
           <p className="tw-my-0 tw-text-sm tw-text-muted">

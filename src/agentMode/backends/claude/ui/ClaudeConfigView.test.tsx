@@ -1,5 +1,5 @@
 import type { InstallState } from "@/agentMode/session/types";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 import { ClaudeConfigView, type ClaudeConfigViewProps } from "./ClaudeConfigView";
 import { CLAUDE_AUTH_COMMAND, CLAUDE_INSTALL_COMMAND } from "@/agentMode/backends/claude/cliSetup";
@@ -25,10 +25,12 @@ const renderView = (overrides: Partial<ClaudeConfigViewProps> = {}): HTMLElement
     <ClaudeConfigView
       state={{ kind: "absent" }}
       binaryPath=""
+      hasBinaryPathOverride={false}
       onSavePath={jest.fn().mockResolvedValue(null)}
       onClearPath={jest.fn()}
       detect={jest.fn().mockResolvedValue(null)}
       searchedDirs={() => []}
+      auth={{ onSignIn: jest.fn(), signingIn: false, url: null }}
       onClose={jest.fn()}
       {...overrides}
     />
@@ -39,18 +41,35 @@ const renderView = (overrides: Partial<ClaudeConfigViewProps> = {}): HTMLElement
 describe("ClaudeConfigView", () => {
   describe("ClaudeConfigView()", () => {
     it("leads with the binary path and demotes the setup steps below it", () => {
-      renderView({ binaryPath: "/usr/local/bin/claude" });
+      renderView({ binaryPath: "/usr/local/bin/claude", hasBinaryPathOverride: true });
 
       const input = screen.getByDisplayValue("/usr/local/bin/claude");
       const steps = screen.getByText("Don't have it yet?");
       expect(input.compareDocumentPosition(steps) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
 
+    it("shows an auto-detected binary without offering to apply or clear it", () => {
+      renderView({
+        state: { kind: "ready", source: "managed" },
+        binaryPath: "/opt/homebrew/bin/claude",
+        hasBinaryPathOverride: false,
+      });
+
+      expect(screen.getByDisplayValue("/opt/homebrew/bin/claude")).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Apply" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Clear" })).toBeNull();
+
+      fireEvent.change(screen.getByDisplayValue("/opt/homebrew/bin/claude"), {
+        target: { value: "/usr/local/bin/claude" },
+      });
+      expect(screen.getByRole("button", { name: "Apply" })).toBeTruthy();
+    });
+
     it("numbers installing and signing in as the two steps of the fallback block", () => {
       renderView();
 
       expect(screen.getByText("Install it")).toBeTruthy();
-      expect(screen.getByText("Sign in")).toBeTruthy();
+      expect(screen.getByText("Sign in", { selector: "div" })).toBeTruthy();
       expect(screen.getByText(commandBlock(CLAUDE_INSTALL_COMMAND))).toBeTruthy();
       expect(screen.getByText(commandBlock(CLAUDE_AUTH_COMMAND))).toBeTruthy();
     });
@@ -85,15 +104,12 @@ describe("ClaudeConfigView", () => {
       expect(screen.queryByRole("button", { name: "Signing in…" })).toBeNull();
     });
 
-    it("shows the command alone when Copilot cannot drive the sign-in", () => {
-      renderView({ auth: undefined });
-
-      expect(screen.queryByRole("button", { name: "Sign in" })).toBeNull();
-      expect(screen.getByText(commandBlock(CLAUDE_AUTH_COMMAND))).toBeTruthy();
-    });
-
     it("points an unsupported custom binary at its saved path instead of an upgrade button", () => {
-      renderView({ state: OUTDATED, binaryPath: "/usr/local/bin/claude" });
+      renderView({
+        state: OUTDATED,
+        binaryPath: "/usr/local/bin/claude",
+        hasBinaryPathOverride: true,
+      });
 
       const alert = screen.getByRole("alert");
       expect(alert.textContent).toContain("Claude 2.1.205 is not supported");
@@ -106,10 +122,12 @@ describe("ClaudeConfigView", () => {
       renderView({
         state: { kind: "ready", source: "custom" },
         binaryPath: "/usr/local/bin/claude",
+        hasBinaryPathOverride: true,
       });
 
       expect(screen.queryByRole("alert")).toBeNull();
       expect(screen.getByText("Ready")).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Clear" })).toBeTruthy();
     });
   });
 });

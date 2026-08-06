@@ -5,11 +5,7 @@ import {
   codexBinaryPathPlaceholder,
 } from "@/agentMode/backends/codex/cliSetup";
 import { BinaryPathSetting } from "@/agentMode/backends/shared/BinaryPathSetting";
-import {
-  ConfigDialogShell,
-  ConfigSection,
-  ConfigWarningStrip,
-} from "@/agentMode/backends/shared/ui/ConfigDialogShell";
+import { ConfigDialogShell, ConfigSection } from "@/agentMode/backends/shared/ui/ConfigDialogShell";
 import { CommandBlock, SetupStep } from "@/agentMode/backends/shared/ui/SetupSteps";
 import type { InstallState } from "@/agentMode/session/types";
 import React from "react";
@@ -48,17 +44,7 @@ export const CodexConfigView: React.FC<CodexConfigViewProps> = ({
   searchedDirs,
   onClose,
 }) => (
-  <ConfigDialogShell
-    title="Configure Codex"
-    state={state}
-    warning={
-      <ConfigWarningStrip
-        state={state}
-        detail="Update it with the install command below, then reopen this dialog."
-      />
-    }
-    onClose={onClose}
-  >
+  <ConfigDialogShell title="Configure Codex" state={state} onClose={onClose}>
     <ConfigSection title="codex-acp binary">
       <p className="tw-my-0 tw-text-sm tw-text-muted">
         Copilot spawns the <code>{CODEX_BINARY_NAME}</code> adapter on this machine. Auto-detect

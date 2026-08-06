@@ -19,6 +19,7 @@ const meta = {
   args: {
     state: { kind: "absent" },
     binaryPath: "",
+    hasBinaryPathOverride: false,
     onSavePath: () => Promise.resolve(null),
     onClearPath: () => undefined,
     detect: () => Promise.resolve(null),
@@ -35,14 +36,18 @@ export const NotSetUp: StoryObj<ClaudeConfigViewProps> = {};
 
 export const Ready: StoryObj<ClaudeConfigViewProps> = {
   args: {
-    state: { kind: "ready", source: "custom" },
+    state: { kind: "ready", source: "managed" },
     binaryPath: "/Users/zero/.local/bin/claude",
   },
 };
 
 /** A custom-path install must be updated in place or cleared so auto-detection can take over. */
 export const UpdateRequired: StoryObj<ClaudeConfigViewProps> = {
-  args: { state: OUTDATED, binaryPath: "/Users/zero/.local/bin/claude" },
+  args: {
+    state: OUTDATED,
+    binaryPath: "/Users/zero/.local/bin/claude",
+    hasBinaryPathOverride: true,
+  },
 };
 
 /** Sign-in in flight: the in-app button is busy, the command stays copyable. */
@@ -50,6 +55,7 @@ export const SigningIn: StoryObj<ClaudeConfigViewProps> = {
   args: {
     state: { kind: "ready", source: "custom" },
     binaryPath: "/Users/zero/.local/bin/claude",
+    hasBinaryPathOverride: true,
     auth: { onSignIn: () => undefined, signingIn: true, url: null },
   },
 };
@@ -59,6 +65,7 @@ export const OAuthFallback: StoryObj<ClaudeConfigViewProps> = {
   args: {
     state: { kind: "ready", source: "custom" },
     binaryPath: "/Users/zero/.local/bin/claude",
+    hasBinaryPathOverride: true,
     auth: {
       onSignIn: () => undefined,
       signingIn: true,
@@ -73,5 +80,6 @@ export const LongPath: StoryObj<ClaudeConfigViewProps> = {
     state: { kind: "ready", source: "custom" },
     binaryPath:
       "/Users/zero/Library/Application Support/fnm/node-versions/v22.11.0/installation/bin/claude",
+    hasBinaryPathOverride: true,
   },
 };

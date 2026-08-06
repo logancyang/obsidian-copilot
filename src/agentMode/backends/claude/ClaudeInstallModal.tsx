@@ -1,5 +1,4 @@
 import { ClaudeConfigView } from "@/agentMode/backends/claude/ui/ClaudeConfigView";
-import type { BackendDescriptor } from "@/agentMode/session/types";
 import { useBackendAuthState } from "@/agentMode/session/useBackendAuthState";
 import { ReactModal } from "@/components/modals/ReactModal";
 import { getSettings, setSettings, useSettingsValue } from "@/settings/model";
@@ -12,6 +11,7 @@ import {
   getClaudeInstallState,
   refreshClaudeInstallState,
   subscribeClaudeInstallState,
+  type ClaudeDescriptor,
 } from "./descriptor";
 
 /**
@@ -21,7 +21,7 @@ import {
  * plain data.
  */
 const ClaudeConfigContainer: React.FC<{
-  descriptor: BackendDescriptor;
+  descriptor: ClaudeDescriptor;
   onClose: () => void;
 }> = ({ descriptor, onClose }) => {
   const settings = useSettingsValue();
@@ -31,6 +31,8 @@ const ClaudeConfigContainer: React.FC<{
   );
   const state = React.useSyncExternalStore(subscribeClaudeInstallState, getInstallStateSnapshot);
   const auth = useBackendAuthState(descriptor);
+  const binaryPathOverride = settings.agentMode?.claudeCli?.path;
+  const binaryPath = descriptor.getResolvedBinaryPath(settings) ?? binaryPathOverride ?? "";
 
   React.useEffect(() => {
     void refreshClaudeInstallState(getSettings(), true);
@@ -53,16 +55,13 @@ const ClaudeConfigContainer: React.FC<{
   return (
     <ClaudeConfigView
       state={state}
-      binaryPath={settings.agentMode?.claudeCli?.path ?? ""}
+      binaryPath={binaryPath}
+      hasBinaryPathOverride={Boolean(binaryPathOverride)}
       onSavePath={onSavePath}
       onClearPath={onClearPath}
       detect={() => Promise.resolve(detectClaudeCliPath())}
       searchedDirs={claudeCliDetectionSearchDirs}
-      auth={
-        descriptor.auth
-          ? { onSignIn: auth.signIn, signingIn: auth.signingIn, url: auth.url }
-          : undefined
-      }
+      auth={{ onSignIn: auth.signIn, signingIn: auth.signingIn, url: auth.url }}
       onClose={onClose}
     />
   );
@@ -72,7 +71,7 @@ const ClaudeConfigContainer: React.FC<{
 export class ClaudeInstallModal extends ReactModal {
   constructor(
     app: App,
-    private readonly descriptor: BackendDescriptor
+    private readonly descriptor: ClaudeDescriptor
   ) {
     super(app, "Configure Claude");
   }

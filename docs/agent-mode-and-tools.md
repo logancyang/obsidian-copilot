@@ -37,6 +37,8 @@ If the agent Copilot would normally start is not set up and there is no chat or 
 
 Selecting a row only previews its action. **Start chat** saves that agent as the default and starts it; **Configure** opens its setup without changing the default. After a chat starts, use the agent and model picker to switch agents or choose one of that agent's models.
 
+The Claude setup dialog can also sign you in before a chat starts. After confirming or auto-detecting the Claude Code binary, click **Sign in** to open Claude's browser login. If the Claude CLI cannot open the browser itself, click **Open sign-in page** while sign-in is running to open the fallback URL.
+
 ### Choosing the OpenCode Binary Source
 
 The OpenCode setup dialog (**Settings → Copilot → Agents → opencode → Configure**) offers two ways to provide the binary, shown one at a time: **Managed by Copilot**, where Copilot downloads and updates an official release for you, and **My own binary**, where you point Copilot at an OpenCode you already have installed.
