@@ -65,7 +65,7 @@ const meta = {
     footerNote: "opencode isn't set up on this machine yet.",
     onCta: () => undefined,
   },
-  parameters: { gallery: { host: "leaf", layout: "padded", width: 300 } },
+  parameters: { gallery: { host: "leaf", layout: "padded" } },
 } satisfies Meta<AgentSelectViewProps>;
 export default meta;
 
