@@ -218,7 +218,7 @@ const ActivityGroupRow: React.FC<ActivityGroupRowProps> = ({ group, atLiveEdge, 
           member,
           member.type === "action" ? member.part.id : `thought-${i}`,
           ctx,
-          false,
+          atLiveEdge,
           trailId
         )
       }

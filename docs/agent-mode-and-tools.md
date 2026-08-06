@@ -223,14 +223,18 @@ See [Context and Mentions](context-and-mentions.md) for the full @-mention refer
 
 ## Tool Call Indicators
 
-While the agent is working, the chat shows status indicators for each tool call:
+While the agent is working, the chat shows what it is doing. A single action gets its own status line, such as:
 
 - "Reading files"
 - "Searching the web"
 - "Reading file tree"
 - "Compacting"
 
-This lets you see what the agent is doing as it works.
+When the agent performs several actions in a row, they are collapsed into one summary row instead of a long list — for example "Read 2 files, ran 5 commands, thought for 51s". While that work is still in progress, the current step (like the command being run) appears beneath the summary and updates as the agent moves on.
+
+Click a summary row to expand it and see every action inside, each with its own status line. An expanded row stays open — even as new actions stream into it — until you collapse it again.
+
+Only background work is grouped this way. The agent's own messages, plan checklists, questions to you, and delegated sub-agents always stay visible as separate rows.
 
 ### Delegated Agents and Shell Commands
 

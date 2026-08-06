@@ -198,6 +198,21 @@ describe("AgentTrail", () => {
     expect(screen.queryByText("Reasoning")).toBeNull();
   });
 
+  it("keeps trailing reasoning live when the streaming group is expanded", () => {
+    renderTrail({
+      parts: [READ_A, { kind: "thought", text: "still mulling it over" }],
+      isStreaming: true,
+      turnStopReason: undefined,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Read 1 file/ }));
+
+    // The expanded member must report the same in-flight state the collapsed
+    // live row did — not flip to a finished "Thought for" block.
+    expect(screen.getByText("Reasoning")).toBeTruthy();
+    expect(screen.queryByText("Thought for")).toBeNull();
+  });
+
   it("renders prose between two groups at full size", () => {
     renderTrail({ parts: STREAMING_PARTS, isStreaming: true, turnStopReason: undefined });
 
