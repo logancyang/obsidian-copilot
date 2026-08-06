@@ -25,9 +25,7 @@ const meta = {
     searchedDirs: () => [],
     onClose: () => undefined,
   },
-  // The real dialog fills its modal edge to edge, so the story asks for a width
-  // the modal clamps to its own — anything narrower hides the full-bleed bands.
-  parameters: { gallery: { host: "modal", layout: "padded", width: 600 } },
+  parameters: { gallery: { host: "modal", layout: "padded" } },
 } satisfies Meta<CodexConfigViewProps>;
 export default meta;
 

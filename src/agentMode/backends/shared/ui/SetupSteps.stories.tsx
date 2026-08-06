@@ -36,9 +36,7 @@ const meta = {
   title: "Agent Mode/Setup Steps",
   component: SetupStepsBlock,
   args: { installCommand: "npm install -g @anthropic-ai/claude-code" },
-  // The steps live inside a Configure dialog band, so they are judged at the
-  // width the modal gives them, not at a leaf pane's.
-  parameters: { gallery: { host: "modal", layout: "padded", width: 600 } },
+  parameters: { gallery: { host: "modal", layout: "padded" } },
 } satisfies Meta<SetupStepsStoryProps>;
 export default meta;
 
