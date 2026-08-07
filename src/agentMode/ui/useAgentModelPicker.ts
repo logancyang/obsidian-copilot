@@ -5,8 +5,10 @@ import { listBackendDescriptors } from "@/agentMode/backends/registry";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import { modelStateSignature } from "@/agentMode/session/translateBackendState";
 import type { BackendDescriptor } from "@/agentMode/session/types";
+import { useBackendInstallStates } from "@/agentMode/ui/useBackendDescriptor";
 import { buildAgentModelPicker } from "./agentModelPickerHelpers";
 import { useManagerSubscribe } from "./useManagerSubscribe";
+import type CopilotPlugin from "@/main";
 
 export interface AgentModelPickerOverride {
   models: ModelSelectorEntry[];
@@ -86,18 +88,21 @@ function useAgentModelSignal(
  * Mode is *not* part of this override — see `useAgentModePicker` for that.
  */
 export function useAgentModelPicker(
-  manager: AgentSessionManager | null
+  manager: AgentSessionManager | null,
+  plugin: CopilotPlugin
 ): AgentModelPickerOverride | null {
   const settings = useSettingsValue();
   // Every registered backend shows in the picker; Self-Host Mode marks cloud
   // agents (via `settings` in `buildAgentModelPicker`) rather than hiding them.
   // The registry is static, so the descriptor list is a stable module constant.
   const descriptors = useMemo(() => listBackendDescriptors(), []);
+  const installStates = useBackendInstallStates(plugin);
   const signal = useAgentModelSignal(manager, descriptors);
   return useMemo(() => {
-    // `signal` is a memo invalidator — referenced here so
-    // react-hooks/exhaustive-deps accepts it in the dep array.
+    // These are memo invalidators: the builder reads the manager and
+    // descriptors directly after either external store reports a change.
     void signal;
+    void installStates;
     return buildAgentModelPicker({ manager, descriptors, settings });
-  }, [manager, descriptors, settings, signal]);
+  }, [manager, descriptors, settings, signal, installStates]);
 }

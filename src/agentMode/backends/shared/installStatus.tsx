@@ -1,16 +1,15 @@
 import type { InstallState } from "@/agentMode/session/types";
 import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
-import { Check } from "lucide-react";
+import { AlertTriangle, Check } from "lucide-react";
 import React from "react";
 
 interface InstallBadgeSpec {
   label: string;
-  variant: "outline" | "destructive";
-  /** Extra text color class layered on the badge. */
-  className?: string;
+  variant: "outline" | "destructive" | "success";
   /** Render a leading check glyph (ready state). */
   showCheck?: boolean;
+  /** Render a leading alert glyph (the user has to act). */
+  showAlert?: boolean;
   /** Tooltip text (error message). */
   title?: string;
 }
@@ -21,7 +20,7 @@ interface InstallBadgeSpec {
  */
 export function installBadge(state: InstallState): InstallBadgeSpec | null {
   if (state.kind === "ready") {
-    return { label: "Ready", variant: "outline", className: "tw-text-success", showCheck: true };
+    return { label: "Ready", variant: "success", showCheck: true };
   }
   if (state.kind === "checking") {
     return { label: "Checking…", variant: "outline" };
@@ -37,37 +36,42 @@ export function installBadge(state: InstallState): InstallBadgeSpec | null {
 }
 
 /**
+ * Status vocabulary for the Configure dialogs. It differs from {@link installBadge}
+ * on the two states where a dialog and a settings card have different jobs: a
+ * dialog is the place you go to fix things, so `absent` says so outright instead
+ * of staying silent, and `incompatible` names the remedy ("Update required")
+ * rather than the diagnosis.
+ */
+const CONFIG_STATUS_BADGES: Record<InstallState["kind"], InstallBadgeSpec> = {
+  ready: { label: "Ready", variant: "success", showCheck: true },
+  absent: { label: "Not set up", variant: "outline" },
+  incompatible: { label: "Update required", variant: "destructive", showAlert: true },
+  checking: { label: "Checking…", variant: "outline" },
+  error: { label: "Error", variant: "destructive" },
+};
+
+const StatusBadge: React.FC<{ spec: InstallBadgeSpec }> = ({ spec }) => (
+  <Badge variant={spec.variant} className="tw-gap-1" title={spec.title}>
+    {spec.showCheck && <Check aria-hidden className="tw-size-icon-xs" />}
+    {spec.showAlert && <AlertTriangle aria-hidden className="tw-size-icon-xs" />}
+    {spec.label}
+  </Badge>
+);
+
+/**
  * Card status badge. Renders nothing when the agent is not configured.
  */
 export const InstallBadge: React.FC<{ state: InstallState }> = ({ state }) => {
   const spec = installBadge(state);
   if (!spec) return null;
-  return (
-    <Badge variant={spec.variant} className={cn("tw-gap-1", spec.className)} title={spec.title}>
-      {spec.showCheck && <Check className="tw-size-icon-xs" />}
-      {spec.label}
-    </Badge>
-  );
+  return <StatusBadge spec={spec} />;
 };
 
 /**
- * Gives configuration dialogs a shared readiness summary so users can understand whether setup action is required.
- * @param state - The backend readiness state the dialog needs to explain.
- * @param detail - Optional runtime context that helps the user identify the configured installation.
+ * Configure-dialog status badge, sat beside the dialog title. Always renders:
+ * inside a setup dialog every state — including "not set up" — is information
+ * the user came for.
  */
-export const InstallStatusLine: React.FC<{
-  state: InstallState;
-  detail?: React.ReactNode;
-}> = ({ state, detail }) => (
-  <div className="tw-flex tw-flex-col tw-items-start tw-gap-1">
-    {state.kind === "absent" ? (
-      <span className="tw-text-sm tw-text-muted">Not configured.</span>
-    ) : (
-      <InstallBadge state={state} />
-    )}
-    {detail && <div className="tw-break-all tw-font-mono tw-text-xs tw-text-muted">{detail}</div>}
-    {(state.kind === "incompatible" || state.kind === "error") && (
-      <div className="tw-text-sm tw-text-error">{state.message}</div>
-    )}
-  </div>
+export const ConfigStatusBadge: React.FC<{ state: InstallState }> = ({ state }) => (
+  <StatusBadge spec={CONFIG_STATUS_BADGES[state.kind]} />
 );

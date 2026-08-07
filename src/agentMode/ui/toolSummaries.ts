@@ -7,9 +7,9 @@ import { isAbsolutePath, toVaultRelative } from "@/utils/vaultPath";
 
 /**
  * Render-time context passed through to the summary callbacks that need
- * vault-relative path resolution. Resolved once by `ActionCard` /
- * `AggregateCard` (which can call `getVaultBase(app)`), so the summary
- * objects themselves stay free of any reach into the global `app`.
+ * vault-relative path resolution. Resolved once by the rendering layer (which
+ * can call `getVaultBase(app)`), so the summary objects themselves stay free
+ * of any reach into the global `app`.
  */
 export interface ToolSummaryContext {
   /** Vault root absolute path, or null when unavailable (mobile, tests). */
@@ -29,8 +29,6 @@ export interface ToolSummary {
   collapsedLine: (part: ToolCallPart, ctx?: ToolSummaryContext) => string;
   /** Optional muted line below the title — counts/sizes/duration. Null hides. */
   outcome: (part: ToolCallPart) => string | null;
-  /** Tool-aware aggregate stat for N consecutive same-key parts. */
-  aggregate: (parts: ToolCallPart[]) => { line: string; outcome: string };
   /** Full tool input shown only in the expanded card. Null hides. */
   expandedDetails?: (part: ToolCallPart) => string | null;
   /**
@@ -41,28 +39,18 @@ export interface ToolSummary {
   targetPath?: (part: ToolCallPart, ctx?: ToolSummaryContext) => string | null;
 }
 
-/**
- * Result of recognizing one tool_call part. Consumers can also call
- * `lookupToolSummaryForAggregate` when they have a homogenous group.
- */
+/** The presentation for one tool_call part: vendor name → tool kind → generic. */
 export function lookupToolSummary(part: ToolCallPart): ToolSummary {
   const base = selectToolSummary(part);
   if (!part.mcpServer) return base;
   // An MCP tool whose bare name collides with a native tool (e.g.
   // `mcp__srv__read` → bare `read` → the Read/kind summary) would otherwise
-  // masquerade as that native tool. Prepend the server to both the collapsed
-  // line and the compacted aggregate line so it always reads as `server · …`,
-  // even when two consecutive MCP calls fold into an `AggregateCard`.
-  // `toolKeyFor` namespaces MCP calls per-server, so every part in an
-  // aggregate shares this server — prefixing the aggregate line is safe.
+  // masquerade as that native tool. Prepend the server so it always reads as
+  // `server · …`.
   const server = part.mcpServer;
   return {
     ...base,
     collapsedLine: (p, ctx) => `${server} · ${base.collapsedLine(p, ctx)}`,
-    aggregate: (parts) => {
-      const agg = base.aggregate(parts);
-      return { ...agg, line: `${server} · ${agg.line}` };
-    },
   };
 }
 
@@ -89,34 +77,7 @@ function isOpencodeTaskTool(part: ToolCallPart): boolean {
   return typeof input?.subagent_type === "string";
 }
 
-function statusCounts(parts: ToolCallPart[]): {
-  done: number;
-  failed: number;
-  pending: number;
-} {
-  let done = 0;
-  let failed = 0;
-  let pending = 0;
-  for (const p of parts) {
-    if (p.status === "completed") done++;
-    else if (p.status === "failed") failed++;
-    else pending++;
-  }
-  return { done, failed, pending };
-}
-
-function statusSuffix(parts: ToolCallPart[]): string {
-  const { done, failed, pending } = statusCounts(parts);
-  // Mixed-status surfaces explicitly; clean runs say nothing.
-  if (failed === 0 && pending === 0) return "";
-  const bits: string[] = [];
-  if (done > 0) bits.push(`${done} done`);
-  if (failed > 0) bits.push(`${failed} failed`);
-  if (pending > 0) bits.push(`${pending} pending`);
-  return ` · ${bits.join(" · ")}`;
-}
-
-function pluralize(n: number, singular: string, plural?: string): string {
+export function pluralize(n: number, singular: string, plural?: string): string {
   return `${n} ${n === 1 ? singular : (plural ?? `${singular}s`)}`;
 }
 
@@ -276,13 +237,6 @@ const READ_SUMMARY: ToolSummary = {
     const t = approxTokens(p);
     return t > 0 ? `~${formatTokens(t)} tokens` : null;
   },
-  aggregate: (parts) => {
-    const tokens = parts.reduce((sum, p) => sum + approxTokens(p), 0);
-    return {
-      line: `Read ${pluralize(parts.length, "note")}${statusSuffix(parts)}`,
-      outcome: tokens > 0 ? `~${formatTokens(tokens)} tokens` : "",
-    };
-  },
   targetPath: (p, ctx) => targetFromPath(p, ctx?.vaultBase ?? null),
 };
 
@@ -294,10 +248,6 @@ const LIST_SUMMARY: ToolSummary = {
     return path ? `${v} ${path}` : `${v} vault root`;
   },
   outcome: () => null,
-  aggregate: (parts) => ({
-    line: `Listed ${pluralize(parts.length, "folder")}${statusSuffix(parts)}`,
-    outcome: "",
-  }),
 };
 
 const EDIT_SUMMARY: ToolSummary = {
@@ -314,19 +264,6 @@ const EDIT_SUMMARY: ToolSummary = {
     const { added, removed } = diffStats(p);
     if (added === 0 && removed === 0) return null;
     return `+${added} / −${removed} lines`;
-  },
-  aggregate: (parts) => {
-    let added = 0;
-    let removed = 0;
-    for (const p of parts) {
-      const s = diffStats(p);
-      added += s.added;
-      removed += s.removed;
-    }
-    return {
-      line: `Edited ${pluralize(parts.length, "note")}${statusSuffix(parts)}`,
-      outcome: added + removed > 0 ? `+${added} / −${removed} lines` : "",
-    };
   },
   targetPath: (p, ctx) =>
     diffTargetPaths(p).length > 1 ? null : targetFromPath(p, ctx?.vaultBase ?? null),
@@ -347,10 +284,6 @@ const BASH_SUMMARY: ToolSummary = {
     return `${v} ${targetFromTitle(p)}`;
   },
   outcome: () => null,
-  aggregate: (parts) => ({
-    line: `Ran ${pluralize(parts.length, "command")}${statusSuffix(parts)}`,
-    outcome: "",
-  }),
   expandedDetails: (p) => {
     const input = p.input as { command?: unknown; description?: unknown } | null | undefined;
     if (typeof input?.command !== "string" || input.command.length === 0) return null;
@@ -369,10 +302,6 @@ const SEARCH_VAULT_SUMMARY: ToolSummary = {
     return q ? `${v} · "${q}"` : `${v} · ${targetFromTitle(p)}`;
   },
   outcome: () => null,
-  aggregate: (parts) => ({
-    line: `Searched vault · ${pluralize(parts.length, "query", "queries")}${statusSuffix(parts)}`,
-    outcome: "",
-  }),
 };
 
 const WEB_SEARCH_SUMMARY: ToolSummary = {
@@ -383,10 +312,6 @@ const WEB_SEARCH_SUMMARY: ToolSummary = {
     return q ? `${v} · "${q}"` : `${v} · ${targetFromTitle(p)}`;
   },
   outcome: () => null,
-  aggregate: (parts) => ({
-    line: `Searched web · ${pluralize(parts.length, "query", "queries")}${statusSuffix(parts)}`,
-    outcome: "",
-  }),
 };
 
 const WEB_FETCH_SUMMARY: ToolSummary = {
@@ -398,10 +323,6 @@ const WEB_FETCH_SUMMARY: ToolSummary = {
     return `${v} ${targetFromTitle(p)}`;
   },
   outcome: () => null,
-  aggregate: (parts) => ({
-    line: `Fetched ${pluralize(parts.length, "URL")}${statusSuffix(parts)}`,
-    outcome: "",
-  }),
 };
 
 const TASK_SUMMARY: ToolSummary = {
@@ -435,10 +356,6 @@ const TASK_SUMMARY: ToolSummary = {
     if (progress.durationMs !== undefined) bits.push(formatDuration(progress.durationMs));
     return bits.length > 0 ? bits.join(" · ") : null;
   },
-  aggregate: (parts) => ({
-    line: `Ran ${pluralize(parts.length, "sub-agent")}${statusSuffix(parts)}`,
-    outcome: "",
-  }),
 };
 
 const TODO_SUMMARY: ToolSummary = {
@@ -449,20 +366,12 @@ const TODO_SUMMARY: ToolSummary = {
     const n = Array.isArray(input?.todos) ? input.todos.length : 0;
     return n > 0 ? pluralize(n, "task") : null;
   },
-  aggregate: (parts) => ({
-    line: `Updated task list · ${pluralize(parts.length, "time")}${statusSuffix(parts)}`,
-    outcome: "",
-  }),
 };
 
 const EXIT_PLAN_SUMMARY: ToolSummary = {
   icon: pickToolIcon({ vendorToolName: "ExitPlanMode" }),
   collapsedLine: (p) => `${verb(p, "Proposing", "Proposed")} plan`,
   outcome: () => null,
-  aggregate: (parts) => ({
-    line: `Proposed ${pluralize(parts.length, "plan")}${statusSuffix(parts)}`,
-    outcome: "",
-  }),
 };
 
 const ASK_USER_QUESTION_SUMMARY: ToolSummary = {
@@ -473,10 +382,6 @@ const ASK_USER_QUESTION_SUMMARY: ToolSummary = {
     return q ? `${v}: "${q}"` : `${v} a question`;
   },
   outcome: () => null,
-  aggregate: (parts) => ({
-    line: `Asked ${pluralize(parts.length, "question")}${statusSuffix(parts)}`,
-    outcome: "",
-  }),
 };
 
 const SKILL_SUMMARY: ToolSummary = {
@@ -487,10 +392,6 @@ const SKILL_SUMMARY: ToolSummary = {
     return name ? `${v} skill ${name}` : `${v} a skill`;
   },
   outcome: () => null,
-  aggregate: (parts) => ({
-    line: `Ran ${pluralize(parts.length, "skill")}${statusSuffix(parts)}`,
-    outcome: "",
-  }),
   expandedDetails: (p) => {
     const input = p.input as { args?: unknown } | null | undefined;
     return typeof input?.args === "string" && input.args.length > 0 ? input.args : null;
@@ -529,10 +430,6 @@ const KIND_SEARCH_SUMMARY: ToolSummary = {
     return q ? `${v} · "${q}"` : `${v} · ${targetFromTitle(p)}`;
   },
   outcome: () => null,
-  aggregate: (parts) => ({
-    line: `Searched · ${pluralize(parts.length, "query", "queries")}${statusSuffix(parts)}`,
-    outcome: "",
-  }),
 };
 const KIND_EXECUTE_SUMMARY: ToolSummary = {
   ...BASH_SUMMARY,
@@ -547,20 +444,12 @@ const KIND_DELETE_SUMMARY: ToolSummary = {
   collapsedLine: (p, ctx) =>
     `${verb(p, "Deleting", "Deleted")} ${displayTargetFromPath(p, ctx?.vaultBase ?? null) ?? targetFromTitle(p)}`,
   outcome: () => null,
-  aggregate: (parts) => ({
-    line: `Deleted ${pluralize(parts.length, "item")}${statusSuffix(parts)}`,
-    outcome: "",
-  }),
 };
 const KIND_MOVE_SUMMARY: ToolSummary = {
   icon: pickToolIcon({ toolKind: "move" }),
   collapsedLine: (p, ctx) =>
     `${verb(p, "Moving", "Moved")} ${displayTargetFromPath(p, ctx?.vaultBase ?? null) ?? targetFromTitle(p)}`,
   outcome: () => null,
-  aggregate: (parts) => ({
-    line: `Moved ${pluralize(parts.length, "item")}${statusSuffix(parts)}`,
-    outcome: "",
-  }),
 };
 const KIND_SWITCH_MODE_SUMMARY: ToolSummary = {
   ...EXIT_PLAN_SUMMARY,
@@ -570,10 +459,6 @@ const KIND_THINK_SUMMARY: ToolSummary = {
   icon: pickToolIcon({ toolKind: "think" }),
   collapsedLine: (p) => verb(p, "Thinking", "Thought"),
   outcome: () => null,
-  aggregate: (parts) => ({
-    line: `Thought · ${pluralize(parts.length, "step")}${statusSuffix(parts)}`,
-    outcome: "",
-  }),
 };
 
 const KIND_SUMMARIES: Record<string, ToolSummary> = {
@@ -592,10 +477,6 @@ const GENERIC_SUMMARY: ToolSummary = {
   icon: pickToolIcon({}),
   collapsedLine: (p) => genericToolLabel(p),
   outcome: () => null,
-  aggregate: (parts) => ({
-    line: `${pluralize(parts.length, "tool call")}${statusSuffix(parts)}`,
-    outcome: "",
-  }),
 };
 
 function formatTokens(n: number): string {

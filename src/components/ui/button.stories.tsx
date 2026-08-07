@@ -23,7 +23,6 @@ export default meta;
 
 export const Disabled: StoryObj<ButtonProps> = {
   args: { disabled: true, children: "Working…" },
-  parameters: { gallery: { width: 300 } },
 };
 
 export const Variants: StoryObj<ButtonProps> = {

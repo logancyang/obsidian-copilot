@@ -1,14 +1,24 @@
-import React from "react";
-import { agentResponseText, buildAgentTrail, type RenderNode } from "@/agentMode/ui/agentTrail";
+import React, { useMemo } from "react";
+import { agentResponseText, buildAgentTrail } from "@/agentMode/ui/agentTrail";
 import type { AgentMessagePart, StopReason } from "@/agentMode/session/types";
 import { ActionCard } from "@/agentMode/ui/ActionCard";
+import { ActivityGroupCard } from "@/agentMode/ui/ActivityGroupCard";
+import {
+  foldActivityGroups,
+  type ActivityGroupNode,
+  type GroupedTrailNode,
+} from "@/agentMode/ui/activityGroups";
+import { activityLiveStep, isReasoningActive } from "@/agentMode/ui/activityLiveStep";
 import { AgentMessageActions } from "@/agentMode/ui/AgentMessageActions";
-import { AggregateCard } from "@/agentMode/ui/AggregateCard";
 import { SubAgentCard } from "@/agentMode/ui/SubAgentCard";
 import { ReasoningBlock } from "@/agentMode/ui/ReasoningBlock";
 import { AgentMarkdownText } from "@/agentMode/ui/AgentMarkdownText";
 import { planEntryClass, planEntryIcon } from "@/agentMode/ui/planEntryStyles";
+import type { ToolSummaryContext } from "@/agentMode/ui/toolSummaries";
+import { useThinkingClock } from "@/agentMode/ui/useThinkingClock";
+import { useTrailExpansion, type TrailExpansion } from "@/agentMode/ui/useTrailExpansion";
 import { BottomLoadingIndicator } from "@/components/chat-components/BottomLoadingIndicator";
+import { getVaultBase } from "@/utils/vaultPath";
 import { App } from "obsidian";
 
 interface AgentTrailProps {
@@ -57,6 +67,17 @@ export const AgentTrail: React.FC<AgentTrailProps> = ({
   );
 };
 
+/** What every node in one trail renders against, regardless of its position. */
+interface TrailContext {
+  app: App;
+  /** The trail's trailing part, reference-compared to freeze stale reasoning. */
+  lastPart: AgentMessagePart | undefined;
+  /** Which activity groups the user has opened; owned above the node list so an
+   *  open group survives the reshaping that streaming causes. */
+  expansion: TrailExpansion;
+  summaryCtx: ToolSummaryContext;
+}
+
 /** Renders the full trail in chronological order — the pre-collapse view. */
 const LinearTrail: React.FC<{
   parts: AgentMessagePart[];
@@ -64,7 +85,11 @@ const LinearTrail: React.FC<{
   showThinkingTail?: boolean;
   app: App;
 }> = ({ parts, isStreaming, showThinkingTail, app }) => {
-  const tree = buildAgentTrail(parts);
+  const expansion = useTrailExpansion();
+  // `vaultBase` is stable for the plugin lifetime, but memoizing keeps the
+  // summary inputs referentially stable across re-renders.
+  const summaryCtx = useMemo(() => ({ vaultBase: getVaultBase(app) }), [app]);
+  const nodes = foldActivityGroups(buildAgentTrail(parts));
   // A reasoning block is "still active" only while the turn is in flight AND
   // its `thought` part is the trailing entry of `msg.parts[]`. Anything later
   // (a tool_call, a sibling thought split by a tool_call, an `agent_message_chunk`)
@@ -73,47 +98,137 @@ const LinearTrail: React.FC<{
   // part is robust to the hidden-tool filter inside `buildAgentTrail`: if the
   // last part is hidden, no reasoning node will match, so all reasoning blocks
   // freeze — which is the right outcome.
-  const lastPart = parts.length > 0 ? parts[parts.length - 1] : undefined;
+  const ctx: TrailContext = {
+    app,
+    lastPart: parts.length > 0 ? parts[parts.length - 1] : undefined,
+    expansion,
+    summaryCtx,
+  };
   return (
     <div className="tw-flex tw-flex-col tw-gap-1">
-      {tree.map((node, i) => renderNode(node, i, isStreaming, app, lastPart))}
+      {nodes.map((node, i) =>
+        renderNode(node, i, ctx, isStreaming && i === nodes.length - 1, "root")
+      )}
       {showThinkingTail ? <BottomLoadingIndicator /> : null}
     </div>
   );
 };
 
+/**
+ * @param atLiveEdge - Whether this node closes every containing peer list in
+ *   the streaming trail. Activity inside an earlier parent has finished.
+ * @param trailId - Stable identity of this peer list, used to keep expansion
+ *   state independent across nesting levels.
+ */
 function renderNode(
-  node: RenderNode,
+  node: GroupedTrailNode,
   key: string | number,
-  isStreaming: boolean,
-  app: App,
-  lastPart: AgentMessagePart | undefined
+  ctx: TrailContext,
+  atLiveEdge: boolean,
+  trailId: string
 ): React.ReactNode {
   switch (node.type) {
-    case "action":
-      return <ActionCard key={key} part={node.part} />;
-    case "aggregate":
-      return <AggregateCard key={key} parts={node.parts} />;
-    case "subagent":
+    case "action": {
+      const expansionId = actionExpansionId(trailId, node.part.id);
+      return (
+        <ActionCard
+          key={key}
+          part={node.part}
+          open={ctx.expansion.isOpen(expansionId)}
+          onToggle={() => ctx.expansion.toggle(expansionId)}
+        />
+      );
+    }
+    case "activityGroup":
+      return (
+        <ActivityGroupRow
+          key={key}
+          group={node}
+          ctx={ctx}
+          atLiveEdge={atLiveEdge}
+          trailId={trailId}
+        />
+      );
+    case "subagent": {
+      // Peers nest, so a sub-agent's own children group exactly like the root.
+      const children = foldActivityGroups(node.children);
+      const lastChild = children[children.length - 1];
+      const childTrailId = `${trailId}/subagent:${node.parent.id}`;
       return (
         <SubAgentCard
           key={key}
           parent={node.parent}
-          childNodes={node.children}
+          childNodes={children}
           truncated={node.truncated}
-          app={app}
-          renderNode={(n, k) => renderNode(n, k, isStreaming, app, lastPart)}
+          app={ctx.app}
+          renderNode={(n, k) => renderNode(n, k, ctx, atLiveEdge && n === lastChild, childTrailId)}
         />
       );
+    }
     case "reasoning": {
-      const isActive = isStreaming && node.part === lastPart;
+      const isActive = atLiveEdge && node.part === ctx.lastPart;
       return <ReasoningBlock key={key} part={node.part} isStreaming={isActive} />;
     }
     case "text":
-      return <AgentMarkdownText key={key} text={node.part.text} app={app} />;
+      return <AgentMarkdownText key={key} text={node.part.text} app={ctx.app} />;
     case "plan":
       return <PlanPill key={key} entries={node.part.entries} />;
   }
+}
+
+interface ActivityGroupRowProps {
+  group: ActivityGroupNode;
+  /** Whether this group is the one the agent is still working in. */
+  atLiveEdge: boolean;
+  ctx: TrailContext;
+  trailId: string;
+}
+
+// A component rather than a branch of `renderNode` because each group owns its
+// own thinking clock, and hooks cannot run in a loop.
+const ActivityGroupRow: React.FC<ActivityGroupRowProps> = ({ group, atLiveEdge, ctx, trailId }) => {
+  const thinkingMs = useThinkingClock(isReasoningActive(group.members, atLiveEdge));
+  const groupExpansionId = `${trailId}/group:${group.id}`;
+  const memberExpansionIds = group.members.flatMap((member) =>
+    member.type === "action" ? [actionExpansionId(trailId, member.part.id)] : []
+  );
+  const groupOpen =
+    ctx.expansion.isOpen(groupExpansionId) ||
+    memberExpansionIds.some((id) => ctx.expansion.isOpen(id));
+
+  const toggleGroup = () => {
+    if (!groupOpen) {
+      ctx.expansion.toggle(groupExpansionId);
+      return;
+    }
+    if (ctx.expansion.isOpen(groupExpansionId)) ctx.expansion.toggle(groupExpansionId);
+    for (const id of memberExpansionIds) {
+      if (ctx.expansion.isOpen(id)) ctx.expansion.toggle(id);
+    }
+  };
+
+  return (
+    <ActivityGroupCard
+      group={group}
+      thinkingMs={thinkingMs}
+      open={groupOpen}
+      onToggle={toggleGroup}
+      renderMember={(member, i) =>
+        renderNode(
+          member,
+          member.type === "action" ? member.part.id : `thought-${i}`,
+          ctx,
+          atLiveEdge,
+          trailId
+        )
+      }
+      liveStep={activityLiveStep(group.members, atLiveEdge, ctx.summaryCtx)}
+    />
+  );
+};
+
+function actionExpansionId(trailId: string, toolCallId: string): string {
+  return `${trailId}/action:${toolCallId}`;
 }
 
 interface PlanPillProps {

@@ -49,7 +49,7 @@ jest.mock("@/settings/model", () => {
   };
 });
 
-import { OPENCODE_MIN_ACP_VERSION, OPENCODE_PINNED_VERSION } from "@/constants";
+import { OPENCODE_MIN_ACP_VERSION, OPENCODE_PINNED_VERSION } from "./ui/opencodeVersion";
 import { copilotAppDataDir } from "@/utils/appPaths";
 import * as fs from "node:fs";
 import * as os from "node:os";

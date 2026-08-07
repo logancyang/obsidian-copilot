@@ -196,6 +196,8 @@ export const ClaudeBackendDescriptor: BackendDescriptor = {
   Icon: ClaudeLogo,
   // Cloud agent — flagged with a cloud-egress warning while Self-Host Mode is on.
   selfHostable: false,
+  setupDescription:
+    "Anthropic models, billed to your Claude Code subscription. Runs the claude CLI already on your machine.",
   skillsProjectDir: ".claude/skills",
   crossDiscoveredAgents: [],
   restartOnManagedSkillsChange: false,

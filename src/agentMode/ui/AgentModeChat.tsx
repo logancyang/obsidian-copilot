@@ -1,9 +1,11 @@
 import { AgentChatControls } from "@/agentMode/ui/AgentChatControls";
 import { AgentHome } from "@/agentMode/ui/AgentHome";
 import { AgentModeStatus } from "@/agentMode/ui/AgentModeStatus";
+import { AgentSelectPanel } from "@/agentMode/ui/AgentSelectPanel";
+import { AgentSelectPane } from "@/agentMode/ui/AgentSelectPane";
 import {
-  useActiveBackendDescriptor,
   useBackendInstallState,
+  useSessionBackendDescriptor,
 } from "@/agentMode/ui/useBackendDescriptor";
 import type CopilotPlugin from "@/main";
 import { logError } from "@/logger";
@@ -27,7 +29,7 @@ export const AgentModeChat: React.FC<Props> = ({
   updateUserMessageHistory,
 }) => {
   const manager = plugin.agentSessionManager;
-  const descriptor = useActiveBackendDescriptor();
+  const descriptor = useSessionBackendDescriptor(manager);
   const installState = useBackendInstallState(descriptor, plugin);
   const [tick, setTick] = React.useState(0);
 
@@ -38,9 +40,9 @@ export const AgentModeChat: React.FC<Props> = ({
 
   // Manager fires `notify()` on preload settle, which bumps `tick` above and
   // re-renders this component — so we can read the flag directly each render.
-  // Gate only on the *active* backend so a slow non-active backend never
-  // holds the chat hostage; the picker shows per-backend loading rows for
-  // the others.
+  // Gate only on the backend being started or shown so a slow unrelated
+  // backend never holds the chat hostage; the picker shows per-backend
+  // loading rows for the others.
   const preloadReady = manager?.isPreloadReady(descriptor.id) ?? true;
 
   // Auto-spawn the first session on mount. The manager de-dupes concurrent
@@ -106,9 +108,36 @@ export const AgentModeChat: React.FC<Props> = ({
     );
   }
 
-  // No active session (binary missing, booting, or boot error). Render the
-  // chain switcher above the status pill so the user can still leave Agent
-  // Mode without going through settings or the command palette.
+  // No active session (binary missing, booting, or boot error). The agent
+  // select view is a *cold-start* surface, so it takes the pane over only when
+  // nothing is actively erroring and the agent that would run isn't set up —
+  // the mirror image of the auto-spawn gate above. Two states deliberately keep
+  // the compact card instead:
+  //  - any `lastError`: a crashed agent, expired credentials, or a failed resume
+  //    is a runtime failure, not "no agent is set up". Replacing a working
+  //    panel with a setup screen would misdiagnose it, and the card's Retry /
+  //    Configure action is the fix. `lastError` therefore wins when both are
+  //    true — `AgentModeStatus` still checks install state first internally, so
+  //    an absent backend keeps its Install call to action there.
+  //  - `checking`: transient and Claude-only. Flashing the select view and
+  //    swapping it out is worse than the one-line "Checking … version…".
+  const isColdStart =
+    !manager.getIsStarting() &&
+    manager.getLastError() === null &&
+    (installState.kind === "absent" ||
+      installState.kind === "incompatible" ||
+      installState.kind === "error");
+
+  if (isColdStart) {
+    return (
+      <AgentSelectPane controls={<AgentChatControls />}>
+        <AgentSelectPanel plugin={plugin} manager={manager} />
+      </AgentSelectPane>
+    );
+  }
+
+  // Render the chain switcher below the status surface so the user can still
+  // leave Agent Mode without going through settings or the command palette.
   return (
     <div className="tw-flex tw-size-full tw-flex-col tw-overflow-hidden">
       <div className="tw-flex-1" />

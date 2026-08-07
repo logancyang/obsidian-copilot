@@ -333,7 +333,9 @@ export default [
   // detectBinary / binaryPath / nodeToolBinDirs / rendererEventsShim are
   // sibling utilities pulled in by agent-mode wiring and share the same
   // Electron-renderer assumptions. The Symposium handoff consumer is likewise
-  // desktop-only, but remains in the host publishing layer.
+  // desktop-only, but remains in the host publishing layer. openVaultPath
+  // lazy-requires node:fs behind a desktop vault-base guard, mirroring
+  // opencodeLog.
   {
     files: [
       "src/agentMode/**",
@@ -344,6 +346,7 @@ export default [
       "src/utils/rendererEventsShim.ts",
       "src/utils/issueReport.ts",
       "src/utils/opencodeLog.ts",
+      "src/utils/openVaultPath.ts",
       "src/symposium/symposiumAgentHandoff.ts",
     ],
     rules: {
