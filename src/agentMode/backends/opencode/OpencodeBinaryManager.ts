@@ -280,6 +280,11 @@ export class OpencodeBinaryManager {
    * the previous vault. Only the handle is replaced, so a run still in flight
    * is adopted rather than restarted.
    *
+   * Call this once per lifecycle, from the backend's `onPluginLoad` and nowhere
+   * else. The binding is global mutable state read at operation time, so a
+   * caller that rebound on its way in would retarget the manager for every
+   * holder — including surfaces of the lifecycle that is actually running.
+   *
    * @param plugin - The current lifecycle's plugin, whose vault every in-vault
    * path must be derived from.
    */

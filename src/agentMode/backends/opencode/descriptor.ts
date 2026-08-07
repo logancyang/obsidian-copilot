@@ -44,7 +44,7 @@ const EMPTY_EFFORT_CATALOG: Record<string, EffortOption[]> = Object.freeze({});
 
 // Lazy-created singleton manager, kept across plugin lifecycles so an install
 // started in one is still running in the next. The instance is reused but its
-// plugin handle is not: see `adoptPlugin`.
+// plugin handle is not: `onPluginLoad` rebinds it, see `adoptPlugin`.
 let managerRef: OpencodeBinaryManager | null = null;
 
 /**
@@ -97,12 +97,12 @@ const opencodeWire: ModelWireCodec = {
  * The plugin no longer holds a top-level reference — ownership lives next to
  * the backend that uses it.
  *
- * Every call rebinds the plugin, so the manager survives a lifecycle without
- * carrying the previous one's vault with it.
+ * Resolving does not rebind: callers can outlive the lifecycle they captured
+ * their `plugin` in, and the manager's binding is read at operation time by
+ * whoever holds it. `onPluginLoad` is the one rebinder.
  */
 export function getOpencodeBinaryManager(plugin: CopilotPlugin): OpencodeBinaryManager {
   if (!managerRef) managerRef = new OpencodeBinaryManager(plugin);
-  else managerRef.adoptPlugin(plugin);
   return managerRef;
 }
 
@@ -286,6 +286,12 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
 
   async onPluginLoad(plugin: CopilotPlugin): Promise<void> {
     const manager = getOpencodeBinaryManager(plugin);
+    // The sole rebind point. Every other caller reaches the manager from a
+    // surface that can outlive its lifecycle — a settings tree still holding
+    // the outgoing vault's plugin can open Configure — so only this hook can
+    // vouch for the lifecycle now running. Same shape `main.ts` uses for
+    // `miyoMutationSession`, and it runs before any UI of this lifecycle exists.
+    manager.adoptPlugin(plugin);
     // The manager is a module-level singleton, so it survives disable→enable
     // and "Open another vault" in the same process. Clearing at the START of a
     // lifecycle is the convention `main.ts` documents for exactly that carry-
