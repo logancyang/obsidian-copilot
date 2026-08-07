@@ -25,16 +25,11 @@ import type {
 } from "@/agentMode/session/types";
 import type { BackendDescriptor, BackendProcess, InstallState } from "@/agentMode/session/types";
 import { detectBinary } from "@/utils/detectBinary";
+import { findModelEntry } from "@/agentMode/session/translateBackendState";
+import { formatCodexModelId, parseCodexModelId } from "@/utils/codexModelId";
 import { codexAcpSearchDirs, resolveCodexAcpBinary } from "./codexBinaryResolver";
 import { CODEX_BINARY_NAME } from "./cliSetup";
 import { buildCodexModeMapping } from "./codexModeMapping";
-
-/**
- * Vocabulary mirrors codex-acp's advertised efforts. `minimal` is included
- * for forward-compat — codex CLI accepts it as a reasoning level even though
- * codex-acp doesn't currently advertise it.
- */
-const KNOWN_CODEX_EFFORTS = new Set(["minimal", "low", "medium", "high", "xhigh"]);
 
 export function updateCodexFields(partial: Partial<CodexBackendSettings>): void {
   updateAgentModeBackendFields("codex", partial);
@@ -64,27 +59,14 @@ export function codexAcpDetectionSearchDirs(): string[] {
 }
 
 /**
- * Wire-format codec for Codex — `<base>[/<effort>]`. No provider segment
- * (Codex's catalog isn't routed through Copilot BYOK keys, so
+ * Wire-format codec for Codex — see `codexModelId` for the format. No provider
+ * segment (Codex's catalog isn't routed through Copilot BYOK keys, so
  * `decode().provider` stays `null`).
  */
 const codexWire: ModelWireCodec = {
   encode: (selection: ModelSelection) =>
-    selection.effort ? `${selection.baseModelId}/${selection.effort}` : selection.baseModelId,
-  decode: (wireId: string) => {
-    if (!wireId) return { selection: { baseModelId: wireId, effort: null }, provider: null };
-    const segments = wireId.split("/");
-    if (segments.length === 1) {
-      return { selection: { baseModelId: wireId, effort: null }, provider: null };
-    }
-    if (segments.length === 2 && KNOWN_CODEX_EFFORTS.has(segments[1])) {
-      return {
-        selection: { baseModelId: segments[0], effort: segments[1] },
-        provider: null,
-      };
-    }
-    return { selection: { baseModelId: wireId, effort: null }, provider: null };
-  },
+    formatCodexModelId(selection.baseModelId, selection.effort),
+  decode: (wireId: string) => ({ selection: parseCodexModelId(wireId), provider: null }),
 };
 
 /**
@@ -94,9 +76,10 @@ const codexWire: ModelWireCodec = {
  * (active session or preloader cache); curation is the model-management
  * `backends.codex.enabledModels` set surfaced via `getEnabledModelEntries`.
  *
- * Effort is surfaced via opencode-style model-id parsing — codex-acp
- * advertises one model per (base × effort) combination, and we collapse
- * them into a single picker row plus a sibling effort dropdown.
+ * codex-acp advertises one model per (base × effort) combination, so effort is
+ * read back off the wire id (`codexModelId`) and the variants collapse into a
+ * single picker row plus a sibling effort dropdown. The advertised set is the
+ * only source of effort levels — Copilot enumerates none of its own.
  */
 export const CodexBackendDescriptor: BackendDescriptor = {
   id: "codex",
@@ -174,7 +157,12 @@ export const CodexBackendDescriptor: BackendDescriptor = {
   },
 
   async applySelection(session: AgentSession, selection: ModelSelection): Promise<void> {
-    await session.applyModelWireId(codexWire.encode(selection));
+    // codex-acp rejects a bare model id ("Expected: modelId[effort]"), and every
+    // model it advertises carries efforts, so a selection that arrived without
+    // one — a cross-backend pick drafted against a model that has none — is
+    // snapped to the model's first advertised level rather than sent as-is.
+    const effort = selection.effort ?? firstAdvertisedEffort(session, selection.baseModelId);
+    await session.applyModelWireId(codexWire.encode({ ...selection, effort }));
   },
 
   createBackendProcess(args): BackendProcess {
@@ -191,6 +179,16 @@ export const CodexBackendDescriptor: BackendDescriptor = {
     return buildCodexModeMapping(modeState);
   },
 };
+
+/**
+ * The first real effort level the session reports for a model, or `null` when
+ * no state has settled yet (the caller then sends a bare id and lets the agent
+ * reject it rather than inventing a level Copilot doesn't know is valid).
+ */
+function firstAdvertisedEffort(session: AgentSession, baseModelId: string): string | null {
+  const entry = findModelEntry(session.getState()?.model, baseModelId);
+  return entry?.effortOptions.find((o) => o.value !== null)?.value ?? null;
+}
 
 function codexPermissionDecision(metadata: unknown): unknown {
   if (metadata === null || typeof metadata !== "object") return undefined;
