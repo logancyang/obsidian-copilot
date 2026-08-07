@@ -24,8 +24,28 @@ jest.mock("@/LLMProviders/brevilabsClient", () => ({
   BrevilabsClient: { getInstance: () => ({ validateLicenseKey: () => mockValidateLicenseKey() }) },
 }));
 
+const mockSetModelKey = jest.fn<void, [string]>();
+
+jest.mock("@/aiParams", () => ({
+  setModelKey: (key: string) => mockSetModelKey(key),
+}));
+
+const mockIsDesktopRuntime = jest.fn<boolean, []>();
+
+jest.mock("@/utils/desktopRuntime", () => ({
+  isDesktopRuntime: () => mockIsDesktopRuntime(),
+}));
+
+const mockApplyCopilotDefaultModel = jest.fn<string[], [string]>();
+
+jest.mock("@/agentMode", () => ({
+  applyCopilotDefaultModel: (configuredModelId: string) =>
+    mockApplyCopilotDefaultModel(configuredModelId),
+}));
+
 import {
   applyEntitlement,
+  applyLicenseSettings,
   canUseMultiAgent,
   checkIsPaidUser,
   isPlusEnabled,
@@ -104,10 +124,125 @@ describe("plusUtils", () => {
   beforeEach(async () => {
     mockSetSettings.mockClear();
     mockUpdateSetting.mockClear();
+    mockSetModelKey.mockClear();
     mockVerifyEntitlement.mockReset();
     mockValidateLicenseKey.mockReset();
+    mockApplyCopilotDefaultModel.mockReset().mockReturnValue([]);
+    mockIsDesktopRuntime.mockReturnValue(true);
     mockGetSettings.mockReturnValue(buildSettings({ entitlementToken: "" }));
     await verifyCachedEntitlement();
+  });
+
+  describe("applyLicenseSettings()", () => {
+    const FLASH_CONFIGURED_ID = "cm-flash";
+
+    /** Settings in the state the provider sync leaves behind: Plus provider registered, flash configured. */
+    function settingsWithFlashConfigured(): CopilotSettings {
+      return buildSettings({
+        providers: {
+          "plus-1": {
+            providerId: "plus-1",
+            origin: { kind: "copilot-plus" },
+            providerType: "openai-compatible",
+            displayName: "Copilot",
+            addedAt: 0,
+          },
+        },
+        configuredModels: [
+          {
+            configuredModelId: FLASH_CONFIGURED_ID,
+            providerId: "plus-1",
+            info: { id: "copilot-plus-flash", displayName: "Copilot Plus Flash" },
+            configuredAt: 0,
+          },
+        ],
+      });
+    }
+
+    it("makes the configured Copilot model the chat default", async () => {
+      mockGetSettings.mockReturnValue(settingsWithFlashConfigured());
+
+      await applyLicenseSettings();
+
+      expect(mockSetModelKey).toHaveBeenCalledWith(FLASH_CONFIGURED_ID);
+      expect(mockSetSettings).toHaveBeenCalledWith({ defaultModelKey: FLASH_CONFIGURED_ID });
+    });
+
+    it("writes no chain type or embedding model — both belong to retired surfaces", async () => {
+      mockGetSettings.mockReturnValue(settingsWithFlashConfigured());
+
+      await applyLicenseSettings();
+
+      const written = mockSetSettings.mock.calls.flatMap((call) => Object.keys(call[0]));
+      expect(written).toEqual(["defaultModelKey"]);
+    });
+
+    it("seeds the agent default model on desktop", async () => {
+      mockGetSettings.mockReturnValue(settingsWithFlashConfigured());
+      mockApplyCopilotDefaultModel.mockReturnValue(["opencode"]);
+
+      await applyLicenseSettings();
+
+      expect(mockApplyCopilotDefaultModel).toHaveBeenCalledWith(FLASH_CONFIGURED_ID);
+    });
+
+    it("still sets the chat default on mobile, where Agent Mode cannot load", async () => {
+      mockIsDesktopRuntime.mockReturnValue(false);
+      mockGetSettings.mockReturnValue(settingsWithFlashConfigured());
+
+      await applyLicenseSettings();
+
+      expect(mockSetSettings).toHaveBeenCalledWith({ defaultModelKey: FLASH_CONFIGURED_ID });
+      expect(mockApplyCopilotDefaultModel).not.toHaveBeenCalled();
+    });
+
+    it("resolves without applying anything when the Copilot model is not configured yet", async () => {
+      mockGetSettings.mockReturnValue(buildSettings({}));
+
+      await applyLicenseSettings();
+
+      expect(mockSetModelKey).not.toHaveBeenCalled();
+      expect(mockSetSettings).not.toHaveBeenCalled();
+      expect(mockApplyCopilotDefaultModel).not.toHaveBeenCalled();
+    });
+
+    it("ignores a model of the same name that a non-Copilot provider supplies", async () => {
+      mockGetSettings.mockReturnValue(
+        buildSettings({
+          providers: {
+            "byok-1": {
+              providerId: "byok-1",
+              origin: { kind: "byok" },
+              providerType: "openai-compatible",
+              displayName: "Some BYOK provider",
+              addedAt: 0,
+            },
+          },
+          configuredModels: [
+            {
+              configuredModelId: "cm-impostor",
+              providerId: "byok-1",
+              info: { id: "copilot-plus-flash", displayName: "Copilot Plus Flash" },
+              configuredAt: 0,
+            },
+          ],
+        })
+      );
+
+      await applyLicenseSettings();
+
+      expect(mockSetSettings).not.toHaveBeenCalled();
+    });
+
+    it("keeps the chat default when agent seeding throws", async () => {
+      mockGetSettings.mockReturnValue(settingsWithFlashConfigured());
+      mockApplyCopilotDefaultModel.mockImplementation(() => {
+        throw new Error("registry unavailable");
+      });
+
+      await expect(applyLicenseSettings()).resolves.toBeUndefined();
+      expect(mockSetSettings).toHaveBeenCalledWith({ defaultModelKey: FLASH_CONFIGURED_ID });
+    });
   });
 
   describe("isSelfHostModeValid()", () => {

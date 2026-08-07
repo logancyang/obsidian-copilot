@@ -123,6 +123,7 @@ export function opencodeEnabledModelEntries(
     const baseModelId = opencodeWireBaseId(provider, configuredModel);
     if (!baseModelId) continue;
     out.push({
+      configuredModelId,
       baseModelId,
       name: configuredModel.info.displayName || configuredModel.info.id,
       description: configuredModel.info.description,

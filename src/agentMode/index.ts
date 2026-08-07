@@ -15,6 +15,7 @@ import { AgentModelPreloader } from "./session/AgentModelPreloader";
 import { AgentSessionIndex } from "./session/AgentSessionIndex";
 import { createNodeFileStorage } from "./session/nodeFileStorage";
 import { AgentSessionManager } from "./session/AgentSessionManager";
+import { seedCopilotDefaultModel } from "./session/copilotDefaultModel";
 import { SkillManager } from "./skills";
 import { planManagedBuiltins } from "./skills/builtin/builtinSkills";
 import { removeSeededBuiltin, seedBuiltinSkills } from "./skills/builtin/seedBuiltinSkills";
@@ -87,6 +88,20 @@ export function isAgentModeEnabled(): boolean {
 /** Hook variant for symmetry with other settings-derived hooks. */
 export function useIsAgentModeEnabled(): boolean {
   return isAgentModeEnabled();
+}
+
+/**
+ * Seed `configuredModelId` as the default model of every registered backend
+ * that can route it — the plugin host's entry point for
+ * {@link seedCopilotDefaultModel}, called when a license is applied. Lives here
+ * because `session/` may not import the registry, the same reason as
+ * `collectAgentSkillsDirsProjectRel` below.
+ *
+ * @param configuredModelId - The model to install as the default.
+ * @returns Ids of the backends whose default was written.
+ */
+export function applyCopilotDefaultModel(configuredModelId: string): BackendId[] {
+  return seedCopilotDefaultModel(listBackendDescriptors(), configuredModelId);
 }
 
 /**

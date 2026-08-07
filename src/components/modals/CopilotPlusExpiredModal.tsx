@@ -9,9 +9,9 @@ import { getSettings } from "@/settings/model";
 import { createPluginRoot } from "@/utils/react/createPluginRoot";
 
 function CopilotPlusExpiredModalContent({ onCancel }: { onCancel: () => void }) {
-  const settings = getSettings();
-  const isUsingPlusModels =
-    isPlusModel(settings.defaultModelKey) && isPlusModel(settings.embeddingModelKey);
+  // Chat model only: nothing sets a Plus embedding model any more, so also
+  // requiring one would silence this warning for every user who has one.
+  const isUsingPlusModels = isPlusModel(getSettings().defaultModelKey);
 
   return (
     <div className="tw-flex tw-flex-col tw-gap-4">

@@ -138,6 +138,9 @@ describe("opencodeEnabledModelEntries", () => {
     const [entry] = opencodeEnabledModelEntries(settings);
     expect(entry.credentialState).toBe("ok");
     expect(entry.name).toBe("Big X");
+    // Carries its configured-model id so a caller holding one can ask this
+    // backend for the matching wire id (see `applyCopilotDefaultModel`).
+    expect(entry.configuredModelId).toBe("cm1");
   });
 
   it("treats agent-origin (native) models as ok regardless of key", () => {

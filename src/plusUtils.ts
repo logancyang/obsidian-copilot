@@ -1,17 +1,9 @@
-import { setChainType, setModelKey } from "@/aiParams";
-import { ChainType } from "@/chainType";
+import { setModelKey } from "@/aiParams";
 import { CopilotPlusExpiredModal } from "@/components/modals/CopilotPlusExpiredModal";
-import {
-  ChatModelProviders,
-  ChatModels,
-  EmbeddingModelProviders,
-  EmbeddingModels,
-  PLUS_UTM_MEDIUMS,
-  PlusUtmMedium,
-} from "@/constants";
+import { ChatModels, EmbeddingModelProviders, PLUS_UTM_MEDIUMS, PlusUtmMedium } from "@/constants";
 import { EntitlementFeature, verifyEntitlement } from "@/entitlement";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
-import { logError, logInfo } from "@/logger";
+import { logError, logInfo, logWarn } from "@/logger";
 import {
   CopilotSettings,
   getSettings,
@@ -19,15 +11,11 @@ import {
   updateSetting,
   useSettingsValue,
 } from "@/settings/model";
+import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { App, Notice } from "obsidian";
 import React from "react";
 
 export const DEFAULT_COPILOT_PLUS_CHAT_MODEL = ChatModels.COPILOT_PLUS_FLASH;
-const DEFAULT_COPILOT_PLUS_CHAT_MODEL_KEY =
-  DEFAULT_COPILOT_PLUS_CHAT_MODEL + "|" + ChatModelProviders.COPILOT_PLUS;
-export const DEFAULT_COPILOT_PLUS_EMBEDDING_MODEL = EmbeddingModels.COPILOT_PLUS_SMALL;
-export const DEFAULT_COPILOT_PLUS_EMBEDDING_MODEL_KEY =
-  DEFAULT_COPILOT_PLUS_EMBEDDING_MODEL + "|" + EmbeddingModelProviders.COPILOT_PLUS;
 
 /**
  * How often a running session re-validates its license. Well inside the token's
@@ -375,55 +363,50 @@ export function useIsSelfHostEligible(): boolean | undefined {
 }
 
 /**
- * Apply the Copilot Plus settings.
- * Includes clinical fix to ensure indexing is triggered when embedding model changes,
- * as the automatic detection doesn't work reliably in all scenarios.
+ * Install the licensed default model — Copilot Plus Flash — everywhere the
+ * user will meet a model picker: chat, and every agent that can route it.
+ *
+ * License activation already registers the Copilot provider and enrolls its
+ * models; this is the opinionated half, choosing which of them a licensed user
+ * should land on. Nothing here touches a surface the license doesn't pay for,
+ * so a user who declines loses only the convenience.
+ *
+ * A no-op when the Plus model isn't in the configured set — that means the
+ * provider sync hasn't landed yet, and defaulting to a model that isn't there
+ * would strand every picker on a dead selection.
  */
-export function applyPlusSettings(): void {
+export async function applyLicenseSettings(): Promise<void> {
   const settings = getSettings();
   const plusProviderIds = new Set(
     Object.values(settings.providers)
       .filter((provider) => provider.origin.kind === "copilot-plus")
       .map((provider) => provider.providerId)
   );
-  const defaultModelKey =
-    settings.configuredModels.find(
-      (model) =>
-        plusProviderIds.has(model.providerId) &&
-        model.info.id === (DEFAULT_COPILOT_PLUS_CHAT_MODEL as string)
-    )?.configuredModelId ?? DEFAULT_COPILOT_PLUS_CHAT_MODEL_KEY;
-  const embeddingModelKey = DEFAULT_COPILOT_PLUS_EMBEDDING_MODEL_KEY;
-  const previousEmbeddingModelKey = settings.embeddingModelKey;
+  const configuredModelId = settings.configuredModels.find(
+    (model) =>
+      plusProviderIds.has(model.providerId) &&
+      model.info.id === (DEFAULT_COPILOT_PLUS_CHAT_MODEL as string)
+  )?.configuredModelId;
+  if (!configuredModelId) {
+    logWarn(
+      `applyLicenseSettings: ${DEFAULT_COPILOT_PLUS_CHAT_MODEL} is not configured yet, nothing to apply`
+    );
+    return;
+  }
 
-  logInfo("applyPlusSettings: Changing embedding model", {
-    from: previousEmbeddingModelKey,
-    to: embeddingModelKey,
-    changed: previousEmbeddingModelKey !== embeddingModelKey,
-  });
+  setModelKey(configuredModelId);
+  setSettings({ defaultModelKey: configuredModelId });
 
-  setModelKey(defaultModelKey);
-  setChainType(ChainType.COPILOT_PLUS_CHAIN);
-  setSettings({
-    defaultModelKey,
-    embeddingModelKey,
-    defaultChainType: ChainType.COPILOT_PLUS_CHAIN,
-  });
-
-  // Ensure indexing happens only once when embedding model changes
-  if (previousEmbeddingModelKey !== embeddingModelKey) {
-    logInfo("applyPlusSettings: Embedding model changed, triggering indexing");
-    import("@/search/vectorStoreManager")
-      .then(async (module) => {
-        await module.default.getInstance().indexVaultToVectorStore();
-      })
-      .catch((error) => {
-        logError("Failed to trigger indexing after Plus settings applied:", error);
-        new Notice(
-          "Failed to update Copilot index. Please try force reindexing from the command palette."
-        );
-      });
-  } else {
-    logInfo("applyPlusSettings: No embedding model change, skipping indexing");
+  // Agent Mode is desktop-only, and its barrel pulls in Node-backed modules
+  // that crash the plugin when loaded on mobile — hence the guarded dynamic
+  // import (same gate as the agent view's registration in `main.ts`).
+  if (!isDesktopRuntime()) return;
+  try {
+    const { applyCopilotDefaultModel } = await import("@/agentMode");
+    const seeded = applyCopilotDefaultModel(configuredModelId);
+    logInfo("applyLicenseSettings: seeded the agent default model", { backends: seeded });
+  } catch (error) {
+    logError("applyLicenseSettings: seeding the agent default model failed", error);
   }
 }
 

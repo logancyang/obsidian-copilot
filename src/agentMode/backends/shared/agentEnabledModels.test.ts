@@ -60,6 +60,9 @@ describe("agentOriginEnabledModelEntries", () => {
     ]);
     // Agent-native: CLI-owned auth, never a credential flag.
     expect(entries.every((e) => e.credentialState === "ok")).toBe(true);
+    // Each entry names the configured model it came from, so a caller holding
+    // one can find this backend's wire id for it (`applyCopilotDefaultModel`).
+    expect(entries.map((e) => e.configuredModelId).sort()).toEqual(["cm1", "cm2"]);
     expect(entries[0].name).toBe("claude-sonnet-4-5");
   });
 
