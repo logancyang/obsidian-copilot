@@ -188,5 +188,5 @@ For any API that follows the OpenAI API format. Useful for custom deployments, p
 
 ## Related
 
-- [Models and Parameters](models-and-parameters.md) — Enable, disable, and configure models
+- [Models](models-and-parameters.md) — Enable, disable, and configure models
 - [Getting Started](getting-started.md) — First-time setup
