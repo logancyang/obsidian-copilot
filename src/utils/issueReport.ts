@@ -31,6 +31,7 @@
 import { err2String } from "@/errorFormat";
 import { logWarn } from "@/logger";
 import { formatBytes } from "@/utils/formatBytes";
+import { isMissingFileError } from "@/utils/isMissingFileError";
 import { zipSync } from "fflate";
 import { redactLogText } from "./redactLog";
 import { requireNodeModule } from "./desktopRuntime";
@@ -283,10 +284,15 @@ async function writeBundle(
  * they edit the staging folder precisely to take something out, and the issue
  * body must not still be quoting it.
  *
- * Throws when the zip cannot be produced, including when a file that was
- * reported as included has since disappeared, or when the packed result exceeds
- * GitHub's attachment limit — a bundle we cannot vouch for must not be presented
- * as ready to attach. Nothing partial is left at `zipPath` on the way out.
+ * A staged attachment that has gone missing or become unreadable does not stop
+ * the rebuild: it comes back demoted in the returned outcomes, so the rest of
+ * the report still packs. `report.md` is the exception — without it there is no
+ * issue to file, and this throws.
+ *
+ * Throws when the zip cannot be produced, including when the packed result
+ * exceeds GitHub's attachment limit — a bundle we cannot vouch for must not be
+ * presented as ready to attach. Nothing partial is left at `zipPath` on the way
+ * out.
  */
 export async function zipReportBundle(
   report: AssembledReport,
@@ -311,9 +317,40 @@ export async function zipReportBundle(
   // assembler wrote, and by the time the compressed size is known the whole thing
   // has already been read into the renderer and zipped synchronously. Past this
   // ceiling that pause stops being a pause.
+  // A staged file that has gone missing is a removal, not a failure. The review
+  // step invites exactly this edit ("Edited the files? Rebuild zip repacks
+  // them") right after warning that the screenshot is not redacted, so deleting
+  // it is the obvious way to act on that warning. Throwing would strand the
+  // user with nothing to send, since the rebuild deletes the old zip first.
+  // `report.md` is the one file this cannot rescue — dropping it leaves no
+  // issue to file, and `draftFromPackedNote` says so in as many words.
+  const asRemoved = (a: AttachmentOutcome): AttachmentOutcome => ({
+    ...a,
+    absPath: null,
+    bytes: 0,
+    status: "skipped",
+    reason: "Removed from the report folder before the rebuild.",
+  });
+  // Only an absent file is the user's own edit. A file that is still there but
+  // cannot be read — locked by another program, permissions changed underneath
+  // us — is a failure, and reporting it as "Removed" would blame the user for
+  // something they did not do while the report goes out a source short. Same
+  // split the assembler already makes, so the two passes describe one kind of
+  // trouble the same way.
+  const afterReadError = (a: AttachmentOutcome, err: unknown): AttachmentOutcome =>
+    isMissingFileError(err)
+      ? asRemoved(a)
+      : { ...a, absPath: null, bytes: 0, status: "failed", reason: describeFailure(err) };
+
+  const unreadable = new Map<string, unknown>();
+
   let stagedBytes = 0;
   for (const attachment of packable) {
-    stagedBytes += await runtime.sizeOf(attachment.absPath);
+    try {
+      stagedBytes += await runtime.sizeOf(attachment.absPath);
+    } catch (e) {
+      unreadable.set(attachment.id, e);
+    }
   }
   if (stagedBytes > MAX_PACKABLE_INPUT_BYTES) {
     throw new Error(
@@ -330,7 +367,19 @@ export async function zipReportBundle(
       attachments.push(attachment);
       continue;
     }
-    const data = await runtime.readBytes(attachment.absPath);
+    if (unreadable.has(attachment.id)) {
+      attachments.push(afterReadError(attachment, unreadable.get(attachment.id)));
+      continue;
+    }
+    let data: Uint8Array;
+    try {
+      data = await runtime.readBytes(attachment.absPath);
+    } catch (e) {
+      // Went missing or became unreadable in the window between the weigh pass
+      // and this one — same two outcomes, just reached later.
+      attachments.push(afterReadError(attachment, e));
+      continue;
+    }
     // Re-checked against what was actually read: a file can grow between its
     // `sizeOf` and its `readBytes`, and the sum above would then be an
     // underestimate of what is now in memory.
