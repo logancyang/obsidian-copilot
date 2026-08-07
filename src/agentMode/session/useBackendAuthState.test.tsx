@@ -21,14 +21,30 @@ describe("useBackendAuthState", () => {
   describe("useBackendAuthState()", () => {
     it("publishes completed sign-in status to every consumer of the same backend auth", async () => {
       const descriptor = makeDescriptor();
+      let completeOlderProbe!: (status: { signedIn: boolean }) => void;
+      let completeCurrentProbe!: (status: { signedIn: boolean }) => void;
+      const olderProbe = new Promise<{ signedIn: boolean }>((resolve) => {
+        completeOlderProbe = resolve;
+      });
+      const currentProbe = new Promise<{ signedIn: boolean }>((resolve) => {
+        completeCurrentProbe = resolve;
+      });
       let completeSignIn!: (status: { signedIn: boolean; label: string }) => void;
       const signIn = new Promise<{ signedIn: boolean; label: string }>((resolve) => {
         completeSignIn = resolve;
       });
+      descriptor.auth!.getStatus = jest
+        .fn()
+        .mockReturnValueOnce(olderProbe)
+        .mockReturnValueOnce(currentProbe);
       descriptor.auth!.signIn = jest.fn(() => signIn);
       const statusCard = renderHook(() => useBackendAuthState(descriptor));
       const configDialog = renderHook(() => useBackendAuthState(descriptor));
 
+      await act(async () => {
+        completeCurrentProbe({ signedIn: false });
+        await currentProbe;
+      });
       await waitFor(() => expect(statusCard.result.current.status).toEqual({ signedIn: false }));
       await waitFor(() => expect(configDialog.result.current.status).toEqual({ signedIn: false }));
 
@@ -38,6 +54,10 @@ describe("useBackendAuthState", () => {
         completeSignIn({ signedIn: true, label: "zero@example.com" });
         await signIn;
       });
+      await act(async () => {
+        completeOlderProbe({ signedIn: false });
+        await olderProbe;
+      });
 
       await waitFor(() =>
         expect(statusCard.result.current.status).toEqual({
@@ -45,6 +65,25 @@ describe("useBackendAuthState", () => {
           label: "zero@example.com",
         })
       );
+    });
+
+    it("re-probes when the caller's auth-relevant key changes", async () => {
+      const descriptor = makeDescriptor();
+      descriptor.auth!.getStatus = jest
+        .fn()
+        .mockResolvedValueOnce({ signedIn: false })
+        .mockResolvedValueOnce({ signedIn: true });
+      const { result, rerender } = renderHook(
+        ({ binaryPath }) => useBackendAuthState(descriptor, binaryPath),
+        { initialProps: { binaryPath: "" } }
+      );
+
+      await waitFor(() => expect(result.current.status).toEqual({ signedIn: false }));
+
+      rerender({ binaryPath: "/usr/local/bin/claude" });
+
+      await waitFor(() => expect(result.current.status).toEqual({ signedIn: true }));
+      expect(descriptor.auth!.getStatus).toHaveBeenCalledTimes(2);
     });
 
     it("keeps auth state empty when the descriptor has no auth capability", () => {

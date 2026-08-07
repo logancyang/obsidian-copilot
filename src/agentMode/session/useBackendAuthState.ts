@@ -7,6 +7,7 @@ import React from "react";
 type AuthStatusSubscriber = (status: BackendAuthStatus) => void;
 
 const authStatusSubscribers = new WeakMap<BackendAuth, Set<AuthStatusSubscriber>>();
+const authStatusGenerations = new WeakMap<BackendAuth, number>();
 
 const subscribeAuthStatus = (auth: BackendAuth, subscriber: AuthStatusSubscriber): (() => void) => {
   const subscribers = authStatusSubscribers.get(auth) ?? new Set<AuthStatusSubscriber>();
@@ -18,7 +19,18 @@ const subscribeAuthStatus = (auth: BackendAuth, subscriber: AuthStatusSubscriber
   };
 };
 
-const publishAuthStatus = (auth: BackendAuth, status: BackendAuthStatus): void => {
+const beginAuthStatusOperation = (auth: BackendAuth): number => {
+  const generation = (authStatusGenerations.get(auth) ?? 0) + 1;
+  authStatusGenerations.set(auth, generation);
+  return generation;
+};
+
+const publishAuthStatus = (
+  auth: BackendAuth,
+  status: BackendAuthStatus,
+  generation: number
+): void => {
+  if (authStatusGenerations.get(auth) !== generation) return;
   authStatusSubscribers.get(auth)?.forEach((subscriber) => subscriber(status));
 };
 
@@ -47,8 +59,14 @@ export interface BackendAuthUiState {
  * `descriptor.auth` contract and is consumed from both `ui/` surfaces and
  * backend-owned Configure dialogs — the contract layer is the only home both
  * may import.
+ *
+ * @param descriptor - Backend whose authentication capability should be observed and driven.
+ * @param probeKey - Caller-owned identity for auth-relevant inputs that should trigger a fresh probe.
  */
-export function useBackendAuthState(descriptor: BackendDescriptor): BackendAuthUiState {
+export function useBackendAuthState(
+  descriptor: BackendDescriptor,
+  probeKey?: unknown
+): BackendAuthUiState {
   const settings = useSettingsValue();
   // Latest settings without making the mount probe re-fire on unrelated edits.
   const settingsRef = React.useRef(settings);
@@ -65,25 +83,27 @@ export function useBackendAuthState(descriptor: BackendDescriptor): BackendAuthU
       return;
     }
     const unsubscribe = subscribeAuthStatus(auth, setStatus);
+    const generation = beginAuthStatusOperation(auth);
     void auth.getStatus(settingsRef.current).then(
-      (s) => publishAuthStatus(auth, s),
+      (s) => publishAuthStatus(auth, s, generation),
       (e) => {
         logError("[AgentMode] auth status probe failed", e);
-        publishAuthStatus(auth, { signedIn: false });
+        publishAuthStatus(auth, { signedIn: false }, generation);
       }
     );
     return unsubscribe;
-  }, [auth]);
+  }, [auth, probeKey]);
 
   const signIn = React.useCallback(() => {
     if (!auth || signingIn) return;
+    const generation = beginAuthStatusOperation(auth);
     setSigningIn(true);
     setUrl(null);
     new Notice(`Opening your browser to sign in to ${descriptor.displayName}…`);
     auth
       .signIn(settingsRef.current, { onUrl: (u) => setUrl(u) })
       .then((s) => {
-        publishAuthStatus(auth, s);
+        publishAuthStatus(auth, s, generation);
         new Notice(
           s.signedIn
             ? `Signed in to ${descriptor.displayName}${s.label ? ` as ${s.label}` : ""}.`

@@ -30,9 +30,9 @@ const ClaudeConfigContainer: React.FC<{
     [settings]
   );
   const state = React.useSyncExternalStore(subscribeClaudeInstallState, getInstallStateSnapshot);
-  const auth = useBackendAuthState(descriptor);
   const binaryPathOverride = settings.agentMode?.claudeCli?.path;
   const binaryPath = descriptor.getResolvedBinaryPath(settings) ?? binaryPathOverride ?? "";
+  const auth = useBackendAuthState(descriptor, binaryPath);
 
   React.useEffect(() => {
     void refreshClaudeInstallState(getSettings(), true);
