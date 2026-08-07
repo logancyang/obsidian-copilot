@@ -57,6 +57,8 @@ export interface ClaudeDescriptor extends BackendDescriptor {
  * over. Unconfigured, it is Claude's own classifier-driven `auto`: it approves
  * routine requests and still escalates the risky ones, the closest match to
  * what "Auto" promises in the picker.
+ *
+ * @param settings Settings snapshot from which to resolve the persisted Claude permission.
  */
 export function resolveClaudeAutoModePermission(
   settings: CopilotSettings

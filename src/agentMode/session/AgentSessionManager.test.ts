@@ -1464,6 +1464,75 @@ describe("AgentSessionManager.applySelection", () => {
   });
 });
 
+describe("AgentSessionManager.applyMode", () => {
+  function buildModeManager(
+    getModeMapping: BackendDescriptor["getModeMapping"]
+  ): AgentSessionManager {
+    const descriptor = {
+      ...buildDescriptor(),
+      id: "claude",
+      displayName: "Claude",
+      getModeMapping,
+    } as BackendDescriptor;
+    const modelPreloader = {
+      getCachedModelCatalog: jest.fn(() => null),
+      getEffortCatalog: jest.fn(() => null),
+      preload: jest.fn(async () => undefined),
+      refresh: jest.fn(() => null),
+      subscribe: jest.fn(() => () => {}),
+      shutdown: jest.fn(),
+      clearCached: jest.fn(),
+      takeWarm: jest.fn(() => null),
+      getWarmProcs: jest.fn(() => []),
+    };
+    return new AgentSessionManager(
+      buildApp(),
+      buildPlugin() as unknown as ConstructorParameters<typeof AgentSessionManager>[1],
+      {
+        permissionPrompter: jest.fn(),
+        resolveDescriptor: (id) => (id === descriptor.id ? descriptor : undefined),
+        modelPreloader: modelPreloader as unknown as ConstructorParameters<
+          typeof AgentSessionManager
+        >[2]["modelPreloader"],
+      }
+    );
+  }
+
+  it("refreshes a state-independent native mapping before dispatch", async () => {
+    const manager = buildModeManager(() => ({
+      kind: "setMode",
+      canonical: { default: "default", plan: "plan", auto: "auto" },
+    }));
+    const session = await manager.createSession("claude");
+
+    await manager.applyMode("claude", "auto", {
+      kind: "setMode",
+      nativeId: "bypassPermissions",
+    });
+
+    expect(session.setMode).toHaveBeenCalledWith("auto");
+  });
+
+  it("uses the translated spec when the mapping requires live backend state", async () => {
+    const manager = buildModeManager((modeState) =>
+      modeState
+        ? {
+            kind: "setMode",
+            canonical: { default: "default", plan: "plan", auto: "full-access" },
+          }
+        : null
+    );
+    const session = await manager.createSession("claude");
+
+    await manager.applyMode("claude", "auto", {
+      kind: "setMode",
+      nativeId: "cached-auto",
+    });
+
+    expect(session.setMode).toHaveBeenCalledWith("cached-auto");
+  });
+});
+
 describe("AgentSessionManager default-model settings subscription", () => {
   // The per-session apply chain hops through several resolved promises
   // (prior link → session.ready → apply). Drain enough microtasks that a
