@@ -2,7 +2,7 @@ import React from "react";
 import { App, Modal } from "obsidian";
 import { Root } from "react-dom/client";
 import { Button } from "@/components/ui/button";
-import { isPlusModel, navigateToPlusPage } from "@/plusUtils";
+import { isUsingLicensedModels, navigateToPlusPage } from "@/plusUtils";
 import { PLUS_UTM_MEDIUMS } from "@/constants";
 import { ExternalLink } from "lucide-react";
 import { getSettings } from "@/settings/model";
@@ -71,9 +71,7 @@ export class CopilotPlusExpiredModal extends Modal {
     this.root.render(
       <CopilotPlusExpiredModalContent
         onCancel={handleCancel}
-        // Chat model only: nothing sets a Copilot embedding model any more, so
-        // also requiring one would silence this warning for every user.
-        isUsingPlusModels={isPlusModel(getSettings().defaultModelKey)}
+        isUsingPlusModels={isUsingLicensedModels(getSettings())}
       />
     );
   }

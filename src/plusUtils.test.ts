@@ -60,6 +60,7 @@ jest.mock("@/agentMode", () => ({
 import {
   applyEntitlement,
   applyLicenseSettings,
+  isUsingLicensedModels,
   canUseMultiAgent,
   checkIsPaidUser,
   isPlusEnabled,
@@ -312,6 +313,72 @@ describe("plusUtils", () => {
 
       await expect(applyLicenseSettings()).resolves.toBeUndefined();
       expect(mockSetSettings).toHaveBeenCalledWith({ defaultModelKey: FLASH_CONFIGURED_ID });
+    });
+  });
+
+  describe("isUsingLicensedModels()", () => {
+    it("is true when the chat default is a Copilot model", () => {
+      const settings = buildSettings({
+        defaultModelKey: "cm-flash",
+        providers: {
+          "plus-1": {
+            providerId: "plus-1",
+            origin: { kind: "copilot-plus" },
+            providerType: "openai-compatible",
+            displayName: "Copilot",
+            addedAt: 0,
+          },
+        },
+        configuredModels: [
+          {
+            configuredModelId: "cm-flash",
+            providerId: "plus-1",
+            info: { id: "copilot-plus-flash", displayName: "Copilot Plus Flash" },
+            configuredAt: 0,
+          },
+        ],
+      });
+      mockGetSettings.mockReturnValue(settings);
+
+      expect(isUsingLicensedModels(settings)).toBe(true);
+    });
+
+    it("is true for an agent still defaulted to a Copilot model after chat moved off it", () => {
+      // The case the expiry warning exists for: chat is on the user's own model,
+      // so only the agent's sessions are about to break. The Copilot provider is
+      // already unregistered here, as expiry leaves it.
+      const settings = buildSettings({
+        defaultModelKey: "cm-byok",
+        agentMode: {
+          ...DEFAULT_SETTINGS.agentMode,
+          backends: {
+            opencode: {
+              defaultModel: { baseModelId: "copilot-plus/copilot-plus-flash", effort: null },
+            },
+          },
+        },
+      });
+      mockGetSettings.mockReturnValue(settings);
+
+      expect(isUsingLicensedModels(settings)).toBe(true);
+    });
+
+    it("is false when neither chat nor any agent points at a Copilot model", () => {
+      const settings = buildSettings({
+        defaultModelKey: "cm-byok",
+        agentMode: {
+          ...DEFAULT_SETTINGS.agentMode,
+          backends: {
+            opencode: {
+              defaultModel: { baseModelId: "anthropic/claude-sonnet-4-5", effort: null },
+            },
+            claude: { defaultModel: null },
+          },
+        },
+      });
+      mockGetSettings.mockReturnValue(settings);
+
+      expect(isUsingLicensedModels(settings)).toBe(false);
     });
   });
 

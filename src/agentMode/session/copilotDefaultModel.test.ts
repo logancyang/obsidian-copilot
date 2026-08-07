@@ -1,5 +1,5 @@
 import type { CopilotSettings } from "@/settings/model";
-import type { BackendDescriptor, EnabledModelEntry } from "./types";
+import type { BackendDescriptor } from "./types";
 
 const mockGetSettings = jest.fn<CopilotSettings, []>();
 const mockSetSettings = jest.fn<void, [(cur: CopilotSettings) => Partial<CopilotSettings>]>();
@@ -15,15 +15,15 @@ import { seedCopilotDefaultModel } from "./copilotDefaultModel";
 
 const FLASH_ID = "cm-flash";
 
-function entry(configuredModelId: string, baseModelId: string): EnabledModelEntry {
-  return { configuredModelId, baseModelId, name: baseModelId, credentialState: "ok" };
-}
-
-/** A descriptor stub carrying only what the seed reads: its id and enabled entries. */
-function descriptor(id: string, entries: EnabledModelEntry[] | null): BackendDescriptor {
+/**
+ * A descriptor stub carrying only what the seed reads: its id and its wire id
+ * for the model. `wireBaseId: null` is a backend that cannot route the model;
+ * `undefined` is one that does not implement the lookup at all (claude, codex).
+ */
+function descriptor(id: string, wireBaseId: string | null | undefined): BackendDescriptor {
   return {
     id,
-    getEnabledModelEntries: entries === null ? undefined : () => entries,
+    getWireBaseId: wireBaseId === undefined ? undefined : () => wireBaseId,
   } as unknown as BackendDescriptor;
 }
 
@@ -48,8 +48,8 @@ describe("copilotDefaultModel", () => {
       const current = settingsWith({});
       mockGetSettings.mockReturnValue(current);
       const descriptors = [
-        descriptor("opencode", [entry(FLASH_ID, "copilot-plus/copilot-plus-flash")]),
-        descriptor("pi", [entry(FLASH_ID, "copilot-plus-flash")]),
+        descriptor("opencode", "copilot-plus/copilot-plus-flash"),
+        descriptor("pi", "copilot-plus-flash"),
       ];
 
       expect(seedCopilotDefaultModel(descriptors, FLASH_ID)).toEqual(["opencode", "pi"]);
@@ -68,7 +68,7 @@ describe("copilotDefaultModel", () => {
       mockGetSettings.mockReturnValue(current);
 
       seedCopilotDefaultModel(
-        [descriptor("opencode", [entry(FLASH_ID, "copilot-plus/copilot-plus-flash")])],
+        [descriptor("opencode", "copilot-plus/copilot-plus-flash")],
         FLASH_ID
       );
 
@@ -78,13 +78,13 @@ describe("copilotDefaultModel", () => {
       expect(written.defaultModel.effort).toBeNull();
     });
 
-    it("skips backends that do not carry the model and those reporting no enabled set", () => {
+    it("skips a backend that cannot route the model and one that does not answer at all", () => {
       const current = settingsWith({});
       mockGetSettings.mockReturnValue(current);
       const descriptors = [
-        descriptor("opencode", [entry(FLASH_ID, "copilot-plus/copilot-plus-flash")]),
-        descriptor("claude", [entry("cm-sonnet", "claude-sonnet-4-5")]),
-        descriptor("codex", null),
+        descriptor("opencode", "copilot-plus/copilot-plus-flash"),
+        descriptor("claude", null),
+        descriptor("codex", undefined),
       ];
 
       expect(seedCopilotDefaultModel(descriptors, FLASH_ID)).toEqual(["opencode"]);
@@ -101,8 +101,8 @@ describe("copilotDefaultModel", () => {
       });
       mockGetSettings.mockReturnValue(current);
       const descriptors = [
-        descriptor("opencode", [entry(FLASH_ID, "copilot-plus/copilot-plus-flash")]),
-        descriptor("claude", [entry("cm-sonnet", "claude-sonnet-4-5")]),
+        descriptor("opencode", "copilot-plus/copilot-plus-flash"),
+        descriptor("claude", null),
       ];
 
       seedCopilotDefaultModel(descriptors, FLASH_ID);
@@ -119,10 +119,7 @@ describe("copilotDefaultModel", () => {
     it("writes nothing when no backend can route the model", () => {
       mockGetSettings.mockReturnValue(settingsWith({}));
 
-      const seeded = seedCopilotDefaultModel(
-        [descriptor("claude", [entry("cm-sonnet", "claude-sonnet-4-5")])],
-        FLASH_ID
-      );
+      const seeded = seedCopilotDefaultModel([descriptor("claude", null)], FLASH_ID);
 
       expect(seeded).toEqual([]);
       expect(mockSetSettings).not.toHaveBeenCalled();
@@ -131,8 +128,8 @@ describe("copilotDefaultModel", () => {
     it("writes once for all backends so a live session re-applies the default a single time", () => {
       mockGetSettings.mockReturnValue(settingsWith({}));
       const descriptors = [
-        descriptor("opencode", [entry(FLASH_ID, "copilot-plus/copilot-plus-flash")]),
-        descriptor("pi", [entry(FLASH_ID, "copilot-plus-flash")]),
+        descriptor("opencode", "copilot-plus/copilot-plus-flash"),
+        descriptor("pi", "copilot-plus-flash"),
       ];
 
       seedCopilotDefaultModel(descriptors, FLASH_ID);
@@ -140,13 +137,13 @@ describe("copilotDefaultModel", () => {
       expect(mockSetSettings).toHaveBeenCalledTimes(1);
     });
 
-    // The stubs above fix the join's contract; this pins the wiring the
-    // registry entry point depends on — that a real descriptor reports an
-    // enrolled Copilot model under a wire id this can seed. A stub agreeing
-    // with itself would not catch the descriptor ceasing to report one.
-    it("seeds the real OpenCode descriptor from an enrolled Copilot model", () => {
+    // The stubs above fix the join's contract; this pins the real wiring the
+    // registry entry point depends on. Note the absent `backends.opencode`
+    // slice: provider sync configures a model before enrolling it anywhere, so
+    // seeding must work from the model alone — an enrollment-based lookup would
+    // skip OpenCode for anyone who confirmed before sync finished.
+    it("seeds the real OpenCode descriptor from a model that is configured but not yet enrolled", () => {
       const settings = {
-        backends: { opencode: { enabledModels: [FLASH_ID] } },
         configuredModels: [
           {
             configuredModelId: FLASH_ID,

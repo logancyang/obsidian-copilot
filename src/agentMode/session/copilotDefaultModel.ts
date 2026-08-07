@@ -11,11 +11,15 @@ import { type CopilotSettings, getSettings, setSettings } from "@/settings/model
  * itself. This closes that gap so a paying user's agents start on the model
  * their license just paid for.
  *
- * Which backends qualify is discovered, never listed: a backend carries the
- * model exactly when its own `getEnabledModelEntries` reports it, so an agent
- * added later is covered the moment it enrolls the model — no edit here. A
- * backend serving only its own models (claude, codex) never matches and is
- * skipped.
+ * Which backends qualify is discovered, never listed: each is asked for its own
+ * wire id for the model, so an agent added later is covered by implementing
+ * `getWireBaseId` — no edit here. A backend serving only its own models
+ * (claude, codex) omits that method and is skipped.
+ *
+ * Asking the descriptor rather than reading its enabled models is what makes
+ * this safe to run the instant the model is configured: provider sync creates
+ * the configured model first and enrolls it into each backend afterwards, so an
+ * enrollment-based join would silently skip a backend that had not caught up.
  *
  * The stored effort is `null` ("agent default"), matching what the settings
  * picker persists for a model-only choice: seeding a model must not silently
@@ -33,10 +37,8 @@ export function seedCopilotDefaultModel(
   const settings = getSettings();
   const targets = new Map<BackendId, string>();
   for (const descriptor of descriptors) {
-    const entry = descriptor
-      .getEnabledModelEntries?.(settings)
-      ?.find((candidate) => candidate.configuredModelId === configuredModelId);
-    if (entry) targets.set(descriptor.id, entry.baseModelId);
+    const baseModelId = descriptor.getWireBaseId?.(configuredModelId, settings) ?? null;
+    if (baseModelId) targets.set(descriptor.id, baseModelId);
   }
   if (targets.size === 0) return [];
 

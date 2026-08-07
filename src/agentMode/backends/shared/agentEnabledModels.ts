@@ -37,7 +37,6 @@ export function agentOriginEnabledModelEntries(
     const configuredModel = modelsById.get(configuredModelId);
     if (!configuredModel) continue;
     entries.push({
-      configuredModelId,
       baseModelId: wireDecode(configuredModel.info.id).selection.baseModelId,
       name: configuredModel.info.displayName || configuredModel.info.id,
       description: configuredModel.info.description,

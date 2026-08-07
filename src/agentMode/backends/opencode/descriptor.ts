@@ -20,7 +20,7 @@ import {
   OpencodeBinaryManager,
   toOpencodeInstallState,
 } from "./OpencodeBinaryManager";
-import { opencodeEnabledModelEntries } from "./opencodeModelResolve";
+import { opencodeEnabledModelEntries, opencodeWireBaseIdFor } from "./opencodeModelResolve";
 import { OpencodeSettingsPanel } from "./OpencodeSettingsPanel";
 import { resolveOpencodeBinary } from "./opencodeBinaryResolver";
 import { mapNodeArch, mapNodePlatform } from "./platformResolver";
@@ -154,6 +154,10 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
 
   getEnabledModelEntries(settings: CopilotSettings): EnabledModelEntry[] {
     return [...opencodeEnabledModelEntries(settings)];
+  },
+
+  getWireBaseId(configuredModelId: string, settings: CopilotSettings): string | null {
+    return opencodeWireBaseIdFor(configuredModelId, settings);
   },
 
   getInstallState(settings: CopilotSettings): InstallState {

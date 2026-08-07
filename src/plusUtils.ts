@@ -51,6 +51,24 @@ export function isPlusModel(modelKey: string): boolean {
 }
 
 /**
+ * Whether any default a license installed still points at a Copilot model — the
+ * chat default, or an agent's stored default from {@link applyLicenseSettings}.
+ * Both matter on expiry: a user can move chat onto their own model and leave an
+ * agent on the Copilot one, and those sessions are the ones about to break.
+ *
+ * The agent side matches the model id inside each stored wire id (backends
+ * prefix theirs differently) rather than resolving it through the configured
+ * set, because expiry unregisters the provider and takes those rows with it —
+ * often before this is read.
+ */
+export function isUsingLicensedModels(settings: CopilotSettings): boolean {
+  if (isPlusModel(settings.defaultModelKey)) return true;
+  return Object.values(settings.agentMode?.backends ?? {}).some((backend) =>
+    backend?.defaultModel?.baseModelId?.includes(DEFAULT_COPILOT_PLUS_CHAT_MODEL)
+  );
+}
+
+/**
  * Synchronous check for paid (any valid license, incl. Lite) feature access. Use
  * this for the broad Plus-feature gates (model validation, UI state) that should
  * remain available to every paying user.

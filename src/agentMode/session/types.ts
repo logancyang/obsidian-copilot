@@ -157,15 +157,6 @@ export interface EnabledModelEntry {
   description?: string;
   credentialState: EnabledModelCredentialState;
   /**
-   * The `ConfiguredModel` this entry was derived from. Lets a caller holding a
-   * configuredModelId ask any backend "can you route this, and under what
-   * baseModelId?" without knowing that backend's wire conventions — the join
-   * `applyCopilotDefaultModel` uses to seed a default across every agent that
-   * carries the model. Optional because an entry need not come from the
-   * configured set; such an entry simply never matches that join.
-   */
-  configuredModelId?: string;
-  /**
    * Capabilities derived from the model's persisted `ConfiguredModel.info`
    * (the modality snapshot taken at setup) — the reliable source the picker
    * prefers over a live catalog lookup. `undefined` means "unknown" (the

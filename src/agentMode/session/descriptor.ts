@@ -368,6 +368,18 @@ export interface BackendDescriptor {
   getEnabledModelEntries?(settings: CopilotSettings): EnabledModelEntry[] | null;
 
   /**
+   * Optional: this backend's wire base id for one configured model, or `null`
+   * when it cannot route that model's provider at all. Answers "can you run
+   * this, and under what id?" from the provider alone, deliberately ignoring
+   * whether the model is enabled — enrollment is a separate, later write (see
+   * `CopilotPlusSetupApi.#reconcileModels`), so a caller acting the moment a
+   * model is configured must not have to race it. Only backends that route
+   * Copilot-side providers implement this; agent-native ones (claude, codex)
+   * omit it, which reads as "not mine".
+   */
+  getWireBaseId?(configuredModelId: string, settings: CopilotSettings): string | null;
+
+  /**
    * Optional: persist the probe sessionId returned by a successful
    * `session/new` probe so the next plugin load can reuse it via
    * `resumeSession` or `loadSession`. Only called by `AgentModelPreloader`.

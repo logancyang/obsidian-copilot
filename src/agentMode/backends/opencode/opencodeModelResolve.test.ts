@@ -4,6 +4,7 @@ import {
   isOpencodeZenWireId,
   mapProviderToOpencodeId,
   opencodeEnabledModelEntries,
+  opencodeWireBaseIdFor,
 } from "./opencodeModelResolve";
 
 /** Build a minimal `Provider` row for a given origin + type. */
@@ -138,9 +139,6 @@ describe("opencodeEnabledModelEntries", () => {
     const [entry] = opencodeEnabledModelEntries(settings);
     expect(entry.credentialState).toBe("ok");
     expect(entry.name).toBe("Big X");
-    // Carries its configured-model id so a caller holding one can ask this
-    // backend for the matching wire id (see `applyCopilotDefaultModel`).
-    expect(entry.configuredModelId).toBe("cm1");
   });
 
   it("treats agent-origin (native) models as ok regardless of key", () => {
@@ -256,5 +254,51 @@ describe("opencodeEnabledModelEntries", () => {
       configuredModels: [makeModel("cm1", "p1", "some-azure-model")],
     });
     expect(opencodeEnabledModelEntries(settings)).toHaveLength(0);
+  });
+});
+
+describe("opencodeWireBaseIdFor", () => {
+  const plusProvider = makeProvider("plus-1", { kind: "copilot-plus" }, "openai-compatible");
+
+  it("prefixes a Copilot model with the provider opencode routes it under", () => {
+    const settings = makeSettings({
+      providers: { "plus-1": plusProvider },
+      configuredModels: [makeModel("cm1", "plus-1", "copilot-plus-flash")],
+    });
+    expect(opencodeWireBaseIdFor("cm1", settings)).toBe("copilot-plus/copilot-plus-flash");
+  });
+
+  it("answers for a configured model that no backend has enabled yet", () => {
+    // No `backends.opencode` slice at all: provider sync configures a model
+    // before enrolling it, and the id must be available in between.
+    const settings = makeSettings({
+      providers: { "plus-1": plusProvider },
+      configuredModels: [makeModel("cm1", "plus-1", "copilot-plus-flash")],
+    });
+    expect(settings.backends.opencode).toBeUndefined();
+    expect(opencodeWireBaseIdFor("cm1", settings)).toBe("copilot-plus/copilot-plus-flash");
+  });
+
+  it("leaves an agent-hosted model's own id unprefixed", () => {
+    const settings = makeSettings({
+      providers: { "oc-1": makeProvider("oc-1", { kind: "agent", agentType: "opencode" }) },
+      configuredModels: [makeModel("cm1", "oc-1", "opencode/zen-model")],
+    });
+    expect(opencodeWireBaseIdFor("cm1", settings)).toBe("opencode/zen-model");
+  });
+
+  it("returns null for an unknown model, a missing provider, and an unroutable one", () => {
+    const unroutable = makeSettings({
+      providers: { p1: makeProvider("p1", { kind: "byok" }, "azure") },
+      configuredModels: [makeModel("cm1", "p1", "some-azure-model")],
+    });
+    expect(opencodeWireBaseIdFor("cm1", unroutable)).toBeNull();
+    expect(opencodeWireBaseIdFor("nope", unroutable)).toBeNull();
+
+    const orphaned = makeSettings({
+      providers: {},
+      configuredModels: [makeModel("cm1", "gone", "copilot-plus-flash")],
+    });
+    expect(opencodeWireBaseIdFor("cm1", orphaned)).toBeNull();
   });
 });
