@@ -18,7 +18,11 @@ import { SystemPromptSyntaxInstruction } from "@/components/SystemPromptSyntaxIn
 import { DEFAULT_MODEL_SETTING } from "@/constants";
 import { ProjectContextBadgeList } from "@/components/project/ProjectContextBadgeList";
 import { ProjectContextSourceEditor } from "@/components/project/ProjectContextSourceEditor";
-import { readAgentsFile, writeAgentsFile } from "@/instructions/agentsFile";
+import {
+  agentsFileIsUninitialized,
+  readAgentsFile,
+  writeAgentsFile,
+} from "@/instructions/agentsFile";
 import { logError } from "@/logger";
 import { ProjectInstructionsField } from "@/instructions/ProjectInstructionsField";
 import { getProjectAnchorFromConfigPath } from "@/projects/projectPaths";
@@ -141,12 +145,17 @@ export function AddProjectModalContent({
   useEffect(() => {
     if (instructionsFolder === null) return;
     let cancelled = false;
-    void readAgentsFile(app, instructionsFolder)
-      .then((content) => {
+    void Promise.all([
+      readAgentsFile(app, instructionsFolder),
+      // Ownership, not emptiness: a file the user deliberately cleared is still theirs, and
+      // seeding over it would resurrect text they deleted on the next save of any field. This
+      // is the same predicate the session-start move consults, so the two agree on which files
+      // are Copilot's to initialize.
+      agentsFileIsUninitialized(app, instructionsFolder),
+    ])
+      .then(([content, uninitialized]) => {
         if (cancelled) return;
-        // A non-empty AGENTS.md already owns this project's instructions; the legacy body is
-        // then one the move deliberately refused to overwrite, and it is not ours to clear.
-        const seedFromLegacy = !content.trim() && legacyPrompt.trim().length > 0;
+        const seedFromLegacy = uninitialized && legacyPrompt.trim().length > 0;
         setInstructions(seedFromLegacy ? legacyPrompt : content);
         setDraftOwnsLegacyPrompt(seedFromLegacy);
       })

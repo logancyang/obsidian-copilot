@@ -14,11 +14,13 @@ jest.mock("@/projects/projectPaths", () => ({
 }));
 
 const readAgentsFile = jest.fn(async (): Promise<string> => "");
+const agentsFileIsUninitialized = jest.fn(async (): Promise<boolean> => true);
 const writeAgentsFile = jest.fn(
   async (_app: unknown, _folder: string, _content: string): Promise<void> => {}
 );
 jest.mock("@/instructions/agentsFile", () => ({
   readAgentsFile: () => readAgentsFile(),
+  agentsFileIsUninitialized: () => agentsFileIsUninitialized(),
   writeAgentsFile: (app: unknown, folder: string, content: string) =>
     writeAgentsFile(app, folder, content),
 }));
@@ -85,6 +87,7 @@ describe("AddProjectModal", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     readAgentsFile.mockResolvedValue("");
+    agentsFileIsUninitialized.mockResolvedValue(true);
     writeAgentsFile.mockResolvedValue(undefined);
     getCachedProjectRecordById.mockReturnValue({
       folderName: "proj-1",
@@ -122,10 +125,28 @@ describe("AddProjectModal", () => {
       expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ systemPrompt: "" }));
     });
 
+    it("respects an AGENTS.md the user deliberately emptied, rather than resurrecting the legacy text", async () => {
+      // An empty file the user owns is a decision, not an absence. Seeding over it would put
+      // deleted instructions back on the next save of any unrelated field.
+      readAgentsFile.mockResolvedValue("");
+      agentsFileIsUninitialized.mockResolvedValue(false);
+      const { onSave } = renderModal();
+
+      expect((await findInstructionsBox()).value).toBe("");
+
+      fireEvent.click(screen.getByText("Save"));
+
+      await waitFor(() => expect(onSave).toHaveBeenCalled());
+      expect(onSave).toHaveBeenCalledWith(
+        expect.objectContaining({ systemPrompt: "Cite only #verified notes." })
+      );
+    });
+
     it("keeps the legacy copy when AGENTS.md already had its own body", async () => {
       // The move refuses to overwrite a user-authored file, so that legacy text was never
       // transferred and is not this dialog's to discard.
       readAgentsFile.mockResolvedValue("Rules the user wrote directly.");
+      agentsFileIsUninitialized.mockResolvedValue(false);
       const { onSave } = renderModal();
       await findInstructionsBox();
 
@@ -141,6 +162,7 @@ describe("AddProjectModal", () => {
       // A rejected update leaves the dialog open and cancelable, so the file must not keep an
       // edit the user can still back out of.
       readAgentsFile.mockResolvedValue("Old rules");
+      agentsFileIsUninitialized.mockResolvedValue(false);
       const onSave = jest.fn().mockRejectedValue(new Error("A project with that name exists"));
       renderModal({ onSave });
       fireEvent.change(await findInstructionsBox(), { target: { value: "New rules" } });
