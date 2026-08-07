@@ -28,6 +28,13 @@ function makeApp(initialFiles: Record<string, string> = {}, folders: string[] = 
   const toFolder = (path: string) =>
     new (TFolder as unknown as new (path: string) => TFolder)(path);
   const openFile = jest.fn().mockResolvedValue(undefined);
+  /** The key `path` actually names on disk, honouring the platform's case rules. */
+  const diskPath = (path: string): string | undefined => {
+    if (state.files.has(path)) return path;
+    if (!Platform.isMacOS) return undefined;
+    const target = path.toLowerCase();
+    return [...state.files.keys()].find((key) => key.toLowerCase() === target);
+  };
   const app = {
     vault: {
       // Obsidian never indexes dot-folders, so those paths resolve only through the adapter —
@@ -52,10 +59,13 @@ function makeApp(initialFiles: Record<string, string> = {}, folders: string[] = 
         state.files.set(file.path, content);
       }),
       adapter: {
-        exists: jest.fn(async (path: string) => state.files.has(path)),
-        read: jest.fn(async (path: string) => state.files.get(path) ?? ""),
+        // The real adapter goes to the OS, so on a case-insensitive volume it answers for
+        // every spelling of a path — which is exactly what makes a cached `agents.md` look
+        // like an uncached `AGENTS.md` to the resolver.
+        exists: jest.fn(async (path: string) => diskPath(path) !== undefined),
+        read: jest.fn(async (path: string) => state.files.get(diskPath(path) ?? path) ?? ""),
         write: jest.fn(async (path: string, content: string) => {
-          state.files.set(path, content);
+          state.files.set(diskPath(path) ?? path, content);
         }),
         stat: jest.fn(async () => ({ ctime: 0, mtime: 0, size: 0 })),
       },
@@ -384,6 +394,17 @@ describe("agentsFile", () => {
       // state and strands an editor the user has open on that note.
       expect(app.vault.modify).toHaveBeenCalled();
       expect(app.vault.adapter.write).not.toHaveBeenCalled();
+    });
+
+    it("does not walk the vault when the folder simply has no instruction file", async () => {
+      // Session start asks this on every new session, and having no file yet is the common
+      // answer; the variant scan is a repair for an existing file, not a lookup path.
+      setCaseInsensitiveFilesystem(true);
+      const { app } = makeApp();
+
+      await expect(readAgentsFile(app, "")).resolves.toBe("");
+
+      expect(app.vault.getFiles).not.toHaveBeenCalled();
     });
 
     it("keeps them separate on a case-sensitive volume, where the backends read only the exact name", async () => {

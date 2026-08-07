@@ -19,9 +19,8 @@ import { DEFAULT_MODEL_SETTING } from "@/constants";
 import { ProjectContextBadgeList } from "@/components/project/ProjectContextBadgeList";
 import { ProjectContextSourceEditor } from "@/components/project/ProjectContextSourceEditor";
 import { readAgentsFile, writeAgentsFile } from "@/instructions/agentsFile";
+import { logError } from "@/logger";
 import { ProjectInstructionsField } from "@/instructions/ProjectInstructionsField";
-import { useAgentsFileDraft } from "@/instructions/useAgentsFileDraft";
-import { moveProjectPromptToAgentsFile } from "@/projects/moveProjectPrompt";
 import { getProjectAnchorFromConfigPath } from "@/projects/projectPaths";
 import { getCachedProjectRecordById } from "@/projects/state";
 import { err2String, randomUUID } from "@/utils";
@@ -130,23 +129,34 @@ export function AddProjectModalContent({
     () => (record ? getProjectAnchorFromConfigPath(record.filePath).projectFolderPath : null),
     [record]
   );
+  // Null until the read settles, so the field never mounts empty over instructions that exist.
+  const [instructions, setInstructions] = useState<string | null>(null);
   // A project that has not started a session since the file layout changed still keeps its
-  // instructions in `project.md`, where this editor cannot see them. Run the same one-shot
-  // move session start runs, so the field shows the text it is about to own instead of
-  // rendering blank over instructions that are still live. Only then is the folder readable.
-  const [migratedFolder, setMigratedFolder] = useState<string | null>(null);
+  // instructions in `project.md`, where AGENTS.md cannot see them. Show that text rather than a
+  // blank box, but do NOT move it here: opening a dialog must not write to the vault, and
+  // Cancel has to leave the project exactly as it was. Saving is what performs the move —
+  // see `handleSave`.
+  const [draftOwnsLegacyPrompt, setDraftOwnsLegacyPrompt] = useState(false);
+  const legacyPrompt = initialProject?.systemPrompt ?? "";
   useEffect(() => {
-    if (!record || instructionsFolder === null) return;
+    if (instructionsFolder === null) return;
     let cancelled = false;
-    // Never rejects; a vault that refuses the move leaves the legacy text in place.
-    void moveProjectPromptToAgentsFile(app, record).then(() => {
-      if (!cancelled) setMigratedFolder(instructionsFolder);
-    });
+    void readAgentsFile(app, instructionsFolder)
+      .then((content) => {
+        if (cancelled) return;
+        // A non-empty AGENTS.md already owns this project's instructions; the legacy body is
+        // then one the move deliberately refused to overwrite, and it is not ours to clear.
+        const seedFromLegacy = !content.trim() && legacyPrompt.trim().length > 0;
+        setInstructions(seedFromLegacy ? legacyPrompt : content);
+        setDraftOwnsLegacyPrompt(seedFromLegacy);
+      })
+      .catch((error) => {
+        logError("Failed to read project instructions.", error);
+      });
     return () => {
       cancelled = true;
     };
-  }, [app, record, instructionsFolder]);
-  const [instructions, setInstructions] = useAgentsFileDraft(app, migratedFolder);
+  }, [app, instructionsFolder, legacyPrompt]);
 
   // URL items derived from formData for UrlTagInput
   const urlItems = useMemo(
@@ -309,6 +319,11 @@ export function AddProjectModalContent({
             name: trimmedName,
             projectModelKey: initialProject.projectModelKey,
             modelConfigs: initialProject.modelConfigs,
+            // Completes the move the editor only previewed: the instruction file below is
+            // about to own this text, so `project.md` drops its copy in the same save. Left
+            // alone when AGENTS.md already had its own body, where the legacy text is not
+            // this dialog's to discard.
+            ...(draftOwnsLegacyPrompt ? { systemPrompt: "" } : {}),
           }
         : { ...formData, name: trimmedName };
 

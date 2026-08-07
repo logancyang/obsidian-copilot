@@ -13,14 +13,6 @@ jest.mock("@/projects/projectPaths", () => ({
   }),
 }));
 
-const moveProjectPromptToAgentsFile = jest.fn(
-  async (_app: unknown, _record: ProjectFileRecord): Promise<void> => {}
-);
-jest.mock("@/projects/moveProjectPrompt", () => ({
-  moveProjectPromptToAgentsFile: (app: unknown, record: ProjectFileRecord) =>
-    moveProjectPromptToAgentsFile(app, record),
-}));
-
 const readAgentsFile = jest.fn(async (): Promise<string> => "");
 const writeAgentsFile = jest.fn(
   async (_app: unknown, _folder: string, _content: string): Promise<void> => {}
@@ -94,7 +86,6 @@ describe("AddProjectModal", () => {
     jest.clearAllMocks();
     readAgentsFile.mockResolvedValue("");
     writeAgentsFile.mockResolvedValue(undefined);
-    moveProjectPromptToAgentsFile.mockResolvedValue(undefined);
     getCachedProjectRecordById.mockReturnValue({
       folderName: "proj-1",
       filePath: `${PROJECT_FOLDER}/project.md`,
@@ -103,30 +94,46 @@ describe("AddProjectModal", () => {
   });
 
   describe("AddProjectModalContent", () => {
-    it("moves legacy project.md instructions in before showing the field, so an upgraded project is not edited blank", async () => {
-      // The move is what puts the text into AGENTS.md; reading first would show an empty box
-      // over instructions that are still live in `project.md`.
-      moveProjectPromptToAgentsFile.mockImplementation(async () => {
-        readAgentsFile.mockResolvedValue("Cite only #verified notes.");
-      });
+    it("shows legacy project.md instructions, so an upgraded project is not edited blank", async () => {
+      // Its AGENTS.md is still empty, so the live text is the `project.md` body.
       renderModal();
 
-      const box = await findInstructionsBox();
-      expect(box.value).toBe("Cite only #verified notes.");
-      expect(moveProjectPromptToAgentsFile).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.objectContaining({ filePath: `${PROJECT_FOLDER}/project.md` })
-      );
+      expect((await findInstructionsBox()).value).toBe("Cite only #verified notes.");
     });
 
-    it("writes the edited instructions to the project's own folder on save", async () => {
+    it("writes nothing while the dialog is merely open, so Cancel leaves the project untouched", async () => {
+      // Opening an editor is not a decision; the move happens on save or not at all.
       renderModal();
+      await findInstructionsBox();
+
+      expect(writeAgentsFile).not.toHaveBeenCalled();
+    });
+
+    it("clears the legacy copy on save, completing the move the editor previewed", async () => {
+      const { onSave } = renderModal();
       fireEvent.change(await findInstructionsBox(), { target: { value: "New rules" } });
 
       fireEvent.click(screen.getByText("Save"));
 
       await waitFor(() =>
         expect(writeAgentsFile).toHaveBeenCalledWith(expect.anything(), PROJECT_FOLDER, "New rules")
+      );
+      // Left in place, `project.md` would keep a second copy that v3 Chat still reads.
+      expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ systemPrompt: "" }));
+    });
+
+    it("keeps the legacy copy when AGENTS.md already had its own body", async () => {
+      // The move refuses to overwrite a user-authored file, so that legacy text was never
+      // transferred and is not this dialog's to discard.
+      readAgentsFile.mockResolvedValue("Rules the user wrote directly.");
+      const { onSave } = renderModal();
+      await findInstructionsBox();
+
+      fireEvent.click(screen.getByText("Save"));
+
+      await waitFor(() => expect(onSave).toHaveBeenCalled());
+      expect(onSave).toHaveBeenCalledWith(
+        expect.objectContaining({ systemPrompt: "Cite only #verified notes." })
       );
     });
 
@@ -156,7 +163,6 @@ describe("AddProjectModal", () => {
 
       await waitFor(() => expect(screen.getByText("New Project")).toBeTruthy());
       expect(screen.queryByLabelText("Project instructions")).toBeNull();
-      expect(moveProjectPromptToAgentsFile).not.toHaveBeenCalled();
       expect(readAgentsFile).not.toHaveBeenCalled();
     });
   });

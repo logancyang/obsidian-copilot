@@ -238,16 +238,26 @@ function childPath(folderPath: string, fileName: string): string {
  * two files, adopting `agents.md` as the canonical file would be a corruption: the exact-name
  * file the backends discover would never get created, and instructions edited through Copilot
  * would land somewhere no agent reads.
+ *
+ * The variant scan is last on purpose. It walks every file in the vault, and the overwhelmingly
+ * common call is a scope that simply has no instruction file yet — session start asks on every
+ * new session. Letting `resolveFileByPath` answer first turns that case into a single `exists`
+ * check, and confines the scan to the one state that can actually need repair.
  */
 async function resolveInstructionFile(app: App, filePath: string): Promise<TFile | null> {
   const cached = app.vault.getAbstractFileByPath(filePath);
   if (cached instanceof TFile) return cached;
-  if (hasCaseInsensitiveFilesystem()) {
-    const target = filePath.toLowerCase();
-    const variant = app.vault.getFiles().find((file) => file.path.toLowerCase() === target);
-    if (variant) return variant;
-  }
-  return await resolveFileByPath(app, filePath);
+
+  const resolved = await resolveFileByPath(app, filePath);
+  // Nothing on disk under this name. On a case-insensitive volume `exists` already answered
+  // for every spelling of it, so there is no variant left to look for.
+  if (!resolved) return null;
+  if (!hasCaseInsensitiveFilesystem()) return resolved;
+
+  // Something exists that the cache missed under this exact spelling: either a dot-folder file
+  // Obsidian never indexes (keep the synthetic one) or the same note under another casing.
+  const target = filePath.toLowerCase();
+  return app.vault.getFiles().find((file) => file.path.toLowerCase() === target) ?? resolved;
 }
 
 /**
