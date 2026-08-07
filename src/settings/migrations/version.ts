@@ -26,5 +26,6 @@
  *   13  → drop the retired index settings. The device-local artifact and
  *          credential cleanup is gated separately, in
  *          `legacyIndexRemovalMigration`, because this version is synced.
+ *   14  → fold Codex's per-effort configured models into one row per base model.
  */
-export const CURRENT_SETTINGS_VERSION = 13;
+export const CURRENT_SETTINGS_VERSION = 14;

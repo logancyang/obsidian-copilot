@@ -1,3 +1,4 @@
+import type { ModelSelectionSession } from "@/agentMode/session/types";
 import { logWarn } from "@/logger";
 import type CopilotPlugin from "@/main";
 import { requireNodeModule } from "@/utils/desktopRuntime";
@@ -299,7 +300,11 @@ export const ClaudeBackendDescriptor: ClaudeDescriptor = {
     return isClaudePlanModePlanFilePath(absolutePath);
   },
 
-  async applySelection(session: AgentSession, selection: ModelSelection, context): Promise<void> {
+  async applySelection(
+    session: ModelSelectionSession,
+    selection: ModelSelection,
+    context
+  ): Promise<void> {
     // Claude's wire id is just the baseModelId — effort travels through
     // `setConfigOption`, not the model id. Skip the model round-trip when
     // the base hasn't changed, otherwise effort-only ticks would fire a

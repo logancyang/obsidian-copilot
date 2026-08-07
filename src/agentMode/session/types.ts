@@ -14,6 +14,7 @@ export type {
   BackendDescriptor,
   BackendSignInHandlers,
   InstallState,
+  ModelSelectionSession,
 } from "./descriptor";
 export type { CurrentPlan, PlanDecisionAction, PlanProposalDecision } from "./plan";
 
@@ -290,9 +291,15 @@ export type ModeApplySpec =
  * `category:"model"` select id (opencode ≥ 1.15.13). The encoded wire id is the
  * same string in both channels; only the RPC differs. `effortConfigId` records
  * a separate `category:"thought_level"` selector when the backend exposes one.
+ * A `setModel` backend can additionally advertise a model-only `modelConfigId`
+ * so an unset effort can be delegated to the agent without encoding a bare ID.
  */
 export type ModelApplySpec =
-  | { kind: "setModel" }
+  | {
+      kind: "setModel";
+      /** Advertised model-only option that lets the agent choose effort. */
+      modelConfigId?: string;
+    }
   | { kind: "setConfigOption"; configId: string; effortConfigId?: string };
 
 /**

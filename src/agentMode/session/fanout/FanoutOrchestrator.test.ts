@@ -1,3 +1,7 @@
+import { OpencodeBackendDescriptor } from "@/agentMode/backends/opencode/descriptor";
+import { ClaudeBackendDescriptor } from "@/agentMode/backends/claude/descriptor";
+import { CodexBackendDescriptor } from "@/agentMode/backends/codex/descriptor";
+import { translateBackendState } from "@/agentMode/session/translateBackendState";
 import type {
   BackendDescriptor,
   BackendId,
@@ -14,6 +18,13 @@ jest.mock("@/logger", () => ({
   logInfo: jest.fn(),
   logWarn: jest.fn(),
   logError: jest.fn(),
+}));
+
+jest.mock("@/agentMode/sdk/effortOption", () => ({
+  ...jest.requireActual("@/agentMode/sdk/effortOption"),
+  getCachedSdkCatalog: () => [
+    { value: "claude-sonnet-4-5", supportsEffort: true, supportedEffortLevels: ["low", "high"] },
+  ],
 }));
 
 interface MockProc {
@@ -183,193 +194,340 @@ function runInput(
   };
 }
 
-describe("createFanoutTurn", () => {
-  it("seeds one running slot per agent (insertion order) plus a pending summary", () => {
-    const turn = createFanoutTurn(["opencode", "claude", "codex"]);
-    expect(Object.keys(turn.answers)).toEqual(["opencode", "claude", "codex"]);
-    expect(turn.answers.claude).toEqual({ backendId: "claude", status: "running", text: "" });
-    expect(turn.summary).toEqual({ status: "pending", text: "" });
-  });
-});
-
-describe("FanoutOrchestrator.run", () => {
-  it("streams each agent's answer into its own slot and marks them done", async () => {
-    const { host, procs, readOnlyRegistered, readOnlyUnregistered, excludedFromHistory } = makeHost(
-      {
-        claude: { sessionId: "s-claude" },
-        codex: { sessionId: "s-codex" },
-      }
-    );
-    const orchestrator = new FanoutOrchestrator(host);
-    const controller = new AbortController();
-    const snapshots: string[] = [];
-
-    const runPromise = orchestrator.run(
-      runInput(["claude", "codex"], {
-        prompt: [{ type: "text", text: "review this" }],
-        signal: controller.signal,
-        onChange: (turn) => snapshots.push(JSON.stringify(turn.answers)),
-      })
-    );
-
-    await flush();
-    procs.get("claude")!.emit(textChunk("s-claude", "Claude says hi"));
-    procs.get("codex")!.emit(textChunk("s-codex", "Codex says hi"));
-    procs.get("claude")!.resolvePrompt();
-    procs.get("codex")!.resolvePrompt();
-    // Answers settled; the main agent (claude) now opens a summary sub-session
-    // once the post-resolve trailing-chunk grace on both answers elapses.
-    await flushPastGrace();
-    procs.get("claude")!.emit(textChunk("s-claude", "summary"));
-    procs.get("claude")!.resolvePrompt();
-
-    const turn = await runPromise;
-    expect(turn.answers.claude).toEqual({
-      backendId: "claude",
-      status: "done",
-      text: "Claude says hi",
+describe("FanoutOrchestrator", () => {
+  describe("createFanoutTurn()", () => {
+    it("seeds one running slot per agent (insertion order) plus a pending summary", () => {
+      const turn = createFanoutTurn(["opencode", "claude", "codex"]);
+      expect(Object.keys(turn.answers)).toEqual(["opencode", "claude", "codex"]);
+      expect(turn.answers.claude).toEqual({ backendId: "claude", status: "running", text: "" });
+      expect(turn.summary).toEqual({ status: "pending", text: "" });
     });
-    expect(turn.answers.codex).toEqual({
-      backendId: "codex",
-      status: "done",
-      text: "Codex says hi",
-    });
-    expect(turn.summary.status).toBe("done");
-    expect(turn.summary.text).toBe("summary");
-    // Three sub-sessions registered read-only: two answers + the summary (a
-    // second session on the main backend), all unregistered on teardown.
-    expect(readOnlyRegistered.sort()).toEqual(["s-claude", "s-claude", "s-codex"]);
-    expect(readOnlyUnregistered.sort()).toEqual(["s-claude", "s-claude", "s-codex"]);
-    // Every sub-session (incl. the summary's) is tombstoned so it never leaks
-    // into Recent Chats as a phantom native session.
-    expect(excludedFromHistory.map((e) => e.sessionId).sort()).toEqual([
-      "s-claude",
-      "s-claude",
-      "s-codex",
-    ]);
-    expect(snapshots.length).toBeGreaterThan(1);
   });
 
-  it("isolates a failed agent as an error slot while others complete", async () => {
-    const { host, procs } = makeHost({
-      claude: { sessionId: "s-claude" },
-      codex: { sessionId: "s-codex" },
+  describe("FanoutOrchestrator", () => {
+    describe("run()", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 applies a model-only Codex default through the same advertised option for answer and summary sessions", async () => {
+        const { host, procs } = makeHost({ codex: { sessionId: "s-codex" } });
+        const proc = procs.get("codex")!.proc;
+        const state = translateBackendState(
+          {
+            models: {
+              currentModelId: "example[high]",
+              availableModels: ["low", "high"].map((effort) => ({
+                modelId: `example[${effort}]`,
+                name: "Example",
+              })),
+            },
+            modes: null,
+            configOptions: [
+              {
+                id: "model-choice",
+                category: "model",
+                type: "select",
+                name: "Model",
+                currentValue: "example",
+                options: [{ value: "example", name: "Example" }],
+              },
+            ],
+          },
+          CodexBackendDescriptor
+        );
+        jest.mocked(proc.newSession).mockResolvedValue({ sessionId: "s-codex", state });
+        jest.mocked(proc.setSessionConfigOption).mockResolvedValue(state);
+        jest.mocked(proc.prompt).mockImplementation(async () => {
+          procs.get("codex")!.emit(textChunk("s-codex", "answer"));
+          return { stopReason: "end_turn" };
+        });
+        host.ensureBackendForFanout = async () => ({ proc, descriptor: CodexBackendDescriptor });
+        host.getDefaultSelection = () => ({ baseModelId: "example", effort: null });
+
+        await new FanoutOrchestrator(host).run(runInput(["codex"]));
+
+        expect(proc.setSessionModel).not.toHaveBeenCalled();
+        expect(proc.setSessionConfigOption).toHaveBeenCalledWith({
+          sessionId: "s-codex",
+          configId: "model-choice",
+          value: "example",
+        });
+        expect(proc.setSessionConfigOption).toHaveBeenCalledTimes(2);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 sends an explicit Codex effort through the descriptor's wire format", async () => {
+        const { host, procs } = makeHost({ codex: { sessionId: "s-codex" } });
+        const proc = procs.get("codex")!.proc;
+        host.ensureBackendForFanout = async () => ({ proc, descriptor: CodexBackendDescriptor });
+        host.getDefaultSelection = () => ({ baseModelId: "example", effort: "high" });
+        jest.mocked(proc.prompt).mockResolvedValue({ stopReason: "end_turn" });
+        await new FanoutOrchestrator(host).run(runInput(["codex"]));
+        expect(proc.setSessionModel).toHaveBeenCalledWith({
+          sessionId: "s-codex",
+          modelId: "example[high]",
+        });
+        expect(proc.setSessionConfigOption).not.toHaveBeenCalled();
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 reports an unsupported model-only switch rather than running fan-out on a different model", async () => {
+        const { host, procs } = makeHost({ codex: { sessionId: "s-codex" } });
+        const proc = procs.get("codex")!.proc;
+        host.ensureBackendForFanout = async () => ({ proc, descriptor: CodexBackendDescriptor });
+        host.getDefaultSelection = () => ({ baseModelId: "example", effort: null });
+        const result = await new FanoutOrchestrator(host).run(runInput(["codex"]));
+        expect(result.answers.codex.status).toBe("error");
+        expect(result.answers.codex.error).toContain("Choose an explicit effort");
+        expect(proc.prompt).not.toHaveBeenCalled();
+        expect(proc.setSessionModel).not.toHaveBeenCalled();
+      });
+
+      it.each([true, false])(
+        "https://github.com/Brevilabs/obsidian-copilot-private/issues/219 uses OpenCode's refreshed effort capability after selecting the model, offered=%s",
+        async (offered) => {
+          const { host, procs } = makeHost({ opencode: { sessionId: "s-opencode" } });
+          const proc = procs.get("opencode")!.proc;
+          const initial: BackendState = {
+            model: {
+              current: { baseModelId: "provider/old", effort: null },
+              availableModels: [],
+              apply: { kind: "setConfigOption", configId: "model", effortConfigId: "old-effort" },
+            },
+            mode: null,
+          };
+          const refreshed: BackendState = {
+            model: {
+              current: { baseModelId: "provider/new", effort: null },
+              availableModels: [
+                {
+                  baseModelId: "provider/new",
+                  name: "New",
+                  provider: null,
+                  effortOptions: offered ? [{ value: "high", label: "high" }] : [],
+                },
+              ],
+              apply: { kind: "setConfigOption", configId: "model", effortConfigId: "new-effort" },
+            },
+            mode: null,
+          };
+          host.ensureBackendForFanout = async () => ({
+            proc,
+            descriptor: OpencodeBackendDescriptor,
+          });
+          host.getDefaultSelection = () => ({ baseModelId: "provider/new", effort: "high" });
+          jest
+            .mocked(proc.newSession)
+            .mockResolvedValue({ sessionId: "s-opencode", state: initial });
+          jest.mocked(proc.setSessionConfigOption).mockResolvedValue(refreshed);
+          jest.mocked(proc.prompt).mockResolvedValue({ stopReason: "end_turn" });
+
+          await new FanoutOrchestrator(host).run(runInput(["opencode"]));
+
+          expect(proc.setSessionModel).not.toHaveBeenCalled();
+          expect(jest.mocked(proc.setSessionConfigOption).mock.calls).toEqual([
+            [{ sessionId: "s-opencode", configId: "model", value: "provider/new" }],
+            ...(offered
+              ? [[{ sessionId: "s-opencode", configId: "new-effort", value: "high" }]]
+              : []),
+          ]);
+        }
+      );
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 keeps Claude's separate effort dispatch when fan-out uses the shared descriptor contract", async () => {
+        const { host, procs } = makeHost({ claude: { sessionId: "s-claude" } });
+        const proc = procs.get("claude")!.proc;
+        const modelId = "claude-sonnet-4-5";
+        host.ensureBackendForFanout = async () => ({ proc, descriptor: ClaudeBackendDescriptor });
+        host.getDefaultSelection = () => ({ baseModelId: modelId, effort: "high" });
+        // The real descriptor uses its SDK catalog's effort option.
+        const effortOption = ClaudeBackendDescriptor.wire.effortConfigFor?.(modelId);
+        expect(effortOption).toBeTruthy();
+        jest.mocked(proc.prompt).mockResolvedValue({ stopReason: "end_turn" });
+
+        await new FanoutOrchestrator(host).run(runInput(["claude"]));
+
+        expect(proc.setSessionModel).toHaveBeenCalledWith({ sessionId: "s-claude", modelId });
+        expect(proc.setSessionConfigOption).toHaveBeenCalledWith({
+          sessionId: "s-claude",
+          configId: effortOption!.id,
+          value: "high",
+        });
+      });
+
+      it("streams each agent's answer into its own slot and marks them done", async () => {
+        const { host, procs, readOnlyRegistered, readOnlyUnregistered, excludedFromHistory } =
+          makeHost({
+            claude: { sessionId: "s-claude" },
+            codex: { sessionId: "s-codex" },
+          });
+        const orchestrator = new FanoutOrchestrator(host);
+        const controller = new AbortController();
+        const snapshots: string[] = [];
+
+        const runPromise = orchestrator.run(
+          runInput(["claude", "codex"], {
+            prompt: [{ type: "text", text: "review this" }],
+            signal: controller.signal,
+            onChange: (turn) => snapshots.push(JSON.stringify(turn.answers)),
+          })
+        );
+
+        await flush();
+        procs.get("claude")!.emit(textChunk("s-claude", "Claude says hi"));
+        procs.get("codex")!.emit(textChunk("s-codex", "Codex says hi"));
+        procs.get("claude")!.resolvePrompt();
+        procs.get("codex")!.resolvePrompt();
+        // Answers settled; the main agent (claude) now opens a summary sub-session
+        // once the post-resolve trailing-chunk grace on both answers elapses.
+        await flushPastGrace();
+        procs.get("claude")!.emit(textChunk("s-claude", "summary"));
+        procs.get("claude")!.resolvePrompt();
+
+        const turn = await runPromise;
+        expect(turn.answers.claude).toEqual({
+          backendId: "claude",
+          status: "done",
+          text: "Claude says hi",
+        });
+        expect(turn.answers.codex).toEqual({
+          backendId: "codex",
+          status: "done",
+          text: "Codex says hi",
+        });
+        expect(turn.summary.status).toBe("done");
+        expect(turn.summary.text).toBe("summary");
+        // Three sub-sessions registered read-only: two answers + the summary (a
+        // second session on the main backend), all unregistered on teardown.
+        expect(readOnlyRegistered.sort()).toEqual(["s-claude", "s-claude", "s-codex"]);
+        expect(readOnlyUnregistered.sort()).toEqual(["s-claude", "s-claude", "s-codex"]);
+        // Every sub-session (incl. the summary's) is tombstoned so it never leaks
+        // into Recent Chats as a phantom native session.
+        expect(excludedFromHistory.map((e) => e.sessionId).sort()).toEqual([
+          "s-claude",
+          "s-claude",
+          "s-codex",
+        ]);
+        expect(snapshots.length).toBeGreaterThan(1);
+      });
+
+      it("isolates a failed agent as an error slot while others complete", async () => {
+        const { host, procs } = makeHost({
+          claude: { sessionId: "s-claude" },
+          codex: { sessionId: "s-codex" },
+        });
+        const orchestrator = new FanoutOrchestrator(host);
+        const controller = new AbortController();
+
+        const runPromise = orchestrator.run(
+          runInput(["claude", "codex"], { signal: controller.signal })
+        );
+
+        await flush();
+        procs.get("claude")!.emit(textChunk("s-claude", "ok"));
+        procs.get("claude")!.resolvePrompt();
+        procs.get("codex")!.rejectPrompt(new Error("backend boom"));
+        // The main agent (claude) summarizes over the one survivor once claude's
+        // post-resolve trailing-chunk grace elapses.
+        await flushPastGrace();
+        procs.get("claude")!.resolvePrompt();
+
+        const turn = await runPromise;
+        expect(turn.answers.claude.status).toBe("done");
+        expect(turn.answers.codex.status).toBe("error");
+        expect(turn.answers.codex.error).toContain("backend boom");
+        // The failed agent is never fed as an answer AND never named to the
+        // summarizer, so the summary can't mention or speculate about it.
+        const summaryCall = (procs.get("claude")!.proc.prompt as jest.Mock).mock.calls[1][0];
+        const text = summaryCall.prompt[0].text as string;
+        expect(text).toContain("the original question");
+        expect(text).toContain("CLAUDE");
+        expect(text).not.toContain("CODEX");
+      });
+
+      it("applies the read-only sandbox id (never plan) only for backends that advertise one", async () => {
+        const { host, procs } = makeHost({
+          // codex advertises a genuine read-only sandbox; its plan id is "plan".
+          codex: { sessionId: "s-codex", readOnlyModeId: "read-only" },
+          // opencode has no readOnlyModeId → no mode switch (relies on prompt +
+          // permission layers). Stands in for any backend lacking a sandbox.
+          opencode: { sessionId: "s-opencode" },
+        });
+        const orchestrator = new FanoutOrchestrator(host);
+        const controller = new AbortController();
+
+        const runPromise = orchestrator.run(
+          runInput(["codex", "opencode"], { signal: controller.signal })
+        );
+        await flush();
+        procs.get("codex")!.resolvePrompt();
+        procs.get("opencode")!.resolvePrompt();
+        // Main agent (codex) summary turn.
+        await flushPastGrace();
+        procs.get("codex")!.resolvePrompt();
+        await runPromise;
+
+        // Applies the read-only sandbox id, NOT canonical.plan ("plan") — a backend
+        // (Claude) whose plan mode writes plan files must never be put into it here.
+        expect(procs.get("codex")!.setSessionMode).toHaveBeenCalledWith({
+          sessionId: "s-codex",
+          modeId: "read-only",
+        });
+        expect(procs.get("codex")!.setSessionMode).not.toHaveBeenCalledWith({
+          sessionId: "s-codex",
+          modeId: "plan",
+        });
+        // No readOnlyModeId → setSessionMode is never called for that backend.
+        expect(procs.get("opencode")!.setSessionMode).not.toHaveBeenCalled();
+      });
+
+      it("cancels EVERY in-flight sub-session and lands each slot terminal-cancelled on abort", async () => {
+        const { host, procs } = makeHost({
+          claude: { sessionId: "s-claude" },
+          codex: { sessionId: "s-codex" },
+        });
+        const orchestrator = new FanoutOrchestrator(host);
+        const controller = new AbortController();
+        const runPromise = orchestrator.run(
+          runInput(["claude", "codex"], { signal: controller.signal })
+        );
+
+        await flush();
+        // Both sub-sessions are mid-prompt; the user cancels the turn.
+        controller.abort();
+        // Backends honor the cancel and resolve their pending prompts.
+        procs.get("claude")!.resolvePrompt();
+        procs.get("codex")!.resolvePrompt();
+        const turn = await runPromise;
+
+        // Every in-flight sub-session got cancel called (abort listener path).
+        expect(procs.get("claude")!.cancel).toHaveBeenCalledWith({ sessionId: "s-claude" });
+        expect(procs.get("codex")!.cancel).toHaveBeenCalledWith({ sessionId: "s-codex" });
+        // No slot is left running; an abort mid-prompt is terminal-cancelled, not done.
+        expect(turn.answers.claude.status).toBe("cancelled");
+        expect(turn.answers.codex.status).toBe("cancelled");
+        // No summary sub-session ran after cancel (only the two answer prompts).
+        expect(procs.get("claude")!.promptCount()).toBe(1);
+        expect(turn.summary.status).toBe("pending");
+      });
+
+      it("lands a brief all-failed note (no fabricated summary) when zero agents succeed", async () => {
+        const { host, procs } = makeHost({
+          claude: { sessionId: "s-claude" },
+          codex: { sessionId: "s-codex" },
+        });
+        const orchestrator = new FanoutOrchestrator(host);
+        const controller = new AbortController();
+        const runPromise = orchestrator.run(
+          runInput(["claude", "codex"], { signal: controller.signal })
+        );
+
+        await flush();
+        procs.get("claude")!.rejectPrompt(new Error("boom-a"));
+        procs.get("codex")!.rejectPrompt(new Error("boom-b"));
+        const turn = await runPromise;
+
+        expect(turn.summary.status).toBe("done");
+        expect(turn.summary.text).toBe(FANOUT_ALL_FAILED_SUMMARY);
+        // No summary sub-session was dispatched — nothing to reconcile.
+        expect(procs.get("claude")!.promptCount()).toBe(1);
+        expect(procs.get("codex")!.promptCount()).toBe(1);
+      });
     });
-    const orchestrator = new FanoutOrchestrator(host);
-    const controller = new AbortController();
-
-    const runPromise = orchestrator.run(
-      runInput(["claude", "codex"], { signal: controller.signal })
-    );
-
-    await flush();
-    procs.get("claude")!.emit(textChunk("s-claude", "ok"));
-    procs.get("claude")!.resolvePrompt();
-    procs.get("codex")!.rejectPrompt(new Error("backend boom"));
-    // The main agent (claude) summarizes over the one survivor once claude's
-    // post-resolve trailing-chunk grace elapses.
-    await flushPastGrace();
-    procs.get("claude")!.resolvePrompt();
-
-    const turn = await runPromise;
-    expect(turn.answers.claude.status).toBe("done");
-    expect(turn.answers.codex.status).toBe("error");
-    expect(turn.answers.codex.error).toContain("backend boom");
-    // The failed agent is never fed as an answer AND never named to the
-    // summarizer, so the summary can't mention or speculate about it.
-    const summaryCall = (procs.get("claude")!.proc.prompt as jest.Mock).mock.calls[1][0];
-    const text = summaryCall.prompt[0].text as string;
-    expect(text).toContain("the original question");
-    expect(text).toContain("CLAUDE");
-    expect(text).not.toContain("CODEX");
-  });
-
-  it("applies the read-only sandbox id (never plan) only for backends that advertise one", async () => {
-    const { host, procs } = makeHost({
-      // codex advertises a genuine read-only sandbox; its plan id is "plan".
-      codex: { sessionId: "s-codex", readOnlyModeId: "read-only" },
-      // opencode has no readOnlyModeId → no mode switch (relies on prompt +
-      // permission layers). Stands in for any backend lacking a sandbox.
-      opencode: { sessionId: "s-opencode" },
-    });
-    const orchestrator = new FanoutOrchestrator(host);
-    const controller = new AbortController();
-
-    const runPromise = orchestrator.run(
-      runInput(["codex", "opencode"], { signal: controller.signal })
-    );
-    await flush();
-    procs.get("codex")!.resolvePrompt();
-    procs.get("opencode")!.resolvePrompt();
-    // Main agent (codex) summary turn.
-    await flushPastGrace();
-    procs.get("codex")!.resolvePrompt();
-    await runPromise;
-
-    // Applies the read-only sandbox id, NOT canonical.plan ("plan") — a backend
-    // (Claude) whose plan mode writes plan files must never be put into it here.
-    expect(procs.get("codex")!.setSessionMode).toHaveBeenCalledWith({
-      sessionId: "s-codex",
-      modeId: "read-only",
-    });
-    expect(procs.get("codex")!.setSessionMode).not.toHaveBeenCalledWith({
-      sessionId: "s-codex",
-      modeId: "plan",
-    });
-    // No readOnlyModeId → setSessionMode is never called for that backend.
-    expect(procs.get("opencode")!.setSessionMode).not.toHaveBeenCalled();
-  });
-
-  it("cancels EVERY in-flight sub-session and lands each slot terminal-cancelled on abort", async () => {
-    const { host, procs } = makeHost({
-      claude: { sessionId: "s-claude" },
-      codex: { sessionId: "s-codex" },
-    });
-    const orchestrator = new FanoutOrchestrator(host);
-    const controller = new AbortController();
-    const runPromise = orchestrator.run(
-      runInput(["claude", "codex"], { signal: controller.signal })
-    );
-
-    await flush();
-    // Both sub-sessions are mid-prompt; the user cancels the turn.
-    controller.abort();
-    // Backends honor the cancel and resolve their pending prompts.
-    procs.get("claude")!.resolvePrompt();
-    procs.get("codex")!.resolvePrompt();
-    const turn = await runPromise;
-
-    // Every in-flight sub-session got cancel called (abort listener path).
-    expect(procs.get("claude")!.cancel).toHaveBeenCalledWith({ sessionId: "s-claude" });
-    expect(procs.get("codex")!.cancel).toHaveBeenCalledWith({ sessionId: "s-codex" });
-    // No slot is left running; an abort mid-prompt is terminal-cancelled, not done.
-    expect(turn.answers.claude.status).toBe("cancelled");
-    expect(turn.answers.codex.status).toBe("cancelled");
-    // No summary sub-session ran after cancel (only the two answer prompts).
-    expect(procs.get("claude")!.promptCount()).toBe(1);
-    expect(turn.summary.status).toBe("pending");
-  });
-
-  it("lands a brief all-failed note (no fabricated summary) when zero agents succeed", async () => {
-    const { host, procs } = makeHost({
-      claude: { sessionId: "s-claude" },
-      codex: { sessionId: "s-codex" },
-    });
-    const orchestrator = new FanoutOrchestrator(host);
-    const controller = new AbortController();
-    const runPromise = orchestrator.run(
-      runInput(["claude", "codex"], { signal: controller.signal })
-    );
-
-    await flush();
-    procs.get("claude")!.rejectPrompt(new Error("boom-a"));
-    procs.get("codex")!.rejectPrompt(new Error("boom-b"));
-    const turn = await runPromise;
-
-    expect(turn.summary.status).toBe("done");
-    expect(turn.summary.text).toBe(FANOUT_ALL_FAILED_SUMMARY);
-    // No summary sub-session was dispatched — nothing to reconcile.
-    expect(procs.get("claude")!.promptCount()).toBe(1);
-    expect(procs.get("codex")!.promptCount()).toBe(1);
   });
 });
