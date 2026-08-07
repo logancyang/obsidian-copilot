@@ -8,11 +8,17 @@ import { ExternalLink } from "lucide-react";
 import { getSettings } from "@/settings/model";
 import { createPluginRoot } from "@/utils/react/createPluginRoot";
 
-function CopilotPlusExpiredModalContent({ onCancel }: { onCancel: () => void }) {
-  // Chat model only: nothing sets a Plus embedding model any more, so also
-  // requiring one would silence this warning for every user who has one.
-  const isUsingPlusModels = isPlusModel(getSettings().defaultModelKey);
+export interface CopilotPlusExpiredModalContentProps {
+  onCancel: () => void;
+  /** Whether to warn that Copilot models are about to stop working. */
+  isUsingPlusModels: boolean;
+}
 
+/** Body of {@link CopilotPlusExpiredModal}, exported prop-driven so the gallery can render both states. */
+export function CopilotPlusExpiredModalContent({
+  onCancel,
+  isUsingPlusModels,
+}: CopilotPlusExpiredModalContentProps) {
   return (
     <div className="tw-flex tw-flex-col tw-gap-4">
       <div className="tw-flex tw-flex-col tw-gap-2">
@@ -62,7 +68,14 @@ export class CopilotPlusExpiredModal extends Modal {
       this.close();
     };
 
-    this.root.render(<CopilotPlusExpiredModalContent onCancel={handleCancel} />);
+    this.root.render(
+      <CopilotPlusExpiredModalContent
+        onCancel={handleCancel}
+        // Chat model only: nothing sets a Copilot embedding model any more, so
+        // also requiring one would silence this warning for every user.
+        isUsingPlusModels={isPlusModel(getSettings().defaultModelKey)}
+      />
+    );
   }
 
   onClose() {
