@@ -33,6 +33,11 @@ function makeApp(initialFiles: Record<string, string> = {}, folders: string[] = 
         if (state.folders.has(path)) return toFolder(path);
         return null;
       }),
+      getFiles: jest.fn(() =>
+        [...state.files.keys()]
+          .filter((path) => !path.split("/").some((segment) => segment.startsWith(".")))
+          .map(toFile)
+      ),
       create: jest.fn(async (path: string, content: string) => {
         state.files.set(path, content);
         return toFile(path);
@@ -338,6 +343,37 @@ describe("agentsFile", () => {
         ".copilot/projects/One/AGENTS.md"
       );
       expect(openFile).not.toHaveBeenCalled();
+    });
+
+    it("opens a note the vault stores under another casing", async () => {
+      // A case-insensitive volume lets `agents.md` answer for `AGENTS.md`. Matching the cache
+      // only exactly would call an ordinary note unreachable and refuse to open it.
+      const { app, openFile } = makeApp({ "agents.md": "rules" });
+
+      await openAgentsFile(app, "", "", false);
+
+      expect(openFile).toHaveBeenCalledWith(expect.objectContaining({ path: "agents.md" }));
+    });
+  });
+
+  describe("case-insensitive vault spellings", () => {
+    it("reads the existing note rather than reporting no instructions", async () => {
+      const { app } = makeApp({ "agents.md": "Old rules" });
+
+      await expect(readAgentsFile(app, "")).resolves.toBe("Old rules");
+    });
+
+    it("edits that same note through the vault instead of creating a second file", async () => {
+      const { app, state } = makeApp({ "agents.md": "Old rules", "CLAUDE.md": "@AGENTS.md\n" });
+
+      await writeAgentsFile(app, "", "New rules");
+
+      expect(state.files.get("agents.md")).toBe("New rules");
+      expect(state.files.has("AGENTS.md")).toBe(false);
+      // Through `vault.modify`, not the adapter: an adapter write bypasses Obsidian's own file
+      // state and strands an editor the user has open on that note.
+      expect(app.vault.modify).toHaveBeenCalled();
+      expect(app.vault.adapter.write).not.toHaveBeenCalled();
     });
   });
 });

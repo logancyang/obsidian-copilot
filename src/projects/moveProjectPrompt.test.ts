@@ -32,6 +32,7 @@ function makeApp(initialFiles: Record<string, string> = {}) {
         if (files.has(path)) return toFile(path);
         return path.includes("/") && !path.endsWith(".md") ? toFolder(path) : null;
       }),
+      getFiles: jest.fn(() => [...files.keys()].map(toFile)),
       create: jest.fn(async (path: string, content: string) => {
         files.set(path, content);
         return toFile(path);

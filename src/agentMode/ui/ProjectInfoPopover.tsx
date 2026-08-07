@@ -108,14 +108,119 @@ function ProgressSection({ todoList }: ProgressSectionProps) {
   );
 }
 
+/** One listed project file, reduced to what a row draws. */
+export interface ProjectFileEntry {
+  path: string;
+  name: string;
+  extension: string;
+}
+
+export interface ProjectFilesListProps {
+  /** Folder files to list under the fixed AGENTS.md row, already filtered and sorted. */
+  files: ProjectFileEntry[];
+  onOpenInstructions: () => void;
+  onOpenFile: (path: string) => void;
+  onReveal: () => void;
+}
+
+/**
+ * The Project files section as drawn: a fixed AGENTS.md row, the folder's remaining files, and
+ * the Outputs placeholder. Presentational on purpose — which files belong here depends on the
+ * project record and on reading CLAUDE.md, and that resolution lives in the container below so
+ * these rows stay renderable from fixture data.
+ */
+export function ProjectFilesList({
+  files,
+  onOpenInstructions,
+  onOpenFile,
+  onReveal,
+}: ProjectFilesListProps) {
+  const [outputsOpen, setOutputsOpen] = useState(false);
+
+  return (
+    <div className="tw-px-3 tw-py-2.5">
+      <div className="tw-mb-1 tw-flex tw-items-center tw-justify-between">
+        <span className="tw-text-ui-smaller tw-font-semibold tw-text-faint">Project files</span>
+        <Button
+          variant="ghost2"
+          size="icon"
+          aria-label="Reveal project files in vault"
+          className="tw-size-5 tw-text-faint hover:tw-text-normal"
+          onClick={onReveal}
+        >
+          <FolderSearch className="tw-size-3.5" />
+        </Button>
+      </div>
+
+      {/* Fixed first row: the project's canonical instructions file. */}
+      <div
+        role="button"
+        tabIndex={0}
+        className="tw-flex tw-cursor-pointer tw-items-center tw-gap-2 tw-rounded tw-p-1 hover:tw-bg-secondary"
+        onClick={onOpenInstructions}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") onOpenInstructions();
+        }}
+      >
+        <FileBadge ext="md" />
+        <span className="tw-min-w-0 tw-flex-1 tw-truncate tw-text-ui-small">AGENTS.md</span>
+        <ArrowUpRight aria-hidden="true" className="tw-size-3.5 tw-shrink-0 tw-text-faint" />
+      </div>
+
+      {files.map((file) => (
+        <div
+          key={file.path}
+          role="button"
+          tabIndex={0}
+          className="tw-flex tw-cursor-pointer tw-items-center tw-gap-2 tw-rounded tw-p-1 hover:tw-bg-secondary"
+          onClick={() => onOpenFile(file.path)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") onOpenFile(file.path);
+          }}
+        >
+          <FileBadge ext={file.extension.toLowerCase()} />
+          <span className="tw-min-w-0 tw-flex-1 tw-truncate tw-text-ui-small" title={file.name}>
+            {file.name}
+          </span>
+        </div>
+      ))}
+
+      {/* Outputs: files generated during agent conversations. The producing
+          feature hasn't shipped yet, so this is the collapsed empty state the
+          design reserves — wired up once outputs land in the project folder. */}
+      <div
+        role="button"
+        tabIndex={0}
+        className="tw-flex tw-cursor-pointer tw-items-center tw-gap-1 tw-rounded tw-p-1 tw-text-muted hover:tw-bg-secondary"
+        onClick={() => setOutputsOpen((v) => !v)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") setOutputsOpen((v) => !v);
+        }}
+        aria-expanded={outputsOpen}
+      >
+        {outputsOpen ? (
+          <ChevronDown className="tw-size-3.5" aria-hidden="true" />
+        ) : (
+          <ChevronRight className="tw-size-3.5" aria-hidden="true" />
+        )}
+        <span className="tw-text-ui-small tw-font-medium">Outputs</span>
+        <span className="tw-text-ui-smaller tw-text-faint">(0)</span>
+      </div>
+      {outputsOpen && (
+        <div className="tw-py-1 tw-pl-6 tw-text-ui-smaller tw-text-faint">No outputs yet</div>
+      )}
+    </div>
+  );
+}
+
 interface ProjectFilesSectionProps {
   app: App;
   project: ProjectConfig;
   onClose: () => void;
 }
 
+/** Resolves the project folder's listable files and the vault actions the rows trigger. */
 function ProjectFilesSection({ app, project, onClose }: ProjectFilesSectionProps) {
-  const [outputsOpen, setOutputsOpen] = useState(false);
   // State rather than a memo: CLAUDE.md's visibility depends on its content (import-only
   // wiring is hidden, user-authored rules are listed), and reading content is async.
   const [files, setFiles] = useState<TFile[]>([]);
@@ -153,7 +258,9 @@ function ProjectFilesSection({ app, project, onClose }: ProjectFilesSectionProps
     };
   }, [app, project.id]);
 
-  const handleOpenFile = (file: TFile) => {
+  const handleOpenFile = (path: string) => {
+    const file = files.find((candidate) => candidate.path === path);
+    if (!file) return;
     onClose();
     void app.workspace
       .getLeaf(false)
@@ -183,81 +290,15 @@ function ProjectFilesSection({ app, project, onClose }: ProjectFilesSectionProps
   };
 
   return (
-    <div className="tw-px-3 tw-py-2.5">
-      <div className="tw-mb-1 tw-flex tw-items-center tw-justify-between">
-        <span className="tw-text-ui-smaller tw-font-semibold tw-text-faint">Project files</span>
-        <Button
-          variant="ghost2"
-          size="icon"
-          aria-label="Reveal project files in vault"
-          className="tw-size-5 tw-text-faint hover:tw-text-normal"
-          onClick={() => {
-            onClose();
-            revealProjectFolder(app, project);
-          }}
-        >
-          <FolderSearch className="tw-size-3.5" />
-        </Button>
-      </div>
-
-      {/* Fixed first row: the project's canonical instructions file. */}
-      <div
-        role="button"
-        tabIndex={0}
-        className="tw-flex tw-cursor-pointer tw-items-center tw-gap-2 tw-rounded tw-p-1 hover:tw-bg-secondary"
-        onClick={handleOpenProjectInstructions}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") handleOpenProjectInstructions();
-        }}
-      >
-        <FileBadge ext="md" />
-        <span className="tw-min-w-0 tw-flex-1 tw-truncate tw-text-ui-small">AGENTS.md</span>
-        <ArrowUpRight aria-hidden="true" className="tw-size-3.5 tw-shrink-0 tw-text-faint" />
-      </div>
-
-      {files.map((file) => (
-        <div
-          key={file.path}
-          role="button"
-          tabIndex={0}
-          className="tw-flex tw-cursor-pointer tw-items-center tw-gap-2 tw-rounded tw-p-1 hover:tw-bg-secondary"
-          onClick={() => handleOpenFile(file)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") handleOpenFile(file);
-          }}
-        >
-          <FileBadge ext={file.extension.toLowerCase()} />
-          <span className="tw-min-w-0 tw-flex-1 tw-truncate tw-text-ui-small" title={file.name}>
-            {file.name}
-          </span>
-        </div>
-      ))}
-
-      {/* Outputs: files generated during agent conversations. The producing
-          feature hasn't shipped yet, so this is the collapsed empty state the
-          design reserves — wired up once outputs land in the project folder. */}
-      <div
-        role="button"
-        tabIndex={0}
-        className="tw-flex tw-cursor-pointer tw-items-center tw-gap-1 tw-rounded tw-p-1 tw-text-muted hover:tw-bg-secondary"
-        onClick={() => setOutputsOpen((v) => !v)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") setOutputsOpen((v) => !v);
-        }}
-        aria-expanded={outputsOpen}
-      >
-        {outputsOpen ? (
-          <ChevronDown className="tw-size-3.5" aria-hidden="true" />
-        ) : (
-          <ChevronRight className="tw-size-3.5" aria-hidden="true" />
-        )}
-        <span className="tw-text-ui-small tw-font-medium">Outputs</span>
-        <span className="tw-text-ui-smaller tw-text-faint">(0)</span>
-      </div>
-      {outputsOpen && (
-        <div className="tw-py-1 tw-pl-6 tw-text-ui-smaller tw-text-faint">No outputs yet</div>
-      )}
-    </div>
+    <ProjectFilesList
+      files={files}
+      onOpenInstructions={handleOpenProjectInstructions}
+      onOpenFile={handleOpenFile}
+      onReveal={() => {
+        onClose();
+        revealProjectFolder(app, project);
+      }}
+    />
   );
 }
 

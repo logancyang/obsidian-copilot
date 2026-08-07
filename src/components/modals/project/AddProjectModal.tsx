@@ -18,9 +18,10 @@ import { SystemPromptSyntaxInstruction } from "@/components/SystemPromptSyntaxIn
 import { DEFAULT_MODEL_SETTING } from "@/constants";
 import { ProjectContextBadgeList } from "@/components/project/ProjectContextBadgeList";
 import { ProjectContextSourceEditor } from "@/components/project/ProjectContextSourceEditor";
-import { writeAgentsFile } from "@/instructions/agentsFile";
-import { InstructionsTextarea } from "@/instructions/InstructionsTextarea";
+import { readAgentsFile, writeAgentsFile } from "@/instructions/agentsFile";
+import { ProjectInstructionsField } from "@/instructions/ProjectInstructionsField";
 import { useAgentsFileDraft } from "@/instructions/useAgentsFileDraft";
+import { moveProjectPromptToAgentsFile } from "@/projects/moveProjectPrompt";
 import { getProjectAnchorFromConfigPath } from "@/projects/projectPaths";
 import { getCachedProjectRecordById } from "@/projects/state";
 import { err2String, randomUUID } from "@/utils";
@@ -30,10 +31,10 @@ import type CopilotPlugin from "@/main";
 import { createPluginRoot } from "@/utils/react/createPluginRoot";
 import { useChatBackendModelOptions } from "@/hooks/useChatBackendModelOptions";
 import { App, Modal, Notice } from "obsidian";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Root } from "react-dom/client";
 
-interface AddProjectModalContentProps {
+export interface AddProjectModalContentProps {
   initialProject?: ProjectConfig;
   onSave: (project: ProjectConfig) => Promise<void>;
   onCancel: () => void;
@@ -61,18 +62,10 @@ interface AddProjectModalContentProps {
 }
 
 /**
- * Folder holding a saved project's AGENTS.md, or null for a project that has none yet.
- *
- * Anchored on the record's own config path rather than the live projects root: a Copilot
- * folder change activates before the project cache reloads, and during that window the live
- * root names a different tree than the one this project actually sits in.
+ * The dialog body. Exported apart from the {@link AddProjectModal} host so the form can be
+ * driven without an Obsidian `Modal` around it.
  */
-function projectInstructionsFolder(projectId: string | undefined): string | null {
-  const record = projectId ? getCachedProjectRecordById(projectId) : undefined;
-  return record ? getProjectAnchorFromConfigPath(record.filePath).projectFolderPath : null;
-}
-
-function AddProjectModalContent({
+export function AddProjectModalContent({
   initialProject,
   onSave,
   onCancel,
@@ -125,11 +118,35 @@ function AddProjectModalContent({
 
   // Agent projects keep their instructions in the project's AGENTS.md, so this field edits
   // that file instead of `formData.systemPrompt`. CAG keeps the legacy field below.
-  const instructionsFolder = useMemo(
-    () => (agentMode ? projectInstructionsFolder(initialProject?.id) : null),
+  const record = useMemo(
+    () =>
+      agentMode && initialProject?.id ? getCachedProjectRecordById(initialProject.id) : undefined,
     [agentMode, initialProject?.id]
   );
-  const [instructions, setInstructions] = useAgentsFileDraft(app, instructionsFolder);
+  // Anchored on the record's own config path rather than the live projects root: a Copilot
+  // folder change activates before the project cache reloads, and during that window the live
+  // root names a different tree than the one this project actually sits in.
+  const instructionsFolder = useMemo(
+    () => (record ? getProjectAnchorFromConfigPath(record.filePath).projectFolderPath : null),
+    [record]
+  );
+  // A project that has not started a session since the file layout changed still keeps its
+  // instructions in `project.md`, where this editor cannot see them. Run the same one-shot
+  // move session start runs, so the field shows the text it is about to own instead of
+  // rendering blank over instructions that are still live. Only then is the folder readable.
+  const [migratedFolder, setMigratedFolder] = useState<string | null>(null);
+  useEffect(() => {
+    if (!record || instructionsFolder === null) return;
+    let cancelled = false;
+    // Never rejects; a vault that refuses the move leaves the legacy text in place.
+    void moveProjectPromptToAgentsFile(app, record).then(() => {
+      if (!cancelled) setMigratedFolder(instructionsFolder);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [app, record, instructionsFolder]);
+  const [instructions, setInstructions] = useAgentsFileDraft(app, migratedFolder);
 
   // URL items derived from formData for UrlTagInput
   const urlItems = useMemo(
@@ -307,16 +324,34 @@ function AddProjectModalContent({
       return;
     }
 
+    // Null unless this is an Agent edit whose instruction file the user could have changed.
+    const instructionEdit =
+      instructionsFolder !== null && instructions !== null
+        ? { folder: instructionsFolder, text: instructions }
+        : null;
+
     try {
       setIsSubmitting(true);
       // Written before the save, not after: renaming a project renames its folder, and
       // Obsidian carries the folder's contents along, so a file placed here ends up in the
       // right place either way. Writing afterwards would have to guess the new folder from a
       // project cache that has not refreshed yet.
-      if (instructionsFolder !== null && instructions !== null) {
-        await writeAgentsFile(app, instructionsFolder, instructions);
+      const previous = instructionEdit ? await readAgentsFile(app, instructionEdit.folder) : null;
+      if (instructionEdit) {
+        await writeAgentsFile(app, instructionEdit.folder, instructionEdit.text);
       }
-      await onSave(saveData);
+      try {
+        await onSave(saveData);
+      } catch (e) {
+        // The project update is what makes this dialog's Save real; a rejected one (duplicate
+        // name, folder collision, frontmatter write failure) leaves the modal open and
+        // cancelable, so the instruction file must not keep an edit the user can still back
+        // out of. Put the old body back before surfacing the failure.
+        if (instructionEdit && previous !== null) {
+          await writeAgentsFile(app, instructionEdit.folder, previous);
+        }
+        throw e;
+      }
     } catch (e) {
       new Notice(err2String(e));
       setTouched((prev) => ({
@@ -391,16 +426,7 @@ function AddProjectModalContent({
               )}
 
               {instructions !== null && (
-                <FormField
-                  label="Project instructions"
-                  description="Your custom instructions for the agent to follow for every interaction in this project. They take precedence over your vault instructions wherever the two conflict. Saved to AGENTS.md in the project folder, which you can also edit as a note."
-                >
-                  <InstructionsTextarea
-                    label="Project instructions"
-                    value={instructions}
-                    onChange={setInstructions}
-                  />
-                </FormField>
+                <ProjectInstructionsField value={instructions} onChange={setInstructions} />
               )}
             </div>
           </div>

@@ -50,9 +50,9 @@ const GENERATED_MIRROR_HEADER =
  */
 export async function agentsFileIsUninitialized(app: App, folderPath: string): Promise<boolean> {
   const agentsPath = childPath(folderPath, AGENTS_FILE_NAME);
-  const file = await resolveFileByPath(app, agentsPath);
+  const file = await resolveInstructionFile(app, agentsPath);
   if (!file) return true;
-  return GENERATED_MIRROR_HEADER.test(await readFileContent(app, agentsPath, file));
+  return GENERATED_MIRROR_HEADER.test(await readFileContent(app, file));
 }
 
 /**
@@ -68,9 +68,9 @@ export async function agentsFileIsUninitialized(app: App, folderPath: string): P
  */
 export async function readAgentsFile(app: App, folderPath: string): Promise<string> {
   const agentsPath = childPath(folderPath, AGENTS_FILE_NAME);
-  const file = await resolveFileByPath(app, agentsPath);
+  const file = await resolveInstructionFile(app, agentsPath);
   if (!file) return "";
-  const content = await readFileContent(app, agentsPath, file);
+  const content = await readFileContent(app, file);
   return content.replace(GENERATED_MIRROR_HEADER, "$1");
 }
 
@@ -92,10 +92,10 @@ export async function writeAgentsFile(
   content: string
 ): Promise<void> {
   const agentsPath = childPath(folderPath, AGENTS_FILE_NAME);
-  if (!(await resolveFileByPath(app, agentsPath)) && !content.trim()) return;
+  if (!(await resolveInstructionFile(app, agentsPath)) && !content.trim()) return;
   const file = await ensureAgentsFile(app, folderPath, content);
-  if ((await readFileContent(app, agentsPath, file)) === content) return;
-  await writeFileContent(app, agentsPath, file, content);
+  if ((await readFileContent(app, file)) === content) return;
+  await writeFileContent(app, file, content);
 }
 
 /**
@@ -117,14 +117,13 @@ export async function removeGeneratedInstructionFiles(app: App, folderPath: stri
   ];
   for (const { name, isGenerated } of targets) {
     try {
-      const filePath = childPath(folderPath, name);
-      const file = await resolveFileByPath(app, filePath);
+      const file = await resolveInstructionFile(app, childPath(folderPath, name));
       if (!file) continue;
-      if (!isGenerated(await readFileContent(app, filePath, file))) continue;
-      if (isInVaultCache(app, filePath)) {
+      if (!isGenerated(await readFileContent(app, file))) continue;
+      if (isInVaultCache(app, file.path)) {
         await trashFile(app, file);
       } else {
-        await app.vault.adapter.remove(filePath);
+        await app.vault.adapter.remove(file.path);
       }
     } catch (error) {
       logWarn(`[Instructions] Failed to remove generated ${name} in "${folderPath}"`, error);
@@ -149,7 +148,7 @@ export async function ensureAgentsFile(
 ): Promise<TFile> {
   const agentsPath = childPath(folderPath, AGENTS_FILE_NAME);
   const agentsFile = await ensureFile(app, agentsPath, initialContent);
-  await convertLegacyGeneratedFile(app, agentsPath, agentsFile, initialContent);
+  await convertLegacyGeneratedFile(app, agentsFile, initialContent);
   await ensureClaudeReference(app, childPath(folderPath, CLAUDE_FILE_NAME));
   return agentsFile;
 }
@@ -180,7 +179,7 @@ export async function ensureAgentsFileForDiscovery(
 ): Promise<void> {
   try {
     const agentsPath = childPath(folderPath, AGENTS_FILE_NAME);
-    const existing = await resolveFileByPath(app, agentsPath);
+    const existing = await resolveInstructionFile(app, agentsPath);
     if (!existing && !initialContent.trim()) return;
     await ensureAgentsFile(app, folderPath, initialContent);
   } catch (error) {
@@ -206,9 +205,10 @@ export async function openAgentsFile(
   newLeaf: boolean
 ): Promise<void> {
   const file = await ensureAgentsFile(app, folderPath, initialContent);
-  // A file under a dot-folder is never in the vault cache, so `resolveFileByPath` hands back
-  // a synthetic TFile that Obsidian's editor cannot open. Report the real path instead of
-  // opening an empty leaf.
+  // A file under a dot-folder is never in the vault cache, so `resolveInstructionFile` hands
+  // back a synthetic TFile that Obsidian's editor cannot open. Report the real path instead of
+  // opening an empty leaf. A cased-differently note is not this case — the resolver returns the
+  // cached file for those, so they open normally.
   if (!isInVaultCache(app, file.path)) {
     throw new Error(`${file.path} is in a hidden folder Obsidian cannot open. Edit it externally.`);
   }
@@ -220,31 +220,46 @@ function childPath(folderPath: string, fileName: string): string {
 }
 
 /**
- * A file under a dot-folder is never in the vault cache, so these two route through the
- * adapter for those and through the vault for everything else. Reading or writing a cached
- * file via the adapter would bypass Obsidian's own file state and strand open editors.
+ * Resolve one of this module's canonical instruction paths to the file that actually backs it.
+ *
+ * `resolveFileByPath` matches the vault cache exactly and otherwise falls back to a synthetic
+ * adapter file for anything merely present on disk. On a case-insensitive volume a vault
+ * holding `agents.md` takes that fallback for `AGENTS.md`, and every cache check downstream
+ * then treats an ordinary note as an unreachable hidden-folder file: reads and writes bypass
+ * Obsidian's own file state, and Open reports a folder error for a note it could have opened.
+ * Matching the cache case-insensitively first lets the real file win.
  */
-async function readFileContent(app: App, filePath: string, file: TFile): Promise<string> {
-  return isInVaultCache(app, filePath)
-    ? await app.vault.read(file)
-    : await app.vault.adapter.read(filePath);
+async function resolveInstructionFile(app: App, filePath: string): Promise<TFile | null> {
+  const cached = app.vault.getAbstractFileByPath(filePath);
+  if (cached instanceof TFile) return cached;
+  const target = filePath.toLowerCase();
+  const variant = app.vault.getFiles().find((file) => file.path.toLowerCase() === target);
+  return variant ?? (await resolveFileByPath(app, filePath));
 }
 
-async function writeFileContent(
-  app: App,
-  filePath: string,
-  file: TFile,
-  content: string
-): Promise<void> {
-  if (isInVaultCache(app, filePath)) {
+/**
+ * A file under a dot-folder is never in the vault cache, so these two route through the
+ * adapter for those and through the vault for everything else. Reading or writing a cached
+ * file via the adapter would bypass Obsidian's own file state and strand open editors. Both
+ * key on the resolved file's own path, which is the casing on disk rather than the canonical
+ * spelling the caller asked for.
+ */
+async function readFileContent(app: App, file: TFile): Promise<string> {
+  return isInVaultCache(app, file.path)
+    ? await app.vault.read(file)
+    : await app.vault.adapter.read(file.path);
+}
+
+async function writeFileContent(app: App, file: TFile, content: string): Promise<void> {
+  if (isInVaultCache(app, file.path)) {
     await app.vault.modify(file, content);
   } else {
-    await app.vault.adapter.write(filePath, content);
+    await app.vault.adapter.write(file.path, content);
   }
 }
 
 async function ensureFile(app: App, filePath: string, content: string): Promise<TFile> {
-  const existing = await resolveFileByPath(app, filePath);
+  const existing = await resolveInstructionFile(app, filePath);
   if (existing) return existing;
 
   const folderPath = normalizePath(filePath.split("/").slice(0, -1).join("/"));
@@ -254,37 +269,31 @@ async function ensureFile(app: App, filePath: string, content: string): Promise<
   }
 
   await app.vault.adapter.write(filePath, content);
-  const created = await resolveFileByPath(app, filePath);
+  const created = await resolveInstructionFile(app, filePath);
   if (!created) throw new Error(`Failed to create ${filePath}`);
   return created;
 }
 
 async function ensureClaudeReference(app: App, claudePath: string): Promise<void> {
-  const file = await resolveFileByPath(app, claudePath);
+  const file = await resolveInstructionFile(app, claudePath);
   if (!file) {
     await ensureFile(app, claudePath, `${CLAUDE_AGENTS_REFERENCE}\n`);
     return;
   }
 
-  const content = await readFileContent(app, claudePath, file);
+  const content = await readFileContent(app, file);
   if (CLAUDE_REFERENCE_PATTERN.test(content)) return;
 
   const separator = content.length === 0 ? "" : content.endsWith("\n") ? "\n" : "\n\n";
-  await writeFileContent(
-    app,
-    claudePath,
-    file,
-    `${content}${separator}${CLAUDE_AGENTS_REFERENCE}\n`
-  );
+  await writeFileContent(app, file, `${content}${separator}${CLAUDE_AGENTS_REFERENCE}\n`);
 }
 
 async function convertLegacyGeneratedFile(
   app: App,
-  agentsPath: string,
   file: TFile,
   initialContent: string
 ): Promise<void> {
-  const content = await readFileContent(app, agentsPath, file);
+  const content = await readFileContent(app, file);
   const match = content.match(GENERATED_MIRROR_HEADER);
   if (!match) return;
 
@@ -294,5 +303,5 @@ async function convertLegacyGeneratedFile(
   const nextContent = initialContent
     ? `${match[1]}${initialContent}`
     : `${match[1]}${content.slice(match[0].length)}`;
-  await writeFileContent(app, agentsPath, file, nextContent);
+  await writeFileContent(app, file, nextContent);
 }
