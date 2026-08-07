@@ -164,7 +164,12 @@ export function SettingItem(props: SettingItemProps) {
               className={cn(
                 "tw-w-full tw-appearance-none",
                 "tw-flex tw-h-9 tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-dropdown tw-px-3 tw-py-1 tw-pr-8",
-                "tw-text-sm !tw-shadow tw-transition-colors",
+                // `tw-text-left` overrides Obsidian's macOS settings default
+                // (`--dropdown-text-align: end` applied to bare `select`), which
+                // strands the label against the right edge of our fixed-width
+                // control. A plain class wins on specificity — neither rule is
+                // `!important`, and a class outranks an element selector.
+                "tw-text-left tw-text-sm !tw-shadow tw-transition-colors",
                 "focus:tw-outline-none focus:tw-ring-1 focus:tw-ring-ring",
                 "disabled:tw-cursor-not-allowed disabled:tw-opacity-50",
                 "hover:tw-bg-interactive-hover hover:tw-text-normal"

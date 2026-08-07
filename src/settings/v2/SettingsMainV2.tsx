@@ -8,11 +8,12 @@ import CopilotPlugin from "@/main";
 import { ByokPanel, ModelManagementProvider } from "@/modelManagement";
 import { resetSettings } from "@/settings/model";
 import { CommandSettings } from "@/settings/v2/components/CommandSettings";
-import { Bot, Cog, Command, Cpu, ShieldCheck, Sigma, Sparkle, Wrench } from "lucide-react";
+import { Cog, Command, Cpu, ShieldCheck, Sigma, Sparkle, Wrench } from "lucide-react";
 import React from "react";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { AdvancedSettings } from "./components/AdvancedSettings";
 import { BasicSettings } from "./components/BasicSettings";
+import { DesktopOnlySettingsPanel } from "./components/DesktopOnlySettingsPanel";
 import { MiyoSettings } from "./components/MiyoSettings";
 import { SelfHostSettings } from "./components/SelfHostSettings";
 
@@ -32,42 +33,20 @@ import { SelfHostSettings } from "./components/SelfHostSettings";
 // The relabeled "Keyword (built-in) vs Miyo (semantic search)" engine toggle
 // and honest embedding-caveat copy land in a follow-up PR, not here. If a review
 // flags the missing QA/search UI again, point them at this note.
-const TAB_IDS = [
-  "basic",
-  "byok",
-  "agent",
-  "miyo",
-  "selfhost",
-  "command",
-  "skills",
-  "advanced",
-] as const;
+const TAB_IDS = ["basic", "byok", "miyo", "skills", "command", "selfhost", "advanced"] as const;
 type TabId = (typeof TAB_IDS)[number];
 
-const LazyAgentSettings = React.lazy(() =>
-  import("./components/AgentSettings").then((module) => ({ default: module.AgentSettings }))
-);
 const LazySkillsSettings = React.lazy(() =>
   import("@/agentMode").then((module) => ({ default: module.SkillsSettings }))
 );
 
-const DesktopOnlySettingsPanel: React.FC = () => (
-  <section className="tw-rounded-md tw-border tw-border-solid tw-border-border tw-p-4 tw-text-sm tw-text-muted">
-    Agent settings are available on desktop.
-  </section>
-);
-
-const AgentSettingsPanel: React.FC = () => {
-  if (!isDesktopRuntime()) return <DesktopOnlySettingsPanel />;
-  return (
-    <React.Suspense fallback={null}>
-      <LazyAgentSettings />
-    </React.Suspense>
-  );
-};
-
 const SkillsSettingsPanel: React.FC = () => {
-  if (!isDesktopRuntime()) return <DesktopOnlySettingsPanel />;
+  // Gate before the dynamic import: on mobile the `@/agentMode` barrel pulls in
+  // Node-only modules that throw while being evaluated, so the desktop check
+  // has to happen before the import is ever requested.
+  if (!isDesktopRuntime()) {
+    return <DesktopOnlySettingsPanel message="Skills are available on desktop." />;
+  }
   return (
     <React.Suspense fallback={null}>
       <LazySkillsSettings />
@@ -79,7 +58,6 @@ const SkillsSettingsPanel: React.FC = () => {
 const icons: Record<TabId, JSX.Element> = {
   basic: <Cog className="tw-size-5" />,
   byok: <Cpu className="tw-size-5" />,
-  agent: <Bot className="tw-size-5" />,
   miyo: <Sigma className="tw-size-5" />,
   selfhost: <ShieldCheck className="tw-size-5" />,
   command: <Command className="tw-size-5" />,
@@ -91,7 +69,6 @@ const icons: Record<TabId, JSX.Element> = {
 const components: Record<TabId, React.FC> = {
   basic: () => <BasicSettings />,
   byok: () => <ByokPanel />,
-  agent: AgentSettingsPanel,
   miyo: () => <MiyoSettings />,
   selfhost: () => <SelfHostSettings />,
   command: () => <CommandSettings />,
@@ -99,12 +76,11 @@ const components: Record<TabId, React.FC> = {
   advanced: () => <AdvancedSettings />,
 };
 
-// Tab labels — most tabs derive from the id, but "agent" capitalizes to a
-// human-friendly label.
+// Tab labels — most tabs derive from the id, but a few need a display form the
+// id can't produce ("byok" → "BYOK", "selfhost" → "Self-Host").
 const TAB_LABELS: Record<TabId, string> = {
   basic: "Basic",
   byok: "BYOK",
-  agent: "Agents",
   miyo: "Miyo",
   selfhost: "Self-Host",
   command: "Command",
@@ -174,7 +150,11 @@ const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin }) => {
     <PluginProvider plugin={plugin}>
       <ModelManagementProvider api={plugin.modelManagement}>
         <TabProvider>
-          <div>
+          {/* Obsidian 1.13 made the settings window resizable, and the panel has
+              no width of its own — without a cap the rows stretch to whatever
+              the user dragged the window to and every control drifts far from
+              its label. */}
+          <div className="tw-mx-auto tw-max-w-[860px]">
             <div className="tw-mb-4 tw-flex tw-flex-col tw-gap-2">
               {/* Reason: Obsidian's settings modal CSS hides plugin-rendered <h1>
                 elements (display: none) because Obsidian reserves the top-level
