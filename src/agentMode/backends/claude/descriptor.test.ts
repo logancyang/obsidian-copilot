@@ -1,13 +1,15 @@
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type { BackendState, InstallState } from "@/agentMode/session/types";
-import type { CopilotSettings } from "@/settings/model";
+import { resetSettings, type CopilotSettings } from "@/settings/model";
 import { resolveClaudeBinary } from "./claudeBinaryResolver";
 import { claudeCompatibilityStore } from "./claudeCompatibilityStore";
 import {
   ClaudeBackendDescriptor,
   getClaudeInstallState,
   refreshClaudeInstallState,
+  resolveClaudeAutoModePermission,
   subscribeClaudeInstallState,
+  updateClaudeFields,
 } from "./descriptor";
 
 jest.mock("./claudeBinaryResolver", () => ({
@@ -177,6 +179,43 @@ describe("claude descriptor", () => {
       });
 
       expect(applyModelWireId).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("resolveClaudeAutoModePermission()", () => {
+    it("falls back to Claude's classifier mode when nothing is persisted", () => {
+      expect(resolveClaudeAutoModePermission({ agentMode: {} } as CopilotSettings)).toBe("auto");
+    });
+
+    it("returns the persisted permission mode", () => {
+      const settings = {
+        agentMode: { backends: { claude: { autoModePermission: "acceptEdits" } } },
+      } as unknown as CopilotSettings;
+
+      expect(resolveClaudeAutoModePermission(settings)).toBe("acceptEdits");
+    });
+  });
+
+  describe("ClaudeBackendDescriptor.getModeMapping()", () => {
+    afterEach(() => {
+      resetSettings();
+    });
+
+    it("points the auto pill at Claude's classifier mode by default", () => {
+      resetSettings();
+
+      expect(ClaudeBackendDescriptor.getModeMapping?.(null, null)).toEqual({
+        kind: "setMode",
+        canonical: { default: "default", plan: "plan", auto: "auto" },
+      });
+    });
+
+    it("points the auto pill at the user's configured permission mode", () => {
+      updateClaudeFields({ autoModePermission: "bypassPermissions" });
+
+      expect(ClaudeBackendDescriptor.getModeMapping?.(null, null)?.canonical.auto).toBe(
+        "bypassPermissions"
+      );
     });
   });
 });

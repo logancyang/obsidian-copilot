@@ -7,6 +7,7 @@ import {
   getSettings,
   subscribeToSettingsChange,
   updateAgentModeBackendFields,
+  type ClaudeAutoModePermission,
   type ClaudeBackendSettings,
   type CopilotSettings,
 } from "@/settings/model";
@@ -47,6 +48,22 @@ const ABSENT_INSTALL_STATE: InstallState = Object.freeze({ kind: "absent" });
 export interface ClaudeDescriptor extends BackendDescriptor {
   auth: BackendAuth;
   getResolvedBinaryPath(settings: CopilotSettings): string | null;
+}
+
+/**
+ * The native permission mode Claude enters when the user picks the canonical
+ * `auto` pill. Copilot's three-mode picker can't express Claude's full
+ * permission vocabulary, so this preference decides how much the pill hands
+ * over. Unconfigured, it is Claude's own classifier-driven `auto`: it approves
+ * routine requests and still escalates the risky ones, the closest match to
+ * what "Auto" promises in the picker.
+ *
+ * @param settings Settings snapshot from which to resolve the persisted Claude permission.
+ */
+export function resolveClaudeAutoModePermission(
+  settings: CopilotSettings
+): ClaudeAutoModePermission {
+  return settings.agentMode?.backends?.claude?.autoModePermission ?? "auto";
 }
 
 export function updateClaudeFields(partial: Partial<ClaudeBackendSettings>): void {
@@ -347,9 +364,10 @@ export const ClaudeBackendDescriptor: ClaudeDescriptor = {
 
   /**
    * Map Copilot's canonical modes onto the SDK's `PermissionMode` strings.
-   * `acceptEdits` / `dontAsk` exist upstream but stay hidden — the picker is
-   * a 3-mode UI (default / plan / auto). The session adapter normalizes
-   * unknown ids to `default`.
+   * The picker is a 3-mode UI (default / plan / auto), so the several native
+   * modes that trade prompts for autonomy collapse onto `auto` — which one
+   * is the user's choice. `dontAsk` stays hidden. The session adapter
+   * normalizes unknown ids to `default`.
    */
   getModeMapping(): ModeMapping {
     return {
@@ -357,7 +375,7 @@ export const ClaudeBackendDescriptor: ClaudeDescriptor = {
       canonical: {
         default: "default",
         plan: "plan",
-        auto: "bypassPermissions",
+        auto: resolveClaudeAutoModePermission(getSettings()),
       },
     };
   },

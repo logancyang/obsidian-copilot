@@ -688,6 +688,30 @@ describe("sanitizeSettings - docProcessorBackend (v6 field)", () => {
 
 describe("model", () => {
   describe("sanitizeSettings()", () => {
+    function sanitizeClaudeSlice(autoModePermission: unknown): CopilotSettings {
+      return sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        agentMode: {
+          enabled: true,
+          byok: {},
+          activeBackend: "claude",
+          backends: { claude: { autoModePermission } },
+        },
+      } as unknown as CopilotSettings);
+    }
+
+    it("keeps a Claude auto permission mode the SDK understands", () => {
+      const sanitized = sanitizeClaudeSlice("acceptEdits");
+
+      expect(sanitized.agentMode.backends.claude?.autoModePermission).toBe("acceptEdits");
+    });
+
+    it("drops an unsupported Claude auto permission mode so the descriptor default applies", () => {
+      const sanitized = sanitizeClaudeSlice("dontAsk");
+
+      expect(sanitized.agentMode.backends.claude?.autoModePermission).toBeUndefined();
+    });
+
     it("defaults to the historical root when empty", () => {
       const out = sanitizeSettings({
         ...DEFAULT_SETTINGS,

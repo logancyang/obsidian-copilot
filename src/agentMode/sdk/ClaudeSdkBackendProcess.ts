@@ -228,15 +228,20 @@ export interface ClaudeSdkBackendProcessOptions {
 }
 
 /**
- * Static mode catalog for the Claude SDK. `acceptEdits` and `dontAsk`
- * are intentionally excluded from the picker.
+ * Static mode catalog for the Claude SDK — the native modes the descriptor is
+ * allowed to project onto Copilot's canonical picker. `acceptEdits`, `auto`,
+ * and `bypassPermissions` are all candidates for the `auto` pill; the
+ * descriptor's mapping picks one, so listing all three here does not widen the
+ * picker. `dontAsk` is intentionally excluded.
  */
 const STATIC_SDK_MODES: RawModeState = {
   currentModeId: "default",
   availableModes: [
     { id: "default", name: "Default" },
     { id: "plan", name: "Plan" },
-    { id: "bypassPermissions", name: "Auto" },
+    { id: "acceptEdits", name: "Accept Edits" },
+    { id: "auto", name: "Auto" },
+    { id: "bypassPermissions", name: "Bypass Permissions" },
   ],
 };
 
@@ -1025,6 +1030,7 @@ function canonicalModeToSdk(modeId: string): PermissionMode | null {
   switch (modeId) {
     case "default":
     case "acceptEdits":
+    case "auto":
     case "bypassPermissions":
     case "plan":
       return modeId;
