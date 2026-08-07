@@ -229,7 +229,7 @@ const RecentChatRow = memo(function RecentChatRow({
       }}
     >
       <ChatIconTile Icon={Icon} needsAttention={hasAttention} />
-      <RecentChatTitle title={item.title} projectName={projectName} />
+      <RecentChatTitle title={item.title} />
 
       {/* Relative time by default; a backgrounded running session shows an accent
           spinner in its place. The action cluster replaces either on hover or
@@ -237,92 +237,95 @@ const RecentChatRow = memo(function RecentChatRow({
           `group-focus-within` path keeps the actions reachable for keyboard
           users (focusing the row reveals them, so Tab can move into them) —
           on hover alone they'd stay `display:none` and out of the tab order. */}
-      {isRunning ? (
-        <LoaderCircle
-          className={cn(
-            "tw-size-3.5 tw-shrink-0 tw-animate-spin tw-text-accent",
-            "group-focus-within:tw-hidden group-hover:tw-hidden"
-          )}
-          aria-label="Running"
-        />
-      ) : (
-        <span
-          className="tw-shrink-0 tw-whitespace-nowrap tw-text-xs tw-text-muted group-focus-within:tw-hidden group-hover:tw-hidden"
-          title={new Date(item.lastAccessedAt).toLocaleString()}
-        >
-          {formatCompactRelativeTime(item.lastAccessedAt.getTime())}
-        </span>
-      )}
-      <div className="tw-hidden tw-shrink-0 tw-items-center tw-gap-1.5 group-focus-within:tw-flex group-hover:tw-flex">
-        {confirmingDelete ? (
-          <>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={(e) => {
-                e.stopPropagation();
-                onConfirmDelete(item.id);
-              }}
-              className="tw-size-5 tw-p-0 tw-text-error hover:tw-text-error"
-              title="Confirm delete"
-            >
-              <Check className="tw-size-3" />
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={(e) => {
-                e.stopPropagation();
-                onCancelDelete();
-              }}
-              className="tw-size-5 tw-p-0"
-              title="Cancel"
-            >
-              <X className="tw-size-3" />
-            </Button>
-          </>
+      <div className="tw-flex tw-shrink-0 tw-items-center tw-gap-1.5">
+        {projectName && <RecentChatProjectBadge name={projectName} />}
+        {isRunning ? (
+          <LoaderCircle
+            className={cn(
+              "tw-size-3.5 tw-shrink-0 tw-animate-spin tw-text-accent",
+              "group-focus-within:tw-hidden group-hover:tw-hidden"
+            )}
+            aria-label="Running"
+          />
         ) : (
-          <>
-            {canOpenSourceFile && (
+          <span
+            className="tw-shrink-0 tw-whitespace-nowrap tw-text-xs tw-text-muted group-focus-within:tw-hidden group-hover:tw-hidden"
+            title={new Date(item.lastAccessedAt).toLocaleString()}
+          >
+            {formatCompactRelativeTime(item.lastAccessedAt.getTime())}
+          </span>
+        )}
+        <div className="tw-hidden tw-shrink-0 tw-items-center tw-gap-1.5 group-focus-within:tw-flex group-hover:tw-flex">
+          {confirmingDelete ? (
+            <>
               <Button
                 size="sm"
                 variant="ghost"
                 onClick={(e) => {
                   e.stopPropagation();
-                  onOpenSourceFile(item.id);
+                  onConfirmDelete(item.id);
+                }}
+                className="tw-size-5 tw-p-0 tw-text-error hover:tw-text-error"
+                title="Confirm delete"
+              >
+                <Check className="tw-size-3" />
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCancelDelete();
                 }}
                 className="tw-size-5 tw-p-0"
-                title="Open source note"
+                title="Cancel"
               >
-                <ArrowUpRight className="tw-size-4" />
+                <X className="tw-size-3" />
               </Button>
-            )}
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={(e) => {
-                e.stopPropagation();
-                onStartEdit(item.id, item.title);
-              }}
-              className="tw-size-5 tw-p-0"
-              title="Rename"
-            >
-              <Edit2 className="tw-size-3" />
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={(e) => {
-                e.stopPropagation();
-                onStartDelete(item.id);
-              }}
-              className="tw-size-5 tw-p-0 tw-text-error hover:tw-text-error"
-              title="Delete"
-            >
-              <Trash2 className="tw-size-3" />
-            </Button>
-          </>
-        )}
+            </>
+          ) : (
+            <>
+              {canOpenSourceFile && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpenSourceFile(item.id);
+                  }}
+                  className="tw-size-5 tw-p-0"
+                  title="Open source note"
+                >
+                  <ArrowUpRight className="tw-size-4" />
+                </Button>
+              )}
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onStartEdit(item.id, item.title);
+                }}
+                className="tw-size-5 tw-p-0"
+                title="Rename"
+              >
+                <Edit2 className="tw-size-3" />
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onStartDelete(item.id);
+                }}
+                className="tw-size-5 tw-p-0 tw-text-error hover:tw-text-error"
+                title="Delete"
+              >
+                <Trash2 className="tw-size-3" />
+              </Button>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );

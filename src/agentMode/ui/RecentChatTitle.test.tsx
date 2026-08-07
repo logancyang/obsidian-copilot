@@ -16,21 +16,15 @@ describe("RecentChatTitle", () => {
   });
 
   describe("RecentChatTitle()", () => {
-    it("uses an explicit ellipsis contract while preserving the full title", () => {
+    it("fills the space before trailing metadata while preserving its full value", () => {
       const title = "Do a research on Mobbin that explains how people express their app value";
-      render(<RecentChatTitle title={title} projectName="Research" />);
+      render(<RecentChatTitle title={title} />);
 
       const titleElement = screen.getByText(title);
       expect(titleElement.classList.contains("tw-block")).toBe(true);
+      expect(titleElement.classList.contains("tw-flex-1")).toBe(true);
       expect(titleElement.classList.contains("tw-truncate")).toBe(true);
       expect(titleElement.getAttribute("title")).toBe(title);
-      expect(screen.getByLabelText("Project: Research")).toBeTruthy();
-    });
-
-    it("omits the project badge when no project name is available", () => {
-      render(<RecentChatTitle title="Global chat" />);
-
-      expect(screen.queryByLabelText(/^Project:/)).toBeNull();
     });
   });
 });

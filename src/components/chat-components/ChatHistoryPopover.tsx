@@ -461,15 +461,14 @@ function ChatHistoryItem({
         iconClassName="tw-size-3 tw-text-muted"
       />
 
-      <div className="tw-flex tw-min-w-0 tw-flex-1 tw-items-center tw-gap-1.5">
-        <span
-          className="tw-block tw-min-w-0 tw-shrink tw-truncate tw-text-sm tw-font-medium tw-text-normal"
-          title={chat.title}
-        >
-          {chat.title}
-        </span>
-        {getBadge?.(chat)}
-      </div>
+      <span
+        className="tw-block tw-min-w-0 tw-flex-1 tw-truncate tw-text-sm tw-font-medium tw-text-normal"
+        title={chat.title}
+      >
+        {chat.title}
+      </span>
+
+      {getBadge?.(chat)}
 
       <div
         className={cn(

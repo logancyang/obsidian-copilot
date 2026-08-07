@@ -114,8 +114,12 @@ describe("GlobalRecentChatsSection", () => {
       });
 
       const badge = screen.getByLabelText("Project: Product research");
+      const timestamp = screen.getByTitle(new Date(item.lastAccessedAt).toLocaleString());
+      const title = screen.getByText(item.title);
       expect(badge.textContent).toBe("Product research");
       expect(badge.getAttribute("title")).toBe("Product research");
+      expect(badge.parentElement).toBe(timestamp.parentElement);
+      expect(title.nextElementSibling).toBe(badge.parentElement);
     });
 
     it("omits project badges for global chats, unknown projects, and project landings", () => {
