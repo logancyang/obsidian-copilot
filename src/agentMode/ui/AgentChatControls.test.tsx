@@ -23,10 +23,10 @@ const mockNavigateToPlusPage = navigateToPlusPage as jest.MockedFunction<typeof 
 
 /** The control-bar buttons need a Radix `TooltipProvider` ancestor, which the
  * chat-view root supplies in the app. */
-function renderControls() {
+function renderControls({ showMultiAgentUpsell = true } = {}) {
   return render(
     <TooltipProvider>
-      <AgentChatControls onNewChat={() => {}} />
+      <AgentChatControls onNewChat={() => {}} showMultiAgentUpsell={showMultiAgentUpsell} />
     </TooltipProvider>
   );
 }
@@ -34,30 +34,42 @@ function renderControls() {
 const UPSELL_COPY = "Mention multiple agents with @ (needs Plus tier or above)";
 
 describe("AgentChatControls", () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
+  describe("AgentChatControls()", () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
 
-  it("offers the multi-agent upsell when the user is not entitled", () => {
-    mockUseCanUseMultiAgent.mockReturnValue(false);
-    renderControls();
+    it("offers the multi-agent upsell when the user is not entitled", () => {
+      mockUseCanUseMultiAgent.mockReturnValue(false);
+      renderControls();
 
-    expect(screen.queryByText(UPSELL_COPY)).not.toBeNull();
-  });
+      expect(screen.queryByText(UPSELL_COPY)).not.toBeNull();
+    });
 
-  it("leaves the left slot empty when the user is already entitled", () => {
-    mockUseCanUseMultiAgent.mockReturnValue(true);
-    renderControls();
+    it("leaves the left slot empty when the user is already entitled", () => {
+      mockUseCanUseMultiAgent.mockReturnValue(true);
+      renderControls();
 
-    expect(screen.queryByText(UPSELL_COPY)).toBeNull();
-  });
+      expect(screen.queryByText(UPSELL_COPY)).toBeNull();
+    });
 
-  it("opens the multi-agent Plus destination when the upsell is clicked", () => {
-    mockUseCanUseMultiAgent.mockReturnValue(false);
-    renderControls();
+    // The pre-conversation mounts (cold-start agent selection, not-ready
+    // fallback) render this bar with no props, where an upsell would pitch a
+    // second agent to a user without a working first one.
+    it("withholds the upsell from a caller that does not opt in, even when unentitled", () => {
+      mockUseCanUseMultiAgent.mockReturnValue(false);
+      renderControls({ showMultiAgentUpsell: false });
 
-    fireEvent.click(screen.getByText(UPSELL_COPY));
+      expect(screen.queryByText(UPSELL_COPY)).toBeNull();
+    });
 
-    expect(mockNavigateToPlusPage).toHaveBeenCalledWith(PLUS_UTM_MEDIUMS.MULTI_AGENT);
+    it("opens the multi-agent Plus destination when the upsell is clicked", () => {
+      mockUseCanUseMultiAgent.mockReturnValue(false);
+      renderControls();
+
+      fireEvent.click(screen.getByText(UPSELL_COPY));
+
+      expect(mockNavigateToPlusPage).toHaveBeenCalledWith(PLUS_UTM_MEDIUMS.MULTI_AGENT);
+    });
   });
 });

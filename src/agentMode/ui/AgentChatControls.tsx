@@ -38,6 +38,14 @@ interface AgentChatControlsProps {
    * reports usage. Omitted in the not-ready state, so nothing renders there.
    */
   usageMeter?: React.ReactNode;
+  /**
+   * Opt into the multi-agent upsell in the left slot. Opt-in, not automatic:
+   * the pre-conversation mounts (cold-start agent selection, the not-ready
+   * fallback) render this bar too, and pitching multi-agent there would sell a
+   * second agent to someone who has no working first one. Only the conversation
+   * mount sets it, and it still defers to the entitlement check.
+   */
+  showMultiAgentUpsell?: boolean;
 }
 
 /**
@@ -46,8 +54,9 @@ interface AgentChatControlsProps {
  * Save Chat button (when autosave is off), and the chat history popover.
  * Intentionally omits the model picker, project picker, and settings popover
  * — Agent Mode owns its own model/conversation state via ACP. The left side
- * doubles as the multi-agent upsell slot for free users (empty otherwise),
- * rather than adding a separate row above the composer.
+ * doubles as the multi-agent upsell slot for unentitled users whose caller
+ * opts in (empty otherwise), rather than adding a separate row above the
+ * composer.
  */
 export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
   onNewChat,
@@ -59,6 +68,7 @@ export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
   onDeleteChat,
   onOpenSourceFile,
   usageMeter,
+  showMultiAgentUpsell = false,
 }) => {
   const settings = useSettingsValue();
   const canUseMultiAgent = useCanUseMultiAgent();
@@ -69,7 +79,7 @@ export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
   return (
     <div className="tw-flex tw-w-full tw-items-center tw-justify-between tw-p-1">
       <div className="tw-ml-1 tw-flex tw-min-w-0 tw-flex-1 tw-items-center tw-gap-1">
-        {!canUseMultiAgent && (
+        {showMultiAgentUpsell && !canUseMultiAgent && (
           <Button
             variant="ghost2"
             size="fit"
