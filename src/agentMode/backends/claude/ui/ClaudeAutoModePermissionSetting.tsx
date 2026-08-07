@@ -21,7 +21,7 @@ export const ClaudeAutoModePermissionSetting: React.FC<ClaudeAutoModePermissionS
   <SettingItem
     type="select"
     title="Auto mode permissions"
-    description="What the chat's Auto mode hands over. Auto lets Claude judge each request and still ask about risky ones, Accept edits auto-approves file edits only, and Bypass permissions skips every check."
+    description="Auto lets Claude judge each request and still ask about risky ones, Accept edits auto-approves file edits only, and Bypass permissions skips every check."
     value={value}
     options={AUTO_MODE_OPTIONS}
     onChange={(next) => onChange(next as ClaudeAutoModePermission)}
