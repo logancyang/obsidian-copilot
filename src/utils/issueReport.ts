@@ -399,6 +399,27 @@ export async function zipReportBundle(
   // and `writeFile` would spend the whole synchronous pack on a bundle already
   // known to be unusable — and leave a new zip on disk while the UI says there
   // is nothing to upload.
+  //
+  // DESIGN NOTE — report.md attachment list may name a file the rebuilt zip omits
+  // (logancyang/obsidian-copilot-preview#279). When the user deletes an attachment
+  // from the staging folder and clicks Rebuild, the above loop demotes it to
+  // `skipped` in the returned manifest, but `entries[report.md]` is still the
+  // original markdown listing that file. So the public issue can say an
+  // attachment was included when it was omitted. Severity: what leaks is the
+  // filename in a list, not the file content — if the user deleted
+  // screenshot.png to keep its content private, that goal IS achieved.
+  // The obvious fix (regenerate report.md from the final manifest)
+  // has a real cost: the flow explicitly invites the user to edit the staging
+  // folder ("Edited the files? Rebuild zip repacks them"), and report.md is one
+  // of the files they may have edited — including to redact their own prose.
+  // Silently regenerating it would discard the user's sanitization, which is
+  // strictly worse than a stale filename. This is the edit-the-folder contract's
+  // inherent tradeoff: you can promise "I use what you edited" (list can lag) or
+  // "the list is always accurate" (edits get clobbered), not both. Shipping with
+  // the first promise. Follow-up can add UI that detects the discrepancy and lets
+  // the user choose (regenerate vs keep edits), or drop the attachment list from
+  // report.md entirely (the zip is the source of truth anyway).
+  // If a future review flags this, point them at this note.
   const issueDraft = draftFromPackedNote(entries[REPORT_NOTE_NAME]);
   const manualIssueUrl = buildIssueUrl(
     issueDraft.title,
