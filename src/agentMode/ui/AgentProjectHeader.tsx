@@ -1,13 +1,11 @@
-import { ProjectIconTile } from "@/agentMode/ui/ProjectIconTile";
 import { TruncatedText } from "@/components/TruncatedText";
 import { Button } from "@/components/ui/button";
+import { ProjectFolderIcon } from "@/components/ui/ProjectFolderIcon";
 import { cn } from "@/lib/utils";
 import { ChevronLeft } from "lucide-react";
 import React, { memo } from "react";
 
 interface AgentProjectHeaderProps {
-  /** Stable project id — drives the identity tile's color (same hue as the Projects tab). */
-  projectId: string;
   /** Live project name (read from `useProjects` by the parent so renames reflect). */
   projectName: string;
   /** Leave the project workspace back to the global scope. */
@@ -34,7 +32,6 @@ interface AgentProjectHeaderProps {
  */
 export const AgentProjectHeader = memo(
   ({
-    projectId,
     projectName,
     onExit,
     menu,
@@ -59,7 +56,7 @@ export const AgentProjectHeader = memo(
         </span>
       ) : (
         <>
-          <ProjectIconTile id={projectId} />
+          <ProjectFolderIcon />
           <TruncatedText
             className="tw-min-w-0 tw-flex-1 tw-text-ui-small tw-font-medium tw-text-normal"
             tooltipContent={projectName}

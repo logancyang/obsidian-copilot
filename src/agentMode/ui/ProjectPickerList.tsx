@@ -5,8 +5,8 @@ import {
   INLINE_LIMIT,
 } from "@/agentMode/ui/AgentHomeSection";
 import { AgentProjectRowActions } from "@/agentMode/ui/AgentProjectRowActions";
-import { ProjectIconTile } from "@/agentMode/ui/ProjectIconTile";
 import { ProjectConfig } from "@/aiParams";
+import { ProjectFolderIcon } from "@/components/ui/ProjectFolderIcon";
 import { useRecentUsageManagerRevision } from "@/hooks/useRecentUsageManagerRevision";
 import { cn } from "@/lib/utils";
 import { filterProjects } from "@/utils/projectUtils";
@@ -103,7 +103,7 @@ const ProjectRow = memo(({ project, timeMs, onSelect, app, onDeleted }: ProjectR
     label={project.name}
     timeMs={timeMs}
     onClick={() => onSelect(project)}
-    leading={<ProjectIconTile id={project.id} />}
+    icon={ProjectFolderIcon}
     trailing={<AgentProjectRowActions app={app} project={project} onDeleted={onDeleted} />}
   />
 ));

@@ -48,9 +48,9 @@ interface AgentHomeCreateRowProps {
 
 /**
  * Leading "create" action shared by the section bodies (New project / New chat).
- * An accent tile + accent label, shaped like the colored item tiles below so
- * both panels open with a same-height first row (keeps the tabbed shelf from
- * jumping when you switch between Projects and Recent Chats).
+ * An accent tile + accent label with the same leading-slot dimensions as item
+ * icons below, so both panels open with a same-height first row (keeps the
+ * tabbed shelf from jumping when you switch between Projects and Recent Chats).
  */
 export const AgentHomeCreateRow = memo(function AgentHomeCreateRow({
   label,
@@ -90,8 +90,8 @@ interface AgentHomeListRowProps {
   icon?: React.ComponentType<{ className?: string }>;
   /**
    * Custom leading element, rendered in place of `icon` when set. Lets a row
-   * supply a richer marker than a single monochrome glyph — e.g. the project
-   * tile (tinted square + colored folder). Takes precedence over `icon`.
+   * supply a richer marker than a single monochrome glyph. Takes precedence
+   * over `icon`.
    */
   leading?: React.ReactNode;
   /**
@@ -111,10 +111,10 @@ interface AgentHomeListRowProps {
 
 /**
  * Generic clickable list row: optional leading icon/element + truncated label +
- * relative time. The leading slot is filled by `leading` (a rich marker like the
- * project tile) or `icon` (a single glyph, e.g. a chat's backend brand). A row
- * with neither can `indent` so its text still aligns under siblings that do
- * (`tw-pl-6` ≈ icon width + gap).
+ * relative time. The leading slot is filled by `leading` (a custom marker) or
+ * `icon` (a single glyph, e.g. a chat's backend brand). A row with neither can
+ * `indent` so its text still aligns under siblings that do (`tw-pl-6` ≈ icon
+ * width + gap).
  */
 export const AgentHomeListRow = memo(function AgentHomeListRow({
   label,

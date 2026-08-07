@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/select";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { SearchBar } from "@/components/ui/SearchBar";
+import { ProjectFolderIcon } from "@/components/ui/ProjectFolderIcon";
 import { cn } from "@/lib/utils";
 import { logError, logWarn } from "@/logger";
 import { ProjectFileManager } from "@/projects/ProjectFileManager";
@@ -25,7 +26,6 @@ import {
   ChevronDown,
   ChevronUp,
   Edit2,
-  Folder,
   MessageSquare,
   Plus,
   Search,
@@ -57,9 +57,7 @@ function ProjectItem({
       onClick={() => loadContext(project)}
     >
       <div className="tw-flex tw-flex-1 tw-items-center tw-gap-2 tw-overflow-hidden">
-        <div className="tw-text-accent">
-          <Folder className="tw-size-4" />
-        </div>
+        <ProjectFolderIcon />
         <div className="tw-flex tw-flex-1 tw-flex-col tw-gap-1.5 tw-overflow-hidden">
           <span className="tw-w-full tw-truncate tw-text-[13px] tw-font-medium tw-text-normal">
             {project.name}
@@ -356,7 +354,7 @@ export const ProjectList = memo(
                     <SelectTrigger className="tw-truncate">
                       <SelectValue>
                         <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-2">
-                          <Folder className="tw-size-4 tw-shrink-0 tw-text-accent/70" />
+                          <ProjectFolderIcon />
                           <span className="tw-flex-1 tw-truncate">{selectedProject.name}</span>
                         </div>
                       </SelectValue>
@@ -369,7 +367,7 @@ export const ProjectList = memo(
                           className="tw-flex tw-items-center tw-gap-2"
                         >
                           <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-2">
-                            <Folder className="tw-size-4 tw-shrink-0" />
+                            <ProjectFolderIcon />
                             <span className="tw-truncate">{project.name}</span>
                           </div>
                         </SelectItem>

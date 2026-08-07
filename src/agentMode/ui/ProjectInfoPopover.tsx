@@ -32,7 +32,7 @@ import React, { memo, useEffect, useState } from "react";
 const HIDDEN_BASENAME = "project.md";
 const AGENTS_BASENAME = "agents.md";
 
-/** Per-extension badge tints, the same project palette tokens rows use. */
+/** Semantic per-extension badge tints for quickly distinguishing file types. */
 const BADGE_CLASSES: Record<string, string> = {
   pdf: "tw-bg-project-red tw-text-project-red",
   md: "tw-bg-project-blue tw-text-project-blue",

@@ -217,24 +217,18 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   // Latch the in-project header content so its exit collapse animates with the
   // project it's leaving: `projectName`/`isOrphanedProject` flip to their global
   // values the instant the scope changes, before the header's collapse finishes,
-  // which would otherwise flash an empty name mid-animation. The id rides along
-  // so the identity tile's color doesn't flash either. Writing the ref during
-  // render is the same derive-from-props pattern the context-load card uses.
-  // The global-scope initial id only ever lives in a collapsed, aria-hidden
-  // header; the first project entry latches a real project id.
+  // which would otherwise flash an empty name mid-animation. Writing the ref
+  // during render is the same derive-from-props pattern the context-load card uses.
   const lastProjectHeaderRef = useRef({
-    id: activeProjectId,
     name: projectName,
     orphaned: isOrphanedProject,
   });
   if (isProjectScope) {
     lastProjectHeaderRef.current = {
-      id: activeProjectId,
       name: projectName,
       orphaned: isOrphanedProject,
     };
   }
-  const headerProjectId = isProjectScope ? activeProjectId : lastProjectHeaderRef.current.id;
   const headerName = isProjectScope ? projectName : lastProjectHeaderRef.current.name;
   const headerOrphaned = isProjectScope ? isOrphanedProject : lastProjectHeaderRef.current.orphaned;
 
@@ -536,7 +530,8 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
         id: "chats",
         icon: <MessageSquare className="tw-size-4" />,
         title: "Recent Chats",
-        count: chatHistoryItems.length,
+        // Chat history grows indefinitely, so its cumulative total is not a
+        // useful tab-level status. The list itself remains fully searchable.
         renderBody: () => (
           <GlobalRecentChatsSection
             items={chatHistoryItems}
@@ -621,7 +616,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
         id: "project-chats",
         icon: <MessageSquare className="tw-size-4" />,
         title: "Recent Chats",
-        count: chatHistoryItems.length,
+        // Match the global shelf: an ever-growing history tally adds noise.
         renderBody: () => (
           <GlobalRecentChatsSection
             items={chatHistoryItems}
@@ -796,7 +791,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       >
         <div className="tw-min-h-0 tw-overflow-hidden">
           <AgentProjectHeader
-            projectId={headerProjectId}
             projectName={headerName}
             onExit={handleExitProject}
             orphaned={headerOrphaned}
