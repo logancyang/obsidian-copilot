@@ -78,7 +78,7 @@ describe("AgentTurnDurationIndicator", () => {
       expect(
         container
           .querySelector(".copilot-spinner")
-          ?.parentElement?.classList.contains("tw-absolute")
+          ?.parentElement?.parentElement?.classList.contains("tw-gap-1.5")
       ).toBe(true);
       expect(screen.queryByRole("status")).toBeNull();
 
