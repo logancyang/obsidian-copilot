@@ -879,11 +879,15 @@ export interface AgentChatMessage {
   content?: unknown[];
   /**
    * Backend `stopReason` once the turn finishes. Absent while streaming,
-   * set when `prompt()` resolves. Only `end_turn` triggers the
-   * collapse-research-into-"Worked for X" UI; cancelled / refusal / etc.
-   * leave the trail uncollapsed so the user sees what happened.
+   * set when `prompt()` resolves. The UI uses cancellation to suppress answer
+   * actions while leaving the visible activity trail intact.
    */
   turnStopReason?: StopReason;
+  /**
+   * Frozen wall-clock duration for the turn, measured from prompt submission
+   * until the backend settles. Absent while the turn is still running.
+   */
+  turnDurationMs?: number;
   /**
    * Per-agent fan-out state when this assistant message is a multi-agent QA turn.
    * LIVE in-memory only — persistence rides in the body as a composite

@@ -955,6 +955,49 @@ describe("ClaudeSdkBackendProcess", () => {
     };
   }
 
+  describe("setSessionMode()", () => {
+    beforeEach(() => {
+      queryMock.mockReset();
+      createSdkMcpServerMock.mockClear();
+    });
+
+    function makeProcess(): ClaudeSdkBackendProcess {
+      return new ClaudeSdkBackendProcess({
+        pathToClaudeCodeExecutable: "/usr/local/bin/claude",
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        app: { vault: {} } as any,
+        clientVersion: "1.2.3",
+        descriptor: fakeDescriptor(),
+      });
+    }
+
+    it.each(["default", "plan", "acceptEdits", "auto", "bypassPermissions"])(
+      "carries the %s permission mode into the next turn",
+      async (modeId) => {
+        queryMock.mockImplementation(() => makeQuery([resultMessage()]));
+        const proc = makeProcess();
+
+        const { sessionId } = await proc.newSession({ cwd: "/vault" });
+        proc.registerSessionHandler(sessionId, () => {});
+        await proc.setSessionMode({ sessionId, modeId });
+        await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
+
+        const call = getPromptQueryCalls()[0][0] as { options: { permissionMode?: string } };
+        expect(call.options.permissionMode).toBe(modeId);
+      }
+    );
+
+    it("rejects a permission mode the SDK does not define", async () => {
+      const proc = makeProcess();
+
+      const { sessionId } = await proc.newSession({ cwd: "/vault" });
+
+      await expect(proc.setSessionMode({ sessionId, modeId: "dontAsk" })).rejects.toThrow(
+        "Unsupported mode dontAsk"
+      );
+    });
+  });
+
   describe("supportsAdditionalDirectories()", () => {
     beforeEach(() => {
       queryMock.mockReset();

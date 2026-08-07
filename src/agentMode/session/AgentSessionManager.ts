@@ -2130,18 +2130,30 @@ export class AgentSessionManager {
 
   /**
    * Apply a canonical mode change against the active session. `spec` carries
-   * the native dispatch info (which ACP RPC + payload); `mode` is the canonical
-   * id to persist. After a successful apply, `mode` becomes the backend's sticky
-   * default so the next new conversation reopens in it — symmetric with
-   * `applySelection`. If the apply throws, no persistence occurs.
+   * the translated native dispatch info (which ACP RPC + payload). A descriptor
+   * whose mapping does not depend on live backend state gets one final lookup
+   * here so settings changes made after the picker rendered take effect on the
+   * click. After a successful apply, `mode` becomes the backend's sticky default
+   * so the next new conversation reopens in it — symmetric with `applySelection`.
+   * If the apply throws, no persistence occurs.
+   *
+   * @param backendId Backend expected to own the active session.
+   * @param mode Canonical mode selected in the picker.
+   * @param spec Translated fallback for mappings that require live backend state.
    */
   async applyMode(backendId: BackendId, mode: CopilotMode, spec: ModeApplySpec): Promise<void> {
     const session = this.getActiveSession();
     if (!session || session.backendId !== backendId) return;
-    if (spec.kind === "setMode") {
-      await session.setMode(spec.nativeId);
+    const latestMapping = this.resolveDescriptor(backendId).getModeMapping?.(null, null);
+    const latestNativeId =
+      latestMapping?.kind === "setMode" ? latestMapping.canonical[mode] : undefined;
+    const resolvedSpec: ModeApplySpec = latestNativeId
+      ? { kind: "setMode", nativeId: latestNativeId }
+      : spec;
+    if (resolvedSpec.kind === "setMode") {
+      await session.setMode(resolvedSpec.nativeId);
     } else {
-      await session.setConfigOption(spec.configId, spec.value);
+      await session.setConfigOption(resolvedSpec.configId, resolvedSpec.value);
     }
     await this.persistDefaultMode(backendId, mode);
   }

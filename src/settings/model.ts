@@ -335,6 +335,13 @@ export interface CopilotSettings {
 }
 
 /**
+ * Native Claude permission mode that Copilot's canonical `auto` pill drives.
+ * `auto` lets Claude's classifier approve or deny each request, `acceptEdits`
+ * auto-approves file edits only, and `bypassPermissions` skips every check.
+ */
+export type ClaudeAutoModePermission = "acceptEdits" | "auto" | "bypassPermissions";
+
+/**
  * Settings slice owned by the Claude (Agent SDK) backend. The user-
  * installed `claude` CLI path lives at top-level `agentMode.claudeCli.path`
  * so the resolver can be reused independently of which Anthropic
@@ -345,6 +352,11 @@ export interface ClaudeBackendSettings {
   defaultModel?: ModelSelection | null;
   /** Sticky permission-mode preference (default/plan/auto). Unset = the agent's natural starting mode. */
   defaultMode?: CopilotMode | null;
+  /**
+   * Which native permission mode the `auto` pill switches Claude into. Unset =
+   * Claude's classifier-driven `auto`.
+   */
+  autoModePermission?: ClaudeAutoModePermission;
   /**
    * Opt-in: pass `thinking: { type: "enabled" }` to the SDK so the agent
    * surfaces reasoning chunks. Off by default (matches SDK default).
@@ -1335,12 +1347,28 @@ export function sanitizeEnvOverrides(raw: unknown): Record<string, string> | und
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
+// Closed set mirroring the `ClaudeAutoModePermission` union; an unknown value
+// falls back to the descriptor's default rather than reaching the SDK, which
+// rejects permission modes it doesn't know.
+const CLAUDE_AUTO_MODE_PERMISSIONS: readonly ClaudeAutoModePermission[] = [
+  "acceptEdits",
+  "auto",
+  "bypassPermissions",
+];
+function sanitizeClaudeAutoModePermission(raw: unknown): ClaudeAutoModePermission | undefined {
+  return typeof raw === "string" &&
+    (CLAUDE_AUTO_MODE_PERMISSIONS as readonly string[]).includes(raw)
+    ? (raw as ClaudeAutoModePermission)
+    : undefined;
+}
+
 function sanitizeClaudeBackendSettings(raw: unknown): ClaudeBackendSettings {
   if (!raw || typeof raw !== "object") return {};
   const r = raw as Record<string, unknown>;
   return {
     defaultModel: sanitizeDefaultModel(r.defaultModel),
     defaultMode: sanitizeDefaultMode(r.defaultMode),
+    autoModePermission: sanitizeClaudeAutoModePermission(r.autoModePermission),
     enableThinking: typeof r.enableThinking === "boolean" ? r.enableThinking : undefined,
     envOverrides: sanitizeEnvOverrides(r.envOverrides),
   };

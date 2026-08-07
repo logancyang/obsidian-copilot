@@ -17,7 +17,7 @@ import { planEntryClass, planEntryIcon } from "@/agentMode/ui/planEntryStyles";
 import type { ToolSummaryContext } from "@/agentMode/ui/toolSummaries";
 import { useThinkingClock } from "@/agentMode/ui/useThinkingClock";
 import { useTrailExpansion, type TrailExpansion } from "@/agentMode/ui/useTrailExpansion";
-import { BottomLoadingIndicator } from "@/components/chat-components/BottomLoadingIndicator";
+import { AgentTurnDurationIndicator } from "@/agentMode/ui/AgentTurnDurationIndicator";
 import { getVaultBase } from "@/utils/vaultPath";
 import { App } from "obsidian";
 
@@ -26,11 +26,10 @@ interface AgentTrailProps {
   /** True iff this message is the one currently being streamed by the
    *  agent. Drives reasoning-block spinner / timer. */
   isStreaming: boolean;
-  /** When true, render a "Thinking" shimmer as the last item of the trail.
-   *  Anchors the in-flight indicator to the streaming message's own bubble
-   *  (e.g., directly under a populating SubAgentCard) instead of pinning it
-   *  to the bottom of the chat container. */
-  showThinkingTail?: boolean;
+  /** Turn start used by the live whole-turn timer. */
+  turnStartedAtMs?: number;
+  /** Frozen whole-turn duration retained after the latest turn completes. */
+  turnDurationMs?: number;
   /** Obsidian `App` for the markdown renderer used by `text` parts. */
   app: App;
   /** Backend stopReason once the turn has ended. Only `cancelled` suppresses
@@ -41,7 +40,8 @@ interface AgentTrailProps {
 export const AgentTrail: React.FC<AgentTrailProps> = ({
   parts,
   isStreaming,
-  showThinkingTail,
+  turnStartedAtMs,
+  turnDurationMs,
   app,
   turnStopReason,
 }) => {
@@ -56,12 +56,12 @@ export const AgentTrail: React.FC<AgentTrailProps> = ({
 
   return (
     <div className="tw-group tw-flex tw-flex-col tw-gap-1">
-      <LinearTrail
-        parts={parts}
-        isStreaming={isStreaming}
-        showThinkingTail={showThinkingTail}
-        app={app}
-      />
+      <LinearTrail parts={parts} isStreaming={isStreaming} app={app} />
+      {turnDurationMs !== undefined ? (
+        <AgentTurnDurationIndicator status="complete" durationMs={turnDurationMs} />
+      ) : isStreaming && turnStartedAtMs !== undefined ? (
+        <AgentTurnDurationIndicator status="running" startedAtMs={turnStartedAtMs} />
+      ) : null}
       {actions}
     </div>
   );
@@ -82,9 +82,8 @@ interface TrailContext {
 const LinearTrail: React.FC<{
   parts: AgentMessagePart[];
   isStreaming: boolean;
-  showThinkingTail?: boolean;
   app: App;
-}> = ({ parts, isStreaming, showThinkingTail, app }) => {
+}> = ({ parts, isStreaming, app }) => {
   const expansion = useTrailExpansion();
   // `vaultBase` is stable for the plugin lifetime, but memoizing keeps the
   // summary inputs referentially stable across re-renders.
@@ -109,7 +108,6 @@ const LinearTrail: React.FC<{
       {nodes.map((node, i) =>
         renderNode(node, i, ctx, isStreaming && i === nodes.length - 1, "root")
       )}
-      {showThinkingTail ? <BottomLoadingIndicator /> : null}
     </div>
   );
 };

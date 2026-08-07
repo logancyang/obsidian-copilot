@@ -384,7 +384,11 @@ export class AgentSession {
   // on the finished message instead of being dropped — or, worse, appended to
   // a newer turn's placeholder. Replaced on the next completion, cleared on
   // cancel/dispose.
-  private settledStream: { placeholderId: string; messageIds: Set<string> } | null = null;
+  private settledStream: {
+    placeholderId: string;
+    messageIds: Set<string>;
+    turnStartedAtMs: number;
+  } | null = null;
   // A locally-cancelled prompt whose backend promise has not settled yet. A
   // follow-up may be composed immediately, but its backend prompt waits on this
   // barrier so output from the cancelled generation cannot target the new turn.
@@ -965,10 +969,11 @@ export class AgentSession {
     };
     const userMessageId = this.store.addMessage(userMessage);
 
+    const turnStartedAtMs = Date.now();
     const placeholder: NewAgentChatMessage = {
       message: "",
       sender: AI_SENDER,
-      timestamp: formatDateTime(new Date()),
+      timestamp: formatDateTime(new Date(turnStartedAtMs)),
       isVisible: true,
       parts: [],
     };
@@ -995,7 +1000,7 @@ export class AgentSession {
     this.lastTurnError = false;
     this.recomputeStatusIfChanged();
 
-    const turn = this.runTurn(displayText, userMessageId, context, promptContent);
+    const turn = this.runTurn(displayText, userMessageId, context, turnStartedAtMs, promptContent);
     return { userMessageId, turn };
   }
 
@@ -1008,6 +1013,7 @@ export class AgentSession {
     displayText: string,
     userMessageId: string,
     context: MessageContext | undefined,
+    turnStartedAtMs: number,
     promptContent?: PromptContent[]
   ): Promise<StopReason> {
     const placeholderId = this.placeholderId;
@@ -1057,7 +1063,7 @@ export class AgentSession {
         // gate can be bypassed (pasting a pill), so re-check entitlement here at
         // the session boundary. Paying users short-circuit; everyone else is hard-blocked.
         if (!(await this.ensureMultiAgentEntitlement())) {
-          return this.blockFanoutForEntitlement(placeholderId);
+          return this.blockFanoutForEntitlement(placeholderId, turnStartedAtMs);
         }
 
         // Give every fan-out agent the PRIOR visible transcript as a read-only
@@ -1082,7 +1088,7 @@ export class AgentSession {
         // the next normal turn skip the block, permanently stripping the project
         // manifest from the main chat. Leaving it unset lets that turn deliver it
         // (and each ephemeral fan-out, being memoryless, re-receives it meanwhile).
-        return await this.runFanoutPath(placeholderId, displayText, promptBlocks);
+        return await this.runFanoutPath(placeholderId, displayText, promptBlocks, turnStartedAtMs);
       }
 
       // Single-agent path: prepend any buffered fan-out turns as one labeled
@@ -1169,7 +1175,10 @@ export class AgentSession {
         );
         this.store.markMessageError(placeholderId, message);
       }
-      if (placeholderId && this.store.markTurnComplete(placeholderId, resp.stopReason)) {
+      if (
+        placeholderId &&
+        this.store.markTurnComplete(placeholderId, resp.stopReason, Date.now() - turnStartedAtMs)
+      ) {
         this.notifyMessages();
       }
       // Some backends flush the prompt result before the turn's last content
@@ -1177,7 +1186,11 @@ export class AgentSession {
       // `messageId` so those trailing chunks still land — except on an explicit
       // cancel, where further output should stay suppressed.
       if (placeholderId && resp.stopReason !== "cancelled") {
-        this.settledStream = { placeholderId, messageIds: this.currentMessageIds };
+        this.settledStream = {
+          placeholderId,
+          messageIds: this.currentMessageIds,
+          turnStartedAtMs,
+        };
       } else if (resp.stopReason === "cancelled") {
         this.settledStream = null;
       }
@@ -1188,7 +1201,11 @@ export class AgentSession {
     } catch (err) {
       logWarn(`[AgentMode] prompt failed`, err);
       if (placeholderId) {
-        this.store.markMessageError(placeholderId, formatPromptFailure(err));
+        this.store.markMessageError(
+          placeholderId,
+          formatPromptFailure(err),
+          Date.now() - turnStartedAtMs
+        );
         this.notifyMessages();
       }
       this.lastTurnError = true;
@@ -1219,13 +1236,13 @@ export class AgentSession {
    * Clean up a paywall-blocked fan-out turn: surface the upgrade prompt and
    * finalize the placeholder as an error so no dangling bubble remains.
    */
-  private blockFanoutForEntitlement(placeholderId: string): StopReason {
+  private blockFanoutForEntitlement(placeholderId: string, turnStartedAtMs: number): StopReason {
     showMultiAgentUpgradePrompt();
     this.store.markMessageError(
       placeholderId,
       "Multi-agent QA is a Copilot Plus feature. Upgrade to mention more than one agent in a turn."
     );
-    this.store.markTurnComplete(placeholderId, "refusal");
+    this.store.markTurnComplete(placeholderId, "refusal", Date.now() - turnStartedAtMs);
     this.currentMessageIds = new Set();
     if (this.placeholderId === placeholderId) this.placeholderId = null;
     this.notifyMessages();
@@ -1242,7 +1259,8 @@ export class AgentSession {
   private async runFanoutPath(
     placeholderId: string,
     originalPromptText: string,
-    promptBlocks: PromptContent[]
+    promptBlocks: PromptContent[],
+    turnStartedAtMs: number
   ): Promise<StopReason> {
     const signal = this.abortController?.signal ?? new AbortController().signal;
     const input: FanoutRunInput = {
@@ -1289,7 +1307,7 @@ export class AgentSession {
         this.pendingFanoutContext.push({ question: originalPromptText, summary: replay });
       }
     }
-    if (this.store.markTurnComplete(placeholderId, stopReason)) {
+    if (this.store.markTurnComplete(placeholderId, stopReason, Date.now() - turnStartedAtMs)) {
       this.notifyMessages();
     }
     if (this.placeholderId === placeholderId) this.placeholderId = null;
@@ -1772,7 +1790,12 @@ export class AgentSession {
         update.sessionUpdate === "agent_message_chunk"
           ? this.store.appendAgentText(target, text)
           : this.store.appendAgentThought(target, text);
-      if (appended) this.scheduleNotifyMessages();
+      if (appended) {
+        if (target === this.settledStream?.placeholderId) {
+          this.store.extendTurnDuration(target, Date.now() - this.settledStream.turnStartedAtMs);
+        }
+        this.scheduleNotifyMessages();
+      }
       return;
     }
 

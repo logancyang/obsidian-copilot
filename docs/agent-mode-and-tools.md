@@ -55,15 +55,30 @@ When you open a new agent chat and the message box is empty, Copilot types out s
 
 If you've turned on reduced motion in your operating system, the prompts still rotate but appear and disappear whole instead of typing out.
 
+## Turn Duration
+
+While an agent turn is running, the activity trail shows **Worked for** with a live elapsed-time counter and the animated Copilot icon. The counter measures the full wall-clock time from sending the prompt until the turn finishes, including tool use and any time spent waiting for a permission or answer.
+
+When the turn finishes, the time freezes and the Copilot icon becomes static. The completed duration remains visible beneath the latest response until you send the next prompt, when a new counter takes its place. Leading zero units are omitted, so durations appear as `18s`, `2m 18s`, or `1h 2m 18s`.
+
 ## Choosing an Operating Mode
 
 The mode picker beside the message box controls how much the active agent can do:
 
 - **Default** — the agent can work in your vault and asks before sensitive actions.
 - **Plan** — the agent reads and reasons without changing your vault.
-- **Auto** — the agent can work without individual approval prompts. Use it only when you trust the task and workspace.
+- **Auto** — the agent works with its Auto permissions. Depending on the agent and its configuration, some actions may still require approval.
 
 The available modes depend on the selected agent. Copilot normalizes equivalent modes across supported versions of Claude, Codex, and OpenCode.
+
+With Claude you can decide how much **Auto** actually hands over, under
+**Settings → Copilot → Agents → Claude → Auto mode permissions**:
+
+- **Auto** (default) — Claude judges each request itself, approving routine work and still asking about risky actions.
+- **Accept edits** — file edits are approved automatically; everything else still asks.
+- **Bypass permissions** — nothing is checked. Use it only in a workspace you fully trust.
+
+Changing this takes effect the next time you pick **Auto**, so an open chat keeps the permissions it started with.
 
 When **Default** mode asks for permission, the request stays in the chat until
 you choose an action, cancel the turn, or close the session. Hover or focus a

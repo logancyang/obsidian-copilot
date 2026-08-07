@@ -28,7 +28,7 @@ interface ModePickerProps {
 const MODE_DISPLAY: Record<CopilotMode, { label: string; description: string }> = {
   auto: {
     label: "Auto",
-    description: "Runs tools and edits files without asking.",
+    description: "Uses the agent's Auto permissions for tools and edits.",
   },
   plan: {
     label: "Plan",

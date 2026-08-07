@@ -1,10 +1,11 @@
 import { EnvOverridesSetting } from "@/agentMode/backends/shared/EnvOverridesSetting";
+import { ClaudeAutoModePermissionSetting } from "@/agentMode/backends/claude/ui/ClaudeAutoModePermissionSetting";
 import { SettingItem } from "@/components/ui/setting-item";
 import type CopilotPlugin from "@/main";
 import { useSettingsValue } from "@/settings/model";
 import type { App } from "obsidian";
 import React from "react";
-import { updateClaudeFields } from "./descriptor";
+import { resolveClaudeAutoModePermission, updateClaudeFields } from "./descriptor";
 
 interface Props {
   plugin: CopilotPlugin;
@@ -21,6 +22,11 @@ export const ClaudeSettingsPanel: React.FC<Props> = () => {
   const settings = useSettingsValue();
   return (
     <>
+      <ClaudeAutoModePermissionSetting
+        value={resolveClaudeAutoModePermission(settings)}
+        onChange={(autoModePermission) => updateClaudeFields({ autoModePermission })}
+      />
+
       <SettingItem
         type="switch"
         title="Show extended thinking"
