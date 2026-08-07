@@ -24,7 +24,8 @@ const AGENT_DEFAULT_LABEL = "Agent default";
  * Per-agent "Default model" picker shown in each toggled-on agent's settings
  * section. Sources its options from the agent's enabled (toggled-on) models,
  * and writes the chosen (model, effort) as that backend's durable default via
- * `persistDefaultSelection` — the only writer of `defaultModel`. Every new
+ * `persistDefaultSelection` — the only writer of `defaultModel` besides
+ * `applyCopilotDefaultModel`, which seeds it on license activation. Every new
  * session and fan-out answerer on this backend starts from it, and an open
  * chat picks it up on the next turn (see `AgentSessionManager`).
  */
