@@ -28,7 +28,7 @@ export function formatWorkedDuration(durationMs: number): string {
 
 /**
  * Shows whole-turn elapsed time, animating only while the agent is active and
- * retaining a quiet, icon-free duration after the turn completes.
+ * retaining a quiet, static icon and duration after the turn completes.
  */
 export const AgentTurnDurationIndicator: React.FC<AgentTurnDurationIndicatorProps> = (props) => {
   const [now, setNow] = useState(() => Date.now());
@@ -48,12 +48,10 @@ export const AgentTurnDurationIndicator: React.FC<AgentTurnDurationIndicatorProp
       role={isRunning ? "status" : undefined}
       aria-live={isRunning ? "polite" : undefined}
     >
-      <div className="tw-flex tw-w-full tw-items-center tw-gap-1.5 tw-pl-1 tw-text-left tw-text-ui-small tw-text-muted">
-        {isRunning ? (
-          <span className="tw-flex tw-size-icon-xs tw-shrink-0 tw-items-center tw-justify-center">
-            <CopilotSpinner />
-          </span>
-        ) : null}
+      <div className="tw-relative tw-flex tw-w-full tw-items-center tw-pl-1 tw-text-left tw-text-ui-small tw-text-muted">
+        <span className="tw-absolute tw-left-1 tw-top-1/2 -tw-ml-1.5 tw-flex tw-size-icon-xs -tw-translate-x-full -tw-translate-y-1/2 tw-items-center tw-justify-center">
+          <CopilotSpinner animated={isRunning} />
+        </span>
         <span aria-hidden={isRunning || undefined}>
           <span className={isRunning ? "copilot-shimmer-text tw-font-medium" : "tw-font-medium"}>
             Worked for

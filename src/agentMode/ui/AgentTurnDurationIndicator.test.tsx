@@ -37,13 +37,14 @@ describe("AgentTurnDurationIndicator", () => {
       expect(screen.getByRole("status").textContent).toContain("Agent is working");
       expect(screen.getByText("2m 18s")).toBeTruthy();
       expect(container.querySelector(".copilot-spinner")).toBeTruthy();
+      expect(container.querySelector(".copilot-spinner-dot-0")).toBeTruthy();
 
       act(() => jest.advanceTimersByTime(2_000));
 
       expect(screen.getByText("2m 20s")).toBeTruthy();
     });
 
-    it("freezes the duration and removes the icon after completion", () => {
+    it("freezes the duration and keeps a static icon after completion", () => {
       const { container } = render(
         <AgentTurnDurationIndicator status="complete" durationMs={138_000} />
       );
@@ -52,7 +53,13 @@ describe("AgentTurnDurationIndicator", () => {
       expect(
         screen.getByText("Worked for").parentElement?.parentElement?.classList.contains("tw-pl-1")
       ).toBe(true);
-      expect(container.querySelector(".copilot-spinner")).toBeNull();
+      expect(container.querySelector(".copilot-spinner")).toBeTruthy();
+      expect(container.querySelector(".copilot-spinner-dot-0")).toBeNull();
+      expect(
+        container
+          .querySelector(".copilot-spinner")
+          ?.parentElement?.classList.contains("tw-absolute")
+      ).toBe(true);
       expect(screen.queryByRole("status")).toBeNull();
 
       act(() => jest.advanceTimersByTime(60_000));

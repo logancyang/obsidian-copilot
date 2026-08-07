@@ -57,14 +57,15 @@ describe("AgentChatMessages", () => {
 
     afterEach(() => jest.useRealTimers());
 
-    it("retains the latest completed turn duration without an icon", () => {
+    it("retains the latest completed turn duration with a static icon", () => {
       const { container } = renderMessages(
         [assistantMessage("answer-1", 62_000, { turnDurationMs: 138_000 })],
         false
       );
 
       expect(screen.getByText("2m 18s")).toBeTruthy();
-      expect(container.querySelector(".copilot-spinner")).toBeNull();
+      expect(container.querySelector(".copilot-spinner")).toBeTruthy();
+      expect(container.querySelector(".copilot-spinner-dot-0")).toBeNull();
     });
 
     it("retires the prior duration when the next turn starts", () => {
