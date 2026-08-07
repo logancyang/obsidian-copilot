@@ -6,6 +6,7 @@ import {
 import {
   AbortError,
   computeInstallState,
+  OperationInFlightError,
   toOpencodeInstallState,
   type ProgressEvent,
 } from "@/agentMode/backends/opencode/OpencodeBinaryManager";
@@ -92,6 +93,17 @@ export const OpencodeConfigContainer: React.FC<{
     manager.getRuntimeState,
     manager.getRuntimeState
   );
+  // DESIGN NOTE — `detecting` and `busy` deliberately map to idle, not to
+  // `running`. `running` is the shape this dialog uses for a cancellable
+  // download: it replaces the whole managed section with a progress bar and a
+  // Cancel. None of the operations behind those two kinds takes a signal
+  // (their `runExclusive` bodies declare no parameter), so Cancel would be a
+  // control that does nothing — and during a custom-binary upgrade the section
+  // would also fight the dialog's own `upgradeRun`. The real harm in the
+  // reported case was a Download click that reported nothing; that is fixed
+  // where it happens, by surfacing `OperationInFlightError` below, instead of
+  // by borrowing a state whose meaning does not fit.
+  // If a future review flags this again, point them at this note.
   const installRun: OpencodeRunState =
     runtime.kind === "installing"
       ? runningState(runtime.progress)
@@ -107,6 +119,13 @@ export const OpencodeConfigContainer: React.FC<{
         // Cancellation is not a failure, and a real failure is already in the
         // manager's runtime state, which this dialog renders.
         if (err instanceof AbortError || (err as Error)?.name === "AbortError") return;
+        // Losing the race is the one failure the runtime state cannot show:
+        // it belongs to the operation that won, which is rendering its own
+        // progress elsewhere. Without this the button would look inert.
+        if (err instanceof OperationInFlightError) {
+          new Notice(err.message);
+          return;
+        }
         logError("[AgentMode] opencode install failed", err);
       });
   }, [manager]);
@@ -172,7 +191,16 @@ export const OpencodeConfigContainer: React.FC<{
   );
 
   const clearCustomPath = React.useCallback(async (): Promise<void> => {
-    await manager.setCustomBinaryPath(null);
+    // The caller (`BinaryPathSetting`) awaits this in a try/finally with no
+    // catch, so anything thrown here becomes an unhandled rejection the user
+    // never sees — and clearing can now fail, because it takes the same
+    // binary-path lock every other write does.
+    try {
+      await manager.setCustomBinaryPath(null);
+    } catch (e) {
+      new Notice(`Couldn't clear the custom path: ${e instanceof Error ? e.message : String(e)}`);
+      return;
+    }
     new Notice("Custom opencode path cleared.");
   }, [manager]);
 

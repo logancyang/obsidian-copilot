@@ -18,6 +18,7 @@ jest.mock("@/components/modals/ConfirmModal", () => ({
 import { DEFAULT_SETTINGS } from "@/constants";
 import {
   AbortError,
+  OperationInFlightError,
   type OpencodeBinaryManager,
   type ProgressEvent,
   type RuntimeState,
@@ -322,6 +323,40 @@ describe("OpencodeInstallModal", () => {
 
       expect(setCustomBinaryPath).toHaveBeenCalledWith(null);
       expect(noticeMessages()).toContain("Custom opencode path cleared.");
+    });
+
+    it("explains a clear that lost the binary-path lock instead of failing silently", async () => {
+      setOpencodeSettings({
+        binaryPath: EXISTING_BINARY_PATH,
+        binaryVersion: "1.16.0",
+        binarySource: "custom",
+      });
+      const { manager, setCustomBinaryPath } = makeManager();
+      setCustomBinaryPath.mockRejectedValue(new OperationInFlightError());
+      renderContainer(manager);
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+      });
+
+      // The caller awaits this with no catch of its own, so an unreported
+      // rejection would leave the button resetting with nothing said.
+      expect(noticeMessages().join(" ")).toContain("Couldn't clear the custom path");
+      expect(noticeMessages()).not.toContain("Custom opencode path cleared.");
+    });
+
+    it("names the operation that won when a download loses the race", async () => {
+      const { manager, installDeferred } = makeManager();
+      renderContainer(manager);
+
+      fireEvent.click(screen.getByRole("button", { name: "Download & install" }));
+      await act(async () => {
+        installDeferred().reject(new OperationInFlightError());
+      });
+
+      // This is the one failure the shared runtime state cannot render: it
+      // belongs to the operation that won, not to this dialog.
+      expect(noticeMessages().join(" ")).toContain("already running");
     });
 
     it("uninstalls only after the size-annotated confirmation is accepted", async () => {

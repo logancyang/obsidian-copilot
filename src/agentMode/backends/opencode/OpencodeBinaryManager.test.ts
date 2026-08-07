@@ -592,7 +592,7 @@ describe("OpencodeBinaryManager.uninstall / downloadsSize", () => {
   });
 });
 
-describe("OpencodeBinaryManager runtime state", () => {
+describe("OpencodeBinaryManager.runtimeState", () => {
   beforeEach(() => settingsMock.__reset({}));
 
   it("starts idle and hands every subscriber the same snapshot object", () => {
