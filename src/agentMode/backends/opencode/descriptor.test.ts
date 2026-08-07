@@ -1,4 +1,9 @@
-import { OpencodeBackendDescriptor } from "./descriptor";
+import { getOpencodeBinaryManager, OpencodeBackendDescriptor } from "./descriptor";
+import { legacyVaultDataDir } from "./OpencodeBinaryManager";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import { FileSystemAdapter } from "obsidian";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type {
   BackendProcess,
@@ -376,5 +381,51 @@ describe("OpencodeBackendDescriptor.prefetchEffortCatalog", () => {
       QWEN,
       "orig/model",
     ]);
+  });
+});
+
+describe("getOpencodeBinaryManager()", () => {
+  const CONFIG_DIR = "my-config";
+
+  /** Desktop CopilotPlugin stand-in whose in-vault paths resolve under `vaultBase`. */
+  function vaultPlugin(vaultBase: string): never {
+    const adapter = new FileSystemAdapter();
+    adapter.getBasePath = () => vaultBase;
+    return {
+      app: { vault: { adapter, configDir: CONFIG_DIR } },
+      manifest: { id: "copilot-test" },
+    } as never;
+  }
+
+  it("keeps the one manager but rebinds it to the asking lifecycle's vault", async () => {
+    const firstVault = await fs.promises.mkdtemp(path.join(os.tmpdir(), "opencode-desc-a-"));
+    const secondVault = await fs.promises.mkdtemp(path.join(os.tmpdir(), "opencode-desc-b-"));
+    try {
+      const bin = path.join(
+        legacyVaultDataDir(secondVault, CONFIG_DIR, "copilot-test"),
+        "1.14.0",
+        "bin",
+        "opencode"
+      );
+      await fs.promises.mkdir(path.dirname(bin), { recursive: true });
+      await fs.promises.writeFile(bin, "z".repeat(12));
+
+      const first = getOpencodeBinaryManager(vaultPlugin(firstVault));
+      // Only the second vault holds a legacy copy, so the difference is what
+      // this manager attributes to the vault it is currently bound to. Measured
+      // as a delta because the OS-local install root is real and may be
+      // non-empty on the machine running the suite.
+      const beforeRebind = await first.downloadsSize();
+      const second = getOpencodeBinaryManager(vaultPlugin(secondVault));
+
+      // One manager, so an install running from the previous lifecycle survives.
+      expect(second).toBe(first);
+      // Reading through the plugin it was built with would report — and on
+      // uninstall delete — the first vault's files instead.
+      expect((await second.downloadsSize()) - beforeRebind).toBe(12);
+    } finally {
+      await fs.promises.rm(firstVault, { recursive: true, force: true });
+      await fs.promises.rm(secondVault, { recursive: true, force: true });
+    }
   });
 });

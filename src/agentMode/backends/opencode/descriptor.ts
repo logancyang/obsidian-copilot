@@ -42,8 +42,9 @@ const OPENCODE_MODE_CONFIG_OPTION_ID = "mode";
 /** Frozen empty effort catalog — referential stability for the "no effort" case. */
 const EMPTY_EFFORT_CATALOG: Record<string, EffortOption[]> = Object.freeze({});
 
-// Lazy-created singleton manager. The first plugin to ask for it wins; in a
-// running Obsidian instance there's exactly one CopilotPlugin so this is safe.
+// Lazy-created singleton manager, kept across plugin lifecycles so an install
+// started in one is still running in the next. The instance is reused but its
+// plugin handle is not: see `adoptPlugin`.
 let managerRef: OpencodeBinaryManager | null = null;
 
 /**
@@ -95,9 +96,13 @@ const opencodeWire: ModelWireCodec = {
  * Resolve the lazy `OpencodeBinaryManager` instance owned by this descriptor.
  * The plugin no longer holds a top-level reference — ownership lives next to
  * the backend that uses it.
+ *
+ * Every call rebinds the plugin, so the manager survives a lifecycle without
+ * carrying the previous one's vault with it.
  */
 export function getOpencodeBinaryManager(plugin: CopilotPlugin): OpencodeBinaryManager {
   if (!managerRef) managerRef = new OpencodeBinaryManager(plugin);
+  else managerRef.adoptPlugin(plugin);
   return managerRef;
 }
 

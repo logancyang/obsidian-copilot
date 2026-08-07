@@ -268,7 +268,24 @@ export function legacyVaultDataDir(
  * the install location into `settings.agentMode`. Desktop-only.
  */
 export class OpencodeBinaryManager {
-  constructor(private readonly plugin: CopilotPlugin) {}
+  constructor(private plugin: CopilotPlugin) {}
+
+  /**
+   * Point the manager at the plugin instance of the lifecycle now running.
+   *
+   * The manager is cached at module scope and deliberately outlives a lifecycle
+   * (the carry-over `main.ts` documents), so the plugin it was constructed with
+   * can name a vault that is no longer open. {@link uninstall} deletes an
+   * in-vault path derived from that plugin — left stale, it would delete out of
+   * the previous vault. Only the handle is replaced, so a run still in flight
+   * is adopted rather than restarted.
+   *
+   * @param plugin - The current lifecycle's plugin, whose vault every in-vault
+   * path must be derived from.
+   */
+  adoptPlugin(plugin: CopilotPlugin): void {
+    this.plugin = plugin;
+  }
 
   /**
    * The operation currently holding the binary-path write lock, or null. Only
