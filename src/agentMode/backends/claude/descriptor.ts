@@ -13,6 +13,7 @@ import {
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import { MethodUnsupportedError } from "@/agentMode/session/errors";
 import { claudeBinarySearchDirs, resolveClaudeBinary } from "./claudeBinaryResolver";
+import { CLAUDE_INSTALL_COMMAND } from "./cliSetup";
 import { getClaudeAuthStatus, signInToClaude } from "./claudeAuth";
 import { assertClaudeVersionSupported } from "./claudeVersion";
 import { agentOriginEnabledModelEntries } from "@/agentMode/backends/shared/agentEnabledModels";
@@ -22,13 +23,16 @@ import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemP
 import { buildBuiltinSkillEnv } from "@/agentMode/backends/shared/builtinSkillEnv";
 import { getVaultBase } from "@/utils/vaultPath";
 import type {
+  BackendAuth,
   BackendConfigOption,
+  BackendDescriptor,
+  BackendProcess,
   EnabledModelEntry,
+  InstallState,
   ModeMapping,
   ModelSelection,
   ModelWireCodec,
 } from "@/agentMode/session/types";
-import type { BackendDescriptor, BackendProcess, InstallState } from "@/agentMode/session/types";
 import { ClaudeInstallModal } from "./ClaudeInstallModal";
 import ClaudeLogo from "./logo.svg";
 import { ClaudeSettingsPanel } from "./ClaudeSettingsPanel";
@@ -37,12 +41,13 @@ import {
   type ClaudeCompatibilityInput,
 } from "./claudeCompatibilityStore";
 
-export const CLAUDE_INSTALL_COMMAND =
-  process.platform === "win32"
-    ? "irm https://gist.githubusercontent.com/logancyang/7a87eb38d91015eac567521f8cc9c729/raw/install-claude-agent-mode-windows.ps1 | iex"
-    : "npm install -g @anthropic-ai/claude-code";
-
 const ABSENT_INSTALL_STATE: InstallState = Object.freeze({ kind: "absent" });
+
+/** Claude's descriptor contract, whose binary-resolution and auth capabilities are unconditional. */
+export interface ClaudeDescriptor extends BackendDescriptor {
+  auth: BackendAuth;
+  getResolvedBinaryPath(settings: CopilotSettings): string | null;
+}
 
 export function updateClaudeFields(partial: Partial<ClaudeBackendSettings>): void {
   updateAgentModeBackendFields("claude", partial);
@@ -190,7 +195,7 @@ function isClaudePlanModePlanFilePath(absolutePath: string): boolean {
  * Bedrock / Vertex env if configured) — the SDK handles credential
  * resolution through the spawned CLI; we never see or pass the secret.
  */
-export const ClaudeBackendDescriptor: BackendDescriptor = {
+export const ClaudeBackendDescriptor: ClaudeDescriptor = {
   id: "claude",
   displayName: "Claude",
   Icon: ClaudeLogo,
@@ -249,7 +254,7 @@ export const ClaudeBackendDescriptor: BackendDescriptor = {
   },
 
   openInstallUI(plugin: CopilotPlugin): void {
-    new ClaudeInstallModal(plugin.app).open();
+    new ClaudeInstallModal(plugin.app, ClaudeBackendDescriptor).open();
   },
 
   auth: {
