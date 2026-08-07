@@ -3,13 +3,13 @@
  * `Provider` per `(agentType, providerType)` with `origin: "agent"` and
  * snapshots a `ConfiguredModel` per `wireModelId`.
  *
- * Enablement follows one rule: only the agent's *current* model ends up
- * enabled. `registerAgentProvider` (first enrollment) auto-enrolls every model
- * into `backends[agentType]` so the discovery wiring can then narrow the
- * enabled set down to the current model; `syncAgentModels` (later probes) adds
- * newly-reported models *disabled*, so a model the agent introduces later never
- * silently turns itself on. Either way agent-owned models stay exclusive to
- * their agent's picker.
+ * Every reported model becomes a `ConfiguredModel`, so all of them show up in
+ * the curation UI for the user to toggle. Which ones start *enabled* is the
+ * caller's call: `registerAgentProvider` (first enrollment) auto-enrolls the
+ * subset named by `autoEnrollModelIds`, or every model when that is omitted.
+ * `syncAgentModels` (later probes) adds newly-reported models *disabled*, so a
+ * model the agent introduces later never silently turns itself on. Either way
+ * agent-owned models stay exclusive to their agent's picker.
  *
  * `registerAgentProvider` is idempotent on `(agentType, providerType)`:
  * re-running reconciles the model list. `syncAgentModels` is the narrower
@@ -39,6 +39,13 @@ export interface RegisterAgentProviderInput {
   /** Full set of wire ids the agent reports; the existing model set is diffed
    *  against this list. */
   wireModelIds: readonly string[];
+  /**
+   * Wire ids to enable on first enrollment. Ids outside this set are still
+   * created (so the curation UI lists them) but ship off. Omit to enable every
+   * reported model — the right default for agents whose catalog is small
+   * enough to show in full.
+   */
+  autoEnrollModelIds?: readonly string[];
   /** Agent-reported display names, keyed by wire id. For agent-origin
    *  providers these win over catalog metadata (the agent owns the name). */
   fallbackDisplayNames?: Record<string, string>;
@@ -64,6 +71,13 @@ export interface AgentSyncResult {
   added: string[];
   removed: string[];
 }
+
+/**
+ * Auto-enroll set meaning "enable nothing" — what later syncs pass so a
+ * newly-reported model stays off until the user enables it. A frozen module
+ * constant rather than a fresh `[]`, which would be a new identity per call.
+ */
+const ENROLL_NONE: readonly string[] = Object.freeze([]);
 
 export class AgentSetupApi {
   readonly #providers: ProviderRegistry;
@@ -135,10 +149,8 @@ export class AgentSetupApi {
       input.fallbackDisplayNames,
       input.fallbackDescriptions
     );
-    // First enrollment enables every model; the discovery wiring narrows the
-    // enabled set to the current model afterward.
     const { added, removed } = await this.#reconcileModels(input.agentType, providerId, infos, {
-      enableNewModels: true,
+      autoEnrollModelIds: input.autoEnrollModelIds,
     });
 
     // Return the configured-model ids in wire-id order, joining freshly-added
@@ -173,7 +185,7 @@ export class AgentSetupApi {
    *
    * Newly-reported models are added *disabled*: a model the agent introduces on
    * a later probe never turns itself on, so the enabled set keeps reflecting the
-   * user's curation (only the current model was seeded at first enrollment).
+   * user's curation (only the first-enrollment subset was seeded).
    */
   async syncAgentModels(input: SyncAgentModelsInput): Promise<AgentSyncResult> {
     const providers = this.#listAgentProviders(input.agentType);
@@ -194,7 +206,7 @@ export class AgentSetupApi {
         input.agentType,
         provider.providerId,
         infos,
-        { enableNewModels: false }
+        { autoEnrollModelIds: ENROLL_NONE }
       );
       return {
         added: added.map((a) => a.configuredModelId),
@@ -228,7 +240,7 @@ export class AgentSetupApi {
         input.agentType,
         provider.providerId,
         infos,
-        { enableNewModels: false }
+        { autoEnrollModelIds: ENROLL_NONE }
       );
       for (const a of added) addedAll.push(a.configuredModelId);
       for (const r of removed) removedAll.push(r.configuredModelId);
@@ -390,16 +402,22 @@ export class AgentSetupApi {
    * write, so re-syncing an unchanged list is a no-op that never resets user
    * curation.
    *
-   * `enableNewModels` controls whether each freshly-added model is enrolled into
-   * `backends[agentType]`: `true` on first enrollment (the discovery wiring
-   * narrows to the current model afterward), `false` on later syncs so a model
-   * the agent introduces later stays disabled until the user enables it.
+   * `autoEnrollModelIds` selects which freshly-added models are enrolled into
+   * `backends[agentType]`: `undefined` enrolls every one of them (first
+   * enrollment of an agent whose whole catalog should start on), a subset
+   * enrolls just those, and `ENROLL_NONE` enrolls none — what later syncs pass,
+   * so a model the agent introduces later stays disabled until the user enables
+   * it. Models outside the set are still created, so the curation UI lists them.
+   *
+   * Enrollment is per-model (`enableModel`), never a bulk replace of the
+   * backend's enabled set: for opencode that set also holds the user's BYOK and
+   * Plus picks, which a wholesale overwrite would silently drop.
    */
   async #reconcileModels(
     agentType: AgentType,
     providerId: string,
     infos: readonly ModelInfo[],
-    opts: { enableNewModels: boolean }
+    opts: { autoEnrollModelIds?: readonly string[] }
   ): Promise<{
     added: Array<{ wireId: string; configuredModelId: string }>;
     removed: Array<{ wireId: string; configuredModelId: string }>;
@@ -407,6 +425,7 @@ export class AgentSetupApi {
     const existing = this.#models.listByProvider(providerId);
     const existingByWireId = new Map(existing.map((m) => [m.info.id, m]));
     const desiredWireIds = new Set(infos.map((info) => info.id));
+    const autoEnrollFilter = opts.autoEnrollModelIds ? new Set(opts.autoEnrollModelIds) : null;
 
     const added: Array<{ wireId: string; configuredModelId: string }> = [];
     for (const info of infos) {
@@ -414,9 +433,9 @@ export class AgentSetupApi {
       if (!current) {
         const configuredModelId = await this.#models.add({ providerId, info });
         // Enroll into this agent's backend only — agent models never leak into
-        // chat or another agent's picker. Skipped on sync so later-discovered
-        // models stay disabled until the user enables them.
-        if (opts.enableNewModels) {
+        // chat or another agent's picker. A wire id outside `autoEnrollFilter`
+        // (when set) ships available-but-off.
+        if (!autoEnrollFilter || autoEnrollFilter.has(info.id)) {
           await this.#backends.enableModel(agentType, configuredModelId);
         }
         added.push({ wireId: info.id, configuredModelId });

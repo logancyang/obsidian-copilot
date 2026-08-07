@@ -50,7 +50,7 @@ An optional description of what the project is for.
 ### Model
 
 Choose which AI model to use for this project. The available options are the models enabled under
-**Settings → Copilot → Agents → Quick Chat models**.
+**Settings → Copilot → Basic → Agents → Quick Chat models**.
 
 ### Model Settings
 

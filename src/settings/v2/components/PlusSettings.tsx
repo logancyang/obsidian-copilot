@@ -47,7 +47,7 @@ export function PlusSettings() {
   const usageData = getPlusUsageMock();
 
   return (
-    <section className="tw-flex tw-flex-col tw-gap-4 tw-rounded-xl tw-border tw-border-solid tw-p-4 tw-shadow-sm tw-bg-interactive-accent/10 tw-border-interactive-accent/40">
+    <section className="tw-flex tw-flex-col tw-gap-4 tw-rounded-xl tw-border tw-border-solid tw-border-border tw-p-4 tw-shadow-sm tw-bg-interactive-accent/10">
       <div className="tw-flex tw-items-center tw-justify-between tw-gap-2 tw-text-lg tw-font-semibold">
         <span>Copilot License</span>
         {licenseStatus === "active" && (
@@ -93,7 +93,7 @@ export function PlusSettings() {
           undefined; the status covers a key that stopped working while the
           cached flag still reads paid. */}
       {(isPaidUser === false || licenseStatus === "inactive") && !isChecking && (
-        <div className="tw-flex tw-flex-col tw-gap-2 tw-rounded-lg tw-border tw-border-solid tw-bg-primary tw-p-3 tw-border-interactive-accent/30">
+        <div className="tw-flex tw-flex-col tw-gap-2 tw-rounded-lg tw-border tw-border-solid tw-border-border tw-bg-primary tw-p-3">
           <div className="tw-text-sm tw-text-normal">All of it for a few dollars a month.</div>
           <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-2">
             <Button

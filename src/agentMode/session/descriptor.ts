@@ -206,6 +206,16 @@ export interface BackendDescriptor {
   openInstallUI(plugin: CopilotPlugin): void;
 
   /**
+   * Optional: actions rendered inline in the settings row while this backend is
+   * absent, in place of the generic Configure button. Backends the plugin can
+   * install itself own their whole first-run path (download, progress, cancel,
+   * adopting an existing binary), so the user never has to open a dialog to get
+   * started. Backends that only document an external install omit it and keep
+   * the Configure button.
+   */
+  AbsentInstallActions?: React.ComponentType<{ plugin: CopilotPlugin }>;
+
+  /**
    * Optional: upgrade the installed binary in place (managed reinstall, or the
    * CLI's own `upgrade`). Resolves when done. Changing the persisted version
    * restarts the backend via the `subscribeInstallState` subscription, so the

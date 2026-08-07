@@ -7,7 +7,7 @@
  *   - the passed `configuredModelId` if it's still enabled in `backends.chat`;
  *   - otherwise the first enabled chat model (stale/removed selection);
  *   - otherwise `{ ok: false, reason: "empty" }` — nothing enabled, UI prompts
- *     the user to enable a model under Settings → Agents → Quick Chat.
+ *     the user to enable a model under Settings → Basic → Agents → Quick Chat.
  */
 
 import { CustomModel } from "@/aiParams";

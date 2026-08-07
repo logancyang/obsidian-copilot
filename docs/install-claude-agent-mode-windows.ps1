@@ -68,5 +68,5 @@ Write-Host ""
 Write-Host "Done. $clipboardMessage"
 Write-Host $claude
 Write-Host ""
-Write-Host "Next: Obsidian -> Settings -> Copilot -> Agents -> Claude -> Configure"
+Write-Host "Next: Obsidian -> Settings -> Copilot -> Basic -> Agents -> Claude -> Configure"
 Write-Host "Click Auto-detect. If needed, paste this path into the binary path field, then save."

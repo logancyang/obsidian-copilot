@@ -4,9 +4,10 @@
  * `origin: "agent"` `ConfiguredModel` so the curation UI and chat picker can
  * show the agent-discovered set.
  *
- * First enrollment of an `agentType` creates the provider and enables every
- * reported model; every later probe only reconciles the model list (no
- * provider-row write), so re-probes don't churn settings.
+ * First enrollment of an `agentType` creates the provider and enrolls every
+ * reported model, enabling all of them (opencode: only the first few — see
+ * `OPENCODE_DEFAULT_ENABLED_COUNT`); every later probe only reconciles the
+ * model list (no provider-row write), so re-probes don't churn settings.
  *
  * opencode enrolls all its models under a single agent provider, each
  * `ConfiguredModel.info.id` keeping the full prefixed wire form (e.g.
@@ -35,6 +36,13 @@ const PROVIDER_TYPE_BY_AGENT: Record<AgentType, ProviderType> = {
   codex: "openai-compatible",
   opencode: "openai-compatible",
 };
+
+/**
+ * How many opencode models start enabled on first enrollment. Small enough to
+ * keep the model picker scannable without hiding the catalog — the rest are
+ * enrolled and one toggle away in Settings.
+ */
+const OPENCODE_DEFAULT_ENABLED_COUNT = 3;
 
 /**
  * Subscribe (for the plugin's lifetime) to the model cache and enroll each
@@ -107,7 +115,7 @@ export function wireAgentModelDiscovery(
 
 /**
  * Enroll one backend's reported wire ids through `AgentSetupApi`: first
- * enrollment registers the provider and keeps every reported model enabled;
+ * enrollment registers the provider and picks the initially-enabled set;
  * later enrollments only reconcile the model list. opencode first drops models
  * it shares with a Copilot-managed provider.
  */
@@ -161,8 +169,21 @@ async function enrollBackend(
     return;
   }
 
-  // First enrollment keeps every registered model enabled. Catalog ordering
-  // carries no backend-default semantics.
+  // opencode advertises a large hosted catalog and, unlike codex, gets no
+  // (model × effort) collapsing in the picker — one reported model is one row.
+  // Enabling all of them buries the picker in scroll on a fresh install, so
+  // only the first few start on; the rest are still enrolled and one toggle
+  // away in Settings.
+  //
+  // "First few" is presentation order, not a quality ranking: the protocol
+  // carries no recommendation or default signal, so this is a deterministic
+  // fallback for a count the product chose, not an assertion about which
+  // models are best.
+  const autoEnrollModelIds =
+    descriptor.id === "opencode"
+      ? wireModelIds.slice(0, OPENCODE_DEFAULT_ENABLED_COUNT)
+      : undefined;
+
   const result = await api.setup.agent.registerAgentProvider({
     agentType,
     providerType: PROVIDER_TYPE_BY_AGENT[agentType],
@@ -171,13 +192,15 @@ async function enrollBackend(
     // own models, so the keychain id stays null.
     apiKey: null,
     wireModelIds,
+    autoEnrollModelIds,
     fallbackDisplayNames,
     fallbackDescriptions,
   });
 
   logInfo(
     `[AgentMode] model discovery: first enrollment for ${agentType} — ` +
-      `${result.configuredModelIds.length} model(s) configured and enabled`
+      `${result.configuredModelIds.length} model(s) configured, ` +
+      `${autoEnrollModelIds?.length ?? result.configuredModelIds.length} enabled`
   );
 }
 

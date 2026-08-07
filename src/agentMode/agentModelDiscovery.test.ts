@@ -230,7 +230,7 @@ describe("wireAgentModelDiscovery", () => {
     unsub();
   });
 
-  it("keeps every registered model enabled regardless of catalog order", async () => {
+  it("leaves autoEnrollModelIds unset for codex so its whole catalog starts enabled", async () => {
     mockDescriptors = [makeDescriptor({ id: "codex" })];
     const a = makeApiFake();
     const catalog = catalogWithModels(["gpt-5", "gpt-5.5"]);
@@ -242,11 +242,12 @@ describe("wireAgentModelDiscovery", () => {
     const unsub = wireAgentModelDiscovery(makePlugin(a.api), manager);
     await waitForDiscoveryLog("first enrollment for codex");
     expect(a.registerAgentProvider.mock.calls[0][0].wireModelIds).toEqual(["gpt-5", "gpt-5.5"]);
+    expect(a.registerAgentProvider.mock.calls[0][0].autoEnrollModelIds).toBeUndefined();
     expect(a.setEnabledModels).not.toHaveBeenCalled();
     unsub();
   });
 
-  it("keeps every remaining OpenCode model enabled after managed-provider suppression", async () => {
+  it("enrolls every remaining OpenCode model after managed-provider suppression", async () => {
     mockDescriptors = [makeDescriptor({ id: "opencode" })];
     const m = makeManagerFake();
     const a = makeApiFake();
@@ -268,6 +269,50 @@ describe("wireAgentModelDiscovery", () => {
       "opencode/small-gherkin",
     ]);
     expect(a.setEnabledModels).not.toHaveBeenCalled();
+    unsub();
+  });
+
+  it("enables only the first three OpenCode models while enrolling the rest", async () => {
+    mockDescriptors = [makeDescriptor({ id: "opencode" })];
+    const m = makeManagerFake();
+    const a = makeApiFake();
+    m.setCatalog(
+      "opencode",
+      catalogWithModels([
+        "opencode/big-pickle",
+        "opencode/claude-fable-5",
+        "opencode/claude-haiku-4-5",
+        "opencode/claude-opus-4-1",
+        "opencode/small-gherkin",
+      ])
+    );
+
+    const unsub = wireAgentModelDiscovery(makePlugin(a.api), m.manager);
+    await waitForDiscoveryLog("first enrollment for opencode");
+
+    const input = a.registerAgentProvider.mock.calls[0][0];
+    // Every model is still enrolled, so the curation UI can list all five.
+    expect(input.wireModelIds).toHaveLength(5);
+    expect(input.autoEnrollModelIds).toEqual([
+      "opencode/big-pickle",
+      "opencode/claude-fable-5",
+      "opencode/claude-haiku-4-5",
+    ]);
+    unsub();
+  });
+
+  it("enables every OpenCode model when fewer than three survive suppression", async () => {
+    mockDescriptors = [makeDescriptor({ id: "opencode" })];
+    const m = makeManagerFake();
+    const a = makeApiFake();
+    m.setCatalog("opencode", catalogWithModels(["opencode/big-pickle"]));
+
+    const unsub = wireAgentModelDiscovery(makePlugin(a.api), m.manager);
+    await waitForDiscoveryLog("first enrollment for opencode");
+
+    expect(a.registerAgentProvider.mock.calls[0][0].autoEnrollModelIds).toEqual([
+      "opencode/big-pickle",
+    ]);
     unsub();
   });
 

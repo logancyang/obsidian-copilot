@@ -7,6 +7,7 @@ import {
   type BackendDescriptor,
 } from "@/agentMode";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { SettingItem } from "@/components/ui/setting-item";
 import { SettingSection } from "@/components/ui/setting-section";
 import { TabContent, TabItem, type TabItem as TabItemType } from "@/components/ui/setting-tabs";
@@ -17,7 +18,6 @@ import { logError } from "@/logger";
 import { setSettings, updateSetting, useSettingsValue } from "@/settings/model";
 import { formatBinaryPathForDisplay } from "@/utils/binaryPath";
 import { AlertTriangle, MessageCircle } from "lucide-react";
-import { Platform } from "obsidian";
 import React from "react";
 import { ChatModelEnableList } from "./ChatModelEnableList";
 import { ConfiguredModelEnableList } from "./ConfiguredModelEnableList";
@@ -37,10 +37,26 @@ function getScrollableParent(el: HTMLElement): HTMLElement | null {
 }
 
 /**
- * Top-level "Agents" settings tab. Owns the global default-backend picker and
- * a sub-tab strip with one panel per backend plus a Quick Chat panel. Each
- * backend panel curates that backend's default model, enabled models, and
- * binary/auth config.
+ * Section label for the Agents block. The `alpha` badge is deliberately quiet —
+ * it qualifies the heading rather than competing with it.
+ */
+const AGENTS_SECTION_LABEL = (
+  <span className="tw-inline-flex tw-items-center tw-gap-1.5">
+    Agents
+    <Badge variant="outline" className="tw-px-1.5 tw-py-0 tw-font-normal">
+      alpha
+    </Badge>
+  </span>
+);
+
+/**
+ * The "Agents" section of the Basic settings tab. Owns the global
+ * default-backend picker and a sub-tab strip with one panel per backend plus a
+ * Quick Chat panel. Each backend panel curates that backend's default model,
+ * enabled models, and binary/auth config.
+ *
+ * Desktop-only: the caller must gate on `isDesktopRuntime()` before rendering
+ * this, because the `@/agentMode` barrel it imports pulls in Node-only modules.
  */
 export const AgentSettings: React.FC = () => {
   const settings = useSettingsValue();
@@ -69,17 +85,6 @@ export const AgentSettings: React.FC = () => {
     setSelectedTab(id);
   }, []);
 
-  if (Platform.isMobile) {
-    return (
-      <section>
-        <div className="tw-mb-3 tw-text-xl tw-font-bold">Agents</div>
-        <div className="tw-text-muted">
-          Agent Mode is desktop only. Open the desktop app to configure agents.
-        </div>
-      </section>
-    );
-  }
-
   // Every registered backend shows here — Self-Host Mode marks cloud agents
   // (warning banner in their panel) rather than hiding them. Cloud agents sort
   // last because `backendDisplayOrder()` lists the self-hostable opencode first.
@@ -106,49 +111,52 @@ export const AgentSettings: React.FC = () => {
     : orderedDescriptors[0].id;
 
   return (
-    <section>
-      <div className="tw-mb-3 tw-text-xl tw-font-bold">Agents (alpha)</div>
-      <div className="tw-space-y-4">
-        <SettingSection>
-          <SettingItem
-            type="select"
-            title="Default backend"
-            description="Used when you click + to start a new session and for auto-spawn on mount. Selecting a model from the model picker also updates this."
-            value={activeBackendValue}
-            onChange={(value) =>
-              setSettings((cur) => ({ agentMode: { ...cur.agentMode, activeBackend: value } }))
-            }
-            options={orderedDescriptors.map((d) => ({ label: d.displayName, value: d.id }))}
-          />
-        </SettingSection>
+    <section className="tw-space-y-4">
+      <SettingSection label={AGENTS_SECTION_LABEL}>
+        <SettingItem
+          type="select"
+          title="Default backend"
+          description="Used when you click + to start a new session and for auto-spawn on mount. Selecting a model from the model picker also updates this."
+          value={activeBackendValue}
+          onChange={(value) =>
+            setSettings((cur) => ({ agentMode: { ...cur.agentMode, activeBackend: value } }))
+          }
+          options={orderedDescriptors.map((d) => ({ label: d.displayName, value: d.id }))}
+        />
+      </SettingSection>
 
-        <div className="tw-flex tw-flex-col">
-          <div ref={tabStripRef} className="tw-flex tw-flex-wrap tw-gap-1" role="tablist">
-            {tabs.map((tab, index) => (
-              <TabItem
-                key={tab.id}
-                tab={tab}
-                isSelected={selectedTabId === tab.id}
-                onClick={() => handleSelectTab(tab.id)}
-                isFirst={index === 0}
-                isLast={index === tabs.length - 1}
-              />
-            ))}
-          </div>
-
-          {orderedDescriptors.map((descriptor) => (
-            <TabContent
-              key={descriptor.id}
-              id={descriptor.id}
-              isSelected={selectedTabId === descriptor.id}
-            >
-              <BackendPanel descriptor={descriptor} plugin={plugin} />
-            </TabContent>
+      <div className="tw-flex tw-flex-col">
+        <div ref={tabStripRef} className="tw-flex tw-flex-wrap tw-gap-1" role="tablist">
+          {tabs.map((tab, index) => (
+            <TabItem
+              key={tab.id}
+              tab={tab}
+              isSelected={selectedTabId === tab.id}
+              onClick={() => handleSelectTab(tab.id)}
+              isFirst={index === 0}
+              isLast={index === tabs.length - 1}
+              variant="inline"
+            />
           ))}
-          <TabContent id={QUICK_CHAT_TAB_ID} isSelected={selectedTabId === QUICK_CHAT_TAB_ID}>
-            <QuickChatPanel />
-          </TabContent>
         </div>
+
+        {orderedDescriptors.map((descriptor) => (
+          <TabContent
+            key={descriptor.id}
+            id={descriptor.id}
+            isSelected={selectedTabId === descriptor.id}
+            variant="inline"
+          >
+            <BackendPanel descriptor={descriptor} plugin={plugin} />
+          </TabContent>
+        ))}
+        <TabContent
+          id={QUICK_CHAT_TAB_ID}
+          isSelected={selectedTabId === QUICK_CHAT_TAB_ID}
+          variant="inline"
+        >
+          <QuickChatPanel />
+        </TabContent>
       </div>
     </section>
   );
@@ -167,8 +175,8 @@ const QuickChatPanel: React.FC = () => {
   const hasDefault = resolvedDefaultModelId !== undefined;
 
   return (
-    <div className="tw-space-y-3">
-      <div className="tw-flex tw-min-w-0 tw-flex-col">
+    <SettingSection>
+      <div className="tw-flex tw-min-w-0 tw-flex-col tw-py-4">
         <span className="tw-text-base tw-font-semibold">Quick Chat models</span>
         <span className="tw-text-xs tw-text-muted">
           Models shown in the chat model picker. Add providers on the Models (BYOK) tab.
@@ -190,8 +198,10 @@ const QuickChatPanel: React.FC = () => {
         }
         placeholder="Model"
       />
-      <ChatModelEnableList />
-    </div>
+      <div className="tw-py-4">
+        <ChatModelEnableList />
+      </div>
+    </SettingSection>
   );
 };
 
@@ -226,6 +236,13 @@ const BackendPanel: React.FC<{
 
   const Icon = descriptor.Icon;
   const showCloudWarning = backendNeedsSelfHostWarning(descriptor, settings);
+  // Only a backend the plugin can install itself offers inline actions, and
+  // that is also the only kind whose models run on the user's own keys — so the
+  // same condition gates the recommendation and the BYOK hint. A vendor backend
+  // (claude, codex) authenticates against its own subscription, where "add
+  // providers on the BYOK tab" would be wrong advice.
+  const InlineInstall =
+    installState.kind === "absent" ? descriptor.AbsentInstallActions : undefined;
 
   return (
     <div className="tw-space-y-3">
@@ -239,41 +256,73 @@ const BackendPanel: React.FC<{
           </div>
         </div>
       )}
-      <div className="tw-flex tw-items-center tw-justify-between tw-gap-2">
-        <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-2">
-          <Icon className="tw-size-4 tw-shrink-0" />
-          <div className="tw-flex tw-min-w-0 tw-flex-col">
-            <div className="tw-flex tw-items-center tw-gap-2">
-              <span className="tw-text-base tw-font-semibold">{descriptor.displayName}</span>
-              <InstallBadge state={installState} />
+      {/* One card per panel, rows divided by `SettingSection`. It insets and
+          divides its DIRECT children, so each block below has to be a single
+          row-shaped element carrying its own vertical padding — the rows that
+          come from `SettingItem` / `EnvOverridesSetting` already do. The cloud
+          warning stays outside: it qualifies the whole backend, not one row. */}
+      <SettingSection>
+        <div className="tw-flex tw-flex-col tw-gap-2 tw-py-4">
+          <div className="tw-flex tw-items-center tw-justify-between tw-gap-2">
+            <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-2">
+              <Icon className="tw-size-4 tw-shrink-0" />
+              <div className="tw-flex tw-min-w-0 tw-flex-col">
+                <div className="tw-flex tw-items-center tw-gap-2">
+                  <span className="tw-text-base tw-font-semibold">{descriptor.displayName}</span>
+                  <InstallBadge state={installState} />
+                  {InlineInstall && (
+                    <Badge variant="accent" className="tw-font-normal">
+                      Recommended
+                    </Badge>
+                  )}
+                </div>
+                {resolvedPath && (
+                  <TruncatedText className="tw-max-w-[90%] tw-font-mono tw-text-xs tw-text-muted">
+                    {formatBinaryPathForDisplay(resolvedPath)}
+                  </TruncatedText>
+                )}
+                {InlineInstall && (
+                  <span className="tw-text-xs tw-text-muted">
+                    Not installed — one download away.
+                  </span>
+                )}
+                {(installState.kind === "incompatible" || installState.kind === "error") && (
+                  <span className="tw-text-xs tw-text-error">{installState.message}</span>
+                )}
+              </div>
             </div>
-            {resolvedPath && (
-              <TruncatedText className="tw-max-w-[90%] tw-font-mono tw-text-xs tw-text-muted">
-                {formatBinaryPathForDisplay(resolvedPath)}
-              </TruncatedText>
-            )}
-            {(installState.kind === "incompatible" || installState.kind === "error") && (
-              <span className="tw-text-xs tw-text-error">{installState.message}</span>
+            {InlineInstall ? (
+              <InlineInstall plugin={plugin} />
+            ) : (
+              <Button
+                className="tw-shrink-0"
+                size="default"
+                variant={installState.kind === "ready" ? "secondary" : "default"}
+                onClick={() => descriptor.openInstallUI(plugin)}
+              >
+                Configure
+              </Button>
             )}
           </div>
+          {InlineInstall && (
+            <div className="tw-text-xs tw-text-muted">
+              Works with Copilot Plus or your own API keys — add providers on the BYOK tab.
+            </div>
+          )}
         </div>
-        <Button
-          className="tw-shrink-0"
-          size="default"
-          variant={installState.kind === "ready" ? "secondary" : "default"}
-          onClick={() => descriptor.openInstallUI(plugin)}
-        >
-          Configure
-        </Button>
-      </div>
 
-      {installState.kind === "ready" && manager && (
-        <AgentDefaultModelSetting descriptor={descriptor} manager={manager} />
-      )}
+        {installState.kind === "ready" && manager && (
+          <AgentDefaultModelSetting descriptor={descriptor} manager={manager} />
+        )}
 
-      {installState.kind === "ready" && <ConfiguredModelEnableList descriptor={descriptor} />}
+        {installState.kind === "ready" && (
+          <div className="tw-py-4">
+            <ConfiguredModelEnableList descriptor={descriptor} />
+          </div>
+        )}
 
-      {Panel && <Panel plugin={plugin} app={plugin.app} />}
+        {Panel && <Panel plugin={plugin} app={plugin.app} />}
+      </SettingSection>
     </div>
   );
 };

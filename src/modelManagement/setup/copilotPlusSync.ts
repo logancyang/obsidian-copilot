@@ -20,9 +20,9 @@ import type { ModelInfo } from "@/modelManagement/types/catalog";
  * `models.brevilabs.com/v1/models`. Wire ids must match what the relay accepts;
  * opencode routes them as `copilot-plus/<id>` (see `mapProviderToOpencodeId`).
  *
- * Only `copilot-plus-flash` is enabled by default (see
- * `COPILOT_PLUS_DEFAULT_ENABLED_MODELS`); the rest ship available-but-off in the
- * chat + opencode pickers for the user to toggle on.
+ * `COPILOT_PLUS_DEFAULT_ENABLED_MODELS` names the few enabled by default; the
+ * rest ship available-but-off in the chat + opencode pickers for the user to
+ * toggle on.
  *
  * `reasoning: true` marks the models the relay accepts an effort level for (it
  * matches the models service's `supports_reasoning`). The chat + agent pickers
@@ -72,6 +72,14 @@ export const COPILOT_PLUS_MODELS: readonly ModelInfo[] = Object.freeze([
     modalities: { input: ["text"], output: ["text"] },
   },
   {
+    id: ChatModels.COPILOT_PLUS_DEEPSEEK_V4_FLASH_0731,
+    displayName: "DeepSeek V4 Flash 0731",
+    description: "The newest DeepSeek V4 Flash snapshot: fast, cheap, and broadly capable.",
+    toolCall: true,
+    reasoning: true,
+    modalities: { input: ["text"], output: ["text"] },
+  },
+  {
     id: ChatModels.COPILOT_PLUS_MIMO_V2_5,
     displayName: "MiMo V2.5",
     description: "Cost-effective and capable for everyday use.",
@@ -94,9 +102,15 @@ export const COPILOT_PLUS_MODELS: readonly ModelInfo[] = Object.freeze([
  * registered. Everything else in `COPILOT_PLUS_MODELS` is added but left
  * unenrolled, so users opt into the extra models themselves. Passed to
  * `registerPlusProvider` as `autoEnrollModelIds`.
+ *
+ * Three models are enabled by default to give users immediate access to
+ * representative capabilities: fastest responses (Flash), top-tier reasoning
+ * (DeepSeek V4 Pro), and long-horizon frontier open model (GLM-5.2).
  */
 export const COPILOT_PLUS_DEFAULT_ENABLED_MODELS: readonly string[] = Object.freeze([
   ChatModels.COPILOT_PLUS_FLASH,
+  ChatModels.COPILOT_PLUS_DEEPSEEK_V4_PRO,
+  ChatModels.COPILOT_PLUS_GLM_5_2,
 ]);
 
 /**
