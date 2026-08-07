@@ -76,6 +76,19 @@ export type ContextMaterializeProgressFn = (progress: ContextMaterializeProgress
 // Referential stability: a single frozen empty array for every "no context" exit.
 const EMPTY_DIRECTORIES: string[] = Object.freeze([] as string[]) as string[];
 /**
+ * Block for a project whose context could not be resolved at all. Still announces the
+ * workspace, for the same reason the source-less block below does: losing the block would
+ * also lose the workspace policy, so a failed materialization would silently widen where the
+ * agent writes instead of merely leaving it without context.
+ */
+const UNAVAILABLE_PROJECT_CONTEXT_BLOCK = [
+  "<project_context>",
+  "This session runs in a project workspace: the working directory is the project's",
+  "folder. This project's context sources could not be loaded for this session.",
+  "</project_context>",
+].join("\n");
+
+/**
  * Frozen fallback result for the "no usable record / whole-run failure" exits —
  * NO `contextSignature`, so it never clears a caller's dirty flag (nothing was
  * captured). A project that resolves to no sources returns a DISTINCT result
@@ -85,6 +98,7 @@ const EMPTY_DIRECTORIES: string[] = Object.freeze([] as string[]) as string[];
  */
 export const EMPTY_CONTEXT_MATERIALIZATION_RESULT: ContextMaterializationResult = Object.freeze({
   additionalDirectories: EMPTY_DIRECTORIES,
+  projectContextBlock: UNAVAILABLE_PROJECT_CONTEXT_BLOCK,
 });
 const EMPTY_RESULT = EMPTY_CONTEXT_MATERIALIZATION_RESULT;
 

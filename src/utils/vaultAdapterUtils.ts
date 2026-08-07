@@ -1,4 +1,14 @@
-import { App, TAbstractFile, TFile, TFolder } from "obsidian";
+import { App, Platform, TAbstractFile, TFile, TFolder } from "obsidian";
+
+/**
+ * Whether the host filesystem treats paths case-insensitively — i.e. whether two spellings of
+ * one path can name the same file. Callers that fold case on a path MUST gate on this: on a
+ * case-sensitive volume `agents.md` and `AGENTS.md` really are two different files, and
+ * conflating them silently redirects reads and writes to the wrong one.
+ */
+export function hasCaseInsensitiveFilesystem(): boolean {
+  return Platform.isWin || Platform.isMacOS || Platform.isIosApp;
+}
 
 /**
  * Move a file or folder to the user's configured trash via FileManager.trashFile (Obsidian 1.4+).

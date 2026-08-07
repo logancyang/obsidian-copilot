@@ -7,7 +7,12 @@ import {
   readAgentsFile,
   writeAgentsFile,
 } from "@/instructions/agentsFile";
-import { App, TFile, TFolder } from "obsidian";
+import { App, Platform, TFile, TFolder } from "obsidian";
+
+/** The mock defaults to the case-sensitive branch; folding tests opt in explicitly. */
+function setCaseInsensitiveFilesystem(value: boolean) {
+  (Platform as { isMacOS: boolean }).isMacOS = value;
+}
 
 interface MockVaultState {
   files: Map<string, string>;
@@ -348,6 +353,7 @@ describe("agentsFile", () => {
     it("opens a note the vault stores under another casing", async () => {
       // A case-insensitive volume lets `agents.md` answer for `AGENTS.md`. Matching the cache
       // only exactly would call an ordinary note unreachable and refuse to open it.
+      setCaseInsensitiveFilesystem(true);
       const { app, openFile } = makeApp({ "agents.md": "rules" });
 
       await openAgentsFile(app, "", "", false);
@@ -356,14 +362,18 @@ describe("agentsFile", () => {
     });
   });
 
-  describe("case-insensitive vault spellings", () => {
+  describe("differently-cased instruction files", () => {
+    afterEach(() => setCaseInsensitiveFilesystem(false));
+
     it("reads the existing note rather than reporting no instructions", async () => {
+      setCaseInsensitiveFilesystem(true);
       const { app } = makeApp({ "agents.md": "Old rules" });
 
       await expect(readAgentsFile(app, "")).resolves.toBe("Old rules");
     });
 
     it("edits that same note through the vault instead of creating a second file", async () => {
+      setCaseInsensitiveFilesystem(true);
       const { app, state } = makeApp({ "agents.md": "Old rules", "CLAUDE.md": "@AGENTS.md\n" });
 
       await writeAgentsFile(app, "", "New rules");
@@ -374,6 +384,17 @@ describe("agentsFile", () => {
       // state and strands an editor the user has open on that note.
       expect(app.vault.modify).toHaveBeenCalled();
       expect(app.vault.adapter.write).not.toHaveBeenCalled();
+    });
+
+    it("keeps them separate on a case-sensitive volume, where the backends read only the exact name", async () => {
+      // Adopting `agents.md` here would leave AGENTS.md uncreated and send the user's edits to
+      // a file codex/opencode never discover.
+      const { app, state } = makeApp({ "agents.md": "Someone else's note" });
+
+      await writeAgentsFile(app, "", "New rules");
+
+      expect(state.files.get("AGENTS.md")).toBe("New rules");
+      expect(state.files.get("agents.md")).toBe("Someone else's note");
     });
   });
 });

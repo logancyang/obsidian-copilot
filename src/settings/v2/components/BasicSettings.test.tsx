@@ -237,7 +237,28 @@ describe("BasicSettings", () => {
   it("opens a blank vault AGENTS.md, never seeded from a Chat prompt", async () => {
     render(<BasicSettings />);
     fireEvent.click(await screen.findByRole("button", { name: /Open AGENTS.md/ }));
-    expect(openAgentsFile).toHaveBeenCalledWith(expect.anything(), "", "", true);
+    // Opening awaits the flushed save first, so the open lands a tick later.
+    await waitFor(() =>
+      expect(openAgentsFile).toHaveBeenCalledWith(expect.anything(), "", "", true)
+    );
+  });
+
+  it("lands a pending edit before opening the file, so the open cannot race the save", async () => {
+    // Both paths create the file when it is missing; letting them race loses whatever the user
+    // typed inside the debounce window to an already-exists failure.
+    render(<BasicSettings />);
+    const editor = await screen.findByRole("textbox", { name: "Custom vault instructions" });
+    fireEvent.change(editor, { target: { value: "Always cite." } });
+
+    fireEvent.click(screen.getByRole("button", { name: /Open AGENTS.md/ }));
+
+    await waitFor(() =>
+      expect(openAgentsFile).toHaveBeenCalledWith(expect.anything(), "", "", true)
+    );
+    expect(writeAgentsFile).toHaveBeenCalledWith(expect.anything(), "", "Always cite.");
+    expect(writeAgentsFile.mock.invocationCallOrder[0]).toBeLessThan(
+      openAgentsFile.mock.invocationCallOrder[0]
+    );
   });
 
   it("shows what the vault AGENTS.md already says, so editing starts from the real file", async () => {

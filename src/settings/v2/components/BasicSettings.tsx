@@ -88,28 +88,36 @@ export const BasicSettings: React.FC = () => {
   // Settings have no Save button, so the file follows the textarea. Debounced because the
   // alternative is one vault write per keystroke; flushed on unmount so closing the tab
   // mid-sentence still lands the last edit.
+  // Returns the write so a caller that needs the file on disk can await `flush()`.
   const saveVaultInstructions = useMemo(
     () =>
-      debounce((next: string) => {
-        void writeAgentsFile(app, "", next).catch((error) => {
-          logError("Failed to save vault instructions.", error);
-          new Notice("Failed to save AGENTS.md.");
-        });
-      }, 1000),
+      debounce(
+        (next: string) =>
+          writeAgentsFile(app, "", next).catch((error) => {
+            logError("Failed to save vault instructions.", error);
+            new Notice("Failed to save AGENTS.md.");
+          }),
+        1000
+      ),
     [app]
   );
-  useEffect(() => () => saveVaultInstructions.flush(), [saveVaultInstructions]);
+  useEffect(() => () => void saveVaultInstructions.flush(), [saveVaultInstructions]);
 
-  const handleOpenVaultInstructions = () => {
-    saveVaultInstructions.flush();
+  const handleOpenVaultInstructions = async () => {
+    // Awaited, not fire-and-forget: `openAgentsFile` creates the file when it is missing, so
+    // racing an in-flight save lets both paths see it as absent and create it. The loser's
+    // write then fails and takes whatever the user typed inside the debounce window with it.
+    await saveVaultInstructions.flush();
     // The settings modal sits above the workspace, so close it or the file opens behind it.
     (app as unknown as { setting: { close: () => void } }).setting.close();
     // Empty content on purpose: a vault AGENTS.md starts blank. Nothing is migrated into it,
     // so what the user sees here is only ever what they wrote.
-    void openAgentsFile(app, "", "", true).catch((error) => {
+    try {
+      await openAgentsFile(app, "", "", true);
+    } catch (error) {
       logError("Failed to open vault AGENTS.md.", error);
       new Notice(error instanceof Error ? error.message : "Failed to open AGENTS.md.");
-    });
+    }
   };
 
   const applyFolderChange = () => {
@@ -342,10 +350,11 @@ export const BasicSettings: React.FC = () => {
                 value={vaultInstructions}
                 onChange={(next) => {
                   setVaultInstructions(next);
-                  saveVaultInstructions(next);
+                  // Typing never waits on the write; only Open does, via `flush()`.
+                  void saveVaultInstructions(next);
                 }}
               />
-              <Button variant="secondary" onClick={handleOpenVaultInstructions}>
+              <Button variant="secondary" onClick={() => void handleOpenVaultInstructions()}>
                 <ArrowUpRight className="tw-size-4" />
                 Open AGENTS.md
               </Button>

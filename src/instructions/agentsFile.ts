@@ -1,5 +1,10 @@
 import { logWarn } from "@/logger";
-import { isInVaultCache, resolveFileByPath, trashFile } from "@/utils/vaultAdapterUtils";
+import {
+  hasCaseInsensitiveFilesystem,
+  isInVaultCache,
+  resolveFileByPath,
+  trashFile,
+} from "@/utils/vaultAdapterUtils";
 import { App, normalizePath, TFile, TFolder } from "obsidian";
 
 export const AGENTS_FILE_NAME = "AGENTS.md";
@@ -228,13 +233,21 @@ function childPath(folderPath: string, fileName: string): string {
  * then treats an ordinary note as an unreachable hidden-folder file: reads and writes bypass
  * Obsidian's own file state, and Open reports a folder error for a note it could have opened.
  * Matching the cache case-insensitively first lets the real file win.
+ *
+ * Gated on the platform, because the fold is only ever a repair. Where two spellings really are
+ * two files, adopting `agents.md` as the canonical file would be a corruption: the exact-name
+ * file the backends discover would never get created, and instructions edited through Copilot
+ * would land somewhere no agent reads.
  */
 async function resolveInstructionFile(app: App, filePath: string): Promise<TFile | null> {
   const cached = app.vault.getAbstractFileByPath(filePath);
   if (cached instanceof TFile) return cached;
-  const target = filePath.toLowerCase();
-  const variant = app.vault.getFiles().find((file) => file.path.toLowerCase() === target);
-  return variant ?? (await resolveFileByPath(app, filePath));
+  if (hasCaseInsensitiveFilesystem()) {
+    const target = filePath.toLowerCase();
+    const variant = app.vault.getFiles().find((file) => file.path.toLowerCase() === target);
+    if (variant) return variant;
+  }
+  return await resolveFileByPath(app, filePath);
 }
 
 /**

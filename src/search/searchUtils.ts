@@ -9,7 +9,8 @@ import { getEffectiveProjectsFolder } from "@/settings/copilotFolder";
 import { logFileManager } from "@/logFileManager";
 import { getTagsFromNote, stripHash } from "@/utils";
 import { Embeddings } from "@langchain/core/embeddings";
-import { App, Platform, TFile } from "obsidian";
+import { hasCaseInsensitiveFilesystem } from "@/utils/vaultAdapterUtils";
+import { App, TFile } from "obsidian";
 
 export interface PatternCategory {
   tagPatterns?: string[];
@@ -170,11 +171,6 @@ export function getSystemExcludedFolders(settings: CopilotSettings): string[] {
  */
 export function isSystemExcludedPath(filePath: string): boolean {
   return matchSystemRoots(filePath, getSystemExcludedFolders(getSettings()));
-}
-
-/** Whether the host filesystem treats paths case-insensitively. */
-function hasCaseInsensitiveFilesystem(): boolean {
-  return Platform.isWin || Platform.isMacOS || Platform.isIosApp;
 }
 
 /**
