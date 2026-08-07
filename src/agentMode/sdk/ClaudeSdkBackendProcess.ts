@@ -15,7 +15,6 @@ import {
   query,
   type EffortLevel,
   type HookCallback,
-  type McpServerConfig,
   type ModelInfo,
   type Options,
   type PermissionMode,
@@ -42,7 +41,6 @@ import type {
   ListSessionsOutput,
   LoadSessionInput,
   LoadSessionOutput,
-  McpServerSpec,
   OpenSessionInput,
   OpenSessionOutput,
   PermissionDecision,
@@ -102,7 +100,6 @@ interface SessionState {
    * pulled via `ensureModelCatalog()`.
    */
   effort?: EffortLevel;
-  mcpServers: Record<string, McpServerConfig>;
   /**
    * Absolute extra workspace roots captured from the Open/Resume input,
    * forwarded into `options.additionalDirectories` on every `query()` for this
@@ -322,17 +319,11 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
   async newSession(params: OpenSessionInput): Promise<OpenSessionOutput> {
     logSdkOutbound("newSession", {
       cwd: params.cwd,
-      mcpServers: params.mcpServers,
       projectId: params.projectId ?? null,
     });
     await this.ensureCompatible();
     const sessionId = uuidv4();
     const cwd = params.cwd ?? null;
-    const mcp: Record<string, McpServerConfig> = {};
-    for (const server of params.mcpServers ?? []) {
-      const cfg = mcpServerSpecToSdkConfig(server);
-      if (cfg) mcp[server.name] = cfg;
-    }
     // Resolve the catalog before returning so the picker never sees an
     // empty model list. On a probe miss, at most one subprocess is
     // spawned (deduped via cachedModelsProbe).
@@ -344,7 +335,6 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       cwd,
       projectId: params.projectId,
       firstPromptStarted: false,
-      mcpServers: mcp,
       model: seedModelId,
       additionalDirectories: params.additionalDirectories,
       systemPromptAppend: this.resolveSystemPromptAppend(),
@@ -394,7 +384,6 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       pathToClaudeCodeExecutable: this.opts.pathToClaudeCodeExecutable,
       cwd: session.cwd ?? undefined,
       includePartialMessages: true,
-      mcpServers: session.mcpServers,
       allowedTools: ["Read", "Write", "Edit", "Glob", "Grep", "LS"],
       disallowedTools: ["TaskOutput", "Workflow", "Monitor"],
       canUseTool: this.bridge.canUseTool,
@@ -466,7 +455,6 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
         model: options.model ?? null,
         permissionMode: options.permissionMode ?? null,
         effort: options.effort ?? null,
-        mcpServers: Object.keys(options.mcpServers ?? {}),
         allowedTools: options.allowedTools,
         disallowedTools: options.disallowedTools,
       },
@@ -739,16 +727,11 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
   async resumeSession(params: ResumeSessionInput): Promise<ResumeSessionOutput> {
     logSdkOutbound(
       "resumeSession",
-      { cwd: params.cwd, mcpServers: params.mcpServers, projectId: params.projectId ?? null },
+      { cwd: params.cwd, projectId: params.projectId ?? null },
       params.sessionId
     );
     await this.ensureCompatible();
     const cwd = params.cwd ?? null;
-    const mcp: Record<string, McpServerConfig> = {};
-    for (const server of params.mcpServers ?? []) {
-      const cfg = mcpServerSpecToSdkConfig(server);
-      if (cfg) mcp[server.name] = cfg;
-    }
     const catalog = await this.ensureModelCatalog();
     const defaultId = this.opts.getDefaultModelId?.();
     const seedModelId = resolveSeedModelId(catalog, defaultId);
@@ -757,7 +740,6 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       cwd,
       projectId: params.projectId,
       firstPromptStarted: true,
-      mcpServers: mcp,
       model: seedModelId,
       additionalDirectories: params.additionalDirectories,
       systemPromptAppend: this.resolveSystemPromptAppend(),
@@ -779,10 +761,6 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     // a transcript provided by the caller). The loader falls back to
     // `resumeSession`, which reads the SDK's own on-disk transcript.
     throw new MethodUnsupportedError("session/load");
-  }
-
-  supportsMcpTransport(_transport: "http" | "sse"): boolean {
-    return true;
   }
 
   /**
@@ -1016,33 +994,6 @@ async function* makePromptStream(
     parent_tool_use_id: null,
     session_id: sessionId,
   };
-}
-
-function mcpServerSpecToSdkConfig(server: McpServerSpec): McpServerConfig | null {
-  if ("type" in server && server.type === "http") {
-    return { type: "http", url: server.url, headers: kvListToRecord(server.headers) };
-  }
-  if ("type" in server && server.type === "sse") {
-    return { type: "sse", url: server.url, headers: kvListToRecord(server.headers) };
-  }
-  if ("command" in server) {
-    return {
-      type: "stdio",
-      command: server.command,
-      args: server.args ?? [],
-      env: kvListToRecord(server.env),
-    };
-  }
-  return null;
-}
-
-function kvListToRecord(
-  list: Array<{ name: string; value: string }> | undefined
-): Record<string, string> | undefined {
-  if (!list || list.length === 0) return undefined;
-  const out: Record<string, string> = {};
-  for (const { name, value } of list) out[name] = value;
-  return out;
 }
 
 function canonicalModeToSdk(modeId: string): PermissionMode | null {

@@ -41,7 +41,7 @@ const PROVIDERS_WITHOUT_API_KEYS: ReadonlySet<Provider> = new Set([
 
 export function getProviderLabel(provider: string, model?: CustomModel): string {
   const baseLabel = ProviderInfo[provider as Provider]?.label || provider;
-  return baseLabel + (model?.believerExclusive && baseLabel === "Copilot Plus" ? "(Believer)" : "");
+  return baseLabel + (model?.believerExclusive && baseLabel === "Copilot" ? "(Believer)" : "");
 }
 
 /**

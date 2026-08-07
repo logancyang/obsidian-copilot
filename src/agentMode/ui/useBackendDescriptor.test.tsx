@@ -1,22 +1,32 @@
 import { act, renderHook } from "@testing-library/react";
 import { backendRegistry, getActiveBackendDescriptor } from "@/agentMode/backends/registry";
+import type { BackendId } from "@/agentMode/session/types";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import type { BackendDescriptor, InstallState } from "@/agentMode/session/types";
 import type CopilotPlugin from "@/main";
 import type { CopilotSettings } from "@/settings/model";
-import React from "react";
-import { useBackendInstallState, useSessionBackendDescriptor } from "./useBackendDescriptor";
+import {
+  useBackendInstallState,
+  useBackendInstallStates,
+  useSessionBackendDescriptor,
+} from "./useBackendDescriptor";
 
 let mockSettings = {} as CopilotSettings;
 
+/* eslint-disable @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mock name must match */
 jest.mock("@/settings/model", () => ({
-  useSettingsValue: () => React.useMemo(() => mockSettings, []),
+  useSettingsValue: () => mockSettings,
 }));
+/* eslint-enable @eslint-react/hooks-extra/no-unnecessary-use-prefix */
 
-jest.mock("@/agentMode/backends/registry", () => ({
-  backendRegistry: {},
-  getActiveBackendDescriptor: jest.fn(),
-}));
+jest.mock("@/agentMode/backends/registry", () => {
+  const registry: Record<string, unknown> = {};
+  return {
+    backendRegistry: registry,
+    getActiveBackendDescriptor: jest.fn(),
+    listBackendDescriptors: () => Object.values(registry),
+  };
+});
 
 const mockGetActiveBackendDescriptor = getActiveBackendDescriptor as jest.MockedFunction<
   typeof getActiveBackendDescriptor
@@ -51,11 +61,11 @@ function makeManager() {
   };
 }
 
-function makeInstallDescriptor(initial: InstallState) {
+function makeInstallDescriptor(initial: InstallState, id: BackendId = "claude") {
   let state = initial;
   const listeners = new Set<() => void>();
   const backend = {
-    id: "claude",
+    id,
     getInstallState: () => ({ ...state }),
     subscribeInstallState: (_plugin: CopilotPlugin, listener: () => void) => {
       listeners.add(listener);
@@ -163,6 +173,71 @@ describe("useBackendDescriptor", () => {
       unmount();
 
       expect(fake.unsubscribed()).toBe(true);
+    });
+  });
+
+  describe("useBackendInstallStates()", () => {
+    it("reuses one frozen empty record across settings identity changes", () => {
+      const { result, rerender } = renderHook(() => useBackendInstallStates({} as CopilotPlugin));
+      const first = result.current;
+
+      mockSettings = { ...mockSettings };
+      rerender();
+
+      expect(result.current).toBe(first);
+      expect(Object.isFrozen(result.current)).toBe(true);
+    });
+
+    it("reports every registered backend's state keyed by id", () => {
+      const opencode = makeInstallDescriptor({ kind: "ready", source: "managed" }, "opencode");
+      const claude = makeInstallDescriptor({ kind: "absent" }, "claude");
+      registry.opencode = opencode.backend;
+      registry.claude = claude.backend;
+
+      const { result } = renderHook(() => useBackendInstallStates({} as CopilotPlugin));
+
+      expect(result.current).toEqual({
+        opencode: { kind: "ready", source: "managed" },
+        claude: { kind: "absent" },
+      });
+    });
+
+    it("updates when any single backend's install state changes", () => {
+      const opencode = makeInstallDescriptor({ kind: "ready", source: "managed" }, "opencode");
+      const claude = makeInstallDescriptor({ kind: "absent" }, "claude");
+      registry.opencode = opencode.backend;
+      registry.claude = claude.backend;
+      const { result } = renderHook(() => useBackendInstallStates({} as CopilotPlugin));
+
+      act(() => claude.emit({ kind: "ready", source: "custom" }));
+
+      expect(result.current.claude).toEqual({ kind: "ready", source: "custom" });
+      expect(result.current.opencode).toEqual({ kind: "ready", source: "managed" });
+    });
+
+    it("keeps the same record identity when a notification changes nothing", () => {
+      const ready: InstallState = { kind: "ready", source: "managed" };
+      const opencode = makeInstallDescriptor(ready, "opencode");
+      registry.opencode = opencode.backend;
+      const { result } = renderHook(() => useBackendInstallStates({} as CopilotPlugin));
+      const before = result.current;
+
+      act(() => opencode.emit(ready));
+
+      expect(result.current).toBe(before);
+    });
+
+    it("unsubscribes from every backend on unmount", () => {
+      const opencode = makeInstallDescriptor({ kind: "absent" }, "opencode");
+      const claude = makeInstallDescriptor({ kind: "absent" }, "claude");
+      registry.opencode = opencode.backend;
+      registry.claude = claude.backend;
+      const { unmount } = renderHook(() => useBackendInstallStates({} as CopilotPlugin));
+
+      unmount();
+
+      expect(opencode.unsubscribed()).toBe(true);
+      expect(claude.unsubscribed()).toBe(true);
     });
   });
 });

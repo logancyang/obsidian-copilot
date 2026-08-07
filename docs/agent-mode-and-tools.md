@@ -26,6 +26,25 @@ When the autonomous agent is enabled, Copilot can:
 
 The agent activates automatically when you're in **Copilot Plus** mode. You don't need to do anything special — just ask your question.
 
+### Starting Agent Mode for the First Time
+
+If the agent Copilot would normally start is not set up and there is no chat or runtime error to recover, Agent Mode opens with **Select your agent**. Each row shows what that agent uses and its current setup state:
+
+- **Installed** can start a chat. Copilot checks sign-in after the agent starts.
+- **Checking…** is temporarily unavailable while Copilot verifies the installation.
+- **Update required** or **Error** opens Configure with the specific recovery guidance.
+- A row without a status badge is not installed and opens Configure.
+
+Selecting a row only previews its action. **Start chat** saves that agent as the default and starts it; **Configure** opens its setup without changing the default. After a chat starts, use the agent and model picker to switch agents or choose one of that agent's models.
+
+The Claude setup dialog can also sign you in before a chat starts. After confirming or auto-detecting the Claude Code binary, click **Sign in** to open Claude's browser login. If the Claude CLI cannot open the browser itself, click **Open sign-in page** while sign-in is running to open the fallback URL.
+
+### Choosing the OpenCode Binary Source
+
+The OpenCode setup dialog (**Settings → Copilot → Agents → opencode → Configure**) offers two ways to provide the binary, shown one at a time: **Managed by Copilot**, where Copilot downloads and updates an official release for you, and **My own binary**, where you point Copilot at an OpenCode you already have installed.
+
+Switching between the two views only changes which controls you see — it never changes the binary in use. The actual switch happens when you act: **Download & install** activates the managed copy, and applying a path under **My own binary** activates yours. Your saved custom path is kept while you browse the managed view, and the dialog tells you whenever the source you're looking at is not the one currently in use.
+
 ## Sample Prompts in the Message Box
 
 When you open a new agent chat and the message box is empty, Copilot types out sample prompts there one at a time — each appears character by character, pauses so you can read it, clears itself, and gives way to the next. They are examples of what the agent can do with your vault, not something being sent.
@@ -223,14 +242,18 @@ See [Context and Mentions](context-and-mentions.md) for the full @-mention refer
 
 ## Tool Call Indicators
 
-While the agent is working, the chat shows status indicators for each tool call:
+While the agent is working, the chat shows what it is doing. A single action gets its own status line, such as:
 
 - "Reading files"
 - "Searching the web"
 - "Reading file tree"
 - "Compacting"
 
-This lets you see what the agent is doing as it works.
+When the agent performs several actions in a row, they are collapsed into one summary row instead of a long list — for example "Read 2 files, ran 5 commands, thought for 51s". While that work is still in progress, the current step (like the command being run) appears beneath the summary and updates as the agent moves on.
+
+Click a summary row to expand it and see every action inside, each with its own status line. An expanded row stays open — even as new actions stream into it — until you collapse it again.
+
+Only background work is grouped this way. The agent's own messages, plan checklists, questions to you, and delegated sub-agents always stay visible as separate rows.
 
 ### Delegated Agents and Shell Commands
 

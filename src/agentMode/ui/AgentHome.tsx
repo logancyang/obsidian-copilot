@@ -340,7 +340,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     if (isOrphanedProject) new Notice("This project no longer exists.");
   }, [isOrphanedProject]);
 
-  const modelPickerOverride = useAgentModelPicker(manager);
+  const modelPickerOverride = useAgentModelPicker(manager, plugin);
   const modePickerOverride = useAgentModePicker(manager);
 
   const handleCycleMode = useCallback(() => {
@@ -945,6 +945,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                       onDeleteChat={handleDeleteChat}
                       onOpenSourceFile={handleOpenSourceFile}
                       usageMeter={<AgentContextMeter backend={backend} />}
+                      showMultiAgentUpsell
                     />
                     {composerNode}
                   </>

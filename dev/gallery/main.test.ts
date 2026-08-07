@@ -1,5 +1,5 @@
 import { mountPluginViewRoot, type PluginViewRootHandle } from "@/utils/react/mountPluginViewRoot";
-import { fireEvent, render } from "@testing-library/react";
+import { fireEvent, render, type RenderResult } from "@testing-library/react";
 import GalleryPlugin, { GALLERY_VIEWTYPE, type GalleryHandle } from "./main";
 import type { AuditReport } from "./audit";
 import type { GalleryViewState } from "./Gallery";
@@ -121,6 +121,25 @@ interface RecordedViewState {
 function getGeneratedMock(): { loaders: jest.Mock[] } {
   return jest.requireMock<{ galleryGeneratedMock: { loaders: jest.Mock[] } }>("./stories.generated")
     .galleryGeneratedMock;
+}
+
+/** Unfolds nested ancestors so a story button becomes clickable. */
+function expandStoryPath(gallery: RenderResult, storyId: string): void {
+  const segments = storyId.split("/");
+  segments.pop();
+  let path = "";
+
+  for (const [index, segment] of segments.entries()) {
+    path = path ? `${path}/${segment}` : segment;
+    if (index === 0) {
+      continue;
+    }
+
+    const unfoldButton = gallery.queryByRole("button", { name: `Unfold ${path} subtree` });
+    if (unfoldButton) {
+      fireEvent.click(unfoldButton);
+    }
+  }
 }
 
 describe("main", () => {
@@ -395,7 +414,7 @@ describe("main", () => {
     });
 
     describe("onOpen()", () => {
-      it("shows a visible nested list, selected marker, exact current id, and one story", async () => {
+      it("shows a visible nested list, selected styling, exact current id, and one story", async () => {
         await view.onOpen();
 
         expect(mountViewRoot).toHaveBeenCalledWith(view.containerEl, app, expect.any(Function));
@@ -409,9 +428,10 @@ describe("main", () => {
         ).toBeTruthy();
         expect(gallery.getByRole("button", { name: "Show Agent Mode contact sheet" })).toBeTruthy();
         expect(gallery.getByRole("button", { name: "Show UI contact sheet" })).toBeTruthy();
-        expect(gallery.getByRole("button", { name: "Default Selected" }).textContent).toContain(
-          "Selected"
-        );
+        const selectedStory = gallery.getByRole("button", { name: "Default" });
+        expect(selectedStory.getAttribute("aria-current")).toBe("true");
+        expect(selectedStory.classList.contains("mod-cta")).toBe(true);
+        expect(gallery.queryByText("Selected")).toBeNull();
         expect(gallery.getByText("Agent Mode/Agent Welcome Card/Default")).toBeTruthy();
         expect(gallery.container.querySelectorAll("[data-gallery-story-id]")).toHaveLength(1);
 
@@ -420,13 +440,16 @@ describe("main", () => {
 
       it("persists mouse and width changes through ItemView state", async () => {
         await view.onOpen();
-        if (!renderView) {
+        const renderTree = renderView;
+        if (!renderTree) {
           throw new Error("Gallery view did not provide a React tree");
         }
-        const gallery = render(renderView() as ReactElement);
+        const gallery = render(renderTree() as ReactElement);
+        const rerenderGallery = () => gallery.rerender(renderTree() as ReactElement);
 
         fireEvent.click(gallery.getByRole("button", { name: "600" }));
-        gallery.rerender(renderView() as ReactElement);
+        rerenderGallery();
+        expandStoryPath(gallery, "UI/Button/Disabled");
         fireEvent.click(gallery.getByRole("button", { name: "Disabled" }));
 
         expect(view.getState()).toMatchObject({
@@ -435,6 +458,7 @@ describe("main", () => {
           selectedSubtree: "UI/Button",
           width: 600,
         });
+        // Tree folds are view-local; only the width and story pick persist.
         expect(requestSaveLayout).toHaveBeenCalledTimes(2);
 
         gallery.unmount();
@@ -493,14 +517,15 @@ describe("main", () => {
 
         expect(handle.list()).toEqual([
           "Agent Mode/Agent Welcome Card/Default",
-          "Agent Mode/Agent Welcome Card/Narrow",
           "Gallery/Host Environments/DefaultLeaf",
           "Gallery/Host Environments/DeleteConfirmation",
           "Gallery/Host Environments/ModelPreferences",
           "Gallery/Host Environments/ResponseActions",
           "Gallery/Test Probes/Broken",
           "Gallery/Test Probes/Overflow",
+          "UI/Badge/Accent",
           "UI/Badge/Status",
+          "UI/Badge/Success",
           "UI/Badge/Variants",
           "UI/Button/Disabled",
           "UI/Button/Sizes",
@@ -663,12 +688,15 @@ describe("main", () => {
 
       it("restores the selected story after its prior tab closes and the command reopens it", async () => {
         await view.onOpen();
-        if (!renderView || !createView) {
+        const renderTree = renderView;
+        if (!renderTree || !createView) {
           throw new Error("Gallery view did not initialize");
         }
-        const firstGallery = render(renderView() as ReactElement);
+        const firstGallery = render(renderTree() as ReactElement);
+        const rerenderGallery = () => firstGallery.rerender(renderTree() as ReactElement);
+        expandStoryPath(firstGallery, "UI/Button/Sizes");
         fireEvent.click(firstGallery.getByRole("button", { name: "Sizes" }));
-        firstGallery.rerender(renderView() as ReactElement);
+        rerenderGallery();
         await view.onClose();
         firstGallery.unmount();
 

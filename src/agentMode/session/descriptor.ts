@@ -106,6 +106,16 @@ export interface BackendDescriptor {
   readonly selfHostable: boolean;
 
   /**
+   * One-paragraph pitch shown beside this backend in the agent select view:
+   * which models the user gets from it, and whose plan pays for them. That
+   * trade-off is the only thing separating the agents from a user's point of
+   * view, so every backend must state it.
+   *
+   * Required (not optional) so a new backend must make an explicit decision.
+   */
+  readonly setupDescription: string;
+
+  /**
    * Project-relative POSIX path of the directory this backend reads skills
    * from. No leading slash. The symlink fanout writes
    * `<vault>/<skillsProjectDir>/<skill-name>` for every enabled skill.

@@ -79,7 +79,6 @@ function makeMockProc(opts?: { newSessionState?: BackendState }): MockProcHandle
     listSessions: jest.fn(),
     resumeSession: jest.fn(),
     loadSession: jest.fn(),
-    supportsMcpTransport: () => false,
     shutdown,
   };
   return {

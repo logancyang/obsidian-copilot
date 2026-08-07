@@ -147,7 +147,7 @@ function originBadgeLabel(kind: OriginKind): string {
     case "byok":
       return "BYOK";
     case "copilot-plus":
-      return "Copilot Plus";
+      return "Copilot";
     case "agent":
       return "Agent Provided";
   }
@@ -214,7 +214,7 @@ export function buildModelEnableGroups(
   }
 
   // Copilot Plus is highlighted and floated to the top; its provider name
-  // already reads "Copilot Plus", so instead of a disambiguating origin badge
+  // already reads "Copilot", so instead of a disambiguating origin badge
   // it carries a "privacy" badge plus a license-required hover hint. Every
   // other origin gets an origin badge only when the list mixes origins.
   const mixed = new Set(out.map((o) => o.kind)).size > 1;

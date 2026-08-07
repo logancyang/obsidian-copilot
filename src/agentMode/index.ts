@@ -44,7 +44,7 @@ export {
   isOpencodeZenWireId,
 } from "./backends/opencode/opencodeModelResolve";
 export type { OpencodeProviderMapping } from "./backends/opencode/opencodeModelResolve";
-export { installBadge, InstallBadge, InstallStatusLine } from "./backends/shared/installStatus";
+export { installBadge, InstallBadge } from "./backends/shared/installStatus";
 export type {
   BackendState,
   CopilotMode,
@@ -53,10 +53,7 @@ export type {
   ModelSelection,
   ModelState,
 } from "./session/types";
-export type { StoredMcpServer, McpTransport } from "./session/mcpResolver";
-export { sanitizeStoredMcpServers } from "./session/mcpResolver";
 export { AgentDefaultModelSetting } from "./ui/AgentDefaultModelSetting";
-export { McpServersPanel } from "./ui/McpServersPanel";
 export { ModelEnableList } from "./ui/ModelEnableList";
 export type { ModelEnableGroup, ModelEnableRow } from "./ui/ModelEnableList";
 export { PlanPreviewView, PLAN_PREVIEW_VIEW_TYPE } from "./ui/PlanPreviewView";
@@ -64,10 +61,12 @@ export type { PlanPreviewViewState } from "./ui/PlanPreviewView";
 export { ReportIssueModal } from "./ui/ReportIssueModal";
 export type { ReportIssueModalParams } from "./ui/ReportIssueModal";
 export {
+  backendDisplayOrder,
   backendNeedsSelfHostWarning,
   getActiveBackendDescriptor,
   getCloudAgentIds,
   listBackendDescriptors,
+  RECOMMENDED_BACKEND_ID,
 } from "./backends/registry";
 export { frameSink as acpFrameSink, setFrameSinkVaultBasePath } from "./session/debugSink";
 export { getManagedSkills, SkillManager, SkillsSettings, useManagedSkills } from "./skills";

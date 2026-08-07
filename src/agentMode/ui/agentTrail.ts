@@ -13,7 +13,6 @@ export type PlanPart = Extract<AgentMessagePart, { kind: "plan" }>;
  */
 export type RenderNode =
   | { type: "action"; part: ToolCallPart }
-  | { type: "aggregate"; toolKey: string; parts: ToolCallPart[] }
   | { type: "subagent"; parent: ToolCallPart; children: RenderNode[]; truncated?: boolean }
   | { type: "reasoning"; part: ThoughtPart }
   | { type: "text"; part: TextPart }
@@ -46,21 +45,6 @@ export function agentResponseText(parts: AgentMessagePart[]): string {
   return cleanMessageForCopy(text);
 }
 
-/**
- * Aggregate stat for a tool call — used as the compaction `toolKey`. The
- * vendor name (when present) gives finer-grained grouping (e.g. Claude
- * Code's `MultiEdit` vs `Edit`); the ACP `toolKind` is the portable
- * fallback.
- */
-export function toolKeyFor(part: ToolCallPart): string {
-  const base = part.vendorToolName ?? part.toolKind ?? "other";
-  // MCP calls key per-server so they neither fold into a same-bare-named
-  // native tool's aggregate nor merge across servers. That keeps the
-  // `server ·` prefix on the aggregate line (see `lookupToolSummary`) accurate
-  // for the whole group.
-  return part.mcpServer ? `mcp:${part.mcpServer}:${base}` : base;
-}
-
 /** Claude Code's deferred-tool schema loader has no standalone user meaning. */
 function isHiddenTool(part: AgentMessagePart): boolean {
   return part.kind === "tool_call" && part.vendorToolName === "ToolSearch";
@@ -85,11 +69,10 @@ function isSubAgentLaunch(part: ToolCallPart): boolean {
 }
 
 /**
- * Fold a flat `AgentMessagePart[]` into a render tree. Compaction folds
- * runs of `N >= 2` consecutive same-`toolKey` peers into one aggregate
- * node; sub-agents (parts whose id is referenced by another part's
- * `parentToolCallId`) absorb their children. Strict — no heuristics
- * beyond what the design doc spells out.
+ * Fold a flat `AgentMessagePart[]` into a render tree: one node per part, with
+ * sub-agents (parts whose id is referenced by another part's
+ * `parentToolCallId`) absorbing their children. Runs of peers are pooled a
+ * layer up by `foldActivityGroups`, so this stays purely structural.
  */
 export function buildAgentTrail(
   parts: AgentMessagePart[],
@@ -97,8 +80,8 @@ export function buildAgentTrail(
 ): RenderNode[] {
   const maxDepth = opts.maxDepth ?? 3;
   // Drop harness-internal tools before any structural work — siblings around
-  // a hidden tool then re-aggregate naturally, and any orphaned children of a
-  // hidden parent fall through to the existing top-level orphan path.
+  // a hidden tool then become neighbours naturally, and any orphaned children
+  // of a hidden parent fall through to the existing top-level orphan path.
   parts = parts.filter((p) => !isHiddenTool(p));
   // Index every tool_call by id so children can be looked up cheaply.
   const byId = new Map<string, ToolCallPart>();
@@ -131,15 +114,8 @@ export function buildAgentTrail(
   return foldNodes(topLevel, childrenByParent, maxDepth, 0);
 }
 
-/**
- * Recursive helper: builds nodes for a peer level, applies compaction,
- * and recurses into each sub-agent's children.
- *
- * Compaction applies at every depth — only same-`toolKey` adjacent peers
- * collapse, so unrelated tool calls never merge. Any intervening `text`,
- * `thought`, `plan`, sub-agent, or different-tool call breaks the run and
- * forces the next same-tool call to start a fresh aggregate.
- */
+/** Recursive helper: builds nodes for a peer level and recurses into each
+ *  sub-agent's children. */
 function foldNodes(
   peers: AgentMessagePart[],
   childrenByParent: Map<string, ToolCallPart[]>,
@@ -153,10 +129,6 @@ function foldNodes(
       continue;
     }
     if (p.kind === "text") {
-      // Streamed prose breaks compaction (design doc §"Compaction"): a text
-      // part between two same-tool calls disqualifies grouping. Pushing
-      // straight to `out` here naturally enforces that — the next tool_call
-      // can't see a prior aggregate/action of the same key as `prev`.
       // Skip empty/whitespace-only text parts so they don't become a flex
       // child contributing `gap-1` plus their own padding to the trail.
       if (p.text.trim().length === 0) continue;
@@ -170,9 +142,8 @@ function foldNodes(
     // tool_call
     const children = childrenByParent.get(p.id);
     if ((children && children.length > 0) || isSubAgentLaunch(p)) {
-      // Sub-agent: flush any pending compaction first (sub-agent boundary
-      // breaks compaction), then emit the subagent node. A background launch
-      // has no streamed children but still groups so its report renders inside.
+      // A background launch has no streamed children but still emits a
+      // subagent node so its final report has a home.
       const childNodes =
         depth + 1 >= maxDepth
           ? []
@@ -185,16 +156,7 @@ function foldNodes(
       });
       continue;
     }
-    // Plain action — try to compact with the previous node.
-    const prev = out[out.length - 1];
-    const key = toolKeyFor(p);
-    if (prev && prev.type === "action" && toolKeyFor(prev.part) === key) {
-      out[out.length - 1] = { type: "aggregate", toolKey: key, parts: [prev.part, p] };
-    } else if (prev && prev.type === "aggregate" && prev.toolKey === key) {
-      prev.parts.push(p);
-    } else {
-      out.push({ type: "action", part: p });
-    }
+    out.push({ type: "action", part: p });
   }
   return out;
 }

@@ -116,7 +116,7 @@ export async function syncCopilotPlusProvider(
     if (isPaidUser && licenseKey) {
       await api.setup.copilotPlus.registerPlusProvider({
         providerType: "openai-compatible",
-        displayName: "Copilot Plus",
+        displayName: "Copilot",
         baseUrl: BREVILABS_MODELS_BASE_URL,
         apiKey: licenseKey,
         models: COPILOT_PLUS_MODELS,

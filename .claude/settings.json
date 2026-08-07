@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "gate=\"$HOME/.cache/brevilabs-skills/current/hooks/enforce-brevilabs-skills.py\"; [ -x \"$gate\" ] && exec \"$gate\" || exit 0",
+            "timeout": 10,
+            "statusMessage": "Checking for a matching Brevilabs skill..."
+          }
+        ]
+      }
+    ]
+  }
+}

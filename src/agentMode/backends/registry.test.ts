@@ -1,9 +1,12 @@
 import type { CopilotSettings } from "@/settings/model";
 import {
+  backendDisplayOrder,
   backendNeedsSelfHostWarning,
+  backendRegistry,
   getActiveBackendDescriptor,
   getCloudAgentIds,
   listBackendDescriptors,
+  RECOMMENDED_BACKEND_ID,
 } from "./registry";
 import { ClaudeBackendDescriptor } from "./claude";
 import { CodexBackendDescriptor } from "./codex/descriptor";
@@ -30,7 +33,6 @@ describe("backendRegistry", () => {
       agentMode: {
         enabled: true,
         byok: {},
-        mcpServers: [],
         activeBackend: activeBackend ?? "opencode",
         backends: { opencode: {} },
       },
@@ -46,6 +48,39 @@ describe("backendRegistry", () => {
 
   it("listBackendDescriptors includes OpenCode", () => {
     expect(listBackendDescriptors()).toContain(OpencodeBackendDescriptor);
+  });
+
+  describe("backendDisplayOrder()", () => {
+    it("lists opencode, then Claude, then Codex", () => {
+      expect(backendDisplayOrder()).toEqual([
+        OpencodeBackendDescriptor,
+        ClaudeBackendDescriptor,
+        CodexBackendDescriptor,
+      ]);
+    });
+
+    it("covers every registered backend exactly once", () => {
+      const ids = backendDisplayOrder().map((descriptor) => descriptor.id);
+      expect([...ids].sort()).toEqual(Object.keys(backendRegistry).sort());
+    });
+
+    it("returns a stable reference across calls", () => {
+      expect(backendDisplayOrder()).toBe(backendDisplayOrder());
+    });
+  });
+
+  describe("RECOMMENDED_BACKEND_ID", () => {
+    it("names a registered backend", () => {
+      expect(backendRegistry[RECOMMENDED_BACKEND_ID]).toBeDefined();
+    });
+  });
+
+  describe("agent setup copy", () => {
+    it("every registered backend states which models it serves and who pays", () => {
+      for (const descriptor of listBackendDescriptors()) {
+        expect(descriptor.setupDescription.length).toBeGreaterThan(0);
+      }
+    });
   });
 
   describe("Self-Host Mode marking", () => {

@@ -21,7 +21,7 @@ describe("model-display-utils", () => {
           "copilot-plus",
           model({ provider: "copilot-plus", believerExclusive: true })
         )
-      ).toBe("Copilot Plus(Believer)");
+      ).toBe("Copilot(Believer)");
       expect(getProviderLabel("custom-provider")).toBe("custom-provider");
     });
   });

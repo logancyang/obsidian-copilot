@@ -776,14 +776,14 @@ export const ProviderInfo: Record<Provider, ProviderMetadata> = {
     listModelURL: "",
   },
   [EmbeddingModelProviders.COPILOT_PLUS]: {
-    label: "Copilot Plus",
+    label: "Copilot",
     host: BREVILABS_MODELS_BASE_URL,
     curlBaseURL: BREVILABS_MODELS_BASE_URL,
     keyManagementURL: "",
     listModelURL: "",
   },
   [EmbeddingModelProviders.COPILOT_PLUS_JINA]: {
-    label: "Copilot Plus",
+    label: "Copilot",
     host: BREVILABS_MODELS_BASE_URL,
     curlBaseURL: BREVILABS_MODELS_BASE_URL,
     keyManagementURL: "",
@@ -960,14 +960,6 @@ export const RESTRICTION_MESSAGES = {
     `${extension.toUpperCase()} files are not supported in the current mode.`,
 } as const;
 
-export const OPENCODE_PINNED_VERSION = "1.16.0";
-export const OPENCODE_RELEASE_TAG = `v${OPENCODE_PINNED_VERSION}`;
-/**
- * Minimum opencode the plugin supports. v1.15.13 introduced the config-option
- * model catalog we consume, and v1.16.0 made ACP `session/cancel` abort the
- * backing turn so a stopped session remains reusable.
- */
-export const OPENCODE_MIN_ACP_VERSION = "1.16.0";
 export const OPENCODE_RELEASE_URL_TEMPLATE =
   "https://github.com/sst/opencode/releases/download/v{version}/{asset}";
 export const OPENCODE_RELEASE_API_URL_TEMPLATE =
@@ -1102,7 +1094,6 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   convertedDocOutputFolder: DEFAULT_CONVERTED_DOC_OUTPUT_FOLDER,
   agentMode: {
     byok: {},
-    mcpServers: [],
     activeBackend: "opencode",
     backends: {},
     // On by default so the diagnostic frame log is already capturing when a

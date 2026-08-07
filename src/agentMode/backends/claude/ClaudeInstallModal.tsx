@@ -1,45 +1,44 @@
-import { BinaryPathSetting } from "@/agentMode/backends/shared/BinaryPathSetting";
-import { ConfigDialogShell, ConfigSection } from "@/agentMode/backends/shared/ConfigDialogShell";
-import { InstallCommandRow } from "@/agentMode/backends/shared/InstallCommandRow";
-import { InstallStatusLine } from "@/agentMode/backends/shared/installStatus";
+import { ClaudeConfigView } from "@/agentMode/backends/claude/ui/ClaudeConfigView";
+import { useBackendAuthState } from "@/agentMode/session/useBackendAuthState";
 import { ReactModal } from "@/components/modals/ReactModal";
 import { getSettings, setSettings, useSettingsValue } from "@/settings/model";
 import { validateExecutableFile } from "@/utils/detectBinary";
 import { App, Notice } from "obsidian";
 import React from "react";
 import {
-  CLAUDE_INSTALL_COMMAND,
   claudeCliDetectionSearchDirs,
   detectClaudeCliPath,
   getClaudeInstallState,
   refreshClaudeInstallState,
   subscribeClaudeInstallState,
+  type ClaudeDescriptor,
 } from "./descriptor";
 
 /**
- * Configure dialog for the Claude (Agent SDK) backend. The SDK auto-detects the
- * `claude` CLI; this dialog surfaces the resolved path, the install command, an
- * optional custom path override, and auth guidance. There is no managed
- * install — the user installs the `claude` CLI themselves.
+ * Stateful half of the Claude Configure dialog: the only place that reads
+ * settings, validates a pasted path, drives the CLI's sign-in, and raises
+ * notices. Everything it computes is handed to {@link ClaudeConfigView} as
+ * plain data.
  */
-const ClaudeConfigBody: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+const ClaudeConfigContainer: React.FC<{
+  descriptor: ClaudeDescriptor;
+  onClose: () => void;
+}> = ({ descriptor, onClose }) => {
   const settings = useSettingsValue();
   const getInstallStateSnapshot = React.useCallback(
     () => getClaudeInstallState(settings),
     [settings]
   );
-  const sessionState = React.useSyncExternalStore(
-    subscribeClaudeInstallState,
-    getInstallStateSnapshot
-  );
+  const state = React.useSyncExternalStore(subscribeClaudeInstallState, getInstallStateSnapshot);
+  const binaryPathOverride = settings.agentMode?.claudeCli?.path;
+  const binaryPath = descriptor.getResolvedBinaryPath(settings) ?? binaryPathOverride ?? "";
+  const auth = useBackendAuthState(descriptor, binaryPath);
 
   React.useEffect(() => {
     void refreshClaudeInstallState(getSettings(), true);
   }, []);
 
-  const overridePath = settings.agentMode?.claudeCli?.path ?? "";
-
-  const onSaveCustomPath = React.useCallback(async (path: string): Promise<string | null> => {
+  const onSavePath = React.useCallback(async (path: string): Promise<string | null> => {
     const err = await validateExecutableFile(path);
     if (err) return err;
     setSettings((cur) => ({ agentMode: { ...cur.agentMode, claudeCli: { path } } }));
@@ -48,55 +47,41 @@ const ClaudeConfigBody: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     return null;
   }, []);
 
-  const clearCustomPath = React.useCallback((): void => {
+  const onClearPath = React.useCallback((): void => {
     setSettings((cur) => ({ agentMode: { ...cur.agentMode, claudeCli: undefined } }));
     new Notice("Claude CLI override cleared. Auto-detection will be used.");
   }, []);
 
   return (
-    <ConfigDialogShell status={<InstallStatusLine state={sessionState} />} onClose={onClose}>
-      <ConfigSection title="Install Claude Code">
-        <InstallCommandRow command={CLAUDE_INSTALL_COMMAND} />
-      </ConfigSection>
-
-      <ConfigSection title="Use your own binary">
-        <p className="tw-my-0 tw-text-sm tw-text-muted">
-          Use an existing <code>claude</code> binary you have on disk.
-        </p>
-        <BinaryPathSetting
-          binaryName="claude"
-          placeholder={
-            process.platform === "win32"
-              ? "/absolute/path/to/claude.exe"
-              : "/absolute/path/to/claude"
-          }
-          initialPath={overridePath}
-          notFoundHint="claude not found in known install locations. Run the install command above, then click Auto-detect again."
-          onSave={onSaveCustomPath}
-          onClear={clearCustomPath}
-          persistOnAutoDetect
-          detect={() => Promise.resolve(detectClaudeCliPath())}
-          searchedDirs={claudeCliDetectionSearchDirs}
-        />
-      </ConfigSection>
-
-      <ConfigSection title="Authentication">
-        <p className="tw-my-0 tw-text-sm tw-text-muted">
-          Claude inherits auth from your local <code>claude auth login --claudeai</code>{" "}
-          credentials.
-        </p>
-      </ConfigSection>
-    </ConfigDialogShell>
+    <ClaudeConfigView
+      state={state}
+      binaryPath={binaryPath}
+      hasBinaryPathOverride={Boolean(binaryPathOverride)}
+      onSavePath={onSavePath}
+      onClearPath={onClearPath}
+      detect={() => Promise.resolve(detectClaudeCliPath())}
+      searchedDirs={claudeCliDetectionSearchDirs}
+      auth={{
+        status: auth.status,
+        onSignIn: auth.signIn,
+        signingIn: auth.signingIn,
+        url: auth.url,
+      }}
+      onClose={onClose}
+    />
   );
 };
 
 /** Configure dialog for the Claude backend. Opened via `descriptor.openInstallUI`. */
 export class ClaudeInstallModal extends ReactModal {
-  constructor(app: App) {
+  constructor(
+    app: App,
+    private readonly descriptor: ClaudeDescriptor
+  ) {
     super(app, "Configure Claude");
   }
 
   protected renderContent(close: () => void): React.ReactElement {
-    return <ClaudeConfigBody onClose={close} />;
+    return <ClaudeConfigContainer descriptor={this.descriptor} onClose={close} />;
   }
 }

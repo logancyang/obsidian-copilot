@@ -579,7 +579,6 @@ describe("buildOpencodeConfig — agent/prompt/mode/skills blocks (preserved)", 
     setSettings({
       agentMode: {
         byok: {},
-        mcpServers: [],
         activeBackend: "opencode",
         debugFullFrames: false,
         welcomeDismissed: false,
@@ -672,7 +671,6 @@ describe("buildOpencodeConfig — agent/prompt/mode/skills blocks (preserved)", 
     setSettings({
       agentMode: {
         byok: {},
-        mcpServers: [],
         activeBackend: "opencode",
         debugFullFrames: false,
         welcomeDismissed: false,
@@ -711,7 +709,6 @@ describe("buildOpencodeConfig — agent/prompt/mode/skills blocks (preserved)", 
     setSettings({
       agentMode: {
         byok: {},
-        mcpServers: [],
         activeBackend: "opencode",
         debugFullFrames: false,
         welcomeDismissed: false,
@@ -842,7 +839,6 @@ describe("OpencodeBackend.buildSpawnDescriptor", () => {
   it("uses agentMode.backends.opencode.binaryPath as command and passes cwd in args, injecting enabled models", async () => {
     updateSetting("agentMode", {
       byok: {},
-      mcpServers: [],
       activeBackend: "opencode",
       debugFullFrames: false,
       welcomeDismissed: false,
@@ -877,7 +873,6 @@ describe("OpencodeBackend.buildSpawnDescriptor", () => {
   it("threads the injected getCacheRoot into the spawned external_directory allow", async () => {
     updateSetting("agentMode", {
       byok: {},
-      mcpServers: [],
       activeBackend: "opencode",
       debugFullFrames: false,
       welcomeDismissed: false,
@@ -905,7 +900,6 @@ describe("OpencodeBackend.buildSpawnDescriptor", () => {
   it("warns when an OPENCODE_CONFIG_CONTENT override would drop the cache allow rule", async () => {
     updateSetting("agentMode", {
       byok: {},
-      mcpServers: [],
       activeBackend: "opencode",
       debugFullFrames: false,
       welcomeDismissed: false,
@@ -931,7 +925,6 @@ describe("OpencodeBackend.buildSpawnDescriptor", () => {
   it("treats a blank getCacheRoot result as unavailable (no allow rule, no warn)", async () => {
     updateSetting("agentMode", {
       byok: {},
-      mcpServers: [],
       activeBackend: "opencode",
       debugFullFrames: false,
       welcomeDismissed: false,
@@ -953,7 +946,6 @@ describe("OpencodeBackend.buildSpawnDescriptor", () => {
   it("does not warn about the override when no cacheRoot is resolved", async () => {
     updateSetting("agentMode", {
       byok: {},
-      mcpServers: [],
       activeBackend: "opencode",
       debugFullFrames: false,
       welcomeDismissed: false,

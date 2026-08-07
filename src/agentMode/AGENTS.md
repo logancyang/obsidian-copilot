@@ -8,7 +8,7 @@ Six element types, strict imports. Enforced by `eslint-plugin-boundaries`
    backend-agnostic session, message store, UI-state bridge,
    persistence manager.
 2. **`acp/`** — the generic ACP runtime (subprocess, JSON-RPC connection,
-   vault MCP client, JSON-RPC stream tap) —
+   vault-backed ACP client, JSON-RPC stream tap) —
    the only place that touches `@agentclientprotocol/sdk`. **All ACP knowledge is confined here.**
 3. **`sdk/`** — in-process SDK adapters that implement
    `BackendProcess` directly. Today
@@ -52,7 +52,7 @@ Pick a track based on what the agent gives you:
   spawn descriptor in `AcpBackendProcess` for you.
 - **In-process / SDK track** (claude) — the agent ships an
   in-process SDK. Put the `BackendProcess` implementation in `sdk/`
-  if any logic is reusable (translator, debug tap, MCP shim) and
+  if any logic is reusable (translator, debug tap) and
   have the descriptor's `createBackendProcess(args)` construct it
   directly.
 
@@ -85,7 +85,7 @@ Then in either case:
 - "Backend-agnostic contract — `BackendProcess`, `BackendDescriptor`,
   the session-domain types, `MethodUnsupportedError`, debug sink,
   `translateBackendState` helper" → `session/`
-- "ACP wire types, JSON-RPC subprocess plumbing, vault MCP client,
+- "ACP wire types, JSON-RPC subprocess plumbing, vault-backed ACP client,
   ACP↔domain translators" → `acp/` (the **only** layer that imports
   `@agentclientprotocol/sdk`)
 - "In-process driver for an SDK that produces session-domain events

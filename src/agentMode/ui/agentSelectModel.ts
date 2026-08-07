@@ -1,0 +1,111 @@
+import type { BackendDescriptor, BackendId, InstallState } from "@/agentMode/session/types";
+
+/**
+ * Readiness of one agent as the select view words it.
+ */
+export type AgentSelectStatus = "checking" | "installed" | "outdated" | "absent" | "error";
+
+/** One agent row in the select view. */
+export interface AgentSelectRow {
+  id: BackendId;
+  name: string;
+  description: string;
+  status: AgentSelectStatus;
+  /** True for the single backend a first-run user is steered to. */
+  recommended: boolean;
+  /**
+   * Operator-facing detail behind a non-`installed` status, carried straight
+   * from `InstallState.message` so version prose is never re-derived here.
+   * `null` when the install state has no message to offer.
+   */
+  statusMessage: string | null;
+}
+
+/** What the view's single call to action does for the selected row. */
+export type AgentSelectAction = "start" | "configure" | "wait";
+
+/** Label, optional explanatory note, and behavior of the select view's one call to action. */
+export interface AgentSelectCta {
+  label: string;
+  /** Footer text beside the button when the selected agent needs attention. */
+  note: string | null;
+  action: AgentSelectAction;
+}
+
+const EMPTY_AGENT_SELECT_ROWS: readonly AgentSelectRow[] = Object.freeze([]);
+
+/**
+ * Narrow a backend's install state to the vocabulary the select view renders.
+ *
+ * A readiness probe can be in flight for one row while another unavailable
+ * backend causes the chooser to mount, so `checking` must remain distinct and
+ * non-actionable instead of making a temporary absence claim.
+ */
+function toSelectStatus(kind: InstallState["kind"]): AgentSelectStatus {
+  switch (kind) {
+    case "ready":
+      return "installed";
+    case "checking":
+      return "checking";
+    case "incompatible":
+      return "outdated";
+    case "error":
+      return "error";
+    case "absent":
+      return "absent";
+  }
+}
+
+function statusMessageOf(state: InstallState): string | null {
+  return state.kind === "incompatible" || state.kind === "error" ? state.message : null;
+}
+
+/**
+ * Project the registered backends onto the select view's row model, preserving
+ * the caller's descriptor order so a single ordering source stays authoritative.
+ * @param descriptors - Backends to list, already in display order.
+ * @param states - Latest install state per backend id; a missing entry is treated as not set up.
+ * @param recommendedId - The backend to mark as recommended, at most one row.
+ */
+export function buildAgentSelectRows(
+  descriptors: readonly BackendDescriptor[],
+  states: Partial<Record<BackendId, InstallState>>,
+  recommendedId: BackendId
+): readonly AgentSelectRow[] {
+  if (descriptors.length === 0) return EMPTY_AGENT_SELECT_ROWS;
+  return descriptors.map((descriptor) => {
+    const state = states[descriptor.id] ?? { kind: "absent" as const };
+    return {
+      id: descriptor.id,
+      name: descriptor.displayName,
+      description: descriptor.setupDescription,
+      status: toSelectStatus(state.kind),
+      recommended: descriptor.id === recommendedId,
+      statusMessage: statusMessageOf(state),
+    };
+  });
+}
+
+/**
+ * Resolve the one call to action the select view ends in. An installed agent can
+ * be started; everything else routes to that agent's Configure dialog, with the
+ * note explaining why.
+ * @param row - The currently selected row.
+ */
+export function resolveAgentSelectCta(row: AgentSelectRow): AgentSelectCta {
+  if (row.status === "checking") {
+    return {
+      label: "Checking…",
+      note: `Checking ${row.name} setup…`,
+      action: "wait",
+    };
+  }
+  if (row.status === "installed") {
+    return { label: "Start chat", note: null, action: "start" };
+  }
+  return {
+    label: "Configure",
+    note: row.statusMessage ?? `${row.name} isn't set up on this machine yet.`,
+    action: "configure",
+  };
+}

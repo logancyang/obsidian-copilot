@@ -7,7 +7,7 @@ type AgentStatusCardProps = React.ComponentProps<typeof AgentStatusCard>;
 const meta = {
   title: "Agent Mode/Agent Status Card",
   component: AgentStatusCard,
-  parameters: { gallery: { host: "leaf", layout: "padded", width: 300 } },
+  parameters: { gallery: { host: "leaf", layout: "padded" } },
 } satisfies Meta<AgentStatusCardProps>;
 export default meta;
 

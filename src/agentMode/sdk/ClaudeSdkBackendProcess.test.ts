@@ -291,7 +291,7 @@ describe("ClaudeSdkBackendProcess", () => {
         descriptor: fakeDescriptor(),
       });
 
-      const { sessionId, state } = await proc.newSession({ cwd: "/vault", mcpServers: [] });
+      const { sessionId, state } = await proc.newSession({ cwd: "/vault" });
       expect(sessionId).toBeTruthy();
       expect(state.model?.current.baseModelId).toBe("claude-fake-pro");
 
@@ -317,7 +317,7 @@ describe("ClaudeSdkBackendProcess", () => {
       expect(promptCalls).toHaveLength(1);
       const call = promptCalls[0][0] as { options: Record<string, unknown> };
       expect(call.options.pathToClaudeCodeExecutable).toBe("/usr/local/bin/claude");
-      expect(Object.keys(call.options.mcpServers as object)).not.toContain("obsidian-vault");
+      expect(call.options.mcpServers).toBeUndefined();
       expect(call.options.allowedTools).toEqual(["Read", "Write", "Edit", "Glob", "Grep", "LS"]);
       expect(call.options.disallowedTools).toEqual(["TaskOutput", "Workflow", "Monitor"]);
       expect(call.options.hooks).toEqual({
@@ -347,7 +347,7 @@ describe("ClaudeSdkBackendProcess", () => {
         descriptor: fakeDescriptor(),
       });
 
-      const { sessionId } = await proc.newSession({ cwd: "/vault", mcpServers: [] });
+      const { sessionId } = await proc.newSession({ cwd: "/vault" });
       proc.registerSessionHandler(sessionId, () => {});
 
       await expect(
@@ -406,7 +406,7 @@ describe("ClaudeSdkBackendProcess", () => {
         clientVersion: "1.2.3",
         descriptor: fakeDescriptor(),
       });
-      const { sessionId } = await proc.newSession({ cwd: "/vault", mcpServers: [] });
+      const { sessionId } = await proc.newSession({ cwd: "/vault" });
       const events: SessionEvent[] = [];
       proc.registerSessionHandler(sessionId, (event) => events.push(event));
 
@@ -438,7 +438,7 @@ describe("ClaudeSdkBackendProcess", () => {
         getSystemPromptAppend: () => "DO THIS THING WITH SKILLS",
       });
 
-      const { sessionId } = await proc.newSession({ cwd: "/vault", mcpServers: [] });
+      const { sessionId } = await proc.newSession({ cwd: "/vault" });
       await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
 
       const calls = getPromptQueryCalls();
@@ -467,7 +467,7 @@ describe("ClaudeSdkBackendProcess", () => {
         getSystemPromptAppend: () => current,
       });
 
-      const { sessionId } = await proc.newSession({ cwd: "/vault", mcpServers: [] });
+      const { sessionId } = await proc.newSession({ cwd: "/vault" });
       // Mutate the "setting" after newSession → the session's first turn must
       // still use the original prompt, proving capture-at-newSession semantics.
       current = "SECOND DIRECTIVE";
@@ -512,7 +512,7 @@ describe("ClaudeSdkBackendProcess", () => {
         descriptor: fakeDescriptor(),
       });
 
-      const { sessionId } = await proc.newSession({ cwd: "/vault", mcpServers: [] });
+      const { sessionId } = await proc.newSession({ cwd: "/vault" });
       // Kick off prompt without a handler — events are buffered.
       const promptPromise = proc.prompt({
         sessionId,
@@ -538,7 +538,7 @@ describe("ClaudeSdkBackendProcess", () => {
         descriptor: fakeDescriptor(),
       });
 
-      const { sessionId } = await proc.newSession({ cwd: "/vault", mcpServers: [] });
+      const { sessionId } = await proc.newSession({ cwd: "/vault" });
       proc.registerSessionHandler(sessionId, () => {});
 
       await proc.prompt({ sessionId, prompt: [{ type: "text", text: "1" }] });
@@ -568,7 +568,7 @@ describe("ClaudeSdkBackendProcess", () => {
         const checkAuth = jest.fn().mockResolvedValue(false);
         const proc = makeAuthCheckedProcess(checkAuth);
 
-        const { sessionId } = await proc.newSession({ cwd: "/vault", mcpServers: [] });
+        const { sessionId } = await proc.newSession({ cwd: "/vault" });
         proc.registerSessionHandler(sessionId, () => {});
 
         await expect(
@@ -582,7 +582,7 @@ describe("ClaudeSdkBackendProcess", () => {
         const checkAuth = jest.fn().mockResolvedValue(true);
         const proc = makeAuthCheckedProcess(checkAuth);
 
-        const { sessionId } = await proc.newSession({ cwd: "/vault", mcpServers: [] });
+        const { sessionId } = await proc.newSession({ cwd: "/vault" });
         proc.registerSessionHandler(sessionId, () => {});
 
         await proc.prompt({ sessionId, prompt: [{ type: "text", text: "1" }] });
@@ -596,7 +596,7 @@ describe("ClaudeSdkBackendProcess", () => {
         const checkAuth = jest.fn().mockResolvedValue(true);
         const proc = makeAuthCheckedProcess(checkAuth);
 
-        const { sessionId } = await proc.newSession({ cwd: "/vault", mcpServers: [] });
+        const { sessionId } = await proc.newSession({ cwd: "/vault" });
         proc.registerSessionHandler(sessionId, () => {});
 
         // First turn ends with a non-success result carrying no error detail
@@ -654,7 +654,7 @@ describe("ClaudeSdkBackendProcess", () => {
       it("aborts the turn and rejects when the stream stalls mid-message", async () => {
         queryMock.mockImplementation((arg: unknown) => makeStallingQuery(arg));
         const proc = makeProcess();
-        const { sessionId } = await proc.newSession({ cwd: "/vault", mcpServers: [] });
+        const { sessionId } = await proc.newSession({ cwd: "/vault" });
         proc.registerSessionHandler(sessionId, () => {});
 
         jest.useFakeTimers();
@@ -691,7 +691,7 @@ describe("ClaudeSdkBackendProcess", () => {
           ])
         );
         const proc = makeProcess();
-        const { sessionId } = await proc.newSession({ cwd: "/vault", mcpServers: [] });
+        const { sessionId } = await proc.newSession({ cwd: "/vault" });
         proc.registerSessionHandler(sessionId, () => {});
 
         const resp = await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
@@ -717,7 +717,7 @@ describe("ClaudeSdkBackendProcess", () => {
         descriptor: fakeDescriptor(),
       });
 
-      const resp = await proc.newSession({ cwd: "/vault", mcpServers: [] });
+      const resp = await proc.newSession({ cwd: "/vault" });
       expect(resp.state.model?.current.baseModelId).toBe("claude-fake-pro");
       const ids = resp.state.model?.availableModels.map((m) => m.baseModelId);
       expect(ids).toContain("claude-fake-pro");
@@ -741,7 +741,7 @@ describe("ClaudeSdkBackendProcess", () => {
         getDefaultModelId: () => "claude-fake-mini",
       });
 
-      const resp = await proc.newSession({ cwd: "/vault", mcpServers: [] });
+      const resp = await proc.newSession({ cwd: "/vault" });
       expect(resp.state.model?.current.baseModelId).toBe("claude-fake-mini");
       const miniEffort = resp.state.model?.availableModels.find(
         (m) => m.baseModelId === "claude-fake-mini"
@@ -759,7 +759,7 @@ describe("ClaudeSdkBackendProcess", () => {
         getDefaultModelId: () => "claude-removed-by-cli-upgrade",
       });
 
-      const resp = await proc.newSession({ cwd: "/vault", mcpServers: [] });
+      const resp = await proc.newSession({ cwd: "/vault" });
       expect(resp.state.model?.current.baseModelId).toBe("claude-fake-pro");
     });
 
@@ -773,7 +773,7 @@ describe("ClaudeSdkBackendProcess", () => {
         descriptor: fakeDescriptor(),
       });
 
-      const { sessionId } = await proc.newSession({ cwd: "/vault", mcpServers: [] });
+      const { sessionId } = await proc.newSession({ cwd: "/vault" });
       proc.registerSessionHandler(sessionId, () => {});
       await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
 
@@ -793,7 +793,7 @@ describe("ClaudeSdkBackendProcess", () => {
         descriptor: fakeDescriptor(),
       });
 
-      const { sessionId } = await proc.newSession({ cwd: "/vault", mcpServers: [] });
+      const { sessionId } = await proc.newSession({ cwd: "/vault" });
       proc.registerSessionHandler(sessionId, () => {});
       const stateAfter = await proc.setSessionConfigOption({
         sessionId,
@@ -820,7 +820,7 @@ describe("ClaudeSdkBackendProcess", () => {
         getEnableThinking: () => false,
       });
 
-      const { sessionId } = await proc.newSession({ cwd: "/vault", mcpServers: [] });
+      const { sessionId } = await proc.newSession({ cwd: "/vault" });
       proc.registerSessionHandler(sessionId, () => {});
       await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
 
@@ -839,7 +839,7 @@ describe("ClaudeSdkBackendProcess", () => {
         getEnableThinking: () => true,
       });
 
-      const { sessionId } = await proc.newSession({ cwd: "/vault", mcpServers: [] });
+      const { sessionId } = await proc.newSession({ cwd: "/vault" });
       proc.registerSessionHandler(sessionId, () => {});
       await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
 
@@ -860,7 +860,7 @@ describe("ClaudeSdkBackendProcess", () => {
         checkCompatibility,
       });
 
-      await expect(proc.newSession({ cwd: "/vault", mcpServers: [] })).rejects.toThrow(
+      await expect(proc.newSession({ cwd: "/vault" })).rejects.toThrow(
         "Claude Code 2.1.205 is not supported"
       );
       expect(queryMock).not.toHaveBeenCalled();
@@ -878,8 +878,8 @@ describe("ClaudeSdkBackendProcess", () => {
       });
 
       await Promise.all([
-        proc.newSession({ cwd: "/vault-a", mcpServers: [] }),
-        proc.newSession({ cwd: "/vault-b", mcpServers: [] }),
+        proc.newSession({ cwd: "/vault-a" }),
+        proc.newSession({ cwd: "/vault-b" }),
       ]);
 
       expect(checkCompatibility).toHaveBeenCalledTimes(1);
@@ -899,10 +899,8 @@ describe("ClaudeSdkBackendProcess", () => {
         checkCompatibility,
       });
 
-      await expect(proc.newSession({ cwd: "/vault", mcpServers: [] })).rejects.toThrow(
-        "upgrade required"
-      );
-      await expect(proc.newSession({ cwd: "/vault", mcpServers: [] })).resolves.toBeDefined();
+      await expect(proc.newSession({ cwd: "/vault" })).rejects.toThrow("upgrade required");
+      await expect(proc.newSession({ cwd: "/vault" })).resolves.toBeDefined();
       expect(checkCompatibility).toHaveBeenCalledTimes(2);
     });
 
@@ -925,7 +923,7 @@ describe("ClaudeSdkBackendProcess", () => {
         getEnvOverrides: () => ({ ANTHROPIC_MODEL: "claude-fable-5" }),
       });
 
-      await proc.newSession({ cwd: "/vault", mcpServers: [] });
+      await proc.newSession({ cwd: "/vault" });
 
       const probeCall = queryMock.mock.calls[0][0] as {
         options: { pathToClaudeCodeExecutable: string; env?: Record<string, string> };
@@ -983,7 +981,6 @@ describe("ClaudeSdkBackendProcess", () => {
 
       const { sessionId } = await proc.newSession({
         cwd: "/vault",
-        mcpServers: [],
         additionalDirectories: ["/abs/context-a", "/abs/context-b"],
       });
       proc.registerSessionHandler(sessionId, () => {});
@@ -997,7 +994,7 @@ describe("ClaudeSdkBackendProcess", () => {
       queryMock.mockImplementation(() => makeQuery([resultMessage()]));
       const proc = makeProc();
 
-      const { sessionId } = await proc.newSession({ cwd: "/vault", mcpServers: [] });
+      const { sessionId } = await proc.newSession({ cwd: "/vault" });
       proc.registerSessionHandler(sessionId, () => {});
       await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
 

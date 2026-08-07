@@ -189,6 +189,10 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
   const promptSuggestionId = useId();
   const showPromptSuggestions = !!placeholderPrompts && placeholderPrompts.length > 0;
 
+  // Obsidian pops its own tooltip for anything carrying `aria-label`, which is
+  // noise on an element the size of the composer — name it out of band instead.
+  const editorLabelId = useId();
+
   const handleEditorReady = useCallback(
     (editor: LexicalEditorType) => {
       setEditorInstance(editor);
@@ -202,11 +206,14 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
       <ActiveFileProvider currentActiveFile={currentActiveFile}>
         <CloudAgentProvider cloudAgentIds={cloudAgentIds}>
           <div className={cn("tw-relative", className)}>
+            <span id={editorLabelId} className="tw-sr-only">
+              Chat input
+            </span>
             <PlainTextPlugin
               contentEditable={
                 <ContentEditable
                   className="tw-max-h-60 tw-min-h-[60px] tw-w-full tw-resize-none tw-overflow-y-auto tw-rounded-md tw-border-none tw-bg-transparent tw-px-2 tw-text-sm tw-text-normal tw-outline-none focus-visible:tw-ring-0"
-                  aria-label="Chat input"
+                  aria-labelledby={editorLabelId}
                   // The suggestions bind Tab, so a screen reader has to hear
                   // what that key will do before it is pressed — the animated
                   // text itself stays hidden.

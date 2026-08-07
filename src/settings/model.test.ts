@@ -198,7 +198,6 @@ describe("sanitizeSettings - agentMode shape migration", () => {
     });
     expect(sanitized.agentMode).toEqual({
       byok: {},
-      mcpServers: [],
       activeBackend: "opencode",
       backends: {},
       debugFullFrames: true,
@@ -216,7 +215,6 @@ describe("sanitizeSettings - agentMode shape migration", () => {
       ...DEFAULT_SETTINGS,
       agentMode: {
         byok: {},
-        mcpServers: [],
         activeBackend: "opencode",
         backends: {},
         debugFullFrames: false,
@@ -230,7 +228,6 @@ describe("sanitizeSettings - agentMode shape migration", () => {
       ...DEFAULT_SETTINGS,
       agentMode: {
         byok: {},
-        mcpServers: [],
         activeBackend: "opencode",
         backends: {},
         debugFullFrames: true,
@@ -244,7 +241,6 @@ describe("sanitizeSettings - agentMode shape migration", () => {
       ...DEFAULT_SETTINGS,
       agentMode: {
         byok: {},
-        mcpServers: [],
         activeBackend: "opencode",
         backends: {},
         debugFullFrames: "yes" as unknown as boolean,
@@ -256,7 +252,7 @@ describe("sanitizeSettings - agentMode shape migration", () => {
   it("leaves backends empty when no legacy fields and no existing slice", () => {
     const sanitized = sanitizeSettings({
       ...DEFAULT_SETTINGS,
-      agentMode: { enabled: true, byok: {}, mcpServers: [] },
+      agentMode: { enabled: true, byok: {} },
     } as unknown as CopilotSettings);
     expect(sanitized.agentMode.backends).toEqual({});
   });
@@ -267,7 +263,6 @@ describe("sanitizeSettings - agentMode shape migration", () => {
       agentMode: {
         enabled: true,
         byok: {},
-        mcpServers: [],
         activeBackend: "opencode",
         backends: {
           opencode: { binaryPath: "/new/opencode", binaryVersion: "2.0.0", binarySource: "custom" },
@@ -290,7 +285,6 @@ describe("sanitizeSettings - agentMode shape migration", () => {
       agentMode: {
         enabled: true,
         byok: {},
-        mcpServers: [],
         backends: {
           opencode: { binaryPath: "/p", binaryVersion: "1.0.0", binarySource: "garbage" },
         },
@@ -308,7 +302,6 @@ describe("sanitizeSettings - agentMode shape migration", () => {
       agentMode: {
         enabled: true,
         byok: {},
-        mcpServers: [],
         backends: { opencode: { binarySource: "managed" } },
       },
     } as unknown as CopilotSettings;
@@ -389,7 +382,6 @@ describe("sanitizeEnvOverrides", () => {
       agentMode: {
         enabled: true,
         byok: {},
-        mcpServers: [],
         activeBackend: "claude",
         backends: {
           claude: { envOverrides: { CLAUDE_CONFIG_DIR: "/x", "BAD KEY": "y" } },

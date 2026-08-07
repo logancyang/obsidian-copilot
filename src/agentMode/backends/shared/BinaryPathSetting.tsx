@@ -10,6 +10,8 @@ interface Props {
   binaryName: string;
   placeholder: string;
   initialPath: string;
+  /** Whether `initialPath` is a saved override rather than a resolved default. */
+  hasPersistedPath?: boolean;
   /** Optional hint surfaced when auto-detect finds nothing. */
   notFoundHint?: string;
   /** Validate & persist on Apply. Returns null on success, error message on failure. */
@@ -47,6 +49,7 @@ export const BinaryPathSetting: React.FC<Props> = ({
   binaryName,
   placeholder,
   initialPath,
+  hasPersistedPath = initialPath.trim() !== "",
   notFoundHint,
   onSave,
   onClear,
@@ -124,11 +127,11 @@ export const BinaryPathSetting: React.FC<Props> = ({
     }
   }, [binaryName, busy, notFoundHint, onSave, persistOnAutoDetect, detect, searchedDirs]);
 
-  // A usable custom path is applied (`initialPath` is the persisted value, validated
-  // on save/auto-detect) and the draft matches it — so re-applying would be a no-op.
-  // An in-flight edit flips the button back to Apply so the new value can be saved.
-  const showClear =
-    Boolean(onClear) && initialPath.trim() !== "" && pathInput.trim() === initialPath.trim();
+  // A resolved default is already usable but cannot be cleared because no override
+  // exists. Editing it reveals Apply; a matching persisted override reveals Clear.
+  const draftMatchesInitial = pathInput.trim() === initialPath.trim();
+  const showClear = Boolean(onClear) && hasPersistedPath && draftMatchesInitial;
+  const showApply = !draftMatchesInitial || initialPath.trim() === "";
 
   return (
     <div className="tw-flex tw-w-full tw-flex-col tw-gap-2">
@@ -147,11 +150,11 @@ export const BinaryPathSetting: React.FC<Props> = ({
           <Button variant="destructive" size="default" onClick={clear} disabled={busy}>
             Clear
           </Button>
-        ) : (
+        ) : showApply ? (
           <Button variant="default" size="default" onClick={apply} disabled={busy}>
             Apply
           </Button>
-        )}
+        ) : null}
       </div>
       {error && (
         <div className="tw-flex tw-flex-col tw-gap-1 tw-text-sm tw-text-error">

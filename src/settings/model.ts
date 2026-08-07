@@ -265,13 +265,6 @@ export interface CopilotSettings {
   /** Agent Mode (ACP-backed BYOK agent harness). Desktop only. */
   agentMode: {
     byok: { anthropic?: string; openai?: string; google?: string };
-    /**
-     * User-configured MCP servers passed to the agent on session start.
-     * Stored as `unknown[]` here to keep settings independent of the
-     * agentMode module. The agentMode layer owns the typed shape
-     * (`StoredMcpServer`) and sanitizes on read via `sanitizeStoredMcpServers`.
-     */
-    mcpServers: unknown[];
     /** Which registered backend to use. Defaults to "opencode". */
     activeBackend: string;
     /** Per-backend config slice, keyed by BackendId. Each backend owns its slice. */
@@ -1037,7 +1030,6 @@ function sanitizeAgentMode(raw: unknown): CopilotSettings["agentMode"] {
     r.byok && typeof r.byok === "object"
       ? (r.byok as { anthropic?: string; openai?: string; google?: string })
       : {};
-  const mcpServers = Array.isArray(r.mcpServers) ? r.mcpServers : [];
   const activeBackend =
     typeof r.activeBackend === "string"
       ? r.activeBackend
@@ -1100,7 +1092,6 @@ function sanitizeAgentMode(raw: unknown): CopilotSettings["agentMode"] {
 
   return {
     byok,
-    mcpServers,
     activeBackend,
     backends,
     debugFullFrames,

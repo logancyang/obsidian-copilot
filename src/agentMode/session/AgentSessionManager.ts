@@ -44,7 +44,6 @@ import {
   type MarkdownChatEntry,
 } from "./chatHistoryMerge";
 import { MethodUnsupportedError } from "./errors";
-import { resolveMcpServers } from "./mcpResolver";
 import { replayPersistedMode } from "./replayPersistedMode";
 import {
   FanoutOrchestrator,
@@ -89,7 +88,6 @@ import type {
   BackendState,
   CopilotMode,
   EffortOption,
-  McpServerSpec,
   ModeApplySpec,
   ModelSelection,
   PermissionDecision,
@@ -502,8 +500,6 @@ export class AgentSessionManager {
         const adapter = this.app.vault.adapter;
         return adapter instanceof FileSystemAdapter ? adapter.getBasePath() : null;
       },
-      getMcpServers: (proc): McpServerSpec[] =>
-        resolveMcpServers(proc, getSettings().agentMode?.mcpServers),
       registerReadOnlySession: (sessionId) => {
         this.readOnlyFanoutSessions.add(sessionId);
         return () => this.readOnlyFanoutSessions.delete(sessionId);
@@ -2980,8 +2976,6 @@ export class AgentSessionManager {
       return null;
     }
 
-    const mcpServers = resolveMcpServers(backend, getSettings().agentMode?.mcpServers);
-
     // Await the roots now (materialize has been running alongside ensureBackend).
     // GLOBAL has no contextReady → undefined, identical to a context-free resume.
     // The inline `<project_context>` block is for fresh first prompts only, so a
@@ -3001,7 +2995,6 @@ export class AgentSessionManager {
       resumeResult = await backend.loadSession({
         sessionId,
         cwd,
-        mcpServers,
         projectId,
         additionalDirectories,
       });
@@ -3018,7 +3011,6 @@ export class AgentSessionManager {
         resumeResult = await backend.resumeSession({
           sessionId,
           cwd,
-          mcpServers,
           projectId,
           additionalDirectories,
         });
@@ -3337,24 +3329,30 @@ export class AgentSessionManager {
     if (existing && existing.isRunning()) return existing;
     const inflight = this.starting.get(backendId);
     if (inflight) return inflight;
-
-    const warm = this.preloader.takeWarm(backendId);
-    if (warm) {
-      // Probe subprocess is already started + initialize-handshaken —
-      // wire it into the manager without paying either cost again.
-      this.wirePrompters(warm.proc);
-      this.installBackendExitHandler(backendId, warm.proc, descriptor);
-      this.backends.set(backendId, warm.proc);
-      return warm.proc;
-    }
-
-    const proc = descriptor.createBackendProcess({
-      plugin: this.plugin,
-      app: this.app,
-      clientVersion: this.plugin.manifest.version,
-      descriptor,
-    });
     const startPromise = (async () => {
+      // A plugin-load probe owns the only process for this backend until it
+      // settles. Await that same deduped probe so a user selection cannot race
+      // it and spawn a second process before the warm entry exists.
+      if (!this.isPreloadReady(backendId)) {
+        await this.preloader.preload(backendId);
+      }
+
+      const warm = this.preloader.takeWarm(backendId);
+      if (warm) {
+        // Probe subprocess is already started + initialize-handshaken —
+        // wire it into the manager without paying either cost again.
+        this.wirePrompters(warm.proc);
+        this.installBackendExitHandler(backendId, warm.proc, descriptor);
+        this.backends.set(backendId, warm.proc);
+        return warm.proc;
+      }
+
+      const proc = descriptor.createBackendProcess({
+        plugin: this.plugin,
+        app: this.app,
+        clientVersion: this.plugin.manifest.version,
+        descriptor,
+      });
       // ACP backends declare `start()` to spawn the subprocess and run the
       // initialize handshake. In-process adapters (Claude SDK) omit it.
       if (proc.start) await proc.start();
