@@ -112,15 +112,19 @@ describe("BasicSettings", () => {
     expect(screen.getByText("Conversation Filename Template")).not.toBeNull();
   });
 
-  it("drops the template disclosure entirely when autosave is off", () => {
+  it("keeps the template reachable when autosave is off", () => {
     settingsStore.set(settingsAtom, {
       ...DEFAULT_SETTINGS,
       copilotFolder: "copilot",
       autosaveChat: false,
     });
     render(<BasicSettings />);
-    expect(screen.queryByRole("button", { name: "Advanced" })).toBeNull();
-    expect(screen.queryByText("Conversation Filename Template")).toBeNull();
+
+    // Autosave off is exactly when the manual "Save Chat as Note" button
+    // appears, and it names its note from this template — so this is the one
+    // state where the template must not be hidden.
+    fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
+    expect(screen.getByText("Conversation Filename Template")).not.toBeNull();
   });
 
   it("binds the Copilot folder input to the persisted root", () => {

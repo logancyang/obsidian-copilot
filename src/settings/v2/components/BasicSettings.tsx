@@ -330,86 +330,85 @@ export const BasicSettings: React.FC = () => {
           onCheckedChange={(checked) => updateSetting("autosaveChat", checked)}
         />
 
-        {/* The template only ever produces a filename for the note autosave
-            writes, so with autosave off there is nothing for it to name. */}
-        {settings.autosaveChat && (
-          <Collapsible open={templateOpen} onOpenChange={setTemplateOpen}>
-            <CollapsibleTrigger asChild>
-              <SettingDisclosure open={templateOpen} />
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-              <SettingItem
-                type="custom"
-                title="Conversation Filename Template"
-                description={
-                  <div className="tw-flex tw-items-start tw-gap-1.5 ">
-                    <span className="tw-leading-none">
-                      Customize the format of saved conversation note names.
-                    </span>
-                    <HelpTooltip
-                      content={
-                        <div className="tw-flex tw-max-w-96 tw-flex-col tw-gap-2 tw-py-4">
-                          <div className="tw-text-sm tw-font-medium tw-text-accent">
-                            Note: All the following variables must be included in the template.
-                          </div>
-                          <div>
-                            <div className="tw-text-sm tw-font-medium tw-text-muted">
-                              Available variables:
-                            </div>
-                            <ul className="tw-pl-4 tw-text-sm tw-text-muted">
-                              <li>
-                                <strong>{"{$date}"}</strong>: Date in YYYYMMDD format
-                              </li>
-                              <li>
-                                <strong>{"{$time}"}</strong>: Time in HHMMSS format
-                              </li>
-                              <li>
-                                <strong>{"{$topic}"}</strong>: Chat conversation topic
-                              </li>
-                            </ul>
-                            <i className="tw-mt-2 tw-text-sm tw-text-muted">
-                              Example: {"{$date}_{$time}__{$topic}"} →
-                              20250114_153232__polish_this_article_[[Readme]]
-                            </i>
-                          </div>
+        {/* Not gated on autosave: the "Save Chat as Note" button appears only
+            when autosave is off, and it names its note from this same template,
+            so gating would hide the control exactly where it is the only one. */}
+        <Collapsible open={templateOpen} onOpenChange={setTemplateOpen}>
+          <CollapsibleTrigger asChild>
+            <SettingDisclosure open={templateOpen} />
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <SettingItem
+              type="custom"
+              title="Conversation Filename Template"
+              description={
+                <div className="tw-flex tw-items-start tw-gap-1.5 ">
+                  <span className="tw-leading-none">
+                    Customize the format of saved conversation note names.
+                  </span>
+                  <HelpTooltip
+                    content={
+                      <div className="tw-flex tw-max-w-96 tw-flex-col tw-gap-2 tw-py-4">
+                        <div className="tw-text-sm tw-font-medium tw-text-accent">
+                          Note: All the following variables must be included in the template.
                         </div>
-                      }
-                    />
-                  </div>
-                }
-              >
-                <div className="tw-flex tw-w-[320px] tw-items-center tw-gap-1.5">
-                  <Input
-                    type="text"
-                    className={cn(
-                      "tw-min-w-[80px] tw-grow tw-transition-all tw-duration-200",
-                      isChecking ? "tw-w-[80px]" : "tw-w-[120px]"
-                    )}
-                    placeholder="{$date}_{$time}__{$topic}"
-                    value={conversationNoteName}
-                    onChange={(e) => setConversationNoteName(e.target.value)}
-                    disabled={isChecking}
+                        <div>
+                          <div className="tw-text-sm tw-font-medium tw-text-muted">
+                            Available variables:
+                          </div>
+                          <ul className="tw-pl-4 tw-text-sm tw-text-muted">
+                            <li>
+                              <strong>{"{$date}"}</strong>: Date in YYYYMMDD format
+                            </li>
+                            <li>
+                              <strong>{"{$time}"}</strong>: Time in HHMMSS format
+                            </li>
+                            <li>
+                              <strong>{"{$topic}"}</strong>: Chat conversation topic
+                            </li>
+                          </ul>
+                          <i className="tw-mt-2 tw-text-sm tw-text-muted">
+                            Example: {"{$date}_{$time}__{$topic}"} →
+                            20250114_153232__polish_this_article_[[Readme]]
+                          </i>
+                        </div>
+                      </div>
+                    }
                   />
-
-                  <Button
-                    onClick={() => applyCustomNoteFormat()}
-                    disabled={isChecking}
-                    variant="secondary"
-                  >
-                    {isChecking ? (
-                      <>
-                        <Loader2 className="tw-mr-2 tw-size-4 tw-animate-spin" />
-                        Apply
-                      </>
-                    ) : (
-                      "Apply"
-                    )}
-                  </Button>
                 </div>
-              </SettingItem>
-            </CollapsibleContent>
-          </Collapsible>
-        )}
+              }
+            >
+              <div className="tw-flex tw-w-[320px] tw-items-center tw-gap-1.5">
+                <Input
+                  type="text"
+                  className={cn(
+                    "tw-min-w-[80px] tw-grow tw-transition-all tw-duration-200",
+                    isChecking ? "tw-w-[80px]" : "tw-w-[120px]"
+                  )}
+                  placeholder="{$date}_{$time}__{$topic}"
+                  value={conversationNoteName}
+                  onChange={(e) => setConversationNoteName(e.target.value)}
+                  disabled={isChecking}
+                />
+
+                <Button
+                  onClick={() => applyCustomNoteFormat()}
+                  disabled={isChecking}
+                  variant="secondary"
+                >
+                  {isChecking ? (
+                    <>
+                      <Loader2 className="tw-mr-2 tw-size-4 tw-animate-spin" />
+                      Apply
+                    </>
+                  ) : (
+                    "Apply"
+                  )}
+                </Button>
+              </div>
+            </SettingItem>
+          </CollapsibleContent>
+        </Collapsible>
       </SettingSection>
     </div>
   );

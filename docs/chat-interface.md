@@ -89,7 +89,7 @@ Where:
 - `{$date}` — Date in YYYY-MM-DD format
 - `{$time}` — Time in HH-MM-SS format
 
-All three variables are required. To customize the format, turn on **Autosave Chat as Markdown** in Settings → Basic → Saving conversations, then expand **Advanced** in that same section.
+All three variables are required. To customize the format, expand **Advanced** under Settings → Basic → Saving conversations. The template names both autosaved notes and the ones you save yourself with **Save Chat as Note**.
 
 ### AI-Generated Titles
 

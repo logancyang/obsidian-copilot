@@ -46,6 +46,22 @@ const isAbort = (e: unknown): boolean =>
  * Holding it here is what makes the row's state a view of the work rather than
  * a private copy of it: the work survives a tab switch, any row can show it,
  * and while it runs no row offers either action.
+ *
+ * DESIGN NOTE — why this lives in the UI module and not in the manager.
+ * `useBackendInstallState` / `descriptor.subscribeInstallState` is the codebase's
+ * cross-mount install-state convention, but it reports only *persisted* state
+ * (absent / ready / incompatible, derived from `binaryPath` & friends in
+ * settings). It cannot express detecting, installing, progress, the
+ * `AbortController`, or a failure that never reached settings — so it does not
+ * subsume this. The better long-term home is `OpencodeBinaryManager`, which
+ * `getOpencodeBinaryManager` already returns as a cached singleton
+ * (`descriptor.ts` `managerRef`): it would own the in-flight run behind a
+ * `useSyncExternalStore` snapshot and leave this file with no module state at
+ * all. That move rewrites the manager's API and its tests, relocates the adopt
+ * detect across a dependency edge, and needs a settled contract for how runtime
+ * state merges with persisted state — an install-architecture change, not a
+ * settings-row fix. Deferred deliberately.
+ * If a future review flags this shape again, point them at this note.
  */
 type InFlightWork =
   | { kind: "installing"; controller: AbortController; progress: ProgressEvent | null }
@@ -76,6 +92,32 @@ const rows = new Set<(state: Run) => void>();
  */
 const publish = (state: Run): void => {
   rows.forEach((notify) => notify(state));
+};
+
+/**
+ * Report a failure through the row when one is mounted, and through a `Notice`
+ * when none is — the work can outlive every row, and `publish` to an empty set
+ * is silent. Both success paths already announce unconditionally; without this
+ * a first run that failed while the user was on another tab would leave them
+ * back at an idle Download button with no reason given.
+ *
+ * The Notice names opencode because it appears with no surrounding context; the
+ * row does not, since it sits inside the opencode panel.
+ *
+ * DESIGN NOTE — the failure is announced once, not replayed. A row mounting
+ * *after* a failure already settled shows idle actions, not the old error:
+ * nothing outlives the announcement, by design. Making terminal errors
+ * replayable means persisting them, which is a runtime-state contract that
+ * belongs with the manager-owned store described above, not another module
+ * variable here. Retrying is one click and re-surfaces any error that persists.
+ * If a future review flags the missing replay, point them at this note.
+ */
+const announceFailure = (message: string): void => {
+  if (rows.size > 0) {
+    publish({ kind: "error", message });
+    return;
+  }
+  new Notice(`opencode setup failed: ${message}`);
 };
 
 /** Test seam: no production caller, since a real install always settles. */
@@ -136,7 +178,7 @@ export const OpencodeAbsentInstallActions: React.FC<{ plugin: CopilotPlugin }> =
           return;
         }
         logError("[AgentMode] inline opencode install failed", err);
-        publish({ kind: "error", message: describeError(err) });
+        announceFailure(describeError(err));
       });
   }, [plugin]);
 
@@ -156,10 +198,9 @@ export const OpencodeAbsentInstallActions: React.FC<{ plugin: CopilotPlugin }> =
         const found = await detectOpencodeCliPath();
         if (!found) {
           inFlight = null;
-          publish({
-            kind: "error",
-            message: "Couldn't find opencode on this device. Use Configure to enter its path.",
-          });
+          announceFailure(
+            "Couldn't find opencode on this device. Use Configure to enter its path."
+          );
           return;
         }
         await getOpencodeBinaryManager(plugin).setCustomBinaryPath(found);
@@ -169,7 +210,7 @@ export const OpencodeAbsentInstallActions: React.FC<{ plugin: CopilotPlugin }> =
       } catch (e) {
         inFlight = null;
         logError("[AgentMode] adopting an existing opencode failed", e);
-        publish({ kind: "error", message: describeError(e) });
+        announceFailure(describeError(e));
       }
     })();
   }, [plugin]);

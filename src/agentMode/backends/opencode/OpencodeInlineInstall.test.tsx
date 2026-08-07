@@ -320,6 +320,44 @@ describe("OpencodeInlineInstall", () => {
       expect(await screen.findByText(/Couldn't find opencode on this device/)).not.toBeNull();
     });
 
+    // A failure published to zero rows is silent, while both success paths
+    // already announce unconditionally. These cover the asymmetry.
+    it("announces an install failure that lands while no row is mounted", async () => {
+      const pending = deferredInstall();
+      const { unmount } = render(<OpencodeAbsentInstallActions plugin={plugin} />);
+      fireEvent.click(screen.getByRole("button", { name: "Download opencode" }));
+      await screen.findByRole("button", { name: "Cancel" });
+      unmount();
+
+      await act(async () => {
+        pending.fail(new Error("GitHub API rate-limited"));
+      });
+
+      expect(Notice).toHaveBeenCalledWith("opencode setup failed: GitHub API rate-limited");
+    });
+
+    it("announces a failed detect that lands while no row is mounted", async () => {
+      let resolveDetect: (path: string | null) => void = () => {};
+      detectOpencodeCliPath.mockImplementation(
+        () =>
+          new Promise<string | null>((resolve) => {
+            resolveDetect = resolve;
+          })
+      );
+      const { unmount } = render(<OpencodeAbsentInstallActions plugin={plugin} />);
+      fireEvent.click(screen.getByRole("button", { name: "I already have it" }));
+      await screen.findByRole("button", { name: "Looking…" });
+      unmount();
+
+      await act(async () => {
+        resolveDetect(null);
+      });
+
+      expect(Notice).toHaveBeenCalledWith(
+        expect.stringContaining("Couldn't find opencode on this device")
+      );
+    });
+
     it("returns a remounted row to the idle actions when the install succeeds", async () => {
       const pending = deferredInstall();
       const { unmount } = render(<OpencodeAbsentInstallActions plugin={plugin} />);
