@@ -649,12 +649,91 @@ describe("issueReport", () => {
       expect(raw).not.toContain("screenshot.png");
     });
 
-    it("fails rather than producing a zip missing a file it promised to include", async () => {
-      const { runtime, files } = makeRuntime();
+    it("treats an attachment the user deleted from the folder as removed, not as a failure", async () => {
+      const { runtime, writes, files } = makeRuntime();
       const report = await assembleReportBundle(baseInput, runtime);
+      // The review step warns the screenshot is not redacted and invites the
+      // user to edit the folder, so deleting it is the obvious way to act on
+      // that warning. Failing here would leave nothing to send: the rebuild
+      // removes the old zip first.
       files.delete(`${BUNDLE_DIR}/screenshot.png`);
 
-      await expect(zipReportBundle(report, runtime)).rejects.toThrow("ENOENT");
+      const { zipPath, attachments } = await zipReportBundle(report, runtime);
+
+      const shot = attachments.find((a) => a.name === "screenshot.png");
+      expect(shot?.status).toBe("skipped");
+      expect(shot?.reason).toBe("Removed from the report folder before the rebuild.");
+      expect(shot?.bytes).toBe(0);
+      const raw = new TextDecoder().decode(
+        writes.find((w) => w.path === zipPath)?.data ?? new Uint8Array()
+      );
+      expect(raw).not.toContain("screenshot.png");
+      expect(raw).toContain("report.md");
+    });
+
+    it("treats an attachment deleted mid-pack as removed too", async () => {
+      const { runtime, files } = makeRuntime();
+      const report = await assembleReportBundle(baseInput, runtime);
+      // Gone between the weigh pass and the read pass — the same removal, just
+      // landing in the other half of the packer.
+      const readBytes = runtime.readBytes;
+      runtime.readBytes = async (p) => {
+        files.delete(`${BUNDLE_DIR}/screenshot.png`);
+        return readBytes(p);
+      };
+
+      const { attachments } = await zipReportBundle(report, runtime);
+
+      expect(attachments.find((a) => a.name === "screenshot.png")?.status).toBe("skipped");
+    });
+
+    it("reports an attachment that is still there but unreadable as failed, not as removed", async () => {
+      const { runtime, writes } = makeRuntime();
+      const report = await assembleReportBundle(baseInput, runtime);
+      // Locked by another program, or permissions changed underneath us. Calling
+      // this a removal would blame the user for an edit they never made, and
+      // send the report a source short on the strength of it.
+      const sizeOf = runtime.sizeOf;
+      runtime.sizeOf = async (p) =>
+        p.endsWith("screenshot.png") ? Promise.reject(new Error("EACCES")) : sizeOf(p);
+
+      const { zipPath, attachments } = await zipReportBundle(report, runtime);
+
+      const shot = attachments.find((a) => a.name === "screenshot.png");
+      expect(shot?.status).toBe("failed");
+      expect(shot?.reason).toContain("EACCES");
+      // Still non-fatal: everything readable is packed anyway.
+      const raw = new TextDecoder().decode(
+        writes.find((w) => w.path === zipPath)?.data ?? new Uint8Array()
+      );
+      expect(raw).toContain("report.md");
+      expect(raw).not.toContain("screenshot.png");
+    });
+
+    it("reports an attachment that becomes unreadable between the two passes as failed", async () => {
+      const { runtime } = makeRuntime();
+      const report = await assembleReportBundle(baseInput, runtime);
+      // Weighed fine, then refused the read — the removed/failed split has to
+      // hold in the other half of the packer too.
+      const readBytes = runtime.readBytes;
+      runtime.readBytes = async (p) =>
+        p.endsWith("screenshot.png") ? Promise.reject(new Error("EACCES")) : readBytes(p);
+
+      const { attachments } = await zipReportBundle(report, runtime);
+
+      const shot = attachments.find((a) => a.name === "screenshot.png");
+      expect(shot?.status).toBe("failed");
+      expect(shot?.reason).toContain("EACCES");
+    });
+
+    it("still refuses to pack once report.md itself is gone", async () => {
+      const { runtime, files } = makeRuntime();
+      const report = await assembleReportBundle(baseInput, runtime);
+      // The one deletion no demotion can rescue: without the note there is no
+      // issue body to file, so this stays a hard failure with a reason.
+      files.delete(`${BUNDLE_DIR}/report.md`);
+
+      await expect(zipReportBundle(report, runtime)).rejects.toThrow(/no report\.md/);
     });
 
     it("reports the sizes it just read, so a repack after the user edits the folder is reflected", async () => {
