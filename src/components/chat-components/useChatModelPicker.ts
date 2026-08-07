@@ -5,10 +5,9 @@ import {
   providerRequiresApiKey,
   resolveChatModelSelectionId,
 } from "@/modelManagement";
-import { getModelKeyFromModel, settingsStore } from "@/settings/model";
+import { getModelKeyFromModel, settingsStore, useSettingsValue } from "@/settings/model";
 import type { ModelSelectorEntry } from "@/components/ui/ModelSelector";
-import { lockedCopilotEntries } from "@/lib/lockedCopilotEntries";
-import { useIsPaidUser } from "@/plusUtils";
+import { lockedCopilotEntries, shouldPreviewCopilotModels } from "@/lib/lockedCopilotEntries";
 import { useAtomValue } from "jotai";
 import React from "react";
 
@@ -59,13 +58,13 @@ export function useChatModelPicker(params: {
 }): ChatModelPickerOverride {
   const { value, onChange } = params;
   const entries = useAtomValue(backendPickerAtomFamily("chat"), { store: settingsStore });
-  const isPaidUser = useIsPaidUser();
+  const settings = useSettingsValue();
 
   // Advertised, never selectable: kept out of `models` below so selection,
   // fallback, and the stored value can never resolve to one.
   const lockedRows = React.useMemo(
-    () => (isPaidUser ? EMPTY_LOCKED_ROWS : lockedCopilotEntries()),
-    [isPaidUser]
+    () => (shouldPreviewCopilotModels(settings) ? lockedCopilotEntries() : EMPTY_LOCKED_ROWS),
+    [settings]
   );
 
   const { models, byModelKey, idToModelKey } = React.useMemo(() => {

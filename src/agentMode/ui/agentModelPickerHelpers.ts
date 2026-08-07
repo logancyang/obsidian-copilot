@@ -2,7 +2,7 @@ import { Notice } from "obsidian";
 import { logError } from "@/logger";
 import type { ModelCapability } from "@/constants";
 import type { ModelSelectorEntry } from "@/components/ui/ModelSelector";
-import { lockedCopilotEntries } from "@/lib/lockedCopilotEntries";
+import { lockedCopilotEntries, shouldPreviewCopilotModels } from "@/lib/lockedCopilotEntries";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type { AgentChatUIState } from "@/agentMode/session/AgentChatUIState";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
@@ -376,7 +376,7 @@ export function buildPickerEntries(
     // above so neither relabels these rows: an unset-up agent's readiness reason
     // would replace "Copilot license required" with the wrong fix, and the
     // emptiness check for the loading/error placeholder must not count them.
-    if (descriptor.routesCopilotModels && !settings.isPaidUser) {
+    if (descriptor.routesCopilotModels && shouldPreviewCopilotModels(settings)) {
       entries.splice(
         sectionStart,
         0,

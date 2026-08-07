@@ -1,7 +1,34 @@
 import { COPILOT_PLUS_DEFAULT_ENABLED_MODELS, COPILOT_PLUS_MODELS } from "@/modelManagement";
-import { lockedCopilotEntries } from "./lockedCopilotEntries";
+import { lockedCopilotEntries, shouldPreviewCopilotModels } from "./lockedCopilotEntries";
+
+import type { CopilotSettings } from "@/settings/model";
+
+function settingsWithProviders(providers: Record<string, unknown>): CopilotSettings {
+  return { providers } as unknown as CopilotSettings;
+}
 
 describe("lockedCopilotEntries", () => {
+  describe("shouldPreviewCopilotModels()", () => {
+    it("previews when no Copilot provider is registered", () => {
+      expect(shouldPreviewCopilotModels(settingsWithProviders({}))).toBe(true);
+      expect(
+        shouldPreviewCopilotModels(
+          settingsWithProviders({ "byok-1": { providerId: "byok-1", origin: { kind: "byok" } } })
+        )
+      ).toBe(true);
+    });
+
+    it("stops previewing once the Copilot provider is registered, so locked copies never sit beside working models", () => {
+      expect(
+        shouldPreviewCopilotModels(
+          settingsWithProviders({
+            "plus-1": { providerId: "plus-1", origin: { kind: "copilot-plus" } },
+          })
+        )
+      ).toBe(false);
+    });
+  });
+
   describe("lockedCopilotEntries()", () => {
     it("previews exactly the models a license switches on, in lineup order", () => {
       const previewed = lockedCopilotEntries().map((entry) => entry.name);

@@ -185,7 +185,7 @@ function makeManager(opts: {
   } as unknown as AgentSessionManager;
 }
 
-const emptySettings = {} as CopilotSettings;
+const emptySettings = { providers: {} } as unknown as CopilotSettings;
 
 function claudeWithInstallState(installState: InstallState): BackendDescriptor {
   return {
@@ -232,7 +232,6 @@ describe("buildPickerEntries", () => {
 
     const { entries } = buildPickerEntries(manager, [descriptor], {} as ModelActiveContext, {
       ...emptySettings,
-      isPaidUser: false,
     });
 
     const locked = entries.filter((model) => model._needsLicense);
@@ -258,13 +257,12 @@ describe("buildPickerEntries", () => {
 
     const { entries } = buildPickerEntries(manager, [claude], {} as ModelActiveContext, {
       ...emptySettings,
-      isPaidUser: false,
     });
 
     expect(entries.some((entry) => entry._needsLicense)).toBe(false);
   });
 
-  it("previews nothing once a license is active, since the real models are there", () => {
+  it("previews nothing once the Copilot provider is registered, since the real models are there", () => {
     const entry = makeModelEntry("catalog-model");
     const descriptor = {
       ...makeDescriptor("opencode"),
@@ -281,7 +279,15 @@ describe("buildPickerEntries", () => {
 
     const { entries } = buildPickerEntries(manager, [descriptor], {} as ModelActiveContext, {
       ...emptySettings,
-      isPaidUser: true,
+      providers: {
+        "plus-1": {
+          providerId: "plus-1",
+          providerType: "openai-compatible",
+          displayName: "Copilot",
+          origin: { kind: "copilot-plus" },
+          addedAt: 0,
+        },
+      },
     });
 
     expect(entries.map((model) => model.name)).toEqual(["catalog-model"]);
@@ -303,7 +309,6 @@ describe("buildPickerEntries", () => {
 
     const { entries } = buildPickerEntries(manager, [descriptor], {} as ModelActiveContext, {
       ...emptySettings,
-      isPaidUser: false,
     });
 
     expect(entries.some((entry) => entry._disabledReason === "Loading…")).toBe(true);

@@ -1,5 +1,6 @@
 import type { ModelSelectorEntry } from "@/components/ui/ModelSelector";
 import { ChatModelProviders } from "@/constants";
+import type { CopilotSettings } from "@/settings/model";
 import { COPILOT_PLUS_DEFAULT_ENABLED_MODELS, COPILOT_PLUS_MODELS } from "@/modelManagement";
 
 /** See AGENTS.md → "Referential stability". */
@@ -19,6 +20,22 @@ const LICENSE_REQUIRED = "Copilot license required";
 const PREVIEWED_MODELS = COPILOT_PLUS_MODELS.filter((model) =>
   COPILOT_PLUS_DEFAULT_ENABLED_MODELS.includes(model.id)
 );
+
+/**
+ * Whether the pickers should advertise the lineup — true exactly when no Copilot
+ * provider is registered, which is the absence these rows exist to fill.
+ *
+ * Deliberately not `!isPaidUser`: the two agree in practice, but a license state
+ * that has not resolved while the provider is still registered would put locked
+ * copies beside working models. Asking about the provider cannot produce that.
+ *
+ * @param settings - Caller-owned settings snapshot holding the provider rows.
+ */
+export function shouldPreviewCopilotModels(settings: CopilotSettings): boolean {
+  return !Object.values(settings.providers).some(
+    (provider) => provider.origin.kind === "copilot-plus"
+  );
+}
 
 /**
  * Non-selectable rows advertising the Copilot models a license would unlock.
