@@ -3,6 +3,7 @@ import { ChevronDown } from "lucide-react";
 import * as SliderPrimitive from "@radix-ui/react-slider";
 import { Button } from "@/components/ui/button";
 import { FreeModelWarningIcon } from "@/components/ui/FreeModelWarningIcon";
+import { LicenseRequiredIcon } from "@/components/ui/LicenseRequiredIcon";
 import { SelfHostCloudWarningIcon } from "@/components/ui/SelfHostCloudWarningIcon";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ModelDisplay } from "@/components/ui/model-display";
@@ -241,7 +242,9 @@ export function ModelEffortPicker({ override, className }: ModelEffortPickerProp
             const key = getModelKeyFromModel(entry);
             const disabledReason = entry._disabledReason;
             const itemDisabled = Boolean(disabledReason);
-            const rightLabel = disabledReason ?? null;
+            // A locked Copilot row says why through its lock icon; repeating the
+            // reason per row would print the same sentence down the whole group.
+            const rightLabel = entry._needsLicense ? null : (disabledReason ?? null);
             const isHighlight = key === highlightKey;
             const isActive = key === draftModelKey;
             const showHeader = entry._group !== undefined && entry._group !== lastGroup;
@@ -282,6 +285,7 @@ export function ModelEffortPicker({ override, className }: ModelEffortPickerProp
                     <div className="tw-min-w-0">
                       <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-1">
                         <ModelDisplay model={entry} iconSize={12} />
+                        {entry._needsLicense && <LicenseRequiredIcon />}
                         {entry._isFree && <FreeModelWarningIcon />}
                         {entry._needsSelfHostWarning && <SelfHostCloudWarningIcon />}
                       </div>

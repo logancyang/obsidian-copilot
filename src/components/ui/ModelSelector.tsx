@@ -8,6 +8,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ModelDisplay } from "@/components/ui/model-display";
+import { LicenseRequiredIcon } from "@/components/ui/LicenseRequiredIcon";
 import { SelfHostCloudWarningIcon } from "@/components/ui/SelfHostCloudWarningIcon";
 import { checkModelApiKey, err2String } from "@/lib/model-display-utils";
 import type { ModelApiKeySettings } from "@/lib/model-display-utils";
@@ -59,6 +60,14 @@ export type ModelSelectorEntry = CustomModel & {
    * the model stays selectable (Self-Host Mode marks, it doesn't block).
    */
   _needsSelfHostWarning?: boolean;
+  /**
+   * `true` for a Copilot model the user has no license to run, shown so the
+   * lineup is discoverable before they buy. The row renders a lock icon +
+   * tooltip beside the name and suppresses the right-side `_disabledReason`
+   * label, which would otherwise repeat the same sentence down the whole group.
+   * Always paired with a `_disabledReason` — that is what disables the row.
+   */
+  _needsLicense?: boolean;
 };
 
 interface ModelSelectorProps {
@@ -135,7 +144,11 @@ export function ModelSelector({
             ? checkModelApiKey(model, apiKeySettings).hasApiKey
             : true;
           const itemDisabled = Boolean(disabledReason) || !hasApiKey;
-          const rightLabel = disabledReason ?? (!hasApiKey ? "Needs API key" : null);
+          // A locked Copilot row says why through its lock icon; repeating the
+          // reason per row would print the same sentence down the whole group.
+          const rightLabel = model._needsLicense
+            ? null
+            : (disabledReason ?? (!hasApiKey ? "Needs API key" : null));
           const showHeader = model._group !== undefined && model._group !== lastGroup;
           const headerKey = `__group__${model._group}__${getModelKeyFromModel(model)}`;
           lastGroup = model._group;
@@ -177,6 +190,7 @@ export function ModelSelector({
               >
                 <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-1">
                   <ModelDisplay model={model} iconSize={12} />
+                  {model._needsLicense && <LicenseRequiredIcon />}
                   {model._needsSelfHostWarning && <SelfHostCloudWarningIcon />}
                 </div>
                 {rightLabel && (

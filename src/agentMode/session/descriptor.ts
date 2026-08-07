@@ -106,6 +106,19 @@ export interface BackendDescriptor {
   readonly selfHostable: boolean;
 
   /**
+   * Whether this backend can run the Copilot-hosted models. `true` for backends
+   * that route Copilot's provider (opencode); `false` for agents that bring
+   * their own models from their own subscription (Claude Code, Codex).
+   *
+   * Read when no license is active, to decide whose section previews the locked
+   * Copilot lineup — which is why it cannot be derived from the configured
+   * models: without a license there is no Copilot provider to inspect.
+   *
+   * Required (not optional) so a new backend must make an explicit decision.
+   */
+  readonly routesCopilotModels: boolean;
+
+  /**
    * One-paragraph pitch shown beside this backend in the agent select view:
    * which models the user gets from it, and whose plan pays for them. That
    * trade-off is the only thing separating the agents from a user's point of

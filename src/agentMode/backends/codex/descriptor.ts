@@ -104,6 +104,7 @@ export const CodexBackendDescriptor: BackendDescriptor = {
   Icon: CodexLogo,
   // Cloud agent — flagged with a cloud-egress warning while Self-Host Mode is on.
   selfHostable: false,
+  routesCopilotModels: false,
   setupDescription:
     "OpenAI models, billed to your ChatGPT subscription. Runs the codex-acp adapter on your machine.",
   skillsProjectDir: ".agents/skills",
