@@ -137,7 +137,7 @@ describe("AgentTrail", () => {
     expect(screen.queryByTitle("Copy")).toBeNull();
     expect(screen.queryByTitle("Insert / Replace at cursor")).toBeNull();
   });
-  it("renders research inline with no 'Worked for' toggle on a completed research+answer turn", () => {
+  it("keeps research inline while showing a non-collapsible completed duration", () => {
     renderTrail({
       parts: [
         // Multi-word title with no vendorToolName renders verbatim as the
@@ -146,10 +146,12 @@ describe("AgentTrail", () => {
         text("The final answer."),
       ],
       turnStopReason: "end_turn",
+      turnDurationMs: 138_000,
     });
 
-    // The "Worked for X" collapse is gone: the whole trail renders inline.
-    expect(screen.queryByText(/Worked for/i)).toBeNull();
+    expect(screen.getByText("Worked for")).toBeTruthy();
+    expect(screen.getByText("2m 18s")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Worked for/i })).toBeNull();
     // The trailing prose renders as the final answer.
     expect(screen.getByText("The final answer.")).toBeTruthy();
     // The research tool card renders inline (not folded behind a toggle).
