@@ -88,6 +88,14 @@ not appear under those two.
 run it if you accept the offer in the welcome dialog when your license
 activates — see [Setting Up Copilot Plus](#setting-up-copilot-plus) above.
 
+### Before you have a license
+
+The three models a license switches on still appear in both pickers, greyed out
+and marked with a lock. Hovering the lock reads "Copilot license required".
+They are there so you can see what a license adds; they cannot be selected, and
+they leave your own models exactly where they were. Activate a license and the
+locks come off the same rows.
+
 ---
 
 ## Memory System
