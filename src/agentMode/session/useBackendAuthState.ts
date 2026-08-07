@@ -4,34 +4,61 @@ import { useSettingsValue } from "@/settings/model";
 import { Notice } from "obsidian";
 import React from "react";
 
-type AuthStatusSubscriber = (status: BackendAuthStatus) => void;
+interface BackendAuthSnapshot {
+  readonly status: BackendAuthStatus | null;
+  readonly signingIn: boolean;
+  readonly url: string | null;
+}
 
-const authStatusSubscribers = new WeakMap<BackendAuth, Set<AuthStatusSubscriber>>();
-const authStatusGenerations = new WeakMap<BackendAuth, number>();
+const EMPTY_AUTH_SNAPSHOT = Object.freeze<BackendAuthSnapshot>({
+  status: null,
+  signingIn: false,
+  url: null,
+});
+const authSnapshots = new WeakMap<BackendAuth, BackendAuthSnapshot>();
+const authSubscribers = new WeakMap<BackendAuth, Set<() => void>>();
+const authProbeGenerations = new WeakMap<BackendAuth, number>();
 
-const subscribeAuthStatus = (auth: BackendAuth, subscriber: AuthStatusSubscriber): (() => void) => {
-  const subscribers = authStatusSubscribers.get(auth) ?? new Set<AuthStatusSubscriber>();
+const getAuthSnapshot = (auth: BackendAuth): BackendAuthSnapshot =>
+  authSnapshots.get(auth) ?? EMPTY_AUTH_SNAPSHOT;
+
+const subscribeAuthState = (auth: BackendAuth, subscriber: () => void): (() => void) => {
+  const subscribers = authSubscribers.get(auth) ?? new Set<() => void>();
   subscribers.add(subscriber);
-  authStatusSubscribers.set(auth, subscribers);
+  authSubscribers.set(auth, subscribers);
   return () => {
     subscribers.delete(subscriber);
-    if (subscribers.size === 0) authStatusSubscribers.delete(auth);
+    if (subscribers.size === 0) authSubscribers.delete(auth);
   };
 };
 
-const beginAuthStatusOperation = (auth: BackendAuth): number => {
-  const generation = (authStatusGenerations.get(auth) ?? 0) + 1;
-  authStatusGenerations.set(auth, generation);
+const updateAuthSnapshot = (auth: BackendAuth, update: Partial<BackendAuthSnapshot>): void => {
+  const current = getAuthSnapshot(auth);
+  const next = Object.freeze({ ...current, ...update });
+  if (
+    current.status === next.status &&
+    current.signingIn === next.signingIn &&
+    current.url === next.url
+  ) {
+    return;
+  }
+  authSnapshots.set(auth, next);
+  authSubscribers.get(auth)?.forEach((subscriber) => subscriber());
+};
+
+const beginAuthProbe = (auth: BackendAuth): number => {
+  const generation = (authProbeGenerations.get(auth) ?? 0) + 1;
+  authProbeGenerations.set(auth, generation);
   return generation;
 };
 
-const publishAuthStatus = (
+const publishAuthProbeStatus = (
   auth: BackendAuth,
   status: BackendAuthStatus,
   generation: number
 ): void => {
-  if (authStatusGenerations.get(auth) !== generation) return;
-  authStatusSubscribers.get(auth)?.forEach((subscriber) => subscriber(status));
+  if (authProbeGenerations.get(auth) !== generation || getAuthSnapshot(auth).signingIn) return;
+  updateAuthSnapshot(auth, { status });
 };
 
 export interface BackendAuthUiState {
@@ -73,37 +100,41 @@ export function useBackendAuthState(
   settingsRef.current = settings;
 
   const auth = descriptor.auth;
-  const [status, setStatus] = React.useState<BackendAuthStatus | null>(null);
-  const [signingIn, setSigningIn] = React.useState(false);
-  const [url, setUrl] = React.useState<string | null>(null);
+  const subscribe = React.useCallback(
+    (subscriber: () => void) => (auth ? subscribeAuthState(auth, subscriber) : () => undefined),
+    [auth]
+  );
+  const getSnapshot = React.useCallback(
+    () => (auth ? getAuthSnapshot(auth) : EMPTY_AUTH_SNAPSHOT),
+    [auth]
+  );
+  const snapshot = React.useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 
   React.useEffect(() => {
-    if (!auth) {
-      setStatus(null);
-      return;
-    }
-    const unsubscribe = subscribeAuthStatus(auth, setStatus);
-    const generation = beginAuthStatusOperation(auth);
+    if (!auth || getAuthSnapshot(auth).signingIn) return;
+    const generation = beginAuthProbe(auth);
     void auth.getStatus(settingsRef.current).then(
-      (s) => publishAuthStatus(auth, s, generation),
+      (s) => publishAuthProbeStatus(auth, s, generation),
       (e) => {
         logError("[AgentMode] auth status probe failed", e);
-        publishAuthStatus(auth, { signedIn: false }, generation);
+        publishAuthProbeStatus(auth, { signedIn: false }, generation);
       }
     );
-    return unsubscribe;
   }, [auth, probeKey]);
 
   const signIn = React.useCallback(() => {
-    if (!auth || signingIn) return;
-    const generation = beginAuthStatusOperation(auth);
-    setSigningIn(true);
-    setUrl(null);
+    if (!auth || getAuthSnapshot(auth).signingIn) return;
+    beginAuthProbe(auth);
+    updateAuthSnapshot(auth, { signingIn: true, url: null });
     new Notice(`Opening your browser to sign in to ${descriptor.displayName}…`);
     auth
-      .signIn(settingsRef.current, { onUrl: (u) => setUrl(u) })
+      .signIn(settingsRef.current, {
+        onUrl: (url) => {
+          if (getAuthSnapshot(auth).signingIn) updateAuthSnapshot(auth, { url });
+        },
+      })
       .then((s) => {
-        publishAuthStatus(auth, s, generation);
+        updateAuthSnapshot(auth, { status: s });
         new Notice(
           s.signedIn
             ? `Signed in to ${descriptor.displayName}${s.label ? ` as ${s.label}` : ""}.`
@@ -115,10 +146,9 @@ export function useBackendAuthState(
         new Notice(`Sign-in to ${descriptor.displayName} failed. Please try again.`);
       })
       .finally(() => {
-        setSigningIn(false);
-        setUrl(null);
+        updateAuthSnapshot(auth, { signingIn: false, url: null });
       });
-  }, [auth, signingIn, descriptor.displayName]);
+  }, [auth, descriptor.displayName]);
 
-  return { status, signingIn, url, signIn };
+  return { ...snapshot, signIn };
 }

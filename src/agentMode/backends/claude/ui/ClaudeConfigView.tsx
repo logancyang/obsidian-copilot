@@ -104,7 +104,7 @@ export const ClaudeConfigView: React.FC<ClaudeConfigViewProps> = ({
           <CommandBlock
             command={CLAUDE_AUTH_COMMAND}
             action={
-              auth.status?.signedIn === false ? (
+              state.kind === "ready" && auth.status?.signedIn === false ? (
                 auth.signingIn && auth.url ? (
                   <Button asChild variant="secondary" size="sm">
                     <a href={auth.url} target="_blank" rel="noopener noreferrer">

@@ -77,6 +77,7 @@ describe("ClaudeConfigView", () => {
     it("offers the in-app sign-in beside the command when the backend can run it", () => {
       const onSignIn = jest.fn();
       renderView({
+        state: { kind: "ready", source: "custom" },
         auth: { status: { signedIn: false }, onSignIn, signingIn: false, url: null },
       });
 
@@ -85,6 +86,7 @@ describe("ClaudeConfigView", () => {
 
     it("blocks a second sign-in while one is already running", () => {
       renderView({
+        state: { kind: "ready", source: "custom" },
         auth: {
           status: { signedIn: false },
           onSignIn: jest.fn(),
@@ -100,6 +102,7 @@ describe("ClaudeConfigView", () => {
 
     it("offers the OAuth fallback link when the CLI cannot open a browser", () => {
       renderView({
+        state: { kind: "ready", source: "custom" },
         auth: {
           status: { signedIn: false },
           onSignIn: jest.fn(),
@@ -116,6 +119,7 @@ describe("ClaudeConfigView", () => {
 
     it("hides the in-app sign-in action when the backend is authenticated", () => {
       renderView({
+        state: { kind: "ready", source: "custom" },
         auth: {
           status: { signedIn: true, label: "zero@example.com" },
           onSignIn: jest.fn(),
@@ -129,7 +133,22 @@ describe("ClaudeConfigView", () => {
 
     it("hides the in-app sign-in action while auth status is still loading", () => {
       renderView({
+        state: { kind: "ready", source: "custom" },
         auth: { status: null, onSignIn: jest.fn(), signingIn: false, url: null },
+      });
+
+      expect(screen.queryByRole("button", { name: "Sign in" })).toBeNull();
+    });
+
+    it("hides the in-app sign-in action until the Claude binary is ready", () => {
+      renderView({
+        state: { kind: "absent" },
+        auth: {
+          status: { signedIn: false },
+          onSignIn: jest.fn(),
+          signingIn: false,
+          url: null,
+        },
       });
 
       expect(screen.queryByRole("button", { name: "Sign in" })).toBeNull();

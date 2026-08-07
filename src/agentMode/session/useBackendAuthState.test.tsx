@@ -48,8 +48,13 @@ describe("useBackendAuthState", () => {
       await waitFor(() => expect(statusCard.result.current.status).toEqual({ signedIn: false }));
       await waitFor(() => expect(configDialog.result.current.status).toEqual({ signedIn: false }));
 
-      act(() => configDialog.result.current.signIn());
+      act(() => void configDialog.result.current.signIn());
+      const signInHandlers = (descriptor.auth!.signIn as jest.Mock).mock.calls[0][1];
+      act(() => void signInHandlers.onUrl("https://example.com/sign-in"));
       configDialog.unmount();
+      const lateConsumer = renderHook(() => useBackendAuthState(descriptor, "late-consumer"));
+      expect(lateConsumer.result.current.signingIn).toBe(true);
+      expect(lateConsumer.result.current.url).toBe("https://example.com/sign-in");
       await act(async () => {
         completeSignIn({ signedIn: true, label: "zero@example.com" });
         await signIn;
@@ -65,6 +70,11 @@ describe("useBackendAuthState", () => {
           label: "zero@example.com",
         })
       );
+      expect(lateConsumer.result.current.status).toEqual({
+        signedIn: true,
+        label: "zero@example.com",
+      });
+      expect(descriptor.auth!.getStatus).toHaveBeenCalledTimes(2);
     });
 
     it("re-probes when the caller's auth-relevant key changes", async () => {
