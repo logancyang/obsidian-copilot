@@ -9,8 +9,25 @@ jest.mock("@/logger", () => ({ logInfo: jest.fn(), logWarn: jest.fn(), logError:
 // branch and the first thing a new user touches), so the binary manager behind
 // it is the only thing stubbed.
 const install = jest.fn();
+// The inline row subscribes to the manager's runtime store, so the stub has to
+// expose it with stable identities — an inline arrow per call would make
+// `useSyncExternalStore` resubscribe on every commit.
+const opencodeRuntimeListeners = new Set<() => void>();
+// One frozen snapshot, not a fresh object per call: `useSyncExternalStore`
+// compares by identity, so returning a new literal each time re-renders forever.
+const IDLE_RUNTIME = Object.freeze({ kind: "idle" as const });
+const opencodeManagerStub = {
+  install,
+  adoptExistingBinary: jest.fn().mockResolvedValue(null),
+  cancelCurrentOperation: jest.fn(),
+  subscribeRuntimeState: (onChange: () => void) => {
+    opencodeRuntimeListeners.add(onChange);
+    return () => opencodeRuntimeListeners.delete(onChange);
+  },
+  getRuntimeState: () => IDLE_RUNTIME,
+};
 jest.mock("@/agentMode/backends/opencode/descriptor", () => ({
-  getOpencodeBinaryManager: () => ({ install }),
+  getOpencodeBinaryManager: () => opencodeManagerStub,
   detectOpencodeCliPath: jest.fn(),
   OpencodeBackendDescriptor: { openInstallUI: jest.fn() },
 }));

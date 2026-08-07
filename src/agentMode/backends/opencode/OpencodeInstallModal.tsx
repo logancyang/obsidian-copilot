@@ -84,30 +84,34 @@ export const OpencodeConfigContainer: React.FC<{
     opencode?.binarySource ?? "managed"
   );
 
-  const [installRun, setInstallRun] = React.useState<OpencodeRunState>({ kind: "idle" });
-  const abortRef = React.useRef<AbortController | null>(null);
-  React.useEffect(() => () => abortRef.current?.abort(), []);
+  // Read from the manager rather than kept here: the dialog is one of several
+  // surfaces that can start an install, and closing it must not cancel a run
+  // the inline settings row is also showing. Cancel is now explicit only.
+  const runtime = React.useSyncExternalStore(
+    manager.subscribeRuntimeState,
+    manager.getRuntimeState,
+    manager.getRuntimeState
+  );
+  const installRun: OpencodeRunState =
+    runtime.kind === "installing"
+      ? runningState(runtime.progress)
+      : runtime.kind === "error"
+        ? { kind: "error", message: runtime.message }
+        : { kind: "idle" };
 
   const install = React.useCallback(() => {
-    const controller = new AbortController();
-    abortRef.current = controller;
-    setInstallRun(runningState(null));
     manager
-      .install({ signal: controller.signal, onProgress: (e) => setInstallRun(runningState(e)) })
-      .then(({ version }) => {
-        setInstallRun({ kind: "idle" });
-        new Notice(`opencode v${version} installed.`);
-      })
+      .install()
+      .then(({ version }) => new Notice(`opencode v${version} installed.`))
       .catch((err: unknown) => {
-        if (err instanceof AbortError || (err as Error)?.name === "AbortError") {
-          setInstallRun({ kind: "idle" });
-          return;
-        }
-        setInstallRun(errorState(err));
+        // Cancellation is not a failure, and a real failure is already in the
+        // manager's runtime state, which this dialog renders.
+        if (err instanceof AbortError || (err as Error)?.name === "AbortError") return;
+        logError("[AgentMode] opencode install failed", err);
       });
   }, [manager]);
 
-  const cancelInstall = React.useCallback(() => abortRef.current?.abort(), []);
+  const cancelInstall = React.useCallback(() => manager.cancelCurrentOperation(), [manager]);
 
   // Uninstall fully reclaims opencode: it removes every downloaded copy — all
   // versions under ~/.obsidian-copilot/opencode AND the old pre-migration copy

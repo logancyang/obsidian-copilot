@@ -60,6 +60,7 @@ import {
   legacyVaultDataDir,
   opencodeManagedDataDir,
   OpencodeBinaryManager,
+  OperationInFlightError,
   parseVersionFromStdout,
   pickMatchingAsset,
   toOpencodeInstallState,
@@ -581,5 +582,80 @@ describe("OpencodeBinaryManager.uninstall / downloadsSize", () => {
     } finally {
       await fs.promises.rm(vaultBase, { recursive: true, force: true });
     }
+  });
+});
+
+describe("OpencodeBinaryManager runtime state", () => {
+  beforeEach(() => settingsMock.__reset({}));
+
+  it("starts idle and hands every subscriber the same snapshot object", () => {
+    const mgr = new OpencodeBinaryManager(fakePlugin);
+    expect(mgr.getRuntimeState()).toEqual({ kind: "idle" });
+    // useSyncExternalStore compares snapshots by identity; an unchanged store
+    // returning a fresh object every call would re-render on every commit.
+    expect(mgr.getRuntimeState()).toBe(mgr.getRuntimeState());
+  });
+
+  it("notifies subscribers on each transition and stops after unsubscribe", async () => {
+    const mgr = new OpencodeBinaryManager(fakePlugin);
+    const seen: string[] = [];
+    const unsubscribe = mgr.subscribeRuntimeState(() => seen.push(mgr.getRuntimeState().kind));
+
+    await mgr.setCustomBinaryPath(process.execPath);
+    expect(seen).toEqual(["busy", "idle"]);
+
+    unsubscribe();
+    await mgr.setCustomBinaryPath(null);
+    expect(seen).toEqual(["busy", "idle"]);
+  });
+
+  it("reports a failed operation as an error state the next reader can show", async () => {
+    const mgr = new OpencodeBinaryManager(fakePlugin);
+    await expect(mgr.setCustomBinaryPath("/definitely/not/here")).rejects.toThrow(/No file at/);
+    // Durable rather than announced: whichever surface mounts next renders it.
+    expect(mgr.getRuntimeState()).toEqual({
+      kind: "error",
+      message: expect.stringContaining("No file at"),
+    });
+  });
+
+  it("clears a previous error once the next operation succeeds", async () => {
+    const mgr = new OpencodeBinaryManager(fakePlugin);
+    await expect(mgr.setCustomBinaryPath("/definitely/not/here")).rejects.toThrow();
+
+    await mgr.setCustomBinaryPath(process.execPath);
+
+    expect(mgr.getRuntimeState()).toEqual({ kind: "idle" });
+  });
+
+  it("refuses a second operation while one holds the binary-path lock", async () => {
+    const mgr = new OpencodeBinaryManager(fakePlugin);
+    // The lock is taken synchronously, before the first await inside the
+    // operation, so the call below is genuinely the second one in.
+    const first = mgr.setCustomBinaryPath(process.execPath);
+    expect(mgr.isBusy()).toBe(true);
+
+    // Both writers persist binaryPath/binarySource, so letting them overlap is
+    // what lets whichever settles last name a source the user did not choose.
+    await expect(mgr.adoptExistingBinary()).rejects.toBeInstanceOf(OperationInFlightError);
+
+    await first;
+    expect(settingsMock.__get().binaryPath).toBe(process.execPath);
+  });
+
+  it("frees the lock once the operation settles, including on failure", async () => {
+    const mgr = new OpencodeBinaryManager(fakePlugin);
+    await expect(mgr.setCustomBinaryPath("/definitely/not/here")).rejects.toThrow();
+
+    expect(mgr.isBusy()).toBe(false);
+    await expect(mgr.setCustomBinaryPath(process.execPath)).resolves.toBeUndefined();
+  });
+
+  it("is not busy before anything has run", () => {
+    expect(new OpencodeBinaryManager(fakePlugin).isBusy()).toBe(false);
+  });
+
+  it("ignores a cancel when nothing is running", () => {
+    expect(() => new OpencodeBinaryManager(fakePlugin).cancelCurrentOperation()).not.toThrow();
   });
 });
