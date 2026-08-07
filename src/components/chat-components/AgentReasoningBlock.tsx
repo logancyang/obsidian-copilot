@@ -1,5 +1,4 @@
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { CopilotSpinner } from "@/components/chat-components/CopilotSpinner";
 import { formatDuration } from "@/lib/duration";
 import { cn } from "@/lib/utils";
 import { ReasoningStatus } from "@/LLMProviders/chainRunner/utils/AgentReasoningState";
@@ -49,13 +48,13 @@ export const AgentReasoningBlock: React.FC<AgentReasoningBlockProps> = ({
       <CollapsibleTrigger asChild disabled={!canExpand}>
         <div
           className={cn(
-            "tw-flex tw-w-full tw-items-center tw-gap-1.5 tw-text-left tw-text-sm tw-text-muted hover:tw-text-normal",
+            "tw-flex tw-w-full tw-items-center tw-gap-1.5 tw-pl-1 tw-text-left tw-text-sm tw-text-muted hover:tw-text-normal",
             canExpand ? "tw-cursor-pointer" : "tw-cursor-default"
           )}
         >
-          {/* Persistent identity icon: spinner while active, Brain when idle/complete */}
+          {/* Reasoning keeps one identity while the separate turn-duration row owns the Copilot mark. */}
           <span className="tw-flex tw-size-3.5 tw-shrink-0 tw-items-center tw-justify-center">
-            {isActive ? <CopilotSpinner /> : <Brain className="tw-size-3.5 tw-text-muted" />}
+            <Brain className="tw-size-3.5 tw-text-muted" />
           </span>
 
           {/* Title and timer */}

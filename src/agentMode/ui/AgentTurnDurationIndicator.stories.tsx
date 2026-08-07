@@ -1,4 +1,6 @@
+import { AgentMarkdownText } from "@/agentMode/ui/AgentMarkdownText";
 import { AgentTurnDurationIndicator } from "@/agentMode/ui/AgentTurnDurationIndicator";
+import { useApp } from "@/context";
 import type { Meta, StoryObj } from "@/lib/story";
 import React from "react";
 
@@ -23,14 +25,19 @@ export const Complete: StoryObj<AgentTurnDurationIndicatorProps> = {
   args: { status: "complete", durationMs: 138_000 },
 };
 
-export const AlignedWithResponse: StoryObj<AgentTurnDurationIndicatorProps> = {
-  render: () => (
+const AlignedWithResponseDemo: React.FC = () => {
+  const app = useApp();
+  return (
     <div>
-      <div className="tw-p-1 tw-text-sm">
-        I excluded generated Copilot conversation logs and notes where AI was only mentioned
-        incidentally.
-      </div>
+      <AgentMarkdownText
+        text="I excluded generated Copilot conversation logs and notes where AI was only mentioned incidentally."
+        app={app}
+      />
       <AgentTurnDurationIndicator status="complete" durationMs={24_000} />
     </div>
-  ),
+  );
+};
+
+export const AlignedWithResponse: StoryObj<AgentTurnDurationIndicatorProps> = {
+  render: AlignedWithResponseDemo,
 };

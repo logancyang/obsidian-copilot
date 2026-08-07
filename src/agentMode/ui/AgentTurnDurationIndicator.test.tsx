@@ -64,7 +64,7 @@ describe("AgentTurnDurationIndicator", () => {
       }
     });
 
-    it("freezes the duration and keeps a static icon after completion", () => {
+    it("freezes the duration with a static icon aligned to response content after completion", () => {
       const { container } = render(
         <AgentTurnDurationIndicator status="complete" durationMs={138_000} />
       );
@@ -75,6 +75,11 @@ describe("AgentTurnDurationIndicator", () => {
       ).toBe(true);
       expect(container.querySelector(".copilot-spinner")).toBeTruthy();
       expect(container.querySelector(".copilot-spinner-dot-0")).toBeNull();
+      expect(
+        container
+          .querySelector(".copilot-spinner")
+          ?.parentElement?.classList.contains("tw-justify-start")
+      ).toBe(true);
       expect(
         container
           .querySelector(".copilot-spinner")

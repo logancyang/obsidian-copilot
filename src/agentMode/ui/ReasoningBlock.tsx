@@ -5,13 +5,13 @@ import type { ThoughtPart } from "@/agentMode/ui/agentTrail";
 interface ReasoningBlockProps {
   part: ThoughtPart;
   /** True when this part belongs to the actively streaming assistant
-   *  message — drives the spinner + live timer. */
+   *  message — drives the active label and live timer. */
   isStreaming: boolean;
 }
 
 /**
  * Adapter that maps an agent-mode `thought` part onto the existing
- * `AgentReasoningBlock` UI (spinner, timer, collapse-on-done). The store
+ * `AgentReasoningBlock` UI (brain icon, timer, collapse-on-done). The store
  * folds streamed `agent_thought_chunk`s into a single `thought` part, so
  * we have one part per assistant turn — `steps` derives from paragraph
  * splits within `part.text`.
