@@ -23,7 +23,7 @@ export interface ChatHistoryItem {
   /** Backend that produced this chat (Agent Mode only). Used to resolve a
    * brand icon in the popover via the caller-supplied `getIcon` resolver. */
   backendId?: string;
-  /** Raw `projectId` from frontmatter, or `undefined` when absent. The
+  /** Owning Agent Project id when known, or `undefined` for global chats. The
    * GLOBAL_SCOPE default is applied in the Agent Mode session layer, not here,
    * to keep this generic helper free of cross-layer scope imports. */
   projectId?: string;
@@ -38,6 +38,8 @@ type ChatHistoryIconResolver = (
   item: ChatHistoryItem
 ) => React.ComponentType<{ className?: string }> | undefined;
 
+type ChatHistoryBadgeResolver = (item: ChatHistoryItem) => React.ReactNode;
+
 interface ChatHistoryPopoverProps {
   children: React.ReactNode;
   chatHistory: ChatHistoryItem[];
@@ -49,6 +51,8 @@ interface ChatHistoryPopoverProps {
    * returns `undefined` (or is not supplied), the row falls back to
    * `MessageCircle`. */
   getIcon?: ChatHistoryIconResolver;
+  /** Optional metadata badge rendered beside a chat title. */
+  getBadge?: ChatHistoryBadgeResolver;
   /**
    * Preferred open direction, chosen by the trigger's geometry — not the
    * platform. Defaults suit a trigger pinned to the bottom of the pane (the
@@ -70,6 +74,7 @@ export function ChatHistoryPopover({
   onLoadChat,
   onOpenSourceFile,
   getIcon,
+  getBadge,
   side = "top",
   align = "end",
 }: ChatHistoryPopoverProps) {
@@ -351,6 +356,7 @@ export function ChatHistoryPopover({
                             isMobile={isMobile}
                             confirmDeleteId={confirmDeleteId}
                             getIcon={getIcon}
+                            getBadge={getBadge}
                           />
                         ))}
                       </div>
@@ -390,6 +396,7 @@ interface ChatHistoryItemProps {
   isMobile: boolean;
   confirmDeleteId: string | null;
   getIcon?: ChatHistoryIconResolver;
+  getBadge?: ChatHistoryBadgeResolver;
 }
 
 function ChatHistoryItem({
@@ -407,6 +414,7 @@ function ChatHistoryItem({
   isMobile,
   confirmDeleteId,
   getIcon,
+  getBadge,
 }: ChatHistoryItemProps) {
   const RowIcon = getIcon?.(chat) ?? MessageCircle;
   if (isEditing) {
@@ -453,10 +461,14 @@ function ChatHistoryItem({
         iconClassName="tw-size-3 tw-text-muted"
       />
 
-      <div className="tw-min-w-0 tw-flex-1">
-        <span className="tw-block tw-truncate tw-text-sm tw-font-medium tw-text-normal">
+      <div className="tw-flex tw-min-w-0 tw-flex-1 tw-items-center tw-gap-1.5">
+        <span
+          className="tw-block tw-min-w-0 tw-shrink tw-truncate tw-text-sm tw-font-medium tw-text-normal"
+          title={chat.title}
+        >
           {chat.title}
         </span>
+        {getBadge?.(chat)}
       </div>
 
       <div

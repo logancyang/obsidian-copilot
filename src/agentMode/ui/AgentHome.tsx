@@ -68,6 +68,8 @@ interface AgentHomeProps {
   updateUserMessageHistory: (newMessage: string) => void;
 }
 
+const EMPTY_PROJECT_NAMES_BY_ID: Readonly<Record<string, string>> = Object.freeze({});
+
 /**
  * Agent Mode home surface for an active session. Persistent across tab switches
  * (the tab strip swaps `sessionId`/`backend` props), so input drafts live here
@@ -192,6 +194,10 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   }, [descriptor, plugin]);
 
   const projects = useProjects();
+  const projectNamesById = useMemo<Readonly<Record<string, string>>>(() => {
+    if (projects.length === 0) return EMPTY_PROJECT_NAMES_BY_ID;
+    return Object.fromEntries(projects.map((project) => [project.id, project.name]));
+  }, [projects]);
 
   // Shared in-memory usage manager — the SAME instance `enterProject` touches. The
   // picker blends it so entering a project reorders the landing list immediately,
@@ -542,6 +548,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
             onLoadHistory={handleLoadChatHistory}
             runningChatIds={runningChatIds}
             attentionChatIds={attentionChatIds}
+            projectNamesById={projectNamesById}
           />
         ),
       },
@@ -581,6 +588,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     ],
     [
       projects,
+      projectNamesById,
       chatHistoryItems,
       app,
       projectUsageManager,

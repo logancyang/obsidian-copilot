@@ -1,5 +1,6 @@
 import { backendRegistry } from "@/agentMode/backends/registry";
 import { INLINE_LIMIT } from "@/agentMode/ui/AgentHomeSection";
+import { RecentChatProjectBadge, RecentChatTitle } from "@/agentMode/ui/RecentChatTitle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -75,6 +76,8 @@ interface GlobalRecentChatsSectionProps {
    * the list is mounted. Omitted means "snapshot only".
    */
   attentionChatIds?: ReadonlySet<string>;
+  /** Current project names keyed by id. Used only by the global variant. */
+  projectNamesById?: Readonly<Record<string, string>>;
   className?: string;
 }
 
@@ -132,6 +135,7 @@ ChatIconTile.displayName = "ChatIconTile";
 
 interface RecentChatRowProps {
   item: ChatHistoryItem;
+  projectName?: string;
   isEditing: boolean;
   editingTitle: string;
   confirmingDelete: boolean;
@@ -160,6 +164,7 @@ interface RecentChatRowProps {
  */
 const RecentChatRow = memo(function RecentChatRow({
   item,
+  projectName,
   isEditing,
   editingTitle,
   confirmingDelete,
@@ -224,12 +229,7 @@ const RecentChatRow = memo(function RecentChatRow({
       }}
     >
       <ChatIconTile Icon={Icon} needsAttention={hasAttention} />
-      <span
-        className="tw-min-w-0 tw-flex-1 tw-truncate tw-text-ui-small tw-text-normal"
-        title={item.title}
-      >
-        {item.title}
-      </span>
+      <RecentChatTitle title={item.title} projectName={projectName} />
 
       {/* Relative time by default; a backgrounded running session shows an accent
           spinner in its place. The action cluster replaces either on hover or
@@ -350,6 +350,7 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
   onLoadHistory,
   runningChatIds,
   attentionChatIds,
+  projectNamesById,
   className,
 }: GlobalRecentChatsSectionProps): React.ReactElement {
   const [query, setQuery] = useState("");
@@ -415,6 +416,18 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
   // section render (an inline arrow here would defeat RecentChatRow's memo).
   const handleCancelEdit = useCallback(() => setEditingId(null), []);
   const handleCancelDelete = useCallback(() => setConfirmDeleteId(null), []);
+  const getProjectName = useCallback(
+    (item: ChatHistoryItem): string | undefined =>
+      variant === "global" && item.projectId ? projectNamesById?.[item.projectId] : undefined,
+    [projectNamesById, variant]
+  );
+  const renderProjectBadge = useCallback(
+    (item: ChatHistoryItem): React.ReactNode => {
+      const projectName = getProjectName(item);
+      return projectName ? <RecentChatProjectBadge name={projectName} /> : null;
+    },
+    [getProjectName]
+  );
 
   return (
     <div
@@ -462,6 +475,7 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
                 <RecentChatRow
                   key={item.id}
                   item={item}
+                  projectName={getProjectName(item)}
                   isEditing={editingId === item.id}
                   // Only the row being renamed needs the live draft; passing a
                   // stable "" to the rest keeps their memo from re-rendering on
@@ -495,6 +509,7 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
               onLoadChat={onLoadChat}
               onOpenSourceFile={onOpenSourceFile}
               getIcon={resolveChatIcon}
+              getBadge={renderProjectBadge}
               // Full-width row near the pane's lower half: open downward like
               // an accordion. Radix flips to "top" if the area below is tight.
               side="bottom"

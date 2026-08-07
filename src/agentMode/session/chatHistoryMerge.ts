@@ -69,10 +69,15 @@ export function mergeChatHistoryItems(
     const twin = key ? nativeByKey.get(key) : undefined;
     if (twin && key) {
       nativeByKey.delete(key);
-      if (twin.lastAccessedAtMs > item.lastAccessedAt.getTime()) {
-        merged.push({ ...item, lastAccessedAt: new Date(twin.lastAccessedAtMs) });
-        continue;
-      }
+      merged.push({
+        ...item,
+        lastAccessedAt:
+          twin.lastAccessedAtMs > item.lastAccessedAt.getTime()
+            ? new Date(twin.lastAccessedAtMs)
+            : item.lastAccessedAt,
+        projectId: item.projectId ?? twin.projectId,
+      });
+      continue;
     }
     merged.push(item);
   }
@@ -84,6 +89,7 @@ export function mergeChatHistoryItems(
       createdAt: new Date(entry.createdAtMs),
       lastAccessedAt: new Date(entry.lastAccessedAtMs),
       backendId: entry.backendId,
+      projectId: entry.projectId,
     });
   }
 

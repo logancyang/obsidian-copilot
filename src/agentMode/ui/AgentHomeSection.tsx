@@ -84,8 +84,9 @@ interface AgentHomeListRowProps {
    */
   indent?: boolean;
   /**
-   * Optional leading icon — informational, e.g. the backend brand a chat ran on.
-   * Rows that need a richer marker than a single glyph use `leading` instead.
+   * Optional leading icon — centered in the same leading slot as create-row
+   * tiles. Rows that need a richer marker than a single glyph use `leading`
+   * instead.
    */
   icon?: React.ComponentType<{ className?: string }>;
   /**
@@ -112,9 +113,8 @@ interface AgentHomeListRowProps {
 /**
  * Generic clickable list row: optional leading icon/element + truncated label +
  * relative time. The leading slot is filled by `leading` (a custom marker) or
- * `icon` (a single glyph, e.g. a chat's backend brand). A row with neither can
- * `indent` so its text still aligns under siblings that do (`tw-pl-6` ≈ icon
- * width + gap).
+ * a centered `icon`. A row with neither can `indent` so its text still aligns
+ * under siblings that do (`tw-pl-6` ≈ icon width + gap).
  */
 export const AgentHomeListRow = memo(function AgentHomeListRow({
   label,
@@ -141,7 +141,12 @@ export const AgentHomeListRow = memo(function AgentHomeListRow({
         }
       }}
     >
-      {leading ?? (Icon && <Icon className="tw-size-4 tw-shrink-0 tw-text-muted" />)}
+      {leading ??
+        (Icon && (
+          <span className="tw-flex tw-size-6 tw-shrink-0 tw-items-center tw-justify-center">
+            <Icon className="tw-size-4 tw-text-muted" />
+          </span>
+        ))}
       <span
         className={cn(
           "tw-min-w-0 tw-flex-1 tw-truncate tw-text-ui-small tw-text-normal",

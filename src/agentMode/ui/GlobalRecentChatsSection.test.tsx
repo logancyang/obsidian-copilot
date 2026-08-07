@@ -2,10 +2,19 @@ import React from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { GlobalRecentChatsSection } from "@/agentMode/ui/GlobalRecentChatsSection";
 
-// jsdom lacks Obsidian's `activeDocument`; the section's View-all popover portals
-// into it. The empty-state paths under test never open it, but alias defensively.
+// jsdom lacks Obsidian's portal document and the observer used to page the open
+// View-all popover, so supply inert browser equivalents for that interaction.
 beforeAll(() => {
   (window as unknown as { activeDocument: Document }).activeDocument = window.document;
+  window.IntersectionObserver = class implements IntersectionObserver {
+    readonly root = null;
+    readonly rootMargin = "";
+    readonly thresholds = [];
+    disconnect = jest.fn();
+    observe = jest.fn();
+    takeRecords = jest.fn(() => []);
+    unobserve = jest.fn();
+  };
 });
 
 const noop = async () => {};
@@ -18,6 +27,7 @@ function renderSection(props: Partial<React.ComponentProps<typeof GlobalRecentCh
       title={props.title}
       runningChatIds={props.runningChatIds}
       attentionChatIds={props.attentionChatIds}
+      projectNamesById={props.projectNamesById}
       onLoadChat={noop}
       onUpdateTitle={noop}
       onDeleteChat={noop}
@@ -33,7 +43,8 @@ function queryAttentionDot(container: HTMLElement): Element | null {
 }
 
 function makeItem(
-  id: string
+  id: string,
+  overrides: Partial<React.ComponentProps<typeof GlobalRecentChatsSection>["items"][number]> = {}
 ): React.ComponentProps<typeof GlobalRecentChatsSection>["items"][number] {
   // `lastAccessedAt` set to "now" so the relative-time label renders the stable
   // `now` bucket regardless of when the test runs.
@@ -42,71 +53,126 @@ function makeItem(
     title: `Chat ${id}`,
     createdAt: new Date(),
     lastAccessedAt: new Date(),
+    ...overrides,
   };
 }
 
 describe("GlobalRecentChatsSection", () => {
-  it("defaults to the global empty-state copy", () => {
-    renderSection();
-    expect(screen.getByText("No recent chats")).toBeTruthy();
-  });
-
-  it("uses project-scoped empty-state copy in the project variant", () => {
-    renderSection({ variant: "project" });
-    expect(screen.getByText("No chats in this project yet")).toBeTruthy();
-  });
-
-  it("applies the optional title as the section's accessible label", () => {
-    renderSection({ variant: "project", title: "Project Chats" });
-    expect(screen.getByLabelText("Project Chats")).toBeTruthy();
-  });
-
-  it("renders a running spinner instead of the time for a backgrounded session", () => {
-    const item = makeItem("running-1");
-    renderSection({ items: [item], runningChatIds: new Set([item.id]) });
-    expect(screen.getByLabelText("Running")).toBeTruthy();
-    expect(screen.queryByText("now")).toBeNull();
-  });
-
-  it("renders the relative time (no spinner) when the session is not running", () => {
-    const item = makeItem("idle-1");
-    renderSection({ items: [item], runningChatIds: new Set() });
-    expect(screen.queryByLabelText("Running")).toBeNull();
-    expect(screen.getByText("now")).toBeTruthy();
-  });
-
-  it("shows the attention dot from the live set even when the item snapshot lacks it", () => {
-    // The handoff case: a backgrounded session finished AFTER the history items
-    // were loaded — the stale snapshot says no attention, the live set says yes.
-    const item = makeItem("done-live");
-    expect(item.needsAttention).toBeUndefined();
-    const { container } = renderSection({
-      items: [item],
-      attentionChatIds: new Set([item.id]),
+  describe("GlobalRecentChatsSection()", () => {
+    it("defaults to the global empty-state copy", () => {
+      renderSection();
+      expect(screen.getByText("No recent chats")).toBeTruthy();
     });
-    expect(queryAttentionDot(container)).not.toBeNull();
-  });
 
-  it("shows no attention dot when neither the snapshot nor the live set flags it", () => {
-    const item = makeItem("plain-1");
-    const { container } = renderSection({ items: [item], attentionChatIds: new Set() });
-    expect(queryAttentionDot(container)).toBeNull();
-  });
-
-  it("caps the inline preview at 5 chats and offers a View-all trigger on overflow", () => {
-    const items = Array.from({ length: 7 }, (_, i) => makeItem(`overflow-${i}`));
-    renderSection({ items });
-    expect(screen.getAllByText(/^Chat overflow-/)).toHaveLength(5);
-    expect(screen.getByText("View all chats")).toBeTruthy();
-  });
-
-  it("shows every match (no cap, no View-all) while searching", () => {
-    const items = Array.from({ length: 7 }, (_, i) => makeItem(`search-${i}`));
-    renderSection({ items });
-    fireEvent.change(screen.getByPlaceholderText("Search chats..."), {
-      target: { value: "Chat search" },
+    it("uses project-scoped empty-state copy in the project variant", () => {
+      renderSection({ variant: "project" });
+      expect(screen.getByText("No chats in this project yet")).toBeTruthy();
     });
-    expect(screen.getAllByText(/^Chat search-/)).toHaveLength(7);
-    expect(screen.queryByText("View all chats")).toBeNull();
+
+    it("applies the optional title as the section's accessible label", () => {
+      renderSection({ variant: "project", title: "Project Chats" });
+      expect(screen.getByLabelText("Project Chats")).toBeTruthy();
+    });
+
+    it("renders a running spinner instead of the time for a backgrounded session", () => {
+      const item = makeItem("running-1");
+      renderSection({ items: [item], runningChatIds: new Set([item.id]) });
+      expect(screen.getByLabelText("Running")).toBeTruthy();
+      expect(screen.queryByText("now")).toBeNull();
+    });
+
+    it("renders the relative time (no spinner) when the session is not running", () => {
+      const item = makeItem("idle-1");
+      renderSection({ items: [item], runningChatIds: new Set() });
+      expect(screen.queryByLabelText("Running")).toBeNull();
+      expect(screen.getByText("now")).toBeTruthy();
+    });
+
+    it("shows the attention dot from the live set even when the item snapshot lacks it", () => {
+      // The handoff case: a backgrounded session finished AFTER the history items
+      // were loaded — the stale snapshot says no attention, the live set says yes.
+      const item = makeItem("done-live");
+      expect(item.needsAttention).toBeUndefined();
+      const { container } = renderSection({
+        items: [item],
+        attentionChatIds: new Set([item.id]),
+      });
+      expect(queryAttentionDot(container)).not.toBeNull();
+    });
+
+    it("shows no attention dot when neither the snapshot nor the live set flags it", () => {
+      const item = makeItem("plain-1");
+      const { container } = renderSection({ items: [item], attentionChatIds: new Set() });
+      expect(queryAttentionDot(container)).toBeNull();
+    });
+
+    it("shows a project badge beside project-scoped chats on the global landing", () => {
+      const item = makeItem("project-chat", { projectId: "project-1" });
+      renderSection({
+        items: [item],
+        projectNamesById: { "project-1": "Product research" },
+      });
+
+      const badge = screen.getByLabelText("Project: Product research");
+      expect(badge.textContent).toBe("Product research");
+      expect(badge.getAttribute("title")).toBe("Product research");
+    });
+
+    it("omits project badges for global chats, unknown projects, and project landings", () => {
+      const { unmount } = renderSection({
+        variant: "project",
+        items: [makeItem("project-chat", { projectId: "project-1" })],
+        projectNamesById: { "project-1": "Product research" },
+      });
+      expect(screen.queryByLabelText("Project: Product research")).toBeNull();
+      unmount();
+
+      renderSection({
+        items: [makeItem("global-chat"), makeItem("unknown-project", { projectId: "missing" })],
+        projectNamesById: { "project-1": "Product research" },
+      });
+      expect(screen.queryByLabelText(/^Project:/)).toBeNull();
+    });
+
+    it("uses an explicit ellipsis contract while preserving the full title for hover", () => {
+      const title = "Do a research on Mobbin that explains how people express their app value";
+      renderSection({ items: [makeItem("long-title", { title })] });
+
+      const titleElement = screen.getByText(title);
+      expect(titleElement.classList.contains("tw-block")).toBe(true);
+      expect(titleElement.classList.contains("tw-truncate")).toBe(true);
+      expect(titleElement.getAttribute("title")).toBe(title);
+    });
+
+    it("caps the inline preview at 5 chats and offers a View-all trigger on overflow", () => {
+      const items = Array.from({ length: 7 }, (_, i) => makeItem(`overflow-${i}`));
+      renderSection({ items });
+      expect(screen.getAllByText(/^Chat overflow-/)).toHaveLength(5);
+      expect(screen.getByText("View all chats")).toBeTruthy();
+    });
+
+    it("renders project badges in the View-all popover from the global landing", () => {
+      const items = Array.from({ length: 6 }, (_, i) =>
+        makeItem(`project-overflow-${i}`, { projectId: "project-1" })
+      );
+      renderSection({
+        items,
+        projectNamesById: { "project-1": "Product research" },
+      });
+
+      expect(screen.getAllByLabelText("Project: Product research")).toHaveLength(5);
+      fireEvent.click(screen.getByText("View all chats"));
+      expect(screen.getAllByLabelText("Project: Product research")).toHaveLength(11);
+    });
+
+    it("shows every match (no cap, no View-all) while searching", () => {
+      const items = Array.from({ length: 7 }, (_, i) => makeItem(`search-${i}`));
+      renderSection({ items });
+      fireEvent.change(screen.getByPlaceholderText("Search chats..."), {
+        target: { value: "Chat search" },
+      });
+      expect(screen.getAllByText(/^Chat search-/)).toHaveLength(7);
+      expect(screen.queryByText("View all chats")).toBeNull();
+    });
   });
 });

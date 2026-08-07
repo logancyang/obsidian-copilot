@@ -80,6 +80,18 @@ describe("ProjectPickerList", () => {
       }
     });
 
+    it("centers project folders in the same leading slot as the create icon", () => {
+      const { container } = render(
+        <ProjectPickerList projects={[projectA]} onSelect={noop} onCreate={noop} app={app} />
+      );
+      const plusSlot = container.querySelector(".lucide-plus")?.parentElement;
+      const folderSlot = container.querySelector(".lucide-folder")?.parentElement;
+
+      expect(plusSlot?.classList.contains("tw-size-6")).toBe(true);
+      expect(folderSlot?.classList.contains("tw-size-6")).toBe(true);
+      expect(folderSlot?.classList.contains("tw-justify-center")).toBe(true);
+    });
+
     it("falls back to persisted order when no usage manager is provided", () => {
       const { container } = renderPicker(undefined);
       // No crash, and the persisted MRU order still holds.
