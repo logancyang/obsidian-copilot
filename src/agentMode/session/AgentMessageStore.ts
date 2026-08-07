@@ -31,6 +31,7 @@ interface StoredAgentMessage {
   context?: MessageContext;
   content?: unknown[];
   turnStopReason?: StopReason;
+  turnDurationMs?: number;
   // Live per-agent fan-out state. In-memory only; the persisted body carries the
   // composite that reconstructs it on load.
   fanout?: FanoutTurn;
@@ -250,6 +251,7 @@ export class AgentMessageStore {
       content: message.content,
       parts: message.parts,
       turnStopReason: message.turnStopReason,
+      turnDurationMs: message.turnDurationMs,
       version: 0,
     });
     this.lastDisplay = null;
@@ -257,15 +259,37 @@ export class AgentMessageStore {
   }
 
   /**
-   * Stamp a finished turn's `stopReason` onto its placeholder assistant message.
+   * Stamp a finished turn's outcome and frozen duration onto its placeholder assistant message.
    * Returns false if the message is missing or already marked complete — the
    * latter lets callers skip notifying.
+   *
+   * @param id - Placeholder assistant message that owns the turn.
+   * @param stopReason - Backend outcome reported when the prompt settled.
+   * @param durationMs - Wall-clock elapsed time for the complete turn.
    */
-  markTurnComplete(id: string, stopReason: StopReason): boolean {
+  markTurnComplete(id: string, stopReason: StopReason, durationMs: number): boolean {
     const msg = this.messages.find((m) => m.id === id);
     if (!msg) return false;
     if (msg.turnStopReason !== undefined) return false;
     msg.turnStopReason = stopReason;
+    msg.turnDurationMs = Math.max(0, durationMs);
+    this.touch(msg);
+    return true;
+  }
+
+  /**
+   * Extend a completed turn's duration when its backend delivers trailing content.
+   * Returns false for missing or still-running messages and when the duration did not advance.
+   *
+   * @param id - Completed assistant message receiving late turn activity.
+   * @param durationMs - Wall-clock elapsed time through the trailing activity.
+   */
+  extendTurnDuration(id: string, durationMs: number): boolean {
+    const msg = this.messages.find((m) => m.id === id);
+    if (!msg || msg.turnDurationMs === undefined) return false;
+    const nextDurationMs = Math.max(0, durationMs);
+    if (nextDurationMs <= msg.turnDurationMs) return false;
+    msg.turnDurationMs = nextDurationMs;
     this.touch(msg);
     return true;
   }
@@ -381,11 +405,16 @@ export class AgentMessageStore {
    * Mark a message as an error and append the error text to its display body.
    * Used when a turn rejects mid-stream so the partial placeholder gets a
    * visible error instead of looking like a normal truncated reply.
+   *
+   * @param id - Assistant message that should display the failure.
+   * @param errorText - User-visible failure detail to append.
+   * @param durationMs - Frozen turn duration when this error ends an in-flight turn.
    */
-  markMessageError(id: string, errorText: string): boolean {
+  markMessageError(id: string, errorText: string, durationMs?: number): boolean {
     const msg = this.messages.find((m) => m.id === id);
     if (!msg) return false;
     msg.isErrorMessage = true;
+    if (durationMs !== undefined) msg.turnDurationMs = Math.max(0, durationMs);
     const suffix = msg.displayText.length > 0 ? "\n\n" : "";
     msg.displayText += `${suffix}**Error:** ${errorText}`;
     this.touch(msg);
@@ -489,6 +518,7 @@ export class AgentMessageStore {
         content: msg.content,
         parts: msg.parts,
         turnStopReason: msg.turnStopReason,
+        turnDurationMs: msg.turnDurationMs,
         fanout,
         version: 0,
       });
@@ -515,6 +545,7 @@ export class AgentMessageStore {
       content: m.content,
       parts: m.parts,
       turnStopReason: m.turnStopReason,
+      turnDurationMs: m.turnDurationMs,
       // Snapshot so each adapted view carries a fresh reference; the orchestrator
       // mutates one turn in place, so the same reference would freeze the dropdown.
       ...(m.fanout ? { fanout: snapshotFanoutTurn(m.fanout) } : {}),

@@ -1,4 +1,9 @@
+import { cn } from "@/lib/utils";
 import React from "react";
+
+interface CopilotSpinnerProps {
+  animated?: boolean;
+}
 
 // 7-dot sigma (Σ) pattern. animIndex orders the snake trail:
 // top-right → top-center → top-left → center → bottom-left → bottom-center → bottom-right.
@@ -16,7 +21,7 @@ const DOT_SIZE = 2.5;
 const DOT_GAP = 3;
 const GRID_SIZE = DOT_SIZE * 3 + DOT_GAP * 2;
 
-export const CopilotSpinner: React.FC = () => {
+export const CopilotSpinner: React.FC<CopilotSpinnerProps> = ({ animated = true }) => {
   return (
     <svg
       width={GRID_SIZE}
@@ -34,7 +39,10 @@ export const CopilotSpinner: React.FC = () => {
             cy={cy}
             r={DOT_SIZE / 2}
             // eslint-disable-next-line tailwindcss/no-custom-classname
-            className={`copilot-spinner-dot copilot-spinner-dot-${dot.animIndex}`}
+            className={cn(
+              "copilot-spinner-dot",
+              animated && `copilot-spinner-dot-${dot.animIndex}`
+            )}
           />
         );
       })}
