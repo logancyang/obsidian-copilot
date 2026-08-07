@@ -423,6 +423,18 @@ function ItemCard({
   );
 }
 
+/**
+ * DESIGN NOTE — this modal's property visual states (the icon below, the
+ * Properties section, its value rows) have no component-gallery story, unlike
+ * the sibling editors ProjectContextBadgeList and ProjectContextSourceEditor.
+ * A story can only mount an exported component, and this file exports just the
+ * Obsidian `Modal` subclass; every React part here is module-private. Covering
+ * it would mean exporting `ContextManage` solely so the gallery can reach it,
+ * which no story in this repo does — the widened production surface costs more
+ * than the coverage buys, since the property icon and hue are identical to the
+ * two components that are covered. If a future review flags this again, point
+ * them at this note.
+ */
 function CategoryItemCard({
   item,
   onClick,

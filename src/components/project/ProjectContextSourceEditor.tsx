@@ -52,7 +52,7 @@ const FILE_CHIP_CONFIG = {
 
 /**
  * The shared, controlled mixed file+URL context editor (design H / E). Renders
- * inclusions (folder/tag/file/extension via {@link buildBadgeItems}) and URLs
+ * inclusions (folder/tag/file/extension/property via {@link buildBadgeItems}) and URLs
  * (via {@link parseProjectUrls}) as one wrapped {@link ContextChip} flow that
  * fills the box and scrolls internally when it overflows, then a footer pinned at
  * the box floor (drag hint · +URL · Manage). Pure / controlled: deletes and the
