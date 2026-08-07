@@ -280,7 +280,13 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
   SettingsPanel: OpencodeSettingsPanel,
 
   async onPluginLoad(plugin: CopilotPlugin): Promise<void> {
-    await getOpencodeBinaryManager(plugin).refreshInstallState();
+    const manager = getOpencodeBinaryManager(plugin);
+    // The manager is a module-level singleton, so it survives disable→enable
+    // and "Open another vault" in the same process. Clearing at the START of a
+    // lifecycle is the convention `main.ts` documents for exactly that carry-
+    // over — and here it stops a failure from one vault greeting the next.
+    manager.forgetSettledError();
+    await manager.refreshInstallState();
   },
 
   getProbeSessionId(settings: CopilotSettings): string | undefined {

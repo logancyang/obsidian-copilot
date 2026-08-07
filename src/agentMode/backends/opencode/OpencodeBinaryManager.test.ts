@@ -673,6 +673,29 @@ describe("OpencodeBinaryManager runtime state", () => {
     expect(mgr.isBusy()).toBe(false);
   });
 
+  it("drops a settled error when a new plugin lifecycle starts", async () => {
+    const mgr = new OpencodeBinaryManager(fakePlugin);
+    await expect(mgr.adoptExistingBinary()).rejects.toBeInstanceOf(OpencodeNotFoundError);
+
+    mgr.forgetSettledError();
+
+    // The manager is a module-level singleton, so without this the next vault
+    // opened in the same process would greet the user with this vault's error.
+    expect(mgr.getRuntimeState()).toEqual({ kind: "idle" });
+  });
+
+  it("keeps a running operation visible across a lifecycle boundary", async () => {
+    const mgr = new OpencodeBinaryManager(fakePlugin);
+    const inFlight = mgr.setCustomBinaryPath(process.execPath);
+
+    mgr.forgetSettledError();
+
+    // A run still belongs to this process; the new lifecycle adopts it rather
+    // than dropping to idle and offering a rival action underneath it.
+    expect(mgr.getRuntimeState()).toEqual({ kind: "busy" });
+    await inFlight;
+  });
+
   it("is not busy before anything has run", () => {
     expect(new OpencodeBinaryManager(fakePlugin).isBusy()).toBe(false);
   });

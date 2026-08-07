@@ -35,9 +35,18 @@ export type ProgressEvent =
 
 export interface InstallOptions {
   onProgress?: (e: ProgressEvent) => void;
-  signal?: AbortSignal;
   /** Override pinned version. Defaults to OPENCODE_PINNED_VERSION. */
   version?: string;
+}
+
+/**
+ * What the install pipeline needs on top of the public options. The signal is
+ * absent from {@link InstallOptions} on purpose: the manager owns cancellation
+ * through {@link OpencodeBinaryManager.cancelCurrentOperation}, so a caller
+ * cannot supply one, and the pipeline only ever receives the manager's own.
+ */
+interface InstallPipelineOptions extends InstallOptions {
+  signal?: AbortSignal;
 }
 
 export type InstallState =
@@ -312,6 +321,21 @@ export class OpencodeBinaryManager {
     this.runtimeSubscribers.forEach((notify) => notify());
   }
 
+  /**
+   * Drop a failure left over from a previous plugin lifecycle, so a new one
+   * does not open showing an error nobody here caused.
+   *
+   * The rest of the runtime state is deliberately kept: a run still in flight
+   * belongs to this process and the new lifecycle adopts it rather than
+   * offering a rival action (see the note on {@link operation}). Only a settled
+   * error is stale — it describes an attempt that ended, in a vault that may
+   * not even be the one now open.
+   */
+  forgetSettledError(): void {
+    if (this.operation || this.runtimeState.kind !== "error") return;
+    this.setRuntimeState({ kind: "idle" });
+  }
+
   /** Whether a binary-path operation is running, from any entry point. */
   isBusy(): boolean {
     return this.operation !== null;
@@ -329,10 +353,11 @@ export class OpencodeBinaryManager {
    * Run `body` as the one binary-path operation, publishing `running` for its
    * duration and settling back to idle (or to an error the UI can show).
    *
-   * Every public method that writes `binaryPath`/`binarySource` goes through
-   * here, which is what makes the lock complete: guarding only the managed
-   * install would still let the Configure dialog apply a custom path
-   * underneath it.
+   * Every *user-triggered* operation that writes `binaryPath`/`binarySource`
+   * goes through here, which is what makes the lock useful: guarding only the
+   * managed install would still let the Configure dialog apply a custom path
+   * underneath it. {@link refreshInstallState} is the one writer outside, and
+   * says there why.
    *
    * @param running - State published while `body` runs.
    * @param body - Receives the signal to honour for cancellation.
@@ -363,20 +388,6 @@ export class OpencodeBinaryManager {
     }
   }
 
-  /**
-   * Link a caller-supplied signal to this operation's own controller, so a
-   * caller that already had one (the Configure dialog) keeps working while the
-   * manager stays the single place that can cancel.
-   */
-  private static linkSignal(external: AbortSignal | undefined, controller: AbortController): void {
-    if (!external) return;
-    if (external.aborted) {
-      controller.abort();
-      return;
-    }
-    external.addEventListener("abort", () => controller.abort(), { once: true });
-  }
-
   getInstallState(): InstallState {
     return computeInstallState(readOpencodeSettings());
   }
@@ -387,6 +398,19 @@ export class OpencodeBinaryManager {
    * restored a vault from backup, etc.), demote to `absent`. Skipped for
    * custom-source installs — re-checking on every plugin load would punish
    * users for transient filesystem hiccups (network mounts, etc.).
+   *
+   * DESIGN NOTE — this is the one `binaryPath` writer that stays outside
+   * {@link runExclusive}, and the residual race is accepted. To lose data a
+   * user needs a managed path whose file is already gone, an install still
+   * running from a previous lifecycle, a reload landing mid-run, AND the
+   * single `fileExists` stat below straddling the instant that install
+   * persists its result — at which point the clear would wipe the fresh
+   * install. Taking the lock here would be worse: a reconcile at load would
+   * throw `OperationInFlightError` on every plugin load that happens during a
+   * download, turning a millisecond-wide race into a routine failure. If a
+   * future review flags this again, point them at this note; the cheap fix, if
+   * it ever bites, is to re-read settings after the await and only clear when
+   * the path still matches the one checked.
    */
   async refreshInstallState(): Promise<void> {
     // Read raw settings (not getInstallState) so we can still see a configured
@@ -432,14 +456,9 @@ export class OpencodeBinaryManager {
   /**
    * Download and activate the pinned opencode build, holding the binary-path
    * lock for the whole run and publishing download progress as it goes.
-   *
-   * `opts.signal` still works and is linked to the manager's own controller, so
-   * an existing caller keeps its cancellation while
-   * {@link cancelCurrentOperation} can reach the same run.
    */
   async install(opts: InstallOptions = {}): Promise<{ version: string; path: string }> {
     return this.runExclusive({ kind: "installing", progress: null }, (signal) => {
-      OpencodeBinaryManager.linkSignal(opts.signal, this.operationController());
       return this.installPipeline({
         ...opts,
         signal,
@@ -449,12 +468,6 @@ export class OpencodeBinaryManager {
         },
       });
     });
-  }
-
-  /** The controller of the operation `runExclusive` just opened. */
-  private operationController(): AbortController {
-    if (!this.operation) throw new Error("No opencode operation is running.");
-    return this.operation.controller;
   }
 
   /**
@@ -468,7 +481,7 @@ export class OpencodeBinaryManager {
    * holds — or settle the run to idle before it has removed the old version.
    */
   private async installPipeline(
-    opts: InstallOptions = {}
+    opts: InstallPipelineOptions = {}
   ): Promise<{ version: string; path: string }> {
     const version = opts.version ?? OPENCODE_PINNED_VERSION;
     const dataDir = this.getDataDir();
@@ -614,7 +627,6 @@ export class OpencodeBinaryManager {
    */
   async upgradeManaged(opts: InstallOptions = {}): Promise<{ version: string; path: string }> {
     return this.runExclusive({ kind: "installing", progress: null }, async (signal) => {
-      OpencodeBinaryManager.linkSignal(opts.signal, this.operationController());
       const prev = readOpencodeSettings();
       const result = await this.installPipeline({
         ...opts,
@@ -936,7 +948,7 @@ async function downloadToFile(
   url: string,
   dest: string,
   expectedSize: number | undefined,
-  opts: InstallOptions
+  opts: InstallPipelineOptions
 ): Promise<void> {
   const assetName = path.basename(dest);
   const res = await httpsGetWithRedirects(url, opts.signal);
