@@ -76,7 +76,12 @@ const TrailDemo: React.FC<{ parts: AgentMessagePart[]; isStreaming?: boolean }> 
   const app = useApp();
   return (
     <TooltipProvider>
-      <AgentTrail parts={parts} isStreaming={isStreaming} app={app} />
+      <AgentTrail
+        parts={parts}
+        isStreaming={isStreaming}
+        turnStartedAtMs={isStreaming ? Date.now() - 138_000 : undefined}
+        app={app}
+      />
     </TooltipProvider>
   );
 };

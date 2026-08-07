@@ -3,7 +3,7 @@ import { AskUserQuestionCard } from "@/agentMode/ui/AskUserQuestionCard";
 import { FanoutMessageCard } from "@/agentMode/ui/FanoutMessageCard";
 import { PlanProposalCard } from "@/agentMode/ui/PlanProposalCard";
 import { ToolPermissionCard } from "@/agentMode/ui/ToolPermissionCard";
-import { BottomLoadingIndicator } from "@/components/chat-components/BottomLoadingIndicator";
+import { AgentTurnDurationIndicator } from "@/agentMode/ui/AgentTurnDurationIndicator";
 import ChatSingleMessage from "@/components/chat-components/ChatSingleMessage";
 import { USER_SENDER } from "@/constants";
 import { useChatScrolling } from "@/hooks/useChatScrolling";
@@ -93,28 +93,15 @@ const AgentChatMessages = memo(
     const hasTailCards =
       showPlanCard || pendingToolPermissions.length > 0 || pendingAskUserQuestions.length > 0;
 
-    // The last visible assistant message is the streaming placeholder while
-    // a turn is in flight — drives the reasoning-block timer/spinner and the
-    // persistent "Thinking" loader below it. The bottom loader is suppressed
-    // when the streaming message's tail part is a `thought` (the reasoning
-    // block already spins) and when the bubble is still entirely empty (the
-    // in-place `isStreamingPlaceholder` spinner covers that).
-    const { streamingMessageId, showBottomLoader } = useMemo(() => {
-      if (!isLoading) return { streamingMessageId: undefined, showBottomLoader: false };
-      const streaming = lastAssistant(visible);
-      if (!streaming) return { streamingMessageId: undefined, showBottomLoader: false };
-      const parts = streaming.parts ?? [];
-      const last = parts[parts.length - 1];
-      const hasParts = parts.length > 0;
-      const hasBody = !!streaming.message;
-      const showLoader = last?.kind !== "thought" && (hasParts || hasBody);
-      return { streamingMessageId: streaming.id, showBottomLoader: showLoader };
-    }, [isLoading, visible]);
+    // The latest assistant message owns both timer states: it ticks while that
+    // turn is in flight, then retains the frozen duration until the next turn
+    // appends a newer placeholder and naturally retires this row.
+    const latestAssistant = useMemo(() => lastAssistant(visible), [visible]);
+    const streamingMessageId = isLoading ? latestAssistant?.id : undefined;
 
     if (visible.length === 0) {
       return (
         <div className="tw-flex tw-size-full tw-flex-col tw-gap-2 tw-overflow-y-auto tw-px-3 tw-pt-2">
-          {isLoading && <BottomLoadingIndicator />}
           {inlinePlanCard}
           {inlineToolPermissionCards}
           {inlineAskUserQuestionCards}
@@ -144,8 +131,23 @@ const AgentChatMessages = memo(
             const isAssistant = message.sender !== USER_SENDER;
             const hasParts = (message.parts?.length ?? 0) > 0;
             const renderTrail = isAssistant && hasParts;
-            // The streaming placeholder (empty body, no parts) renders as a
-            // thinking spinner in-place, so the user sees progress the moment
+            const ownsTurnDuration = isAssistant && message.id === latestAssistant?.id;
+            const completedTurnDurationMs = ownsTurnDuration ? message.turnDurationMs : undefined;
+            const runningTurnStartedAtMs =
+              ownsTurnDuration && message.id === streamingMessageId
+                ? message.timestamp?.epoch
+                : undefined;
+            const standaloneTurnDuration =
+              completedTurnDurationMs !== undefined ? (
+                <AgentTurnDurationIndicator
+                  status="complete"
+                  durationMs={completedTurnDurationMs}
+                />
+              ) : runningTurnStartedAtMs !== undefined ? (
+                <AgentTurnDurationIndicator status="running" startedAtMs={runningTurnStartedAtMs} />
+              ) : null;
+            // The streaming placeholder (empty body, no parts) renders the
+            // whole-turn timer in-place, so the user sees progress the moment
             // they hit send rather than an empty assistant bubble.
             const isStreamingPlaceholder =
               isAssistant && message.id === streamingMessageId && !hasParts && !message.message;
@@ -168,17 +170,17 @@ const AgentChatMessages = memo(
                 {fanoutTurn ? (
                   <div className="tw-px-3 tw-pt-2">
                     <FanoutMessageCard message={message} turn={fanoutTurn} app={app} />
+                    {standaloneTurnDuration}
                   </div>
                 ) : isStreamingPlaceholder ? (
-                  <div className="tw-px-3 tw-pt-2">
-                    <BottomLoadingIndicator />
-                  </div>
+                  <div className="tw-px-3 tw-pt-2">{standaloneTurnDuration}</div>
                 ) : renderTrail ? (
                   <div className="tw-px-3 tw-pt-2">
                     <AgentTrail
                       parts={message.parts!}
                       isStreaming={message.id === streamingMessageId}
-                      showThinkingTail={message.id === streamingMessageId && showBottomLoader}
+                      turnStartedAtMs={runningTurnStartedAtMs}
+                      turnDurationMs={completedTurnDurationMs}
                       app={app}
                       turnStopReason={message.turnStopReason}
                     />
@@ -188,7 +190,12 @@ const AgentChatMessages = memo(
                   // yet (ACP owns conversation history server-side), so no
                   // lifecycle handlers are wired — ChatButtons renders only the
                   // copy / insert actions it can honor.
-                  <ChatSingleMessage message={adaptedMessage} app={app} isStreaming={false} />
+                  <>
+                    <ChatSingleMessage message={adaptedMessage} app={app} isStreaming={false} />
+                    {standaloneTurnDuration ? (
+                      <div className="tw-px-3">{standaloneTurnDuration}</div>
+                    ) : null}
+                  </>
                 )}
               </div>
             );

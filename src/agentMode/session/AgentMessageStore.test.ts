@@ -239,11 +239,12 @@ describe("AgentMessageStore", () => {
       timestamp: formatDateTime(new Date()),
       isVisible: true,
     });
-    store.markMessageError(id, "boom");
+    store.markMessageError(id, "boom", 12_345);
     const msg = store.getMessage(id);
     expect(msg?.isErrorMessage).toBe(true);
     expect(msg?.message).toContain("partial reply");
     expect(msg?.message).toContain("**Error:** boom");
+    expect(msg?.turnDurationMs).toBe(12_345);
   });
 
   it("truncateAfterMessageId drops everything after the target", () => {
@@ -310,10 +311,11 @@ describe("AgentMessageStore", () => {
       const v2 = store.getDisplayMessages()[0];
       expect(v2).not.toBe(v1);
 
-      store.markTurnComplete(id, "end_turn");
+      store.markTurnComplete(id, "end_turn", 12_345);
       const v3 = store.getDisplayMessages()[0];
       expect(v3).not.toBe(v2);
       expect(v3.turnStopReason).toBe("end_turn");
+      expect(v3.turnDurationMs).toBe(12_345);
     });
 
     it("does not re-adapt when upsertAgentPart is a no-op", () => {

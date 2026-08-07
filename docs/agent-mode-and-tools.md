@@ -53,6 +53,12 @@ When you open a new agent chat and the message box is empty, Copilot types out s
 
 If you've turned on reduced motion in your operating system, the prompts still rotate but appear and disappear whole instead of typing out.
 
+## Turn Duration
+
+While an agent turn is running, the activity trail shows **Worked for** with a live elapsed-time counter and the animated Copilot icon. The counter measures the full wall-clock time from sending the prompt until the turn finishes, including tool use and any time spent waiting for a permission or answer.
+
+When the turn finishes, the time freezes and the icon disappears. The completed duration remains visible beneath the latest response until you send the next prompt, when a new counter takes its place. Leading zero units are omitted, so durations appear as `18s`, `2m 18s`, or `1h 2m 18s`.
+
 ## Choosing an Operating Mode
 
 The mode picker beside the message box controls how much the active agent can do:

@@ -618,6 +618,40 @@ describe("AgentSession.sendPrompt", () => {
     });
   });
 
+  it("uses the placeholder timestamp as the live start and freezes elapsed time on completion", async () => {
+    jest.useFakeTimers();
+    try {
+      jest.setSystemTime(10_000);
+      const mock = makeMockBackend();
+      let resolvePrompt!: (value: { stopReason: "end_turn" }) => void;
+      mock.prompt.mockImplementation(() => new Promise((resolve) => (resolvePrompt = resolve)));
+      const session = new AgentSession({
+        backend: mock.asBackend,
+        backendSessionId: "acp-1",
+        internalId: "internal-1",
+        backendId: "opencode",
+      });
+
+      const { turn } = session.sendPrompt("time this");
+      const running = session.store
+        .getDisplayMessages()
+        .find((message) => message.sender === AI_SENDER);
+      expect(running?.timestamp?.epoch).toBe(10_000);
+      expect(running?.turnDurationMs).toBeUndefined();
+
+      jest.advanceTimersByTime(138_000);
+      resolvePrompt({ stopReason: "end_turn" });
+      await turn;
+
+      const completed = session.store
+        .getDisplayMessages()
+        .find((message) => message.sender === AI_SENDER);
+      expect(completed?.turnDurationMs).toBe(138_000);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it("forwards image content blocks to the backend prompt", async () => {
     const mock = makeMockBackend();
     const session = new AgentSession({
@@ -757,6 +791,7 @@ describe("AgentSession.sendPrompt", () => {
     expect(placeholder?.isErrorMessage).toBe(true);
     expect(placeholder?.message).toContain("FreeUsageLimitError");
     expect(placeholder?.message).toContain("Rate limit exceeded");
+    expect(placeholder?.turnDurationMs).toEqual(expect.any(Number));
   });
 
   it("surfaces a provider error stringified inside data.message (codex-acp)", async () => {
