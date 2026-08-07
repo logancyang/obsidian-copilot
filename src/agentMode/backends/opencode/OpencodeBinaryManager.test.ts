@@ -261,6 +261,54 @@ describe("OpencodeBinaryManager", () => {
       });
     });
   });
+
+  describe("adoptPlugin()", () => {
+    let home: string;
+
+    beforeEach(async () => {
+      // An empty OS-local install root, so downloadsSize below reports only
+      // what the bound vault's legacy directory holds.
+      home = await fs.promises.mkdtemp(path.join(os.tmpdir(), "opencode-home-"));
+      jest.mocked(os.homedir).mockReturnValue(home);
+    });
+
+    afterEach(async () => {
+      jest.mocked(os.homedir).mockReset();
+      await fs.promises.rm(home, { recursive: true, force: true });
+    });
+
+    it("reclaims from the adopted lifecycle's vault, not the one the manager was built with", async () => {
+      const firstVault = await fs.promises.mkdtemp(path.join(os.tmpdir(), "opencode-vault-a-"));
+      const secondVault = await fs.promises.mkdtemp(path.join(os.tmpdir(), "opencode-vault-b-"));
+      try {
+        const seedLegacy = async (vaultBase: string, bytes: number): Promise<string> => {
+          const legacy = legacyVaultDataDir(vaultBase, CONFIG_DIR, "copilot-test");
+          const bin = path.join(legacy, "1.14.0", "bin", "opencode");
+          await fs.promises.mkdir(path.dirname(bin), { recursive: true });
+          await fs.promises.writeFile(bin, "z".repeat(bytes));
+          return legacy;
+        };
+        const firstLegacy = await seedLegacy(firstVault, 40);
+        const secondLegacy = await seedLegacy(secondVault, 10);
+
+        // The manager outlives a lifecycle, so it can be built against one vault
+        // and then asked to work in another ("Open another vault" without restart).
+        const mgr = new OpencodeBinaryManager(vaultPlugin(firstVault));
+        mgr.adoptPlugin(vaultPlugin(secondVault));
+
+        expect(await mgr.downloadsSize()).toBe(10);
+
+        await mgr.uninstall();
+
+        expect(fs.existsSync(secondLegacy)).toBe(false);
+        // The vault the user is no longer in keeps its files.
+        expect(fs.existsSync(firstLegacy)).toBe(true);
+      } finally {
+        await fs.promises.rm(firstVault, { recursive: true, force: true });
+        await fs.promises.rm(secondVault, { recursive: true, force: true });
+      }
+    });
+  });
 });
 
 describe("parseVersionFromStdout", () => {
