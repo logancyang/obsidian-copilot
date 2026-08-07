@@ -17,6 +17,7 @@ function sources(over: Partial<ManifestSources> = {}): ManifestSources {
     extensions: [],
     tags: [],
     properties: [],
+    propertyNotes: [],
     webUrls: [],
     youtubeUrls: [],
     materialized: [],
@@ -129,21 +130,19 @@ describe("buildProjectContextBlock", () => {
     expect(md).toContain("[Topics:Physics]");
   });
 
-  it("keeps the property label visible when matched notes overflow the entry cap", () => {
-    const manyNotes = Array.from({ length: MAX_MANIFEST_ENTRIES + 5 }, (_, i) => abs(`n${i}.md`));
+  it("lists property-matched notes under their own heading", () => {
     const md = buildProjectContextBlock(
-      sources({ notes: manyNotes, properties: ["[Topics:Physics]"] })
+      sources({ properties: ["[Topics:Physics]"], propertyNotes: [abs("p.md", "/vault/p.md")] })
     );
-    expect(md).toContain("Included properties");
-    expect(md).toContain("[Topics:Physics]");
+    expect(md).toContain("## Notes matching an included property");
+    expect(md).toContain("`/vault/p.md`");
   });
 
-  it("keeps every hand-declared source when property-expanded notes overflow the cap", () => {
-    // A single `[Subject:]` inclusion enumerates every note carrying the key, which
-    // is enough to exhaust the cap on its own. The sections that follow notes in
-    // reading order must survive it — a dropped URL row loses its snapshot pointer,
-    // and that absolute cache path appears nowhere else.
-    const manyNotes = Array.from({ length: MAX_MANIFEST_ENTRIES + 20 }, (_, i) => abs(`n${i}.md`));
+  it("keeps every declared source when property-matched notes overflow the entry cap", () => {
+    // One `[Subject:]` enumerates every note carrying the key, which alone exhausts
+    // the cap. No declared source may be pushed out by that expansion — a dropped URL
+    // row loses its snapshot pointer, and that cache path appears nowhere else.
+    const many = Array.from({ length: MAX_MANIFEST_ENTRIES + 20 }, (_, i) => abs(`n${i}.md`));
     const materialized: MaterializedEntry[] = [
       {
         type: "web",
@@ -154,9 +153,10 @@ describe("buildProjectContextBlock", () => {
     ];
     const md = buildProjectContextBlock(
       sources({
-        notes: manyNotes,
+        propertyNotes: many,
         properties: ["[Subject:]"],
         folders: [abs("Papers", "/vault/Papers")],
+        notes: [abs("Spec.md", "/vault/Spec.md")],
         extensions: ["*.pdf"],
         tags: ["#physics"],
         webUrls: ["https://a.com"],
@@ -167,19 +167,48 @@ describe("buildProjectContextBlock", () => {
 
     expect(md).toContain("[Subject:]");
     expect(md).toContain("`/vault/Papers`");
+    expect(md).toContain("`/vault/Spec.md`");
     expect(md).toContain("`*.pdf`");
     expect(md).toContain("#physics");
     expect(md).toContain("https://a.com → `/cache/remotes/web-1.md`");
     expect(md).toContain("https://youtu.be/abc");
   });
 
-  it("spends the leftover budget on notes and counts the trimmed ones as omitted", () => {
-    // 5 hand-declared sources + 120 expanded notes = 125 total, so notes get the
-    // remaining 95 slots and the 25 they lose are what the truncation note reports.
-    const manyNotes = Array.from({ length: 120 }, (_, i) => abs(`n${i}.md`));
+  it("keeps a declared note when materialized file rows overflow the entry cap", () => {
+    // A folder inclusion over a PDF-heavy folder expands to one materialized row per
+    // binary, so those rows are an expansion too and must not evict the `[[note]]`
+    // the user declared by hand — off-cwd, its absolute path here is the agent's
+    // only handle on it.
+    const materialized: MaterializedEntry[] = Array.from(
+      { length: MAX_MANIFEST_ENTRIES + 20 },
+      (_, i) => ({
+        type: "file" as const,
+        source: `Papers/p${i}.pdf`,
+        cacheFileName: `file-${i}.md`,
+        snapshotAbsPath: `/cache/files/file-${i}.md`,
+      })
+    );
     const md = buildProjectContextBlock(
       sources({
-        notes: manyNotes,
+        materialized,
+        folders: [abs("Papers", "/vault/Papers")],
+        notes: [abs("Outside/Spec.md", "/elsewhere/Outside/Spec.md")],
+        tags: ["#physics"],
+      })
+    );
+
+    expect(md).toContain("`/elsewhere/Outside/Spec.md`");
+    expect(md).toContain("#physics");
+    expect(md).toContain("`/vault/Papers`");
+  });
+
+  it("spends the leftover budget on expansions and counts the trimmed ones as omitted", () => {
+    // 5 declared sources + 120 property matches = 125 total, so the expansion gets
+    // the remaining 95 slots and the 25 it loses are what the truncation note reports.
+    const many = Array.from({ length: 120 }, (_, i) => abs(`n${i}.md`));
+    const md = buildProjectContextBlock(
+      sources({
+        propertyNotes: many,
         properties: ["[Subject:]"],
         folders: [abs("Papers", "/vault/Papers")],
         extensions: ["*.pdf"],
@@ -188,8 +217,8 @@ describe("buildProjectContextBlock", () => {
       })
     );
 
-    const listedNotes = manyNotes.filter((note) => md.includes(`\`${note.vaultPath}\``));
-    expect(listedNotes).toHaveLength(MAX_MANIFEST_ENTRIES - 5);
+    const listed = many.filter((note) => md.includes(`\`${note.vaultPath}\``));
+    expect(listed).toHaveLength(MAX_MANIFEST_ENTRIES - 5);
     expect(md).toContain(`Only the first ${MAX_MANIFEST_ENTRIES} of 125 sources`);
     expect(md).toContain("25 more are omitted");
   });

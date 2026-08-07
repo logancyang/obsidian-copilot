@@ -47,6 +47,7 @@ describe("BUILTIN_PROJECT_SYSTEM_PROMPT", () => {
       extensions: [],
       tags: [],
       properties: [],
+      propertyNotes: [],
       webUrls: [],
       youtubeUrls: [],
       materialized: [],

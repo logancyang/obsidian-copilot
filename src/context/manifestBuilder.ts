@@ -26,16 +26,24 @@ export interface ManifestPathEntry {
  */
 export interface ManifestSources {
   folders: ManifestPathEntry[];
+  /** Notes the user declared one at a time as `[[title]]` inclusions. */
   notes: ManifestPathEntry[];
   extensions: string[];
   tags: string[];
   /**
    * Property inclusion patterns (e.g. `[Topics:Physics]`), listed as source
-   * labels. Property-matched notes are also enumerated under "Included notes",
-   * but a broad property can overflow the entry cap; the label ensures the agent
-   * still knows which frontmatter query produced them even when notes are cut.
+   * labels. The notes they match arrive separately in {@link propertyNotes},
+   * which a broad property can push past the entry cap; the label ensures the
+   * agent still knows which frontmatter query produced them even when cut.
    */
   properties: string[];
+  /**
+   * Notes enumerated from {@link properties}, kept apart from the declared
+   * `notes` because they are an EXPANSION — one pattern yields as many entries
+   * as the vault happens to match. See the entry-cap note in
+   * {@link buildProjectContextBlock}.
+   */
+  propertyNotes: ManifestPathEntry[];
   webUrls: string[];
   youtubeUrls: string[];
   /** Present cache files, used to resolve snapshot pointers + list file snapshots. */
@@ -79,26 +87,31 @@ export function buildProjectContextBlock(sources: ManifestSources): string {
   // pattern when the source didn't resolve to a real on-disk path.
   const pathText = (entry: ManifestPathEntry): string => `\`${entry.absPath ?? entry.vaultPath}\``;
 
-  // ORDER IS LOAD-BEARING — notes MUST stay last. Every other section grows one
-  // line per hand-added source, but notes also carry the notes a property
-  // inclusion enumerates, so one `[Subject:]` on a vault-wide key fills the cap by
-  // itself. Listing notes last means the entry-cap slice below spends the budget on
-  // the declared sources first and gives notes the remainder, instead of letting a
-  // broad property push the later sections out of the block entirely. URLs are the
-  // costly loss: a materialized snapshot's absolute cache path reaches the agent
-  // ONLY through its row here, so a dropped line takes the fetched page with it.
-  const lines: ManifestLine[] = [
+  // ORDER IS LOAD-BEARING — every DECLARED source comes before every EXPANDED one,
+  // because the entry-cap slice below simply takes the first MAX_MANIFEST_ENTRIES.
+  // A declared section grows one line per source the user added by hand, so it can
+  // only overflow deliberately. An expanded section grows with the vault: one
+  // property pattern yields a line per matching note, and one folder yields a line
+  // per PDF/image under it. Listing expansions last means neither can push a source
+  // the user actually declared out of the block. Losing one costs the agent its only
+  // handle on that source — a note or snapshot outside the session cwd is reachable
+  // ONLY through the absolute path in its row here.
+  const declared: ManifestLine[] = [
     ...sources.folders.map((e) => line("Included folders", pathText(e))),
     ...sources.properties.map((p) => line("Included properties", p)),
+    ...sources.notes.map((e) => line("Included notes", pathText(e))),
     ...sources.extensions.map((p) => line("Included file types", `\`${p}\``)),
     ...sources.tags.map((t) => line("Included tags", t)),
     ...sources.webUrls.map((u) => line("Included URLs", withPointer("web", u))),
     ...sources.youtubeUrls.map((u) => line("Included YouTube", withPointer("youtube", u))),
+  ];
+  const expanded: ManifestLine[] = [
     ...sources.materialized
       .filter((e) => e.type === "file")
       .map((e) => line("Materialized files", withPointer(e.type, e.source))),
-    ...sources.notes.map((e) => line("Included notes", pathText(e))),
+    ...sources.propertyNotes.map((e) => line("Notes matching an included property", pathText(e))),
   ];
+  const lines: ManifestLine[] = [...declared, ...expanded];
 
   const total = lines.length;
   const shown = lines.slice(0, MAX_MANIFEST_ENTRIES);
@@ -109,8 +122,8 @@ export function buildProjectContextBlock(sources: ManifestSources): string {
     "Context sources for this project, with absolute paths. Folders and tags are",
     "listed as sources, not expanded into member files — use your own search",
     "(grep/glob/read) to enumerate them. Properties are listed as source labels and",
-    'also expanded into matching notes under "Included notes" (a property pattern\'s',
-    "label is listed so it survives the entry cap; its resolved notes appear below).",
+    'also expanded into the notes they match, under "Notes matching an included',
+    'property" (the label is listed first so it survives the entry cap).',
     "Materialized snapshots of URLs, YouTube transcripts, and PDFs/images are shown",
     "inline as an absolute path after the source, formatted `<source> → <absolute path>`",
     "— read that path directly. A source with no path isn't cached (not yet converted",
