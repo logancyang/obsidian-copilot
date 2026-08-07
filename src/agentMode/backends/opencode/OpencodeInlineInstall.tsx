@@ -61,6 +61,24 @@ const isAbort = (e: unknown): boolean =>
  * detect across a dependency edge, and needs a settled contract for how runtime
  * state merges with persisted state — an install-architecture change, not a
  * settings-row fix. Deferred deliberately.
+ *
+ * DESIGN NOTE — racing Configure dialogs (issue #TBD).
+ * While an inline install runs, persisted installState is still `absent`, so
+ * every Configure entry point (AgentModeChat, AgentHome, AgentModeStatus,
+ * useAgentSelect, and the non-inline AgentSettings branch) can still open the
+ * dialog. From there the user can save a custom binary path or start another
+ * managed install, racing this pending one and letting whichever writer settles
+ * last choose the saved opencode source despite the inline row hiding its own
+ * competing actions.
+ * The correct fix is a single-flight token in `OpencodeBinaryManager`: only one
+ * of `install()`, `upgradeCustomBinary()`, `uninstall()`, `setCustomBinaryPath()`
+ * may run at a time; a second caller is rejected with a clear error rather than
+ * racing. That serializes ALL entry points (including ones not yet written) at
+ * the one choke point, and it puts the lifecycle on the manager surface where
+ * AGENTS.md:117-123 asks for it. Deferred as a follow-up: this PR is 8 review
+ * rounds deep, already carries 215 lines of module-scoped async state, and
+ * adding manager-level concurrency control is an install-architecture change
+ * that should land independently.
  * If a future review flags this shape again, point them at this note.
  */
 type InFlightWork =
