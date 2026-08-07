@@ -79,10 +79,17 @@ export function buildProjectContextBlock(sources: ManifestSources): string {
   // pattern when the source didn't resolve to a real on-disk path.
   const pathText = (entry: ManifestPathEntry): string => `\`${entry.absPath ?? entry.vaultPath}\``;
 
+  // ORDER IS LOAD-BEARING — notes MUST stay last. Every other section grows one
+  // line per hand-added source, but notes also carry the notes a property
+  // inclusion enumerates, so one `[Subject:]` on a vault-wide key fills the cap by
+  // itself. Listing notes last means the entry-cap slice below spends the budget on
+  // the declared sources first and gives notes the remainder, instead of letting a
+  // broad property push the later sections out of the block entirely. URLs are the
+  // costly loss: a materialized snapshot's absolute cache path reaches the agent
+  // ONLY through its row here, so a dropped line takes the fetched page with it.
   const lines: ManifestLine[] = [
     ...sources.folders.map((e) => line("Included folders", pathText(e))),
     ...sources.properties.map((p) => line("Included properties", p)),
-    ...sources.notes.map((e) => line("Included notes", pathText(e))),
     ...sources.extensions.map((p) => line("Included file types", `\`${p}\``)),
     ...sources.tags.map((t) => line("Included tags", t)),
     ...sources.webUrls.map((u) => line("Included URLs", withPointer("web", u))),
@@ -90,6 +97,7 @@ export function buildProjectContextBlock(sources: ManifestSources): string {
     ...sources.materialized
       .filter((e) => e.type === "file")
       .map((e) => line("Materialized files", withPointer(e.type, e.source))),
+    ...sources.notes.map((e) => line("Included notes", pathText(e))),
   ];
 
   const total = lines.length;

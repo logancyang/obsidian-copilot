@@ -137,4 +137,60 @@ describe("buildProjectContextBlock", () => {
     expect(md).toContain("Included properties");
     expect(md).toContain("[Topics:Physics]");
   });
+
+  it("keeps every hand-declared source when property-expanded notes overflow the cap", () => {
+    // A single `[Subject:]` inclusion enumerates every note carrying the key, which
+    // is enough to exhaust the cap on its own. The sections that follow notes in
+    // reading order must survive it — a dropped URL row loses its snapshot pointer,
+    // and that absolute cache path appears nowhere else.
+    const manyNotes = Array.from({ length: MAX_MANIFEST_ENTRIES + 20 }, (_, i) => abs(`n${i}.md`));
+    const materialized: MaterializedEntry[] = [
+      {
+        type: "web",
+        source: "https://a.com",
+        cacheFileName: "web-1.md",
+        snapshotAbsPath: "/cache/remotes/web-1.md",
+      },
+    ];
+    const md = buildProjectContextBlock(
+      sources({
+        notes: manyNotes,
+        properties: ["[Subject:]"],
+        folders: [abs("Papers", "/vault/Papers")],
+        extensions: ["*.pdf"],
+        tags: ["#physics"],
+        webUrls: ["https://a.com"],
+        youtubeUrls: ["https://youtu.be/abc"],
+        materialized,
+      })
+    );
+
+    expect(md).toContain("[Subject:]");
+    expect(md).toContain("`/vault/Papers`");
+    expect(md).toContain("`*.pdf`");
+    expect(md).toContain("#physics");
+    expect(md).toContain("https://a.com → `/cache/remotes/web-1.md`");
+    expect(md).toContain("https://youtu.be/abc");
+  });
+
+  it("spends the leftover budget on notes and counts the trimmed ones as omitted", () => {
+    // 5 hand-declared sources + 120 expanded notes = 125 total, so notes get the
+    // remaining 95 slots and the 25 they lose are what the truncation note reports.
+    const manyNotes = Array.from({ length: 120 }, (_, i) => abs(`n${i}.md`));
+    const md = buildProjectContextBlock(
+      sources({
+        notes: manyNotes,
+        properties: ["[Subject:]"],
+        folders: [abs("Papers", "/vault/Papers")],
+        extensions: ["*.pdf"],
+        tags: ["#physics"],
+        webUrls: ["https://a.com"],
+      })
+    );
+
+    const listedNotes = manyNotes.filter((note) => md.includes(`\`${note.vaultPath}\``));
+    expect(listedNotes).toHaveLength(MAX_MANIFEST_ENTRIES - 5);
+    expect(md).toContain(`Only the first ${MAX_MANIFEST_ENTRIES} of 125 sources`);
+    expect(md).toContain("25 more are omitted");
+  });
 });
