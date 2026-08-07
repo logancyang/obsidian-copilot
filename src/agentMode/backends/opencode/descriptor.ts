@@ -48,46 +48,23 @@ const EMPTY_EFFORT_CATALOG: Record<string, EffortOption[]> = Object.freeze({});
 let managerRef: OpencodeBinaryManager | null = null;
 
 /**
- * Effort suffixes opencode appends to model ids. Used to disambiguate
- * genuine effort variants from ids whose trailing segment is part of
- * the model name (e.g. `openrouter/anthropic/claude-3.5-haiku` — the
- * last segment `claude-3.5-haiku` is the model, not an effort).
- */
-const KNOWN_OPENCODE_EFFORTS = new Set([
-  "none",
-  "minimal",
-  "low",
-  "medium",
-  "high",
-  "xhigh",
-  "max",
-]);
-
-/**
- * Wire-format codec for Opencode. Native providers emit
- * `<provider>/<model>[/<effort>]` (3 segments with effort); umbrella
- * providers like OpenRouter emit `<provider>/<sub>/<model>[/<effort>]`
- * (4 segments with effort). The leading segment is always the opencode
- * provider id, mapped onto a Copilot `ChatModelProviders` value via
- * `OPENCODE_PROVIDER_MAP` for picker section grouping. We classify the
- * trailing segment as effort iff it's in the known effort vocabulary —
- * that gates out 3-seg umbrella ids whose last segment is part of the
- * model name (e.g. `openrouter/anthropic/claude-3.5-haiku`).
+ * Wire-format codec for Opencode. A model id is `<provider>/<model>` for native
+ * providers and `<provider>/<sub>/<model>` for umbrella providers like
+ * OpenRouter; the leading segment is always the opencode provider id, mapped
+ * onto a Copilot `ChatModelProviders` value via `OPENCODE_PROVIDER_MAP` for
+ * picker section grouping.
+ *
+ * Effort never rides the id: opencode reports it as a sibling
+ * `category:"thought_level"` config option, scoped to the active model, which
+ * `applySelection` and `prefetchEffortCatalog` read. So `decode` leaves the id
+ * whole — no trailing segment is an effort, and none is guessed.
  */
 const opencodeWire: ModelWireCodec = {
-  encode: (selection: ModelSelection) =>
-    selection.effort ? `${selection.baseModelId}/${selection.effort}` : selection.baseModelId,
+  encode: (selection: ModelSelection) => selection.baseModelId,
   decode: (wireId: string) => {
     if (!wireId) return { selection: { baseModelId: wireId, effort: null }, provider: null };
     const segments = wireId.split("/");
     const provider = segments.length >= 2 ? opencodeProviderToCopilot(segments[0]) : null;
-    const last = segments[segments.length - 1];
-    if (segments.length >= 3 && KNOWN_OPENCODE_EFFORTS.has(last)) {
-      return {
-        selection: { baseModelId: segments.slice(0, -1).join("/"), effort: last },
-        provider,
-      };
-    }
     return { selection: { baseModelId: wireId, effort: null }, provider };
   },
 };
@@ -198,9 +175,7 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
         ? context.backendReportedCurrent?.baseModelId
         : session.getState()?.model?.current.baseModelId;
       if (currentBase !== selection.baseModelId) {
-        await session.applyModelWireId(
-          opencodeWire.encode({ baseModelId: selection.baseModelId, effort: null })
-        );
+        await session.applyModelWireId(opencodeWire.encode(selection));
       }
       if (selection.effort !== null) {
         const refreshedApply = session.getState()?.model?.apply;
@@ -234,10 +209,7 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
     // the effort options the refreshed state reports for it.
     if (modelState.apply.kind !== "setConfigOption") return EMPTY_EFFORT_CATALOG;
     const configId = modelState.apply.configId;
-    const originalWire = opencodeWire.encode({
-      baseModelId: modelState.current.baseModelId,
-      effort: null,
-    });
+    const originalWire = opencodeWire.encode(modelState.current);
     const out: Record<string, EffortOption[]> = {};
     try {
       for (const model of enabledModels) {
