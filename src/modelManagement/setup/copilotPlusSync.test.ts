@@ -32,6 +32,7 @@ describe("copilotPlusSync", () => {
       "glm-5.2",
       "kimi-k2.7-code",
       "deepseek-v4-pro",
+      "deepseek-v4-flash-0731",
       "mimo-v2.5",
       "minimax-m2.7",
     ]);
@@ -68,6 +69,7 @@ describe("copilotPlusSync", () => {
         "glm-5.2": true,
         "kimi-k2.7-code": true,
         "deepseek-v4-pro": true,
+        "deepseek-v4-flash-0731": true,
         "mimo-v2.5": true,
         "minimax-m2.7": true,
       });
