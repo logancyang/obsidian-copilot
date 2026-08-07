@@ -1,6 +1,8 @@
 import type { CopilotSettings } from "@/settings/model";
 import type { ConfiguredModel, Provider, ProviderOrigin, ProviderType } from "@/modelManagement";
+import { ChatModelProviders } from "@/constants";
 import {
+  COPILOT_PLUS_OPENCODE_PROVIDER_ID,
   isOpencodeZenWireId,
   mapProviderToOpencodeId,
   opencodeEnabledModelEntries,
@@ -255,6 +257,15 @@ describe("opencodeModelResolve", () => {
         configuredModels: [makeModel("cm1", "p1", "some-azure-model")],
       });
       expect(opencodeEnabledModelEntries(settings)).toHaveLength(0);
+    });
+  });
+
+  describe("COPILOT_PLUS_OPENCODE_PROVIDER_ID", () => {
+    it("equals the Copilot provider id host code builds wire ids from", () => {
+      // `plusUtils.isUsingLicensedModels` reconstructs the prefixed wire id from
+      // `ChatModelProviders.COPILOT_PLUS`, because this module sits behind the
+      // desktop-only Agent Mode barrel. Drift would silently stop it matching.
+      expect(COPILOT_PLUS_OPENCODE_PROVIDER_ID).toBe(ChatModelProviders.COPILOT_PLUS);
     });
   });
 

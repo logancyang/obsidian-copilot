@@ -363,6 +363,24 @@ describe("plusUtils", () => {
       expect(isUsingLicensedModels(settings)).toBe(true);
     });
 
+    it("ignores a BYOK model whose wire id merely resembles the licensed one", () => {
+      const settings = buildSettings({
+        defaultModelKey: "cm-byok",
+        agentMode: {
+          ...DEFAULT_SETTINGS.agentMode,
+          backends: {
+            opencode: {
+              defaultModel: { baseModelId: "openrouter/copilot-plus-flash", effort: null },
+            },
+            codex: { defaultModel: { baseModelId: "copilot-plus-flash-v2", effort: null } },
+          },
+        },
+      });
+      mockGetSettings.mockReturnValue(settings);
+
+      expect(isUsingLicensedModels(settings)).toBe(false);
+    });
+
     it("is false when neither chat nor any agent points at a Copilot model", () => {
       const settings = buildSettings({
         defaultModelKey: "cm-byok",
