@@ -31,7 +31,7 @@ Choosing **Apply Now** sets it as the default for chat and for each agent that
 can run Copilot models — OpenCode today; Claude Code and Codex keep their own
 models and are left alone. Choosing **Apply Later** changes nothing: the Copilot
 models are already available in every picker either way, and you can set a
-default yourself under **Settings → Agents**, per agent and for Quick Chat.
+default yourself under **Settings → Basic → Agents**, per agent and for Quick Chat.
 
 Applying it never changes your embedding model or rebuilds your vault index.
 Semantic search is configured separately — see

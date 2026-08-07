@@ -481,7 +481,7 @@ export async function applyLicenseSettings(): Promise<void> {
       `applyLicenseSettings: ${DEFAULT_COPILOT_PLUS_CHAT_MODEL} was never configured, nothing to apply`
     );
     new Notice(
-      "Copilot could not set a default model. Pick one under Settings → Agents once your license is active."
+      "Copilot could not set a default model. Pick one under Settings → Basic → Agents once your license is active."
     );
     return;
   }
