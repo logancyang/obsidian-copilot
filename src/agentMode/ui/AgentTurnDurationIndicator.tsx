@@ -48,7 +48,7 @@ export const AgentTurnDurationIndicator: React.FC<AgentTurnDurationIndicatorProp
       role={isRunning ? "status" : undefined}
       aria-live={isRunning ? "polite" : undefined}
     >
-      <div className="tw-flex tw-w-full tw-items-center tw-gap-1.5 tw-text-left tw-text-ui-small tw-text-muted">
+      <div className="tw-flex tw-w-full tw-items-center tw-gap-1.5 tw-pl-1 tw-text-left tw-text-ui-small tw-text-muted">
         {isRunning ? (
           <span className="tw-flex tw-size-icon-xs tw-shrink-0 tw-items-center tw-justify-center">
             <CopilotSpinner />

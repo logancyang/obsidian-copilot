@@ -22,3 +22,15 @@ export const Running: StoryObj<AgentTurnDurationIndicatorProps> = {
 export const Complete: StoryObj<AgentTurnDurationIndicatorProps> = {
   args: { status: "complete", durationMs: 138_000 },
 };
+
+export const AlignedWithResponse: StoryObj<AgentTurnDurationIndicatorProps> = {
+  render: () => (
+    <div>
+      <div className="tw-p-1 tw-text-sm">
+        I excluded generated Copilot conversation logs and notes where AI was only mentioned
+        incidentally.
+      </div>
+      <AgentTurnDurationIndicator status="complete" durationMs={24_000} />
+    </div>
+  ),
+};

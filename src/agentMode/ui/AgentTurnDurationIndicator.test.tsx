@@ -49,6 +49,9 @@ describe("AgentTurnDurationIndicator", () => {
       );
 
       expect(screen.getByText("2m 18s").parentElement?.textContent).toContain("Worked for 2m 18s");
+      expect(
+        screen.getByText("Worked for").parentElement?.parentElement?.classList.contains("tw-pl-1")
+      ).toBe(true);
       expect(container.querySelector(".copilot-spinner")).toBeNull();
       expect(screen.queryByRole("status")).toBeNull();
 
