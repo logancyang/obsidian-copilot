@@ -470,7 +470,10 @@ describe("Gallery", () => {
         within(navigation).queryByRole("button", { name: /(Fold|Unfold) UI subtree/ })
       ).toBeNull();
       expect(within(navigation).getByRole("button", { name: "Default" })).toBeTruthy();
-      expect(selectSubtreeButton("UI/Badge")).toBeTruthy();
+      const badgeSubtreeButton = selectSubtreeButton("UI/Badge");
+      expect(badgeSubtreeButton).toBeTruthy();
+      expect(badgeSubtreeButton.parentElement?.classList.contains("tw-gap-1")).toBe(false);
+      expect(badgeSubtreeButton.classList.contains("tw-pl-2")).toBe(true);
       expect(selectSubtreeButton("UI/Button")).toBeTruthy();
       expect(navigation.querySelector('[data-gallery-story-button="UI/Badge/Status"]')).toBeNull();
 

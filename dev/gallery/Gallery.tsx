@@ -587,7 +587,7 @@ function StoryTree({
 
         return (
           <li key={node.path}>
-            <div className="tw-flex tw-items-center tw-gap-1">
+            <div className="tw-flex tw-items-center">
               {canFold && (
                 <Button
                   aria-expanded={expanded}
@@ -615,7 +615,7 @@ function StoryTree({
               <Button
                 aria-label={`Show ${node.path} contact sheet`}
                 aria-pressed={subtreeSelected}
-                className="tw-min-w-0 tw-flex-1 tw-justify-start tw-text-left tw-font-semibold"
+                className="tw-min-w-0 tw-flex-1 tw-justify-start tw-pl-2 tw-text-left tw-font-semibold"
                 onClick={() => {
                   onSelectSubtree(node.path);
                   if (canFold && !expandAll) {
