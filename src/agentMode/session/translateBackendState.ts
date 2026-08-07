@@ -76,6 +76,9 @@ function translateModel(
   const fromConfig = inputs.models ? null : modelStateFromConfigOption(inputs.configOptions);
   const modelState = inputs.models ?? fromConfig?.state ?? null;
   if (!modelState) return null;
+  // Only when `models` won: where it IS the catalog, every group already
+  // carries the option's own description.
+  const baseDescriptions = inputs.models ? baseModelDescriptions(inputs.configOptions) : null;
   const effortFromConfig = fromConfig ? effortConfigOption(inputs.configOptions) : null;
   const apply: ModelApplySpec = fromConfig
     ? {
@@ -133,7 +136,9 @@ function translateModel(
     ),
     // Only backends that opt in surface their per-model blurb; others (opencode)
     // would just add noisy/duplicative lines, so the field is dropped here.
-    description: descriptor.showModelDescriptions ? g.description : undefined,
+    description: descriptor.showModelDescriptions
+      ? (baseDescriptions?.get(g.baseModelId) ?? g.description)
+      : undefined,
     provider: g.provider,
     effortOptions: deriveEffortOptions(g, descriptor),
   }));
@@ -215,6 +220,30 @@ function modelStateFromConfigOption(
     state: { currentModelId: String(opt.currentValue), availableModels },
     configId: opt.id,
   };
+}
+
+/**
+ * Base-model blurbs from a `category:"model"` config option, keyed by model id,
+ * or `null` when the agent publishes none.
+ *
+ * For a backend that advertises both channels (codex), the `models` catalog
+ * holds one entry per (model × effort) pair and each blurb describes that
+ * effort — so a collapsed row would inherit whichever variant came first
+ * ("…Fast responses with lighter reasoning" on a row spanning low→ultra). The
+ * config option lists base models, so its description is the one that describes
+ * the whole row. Names need no such overlay: `stripEffortSuffix` already
+ * resolves them from the variants themselves.
+ */
+function baseModelDescriptions(
+  configOptions: BackendConfigOption[] | null
+): Map<string, string> | null {
+  const fromConfig = modelStateFromConfigOption(configOptions);
+  if (!fromConfig) return null;
+  const byModelId = new Map<string, string>();
+  for (const model of fromConfig.state.availableModels) {
+    if (model.description) byModelId.set(model.modelId, model.description);
+  }
+  return byModelId.size > 0 ? byModelId : null;
 }
 
 function effortConfigOption(
