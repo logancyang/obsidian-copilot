@@ -69,6 +69,26 @@ type InFlightWork =
 
 let inFlight: InFlightWork | null = null;
 
+/**
+ * DESIGN NOTE — this state deliberately outlives a plugin lifecycle, and that
+ * is safe. Module scope survives disable→enable, dev hot reload, and "Open
+ * another vault" in the same process (`main.ts` says so where it resets the
+ * persistence singletons), so a download started in one lifecycle is still
+ * here in the next. Nothing resets `inFlight` outside tests, which is what
+ * makes the carry-over coherent rather than corrupting: a row that sees work
+ * in flight shows its progress and Cancel and never offers Download, so the
+ * next lifecycle adopts the run instead of starting a rival one — and there is
+ * no second task for the old continuation to clobber when it settles.
+ *
+ * The one effect that does cross the boundary is the manager's own settings
+ * write when the install lands. It is accurate: `getDataDir()` builds under
+ * `os.homedir()`, so the binary it names really is installed for whatever vault
+ * is open. The vault that started the download is the one left out, and it
+ * self-heals — `install()` is idempotent, so Download there returns instantly
+ * off the existing manifest.
+ * If a future review flags the lifecycle boundary, point them at this note.
+ */
+
 /** The `Run` a freshly mounted row should start from. */
 const stateOf = (work: InFlightWork | null): Run => {
   if (!work) return { kind: "idle" };
