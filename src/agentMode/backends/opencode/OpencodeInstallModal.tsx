@@ -93,17 +93,30 @@ export const OpencodeConfigContainer: React.FC<{
     manager.getRuntimeState,
     manager.getRuntimeState
   );
+  const [upgradeRun, setUpgradeRun] = React.useState<OpencodeRunState>({ kind: "idle" });
+
+  /**
+   * Drop the last upgrade's outcome, because the binary it described has just
+   * been replaced. Called on the success of every operation that changes which
+   * binary is in play — never before one, since an operation that fails leaves
+   * that outcome as true as it was, and the strip is the only place it is shown.
+   */
+  const forgetUpgradeOutcome = React.useCallback(() => setUpgradeRun({ kind: "idle" }), []);
   // DESIGN NOTE — `detecting` and `busy` deliberately map to idle, not to
   // `running`. `running` is the shape this dialog uses for a cancellable
   // download: it replaces the whole managed section with a progress bar and a
   // Cancel. None of the operations behind those two kinds takes a signal
   // (their `runExclusive` bodies declare no parameter), so Cancel would be a
-  // control that does nothing — and during a custom-binary upgrade the section
-  // would also fight the dialog's own `upgradeRun`. The real harm in the
+  // control that does nothing. The real harm in the
   // reported case was a Download click that reported nothing; that is fixed
   // where it happens, by surfacing `OperationInFlightError` below, instead of
   // by borrowing a state whose meaning does not fit.
   // If a future review flags this again, point them at this note.
+  // Mirrors the manager unconditionally. An earlier attempt let a local
+  // `upgradeRun` suppress this so a managed upgrade would not draw two progress
+  // bars — but a dialog-local value vetoing a shared run produced four defects
+  // in as many review rounds, including hiding an install started from another
+  // surface. Showing one run twice is a cosmetic cost; hiding it is not.
   const installRun: OpencodeRunState =
     runtime.kind === "installing"
       ? runningState(runtime.progress)
@@ -114,7 +127,10 @@ export const OpencodeConfigContainer: React.FC<{
   const install = React.useCallback(() => {
     manager
       .install()
-      .then(({ version }) => new Notice(`opencode v${version} installed.`))
+      .then(({ version }) => {
+        forgetUpgradeOutcome();
+        new Notice(`opencode v${version} installed.`);
+      })
       .catch((err: unknown) => {
         // Cancellation is not a failure, and a real failure is already in the
         // manager's runtime state, which this dialog renders.
@@ -128,7 +144,7 @@ export const OpencodeConfigContainer: React.FC<{
         }
         logError("[AgentMode] opencode install failed", err);
       });
-  }, [manager]);
+  }, [manager, forgetUpgradeOutcome]);
 
   const cancelInstall = React.useCallback(() => manager.cancelCurrentOperation(), [manager]);
 
@@ -144,6 +160,7 @@ export const OpencodeConfigContainer: React.FC<{
       async () => {
         try {
           await manager.uninstall();
+          forgetUpgradeOutcome();
           new Notice(`opencode uninstalled${bytes > 0 ? ` (freed ${formatBytes(bytes)})` : ""}.`);
         } catch (e) {
           logError("[AgentMode] uninstall failed", e);
@@ -155,9 +172,8 @@ export const OpencodeConfigContainer: React.FC<{
       "Uninstall opencode",
       "Uninstall"
     ).open();
-  }, [app, manager]);
+  }, [app, manager, forgetUpgradeOutcome]);
 
-  const [upgradeRun, setUpgradeRun] = React.useState<OpencodeRunState>({ kind: "idle" });
   const upgrade = React.useCallback(() => {
     setUpgradeRun(runningState(null));
     // A user-supplied binary upgrades itself in place; the managed one is
@@ -172,6 +188,20 @@ export const OpencodeConfigContainer: React.FC<{
         new Notice(`opencode upgraded to v${version}.`);
       })
       .catch((err: unknown) => {
+        // Cancelling is the user's own doing, and losing the race means this
+        // upgrade never owned the run at all. Either way `upgradeRun` must go
+        // back to idle: the section below reads a non-idle value as "an upgrade
+        // is showing this run", and would otherwise hide the operation that
+        // actually holds the manager.
+        if (err instanceof AbortError || (err as Error)?.name === "AbortError") {
+          setUpgradeRun({ kind: "idle" });
+          return;
+        }
+        if (err instanceof OperationInFlightError) {
+          setUpgradeRun({ kind: "idle" });
+          new Notice(err.message);
+          return;
+        }
         logError("[AgentMode] opencode upgrade failed", err);
         setUpgradeRun(errorState(err));
       });
@@ -184,10 +214,11 @@ export const OpencodeConfigContainer: React.FC<{
       } catch (e) {
         return e instanceof Error ? e.message : String(e);
       }
+      forgetUpgradeOutcome();
       new Notice("Custom opencode binary path saved.");
       return null;
     },
-    [manager]
+    [manager, forgetUpgradeOutcome]
   );
 
   const clearCustomPath = React.useCallback(async (): Promise<void> => {
@@ -201,8 +232,9 @@ export const OpencodeConfigContainer: React.FC<{
       new Notice(`Couldn't clear the custom path: ${e instanceof Error ? e.message : String(e)}`);
       return;
     }
+    forgetUpgradeOutcome();
     new Notice("Custom opencode path cleared.");
-  }, [manager]);
+  }, [manager, forgetUpgradeOutcome]);
 
   return (
     <OpencodeConfigView

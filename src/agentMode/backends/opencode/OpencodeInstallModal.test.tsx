@@ -257,6 +257,97 @@ describe("OpencodeInstallModal", () => {
       expect(upgradeCustomBinary).not.toHaveBeenCalled();
       expect(noticeMessages()).toContain("opencode upgraded to v1.16.0.");
     });
+    it("drops a failed upgrade's reason once an install has replaced the binary", async () => {
+      setOpencodeSettings({
+        binaryPath: EXISTING_BINARY_PATH,
+        binaryVersion: "1.15.12",
+        binarySource: "managed",
+      });
+      const { manager, upgradeManaged, installDeferred, publish } = makeManager();
+      upgradeManaged.mockRejectedValue(new Error("tar exited with 1"));
+      renderContainer(manager);
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Upgrade to latest" }));
+      });
+      expect(screen.getByText("tar exited with 1")).toBeTruthy();
+
+      fireEvent.click(screen.getByRole("button", { name: "Reinstall" }));
+      await act(async () => {
+        installDeferred().resolve({ version: "1.16.0", path: "/managed" });
+      });
+      publish({ kind: "idle" });
+
+      // The reason described a binary this install has replaced. It survives a
+      // *failed* install on purpose: nothing changed, so it is still true.
+      expect(screen.queryByText("tar exited with 1")).toBeNull();
+    });
+
+    it("leaves a running install visible when an upgrade loses the race for it", async () => {
+      setOpencodeSettings({
+        binaryPath: EXISTING_BINARY_PATH,
+        binaryVersion: "1.15.12",
+        binarySource: "managed",
+      });
+      const { manager, upgradeManaged } = makeManager();
+      upgradeManaged.mockRejectedValue(new OperationInFlightError());
+      renderContainer(manager);
+
+      // The reinstall takes the lock; the upgrade clicked underneath it never
+      // owns the run, so it must not take the run's display with it.
+      fireEvent.click(screen.getByRole("button", { name: "Reinstall" }));
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Upgrade to latest" }));
+      });
+
+      expect(screen.getAllByRole("progressbar")).toHaveLength(1);
+      expect(noticeMessages().join(" ")).toContain("already running");
+    });
+
+    it("treats a cancelled upgrade as cancelled, not as a failure", async () => {
+      setOpencodeSettings({
+        binaryPath: EXISTING_BINARY_PATH,
+        binaryVersion: "1.15.12",
+        binarySource: "managed",
+      });
+      const { manager, upgradeManaged } = makeManager();
+      upgradeManaged.mockRejectedValue(new AbortError());
+      renderContainer(manager);
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Upgrade to latest" }));
+      });
+
+      // Cancel is the user's own doing; the strip must go back to offering the
+      // upgrade rather than reporting "Aborted" as a failure.
+      expect(screen.queryByText("Aborted")).toBeNull();
+      expect(screen.getByRole("button", { name: "Upgrade to latest" })).toBeTruthy();
+    });
+
+    it("drops a failed upgrade's reason once another binary is applied", async () => {
+      setOpencodeSettings({
+        binaryPath: EXISTING_BINARY_PATH,
+        binaryVersion: "1.15.12",
+        binarySource: "managed",
+      });
+      const { manager, upgradeManaged } = makeManager();
+      upgradeManaged.mockRejectedValue(new Error("GitHub API rate-limited"));
+      renderContainer(manager);
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Upgrade to latest" }));
+      });
+      expect(screen.getByText("GitHub API rate-limited")).toBeTruthy();
+
+      fireEvent.click(screen.getByRole("radio", { name: "My own binary" }));
+      fireEvent.change(screen.getByPlaceholderText("/absolute/path/to/opencode"), {
+        target: { value: "/opt/homebrew/bin/opencode" },
+      });
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+      });
+
+      // The reason belonged to the managed download, not to the binary now in play.
+      expect(screen.queryByText("GitHub API rate-limited")).toBeNull();
+    });
 
     it("upgrades an outdated custom binary through its own upgrade command", async () => {
       setOpencodeSettings({
