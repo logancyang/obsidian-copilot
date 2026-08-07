@@ -164,9 +164,9 @@ Reduces the likelihood of the model repeating itself.
 ## Default Model Selection
 
 Your **default model** is the one Copilot uses when you open a new chat. Set it in:
-**Settings → Copilot → Basic → Default Chat Model**
+**Settings → Copilot → Basic → Agents → Quick Chat → Default model**
 
-The dropdown contains models enabled under **Basic → Agents → Quick Chat models**.
+The dropdown contains models enabled under **Quick Chat models**, in that same panel.
 
 ---
 

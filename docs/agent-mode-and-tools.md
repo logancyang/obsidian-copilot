@@ -39,7 +39,9 @@ Selecting a row only previews its action. **Start chat** saves that agent as the
 
 ### Choosing the OpenCode Binary Source
 
-The OpenCode setup dialog (**Settings → Copilot → Basic → Agents → opencode → Configure**) offers two ways to provide the binary, shown one at a time: **Managed by Copilot**, where Copilot downloads and updates an official release for you, and **My own binary**, where you point Copilot at an OpenCode you already have installed.
+Before OpenCode is set up, its row under **Settings → Copilot → Basic → Agents → opencode** offers both sources directly: **Download opencode** fetches an official release for Copilot to manage, and **I already have it** looks for an OpenCode you installed yourself. If that search finds nothing, a **Configure** button appears next to them so you can type the path by hand.
+
+Once OpenCode is set up, that row's **Configure** button opens the setup dialog, which shows the same two sources one at a time: **Managed by Copilot**, where Copilot downloads and updates an official release for you, and **My own binary**, where you point Copilot at an OpenCode you already have installed.
 
 Switching between the two views only changes which controls you see — it never changes the binary in use. The actual switch happens when you act: **Download & install** activates the managed copy, and applying a path under **My own binary** activates yours. Your saved custom path is kept while you browse the managed view, and the dialog tells you whenever the source you're looking at is not the one currently in use.
 
