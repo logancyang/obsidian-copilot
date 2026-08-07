@@ -74,7 +74,7 @@ export const OpencodeAbsentInstallView: React.FC<OpencodeAbsentInstallActionsPro
           // Detection only walks the well-known install locations and PATH, so a
           // binary somewhere else can only be reached by typing its path — and
           // the row hides its usual Configure entry point while absent. Without
-          // this the failure message would name a button that isn't on screen.
+          // this a failed detect would leave that binary with no way in at all.
           <Button variant="ghost" size="default" onClick={onConfigure}>
             Configure
           </Button>

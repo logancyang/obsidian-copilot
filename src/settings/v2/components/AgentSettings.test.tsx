@@ -18,7 +18,7 @@ const opencodeRuntimeListeners = new Set<() => void>();
 const IDLE_RUNTIME = Object.freeze({ kind: "idle" as const });
 const opencodeManagerStub = {
   install,
-  adoptExistingBinary: jest.fn().mockResolvedValue(null),
+  adoptExistingBinary: jest.fn().mockResolvedValue("/usr/local/bin/opencode"),
   cancelCurrentOperation: jest.fn(),
   subscribeRuntimeState: (onChange: () => void) => {
     opencodeRuntimeListeners.add(onChange);

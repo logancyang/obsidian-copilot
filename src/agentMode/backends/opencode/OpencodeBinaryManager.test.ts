@@ -49,6 +49,12 @@ jest.mock("@/settings/model", () => {
   };
 });
 
+// The real detector walks this machine's PATH and install dirs, so adopt tests
+// would pass or fail on whether the developer happens to have opencode.
+jest.mock("./opencodeCliDetector", () => ({
+  detectOpencodeCliPath: jest.fn(async () => null),
+}));
+
 import { OPENCODE_MIN_ACP_VERSION, OPENCODE_PINNED_VERSION } from "./ui/opencodeVersion";
 import { copilotAppDataDir } from "@/utils/appPaths";
 import * as fs from "node:fs";
@@ -60,6 +66,7 @@ import {
   legacyVaultDataDir,
   opencodeManagedDataDir,
   OpencodeBinaryManager,
+  OpencodeNotFoundError,
   OperationInFlightError,
   parseVersionFromStdout,
   pickMatchingAsset,
@@ -649,6 +656,21 @@ describe("OpencodeBinaryManager runtime state", () => {
 
     expect(mgr.isBusy()).toBe(false);
     await expect(mgr.setCustomBinaryPath(process.execPath)).resolves.toBeUndefined();
+  });
+
+  it("leaves a fruitless detect in the error state rather than back at idle", async () => {
+    const mgr = new OpencodeBinaryManager(fakePlugin);
+
+    await expect(mgr.adoptExistingBinary()).rejects.toBeInstanceOf(OpencodeNotFoundError);
+
+    // Resolving would settle the store back to idle, and the settings row only
+    // offers Configure — the one way to name a binary the search cannot see —
+    // while an error is showing.
+    expect(mgr.getRuntimeState()).toEqual({
+      kind: "error",
+      message: expect.stringContaining("Couldn't find opencode"),
+    });
+    expect(mgr.isBusy()).toBe(false);
   });
 
   it("is not busy before anything has run", () => {

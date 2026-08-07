@@ -1,8 +1,11 @@
 import { OpencodeAbsentInstallActions } from "@/agentMode/backends/opencode/OpencodeInlineInstall";
 import {
+  AbortError,
+  OpencodeNotFoundError,
   OperationInFlightError,
   type RuntimeState,
 } from "@/agentMode/backends/opencode/OpencodeBinaryManager";
+import { logError } from "@/logger";
 import type CopilotPlugin from "@/main";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { Notice } from "obsidian";
@@ -23,7 +26,7 @@ function makeFakeManager() {
   let state: RuntimeState = { kind: "idle" };
   const listeners = new Set<() => void>();
   const install = jest.fn<Promise<{ version: string; path: string }>, []>();
-  const adoptExistingBinary = jest.fn<Promise<string | null>, []>();
+  const adoptExistingBinary = jest.fn<Promise<string>, []>();
   const cancelCurrentOperation = jest.fn();
 
   return {
@@ -130,16 +133,44 @@ describe("OpencodeInlineInstall", () => {
       );
     });
 
-    it("points the user at Configure when no opencode is found on the device", async () => {
-      fake.adoptExistingBinary.mockResolvedValue(null);
+    // Asserting the rendered controls rather than the Notice copy: an earlier
+    // version checked only that the message was raised, so it stayed green
+    // while the button that message depends on had vanished from the row.
+    it("reveals Configure and retires the adopt action when no opencode is found", async () => {
+      fake.adoptExistingBinary.mockImplementation(() => {
+        fake.publish({ kind: "error", message: new OpencodeNotFoundError().message });
+        return Promise.reject(new OpencodeNotFoundError());
+      });
       render(<OpencodeAbsentInstallActions plugin={plugin} />);
+
       fireEvent.click(screen.getByRole("button", { name: "I already have it" }));
 
-      await waitFor(() =>
-        expect(Notice).toHaveBeenCalledWith(
-          "Couldn't find opencode on this device. Use Configure to enter its path."
-        )
-      );
+      await waitFor(() => expect(screen.getByRole("button", { name: "Configure" })).not.toBeNull());
+      expect(screen.queryByRole("button", { name: "I already have it" })).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Configure" }));
+      expect(openInstallUI).toHaveBeenCalledWith(plugin);
+    });
+
+    it("keeps a fruitless detect out of the error log, since the row already carries it", async () => {
+      fake.adoptExistingBinary.mockRejectedValue(new OpencodeNotFoundError());
+      render(<OpencodeAbsentInstallActions plugin={plugin} />);
+
+      fireEvent.click(screen.getByRole("button", { name: "I already have it" }));
+
+      await waitFor(() => expect(fake.adoptExistingBinary).toHaveBeenCalled());
+      expect(logError).not.toHaveBeenCalled();
+      expect(Notice).not.toHaveBeenCalled();
+    });
+
+    it("keeps a cancelled download out of the error log", async () => {
+      fake.install.mockRejectedValue(new AbortError());
+      render(<OpencodeAbsentInstallActions plugin={plugin} />);
+
+      fireEvent.click(screen.getByRole("button", { name: "Download opencode" }));
+
+      // Cancelling is the user's own doing, so it is an outcome, not a fault.
+      await waitFor(() => expect(fake.install).toHaveBeenCalled());
+      expect(logError).not.toHaveBeenCalled();
     });
 
     it("opens the Configure dialog from the failure state so a custom path stays reachable", () => {

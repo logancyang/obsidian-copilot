@@ -1,6 +1,6 @@
 import { getOpencodeBinaryManager, OpencodeBackendDescriptor } from "./descriptor";
 import { phaseLabel, phaseProgress } from "./installProgress";
-import { OperationInFlightError } from "./OpencodeBinaryManager";
+import { AbortError, OpencodeNotFoundError, OperationInFlightError } from "./OpencodeBinaryManager";
 import {
   OpencodeAbsentInstallView,
   type OpencodeAbsentInstallState,
@@ -34,10 +34,18 @@ export const OpencodeAbsentInstallActions: React.FC<{ plugin: CopilotPlugin }> =
 
   // The manager already records a failure in its runtime state, where the next
   // row to mount will show it — so a rejection here needs no reporting of its
-  // own. `OperationInFlightError` is swallowed entirely: it only means the user
-  // reached an action the state says is unavailable.
+  // own. Three rejections are outcomes rather than faults and stay out of the
+  // log entirely: losing the race for the manager, cancelling a download, and a
+  // detect that searched everywhere it knows and came up empty.
   const report = (context: string) => (e: unknown) => {
-    if (e instanceof OperationInFlightError) return;
+    if (
+      e instanceof OperationInFlightError ||
+      e instanceof OpencodeNotFoundError ||
+      e instanceof AbortError ||
+      (e as Error | undefined)?.name === "AbortError"
+    ) {
+      return;
+    }
     logError(`[AgentMode] ${context}`, e);
   };
 
@@ -51,13 +59,10 @@ export const OpencodeAbsentInstallActions: React.FC<{ plugin: CopilotPlugin }> =
   const adoptExisting = React.useCallback(() => {
     manager
       .adoptExistingBinary()
-      .then((found) => {
-        new Notice(
-          found
-            ? `Using the opencode at ${found}.`
-            : "Couldn't find opencode on this device. Use Configure to enter its path."
-        );
-      })
+      // Finding nothing rejects rather than resolving, so it reaches the row as
+      // the error state that reveals Configure — the only way left to name a
+      // binary the search cannot reach.
+      .then((found) => new Notice(`Using the opencode at ${found}.`))
       .catch(report("adopting an existing opencode failed"));
   }, [manager]);
 
