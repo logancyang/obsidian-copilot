@@ -25,9 +25,8 @@ function CustomPatternInputModalContent({
     <div className="tw-flex tw-flex-col tw-gap-4">
       <div className="tw-flex tw-flex-col tw-gap-4">
         <div>
-          Comma separated list of paths, tags, note titles, file extensions or frontmatter
-          properties e.g. folder1, folder1/folder2, #tag1, #tag2, [[note1]], [[note2]], *.jpg,
-          *.excallidraw.md, [Topics:Physics], [Subject:]
+          Comma separated list of paths, tags, note titles or file extension e.g. folder1,
+          folder1/folder2, #tag1, #tag2, [[note1]], [[note2]], *.jpg, *.excallidraw.md
         </div>
         <Input
           placeholder="Enter the pattern"
