@@ -21,7 +21,7 @@ jest.mock("@/LLMProviders/brevilabsClient", () => ({
 
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import { getCachedProjectRecordById } from "@/projects/state";
-import { getMatchingPatterns } from "@/search/searchUtils";
+import { getMatchingPatterns, shouldIndexFile } from "@/search/searchUtils";
 import {
   ensureProjectContextMaterialized,
   materializeProjectContextSource,
@@ -30,6 +30,7 @@ import {
 
 const getRecord = getCachedProjectRecordById as jest.Mock;
 const getPatterns = getMatchingPatterns as jest.Mock;
+const indexFile = shouldIndexFile as jest.Mock;
 const getClient = BrevilabsClient.getInstance as jest.Mock;
 
 const CWD = "/vault/Proj";
@@ -91,6 +92,7 @@ function fakeApp(files: Array<{ path: string; ext: string }> = [], folders: stri
     vault: {
       adapter: new FsAdapter("/vault"),
       getFiles: () => tfiles,
+      getMarkdownFiles: () => tfiles.filter((f) => f.extension === "md"),
       getAbstractFileByPath: (p: string) => (folderSet.has(p) ? new Folder(p) : null),
       readBinary: jest.fn(async () => new ArrayBuffer(4)),
     },
@@ -101,6 +103,8 @@ beforeEach(() => {
   mockFs = memFs();
   jest.clearAllMocks();
   getPatterns.mockReturnValue(patterns());
+  // Reset the default so a per-test property matcher override never leaks forward.
+  indexFile.mockReturnValue(true);
   getClient.mockReturnValue({
     url4llm: jest.fn(async () => ({ response: "url text" })),
     youtube4llm: jest.fn(async () => ({ response: { transcript: "yt text" } })),
@@ -175,6 +179,54 @@ describe("ensureProjectContextMaterialized", () => {
 
     expect(result.projectContextBlock).toContain("`/vault/A/Spec.md`");
     expect(result.projectContextBlock).toContain("`/vault/B/Spec.md`");
+  });
+
+  it("counts a property-only inclusion as a source and enumerates matching notes by absolute path", async () => {
+    getRecord.mockReturnValue(record({ inclusions: "[Topics:Physics]" }));
+    getPatterns.mockReturnValue(patterns({ propertyPatterns: ["[Topics:Physics]"] }));
+    const app = fakeApp([
+      { path: "Notes/Relativity.md", ext: "md" },
+      { path: "Notes/Cooking.md", ext: "md" },
+    ]);
+    // Only the physics note carries the matching frontmatter property.
+    indexFile.mockImplementation((_app: unknown, file: { path: string }) => file.path === "Notes/Relativity.md"); // prettier-ignore
+
+    const result = await ensureProjectContextMaterialized(app, "p1", CWD);
+
+    expect(result.projectContextBlock).toContain("<project_context>");
+    expect(result.projectContextBlock).toContain("## Included notes");
+    expect(result.projectContextBlock).toContain("`/vault/Notes/Relativity.md`");
+    expect(result.projectContextBlock).not.toContain("Cooking");
+  });
+
+  it("still emits <project_context> for a property-only project when no note currently matches", async () => {
+    getRecord.mockReturnValue(record({ inclusions: "[Topics:Physics]" }));
+    getPatterns.mockReturnValue(patterns({ propertyPatterns: ["[Topics:Physics]"] }));
+    const app = fakeApp([{ path: "Notes/Cooking.md", ext: "md" }]);
+    indexFile.mockReturnValue(false); // nothing matches the property yet
+
+    const result = await ensureProjectContextMaterialized(app, "p1", CWD);
+
+    // The declared property is a real source, so the block IS emitted (not the
+    // frozen empty result) — otherwise a stale empty landing would be reused. It
+    // simply lists no note until one matches.
+    expect(result.projectContextBlock).toContain("<project_context>");
+    expect(result.projectContextBlock).not.toContain("## Included notes");
+  });
+
+  it("lists a note matched by BOTH a note inclusion and a property only once", async () => {
+    getRecord.mockReturnValue(record({ inclusions: "[[Relativity]],[Topics:Physics]" }));
+    getPatterns.mockReturnValue(
+      patterns({ notePatterns: ["[[Relativity]]"], propertyPatterns: ["[Topics:Physics]"] })
+    );
+    const app = fakeApp([{ path: "Notes/Relativity.md", ext: "md" }]);
+    indexFile.mockReturnValue(true); // the note also matches the property
+
+    const result = await ensureProjectContextMaterialized(app, "p1", CWD);
+
+    const block = result.projectContextBlock ?? "";
+    const occurrences = block.split("`/vault/Notes/Relativity.md`").length - 1;
+    expect(occurrences).toBe(1);
   });
 
   it("materializes in-vault PDFs but ignores markdown files", async () => {

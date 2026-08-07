@@ -8,8 +8,10 @@ import {
   createPatternSettingsValue,
   getDecodedPatterns,
   getMatchingPatterns,
+  getPropertyPattern,
   getSystemExcludedFolders,
   isInternalExcludedPath,
+  parsePropertyPattern,
   previewPatternValue,
   shouldIndexFile,
 } from "./searchUtils";
@@ -64,6 +66,8 @@ jest.mock(
   (): Record<string, unknown> => ({
     ...jest.requireActual("@/utils"),
     getTagsFromNote: jest.fn(),
+    getPropertyValuesFromNote: jest.fn(),
+    noteHasProperty: jest.fn(),
   })
 );
 
@@ -241,6 +245,47 @@ describe("searchUtils", () => {
       };
       expect(shouldIndexFile(window.app, file, null, exclusions)).toBe(false);
     });
+
+    it("should include a note whose property value matches", () => {
+      const file = createTestFile("notes/physics.md");
+      (utils.getPropertyValuesFromNote as jest.Mock).mockReturnValue(["Physics", "Math"]);
+
+      const inclusions = { propertyPatterns: ["[Topics:Physics]"] };
+      expect(shouldIndexFile(window.app, file, inclusions, null)).toBe(true);
+    });
+
+    it("should match a property value case-insensitively", () => {
+      const file = createTestFile("notes/physics.md");
+      (utils.getPropertyValuesFromNote as jest.Mock).mockReturnValue(["physics"]);
+
+      const inclusions = { propertyPatterns: ["[Topics:Physics]"] };
+      expect(shouldIndexFile(window.app, file, inclusions, null)).toBe(true);
+    });
+
+    it("should exclude a note whose property value does not match", () => {
+      const file = createTestFile("notes/chem.md");
+      (utils.getPropertyValuesFromNote as jest.Mock).mockReturnValue(["Chemistry"]);
+
+      const inclusions = { propertyPatterns: ["[Topics:Physics]"] };
+      expect(shouldIndexFile(window.app, file, inclusions, null)).toBe(false);
+    });
+
+    it("should include any note that has the key for a key-only property pattern", () => {
+      const file = createTestFile("notes/any.md");
+      // A key-only pattern matches on key presence, even when the value is empty.
+      (utils.noteHasProperty as jest.Mock).mockReturnValue(true);
+
+      const inclusions = { propertyPatterns: ["[Topics:]"] };
+      expect(shouldIndexFile(window.app, file, inclusions, null)).toBe(true);
+    });
+
+    it("should exclude a note missing the key for a key-only property pattern", () => {
+      const file = createTestFile("notes/none.md");
+      (utils.noteHasProperty as jest.Mock).mockReturnValue(false);
+
+      const inclusions = { propertyPatterns: ["[Topics:]"] };
+      expect(shouldIndexFile(window.app, file, inclusions, null)).toBe(false);
+    });
   });
 
   describe("categorizePatterns", () => {
@@ -288,15 +333,68 @@ describe("searchUtils", () => {
       expect(notePatterns).toEqual(patterns);
     });
 
+    it("should correctly categorize property patterns", () => {
+      const patterns = ["[Topics:Physics]", "[Subject:Einstein]", "[Token:]"];
+      const { propertyPatterns, tagPatterns, folderPatterns, notePatterns } =
+        categorizePatterns(patterns);
+
+      expect(propertyPatterns).toEqual(patterns);
+      expect(tagPatterns).toEqual([]);
+      expect(folderPatterns).toEqual([]);
+      expect(notePatterns).toEqual([]);
+    });
+
+    it("should not mistake a double-bracket note pattern for a property", () => {
+      // A note title may itself contain a colon; the double-bracket form must
+      // still win over the single-bracket property form.
+      const { notePatterns, propertyPatterns } = categorizePatterns(["[[Note 1]]", "[[Topics:x]]"]);
+
+      expect(notePatterns).toEqual(["[[Note 1]]", "[[Topics:x]]"]);
+      expect(propertyPatterns).toEqual([]);
+    });
+
+    it("should treat a bracketed value with an empty key as a folder, not a property", () => {
+      const { folderPatterns, propertyPatterns } = categorizePatterns(["[:onlyvalue]"]);
+
+      expect(propertyPatterns).toEqual([]);
+      expect(folderPatterns).toEqual(["[:onlyvalue]"]);
+    });
+
     it("should correctly categorize mixed patterns", () => {
-      const patterns = ["#important", "*.pdf", "folder1", "[[Note 1]]"];
-      const { tagPatterns, extensionPatterns, folderPatterns, notePatterns } =
+      const patterns = ["#important", "*.pdf", "folder1", "[[Note 1]]", "[Topics:Physics]"];
+      const { tagPatterns, extensionPatterns, folderPatterns, notePatterns, propertyPatterns } =
         categorizePatterns(patterns);
 
       expect(tagPatterns).toEqual(["#important"]);
       expect(extensionPatterns).toEqual(["*.pdf"]);
       expect(folderPatterns).toEqual(["folder1"]);
       expect(notePatterns).toEqual(["[[Note 1]]"]);
+      expect(propertyPatterns).toEqual(["[Topics:Physics]"]);
+    });
+  });
+
+  describe("parsePropertyPattern()", () => {
+    it("splits a property pattern into trimmed key and value", () => {
+      expect(parsePropertyPattern("[Topics:Physics]")).toEqual({
+        key: "Topics",
+        value: "Physics",
+      });
+    });
+
+    it("keeps spaces and later colons inside the value by splitting on the first colon", () => {
+      expect(parsePropertyPattern("[Subject:2024: a talk]")).toEqual({
+        key: "Subject",
+        value: "2024: a talk",
+      });
+    });
+
+    it("returns an empty value for a key-only pattern", () => {
+      expect(parsePropertyPattern("[Topics:]")).toEqual({ key: "Topics", value: "" });
+    });
+
+    it("returns null for a non-property pattern", () => {
+      expect(parsePropertyPattern("[[Note]]")).toBeNull();
+      expect(parsePropertyPattern("folder1")).toBeNull();
     });
   });
 
@@ -376,6 +474,21 @@ describe("searchUtils", () => {
       });
       expect(result).toBe("%23tag1,%23tag2,*.pdf,%5B%5BNote%201%5D%5D,folder1");
     });
+
+    it("should round-trip a property pattern through categorizePatterns", () => {
+      const value = createPatternSettingsValue({ propertyPatterns: ["[Topics:Physics]"] });
+      expect(categorizePatterns(getDecodedPatterns(value)).propertyPatterns).toEqual([
+        "[Topics:Physics]",
+      ]);
+    });
+
+    it("should round-trip a property value containing commas and percent signs", () => {
+      // The stored form is a comma-joined, percent-encoded list, so a value with
+      // its own commas or percent signs must survive encode -> decode intact.
+      const pattern = "[Topics:a, b 50%]";
+      const value = createPatternSettingsValue({ propertyPatterns: [pattern] });
+      expect(categorizePatterns(getDecodedPatterns(value)).propertyPatterns).toEqual([pattern]);
+    });
   });
 
   describe("getDecodedPatterns", () => {
@@ -446,6 +559,7 @@ describe("searchUtils", () => {
         extensionPatterns: ["*.pdf"],
         tagPatterns: ["#important"],
         notePatterns: ["[[Note 1]]"],
+        propertyPatterns: [],
       });
       expect(exclusions).toBeNull();
     });
@@ -464,6 +578,7 @@ describe("searchUtils", () => {
         tagPatterns: ["#draft"],
         extensionPatterns: ["*.tmp"],
         notePatterns: [],
+        propertyPatterns: [],
       });
     });
 
@@ -480,12 +595,14 @@ describe("searchUtils", () => {
         tagPatterns: ["#important"],
         extensionPatterns: [],
         notePatterns: [],
+        propertyPatterns: [],
       });
       expect(exclusions).toEqual({
         folderPatterns: ["private"],
         tagPatterns: ["#draft"],
         extensionPatterns: [],
         notePatterns: [],
+        propertyPatterns: [],
       });
     });
   });
@@ -612,6 +729,20 @@ describe("searchUtils", () => {
       } finally {
         Object.assign(platform, restore);
       }
+    });
+  });
+
+  describe("getPropertyPattern()", () => {
+    it("returns [key:value] when value is provided", () => {
+      expect(getPropertyPattern("Topics", "Physics")).toBe("[Topics:Physics]");
+    });
+
+    it("returns [key:] when value is omitted", () => {
+      expect(getPropertyPattern("Topics")).toBe("[Topics:]");
+    });
+
+    it("returns [key:] when value is empty string", () => {
+      expect(getPropertyPattern("Topics", "")).toBe("[Topics:]");
     });
   });
 });

@@ -29,6 +29,13 @@ export interface ManifestSources {
   notes: ManifestPathEntry[];
   extensions: string[];
   tags: string[];
+  /**
+   * Property inclusion patterns (e.g. `[Topics:Physics]`), listed as source
+   * labels. Property-matched notes are also enumerated under "Included notes",
+   * but a broad property can overflow the entry cap; the label ensures the agent
+   * still knows which frontmatter query produced them even when notes are cut.
+   */
+  properties: string[];
   webUrls: string[];
   youtubeUrls: string[];
   /** Present cache files, used to resolve snapshot pointers + list file snapshots. */
@@ -74,6 +81,7 @@ export function buildProjectContextBlock(sources: ManifestSources): string {
 
   const lines: ManifestLine[] = [
     ...sources.folders.map((e) => line("Included folders", pathText(e))),
+    ...sources.properties.map((p) => line("Included properties", p)),
     ...sources.notes.map((e) => line("Included notes", pathText(e))),
     ...sources.extensions.map((p) => line("Included file types", `\`${p}\``)),
     ...sources.tags.map((t) => line("Included tags", t)),
@@ -92,10 +100,13 @@ export function buildProjectContextBlock(sources: ManifestSources): string {
     "<project_context>",
     "Context sources for this project, with absolute paths. Folders and tags are",
     "listed as sources, not expanded into member files — use your own search",
-    "(grep/glob/read) to enumerate them. Materialized snapshots of URLs, YouTube",
-    "transcripts, and PDFs/images are shown inline as an absolute path after the",
-    "source, formatted `<source> → <absolute path>` — read that path directly. A source",
-    "with no path isn't cached (not yet converted or conversion failed); use the source itself.",
+    "(grep/glob/read) to enumerate them. Properties are listed as source labels and",
+    'also expanded into matching notes under "Included notes" (a property pattern\'s',
+    "label is listed so it survives the entry cap; its resolved notes appear below).",
+    "Materialized snapshots of URLs, YouTube transcripts, and PDFs/images are shown",
+    "inline as an absolute path after the source, formatted `<source> → <absolute path>`",
+    "— read that path directly. A source with no path isn't cached (not yet converted",
+    "or conversion failed); use the source itself.",
   ];
 
   let currentSection = "";
@@ -111,7 +122,7 @@ export function buildProjectContextBlock(sources: ManifestSources): string {
     out.push(
       "",
       `> Only the first ${shown.length} of ${total} sources are listed; ${omitted} more are omitted. ` +
-        `Use folder/tag search (grep/find) to find the rest.`
+        `Use the declared context sources above with grep/glob/read to find the rest.`
     );
   }
   out.push("</project_context>");

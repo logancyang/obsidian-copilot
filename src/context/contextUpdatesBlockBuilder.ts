@@ -11,7 +11,7 @@
  */
 const PROJECT_CONTEXT_UPDATES_BLOCK = [
   "<project_context_updates>",
-  "Project sources may have changed, re-check declared folders/tags/files before answering.",
+  "Project sources may have changed; re-check the declared project context before answering.",
   "</project_context_updates>",
 ].join("\n");
 

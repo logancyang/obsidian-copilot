@@ -134,6 +134,27 @@ describe("usePersistentContextDrop", () => {
     expect(mockUpdateProject).not.toHaveBeenCalled();
   });
 
+  it("preserves existing property patterns when a file is dropped", async () => {
+    seedProject(
+      makeProject({
+        contextSource: {
+          inclusions: createPatternSettingsValue({ propertyPatterns: ["[Topics:Physics]"] }),
+        },
+      })
+    );
+    const file = new (TFile as unknown as new (p: string) => TFile)("notes/Intro.md");
+    const app = makeApp({ "notes/Intro.md": file });
+
+    const { getByTestId } = render(<Harness app={app} projectId="p1" />);
+    dispatchDrop(getByTestId("zone"), [{ kind: "string", value: "notes/Intro.md" }]);
+
+    await waitFor(() => expect(mockUpdateProject).toHaveBeenCalledTimes(1));
+    const [, nextConfig] = mockUpdateProject.mock.calls[0];
+    const patterns = getDecodedPatterns(nextConfig.contextSource.inclusions);
+    expect(patterns).toContain("[[Intro]]");
+    expect(patterns).toContain("[Topics:Physics]");
+  });
+
   it("rejects external OS files (no vault item resolved)", async () => {
     seedProject(makeProject());
     const app = makeApp({});
