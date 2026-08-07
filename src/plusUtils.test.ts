@@ -5,12 +5,26 @@ const mockGetSettings = jest.fn<CopilotSettings, []>();
 const mockSetSettings = jest.fn<void, [Partial<CopilotSettings>]>();
 const mockUpdateSetting = jest.fn<void, [string, unknown]>();
 
+type SettingsListener = (prev: CopilotSettings, next: CopilotSettings) => void;
+const settingsListeners = new Set<SettingsListener>();
+
 jest.mock("@/settings/model", () => ({
   getSettings: () => mockGetSettings(),
   setSettings: (partial: Partial<CopilotSettings>) => mockSetSettings(partial),
   updateSetting: (key: string, value: unknown) => mockUpdateSetting(key, value),
   useSettingsValue: () => mockGetSettings(),
+  subscribeToSettingsChange: (callback: SettingsListener) => {
+    settingsListeners.add(callback);
+    return () => settingsListeners.delete(callback);
+  },
 }));
+
+/** Publish a settings change the way the provider sync's write does. */
+function emitSettings(next: CopilotSettings): void {
+  const prev = mockGetSettings();
+  mockGetSettings.mockReturnValue(next);
+  for (const listener of [...settingsListeners]) listener(prev, next);
+}
 
 const mockVerifyEntitlement = jest.fn<Promise<unknown>, [string, unknown?]>();
 
@@ -57,6 +71,7 @@ import {
   verifyCachedEntitlement,
 } from "@/plusUtils";
 import { renderHook, waitFor } from "@testing-library/react";
+import { Notice } from "obsidian";
 
 const FUTURE_EXP_SECONDS = 9_999_999_999;
 const PAST_EXP_SECONDS = 1_000_000_000;
@@ -129,6 +144,8 @@ describe("plusUtils", () => {
     mockValidateLicenseKey.mockReset();
     mockApplyCopilotDefaultModel.mockReset().mockReturnValue([]);
     mockIsDesktopRuntime.mockReturnValue(true);
+    (Notice as unknown as jest.Mock).mockClear();
+    settingsListeners.clear();
     mockGetSettings.mockReturnValue(buildSettings({ entitlementToken: "" }));
     await verifyCachedEntitlement();
   });
@@ -196,14 +213,60 @@ describe("plusUtils", () => {
       expect(mockApplyCopilotDefaultModel).not.toHaveBeenCalled();
     });
 
-    it("resolves without applying anything when the Copilot model is not configured yet", async () => {
+    it("applies once provider sync enrolls the model, rather than no-opping on a click that beat it", async () => {
       mockGetSettings.mockReturnValue(buildSettings({}));
 
-      await applyLicenseSettings();
-
-      expect(mockSetModelKey).not.toHaveBeenCalled();
+      const applied = applyLicenseSettings();
+      // Mid-flight: the click landed before enrollment, so nothing is written yet.
       expect(mockSetSettings).not.toHaveBeenCalled();
-      expect(mockApplyCopilotDefaultModel).not.toHaveBeenCalled();
+
+      emitSettings(settingsWithFlashConfigured());
+      await applied;
+
+      expect(mockSetModelKey).toHaveBeenCalledWith(FLASH_CONFIGURED_ID);
+      expect(mockSetSettings).toHaveBeenCalledWith({ defaultModelKey: FLASH_CONFIGURED_ID });
+      expect(mockApplyCopilotDefaultModel).toHaveBeenCalledWith(FLASH_CONFIGURED_ID);
+    });
+
+    it("ignores settings changes that still lack the model", async () => {
+      mockGetSettings.mockReturnValue(buildSettings({}));
+
+      const applied = applyLicenseSettings();
+      emitSettings(buildSettings({ userId: "user-123" }));
+      expect(mockSetSettings).not.toHaveBeenCalled();
+
+      emitSettings(settingsWithFlashConfigured());
+      await applied;
+
+      expect(mockSetSettings).toHaveBeenCalledWith({ defaultModelKey: FLASH_CONFIGURED_ID });
+    });
+
+    it("stops waiting and tells the user when the model never arrives", async () => {
+      jest.useFakeTimers();
+      try {
+        mockGetSettings.mockReturnValue(buildSettings({}));
+
+        const applied = applyLicenseSettings();
+        jest.advanceTimersByTime(15_000);
+        await applied;
+
+        expect(mockSetModelKey).not.toHaveBeenCalled();
+        expect(mockSetSettings).not.toHaveBeenCalled();
+        expect(mockApplyCopilotDefaultModel).not.toHaveBeenCalled();
+        expect(Notice).toHaveBeenCalledTimes(1);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it("leaves no settings listener behind once it settles", async () => {
+      mockGetSettings.mockReturnValue(buildSettings({}));
+
+      const applied = applyLicenseSettings();
+      emitSettings(settingsWithFlashConfigured());
+      await applied;
+
+      expect(settingsListeners.size).toBe(0);
     });
 
     it("ignores a model of the same name that a non-Copilot provider supplies", async () => {
@@ -229,7 +292,14 @@ describe("plusUtils", () => {
         })
       );
 
-      await applyLicenseSettings();
+      jest.useFakeTimers();
+      try {
+        const applied = applyLicenseSettings();
+        jest.advanceTimersByTime(15_000);
+        await applied;
+      } finally {
+        jest.useRealTimers();
+      }
 
       expect(mockSetSettings).not.toHaveBeenCalled();
     });

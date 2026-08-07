@@ -6,13 +6,16 @@ import { createPluginRoot } from "@/utils/react/createPluginRoot";
 import { logError } from "@/logger";
 import { DEFAULT_COPILOT_PLUS_CHAT_MODEL, applyLicenseSettings } from "@/plusUtils";
 
-function CopilotPlusWelcomeModalContent({
-  onConfirm,
-  onCancel,
-}: {
+export interface CopilotPlusWelcomeModalContentProps {
   onConfirm: () => void;
   onCancel: () => void;
-}) {
+}
+
+/** Body of {@link CopilotPlusWelcomeModal}, exported prop-driven so the gallery can render it. */
+export function CopilotPlusWelcomeModalContent({
+  onConfirm,
+  onCancel,
+}: CopilotPlusWelcomeModalContentProps) {
   return (
     <div className="tw-flex tw-flex-col tw-gap-4">
       <div>

@@ -17,7 +17,7 @@ Copilot Plus is a subscription that enables:
 - **Memory system** — Persistent memory across conversations
 - **Copilot Plus Flash model** — A built-in model that requires no separate API key
 - **URL processing** — Fetch and summarize web pages as context
-- **Copilot Plus embedding models** — High-quality embeddings for semantic search
+- **Copilot Plus embedding models** — High-quality embeddings, selected under semantic search rather than by activating a license
 
 ### Setting Up Copilot Plus
 
@@ -25,6 +25,17 @@ Copilot Plus is a subscription that enables:
 2. Go to **Settings → Copilot → Basic** (or the Plus banner in the settings)
 3. Enter your license key in the **Copilot Plus License Key** field
 4. Features unlock automatically
+
+A welcome dialog then offers to make **copilot-plus-flash** your default model.
+Choosing **Apply Now** sets it as the default for chat and for each agent that
+can run Copilot models — OpenCode today; Claude Code and Codex keep their own
+models and are left alone. Choosing **Apply Later** changes nothing: the Copilot
+models are already available in every picker either way, and you can set a
+default yourself under **Settings → Agents**, per agent and for Quick Chat.
+
+Applying it never changes your embedding model or rebuilds your vault index.
+Semantic search is configured separately — see
+[Vault search and indexing](vault-search-and-indexing.md).
 
 The badge at the top of the license section names your plan once the key is
 working — **Plus**, **Lite**, or **Lifetime** for a Believer or Supporter

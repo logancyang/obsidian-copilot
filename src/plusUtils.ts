@@ -8,6 +8,7 @@ import {
   CopilotSettings,
   getSettings,
   setSettings,
+  subscribeToSettingsChange,
   updateSetting,
   useSettingsValue,
 } from "@/settings/model";
@@ -363,6 +364,62 @@ export function useIsSelfHostEligible(): boolean | undefined {
 }
 
 /**
+ * How long to wait for provider sync to enroll the Copilot models. Generous on
+ * purpose: the wait costs nothing when the models are already there, and the
+ * only thing a short deadline could buy is failing while the work that would
+ * have succeeded is still running.
+ */
+const CONFIGURED_MODEL_WAIT_MS = 15_000;
+
+/** The configured Copilot chat model in `settings`, or `undefined` if the provider sync has not enrolled it. */
+function findLicensedChatModelId(settings: CopilotSettings): string | undefined {
+  const plusProviderIds = new Set(
+    Object.values(settings.providers)
+      .filter((provider) => provider.origin.kind === "copilot-plus")
+      .map((provider) => provider.providerId)
+  );
+  return settings.configuredModels.find(
+    (model) =>
+      plusProviderIds.has(model.providerId) &&
+      model.info.id === (DEFAULT_COPILOT_PLUS_CHAT_MODEL as string)
+  )?.configuredModelId;
+}
+
+/**
+ * The configured Copilot chat model, waiting for provider sync to enroll it if
+ * it is not there yet. Resolves `undefined` only if it never arrives.
+ *
+ * Validating a license and enrolling its models are two independent async
+ * chains with no shared handle: `checkIsPaidUser` returning is what opens the
+ * welcome modal, while enrollment starts later, from the settings subscriber
+ * that persists the same change. Reading the configured set once would let a
+ * user who clicks Apply Now inside that window apply nothing at all.
+ */
+function waitForLicensedChatModelId(): Promise<string | undefined> {
+  const present = findLicensedChatModelId(getSettings());
+  if (present) return Promise.resolve(present);
+  return new Promise((resolve) => {
+    let settled = false;
+    const settle = (id: string | undefined): void => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      unsubscribe();
+      resolve(id);
+    };
+    const unsubscribe = subscribeToSettingsChange((_prev, next) => {
+      const id = findLicensedChatModelId(next);
+      if (id) settle(id);
+    });
+    const timer = window.setTimeout(() => settle(undefined), CONFIGURED_MODEL_WAIT_MS);
+    // Enrollment can land between the check above and this subscription, which
+    // would otherwise leave nothing left to notify us.
+    const raced = findLicensedChatModelId(getSettings());
+    if (raced) settle(raced);
+  });
+}
+
+/**
  * Install the licensed default model — Copilot Plus Flash — everywhere the
  * user will meet a model picker: chat, and every agent that can route it.
  *
@@ -371,25 +428,18 @@ export function useIsSelfHostEligible(): boolean | undefined {
  * should land on. Nothing here touches a surface the license doesn't pay for,
  * so a user who declines loses only the convenience.
  *
- * A no-op when the Plus model isn't in the configured set — that means the
- * provider sync hasn't landed yet, and defaulting to a model that isn't there
- * would strand every picker on a dead selection.
+ * Applies nothing if the model never arrives, rather than storing a key no
+ * picker can resolve — and says so, since by then the modal has closed and
+ * silence would look like success.
  */
 export async function applyLicenseSettings(): Promise<void> {
-  const settings = getSettings();
-  const plusProviderIds = new Set(
-    Object.values(settings.providers)
-      .filter((provider) => provider.origin.kind === "copilot-plus")
-      .map((provider) => provider.providerId)
-  );
-  const configuredModelId = settings.configuredModels.find(
-    (model) =>
-      plusProviderIds.has(model.providerId) &&
-      model.info.id === (DEFAULT_COPILOT_PLUS_CHAT_MODEL as string)
-  )?.configuredModelId;
+  const configuredModelId = await waitForLicensedChatModelId();
   if (!configuredModelId) {
     logWarn(
-      `applyLicenseSettings: ${DEFAULT_COPILOT_PLUS_CHAT_MODEL} is not configured yet, nothing to apply`
+      `applyLicenseSettings: ${DEFAULT_COPILOT_PLUS_CHAT_MODEL} was never configured, nothing to apply`
+    );
+    new Notice(
+      "Copilot could not set a default model. Pick one under Settings → Agents once your license is active."
     );
     return;
   }
