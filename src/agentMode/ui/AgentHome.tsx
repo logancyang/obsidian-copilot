@@ -945,6 +945,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                       onDeleteChat={handleDeleteChat}
                       onOpenSourceFile={handleOpenSourceFile}
                       usageMeter={<AgentContextMeter backend={backend} />}
+                      showMultiAgentUpsell
                     />
                     {composerNode}
                   </>
