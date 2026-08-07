@@ -72,6 +72,14 @@ export const COPILOT_PLUS_MODELS: readonly ModelInfo[] = Object.freeze([
     modalities: { input: ["text"], output: ["text"] },
   },
   {
+    id: ChatModels.COPILOT_PLUS_DEEPSEEK_V4_FLASH_0731,
+    displayName: "DeepSeek V4 Flash 0731",
+    description: "The newest DeepSeek V4 Flash snapshot: fast, cheap, and broadly capable.",
+    toolCall: true,
+    reasoning: true,
+    modalities: { input: ["text"], output: ["text"] },
+  },
+  {
     id: ChatModels.COPILOT_PLUS_MIMO_V2_5,
     displayName: "MiMo V2.5",
     description: "Cost-effective and capable for everyday use.",
