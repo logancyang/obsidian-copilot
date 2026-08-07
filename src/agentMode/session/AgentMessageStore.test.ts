@@ -247,6 +247,20 @@ describe("AgentMessageStore", () => {
     expect(msg?.turnDurationMs).toBe(12_345);
   });
 
+  describe("extendTurnDuration()", () => {
+    it("advances only an already-completed turn", () => {
+      const store = new AgentMessageStore();
+      const runningId = store.addMessage(placeholder());
+      const completedId = store.addMessage(placeholder());
+      store.markTurnComplete(completedId, "end_turn", 10_000);
+
+      expect(store.extendTurnDuration(runningId, 15_000)).toBe(false);
+      expect(store.extendTurnDuration(completedId, 9_000)).toBe(false);
+      expect(store.extendTurnDuration(completedId, 15_000)).toBe(true);
+      expect(store.getMessage(completedId)?.turnDurationMs).toBe(15_000);
+    });
+  });
+
   it("truncateAfterMessageId drops everything after the target", () => {
     const store = new AgentMessageStore();
     const a = store.addMessage(placeholder());

@@ -34,14 +34,34 @@ describe("AgentTurnDurationIndicator", () => {
         <AgentTurnDurationIndicator status="running" startedAtMs={62_000} />
       );
 
-      expect(screen.getByRole("status").textContent).toContain("Agent is working");
-      expect(screen.getByText("2m 18s")).toBeTruthy();
+      expect(screen.getByRole("status").textContent).toBe("Agent is working");
+      const duration = screen.getByText("2m 18s");
+      expect(duration.closest('[aria-hidden="true"]')).toBeNull();
       expect(container.querySelector(".copilot-spinner")).toBeTruthy();
       expect(container.querySelector(".copilot-spinner-dot-0")).toBeTruthy();
 
       act(() => jest.advanceTimersByTime(2_000));
 
       expect(screen.getByText("2m 20s")).toBeTruthy();
+    });
+
+    it("registers and clears the ticker on the mounted element's window", () => {
+      const setInterval = jest.fn(() => 42);
+      const clearInterval = jest.fn();
+      const popoutWindow = { setInterval, clearInterval } as unknown as Window;
+      const winSpy = jest.spyOn(Node.prototype, "win", "get").mockReturnValue(popoutWindow);
+
+      try {
+        const { unmount } = render(
+          <AgentTurnDurationIndicator status="running" startedAtMs={62_000} />
+        );
+
+        expect(setInterval).toHaveBeenCalledWith(expect.any(Function), 1000);
+        unmount();
+        expect(clearInterval).toHaveBeenCalledWith(42);
+      } finally {
+        winSpy.mockRestore();
+      }
     });
 
     it("freezes the duration and keeps a static icon after completion", () => {

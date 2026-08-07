@@ -278,6 +278,23 @@ export class AgentMessageStore {
   }
 
   /**
+   * Extend a completed turn's duration when its backend delivers trailing content.
+   * Returns false for missing or still-running messages and when the duration did not advance.
+   *
+   * @param id - Completed assistant message receiving late turn activity.
+   * @param durationMs - Wall-clock elapsed time through the trailing activity.
+   */
+  extendTurnDuration(id: string, durationMs: number): boolean {
+    const msg = this.messages.find((m) => m.id === id);
+    if (!msg || msg.turnDurationMs === undefined) return false;
+    const nextDurationMs = Math.max(0, durationMs);
+    if (nextDurationMs <= msg.turnDurationMs) return false;
+    msg.turnDurationMs = nextDurationMs;
+    this.touch(msg);
+    return true;
+  }
+
+  /**
    * Set the live fan-out turn on a message and bump its version so the memoized
    * view invalidates. Stores the live reference; `getDisplayMessages` snapshots
    * it per tick. Returns false when the message is missing.

@@ -1,5 +1,5 @@
 import { CopilotSpinner } from "@/components/chat-components/CopilotSpinner";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 
 interface RunningTurnDurationProps {
   status: "running";
@@ -32,33 +32,39 @@ export function formatWorkedDuration(durationMs: number): string {
  */
 export const AgentTurnDurationIndicator: React.FC<AgentTurnDurationIndicatorProps> = (props) => {
   const [now, setNow] = useState(() => Date.now());
+  const rootRef = useRef<HTMLDivElement>(null);
   const isRunning = props.status === "running";
 
   useEffect(() => {
     if (!isRunning) return;
-    const id = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(id);
+    const intervalWindow = rootRef.current?.win;
+    if (!intervalWindow) return;
+    const id = intervalWindow.setInterval(() => setNow(Date.now()), 1000);
+    return () => intervalWindow.clearInterval(id);
   }, [isRunning]);
 
   const durationMs = isRunning ? Math.max(0, now - props.startedAtMs) : props.durationMs;
 
   return (
     <div
+      ref={rootRef}
       className="tw-mb-2 tw-mt-1 tw-w-full tw-text-ui-medium max-md:tw-mb-1.5 max-md:tw-mt-0.5"
-      role={isRunning ? "status" : undefined}
-      aria-live={isRunning ? "polite" : undefined}
     >
       <div className="tw-relative tw-flex tw-w-full tw-items-center tw-pl-1 tw-text-left tw-text-ui-small tw-text-muted">
         <span className="tw-absolute tw-left-1 tw-top-1/2 -tw-ml-1.5 tw-flex tw-size-icon-xs -tw-translate-x-full -tw-translate-y-1/2 tw-items-center tw-justify-center">
           <CopilotSpinner animated={isRunning} />
         </span>
-        <span aria-hidden={isRunning || undefined}>
+        <span>
           <span className={isRunning ? "copilot-shimmer-text tw-font-medium" : "tw-font-medium"}>
             Worked for
           </span>{" "}
           <span className="tw-tabular-nums">{formatWorkedDuration(durationMs)}</span>
         </span>
-        {isRunning ? <span className="tw-sr-only">Agent is working</span> : null}
+        {isRunning ? (
+          <span className="tw-sr-only" role="status" aria-live="polite">
+            Agent is working
+          </span>
+        ) : null}
       </div>
     </div>
   );

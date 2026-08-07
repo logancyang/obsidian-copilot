@@ -882,43 +882,57 @@ describe("AgentSession.sendPrompt", () => {
   });
 
   it("appends a content chunk that trails past the prompt result (messageId race)", async () => {
-    const mock = makeMockBackend();
-    let resolvePrompt: ((v: { stopReason: "end_turn" }) => void) | null = null;
-    mock.prompt.mockImplementation(
-      () => new Promise((resolve) => (resolvePrompt = resolve as typeof resolvePrompt))
-    );
-    const session = new AgentSession({
-      backend: mock.asBackend,
-      backendSessionId: "acp-1",
-      internalId: "internal-1",
-      backendId: "opencode",
-    });
-    const { turn } = session.sendPrompt("hi");
+    jest.useFakeTimers();
+    try {
+      jest.setSystemTime(10_000);
+      const mock = makeMockBackend();
+      let resolvePrompt: ((v: { stopReason: "end_turn" }) => void) | null = null;
+      mock.prompt.mockImplementation(
+        () => new Promise((resolve) => (resolvePrompt = resolve as typeof resolvePrompt))
+      );
+      const session = new AgentSession({
+        backend: mock.asBackend,
+        backendSessionId: "acp-1",
+        internalId: "internal-1",
+        backendId: "opencode",
+      });
+      const { turn } = session.sendPrompt("hi");
 
-    // Chunk delivered before the result.
-    mock.emit({
-      sessionId: "acp-1",
-      update: {
-        sessionUpdate: "agent_message_chunk",
-        messageId: "msg-1",
-        content: { type: "text", text: "Hello" },
-      },
-    });
-    // The backend flushes the result while the last chunk is still in flight.
-    resolvePrompt!({ stopReason: "end_turn" });
-    await turn;
-    // Trailing chunk for the same message arrives after the turn settled.
-    mock.emit({
-      sessionId: "acp-1",
-      update: {
-        sessionUpdate: "agent_message_chunk",
-        messageId: "msg-1",
-        content: { type: "text", text: ", world." },
-      },
-    });
+      // Chunk delivered before the result.
+      mock.emit({
+        sessionId: "acp-1",
+        update: {
+          sessionUpdate: "agent_message_chunk",
+          messageId: "msg-1",
+          content: { type: "text", text: "Hello" },
+        },
+      });
+      // The backend flushes the result while the last chunk is still in flight.
+      jest.setSystemTime(20_000);
+      resolvePrompt!({ stopReason: "end_turn" });
+      await turn;
+      expect(
+        session.store.getDisplayMessages().find((message) => message.sender === AI_SENDER)
+          ?.turnDurationMs
+      ).toBe(10_000);
 
-    const placeholder = session.store.getDisplayMessages().find((m) => m.sender === AI_SENDER);
-    expect(placeholder?.message).toBe("Hello, world.");
+      // Trailing chunk for the same message arrives after the turn settled.
+      jest.setSystemTime(25_000);
+      mock.emit({
+        sessionId: "acp-1",
+        update: {
+          sessionUpdate: "agent_message_chunk",
+          messageId: "msg-1",
+          content: { type: "text", text: ", world." },
+        },
+      });
+
+      const placeholder = session.store.getDisplayMessages().find((m) => m.sender === AI_SENDER);
+      expect(placeholder?.message).toBe("Hello, world.");
+      expect(placeholder?.turnDurationMs).toBe(15_000);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it("routes a trailing chunk to its own message, not a newer turn", async () => {

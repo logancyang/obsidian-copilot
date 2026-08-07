@@ -384,7 +384,11 @@ export class AgentSession {
   // on the finished message instead of being dropped — or, worse, appended to
   // a newer turn's placeholder. Replaced on the next completion, cleared on
   // cancel/dispose.
-  private settledStream: { placeholderId: string; messageIds: Set<string> } | null = null;
+  private settledStream: {
+    placeholderId: string;
+    messageIds: Set<string>;
+    turnStartedAtMs: number;
+  } | null = null;
   // A locally-cancelled prompt whose backend promise has not settled yet. A
   // follow-up may be composed immediately, but its backend prompt waits on this
   // barrier so output from the cancelled generation cannot target the new turn.
@@ -1182,7 +1186,11 @@ export class AgentSession {
       // `messageId` so those trailing chunks still land — except on an explicit
       // cancel, where further output should stay suppressed.
       if (placeholderId && resp.stopReason !== "cancelled") {
-        this.settledStream = { placeholderId, messageIds: this.currentMessageIds };
+        this.settledStream = {
+          placeholderId,
+          messageIds: this.currentMessageIds,
+          turnStartedAtMs,
+        };
       } else if (resp.stopReason === "cancelled") {
         this.settledStream = null;
       }
@@ -1782,7 +1790,12 @@ export class AgentSession {
         update.sessionUpdate === "agent_message_chunk"
           ? this.store.appendAgentText(target, text)
           : this.store.appendAgentThought(target, text);
-      if (appended) this.scheduleNotifyMessages();
+      if (appended) {
+        if (target === this.settledStream?.placeholderId) {
+          this.store.extendTurnDuration(target, Date.now() - this.settledStream.turnStartedAtMs);
+        }
+        this.scheduleNotifyMessages();
+      }
       return;
     }
 
