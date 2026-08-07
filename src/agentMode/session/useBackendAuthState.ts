@@ -1,8 +1,26 @@
-import type { BackendAuthStatus, BackendDescriptor } from "@/agentMode/session/types";
+import type { BackendAuth, BackendAuthStatus, BackendDescriptor } from "@/agentMode/session/types";
 import { logError } from "@/logger";
 import { useSettingsValue } from "@/settings/model";
 import { Notice } from "obsidian";
 import React from "react";
+
+type AuthStatusSubscriber = (status: BackendAuthStatus) => void;
+
+const authStatusSubscribers = new WeakMap<BackendAuth, Set<AuthStatusSubscriber>>();
+
+const subscribeAuthStatus = (auth: BackendAuth, subscriber: AuthStatusSubscriber): (() => void) => {
+  const subscribers = authStatusSubscribers.get(auth) ?? new Set<AuthStatusSubscriber>();
+  subscribers.add(subscriber);
+  authStatusSubscribers.set(auth, subscribers);
+  return () => {
+    subscribers.delete(subscriber);
+    if (subscribers.size === 0) authStatusSubscribers.delete(auth);
+  };
+};
+
+const publishAuthStatus = (auth: BackendAuth, status: BackendAuthStatus): void => {
+  authStatusSubscribers.get(auth)?.forEach((subscriber) => subscriber(status));
+};
 
 export interface BackendAuthUiState {
   /**
@@ -46,17 +64,15 @@ export function useBackendAuthState(descriptor: BackendDescriptor): BackendAuthU
       setStatus(null);
       return;
     }
-    let cancelled = false;
+    const unsubscribe = subscribeAuthStatus(auth, setStatus);
     void auth.getStatus(settingsRef.current).then(
-      (s) => !cancelled && setStatus(s),
+      (s) => publishAuthStatus(auth, s),
       (e) => {
         logError("[AgentMode] auth status probe failed", e);
-        if (!cancelled) setStatus({ signedIn: false });
+        publishAuthStatus(auth, { signedIn: false });
       }
     );
-    return () => {
-      cancelled = true;
-    };
+    return unsubscribe;
   }, [auth]);
 
   const signIn = React.useCallback(() => {
@@ -67,7 +83,7 @@ export function useBackendAuthState(descriptor: BackendDescriptor): BackendAuthU
     auth
       .signIn(settingsRef.current, { onUrl: (u) => setUrl(u) })
       .then((s) => {
-        setStatus(s);
+        publishAuthStatus(auth, s);
         new Notice(
           s.signedIn
             ? `Signed in to ${descriptor.displayName}${s.label ? ` as ${s.label}` : ""}.`

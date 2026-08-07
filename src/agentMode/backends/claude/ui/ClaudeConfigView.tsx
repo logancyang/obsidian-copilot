@@ -7,12 +7,14 @@ import {
   ConfigWarningStrip,
 } from "@/agentMode/backends/shared/ui/ConfigDialogShell";
 import { CommandBlock, SetupStep } from "@/agentMode/backends/shared/ui/SetupSteps";
-import type { InstallState } from "@/agentMode/session/types";
+import type { BackendAuthStatus, InstallState } from "@/agentMode/session/types";
 import { Button } from "@/components/ui/button";
 import React from "react";
 
 /** In-app equivalent of the sign-in command, for backends that can run it themselves. */
 export interface ClaudeAuthProps {
+  /** Latest probed sign-in state; the action stays hidden until signed out is confirmed. */
+  status: BackendAuthStatus | null;
   /** Start the CLI's interactive sign-in. */
   onSignIn: () => void;
   /** True while a sign-in is running, so the button can't be fired twice. */
@@ -102,22 +104,24 @@ export const ClaudeConfigView: React.FC<ClaudeConfigViewProps> = ({
           <CommandBlock
             command={CLAUDE_AUTH_COMMAND}
             action={
-              auth.signingIn && auth.url ? (
-                <Button asChild variant="secondary" size="sm">
-                  <a href={auth.url} target="_blank" rel="noopener noreferrer">
-                    Open sign-in page
-                  </a>
-                </Button>
-              ) : (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={auth.onSignIn}
-                  disabled={auth.signingIn}
-                >
-                  {auth.signingIn ? "Signing in…" : "Sign in"}
-                </Button>
-              )
+              auth.status?.signedIn === false ? (
+                auth.signingIn && auth.url ? (
+                  <Button asChild variant="secondary" size="sm">
+                    <a href={auth.url} target="_blank" rel="noopener noreferrer">
+                      Open sign-in page
+                    </a>
+                  </Button>
+                ) : (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={auth.onSignIn}
+                    disabled={auth.signingIn}
+                  >
+                    {auth.signingIn ? "Signing in…" : "Sign in"}
+                  </Button>
+                )
+              ) : undefined
             }
           />
           <p className="tw-my-0 tw-text-sm tw-text-muted">

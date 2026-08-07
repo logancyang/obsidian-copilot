@@ -24,7 +24,12 @@ const meta = {
     onClearPath: () => undefined,
     detect: () => Promise.resolve(null),
     searchedDirs: () => [],
-    auth: { onSignIn: () => undefined, signingIn: false, url: null },
+    auth: {
+      status: { signedIn: false },
+      onSignIn: () => undefined,
+      signingIn: false,
+      url: null,
+    },
     onClose: () => undefined,
   },
   parameters: { gallery: { host: "modal", layout: "padded" } },
@@ -38,6 +43,12 @@ export const Ready: StoryObj<ClaudeConfigViewProps> = {
   args: {
     state: { kind: "ready", source: "managed" },
     binaryPath: "/Users/zero/.local/bin/claude",
+    auth: {
+      status: { signedIn: true, label: "zero@example.com" },
+      onSignIn: () => undefined,
+      signingIn: false,
+      url: null,
+    },
   },
 };
 
@@ -56,7 +67,12 @@ export const SigningIn: StoryObj<ClaudeConfigViewProps> = {
     state: { kind: "ready", source: "custom" },
     binaryPath: "/Users/zero/.local/bin/claude",
     hasBinaryPathOverride: true,
-    auth: { onSignIn: () => undefined, signingIn: true, url: null },
+    auth: {
+      status: { signedIn: false },
+      onSignIn: () => undefined,
+      signingIn: true,
+      url: null,
+    },
   },
 };
 
@@ -67,6 +83,7 @@ export const OAuthFallback: StoryObj<ClaudeConfigViewProps> = {
     binaryPath: "/Users/zero/.local/bin/claude",
     hasBinaryPathOverride: true,
     auth: {
+      status: { signedIn: false },
       onSignIn: () => undefined,
       signingIn: true,
       url: "https://claude.ai/oauth/authorize?code=example",

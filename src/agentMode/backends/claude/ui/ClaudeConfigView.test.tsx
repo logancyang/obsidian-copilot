@@ -30,7 +30,7 @@ const renderView = (overrides: Partial<ClaudeConfigViewProps> = {}): HTMLElement
       onClearPath={jest.fn()}
       detect={jest.fn().mockResolvedValue(null)}
       searchedDirs={() => []}
-      auth={{ onSignIn: jest.fn(), signingIn: false, url: null }}
+      auth={{ status: { signedIn: false }, onSignIn: jest.fn(), signingIn: false, url: null }}
       onClose={jest.fn()}
       {...overrides}
     />
@@ -76,13 +76,22 @@ describe("ClaudeConfigView", () => {
 
     it("offers the in-app sign-in beside the command when the backend can run it", () => {
       const onSignIn = jest.fn();
-      renderView({ auth: { onSignIn, signingIn: false, url: null } });
+      renderView({
+        auth: { status: { signedIn: false }, onSignIn, signingIn: false, url: null },
+      });
 
       expect(screen.getByRole("button", { name: "Sign in" })).toBeTruthy();
     });
 
     it("blocks a second sign-in while one is already running", () => {
-      renderView({ auth: { onSignIn: jest.fn(), signingIn: true, url: null } });
+      renderView({
+        auth: {
+          status: { signedIn: false },
+          onSignIn: jest.fn(),
+          signingIn: true,
+          url: null,
+        },
+      });
 
       expect(screen.getByRole<HTMLButtonElement>("button", { name: "Signing in…" }).disabled).toBe(
         true
@@ -92,6 +101,7 @@ describe("ClaudeConfigView", () => {
     it("offers the OAuth fallback link when the CLI cannot open a browser", () => {
       renderView({
         auth: {
+          status: { signedIn: false },
           onSignIn: jest.fn(),
           signingIn: true,
           url: "https://claude.ai/oauth/authorize?code=example",
@@ -102,6 +112,27 @@ describe("ClaudeConfigView", () => {
         "https://claude.ai/oauth/authorize?code=example"
       );
       expect(screen.queryByRole("button", { name: "Signing in…" })).toBeNull();
+    });
+
+    it("hides the in-app sign-in action when the backend is authenticated", () => {
+      renderView({
+        auth: {
+          status: { signedIn: true, label: "zero@example.com" },
+          onSignIn: jest.fn(),
+          signingIn: false,
+          url: null,
+        },
+      });
+
+      expect(screen.queryByRole("button", { name: "Sign in" })).toBeNull();
+    });
+
+    it("hides the in-app sign-in action while auth status is still loading", () => {
+      renderView({
+        auth: { status: null, onSignIn: jest.fn(), signingIn: false, url: null },
+      });
+
+      expect(screen.queryByRole("button", { name: "Sign in" })).toBeNull();
     });
 
     it("points an unsupported custom binary at its saved path instead of an upgrade button", () => {
