@@ -29,7 +29,14 @@ import {
 } from "@/aiParams";
 import type { ProjectFileRecord } from "@/projects/type";
 import { getProjectContextSignature } from "@/projects/projectContextSignature";
-import type { BackendDescriptor, BackendModelCatalog, InstallState } from "./types";
+import { MethodUnsupportedError } from "@/agentMode/session/errors";
+import type {
+  BackendDescriptor,
+  BackendId,
+  BackendModelCatalog,
+  BackendState,
+  InstallState,
+} from "./types";
 
 const mockEnsureMaterialized = ensureProjectContextMaterialized as jest.Mock;
 
@@ -2028,6 +2035,9 @@ describe("AgentSessionManager chat history aggregation", () => {
     probeSessionId?: string;
     /** Defaults to true; set false to model a non-summarizing backend (codex). */
     summarizesSessionTitle?: boolean;
+    backendId?: BackendId;
+    createBackendProcess?: jest.Mock;
+    applyInitialSessionConfig?: BackendDescriptor["applyInitialSessionConfig"];
   }) {
     const frontmatterByPath = opts?.files ?? {};
     const hiddenByPath = opts?.hiddenFiles ?? {};
@@ -2075,12 +2085,18 @@ describe("AgentSessionManager chat history aggregation", () => {
       deleteFile: jest.fn(async () => undefined),
     };
     const index = new AgentSessionIndex(makeIndexStorage(), "plugins/copilot/index.json");
+    const backendId = opts?.backendId ?? "opencode";
     const descriptor = {
       ...buildDescriptor(),
+      id: backendId,
       summarizesSessionTitle: opts?.summarizesSessionTitle ?? true,
       getProbeSessionId: jest.fn(() => opts?.probeSessionId),
+      applyInitialSessionConfig: opts?.applyInitialSessionConfig,
     } as unknown as BackendDescriptor;
-    if (opts?.listSessions) {
+    if (opts?.createBackendProcess) {
+      (descriptor as unknown as { createBackendProcess: jest.Mock }).createBackendProcess =
+        opts.createBackendProcess;
+    } else if (opts?.listSessions) {
       (descriptor as unknown as { createBackendProcess: jest.Mock }).createBackendProcess = jest.fn(
         () => ({ ...makeMockBackendProcess(), listSessions: opts.listSessions })
       );
@@ -2090,7 +2106,7 @@ describe("AgentSessionManager chat history aggregation", () => {
       plugin as unknown as ConstructorParameters<typeof AgentSessionManager>[1],
       {
         permissionPrompter: jest.fn(),
-        resolveDescriptor: (id) => (id === "opencode" ? descriptor : undefined),
+        resolveDescriptor: (id) => (id === backendId ? descriptor : undefined),
         modelPreloader: {
           getCachedModelCatalog: jest.fn(() => null),
           preload: jest.fn(async () => undefined),
@@ -2105,7 +2121,7 @@ describe("AgentSessionManager chat history aggregation", () => {
             if (opts.warmListSessions) proc.listSessions = opts.warmListSessions;
             if (opts.warmSessionExistsLocally)
               proc.sessionExistsLocally = opts.warmSessionExistsLocally;
-            return [{ backendId: "opencode", proc }];
+            return [{ backendId, proc }];
           }),
         } as unknown as ConstructorParameters<typeof AgentSessionManager>[2]["modelPreloader"],
         persistenceManager: persistence as unknown as ConstructorParameters<
@@ -2289,19 +2305,87 @@ describe("AgentSessionManager chat history aggregation", () => {
     expect(live.setLabel).not.toHaveBeenCalled();
   });
 
-  it("matches live sessions by the (backendId, sessionId) pair, not session id alone", async () => {
-    const { manager } = buildHistoryHarness();
-    const session = await manager.createSession("opencode");
-    const liveId = session.getBackendSessionId()!;
+  describe("loadNativeSessionFromHistory()", () => {
+    it("matches live sessions by the (backendId, sessionId) pair, not session id alone", async () => {
+      const { manager } = buildHistoryHarness();
+      const session = await manager.createSession("opencode");
+      const liveId = session.getBackendSessionId()!;
 
-    // Same backend + session id: focuses the existing tab.
-    await expect(manager.loadNativeSessionFromHistory("opencode", liveId)).resolves.toBe(session);
+      // Same backend + session id: focuses the existing tab.
+      await expect(manager.loadNativeSessionFromHistory("opencode", liveId)).resolves.toBe(session);
 
-    // Same session id on a DIFFERENT backend must not focus the opencode
-    // tab — it falls through to the resume path (which here fails on the
-    // unknown backend rather than silently hijacking the wrong session).
-    await expect(manager.loadNativeSessionFromHistory("codex", liveId)).rejects.toThrow();
-    expect(manager.getActiveSession()).toBe(session);
+      // Same session id on a DIFFERENT backend must not focus the opencode
+      // tab — it falls through to the resume path (which here fails on the
+      // unknown backend rather than silently hijacking the wrong session).
+      await expect(manager.loadNativeSessionFromHistory("codex", liveId)).rejects.toThrow();
+      expect(manager.getActiveSession()).toBe(session);
+    });
+
+    it("applies initial backend config before returning a resumed session", async () => {
+      const backendState = (effort: string): BackendState => ({
+        model: {
+          current: { baseModelId: "sonnet", effort },
+          availableModels: [],
+          apply: { kind: "setModel" },
+        },
+        mode: null,
+      });
+      const setSessionConfigOption = jest.fn(async () => backendState("high"));
+      const backend = {
+        ...makeMockBackendProcess(),
+        loadSession: jest.fn(async () => {
+          throw new MethodUnsupportedError("session/load");
+        }),
+        resumeSession: jest.fn(async ({ sessionId }: { sessionId: string }) => ({
+          sessionId,
+          state: backendState("low"),
+        })),
+        setSessionConfigOption,
+      };
+      let releaseApply: () => void = () => {};
+      let markApplyStarted: () => void = () => {};
+      const applyStarted = new Promise<void>((resolve) => {
+        markApplyStarted = resolve;
+      });
+      const applyRelease = new Promise<void>((resolve) => {
+        releaseApply = resolve;
+      });
+      const applyInitialSessionConfig = jest.fn(async (session: AgentSession) => {
+        markApplyStarted();
+        await applyRelease;
+        await session.setConfigOption("effort", "high");
+      });
+      const { manager } = buildHistoryHarness({
+        backendId: "claude",
+        createBackendProcess: jest.fn(() => backend),
+        applyInitialSessionConfig,
+      });
+
+      let returned = false;
+      const loading = manager
+        .loadNativeSessionFromHistory("claude", "saved-chat")
+        .then((session) => {
+          returned = true;
+          return session;
+        });
+      await applyStarted;
+      await Promise.resolve();
+      expect(returned).toBe(false);
+
+      releaseApply();
+      const session = await loading;
+
+      expect(applyInitialSessionConfig).toHaveBeenCalledWith(
+        session,
+        expect.objectContaining({ agentMode: expect.any(Object) })
+      );
+      expect(setSessionConfigOption).toHaveBeenCalledWith({
+        sessionId: "saved-chat",
+        configId: "effort",
+        value: "high",
+      });
+      expect(session.getState()?.model?.current.effort).toBe("high");
+    });
   });
 
   it("hides a markdown chat whose backend session is absent on this device", async () => {

@@ -3070,6 +3070,21 @@ export class AgentSessionManager {
           }
         : {}),
     });
+    if (descriptor.applyInitialSessionConfig) {
+      try {
+        await descriptor.applyInitialSessionConfig(session, getSettings());
+      } catch (e) {
+        logWarn(
+          `[AgentMode] applyInitialSessionConfig failed for resumed ${backendId} session; continuing`,
+          e
+        );
+      }
+    }
+    if (this.disposed) {
+      await session.dispose();
+      this.finishPendingCreate();
+      return null;
+    }
     if (projectId !== GLOBAL_SCOPE) {
       this.lastSeenProjectContentEpochBySession.set(internalId, RESUMED_SESSION_BEHIND_EPOCH);
     }
