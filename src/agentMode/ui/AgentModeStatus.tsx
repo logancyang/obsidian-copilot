@@ -1,6 +1,6 @@
 import { AgentStatusCard } from "@/agentMode/ui/AgentStatusCard";
+import { useBackendAuthState } from "@/agentMode/session/useBackendAuthState";
 import {
-  useBackendAuthState,
   useBackendInstallState,
   useSessionBackendDescriptor,
 } from "@/agentMode/ui/useBackendDescriptor";
