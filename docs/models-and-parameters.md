@@ -8,41 +8,17 @@ This guide explains how to manage chat models, embedding models, and the paramet
 
 ### Built-In Models
 
-Copilot comes with a set of built-in models across many providers. Some are always included ("core" models); others can be enabled or disabled.
+Copilot ships with a starter set of models for every provider it supports, so a
+provider's models are ready to enable the moment you add its API key. Which
+models those are changes with each release as providers ship new ones, so the
+live list lives in the app rather than here: **Settings → Copilot → Models
+(BYOK)** shows what is available for each provider you have added, and **Import
+models from provider** fetches anything newer than the shipped set.
 
-| Model                         | Provider   | Capabilities      |
-| ----------------------------- | ---------- | ----------------- |
-| copilot-plus-flash            | Copilot    | Vision, Reasoning |
-| deepseek-v4-pro               | Copilot    | Reasoning         |
-| glm-5.2                       | Copilot    | Reasoning         |
-| deepseek-v4-flash-0731        | Copilot    | Reasoning         |
-| kimi-k2.7-code                | Copilot    | Vision, Reasoning |
-| kimi-k2.6                     | Copilot    | —                 |
-| mimo-v2.5                     | Copilot    | Reasoning         |
-| minimax-m2.7                  | Copilot    | Reasoning         |
-| google/gemini-2.5-flash       | OpenRouter | Vision            |
-| google/gemini-2.5-pro         | OpenRouter | Vision            |
-| google/gemini-3.5-flash       | OpenRouter | Vision, Reasoning |
-| google/gemini-3.1-pro-preview | OpenRouter | Vision, Reasoning |
-| openai/gpt-5.4                | OpenRouter | Vision            |
-| openai/gpt-5-mini             | OpenRouter | Vision            |
-| gpt-5.4                       | OpenAI     | Vision            |
-| gpt-5-mini                    | OpenAI     | Vision            |
-| gpt-4.1                       | OpenAI     | Vision            |
-| gpt-4.1-mini                  | OpenAI     | Vision            |
-| claude-opus-4-6               | Anthropic  | Vision, Reasoning |
-| claude-sonnet-4-5-20250929    | Anthropic  | Vision, Reasoning |
-| gemini-2.5-pro                | Google     | Vision            |
-| gemini-2.5-flash              | Google     | Vision            |
-| gemini-3.5-flash              | Google     | Vision, Reasoning |
-| grok-4-1-fast                 | XAI        | Vision            |
-| deepseek-chat                 | DeepSeek   | —                 |
-| deepseek-reasoner             | DeepSeek   | Reasoning         |
-
-Models whose provider is **Copilot** run on your license and need no API key of
-your own — three are on by default and the rest are yours to switch on. See
+Providers covered out of the box: OpenAI, Anthropic, Google, xAI, DeepSeek,
+OpenRouter, and SiliconFlow — each needs your own API key. The Copilot models
+need no key of your own; see
 [Models included with your license](copilot-plus-and-self-host.md#models-included-with-your-license).
-Every other provider needs your own key, added on the **Models (BYOK)** tab.
 
 ### Model Capability Badges
 
