@@ -405,6 +405,83 @@ describe("buildModelEnableGroups", () => {
     expect(groups[0].label).toBe("Codex");
   });
 
+  it("synthesizes a locked Copilot group for opencode when no Copilot provider is registered", () => {
+    const partition = {
+      byokPlusCandidates: [
+        {
+          configuredModel: model("m-byok", "byok-1", "claude-sonnet-4-5"),
+          provider: byok,
+          enabled: true,
+        },
+      ],
+      agentOriginCandidates: [],
+    };
+
+    const groups = buildModelEnableGroups(partition, true, "");
+
+    // Same position, badge, and tooltip a licensed user's group gets — only the
+    // rows differ, and only by being unusable.
+    expect(groups[0].label).toBe("Copilot");
+    expect(groups[0].badge).toBe("privacy");
+    expect(groups[0].tooltip).toBe("Copilot license required");
+    expect(groups[0].highlight).toBe(true);
+    expect(groups[0].rows.length).toBeGreaterThan(0);
+    expect(groups[0].rows.every((row) => row.locked && !row.enabled)).toBe(true);
+  });
+
+  it("leaves the real Copilot group alone rather than adding a locked one beside it", () => {
+    const plusProvider: Provider = {
+      providerId: "plus-1",
+      providerType: "openai-compatible",
+      displayName: "Copilot",
+      origin: { kind: "copilot-plus" },
+      addedAt: 0,
+    };
+    const partition = {
+      byokPlusCandidates: [
+        {
+          configuredModel: model("m-plus", "plus-1", "copilot-plus-flash"),
+          provider: plusProvider,
+          enabled: true,
+        },
+      ],
+      agentOriginCandidates: [],
+    };
+
+    const groups = buildModelEnableGroups(partition, true, "");
+
+    expect(groups.filter((g) => g.label === "Copilot")).toHaveLength(1);
+    expect(groups[0].rows.every((row) => row.locked)).toBe(false);
+  });
+
+  it("adds no locked group for an agent that cannot route Copilot models", () => {
+    const partition = {
+      byokPlusCandidates: [],
+      agentOriginCandidates: [
+        {
+          configuredModel: model("m-cx", "cx-agent", "gpt-5-codex"),
+          provider: agentProvider("cx-agent", "codex", "Codex"),
+          enabled: true,
+        },
+      ],
+    };
+
+    const groups = buildModelEnableGroups(partition, false, "");
+
+    expect(groups.some((g) => g.rows.some((row) => row.locked))).toBe(false);
+  });
+
+  it("filters the locked rows by the search query like any others", () => {
+    const empty = { byokPlusCandidates: [], agentOriginCandidates: [] };
+
+    const matching = buildModelEnableGroups(empty, true, "flash");
+    const missing = buildModelEnableGroups(empty, true, "no-such-model");
+
+    expect(matching[0].rows.length).toBeGreaterThan(0);
+    expect(matching[0].rows.every((row) => /flash/i.test(row.label + row.wireId))).toBe(true);
+    expect(missing).toHaveLength(0);
+  });
+
   it("badges non-Plus origins when the list mixes origins (opencode)", () => {
     const plusProvider: Provider = {
       providerId: "plus-1",

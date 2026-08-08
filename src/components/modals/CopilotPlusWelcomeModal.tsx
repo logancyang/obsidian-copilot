@@ -20,8 +20,9 @@ export function CopilotPlusWelcomeModalContent({
     <div className="tw-flex tw-flex-col tw-gap-4">
       <div>
         <p>
-          Thanks for purchasing! You have unlocked the full power of Copilot, featuring chat
-          context, PDF and image support, exclusive chat and embedding models, and much more!
+          Thanks for purchasing! You have unlocked the full power of Copilot: Copilot exclusive
+          models, cross-agent skills, multi-agent features, access to the{" "}
+          <a href="https://symposium.md">symposium.md</a> doc sharing service, and much more!
         </p>
         <p>
           Would you like to make <b className="tw-text-accent">{DEFAULT_COPILOT_PLUS_CHAT_MODEL}</b>{" "}

@@ -11,6 +11,16 @@ describe("CopilotPlusWelcomeModal", () => {
       expect(screen.getByText(/default model for chat and your agents/)).toBeTruthy();
     });
 
+    it("names what the license unlocks, including the symposium link", () => {
+      render(<CopilotPlusWelcomeModalContent onConfirm={jest.fn()} onCancel={jest.fn()} />);
+
+      const link = screen.getByRole("link", { name: "symposium.md" });
+      expect(link.getAttribute("href")).toBe("https://symposium.md");
+      expect(screen.getByText(/Copilot exclusive/)).toBeTruthy();
+      expect(screen.getByText(/cross-agent skills/)).toBeTruthy();
+      expect(screen.getByText(/multi-agent features/)).toBeTruthy();
+    });
+
     it("offers to apply no mode, no embedding model, and no vault rebuild", () => {
       const { container } = render(
         <CopilotPlusWelcomeModalContent onConfirm={jest.fn()} onCancel={jest.fn()} />

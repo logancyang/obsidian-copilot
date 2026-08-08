@@ -1,6 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { FreeModelWarningIcon } from "@/components/ui/FreeModelWarningIcon";
+import { LicenseRequiredIcon } from "@/components/ui/LicenseRequiredIcon";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { ModelCapabilityIcons, hasCapabilityIcons } from "@/components/ui/model-display";
 import { SearchBar } from "@/components/ui/SearchBar";
@@ -31,6 +32,12 @@ export interface ModelEnableRow {
    * (Ollama, LM Studio) are excluded.
    */
   isFree?: boolean;
+  /**
+   * `true` for a Copilot model the user has no license to run, listed so the
+   * lineup is discoverable before they buy. Renders a lock icon beside the label
+   * and a disabled toggle — the row is an advertisement, not a control.
+   */
+  locked?: boolean;
 }
 
 /** A provider-display-name-grouped section of model rows. */
@@ -128,6 +135,7 @@ export const ModelEnableList: React.FC<ModelEnableListProps> = ({
           <div className="tw-min-w-0">
             <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-1">
               <span className="tw-truncate">{row.label}</span>
+              {row.locked && <LicenseRequiredIcon />}
               {row.isFree && <FreeModelWarningIcon />}
               {hasCapabilityIcons(row.capabilities) && (
                 <span className="tw-flex tw-shrink-0 tw-items-center tw-gap-0.5">
@@ -139,7 +147,11 @@ export const ModelEnableList: React.FC<ModelEnableListProps> = ({
               <div className="tw-truncate tw-text-xs tw-text-muted">{row.description}</div>
             )}
           </div>
-          <SettingSwitch checked={row.enabled} onCheckedChange={(next) => onToggle(row.id, next)} />
+          <SettingSwitch
+            checked={row.enabled}
+            disabled={row.locked}
+            onCheckedChange={(next) => onToggle(row.id, next)}
+          />
         </div>
       ))}
     </div>
