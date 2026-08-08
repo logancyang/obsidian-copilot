@@ -49,7 +49,7 @@ The default model is **OpenRouter Gemini 2.5 Flash**, which requires an OpenRout
 
 ### Step 3: Choose a Default Model
 
-Add a provider and its models on the **Models (BYOK)** tab, then choose which of those models appear in chat under **Agents → Quick Chat models**. On the **Basic** tab, use the **Default Chat Model** dropdown to select the model you want to use.
+Add a provider and its models on the **Models (BYOK)** tab, then open **Basic → Agents → Quick Chat**: enable the ones you want to see in chat under **Quick Chat models**, and pick the one new chats start with under **Default model**.
 
 ### Step 4: Choose a Chat Mode
 

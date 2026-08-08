@@ -127,7 +127,7 @@ export default class ChainManager {
         );
         if (!resolution.ok) {
           throw new MissingModelKeyError(
-            "No chat model enabled. Enable a model under Settings → Agents → Quick Chat, " +
+            "No chat model enabled. Enable a model under Settings → Basic → Agents → Quick Chat, " +
               "or add one on the Models (BYOK) tab."
           );
         }
@@ -144,7 +144,7 @@ export default class ChainManager {
       }
 
       // Chain-type housekeeping. Do NOT write `chainType` back to the atom —
-      // the atom is owned by the UI dropdowns and `applyPlusSettings`. The
+      // the atom is owned by the UI dropdowns. The
       // captured local `chainType` may already be stale by the time we reach
       // here (we just awaited `setChatModel(...)`), and writing it back used
       // to create a self-sustaining `setChainType` → ProjectManager

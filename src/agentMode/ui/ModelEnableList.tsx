@@ -151,7 +151,10 @@ export const ModelEnableList: React.FC<ModelEnableListProps> = ({
     <div className="tw-flex tw-flex-col tw-gap-2">
       <SearchBar value={query} onChange={onQueryChange} placeholder={searchPlaceholder} />
 
-      <div className="tw-max-h-[36rem] tw-overflow-y-auto tw-pr-1">
+      {/* Caps the list at roughly ten rows (a row is ~32px: 20px of text, 8px of
+          padding, 4px of gap) so a long catalog scrolls inside the card instead
+          of pushing everything below it off the settings pane. */}
+      <div className="tw-max-h-80 tw-overflow-y-auto tw-pr-1">
         {!hasRows ? (
           <div className="tw-py-6 tw-text-center tw-text-sm tw-text-muted">
             {emptyState ?? (searching ? `No models match “${query.trim()}”.` : "No models.")}

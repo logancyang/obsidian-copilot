@@ -1,8 +1,10 @@
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { Input } from "@/components/ui/input";
 import { SettingItem } from "@/components/ui/setting-item";
+import { SettingDisclosure } from "@/components/ui/setting-disclosure";
 import { SettingSection } from "@/components/ui/setting-section";
 import { DEFAULT_OPEN_AREA, SEND_SHORTCUT } from "@/constants";
 import { useApp } from "@/context";
@@ -28,13 +30,38 @@ import {
   useSettingsValue,
   validateCopilotFolder,
 } from "@/settings/model";
+import { DesktopOnlySettingsPanel } from "@/settings/v2/components/DesktopOnlySettingsPanel";
 import { LegacyChatPromptsNotice } from "@/settings/v2/components/LegacyChatPromptsNotice";
 import { PlusSettings } from "@/settings/v2/components/PlusSettings";
 import { formatDateTime } from "@/utils";
+import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { revealFolderInExplorer } from "@/utils/revealFolderInExplorer";
 import { ArrowUpRight, Folder, FolderSync, Loader2 } from "lucide-react";
 import { Notice } from "obsidian";
 import React, { useEffect, useMemo, useState } from "react";
+
+const LazyAgentSettings = React.lazy(() =>
+  import("@/settings/v2/components/AgentSettings").then((module) => ({
+    default: module.AgentSettings,
+  }))
+);
+
+/**
+ * The Agents block of the Basic tab, behind the desktop gate. `React.lazy`
+ * defers the import until this actually renders, so the desktop check runs
+ * before the `@/agentMode` barrel — which pulls in Node-only modules that throw
+ * on evaluation under a mobile runtime — is ever requested.
+ */
+const AgentsSection: React.FC = () => {
+  if (!isDesktopRuntime()) {
+    return <DesktopOnlySettingsPanel message="Agent settings are available on desktop." />;
+  }
+  return (
+    <React.Suspense fallback={null}>
+      <LazyAgentSettings />
+    </React.Suspense>
+  );
+};
 
 /**
  * Body of the "Change Copilot folder" confirmation modal. Leads with a
@@ -67,6 +94,7 @@ export const BasicSettings: React.FC = () => {
   // incoming lifecycle while still holding the outgoing vault's `app`.
   const { miyoMutationSession } = usePlugin();
   const [isChecking, setIsChecking] = useState(false);
+  const [templateOpen, setTemplateOpen] = useState(false);
   const [conversationNoteName, setConversationNoteName] = useState(
     settings.defaultConversationNoteName || "{$date}_{$time}__{$topic}"
   );
@@ -252,6 +280,8 @@ export const BasicSettings: React.FC = () => {
     <div className="tw-space-y-4">
       <PlusSettings />
 
+      <AgentsSection />
+
       {/* General Section */}
       <SettingSection label="General">
         <SettingItem
@@ -373,75 +403,85 @@ export const BasicSettings: React.FC = () => {
           onCheckedChange={(checked) => updateSetting("autosaveChat", checked)}
         />
 
-        <SettingItem
-          type="custom"
-          title="Conversation Filename Template"
-          description={
-            <div className="tw-flex tw-items-start tw-gap-1.5 ">
-              <span className="tw-leading-none">
-                Customize the format of saved conversation note names.
-              </span>
-              <HelpTooltip
-                content={
-                  <div className="tw-flex tw-max-w-96 tw-flex-col tw-gap-2 tw-py-4">
-                    <div className="tw-text-sm tw-font-medium tw-text-accent">
-                      Note: All the following variables must be included in the template.
-                    </div>
-                    <div>
-                      <div className="tw-text-sm tw-font-medium tw-text-muted">
-                        Available variables:
+        {/* Not gated on autosave: the "Save Chat as Note" button appears only
+            when autosave is off, and it names its note from this same template,
+            so gating would hide the control exactly where it is the only one. */}
+        <Collapsible open={templateOpen} onOpenChange={setTemplateOpen}>
+          <CollapsibleTrigger asChild>
+            <SettingDisclosure open={templateOpen} />
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <SettingItem
+              type="custom"
+              title="Conversation Filename Template"
+              description={
+                <div className="tw-flex tw-items-start tw-gap-1.5 ">
+                  <span className="tw-leading-none">
+                    Customize the format of saved conversation note names.
+                  </span>
+                  <HelpTooltip
+                    content={
+                      <div className="tw-flex tw-max-w-96 tw-flex-col tw-gap-2 tw-py-4">
+                        <div className="tw-text-sm tw-font-medium tw-text-accent">
+                          Note: All the following variables must be included in the template.
+                        </div>
+                        <div>
+                          <div className="tw-text-sm tw-font-medium tw-text-muted">
+                            Available variables:
+                          </div>
+                          <ul className="tw-pl-4 tw-text-sm tw-text-muted">
+                            <li>
+                              <strong>{"{$date}"}</strong>: Date in YYYYMMDD format
+                            </li>
+                            <li>
+                              <strong>{"{$time}"}</strong>: Time in HHMMSS format
+                            </li>
+                            <li>
+                              <strong>{"{$topic}"}</strong>: Chat conversation topic
+                            </li>
+                          </ul>
+                          <i className="tw-mt-2 tw-text-sm tw-text-muted">
+                            Example: {"{$date}_{$time}__{$topic}"} →
+                            20250114_153232__polish_this_article_[[Readme]]
+                          </i>
+                        </div>
                       </div>
-                      <ul className="tw-pl-4 tw-text-sm tw-text-muted">
-                        <li>
-                          <strong>{"{$date}"}</strong>: Date in YYYYMMDD format
-                        </li>
-                        <li>
-                          <strong>{"{$time}"}</strong>: Time in HHMMSS format
-                        </li>
-                        <li>
-                          <strong>{"{$topic}"}</strong>: Chat conversation topic
-                        </li>
-                      </ul>
-                      <i className="tw-mt-2 tw-text-sm tw-text-muted">
-                        Example: {"{$date}_{$time}__{$topic}"} →
-                        20250114_153232__polish_this_article_[[Readme]]
-                      </i>
-                    </div>
-                  </div>
-                }
-              />
-            </div>
-          }
-        >
-          <div className="tw-flex tw-w-[320px] tw-items-center tw-gap-1.5">
-            <Input
-              type="text"
-              className={cn(
-                "tw-min-w-[80px] tw-grow tw-transition-all tw-duration-200",
-                isChecking ? "tw-w-[80px]" : "tw-w-[120px]"
-              )}
-              placeholder="{$date}_{$time}__{$topic}"
-              value={conversationNoteName}
-              onChange={(e) => setConversationNoteName(e.target.value)}
-              disabled={isChecking}
-            />
-
-            <Button
-              onClick={() => applyCustomNoteFormat()}
-              disabled={isChecking}
-              variant="secondary"
+                    }
+                  />
+                </div>
+              }
             >
-              {isChecking ? (
-                <>
-                  <Loader2 className="tw-mr-2 tw-size-4 tw-animate-spin" />
-                  Apply
-                </>
-              ) : (
-                "Apply"
-              )}
-            </Button>
-          </div>
-        </SettingItem>
+              <div className="tw-flex tw-w-[320px] tw-items-center tw-gap-1.5">
+                <Input
+                  type="text"
+                  className={cn(
+                    "tw-min-w-[80px] tw-grow tw-transition-all tw-duration-200",
+                    isChecking ? "tw-w-[80px]" : "tw-w-[120px]"
+                  )}
+                  placeholder="{$date}_{$time}__{$topic}"
+                  value={conversationNoteName}
+                  onChange={(e) => setConversationNoteName(e.target.value)}
+                  disabled={isChecking}
+                />
+
+                <Button
+                  onClick={() => applyCustomNoteFormat()}
+                  disabled={isChecking}
+                  variant="secondary"
+                >
+                  {isChecking ? (
+                    <>
+                      <Loader2 className="tw-mr-2 tw-size-4 tw-animate-spin" />
+                      Apply
+                    </>
+                  ) : (
+                    "Apply"
+                  )}
+                </Button>
+              </div>
+            </SettingItem>
+          </CollapsibleContent>
+        </Collapsible>
       </SettingSection>
     </div>
   );

@@ -100,6 +100,10 @@ async function persistInclusions(
   const notePatterns = new Set(existing?.notePatterns ?? []);
   const tagPatterns = new Set(existing?.tagPatterns ?? []);
   const extensionPatterns = new Set(existing?.extensionPatterns ?? []);
+  // Drops only add folders/notes, but every existing category must be carried
+  // through the rebuild — omitting property patterns here would silently erase
+  // a project's `[key:value]` sources on the next drop.
+  const propertyPatterns = new Set(existing?.propertyPatterns ?? []);
 
   let added = 0;
   for (const file of files) {
@@ -125,6 +129,7 @@ async function persistInclusions(
     extensionPatterns: [...extensionPatterns],
     folderPatterns: [...folderPatterns],
     notePatterns: [...notePatterns],
+    propertyPatterns: [...propertyPatterns],
   });
   const next: ProjectConfig = {
     ...project,

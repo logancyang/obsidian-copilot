@@ -213,9 +213,11 @@ user prompt. The block lists absolute paths to the snapshots so the agent can
 read them directly; the composer shows a context status icon and queues sends
 while context is still materializing.
 
-Folders, notes, tags, and extensions are listed in the same block by path/pattern
-(they need no conversion); folders that live outside the session cwd are also
-reported as `additionalDirectories` to widen the agent's searchable roots.
+Folders, notes, tags, extensions, and properties are listed in the same block by
+path/pattern (they need no conversion); folders that live outside the session cwd
+are also reported as `additionalDirectories` to widen the agent's searchable
+roots. Property inclusions additionally enumerate the notes they matched, because
+a frontmatter value is not something the agent could grep its way to.
 
 **Contract (relied on by the session manager):** materialization **never
 rejects** — any failure degrades to a best-effort partial / empty result so

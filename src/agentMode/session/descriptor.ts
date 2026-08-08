@@ -204,6 +204,16 @@ export interface BackendDescriptor {
   openInstallUI(plugin: CopilotPlugin): void;
 
   /**
+   * Optional: actions rendered inline in the settings row while this backend is
+   * absent, in place of the generic Configure button. Backends the plugin can
+   * install itself own their whole first-run path (download, progress, cancel,
+   * adopting an existing binary), so the user never has to open a dialog to get
+   * started. Backends that only document an external install omit it and keep
+   * the Configure button.
+   */
+  AbsentInstallActions?: React.ComponentType<{ plugin: CopilotPlugin }>;
+
+  /**
    * Optional: upgrade the installed binary in place (managed reinstall, or the
    * CLI's own `upgrade`). Resolves when done. Changing the persisted version
    * restarts the backend via the `subscribeInstallState` subscription, so the
@@ -364,6 +374,18 @@ export interface BackendDescriptor {
    * keeps only the active session's selection.
    */
   getEnabledModelEntries?(settings: CopilotSettings): EnabledModelEntry[] | null;
+
+  /**
+   * Optional: this backend's wire base id for one configured model, or `null`
+   * when it cannot route that model's provider at all. Answers "can you run
+   * this, and under what id?" from the provider alone, deliberately ignoring
+   * whether the model is enabled — enrollment is a separate, later write (see
+   * `CopilotPlusSetupApi.#reconcileModels`), so a caller acting the moment a
+   * model is configured must not have to race it. Only backends that route
+   * Copilot-side providers implement this; agent-native ones (claude, codex)
+   * omit it, which reads as "not mine".
+   */
+  getWireBaseId?(configuredModelId: string, settings: CopilotSettings): string | null;
 
   /**
    * Optional: persist the probe sessionId returned by a successful

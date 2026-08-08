@@ -15,6 +15,7 @@ import * as path from "node:path";
 import { promisify } from "node:util";
 import { renameWithRetry } from "@/agentMode/skills/renameWithRetry";
 import { copilotAppDataDir } from "@/utils/appPaths";
+import { detectOpencodeCliPath } from "./opencodeCliDetector";
 import { expectedBinaryName, resolveOpencodeTarget } from "./platformResolver";
 import type { InstallState as BackendInstallState } from "@/agentMode/session/types";
 
@@ -34,14 +35,66 @@ export type ProgressEvent =
 
 export interface InstallOptions {
   onProgress?: (e: ProgressEvent) => void;
-  signal?: AbortSignal;
   /** Override pinned version. Defaults to OPENCODE_PINNED_VERSION. */
   version?: string;
+}
+
+/**
+ * What the install pipeline needs on top of the public options. The signal is
+ * absent from {@link InstallOptions} on purpose: the manager owns cancellation
+ * through {@link OpencodeBinaryManager.cancelCurrentOperation}, so a caller
+ * cannot supply one, and the pipeline only ever receives the manager's own.
+ */
+interface InstallPipelineOptions extends InstallOptions {
+  signal?: AbortSignal;
 }
 
 export type InstallState =
   | { kind: "absent" }
   | { kind: "installed"; version: string; path: string; source: "managed" | "custom" };
+
+/**
+ * What the manager is currently doing to the opencode binary, as opposed to
+ * {@link InstallState}, which is what the *persisted settings* say. Every UI
+ * that can start one of these operations reads this, so none of them offers a
+ * competing action while one is running.
+ *
+ * `busy` covers the operations with nothing to show but the fact that they are
+ * running; `installing` is separate because it carries download progress.
+ */
+export type RuntimeState =
+  | { kind: "idle" }
+  | { kind: "detecting" }
+  | { kind: "installing"; progress: ProgressEvent | null }
+  | { kind: "busy" }
+  | { kind: "error"; message: string };
+
+/** Thrown when a second binary-path operation is started while one is running. */
+export class OperationInFlightError extends Error {
+  constructor() {
+    super("An opencode setup operation is already running.");
+    this.name = "OperationInFlightError";
+  }
+}
+
+/**
+ * Thrown when auto-detect finds no opencode to adopt. A failure rather than an
+ * empty success so it lands in the runtime error state: the settings row swaps
+ * its adopt action for Configure only while showing an error, and Configure is
+ * the sole way to reach a binary outside the searched locations.
+ *
+ * The message names no control, because every surface subscribed to the runtime
+ * state renders it — including the Configure dialog itself, where telling the
+ * user to open Configure would contradict where they already are.
+ */
+export class OpencodeNotFoundError extends Error {
+  constructor() {
+    super("Couldn't find opencode in the usual install locations or on PATH.");
+    this.name = "OpencodeNotFoundError";
+  }
+}
+
+const describeOperationError = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
 interface GithubAsset {
   name: string;
@@ -215,7 +268,147 @@ export function legacyVaultDataDir(
  * the install location into `settings.agentMode`. Desktop-only.
  */
 export class OpencodeBinaryManager {
-  constructor(private readonly plugin: CopilotPlugin) {}
+  constructor(private plugin: CopilotPlugin) {}
+
+  /**
+   * Point the manager at the plugin instance of the lifecycle now running.
+   *
+   * The manager is cached at module scope and deliberately outlives a lifecycle
+   * (the carry-over `main.ts` documents), so the plugin it was constructed with
+   * can name a vault that is no longer open. {@link uninstall} deletes an
+   * in-vault path derived from that plugin — left stale, it would delete out of
+   * the previous vault. Only the handle is replaced, so a run still in flight
+   * is adopted rather than restarted.
+   *
+   * Call this once per lifecycle, from the backend's `onPluginLoad` and nowhere
+   * else. The binding is global mutable state read at operation time, so a
+   * caller that rebound on its way in would retarget the manager for every
+   * holder — including surfaces of the lifecycle that is actually running.
+   *
+   * @param plugin - The current lifecycle's plugin, whose vault every in-vault
+   * path must be derived from.
+   */
+  adoptPlugin(plugin: CopilotPlugin): void {
+    this.plugin = plugin;
+  }
+
+  /**
+   * The operation currently holding the binary-path write lock, or null. Only
+   * one may run at a time: `install` lands a managed binary and
+   * `setCustomBinaryPath` saves a user-supplied one, but both write the same
+   * `binaryPath`/`binarySource` settings, so two in flight would let whichever
+   * settled last decide the source the user did not choose last.
+   *
+   * DESIGN NOTE — this deliberately outlives a plugin lifecycle. Module scope
+   * survives disable→enable, dev hot reload, and "Open another vault" in the
+   * same process (`main.ts` says so where it resets the persistence
+   * singletons), and `getOpencodeBinaryManager` caches this manager at module
+   * scope, so an operation started in one lifecycle is still here in the next.
+   * That carry-over is coherent rather than corrupting: every UI reads the same
+   * runtime state and offers no competing action while it is set, so the next
+   * lifecycle adopts the run instead of starting a rival one.
+   *
+   * The one effect that crosses the boundary is the settings write when an
+   * install lands, and it is accurate: `getDataDir()` builds under
+   * `os.homedir()`, so the binary it names really is installed for whatever
+   * vault is open. The vault that started the download is the one left out, and
+   * it self-heals — `install()` is idempotent, so Download there returns
+   * instantly off the existing manifest.
+   * If a future review flags the lifecycle boundary, point them at this note.
+   */
+  private operation: { controller: AbortController } | null = null;
+  private runtimeState: RuntimeState = { kind: "idle" };
+  private readonly runtimeSubscribers = new Set<() => void>();
+
+  /**
+   * Subscribe to {@link getRuntimeState}. Bound once so React's
+   * `useSyncExternalStore` sees a stable reference and does not resubscribe on
+   * every render.
+   */
+  readonly subscribeRuntimeState = (onChange: () => void): (() => void) => {
+    this.runtimeSubscribers.add(onChange);
+    return () => {
+      this.runtimeSubscribers.delete(onChange);
+    };
+  };
+
+  /**
+   * Current runtime state. The returned object is replaced, never mutated, so
+   * `useSyncExternalStore` can compare snapshots by identity.
+   */
+  readonly getRuntimeState = (): RuntimeState => this.runtimeState;
+
+  private setRuntimeState(next: RuntimeState): void {
+    this.runtimeState = next;
+    this.runtimeSubscribers.forEach((notify) => notify());
+  }
+
+  /**
+   * Drop a failure left over from a previous plugin lifecycle, so a new one
+   * does not open showing an error nobody here caused.
+   *
+   * The rest of the runtime state is deliberately kept: a run still in flight
+   * belongs to this process and the new lifecycle adopts it rather than
+   * offering a rival action (see the note on {@link operation}). Only a settled
+   * error is stale — it describes an attempt that ended, in a vault that may
+   * not even be the one now open.
+   */
+  forgetSettledError(): void {
+    if (this.operation || this.runtimeState.kind !== "error") return;
+    this.setRuntimeState({ kind: "idle" });
+  }
+
+  /** Whether a binary-path operation is running, from any entry point. */
+  isBusy(): boolean {
+    return this.operation !== null;
+  }
+
+  /**
+   * Cancel the running operation, if it is one that can be cancelled. A no-op
+   * otherwise — only the managed install is interruptible.
+   */
+  cancelCurrentOperation(): void {
+    this.operation?.controller.abort();
+  }
+
+  /**
+   * Run `body` as the one binary-path operation, publishing `running` for its
+   * duration and settling back to idle (or to an error the UI can show).
+   *
+   * Every *user-triggered* operation that writes `binaryPath`/`binarySource`
+   * goes through here, which is what makes the lock useful: guarding only the
+   * managed install would still let the Configure dialog apply a custom path
+   * underneath it. {@link refreshInstallState} is the one writer outside, and
+   * says there why.
+   *
+   * @param running - State published while `body` runs.
+   * @param body - Receives the signal to honour for cancellation.
+   */
+  private async runExclusive<T>(
+    running: RuntimeState,
+    body: (signal: AbortSignal) => Promise<T>
+  ): Promise<T> {
+    if (this.operation) throw new OperationInFlightError();
+    const controller = new AbortController();
+    this.operation = { controller };
+    this.setRuntimeState(running);
+    try {
+      const result = await body(controller.signal);
+      this.operation = null;
+      this.setRuntimeState({ kind: "idle" });
+      return result;
+    } catch (e) {
+      this.operation = null;
+      // A cancellation is the user's own doing, so it returns to idle rather
+      // than reporting a failure they would have to dismiss.
+      if (e instanceof AbortError || (e as Error | undefined)?.name === "AbortError") {
+        this.setRuntimeState({ kind: "idle" });
+      } else {
+        this.setRuntimeState({ kind: "error", message: describeOperationError(e) });
+      }
+      throw e;
+    }
+  }
 
   getInstallState(): InstallState {
     return computeInstallState(readOpencodeSettings());
@@ -227,6 +420,19 @@ export class OpencodeBinaryManager {
    * restored a vault from backup, etc.), demote to `absent`. Skipped for
    * custom-source installs — re-checking on every plugin load would punish
    * users for transient filesystem hiccups (network mounts, etc.).
+   *
+   * DESIGN NOTE — this is the one `binaryPath` writer that stays outside
+   * {@link runExclusive}, and the residual race is accepted. To lose data a
+   * user needs a managed path whose file is already gone, an install still
+   * running from a previous lifecycle, a reload landing mid-run, AND the
+   * single `fileExists` stat below straddling the instant that install
+   * persists its result — at which point the clear would wipe the fresh
+   * install. Taking the lock here would be worse: a reconcile at load would
+   * throw `OperationInFlightError` on every plugin load that happens during a
+   * download, turning a millisecond-wide race into a routine failure. If a
+   * future review flags this again, point them at this note; the cheap fix, if
+   * it ever bites, is to re-read settings after the await and only clear when
+   * the path still matches the one checked.
    */
   async refreshInstallState(): Promise<void> {
     // Read raw settings (not getInstallState) so we can still see a configured
@@ -270,11 +476,35 @@ export class OpencodeBinaryManager {
   }
 
   /**
+   * Download and activate the pinned opencode build, holding the binary-path
+   * lock for the whole run and publishing download progress as it goes.
+   */
+  async install(opts: InstallOptions = {}): Promise<{ version: string; path: string }> {
+    return this.runExclusive({ kind: "installing", progress: null }, (signal) => {
+      return this.installPipeline({
+        ...opts,
+        signal,
+        onProgress: (e) => {
+          this.setRuntimeState({ kind: "installing", progress: e });
+          opts.onProgress?.(e);
+        },
+      });
+    });
+  }
+
+  /**
    * Full install pipeline: resolve target → fetch release metadata →
    * download → extract → atomic rename → persist settings. Idempotent when
    * an existing install matches the pinned manifest.
+   *
+   * Private and lock-free on purpose: {@link install} and
+   * {@link upgradeManaged} are the entry points that own an operation, and
+   * upgrade calls this directly so it does not re-enter the lock it already
+   * holds — or settle the run to idle before it has removed the old version.
    */
-  async install(opts: InstallOptions = {}): Promise<{ version: string; path: string }> {
+  private async installPipeline(
+    opts: InstallPipelineOptions = {}
+  ): Promise<{ version: string; path: string }> {
     const version = opts.version ?? OPENCODE_PINNED_VERSION;
     const dataDir = this.getDataDir();
     const versionDir = path.join(dataDir, version);
@@ -412,21 +642,35 @@ export class OpencodeBinaryManager {
    * Upgrade a managed install to the pinned version: install the pinned binary
    * (atomic — the existing one keeps working until the new one is staged in),
    * then remove the previously-active managed version dir when it differs.
+   *
+   * Owns the operation itself and drives {@link installPipeline} directly, so
+   * the run stays locked — and the row stays on "installing" — until the old
+   * version dir is gone, not just until the new binary lands.
    */
   async upgradeManaged(opts: InstallOptions = {}): Promise<{ version: string; path: string }> {
-    const prev = readOpencodeSettings();
-    const result = await this.install({ ...opts, version: OPENCODE_PINNED_VERSION });
-    if (
-      prev.binarySource === "managed" &&
-      prev.binaryVersion &&
-      prev.binaryVersion !== result.version
-    ) {
-      const oldDir = path.join(this.getDataDir(), prev.binaryVersion);
-      await removeDir(oldDir).catch((e) =>
-        logWarn(`[AgentMode] failed to remove old opencode ${oldDir}: ${e}`)
-      );
-    }
-    return result;
+    return this.runExclusive({ kind: "installing", progress: null }, async (signal) => {
+      const prev = readOpencodeSettings();
+      const result = await this.installPipeline({
+        ...opts,
+        signal,
+        version: OPENCODE_PINNED_VERSION,
+        onProgress: (e) => {
+          this.setRuntimeState({ kind: "installing", progress: e });
+          opts.onProgress?.(e);
+        },
+      });
+      if (
+        prev.binarySource === "managed" &&
+        prev.binaryVersion &&
+        prev.binaryVersion !== result.version
+      ) {
+        const oldDir = path.join(this.getDataDir(), prev.binaryVersion);
+        await removeDir(oldDir).catch((e) =>
+          logWarn(`[AgentMode] failed to remove old opencode ${oldDir}: ${e}`)
+        );
+      }
+      return result;
+    });
   }
 
   /**
@@ -436,34 +680,36 @@ export class OpencodeBinaryManager {
    * are untouched. Throws with a readable message on failure.
    */
   async upgradeCustomBinary(): Promise<{ version: string; path: string }> {
-    const s = readOpencodeSettings();
-    if (s.binarySource !== "custom" || !s.binaryPath) {
-      throw new Error("No custom opencode binary is configured to upgrade.");
-    }
-    const binaryPath = s.binaryPath;
-    try {
-      await execFileAsync(binaryPath, ["upgrade"], {
-        timeout: UPGRADE_BINARY_TIMEOUT_MS,
-        windowsHide: true,
-      });
-    } catch (e) {
-      const err = e as NodeJS.ErrnoException;
-      throw new Error(`\`${binaryPath} upgrade\` failed: ${err.message ?? String(err)}`);
-    }
-    const { stdout } = await verifyOpencodeBinary(binaryPath);
-    const version = parseVersionFromStdout(stdout);
-    if (!version) {
-      throw new Error(`${binaryPath} --version didn't report a version after upgrade.`);
-    }
-    if (isOpencodeVersionOutdated(version)) {
-      throw new Error(
-        `opencode upgrade did not reach the required version ${OPENCODE_MIN_ACP_VERSION}+ ` +
-          `(still v${version}).`
-      );
-    }
-    updateOpencodeFields({ binaryVersion: version, binaryPath, binarySource: "custom" });
-    logInfo(`[AgentMode] upgraded custom opencode to ${version}`);
-    return { version, path: binaryPath };
+    return this.runExclusive({ kind: "busy" }, async () => {
+      const s = readOpencodeSettings();
+      if (s.binarySource !== "custom" || !s.binaryPath) {
+        throw new Error("No custom opencode binary is configured to upgrade.");
+      }
+      const binaryPath = s.binaryPath;
+      try {
+        await execFileAsync(binaryPath, ["upgrade"], {
+          timeout: UPGRADE_BINARY_TIMEOUT_MS,
+          windowsHide: true,
+        });
+      } catch (e) {
+        const err = e as NodeJS.ErrnoException;
+        throw new Error(`\`${binaryPath} upgrade\` failed: ${err.message ?? String(err)}`);
+      }
+      const { stdout } = await verifyOpencodeBinary(binaryPath);
+      const version = parseVersionFromStdout(stdout);
+      if (!version) {
+        throw new Error(`${binaryPath} --version didn't report a version after upgrade.`);
+      }
+      if (isOpencodeVersionOutdated(version)) {
+        throw new Error(
+          `opencode upgrade did not reach the required version ${OPENCODE_MIN_ACP_VERSION}+ ` +
+            `(still v${version}).`
+        );
+      }
+      updateOpencodeFields({ binaryVersion: version, binaryPath, binarySource: "custom" });
+      logInfo(`[AgentMode] upgraded custom opencode to ${version}`);
+      return { version, path: binaryPath };
+    });
   }
 
   /**
@@ -509,10 +755,12 @@ export class OpencodeBinaryManager {
    * left untouched — it lives outside our dirs and belongs to the user.
    */
   async uninstall(): Promise<void> {
-    await Promise.all(this.reclaimableDirs().map((dir) => removeDir(dir)));
-    if (readOpencodeSettings().binarySource !== "custom") {
-      clearOpencodeBinary();
-    }
+    return this.runExclusive({ kind: "busy" }, async () => {
+      await Promise.all(this.reclaimableDirs().map((dir) => removeDir(dir)));
+      if (readOpencodeSettings().binarySource !== "custom") {
+        clearOpencodeBinary();
+      }
+    });
   }
 
   /**
@@ -522,6 +770,32 @@ export class OpencodeBinaryManager {
    * paths are caught at config time rather than later when ACP tries to boot.
    */
   async setCustomBinaryPath(p: string | null): Promise<void> {
+    return this.runExclusive({ kind: "busy" }, () => this.writeCustomBinaryPath(p));
+  }
+
+  /**
+   * Find an opencode the user installed themselves and adopt it.
+   *
+   * One operation rather than a detect the caller follows with
+   * {@link setCustomBinaryPath}: the lock has to span the search as well as the
+   * write, or a managed install started while the search was still running
+   * would land in between and leave settings naming a source the user did not
+   * choose last.
+   *
+   * @returns the adopted path.
+   * @throws OpencodeNotFoundError when the search turns up nothing.
+   */
+  async adoptExistingBinary(): Promise<string> {
+    return this.runExclusive({ kind: "detecting" }, async () => {
+      const found = await detectOpencodeCliPath();
+      if (!found) throw new OpencodeNotFoundError();
+      await this.writeCustomBinaryPath(found);
+      return found;
+    });
+  }
+
+  /** Validate and persist a custom binary path. Assumes the lock is held. */
+  private async writeCustomBinaryPath(p: string | null): Promise<void> {
     if (p === null) {
       clearOpencodeBinary();
       return;
@@ -696,7 +970,7 @@ async function downloadToFile(
   url: string,
   dest: string,
   expectedSize: number | undefined,
-  opts: InstallOptions
+  opts: InstallPipelineOptions
 ): Promise<void> {
   const assetName = path.basename(dest);
   const res = await httpsGetWithRedirects(url, opts.signal);

@@ -49,6 +49,12 @@ jest.mock("@/settings/model", () => {
   };
 });
 
+// The real detector walks this machine's PATH and install dirs, so adopt tests
+// would pass or fail on whether the developer happens to have opencode.
+jest.mock("./opencodeCliDetector", () => ({
+  detectOpencodeCliPath: jest.fn(async () => null),
+}));
+
 import { OPENCODE_MIN_ACP_VERSION, OPENCODE_PINNED_VERSION } from "./ui/opencodeVersion";
 import { copilotAppDataDir } from "@/utils/appPaths";
 import * as fs from "node:fs";
@@ -60,6 +66,8 @@ import {
   legacyVaultDataDir,
   opencodeManagedDataDir,
   OpencodeBinaryManager,
+  OpencodeNotFoundError,
+  OperationInFlightError,
   parseVersionFromStdout,
   pickMatchingAsset,
   toOpencodeInstallState,
@@ -251,6 +259,54 @@ describe("OpencodeBinaryManager", () => {
         minVersion: OPENCODE_MIN_ACP_VERSION,
         message: `opencode v1.15.12 is not supported. Copilot requires opencode v${OPENCODE_MIN_ACP_VERSION} or newer.`,
       });
+    });
+  });
+
+  describe("adoptPlugin()", () => {
+    let home: string;
+
+    beforeEach(async () => {
+      // An empty OS-local install root, so downloadsSize below reports only
+      // what the bound vault's legacy directory holds.
+      home = await fs.promises.mkdtemp(path.join(os.tmpdir(), "opencode-home-"));
+      jest.mocked(os.homedir).mockReturnValue(home);
+    });
+
+    afterEach(async () => {
+      jest.mocked(os.homedir).mockReset();
+      await fs.promises.rm(home, { recursive: true, force: true });
+    });
+
+    it("reclaims from the adopted lifecycle's vault, not the one the manager was built with", async () => {
+      const firstVault = await fs.promises.mkdtemp(path.join(os.tmpdir(), "opencode-vault-a-"));
+      const secondVault = await fs.promises.mkdtemp(path.join(os.tmpdir(), "opencode-vault-b-"));
+      try {
+        const seedLegacy = async (vaultBase: string, bytes: number): Promise<string> => {
+          const legacy = legacyVaultDataDir(vaultBase, CONFIG_DIR, "copilot-test");
+          const bin = path.join(legacy, "1.14.0", "bin", "opencode");
+          await fs.promises.mkdir(path.dirname(bin), { recursive: true });
+          await fs.promises.writeFile(bin, "z".repeat(bytes));
+          return legacy;
+        };
+        const firstLegacy = await seedLegacy(firstVault, 40);
+        const secondLegacy = await seedLegacy(secondVault, 10);
+
+        // The manager outlives a lifecycle, so it can be built against one vault
+        // and then asked to work in another ("Open another vault" without restart).
+        const mgr = new OpencodeBinaryManager(vaultPlugin(firstVault));
+        mgr.adoptPlugin(vaultPlugin(secondVault));
+
+        expect(await mgr.downloadsSize()).toBe(10);
+
+        await mgr.uninstall();
+
+        expect(fs.existsSync(secondLegacy)).toBe(false);
+        // The vault the user is no longer in keeps its files.
+        expect(fs.existsSync(firstLegacy)).toBe(true);
+      } finally {
+        await fs.promises.rm(firstVault, { recursive: true, force: true });
+        await fs.promises.rm(secondVault, { recursive: true, force: true });
+      }
     });
   });
 });
@@ -581,5 +637,118 @@ describe("OpencodeBinaryManager.uninstall / downloadsSize", () => {
     } finally {
       await fs.promises.rm(vaultBase, { recursive: true, force: true });
     }
+  });
+});
+
+describe("OpencodeBinaryManager.runtimeState", () => {
+  beforeEach(() => settingsMock.__reset({}));
+
+  it("starts idle and hands every subscriber the same snapshot object", () => {
+    const mgr = new OpencodeBinaryManager(fakePlugin);
+    expect(mgr.getRuntimeState()).toEqual({ kind: "idle" });
+    // useSyncExternalStore compares snapshots by identity; an unchanged store
+    // returning a fresh object every call would re-render on every commit.
+    expect(mgr.getRuntimeState()).toBe(mgr.getRuntimeState());
+  });
+
+  it("notifies subscribers on each transition and stops after unsubscribe", async () => {
+    const mgr = new OpencodeBinaryManager(fakePlugin);
+    const seen: string[] = [];
+    const unsubscribe = mgr.subscribeRuntimeState(() => seen.push(mgr.getRuntimeState().kind));
+
+    await mgr.setCustomBinaryPath(process.execPath);
+    expect(seen).toEqual(["busy", "idle"]);
+
+    unsubscribe();
+    await mgr.setCustomBinaryPath(null);
+    expect(seen).toEqual(["busy", "idle"]);
+  });
+
+  it("reports a failed operation as an error state the next reader can show", async () => {
+    const mgr = new OpencodeBinaryManager(fakePlugin);
+    await expect(mgr.setCustomBinaryPath("/definitely/not/here")).rejects.toThrow(/No file at/);
+    // Durable rather than announced: whichever surface mounts next renders it.
+    expect(mgr.getRuntimeState()).toEqual({
+      kind: "error",
+      message: expect.stringContaining("No file at"),
+    });
+  });
+
+  it("clears a previous error once the next operation succeeds", async () => {
+    const mgr = new OpencodeBinaryManager(fakePlugin);
+    await expect(mgr.setCustomBinaryPath("/definitely/not/here")).rejects.toThrow();
+
+    await mgr.setCustomBinaryPath(process.execPath);
+
+    expect(mgr.getRuntimeState()).toEqual({ kind: "idle" });
+  });
+
+  it("refuses a second operation while one holds the binary-path lock", async () => {
+    const mgr = new OpencodeBinaryManager(fakePlugin);
+    // The lock is taken synchronously, before the first await inside the
+    // operation, so the call below is genuinely the second one in.
+    const first = mgr.setCustomBinaryPath(process.execPath);
+    expect(mgr.isBusy()).toBe(true);
+
+    // Both writers persist binaryPath/binarySource, so letting them overlap is
+    // what lets whichever settles last name a source the user did not choose.
+    await expect(mgr.adoptExistingBinary()).rejects.toBeInstanceOf(OperationInFlightError);
+
+    await first;
+    expect(settingsMock.__get().binaryPath).toBe(process.execPath);
+  });
+
+  it("frees the lock once the operation settles, including on failure", async () => {
+    const mgr = new OpencodeBinaryManager(fakePlugin);
+    await expect(mgr.setCustomBinaryPath("/definitely/not/here")).rejects.toThrow();
+
+    expect(mgr.isBusy()).toBe(false);
+    await expect(mgr.setCustomBinaryPath(process.execPath)).resolves.toBeUndefined();
+  });
+
+  it("leaves a fruitless detect in the error state rather than back at idle", async () => {
+    const mgr = new OpencodeBinaryManager(fakePlugin);
+
+    await expect(mgr.adoptExistingBinary()).rejects.toBeInstanceOf(OpencodeNotFoundError);
+
+    // Resolving would settle the store back to idle, and the settings row only
+    // offers Configure — the one way to name a binary the search cannot see —
+    // while an error is showing.
+    expect(mgr.getRuntimeState()).toEqual({
+      kind: "error",
+      message: expect.stringContaining("Couldn't find opencode"),
+    });
+    expect(mgr.isBusy()).toBe(false);
+  });
+
+  it("drops a settled error when a new plugin lifecycle starts", async () => {
+    const mgr = new OpencodeBinaryManager(fakePlugin);
+    await expect(mgr.adoptExistingBinary()).rejects.toBeInstanceOf(OpencodeNotFoundError);
+
+    mgr.forgetSettledError();
+
+    // The manager is a module-level singleton, so without this the next vault
+    // opened in the same process would greet the user with this vault's error.
+    expect(mgr.getRuntimeState()).toEqual({ kind: "idle" });
+  });
+
+  it("keeps a running operation visible across a lifecycle boundary", async () => {
+    const mgr = new OpencodeBinaryManager(fakePlugin);
+    const inFlight = mgr.setCustomBinaryPath(process.execPath);
+
+    mgr.forgetSettledError();
+
+    // A run still belongs to this process; the new lifecycle adopts it rather
+    // than dropping to idle and offering a rival action underneath it.
+    expect(mgr.getRuntimeState()).toEqual({ kind: "busy" });
+    await inFlight;
+  });
+
+  it("is not busy before anything has run", () => {
+    expect(new OpencodeBinaryManager(fakePlugin).isBusy()).toBe(false);
+  });
+
+  it("ignores a cancel when nothing is running", () => {
+    expect(() => new OpencodeBinaryManager(fakePlugin).cancelCurrentOperation()).not.toThrow();
   });
 });

@@ -230,9 +230,9 @@ const sessionCreateSpy = jest.spyOn(AgentSession, "start").mockImplementation((o
 
 function buildApp(basePath = "/vault"): App {
   const adapter = new (FileSystemAdapter as unknown as new (basePath: string) => unknown)(basePath);
-  // The ProjectContentTracker registers vault event listeners at construction;
-  // provide no-op `on`/`offref` so a manager can be built in tests.
-  const vaultEvents = {
+  // The ProjectContentTracker registers vault AND metadata-cache event listeners
+  // at construction; provide no-op `on`/`offref` on both so a manager can be built.
+  const events = {
     on: jest.fn(() => ({}) as never),
     offref: jest.fn(),
   };
@@ -241,11 +241,15 @@ function buildApp(basePath = "/vault"): App {
   // disk) is the "nothing to initialize" case, so no files are written.
   const vaultFiles = {
     getAbstractFileByPath: jest.fn(() => null),
+    getFiles: jest.fn(() => []),
     create: jest.fn(),
     read: jest.fn(async () => ""),
     modify: jest.fn(),
   };
-  return { vault: { adapter, ...vaultEvents, ...vaultFiles } } as unknown as App;
+  return {
+    vault: { adapter, ...events, ...vaultFiles },
+    metadataCache: { ...events },
+  } as unknown as App;
 }
 
 function buildPlugin(): { manifest: { version: string } } {
@@ -2054,6 +2058,9 @@ describe("AgentSessionManager chat history aggregation", () => {
           const fm = frontmatterByPath[file.path];
           return fm ? { frontmatter: fm } : null;
         },
+        // ProjectContentTracker also registers a metadata-cache "changed" listener.
+        on: jest.fn(() => ({}) as never),
+        offref: jest.fn(),
       },
     } as unknown as App;
     const plugin = {

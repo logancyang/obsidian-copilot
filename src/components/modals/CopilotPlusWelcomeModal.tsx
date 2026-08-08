@@ -3,55 +3,31 @@ import { App, Modal } from "obsidian";
 import { Root } from "react-dom/client";
 import { Button } from "@/components/ui/button";
 import { createPluginRoot } from "@/utils/react/createPluginRoot";
-import {
-  DEFAULT_COPILOT_PLUS_CHAT_MODEL,
-  DEFAULT_COPILOT_PLUS_EMBEDDING_MODEL,
-  DEFAULT_COPILOT_PLUS_EMBEDDING_MODEL_KEY,
-  applyPlusSettings,
-} from "@/plusUtils";
-import { getSettings } from "@/settings/model";
-import { TriangleAlert } from "lucide-react";
+import { logError } from "@/logger";
+import { DEFAULT_COPILOT_PLUS_CHAT_MODEL, applyLicenseSettings } from "@/plusUtils";
 
-function CopilotPlusWelcomeModalContent({
-  onConfirm,
-  onCancel,
-}: {
+export interface CopilotPlusWelcomeModalContentProps {
   onConfirm: () => void;
   onCancel: () => void;
-}) {
-  const settings = getSettings();
+}
+
+/** Body of {@link CopilotPlusWelcomeModal}, exported prop-driven so the gallery can render it. */
+export function CopilotPlusWelcomeModalContent({
+  onConfirm,
+  onCancel,
+}: CopilotPlusWelcomeModalContentProps) {
   return (
     <div className="tw-flex tw-flex-col tw-gap-4">
       <div>
         <p>
-          Thanks for purchasing <b>Copilot Plus</b>! You have unlocked the full power of Copilot,
-          featuring chat context, PDF and image support, exclusive chat and embedding models, and
-          much more!
+          Thanks for purchasing! You have unlocked the full power of Copilot, featuring chat
+          context, PDF and image support, exclusive chat and embedding models, and much more!
         </p>
         <p>
-          Would you like to apply the Copilot Plus settings now? You can always change this later in
+          Would you like to make <b className="tw-text-accent">{DEFAULT_COPILOT_PLUS_CHAT_MODEL}</b>{" "}
+          the default model for chat and your agents now? You can always change this later in
           Settings.
         </p>
-        <ul className="tw-pl-4">
-          <li>
-            Default mode: <b className="tw-text-accent">Copilot Plus</b>
-          </li>
-          <li>
-            Chat model: <b className="tw-text-accent">{DEFAULT_COPILOT_PLUS_CHAT_MODEL}</b>
-          </li>
-          <li>
-            <div>
-              Embedding model:{" "}
-              <b className="tw-text-accent">{DEFAULT_COPILOT_PLUS_EMBEDDING_MODEL}</b>
-            </div>
-            {settings.embeddingModelKey !== DEFAULT_COPILOT_PLUS_EMBEDDING_MODEL_KEY && (
-              <div className="tw-flex tw-items-center tw-gap-1 tw-text-sm tw-text-warning">
-                <TriangleAlert className="tw-size-4" /> It will rebuild your embeddings for the
-                entire vault
-              </div>
-            )}
-          </li>
-        </ul>
       </div>
       <div className="tw-flex tw-w-full tw-justify-end tw-gap-2">
         <Button variant="ghost" onClick={onCancel}>
@@ -72,7 +48,7 @@ export class CopilotPlusWelcomeModal extends Modal {
     super(app);
     // https://docs.obsidian.md/Reference/TypeScript+API/Modal/setTitle
     // @ts-ignore
-    this.setTitle("Welcome to Copilot Plus 🚀");
+    this.setTitle("Welcome to Copilot 🚀");
   }
 
   onOpen() {
@@ -80,7 +56,9 @@ export class CopilotPlusWelcomeModal extends Modal {
     this.root = createPluginRoot(contentEl, this.app);
 
     const handleConfirm = () => {
-      applyPlusSettings();
+      void applyLicenseSettings().catch((error) =>
+        logError("Failed to apply the licensed default model", error)
+      );
       this.close();
     };
 

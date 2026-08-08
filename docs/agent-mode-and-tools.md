@@ -41,7 +41,9 @@ The Claude setup dialog can also sign you in before a chat starts. After confirm
 
 ### Choosing the OpenCode Binary Source
 
-The OpenCode setup dialog (**Settings → Copilot → Agents → opencode → Configure**) offers two ways to provide the binary, shown one at a time: **Managed by Copilot**, where Copilot downloads and updates an official release for you, and **My own binary**, where you point Copilot at an OpenCode you already have installed.
+Before OpenCode is set up, its row under **Settings → Copilot → Basic → Agents → opencode** offers both sources directly: **Download opencode** fetches an official release for Copilot to manage, and **I already have it** looks for an OpenCode you installed yourself. If that search finds nothing, a **Configure** button appears next to them so you can type the path by hand.
+
+Once OpenCode is set up, that row's **Configure** button opens the setup dialog, which shows the same two sources one at a time: **Managed by Copilot**, where Copilot downloads and updates an official release for you, and **My own binary**, where you point Copilot at an OpenCode you already have installed.
 
 Switching between the two views only changes which controls you see — it never changes the binary in use. The actual switch happens when you act: **Download & install** activates the managed copy, and applying a path under **My own binary** activates yours. Your saved custom path is kept while you browse the managed view, and the dialog tells you whenever the source you're looking at is not the one currently in use.
 
@@ -276,7 +278,7 @@ For v4, Claude runs delegated agents and Bash commands synchronously. Copilot wa
 
 The Workflow tool and remote-isolated agents are temporarily unavailable because they require background execution. Local agents, including worktree-isolated agents, remain available and run synchronously. Background execution will return after Copilot moves Claude sessions to a persistent streaming lifecycle.
 
-This requires Claude Code 2.1.206 or newer. Copilot checks the installed version when it starts and whenever you apply or auto-detect a Claude binary. An older binary is marked **Incompatible version** in Settings → Copilot → Agents → Claude and cannot start a session. If you select Claude in chat, Copilot shows the required version and a **Configure Claude** button that opens the same setup dialog; installation guidance stays in that dialog.
+This requires Claude Code 2.1.206 or newer. Copilot checks the installed version when it starts and whenever you apply or auto-detect a Claude binary. An older binary is marked **Incompatible version** in Settings → Copilot → Basic → Agents → Claude and cannot start a session. If you select Claude in chat, Copilot shows the required version and a **Configure Claude** button that opens the same setup dialog; installation guidance stays in that dialog.
 
 If Claude's usage is exhausted, Copilot shows Claude's own error in chat, including the reset time when Claude provides one. You can wait until the limit resets or switch to another agent.
 

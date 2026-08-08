@@ -1,4 +1,9 @@
-import { OpencodeBackendDescriptor } from "./descriptor";
+import { getOpencodeBinaryManager, OpencodeBackendDescriptor } from "./descriptor";
+import { legacyVaultDataDir } from "./OpencodeBinaryManager";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import { FileSystemAdapter } from "obsidian";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type {
   BackendProcess,
@@ -376,5 +381,76 @@ describe("OpencodeBackendDescriptor.prefetchEffortCatalog", () => {
       QWEN,
       "orig/model",
     ]);
+  });
+});
+
+const CONFIG_DIR = "my-config";
+
+/** Desktop CopilotPlugin stand-in whose in-vault paths resolve under `vaultBase`. */
+function vaultPlugin(vaultBase: string): never {
+  const adapter = new FileSystemAdapter();
+  adapter.getBasePath = () => vaultBase;
+  return {
+    app: { vault: { adapter, configDir: CONFIG_DIR } },
+    manifest: { id: "copilot-test" },
+  } as never;
+}
+
+/** A vault holding `bytes` of pre-#2569 in-vault opencode install. */
+async function vaultWithLegacyInstall(prefix: string, bytes: number): Promise<string> {
+  const vaultBase = await fs.promises.mkdtemp(path.join(os.tmpdir(), prefix));
+  const bin = path.join(
+    legacyVaultDataDir(vaultBase, CONFIG_DIR, "copilot-test"),
+    "1.14.0",
+    "bin",
+    "opencode"
+  );
+  await fs.promises.mkdir(path.dirname(bin), { recursive: true });
+  await fs.promises.writeFile(bin, "z".repeat(bytes));
+  return vaultBase;
+}
+
+describe("getOpencodeBinaryManager()", () => {
+  it("hands back the one manager without repointing it at the asking vault", async () => {
+    const emptyVault = await fs.promises.mkdtemp(path.join(os.tmpdir(), "opencode-desc-a-"));
+    const legacyVault = await vaultWithLegacyInstall("opencode-desc-b-", 12);
+    try {
+      const first = getOpencodeBinaryManager(vaultPlugin(emptyVault));
+      // Only `legacyVault` holds an in-vault copy, so a change here is the
+      // manager having switched vaults. Measured as a delta because the
+      // OS-local install root is real and may be non-empty on this machine.
+      const before = await first.downloadsSize();
+      const second = getOpencodeBinaryManager(vaultPlugin(legacyVault));
+
+      // One manager, so an install running from the previous lifecycle survives.
+      expect(second).toBe(first);
+      // Resolving is not a claim to be the running lifecycle: a settings tree
+      // that outlived its own could otherwise aim the singleton — and the
+      // uninstall of whoever else holds it — at a vault nobody is in.
+      expect((await second.downloadsSize()) - before).toBe(0);
+    } finally {
+      await fs.promises.rm(emptyVault, { recursive: true, force: true });
+      await fs.promises.rm(legacyVault, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("OpencodeBackendDescriptor.onPluginLoad()", () => {
+  it("rebinds the surviving manager to the loading lifecycle's vault", async () => {
+    const emptyVault = await fs.promises.mkdtemp(path.join(os.tmpdir(), "opencode-load-a-"));
+    const legacyVault = await vaultWithLegacyInstall("opencode-load-b-", 12);
+    try {
+      await OpencodeBackendDescriptor.onPluginLoad?.(vaultPlugin(emptyVault));
+      // Held across the reload, the way an open Configure dialog holds it.
+      const manager = getOpencodeBinaryManager(vaultPlugin(emptyVault));
+      const before = await manager.downloadsSize();
+
+      await OpencodeBackendDescriptor.onPluginLoad?.(vaultPlugin(legacyVault));
+
+      expect((await manager.downloadsSize()) - before).toBe(12);
+    } finally {
+      await fs.promises.rm(emptyVault, { recursive: true, force: true });
+      await fs.promises.rm(legacyVault, { recursive: true, force: true });
+    }
   });
 });

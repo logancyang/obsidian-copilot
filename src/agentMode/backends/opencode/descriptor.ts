@@ -1,6 +1,5 @@
-import * as fs from "node:fs";
-import * as os from "node:os";
 import { OpencodeInstallModal } from "@/agentMode/backends/opencode/OpencodeInstallModal";
+import { OpencodeAbsentInstallActions } from "@/agentMode/backends/opencode/OpencodeInlineInstall";
 import OpencodeLogo from "@/agentMode/backends/opencode/logo.svg";
 import type CopilotPlugin from "@/main";
 import { logWarn } from "@/logger";
@@ -20,11 +19,9 @@ import {
   OpencodeBinaryManager,
   toOpencodeInstallState,
 } from "./OpencodeBinaryManager";
-import { opencodeEnabledModelEntries } from "./opencodeModelResolve";
+import { opencodeEnabledModelEntries, opencodeWireBaseIdFor } from "./opencodeModelResolve";
 import { OpencodeSettingsPanel } from "./OpencodeSettingsPanel";
-import { resolveOpencodeBinary } from "./opencodeBinaryResolver";
 import { mapNodeArch, mapNodePlatform } from "./platformResolver";
-import { detectBinary } from "@/utils/detectBinary";
 import { cacheRoot } from "@/context/conversionsLocation";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import { simpleBinaryBackendProcess } from "@/agentMode/backends/shared/simpleBinaryBackend";
@@ -45,8 +42,9 @@ const OPENCODE_MODE_CONFIG_OPTION_ID = "mode";
 /** Frozen empty effort catalog — referential stability for the "no effort" case. */
 const EMPTY_EFFORT_CATALOG: Record<string, EffortOption[]> = Object.freeze({});
 
-// Lazy-created singleton manager. The first plugin to ask for it wins; in a
-// running Obsidian instance there's exactly one CopilotPlugin so this is safe.
+// Lazy-created singleton manager, kept across plugin lifecycles so an install
+// started in one is still running in the next. The instance is reused but its
+// plugin handle is not: `onPluginLoad` rebinds it, see `adoptPlugin`.
 let managerRef: OpencodeBinaryManager | null = null;
 
 /**
@@ -98,6 +96,10 @@ const opencodeWire: ModelWireCodec = {
  * Resolve the lazy `OpencodeBinaryManager` instance owned by this descriptor.
  * The plugin no longer holds a top-level reference — ownership lives next to
  * the backend that uses it.
+ *
+ * Resolving does not rebind: callers can outlive the lifecycle they captured
+ * their `plugin` in, and the manager's binding is read at operation time by
+ * whoever holds it. `onPluginLoad` is the one rebinder.
  */
 export function getOpencodeBinaryManager(plugin: CopilotPlugin): OpencodeBinaryManager {
   if (!managerRef) managerRef = new OpencodeBinaryManager(plugin);
@@ -105,29 +107,11 @@ export function getOpencodeBinaryManager(plugin: CopilotPlugin): OpencodeBinaryM
 }
 
 /**
- * Run an auto-detect for an externally-installed `opencode`, ignoring any
- * stale custom-path override (e.g. a POSIX path synced from a macOS profile
- * onto Windows). Walks well-known native-install layouts (`~/.opencode/bin`,
- * `~/.bun/bin`, `~/.local/bin`, `%LOCALAPPDATA%\opencode\bin`, ProgramFiles)
- * plus the shared node-tool dirs, then falls back to a PATH walk via
- * `detectBinary` so users with a non-standard install dir on PATH still match.
- * Independent of the managed binary.
+ * Re-exported so existing importers keep their path. The implementation lives
+ * in `opencodeCliDetector` because the manager needs it too, and importing it
+ * from here would close a descriptor↔manager cycle.
  */
-export async function detectOpencodeCliPath(): Promise<string | null> {
-  const fromResolver = resolveOpencodeBinary({
-    override: undefined,
-    homeDir: os.homedir(),
-    platform: process.platform,
-    env: process.env,
-    fs: {
-      existsSync: (p) => fs.existsSync(p),
-      readFileSync: (p, encoding) => fs.readFileSync(p, encoding),
-      readdirSync: (p) => fs.readdirSync(p),
-    },
-  });
-  if (fromResolver) return fromResolver;
-  return detectBinary("opencode");
-}
+export { detectOpencodeCliPath } from "./opencodeCliDetector";
 
 /**
  * Descriptor for the OpenCode backend. This is the contract `session/` and
@@ -154,6 +138,10 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
 
   getEnabledModelEntries(settings: CopilotSettings): EnabledModelEntry[] {
     return [...opencodeEnabledModelEntries(settings)];
+  },
+
+  getWireBaseId(configuredModelId: string, settings: CopilotSettings): string | null {
+    return opencodeWireBaseIdFor(configuredModelId, settings);
   },
 
   getInstallState(settings: CopilotSettings): InstallState {
@@ -186,6 +174,8 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
       arch: mapNodeArch(process.arch) ?? process.arch,
     }).open();
   },
+
+  AbsentInstallActions: OpencodeAbsentInstallActions,
 
   async upgrade(plugin: CopilotPlugin): Promise<void> {
     const manager = getOpencodeBinaryManager(plugin);
@@ -299,7 +289,19 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
   SettingsPanel: OpencodeSettingsPanel,
 
   async onPluginLoad(plugin: CopilotPlugin): Promise<void> {
-    await getOpencodeBinaryManager(plugin).refreshInstallState();
+    const manager = getOpencodeBinaryManager(plugin);
+    // The sole rebind point. Every other caller reaches the manager from a
+    // surface that can outlive its lifecycle — a settings tree still holding
+    // the outgoing vault's plugin can open Configure — so only this hook can
+    // vouch for the lifecycle now running. Same shape `main.ts` uses for
+    // `miyoMutationSession`, and it runs before any UI of this lifecycle exists.
+    manager.adoptPlugin(plugin);
+    // The manager is a module-level singleton, so it survives disable→enable
+    // and "Open another vault" in the same process. Clearing at the START of a
+    // lifecycle is the convention `main.ts` documents for exactly that carry-
+    // over — and here it stops a failure from one vault greeting the next.
+    manager.forgetSettledError();
+    await manager.refreshInstallState();
   },
 
   getProbeSessionId(settings: CopilotSettings): string | undefined {

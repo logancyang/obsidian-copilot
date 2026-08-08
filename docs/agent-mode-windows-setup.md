@@ -12,7 +12,7 @@ irm https://gist.githubusercontent.com/logancyang/7a87eb38d91015eac567521f8cc9c7
 
 When Claude asks you to sign in, finish the browser login. The installer copies the `claude.exe` path to your clipboard.
 
-In Obsidian: **Settings -> Copilot -> Agents -> Claude -> Configure -> Auto-detect**. If it doesn't find Claude, paste the copied path into the binary path field, then save.
+In Obsidian: **Settings -> Copilot -> Basic -> Agents -> Claude -> Configure -> Auto-detect**. If it doesn't find Claude, paste the copied path into the binary path field, then save.
 
 Open a Copilot chat, switch to **Agent Mode**, pick **Claude**, and send a message.
 
@@ -28,7 +28,7 @@ irm https://gist.githubusercontent.com/logancyang/380ef4dbf9f98900771da76eca3d21
 
 When Codex asks you to sign in, finish the login. The installer copies the `codex-acp.exe` path to your clipboard.
 
-In Obsidian: **Settings -> Copilot -> Agents -> Codex -> Configure**. Paste the copied path into the binary path field, leave **Environment variables** empty, then save.
+In Obsidian: **Settings -> Copilot -> Basic -> Agents -> Codex -> Configure**. Paste the copied path into the binary path field, leave **Environment variables** empty, then save.
 
 Open a Copilot chat, switch to **Agent Mode**, pick **Codex**, and send a message.
 

@@ -257,6 +257,61 @@ describe("AgentSetupApi.registerAgentProvider", () => {
     expect(h.backends.enabledFor("codex")).toEqual([]);
   });
 
+  it("enables only autoEnrollModelIds while still creating every reported model", async () => {
+    const h = makeHarness();
+    const result = await h.api.registerAgentProvider({
+      agentType: "opencode",
+      providerType: "openai-compatible",
+      displayName: "opencode",
+      apiKey: null,
+      wireModelIds: ["opencode/a", "opencode/b", "opencode/c"],
+      autoEnrollModelIds: ["opencode/a", "opencode/c"],
+    });
+
+    // All three exist, so the curation UI can list — and the user can toggle —
+    // the ones that ship off.
+    expect(result.configuredModelIds).toHaveLength(3);
+
+    const enabledWireIds = h.backends
+      .enabledFor("opencode")
+      .map((id) => h.models.get(id)!.info.id)
+      .sort();
+    expect(enabledWireIds).toEqual(["opencode/a", "opencode/c"]);
+  });
+
+  it("leaves the backend's other picks intact when auto-enrolling a subset", async () => {
+    const h = makeHarness();
+    // A model the user already curated into the opencode backend from another
+    // origin (BYOK / Plus). Enrollment must add to that set, never replace it.
+    await h.backends.enableModel("opencode", "pre-existing-byok-model");
+
+    await h.api.registerAgentProvider({
+      agentType: "opencode",
+      providerType: "openai-compatible",
+      displayName: "opencode",
+      apiKey: null,
+      wireModelIds: ["opencode/a", "opencode/b"],
+      autoEnrollModelIds: ["opencode/a"],
+    });
+
+    expect(h.backends.enabledFor("opencode")).toContain("pre-existing-byok-model");
+  });
+
+  it("enables nothing when autoEnrollModelIds is empty", async () => {
+    const h = makeHarness();
+    const result = await h.api.registerAgentProvider({
+      agentType: "opencode",
+      providerType: "openai-compatible",
+      displayName: "opencode",
+      apiKey: null,
+      wireModelIds: ["opencode/a", "opencode/b"],
+      autoEnrollModelIds: [],
+    });
+
+    expect(result.configuredModelIds).toHaveLength(2);
+    expect(h.backends.enabledFor("opencode")).toEqual([]);
+  });
+
   it("lets the agent-reported name + description win over catalog metadata", async () => {
     const h = makeHarness();
     // Catalog knows "claude-sonnet-4-5" as "Claude Sonnet 4.5"; the agent's

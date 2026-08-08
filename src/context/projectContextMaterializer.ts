@@ -3,7 +3,7 @@ import { err2String } from "@/errorFormat";
 import { logInfo, logWarn } from "@/logger";
 import { getCachedProjectRecordById } from "@/projects/state";
 import { getProjectContextSignature } from "@/projects/projectContextSignature";
-import { getMatchingPatterns } from "@/search/searchUtils";
+import { getMatchingPatterns, shouldIndexFile, type PatternCategory } from "@/search/searchUtils";
 import { listMaterializeCandidates } from "@/context/materializeCandidates";
 import { Mutex } from "async-mutex";
 import { App, FileSystemAdapter, TFile, TFolder } from "obsidian";
@@ -75,6 +75,19 @@ export type ContextMaterializeProgressFn = (progress: ContextMaterializeProgress
 
 // Referential stability: a single frozen empty array for every "no context" exit.
 const EMPTY_DIRECTORIES: string[] = Object.freeze([] as string[]) as string[];
+// Referential stability: one frozen empty array for the "no property notes" exit.
+const EMPTY_MANIFEST_ENTRIES: ManifestPathEntry[] = Object.freeze(
+  [] as ManifestPathEntry[]
+) as ManifestPathEntry[];
+
+/**
+ * Identity of a resolved manifest entry for dedupe. Keyed on the absolute path
+ * when one resolved, since that is what the agent actually reads; an unresolved
+ * pattern falls back to its `vaultPath` so two of them still compare equal.
+ */
+function manifestEntryKey(entry: ManifestPathEntry): string {
+  return entry.absPath ?? entry.vaultPath;
+}
 /**
  * Block for a project whose context could not be resolved at all. Still announces the
  * workspace, for the same reason the source-less block below does: losing the block would
@@ -339,7 +352,7 @@ async function runMaterialize(
     // included folder. That "粒度错配的洞" is explicitly acknowledged-and-unblocked
     // — hard enforcement needs a backend/OS sandbox (Tier 2/3), deferred past PR2.
     // See designdocs/agent-projects/PR2_DESIGN.md §4.1.1.
-    const { inclusions } = getMatchingPatterns({
+    const { inclusions, exclusions } = getMatchingPatterns({
       inclusions: contextSource.inclusions,
       exclusions: contextSource.exclusions,
       isProject: true,
@@ -356,6 +369,10 @@ async function runMaterialize(
     // See designdocs/agent-projects/PR2_DESIGN.md §4.1.
     const extensions = inclusions?.extensionPatterns ?? [];
     const tags = inclusions?.tagPatterns ?? [];
+    // Property inclusions can't be resolved from a path like folders/notes — their
+    // values live in frontmatter — so they're enumerated to concrete matching
+    // notes below and counted as a real source in `hasAnySource`.
+    const properties = inclusions?.propertyPatterns ?? [];
 
     const adapter = getVaultFileSystemAdapter(app);
     const { entries: folderEntries, additionalDirectories } = resolveFolderPaths(
@@ -364,7 +381,19 @@ async function runMaterialize(
       cwd,
       adapter
     );
+    // Property matches stay a SEPARATE list from the declared `[[title]]` notes:
+    // the manifest lists declarations ahead of expansions so a broad property
+    // can't push a hand-added source out of the entry cap. Deduped by resolved
+    // path so a note included via BOTH a [[title]] and a property is listed once,
+    // under the declaration.
     const noteEntries = resolveNotePaths(app, notes, adapter);
+    const declaredNotePaths = new Set(noteEntries.map(manifestEntryKey));
+    const propertyNoteEntries = resolvePropertyNotePaths(
+      app,
+      properties,
+      exclusions,
+      adapter
+    ).filter((entry) => !declaredNotePaths.has(manifestEntryKey(entry)));
 
     const files: FileSource[] = inclusions
       ? listMaterializeCandidates(app, contextSource).map((file) => ({
@@ -383,6 +412,7 @@ async function runMaterialize(
       notes.length > 0 ||
       extensions.length > 0 ||
       tags.length > 0 ||
+      properties.length > 0 ||
       additionalDirectories.length > 0;
     if (!hasAnySource) {
       return {
@@ -442,6 +472,8 @@ async function runMaterialize(
       notes: noteEntries,
       extensions,
       tags,
+      properties,
+      propertyNotes: propertyNoteEntries,
       webUrls,
       youtubeUrls,
       materialized: manifestEntries,
@@ -668,6 +700,36 @@ function resolveNotePaths(
       absPath: adapter.getFullPath(file.path),
     }));
   });
+}
+
+/**
+ * Enumerate the markdown notes whose frontmatter matches a project's property
+ * inclusions, resolved to absolute `ManifestPathEntry`s. Unlike folders/notes/tags
+ * — which are listed as SOURCE LABELS the agent expands with its own search — a
+ * property value lives in frontmatter the agent's native search can't discover
+ * (it's a vault-specific taxonomy, not a grep-able `#tag`), so the matching notes
+ * are enumerated concretely here. Reuses the Phase 1 matcher through the exported
+ * {@link shouldIndexFile} contract (property-only inclusions + the project's real
+ * exclusions), so match semantics stay identical to indexing/QA. Sorted by path
+ * for a stable listing; empty (frozen) when the project declares no property.
+ */
+function resolvePropertyNotePaths(
+  app: App,
+  propertyPatterns: string[],
+  exclusions: PatternCategory | null,
+  adapter: FileSystemAdapter | null
+): ManifestPathEntry[] {
+  if (propertyPatterns.length === 0) return EMPTY_MANIFEST_ENTRIES;
+  const inclusions: PatternCategory = { propertyPatterns };
+  return app.vault
+    .getMarkdownFiles()
+    .filter((file) => shouldIndexFile(app, file, inclusions, exclusions, true))
+    .sort((a, b) => a.path.localeCompare(b.path))
+    .map((file) =>
+      adapter
+        ? { vaultPath: file.path, absPath: adapter.getFullPath(file.path) }
+        : { vaultPath: file.path }
+    );
 }
 
 /**

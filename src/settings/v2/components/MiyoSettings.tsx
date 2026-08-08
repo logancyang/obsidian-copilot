@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SegmentedControl } from "@/components/ui/segmented-control";
+import { SettingDisclosure } from "@/components/ui/setting-disclosure";
 import { SettingItem } from "@/components/ui/setting-item";
 import { SettingSection } from "@/components/ui/setting-section";
 import { SettingSwitch } from "@/components/ui/setting-switch";
@@ -40,7 +41,7 @@ import { MiyoStatusRow } from "@/settings/v2/components/MiyoStatusRow";
 import { err2String } from "@/utils";
 import { getVaultBase } from "@/utils/vaultPath";
 import { extractAppIgnoreSettings, getSystemExcludedFolders } from "@/search/searchUtils";
-import { ArrowUpRight, ChevronRight, CornerDownRight, TriangleAlert } from "lucide-react";
+import { ArrowUpRight, CornerDownRight, TriangleAlert } from "lucide-react";
 import { Notice, Platform } from "obsidian";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 
@@ -875,20 +876,7 @@ export const MiyoSettings: React.FC = () => {
 
         {/* Advanced — the remote Miyo URL is an escape hatch, tucked away by default. */}
         <div>
-          {/* Plain disclosure row, not a button box: the `!` resets override
-              Obsidian's native button chrome (border/background/shadow/padding)
-              that a raw <button> inherits inside the settings pane. */}
-          <button
-            type="button"
-            className="tw-flex tw-w-full tw-cursor-pointer tw-items-center !tw-justify-start tw-gap-1.5 !tw-border-none !tw-bg-transparent !tw-px-0 !tw-py-3 tw-text-left tw-text-sm tw-font-medium tw-text-muted !tw-shadow-none hover:tw-text-normal"
-            aria-expanded={advancedOpen}
-            onClick={() => setAdvancedOpen((open) => !open)}
-          >
-            <ChevronRight
-              className={cn("tw-size-3.5 tw-transition-transform", advancedOpen && "tw-rotate-90")}
-            />
-            Advanced
-          </button>
+          <SettingDisclosure open={advancedOpen} onClick={() => setAdvancedOpen((open) => !open)} />
 
           {advancedOpen && (
             <div className="tw-pb-2">

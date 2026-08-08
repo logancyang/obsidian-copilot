@@ -7,7 +7,7 @@ import { logError, logInfo, logWarn } from "@/logger";
 import { getSettings, normalizeRootFolders, type CopilotSettings } from "@/settings/model";
 import { getEffectiveProjectsFolder } from "@/settings/copilotFolder";
 import { logFileManager } from "@/logFileManager";
-import { getTagsFromNote, stripHash } from "@/utils";
+import { getPropertyValuesFromNote, getTagsFromNote, noteHasProperty, stripHash } from "@/utils";
 import { Embeddings } from "@langchain/core/embeddings";
 import { hasCaseInsensitiveFilesystem } from "@/utils/vaultAdapterUtils";
 import { App, TFile } from "obsidian";
@@ -17,6 +17,7 @@ export interface PatternCategory {
   extensionPatterns?: string[];
   folderPatterns?: string[];
   notePatterns?: string[];
+  propertyPatterns?: string[];
 }
 
 export async function getVectorLength(embeddingInstance: Embeddings | undefined): Promise<number> {
@@ -288,10 +289,25 @@ export function categorizePatterns(patterns: string[]) {
   const extensionPatterns: string[] = [];
   const folderPatterns: string[] = [];
   const notePatterns: string[] = [];
+  const propertyPatterns: string[] = [];
 
   const tagRegex = /^#[^\s#]+$/; // Matches #tag format
   const extensionRegex = /^\*\.([a-zA-Z0-9.]+)$/; // Matches *.extension format
   const noteRegex = /^\[\[(.*?)\]\]$/; // Matches [[note name]] format - removed global flag and added ^ $
+  // Matches the single-bracket [key:value] property form. Tested after noteRegex
+  // (double-bracket) so it never swallows a [[note]], and before the folder
+  // fallthrough so it isn't mistaken for a folder path.
+  //
+  // DESIGN NOTE: like #tag, *.ext, and [[note]], a pattern is an untyped string
+  // classified purely by its shape — there is no per-entry type tag and no
+  // migration. A pre-existing folder pattern shaped exactly like [key:value] would
+  // now be read as a property, but that requires a ":" inside a folder name, which
+  // Obsidian's primary platforms (macOS/Windows) forbid; the identical
+  // shape-ambiguity already exists for a folder literally named [[x]]. Reserving
+  // this shape for properties keeps the grammar consistent; a typed marker would
+  // change the serialized format for every source. If a future review flags this,
+  // point them here.
+  const propertyRegex = /^\[([^[\]:]+):(.*)\]$/;
 
   patterns.forEach((pattern) => {
     if (tagRegex.test(pattern)) {
@@ -300,12 +316,29 @@ export function categorizePatterns(patterns: string[]) {
       extensionPatterns.push(pattern);
     } else if (noteRegex.test(pattern)) {
       notePatterns.push(pattern);
+    } else if (propertyRegex.test(pattern)) {
+      propertyPatterns.push(pattern);
     } else {
       folderPatterns.push(pattern);
     }
   });
 
-  return { tagPatterns, extensionPatterns, folderPatterns, notePatterns };
+  return { tagPatterns, extensionPatterns, folderPatterns, notePatterns, propertyPatterns };
+}
+
+/**
+ * Split a `[key:value]` property pattern into its key and value. Splits on the
+ * first colon only, so a value may itself contain spaces and colons (the reason
+ * some vaults use frontmatter properties instead of tags).
+ *
+ * @param pattern - A property pattern produced by {@link getPropertyPattern}.
+ * @returns The trimmed key and value, or null when the input is not a property
+ * pattern. A key-only pattern (`[key:]`) yields an empty-string value.
+ */
+export function parsePropertyPattern(pattern: string): { key: string; value: string } | null {
+  const match = pattern.match(/^\[([^[\]:]+):(.*)\]$/);
+  if (!match) return null;
+  return { key: match[1].trim(), value: match[2].trim() };
 }
 
 /**
@@ -331,11 +364,13 @@ export function createPatternSettingsValue({
   extensionPatterns,
   folderPatterns,
   notePatterns,
+  propertyPatterns,
 }: PatternCategory) {
   const patterns = [
     ...(tagPatterns ?? []),
     ...(extensionPatterns ?? []),
     ...(notePatterns ?? []),
+    ...(propertyPatterns ?? []),
     ...(folderPatterns ?? []),
   ].map((pattern) => encodeURIComponent(pattern));
 
@@ -355,6 +390,39 @@ function matchFilePathWithTags(app: App, file: TFile, tagPatterns: string[]): bo
   return tagPatterns.some((pattern) =>
     tags.some((tag) => tag.toLowerCase() === stripHash(pattern).toLowerCase())
   );
+}
+
+/**
+ * Match a note against `[key:value]` property patterns. A value matches
+ * case-insensitively after trimming, and a list property matches when any of
+ * its elements matches; a key-only pattern (`[key:]`) matches any note that
+ * has the key.
+ *
+ * DESIGN NOTE — the KEY is matched case-sensitively while the VALUE is not.
+ * Obsidian folds only its reserved keys (`tags`, `aliases`, `cssclasses`); a
+ * user-defined key keeps the exact spelling it was written with, and the
+ * metadata cache exposes the raw frontmatter object, so `Topics` and `topics`
+ * are genuinely two keys. The picker enumerates real vault keys, so it offers
+ * whichever spellings actually exist and a chosen one always matches the notes
+ * it came from. Folding keys was considered and rejected: it would have to pick
+ * a winner when both spellings exist with different values, and it would make
+ * `[key:]` match notes the user never declared under that spelling.
+ * If a future review flags the case-sensitive key lookup again, point them here.
+ *
+ * @param propertyPatterns - The property patterns to match the note against.
+ * @returns True if the note satisfies any property pattern, false otherwise.
+ */
+function matchFilePathWithProperties(app: App, file: TFile, propertyPatterns: string[]): boolean {
+  if (propertyPatterns.length === 0) return false;
+
+  return propertyPatterns.some((pattern) => {
+    const parsed = parsePropertyPattern(pattern);
+    if (!parsed) return false;
+    if (parsed.value === "") return noteHasProperty(app, file, parsed.key);
+    const values = getPropertyValuesFromNote(app, file, parsed.key);
+    const target = parsed.value.toLowerCase();
+    return values.some((value) => value.trim().toLowerCase() === target);
+  });
 }
 
 /**
@@ -424,13 +492,15 @@ function matchFilePathWithNotes(file: TFile, noteTitles: string[]): boolean {
 function matchFilePathWithPatterns(app: App, file: TFile, patterns: PatternCategory): boolean {
   if (!patterns) return false;
 
-  const { tagPatterns, extensionPatterns, folderPatterns, notePatterns } = patterns;
+  const { tagPatterns, extensionPatterns, folderPatterns, notePatterns, propertyPatterns } =
+    patterns;
 
   return (
     matchFilePathWithTags(app, file, tagPatterns ?? []) ||
     matchFilePathWithExtensions(file.path, extensionPatterns ?? []) ||
     matchFilePathWithFolders(file.path, folderPatterns ?? []) ||
-    matchFilePathWithNotes(file, notePatterns ?? [])
+    matchFilePathWithNotes(file, notePatterns ?? []) ||
+    matchFilePathWithProperties(app, file, propertyPatterns ?? [])
   );
 }
 
@@ -462,6 +532,14 @@ export function extractAppIgnoreSettings(app: App): string[] {
 
 export function getTagPattern(tag: string): string {
   return `#${tag}`;
+}
+
+/**
+ * Build a `[key:value]` property inclusion pattern. Omitting the value yields
+ * the key-only form `[key:]`, which matches any note that has the key.
+ */
+export function getPropertyPattern(key: string, value?: string): string {
+  return value ? `[${key}:${value}]` : `[${key}:]`;
 }
 
 export function getFilePattern(file: TFile): string {

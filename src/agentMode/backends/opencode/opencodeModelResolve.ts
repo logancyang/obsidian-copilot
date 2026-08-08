@@ -82,6 +82,28 @@ function opencodeWireBaseId(provider: Provider, configuredModel: ConfiguredModel
 }
 
 /**
+ * opencode's wire base id for one configured model, or `null` when opencode
+ * cannot route its provider. Deliberately ignores `enabledModels`: provider
+ * sync creates the configured model before enrolling it, so a caller that
+ * needs the id the moment the model exists must not depend on enrollment.
+ *
+ * @param configuredModelId - The configured model to translate.
+ * @param settings - Caller-owned settings snapshot holding the model + provider rows.
+ */
+export function opencodeWireBaseIdFor(
+  configuredModelId: string,
+  settings: CopilotSettings
+): string | null {
+  const configuredModel = settings.configuredModels.find(
+    (model) => model.configuredModelId === configuredModelId
+  );
+  if (!configuredModel) return null;
+  const provider = settings.providers[configuredModel.providerId];
+  if (!provider) return null;
+  return opencodeWireBaseId(provider, configuredModel);
+}
+
+/**
  * Credential health for an enabled opencode model, derived purely from the
  * persisted provider row (sync — no keychain read). Native (agent-hosted)
  * providers carry their own auth, so they're always `ok`. Otherwise a

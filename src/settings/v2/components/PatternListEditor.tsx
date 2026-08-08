@@ -69,6 +69,13 @@ export const PatternListEditor: React.FC<PatternListEditorProps> = ({
   // Parse and deduplicate patterns
   const patterns = useMemo(() => getUniquePatterns(value), [value]);
 
+  // DESIGN NOTE — this editor owns four of the five categories `categorizePatterns`
+  // returns. The fifth, `propertyPatterns`, belongs to project context; here it has
+  // no badge, and the rebuilds in `updatePatterns` and `handleAddCustom` name their
+  // keys explicitly, so a property pattern typed in or synced from elsewhere is
+  // dropped on the next edit. The matcher itself honours stored property patterns,
+  // which is why nothing in this UI may offer `[key:value]` until the editor can
+  // show and remove them. If a future review flags this again, point them at this note.
   const { tagPatterns, extensionPatterns, folderPatterns, notePatterns } = useMemo(
     () => categorizePatterns(patterns),
     [patterns]
