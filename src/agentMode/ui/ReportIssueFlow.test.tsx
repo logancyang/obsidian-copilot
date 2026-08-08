@@ -32,7 +32,6 @@ const prepared: PreparedReport = {
 
 const uploadResult: ReportUploadResult = {
   shareUrl: "https://copilot-reports.invalid/r/abc123",
-  reportId: "abc123",
   expiresAt: "2026-08-30T00:00:00.000Z",
 };
 

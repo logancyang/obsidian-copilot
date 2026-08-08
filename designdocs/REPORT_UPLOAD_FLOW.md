@@ -141,7 +141,7 @@ that prevents a false sense of completion:
 > Submit in your browser.
 
 If the API supports revocation, `Delete uploaded report` belongs here too — this
-is the only place the user still holds the report id.
+is the last page that still holds a handle on the uploaded object.
 
 ## The uploader interface
 
@@ -149,8 +149,6 @@ is the only place the user still holds the report id.
 export interface ReportUploadResult {
   /** Stable, non-secret URL for the issue body. Never a raw presigned GET. */
   shareUrl: string;
-  /** Server-side id, for revocation and for support to correlate. */
-  reportId: string;
   /** When `shareUrl` stops working, so page ③ can say. */
   expiresAt?: string;
 }
@@ -163,10 +161,12 @@ A function type, not an interface with one method: one operation, no state. No
 interface that advertises capabilities the implementation cannot honour is how a
 UI ends up promising a Cancel button that does nothing.
 
-Three fields rather than a bare URL, because each has a caller: `shareUrl` goes in
-the issue, `expiresAt` is displayed on page ③, and `reportId` is what a revoke or
-a support query needs. If revocation lands, the type grows a sibling
-`deleteReport(reportId)` rather than overloading this one.
+Two fields rather than a bare URL, because each has a caller: `shareUrl` goes in
+the issue and `expiresAt` is displayed on page ③. A server-side id for revocation
+and support correlation is deliberately absent — nothing here would read it, and
+requiring it would oblige an endpoint that does not exist yet to return a field
+no caller wants. Revocation, when it lands, adds both the id and the sibling
+`deleteReport` that consumes it, rather than pre-paying for half of it now.
 
 **Injected at the composition root**, as a **required** `ReportIssueModalParams`
 field. Tests override it.
@@ -348,12 +348,12 @@ Modelled by `AttachmentOutcome`, and visible on page ② before sending.
 
 ### D — actor / trust boundary × authorisation and retention
 
-| Actor                           | Holds                       | Must not be able to            |
-| ------------------------------- | --------------------------- | ------------------------------ |
-| Reporter                        | zip, `reportId`, `shareUrl` | — (may revoke, if supported)   |
-| Maintainer                      | `shareUrl` from the issue   | download without authorisation |
-| Anyone reading the public issue | `shareUrl`                  | download at all                |
-| Brevilabs                       | the object                  | retain past the stated window  |
+| Actor                           | Holds                     | Must not be able to            |
+| ------------------------------- | ------------------------- | ------------------------------ |
+| Reporter                        | zip, `shareUrl`           | — (may revoke, if supported)   |
+| Maintainer                      | `shareUrl` from the issue | download without authorisation |
+| Anyone reading the public issue | `shareUrl`                | download at all                |
+| Brevilabs                       | the object                | retain past the stated window  |
 
 The third row is what forces `shareUrl` to be a reference rather than a
 credential.
@@ -381,7 +381,7 @@ gone with no error ever shown.
 **What holds it.** Nothing in the code. This branch must not merge or release
 before the endpoint exists — that is a human gate, and it is the whole
 protection. The `.invalid` host is the one hedge that survives a mistake: a fake
-link can never resolve, and can never collide with a real `reportId`.
+link can never resolve, and can never be mistaken for a real response.
 
 **Still to build, in order:**
 
