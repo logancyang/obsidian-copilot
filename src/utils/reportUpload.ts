@@ -10,8 +10,6 @@
 export interface ReportUploadResult {
   /** Stable, non-secret reference for the issue body — never a bearer credential. */
   shareUrl: string;
-  /** Server-side id, for revocation and support correlation. */
-  reportId: string;
   /**
    * When `shareUrl` stops working, shown to the user alongside it.
    *

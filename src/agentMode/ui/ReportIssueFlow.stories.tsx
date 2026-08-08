@@ -70,7 +70,6 @@ const UPLOADED: UploadOutcome = {
   ok: true,
   result: {
     shareUrl: "https://reports.example.invalid/r/a1b2c3",
-    reportId: "a1b2c3",
     expiresAt: "2026-09-06T00:00:00.000Z",
   },
   issueUrl: "https://github.com/logancyang/obsidian-copilot/issues/new?body=...",

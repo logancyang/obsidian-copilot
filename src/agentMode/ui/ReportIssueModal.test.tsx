@@ -417,7 +417,6 @@ describe("ReportIssueModal", () => {
     it("builds the linked issue URL from the uploader's result", async () => {
       const uploader: ReportUploader = jest.fn().mockResolvedValue({
         shareUrl: "https://copilot-reports.invalid/r/abc123",
-        reportId: "abc123",
       });
 
       const outcome = await uploadReport(uploader, report);
@@ -444,10 +443,8 @@ describe("ReportIssueModal", () => {
     it("still reports success when the upload lands but the URL cannot carry the link", async () => {
       // A `shareUrl` long enough that no body fits under the URL ceiling, so
       // `buildLinkedReportIssueUrl` throws — after the report is already stored.
-      const uploader: ReportUploader = jest.fn().mockResolvedValue({
-        shareUrl: `https://copilot-reports.invalid/r/${"a".repeat(3000)}`,
-        reportId: "abc123",
-      });
+      const shareUrl = `https://copilot-reports.invalid/r/${"a".repeat(3000)}`;
+      const uploader: ReportUploader = jest.fn().mockResolvedValue({ shareUrl });
 
       const outcome = await uploadReport(uploader, report);
 
@@ -457,7 +454,7 @@ describe("ReportIssueModal", () => {
       if (!outcome.ok) throw new Error("expected success");
       expect(outcome.linkPrefilled).toBe(false);
       expect(outcome.issueUrl).toBe(report.manualIssueUrl);
-      expect(outcome.result.reportId).toBe("abc123");
+      expect(outcome.result.shareUrl).toBe(shareUrl);
     });
   });
 
