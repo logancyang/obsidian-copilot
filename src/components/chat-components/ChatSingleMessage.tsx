@@ -1,4 +1,5 @@
 import { ChatButtons } from "@/components/chat-components/ChatButtons";
+import { AssistantResponseFooter } from "@/components/ui/AssistantResponseFooter";
 import { SourcesModal } from "@/components/modals/SourcesModal";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
@@ -303,6 +304,8 @@ interface ChatSingleMessageProps {
   onRegenerate?: () => void;
   onEdit?: (newMessage: string) => void;
   onDelete?: () => void;
+  /** Agent Mode metadata placed at the response footer's leading edge, before the timestamp. */
+  footerStart?: React.ReactNode;
 }
 
 const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
@@ -312,6 +315,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   onRegenerate,
   onEdit,
   onDelete,
+  footerStart,
 }) => {
   const [isEditing, setIsEditing] = useState<boolean>(false);
   const parsedReasoningBlock = useMemo(
@@ -1002,18 +1006,21 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           )}
 
           {!isStreaming && (
-            <div className="tw-flex tw-items-center tw-justify-between">
-              <div className="tw-text-xs tw-text-faint">{message.timestamp?.display}</div>
-              <ChatButtons
-                message={message}
-                onInsertIntoEditor={handleInsertIntoEditor}
-                onRegenerate={onRegenerate}
-                onEdit={onEdit ? handleEdit : undefined}
-                onDelete={onDelete}
-                onShowSources={handleShowSources}
-                hasSources={message.sources && message.sources.length > 0 ? true : false}
-              />
-            </div>
+            <AssistantResponseFooter
+              leading={footerStart}
+              timestamp={message.timestamp?.display}
+              actions={
+                <ChatButtons
+                  message={message}
+                  onInsertIntoEditor={handleInsertIntoEditor}
+                  onRegenerate={onRegenerate}
+                  onEdit={onEdit ? handleEdit : undefined}
+                  onDelete={onDelete}
+                  onShowSources={handleShowSources}
+                  hasSources={message.sources && message.sources.length > 0 ? true : false}
+                />
+              }
+            />
           )}
         </div>
       </div>

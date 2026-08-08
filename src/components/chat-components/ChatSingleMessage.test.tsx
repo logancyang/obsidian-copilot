@@ -1,5 +1,5 @@
 import React from "react";
-import { render, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import ChatSingleMessage, {
   normalizeFootnoteRendering,
 } from "@/components/chat-components/ChatSingleMessage";
@@ -352,5 +352,38 @@ describe("ChatSingleMessage", () => {
     const messageSegment = container.querySelector(".message-segment");
     expect(messageSegment).toBeTruthy();
     expect(messageSegment?.classList.contains("markdown-rendered")).toBe(true);
+  });
+
+  it("shows supplied Agent Mode metadata instead of the timestamp in the response footer", async () => {
+    const timestamp = "2026/08/07 20:31:10";
+    const { rerender } = render(
+      <TooltipProvider>
+        <ChatSingleMessage
+          message={{ ...baseMessage, timestamp: { epoch: 1, display: timestamp, fileName: "now" } }}
+          app={createAppStub()}
+          isStreaming={false}
+          footerStart={<span>Worked for 24s</span>}
+        />
+      </TooltipProvider>
+    );
+
+    await waitFor(() => expect(renderMarkdownMock).toHaveBeenCalled());
+
+    const duration = screen.getByText("Worked for 24s");
+    const footer = duration.closest(".tw-justify-between");
+    expect(footer?.classList.contains("tw-items-center")).toBe(true);
+    expect(footer?.contains(screen.getByTitle("Copy"))).toBe(true);
+    expect(screen.queryByText(timestamp)).toBeNull();
+
+    rerender(
+      <TooltipProvider>
+        <ChatSingleMessage
+          message={{ ...baseMessage, timestamp: { epoch: 1, display: timestamp, fileName: "now" } }}
+          app={createAppStub()}
+          isStreaming={false}
+        />
+      </TooltipProvider>
+    );
+    expect(screen.getByText(timestamp)).toBeTruthy();
   });
 });

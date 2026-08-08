@@ -137,13 +137,16 @@ const AgentChatMessages = memo(
               ownsTurnDuration && message.id === streamingMessageId
                 ? message.timestamp?.epoch
                 : undefined;
-            const standaloneTurnDuration =
+            const completedTurnDuration =
               completedTurnDurationMs !== undefined ? (
                 <AgentTurnDurationIndicator
                   status="complete"
                   durationMs={completedTurnDurationMs}
+                  inline
                 />
-              ) : runningTurnStartedAtMs !== undefined ? (
+              ) : null;
+            const runningTurnDuration =
+              runningTurnStartedAtMs !== undefined ? (
                 <AgentTurnDurationIndicator status="running" startedAtMs={runningTurnStartedAtMs} />
               ) : null;
             // The streaming placeholder (empty body, no parts) renders the
@@ -169,11 +172,16 @@ const AgentChatMessages = memo(
               >
                 {fanoutTurn ? (
                   <div className="tw-px-3 tw-pt-2">
-                    <FanoutMessageCard message={message} turn={fanoutTurn} app={app} />
-                    {standaloneTurnDuration}
+                    <FanoutMessageCard
+                      message={message}
+                      turn={fanoutTurn}
+                      app={app}
+                      footerStart={completedTurnDuration}
+                    />
+                    {runningTurnDuration}
                   </div>
                 ) : isStreamingPlaceholder ? (
-                  <div className="tw-px-3 tw-pt-2">{standaloneTurnDuration}</div>
+                  <div className="tw-px-3 tw-pt-2">{runningTurnDuration}</div>
                 ) : renderTrail ? (
                   <div className="tw-px-3 tw-pt-2">
                     <AgentTrail
@@ -181,6 +189,7 @@ const AgentChatMessages = memo(
                       isStreaming={message.id === streamingMessageId}
                       turnStartedAtMs={runningTurnStartedAtMs}
                       turnDurationMs={completedTurnDurationMs}
+                      timestamp={message.timestamp?.display}
                       app={app}
                       turnStopReason={message.turnStopReason}
                     />
@@ -191,9 +200,14 @@ const AgentChatMessages = memo(
                   // lifecycle handlers are wired — ChatButtons renders only the
                   // copy / insert actions it can honor.
                   <>
-                    <ChatSingleMessage message={adaptedMessage} app={app} isStreaming={false} />
-                    {standaloneTurnDuration ? (
-                      <div className="tw-px-3">{standaloneTurnDuration}</div>
+                    <ChatSingleMessage
+                      message={adaptedMessage}
+                      app={app}
+                      isStreaming={false}
+                      footerStart={completedTurnDuration}
+                    />
+                    {runningTurnDuration ? (
+                      <div className="tw-px-3">{runningTurnDuration}</div>
                     ) : null}
                   </>
                 )}

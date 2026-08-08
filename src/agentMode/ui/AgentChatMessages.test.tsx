@@ -16,7 +16,24 @@ jest.mock("@/hooks/useChatScrolling", () => ({
 
 jest.mock("@/components/chat-components/ChatSingleMessage", () => ({
   __esModule: true,
-  default: ({ message }: { message: { message: string } }) => <div>{message.message}</div>,
+  default: ({
+    message,
+    footerStart,
+  }: {
+    message: { message: string };
+    footerStart?: React.ReactNode;
+  }) => (
+    <div>
+      {message.message}
+      <div data-testid="single-message-footer">{footerStart}</div>
+    </div>
+  ),
+}));
+
+jest.mock("@/agentMode/ui/AgentTrailView", () => ({
+  AgentTrail: ({ timestamp }: { timestamp?: string }) => (
+    <div data-testid="agent-trail-timestamp">{timestamp}</div>
+  ),
 }));
 
 function assistantMessage(
@@ -64,6 +81,9 @@ describe("AgentChatMessages", () => {
       );
 
       expect(screen.getByText("2m 18s")).toBeTruthy();
+      expect(screen.getByTestId("single-message-footer").textContent).toContain(
+        "Worked for 2m 18s"
+      );
       expect(container.querySelector(".copilot-spinner")).toBeTruthy();
       expect(container.querySelector(".copilot-spinner-dot-0")).toBeNull();
     });
@@ -83,6 +103,21 @@ describe("AgentChatMessages", () => {
 
       act(() => jest.advanceTimersByTime(1_000));
       expect(screen.getByText("3s")).toBeTruthy();
+    });
+
+    it("passes the message timestamp to a structured trail without a duration", () => {
+      const timestamp = "2026/08/07 20:31:10";
+      renderMessages(
+        [
+          assistantMessage("answer-1", 62_000, {
+            timestamp: { epoch: 62_000, display: timestamp, fileName: "20260807_203110" },
+            parts: [{ kind: "thought", text: "Inspect the response." }],
+          }),
+        ],
+        false
+      );
+
+      expect(screen.getByTestId("agent-trail-timestamp").textContent).toBe(timestamp);
     });
   });
 });

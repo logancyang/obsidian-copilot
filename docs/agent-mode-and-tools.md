@@ -61,7 +61,9 @@ If you've turned on reduced motion in your operating system, the prompts still r
 
 While an agent turn is running, the activity trail shows **Worked for** with a live elapsed-time counter and the animated Copilot icon. The counter measures the full wall-clock time from sending the prompt until the turn finishes, including tool use and any time spent waiting for a permission or answer.
 
-When the turn finishes, the time freezes and the Copilot icon becomes static. The completed duration remains visible beneath the latest response until you send the next prompt, when a new counter takes its place. Leading zero units are omitted, so durations appear as `18s`, `2m 18s`, or `1h 2m 18s`.
+While a reasoning step is active, its brain row shows an animated ellipsis rather than a second timer. When that step finishes, the row changes to **Thought for** with its frozen duration.
+
+When the turn finishes, the time freezes and the Copilot icon becomes static. The completed duration moves to the leading edge of the same footer row as the response controls. When a duration is unavailable, the message timestamp appears in that position instead; only one of the two is shown. The duration remains visible until you send the next prompt, when that completed response falls back to its timestamp and the new turn owns the live counter. Leading zero units are omitted, so durations appear as `18s`, `2m 18s`, or `1h 2m 18s`.
 
 ## Choosing an Operating Mode
 
@@ -269,7 +271,7 @@ While the agent is working, the chat shows what it is doing. A single action get
 
 When the agent performs several actions in a row, they are collapsed into one summary row instead of a long list — for example "Read 2 files, ran 5 commands, thought for 51s". While that work is still in progress, the current step (like the command being run) appears beneath the summary and updates as the agent moves on.
 
-Click a summary row to expand it and see every action inside, each with its own status line. An expanded row stays open — even as new actions stream into it — until you collapse it again.
+Reasoning, individual tool calls, grouped activity, and delegated agents use the same aligned status-row style. Whenever a row has more detail, it shows the same disclosure arrow and can be opened with a click or the keyboard. Expanded details appear on the same indented rail, and an activity group stays open — even as new actions stream into it — until you collapse it again.
 
 Only background work is grouped this way. The agent's own messages, plan checklists, questions to you, and delegated sub-agents always stay visible as separate rows.
 

@@ -1,13 +1,13 @@
 import React, { useMemo } from "react";
-import { ChevronDown, ChevronRight, Loader2, Check, X } from "lucide-react";
+import { Loader2, Check, X } from "lucide-react";
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
 import type { AgentToolStatus } from "@/agentMode/session/types";
 import { lookupToolSummary } from "@/agentMode/ui/toolSummaries";
 import { renderDiff } from "@/agentMode/ui/diffRender";
 import { getVaultBase } from "@/utils/vaultPath";
 import { openVaultPath } from "@/utils/openVaultPath";
-import { cn } from "@/lib/utils";
 import { useApp } from "@/context";
+import { AgentActivityCard } from "@/components/chat-components/AgentActivityCard";
 
 interface ActionCardProps {
   part: ToolCallPart;
@@ -34,23 +34,14 @@ export const ActionCard: React.FC<ActionCardProps> = ({ part, open, onToggle }) 
   const targetPath =
     part.status === "completed" ? (summary.targetPath?.(part, summaryCtx) ?? null) : null;
 
-  const headerClasses = cn(
-    "tw-flex tw-items-center tw-gap-1.5 tw-text-sm tw-text-muted",
-    expandable && "tw-cursor-pointer hover:tw-text-normal"
-  );
-
   return (
-    <div className="tw-my-1 tw-flex tw-flex-col tw-gap-0.5">
-      <div
-        className={headerClasses}
-        onClick={expandable ? onToggle : undefined}
-        role={expandable ? "button" : undefined}
-      >
-        <Icon className="tw-size-3.5 tw-shrink-0 tw-text-muted" />
-        {targetPath ? (
+    <AgentActivityCard
+      icon={Icon}
+      label={
+        targetPath ? (
           <a
             href="#"
-            className="tw-flex-1 tw-truncate tw-font-medium tw-text-inherit hover:tw-text-accent hover:tw-underline"
+            className="tw-min-w-0 tw-truncate tw-text-inherit hover:tw-text-accent hover:tw-underline"
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
@@ -64,46 +55,40 @@ export const ActionCard: React.FC<ActionCardProps> = ({ part, open, onToggle }) 
             {line}
           </a>
         ) : (
-          <span className="tw-flex-1 tw-truncate tw-font-medium">{line}</span>
-        )}
-        <StatusBadge status={part.status} />
-        {expandable &&
-          (open ? (
-            <ChevronDown className="tw-size-3 tw-text-muted" />
-          ) : (
-            <ChevronRight className="tw-size-3 tw-text-muted" />
-          ))}
-      </div>
-      {expandable && open ? (
-        <div className="tw-mt-1 tw-flex tw-flex-col tw-gap-1">
-          {details ? (
-            <pre className="tw-max-h-40 tw-overflow-auto tw-whitespace-pre-wrap tw-rounded tw-bg-secondary-alt tw-p-1 tw-text-xs">
-              {details}
-            </pre>
-          ) : null}
-          {outcome ? <div className="tw-text-xs tw-text-muted">{outcome}</div> : null}
-          {outputs.map((o, i) =>
-            o.type === "text" ? (
-              <pre
-                // eslint-disable-next-line @eslint-react/no-array-index-key -- tool outputs are append-only; index is stable
-                key={`text-${i}`}
-                className="tw-max-h-40 tw-overflow-auto tw-whitespace-pre-wrap tw-rounded tw-bg-secondary-alt tw-p-1 tw-text-xs"
-              >
-                {o.text}
-              </pre>
-            ) : (
-              // eslint-disable-next-line @eslint-react/no-array-index-key -- tool outputs are append-only; index is stable
-              <div key={`diff-${i}-${o.path}`} className="tw-rounded tw-bg-secondary-alt tw-p-1">
-                <p className="tw-font-mono tw-text-xs tw-text-muted">{o.path}</p>
-                <pre className="tw-max-h-40 tw-overflow-auto tw-whitespace-pre-wrap tw-text-xs">
-                  {renderDiff(o.oldText, o.newText)}
-                </pre>
-              </div>
-            )
-          )}
-        </div>
+          <span className="tw-truncate">{line}</span>
+        )
+      }
+      trailing={<StatusBadge status={part.status} />}
+      expandable={expandable}
+      open={open}
+      onToggle={onToggle}
+    >
+      {details ? (
+        <pre className="tw-max-h-40 tw-overflow-auto tw-whitespace-pre-wrap tw-rounded tw-bg-secondary-alt tw-p-1 tw-text-xs">
+          {details}
+        </pre>
       ) : null}
-    </div>
+      {outcome ? <div className="tw-text-xs tw-text-muted">{outcome}</div> : null}
+      {outputs.map((o, i) =>
+        o.type === "text" ? (
+          <pre
+            // eslint-disable-next-line @eslint-react/no-array-index-key -- tool outputs are append-only; index is stable
+            key={`text-${i}`}
+            className="tw-max-h-40 tw-overflow-auto tw-whitespace-pre-wrap tw-rounded tw-bg-secondary-alt tw-p-1 tw-text-xs"
+          >
+            {o.text}
+          </pre>
+        ) : (
+          // eslint-disable-next-line @eslint-react/no-array-index-key -- tool outputs are append-only; index is stable
+          <div key={`diff-${i}-${o.path}`} className="tw-rounded tw-bg-secondary-alt tw-p-1">
+            <p className="tw-font-mono tw-text-xs tw-text-muted">{o.path}</p>
+            <pre className="tw-max-h-40 tw-overflow-auto tw-whitespace-pre-wrap tw-text-xs">
+              {renderDiff(o.oldText, o.newText)}
+            </pre>
+          </div>
+        )
+      )}
+    </AgentActivityCard>
   );
 };
 

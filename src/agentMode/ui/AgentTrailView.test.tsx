@@ -126,10 +126,23 @@ describe("AgentTrail", () => {
     expect(screen.queryByTitle("Insert / Replace at cursor")).toBeNull();
   });
 
+  it("shows the running duration instead of the timestamp while streaming", () => {
+    renderTrail({
+      isStreaming: true,
+      turnStopReason: undefined,
+      turnStartedAtMs: Date.now() - 24_000,
+      timestamp: "2026/08/07 20:31:10",
+    });
+
+    expect(screen.getByText("Worked for")).toBeTruthy();
+    expect(screen.queryByText("2026/08/07 20:31:10")).toBeNull();
+  });
+
   it("renders neither button when the turn was cancelled", () => {
-    renderTrail({ turnStopReason: "cancelled" });
+    renderTrail({ turnStopReason: "cancelled", timestamp: "2026/08/07 20:31:10" });
     expect(screen.queryByTitle("Copy")).toBeNull();
     expect(screen.queryByTitle("Insert / Replace at cursor")).toBeNull();
+    expect(screen.getByText("2026/08/07 20:31:10")).toBeTruthy();
   });
 
   it("renders neither button when the turn produced no trailing prose", () => {
@@ -137,6 +150,15 @@ describe("AgentTrail", () => {
     expect(screen.queryByTitle("Copy")).toBeNull();
     expect(screen.queryByTitle("Insert / Replace at cursor")).toBeNull();
   });
+
+  it("shows the timestamp with response controls when a completed duration is unavailable", () => {
+    renderTrail({ timestamp: "2026/08/07 20:31:10" });
+
+    expect(screen.getByText("2026/08/07 20:31:10")).toBeTruthy();
+    expect(screen.getByTitle("Copy")).toBeTruthy();
+    expect(screen.queryByText("Worked for")).toBeNull();
+  });
+
   it("keeps research inline while showing a non-collapsible completed duration", () => {
     renderTrail({
       parts: [
@@ -147,15 +169,46 @@ describe("AgentTrail", () => {
       ],
       turnStopReason: "end_turn",
       turnDurationMs: 138_000,
+      timestamp: "2026/08/07 20:31:10",
     });
 
     expect(screen.getByText("Worked for")).toBeTruthy();
     expect(screen.getByText("2m 18s")).toBeTruthy();
+    expect(screen.queryByText("2026/08/07 20:31:10")).toBeNull();
     expect(screen.queryByRole("button", { name: /Worked for/i })).toBeNull();
+    const footer = screen.getByText("Worked for").closest(".tw-justify-between");
+    expect(footer?.classList.contains("tw-items-center")).toBe(true);
+    expect(footer?.contains(screen.getByTitle("Copy"))).toBe(true);
+    expect(footer?.contains(screen.getByTitle("Insert / Replace at cursor"))).toBe(true);
     // The trailing prose renders as the final answer.
     expect(screen.getByText("The final answer.")).toBeTruthy();
     // The research tool card renders inline (not folded behind a toggle).
     expect(screen.getByText("Search vault")).toBeTruthy();
+  });
+
+  it("uses one aligned folding header for reasoning and every tool-card family", () => {
+    const { container } = renderTrail({
+      parts: [
+        { kind: "thought", text: "Inspect the trail first." },
+        text("Reasoning complete."),
+        { ...READ_A, output: [{ type: "text", text: "file contents" }] },
+        text("Single tool complete."),
+        READ_B,
+        LINT,
+        text("Grouped tools complete."),
+        toolCall("task1", {
+          vendorToolName: "Task",
+          input: { subagent_type: "Explore", description: "Check nested cards" },
+        }),
+        { ...READ_A, id: "nested-read", parentToolCallId: "task1" },
+      ],
+    });
+
+    const headers = [...container.querySelectorAll("[data-agent-activity-card-header]")];
+    expect(headers).toHaveLength(4);
+    expect(headers.every((header) => header.classList.contains("tw-pl-1"))).toBe(true);
+    expect(headers.every((header) => header.getAttribute("aria-expanded") === "false")).toBe(true);
+    expect(container.querySelectorAll(".lucide-chevron-right")).toHaveLength(4);
   });
 
   it("shows progress on a childless background subagent card", () => {
