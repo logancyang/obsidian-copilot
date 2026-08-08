@@ -433,7 +433,7 @@ function ChatHistoryItem({
         <Input
           value={editingTitle}
           onChange={(e) => onEditingTitleChange(e.target.value)}
-          className="!tw-h-6 tw-flex-1"
+          className="tw-h-6 tw-flex-1"
           autoFocus
           onKeyDown={(e) => {
             if (e.key === "Enter") {

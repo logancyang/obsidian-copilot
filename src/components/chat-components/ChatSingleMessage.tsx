@@ -997,7 +997,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
             />
           )}
 
-          <div className="message-content tw-break-words !tw-leading-[1.6]">
+          <div className="message-content tw-break-words tw-leading-[1.6]">
             {renderMessageContent()}
           </div>
 

@@ -33,7 +33,7 @@ export function PasswordInput({
         onChange={(e) => onChange?.(e.target.value)}
         placeholder={placeholder}
         disabled={disabled}
-        className={cn("tw-w-full !tw-pr-7")}
+        className={cn("tw-w-full tw-pr-7")}
       />
       <div
         onClick={() => !disabled && setShowPassword(!showPassword)}

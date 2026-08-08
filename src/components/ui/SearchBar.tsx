@@ -9,9 +9,7 @@ interface SearchBarProps {
   onChange: (value: string) => void;
   placeholder?: string;
   /**
-   * Extra classes for the inner Input — e.g. a height override (`!tw-h-7`) for
-   * compact list contexts. The Input's base height is `!`-important, so an
-   * override must be `!`-important too (cn/tailwind-merge resolves the conflict).
+   * Extra classes for the inner Input, such as a compact height override.
    */
   inputClassName?: string;
 }

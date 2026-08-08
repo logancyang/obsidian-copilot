@@ -26,9 +26,8 @@ interface ConfigDialogShellProps {
  * Obsidian's native title element empty.
  *
  * Every band owns its own padding so the dividers between them run edge to edge.
- * The `copilot-config-dialog` marker class is what makes that hold: a stylesheet
- * rule keys off it to zero the padding the hosting modal would otherwise
- * contribute, which would inset every divider by a theme-dependent amount.
+ * The hosting install modals carry `copilot-config-modal`, which removes their
+ * theme-dependent outer padding without a costly parent `:has()` selector.
  */
 export const ConfigDialogShell: React.FC<ConfigDialogShellProps> = ({
   title,
@@ -38,7 +37,7 @@ export const ConfigDialogShell: React.FC<ConfigDialogShellProps> = ({
   footer,
   onClose,
 }) => (
-  <div className="copilot-config-dialog tw-flex tw-flex-col">
+  <div className="tw-flex tw-flex-col">
     <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-2 tw-px-4 tw-pb-3 tw-pt-4">
       <h3 className="tw-m-0 tw-text-ui-medium tw-font-semibold tw-leading-tight tw-text-normal">
         {title}

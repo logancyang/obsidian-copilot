@@ -272,6 +272,7 @@ export class OpencodeInstallModal extends ReactModal {
     private readonly hostInfo: { platform: string; arch: string }
   ) {
     super(app, "Configure opencode");
+    this.modalEl.addClass("copilot-config-modal");
   }
 
   protected renderContent(close: () => void): React.ReactElement {

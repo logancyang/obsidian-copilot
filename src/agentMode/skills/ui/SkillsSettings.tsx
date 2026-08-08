@@ -239,7 +239,7 @@ export const SkillsSettings: React.FC = () => {
               value={searchValue}
               onChange={(e) => setSearchValue(e.target.value)}
               placeholder="Search skills…"
-              className="!tw-w-full !tw-pl-8 sm:!tw-w-64"
+              className="tw-w-full tw-pl-8 sm:tw-w-64"
               aria-label="Search skills"
             />
           </div>

@@ -77,8 +77,8 @@ export function useDraggable(options: UseDraggableOptions = {}) {
 
   /**
    * Writes position to the drag element via CSS custom properties.
-   * The consumer must include `!tw-left-[var(--copilot-drag-x,0px)]` and
-   * `!tw-top-[var(--copilot-drag-y,0px)]` (or equivalent) on the element so
+   * The consumer must include `tw-left-[var(--copilot-drag-x,0px)]` and
+   * `tw-top-[var(--copilot-drag-y,0px)]` (or equivalent) on the element so
    * these variables map to actual `left`/`top` values.
    */
   const writePositionToDom = useCallback(

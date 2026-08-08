@@ -169,7 +169,7 @@ export function SettingItem(props: SettingItemProps) {
                 // strands the label against the right edge of our fixed-width
                 // control. A plain class wins on specificity — neither rule is
                 // `!important`, and a class outranks an element selector.
-                "tw-text-left tw-text-sm !tw-shadow tw-transition-colors",
+                "tw-text-left tw-text-sm tw-shadow tw-transition-colors",
                 "focus:tw-outline-none focus:tw-ring-1 focus:tw-ring-ring",
                 "disabled:tw-cursor-not-allowed disabled:tw-opacity-50",
                 "hover:tw-bg-interactive-hover hover:tw-text-normal"

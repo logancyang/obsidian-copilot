@@ -114,11 +114,11 @@ export function SegmentedControl<T extends string>({
             // (rounded-md + overflow-hidden). bg lives only in the selected/unselected
             // branches (never both) so there's no same-property collision.
             className={cn(
-              "tw-cursor-pointer !tw-rounded-none tw-border-none !tw-px-3 !tw-py-1.5 !tw-shadow-none tw-transition-colors focus-visible:tw-outline-none focus-visible:tw-ring-1 focus-visible:tw-ring-ring",
+              "tw-cursor-pointer tw-rounded-none tw-border-none tw-px-3 tw-py-1.5 tw-shadow-none tw-transition-colors focus-visible:tw-outline-none focus-visible:tw-ring-1 focus-visible:tw-ring-ring",
               index > 0 && "tw-border-l tw-border-solid tw-border-border",
               isSelected
-                ? "!tw-bg-interactive-accent !tw-text-on-accent"
-                : "!tw-bg-secondary tw-text-muted hover:!tw-bg-modifier-hover hover:tw-text-normal",
+                ? "tw-bg-interactive-accent tw-text-on-accent"
+                : "tw-bg-secondary tw-text-muted hover:tw-bg-modifier-hover hover:tw-text-normal",
               isDisabled && "tw-cursor-not-allowed tw-opacity-50"
             )}
           >

@@ -215,7 +215,7 @@ export function TypeaheadMenuContent({
               onKeyDown={handleSearchKeyDown}
               placeholder="Search..."
               autoFocus
-              className="tw-w-full tw-rounded-md !tw-border-none !tw-bg-transparent tw-px-1 tw-py-0 tw-text-sm tw-text-normal placeholder:tw-text-muted focus:!tw-shadow-none"
+              className="tw-w-full tw-rounded-md tw-border-none tw-bg-transparent tw-px-1 tw-py-0 tw-text-sm tw-text-normal placeholder:tw-text-muted focus:tw-shadow-none"
             />
           </div>
         )}

@@ -50,6 +50,7 @@ const CodexConfigContainer: React.FC<{ onClose: () => void }> = ({ onClose }) =>
 export class CodexInstallModal extends ReactModal {
   constructor(app: App) {
     super(app, "Configure Codex");
+    this.modalEl.addClass("copilot-config-modal");
   }
 
   protected renderContent(close: () => void): React.ReactElement {

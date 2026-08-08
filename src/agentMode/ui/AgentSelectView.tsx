@@ -120,10 +120,8 @@ export const AgentSelectView: React.FC<AgentSelectViewProps> = ({
               // only in the selected/unselected branch, never both, so nothing
               // collides.
               className={cn(
-                "tw-flex tw-h-auto tw-w-full tw-cursor-pointer tw-items-start tw-gap-2 !tw-whitespace-normal !tw-rounded-md tw-border-none !tw-p-2 tw-text-left !tw-shadow-none tw-transition-colors focus-visible:tw-outline-none focus-visible:tw-ring-1 focus-visible:tw-ring-ring",
-                isSelected
-                  ? "!tw-bg-modifier-hover"
-                  : "!tw-bg-transparent hover:!tw-bg-modifier-hover"
+                "tw-flex tw-h-auto tw-w-full tw-cursor-pointer tw-items-start tw-gap-2 tw-whitespace-normal tw-rounded-md tw-border-none tw-p-2 tw-text-left tw-shadow-none tw-transition-colors focus-visible:tw-outline-none focus-visible:tw-ring-1 focus-visible:tw-ring-ring",
+                isSelected ? "tw-bg-modifier-hover" : "tw-bg-transparent hover:tw-bg-modifier-hover"
               )}
             >
               <span

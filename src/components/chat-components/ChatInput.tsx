@@ -693,7 +693,7 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
   // without removing user-added ones (removal is handled in the dedicated handlers above).
   useEffect(() => {
     if (isPlusChain(currentChain)) {
-      // eslint-disable-next-line @eslint-react/hooks-extra/no-direct-set-state-in-use-effect
+      // eslint-disable-next-line @eslint-react/hooks-extra/no-direct-set-state-in-use-effect -- synchronize the editor draft after an external clear request
       setContextUrls((prev) => {
         const contextUrlSet = new Set(prev);
         const newUrlsFromPills = urlsFromPills.filter((pillUrl) => !contextUrlSet.has(pillUrl));
@@ -703,7 +703,7 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
         return prev;
       });
     } else {
-      // eslint-disable-next-line @eslint-react/hooks-extra/no-direct-set-state-in-use-effect
+      // eslint-disable-next-line @eslint-react/hooks-extra/no-direct-set-state-in-use-effect -- synchronize the editor draft after an external replacement
       setContextUrls([]);
     }
   }, [urlsFromPills, currentChain]);
@@ -711,7 +711,7 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
   // Pill state is owned by the Lexical editor; absorb new entries into context folders
   // without removing user-added ones (removal is handled in handleFolderPillsRemoved).
   useEffect(() => {
-    // eslint-disable-next-line @eslint-react/hooks-extra/no-direct-set-state-in-use-effect
+    // eslint-disable-next-line @eslint-react/hooks-extra/no-direct-set-state-in-use-effect -- the controlled value can be reset by its parent
     setContextFolders((prev) => {
       const contextFolderPaths = new Set(prev);
       const newFoldersFromPills = foldersFromPills.filter(
@@ -996,7 +996,7 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
                   className="tw-text-muted"
                   onClick={() => onSendMessage()}
                 >
-                  <CornerDownLeft className="!tw-size-3" />
+                  <CornerDownLeft className="tw-size-3" />
                   <span>save</span>
                 </Button>
               ) : (

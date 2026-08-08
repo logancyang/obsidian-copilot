@@ -293,7 +293,7 @@ function RelevantNoteRow({
                 onNavigateToNote();
               }
             }}
-            className="tw-min-w-0 tw-flex-1 tw-cursor-pointer tw-truncate tw-text-sm tw-font-medium tw-text-normal !tw-no-underline"
+            className="tw-min-w-0 tw-flex-1 tw-cursor-pointer tw-truncate tw-text-sm tw-font-medium tw-text-normal tw-no-underline"
           >
             {note.note.title}
           </a>

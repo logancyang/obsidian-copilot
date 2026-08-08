@@ -321,7 +321,7 @@ const SessionTab: React.FC<TabProps> = ({
             onCloseOnHover={onClose}
           />
           <TruncatedText
-            className="tw-min-w-0 tw-flex-1 !tw-text-current"
+            className="tw-min-w-0 tw-flex-1 tw-text-current"
             tooltipContent={displayLabel}
           >
             {displayLabel}
@@ -521,10 +521,7 @@ const OverflowRow: React.FC<OverflowRowProps> = ({ session, isActive, onActivate
       )}
     >
       <BrandIcon descriptor={descriptor} status={status} needsAttention={needsAttention} />
-      <TruncatedText
-        className="tw-min-w-0 tw-flex-1 !tw-text-current"
-        tooltipContent={displayLabel}
-      >
+      <TruncatedText className="tw-min-w-0 tw-flex-1 tw-text-current" tooltipContent={displayLabel}>
         {displayLabel}
       </TruncatedText>
       <Button

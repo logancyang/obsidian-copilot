@@ -12,8 +12,8 @@ const ScrollArea = React.forwardRef<
     className={cn("tw-relative tw-overflow-hidden", className)}
     {...props}
   >
-    {/*[&>div:first-child]:!tw-block：for override the first child div style's (display: table)*/}
-    <ScrollAreaPrimitive.Viewport className="tw-size-full tw-rounded-[inherit] [&>div:first-child]:!tw-block">
+    {/* [&>div:first-child]:tw-block overrides the first child div's display: table. */}
+    <ScrollAreaPrimitive.Viewport className="tw-size-full tw-rounded-[inherit] [&>div:first-child]:tw-block">
       {children}
     </ScrollAreaPrimitive.Viewport>
     <ScrollBar />

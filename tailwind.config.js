@@ -7,10 +7,13 @@ import containerQueries from "@tailwindcss/container-queries";
 /** @type {import("tailwindcss").Config} */
 module.exports = {
   prefix: "tw-",
+  // Scope utilities to the document body so they outrank Obsidian's generic
+  // component styles without emitting review-blocking !important declarations.
+  important: "body",
   content: ["./src/**/*.{js,ts,jsx,tsx}", "./src/styles/tailwind.css"],
   darkMode: ["class"],
   // tailwindcss-animate doesn't work with linter when using import statement.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  // eslint-disable-next-line @typescript-eslint/no-require-imports -- tailwindcss-animate exposes a CommonJS Tailwind plugin entrypoint
   plugins: [require("tailwindcss-animate"), colorOpacityPlugin, containerQueries],
   corePlugins: {
     preflight: false,

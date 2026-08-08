@@ -101,8 +101,8 @@ interface AgentHomeListRowProps {
    * chat-history rows (the time is the resting right-edge element; the control
    * takes its slot when the row is active). The row carries `tw-group`, so the
    * swap is pure CSS: the time hides and this slot shows on `group-hover` /
-   * `group-focus-within`, plus `group-has-[[data-state=open]]` so any portaled
-   * popover a slot control opens stays visible after the pointer leaves.
+   * `group-focus-within`. Radix keeps focus on the trigger while its portaled
+   * popover is open, so the focus-within state also keeps the slot visible.
    * Pointer/keyboard events inside the
    * slot are kept from bubbling to the row's `onClick`, so opening the menu never
    * also fires the row action.
@@ -161,8 +161,7 @@ export const AgentHomeListRow = memo(function AgentHomeListRow({
           "tw-shrink-0 tw-whitespace-nowrap tw-text-xs tw-text-muted",
           // Reason: only when a `trailing` control exists does it replace the
           // time on hover/focus — a row without one keeps the time always shown.
-          trailing &&
-            "group-focus-within:tw-hidden group-hover:tw-hidden group-has-[[data-state=open]]:tw-hidden"
+          trailing && "group-focus-within:tw-hidden group-hover:tw-hidden"
         )}
         title={new Date(timeMs).toLocaleString()}
       >
@@ -175,7 +174,7 @@ export const AgentHomeListRow = memo(function AgentHomeListRow({
         // rest; takes the time's slot on hover/focus (or while its dropdown is
         // open) so the row's right edge never shows both at once.
         <span
-          className="tw-hidden tw-shrink-0 tw-items-center group-focus-within:tw-flex group-hover:tw-flex group-has-[[data-state=open]]:tw-flex"
+          className="tw-hidden tw-shrink-0 tw-items-center group-focus-within:tw-flex group-hover:tw-flex"
           onClick={(e) => e.stopPropagation()}
           onKeyDown={(e) => e.stopPropagation()}
         >

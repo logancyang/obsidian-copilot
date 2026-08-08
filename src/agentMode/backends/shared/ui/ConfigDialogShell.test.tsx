@@ -88,10 +88,9 @@ describe("ConfigDialogShell", () => {
       );
 
       // Padding on the container instead of the bands would inset every
-      // divider, leaving a gap at both ends of each hairline. The marker class
-      // is what the stylesheet keys off to strip the host modal's padding.
+      // divider, leaving a gap at both ends of each hairline. The host modal
+      // strips its own padding; the shell must not add another padded wrapper.
       const shell = container.firstElementChild as HTMLElement;
-      expect(shell.className).toContain("copilot-config-dialog");
       expect(shell.className).not.toMatch(/tw-p[xl]?-/);
       const footer = shell.lastElementChild as HTMLElement;
       expect(footer.className).toContain("copilot-divider-t");

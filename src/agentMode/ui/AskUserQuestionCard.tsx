@@ -148,11 +148,11 @@ export const AskUserQuestionCard: React.FC<AskUserQuestionCardProps> = ({ reques
                     // active question. box-shadow (not a border) avoids the
                     // preflight-off border-style leak, and overlaps the
                     // tablist's divider so the accent replaces the grey rule.
-                    "tw--mb-px !tw-rounded-none !tw-border-none !tw-bg-transparent tw-p-1.5 tw-text-sm tw-transition-colors",
+                    "tw--mb-px tw-rounded-none tw-border-none tw-bg-transparent tw-p-1.5 tw-text-sm tw-transition-colors",
                     "disabled:tw-cursor-not-allowed disabled:tw-opacity-50",
                     selected
-                      ? "tw-font-medium tw-text-normal !tw-shadow-[inset_0_-2px_0_0_var(--interactive-accent)]"
-                      : "tw-text-muted !tw-shadow-none hover:tw-text-normal"
+                      ? "tw-font-medium tw-text-normal tw-shadow-[inset_0_-2px_0_0_var(--interactive-accent)]"
+                      : "tw-text-muted tw-shadow-none hover:tw-text-normal"
                   )}
                 >
                   {q.header || `Question ${idx + 1}`}

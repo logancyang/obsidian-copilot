@@ -94,7 +94,7 @@ export function UrlInputRow({
           // for the empty (Paste) state — `!` beats both ghost2's transparent bg
           // and Obsidian's native button chrome.
           !hasValue &&
-            "!tw-border !tw-border-solid !tw-border-border !tw-bg-primary !tw-text-muted !tw-shadow-none hover:!tw-bg-interactive-hover hover:!tw-text-normal"
+            "tw-border tw-border-solid tw-border-border tw-bg-primary tw-text-muted tw-shadow-none hover:tw-bg-interactive-hover hover:tw-text-normal"
         )}
         title={hasValue ? "Add to list" : "Paste from clipboard"}
         onClick={() => void handleAction()}

@@ -79,6 +79,7 @@ export class ClaudeInstallModal extends ReactModal {
     private readonly descriptor: ClaudeDescriptor
   ) {
     super(app, "Configure Claude");
+    this.modalEl.addClass("copilot-config-modal");
   }
 
   protected renderContent(close: () => void): React.ReactElement {

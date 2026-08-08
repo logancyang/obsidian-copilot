@@ -191,7 +191,7 @@ const RecentChatRow = memo(function RecentChatRow({
         <Input
           value={editingTitle}
           onChange={(e) => onEditingTitleChange(e.target.value)}
-          className="!tw-h-6 tw-flex-1"
+          className="tw-h-6 tw-flex-1"
           autoFocus
           onKeyDown={(e) => {
             if (e.key === "Enter") onSaveEdit();
@@ -450,7 +450,7 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
             value={query}
             onChange={setQuery}
             placeholder="Search chats..."
-            inputClassName="!tw-h-7"
+            inputClassName="tw-h-7"
           />
         </div>
       )}

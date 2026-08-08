@@ -68,16 +68,16 @@ export const TabItem: React.FC<TabItemProps> = ({
         "hover:tw-border-interactive-accent",
         "focus-visible:tw-outline-none focus-visible:tw-ring-1 focus-visible:tw-ring-ring",
         isSelected && [
-          "!tw-bg-interactive-accent",
+          "tw-bg-interactive-accent",
           "tw-text-on-accent",
-          "!tw-max-w-full",
+          "tw-max-w-full",
           "tw-transition-all tw-duration-300 tw-ease-in-out",
           "tw-delay-100",
         ],
         // Inline chips only. A page tab keeps its neutral border when selected:
         // it sits against the pane edge, where an accent outline would read as a
         // second boundary rather than as selection.
-        isSelected && variant === "inline" && "!tw-border-interactive-accent",
+        isSelected && variant === "inline" && "tw-border-interactive-accent",
         "lg:tw-max-w-32",
         "md:tw-max-w-32"
       )}

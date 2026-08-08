@@ -106,9 +106,9 @@ const CapabilityRow: React.FC<CapabilityRowProps> = ({
   <div
     className={cn(
       "tw-flex tw-flex-col tw-items-start tw-justify-between tw-gap-4 tw-py-4 sm:tw-flex-row sm:tw-items-center",
-      // `!` so the indent beats the parent's `[&>*]:tw-px-4` (equal specificity,
-      // and px-4 is emitted later, which would otherwise cancel a plain pl-*).
-      indented && "!tw-pl-9"
+      // Duplicate the utility selector so the indent beats the parent's
+      // `[&>*]:tw-px-4` without an !important declaration.
+      indented && "[&&]:tw-pl-9"
     )}
   >
     <div className="tw-w-full tw-space-y-1.5 sm:tw-w-[300px]">
@@ -266,7 +266,7 @@ export const MiyoSettings: React.FC = () => {
   useEffect(() => {
     /* eslint-disable @eslint-react/hooks-extra/no-direct-set-state-in-use-effect -- reset the stale verdict when the inputs it was derived from change underneath us */
     setServerScopeStale(null);
-    /* eslint-enable @eslint-react/hooks-extra/no-direct-set-state-in-use-effect */
+    /* eslint-enable @eslint-react/hooks-extra/no-direct-set-state-in-use-effect -- resume checking after verdict invalidation */
     // No local-only gate: the verify is a read-only lookup that works against a
     // remote Miyo too, and it's the only way a remote user's banner can ever
     // clear (they have no local register flow to write a receipt). Unreachable
@@ -824,10 +824,10 @@ export const MiyoSettings: React.FC = () => {
                 disabled={refreshing}
                 title="Disconnect Miyo"
                 className={cn(
-                  "tw-group tw-inline-flex tw-shrink-0 tw-cursor-pointer tw-items-center tw-gap-1.5 tw-rounded-full !tw-border-none !tw-px-3 !tw-py-1 tw-text-smallest tw-font-semibold !tw-shadow-none tw-transition-colors",
+                  "tw-group tw-inline-flex tw-shrink-0 tw-cursor-pointer tw-items-center tw-gap-1.5 tw-rounded-full tw-border-none tw-px-3 tw-py-1 tw-text-smallest tw-font-semibold tw-shadow-none tw-transition-colors",
                   capabilitiesEnabled
-                    ? "!tw-bg-success tw-text-success hover:!tw-bg-error hover:tw-text-error"
-                    : "tw-text-warning !tw-bg-warning/20 hover:!tw-bg-error hover:tw-text-error"
+                    ? "tw-bg-success tw-text-success hover:tw-bg-error hover:tw-text-error"
+                    : "tw-text-warning tw-bg-warning/20 hover:tw-bg-error hover:tw-text-error"
                 )}
               >
                 <span className="tw-size-1.5 tw-rounded-full tw-bg-current" />
