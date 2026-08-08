@@ -104,35 +104,109 @@ export async function writeAgentsFile(
 }
 
 /**
- * Delete the instruction wiring Copilot itself generated in `folderPath`: a marker-owned
- * AGENTS.md mirror and an import-only CLAUDE.md. Files carrying anything the user wrote are
- * left untouched.
+ * Delete the marker-owned AGENTS.md mirror an older build generated in `folderPath`.
  *
  * Project deletion needs this: leaving a stale mirror behind keeps the folder non-empty, and
  * a same-named project created later would convert that mirror at session start and inherit
  * the dead project's instructions. Never throws — deletion cleanup is best-effort.
  *
+ * The sibling CLAUDE.md is deliberately left alone. It carries no ownership marker, so an
+ * import-only body is indistinguishable from one a user wrote to share their AGENTS rules with
+ * Claude — and a stale import holds no instructions, so keeping it costs nothing while deleting
+ * it destroys a file we cannot prove is ours.
+ *
  * @param app - Obsidian app that owns the target vault
  * @param folderPath - Vault-relative folder, or an empty string for the vault root
  */
 export async function removeGeneratedInstructionFiles(app: App, folderPath: string): Promise<void> {
-  const targets: Array<{ name: string; isGenerated: (content: string) => boolean }> = [
-    { name: AGENTS_FILE_NAME, isGenerated: (content) => GENERATED_MIRROR_HEADER.test(content) },
-    { name: CLAUDE_FILE_NAME, isGenerated: isClaudeImportOnly },
-  ];
-  for (const { name, isGenerated } of targets) {
-    try {
-      const file = await resolveInstructionFile(app, childPath(folderPath, name));
-      if (!file) continue;
-      if (!isGenerated(await readFileContent(app, file))) continue;
-      if (isInVaultCache(app, file.path)) {
-        await trashFile(app, file);
-      } else {
-        await app.vault.adapter.remove(file.path);
-      }
-    } catch (error) {
-      logWarn(`[Instructions] Failed to remove generated ${name} in "${folderPath}"`, error);
-    }
+  try {
+    const file = await resolveInstructionFile(app, childPath(folderPath, AGENTS_FILE_NAME));
+    if (!file) return;
+    if (!GENERATED_MIRROR_HEADER.test(await readFileContent(app, file))) return;
+    await deleteInstructionFile(app, file);
+  } catch (error) {
+    logWarn(
+      `[Instructions] Failed to remove the generated ${AGENTS_FILE_NAME} in "${folderPath}"`,
+      error
+    );
+  }
+}
+
+/** A folder's instruction files as they stood, `null` for one that did not exist. */
+export interface InstructionFilesSnapshot {
+  agents: string | null;
+  claude: string | null;
+}
+
+/**
+ * Record a folder's instruction files so a failed edit can put them back.
+ *
+ * Contents alone cannot express this. A file that does not exist and one the user emptied both
+ * read as `""`, and restoring the wrong one is not a cosmetic error: writing `""` where there
+ * was no file leaves a blank, markerless AGENTS.md that {@link agentsFileIsUninitialized} then
+ * reports as user-owned, permanently blocking the legacy `project.md` move for that project.
+ *
+ * @param app - Obsidian app that owns the target vault
+ * @param folderPath - Vault-relative folder, or an empty string for the vault root
+ */
+export async function captureInstructionFiles(
+  app: App,
+  folderPath: string
+): Promise<InstructionFilesSnapshot> {
+  return {
+    agents: await readIfPresent(app, childPath(folderPath, AGENTS_FILE_NAME)),
+    claude: await readIfPresent(app, childPath(folderPath, CLAUDE_FILE_NAME)),
+  };
+}
+
+/**
+ * Put a folder's instruction files back as {@link captureInstructionFiles} found them, removing
+ * any the edit created. Never throws — a failed rollback must not replace the error that
+ * triggered it.
+ *
+ * @param app - Obsidian app that owns the target vault
+ * @param folderPath - Vault-relative folder, or an empty string for the vault root
+ * @param snapshot - What {@link captureInstructionFiles} recorded before the edit
+ */
+export async function restoreInstructionFiles(
+  app: App,
+  folderPath: string,
+  snapshot: InstructionFilesSnapshot
+): Promise<void> {
+  try {
+    await restoreFile(app, childPath(folderPath, AGENTS_FILE_NAME), snapshot.agents);
+    await restoreFile(app, childPath(folderPath, CLAUDE_FILE_NAME), snapshot.claude);
+  } catch (error) {
+    logWarn(`[Instructions] Failed to restore instruction files in "${folderPath}"`, error);
+  }
+}
+
+async function readIfPresent(app: App, filePath: string): Promise<string | null> {
+  const file = await resolveInstructionFile(app, filePath);
+  return file ? await readFileContent(app, file) : null;
+}
+
+async function restoreFile(app: App, filePath: string, previous: string | null): Promise<void> {
+  const file = await resolveInstructionFile(app, filePath);
+  if (previous === null) {
+    if (file) await deleteInstructionFile(app, file);
+    return;
+  }
+  if (!file) {
+    await ensureFile(app, filePath, previous);
+    return;
+  }
+  if ((await readFileContent(app, file)) !== previous) {
+    await writeFileContent(app, file, previous);
+  }
+}
+
+/** Trash a cached file, but hard-remove one under a dot-folder the vault never indexed. */
+async function deleteInstructionFile(app: App, file: TFile): Promise<void> {
+  if (isInVaultCache(app, file.path)) {
+    await trashFile(app, file);
+  } else {
+    await app.vault.adapter.remove(file.path);
   }
 }
 
@@ -239,10 +313,9 @@ function childPath(folderPath: string, fileName: string): string {
  * file the backends discover would never get created, and instructions edited through Copilot
  * would land somewhere no agent reads.
  *
- * The variant scan is last on purpose. It walks every file in the vault, and the overwhelmingly
- * common call is a scope that simply has no instruction file yet — session start asks on every
- * new session. Letting `resolveFileByPath` answer first turns that case into a single `exists`
- * check, and confines the scan to the one state that can actually need repair.
+ * The variant lookup is last on purpose: the overwhelmingly common call is a scope that has no
+ * instruction file at all — session start asks on every new session — and letting
+ * `resolveFileByPath` answer first turns that into a single `exists` check.
  */
 async function resolveInstructionFile(app: App, filePath: string): Promise<TFile | null> {
   const cached = app.vault.getAbstractFileByPath(filePath);
@@ -252,12 +325,42 @@ async function resolveInstructionFile(app: App, filePath: string): Promise<TFile
   // Nothing on disk under this name. On a case-insensitive volume `exists` already answered
   // for every spelling of it, so there is no variant left to look for.
   if (!resolved) return null;
-  if (!hasCaseInsensitiveFilesystem()) return resolved;
 
   // Something exists that the cache missed under this exact spelling: either a dot-folder file
   // Obsidian never indexes (keep the synthetic one) or the same note under another casing.
-  const target = filePath.toLowerCase();
-  return app.vault.getFiles().find((file) => file.path.toLowerCase() === target) ?? resolved;
+  return findCasedSibling(app, filePath) ?? resolved;
+}
+
+/**
+ * The vault-cached instruction file at `filePath`, matching the way the resolver above does so
+ * that a differently-cased file is the same file to every caller.
+ *
+ * Cache-only and synchronous, for callers that fingerprint a file rather than read it. A miss
+ * here means "not indexed", which is not the same as "absent" — a file under a dot-folder is
+ * always a miss.
+ */
+export function findCachedInstructionFile(app: App, filePath: string): TFile | null {
+  const cached = app.vault.getAbstractFileByPath(filePath);
+  return cached instanceof TFile ? cached : findCasedSibling(app, filePath);
+}
+
+/**
+ * A sibling of `filePath` whose name differs only in case, on a volume where that means the
+ * same file. Scoped to the containing folder rather than the whole vault: these paths are built
+ * from a folder Obsidian itself cased, so only the file name can disagree.
+ */
+function findCasedSibling(app: App, filePath: string): TFile | null {
+  if (!hasCaseInsensitiveFilesystem()) return null;
+  const slash = filePath.lastIndexOf("/");
+  const folderPath = slash === -1 ? "" : filePath.slice(0, slash);
+  const name = (slash === -1 ? filePath : filePath.slice(slash + 1)).toLowerCase();
+  const folder = folderPath ? app.vault.getAbstractFileByPath(folderPath) : app.vault.getRoot();
+  if (!(folder instanceof TFolder)) return null;
+  return (
+    folder.children.find(
+      (child): child is TFile => child instanceof TFile && child.name.toLowerCase() === name
+    ) ?? null
+  );
 }
 
 /**

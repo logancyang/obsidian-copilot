@@ -15,12 +15,24 @@ jest.mock("@/projects/projectPaths", () => ({
 
 const readAgentsFile = jest.fn(async (): Promise<string> => "");
 const agentsFileIsUninitialized = jest.fn(async (): Promise<boolean> => true);
+const captureInstructionFiles = jest.fn(
+  async (_app: unknown, _folder: string): Promise<InstructionFilesSnapshot> => ({
+    agents: null,
+    claude: null,
+  })
+);
+const restoreInstructionFiles = jest.fn(
+  async (_app: unknown, _folder: string, _snapshot: InstructionFilesSnapshot): Promise<void> => {}
+);
 const writeAgentsFile = jest.fn(
   async (_app: unknown, _folder: string, _content: string): Promise<void> => {}
 );
 jest.mock("@/instructions/agentsFile", () => ({
   readAgentsFile: () => readAgentsFile(),
   agentsFileIsUninitialized: () => agentsFileIsUninitialized(),
+  captureInstructionFiles: (app: unknown, folder: string) => captureInstructionFiles(app, folder),
+  restoreInstructionFiles: (app: unknown, folder: string, snapshot: InstructionFilesSnapshot) =>
+    restoreInstructionFiles(app, folder, snapshot),
   writeAgentsFile: (app: unknown, folder: string, content: string) =>
     writeAgentsFile(app, folder, content),
 }));
@@ -51,6 +63,7 @@ import {
 } from "@/components/modals/project/AddProjectModal";
 import type { ProjectConfig } from "@/aiParams";
 import type { ProjectFileRecord } from "@/projects/type";
+import type { InstructionFilesSnapshot } from "@/instructions/agentsFile";
 
 const PROJECT = {
   id: "proj-1",
@@ -88,6 +101,7 @@ describe("AddProjectModal", () => {
     jest.clearAllMocks();
     readAgentsFile.mockResolvedValue("");
     agentsFileIsUninitialized.mockResolvedValue(true);
+    captureInstructionFiles.mockResolvedValue({ agents: null, claude: null });
     writeAgentsFile.mockResolvedValue(undefined);
     getCachedProjectRecordById.mockReturnValue({
       folderName: "proj-1",
@@ -158,11 +172,14 @@ describe("AddProjectModal", () => {
       );
     });
 
-    it("restores the previous instructions when the project update is rejected", async () => {
-      // A rejected update leaves the dialog open and cancelable, so the file must not keep an
-      // edit the user can still back out of.
+    it("restores the folder's instruction files when the project update is rejected", async () => {
+      // A rejected update leaves the dialog open and cancelable, so the files must not keep an
+      // edit the user can still back out of. Restoring from the snapshot rather than a body
+      // also removes files the write created, instead of leaving them blank.
       readAgentsFile.mockResolvedValue("Old rules");
       agentsFileIsUninitialized.mockResolvedValue(false);
+      const snapshot = { agents: "Old rules", claude: "@AGENTS.md\n" };
+      captureInstructionFiles.mockResolvedValue(snapshot);
       const onSave = jest.fn().mockRejectedValue(new Error("A project with that name exists"));
       renderModal({ onSave });
       fireEvent.change(await findInstructionsBox(), { target: { value: "New rules" } });
@@ -170,10 +187,10 @@ describe("AddProjectModal", () => {
       fireEvent.click(screen.getByText("Save"));
 
       await waitFor(() =>
-        expect(writeAgentsFile).toHaveBeenLastCalledWith(
+        expect(restoreInstructionFiles).toHaveBeenCalledWith(
           expect.anything(),
           PROJECT_FOLDER,
-          "Old rules"
+          snapshot
         )
       );
     });

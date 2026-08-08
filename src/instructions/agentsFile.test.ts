@@ -1,5 +1,7 @@
 import {
   agentsFileIsUninitialized,
+  captureInstructionFiles,
+  restoreInstructionFiles,
   ensureAgentsFile,
   removeGeneratedInstructionFiles,
   ensureAgentsFileForDiscovery,
@@ -28,6 +30,18 @@ function makeApp(initialFiles: Record<string, string> = {}, folders: string[] = 
   const toFolder = (path: string) =>
     new (TFolder as unknown as new (path: string) => TFolder)(path);
   const openFile = jest.fn().mockResolvedValue(undefined);
+  /** A folder carrying its immediate file children, which is how the resolver finds a
+   *  differently-cased sibling. Dot-folders are never indexed, so they list nothing. */
+  const folderWithChildren = (path: string) => {
+    const folder = toFolder(path);
+    const children = path.split("/").some((segment) => segment.startsWith("."))
+      ? []
+      : [...state.files.keys()]
+          .filter((key) => key.slice(0, key.lastIndexOf("/") + 1) === (path ? `${path}/` : ""))
+          .map(toFile);
+    (folder as unknown as { children: unknown[] }).children = children;
+    return folder;
+  };
   /** The key `path` actually names on disk, honouring the platform's case rules. */
   const diskPath = (path: string): string | undefined => {
     if (state.files.has(path)) return path;
@@ -42,14 +56,10 @@ function makeApp(initialFiles: Record<string, string> = {}, folders: string[] = 
       getAbstractFileByPath: jest.fn((path: string) => {
         if (path.split("/").some((segment) => segment.startsWith("."))) return null;
         if (state.files.has(path)) return toFile(path);
-        if (state.folders.has(path)) return toFolder(path);
+        if (state.folders.has(path)) return folderWithChildren(path);
         return null;
       }),
-      getFiles: jest.fn(() =>
-        [...state.files.keys()]
-          .filter((path) => !path.split("/").some((segment) => segment.startsWith(".")))
-          .map(toFile)
-      ),
+      getRoot: jest.fn(() => folderWithChildren("")),
       create: jest.fn(async (path: string, content: string) => {
         state.files.set(path, content);
         return toFile(path);
@@ -242,11 +252,62 @@ describe("agentsFile", () => {
     });
   });
 
+  describe("captureInstructionFiles() / restoreInstructionFiles()", () => {
+    it("removes files the edit created, rather than leaving them blank", async () => {
+      // Writing "" back would leave a markerless AGENTS.md that reads as user-owned, which
+      // blocks this project's legacy `project.md` move for good.
+      const { app, state } = makeApp();
+      const before = await captureInstructionFiles(app, "Projects/Research");
+      await writeAgentsFile(app, "Projects/Research", "Half-finished rules");
+
+      await restoreInstructionFiles(app, "Projects/Research", before);
+
+      expect(state.files.has("Projects/Research/AGENTS.md")).toBe(false);
+      expect(state.files.has("Projects/Research/CLAUDE.md")).toBe(false);
+    });
+
+    it("puts an existing body back verbatim", async () => {
+      const { app, state } = makeApp({
+        "Projects/Research/AGENTS.md": "Old rules",
+        "Projects/Research/CLAUDE.md": "@AGENTS.md\n",
+      });
+      const before = await captureInstructionFiles(app, "Projects/Research");
+      await writeAgentsFile(app, "Projects/Research", "New rules");
+
+      await restoreInstructionFiles(app, "Projects/Research", before);
+
+      expect(state.files.get("Projects/Research/AGENTS.md")).toBe("Old rules");
+    });
+
+    it("keeps a file the user had deliberately emptied empty", async () => {
+      // The case contents alone cannot express: absent and empty are different prior states.
+      const { app, state } = makeApp({ "Projects/Research/AGENTS.md": "" });
+      const before = await captureInstructionFiles(app, "Projects/Research");
+      await writeAgentsFile(app, "Projects/Research", "New rules");
+
+      await restoreInstructionFiles(app, "Projects/Research", before);
+
+      expect(state.files.get("Projects/Research/AGENTS.md")).toBe("");
+    });
+  });
+
   describe("removeGeneratedInstructionFiles()", () => {
     const marker =
       "<!-- copilot:generated-agents-mirror v1 — Auto-generated; do not edit here. -->";
 
-    it("removes a marker-owned mirror and import-only CLAUDE.md, so a recreated project starts clean", async () => {
+    it("removes a marker-owned mirror, so a recreated project starts clean", async () => {
+      const { app, state } = makeApp({
+        "Projects/Research/AGENTS.md": `${marker}\n\nDead project's instructions`,
+      });
+
+      await removeGeneratedInstructionFiles(app, "Projects/Research");
+
+      expect(state.files.has("Projects/Research/AGENTS.md")).toBe(false);
+    });
+
+    it("keeps an import-only CLAUDE.md, which carries no marker to prove it is ours", async () => {
+      // `@AGENTS.md` alone is also how a user shares their own AGENTS rules with Claude, and
+      // a stale import holds no instructions — so deleting it can only ever destroy.
       const { app, state } = makeApp({
         "Projects/Research/AGENTS.md": `${marker}\n\nDead project's instructions`,
         "Projects/Research/CLAUDE.md": "@AGENTS.md\n",
@@ -254,8 +315,7 @@ describe("agentsFile", () => {
 
       await removeGeneratedInstructionFiles(app, "Projects/Research");
 
-      expect(state.files.has("Projects/Research/AGENTS.md")).toBe(false);
-      expect(state.files.has("Projects/Research/CLAUDE.md")).toBe(false);
+      expect(state.files.get("Projects/Research/CLAUDE.md")).toBe("@AGENTS.md\n");
     });
 
     it("preserves files carrying anything the user wrote", async () => {
@@ -396,15 +456,15 @@ describe("agentsFile", () => {
       expect(app.vault.adapter.write).not.toHaveBeenCalled();
     });
 
-    it("does not walk the vault when the folder simply has no instruction file", async () => {
+    it("does not look for a variant when the folder simply has no instruction file", async () => {
       // Session start asks this on every new session, and having no file yet is the common
-      // answer; the variant scan is a repair for an existing file, not a lookup path.
+      // answer; the variant lookup is a repair for an existing file, not a lookup path.
       setCaseInsensitiveFilesystem(true);
       const { app } = makeApp();
 
       await expect(readAgentsFile(app, "")).resolves.toBe("");
 
-      expect(app.vault.getFiles).not.toHaveBeenCalled();
+      expect(app.vault.getRoot).not.toHaveBeenCalled();
     });
 
     it("keeps them separate on a case-sensitive volume, where the backends read only the exact name", async () => {

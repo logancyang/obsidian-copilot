@@ -20,7 +20,9 @@ import { ProjectContextBadgeList } from "@/components/project/ProjectContextBadg
 import { ProjectContextSourceEditor } from "@/components/project/ProjectContextSourceEditor";
 import {
   agentsFileIsUninitialized,
+  captureInstructionFiles,
   readAgentsFile,
+  restoreInstructionFiles,
   writeAgentsFile,
 } from "@/instructions/agentsFile";
 import { logError } from "@/logger";
@@ -360,7 +362,12 @@ export function AddProjectModalContent({
       // Obsidian carries the folder's contents along, so a file placed here ends up in the
       // right place either way. Writing afterwards would have to guess the new folder from a
       // project cache that has not refreshed yet.
-      const previous = instructionEdit ? await readAgentsFile(app, instructionEdit.folder) : null;
+      // A snapshot, not the body: the write below can CREATE these files, and putting `""`
+      // back where there was no file leaves a blank AGENTS.md that reads as user-owned and
+      // blocks this project's legacy move for good.
+      const before = instructionEdit
+        ? await captureInstructionFiles(app, instructionEdit.folder)
+        : null;
       if (instructionEdit) {
         await writeAgentsFile(app, instructionEdit.folder, instructionEdit.text);
       }
@@ -369,10 +376,10 @@ export function AddProjectModalContent({
       } catch (e) {
         // The project update is what makes this dialog's Save real; a rejected one (duplicate
         // name, folder collision, frontmatter write failure) leaves the modal open and
-        // cancelable, so the instruction file must not keep an edit the user can still back
-        // out of. Put the old body back before surfacing the failure.
-        if (instructionEdit && previous !== null) {
-          await writeAgentsFile(app, instructionEdit.folder, previous);
+        // cancelable, so the instruction files must not keep an edit the user can still back
+        // out of. Put the folder back before surfacing the failure.
+        if (instructionEdit && before) {
+          await restoreInstructionFiles(app, instructionEdit.folder, before);
         }
         throw e;
       }

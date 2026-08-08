@@ -1,8 +1,8 @@
 import type { ProjectConfig } from "@/aiParams";
-import { AGENTS_FILE_NAME } from "@/instructions/agentsFile";
+import { AGENTS_FILE_NAME, findCachedInstructionFile } from "@/instructions/agentsFile";
 import { getProjectAnchorFromConfigPath } from "@/projects/projectPaths";
 import type { ProjectFileRecord } from "@/projects/type";
-import { App, normalizePath, TFile } from "obsidian";
+import { App, normalizePath } from "obsidian";
 
 /**
  * The context-source fields whose change should invalidate a project's
@@ -116,8 +116,12 @@ function getInstructionsFingerprint(app: App, record: ProjectFileRecord): string
   // after a Copilot-folder change.
   const projectFolderPath = getProjectAnchorFromConfigPath(record.filePath).projectFolderPath;
   const agentsPath = normalizePath(`${projectFolderPath}/${AGENTS_FILE_NAME}`);
-  const file = app.vault.getAbstractFileByPath(agentsPath);
-  if (file instanceof TFile) return `agents:${file.stat.mtime}:${file.stat.size}`;
+  // Resolved the same way the instruction editors resolve it, so a vault holding `agents.md`
+  // fingerprints the file they actually write. An exact-case lookup would miss it and fall
+  // through to the legacy body — empty once the move ran — giving a fingerprint that never
+  // moves no matter how the user edits their instructions.
+  const file = findCachedInstructionFile(app, agentsPath);
+  if (file) return `agents:${file.stat.mtime}:${file.stat.size}`;
   // A project under a hidden Copilot root (`.copilot`, deliberately supported — see the
   // DESIGN NOTE in `validateCopilotFolder`) is never indexed, so an edit to its real
   // AGENTS.md is invisible from here and the legacy body is empty once the move ran. Say so
