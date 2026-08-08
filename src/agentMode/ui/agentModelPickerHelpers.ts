@@ -2,6 +2,7 @@ import { Notice } from "obsidian";
 import { logError } from "@/logger";
 import type { ModelCapability } from "@/constants";
 import type { ModelSelectorEntry } from "@/components/ui/ModelSelector";
+import { lockedCopilotEntries, shouldPreviewCopilotModels } from "@/lib/lockedCopilotEntries";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type { AgentChatUIState } from "@/agentMode/session/AgentChatUIState";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
@@ -369,6 +370,18 @@ export function buildPickerEntries(
       for (let i = sectionStart; i < entries.length; i++) {
         entries[i]._needsSelfHostWarning = true;
       }
+    }
+    // Advertise the Copilot lineup to a user who has no license, at the top of
+    // the section for each agent that could run it. Spliced in after the passes
+    // above so neither relabels these rows: an unset-up agent's readiness reason
+    // would replace "Copilot license required" with the wrong fix, and the
+    // emptiness check for the loading/error placeholder must not count them.
+    if (descriptor.routesCopilotModels && shouldPreviewCopilotModels(settings.providers)) {
+      entries.splice(
+        sectionStart,
+        0,
+        ...lockedCopilotEntries({ group: descriptor.displayName, backendId: descriptor.id })
+      );
     }
   }
 

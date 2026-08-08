@@ -11,6 +11,26 @@ describe("CopilotPlusWelcomeModal", () => {
       expect(screen.getByText(/default model for chat and your agents/)).toBeTruthy();
     });
 
+    it("names what the license includes, including the symposium link", () => {
+      render(<CopilotPlusWelcomeModalContent onConfirm={jest.fn()} onCancel={jest.fn()} />);
+
+      const link = screen.getByRole("link", { name: "symposium.md" });
+      expect(link.getAttribute("href")).toBe("https://symposium.md");
+      expect(screen.getByText(/Copilot exclusive/)).toBeTruthy();
+      expect(screen.getByText(/cross-agent skills/)).toBeTruthy();
+    });
+
+    it("promises no capability a lower paid tier may not have", () => {
+      const { container } = render(
+        <CopilotPlusWelcomeModalContent onConfirm={jest.fn()} onCancel={jest.fn()} />
+      );
+
+      // Multi-agent is tier >= Plus (see `canUseMultiAgent`), so a Lite user
+      // opening this modal must not be told they have it. Same for a blanket
+      // "full power" claim, which is true of no single tier.
+      expect(container.textContent).not.toMatch(/multi-agent|full power|full potential/i);
+    });
+
     it("offers to apply no mode, no embedding model, and no vault rebuild", () => {
       const { container } = render(
         <CopilotPlusWelcomeModalContent onConfirm={jest.fn()} onCancel={jest.fn()} />

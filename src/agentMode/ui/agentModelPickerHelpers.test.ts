@@ -185,7 +185,7 @@ function makeManager(opts: {
   } as unknown as AgentSessionManager;
 }
 
-const emptySettings = {} as CopilotSettings;
+const emptySettings = { providers: {} } as unknown as CopilotSettings;
 
 function claudeWithInstallState(installState: InstallState): BackendDescriptor {
   return {
@@ -215,6 +215,105 @@ function managerWithSonnet(): AgentSessionManager {
 // ---- buildPickerEntries ----
 
 describe("buildPickerEntries", () => {
+  it("previews the locked Copilot lineup above a routing agent's own models when unlicensed", () => {
+    const entry = makeModelEntry("catalog-model");
+    const descriptor = {
+      ...makeDescriptor("opencode"),
+      routesCopilotModels: true,
+      getEnabledModelEntries: () => [
+        { baseModelId: entry.baseModelId, name: entry.name, credentialState: "ok" as const },
+      ],
+    } as unknown as BackendDescriptor;
+    const manager = {
+      getCachedModelCatalog: () => ({ availableModels: [entry] }),
+      getPreloadStatus: () => "ready",
+      getDefaultSelection: () => null,
+    } as unknown as AgentSessionManager;
+
+    const { entries } = buildPickerEntries(manager, [descriptor], {} as ModelActiveContext, {
+      ...emptySettings,
+    });
+
+    const locked = entries.filter((model) => model._needsLicense);
+    expect(locked.length).toBeGreaterThan(0);
+    // Locked rows lead the section, so the offer is the first thing read.
+    expect(entries.slice(0, locked.length).every((model) => model._needsLicense)).toBe(true);
+    expect(entries[entries.length - 1].name).toBe("catalog-model");
+    expect(locked.every((model) => model._group === descriptor.displayName)).toBe(true);
+  });
+
+  it("previews nothing for an agent that cannot route Copilot models", () => {
+    const claude = {
+      ...makeDescriptor("claude"),
+      routesCopilotModels: false,
+      getEnabledModelEntries: () => [
+        { baseModelId: "sonnet", name: "Sonnet", credentialState: "ok" as const },
+      ],
+    } as unknown as BackendDescriptor;
+    const manager = makeManager({
+      catalogById: { claude: null },
+      preloadStatusById: { claude: "ready" },
+    });
+
+    const { entries } = buildPickerEntries(manager, [claude], {} as ModelActiveContext, {
+      ...emptySettings,
+    });
+
+    expect(entries.some((entry) => entry._needsLicense)).toBe(false);
+  });
+
+  it("previews nothing once the Copilot provider is registered, since the real models are there", () => {
+    const entry = makeModelEntry("catalog-model");
+    const descriptor = {
+      ...makeDescriptor("opencode"),
+      routesCopilotModels: true,
+      getEnabledModelEntries: () => [
+        { baseModelId: entry.baseModelId, name: entry.name, credentialState: "ok" as const },
+      ],
+    } as unknown as BackendDescriptor;
+    const manager = {
+      getCachedModelCatalog: () => ({ availableModels: [entry] }),
+      getPreloadStatus: () => "ready",
+      getDefaultSelection: () => null,
+    } as unknown as AgentSessionManager;
+
+    const { entries } = buildPickerEntries(manager, [descriptor], {} as ModelActiveContext, {
+      ...emptySettings,
+      providers: {
+        "plus-1": {
+          providerId: "plus-1",
+          providerType: "openai-compatible",
+          displayName: "Copilot",
+          origin: { kind: "copilot-plus" },
+          addedAt: 0,
+        },
+      },
+    });
+
+    expect(entries.map((model) => model.name)).toEqual(["catalog-model"]);
+  });
+
+  it("still shows a loading placeholder for a routing agent whose preload has not settled", () => {
+    // The locked rows must not satisfy the "section produced nothing" check, or
+    // an unlicensed user loses the per-agent loading row.
+    const descriptor = {
+      ...makeDescriptor("opencode"),
+      routesCopilotModels: true,
+      getEnabledModelEntries: () => [],
+    } as unknown as BackendDescriptor;
+    const manager = {
+      getCachedModelCatalog: () => null,
+      getPreloadStatus: () => "pending",
+      getDefaultSelection: () => null,
+    } as unknown as AgentSessionManager;
+
+    const { entries } = buildPickerEntries(manager, [descriptor], {} as ModelActiveContext, {
+      ...emptySettings,
+    });
+
+    expect(entries.some((entry) => entry._disabledReason === "Loading…")).toBe(true);
+  });
+
   it("builds shared choices from the model catalog", () => {
     const entry = makeModelEntry("catalog-model");
     const descriptor = {

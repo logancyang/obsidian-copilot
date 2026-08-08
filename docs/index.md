@@ -9,7 +9,7 @@ Welcome to the official documentation for **Copilot for Obsidian**, an AI-powere
 | [Getting Started](getting-started.md)                       | Installation, first-time setup, opening the chat panel, keyboard shortcuts      |
 | [Chat Interface](chat-interface.md)                         | Chat modes, sending messages, history, settings, auto-compact                   |
 | [LLM Providers](llm-providers.md)                           | All 16+ supported providers and how to set them up                              |
-| [Models and Parameters](models-and-parameters.md)           | Chat models, embedding models, temperature, max tokens, and other parameters    |
+| [Models](models-and-parameters.md)                          | Which chat models ship with Copilot, adding your own, and the default model     |
 | [Context and Mentions](context-and-mentions.md)             | Active note context, @-mentions, URLs, tags, and the web viewer                 |
 | [Custom Commands](custom-commands.md)                       | Creating and using preset prompts, template variables, Quick Command, Quick Ask |
 | [Vault Search and Indexing](vault-search-and-indexing.md)   | Lexical search, semantic search, index management, exclusions                   |

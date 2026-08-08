@@ -125,6 +125,7 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
   // opencode routes through user-controlled / self-hosted endpoints, so it
   // stays available in Self-Host Mode.
   selfHostable: true,
+  routesCopilotModels: true,
   setupDescription:
     "Copilot Plus models, or any model on your own provider key. Copilot can download and manage the binary for you.",
   skillsProjectDir: ".opencode/skills",

@@ -5,8 +5,9 @@ import {
   providerRequiresApiKey,
   resolveChatModelSelectionId,
 } from "@/modelManagement";
-import { getModelKeyFromModel, settingsStore } from "@/settings/model";
+import { getModelKeyFromModel, settingsStore, useSettingsValue } from "@/settings/model";
 import type { ModelSelectorEntry } from "@/components/ui/ModelSelector";
+import { lockedCopilotEntries, shouldPreviewCopilotModels } from "@/lib/lockedCopilotEntries";
 import { useAtomValue } from "jotai";
 import React from "react";
 
@@ -22,6 +23,9 @@ export interface ChatModelPickerOverride {
 }
 
 const NOOP = () => {};
+
+/** See AGENTS.md → "Referential stability". */
+const EMPTY_LOCKED_ROWS: readonly ModelSelectorEntry[] = Object.freeze([]);
 
 /**
  * Synthetic disabled row shown when no chat model is enabled, so the picker
@@ -54,6 +58,15 @@ export function useChatModelPicker(params: {
 }): ChatModelPickerOverride {
   const { value, onChange } = params;
   const entries = useAtomValue(backendPickerAtomFamily("chat"), { store: settingsStore });
+  const settings = useSettingsValue();
+
+  // Advertised, never selectable: kept out of `models` below so selection,
+  // fallback, and the stored value can never resolve to one.
+  const lockedRows = React.useMemo(
+    () =>
+      shouldPreviewCopilotModels(settings.providers) ? lockedCopilotEntries() : EMPTY_LOCKED_ROWS,
+    [settings.providers]
+  );
 
   const { models, byModelKey, idToModelKey } = React.useMemo(() => {
     const models: ModelSelectorEntry[] = [];
@@ -114,8 +127,15 @@ export function useChatModelPicker(params: {
   );
 
   if (displayModels.length === 0) {
-    return { models: [EMPTY_ENTRY], value: EMPTY_ENTRY_KEY, onChange: NOOP };
+    // A brand-new user has no models at all, which is exactly who most needs to
+    // learn the Copilot lineup exists — so the locked rows lead, and the
+    // guidance row still explains how to add one of their own.
+    return { models: [...lockedRows, EMPTY_ENTRY], value: EMPTY_ENTRY_KEY, onChange: NOOP };
   }
 
-  return { models: displayModels, value: resolvedValue, onChange: handleChange };
+  return {
+    models: lockedRows.length > 0 ? [...lockedRows, ...displayModels] : displayModels,
+    value: resolvedValue,
+    onChange: handleChange,
+  };
 }

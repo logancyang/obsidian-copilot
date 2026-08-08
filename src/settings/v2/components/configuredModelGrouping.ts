@@ -2,6 +2,7 @@
 
 import { isOpencodeZenWireId, type ModelEnableGroup, type ModelEnableRow } from "@/agentMode";
 import {
+  COPILOT_PLUS_MODELS,
   capabilitiesFromConfiguredInfo,
   type ConfiguredModel,
   type Provider,
@@ -168,11 +169,18 @@ interface OriginGroup {
  * Each group maps to a single origin, so when the list spans more than one
  * origin (opencode mixes BYOK/Plus/agent) we tag every group with an origin
  * badge to disambiguate; a single-origin list (claude/codex) gets none.
+ *
+ * @param copilotProviderMissing - Whether no Copilot provider is registered,
+ *   which is when the lineup is worth advertising as a locked group. The caller
+ *   answers it because only it can see the provider rows — and the answer is not
+ *   inferable from the groups built here, since registering the provider and
+ *   reconciling its models are separate writes.
  */
 export function buildModelEnableGroups(
   partition: CandidatePartition,
   isOpencode: boolean,
-  query: string
+  query: string,
+  copilotProviderMissing: boolean
 ): ModelEnableGroup[] {
   const q = query.trim().toLowerCase();
   const out: OriginGroup[] = [];
@@ -211,6 +219,31 @@ export function buildModelEnableGroups(
   }
   for (const [label, { rows }] of bySubGroup) {
     out.push({ group: { key: `agent:${label}`, label, rows }, kind: "agent" });
+  }
+
+  // No Copilot provider means no license, which is exactly when the lineup is
+  // worth advertising: synthesize the group so it is discoverable instead of
+  // absent. Tagged `copilot-plus` so the highlight, badge, tooltip, and float
+  // below apply to it unchanged — a locked group is the same group, minus the
+  // ability to act on it. Only opencode can route these models, and only its
+  // list mixes in non-agent providers at all.
+  if (isOpencode && copilotProviderMissing) {
+    const rows = COPILOT_PLUS_MODELS.map(
+      (model): ModelEnableRow => ({
+        id: `__locked_copilot__${model.id}`,
+        label: model.displayName || model.id,
+        description: model.description,
+        wireId: model.id,
+        enabled: false,
+        locked: true,
+      })
+    ).filter((row) => rowMatches(row, q));
+    if (rows.length > 0) {
+      out.push({
+        group: { key: "locked:copilot-plus", label: "Copilot", rows },
+        kind: "copilot-plus",
+      });
+    }
   }
 
   // Copilot Plus is highlighted and floated to the top; its provider name
