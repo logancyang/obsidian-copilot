@@ -117,7 +117,7 @@ export function useAgentInputDrafts({
       return changed ? next : prev;
     });
     // liveChatInputIds is re-derived each render; gate on its stable join key.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- chat identity, not the storage callback, controls draft restoration
   }, [liveKey]);
 
   const updateDraft = useCallback(

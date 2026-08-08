@@ -2,8 +2,9 @@
  * Returned by {@link debounce}. Calling it schedules the underlying function,
  * with `cancel` and `flush` controls modeled after `lodash.debounce`.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- generic constraint must accept arbitrary function shapes (lodash.debounce convention)
-export interface DebouncedFunction<T extends (...args: any[]) => any> {
+type AnyFunction = (...args: never[]) => unknown;
+
+export interface DebouncedFunction<T extends AnyFunction> {
   (...args: Parameters<T>): ReturnType<T> | undefined;
   cancel(): void;
   flush(): ReturnType<T> | undefined;
@@ -19,8 +20,7 @@ export interface DebounceOptions {
  * Supports the `leading` / `trailing` options and `cancel` / `flush` methods
  * used by the `lodash.debounce` API the codebase relied on previously.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- generic constraint must accept arbitrary function shapes (lodash.debounce convention)
-export function debounce<T extends (...args: any[]) => any>(
+export function debounce<T extends AnyFunction>(
   func: T,
   wait: number,
   options: DebounceOptions = {}

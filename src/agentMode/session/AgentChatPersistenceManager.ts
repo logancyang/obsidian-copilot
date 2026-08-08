@@ -444,7 +444,7 @@ export class AgentChatPersistenceManager {
             .split(/\s+/)
             .slice(0, 10)
             .join(" ")
-            // eslint-disable-next-line no-control-regex
+            // eslint-disable-next-line no-control-regex -- serialized frontmatter must reject embedded control bytes
             .replace(/[\\/:*?"<>|\x00-\x1F]/g, "")
             .trim() || "Untitled Agent Chat"
         : "Untitled Agent Chat";
@@ -478,7 +478,7 @@ export class AgentChatPersistenceManager {
     const sanitizedFileName = customFileName
       .replace(/\[\[([^\]]+)\]\]/g, "$1")
       .replace(/[{}[\]]/g, "_")
-      // eslint-disable-next-line no-control-regex
+      // eslint-disable-next-line no-control-regex -- serialized frontmatter must reject embedded control bytes
       .replace(/[\\/:*?"<>|\x00-\x1F]/g, "_");
 
     const baseNameWithPrefix = `${filePrefix}${sanitizedFileName}.md`;

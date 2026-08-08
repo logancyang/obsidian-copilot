@@ -62,9 +62,9 @@ export async function findLatestOpencodeLog(
 }
 
 function getNodeOpencodeLogRuntime(): OpencodeLogRuntime {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  // eslint-disable-next-line @typescript-eslint/no-require-imports -- Opencode log access is contained in this desktop runtime adapter
   const fs = require("node:fs/promises") as typeof import("node:fs/promises");
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  // eslint-disable-next-line @typescript-eslint/no-require-imports -- Opencode log paths stay inside the same desktop runtime adapter
   const path = require("node:path") as typeof import("node:path");
   return {
     join: (...parts: string[]) => path.join(...parts),

@@ -187,9 +187,9 @@ export function buildReportIssueUrl(input: ReportInput, attachedFiles: string[])
 }
 
 function getNodeReportRuntime(): ReportRuntime {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  // eslint-disable-next-line @typescript-eslint/no-require-imports -- report bundle writing is invoked only by the desktop report flow
   const fs = require("node:fs/promises") as typeof import("node:fs/promises");
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  // eslint-disable-next-line @typescript-eslint/no-require-imports -- report bundle paths stay inside the same desktop-only runtime adapter
   const path = require("node:path") as typeof import("node:path");
   return {
     join: (...parts: string[]) => path.join(...parts),

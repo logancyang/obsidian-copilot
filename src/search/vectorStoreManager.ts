@@ -6,7 +6,7 @@ import { logInfo, logWarn } from "@/logger";
 import EmbeddingsManager from "@/LLMProviders/embeddingManager";
 import { getSearchBackend } from "@/miyo/miyoUtils";
 import { CopilotSettings, getSettings, subscribeToSettingsChange } from "@/settings/model";
-import { Orama } from "@orama/orama";
+import type { CopilotOrama } from "@/search/dbOperations";
 import { App, Notice, Platform, TFile } from "obsidian";
 import { MiyoIndexBackend } from "./indexBackend/MiyoIndexBackend";
 import { OramaIndexBackend } from "./indexBackend/OramaIndexBackend";
@@ -288,8 +288,7 @@ export default class VectorStoreManager {
     this.indexBackend.onunload();
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Orama<any> is the correct API type
-  public async getDb(): Promise<Orama<any>> {
+  public async getDb(): Promise<CopilotOrama> {
     await this.waitForInitialization();
     const db = this.oramaBackend.getDb();
     if (!db) {

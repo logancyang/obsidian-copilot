@@ -31,9 +31,27 @@ export interface OramaDocument {
   metadata: Record<string, unknown>;
 }
 
+// Orama's conditional schema inference requires a literal alias; an interface
+// collapses its inferred document type to `never`.
+export type CopilotOramaSchema = {
+  id: "string";
+  title: "string";
+  path: "string";
+  content: "string";
+  embedding: `vector[${number}]`;
+  embeddingModel: "string";
+  created_at: "number";
+  ctime: "number";
+  mtime: "number";
+  tags: "string[]";
+  extension: "string";
+  nchars: "number";
+};
+
+export type CopilotOrama = Orama<CopilotOramaSchema>;
+
 export class DBOperations {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Orama<any> is the correct API type
-  private oramaDb: Orama<any> | undefined;
+  private oramaDb: CopilotOrama | undefined;
   private chunkedStorage: ChunkedStorage | undefined;
   private isInitialized = false;
   private dbPath: string;
@@ -85,8 +103,7 @@ export class DBOperations {
     this.isInitialized = true;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Orama<any> is the correct API type
-  async initializeDB(embeddingInstance: Embeddings | undefined): Promise<Orama<any> | undefined> {
+  async initializeDB(embeddingInstance: Embeddings | undefined): Promise<CopilotOrama | undefined> {
     try {
       if (!this.isInitialized) {
         this.dbPath = await this.getDbPath();
@@ -211,8 +228,7 @@ export class DBOperations {
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Orama<any> is the correct API type
-  public getDb(): Orama<any> | undefined {
+  public getDb(): CopilotOrama | undefined {
     if (!this.oramaDb) {
       console.warn("Database not initialized. Some features may be limited.");
     }
@@ -270,8 +286,7 @@ export class DBOperations {
     this.hasUnsavedChanges = true;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Orama<any> is the correct API type
-  private async createNewDb(embeddingInstance: Embeddings | undefined): Promise<Orama<any>> {
+  private async createNewDb(embeddingInstance: Embeddings | undefined): Promise<CopilotOrama> {
     if (!embeddingInstance) {
       throw new CustomError("Embedding instance not found.");
     }
@@ -302,8 +317,7 @@ export class DBOperations {
     return db;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Orama<any> is the correct API type
-  public static async getDocsByPath(db: Orama<any>, path: string) {
+  public static async getDocsByPath(db: CopilotOrama, path: string) {
     if (!db) throw new Error("DB not initialized");
     if (!path) return;
     // Use getAllDocuments + JS filter for reliable path matching (handles Unicode/Chinese correctly)
@@ -314,8 +328,7 @@ export class DBOperations {
   }
 
   public static async getDocsByEmbedding(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Orama<any> is the correct API type
-    db: Orama<any>,
+    db: CopilotOrama,
     embedding: number[],
     options: {
       limit: number;
@@ -332,8 +345,7 @@ export class DBOperations {
     return result.hits;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Orama<any> is the correct API type
-  public static async getLatestFileMtime(db: Orama<any> | undefined): Promise<number> {
+  public static async getLatestFileMtime(db: CopilotOrama | undefined): Promise<number> {
     if (!db) throw new Error("DB not initialized");
 
     try {
@@ -358,7 +370,7 @@ export class DBOperations {
     }
   }
 
-  createDynamicSchema(vectorLength: number) {
+  createDynamicSchema(vectorLength: number): CopilotOramaSchema {
     return {
       id: "string",
       title: "string", // basename of the TFile
@@ -401,7 +413,7 @@ export class DBOperations {
 
         // Insert into the assigned partition
         try {
-          await insert(db, docToSave as Parameters<typeof insert>[1]);
+          await insert(db, docToSave);
           logInfo(
             `${existingDoc.hits.length > 0 ? "Updated" : "Inserted"} document ${String(docToSave.id)} in partition ${partition}`
           );
@@ -536,8 +548,7 @@ export class DBOperations {
     return false;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Orama<any> is the correct API type
-  public static async getAllDocuments(db: Orama<any>): Promise<OramaDocument[]> {
+  public static async getAllDocuments(db: CopilotOrama): Promise<OramaDocument[]> {
     const result = await search(db, {
       term: "",
       limit: 100000,

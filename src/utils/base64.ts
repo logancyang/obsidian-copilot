@@ -3,7 +3,7 @@
 // no Node globals, so bare `Buffer` throws "Can't find variable: Buffer" on iOS
 // WebKit. esbuild bundles this polyfill into main.js so the same code path
 // works on both desktop and mobile.
-// eslint-disable-next-line import/no-nodejs-modules
+// eslint-disable-next-line import/no-nodejs-modules -- this package import is the browser polyfill, not the Node built-in
 import { Buffer } from "buffer";
 
 export function arrayBufferToBase64(buffer: ArrayBuffer): string {

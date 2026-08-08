@@ -308,13 +308,13 @@ export function getFrameLogPaths(vaultBasePath: string, runtime: NodeRuntime): F
 
 function getNodeRuntime(): NodeRuntime | null {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- optional desktop logging loads Node APIs lazily and degrades to no-op when unavailable
     const fs = require("node:fs/promises") as typeof import("node:fs/promises");
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- optional desktop logging loads Node APIs lazily and degrades to no-op when unavailable
     const os = require("node:os") as typeof import("node:os");
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- optional desktop logging loads Node APIs lazily and degrades to no-op when unavailable
     const path = require("node:path") as typeof import("node:path");
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- Electron shell support is optional and resolved with the same lazy desktop boundary
     const electron = require("electron") as {
       shell?: {
         openPath?: (path: string) => Promise<string>;

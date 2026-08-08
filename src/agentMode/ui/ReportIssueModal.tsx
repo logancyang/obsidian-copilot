@@ -40,7 +40,7 @@ interface ElectronShell {
 
 function getElectronShell(): ElectronShell | null {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- Electron shell is optional and loaded lazily so reporting can degrade gracefully
     const electron = require("electron") as
       | { shell?: ElectronShell; remote?: { shell?: ElectronShell } }
       | undefined;
@@ -52,9 +52,9 @@ function getElectronShell(): ElectronShell | null {
 
 function reportsRootDir(): string | null {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- report paths use Node only inside this optional desktop runtime probe
     const os = require("node:os") as typeof import("node:os");
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- report paths use Node only inside this optional desktop runtime probe
     const path = require("node:path") as typeof import("node:path");
     return path.join(os.tmpdir(), "obsidian-copilot", "reports");
   } catch {
@@ -258,7 +258,7 @@ export class ReportIssueModal extends Modal {
 
 async function resolveOpencodeLogPath(): Promise<string | null> {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- Opencode log discovery is a desktop-only best-effort path
     const os = require("node:os") as typeof import("node:os");
     // Resolve the log dir from the same env OpencodeBackend spawns opencode with:
     // user env overrides (e.g. XDG_DATA_HOME / HOME) relocate opencode's data dir,
