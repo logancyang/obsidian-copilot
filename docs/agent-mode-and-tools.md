@@ -13,6 +13,7 @@ Open [**Settings → Copilot → Basic → Agents**](settings.md#basic). Configu
 | **opencode** | Recommended for most people                     | Copilot-hosted models, your API providers, or local OpenAI-compatible APIs |
 | **Claude**   | You already use Claude Code                     | Your Claude Code installation and Anthropic account                        |
 | **Codex**    | You already use the Codex CLI and Codex account | Your Codex CLI login through the `codex-acp` adapter                       |
+| **Pi**       | You want a built-in agent with no separate CLI  | Copilot-hosted models or your OpenAI-compatible providers                  |
 
 A one-agent chat can work without a Copilot license when you bring your own model access. An eligible paid plan adds Copilot-hosted models and cloud-backed features. [Compare Copilot plans](copilot-plus-and-self-host.md).
 
@@ -52,6 +53,10 @@ The Codex backend needs the Codex CLI and its `codex-acp` adapter:
 5. Enable the models you want and choose a default.
 
 Copilot uses your existing Codex CLI login. Models added under **BYOK** do not join the Codex model list.
+
+### Pi
+
+Pi is built into Copilot and needs no separate CLI installation. Enable it under **Settings → Copilot → Basic → Agents → Pi**; it can use Copilot Plus models or models from your configured OpenAI-compatible providers.
 
 For Windows-specific installation help, see [Windows setup for Agent Chat](agent-mode-windows-setup.md).
 

@@ -12,6 +12,13 @@ function settingsWithPi(enabled: boolean | undefined): CopilotSettings {
 }
 
 describe("PiBackendDescriptor", () => {
+  describe("model routing", () => {
+    it("routes Copilot-hosted models and explains the bundled provider choices", () => {
+      expect(PiBackendDescriptor.routesCopilotModels).toBe(true);
+      expect(PiBackendDescriptor.setupDescription).toContain("Built into Copilot");
+    });
+  });
+
   describe("getInstallState()", () => {
     it("reports ready only while the opt-in toggle is on", () => {
       expect(PiBackendDescriptor.getInstallState(settingsWithPi(true))).toEqual({
