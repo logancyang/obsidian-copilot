@@ -1,5 +1,5 @@
 import { mountPluginViewRoot, type PluginViewRootHandle } from "@/utils/react/mountPluginViewRoot";
-import { ItemView, Plugin, type WorkspaceLeaf } from "obsidian";
+import { ItemView, Notice, Plugin, type WorkspaceLeaf } from "obsidian";
 import * as React from "react";
 import {
   createGalleryCatalog,
@@ -403,7 +403,14 @@ export default class GalleryPlugin extends Plugin {
   private operationAbortController = new AbortController();
   private readonly views = new Set<GalleryView>();
 
-  async onload(): Promise<void> {
+  onload(): void {
+    void this.loadGallery().catch((error: unknown) => {
+      const detail = error instanceof Error ? error.message : String(error);
+      new Notice(`Component gallery failed to load: ${detail}`);
+    });
+  }
+
+  private async loadGallery(): Promise<void> {
     const storyModules = await Promise.all(
       modules.map(async ({ componentId, load }) => ({
         componentId,

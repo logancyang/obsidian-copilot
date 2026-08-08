@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { isNativeChatId } from "@/utils/nativeChatId";
 import { formatCompactRelativeTime } from "@/utils/formatRelativeTime";
 import { sortByStrategy } from "@/utils/recentUsageManager";
+import { toVoidHandler } from "@/utils/asyncHandler";
 import {
   ArrowUpRight,
   Check,
@@ -485,7 +486,7 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
                   // every keystroke.
                   editingTitle={editingId === item.id ? editingTitle : ""}
                   confirmingDelete={confirmDeleteId === item.id}
-                  onOpen={onLoadChat}
+                  onOpen={toVoidHandler(onLoadChat, "Open recent chat")}
                   onStartEdit={handleStartEdit}
                   onEditingTitleChange={setEditingTitle}
                   // Only the editing row needs the live save handler (it changes

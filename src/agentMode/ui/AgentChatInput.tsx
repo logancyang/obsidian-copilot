@@ -582,10 +582,26 @@ export const AgentChatInput = memo(function AgentChatInput({
           placeholderPrompts={isLanding ? AGENT_PROMPT_SUGGESTIONS : undefined}
           inputMessage={inputMessage}
           setInputMessage={setInputMessage}
-          handleSendMessage={(meta) => handleSendMessage(meta?.webTabs)}
+          handleSendMessage={(meta) => {
+            void handleSendMessage(meta?.webTabs).catch((error: unknown) =>
+              logError("Send agent message failed", error)
+            );
+          }}
           isGenerating={loading}
-          onStopGenerating={handleStopGenerating}
-          onEscape={loading ? handleStopGenerating : undefined}
+          onStopGenerating={() => {
+            void handleStopGenerating().catch((error: unknown) =>
+              logError("Stop agent generation failed", error)
+            );
+          }}
+          onEscape={
+            loading
+              ? () => {
+                  void handleStopGenerating().catch((error: unknown) =>
+                    logError("Stop agent generation failed", error)
+                  );
+                }
+              : undefined
+          }
           onShiftTab={modePickerOverride ? onCycleMode : undefined}
           app={app}
           contextNotes={contextNotes}

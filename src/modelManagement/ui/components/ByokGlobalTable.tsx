@@ -16,6 +16,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { toVoidHandler } from "@/utils/asyncHandler";
 import { SelfHostCloudWarningIcon } from "@/components/ui/SelfHostCloudWarningIcon";
 import type { ConfiguredModel, Provider } from "@/modelManagement/types/persisted";
 import { useModelManagement } from "@/modelManagement/ui/ModelManagementContext";
@@ -260,9 +261,10 @@ const ProviderCard: React.FC<ProviderCardProps> = ({
                 <ModelRow
                   key={model.configuredModelId}
                   model={model}
-                  onRemove={() =>
-                    handleRemoveModel(model.configuredModelId, model.info.displayName)
-                  }
+                  onRemove={toVoidHandler(
+                    () => handleRemoveModel(model.configuredModelId, model.info.displayName),
+                    "Remove configured model"
+                  )}
                 />
               ))}
             </div>

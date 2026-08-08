@@ -21,6 +21,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { preprocessAIResponse } from "@/utils/markdownPreprocess";
 import { Root } from "react-dom/client";
 import { createPluginRoot } from "@/utils/react/createPluginRoot";
+import { toVoidHandler } from "@/utils/asyncHandler";
 import { CustomCommand } from "@/commands/type";
 import { useSettingsValue, updateSetting } from "@/settings/model";
 import {
@@ -426,12 +427,12 @@ function CustomCommandChatModalContent({
       onEditableContentChange={setEditedText}
       followUpValue={followUpValue}
       onFollowUpChange={setFollowUpValue}
-      onFollowUpSubmit={handleFollowUpSubmit}
+      onFollowUpSubmit={toVoidHandler(handleFollowUpSubmit, "Submit command follow-up")}
       selectedModel={chatPicker.value}
       onSelectModel={chatPicker.onChange}
       models={chatPicker.models}
       onStop={handleStop}
-      onCopy={handleCopy}
+      onCopy={toVoidHandler(handleCopy, "Copy command response")}
       onInsert={handleInsert}
       onReplace={handleReplace}
       initialPosition={initialPosition}

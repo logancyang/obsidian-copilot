@@ -2,6 +2,7 @@ import { cn } from "@/lib/utils";
 import { logError } from "@/logger";
 import { getSettings, updateSetting } from "@/settings/model";
 import { createPluginRoot } from "@/utils/react/createPluginRoot";
+import { toVoidHandler } from "@/utils/asyncHandler";
 import { Change, diffArrays } from "diff";
 import { Check, X as XIcon } from "lucide-react";
 import { App, ItemView, Notice, TFile, WorkspaceLeaf } from "obsidian";
@@ -566,11 +567,19 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
   return (
     <div className="tw-relative tw-flex tw-h-full tw-flex-col">
       <div className="tw-fixed tw-bottom-4 tw-left-1/2 tw-z-[9999] tw-flex tw-gap-2 tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-secondary tw-p-2 tw-shadow-lg">
-        <Button variant="destructive" size="sm" onClick={handleReject}>
+        <Button
+          variant="destructive"
+          size="sm"
+          onClick={toVoidHandler(handleReject, "Reject composer changes")}
+        >
           <XIcon className="tw-size-4" />
           Reject
         </Button>
-        <Button variant="success" size="sm" onClick={handleAccept}>
+        <Button
+          variant="success"
+          size="sm"
+          onClick={toVoidHandler(handleAccept, "Accept composer changes")}
+        >
           <Check className="tw-size-4" />
           Accept
         </Button>

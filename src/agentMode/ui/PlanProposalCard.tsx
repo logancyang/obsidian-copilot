@@ -7,6 +7,7 @@ import type {
   PlanProposalDecision,
 } from "@/agentMode/session/types";
 import { closePlanPreview, openPlanPreview } from "@/agentMode/ui/PlanPreviewView";
+import { toVoidHandler } from "@/utils/asyncHandler";
 import { Check, ClipboardList, FileText, Send, X as XIcon } from "lucide-react";
 import { App } from "obsidian";
 import React, { useEffect, useState } from "react";
@@ -98,7 +99,11 @@ export const PlanProposalCard: React.FC<PlanProposalCardProps> = ({ plan, app, c
       </div>
 
       <div className="tw-flex tw-flex-wrap tw-items-center tw-justify-end tw-gap-2 tw-border-t tw-border-solid tw-border-border tw-px-3 tw-py-2">
-        <Button variant="secondary" size="sm" onClick={handleOpen}>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={toVoidHandler(handleOpen, "Open plan preview")}
+        >
           <FileText className="tw-size-4" />
           Open
         </Button>
@@ -108,12 +113,17 @@ export const PlanProposalCard: React.FC<PlanProposalCardProps> = ({ plan, app, c
               variant="destructive"
               size="sm"
               disabled={busy}
-              onClick={() => decide("reject")}
+              onClick={toVoidHandler(() => decide("reject"), "Reject plan")}
             >
               <XIcon className="tw-size-4" />
               Reject
             </Button>
-            <Button variant="success" size="sm" disabled={busy} onClick={() => decide("approve")}>
+            <Button
+              variant="success"
+              size="sm"
+              disabled={busy}
+              onClick={toVoidHandler(() => decide("approve"), "Approve plan")}
+            >
               <Check className="tw-size-4" />
               Approve
             </Button>

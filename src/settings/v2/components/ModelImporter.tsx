@@ -11,6 +11,7 @@ import {
   verifyAndAddModel,
 } from "@/settings/v2/utils/modelActions";
 import { err2String, getProviderLabel } from "@/utils";
+import { toVoidHandler } from "@/utils/asyncHandler";
 import { Loader2 } from "lucide-react";
 import { Notice } from "obsidian";
 import React, { useCallback, useEffect, useRef, useState } from "react";
@@ -219,7 +220,7 @@ export function ModelImporter({
           </div>
           <div className="tw-w-[72px]">
             <Button
-              onClick={handleAddModel}
+              onClick={toVoidHandler(handleAddModel, "Add imported model")}
               disabled={!selectedModel || verifying}
               variant="secondary"
               size="sm"

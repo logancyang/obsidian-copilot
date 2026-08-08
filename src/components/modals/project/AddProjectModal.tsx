@@ -34,6 +34,7 @@ import { Settings } from "lucide-react";
 import { type UrlItem, parseProjectUrls, serializeProjectUrls } from "@/utils/urlTagUtils";
 import type CopilotPlugin from "@/main";
 import { createPluginRoot } from "@/utils/react/createPluginRoot";
+import { toVoidHandler } from "@/utils/asyncHandler";
 import { useChatBackendModelOptions } from "@/hooks/useChatBackendModelOptions";
 import { App, Modal, Notice } from "obsidian";
 import React, { useEffect, useMemo, useState } from "react";
@@ -613,7 +614,10 @@ export function AddProjectModalContent({
           <Button variant="ghost" onClick={onCancel} disabled={isSubmitting}>
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={isSubmitting || !isFormValid()}>
+          <Button
+            onClick={toVoidHandler(handleSave, "Save project")}
+            disabled={isSubmitting || !isFormValid()}
+          >
             {isSubmitting ? "Saving..." : "Save"}
           </Button>
         </div>

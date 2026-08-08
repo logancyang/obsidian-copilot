@@ -21,6 +21,7 @@ import { logError, logWarn } from "@/logger";
 import { ProjectFileManager } from "@/projects/ProjectFileManager";
 import { useSettingsValue } from "@/settings/model";
 import { sortByStrategy } from "@/utils/recentUsageManager";
+import { toVoidHandler } from "@/utils/asyncHandler";
 import {
   ArrowUpRight,
   ChevronDown,
@@ -200,11 +201,11 @@ export const ProjectList = memo(
       if (!selectedProject) return;
       const stillExists = projects.some((p) => p.id === selectedProject.id);
       if (stillExists) return;
-      // eslint-disable-next-line @eslint-react/hooks-extra/no-direct-set-state-in-use-effect
+      // eslint-disable-next-line @eslint-react/hooks-extra/no-direct-set-state-in-use-effect -- reset selection when the project list becomes unavailable
       setSelectedProject(null);
-      // eslint-disable-next-line @eslint-react/hooks-extra/no-direct-set-state-in-use-effect
+      // eslint-disable-next-line @eslint-react/hooks-extra/no-direct-set-state-in-use-effect -- select the only project when the external list collapses to one item
       setShowChatInput(false);
-      // eslint-disable-next-line @eslint-react/hooks-extra/no-direct-set-state-in-use-effect
+      // eslint-disable-next-line @eslint-react/hooks-extra/no-direct-set-state-in-use-effect -- discard a selection removed by an external project update
       setIsOpen(true);
       showChatUI(false);
     }, [projects, selectedProject, showChatUI]);
@@ -473,7 +474,7 @@ export const ProjectList = memo(
                             project={project}
                             loadContext={handleLoadContext}
                             onEdit={handleEditProject}
-                            onDelete={handleDeleteProject}
+                            onDelete={toVoidHandler(handleDeleteProject, "Delete project")}
                           />
                         ))}
                       </div>

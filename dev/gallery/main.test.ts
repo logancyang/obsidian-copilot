@@ -1,5 +1,5 @@
 import { mountPluginViewRoot, type PluginViewRootHandle } from "@/utils/react/mountPluginViewRoot";
-import { fireEvent, render, type RenderResult } from "@testing-library/react";
+import { fireEvent, render, waitFor, type RenderResult } from "@testing-library/react";
 import GalleryPlugin, { GALLERY_VIEWTYPE, type GalleryHandle } from "./main";
 import type { AuditReport } from "./audit";
 import type { GalleryViewState } from "./Gallery";
@@ -71,9 +71,9 @@ jest.mock("obsidian", () => {
     constructor(leaf: unknown) {
       this.app = (leaf as { app?: unknown }).app;
       this.leaf = leaf;
-      this.containerEl = activeDocument.createElement("div");
-      this.containerEl.append(activeDocument.createElement("div"));
-      this.contentEl = activeDocument.createElement("div");
+      this.containerEl = activeDocument.body.createDiv();
+      this.containerEl.append(activeDocument.body.createDiv());
+      this.contentEl = activeDocument.body.createDiv();
       this.contentEl.setText = (text: string) => {
         this.contentEl.textContent = text;
       };
@@ -195,7 +195,8 @@ describe("main", () => {
       createView = viewCreator as (leaf: WorkspaceLeaf) => GalleryViewContract;
     });
 
-    await plugin.onload();
+    plugin.onload();
+    await waitFor(() => expect(registerView).toHaveBeenCalled());
 
     if (!createView) {
       throw new Error("Gallery view was not registered");
@@ -231,7 +232,7 @@ describe("main", () => {
         return;
       }
 
-      const storyElement = activeDocument.createElement("div");
+      const storyElement = activeDocument.body.createDiv();
       storyElement.dataset.story = story.id;
       storyElement.dataset.storyWidth = String(state.width);
       storyElement.dataset.galleryOwner = ownerId;
@@ -739,7 +740,8 @@ describe("main", () => {
         const replacement = new GalleryPlugin(app, {
           id: "copilot-component-gallery",
         } as PluginManifest);
-        await replacement.onload();
+        replacement.onload();
+        await waitFor(() => expect(window.__gallery).not.toBe(firstHandle));
         const replacementHandle = window.__gallery;
 
         plugin.onunload();

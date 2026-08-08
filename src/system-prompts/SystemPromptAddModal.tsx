@@ -7,6 +7,7 @@ import { Lightbulb } from "lucide-react";
 import { App, Modal, Notice, Platform } from "obsidian";
 import { Root } from "react-dom/client";
 import { createPluginRoot } from "@/utils/react/createPluginRoot";
+import { toVoidHandler } from "@/utils/asyncHandler";
 import { UserSystemPrompt } from "@/system-prompts/type";
 import { validatePromptName } from "@/system-prompts/systemPromptUtils";
 import { SystemPromptManager } from "@/system-prompts/systemPromptManager";
@@ -269,7 +270,7 @@ export class SystemPromptAddModal extends Modal {
     this.root.render(
       <SystemPromptAddModalContent
         prompts={this.prompts}
-        onConfirm={handleConfirm}
+        onConfirm={toVoidHandler(handleConfirm, "Create system prompt")}
         onCancel={() => this.close()}
         contentEl={contentEl}
       />

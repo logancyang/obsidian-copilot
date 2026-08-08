@@ -79,15 +79,17 @@ export function UrlTagInput({ urls, onAdd, onRemove }: UrlTagInputProps) {
     setInputValue("");
   };
 
-  const handlePasteFromClipboard = async () => {
-    try {
-      const text = await navigator.clipboard.readText();
-      if (text) {
-        parseAndAddUrls(text);
-      }
-    } catch {
-      // Clipboard API not available or permission denied in Obsidian
-    }
+  const handlePasteFromClipboard = () => {
+    void navigator.clipboard
+      .readText()
+      .then((text) => {
+        if (text) {
+          parseAndAddUrls(text);
+        }
+      })
+      .catch(() => {
+        // Clipboard API not available or permission denied in Obsidian
+      });
   };
 
   const webUrls = urls.filter((u) => u.type === "web");

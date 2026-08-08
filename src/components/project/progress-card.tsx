@@ -19,6 +19,7 @@ import { TruncatedText } from "@/components/TruncatedText";
 import { ProcessingStatus } from "@/components/project/processing-status";
 import { useProjectProcessingData } from "@/components/project/useProjectProcessingData";
 import { openCachedItemPreview } from "@/utils/cacheFileOpener";
+import { toVoidHandler } from "@/utils/asyncHandler";
 import type { ProcessingItem } from "@/components/project/processingAdapter";
 import { ProjectFileManager } from "@/projects/ProjectFileManager";
 import { splitUrlsStringToArray } from "@/projects/projectUtils";
@@ -185,7 +186,7 @@ export default function ProgressCard({ plugin, setHiddenCard, onEditContext }: P
                     items={processingData.items}
                     onRetry={handleRetry}
                     onOpenCachedItem={projectCache != null ? handleOpenCachedItem : undefined}
-                    onRemoveUrl={handleRemoveUrl}
+                    onRemoveUrl={toVoidHandler(handleRemoveUrl, "Remove project URL")}
                     defaultExpanded
                     maxHeight="200px"
                   />

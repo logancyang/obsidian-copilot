@@ -31,6 +31,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 
 import { cn } from "@/lib/utils";
+import { toVoidHandler } from "@/utils/asyncHandler";
 import { logError } from "@/logger";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import { PromptSortStrategy } from "@/types";
@@ -132,15 +133,17 @@ const MobileCommandCard: React.FC<{
         </div>
         <Checkbox
           checked={command.showInSlashMenu}
-          onCheckedChange={(checked) =>
-            onUpdate(
-              {
-                ...command,
-                showInSlashMenu: checked === true,
-              },
-              command.title
-            )
-          }
+          onCheckedChange={toVoidHandler(
+            (checked) =>
+              onUpdate(
+                {
+                  ...command,
+                  showInSlashMenu: checked === true,
+                },
+                command.title
+              ),
+            "Update slash command visibility"
+          )}
         />
       </div>
     </div>
@@ -224,15 +227,17 @@ const SortableTableRow: React.FC<{
       <TableCell className="tw-text-center">
         <Checkbox
           checked={command.showInSlashMenu}
-          onCheckedChange={(checked) =>
-            onUpdate(
-              {
-                ...command,
-                showInSlashMenu: checked === true,
-              },
-              command.title
-            )
-          }
+          onCheckedChange={toVoidHandler(
+            (checked) =>
+              onUpdate(
+                {
+                  ...command,
+                  showInSlashMenu: checked === true,
+                },
+                command.title
+              ),
+            "Update slash command visibility"
+          )}
           className="tw-mx-auto"
         />
       </TableCell>
@@ -258,7 +263,7 @@ const SortableTableRow: React.FC<{
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => onCopy(command)}
+            onClick={toVoidHandler(() => onCopy(command), "Duplicate command")}
             title="Duplicate command"
           >
             <CopyPlus className="tw-size-4" />

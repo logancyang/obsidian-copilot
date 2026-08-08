@@ -51,6 +51,7 @@ import { FileParserManager } from "@/tools/FileParserManager";
 import { ChatMessage } from "@/types/message";
 import { err2String, isPlusChain, modelSupportsVision } from "@/utils";
 import { arrayBufferToBase64 } from "@/utils/base64";
+import { toVoidHandler } from "@/utils/asyncHandler";
 import { appendUniqueFiles } from "@/utils/fileListUtils";
 import { Notice, TFile } from "obsidian";
 import { ContextManageModal } from "@/components/modals/project/context-manage-modal";
@@ -894,9 +895,9 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
           loading={loading}
           loadingMessage={loadingMessage}
           app={app}
-          onRegenerate={handleRegenerate}
-          onEdit={handleEdit}
-          onDelete={handleDelete}
+          onRegenerate={toVoidHandler(handleRegenerate, "Regenerate message")}
+          onEdit={toVoidHandler(handleEdit, "Edit message")}
+          onDelete={toVoidHandler(handleDelete, "Delete message")}
           onReplaceChat={setInputMessage}
           showHelperComponents={selectedChain !== ChainType.PROJECT_CHAIN}
         />
@@ -954,7 +955,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
             <ChatInput
               inputMessage={inputMessage}
               setInputMessage={setInputMessage}
-              handleSendMessage={handleSendMessage}
+              handleSendMessage={toVoidHandler(handleSendMessage, "Send chat message")}
               isGenerating={loading}
               onStopGenerating={() => handleStopGenerating(ABORT_REASON.USER_STOPPED)}
               app={app}

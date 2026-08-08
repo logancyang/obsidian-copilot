@@ -10,6 +10,7 @@ import { ChatIconWithAttention } from "@/components/chat-components/ChatIconWith
 import { logError } from "@/logger";
 import { useSettingsValue } from "@/settings/model";
 import { sortByStrategy } from "@/utils/recentUsageManager";
+import { toVoidHandler } from "@/utils/asyncHandler";
 import { Platform } from "obsidian";
 
 /** Number of chat history items loaded per page. */
@@ -347,12 +348,16 @@ export function ChatHistoryPopover({
                             editingTitle={editingTitle}
                             onEditingTitleChange={setEditingTitle}
                             onStartEdit={handleStartEdit}
-                            onSaveEdit={handleSaveEdit}
+                            onSaveEdit={toVoidHandler(handleSaveEdit, "Save chat title")}
                             onCancelEdit={handleCancelEdit}
-                            onDelete={handleDelete}
+                            onDelete={toVoidHandler(handleDelete, "Delete chat")}
                             onCancelDelete={handleCancelDelete}
-                            onLoadChat={handleLoadChat}
-                            onOpenSourceFile={onOpenSourceFile}
+                            onLoadChat={toVoidHandler(handleLoadChat, "Load chat")}
+                            onOpenSourceFile={
+                              onOpenSourceFile
+                                ? toVoidHandler(onOpenSourceFile, "Open chat source")
+                                : undefined
+                            }
                             isMobile={isMobile}
                             confirmDeleteId={confirmDeleteId}
                             getIcon={getIcon}

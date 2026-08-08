@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { logError } from "@/logger";
 import { detectionSearchDirs } from "@/utils/binaryPath";
+import { toVoidHandler } from "@/utils/asyncHandler";
 import { detectBinary } from "@/utils/detectBinary";
 import { Notice } from "obsidian";
 import React from "react";
@@ -143,15 +144,30 @@ export const BinaryPathSetting: React.FC<Props> = ({
           onChange={(e) => setPathInput(e.target.value)}
           className="tw-flex-1"
         />
-        <Button variant="secondary" size="default" onClick={autoDetect} disabled={busy}>
+        <Button
+          variant="secondary"
+          size="default"
+          onClick={toVoidHandler(autoDetect, "Auto-detect binary")}
+          disabled={busy}
+        >
           Auto-detect
         </Button>
         {showClear ? (
-          <Button variant="destructive" size="default" onClick={clear} disabled={busy}>
+          <Button
+            variant="destructive"
+            size="default"
+            onClick={toVoidHandler(clear, "Clear binary path")}
+            disabled={busy}
+          >
             Clear
           </Button>
         ) : showApply ? (
-          <Button variant="default" size="default" onClick={apply} disabled={busy}>
+          <Button
+            variant="default"
+            size="default"
+            onClick={toVoidHandler(apply, "Apply binary path")}
+            disabled={busy}
+          >
             Apply
           </Button>
         ) : null}

@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { openWithSystemDefault } from "@/utils/openWithSystemDefault";
 import { createPluginRoot } from "@/utils/react/createPluginRoot";
+import { toVoidHandler } from "@/utils/asyncHandler";
 import type { SymposiumAction, SymposiumDocument, SymposiumReceipt } from "@/symposium/types";
 import { App, Modal } from "obsidian";
 import React, { useState } from "react";
@@ -105,7 +106,7 @@ function SymposiumReceiptView({ receipt, actions }: SymposiumReceiptViewProps) {
       <div className="tw-flex tw-items-center tw-justify-end tw-gap-2">
         {copyMessage && <span className="tw-text-small tw-text-muted">{copyMessage}</span>}
         {actions}
-        <Button variant="secondary" onClick={copyUrl}>
+        <Button variant="secondary" onClick={toVoidHandler(copyUrl, "Copy Symposium URL")}>
           Copy
         </Button>
         <Button onClick={openUrl}>Open</Button>

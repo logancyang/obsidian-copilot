@@ -85,6 +85,7 @@ import { dehydrateDeviceProfile, hydrateDeviceProfile } from "@/settings/deviceP
 import { getDeviceId } from "@/utils/deviceId";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { installRendererEventsShim } from "@/utils/rendererEventsShim";
+import { toVoidHandler } from "@/utils/asyncHandler";
 import { ProjectContextCache } from "@/cache/projectContextCache";
 import { ContextProcessor } from "@/contextProcessor";
 import { CustomCommandManager } from "@/commands/customCommandManager";
@@ -179,7 +180,13 @@ export default class CopilotPlugin extends Plugin {
   private lastSelectionSignature?: string;
   private webSelectionTracker?: WebSelectionTracker;
   private readonly chatHistoryLastAccessedAtManager = new RecentUsageManager<string>();
-  async onload(): Promise<void> {
+  onload(): void {
+    void this.loadPlugin().catch((error: unknown) =>
+      logError("Copilot plugin failed to load", error)
+    );
+  }
+
+  private async loadPlugin(): Promise<void> {
     // Patch Node's `events.setMaxListeners` so the Claude Agent SDK's call with
     // a web-realm AbortSignal stops throwing in Electron's renderer. No-ops on
     // mobile (no node:events / no SDK). Must run before any Agent Mode session;
@@ -535,7 +542,7 @@ export default class CopilotPlugin extends Plugin {
     }
   }
 
-  async onunload() {
+  onunload(): void {
     // End the Miyo mutation lifecycle HERE, as the first statement: everything
     // above the first `await` runs before the next `onload()` can possibly
     // start, so this carries none of the late-continuation risk that keeps
@@ -545,6 +552,12 @@ export default class CopilotPlugin extends Plugin {
     // that is never followed by a re-enable, or while another vault is opening.
     resetMiyoMutations();
 
+    void this.finishUnload().catch((error: unknown) =>
+      logError("Copilot plugin failed to unload cleanly", error)
+    );
+  }
+
+  private async finishUnload(): Promise<void> {
     // Best-effort flush of pending keychain/data.json writes.
     // Reason: onunload() is void in Obsidian's type system, but awaiting here
     // is no worse than fire-and-forget, and consistent with the log flush below.
@@ -1160,7 +1173,7 @@ export default class CopilotPlugin extends Plugin {
       this.app,
       chatFiles,
       this.chatHistoryLastAccessedAtManager,
-      this.loadChatHistory.bind(this) as (file: TFile) => void
+      toVoidHandler((file: TFile) => this.loadChatHistory(file), "Load chat history")
     ).open();
   }
 

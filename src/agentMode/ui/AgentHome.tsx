@@ -22,6 +22,7 @@ import {
 import { ProjectPickerList } from "@/agentMode/ui/ProjectPickerList";
 import { RelevantNotesShelfPanel } from "@/agentMode/ui/RelevantNotesShelfPanel";
 import { useRelevantNotesPaneOpen } from "@/agentMode/ui/useRelevantNotesPaneOpen";
+import { toVoidHandler } from "@/utils/asyncHandler";
 import { useAgentChatRuntimeState } from "@/agentMode/ui/hooks/useAgentChatRuntimeState";
 import { useAgentHistoryControls } from "@/agentMode/ui/hooks/useAgentHistoryControls";
 import { useAgentInputDrafts } from "@/agentMode/ui/hooks/useAgentInputDrafts";
@@ -358,7 +359,11 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   // appear in an id, so distinct id sets always produce distinct keys.
   const sessions = manager.getSessions();
   const liveKey = sessions.map((s) => s.chatInputId).join("\0");
-  const liveChatInputIds = useMemo(() => sessions.map((s) => s.chatInputId), [liveKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const liveChatInputIds = useMemo(
+    () => sessions.map((s) => s.chatInputId),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- liveKey invalidates the external session snapshot
+    [liveKey]
+  );
   // Per-chat-input compose drafts live in the shell (the common owner) so the
   // active turn's `loading` (transcript spinner) and the drop overlay's drag
   // state can be read directly here, instead of being mirrored up from the
@@ -441,7 +446,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     if (!isProjectScope) return null;
     const record = getCachedProjectRecordById(activeProjectId);
     return record ? getProjectLandingCaptureSignature(app, record) : null;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the stable session identity owns this one-time synchronization
   }, [app, isProjectScope, activeProjectId, projects]);
   useRefreshEmptyLandingOnContextSourceChange({
     activeProjectId,
@@ -499,7 +504,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   // a session, so it doesn't flicker as tokens arrive. sessionId is the
   // intentional re-roll trigger — not read inside the factory, so exhaustive-deps
   // flags it; the dep is deliberate (same as the liveChatInputIds memo above).
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- route changes, not callback identity, trigger restoration
   const greeting = useMemo(() => pickRandomGreeting(), [sessionId]);
 
   // Populate the chats list whenever a landing (global or per-project) is shown
@@ -545,7 +550,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
             onUpdateTitle={handleUpdateChatTitle}
             onDeleteChat={handleDeleteChat}
             onOpenSourceFile={handleOpenSourceFile}
-            onLoadHistory={handleLoadChatHistory}
+            onLoadHistory={toVoidHandler(handleLoadChatHistory, "Load chat history")}
             runningChatIds={runningChatIds}
             attentionChatIds={attentionChatIds}
             projectNamesById={projectNamesById}
@@ -633,7 +638,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
             onUpdateTitle={handleUpdateChatTitle}
             onDeleteChat={handleDeleteChat}
             onOpenSourceFile={handleOpenSourceFile}
-            onLoadHistory={handleLoadChatHistory}
+            onLoadHistory={toVoidHandler(handleLoadChatHistory, "Load chat history")}
             runningChatIds={runningChatIds}
             attentionChatIds={attentionChatIds}
           />

@@ -12,6 +12,7 @@ import {
   useLicenseState,
 } from "@/plusUtils";
 import { updateSetting, useSettingsValue } from "@/settings/model";
+import { toVoidHandler } from "@/utils/asyncHandler";
 import { ExternalLink, Loader2 } from "lucide-react";
 import React, { useState } from "react";
 
@@ -125,18 +126,21 @@ export function PlusSettings() {
         />
         <Button
           disabled={isChecking}
-          onClick={async () => {
+          onClick={toVoidHandler(async () => {
             updateSetting("plusLicenseKey", localLicenseKey);
             setIsChecking(true);
-            const result = await checkIsPaidUser(app);
-            setIsChecking(false);
-            if (!result) {
-              setError("Invalid license key");
-            } else {
-              setError(null);
-              new CopilotPlusWelcomeModal(app).open();
+            try {
+              const result = await checkIsPaidUser(app);
+              if (!result) {
+                setError("Invalid license key");
+              } else {
+                setError(null);
+                new CopilotPlusWelcomeModal(app).open();
+              }
+            } finally {
+              setIsChecking(false);
             }
-          }}
+          }, "Validate Plus license")}
           className="tw-min-w-10 tw-text-xs md:tw-text-sm"
         >
           {isChecking ? <Loader2 className="tw-size-2 tw-animate-spin md:tw-size-4" /> : "Apply"}

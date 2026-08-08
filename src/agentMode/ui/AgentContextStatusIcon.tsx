@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { settingsStore } from "@/settings/model";
 import { openAgentCachedItemPreview } from "@/utils/cacheFileOpener";
+import { toVoidHandler } from "@/utils/asyncHandler";
 import { useAtomValue } from "jotai";
 import { AlertCircle, CheckCircle, CircleDashed, Loader2 } from "lucide-react";
 import { App } from "obsidian";
@@ -419,7 +420,7 @@ export default function AgentContextStatusIcon({
             app={app}
             project={project}
             hasConfiguredContextSource={hasConfiguredContextSource}
-            onRetryItem={handleRetryItem}
+            onRetryItem={toVoidHandler(handleRetryItem, "Retry context item")}
             onRetryAll={handleRetryAll}
             onEditContext={() => {
               handleOpenChange(false);

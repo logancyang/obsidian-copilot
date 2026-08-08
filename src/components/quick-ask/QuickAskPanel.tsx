@@ -14,6 +14,7 @@ import { useDraggable } from "@/hooks/use-draggable";
 import type { ResizeDirection } from "@/hooks/use-resizable";
 import { useSettingsValue, updateSetting } from "@/settings/model";
 import { cleanMessageForCopy } from "@/utils";
+import { toVoidHandler } from "@/utils/asyncHandler";
 import { ModelSelector } from "@/components/ui/ModelSelector";
 import { useChatModelPicker } from "@/components/chat-components/useChatModelPicker";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -305,7 +306,7 @@ export function QuickAskPanel({
               message={msg}
               isStreaming={isStreaming && msg.id === lastMessageId && msg.role === "assistant"}
               isLastAssistantMessage={msg.role === "assistant" && idx === lastAssistantIdx}
-              onCopy={handleCopy}
+              onCopy={toVoidHandler(handleCopy, "Copy quick ask response")}
               onInsert={handleInsert}
               onReplace={handleReplace}
               hasSelection={hasSelection}
@@ -327,7 +328,7 @@ export function QuickAskPanel({
         <QuickAskInput
           value={inputText}
           onChange={setInputText}
-          onSubmit={handleSubmit}
+          onSubmit={toVoidHandler(handleSubmit, "Submit quick ask")}
           sendShortcut={settings.defaultSendShortcut}
           placeholder={isStreaming ? "Generating..." : "Ask a question... "}
           currentActiveFile={currentActiveFile}
@@ -385,7 +386,7 @@ export function QuickAskPanel({
             <Button
               variant="default"
               size="icon"
-              onClick={handleSubmit}
+              onClick={toVoidHandler(handleSubmit, "Submit quick ask")}
               disabled={!inputText.trim()}
               title="Send message"
             >

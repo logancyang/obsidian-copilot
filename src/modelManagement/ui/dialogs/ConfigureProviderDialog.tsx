@@ -28,6 +28,7 @@ import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { SearchBar } from "@/components/ui/SearchBar";
+import { toVoidHandler } from "@/utils/asyncHandler";
 import { useApp } from "@/context";
 import { logError } from "@/logger";
 import type { ModelManagementApi } from "@/modelManagement/createModelManagement";
@@ -210,7 +211,7 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
     if (!catalogProviderId) return EMPTY_METADATA;
     return api.catalogService.getProvider(catalogProviderId)?.models ?? EMPTY_METADATA;
     // `catalogVersion` re-runs this once the catalog lands.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- provider identity, not callback identity, controls form reset
   }, [catalogProviderId, api, catalogVersion]);
 
   const [displayName, setDisplayName] = useState(() =>
@@ -486,7 +487,11 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
               }}
               placeholder={state.mode === "edit" ? "No API key set" : "Paste your API key"}
             />
-            <Button variant="secondary" onClick={handleTest} disabled={testing}>
+            <Button
+              variant="secondary"
+              onClick={toVoidHandler(handleTest, "Test provider")}
+              disabled={testing}
+            >
               {testing ? <Loader2 className="tw-size-4 tw-animate-spin" /> : "Test"}
             </Button>
             {state.mode === "edit" && apiKey.length > 0 && (
@@ -543,7 +548,11 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
           <Button variant="secondary" onClick={onClose} disabled={saving}>
             Cancel
           </Button>
-          <Button variant="default" onClick={handleSaveNew} disabled={!canSave || saving}>
+          <Button
+            variant="default"
+            onClick={toVoidHandler(handleSaveNew, "Save provider")}
+            disabled={!canSave || saving}
+          >
             {saving ? <Loader2 className="tw-size-4 tw-animate-spin" /> : "Save"}
           </Button>
         </div>
@@ -556,7 +565,11 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
             <Button variant="secondary" onClick={onClose} disabled={saving}>
               Cancel
             </Button>
-            <Button variant="default" onClick={handleSaveEdit} disabled={!canSave || saving}>
+            <Button
+              variant="default"
+              onClick={toVoidHandler(handleSaveEdit, "Update provider")}
+              disabled={!canSave || saving}
+            >
               {saving ? <Loader2 className="tw-size-4 tw-animate-spin" /> : "Save"}
             </Button>
           </div>
