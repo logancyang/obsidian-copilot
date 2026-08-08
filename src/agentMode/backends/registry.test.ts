@@ -23,7 +23,7 @@ jest.mock("@/logger", () => ({ logInfo: jest.fn(), logWarn: jest.fn(), logError:
 jest.mock("obsidian", () => ({
   Modal: class {},
   Notice: class {},
-  Platform: { isMobile: false },
+  Platform: { isDesktop: true, isDesktopApp: true, isMobile: false },
 }));
 
 describe("backendRegistry", () => {

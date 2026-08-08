@@ -1,9 +1,13 @@
-jest.mock("obsidian", () => ({ Platform: { isMobile: false } }));
+jest.mock("obsidian", () => ({
+  Platform: { isDesktop: true, isDesktopApp: true, isMobile: false },
+}));
 
 import { EventEmitter } from "node:events";
 import { installRendererEventsShim } from "./rendererEventsShim";
 
-const obsidian: { Platform: { isMobile: boolean } } = jest.requireMock("obsidian");
+const obsidian: {
+  Platform: { isDesktop: boolean; isDesktopApp: boolean; isMobile: boolean };
+} = jest.requireMock("obsidian");
 
 describe("installRendererEventsShim", () => {
   let original: typeof EventEmitter.setMaxListeners;

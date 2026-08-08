@@ -2,6 +2,7 @@ jest.mock("obsidian", () => ({
   // pickMatchingAsset is pure; FileSystemAdapter and requestUrl are
   // referenced by the manager class but not by these tests.
   FileSystemAdapter: class {},
+  Platform: { isDesktop: true, isDesktopApp: true, isMobile: false },
   requestUrl: jest.fn(),
 }));
 

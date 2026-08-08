@@ -19,6 +19,7 @@ jest.mock("obsidian", () => ({
     }
   },
   Notice: jest.fn(),
+  Platform: { isDesktop: true, isDesktopApp: true, isMobile: false },
 }));
 
 const VAULT = "/Users/me/vault";
