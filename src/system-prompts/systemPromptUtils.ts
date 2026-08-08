@@ -39,7 +39,7 @@ export function validatePromptName(
     return null; // No change needed
   }
 
-  // eslint-disable-next-line no-control-regex
+  // eslint-disable-next-line no-control-regex -- prompt paths must reject embedded control bytes
   const invalidChars = /[#<>:"/\\|?*[\]^\x00-\x1F]/g;
   if (invalidChars.test(trimmedName)) {
     return 'Prompt name contains invalid characters. Avoid using: < > : " / \\ | ? * [ ] ^';

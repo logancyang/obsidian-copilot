@@ -133,10 +133,7 @@ export class LLMChainRunner extends BaseChainRunner {
         logInfo("Stream aborted by user", { reason: abortController.signal.reason });
         // Don't show error message for user-initiated aborts
       } else {
-        await this.handleError(
-          error,
-          streamer.processErrorChunk.bind(streamer) as (message: string) => void
-        );
+        await this.handleError(error, (message: string) => streamer.processErrorChunk(message));
       }
     }
 

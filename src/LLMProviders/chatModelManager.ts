@@ -1061,7 +1061,7 @@ export default class ChatModelManager {
     const tryPing = async (enableCors: boolean) => {
       const modelToTest = { ...model, enableCors };
       const modelConfig = await this.getModelConfig(modelToTest);
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the catch binding documents the ignored lookup failure
       const { streaming, maxTokens, maxCompletionTokens, ...pingConfig } = modelConfig;
 
       // Check model capabilities to determine appropriate maxTokens

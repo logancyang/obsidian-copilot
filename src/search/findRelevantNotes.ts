@@ -8,12 +8,12 @@ import {
   getSearchBackend,
 } from "@/miyo/miyoUtils";
 import { getBacklinkedNotes, getLinkedNotes } from "@/noteUtils";
-import { DBOperations } from "@/search/dbOperations";
+import { DBOperations, type CopilotOrama } from "@/search/dbOperations";
 import type { SemanticIndexDocument } from "@/search/indexBackend/SemanticIndexBackend";
 import { createCopilotPatternFilter } from "@/search/searchUtils";
 import VectorStoreManager from "@/search/vectorStoreManager";
 import { getSettings } from "@/settings/model";
-import { InternalTypedDocument, Orama, Result } from "@orama/orama";
+import { Result } from "@orama/orama";
 import { App, TFile } from "obsidian";
 
 const MAX_K = 20;
@@ -34,11 +34,10 @@ function shouldUseMiyoForRelevantNotes(): boolean {
  * @param currentFilePath - The current file path.
  * @returns A map of the highest score hits for each note.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- InternalTypedDocument<any> is required as Orama controls this type
-function getHighestScoreHits(hits: Result<InternalTypedDocument<any>>[], currentFilePath: string) {
+function getHighestScoreHits(hits: Result<{ path: string }>[], currentFilePath: string) {
   const hitMap = new Map<string, number>();
   for (const hit of hits) {
-    const path = (hit.document as { path: string }).path;
+    const path = hit.document.path;
     const matchingScore = hitMap.get(path);
     if (matchingScore) {
       if (hit.score > matchingScore) {
@@ -103,8 +102,7 @@ async function calculateSimilarityScoreFromOrama({
   filePath,
   currentNoteEmbeddings,
 }: {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Orama<any> is the correct API type
-  db: Orama<any>;
+  db: CopilotOrama;
   filePath: string;
   currentNoteEmbeddings: number[][];
 }): Promise<Map<string, number>> {

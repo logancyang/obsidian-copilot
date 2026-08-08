@@ -12,7 +12,7 @@
 export function escapeYamlString(str: string): string {
   return (
     str
-      // eslint-disable-next-line no-control-regex
+      // eslint-disable-next-line no-control-regex -- YAML scalar validation must reject embedded control bytes
       .replace(/[\x00-\x1F\x7F]/g, " ")
       .replace(/\\/g, "\\\\")
       .replace(/"/g, '\\"')

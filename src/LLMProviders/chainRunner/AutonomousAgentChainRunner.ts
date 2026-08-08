@@ -396,9 +396,8 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
     const thinkStreamer = new ThinkBlockStreamer(updateCurrentAiMessage, true);
 
     if (!isPaidUser) {
-      await this.handleError(
-        new Error("Invalid license key"),
-        thinkStreamer.processErrorChunk.bind(thinkStreamer) as (message: string) => void
+      await this.handleError(new Error("Invalid license key"), (message: string) =>
+        thinkStreamer.processErrorChunk(message)
       );
       const errorResponse = thinkStreamer.close().content;
       return this.handleResponse(
@@ -510,7 +509,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
 
         await this.handleError(
           new Error(autonomousAgentErrorMsg + fallbackErrorMsg),
-          thinkStreamer.processErrorChunk.bind(thinkStreamer) as (message: string) => void
+          (message: string) => thinkStreamer.processErrorChunk(message)
         );
 
         const fullAIResponse = thinkStreamer.close().content;

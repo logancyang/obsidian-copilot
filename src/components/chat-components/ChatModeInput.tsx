@@ -40,7 +40,7 @@ const ChatModeInput: React.FC<ChatModeInputProps> = (props) => {
     } else {
       setAutonomousAgentToggle(settings.enableAutonomousAgent);
     }
-    /* eslint-enable @eslint-react/hooks-extra/no-direct-set-state-in-use-effect */
+    /* eslint-enable @eslint-react/hooks-extra/no-direct-set-state-in-use-effect -- resume checking after the persisted-state synchronization */
   }, [settings.enableAutonomousAgent, currentChain]);
 
   const chatInputRef = useRef<ChatInputHandle>(null);

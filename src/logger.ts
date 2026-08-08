@@ -3,7 +3,11 @@ import { logFileManager } from "@/logFileManager";
 
 export function logInfo(...args: unknown[]) {
   if (getSettings().debug) {
-    console.log(...args);
+    try {
+      console.debug(...args);
+    } catch {
+      // Logging must never interrupt plugin work.
+    }
   }
   // Always append to rolling file log
   void logFileManager.append("INFO", ...args);
@@ -33,24 +37,21 @@ export function logMarkdownBlock(lines: string[]): void {
 }
 
 /**
- * Render a table in the dev console when debug is enabled.
- * Falls back to INFO log when console.table is unavailable.
+ * Render structured rows in the dev console when debug is enabled.
+ * Falls back to INFO logging when the console call fails.
+ *
+ * @param rows Structured records to display.
+ * @param columns Optional ordered keys to include in the debug output.
  */
 export function logTable(rows: Array<Record<string, unknown>>, columns?: string[]): void {
   if (getSettings().debug) {
     try {
-      // @ts-ignore - console.table exists in Chromium runtime
-      if (typeof console.table === "function") {
-        // Provide columns if specified to control field order
-        if (Array.isArray(columns) && columns.length > 0) {
-          // @ts-ignore
-          console.table(rows, columns);
-        } else {
-          // @ts-ignore
-          console.table(rows);
-        }
-        return;
-      }
+      const output =
+        Array.isArray(columns) && columns.length > 0
+          ? rows.map((row) => Object.fromEntries(columns.map((column) => [column, row[column]])))
+          : rows;
+      console.debug(output);
+      return;
     } catch {
       // ignore and fall back
     }

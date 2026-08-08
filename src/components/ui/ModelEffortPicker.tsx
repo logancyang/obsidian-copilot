@@ -91,7 +91,7 @@ export function ModelEffortPicker({ override, className }: ModelEffortPickerProp
             : null;
       setDraftEffort(initialEffort);
       initialRef.current = { model: value, effort: activeEffortValue };
-      /* eslint-enable @eslint-react/hooks-extra/no-direct-set-state-in-use-effect */
+      /* eslint-enable @eslint-react/hooks-extra/no-direct-set-state-in-use-effect -- resume checking after draft initialization */
     }
   }, [open, value, enabledKeys, activeEffortValue, effortOptionsByModelKey]);
 

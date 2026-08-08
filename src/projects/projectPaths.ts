@@ -132,7 +132,7 @@ export function getProjectFolderNameFromConfigPath(filePath: string): string | n
  */
 export function sanitizeVaultPathSegment(input: string): string {
   const trimmed = (input || "").trim();
-  // eslint-disable-next-line no-control-regex
+  // eslint-disable-next-line no-control-regex -- project paths must reject embedded control bytes
   let sanitized = trimmed.replace(/[<>:"/\\|?*]/g, "_").replace(/[\x00-\x1F]/g, "_");
 
   // Reason: Windows does not allow trailing dots or spaces in folder/file names
