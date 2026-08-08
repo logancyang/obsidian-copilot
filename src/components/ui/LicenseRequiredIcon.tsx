@@ -21,7 +21,14 @@ export function LicenseRequiredIcon({ className }: { className?: string }) {
     <span
       // Stop the click from reaching the surrounding row.
       onClick={(e) => e.stopPropagation()}
-      className={cn("tw-flex tw-shrink-0 tw-items-center tw-text-muted", className)}
+      className={cn(
+        // The lock always sits on a row that is disabled — and a disabled
+        // `DropdownMenuItem` sets `pointer-events: none`, which every descendant
+        // inherits. Without this reset the tooltip can never be hovered, leaving
+        // the row greyed with nothing to say why.
+        "tw-pointer-events-auto tw-flex tw-shrink-0 tw-items-center tw-text-muted",
+        className
+      )}
     >
       <HelpTooltip content={LICENSE_REQUIRED} side="top" delayDuration={0}>
         <Lock className="tw-size-3.5" />

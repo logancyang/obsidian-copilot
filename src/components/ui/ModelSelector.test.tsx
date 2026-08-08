@@ -62,6 +62,24 @@ describe("ModelSelector", () => {
       expect(screen.queryByText("Copilot license required")).toBeNull();
     });
 
+    it("renders a row's subtitle under its name and keeps it off the collapsed trigger", async () => {
+      const described = model({
+        displayName: "Copilot Plus Flash",
+        _subtitle: "The default model: fastest responses and the most quota.",
+      });
+      render(<ModelSelector value="gpt-5|openai" onChange={jest.fn()} models={[described]} />);
+
+      expect(
+        screen.queryByText("The default model: fastest responses and the most quota.")
+      ).toBeNull();
+
+      fireEvent.keyDown(screen.getByRole("button"), { key: "Enter" });
+
+      expect(
+        await screen.findByText("The default model: fastest responses and the most quota.")
+      ).toBeTruthy();
+    });
+
     it("keeps the right-side reason for a row disabled for any other cause", async () => {
       const needsKey = model({ _disabledReason: "Add API key" });
       render(<ModelSelector value="gpt-5|openai" onChange={jest.fn()} models={[needsKey]} />);

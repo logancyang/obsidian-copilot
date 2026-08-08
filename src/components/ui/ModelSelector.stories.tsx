@@ -82,9 +82,11 @@ export const Licensed: StoryObj<ModelSelectorProps> = {};
 
 /**
  * No license: the Copilot lineup leads the section, greyed and non-selectable,
- * each row marked by a lock whose hover reads "Copilot license required". The
- * rows carry no right-side label — the lock says it once instead of repeating
- * the sentence down the group. Open the picker, then hover a lock.
+ * each row marked by a lock whose hover reads "Copilot license required" and
+ * subtitled with what the model is for. The rows carry no right-side label —
+ * the lock says it once instead of repeating the sentence down the group. Open
+ * the picker, then hover a lock: the row is pointer-disabled but the lock is
+ * not, which is what keeps the reason reachable here.
  */
 export const Unlicensed: StoryObj<ModelSelectorProps> = {
   args: {

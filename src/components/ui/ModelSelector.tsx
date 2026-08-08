@@ -42,10 +42,9 @@ export type ModelSelectorEntry = CustomModel & {
   _group?: string;
   _backendId?: string;
   /**
-   * Optional second line rendered beneath the title in the dropdown row
-   * (agent backends only). Carries the model's capability blurb so the
-   * picker row matches the settings list row. The collapsed trigger pill
-   * ignores it and stays single-line.
+   * Optional second line rendered beneath the title in the dropdown row.
+   * Carries the model's capability blurb so the picker row matches the settings
+   * list row. The collapsed trigger pill ignores it and stays single-line.
    */
   _subtitle?: string;
   /**
@@ -188,10 +187,15 @@ export function ModelSelector({
                 }}
                 className={itemDisabled ? "tw-cursor-not-allowed tw-opacity-50" : ""}
               >
-                <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-1">
-                  <ModelDisplay model={model} iconSize={12} />
-                  {model._needsLicense && <LicenseRequiredIcon />}
-                  {model._needsSelfHostWarning && <SelfHostCloudWarningIcon />}
+                <div className="tw-min-w-0">
+                  <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-1">
+                    <ModelDisplay model={model} iconSize={12} />
+                    {model._needsLicense && <LicenseRequiredIcon />}
+                    {model._needsSelfHostWarning && <SelfHostCloudWarningIcon />}
+                  </div>
+                  {model._subtitle && (
+                    <div className="tw-truncate tw-text-xs tw-text-muted">{model._subtitle}</div>
+                  )}
                 </div>
                 {rightLabel && (
                   <span className="tw-ml-auto tw-text-smallest tw-text-faint">{rightLabel}</span>
