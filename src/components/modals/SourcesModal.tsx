@@ -181,7 +181,7 @@ export class SourcesModal extends Modal {
     // Create explanation text without "Why this ranked here:" header
     if (details.length > 0) {
       details.forEach((detail) => {
-        const detailDiv = explanationDiv.createEl("div");
+        const detailDiv = explanationDiv.createDiv();
         detailDiv.addClass("tw-mb-1");
         detailDiv.textContent = `• ${detail}`;
       });

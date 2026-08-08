@@ -65,7 +65,7 @@ export class WebTabPillNode extends BasePillNode {
   }
 
   createDOM(_config: EditorConfig, editor: LexicalEditor): HTMLElement {
-    const span = getEditorDocument(editor).createElement("span");
+    const span = getEditorDocument(editor).createSpan();
     span.className = "web-tab-pill-wrapper";
     return span;
   }
@@ -101,7 +101,7 @@ export class WebTabPillNode extends BasePillNode {
   }
 
   exportDOM(editor: LexicalEditor): DOMExportOutput {
-    const element = getEditorDocument(editor).createElement("span");
+    const element = getEditorDocument(editor).createSpan();
     element.setAttribute("data-lexical-web-tab-pill", "true");
     element.setAttribute("data-url", this.__url);
     if (this.__title) {

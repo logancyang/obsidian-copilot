@@ -314,7 +314,7 @@ export class QuickAskOverlay {
     if (QuickAskOverlay.overlayRoot) return QuickAskOverlay.overlayRoot;
 
     const doc = host.doc;
-    const root = doc.createElement("div");
+    const root = doc.createDiv();
     root.className = "copilot-quick-ask-overlay-root";
     host.appendChild(root);
     host.classList.add("copilot-quick-ask-overlay-host");
@@ -334,7 +334,7 @@ export class QuickAskOverlay {
     this.ownerWindow = win;
 
     const overlayRoot = QuickAskOverlay.getOverlayRoot(overlayHost);
-    const overlayContainer = doc.createElement("div");
+    const overlayContainer = doc.createDiv();
     overlayContainer.className = "copilot-quick-ask-overlay";
     overlayRoot.appendChild(overlayContainer);
     this.overlayContainer = overlayContainer;

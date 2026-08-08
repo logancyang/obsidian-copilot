@@ -636,7 +636,7 @@ export class CustomCommandChatModal {
     const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
 
     const doc = this.resolveDocument(activeView);
-    this.container = doc.createElement("div");
+    this.container = doc.createDiv();
     this.container.className = "copilot-menu-command-modal-container";
     doc.body.appendChild(this.container);
 

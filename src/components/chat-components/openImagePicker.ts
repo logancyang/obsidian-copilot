@@ -24,7 +24,7 @@ interface ImagePickerHandlers {
  * in the window hosting the view, not whichever window is focused (popout-safe).
  */
 export function openImagePicker(doc: Document, handlers: ImagePickerHandlers): void {
-  const input = doc.createElement("input");
+  const input = doc.createEl("input");
   input.type = "file";
   input.accept = "image/*";
   input.multiple = true;

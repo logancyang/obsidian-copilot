@@ -23,6 +23,40 @@ if (typeof Node !== "undefined" && !Object.prototype.hasOwnProperty.call(Node.pr
   });
 }
 
+// Polyfill Obsidian's element-construction helpers so tests exercise the same
+// document-aware calls that run inside the plugin and its popout windows.
+function installCreateElHelpers(prototype) {
+  if (typeof prototype.createEl !== "function") {
+    prototype.createEl = function (tag, options = {}) {
+      const doc = this instanceof Document ? this : (this.ownerDocument ?? window.document);
+      const element = doc.createElement(tag);
+      if (options.cls) {
+        const classes = Array.isArray(options.cls) ? options.cls : options.cls.split(" ");
+        element.classList.add(...classes.filter(Boolean));
+      }
+      if (options.text !== undefined) element.textContent = String(options.text);
+      for (const [name, value] of Object.entries(options.attr ?? {})) {
+        element.setAttribute(name, String(value));
+      }
+      if (!(this instanceof Document)) this.appendChild(element);
+      return element;
+    };
+  }
+  if (typeof prototype.createDiv !== "function") {
+    prototype.createDiv = function (options) {
+      return this.createEl("div", options);
+    };
+  }
+  if (typeof prototype.createSpan !== "function") {
+    prototype.createSpan = function (options) {
+      return this.createEl("span", options);
+    };
+  }
+}
+
+if (typeof Document !== "undefined") installCreateElHelpers(Document.prototype);
+if (typeof HTMLElement !== "undefined") installCreateElHelpers(HTMLElement.prototype);
+
 // Polyfill Obsidian's `HTMLElement.setCssProps` augmentation (sets one or more
 // CSS custom properties) so plugin code that calls it — e.g. the autosizing
 // `Textarea` — works under jsdom.

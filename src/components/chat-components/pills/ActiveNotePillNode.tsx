@@ -45,7 +45,7 @@ export class ActiveNotePillNode extends BasePillNode {
   }
 
   createDOM(_config: EditorConfig, editor: LexicalEditor): HTMLElement {
-    const span = getEditorDocument(editor).createElement("span");
+    const span = getEditorDocument(editor).createSpan();
     span.className = "active-note-pill-wrapper";
     return span;
   }
@@ -77,7 +77,7 @@ export class ActiveNotePillNode extends BasePillNode {
   }
 
   exportDOM(editor: LexicalEditor): DOMExportOutput {
-    const element = getEditorDocument(editor).createElement("span");
+    const element = getEditorDocument(editor).createSpan();
     element.setAttribute("data-lexical-active-note-pill", "true");
     element.textContent = "{activeNote}";
     return { element };

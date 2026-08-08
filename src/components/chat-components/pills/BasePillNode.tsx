@@ -118,7 +118,7 @@ export abstract class BasePillNode extends DecoratorNode<JSX.Element> implements
    * Default DOM creation - subclasses can override for custom elements.
    */
   createDOM(_config: EditorConfig, editor: LexicalEditor): HTMLElement {
-    const span = getEditorDocument(editor).createElement("span");
+    const span = getEditorDocument(editor).createSpan();
     span.className = this.getClassName();
     return span;
   }
@@ -127,7 +127,7 @@ export abstract class BasePillNode extends DecoratorNode<JSX.Element> implements
    * Default DOM export - subclasses can override for custom attributes.
    */
   exportDOM(editor: LexicalEditor): DOMExportOutput {
-    const element = getEditorDocument(editor).createElement("span");
+    const element = getEditorDocument(editor).createSpan();
     element.setAttribute(this.getDataAttribute(), "");
     element.setAttribute("data-pill-value", this.__value);
     element.textContent = this.__value;

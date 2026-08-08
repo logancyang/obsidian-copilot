@@ -258,7 +258,7 @@ export async function buildSymposiumDocument(
   ownerDocument: Document
 ): Promise<SymposiumDocument> {
   const markdown = await app.vault.read(file);
-  const article = ownerDocument.createElement("article");
+  const article = ownerDocument.createEl("article");
   article.className = "markdown-preview-view markdown-rendered symposium-document";
 
   const render = (MarkdownRenderer as unknown as { render: ModernRender }).render;
@@ -295,7 +295,7 @@ function normalizeMath(root: HTMLElement): void {
 
 function normalizeTaskCheckboxes(root: HTMLElement): void {
   root.querySelectorAll<HTMLInputElement>("input.task-list-item-checkbox").forEach((checkbox) => {
-    const marker = root.doc.createElement("span");
+    const marker = root.doc.createSpan();
     const checked = checkbox.checked || checkbox.hasAttribute("checked");
     marker.className = "symposium-task-marker";
     marker.setAttribute("role", "img");
@@ -311,7 +311,7 @@ function removeUnsupportedContent(root: HTMLElement): void {
 
 function normalizeInternalLinks(root: HTMLElement): void {
   root.querySelectorAll<HTMLAnchorElement>("a.internal-link").forEach((link) => {
-    const replacement = root.doc.createElement("span");
+    const replacement = root.doc.createSpan();
     replacement.className = [...link.classList]
       .filter((name) => name !== "is-unresolved")
       .join(" ");
@@ -550,7 +550,7 @@ function asciiAt(bytes: Uint8Array, offset: number, expected: string): boolean {
 }
 
 function replaceMissingImage(image: HTMLImageElement, source: string): HTMLElement {
-  const replacement = image.doc.createElement("span");
+  const replacement = image.doc.createSpan();
   replacement.className = "symposium-missing-asset";
   replacement.textContent = `[Missing image: ${image.alt || source || "unknown"}]`;
   image.replaceWith(replacement);
@@ -638,7 +638,7 @@ function decodeUrlComponent(value: string): string {
 }
 
 function serializeDocument(ownerDocument: Document, title: string, article: HTMLElement): string {
-  const titleElement = ownerDocument.createElement("title");
+  const titleElement = ownerDocument.createEl("title");
   titleElement.textContent = title;
   return [
     "<!doctype html>",

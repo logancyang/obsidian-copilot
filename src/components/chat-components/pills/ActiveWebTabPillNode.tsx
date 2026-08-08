@@ -46,7 +46,7 @@ export class ActiveWebTabPillNode extends BasePillNode {
   }
 
   createDOM(_config: EditorConfig, editor: LexicalEditor): HTMLElement {
-    const span = getEditorDocument(editor).createElement("span");
+    const span = getEditorDocument(editor).createSpan();
     span.className = "active-web-tab-pill-wrapper";
     return span;
   }
@@ -78,7 +78,7 @@ export class ActiveWebTabPillNode extends BasePillNode {
   }
 
   exportDOM(editor: LexicalEditor): DOMExportOutput {
-    const element = getEditorDocument(editor).createElement("span");
+    const element = getEditorDocument(editor).createSpan();
     element.setAttribute("data-lexical-active-web-tab-pill", "true");
     element.textContent = ACTIVE_WEB_TAB_MARKER;
     return { element };

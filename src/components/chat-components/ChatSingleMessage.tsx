@@ -147,7 +147,7 @@ const linkInlineCitations = (root: HTMLElement): void => {
     const text = node.textContent || "";
     INLINE_CITATION_RE.lastIndex = 0;
 
-    const fragment = doc.createDocumentFragment();
+    const fragment = createFragment();
     let lastIndex = 0;
     let match: RegExpExecArray | null;
 
@@ -161,13 +161,13 @@ const linkInlineCitations = (root: HTMLElement): void => {
       const allResolved = nums.every((num) => citationAnchors.has(num));
 
       if (allResolved) {
-        const span = doc.createElement("span");
+        const span = doc.createSpan();
         span.className = "copilot-citation-group";
         span.appendChild(doc.createTextNode("["));
         nums.forEach((num, i) => {
           if (i > 0) span.appendChild(doc.createTextNode(", "));
           const sourceAnchor = citationAnchors.get(num)!;
-          const link = doc.createElement("a");
+          const link = doc.createEl("a");
           // Copy all attributes from the source anchor so Obsidian internal-link
           // metadata (e.g. data-href, class="internal-link") is preserved.
           for (const attr of Array.from(sourceAnchor.attributes)) {
@@ -690,7 +690,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
             // Find where to insert this text segment
             const insertBefore = contentRef.current!.children[currentIndex];
 
-            const textDiv = doc.createElement("div");
+            const textDiv = doc.createDiv();
             // `markdown-rendered` opts the container into Obsidian's native
             // reading-view stylesheet so reloaded messages match the live
             // render path (AgentMarkdownText). Most visibly, it restores the
@@ -713,7 +713,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
 
             if (!container) {
               const insertBefore = contentRef.current!.children[currentIndex];
-              const toolDiv = doc.createElement("div");
+              const toolDiv = doc.createDiv();
               toolDiv.className = "tool-call-container";
               toolDiv.id = `tool-call-${toolCallId}`;
 
@@ -747,7 +747,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
             if (!container) {
               // Insert error block at the current stream position
               const insertBefore = contentRef.current!.children[currentIndex];
-              const errorDiv = doc.createElement("div");
+              const errorDiv = doc.createDiv();
               errorDiv.className = "error-block-container";
               errorDiv.id = `error-block-${errorId}`;
 

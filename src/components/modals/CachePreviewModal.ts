@@ -34,7 +34,7 @@ export class CachePreviewModal extends Modal {
     const { contentEl, modalEl } = this;
 
     // Reason: override default modal width for wider content preview
-    modalEl.addClass("!tw-w-[90vw]", "!tw-max-w-[800px]");
+    modalEl.addClass("tw-w-[90vw]", "tw-max-w-[800px]");
 
     contentEl.empty();
     contentEl.addClass("tw-flex", "tw-flex-col", "tw-p-0");
@@ -57,7 +57,7 @@ export class CachePreviewModal extends Modal {
     });
     const fileIconEl = titleWrapper.createDiv({ cls: "tw-text-muted tw-shrink-0" });
     setIcon(fileIconEl, "file-text");
-    titleWrapper.createEl("span", {
+    titleWrapper.createSpan({
       text: this.title,
       cls: "tw-font-semibold tw-text-normal tw-truncate",
     });
