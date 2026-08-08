@@ -2,12 +2,8 @@
  * Agent task-planning steering — a backend-agnostic prompt section that tells the
  * agent WHEN to create a todo/plan list (and, just as importantly, when not to).
  *
- * It lives here, in the neutral `system-prompts` domain, so BOTH prompt builders
- * can consume the SAME text without a circular dependency:
- *  - `projects/projectSystemPrompt.ts` injects it today — Project scope only, so
- *    the global (no-project) prompt stays byte-identical.
- *  - `agentMode/backends/shared/agentSystemPrompt.ts` could push it globally later
- *    (see the seam comment there); single source, no duplicated wording.
+ * It lives in the neutral `system-prompts` domain so the shared Agent Mode
+ * prompt builder can include it without coupling the behavior to one backend.
  *
  * The wording rules are deliberate and load-bearing:
  *  - Threshold-style, never "always": trivial Q&A and single-step tasks must NOT

@@ -34,8 +34,7 @@ import { App, Notice, TAbstractFile, Vault } from "obsidian";
  * - Listen for projectsFolder setting changes with latest-wins reload
  * - Avoid event loops from pending file writes
  *
- * The generated AGENTS.md mirror is not a recognized config file, so none of these
- * handlers react to it (no watcher regeneration loop).
+ * AGENTS.md is an instruction file rather than a project config, so these handlers ignore it.
  */
 export class ProjectRegister {
   private app: App;

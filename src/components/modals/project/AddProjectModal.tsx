@@ -18,6 +18,17 @@ import { SystemPromptSyntaxInstruction } from "@/components/SystemPromptSyntaxIn
 import { DEFAULT_MODEL_SETTING } from "@/constants";
 import { ProjectContextBadgeList } from "@/components/project/ProjectContextBadgeList";
 import { ProjectContextSourceEditor } from "@/components/project/ProjectContextSourceEditor";
+import {
+  agentsFileIsUninitialized,
+  captureInstructionFiles,
+  readAgentsFile,
+  restoreInstructionFiles,
+  writeAgentsFile,
+} from "@/instructions/agentsFile";
+import { logError } from "@/logger";
+import { ProjectInstructionsField } from "@/instructions/ProjectInstructionsField";
+import { getProjectAnchorFromConfigPath } from "@/projects/projectPaths";
+import { getCachedProjectRecordById } from "@/projects/state";
 import { err2String, randomUUID } from "@/utils";
 import { Settings } from "lucide-react";
 import { type UrlItem, parseProjectUrls, serializeProjectUrls } from "@/utils/urlTagUtils";
@@ -25,10 +36,10 @@ import type CopilotPlugin from "@/main";
 import { createPluginRoot } from "@/utils/react/createPluginRoot";
 import { useChatBackendModelOptions } from "@/hooks/useChatBackendModelOptions";
 import { App, Modal, Notice } from "obsidian";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Root } from "react-dom/client";
 
-interface AddProjectModalContentProps {
+export interface AddProjectModalContentProps {
   initialProject?: ProjectConfig;
   onSave: (project: ProjectConfig) => Promise<void>;
   onCancel: () => void;
@@ -55,7 +66,11 @@ interface AddProjectModalContentProps {
   popoverContainer?: HTMLElement | null;
 }
 
-function AddProjectModalContent({
+/**
+ * The dialog body. Exported apart from the {@link AddProjectModal} host so the form can be
+ * driven without an Obsidian `Modal` around it.
+ */
+export function AddProjectModalContent({
   initialProject,
   onSave,
   onCancel,
@@ -105,6 +120,54 @@ function AddProjectModalContent({
           UsageTimestamps: Date.now(),
         }
   );
+
+  // Agent projects keep their instructions in the project's AGENTS.md, so this field edits
+  // that file instead of `formData.systemPrompt`. CAG keeps the legacy field below.
+  const record = useMemo(
+    () =>
+      agentMode && initialProject?.id ? getCachedProjectRecordById(initialProject.id) : undefined,
+    [agentMode, initialProject?.id]
+  );
+  // Anchored on the record's own config path rather than the live projects root: a Copilot
+  // folder change activates before the project cache reloads, and during that window the live
+  // root names a different tree than the one this project actually sits in.
+  const instructionsFolder = useMemo(
+    () => (record ? getProjectAnchorFromConfigPath(record.filePath).projectFolderPath : null),
+    [record]
+  );
+  // Null until the read settles, so the field never mounts empty over instructions that exist.
+  const [instructions, setInstructions] = useState<string | null>(null);
+  // A project that has not started a session since the file layout changed still keeps its
+  // instructions in `project.md`, where AGENTS.md cannot see them. Show that text rather than a
+  // blank box, but do NOT move it here: opening a dialog must not write to the vault, and
+  // Cancel has to leave the project exactly as it was. Saving is what performs the move —
+  // see `handleSave`.
+  const [draftOwnsLegacyPrompt, setDraftOwnsLegacyPrompt] = useState(false);
+  const legacyPrompt = initialProject?.systemPrompt ?? "";
+  useEffect(() => {
+    if (instructionsFolder === null) return;
+    let cancelled = false;
+    void Promise.all([
+      readAgentsFile(app, instructionsFolder),
+      // Ownership, not emptiness: a file the user deliberately cleared is still theirs, and
+      // seeding over it would resurrect text they deleted on the next save of any field. This
+      // is the same predicate the session-start move consults, so the two agree on which files
+      // are Copilot's to initialize.
+      agentsFileIsUninitialized(app, instructionsFolder),
+    ])
+      .then(([content, uninitialized]) => {
+        if (cancelled) return;
+        const seedFromLegacy = uninitialized && legacyPrompt.trim().length > 0;
+        setInstructions(seedFromLegacy ? legacyPrompt : content);
+        setDraftOwnsLegacyPrompt(seedFromLegacy);
+      })
+      .catch((error) => {
+        logError("Failed to read project instructions.", error);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [app, instructionsFolder, legacyPrompt]);
 
   // URL items derived from formData for UrlTagInput
   const urlItems = useMemo(
@@ -267,6 +330,11 @@ function AddProjectModalContent({
             name: trimmedName,
             projectModelKey: initialProject.projectModelKey,
             modelConfigs: initialProject.modelConfigs,
+            // Completes the move the editor only previewed: the instruction file below is
+            // about to own this text, so `project.md` drops its copy in the same save. Left
+            // alone when AGENTS.md already had its own body, where the legacy text is not
+            // this dialog's to discard.
+            ...(draftOwnsLegacyPrompt ? { systemPrompt: "" } : {}),
           }
         : { ...formData, name: trimmedName };
 
@@ -282,9 +350,39 @@ function AddProjectModalContent({
       return;
     }
 
+    // Null unless this is an Agent edit whose instruction file the user could have changed.
+    const instructionEdit =
+      instructionsFolder !== null && instructions !== null
+        ? { folder: instructionsFolder, text: instructions }
+        : null;
+
     try {
       setIsSubmitting(true);
-      await onSave(saveData);
+      // Written before the save, not after: renaming a project renames its folder, and
+      // Obsidian carries the folder's contents along, so a file placed here ends up in the
+      // right place either way. Writing afterwards would have to guess the new folder from a
+      // project cache that has not refreshed yet.
+      // A snapshot, not the body: the write below can CREATE these files, and putting `""`
+      // back where there was no file leaves a blank AGENTS.md that reads as user-owned and
+      // blocks this project's legacy move for good.
+      const before = instructionEdit
+        ? await captureInstructionFiles(app, instructionEdit.folder)
+        : null;
+      if (instructionEdit) {
+        await writeAgentsFile(app, instructionEdit.folder, instructionEdit.text);
+      }
+      try {
+        await onSave(saveData);
+      } catch (e) {
+        // The project update is what makes this dialog's Save real; a rejected one (duplicate
+        // name, folder collision, frontmatter write failure) leaves the modal open and
+        // cancelable, so the instruction files must not keep an edit the user can still back
+        // out of. Put the folder back before surfacing the failure.
+        if (instructionEdit && before) {
+          await restoreInstructionFiles(app, instructionEdit.folder, before);
+        }
+        throw e;
+      }
     } catch (e) {
       new Notice(err2String(e));
       setTouched((prev) => ({
@@ -342,26 +440,25 @@ function AddProjectModalContent({
                 />
               </FormField>
 
-              <FormField
-                label="Project System Prompt"
-                description="Custom instructions for how the AI should behave in this project context"
-              >
-                {/* Template variables ({activeNote}, {[[Note]]}, …) are expanded by
-                    legacy chat's prompt processor only; agent backends receive the
-                    prompt verbatim, so the hints would mislead in Agent Mode. */}
-                {!agentMode && <SystemPromptSyntaxInstruction />}
-                <Textarea
-                  value={formData.systemPrompt}
-                  onChange={(e) => handleInputChange("systemPrompt", e.target.value)}
-                  onBlur={() => setTouched((prev) => ({ ...prev, systemPrompt: true }))}
-                  placeholder={
-                    agentMode
-                      ? "Enter your project system prompt here..."
-                      : "Enter your project system prompt here... Use {[[Note Name]]} to include note contents."
-                  }
-                  className="tw-min-h-32"
-                />
-              </FormField>
+              {!agentMode && (
+                <FormField
+                  label="Project System Prompt"
+                  description="Custom instructions for how the AI should behave in this project context"
+                >
+                  <SystemPromptSyntaxInstruction />
+                  <Textarea
+                    value={formData.systemPrompt}
+                    onChange={(e) => handleInputChange("systemPrompt", e.target.value)}
+                    onBlur={() => setTouched((prev) => ({ ...prev, systemPrompt: true }))}
+                    placeholder="Enter your project system prompt here... Use {[[Note Name]]} to include note contents."
+                    className="tw-min-h-32"
+                  />
+                </FormField>
+              )}
+
+              {instructions !== null && (
+                <ProjectInstructionsField value={instructions} onChange={setInstructions} />
+              )}
             </div>
           </div>
 
@@ -542,8 +639,9 @@ export class AddProjectModal extends Modal {
   onOpen() {
     const { contentEl, modalEl } = this;
 
-    // Reason: Ensure the modal is wide enough for card layout and tall enough for ScrollArea
-    modalEl.addClass("!tw-max-h-[85vh]");
+    // Reason: Ensure the modal is wide enough for card layout and tall enough for ScrollArea.
+    // Same min-width as the context modal it opens, so the two read as one dialog family.
+    modalEl.addClass("!tw-max-h-[85vh]", "tw-min-w-[50vw]");
 
     this.root = createPluginRoot(contentEl, this.app);
 

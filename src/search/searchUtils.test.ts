@@ -111,6 +111,33 @@ describe("searchUtils", () => {
       expect(shouldIndexFile(window.app, file, null, null)).toBe(true);
     });
 
+    it("excludes canonical instruction files from search and indexing", () => {
+      expect(shouldIndexFile(window.app, createTestFile("AGENTS.md"), null, null)).toBe(false);
+      expect(shouldIndexFile(window.app, createTestFile("CLAUDE.md"), null, null)).toBe(false);
+
+      (settingsModel.getSettings as jest.Mock).mockReturnValue({
+        qaInclusions: "",
+        qaExclusions: "",
+        projectsFolder: "copilot/projects",
+      });
+      expect(
+        shouldIndexFile(
+          window.app,
+          createTestFile("copilot/projects/research/AGENTS.md"),
+          null,
+          null
+        )
+      ).toBe(false);
+      expect(
+        shouldIndexFile(
+          window.app,
+          createTestFile("copilot/projects/research/CLAUDE.md"),
+          null,
+          null
+        )
+      ).toBe(false);
+    });
+
     it("should return false when file matches exclusion pattern", () => {
       const file = createTestFile("private/secret.md");
       const exclusions = {
@@ -684,6 +711,23 @@ describe("searchUtils", () => {
       expect(mockGetAbstractFileByPath).not.toHaveBeenCalledWith("ai/memory/note.md");
     });
 
+    it("excludes root instruction files even with no user patterns configured", () => {
+      // Default QA settings take the no-pattern fast path; the instruction-file
+      // exclusion must hold there too, or vault-root AGENTS.md/CLAUDE.md surface
+      // in relevant-note and Miyo results despite being agent-facing content.
+      (settingsModel.getSettings as jest.Mock).mockReturnValue({
+        qaInclusions: "",
+        qaExclusions: "",
+        copilotFolder: "copilot",
+        copilotRootHistory: ["copilot"],
+      });
+      const filter = createCopilotPatternFilter(window.app);
+      expect(filter("AGENTS.md")).toBe(false);
+      expect(filter("CLAUDE.md")).toBe(false);
+      expect(filter("copilot/projects/Research/AGENTS.md")).toBe(false);
+      expect(filter("notes/AGENTS review.md")).toBe(true);
+    });
+
     it("does not over-match a sibling folder that merely shares the root's prefix", () => {
       (settingsModel.getSettings as jest.Mock).mockReturnValue({
         qaInclusions: "",
@@ -694,6 +738,22 @@ describe("searchUtils", () => {
       const filter = createCopilotPatternFilter(window.app);
       // Segment boundary: "mycopilot/" is not the "copilot" root.
       expect(filter("mycopilot/note.md")).toBe(true);
+    });
+
+    it("excludes differently-cased instruction files where the filesystem is case-insensitive", () => {
+      // On macOS a pre-existing `agents.md` IS the file the backends read when they ask for
+      // `AGENTS.md`, so exact-case comparison would let live instructions into search.
+      (obsidian.Platform as { isMacOS: boolean }).isMacOS = true;
+      (settingsModel.getSettings as jest.Mock).mockReturnValue({
+        qaInclusions: "",
+        qaExclusions: "",
+        copilotFolder: "copilot",
+        copilotRootHistory: ["copilot"],
+      });
+      const filter = createCopilotPatternFilter(window.app);
+      expect(filter("agents.md")).toBe(false);
+      expect(filter("Claude.md")).toBe(false);
+      expect(filter("Copilot/Projects/Research/agents.md")).toBe(false);
     });
 
     it("excludes a differently-cased root where the filesystem is case-insensitive", () => {

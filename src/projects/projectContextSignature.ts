@@ -1,5 +1,8 @@
 import type { ProjectConfig } from "@/aiParams";
+import { AGENTS_FILE_NAME, findCachedInstructionFile } from "@/instructions/agentsFile";
+import { getProjectAnchorFromConfigPath } from "@/projects/projectPaths";
 import type { ProjectFileRecord } from "@/projects/type";
+import { App, normalizePath } from "obsidian";
 
 /**
  * The context-source fields whose change should invalidate a project's
@@ -66,26 +69,72 @@ export function getProjectContextSignature(record: ProjectFileRecord): string {
 }
 
 /**
- * Fingerprint of everything an EMPTY project landing session bakes in at
- * creation: the materialization signature PLUS the project's instruction body.
- * A landing session captures its instructions once at start — Claude via
- * `systemPromptAppend`, codex/opencode via the AGENTS.md mirror read from cwd —
- * so a System-Prompt-only edit must replace the still-empty session for the
- * first message to use the new instructions, even though it changes no
- * materialized source.
+ * Fingerprint of everything an EMPTY project landing session bakes in at creation: the
+ * materialization signature PLUS the project's instructions. A landing session captures its
+ * instructions once at start — every backend reads `AGENTS.md` from the session cwd — so an
+ * instruction-only edit must replace the still-empty session for the first message to use the
+ * new text, even though it changes no materialized source.
  *
- * Kept SEPARATE from {@link getProjectContextSignature} on purpose: that one
- * drives re-materialization (glob/URL/PDF conversion) and must stay insensitive
- * to `systemPrompt` (see its DESIGN NOTE) — folding the prompt in there would
- * re-materialize on every prompt edit. `systemPrompt` is compared verbatim
- * (no `normalizeMultiline`): `project.md` preserves the body's whitespace, so a
- * whitespace-only edit is still a real change to what the session captures.
+ * The instruction term is the `AGENTS.md` mtime/size, NOT the `project.md` body: since
+ * AGENTS.md became canonical, the body is inert for Agent Mode, so keying on it would both
+ * miss real edits (stale instructions on the first message) and churn on edits that no longer
+ * matter. `stat` comes from the vault cache, keeping this synchronous for its render-path
+ * callers. Falls back to the legacy body for a project whose AGENTS.md does not exist yet (or
+ * lives in a hidden folder Obsidian does not index) — there, the body is still what
+ * initializes the file.
+ *
+ * Kept SEPARATE from {@link getProjectContextSignature} on purpose: that one drives
+ * re-materialization (glob/URL/PDF conversion) and must stay insensitive to instructions (see
+ * its DESIGN NOTE) — folding them in there would re-materialize on every prompt edit.
  */
-export function getProjectLandingCaptureSignature(record: ProjectFileRecord): string {
+/** Instructions fingerprint for a scope whose instruction file Obsidian does not index. */
+const UNVERIFIABLE_INSTRUCTIONS = "agents:unverifiable";
+
+/**
+ * Whether a landing-capture signature actually pins the scope's instructions.
+ *
+ * False when the instruction file lives outside the vault cache, where edits to it cannot be
+ * observed. A caller reusing an empty landing session on an unverifiable signature would hand
+ * the user a backend that read the file before their last edit, so treat it as "spawn fresh".
+ *
+ * @param signature - A value from {@link getProjectLandingCaptureSignature}, or null off-project
+ */
+export function landingCaptureIsVerifiable(signature: string | null): boolean {
+  return signature !== null && !signature.includes(UNVERIFIABLE_INSTRUCTIONS);
+}
+
+export function getProjectLandingCaptureSignature(app: App, record: ProjectFileRecord): string {
   return JSON.stringify({
     context: getProjectContextSignature(record),
-    systemPrompt: record.project.systemPrompt ?? "",
+    instructions: getInstructionsFingerprint(app, record),
   });
+}
+
+function getInstructionsFingerprint(app: App, record: ProjectFileRecord): string {
+  // Anchored on the record's own path, matching `resolveScopeCwd`: the file the agent reads
+  // is under `dirname(record.filePath)`, which is not the live projects root for the moment
+  // after a Copilot-folder change.
+  const projectFolderPath = getProjectAnchorFromConfigPath(record.filePath).projectFolderPath;
+  const agentsPath = normalizePath(`${projectFolderPath}/${AGENTS_FILE_NAME}`);
+  // Resolved the same way the instruction editors resolve it, so a vault holding `agents.md`
+  // fingerprints the file they actually write. An exact-case lookup would miss it and fall
+  // through to the legacy body — empty once the move ran — giving a fingerprint that never
+  // moves no matter how the user edits their instructions.
+  const file = findCachedInstructionFile(app, agentsPath);
+  if (file) return `agents:${file.stat.mtime}:${file.stat.size}`;
+  // A project under a hidden Copilot root (`.copilot`, deliberately supported — see the
+  // DESIGN NOTE in `validateCopilotFolder`) is never indexed, so an edit to its real
+  // AGENTS.md is invisible from here and the legacy body is empty once the move ran. Say so
+  // rather than report a fingerprint that can never change: `landingCaptureIsVerifiable`
+  // turns this into "spawn fresh" at the reuse gate. Tested on the path rather than the
+  // cache, which is also empty for a folder Obsidian simply has not indexed yet.
+  if (agentsPath.split("/").some((segment) => segment.startsWith("."))) {
+    return UNVERIFIABLE_INSTRUCTIONS;
+  }
+  // Compared verbatim (no `normalizeMultiline`): `project.md` preserves the body's
+  // whitespace, so a whitespace-only edit is a real change to what the file would be
+  // initialized with.
+  return `legacy:${record.project.systemPrompt ?? ""}`;
 }
 
 /**

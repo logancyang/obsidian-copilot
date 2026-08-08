@@ -255,7 +255,7 @@ function makeConfigFile(folderName: string, fileName: string): TFile {
 }
 
 describe("isProjectConfigFile (project.md only)", () => {
-  it("recognizes project.md but not the generated AGENTS.md mirror", () => {
+  it("recognizes project.md but not AGENTS.md", () => {
     expect(isProjectConfigFile(makeConfigFile("my-project", "project.md"))).toBe(true);
     expect(isProjectConfigFile(makeConfigFile("my-project", "AGENTS.md"))).toBe(false);
   });

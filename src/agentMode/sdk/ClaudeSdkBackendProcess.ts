@@ -45,7 +45,6 @@ import type {
   OpenSessionOutput,
   PermissionDecision,
   PermissionPrompt,
-  ProjectProfile,
   PromptInput,
   PromptOutput,
   ResumeSessionInput,
@@ -118,10 +117,9 @@ interface SessionState {
   active?: Query;
   /**
    * Snapshot of the composed Copilot system prompt (base framing + pill-syntax
-   * directive + user custom prompt) captured at `newSession()` time so a
-   * settings change takes effect on the next session rather than mid-
-   * conversation. Empty string = no append. Appended to Claude's default
-   * `claude_code` preset via `options.systemPrompt.append`.
+   * directive + built-in tool guidance) captured at `newSession()` time.
+   * Empty string = no append. Appended to Claude's default `claude_code`
+   * preset via `options.systemPrompt.append`.
    */
   systemPromptAppend: string;
 }
@@ -189,18 +187,12 @@ export interface ClaudeSdkBackendProcessOptions {
   getDefaultModelId?: () => string | undefined;
   /**
    * Returns the composed Copilot system prompt to append to Claude's default
-   * `claude_code` system prompt (base Obsidian framing + pill-syntax directive
-   * + user custom prompt). Read once per `newSession()` so a settings change
+   * `claude_code` system prompt (base Obsidian framing + pill-syntax directive).
+   * Read once per `newSession()` so a settings change
    * applies to the next session rather than mid-turn. Empty string / undefined
    * disables the append.
-   *
-   * `projectInstructions` is the owning project's resolved instruction body
-   * (from {@link setProjectProfileProvider}); the descriptor composes it into
-   * the append. An omitted object, or one whose `projectInstructions` is
-   * `undefined` (no project / GLOBAL_SCOPE / unset provider), yields the
-   * byte-identical global prompt.
    */
-  getSystemPromptAppend?: (opts?: { projectInstructions?: string }) => string | undefined;
+  getSystemPromptAppend?: () => string | undefined;
   /**
    * User-defined env vars merged onto `process.env` for the spawned `claude`
    * CLI. Read per `prompt()` so settings edits apply on the next turn.
@@ -254,15 +246,6 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     null;
   private askUserQuestionPrompter: AskUserQuestionPrompter | null = null;
   private isReadOnlySession: ((sessionId: SessionId) => boolean) | null = null;
-  /**
-   * Resolves a session's owning-project instructions by scope id. Injected by
-   * the manager via {@link setProjectProfileProvider} (mirrors the prompter
-   * setters). Null until wired, and returns `undefined` for `GLOBAL_SCOPE` /
-   * unknown projects — both paths fall back to the global prompt.
-   */
-  private projectProfileProvider:
-    | ((projectId: ProjectScopeId) => ProjectProfile | undefined)
-    | null = null;
   private exitListeners = new Set<() => void>();
   private shuttingDown = false;
   private readonly bridge: PermissionBridge;
@@ -314,22 +297,8 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     this.askUserQuestionPrompter = fn;
   }
 
-  setProjectProfileProvider(fn: (projectId: ProjectScopeId) => ProjectProfile | undefined): void {
-    this.projectProfileProvider = fn;
-  }
-
-  /**
-   * Compose this session's system-prompt append, resolving the owning
-   * project's instructions (if any). A defined non-global `projectId` consults
-   * the injected provider; `undefined` projectId, an unset provider, or a
-   * provider that returns `undefined` (GLOBAL_SCOPE / unknown project) all
-   * yield no project instructions → the append is byte-identical to the global
-   * (no-project) prompt. Captured at `newSession`/`resumeSession` time so a
-   * settings change applies to the next session, not mid-conversation.
-   */
-  private resolveSystemPromptAppend(projectId: ProjectScopeId | undefined): string {
-    const profile = projectId !== undefined ? this.projectProfileProvider?.(projectId) : undefined;
-    return this.opts.getSystemPromptAppend?.({ projectInstructions: profile?.systemPrompt }) ?? "";
+  private resolveSystemPromptAppend(): string {
+    return this.opts.getSystemPromptAppend?.() ?? "";
   }
 
   registerSessionHandler(sessionId: SessionId, handler: SessionUpdateHandler): () => void {
@@ -373,7 +342,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       firstPromptStarted: false,
       model: seedModelId,
       additionalDirectories: params.additionalDirectories,
-      systemPromptAppend: this.resolveSystemPromptAppend(params.projectId),
+      systemPromptAppend: this.resolveSystemPromptAppend(),
       claudeTaskPlan: createClaudeTaskPlanState(),
       backgroundTasks: new ClaudeBackgroundTaskStateMachine(),
     });
@@ -428,14 +397,20 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     // to Claude's default `claude_code` preset. The SDK's preset+append form
     // preserves the full default system prompt — keeping Claude's tool and
     // planning framing — while layering on the Obsidian-vault identity, the
-    // pill-syntax directive, and the user's custom prompt.
-    if (session.systemPromptAppend) {
-      options.systemPrompt = {
-        type: "preset",
-        preset: "claude_code",
-        append: session.systemPromptAppend,
-      };
-    }
+    // pill-syntax directive, and Copilot's built-in tool guidance.
+    //
+    // `excludeDynamicSections` keeps that whole prefix cacheable: the preset
+    // otherwise stamps working directory, git status, and memory paths into the
+    // system prompt, so switching project or crossing midnight would invalidate
+    // it. The SDK re-injects that content as the first user message, so the
+    // model still has the facts — they just stop sitting in the cached prefix.
+    // Sent unconditionally; it is about the preset, not about our append.
+    options.systemPrompt = {
+      type: "preset",
+      preset: "claude_code",
+      excludeDynamicSections: true,
+      append: session.systemPromptAppend || undefined,
+    };
     if (session.firstPromptStarted) {
       options.resume = params.sessionId;
     } else {
@@ -772,7 +747,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       firstPromptStarted: true,
       model: seedModelId,
       additionalDirectories: params.additionalDirectories,
-      systemPromptAppend: this.resolveSystemPromptAppend(params.projectId),
+      systemPromptAppend: this.resolveSystemPromptAppend(),
       claudeTaskPlan: createClaudeTaskPlanState(),
       backgroundTasks: new ClaudeBackgroundTaskStateMachine(),
     });

@@ -1,6 +1,7 @@
 import { COPILOT_FOLDER_ROOT } from "@/constants";
 import { CustomError } from "@/error";
-import { AGENTS_MIRROR_FILE, PROJECT_CONFIG_FILE_NAME } from "@/projects/constants";
+import { AGENTS_FILE_NAME, CLAUDE_FILE_NAME } from "@/instructions/agentsFile";
+import { PROJECT_CONFIG_FILE_NAME } from "@/projects/constants";
 import EmbeddingsManager from "@/LLMProviders/embeddingManager";
 import { logError, logInfo, logWarn } from "@/logger";
 import { getSettings, normalizeRootFolders, type CopilotSettings } from "@/settings/model";
@@ -8,7 +9,8 @@ import { getEffectiveProjectsFolder } from "@/settings/copilotFolder";
 import { logFileManager } from "@/logFileManager";
 import { getPropertyValuesFromNote, getTagsFromNote, noteHasProperty, stripHash } from "@/utils";
 import { Embeddings } from "@langchain/core/embeddings";
-import { App, Platform, TFile } from "obsidian";
+import { hasCaseInsensitiveFilesystem } from "@/utils/vaultAdapterUtils";
+import { App, TFile } from "obsidian";
 
 export interface PatternCategory {
   tagPatterns?: string[];
@@ -172,11 +174,6 @@ export function isSystemExcludedPath(filePath: string): boolean {
   return matchSystemRoots(filePath, getSystemExcludedFolders(getSettings()));
 }
 
-/** Whether the host filesystem treats paths case-insensitively. */
-function hasCaseInsensitiveFilesystem(): boolean {
-  return Platform.isWin || Platform.isMacOS || Platform.isIosApp;
-}
-
 /**
  * Match a raw path against Copilot roots the way the exclusion boundary does.
  *
@@ -223,7 +220,7 @@ export function shouldIndexFile(
   exclusions: PatternCategory | null,
   isProject?: boolean
 ): boolean {
-  // Always exclude Copilot's own log file from Copilot searches/indexing
+  // Always exclude Copilot's internal files from Copilot searches/indexing.
   if (isInternalExcludedFile(file)) {
     return false;
   }
@@ -263,6 +260,12 @@ export function createCopilotPatternFilter(app: App): (path: string) => boolean 
     // in the no-user-pattern fast path below. Case-folded where the filesystem
     // is — see isSystemExcludedPath.
     if (matchSystemRoots(path, systemExcludedFolders)) {
+      return false;
+    }
+    // Instruction files (AGENTS.md/CLAUDE.md/project.md) are excluded on the raw
+    // path for the same reason: with no user patterns configured the TFile branch
+    // below never runs, and the agent already receives these files as instructions.
+    if (isInternalExcludedPath(path)) {
       return false;
     }
     if (!inclusions && !exclusions) {
@@ -557,7 +560,7 @@ export function getExtensionPattern(extension: string): string {
  * Includes the rolling log file path (e.g., "copilot/copilot-log.md").
  */
 function getInternalExcludePaths(): string[] {
-  return [logFileManager.getLogPath()];
+  return [logFileManager.getLogPath(), AGENTS_FILE_NAME, CLAUDE_FILE_NAME];
 }
 
 /**
@@ -587,26 +590,31 @@ function getInternalExcludeFolderPrefixes(): string[] {
  * @param filePath - Full path to the file in the vault
  */
 export function isInternalExcludedPath(filePath: string): boolean {
-  const excludes = new Set(getInternalExcludePaths());
-  if (excludes.has(filePath)) return true;
+  // Case-folded the same way (and behind the same gate) as matchSystemRoots: on a
+  // case-insensitive filesystem, `agents.md` IS the file the backends read when they ask for
+  // `AGENTS.md`, so an exact-case comparison would let a live instruction file into search.
+  const fold = hasCaseInsensitiveFilesystem()
+    ? (value: string) => value.toLowerCase()
+    : (value: string) => value;
+  const foldedPath = fold(filePath);
+  const excludes = new Set(getInternalExcludePaths().map(fold));
+  if (excludes.has(foldedPath)) return true;
 
   // Reason: only exclude internal project files (project.md configs and unsupported/ backups),
   // not user-created files that may live alongside project configs in the projects folder.
   // Check exact depth: only <projectsFolder>/<folderName>/project.md (one level deep).
   const prefixes = getInternalExcludeFolderPrefixes();
   if (prefixes.length === 0) return false;
-  for (const prefix of prefixes) {
-    if (!filePath.startsWith(prefix)) continue;
-    const relativePath = filePath.slice(prefix.length);
+  const internalBasenames = [PROJECT_CONFIG_FILE_NAME, AGENTS_FILE_NAME, CLAUDE_FILE_NAME].map(
+    fold
+  );
+  for (const prefix of prefixes.map(fold)) {
+    if (!foldedPath.startsWith(prefix)) continue;
+    const relativePath = foldedPath.slice(prefix.length);
     const parts = relativePath.split("/");
-    // Exact match: <folderName>/<config> (2 segments). Exclude both the `project.md`
-    // config and its generated `AGENTS.md` mirror by name (path-level mechanism — the
-    // mirror's marker isn't visible here) so neither instruction file leaks into the index.
-    if (
-      parts.length === 2 &&
-      (parts[1] === PROJECT_CONFIG_FILE_NAME || parts[1] === AGENTS_MIRROR_FILE)
-    )
-      return true;
+    // Exact match: <folderName>/<file> (2 segments). Exclude the metadata record and
+    // instruction files so internal guidance does not leak into semantic search results.
+    if (parts.length === 2 && internalBasenames.includes(parts[1])) return true;
     if (relativePath.startsWith("unsupported/") || relativePath === "unsupported") return true;
   }
   return false;

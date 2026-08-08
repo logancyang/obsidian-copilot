@@ -433,16 +433,16 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   // Fingerprint of what an empty landing session captures at creation: the
   // materialization signature PLUS the project instructions. Deliberately
   // broader than the session manager's materialization dirty-tracking signature,
-  // because a landing also bakes in AGENTS.md / Claude's instruction append — so
-  // a System-Prompt-only edit must refresh it. Read from the live record;
+  // because a landing also bakes in the project's AGENTS.md — so an
+  // instruction-only edit must refresh it. Read from the live record;
   // `projects` is a deliberate re-derive trigger — not read inside the factory,
   // but a `useProjects()` change means the cached record may have changed.
   const activeProjectLandingCaptureSignature = useMemo(() => {
     if (!isProjectScope) return null;
     const record = getCachedProjectRecordById(activeProjectId);
-    return record ? getProjectLandingCaptureSignature(record) : null;
+    return record ? getProjectLandingCaptureSignature(app, record) : null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isProjectScope, activeProjectId, projects]);
+  }, [app, isProjectScope, activeProjectId, projects]);
   useRefreshEmptyLandingOnContextSourceChange({
     activeProjectId,
     signature: activeProjectLandingCaptureSignature,

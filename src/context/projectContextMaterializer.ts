@@ -89,6 +89,19 @@ function manifestEntryKey(entry: ManifestPathEntry): string {
   return entry.absPath ?? entry.vaultPath;
 }
 /**
+ * Block for a project whose context could not be resolved at all. Still announces the
+ * workspace, for the same reason the source-less block below does: losing the block would
+ * also lose the workspace policy, so a failed materialization would silently widen where the
+ * agent writes instead of merely leaving it without context.
+ */
+const UNAVAILABLE_PROJECT_CONTEXT_BLOCK = [
+  "<project_context>",
+  "This session runs in a project workspace: the working directory is the project's",
+  "folder. This project's context sources could not be loaded for this session.",
+  "</project_context>",
+].join("\n");
+
+/**
  * Frozen fallback result for the "no usable record / whole-run failure" exits —
  * NO `contextSignature`, so it never clears a caller's dirty flag (nothing was
  * captured). A project that resolves to no sources returns a DISTINCT result
@@ -98,8 +111,23 @@ function manifestEntryKey(entry: ManifestPathEntry): string {
  */
 export const EMPTY_CONTEXT_MATERIALIZATION_RESULT: ContextMaterializationResult = Object.freeze({
   additionalDirectories: EMPTY_DIRECTORIES,
+  projectContextBlock: UNAVAILABLE_PROJECT_CONTEXT_BLOCK,
 });
 const EMPTY_RESULT = EMPTY_CONTEXT_MATERIALIZATION_RESULT;
+
+/**
+ * Block for a project that declares no context sources. The product prompt's workspace
+ * policy triggers on the presence of a `<project_context>` block rather than a per-scope
+ * prompt variant — the prompt must stay byte-identical across scopes for the cache
+ * contract — so a source-less project has to announce itself here or the policy is inert
+ * and the agent is never told to keep writes under the project's `outputs/` folder.
+ */
+const EMPTY_PROJECT_CONTEXT_BLOCK = [
+  "<project_context>",
+  "This session runs in a project workspace: the working directory is the project's",
+  "folder. No context sources are configured for this project.",
+  "</project_context>",
+].join("\n");
 
 /**
  * Per-project single-flight guard. Concurrent cold-start sessions for the same
@@ -301,7 +329,13 @@ async function runMaterialize(
     // this to avoid clearing a flag a newer edit raised — see the result field).
     const contextSignature = getProjectContextSignature(record);
     const contextSource = record.project.contextSource;
-    if (!contextSource) return { additionalDirectories: EMPTY_DIRECTORIES, contextSignature };
+    if (!contextSource) {
+      return {
+        additionalDirectories: EMPTY_DIRECTORIES,
+        projectContextBlock: EMPTY_PROJECT_CONTEXT_BLOCK,
+        contextSignature,
+      };
+    }
 
     const webUrls = splitLines(contextSource.webUrls);
     const youtubeUrls = splitLines(contextSource.youtubeUrls);
@@ -380,7 +414,13 @@ async function runMaterialize(
       tags.length > 0 ||
       properties.length > 0 ||
       additionalDirectories.length > 0;
-    if (!hasAnySource) return { additionalDirectories: EMPTY_DIRECTORIES, contextSignature };
+    if (!hasAnySource) {
+      return {
+        additionalDirectories: EMPTY_DIRECTORIES,
+        projectContextBlock: EMPTY_PROJECT_CONTEXT_BLOCK,
+        contextSignature,
+      };
+    }
 
     // Inclusions are resolved; report the count of binary files queued for
     // materialization so the loading card can show "Resolve files (N)".

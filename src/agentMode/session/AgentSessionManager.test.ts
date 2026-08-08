@@ -45,9 +45,14 @@ const settingsChangeCallbacks = new Set<
   (prev: { agentMode: unknown }, next: { agentMode: unknown }) => void
 >();
 
-// Stub the project-folder mirror so a non-global spawn never touches the vault.
-jest.mock("@/projects/ensureAgentsMirror", () => ({
-  ensureAgentsMirror: jest.fn(async () => undefined),
+// Spy passthrough: the file-level contracts (no conjuring, import next to a user AGENTS.md)
+// are covered in agentsFile.test.ts; the manager tests only assert the wiring — which scopes
+// trigger the ensure. Real implementations no-op against the empty-vault mock either way.
+const ensureAgentsFileForDiscoverySpy = jest.fn<Promise<void>, unknown[]>(async () => undefined);
+jest.mock("@/instructions/agentsFile", () => ({
+  ...jest.requireActual("@/instructions/agentsFile"),
+  ensureAgentsFileForDiscovery: (...a: unknown[]): Promise<void> =>
+    ensureAgentsFileForDiscoverySpy(...a),
 }));
 
 // MRU touch is fire-and-forget through the singleton; mock it so enterProject
@@ -231,7 +236,20 @@ function buildApp(basePath = "/vault"): App {
     on: jest.fn(() => ({}) as never),
     offref: jest.fn(),
   };
-  return { vault: { adapter, ...events }, metadataCache: { ...events } } as unknown as App;
+  // Session start ensures the scope's AGENTS.md is discoverable and stats it for the
+  // landing-capture signature. An empty vault (no cached file, adapter reports nothing on
+  // disk) is the "nothing to initialize" case, so no files are written.
+  const vaultFiles = {
+    getAbstractFileByPath: jest.fn(() => null),
+    getFiles: jest.fn(() => []),
+    create: jest.fn(),
+    read: jest.fn(async () => ""),
+    modify: jest.fn(),
+  };
+  return {
+    vault: { adapter, ...events, ...vaultFiles },
+    metadataCache: { ...events },
+  } as unknown as App;
 }
 
 function buildPlugin(): { manifest: { version: string } } {
@@ -395,7 +413,9 @@ describe("AgentSessionManager.createSession", () => {
     await succeedingSession.ready;
     // Allow the manager's `.finally` continuation to run.
     await Promise.resolve();
-    await Promise.resolve();
+    // Several microtasks: session creation awaits the scope's instruction ensure before the
+    // failing spawn settles.
+    for (let i = 0; i < 10; i++) await Promise.resolve();
 
     expect(mgr.getLastError()).toMatch(/boom/);
   });
@@ -508,7 +528,10 @@ describe("AgentSessionManager warm-backend reuse", () => {
     mgr.registerPreload("opencode", preloadPromise);
 
     const sessionPromise = mgr.createSession();
-    await Promise.resolve();
+    // Macrotask flush, not a fixed microtask count: createSession awaits the
+    // scope's instruction-file ensure before it reaches the backend, so the
+    // number of ticks in front of the preload is not a stable fact to assert.
+    await new Promise((r) => window.setTimeout(r, 0));
 
     expect(preloader.preload).toHaveBeenCalledWith("opencode");
     expect(descriptor.createBackendProcess).not.toHaveBeenCalled();
@@ -2569,6 +2592,7 @@ describe("AgentSessionManager.enterProject MRU touch", () => {
 
   beforeEach(() => {
     mockTouchProjectLastUsed.mockClear();
+    ensureAgentsFileForDiscoverySpy.mockClear();
     (ProjectFileManager.getInstance as jest.Mock).mockClear();
     // Make the scope resolvable: enterProject's orphan guard and resolveScopeCwd
     // both read this, so a known id must return a record with a folder.
@@ -2591,6 +2615,19 @@ describe("AgentSessionManager.enterProject MRU touch", () => {
     await mgr.enterProject(PROJECT_ID);
     expect(ProjectFileManager.getInstance).toHaveBeenCalled();
     expect(mockTouchProjectLastUsed).toHaveBeenCalledWith(PROJECT_ID);
+  });
+
+  it("ensures vault-root instruction discovery before a project session, not just global", async () => {
+    const mgr = buildManager();
+    await mgr.enterProject(PROJECT_ID);
+    // Claude sees a root AGENTS.md only through the root CLAUDE.md import, so a project
+    // session must run the root ensure too; it creates nothing when no root file exists.
+    expect(ensureAgentsFileForDiscoverySpy).toHaveBeenCalledWith(expect.anything(), "", "");
+    expect(ensureAgentsFileForDiscoverySpy).toHaveBeenCalledWith(
+      expect.anything(),
+      "Projects/proj-mru",
+      ""
+    );
   });
 
   it("touches last-used on the restored-session path (no re-spawn)", async () => {

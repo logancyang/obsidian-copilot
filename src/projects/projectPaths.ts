@@ -66,8 +66,7 @@ export function getProjectFolderPath(folderName: string): string {
  * Get a project's config file (`project.md`) path for read/write/create operations.
  *
  * `project.md` is the single recognized config name; a folder rename keeps this same
- * basename, so this path is correct for both new projects and rebasing onto a renamed
- * folder (the generated `AGENTS.md` mirror is handled separately and never moved here).
+ * basename, so this path is correct for both new projects and rebasing onto a renamed folder.
  *
  * @param folderName - Project folder name
  * @param folderOverride - Optional root folder override
@@ -86,8 +85,8 @@ export function getProjectConfigFilePath(folderName: string, folderOverride?: st
  * - Path must be: \<projectsFolder\>/\<folderName\>/project.md (exactly 2 levels deep)
  * - Excludes unsupported/ directory
  *
- * The generated `AGENTS.md` mirror is intentionally NOT recognized here, so the register
- * never reacts to its create/modify/delete events (no watcher regeneration loop).
+ * `AGENTS.md` is intentionally not recognized here because it contains instructions, not
+ * project metadata/configuration.
  *
  * @param file - Vault abstract file
  * @returns Type guard: true if file is a valid project config TFile

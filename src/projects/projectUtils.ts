@@ -152,9 +152,9 @@ function joinUrlsArrayToString(urls: string[]): string {
 }
 
 /**
- * Parse a project config file (`project.md`) into a ProjectFileRecord. The `systemPrompt`
- * is the file body (instruction text); config comes from frontmatter. The generated
- * `AGENTS.md` mirror is never read here — `project.md` is the single source of truth.
+ * Parse a project config file (`project.md`) into a ProjectFileRecord. The legacy
+ * `systemPrompt` comes from the body for missing-AGENTS compatibility; metadata/config
+ * comes from frontmatter. AGENTS.md is intentionally not a project record.
  *
  * Key constraints:
  * - id: frontmatter is authoritative, folder name is fallback

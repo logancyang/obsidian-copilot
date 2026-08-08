@@ -51,7 +51,7 @@ export function getCachedProjectRecordById(projectId: string): ProjectFileRecord
 
 /**
  * Non-reactive: find a cached record by file path.
- * @param filePath - Vault path of the project config file (project.md, the SSOT; AGENTS.md is its generated mirror)
+ * @param filePath - Vault path of the project.md metadata/config record
  * @returns Matching record or undefined
  */
 export function getCachedProjectRecordByFilePath(filePath: string): ProjectFileRecord | undefined {
@@ -71,7 +71,7 @@ export function updateCachedProjectRecords(records: ProjectFileRecord[]): void {
  * Avoids transient "disappear/reappear" gaps for subscribers during modify events,
  * while still cleaning up stale entries when the frontmatter id changes.
  *
- * @param filePath - Vault path of the project config file (project.md, the SSOT; AGENTS.md is its generated mirror) being modified
+ * @param filePath - Vault path of the project.md metadata/config record being modified
  * @param record - Parsed record to store for that file
  */
 export function replaceCachedProjectRecordByFilePath(
@@ -131,7 +131,7 @@ export function deleteCachedProjectRecordById(projectId: string): void {
 
 /**
  * Remove a project record by file path (used for delete/rename events).
- * @param filePath - Vault path of the project config file (project.md, the SSOT; AGENTS.md is its generated mirror)
+ * @param filePath - Vault path of the project.md metadata/config record
  */
 export function deleteCachedProjectRecordByFilePath(filePath: string): void {
   const records = projectsStore.get(projectRecordsAtom);

@@ -1,10 +1,12 @@
 import type { ProjectConfig } from "@/aiParams";
 import type { ProjectFileRecord } from "@/projects/type";
+import { App, TFile } from "obsidian";
 import {
   composeContextDirtyKey,
   contextDirtyKeyMatchesConfig,
   getProjectContextSignature,
   getProjectLandingCaptureSignature,
+  landingCaptureIsVerifiable,
   normalizeProjectContextSource,
 } from "./projectContextSignature";
 
@@ -28,6 +30,30 @@ function makeRecord(
 ): ProjectFileRecord {
   return { project, filePath, folderName: "One" };
 }
+
+/**
+ * App whose vault knows about the given AGENTS.md files, keyed by vault path with their
+ * `mtime`/`size` stat. An unlisted path resolves to null, exercising the legacy
+ * `project.md`-body fallback.
+ */
+function makeApp(agentsFiles: Record<string, { mtime: number; size: number }> = {}): App {
+  return {
+    vault: {
+      getAbstractFileByPath: (path: string) => {
+        const stat = agentsFiles[path];
+        if (!stat) return null;
+        const file = new (TFile as unknown as new (path: string) => TFile)(path);
+        file.stat = { ctime: 0, mtime: stat.mtime, size: stat.size };
+        return file;
+      },
+    },
+  } as unknown as App;
+}
+
+// Beside the record's own `project.md`, which is where the session cwd points, NOT under the
+// live projects root the record may no longer belong to.
+const AGENTS_PATH = "Projects/One/AGENTS.md";
+const noAgents = makeApp();
 
 describe("normalizeProjectContextSource", () => {
   it("trims lines, drops blanks, and rejoins", () => {
@@ -83,14 +109,62 @@ describe("getProjectContextSignature", () => {
 });
 
 describe("getProjectLandingCaptureSignature", () => {
-  it("changes on a System-Prompt-only edit (which the materialization signature ignores)", () => {
+  it("resolves AGENTS.md beside the record's own project.md, not under the live root", () => {
+    // A Copilot-folder change activates before ProjectRegister reloads its cache. The session
+    // cwd follows the record, so the fingerprint has to watch the file in that same folder.
+    const record = makeRecord(makeProject(), "old-root/projects/One/project.md");
+    const app = makeApp({ "old-root/projects/One/AGENTS.md": { mtime: 1000, size: 40 } });
+
+    expect(getProjectLandingCaptureSignature(app, record)).toContain("agents:1000:40");
+  });
+
+  it("refuses to fingerprint a project under a hidden Copilot root", () => {
+    // Obsidian never indexes a dot-folder, so an edit to the real AGENTS.md is invisible here
+    // and the legacy body is empty once the move ran. Reporting a fingerprint that can never
+    // change would let a stale empty landing be reused forever.
+    const record = makeRecord(makeProject(), ".copilot/projects/One/project.md");
+
+    const signature = getProjectLandingCaptureSignature(noAgents, record);
+
+    expect(signature).toContain("agents:unverifiable");
+    expect(landingCaptureIsVerifiable(signature)).toBe(false);
+    expect(
+      landingCaptureIsVerifiable(
+        getProjectLandingCaptureSignature(noAgents, makeRecord(makeProject()))
+      )
+    ).toBe(true);
+  });
+
+  it("tracks the project's AGENTS.md, not the inert project.md body", () => {
+    // AGENTS.md is what every backend actually reads from the session cwd, so an edit to it
+    // must invalidate an empty landing...
+    const record = makeRecord(makeProject({ systemPrompt: "unchanged" }));
+    const before = makeApp({ [AGENTS_PATH]: { mtime: 1000, size: 40 } });
+    const after = makeApp({ [AGENTS_PATH]: { mtime: 2000, size: 55 } });
+    expect(getProjectLandingCaptureSignature(before, record)).not.toBe(
+      getProjectLandingCaptureSignature(after, record)
+    );
+
+    // ...while the legacy body, which no longer reaches the agent once AGENTS.md exists,
+    // must not churn the session.
+    const app = makeApp({ [AGENTS_PATH]: { mtime: 1000, size: 40 } });
+    expect(
+      getProjectLandingCaptureSignature(app, makeRecord(makeProject({ systemPrompt: "old" })))
+    ).toBe(
+      getProjectLandingCaptureSignature(app, makeRecord(makeProject({ systemPrompt: "new" })))
+    );
+  });
+
+  it("falls back to the project.md body until AGENTS.md exists", () => {
+    // Pre-initialization the body IS the instruction source (it seeds the file), so an edit
+    // to it must still refresh the landing.
     const before = makeRecord(makeProject({ systemPrompt: "old" }));
     const after = makeRecord(makeProject({ systemPrompt: "new" }));
     // The materialization signature is intentionally blind to systemPrompt...
     expect(getProjectContextSignature(before)).toBe(getProjectContextSignature(after));
-    // ...but the landing-capture signature must see it, so the empty landing refreshes.
-    expect(getProjectLandingCaptureSignature(before)).not.toBe(
-      getProjectLandingCaptureSignature(after)
+    // ...but the landing-capture signature must see it.
+    expect(getProjectLandingCaptureSignature(noAgents, before)).not.toBe(
+      getProjectLandingCaptureSignature(noAgents, after)
     );
   });
 
@@ -99,16 +173,16 @@ describe("getProjectLandingCaptureSignature", () => {
     const after = makeRecord(
       makeProject({ contextSource: { webUrls: "https://a.com\nhttps://b.com" } })
     );
-    expect(getProjectLandingCaptureSignature(before)).not.toBe(
-      getProjectLandingCaptureSignature(after)
+    expect(getProjectLandingCaptureSignature(noAgents, before)).not.toBe(
+      getProjectLandingCaptureSignature(noAgents, after)
     );
   });
 
   it("does NOT change on a usage-timestamp-only touch", () => {
     const before = makeRecord(makeProject({ systemPrompt: "same", UsageTimestamps: 1 }));
     const after = makeRecord(makeProject({ systemPrompt: "same", UsageTimestamps: 999 }));
-    expect(getProjectLandingCaptureSignature(before)).toBe(
-      getProjectLandingCaptureSignature(after)
+    expect(getProjectLandingCaptureSignature(noAgents, before)).toBe(
+      getProjectLandingCaptureSignature(noAgents, after)
     );
   });
 });

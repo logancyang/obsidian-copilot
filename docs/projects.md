@@ -1,6 +1,8 @@
 # Projects
 
-Projects are focused AI workspaces. Each project has its own model, system prompt, context sources, and completely isolated chat history. Use projects to keep separate AI conversations per client, topic, or area of work.
+Projects are focused AI workspaces. Each project has its own instructions, context sources, and
+isolated chat history. Use projects to keep separate AI conversations per client, topic, or area
+of work.
 
 Projects support **50+ file types** beyond markdown, including PDFs, Word documents, PowerPoint, Excel, images, and more — making them ideal for analyzing large or diverse document collections.
 
@@ -14,7 +16,7 @@ In regular chat, all conversations share the same settings and model. Projects l
 
 - **A specific context** — Specific notes, folders, URLs, or YouTube videos the AI always has access to
 - **A dedicated model** — Different projects can use different AI models
-- **A custom system prompt** — Each project can have its own instructions for the AI
+- **Project instructions** — Each Agent Mode project can have its own `AGENTS.md`
 - **Isolated chat history** — Conversations in one project don't mix with conversations in another
 
 **Example use cases:**
@@ -56,9 +58,20 @@ Choose which AI model to use for this project. The available options are the mod
 
 Override the default temperature and max tokens specifically for this project.
 
-### System Prompt
+### Agent Mode Instructions
 
-Set a custom system prompt for this project. This replaces (or supplements) the global default. See [System Prompts](system-prompts.md) for details.
+Open the project info popover and select **AGENTS.md**. This opens the real file in Obsidian; there
+is no separate prompt editor in project settings.
+
+Vault instructions apply first, followed by the project's `AGENTS.md`, so project rules take
+precedence. For an older project without `AGENTS.md`, the file is initialized from the Project
+System Prompt already stored in `project.md` — the first time you open it, or automatically when
+you next start a chat in that project, so existing projects keep working without any migration
+step. A legacy Copilot-generated mirror is converted to that same text; user-authored files are
+left alone, and a project with no instructions gets no file at all.
+
+`project.md` remains the project's metadata and context configuration record. It is not the agent
+instruction file and is not renamed or migrated.
 
 ---
 
@@ -134,6 +147,6 @@ As an alpha feature, projects have some known limitations:
 ## Related
 
 - [Chat Interface](chat-interface.md) — Chat modes overview, new chat behavior, history
-- [System Prompts](system-prompts.md) — Custom system prompts for projects
+- [Instructions and System Prompts](system-prompts.md) — Vault and project instructions
 - [Context and Mentions](context-and-mentions.md) — How context works
 - [Copilot Plus and Self-Host](copilot-plus-and-self-host.md) — Plus features

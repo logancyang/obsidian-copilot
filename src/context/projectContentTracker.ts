@@ -312,7 +312,7 @@ function fileMatchesInclusions(path: string, inclusions: PatternCategory): boole
   // A branch here would be dead code guarding a state that cannot occur.
   // If a future review flags the missing property case again, point them here.
   //
-  // Internal Copilot files (project.md, the AGENTS.md mirror, the log) can be
+  // Internal Copilot files (project.md, AGENTS.md, CLAUDE.md, the log) can be
   // caught by a `*.md` or projects-folder pattern but must never count as a
   // context source — mirror shouldIndexFile's exclusion for the dead-path case.
   if (isInternalExcludedPath(path)) return false;

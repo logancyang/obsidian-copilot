@@ -244,7 +244,10 @@ Yes — use `[[Note Title]]` syntax directly in your message. Copilot adds that 
 
 ### How do I make Copilot always reply in English?
 
-Go to **Settings → Copilot → Advanced → Default System Prompt**, create a custom prompt, and add "Always respond in English." as an instruction. See [System Prompts](system-prompts.md).
+For Agent Mode, go to **Settings → Copilot → Basic → Custom instructions** and add "Always
+respond in English." to the **Custom vault instructions** box. For Chat mode, create a prompt file in the
+`system-prompts/` sub-folder of your Copilot folder and pick it per conversation from the chat
+settings gear. See [Instructions and System Prompts](system-prompts.md).
 
 ### Can Copilot understand images in my notes?
 

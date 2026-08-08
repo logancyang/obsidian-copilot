@@ -117,14 +117,21 @@ describe("ensureProjectContextMaterialized", () => {
     getRecord.mockReturnValue(undefined);
     const result = await ensureProjectContextMaterialized(fakeApp(), "missing", CWD);
     expect(result.additionalDirectories).toEqual([]);
-    expect(result.projectContextBlock).toBeUndefined();
+    // The caller asked for a project scope, so the workspace policy still has to arm even
+    // though nothing about the project could be read.
+    expect(result.projectContextBlock).toContain("project workspace");
+    expect(result.contextSignature).toBeUndefined();
   });
 
-  it("returns empty when the project has no context sources", async () => {
+  it("still emits a minimal project block when the project has no context sources", async () => {
+    // The product prompt's workspace policy triggers on the block's presence (the prompt is
+    // byte-identical across scopes), so a source-less project must announce itself or the
+    // agent is never told to keep writes under the project's outputs/ folder.
     getRecord.mockReturnValue(record({}));
     const result = await ensureProjectContextMaterialized(fakeApp(), "p1", CWD);
     expect(result.additionalDirectories).toEqual([]);
-    expect(result.projectContextBlock).toBeUndefined();
+    expect(result.projectContextBlock).toContain("<project_context>");
+    expect(result.projectContextBlock).toContain("No context sources are configured");
     expect(mockFs.files.size).toBe(0);
   });
 
@@ -306,7 +313,13 @@ describe("ensureProjectContextMaterialized", () => {
 
     const result = await ensureProjectContextMaterialized(fakeApp(), "p1", CWD);
     expect(result.additionalDirectories).toEqual([]);
-    expect(result.projectContextBlock).toBeUndefined();
+    // The block still announces the workspace: the product prompt's workspace policy triggers
+    // on its presence, so dropping it would stop telling the agent to keep writes under the
+    // project's `outputs/` folder — a broken context load must not widen where it writes.
+    expect(result.projectContextBlock).toContain("project workspace");
+    expect(result.projectContextBlock).toContain("could not be loaded");
+    // Still no signature, so a caller's dirty flag survives a run that captured nothing.
+    expect(result.contextSignature).toBeUndefined();
   });
 });
 

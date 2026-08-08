@@ -12,6 +12,11 @@ import { usePlugin } from "@/contexts/PluginContext";
 import { cn } from "@/lib/utils";
 import { verifyMiyoScope } from "@/miyo/miyoResync";
 import { shouldSurfaceMiyoResync } from "@/miyo/miyoUtils";
+import { openAgentsFile, writeAgentsFile } from "@/instructions/agentsFile";
+import { InstructionsTextarea } from "@/instructions/InstructionsTextarea";
+import { useAgentsFileDraft } from "@/instructions/useAgentsFileDraft";
+import { logError } from "@/logger";
+import { debounce } from "@/utils/debounce";
 import { ensureCopilotSubfolders } from "@/settings/copilotFolder";
 import {
   applyCopilotRootChange,
@@ -26,13 +31,14 @@ import {
   validateCopilotFolder,
 } from "@/settings/model";
 import { DesktopOnlySettingsPanel } from "@/settings/v2/components/DesktopOnlySettingsPanel";
+import { LegacyChatPromptsNotice } from "@/settings/v2/components/LegacyChatPromptsNotice";
 import { PlusSettings } from "@/settings/v2/components/PlusSettings";
 import { formatDateTime } from "@/utils";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { revealFolderInExplorer } from "@/utils/revealFolderInExplorer";
-import { Folder, FolderSync, Loader2 } from "lucide-react";
+import { ArrowUpRight, Folder, FolderSync, Loader2 } from "lucide-react";
 import { Notice } from "obsidian";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 
 const LazyAgentSettings = React.lazy(() =>
   import("@/settings/v2/components/AgentSettings").then((module) => ({
@@ -104,6 +110,48 @@ export const BasicSettings: React.FC = () => {
     setFolderDraft(persistedRoot);
     /* eslint-enable @eslint-react/hooks-extra/no-direct-set-state-in-use-effect */
   }, [persistedRoot]);
+
+  const [vaultInstructions, setVaultInstructions] = useAgentsFileDraft(app, "");
+
+  // Settings have no Save button, so the file follows the textarea. Debounced because the
+  // alternative is one vault write per keystroke; flushed on unmount so closing the tab
+  // mid-sentence still lands the last edit.
+  const saveVaultInstructions = useMemo(() => {
+    // One chain rather than one promise per call. Debouncing bounds how OFTEN a write starts,
+    // not how long one takes: a slow vault (a synced or network-backed one) can still have a
+    // save in flight when the next debounce fires, and if that older write lands second it
+    // overwrites the newer text with no error and nothing on screen to show for it. Queuing
+    // also gives `flush()` a promise that settles only once every queued write has landed.
+    let queue: Promise<void> = Promise.resolve();
+    const enqueue = (next: string): Promise<void> => {
+      queue = queue.then(() =>
+        writeAgentsFile(app, "", next).catch((error) => {
+          logError("Failed to save vault instructions.", error);
+          new Notice("Failed to save AGENTS.md.");
+        })
+      );
+      return queue;
+    };
+    return debounce(enqueue, 1000);
+  }, [app]);
+  useEffect(() => () => void saveVaultInstructions.flush(), [saveVaultInstructions]);
+
+  const handleOpenVaultInstructions = async () => {
+    // Awaited, not fire-and-forget: `openAgentsFile` creates the file when it is missing, so
+    // racing an in-flight save lets both paths see it as absent and create it. The loser's
+    // write then fails and takes whatever the user typed inside the debounce window with it.
+    await saveVaultInstructions.flush();
+    // The settings modal sits above the workspace, so close it or the file opens behind it.
+    (app as unknown as { setting: { close: () => void } }).setting.close();
+    // Empty content on purpose: a vault AGENTS.md starts blank. Nothing is migrated into it,
+    // so what the user sees here is only ever what they wrote.
+    try {
+      await openAgentsFile(app, "", "", true);
+    } catch (error) {
+      logError("Failed to open vault AGENTS.md.", error);
+      new Notice(error instanceof Error ? error.message : "Failed to open AGENTS.md.");
+    }
+  };
 
   const applyFolderChange = () => {
     const validation = validateCopilotFolder(folderDraft);
@@ -318,6 +366,36 @@ export const BasicSettings: React.FC = () => {
             </Button>
           </div>
         </SettingItem>
+      </SettingSection>
+
+      <SettingSection label="Custom instructions">
+        <LegacyChatPromptsNotice />
+        {vaultInstructions !== null && (
+          <SettingItem
+            type="custom"
+            // Rows are vertically centered by default, which leaves the label floating beside
+            // the middle of an editor this tall.
+            className="sm:tw-items-start"
+            title="Custom vault instructions"
+            description="Your custom instructions for the agent to follow for every vault interaction. Saved to AGENTS.md in your vault root, which you can also edit as a note."
+          >
+            <div className="tw-flex tw-w-full tw-flex-col tw-items-end tw-gap-2">
+              <InstructionsTextarea
+                label="Custom vault instructions"
+                value={vaultInstructions}
+                onChange={(next) => {
+                  setVaultInstructions(next);
+                  // Typing never waits on the write; only Open does, via `flush()`.
+                  void saveVaultInstructions(next);
+                }}
+              />
+              <Button variant="secondary" onClick={() => void handleOpenVaultInstructions()}>
+                <ArrowUpRight className="tw-size-4" />
+                Open AGENTS.md
+              </Button>
+            </div>
+          </SettingItem>
+        )}
       </SettingSection>
 
       {/* Saving Conversations Section */}

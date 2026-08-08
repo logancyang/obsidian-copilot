@@ -74,7 +74,7 @@ describe("projectPaths", () => {
       ).toBe(true);
     });
 
-    it("does NOT recognize the generated AGENTS.md mirror as a config file", () => {
+    it("does NOT recognize AGENTS.md as a config file", () => {
       expect(
         isProjectConfigFile(
           mockTFile({ path: "copilot-projects/Foo/AGENTS.md", name: "AGENTS.md", extension: "md" })
@@ -120,7 +120,7 @@ describe("projectPaths", () => {
       expect(getProjectFolderNameFromConfigPath("copilot-projects/Foo/project.md")).toBe("Foo");
     });
 
-    it("returns null for the AGENTS.md mirror (not a config path)", () => {
+    it("returns null for AGENTS.md (not a config path)", () => {
       expect(getProjectFolderNameFromConfigPath("copilot-projects/Foo/AGENTS.md")).toBeNull();
     });
 

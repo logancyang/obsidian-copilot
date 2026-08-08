@@ -91,13 +91,8 @@ export class OpencodeBackend implements AcpBackend {
       );
     }
 
-    // DESIGN NOTE: opencode only auto-discovers `AGENTS.md` from the session cwd and has no
-    // `project_doc_fallback_filenames` equivalent. The plugin guarantees the file exists by
-    // materializing the generated `AGENTS.md` mirror from the project's `project.md` at session
-    // start (see `ensureAgentsMirror`, called before cwd resolution in AgentSessionManager) —
-    // the same session-start ensure codex now relies on as its sole guarantee (codex's
-    // `project.md` fallback was removed; see the matching note in CodexBackend). Hence opencode
-    // needs no instruction-specific code in this spawn.
+    // opencode discovers vault and project AGENTS.md files from the session cwd, so this spawn
+    // needs no instruction-specific configuration.
     // The off-vault conversions cache lives outside opencode's `--cwd <vault>`
     // boundary, so opencode prompts (`external_directory` ask) on every snapshot
     // read unless we pre-allow it (see `buildOpencodeConfig`). cacheRoot is a

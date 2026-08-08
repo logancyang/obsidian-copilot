@@ -24,7 +24,10 @@ import {
   OpencodeBackend,
   type OpencodeModelDeps,
 } from "./OpencodeBackend";
-import { COPILOT_PROMPT_BASE } from "@/agentMode/backends/shared/agentSystemPrompt";
+import {
+  buildAgentSystemPrompt,
+  COPILOT_PROMPT_BASE,
+} from "@/agentMode/backends/shared/agentSystemPrompt";
 
 function makeSystemPrompt(title: string, content: string): UserSystemPrompt {
   return { title, content, createdMs: 0, modifiedMs: 0, lastUsedMs: 0 };
@@ -620,7 +623,7 @@ describe("buildOpencodeConfig — agent/prompt/mode/skills blocks (preserved)", 
     expect(cfg.agent["copilot-build"].mode).toBe("primary");
   });
 
-  it("appends the user's selected custom prompt to both agent prompts", async () => {
+  it("does not copy Chat mode custom prompts into either agent prompt", async () => {
     updateCachedSystemPrompts([makeSystemPrompt("Haiku", "respond in haiku")]);
     setSelectedPromptTitle("Haiku");
     const cfg = (await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS)) as {
@@ -628,13 +631,12 @@ describe("buildOpencodeConfig — agent/prompt/mode/skills blocks (preserved)", 
     };
     for (const id of ["copilot-build", "build"]) {
       expect(cfg.agent[id].prompt?.startsWith(COPILOT_PROMPT_BASE)).toBe(true);
-      expect(cfg.agent[id].prompt).toContain(
-        "<user_custom_instructions>\nrespond in haiku\n</user_custom_instructions>"
-      );
+      expect(cfg.agent[id].prompt).not.toContain("<user_custom_instructions>");
+      expect(cfg.agent[id].prompt).not.toContain("respond in haiku");
     }
   });
 
-  it("suppresses the base prompt when 'disable builtin' is on, keeping the user prompt + pill directive", async () => {
+  it("suppresses the base prompt when 'disable builtin' is on, keeping the pill directive", async () => {
     updateCachedSystemPrompts([makeSystemPrompt("Haiku", "respond in haiku")]);
     setSelectedPromptTitle("Haiku");
     setDisableBuiltinSystemPrompt(true);
@@ -644,10 +646,63 @@ describe("buildOpencodeConfig — agent/prompt/mode/skills blocks (preserved)", 
     for (const id of ["copilot-build", "build"]) {
       expect(cfg.agent[id].prompt).not.toContain(COPILOT_PROMPT_BASE);
       expect(cfg.agent[id].prompt).not.toContain("You are Obsidian Copilot");
-      expect(cfg.agent[id].prompt).toContain("respond in haiku");
+      expect(cfg.agent[id].prompt).not.toContain("respond in haiku");
       // Pill directive is functional wiring, not builtin framing — always sent.
       expect(cfg.agent[id].prompt).toContain("{folder_name}");
     }
+  });
+
+  it("gives both agents the shared product prompt, byte for byte", async () => {
+    const cfg = (await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS)) as {
+      agent: Record<string, { prompt?: string }>;
+    };
+
+    // `toBe`, not `startsWith`: this string is the provider cache prefix, and a
+    // containment check passes while stray bytes push the rest out of the cache.
+    expect(cfg.agent["copilot-build"].prompt).toBe(buildAgentSystemPrompt());
+    expect(cfg.agent.build.prompt).toBe(buildAgentSystemPrompt());
+  });
+
+  it("keeps those bytes identical when the model and binary path change", async () => {
+    const baseline = (await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS)) as {
+      agent: Record<string, { prompt?: string }>;
+    };
+
+    setSettings({
+      agentMode: {
+        byok: {},
+        activeBackend: "opencode",
+        debugFullFrames: false,
+        welcomeDismissed: false,
+        skills: { folder: "copilot/skills" },
+        backends: {
+          opencode: {
+            binaryPath: "/somewhere/else/opencode",
+            defaultModel: { baseModelId: "opencode/other-model", effort: "low" },
+          },
+        },
+      },
+    });
+    const after = (await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS)) as {
+      agent: Record<string, { prompt?: string }>;
+    };
+
+    expect(after.agent["copilot-build"].prompt).toBe(baseline.agent["copilot-build"].prompt);
+    expect(after.agent.build.prompt).toBe(baseline.agent.build.prompt);
+  });
+
+  it("leaves AGENTS.md discovery to opencode instead of inlining instruction text", async () => {
+    const cfg = (await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS)) as {
+      agent: Record<string, { prompt?: string }>;
+      instructions?: unknown;
+    };
+
+    // opencode walks up from the session cwd and collects every ancestor AGENTS.md on its
+    // own. Configuring `instructions` would be dead weight — those paths merge into the same
+    // Set discovery already filled — and inlining the text would put user bytes back in the
+    // cache prefix this PR exists to stabilize.
+    expect(cfg.instructions).toBeUndefined();
+    expect(cfg.agent["copilot-build"].prompt).not.toContain("AGENTS.md instructions:");
   });
 
   it("does not template a skills folder into the opencode prompts", async () => {

@@ -30,9 +30,8 @@ export class CodexBackend implements AcpBackend {
         INITIAL_AGENT_MODE: "agent",
       }
     );
-    // Forward the shared composed system prompt — the Copilot base framing
-    // (unless the user disabled it), the pill-syntax directive, and the user's
-    // custom prompt — via codex's `developer_instructions` config field as a
+    // Forward the shared built-in prompt — the Copilot base framing, tool
+    // guidance, and pill-syntax directive — via codex's `developer_instructions` as a
     // TOML 1.0 basic string. codex appends `developer_instructions` to its own
     // base prompt, so this adds the Obsidian-vault framing on top. Read at
     // spawn time; the host restarts codex on prompt changes via
@@ -60,14 +59,8 @@ export class CodexBackend implements AcpBackend {
       "-c",
       'sandbox_mode="workspace-write"',
     ];
-    // DESIGN NOTE: deliberately no `project_doc_fallback_filenames=["project.md"]`.
-    // Post-Phase-2 the session-start `ensureAgentsMirror` (AgentSessionManager, run before
-    // `resolveSessionCwd` for codex/opencode project sessions) guarantees the marker'd
-    // `AGENTS.md` mirror exists in the project cwd, so a `project.md` fallback is redundant.
-    // This descriptor only knows `vaultBasePath`, not the session scope: a spawn-level fallback
-    // would also apply to GLOBAL sessions and let codex read a user's vault-root `project.md`
-    // note as instructions. On the rare ensure failure a project session gets no instructions
-    // (ensure never throws and re-runs next session) rather than the frontmatter-laden source.
+    // Deliberately no `project_doc_fallback_filenames=["project.md"]`: project.md is metadata,
+    // while Codex discovers the canonical AGENTS.md instructions from the session cwd.
     return descriptor;
   }
 }

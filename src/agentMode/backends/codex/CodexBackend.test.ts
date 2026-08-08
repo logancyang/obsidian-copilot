@@ -7,6 +7,7 @@ import {
 } from "@/system-prompts/state";
 import type { UserSystemPrompt } from "@/system-prompts/type";
 import { SYMPOSIUM_WORKSPACE_ROOT_ENV } from "@/symposium/constants";
+import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemPrompt";
 import { CodexBackend, toTomlBasicString } from "./CodexBackend";
 
 jest.mock("@/logger", () => ({
@@ -94,20 +95,40 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
     expect(value).not.toContain("copilot/skills/<name>/SKILL.md");
   });
 
-  it("appends the user's selected custom prompt to developer_instructions", async () => {
+  it("encodes the shared product prompt into both paths, byte for byte", async () => {
+    const desc = await new CodexBackend().buildSpawnDescriptor({ vaultBasePath: "/vault" });
+    const shared = buildAgentSystemPrompt();
+
+    // `toBe`, not `toContain`: this string is the provider cache prefix, and a containment
+    // check passes while stray bytes push everything after it out of the cache.
+    expect(JSON.parse(desc.env.CODEX_CONFIG as string).developer_instructions).toBe(shared);
+    const cIdx = desc.args.indexOf("-c");
+    expect(desc.args[cIdx + 1]).toBe(`developer_instructions=${toTomlBasicString(shared)}`);
+  });
+
+  it("keeps those bytes identical when the vault path changes", async () => {
+    const backend = new CodexBackend();
+    const a = await backend.buildSpawnDescriptor({ vaultBasePath: "/vault" });
+    const b = await backend.buildSpawnDescriptor({ vaultBasePath: "/somewhere/else/vault" });
+
+    expect(JSON.parse(b.env.CODEX_CONFIG as string).developer_instructions).toBe(
+      JSON.parse(a.env.CODEX_CONFIG as string).developer_instructions
+    );
+    expect(b.args[b.args.indexOf("-c") + 1]).toBe(a.args[a.args.indexOf("-c") + 1]);
+  });
+
+  it("does not copy Chat mode custom prompts into developer_instructions", async () => {
     updateCachedSystemPrompts([makeSystemPrompt("Haiku", "respond in haiku")]);
     setSelectedPromptTitle("Haiku");
     const backend = new CodexBackend();
     const desc = await backend.buildSpawnDescriptor({ vaultBasePath: "/vault" });
     const value = desc.args[desc.args.indexOf("-c") + 1];
     expect(value).toContain("Obsidian Copilot");
-    // The TOML basic string escapes newlines as \n, so match the wrapper +
-    // content rather than the literal multi-line block.
-    expect(value).toContain("<user_custom_instructions>");
-    expect(value).toContain("respond in haiku");
+    expect(value).not.toContain("<user_custom_instructions>");
+    expect(value).not.toContain("respond in haiku");
   });
 
-  it("suppresses the base prompt when 'disable builtin' is on, keeping the user prompt + pill directive", async () => {
+  it("suppresses the base prompt when 'disable builtin' is on, keeping the pill directive", async () => {
     updateCachedSystemPrompts([makeSystemPrompt("Haiku", "respond in haiku")]);
     setSelectedPromptTitle("Haiku");
     setDisableBuiltinSystemPrompt(true);
@@ -115,7 +136,7 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
     const desc = await backend.buildSpawnDescriptor({ vaultBasePath: "/vault" });
     const value = desc.args[desc.args.indexOf("-c") + 1];
     expect(value).not.toContain("Obsidian Copilot");
-    expect(value).toContain("respond in haiku");
+    expect(value).not.toContain("respond in haiku");
     // Pill directive is functional wiring, not builtin framing — always sent.
     expect(value).toContain("{folder_name}");
   });
@@ -291,9 +312,8 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
   });
 
   it("does not add a project.md fallback to the codex spawn args", async () => {
-    // Session-start ensureAgentsMirror supersedes the spawn-level fallback for project scopes;
-    // omitting it also prevents a GLOBAL session from treating a vault-root project.md note as
-    // codex instructions (the spawn descriptor has no scope to gate on).
+    // Omitting the fallback prevents a GLOBAL session from treating a vault-root project.md note
+    // as codex instructions (the spawn descriptor has no scope to gate on).
     const backend = new CodexBackend();
     const desc = await backend.buildSpawnDescriptor({ vaultBasePath: "/vault" });
     expect(desc.args).not.toContainEqual(expect.stringContaining("project_doc_fallback_filenames"));
