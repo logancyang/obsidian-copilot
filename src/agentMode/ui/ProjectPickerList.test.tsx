@@ -64,41 +64,65 @@ describe("ProjectPickerList", () => {
     );
   }
 
-  it("renders projects in most-recently-used order from persisted timestamps", () => {
-    const { container } = renderPicker();
-    expect(renderedOrder(container, names)).toEqual(["C", "B", "A"]);
-  });
-
-  it("falls back to persisted order when no usage manager is provided", () => {
-    const { container } = renderPicker(undefined);
-    // No crash, and the persisted MRU order still holds.
-    expect(renderedOrder(container, names)).toEqual(["C", "B", "A"]);
-  });
-
-  it("re-sorts to reflect an in-memory touch ahead of the throttled persist", () => {
-    const manager = new RecentUsageManager<string>();
-    const { container } = renderPicker(manager);
-    expect(renderedOrder(container, names)).toEqual(["C", "B", "A"]);
-
-    // Touch the oldest project in memory only (no persist). The revision
-    // subscription should re-sort it to the top even though its persisted
-    // UsageTimestamps is still the oldest.
-    act(() => {
-      manager.touch("A");
+  describe("ProjectPickerList()", () => {
+    it("renders projects in most-recently-used order from persisted timestamps", () => {
+      const { container } = renderPicker();
+      expect(renderedOrder(container, names)).toEqual(["C", "B", "A"]);
     });
 
-    expect(renderedOrder(container, names)).toEqual(["A", "C", "B"]);
-  });
+    it("renders neutral folder icons for every project", () => {
+      const { container } = renderPicker();
+      const folders = Array.from(container.querySelectorAll(".lucide-folder"));
+      expect(folders).toHaveLength(names.length);
+      for (const folder of folders) {
+        expect(folder.classList.contains("tw-text-muted")).toBe(true);
+        expect(folder.getAttribute("class")).not.toMatch(/tw-(?:bg|text)-project-/);
+      }
+    });
 
-  it("surfaces the inline Reveal / Edit / Delete actions on every row", () => {
-    const { getByLabelText } = renderPicker();
-    // The actions render inline per row (revealed on hover via CSS) instead of
-    // behind a single overflow trigger — getByLabelText throws if any is missing,
-    // so resolving all three per project is the assertion.
-    for (const name of names) {
-      expect(getByLabelText(`Reveal ${name} in vault`)).toBeTruthy();
-      expect(getByLabelText(`Edit project ${name}`)).toBeTruthy();
-      expect(getByLabelText(`Delete project ${name}`)).toBeTruthy();
-    }
+    it("centers project folders in the same leading slot as the create icon", () => {
+      const { container } = render(
+        <ProjectPickerList projects={[projectA]} onSelect={noop} onCreate={noop} app={app} />
+      );
+      const plusSlot = container.querySelector(".lucide-plus")?.parentElement;
+      const folderSlot = container.querySelector(".lucide-folder")?.parentElement;
+
+      expect(plusSlot?.classList.contains("tw-size-6")).toBe(true);
+      expect(folderSlot?.classList.contains("tw-size-6")).toBe(true);
+      expect(folderSlot?.classList.contains("tw-justify-center")).toBe(true);
+    });
+
+    it("falls back to persisted order when no usage manager is provided", () => {
+      const { container } = renderPicker(undefined);
+      // No crash, and the persisted MRU order still holds.
+      expect(renderedOrder(container, names)).toEqual(["C", "B", "A"]);
+    });
+
+    it("re-sorts to reflect an in-memory touch ahead of the throttled persist", () => {
+      const manager = new RecentUsageManager<string>();
+      const { container } = renderPicker(manager);
+      expect(renderedOrder(container, names)).toEqual(["C", "B", "A"]);
+
+      // Touch the oldest project in memory only (no persist). The revision
+      // subscription should re-sort it to the top even though its persisted
+      // UsageTimestamps is still the oldest.
+      act(() => {
+        manager.touch("A");
+      });
+
+      expect(renderedOrder(container, names)).toEqual(["A", "C", "B"]);
+    });
+
+    it("surfaces the inline Reveal / Edit / Delete actions on every row", () => {
+      const { getByLabelText } = renderPicker();
+      // The actions render inline per row (revealed on hover via CSS) instead of
+      // behind a single overflow trigger — getByLabelText throws if any is missing,
+      // so resolving all three per project is the assertion.
+      for (const name of names) {
+        expect(getByLabelText(`Reveal ${name} in vault`)).toBeTruthy();
+        expect(getByLabelText(`Edit project ${name}`)).toBeTruthy();
+        expect(getByLabelText(`Delete project ${name}`)).toBeTruthy();
+      }
+    });
   });
 });

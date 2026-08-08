@@ -32,7 +32,6 @@ const chats: AgentHomeShelfSection = {
   id: "chats",
   icon: <span />,
   title: "Recent Chats",
-  count: 2,
   renderBody: () => <div>CHATS BODY</div>,
 };
 
@@ -88,8 +87,8 @@ describe("AgentHomeShelf", () => {
       expect(screen.queryByText("PROJECTS BODY")).toBeNull();
     });
 
-    it("hides the count badge when the count is undefined", () => {
-      renderShelf([withCount(undefined)]);
+    it("renders Recent Chats without a cumulative count when the caller omits it", () => {
+      renderShelf([chats]);
       expect(screen.getByRole("tab", { name: /Recent Chats/ }).textContent ?? "").not.toMatch(/\d/);
     });
 

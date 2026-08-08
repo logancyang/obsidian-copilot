@@ -30,7 +30,7 @@ import React, { memo, useEffect, useState } from "react";
 // instructions, so the file must stay visible).
 const HIDDEN_BASENAMES = new Set(["project.md", "agents.md"]);
 
-/** Per-extension badge tints, the same project palette tokens rows use. */
+/** Semantic per-extension badge tints for quickly distinguishing file types. */
 const BADGE_CLASSES: Record<string, string> = {
   pdf: "tw-bg-project-red tw-text-project-red",
   md: "tw-bg-project-blue tw-text-project-blue",

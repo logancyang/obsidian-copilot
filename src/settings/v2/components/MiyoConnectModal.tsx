@@ -40,14 +40,12 @@ const IconTile: React.FC<{ tone: "warning" | "info" | "success"; children: React
     className={cn(
       "tw-mb-3 tw-inline-flex tw-size-10 tw-items-center tw-justify-center tw-rounded-lg",
       // Warm-amber tile (not bg-warning, which skews orange/pink) framing the
-      // orange CircleAlert — matches the design. Reuses the project-yellow tile
-      // token (rgba(--color-yellow-rgb, .16)), the same soft-amber fill
-      // ProjectIconTile uses, so it's a compiled, in-repo class rather than an
-      // ad-hoc alpha utility Tailwind's JIT never emits.
+      // orange CircleAlert — matches the design. Reuses the compiled
+      // project-yellow palette token (rgba(--color-yellow-rgb, .16)) rather than
+      // an ad-hoc alpha utility Tailwind's JIT never emits.
       tone === "warning" && "tw-bg-project-yellow tw-text-warning",
       tone === "info" && "tw-text-accent tw-bg-interactive-accent/20",
-      // Soft-green tile (same project-green pair ProjectIconTile uses) framing the
-      // CheckSquare on the register step — matches the design's green success tile.
+      // Soft-green tile framing the CheckSquare on the register step.
       tone === "success" && "tw-bg-project-green tw-text-project-green"
     )}
   >

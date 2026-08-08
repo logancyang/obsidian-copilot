@@ -16,7 +16,6 @@ function renderHeader(props: Partial<React.ComponentProps<typeof AgentProjectHea
   render(
     <TooltipProvider>
       <AgentProjectHeader
-        projectId={props.projectId ?? "demo-project"}
         projectName={props.projectName ?? "Demo"}
         onExit={onExit}
         menu={menu}
@@ -28,30 +27,43 @@ function renderHeader(props: Partial<React.ComponentProps<typeof AgentProjectHea
 }
 
 describe("AgentProjectHeader", () => {
-  it("shows the live project name", () => {
-    renderHeader({ projectName: "My Research" });
-    expect(screen.getByText("My Research")).toBeTruthy();
-  });
+  describe("AgentProjectHeader()", () => {
+    it("shows the live project name", () => {
+      renderHeader({ projectName: "My Research" });
+      expect(screen.getByText("My Research")).toBeTruthy();
+    });
 
-  it("exits the project when the back affordance is clicked", () => {
-    const { onExit } = renderHeader();
-    fireEvent.click(screen.getByRole("button", { name: "Leave project" }));
-    expect(onExit).toHaveBeenCalledTimes(1);
-  });
+    it("renders a neutral project folder icon", () => {
+      const { container } = render(
+        <TooltipProvider>
+          <AgentProjectHeader projectName="Demo" onExit={jest.fn()} />
+        </TooltipProvider>
+      );
+      const folder = container.querySelector(".lucide-folder");
+      expect(folder?.classList.contains("tw-text-muted")).toBe(true);
+      expect(folder?.getAttribute("class")).not.toMatch(/tw-(?:bg|text)-project-/);
+    });
 
-  it("renders the provided options menu in the trailing slot", () => {
-    renderHeader({ menu: <button type="button" aria-label="Project options" /> });
-    expect(screen.getByLabelText("Project options")).toBeTruthy();
-  });
+    it("exits the project when the back affordance is clicked", () => {
+      const { onExit } = renderHeader();
+      fireEvent.click(screen.getByRole("button", { name: "Leave project" }));
+      expect(onExit).toHaveBeenCalledTimes(1);
+    });
 
-  it("degrades to an escape hatch when the project is orphaned", () => {
-    const { onExit } = renderHeader({ projectName: "Gone", orphaned: true });
-    // No stale name or options menu pointing at a deleted project.
-    expect(screen.queryByText("Gone")).toBeNull();
-    expect(screen.queryByLabelText("Project options")).toBeNull();
-    expect(screen.getByText("This project no longer exists")).toBeTruthy();
-    // The back affordance still works so the user can leave the dead scope.
-    fireEvent.click(screen.getByRole("button", { name: "Leave project" }));
-    expect(onExit).toHaveBeenCalledTimes(1);
+    it("renders the provided options menu in the trailing slot", () => {
+      renderHeader({ menu: <button type="button" aria-label="Project options" /> });
+      expect(screen.getByLabelText("Project options")).toBeTruthy();
+    });
+
+    it("degrades to an escape hatch when the project is orphaned", () => {
+      const { onExit } = renderHeader({ projectName: "Gone", orphaned: true });
+      // No stale name or options menu pointing at a deleted project.
+      expect(screen.queryByText("Gone")).toBeNull();
+      expect(screen.queryByLabelText("Project options")).toBeNull();
+      expect(screen.getByText("This project no longer exists")).toBeTruthy();
+      // The back affordance still works so the user can leave the dead scope.
+      fireEvent.click(screen.getByRole("button", { name: "Leave project" }));
+      expect(onExit).toHaveBeenCalledTimes(1);
+    });
   });
 });

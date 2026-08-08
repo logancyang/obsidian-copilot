@@ -68,6 +68,8 @@ interface AgentHomeProps {
   updateUserMessageHistory: (newMessage: string) => void;
 }
 
+const EMPTY_PROJECT_NAMES_BY_ID: Readonly<Record<string, string>> = Object.freeze({});
+
 /**
  * Agent Mode home surface for an active session. Persistent across tab switches
  * (the tab strip swaps `sessionId`/`backend` props), so input drafts live here
@@ -192,6 +194,10 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   }, [descriptor, plugin]);
 
   const projects = useProjects();
+  const projectNamesById = useMemo<Readonly<Record<string, string>>>(() => {
+    if (projects.length === 0) return EMPTY_PROJECT_NAMES_BY_ID;
+    return Object.fromEntries(projects.map((project) => [project.id, project.name]));
+  }, [projects]);
 
   // Shared in-memory usage manager — the SAME instance `enterProject` touches. The
   // picker blends it so entering a project reorders the landing list immediately,
@@ -217,24 +223,18 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   // Latch the in-project header content so its exit collapse animates with the
   // project it's leaving: `projectName`/`isOrphanedProject` flip to their global
   // values the instant the scope changes, before the header's collapse finishes,
-  // which would otherwise flash an empty name mid-animation. The id rides along
-  // so the identity tile's color doesn't flash either. Writing the ref during
-  // render is the same derive-from-props pattern the context-load card uses.
-  // The global-scope initial id only ever lives in a collapsed, aria-hidden
-  // header; the first project entry latches a real project id.
+  // which would otherwise flash an empty name mid-animation. Writing the ref
+  // during render is the same derive-from-props pattern the context-load card uses.
   const lastProjectHeaderRef = useRef({
-    id: activeProjectId,
     name: projectName,
     orphaned: isOrphanedProject,
   });
   if (isProjectScope) {
     lastProjectHeaderRef.current = {
-      id: activeProjectId,
       name: projectName,
       orphaned: isOrphanedProject,
     };
   }
-  const headerProjectId = isProjectScope ? activeProjectId : lastProjectHeaderRef.current.id;
   const headerName = isProjectScope ? projectName : lastProjectHeaderRef.current.name;
   const headerOrphaned = isProjectScope ? isOrphanedProject : lastProjectHeaderRef.current.orphaned;
 
@@ -536,7 +536,8 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
         id: "chats",
         icon: <MessageSquare className="tw-size-4" />,
         title: "Recent Chats",
-        count: chatHistoryItems.length,
+        // Chat history grows indefinitely, so its cumulative total is not a
+        // useful tab-level status. The list itself remains fully searchable.
         renderBody: () => (
           <GlobalRecentChatsSection
             items={chatHistoryItems}
@@ -547,6 +548,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
             onLoadHistory={handleLoadChatHistory}
             runningChatIds={runningChatIds}
             attentionChatIds={attentionChatIds}
+            projectNamesById={projectNamesById}
           />
         ),
       },
@@ -586,6 +588,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     ],
     [
       projects,
+      projectNamesById,
       chatHistoryItems,
       app,
       projectUsageManager,
@@ -621,7 +624,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
         id: "project-chats",
         icon: <MessageSquare className="tw-size-4" />,
         title: "Recent Chats",
-        count: chatHistoryItems.length,
+        // Match the global shelf: an ever-growing history tally adds noise.
         renderBody: () => (
           <GlobalRecentChatsSection
             items={chatHistoryItems}
@@ -796,7 +799,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       >
         <div className="tw-min-h-0 tw-overflow-hidden">
           <AgentProjectHeader
-            projectId={headerProjectId}
             projectName={headerName}
             onExit={handleExitProject}
             orphaned={headerOrphaned}
