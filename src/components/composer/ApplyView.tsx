@@ -6,8 +6,8 @@ import { Change, diffArrays } from "diff";
 import { Check, X as XIcon } from "lucide-react";
 import { App, ItemView, Notice, TFile, WorkspaceLeaf } from "obsidian";
 import React, { memo, useMemo, useRef, useState } from "react";
-import { Button } from "../ui/button";
-import { SettingSwitch } from "../ui/setting-switch";
+import { Button } from "@/components/ui/button";
+import { SettingSwitch } from "@/components/ui/setting-switch";
 import { getChangeBlocks } from "@/composerUtils";
 import { ApplyViewResult } from "@/types";
 import { ensureFolderExists } from "@/utils";
@@ -452,7 +452,7 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
     // Create the folder if it doesn't exist (supports nested paths)
     if (file_path.includes("/")) {
       const folderPath = file_path.split("/").slice(0, -1).join("/");
-      await ensureFolderExists(folderPath);
+      await ensureFolderExists(app.vault, folderPath);
     }
     return await app.vault.create(file_path, "");
   };

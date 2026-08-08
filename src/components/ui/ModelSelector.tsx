@@ -4,13 +4,70 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ModelDisplay } from "@/components/ui/model-display";
-import { getModelKeyFromModel, useSettingsValue } from "@/settings/model";
-import { checkModelApiKey, err2String } from "@/utils";
+import { LicenseRequiredIcon } from "@/components/ui/LicenseRequiredIcon";
+import { SelfHostCloudWarningIcon } from "@/components/ui/SelfHostCloudWarningIcon";
+import { checkModelApiKey, err2String } from "@/lib/model-display-utils";
+import type { ModelApiKeySettings } from "@/lib/model-display-utils";
+import { getModelKeyFromModel } from "@/lib/model-key";
+import type { CustomModel } from "@/aiParams";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+/**
+ * Picker entry shape. The selector is normally driven by `settings.activeModels`,
+ * but callers can pass an explicit `models` list (e.g. Agent Mode merges
+ * Copilot-configured models with backend-reported ones). To surface a
+ * non-API-key reason for a disabled option, set `_disabledReason` on the
+ * synthetic entry; the selector will render the option disabled with the
+ * reason as a right-side label.
+ *
+ * `_group` opts entries into section headers in the dropdown — when
+ * consecutive entries have differing `_group` values, a non-clickable label
+ * is rendered before the next group. Used by Agent Mode to subtitle
+ * per-backend sections (e.g. `opencode`, `Claude Code`). Backwards
+ * compatible — entries without `_group` render flat as today.
+ *
+ * Agent Mode tags every entry with `_backendId` so the selector can route
+ * the selected key back to the right backend. `getModelKeyFromModel`
+ * prefixes the key with the backend id when set, keeping React keys /
+ * dropdown values unique even when two backends report the same
+ * agent-native model id (e.g. both surface a `sonnet` alias).
+ */
+export type ModelSelectorEntry = CustomModel & {
+  _disabledReason?: string;
+  _group?: string;
+  _backendId?: string;
+  /**
+   * Optional second line rendered beneath the title in the dropdown row.
+   * Carries the model's capability blurb so the picker row matches the settings
+   * list row. The collapsed trigger pill ignores it and stays single-line.
+   */
+  _subtitle?: string;
+  /**
+   * `true` for an opencode Zen model (opencode's self-hosted free tier). The
+   * dropdown row renders a privacy-warning icon + tooltip beside the name,
+   * since prompts go to a third party that may retain or train on them.
+   */
+  _isFree?: boolean;
+  /**
+   * `true` when Self-Host Mode is on and this is a cloud provider/agent. The
+   * dropdown row renders a cloud-egress warning icon + tooltip beside the name;
+   * the model stays selectable (Self-Host Mode marks, it doesn't block).
+   */
+  _needsSelfHostWarning?: boolean;
+  /**
+   * `true` for a Copilot model the user has no license to run, shown so the
+   * lineup is discoverable before they buy. The row renders a lock icon +
+   * tooltip beside the name and suppresses the right-side `_disabledReason`
+   * label, which would otherwise repeat the same sentence down the whole group.
+   * Always paired with a `_disabledReason` — that is what disables the row.
+   */
+  _needsLicense?: boolean;
+};
 
 interface ModelSelectorProps {
   disabled?: boolean;
@@ -20,6 +77,16 @@ interface ModelSelectorProps {
   // Always controlled
   value: string;
   onChange: (modelKey: string) => void;
+  /**
+   * Models to show. Agent-backed callers can supply synthesized entries and
+   * mark unusable rows with `_disabledReason`.
+   */
+  models: ModelSelectorEntry[];
+  /**
+   * Settings snapshot used for BYOK checks. Omit when the model provider owns
+   * authentication and `_disabledReason` is the only availability gate.
+   */
+  apiKeySettings?: Readonly<ModelApiKeySettings>;
 }
 
 export function ModelSelector({
@@ -29,15 +96,18 @@ export function ModelSelector({
   className,
   value,
   onChange,
+  models,
+  apiKeySettings,
 }: ModelSelectorProps) {
   const [modelError, setModelError] = useState<string | null>(null);
-  const settings = useSettingsValue();
 
-  const currentModel = settings.activeModels.find(
-    (model) => model.enabled && getModelKeyFromModel(model) === value
+  const currentModel = models.find(
+    (model) => (model.enabled ?? true) && getModelKeyFromModel(model) === value
   );
 
-  const showModels = settings.activeModels;
+  const visible = models.filter((model) => model.enabled !== false);
+  let lastGroup: string | undefined;
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -56,21 +126,46 @@ export function ModelSelector({
               <span className="tw-truncate">Select Model</span>
             )}
           </div>
+          {/* Persist the cloud-egress warning on the closed trigger too — otherwise a
+              selected cloud model under Self-Host Mode shows no warning until the menu
+              is opened. stopPropagation=false so a click still opens the picker. */}
+          {currentModel?._needsSelfHostWarning && (
+            <SelfHostCloudWarningIcon className="tw-mt-0.5" stopPropagation={false} />
+          )}
           {!disabled && <ChevronDown className="tw-mt-0.5 tw-size-5 tw-shrink-0" />}
         </Button>
       </DropdownMenuTrigger>
 
       <DropdownMenuContent align="start" className="tw-max-h-64 tw-overflow-y-auto">
-        {showModels
-          .filter((model) => model.enabled)
-          .map((model) => {
-            const { hasApiKey } = checkModelApiKey(model, settings);
-            return (
+        {visible.map((model) => {
+          const disabledReason = model._disabledReason;
+          const hasApiKey = apiKeySettings
+            ? checkModelApiKey(model, apiKeySettings).hasApiKey
+            : true;
+          const itemDisabled = Boolean(disabledReason) || !hasApiKey;
+          // A locked Copilot row says why through its lock icon; repeating the
+          // reason per row would print the same sentence down the whole group.
+          const rightLabel = model._needsLicense
+            ? null
+            : (disabledReason ?? (!hasApiKey ? "Needs API key" : null));
+          const showHeader = model._group !== undefined && model._group !== lastGroup;
+          const headerKey = `__group__${model._group}__${getModelKeyFromModel(model)}`;
+          lastGroup = model._group;
+          return (
+            <React.Fragment key={getModelKeyFromModel(model)}>
+              {showHeader && (
+                <DropdownMenuLabel
+                  key={headerKey}
+                  className="tw-text-xs tw-uppercase tw-tracking-wide tw-text-faint"
+                >
+                  {model._group}
+                </DropdownMenuLabel>
+              )}
               <DropdownMenuItem
-                key={getModelKeyFromModel(model)}
-                disabled={!hasApiKey}
+                disabled={itemDisabled}
+                title={disabledReason ?? undefined}
                 onSelect={async (event) => {
-                  if (!hasApiKey) {
+                  if (itemDisabled) {
                     event.preventDefault();
                     return;
                   }
@@ -82,23 +177,33 @@ export function ModelSelector({
                     const msg = `Model switch failed: ` + err2String(error);
                     setModelError(msg);
                     // Restore to the last valid model
-                    const lastValidModel = showModels.find(
-                      (m) => m.enabled && getModelKeyFromModel(m) === value
+                    const lastValidModel = models.find(
+                      (m) => m.enabled !== false && getModelKeyFromModel(m) === value
                     );
                     if (lastValidModel) {
                       onChange(getModelKeyFromModel(lastValidModel));
                     }
                   }
                 }}
-                className={!hasApiKey ? "tw-cursor-not-allowed tw-opacity-50" : ""}
+                className={itemDisabled ? "tw-cursor-not-allowed tw-opacity-50" : ""}
               >
-                <ModelDisplay model={model} iconSize={12} />
-                {!hasApiKey && (
-                  <span className="tw-ml-auto tw-text-smallest tw-text-faint">Needs API key</span>
+                <div className="tw-min-w-0">
+                  <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-1">
+                    <ModelDisplay model={model} iconSize={12} />
+                    {model._needsLicense && <LicenseRequiredIcon />}
+                    {model._needsSelfHostWarning && <SelfHostCloudWarningIcon />}
+                  </div>
+                  {model._subtitle && (
+                    <div className="tw-truncate tw-text-xs tw-text-muted">{model._subtitle}</div>
+                  )}
+                </div>
+                {rightLabel && (
+                  <span className="tw-ml-auto tw-text-smallest tw-text-faint">{rightLabel}</span>
                 )}
               </DropdownMenuItem>
-            );
-          })}
+            </React.Fragment>
+          );
+        })}
       </DropdownMenuContent>
     </DropdownMenu>
   );

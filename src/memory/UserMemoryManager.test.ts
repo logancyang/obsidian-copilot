@@ -17,6 +17,14 @@ import { UserMemoryManager } from "./UserMemoryManager";
 import { App, TFile, Vault } from "obsidian";
 import { ChatMessage } from "@/types/message";
 import { logError, logWarn } from "@/logger";
+jest.mock("@/settings/copilotFolder", () => ({
+  getEffectiveMemoryFolder: jest.fn(() => "copilot/memory"),
+}));
+import { getEffectiveMemoryFolder } from "@/settings/copilotFolder";
+const mockedMemoryFolder = getEffectiveMemoryFolder as jest.MockedFunction<
+  typeof getEffectiveMemoryFolder
+>;
+
 import { CopilotSettings, getSettings } from "@/settings/model";
 import { ensureFolderExists } from "@/utils";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
@@ -84,6 +92,9 @@ describe("UserMemoryManager", () => {
       invoke: jest.fn(),
     } as unknown as jest.Mocked<BaseChatModel>;
 
+    // Reset explicitly: `clearAllMocks` drops calls but keeps a mockReturnValue,
+    // and a test that moves the root mid-operation would otherwise leak it.
+    mockedMemoryFolder.mockReturnValue("copilot/memory");
     userMemoryManager = new UserMemoryManager(mockApp);
   });
 
@@ -223,6 +234,61 @@ describe("UserMemoryManager", () => {
       expect(logError).toHaveBeenCalledWith(
         "[UserMemoryManager] Failed to parse LLM response as JSON:",
         expect.any(Error)
+      );
+    });
+  });
+
+  describe("updateMemory", () => {
+    it("writes the summary to the root that is current when the model returns", async () => {
+      // The memory folder derives from the Copilot root, and the model call is an
+      // unbounded network await. A root change during it must not leave the
+      // operation ensuring one directory and writing into another — the summary
+      // does not depend on the old location, so the current root is correct and
+      // the folder it ensures must be the one it writes.
+      mockedMemoryFolder.mockReturnValue("copilot/memory");
+      const model = {
+        invoke: jest.fn(async () => {
+          mockedMemoryFolder.mockReturnValue("moved/memory");
+          return new AIMessageChunk({ content: '{"summary":"s","topics":[],"insights":[]}' });
+        }),
+      } as unknown as BaseChatModel;
+      (mockVault.getAbstractFileByPath as jest.Mock).mockReturnValue(null);
+
+      await asInternal(userMemoryManager).updateMemory(
+        [
+          { id: "1", message: "hi", sender: "user", isVisible: true, timestamp: null },
+        ] as ChatMessage[],
+        model
+      );
+
+      expect(ensureFolderExists).toHaveBeenCalledWith(mockVault, "moved/memory");
+      expect(mockVault.create).toHaveBeenCalledWith(
+        "moved/memory/Recent Conversations.md",
+        expect.any(String)
+      );
+    });
+  });
+
+  describe("updateSavedMemory", () => {
+    it("reports the path it wrote, not one re-resolved after the root moved", async () => {
+      // The write intentionally stays in the folder captured before the model
+      // call, so a caller re-resolving afterwards would name a file this save
+      // never touched — and the memory would look missing.
+      mockedMemoryFolder.mockReturnValue("copilot/memory");
+      (mockVault.getAbstractFileByPath as jest.Mock).mockReturnValue(null);
+      const model = {
+        invoke: jest.fn(async () => {
+          mockedMemoryFolder.mockReturnValue("moved/memory");
+          return new AIMessageChunk({ content: "- remembered" });
+        }),
+      } as unknown as BaseChatModel;
+
+      const result = await userMemoryManager.updateSavedMemory("remember this", model);
+
+      expect(result.filePath).toBe("copilot/memory/Saved Memories.md");
+      expect(mockVault.create).toHaveBeenCalledWith(
+        "copilot/memory/Saved Memories.md",
+        expect.any(String)
       );
     });
   });
@@ -513,7 +579,7 @@ The conversation covered advanced features and included code examples.`,
       );
 
       // Verify folder creation was called
-      expect(ensureFolderExists).toHaveBeenCalledWith("copilot/memory");
+      expect(ensureFolderExists).toHaveBeenCalledWith(mockVault, "copilot/memory");
 
       // Verify file creation was called with proper content
       expect(mockVault.create).toHaveBeenCalledWith(
@@ -524,7 +590,10 @@ The conversation covered advanced features and included code examples.`,
       const createdContent = mockVault.create.mock.calls[0][1];
       expect(createdContent).not.toContain("**");
 
-      expect(result).toEqual({ content: llmMergedContent });
+      expect(result).toEqual({
+        content: llmMergedContent,
+        filePath: "copilot/memory/Saved Memories.md",
+      });
     });
 
     it("should append to existing Saved Memories file", async () => {
@@ -567,7 +636,10 @@ The conversation covered advanced features and included code examples.`,
       const modifiedContent = mockVault.modify.mock.calls[0][1];
       expect(modifiedContent).not.toContain("**");
 
-      expect(result).toEqual({ content: mergedContent });
+      expect(result).toEqual({
+        content: mergedContent,
+        filePath: "copilot/memory/Saved Memories.md",
+      });
     });
 
     it("should handle errors during save operation", async () => {

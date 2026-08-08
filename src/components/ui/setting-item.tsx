@@ -1,21 +1,12 @@
 import React, { useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
-import { useTab } from "@/contexts/TabContext";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Textarea } from "@/components/ui/textarea";
 import { SettingSwitch } from "@/components/ui/setting-switch";
 import { ChevronDown } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
 import { SettingSlider } from "@/components/ui/setting-slider";
-import { debounce } from "@/utils";
+import { debounce } from "@/lib/debounce";
 
 // 定义输入控件的类型
 type InputType =
@@ -26,8 +17,7 @@ type InputType =
   | "switch"
   | "select"
   | "custom"
-  | "slider"
-  | "dialog";
+  | "slider";
 
 // Select选项的类型
 interface SelectOption {
@@ -90,15 +80,6 @@ interface SliderSettingItemProps extends BaseSettingItemProps {
   suffix?: string;
 }
 
-// 添加 Dialog 类型的 Props
-interface DialogSettingItemProps extends BaseSettingItemProps {
-  type: "dialog";
-  dialogTitle?: string;
-  dialogDescription?: string;
-  trigger: React.ReactNode;
-  children: React.ReactNode;
-}
-
 // 联合类型
 type SettingItemProps =
   | TextSettingItemProps
@@ -106,12 +87,10 @@ type SettingItemProps =
   | SwitchSettingItemProps
   | SelectSettingItemProps
   | CustomSettingItemProps
-  | SliderSettingItemProps
-  | DialogSettingItemProps;
+  | SliderSettingItemProps;
 
 export function SettingItem(props: SettingItemProps) {
   const { title, description, className, disabled } = props;
-  const { modalContainer } = useTab();
 
   const onChange: ((value: string | number) => void) | undefined =
     "onChange" in props ? props.onChange : undefined;
@@ -185,7 +164,12 @@ export function SettingItem(props: SettingItemProps) {
               className={cn(
                 "tw-w-full tw-appearance-none",
                 "tw-flex tw-h-9 tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-dropdown tw-px-3 tw-py-1 tw-pr-8",
-                "tw-text-sm !tw-shadow tw-transition-colors",
+                // `tw-text-left` overrides Obsidian's macOS settings default
+                // (`--dropdown-text-align: end` applied to bare `select`), which
+                // strands the label against the right edge of our fixed-width
+                // control. A plain class wins on specificity — neither rule is
+                // `!important`, and a class outranks an element selector.
+                "tw-text-left tw-text-sm !tw-shadow tw-transition-colors",
                 "focus:tw-outline-none focus:tw-ring-1 focus:tw-ring-ring",
                 "disabled:tw-cursor-not-allowed disabled:tw-opacity-50",
                 "hover:tw-bg-interactive-hover hover:tw-text-normal"
@@ -226,24 +210,6 @@ export function SettingItem(props: SettingItemProps) {
             disabled={disabled}
             className="tw-w-full sm:tw-w-[300px]"
           />
-        );
-
-      case "dialog":
-        return (
-          <Dialog>
-            <DialogTrigger asChild>{props.trigger}</DialogTrigger>
-            <DialogContent container={modalContainer}>
-              {(props.dialogTitle || props.dialogDescription) && (
-                <DialogHeader>
-                  {props.dialogTitle && <DialogTitle>{props.dialogTitle}</DialogTitle>}
-                  {props.dialogDescription && (
-                    <DialogDescription>{props.dialogDescription}</DialogDescription>
-                  )}
-                </DialogHeader>
-              )}
-              {props.children}
-            </DialogContent>
-          </Dialog>
         );
 
       case "custom":

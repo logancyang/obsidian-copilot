@@ -15,9 +15,9 @@ Copilot Plus is a subscription that enables:
 - **Web search** — Search the internet from chat
 - **YouTube transcription** — Fetch video transcripts and use them as context
 - **Memory system** — Persistent memory across conversations
-- **Copilot Plus Flash model** — A built-in model that requires no separate API key
+- **Included models** — A set of chat models that need no API key of your own, from fast everyday ones to top-tier reasoners ([the full list](#models-included-with-your-license))
 - **URL processing** — Fetch and summarize web pages as context
-- **Copilot Plus embedding models** — High-quality embeddings for semantic search
+- **Copilot Plus embedding models** — High-quality embeddings, selected under semantic search rather than by activating a license
 
 ### Setting Up Copilot Plus
 
@@ -26,18 +26,75 @@ Copilot Plus is a subscription that enables:
 3. Enter your license key in the **Copilot Plus License Key** field
 4. Features unlock automatically
 
+A welcome dialog then offers to make **copilot-plus-flash** your default model.
+Choosing **Apply Now** sets it as the default for chat and for each agent that
+can run Copilot models — OpenCode today; Claude Code and Codex keep their own
+models and are left alone. Choosing **Apply Later** changes nothing: the Copilot
+models are already available in every picker either way, and you can set a
+default yourself under **Settings → Basic → Agents**, per agent and for Quick Chat.
+
+Applying it never changes your embedding model or rebuilds your vault index.
+Semantic search is configured separately — see
+[Vault search and indexing](vault-search-and-indexing.md).
+
+The badge at the top of the license section names your plan once the key is
+working — **Plus**, **Lite**, or **Lifetime** for a Believer or Supporter
+purchase. It reads **Inactive** whenever the stored key grants nothing: a
+subscription that ended, a key that was revoked or mistyped, or a plan whose
+included access has run out. The plans link in that section is where you renew
+or upgrade.
+
 ---
 
-## Copilot Plus Flash Model
+## Models included with your license
 
-**Copilot Plus Flash** is a built-in AI model included with your Copilot Plus subscription:
+Your license comes with a set of models Copilot runs for you. None of them need
+an API key of your own.
 
-- No separate API key needed
-- Works out of the box once your license key is active
-- Supports vision (image inputs)
-- Good for general-purpose tasks
+Three are switched on the moment your license activates, chosen to cover the
+range: the fastest one, the strongest reasoner, and a frontier open model.
 
-It appears as `copilot-plus-flash` in the model selector.
+| Model                  | What it's for                                                        |
+| ---------------------- | -------------------------------------------------------------------- |
+| **Copilot Plus Flash** | The default. Fastest responses and the most quota. Accepts images.   |
+| **DeepSeek V4 Pro**    | The hardest reasoning and agentic tasks.                             |
+| **GLM-5.2**            | A long-horizon frontier open model that rivals the best closed ones. |
+
+The rest are included too, switched off until you want them:
+
+| Model                      | What it's for                                                    |
+| -------------------------- | ---------------------------------------------------------------- |
+| **DeepSeek V4 Flash 0731** | The newest DeepSeek V4 Flash snapshot: fast, cheap, and capable. |
+| **Kimi K2.7 Code**         | Coding tasks. Accepts images.                                    |
+| **Kimi K2.6**              | Long-running reasoning tasks.                                    |
+| **MiMo V2.5**              | Cost-effective and capable for everyday use.                     |
+| **MiniMax M2.7**           | Lightweight tasks, compact and efficient.                        |
+
+Turn any of them on under **Settings → Basic → Agents**, in the list for the
+place you want it: **Quick Chat** for the chat model picker, or an agent's own
+list for Agent Mode.
+
+### Where they show up
+
+In **Quick Chat**, they appear in the model picker alongside any models you
+added yourself.
+
+In **Agent Mode**, the picker groups models by agent, and these appear inside
+each agent that can run them — **OpenCode** today. **Claude Code** and **Codex**
+bring their own models from their own subscriptions, so your Copilot models do
+not appear under those two.
+
+**Copilot Plus Flash** becomes the default for chat and for every agent that can
+run it if you accept the offer in the welcome dialog when your license
+activates — see [Setting Up Copilot Plus](#setting-up-copilot-plus) above.
+
+### Before you have a license
+
+The three models a license switches on still appear in both pickers, greyed out
+and marked with a lock. Hovering the lock reads "Copilot license required".
+They are there so you can see what a license adds; they cannot be selected, and
+they leave your own models exactly where they were. Activate a license and the
+locks come off the same rows.
 
 ---
 
@@ -64,7 +121,7 @@ You can ask Copilot to explicitly remember specific facts about you:
 Copilot saves this to a memory file in your vault and references it in future conversations.
 
 - **Enable**: **Settings → Copilot → Plus → Reference Saved Memories** (on by default)
-- **Memory folder**: **Settings → Copilot → Plus → Memory Folder Name** — default: `copilot/memory`
+- **Memory folder**: memories are stored in the `memory/` sub-folder of your Copilot folder — default `copilot/memory`. It follows the Copilot folder location (**Settings → Copilot → Basic → Copilot folder location**).
 - **Update memory tool**: The AI can add, update, or remove memories when you ask
 
 ---
@@ -99,9 +156,11 @@ Self-Host Mode lets you replace Copilot's cloud services with your own infrastru
 
 1. Go to **Settings → Copilot → Plus**
 2. Under **Self-Host Mode**, toggle **Enable Self-Host Mode**
-3. Copilot validates your license. If valid, the toggle activates.
+3. Copilot checks your plan. The toggle stays locked if your plan doesn't include Self-Host Mode.
 4. Toggle **Enable Miyo** to use the Miyo desktop app for local search, PDF parsing, and context.
-5. *(Optional)* Set **Custom Miyo Server URL** only if Miyo is running on a remote machine. Leave blank to use automatic local service discovery.
+5. _(Optional)_ Set **Custom Miyo Server URL** only if Miyo is running on a remote machine. Leave blank to use automatic local service discovery.
+
+**Working offline**: Self-Host Mode keeps working without an internet connection for a while after your last online check, and renews itself automatically whenever you're online. How long that offline period lasts currently varies, so reconnect when you can rather than relying on a fixed window.
 
 ### Web Search in Self-Host Mode
 

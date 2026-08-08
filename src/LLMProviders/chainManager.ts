@@ -1,6 +1,6 @@
 import { getChainType, getCurrentProject, getModelKey, SetChainOptions } from "@/aiParams";
 import { ChainType } from "@/chainType";
-import { BUILTIN_CHAT_MODELS, USER_SENDER } from "@/constants";
+import { USER_SENDER } from "@/constants";
 import {
   AutonomousAgentChainRunner,
   ChainRunner,
@@ -13,7 +13,8 @@ import { logError, logInfo } from "@/logger";
 import { getSettings, subscribeToSettingsChange } from "@/settings/model";
 import { getSystemPrompt } from "@/system-prompts/systemPromptBuilder";
 import { ChatMessage } from "@/types/message";
-import { findCustomModel, isOSeriesModel } from "@/utils";
+import { isOSeriesModel } from "@/utils";
+import { resolveChatBackendModel, type ModelManagementApi } from "@/modelManagement";
 import { MissingModelKeyError } from "@/error";
 import {
   ChatPromptTemplate,
@@ -21,7 +22,7 @@ import {
   MessagesPlaceholder,
 } from "@langchain/core/prompts";
 import { Document } from "@langchain/core/documents";
-import { App, Notice } from "obsidian";
+import { App } from "obsidian";
 import ChatModelManager from "./chatModelManager";
 import MemoryManager from "./memoryManager";
 import PromptManager from "./promptManager";
@@ -40,10 +41,13 @@ export default class ChainManager {
   public promptManager: PromptManager;
   public userMemoryManager: UserMemoryManager;
   private pendingModelError: Error | null = null;
+  /** Model-management API — resolves the chat backend's selected model. */
+  private readonly modelManagement: ModelManagementApi;
 
-  constructor(app: App) {
+  constructor(app: App, modelManagement: ModelManagementApi) {
     // Instantiate singletons
     this.app = app;
+    this.modelManagement = modelManagement;
     this.memoryManager = MemoryManager.getInstance();
     this.chatModelManager = ChatModelManager.getInstance();
     this.promptManager = PromptManager.getInstance();
@@ -55,6 +59,16 @@ export default class ChainManager {
     subscribeToSettingsChange(() => {
       void this.createChainWithNewModel().catch((err) =>
         logError("createChainWithNewModel failed", err)
+      );
+    });
+    modelManagement.providerRegistry.subscribe(() => {
+      void this.createChainWithNewModel().catch((err) =>
+        logError("createChainWithNewModel after provider change failed", err)
+      );
+    });
+    modelManagement.backendConfigRegistry.subscribe(() => {
+      void this.createChainWithNewModel().catch((err) =>
+        logError("createChainWithNewModel after chat backend change failed", err)
       );
     });
   }
@@ -91,7 +105,10 @@ export default class ChainManager {
     options: SetChainOptions = {},
     neededReInitChatMode: boolean = true
   ): Promise<void> {
-    let newModelKey: string | undefined;
+    // The selection is a `configuredModelId` in the chat backend (no longer a
+    // legacy "name|provider" key). Project mode keeps its own per-project
+    // selection; everything else uses the session/global selection.
+    let selectedModelId: string | undefined;
     const chainType = getChainType();
     const currentProject = getCurrentProject();
 
@@ -100,51 +117,34 @@ export default class ChainManager {
     }
 
     try {
-      newModelKey =
+      const preferredId =
         chainType === ChainType.PROJECT_CHAIN ? currentProject?.projectModelKey : getModelKey();
 
-      if (!newModelKey) {
-        throw new MissingModelKeyError("No model key found. Please select a model in settings.");
-      }
-
       if (neededReInitChatMode) {
-        let customModel = findCustomModel(newModelKey, getSettings().activeModels);
-        if (!customModel) {
-          // Reset default model if no model is found
-          console.error("Resetting default model. No model configuration found for: ", newModelKey);
-          customModel = BUILTIN_CHAT_MODELS[0];
-          newModelKey = customModel.name + "|" + customModel.provider;
-        }
-
-        // Add validation for project mode
-        if (chainType === ChainType.PROJECT_CHAIN && !customModel.projectEnabled) {
-          // If the model is not project-enabled, find the first project-enabled model
-          const projectEnabledModel = getSettings().activeModels.find(
-            (m) => m.enabled && m.projectEnabled
+        const resolution = await resolveChatBackendModel(
+          this.modelManagement,
+          preferredId || undefined
+        );
+        if (!resolution.ok) {
+          throw new MissingModelKeyError(
+            "No chat model enabled. Enable a model under Settings → Basic → Agents → Quick Chat, " +
+              "or add one on the Models (BYOK) tab."
           );
-          if (projectEnabledModel) {
-            customModel = projectEnabledModel;
-            newModelKey = projectEnabledModel.name + "|" + projectEnabledModel.provider;
-            new Notice(
-              `Model ${customModel.name} is not available in project mode. Switching to ${projectEnabledModel.name}.`
-            );
-          } else {
-            throw new Error(
-              "No project-enabled models available. Please enable a model for project mode in settings."
-            );
-          }
         }
+        selectedModelId = resolution.configuredModelId;
 
+        // Project temperature / maxTokens overrides still apply on top of the
+        // bridged model.
         const mergedModel = {
-          ...customModel,
+          ...resolution.customModel,
           ...currentProject?.modelConfigs,
         };
-        await this.chatModelManager.setChatModel(mergedModel);
+        await this.chatModelManager.setChatModelFromBridged(mergedModel);
         this.pendingModelError = null;
       }
 
       // Chain-type housekeeping. Do NOT write `chainType` back to the atom —
-      // the atom is owned by the UI dropdowns and `applyPlusSettings`. The
+      // the atom is owned by the UI dropdowns. The
       // captured local `chainType` may already be stale by the time we reach
       // here (we just awaited `setChatModel(...)`), and writing it back used
       // to create a self-sustaining `setChainType` → ProjectManager
@@ -160,11 +160,11 @@ export default class ChainManager {
           "createChainWithNewModel: skipping chain-type housekeeping — no chat model set."
         );
       }
-      logInfo(`Setting model to ${newModelKey}`);
+      logInfo(`Setting chat model to configuredModelId=${selectedModelId}`);
     } catch (error) {
       this.pendingModelError = error instanceof Error ? error : new Error(String(error));
       logError(`createChainWithNewModel failed: ${error}`);
-      logInfo(`modelKey: ${newModelKey || getModelKey()}`);
+      logInfo(`configuredModelId: ${selectedModelId ?? getModelKey()}`);
     }
   }
 

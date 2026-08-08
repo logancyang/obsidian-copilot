@@ -20,6 +20,52 @@ If your plugin does not need CSS, delete this file.
   z-index: 9999 !important;
 }
 
+.copilot-symposium-modal {
+  width: min(32rem, calc(100vw - 2rem));
+  min-width: 0;
+  max-width: calc(100vw - 2rem);
+}
+
+/* Agent Configure dialogs draw their own full-bleed bands (header, sections,
+   footer), so the hosting modal must contribute no padding of its own —
+   otherwise every band's divider stops short of both edges. Keying off the
+   body rather than a class the modal has to remember means every host that
+   renders the shell opts in, the component gallery included. Themes disagree
+   about which element carries the padding, hence both targets. */
+.modal:has(.copilot-config-dialog),
+.modal:has(.copilot-config-dialog) .modal-content {
+  padding: 0;
+}
+
+/* The shell owns the title, so the native header must not reserve space, and a
+   host that sets a title anyway must not stack a second heading above the
+   shell's own. Suppressing it here rather than per host keeps every future
+   caller correct by default. */
+.modal:has(.copilot-config-dialog) .modal-header {
+  margin-bottom: 0;
+}
+
+.modal:has(.copilot-config-dialog) .modal-title {
+  display: none;
+}
+
+/* Single-side dividers. Preflight is off, so `tw-border-b tw-border-solid`
+   leaks `border-style: solid` to all sides and renders all four borders. */
+.copilot-divider-b {
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.copilot-divider-t {
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+/* Relevance meter fill. Width and color are score-driven, so they arrive as
+   per-element CSS variables rather than static utilities. */
+.copilot-relevance-meter-fill {
+  width: var(--relevance-meter-fill, 0%);
+  background: var(--relevance-meter-color, var(--text-faint));
+}
+
 .button-container {
   display: flex;
   justify-content: space-between;
@@ -431,6 +477,29 @@ If your plugin does not need CSS, delete this file.
   }
 }
 
+@keyframes copilot-text-shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.copilot-shimmer-text {
+  background: linear-gradient(
+    90deg,
+    var(--text-muted) 0%,
+    var(--text-normal) 50%,
+    var(--text-muted) 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: copilot-text-shimmer 2.5s ease-in-out infinite;
+}
+
 .copilot-command-input-container {
   width: 90%;
   margin: auto;
@@ -747,16 +816,6 @@ If your plugin does not need CSS, delete this file.
   .tool-call-container {
     margin: 0.5rem 0;
   }
-
-  /* Agent Reasoning Block responsive styles */
-  .agent-reasoning-block {
-    margin: 2px 0 6px;
-  }
-
-  .agent-reasoning-steps {
-    margin: 6px 0 0 16px;
-    gap: 4px;
-  }
 }
 
 .model-card {
@@ -836,19 +895,14 @@ If your plugin does not need CSS, delete this file.
   z-index: var(--layer-modal);
 }
 
-/* use 'important' to prevent ob default css style from being third-party theme overridden */
-/* --copilot-status-bar-clearance is set dynamically by ChatViewLayout */
-
-.workspace-leaf-content[data-type="copilot-chat-view"] .view-content {
-  padding-bottom: calc(
-    var(--safe-area-inset-bottom, 0px) + var(--copilot-status-bar-clearance, 0px) + var(--size-4-1)
-  ) !important;
-}
-
 /* Editor mode for mobile - legacy (no bottom navbar): minimal padding */
 body.is-mobile
   .workspace-tab-container
-  .workspace-leaf-content[data-type="copilot-chat-view"]
+  :is(
+    .workspace-leaf-content[data-type="copilot-chat-view"],
+    .workspace-leaf-content[data-type="copilot-agent-chat-view"],
+    .workspace-leaf-content[data-type="copilot-component-gallery"]
+  )
   .view-content {
   padding-bottom: var(--size-4-1) !important;
 }
@@ -857,7 +911,11 @@ body.is-mobile
 @supports selector(body:has(*)) {
   body.is-mobile:has(.mobile-navbar):not(.is-hidden-nav)
     .workspace-tab-container
-    .workspace-leaf-content[data-type="copilot-chat-view"]
+    :is(
+      .workspace-leaf-content[data-type="copilot-chat-view"],
+      .workspace-leaf-content[data-type="copilot-agent-chat-view"],
+      .workspace-leaf-content[data-type="copilot-component-gallery"]
+    )
     .view-content {
     padding-bottom: calc(
       var(--navbar-height, 50px) + max(var(--safe-area-inset-bottom, 0px), var(--size-4-3)) +
@@ -1014,63 +1072,6 @@ body.is-mobile div[data-radix-popper-content-wrapper] {
   min-width: fit-content !important;
 }
 
-/* Agent Reasoning Block */
-.agent-reasoning-block {
-  margin: 4px 0 8px;
-  padding: 0;
-  font-size: var(--font-ui-small);
-  width: 100%;
-}
-
-.agent-reasoning-header {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--text-faint);
-  background: none;
-  border: none;
-  padding: 0;
-  text-align: left;
-  font-size: var(--font-ui-smaller);
-}
-
-.agent-reasoning-header:hover:not(:disabled) {
-  color: var(--text-muted);
-}
-
-.agent-reasoning-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 14px;
-  height: 14px;
-  flex-shrink: 0;
-}
-
-.agent-reasoning-title {
-  font-weight: var(--font-medium);
-}
-
-.agent-reasoning-timer {
-  color: var(--text-faint);
-}
-
-.agent-reasoning-steps {
-  margin: 8px 0 0 20px;
-  padding: 0;
-  list-style: disc;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.agent-reasoning-step {
-  margin: 0;
-  color: var(--text-muted);
-  line-height: 1.4;
-  font-size: var(--font-ui-smaller);
-}
-
 /* Copilot Cross Spinner Animation
  * 5 dots in cross pattern with 2 dim intervals
  * Sequence: center(4) → right(5) → top(1) → left(3) → bottom(7) → dim → dim → repeat
@@ -1144,22 +1145,6 @@ body.is-mobile div[data-radix-popper-content-wrapper] {
   100% {
     fill: var(--text-faint);
     opacity: 0.2;
-  }
-}
-
-/* Legacy spinner animation (deprecated) */
-.agent-reasoning-spinner .spinner-dots {
-  display: inline-block;
-  animation: reasoning-pulse 1s ease-in-out infinite;
-}
-
-@keyframes reasoning-pulse {
-  0%,
-  100% {
-    opacity: 0.4;
-  }
-  50% {
-    opacity: 1;
   }
 }
 

@@ -4,13 +4,24 @@ import { PDFCache } from "@/cache/pdfCache";
 import { ProjectContextCache } from "@/cache/projectContextCache";
 import { logError, logInfo, logWarn } from "@/logger";
 import { MiyoClient } from "@/miyo/MiyoClient";
-import { getMiyoCustomUrl } from "@/miyo/miyoUtils";
-import { isSelfHostModeValid } from "@/plusUtils";
+import { getMiyoCustomUrl, resolveDocProcessorBackend } from "@/miyo/miyoUtils";
 import { getSettings } from "@/settings/model";
 import { saveConvertedDocOutput as saveConvertedDocOutputCore } from "@/utils/convertedDocOutput";
 import { extractRetryTime, isRateLimitError } from "@/utils/rateLimitUtils";
 import { Notice, TFile, Vault } from "obsidian";
 import { CanvasLoader } from "./CanvasLoader";
+
+/**
+ * Document formats Miyo processes locally via its parse-doc endpoint. Every
+ * doc-processor backend gate reads from this one set, so PDF and EPUB stay in
+ * sync and other formats fall through to Plus.
+ */
+const MIYO_LOCAL_EXTENSIONS = new Set(["pdf", "epub"]);
+
+/** Whether Miyo can process this file locally (drives the fail-closed routing). */
+function isMiyoLocalExtension(file: TFile): boolean {
+  return MIYO_LOCAL_EXTENSIONS.has(file.extension.toLowerCase());
+}
 
 interface FileParser {
   supportedExtensions: string[];
@@ -29,32 +40,41 @@ export async function saveConvertedDocOutput(
   await saveConvertedDocOutputCore(file, content, vault, outputFolder);
 }
 
-/** Result from SelfHostPdfParser: null = not applicable, { content } = success, { error } = tried and failed. */
+/** Result from SelfHostDocParser: null = not applicable, { content } = success, { error } = tried and failed. */
 type MiyoParseResult = { content: string } | { error: string } | null;
 
 /**
- * Self-host PDF parser bridge using Miyo parse-doc endpoint.
+ * Self-host document parser bridge using Miyo's parse-doc endpoint. Handles the
+ * formats Miyo processes locally (see {@link MIYO_LOCAL_EXTENSIONS}).
  */
-class SelfHostPdfParser {
+class SelfHostDocParser {
   private miyoClient: MiyoClient;
 
   /**
-   * Create a new self-host PDF parser.
+   * Create a new self-host document parser.
    */
   constructor() {
     this.miyoClient = new MiyoClient();
   }
 
   /**
-   * Parse a PDF via Miyo when self-host mode is active.
+   * Parse a document via Miyo when self-host mode is active.
    *
-   * @param file - PDF file to parse.
+   * @param file - Document file to parse (PDF or EPUB).
    * @param vault - Obsidian vault instance.
    * @returns Content on success, error reason on failure, or null when not applicable.
    */
-  public async parsePdf(file: TFile, vault: Vault): Promise<MiyoParseResult> {
+  public async parseDoc(file: TFile, vault: Vault): Promise<MiyoParseResult> {
     const settings = getSettings();
-    if (!settings.enableMiyo || file.extension.toLowerCase() !== "pdf") {
+    // Callers own the backend decision: they resolve it once at the parse boundary
+    // (resolveDocProcessorBackend, which probes) and only reach here when it's
+    // "miyo". We must NOT re-read the backend with the synchronous accessor — the
+    // status can cross the stale horizon between the two reads (it degrades by
+    // wall-clock), so a second check could return "plus", hand back null, and let
+    // the caller silently fall through to the cloud — the exact privacy leak the
+    // fail-closed resolver exists to prevent. So parseDoc only guards the file type
+    // and otherwise commits to Miyo, returning `{ error }` on any Miyo failure.
+    if (!isMiyoLocalExtension(file)) {
       return null;
     }
 
@@ -66,11 +86,11 @@ class SelfHostPdfParser {
         return { error: "Miyo parse-doc returned empty text" };
       }
 
-      logInfo(`[SelfHostPdfParser] Parsed PDF via Miyo: ${file.path}`);
+      logInfo(`[SelfHostDocParser] Parsed document via Miyo: ${file.path}`);
       return { content: response.text };
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
-      logWarn(`[SelfHostPdfParser] Failed to parse ${file.path} via Miyo parse-doc: ${reason}`);
+      logWarn(`[SelfHostDocParser] Failed to parse ${file.path} via Miyo parse-doc: ${reason}`);
       return { error: reason };
     }
   }
@@ -84,16 +104,16 @@ class MarkdownParser implements FileParser {
   }
 }
 
-class PDFParser implements FileParser {
+export class PDFParser implements FileParser {
   supportedExtensions = ["pdf"];
   private brevilabsClient: BrevilabsClient;
   private pdfCache: PDFCache;
-  private selfHostPdfParser: SelfHostPdfParser;
+  private selfHostDocParser: SelfHostDocParser;
 
   constructor(brevilabsClient: BrevilabsClient) {
     this.brevilabsClient = brevilabsClient;
     this.pdfCache = PDFCache.getInstance();
-    this.selfHostPdfParser = new SelfHostPdfParser();
+    this.selfHostDocParser = new SelfHostDocParser();
   }
 
   async parseFile(file: TFile, vault: Vault): Promise<string> {
@@ -101,7 +121,7 @@ class PDFParser implements FileParser {
       logInfo("Parsing PDF file:", file.path);
 
       // Try to get from cache first
-      const cachedResponse = await this.pdfCache.get(file);
+      const cachedResponse = await this.pdfCache.get(vault, file);
       if (cachedResponse) {
         logInfo("Using cached PDF content for:", file.path);
         // Ensure output file exists even on cache hit (user may have just enabled the setting)
@@ -110,10 +130,26 @@ class PDFParser implements FileParser {
       }
 
       const settings = getSettings();
-      if (isSelfHostModeValid() && settings.enableMiyo && file.extension.toLowerCase() === "pdf") {
-        const miyoResult = await this.selfHostPdfParser.parsePdf(file, vault);
+      // Refresh Miyo status at the parse boundary (only when it's unconclusive)
+      // so a persisted "miyo" preference isn't silently downgraded to Plus just
+      // because the settings page was never opened to trigger a health check.
+      const backend = isMiyoLocalExtension(file)
+        ? await resolveDocProcessorBackend(settings)
+        : "plus";
+
+      // The user explicitly chose local Miyo processing but Miyo can't be
+      // confirmed reachable: fail closed. Uploading to the cloud here would leak a
+      // document the user asked to keep local — the same privacy guarantee applied
+      // to a Miyo parse failure below.
+      if (backend === "miyo-unavailable") {
+        logWarn(`[PDFParser] Miyo unavailable for ${file.path}; not falling back to cloud`);
+        return `[Error: Could not extract content from PDF ${file.basename}. Miyo (local document processor) is unavailable — reconnect it or switch the Document Processor to Plus in settings.]`;
+      }
+
+      if (backend === "miyo") {
+        const miyoResult = await this.selfHostDocParser.parseDoc(file, vault);
         if (miyoResult && "content" in miyoResult) {
-          await this.pdfCache.set(file, {
+          await this.pdfCache.set(vault, file, {
             response: miyoResult.content,
             elapsed_time_ms: 0,
           });
@@ -132,7 +168,7 @@ class PDFParser implements FileParser {
       const binaryContent = await vault.readBinary(file);
       logInfo("Calling pdf4llm API for:", file.path);
       const pdf4llmResponse = await this.brevilabsClient.pdf4llm(binaryContent);
-      await this.pdfCache.set(file, pdf4llmResponse);
+      await this.pdfCache.set(vault, file, pdf4llmResponse);
       await saveConvertedDocOutput(file, pdf4llmResponse.response, vault);
       return pdf4llmResponse.response;
     } catch (error) {
@@ -141,9 +177,9 @@ class PDFParser implements FileParser {
     }
   }
 
-  async clearCache(): Promise<void> {
+  async clearCache(vault: Vault): Promise<void> {
     logInfo("Clearing PDF cache");
-    await this.pdfCache.clear();
+    await this.pdfCache.clear(vault);
   }
 }
 
@@ -285,7 +321,7 @@ export class Docs4LLMParser implements FileParser {
   supportedExtensions = [...DOCS4LLM_SUPPORTED_EXTENSIONS];
   private brevilabsClient: BrevilabsClient;
   private projectContextCache: ProjectContextCache;
-  private selfHostPdfParser: SelfHostPdfParser;
+  private selfHostDocParser: SelfHostDocParser;
   private currentProject: ProjectConfig | null;
   private static lastRateLimitNoticeTime: number = 0;
 
@@ -296,53 +332,67 @@ export class Docs4LLMParser implements FileParser {
   constructor(brevilabsClient: BrevilabsClient, project: ProjectConfig | null = null) {
     this.brevilabsClient = brevilabsClient;
     this.projectContextCache = ProjectContextCache.getInstance();
-    this.selfHostPdfParser = new SelfHostPdfParser();
+    this.selfHostDocParser = new SelfHostDocParser();
     this.currentProject = project;
   }
 
   async parseFile(file: TFile, vault: Vault): Promise<string> {
+    const projectName = this.currentProject?.name ?? "no project";
     try {
       logInfo(
-        `[Docs4LLMParser] Project ${this.currentProject?.name}: Parsing ${file.extension} file: ${file.path}`
+        `[Docs4LLMParser] Project ${projectName}: Parsing ${file.extension} file: ${file.path}`
       );
 
-      if (!this.currentProject) {
-        logError("[Docs4LLMParser] No project context for parsing file: ", file.path);
-        throw new Error("No project context provided for file parsing");
-      }
-
-      const cachedContent = await this.projectContextCache.getOrReuseFileContext(
-        this.currentProject,
-        file.path
-      );
-      if (cachedContent) {
-        logInfo(
-          `[Docs4LLMParser] Project ${this.currentProject.name}: Using cached content for: ${file.path}`
+      // Project-scoped cache reuse — only in project mode. Normal chat has no
+      // project cache, so this is skipped there.
+      if (this.currentProject) {
+        const cachedContent = await this.projectContextCache.getOrReuseFileContext(
+          this.currentProject,
+          file.path
         );
-        // Ensure output file exists even on cache hit (user may have just enabled the setting)
-        await saveConvertedDocOutput(file, cachedContent, vault);
-        return cachedContent;
-      }
-      logInfo(
-        `[Docs4LLMParser] Project ${this.currentProject.name}: Cache miss for: ${file.path}. Proceeding to API call.`
-      );
-
-      // For PDFs, try Miyo first when self-host mode is active
-      if (
-        isSelfHostModeValid() &&
-        getSettings().enableMiyo &&
-        file.extension.toLowerCase() === "pdf"
-      ) {
-        const miyoResult = await this.selfHostPdfParser.parsePdf(file, vault);
-        if (miyoResult && "content" in miyoResult) {
-          await this.projectContextCache.setFileContext(
-            this.currentProject,
-            file.path,
-            miyoResult.content
+        if (cachedContent) {
+          logInfo(
+            `[Docs4LLMParser] Project ${projectName}: Using cached content for: ${file.path}`
           );
+          // Ensure output file exists even on cache hit (user may have just enabled the setting)
+          await saveConvertedDocOutput(file, cachedContent, vault);
+          return cachedContent;
+        }
+        logInfo(
+          `[Docs4LLMParser] Project ${projectName}: Cache miss for: ${file.path}. Proceeding to API call.`
+        );
+      }
+
+      // For local formats (PDF/EPUB), try Miyo first when self-host mode is
+      // active. Resolve at the parse boundary so an unconclusive (unknown/stale)
+      // status gets one health check before routing. This runs BEFORE the cloud
+      // path's project requirement, so an EPUB parses locally in normal chat too
+      // (PDFs use PDFParser there; EPUB only ever reaches this parser).
+      const backend = isMiyoLocalExtension(file) ? await resolveDocProcessorBackend() : "plus";
+
+      // Explicit local Miyo choice, but Miyo can't be confirmed: fail closed.
+      // Throw so the batch runner marks this file failed/retriable — never upload
+      // a document the user asked to keep local to the cloud.
+      if (backend === "miyo-unavailable") {
+        throw new Error(
+          `Miyo (local document processor) is unavailable for ${file.basename}; not falling back to cloud. Reconnect Miyo or switch the Document Processor to Plus.`
+        );
+      }
+
+      if (backend === "miyo") {
+        const miyoResult = await this.selfHostDocParser.parseDoc(file, vault);
+        if (miyoResult && "content" in miyoResult) {
+          // Cache the result only when we have a project to key it against.
+          if (this.currentProject) {
+            await this.projectContextCache.setFileContext(
+              this.currentProject,
+              file.path,
+              miyoResult.content
+            );
+          }
           await saveConvertedDocOutput(file, miyoResult.content, vault);
           logInfo(
-            `[Docs4LLMParser] Project ${this.currentProject.name}: Parsed PDF via Miyo: ${file.path}`
+            `[Docs4LLMParser] Project ${projectName}: Parsed document via Miyo: ${file.path}`
           );
           return miyoResult.content;
         }
@@ -353,11 +403,18 @@ export class Docs4LLMParser implements FileParser {
         }
       }
 
+      // Cloud path (docs4llm) is project-scoped: its cache reuse and batch
+      // materialization key off the project. Normal chat only reaches here for
+      // non-local formats (or a Plus-selected doc), preserving the pre-existing
+      // project requirement for the cloud route.
+      if (!this.currentProject) {
+        logError("[Docs4LLMParser] No project context for parsing file: ", file.path);
+        throw new Error("No project context provided for file parsing");
+      }
+
       const binaryContent = await vault.readBinary(file);
 
-      logInfo(
-        `[Docs4LLMParser] Project ${this.currentProject.name}: Calling docs4llm API for: ${file.path}`
-      );
+      logInfo(`[Docs4LLMParser] Project ${projectName}: Calling docs4llm API for: ${file.path}`);
       const docs4llmResponse = await this.brevilabsClient.docs4llm(binaryContent, file.extension);
 
       if (!docs4llmResponse || !docs4llmResponse.response) {
@@ -405,12 +462,12 @@ export class Docs4LLMParser implements FileParser {
       await saveConvertedDocOutput(file, content, vault);
 
       logInfo(
-        `[Docs4LLMParser] Project ${this.currentProject.name}: Successfully processed and cached: ${file.path}`
+        `[Docs4LLMParser] Project ${projectName}: Successfully processed and cached: ${file.path}`
       );
       return content;
     } catch (error) {
       logError(
-        `[Docs4LLMParser] Project ${this.currentProject?.name}: Error processing file ${file.path}:`,
+        `[Docs4LLMParser] Project ${projectName}: Error processing file ${file.path}:`,
         error
       );
 
@@ -527,10 +584,10 @@ export class FileParserManager {
     return this.parsers.has(extension);
   }
 
-  async clearPDFCache(): Promise<void> {
+  async clearPDFCache(vault: Vault): Promise<void> {
     const pdfParser = this.parsers.get("pdf");
     if (pdfParser instanceof PDFParser) {
-      await pdfParser.clearCache();
+      await pdfParser.clearCache(vault);
     }
   }
 }

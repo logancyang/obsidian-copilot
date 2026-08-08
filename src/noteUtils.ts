@@ -1,13 +1,14 @@
 import "./types";
-import { TFile } from "obsidian";
+import { App, TFile } from "obsidian";
 
 /**
  * Get all outgoing links from a note
+ * @param app The Obsidian app instance
  * @param file The note file to analyze
  * @param limit The maximum number of linked notes to return
  * @returns Array of linked note
  */
-export function getLinkedNotes(file: TFile, limit = 20): TFile[] {
+export function getLinkedNotes(app: App, file: TFile, limit = 20): TFile[] {
   // Get the cache for the current file
   const fileCache = app.metadataCache.getFileCache(file);
   const linkedNotes: TFile[] = [];
@@ -43,11 +44,12 @@ export function getLinkedNotes(file: TFile, limit = 20): TFile[] {
 
 /**
  * Get all notes that link to the given note
+ * @param app The Obsidian app instance
  * @param file The note file to analyze
  * @param limit The maximum number of backlinked notes to return
  * @returns Array of backlinked note
  */
-export function getBacklinkedNotes(file: TFile, limit = 20): TFile[] {
+export function getBacklinkedNotes(app: App, file: TFile, limit = 20): TFile[] {
   const backlinkedNotes: TFile[] = [];
 
   // Get the backlinks from metadata cache

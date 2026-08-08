@@ -2,7 +2,8 @@ import { ABORT_REASON, AI_SENDER } from "@/constants";
 import { logError, logInfo } from "@/logger";
 import { ChatMessage, ResponseMetadata } from "@/types/message";
 import { err2String, formatDateTime } from "@/utils";
-import ChainManager from "../chainManager";
+import { formatUsageCapError } from "@/utils/usageCapError";
+import ChainManager from "@/LLMProviders/chainManager";
 
 export interface ChainRunner {
   run(
@@ -150,6 +151,15 @@ export abstract class BaseChainRunner implements ChainRunner {
   protected async handleError(error: unknown, processErrorChunk: (message: string) => void) {
     const msg = err2String(error);
     logError("Error during LLM invocation:", msg);
+    // Usage-cap (plan limit) errors get the friendly purchase-credits message with
+    // the dashboard link — on the main streaming path too, not just the planning
+    // catch (which routes through getApiErrorMessage). This is the common cap path:
+    // the relay returns token_limit_error mid-invocation after planning succeeds.
+    const capMessage = formatUsageCapError(error);
+    if (capMessage) {
+      processErrorChunk(capMessage);
+      return;
+    }
     const errorData =
       (error as { response?: { data?: { error?: unknown } } })?.response?.data?.error || msg;
     const errorCode = (errorData as { code?: string })?.code || msg;
@@ -186,7 +196,7 @@ export abstract class BaseChainRunner implements ChainRunner {
     if (this.isAuthenticationError(error, msg)) {
       errorMessage =
         "Something went wrong. Please check if you have set your API key." +
-        "\nPath: Settings > copilot plugin > Basic Tab > Set Keys." +
+        "\nPath: Settings > Copilot > BYOK." +
         "\nOr check model config" +
         "\nError Details: " +
         errorMessage;

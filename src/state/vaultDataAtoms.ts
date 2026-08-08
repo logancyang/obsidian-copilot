@@ -1,5 +1,5 @@
 import { atom } from "jotai";
-import { TFile, TFolder, TAbstractFile } from "obsidian";
+import { App, TFile, TFolder, TAbstractFile } from "obsidian";
 import { debounce } from "@/utils/debounce";
 import { settingsStore } from "@/settings/model";
 import { getTagsFromNote, isAllowedFileForNoteContext } from "@/utils";
@@ -43,6 +43,7 @@ export const tagsAllAtom = atom<string[]>([]);
 export class VaultDataManager {
   private static instance: VaultDataManager | null = null;
   private initialized = false;
+  private app: App | null = null;
 
   private constructor() {
     // Private constructor for singleton pattern
@@ -65,7 +66,7 @@ export class VaultDataManager {
    * Note: VaultDataManager tracks ALL files (md + PDFs + canvas) and ALL tags.
    * Filtering is done by hooks based on parameters.
    */
-  public initialize(): void {
+  public initialize(app: App): void {
     if (this.initialized) {
       logInfo("VaultDataManager: Already initialized, skipping");
       return;
@@ -75,6 +76,8 @@ export class VaultDataManager {
       logInfo("VaultDataManager: app.vault not available, deferring initialization");
       return;
     }
+
+    this.app = app;
 
     logInfo("VaultDataManager: Initializing with vault event listeners");
 
@@ -201,9 +204,9 @@ export class VaultDataManager {
    * Hooks will filter based on their parameters.
    */
   private refreshNotes = (): void => {
-    if (!app?.vault) return;
+    if (!this.app?.vault) return;
 
-    const allFiles = app.vault.getFiles();
+    const allFiles = this.app.vault.getFiles();
     const newFiles = allFiles.filter(
       (file): file is TFile => file instanceof TFile && isAllowedFileForNoteContext(file)
     );
@@ -218,9 +221,9 @@ export class VaultDataManager {
    * Refreshes the folders atom with current vault folders
    */
   private refreshFolders = (): void => {
-    if (!app?.vault) return;
+    if (!this.app?.vault) return;
 
-    const newFolders = app.vault
+    const newFolders = this.app.vault
       .getAllLoadedFiles()
       .filter((file: TAbstractFile): file is TFolder => file instanceof TFolder);
 
@@ -232,12 +235,13 @@ export class VaultDataManager {
    * Refreshes the frontmatter tags atom with current vault tags (frontmatter only)
    */
   private refreshTagsFrontmatter = (): void => {
-    if (!app?.vault || !app?.metadataCache) return;
+    if (!this.app?.vault || !this.app?.metadataCache) return;
+    const app = this.app;
 
     const tagSet = new Set<string>();
 
     app.vault.getMarkdownFiles().forEach((file: TFile) => {
-      const fileTags = getTagsFromNote(file, true); // frontmatterOnly = true
+      const fileTags = getTagsFromNote(app, file, true); // frontmatterOnly = true
       fileTags.forEach((tag) => {
         const tagWithHash = tag.startsWith("#") ? tag : `#${tag}`;
         tagSet.add(tagWithHash);
@@ -254,12 +258,13 @@ export class VaultDataManager {
    * Refreshes the all tags atom with current vault tags (frontmatter + inline)
    */
   private refreshTagsAll = (): void => {
-    if (!app?.vault || !app?.metadataCache) return;
+    if (!this.app?.vault || !this.app?.metadataCache) return;
+    const app = this.app;
 
     const tagSet = new Set<string>();
 
     app.vault.getMarkdownFiles().forEach((file: TFile) => {
-      const fileTags = getTagsFromNote(file, false); // frontmatterOnly = false (all tags)
+      const fileTags = getTagsFromNote(app, file, false); // frontmatterOnly = false (all tags)
       fileTags.forEach((tag) => {
         const tagWithHash = tag.startsWith("#") ? tag : `#${tag}`;
         tagSet.add(tagWithHash);
@@ -290,14 +295,14 @@ export class VaultDataManager {
     this.debouncedRefreshTagsAll.cancel();
 
     // Remove event listeners
-    if (app?.vault) {
-      app.vault.off("create", this.handleFileCreate);
-      app.vault.off("delete", this.handleFileDelete);
-      app.vault.off("rename", this.handleFileRename);
-      app.vault.off("modify", this.handleFileModify);
+    if (this.app?.vault) {
+      this.app.vault.off("create", this.handleFileCreate);
+      this.app.vault.off("delete", this.handleFileDelete);
+      this.app.vault.off("rename", this.handleFileRename);
+      this.app.vault.off("modify", this.handleFileModify);
     }
-    if (app?.metadataCache) {
-      app.metadataCache.off("changed", this.handleMetadataChange);
+    if (this.app?.metadataCache) {
+      this.app.metadataCache.off("changed", this.handleMetadataChange);
     }
 
     this.initialized = false;

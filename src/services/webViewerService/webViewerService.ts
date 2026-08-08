@@ -8,9 +8,9 @@
  */
 
 import type { App } from "obsidian";
-import { Platform } from "obsidian";
 
 import { logError, logWarn } from "@/logger";
+import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import * as actions from "@/services/webViewerService/webViewerServiceActions";
 import {
   getCommandManager,
@@ -73,7 +73,7 @@ export class WebViewerService {
 
   /** Check if the current platform supports Web Viewer (desktop only). */
   isSupportedPlatform(): boolean {
-    return Platform.isDesktopApp === true;
+    return isDesktopRuntime();
   }
 
   /** Get detailed Web Viewer availability information. */

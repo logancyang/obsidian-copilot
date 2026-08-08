@@ -8,8 +8,8 @@ import { SettingSwitch } from "@/components/ui/setting-switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { PLUS_UTM_MEDIUMS } from "@/constants";
 import { logError } from "@/logger";
-import { shouldUseMiyo } from "@/miyo/miyoUtils";
-import { navigateToPlusPage, useIsPlusUser } from "@/plusUtils";
+import { getSearchBackend } from "@/miyo/miyoUtils";
+import { navigateToPlusPage, useIsPaidUser } from "@/plusUtils";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import { Docs4LLMParser } from "@/tools/FileParserManager";
 import { isRateLimitError } from "@/utils/rateLimitUtils";
@@ -20,7 +20,6 @@ import {
   CheckCircle,
   ChevronDown,
   Download,
-  FileText,
   History,
   LibraryBig,
   MessageCirclePlus,
@@ -63,7 +62,7 @@ async function refreshVaultIndex() {
       const count = await VectorStoreManager.getInstance().indexVaultToVectorStore(false, {
         userInitiated: true,
       });
-      if (shouldUseMiyo(settings)) {
+      if (getSearchBackend(settings) === "miyo") {
         new Notice("Miyo folder index refresh started. Open the Miyo app to check details.");
       } else {
         new Notice(`Semantic search index refreshed with ${count} documents.`);
@@ -89,7 +88,7 @@ async function forceReindexVault() {
       const count = await VectorStoreManager.getInstance().indexVaultToVectorStore(true, {
         userInitiated: true,
       });
-      if (shouldUseMiyo(settings)) {
+      if (getSearchBackend(settings) === "miyo") {
         new Notice("Miyo folder index refresh started. Open the Miyo app to check details.");
       } else {
         new Notice(`Semantic search index rebuilt with ${count} documents.`);
@@ -231,7 +230,7 @@ export function ChatControls({
   const app = useApp();
   const settings = useSettingsValue();
   const [selectedChain, setSelectedChain] = useChainType();
-  const isPlusUser = useIsPlusUser();
+  const isPaidUser = useIsPaidUser();
 
   const handleModeChange = async (chainType: ChainType) => {
     // If leaving project mode with autosave enabled, save chat BEFORE clearing project context
@@ -283,7 +282,7 @@ export function ChatControls({
             >
               vault QA (free)
             </DropdownMenuItem>
-            {isPlusUser ? (
+            {isPaidUser ? (
               <DropdownMenuItem
                 onSelect={() => {
                   void handleModeChange(ChainType.COPILOT_PLUS_CHAIN);
@@ -306,7 +305,7 @@ export function ChatControls({
               </DropdownMenuItem>
             )}
 
-            {isPlusUser ? (
+            {isPaidUser ? (
               <DropdownMenuItem
                 className="tw-flex tw-items-center tw-gap-1"
                 onSelect={() => {
@@ -394,19 +393,6 @@ export function ChatControls({
                 Suggested Prompt
               </div>
               <SettingSwitch checked={settings.showSuggestedPrompts} />
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              className="tw-flex tw-justify-between"
-              onSelect={(e) => {
-                e.preventDefault();
-                updateSetting("showRelevantNotes", !settings.showRelevantNotes);
-              }}
-            >
-              <div className="tw-flex tw-items-center tw-gap-2">
-                <FileText className="tw-size-4" />
-                Relevant Note
-              </div>
-              <SettingSwitch checked={settings.showRelevantNotes} />
             </DropdownMenuItem>
             <DropdownMenuItem
               className="tw-flex tw-justify-between"

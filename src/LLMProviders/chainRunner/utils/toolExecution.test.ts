@@ -5,7 +5,7 @@ import { z } from "zod";
 
 // Mock dependencies
 jest.mock("@/plusUtils", () => ({
-  checkIsPlusUser: jest.fn(),
+  checkIsPaidUser: jest.fn(),
   isSelfHostModeValid: jest.fn().mockReturnValue(false),
 }));
 
@@ -21,11 +21,11 @@ jest.mock("@/tools/toolManager", () => ({
   },
 }));
 
-import { checkIsPlusUser } from "@/plusUtils";
+import { checkIsPaidUser } from "@/plusUtils";
 import { ToolManager } from "@/tools/toolManager";
 
 describe("toolExecution", () => {
-  const mockCheckIsPlusUser = checkIsPlusUser as jest.MockedFunction<typeof checkIsPlusUser>;
+  const mockCheckIsPaidUser = checkIsPaidUser as jest.MockedFunction<typeof checkIsPaidUser>;
   const mockCallTool = ToolManager.callTool as jest.MockedFunction<typeof ToolManager.callTool>;
 
   beforeEach(() => {
@@ -66,7 +66,7 @@ describe("toolExecution", () => {
         result: "Tool executed successfully",
         success: true,
       });
-      expect(mockCheckIsPlusUser).not.toHaveBeenCalled();
+      expect(mockCheckIsPaidUser).not.toHaveBeenCalled();
     });
 
     it("should block plus-only tools for non-plus users", async () => {
@@ -89,7 +89,7 @@ describe("toolExecution", () => {
         },
       });
 
-      mockCheckIsPlusUser.mockResolvedValueOnce(false);
+      mockCheckIsPaidUser.mockResolvedValueOnce(false);
 
       const result = await executeSequentialToolCall({ name: "plusTool", args: {} }, [plusTool]);
 
@@ -121,7 +121,7 @@ describe("toolExecution", () => {
         },
       });
 
-      mockCheckIsPlusUser.mockResolvedValueOnce(true);
+      mockCheckIsPaidUser.mockResolvedValueOnce(true);
       mockCallTool.mockResolvedValueOnce("Plus tool executed");
 
       const result = await executeSequentialToolCall({ name: "plusTool", args: {} }, [plusTool]);
@@ -131,7 +131,7 @@ describe("toolExecution", () => {
         result: "Plus tool executed",
         success: true,
       });
-      expect(mockCheckIsPlusUser).toHaveBeenCalled();
+      expect(mockCheckIsPaidUser).toHaveBeenCalled();
       expect(mockCallTool).toHaveBeenCalled();
     });
 

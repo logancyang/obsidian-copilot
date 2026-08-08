@@ -1,4 +1,4 @@
-import { MetadataCache } from "obsidian";
+import { App, MetadataCache } from "obsidian";
 import { z } from "zod";
 import { createLangChainTool } from "./createLangChainTool";
 
@@ -47,12 +47,12 @@ interface TagListPayload {
 }
 
 /**
- * Safely retrieves the metadata cache from the global Obsidian app instance.
+ * Safely retrieves the metadata cache from the given Obsidian app instance.
  *
  * @returns The metadata cache when available, otherwise null.
  */
-function getMetadataCache(): MetadataCache | null {
-  if (typeof app === "undefined" || !app?.metadataCache) {
+function getMetadataCache(app: App): MetadataCache | null {
+  if (!app?.metadataCache) {
     return null;
   }
   return app.metadataCache;
@@ -236,13 +236,13 @@ function formatTagListResult(payload: TagListPayload): string {
  *
  * @returns A tool for retrieving vault tag statistics.
  */
-export const createGetTagListTool = () =>
+export const createGetTagListTool = (app: App) =>
   createLangChainTool({
     name: "getTagList",
     description: "Get the list of tags in the vault with occurrence statistics.",
     schema: TagListToolSchema,
     func: async (args) => {
-      const metadataCache = getMetadataCache();
+      const metadataCache = getMetadataCache(app);
       const includeInline = args?.includeInline ?? true;
       const maxEntries = args?.maxEntries ?? DEFAULT_MAX_TAG_ENTRIES;
 

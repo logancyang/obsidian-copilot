@@ -1,4 +1,12 @@
-import React, { createContext, useContext, useCallback, useMemo, useState } from "react";
+import React, {
+  createContext,
+  useContext,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { INSERT_TEXT_WITH_PILLS_COMMAND } from "@/components/chat-components/utils/lexicalTextUtils";
 import { LexicalEditor } from "lexical";
 
@@ -32,6 +40,14 @@ interface ChatInputProviderProps {
 export function ChatInputProvider({ children }: ChatInputProviderProps): JSX.Element {
   const [editor, setEditor] = useState<LexicalEditor | null>(null);
   const [focusHandler, setFocusHandler] = useState<(() => void) | null>(null);
+  // Text requested before the Lexical editor has mounted (e.g. routed in while
+  // the chat view is still opening). Held here and flushed once the editor
+  // registers, so insertion never depends on mount timing.
+  const pendingInsertRef = useRef<{ text: string; enableURLPills: boolean } | null>(null);
+  // Focus requested before the Lexical editor registered its focus handler (e.g.
+  // a freshly-opened view focusing on open). Latched here and flushed once the
+  // handler registers, so focus never depends on mount timing.
+  const pendingFocusRef = useRef(false);
 
   const registerEditor = useCallback((editorInstance: LexicalEditor) => {
     setEditor(editorInstance);
@@ -48,13 +64,36 @@ export function ChatInputProvider({ children }: ChatInputProviderProps): JSX.Ele
           text,
           options: { enableURLPills, insertAtSelection: true },
         });
+      } else {
+        pendingInsertRef.current = { text, enableURLPills };
       }
     },
     [editor]
   );
 
+  // Flush any text buffered before the editor was ready.
+  useEffect(() => {
+    if (!editor || !pendingInsertRef.current) return;
+    const { text, enableURLPills } = pendingInsertRef.current;
+    pendingInsertRef.current = null;
+    editor.dispatchCommand(INSERT_TEXT_WITH_PILLS_COMMAND, {
+      text,
+      options: { enableURLPills, insertAtSelection: true },
+    });
+  }, [editor]);
+
   const focusInput = useCallback(() => {
     if (focusHandler) {
+      focusHandler();
+    } else {
+      pendingFocusRef.current = true;
+    }
+  }, [focusHandler]);
+
+  // Flush a focus requested before the handler was ready.
+  useEffect(() => {
+    if (focusHandler && pendingFocusRef.current) {
+      pendingFocusRef.current = false;
       focusHandler();
     }
   }, [focusHandler]);

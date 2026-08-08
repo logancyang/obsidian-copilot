@@ -1,0 +1,867 @@
+import {
+  findModelEntry,
+  modelCatalogSignature,
+  modelStateSignature,
+  modeStateSignature,
+  translateBackendState,
+} from "./translateBackendState";
+import type { BackendState } from "./types";
+import type {
+  BackendConfigOption,
+  BackendDescriptor,
+  RawModeState,
+  RawModelState,
+  ModeMapping,
+  ModelWireCodec,
+} from "./types";
+
+/** Default codec: no provider, no effort. Treats wire id as the bare baseModelId. */
+const passthroughWire: ModelWireCodec = {
+  encode: (sel) => sel.baseModelId,
+  decode: (id) => ({ selection: { baseModelId: id, effort: null }, provider: null }),
+};
+
+function descriptor(opts: Partial<BackendDescriptor> = {}): BackendDescriptor {
+  return {
+    id: "test",
+    displayName: "Test",
+    wire: passthroughWire,
+    getInstallState: () => ({ kind: "ready", source: "managed" }),
+    subscribeInstallState: () => () => {},
+    openInstallUI: () => undefined,
+    createBackendProcess: () =>
+      ({}) as unknown as ReturnType<BackendDescriptor["createBackendProcess"]>,
+    ...opts,
+  } as unknown as BackendDescriptor;
+}
+
+/** Suffix-style codec: `<provider>/<base>[/<effort>]`. */
+const suffixWire: ModelWireCodec = {
+  encode: (sel) => (sel.effort ? `${sel.baseModelId}/${sel.effort}` : sel.baseModelId),
+  decode: (id) => {
+    if (!id) return { selection: { baseModelId: id, effort: null }, provider: null };
+    const segments = id.split("/");
+    if (segments.length === 1) {
+      return { selection: { baseModelId: id, effort: null }, provider: null };
+    }
+    if (segments.length === 2) {
+      return { selection: { baseModelId: id, effort: null }, provider: segments[0] };
+    }
+    if (segments.length === 3) {
+      return {
+        selection: { baseModelId: `${segments[0]}/${segments[1]}`, effort: segments[2] },
+        provider: segments[0],
+      };
+    }
+    return { selection: { baseModelId: id, effort: null }, provider: null };
+  },
+};
+
+function suffixDescriptor(extra: Partial<BackendDescriptor> = {}): BackendDescriptor {
+  return descriptor({ wire: suffixWire, ...extra });
+}
+
+function selectOption(
+  id: string,
+  values: { value: string; name?: string }[],
+  current?: string,
+  category: string | null = null
+): BackendConfigOption {
+  return {
+    id,
+    type: "select",
+    category,
+    name: id,
+    currentValue: current ?? values[0]?.value,
+    options: values.map((v) => ({ value: v.value, name: v.name ?? v.value })),
+  };
+}
+
+describe("translateBackendState — model: null cases", () => {
+  it("returns model: null when raw.models is null (case 1)", () => {
+    const state = translateBackendState(
+      { models: null, modes: null, configOptions: null },
+      descriptor()
+    );
+    expect(state.model).toBeNull();
+  });
+});
+
+describe("translateBackendState — model catalog from config option (opencode ≥ 1.15.13)", () => {
+  it("builds the catalog from a category:'model' select when models is null", () => {
+    // opencode 1.15.13 drops the `models` state and reports the catalog as a
+    // generic select with category "model".
+    const modelOpt = selectOption(
+      "model",
+      [
+        { value: "omlx/gemma-4-e4b-it-8bit", name: "oMLX/gemma-4-e4b-it-8bit" },
+        { value: "omlx/Qwen3.6-35B-A3B-UD-MLX-4bit", name: "oMLX/Qwen3.6-35B-A3B-UD-MLX-4bit" },
+      ],
+      "omlx/Qwen3.6-35B-A3B-UD-MLX-4bit",
+      "model"
+    );
+    const state = translateBackendState(
+      { models: null, modes: null, configOptions: [modelOpt] },
+      suffixDescriptor()
+    );
+    expect(state.model?.availableModels.map((m) => m.baseModelId)).toEqual([
+      "omlx/gemma-4-e4b-it-8bit",
+      "omlx/Qwen3.6-35B-A3B-UD-MLX-4bit",
+    ]);
+    // Friendly names come from the option, not the raw wire id.
+    expect(state.model?.availableModels[0]?.name).toBe("oMLX/gemma-4-e4b-it-8bit");
+    expect(state.model?.current.baseModelId).toBe("omlx/Qwen3.6-35B-A3B-UD-MLX-4bit");
+    expect(state.model?.apply).toEqual({ kind: "setConfigOption", configId: "model" });
+  });
+
+  it("prefers the dedicated models state when present (older opencode sends both)", () => {
+    const models: RawModelState = {
+      currentModelId: "omlx/gemma-4-e4b-it-8bit",
+      availableModels: [{ modelId: "omlx/gemma-4-e4b-it-8bit", name: "oMLX/gemma" }],
+    };
+    const modelOpt = selectOption(
+      "model",
+      [{ value: "omlx/other", name: "Other" }],
+      "omlx/other",
+      "model"
+    );
+    const state = translateBackendState(
+      { models, modes: null, configOptions: [modelOpt] },
+      suffixDescriptor()
+    );
+    // `models` wins → setModel channel, catalog from `models` not the option.
+    expect(state.model?.current.baseModelId).toBe("omlx/gemma-4-e4b-it-8bit");
+    expect(state.model?.apply).toEqual({ kind: "setModel" });
+  });
+
+  it("does not treat a category:'mode' select as the model catalog", () => {
+    const modeOpt = selectOption("mode", [{ value: "build", name: "Build" }], "build", "mode");
+    const state = translateBackendState(
+      { models: null, modes: null, configOptions: [modeOpt] },
+      suffixDescriptor()
+    );
+    expect(state.model).toBeNull();
+  });
+
+  it("flattens grouped options under the model select", () => {
+    const grouped: BackendConfigOption = {
+      id: "model",
+      type: "select",
+      category: "model",
+      name: "model",
+      currentValue: "omlx/a",
+      options: [
+        {
+          name: "oMLX",
+          options: [
+            { value: "omlx/a", name: "A" },
+            { value: "omlx/b", name: "B" },
+          ],
+        },
+      ],
+    };
+    const state = translateBackendState(
+      { models: null, modes: null, configOptions: [grouped] },
+      suffixDescriptor()
+    );
+    expect(state.model?.availableModels.map((m) => m.baseModelId)).toEqual(["omlx/a", "omlx/b"]);
+  });
+
+  it("maps the current model's thought-level option into effort state", () => {
+    const modelOpt = selectOption(
+      "model",
+      [
+        { value: "omlx/a", name: "A" },
+        { value: "omlx/b", name: "B" },
+      ],
+      "omlx/a",
+      "model"
+    );
+    const effortOpt = selectOption(
+      "effort",
+      [
+        { value: "low", name: "Low" },
+        { value: "high", name: "High" },
+      ],
+      "high",
+      "thought_level"
+    );
+    const state = translateBackendState(
+      { models: null, modes: null, configOptions: [modelOpt, effortOpt] },
+      suffixDescriptor()
+    );
+    expect(state.model?.current).toEqual({ baseModelId: "omlx/a", effort: "high" });
+    expect(state.model?.availableModels[0]?.effortOptions).toEqual([
+      { value: "low", label: "low" },
+      { value: "high", label: "high" },
+    ]);
+    expect(state.model?.availableModels[1]?.effortOptions).toEqual([]);
+    expect(state.model?.apply).toEqual({
+      kind: "setConfigOption",
+      configId: "model",
+      effortConfigId: "effort",
+    });
+  });
+});
+
+describe("translateBackendState — name normalization + description", () => {
+  it("passes the backend-reported description through when the backend opts in", () => {
+    const models: RawModelState = {
+      currentModelId: "m",
+      availableModels: [{ modelId: "m", name: "M", description: "Opus 4.7 with 1M context" }],
+    };
+    const desc = descriptor({ showModelDescriptions: true });
+    const state = translateBackendState({ models, modes: null, configOptions: null }, desc);
+    expect(findModelEntry(state.model, "m")?.description).toBe("Opus 4.7 with 1M context");
+  });
+
+  it("drops the description when the backend does not opt in (e.g. opencode)", () => {
+    const models: RawModelState = {
+      currentModelId: "m",
+      availableModels: [{ modelId: "m", name: "M", description: "noisy blurb" }],
+    };
+    const state = translateBackendState({ models, modes: null, configOptions: null }, descriptor());
+    expect(findModelEntry(state.model, "m")?.description).toBeUndefined();
+  });
+
+  it("applies descriptor.normalizeModelName to the entry name", () => {
+    const models: RawModelState = {
+      currentModelId: "gpt-5.4",
+      availableModels: [{ modelId: "gpt-5.4", name: "gpt-5.4" }],
+    };
+    const desc = descriptor({ normalizeModelName: (n: string) => n.replace(/^gpt/i, "GPT") });
+    const state = translateBackendState({ models, modes: null, configOptions: null }, desc);
+    expect(findModelEntry(state.model, "gpt-5.4")?.name).toBe("GPT-5.4");
+  });
+
+  it("normalizes the synthesized current entry's name (current not in catalog)", () => {
+    const models: RawModelState = {
+      currentModelId: "gpt-x",
+      availableModels: [{ modelId: "other", name: "Other" }],
+    };
+    const desc = descriptor({ normalizeModelName: (n: string) => n.replace(/^gpt/i, "GPT") });
+    const state = translateBackendState({ models, modes: null, configOptions: null }, desc);
+    expect(findModelEntry(state.model, "gpt-x")?.name).toBe("GPT-x");
+  });
+});
+
+describe("translateBackendState — suffix-style backends", () => {
+  it("collapses gpt-5 + variants into one entry with effort options (case 2)", () => {
+    const models: RawModelState = {
+      currentModelId: "openai/gpt-5/low",
+      availableModels: [
+        { modelId: "openai/gpt-5", name: "GPT-5" },
+        { modelId: "openai/gpt-5/low", name: "GPT-5 (low)" },
+        { modelId: "openai/gpt-5/medium", name: "GPT-5 (medium)" },
+      ],
+    };
+    const state = translateBackendState(
+      { models, modes: null, configOptions: null },
+      suffixDescriptor()
+    );
+    expect(state.model).not.toBeNull();
+    expect(state.model!.availableModels).toHaveLength(1);
+    const entry = state.model!.availableModels[0];
+    expect(entry.baseModelId).toBe("openai/gpt-5");
+    expect(entry.provider).toBe("openai");
+    expect(entry.effortOptions.map((o) => o.value)).toEqual([null, "low", "medium"]);
+    expect(state.model!.current.baseModelId).toBe(entry.baseModelId);
+    expect(state.model!.current.effort).toBe("low");
+  });
+
+  it("multi-provider catalog produces one entry per base with own provider (case 3)", () => {
+    const models: RawModelState = {
+      currentModelId: "openai/gpt-5/low",
+      availableModels: [
+        { modelId: "openai/gpt-5/low", name: "GPT-5 (low)" },
+        { modelId: "anthropic/claude-sonnet-4-5/low", name: "Sonnet (low)" },
+      ],
+    };
+    const state = translateBackendState(
+      { models, modes: null, configOptions: null },
+      suffixDescriptor()
+    );
+    const entries = state.model!.availableModels;
+    expect(entries).toHaveLength(2);
+    expect(entries[0]).toMatchObject({ baseModelId: "openai/gpt-5", provider: "openai" });
+    expect(entries[1]).toMatchObject({
+      baseModelId: "anthropic/claude-sonnet-4-5",
+      provider: "anthropic",
+    });
+  });
+
+  it("single-variant base produces empty effortOptions (case 4)", () => {
+    const models: RawModelState = {
+      currentModelId: "openai/gpt-5",
+      availableModels: [{ modelId: "openai/gpt-5", name: "GPT-5" }],
+    };
+    const state = translateBackendState(
+      { models, modes: null, configOptions: null },
+      suffixDescriptor()
+    );
+    expect(state.model!.availableModels[0].effortOptions).toEqual([]);
+    expect(state.model!.current.effort).toBeNull();
+  });
+
+  it("mixed catalog: some bases have variants, some don't (case 5)", () => {
+    const models: RawModelState = {
+      currentModelId: "openai/gpt-5/medium",
+      availableModels: [
+        { modelId: "openai/gpt-5", name: "GPT-5" },
+        { modelId: "openai/gpt-5/medium", name: "GPT-5 (medium)" },
+        { modelId: "anthropic/sonnet", name: "Sonnet" },
+      ],
+    };
+    const state = translateBackendState(
+      { models, modes: null, configOptions: null },
+      suffixDescriptor()
+    );
+    const entries = state.model!.availableModels;
+    const gpt = entries.find((e) => e.baseModelId === "openai/gpt-5")!;
+    const sonnet = entries.find((e) => e.baseModelId === "anthropic/sonnet")!;
+    expect(gpt.effortOptions.map((o) => o.value)).toEqual([null, "medium"]);
+    expect(sonnet.effortOptions).toEqual([]);
+  });
+
+  it("current selection with effort suffix is reachable in availableModels (case 9)", () => {
+    const models: RawModelState = {
+      currentModelId: "openai/gpt-5/low",
+      availableModels: [
+        { modelId: "openai/gpt-5", name: "GPT-5" },
+        { modelId: "openai/gpt-5/low", name: "GPT-5 (low)" },
+      ],
+    };
+    const state = translateBackendState(
+      { models, modes: null, configOptions: null },
+      suffixDescriptor()
+    );
+    expect(state.model!.current.baseModelId).toBe("openai/gpt-5");
+    expect(state.model!.current.effort).toBe("low");
+    expect(findModelEntry(state.model, state.model!.current.baseModelId)).toBeDefined();
+  });
+
+  it("strips trailing effort suffix from grouped name when ≥2 variants", () => {
+    const models: RawModelState = {
+      currentModelId: "openai/gpt-5/low",
+      availableModels: [
+        { modelId: "openai/gpt-5/low", name: "GPT-5 (low)" },
+        { modelId: "openai/gpt-5/medium", name: "GPT-5 (medium)" },
+      ],
+    };
+    const state = translateBackendState(
+      { models, modes: null, configOptions: null },
+      suffixDescriptor()
+    );
+    expect(state.model!.availableModels[0].name).toBe("GPT-5");
+  });
+
+  it("leaves single-variant names untouched even if they look like effort suffixes", () => {
+    const models: RawModelState = {
+      currentModelId: "x/some-model",
+      availableModels: [{ modelId: "x/some-model", name: "Some Model (medium)" }],
+    };
+    const state = translateBackendState(
+      { models, modes: null, configOptions: null },
+      suffixDescriptor()
+    );
+    expect(state.model!.availableModels[0].name).toBe("Some Model (medium)");
+  });
+});
+
+describe("translateBackendState — descriptor-style backends", () => {
+  function effortDescriptor(map: Record<string, BackendConfigOption | null>): BackendDescriptor {
+    return descriptor({
+      wire: {
+        encode: passthroughWire.encode,
+        decode: passthroughWire.decode,
+        effortConfigFor: (baseModelId: string) => map[baseModelId] ?? null,
+      },
+    });
+  }
+
+  it("populates effortOptions for every model with a configOption (case 6)", () => {
+    const opt = selectOption("effort", [{ value: "low" }, { value: "high" }]);
+    const models: RawModelState = {
+      currentModelId: "claude-sonnet",
+      availableModels: [
+        { modelId: "claude-sonnet", name: "Sonnet" },
+        { modelId: "claude-opus", name: "Opus" },
+      ],
+    };
+    const state = translateBackendState(
+      { models, modes: null, configOptions: null },
+      effortDescriptor({ "claude-sonnet": opt, "claude-opus": opt })
+    );
+    expect(state.model!.availableModels[0].effortOptions.map((o) => o.value)).toEqual([
+      "low",
+      "high",
+    ]);
+    expect(state.model!.availableModels[1].effortOptions.map((o) => o.value)).toEqual([
+      "low",
+      "high",
+    ]);
+  });
+
+  it("Haiku-style model with no effort returns empty effortOptions (case 7)", () => {
+    const sonnetOpt = selectOption("effort", [{ value: "low" }, { value: "high" }]);
+    const models: RawModelState = {
+      currentModelId: "claude-haiku",
+      availableModels: [
+        { modelId: "claude-sonnet", name: "Sonnet" },
+        { modelId: "claude-haiku", name: "Haiku" },
+      ],
+    };
+    const state = translateBackendState(
+      { models, modes: null, configOptions: null },
+      effortDescriptor({ "claude-sonnet": sonnetOpt, "claude-haiku": null })
+    );
+    const haiku = state.model!.availableModels.find((e) => e.baseModelId === "claude-haiku")!;
+    expect(haiku.effortOptions).toEqual([]);
+    expect(state.model!.current.baseModelId).toBe(haiku.baseModelId);
+    expect(state.model!.current.effort).toBeNull();
+  });
+
+  it("descriptor-style current effort uses live configOptions when present (case 10)", () => {
+    const spec = selectOption(
+      "effort",
+      [{ value: "low" }, { value: "medium" }, { value: "high" }],
+      "low"
+    );
+    const liveOpts: BackendConfigOption[] = [
+      selectOption("effort", [{ value: "low" }, { value: "medium" }, { value: "high" }], "high"),
+    ];
+    const models: RawModelState = {
+      currentModelId: "claude-sonnet",
+      availableModels: [{ modelId: "claude-sonnet", name: "Sonnet" }],
+    };
+    const state = translateBackendState(
+      { models, modes: null, configOptions: liveOpts },
+      effortDescriptor({ "claude-sonnet": spec })
+    );
+    expect(state.model!.current.effort).toBe("high");
+  });
+
+  it("descriptor-style current effort falls back to spec.currentValue without live opts (case 10)", () => {
+    const spec = selectOption(
+      "effort",
+      [{ value: "low" }, { value: "medium" }, { value: "high" }],
+      "medium"
+    );
+    const models: RawModelState = {
+      currentModelId: "claude-sonnet",
+      availableModels: [{ modelId: "claude-sonnet", name: "Sonnet" }],
+    };
+    const state = translateBackendState(
+      { models, modes: null, configOptions: null },
+      effortDescriptor({ "claude-sonnet": spec })
+    );
+    expect(state.model!.current.effort).toBe("medium");
+  });
+
+  it("Haiku has no effort dimension — current.effort: null (case 11)", () => {
+    const models: RawModelState = {
+      currentModelId: "claude-haiku",
+      availableModels: [{ modelId: "claude-haiku", name: "Haiku" }],
+    };
+    const state = translateBackendState(
+      { models, modes: null, configOptions: null },
+      effortDescriptor({ "claude-haiku": null })
+    );
+    expect(state.model!.current.effort).toBeNull();
+    expect(findModelEntry(state.model, state.model!.current.baseModelId)!.effortOptions).toEqual(
+      []
+    );
+  });
+});
+
+describe("translateBackendState — provider/parsing edge cases", () => {
+  it("provider precompute — entries preserve per-id provider (case 8)", () => {
+    const models: RawModelState = {
+      currentModelId: "openai/gpt-5",
+      availableModels: [
+        { modelId: "openai/gpt-5", name: "GPT-5" },
+        { modelId: "free-form-id", name: "FF" },
+      ],
+    };
+    const state = translateBackendState(
+      { models, modes: null, configOptions: null },
+      suffixDescriptor()
+    );
+    const gpt = state.model!.availableModels.find((e) => e.baseModelId === "openai/gpt-5")!;
+    const ff = state.model!.availableModels.find((e) => e.baseModelId === "free-form-id")!;
+    expect(gpt.provider).toBe("openai");
+    expect(ff.provider).toBeNull();
+  });
+
+  it("currentModelId not in availableModels — translator synthesizes entry (case 12)", () => {
+    const models: RawModelState = {
+      currentModelId: "openai/missing",
+      availableModels: [{ modelId: "openai/gpt-5", name: "GPT-5" }],
+    };
+    const state = translateBackendState(
+      { models, modes: null, configOptions: null },
+      suffixDescriptor()
+    );
+    expect(state.model!.availableModels).toHaveLength(2);
+    expect(state.model!.current.baseModelId).toBe("openai/missing");
+    expect(findModelEntry(state.model, state.model!.current.baseModelId)).toBeDefined();
+  });
+
+  it("backend with passthrough codec and no descriptor effort hook (case 13)", () => {
+    const models: RawModelState = {
+      currentModelId: "x/y",
+      availableModels: [
+        { modelId: "x/y", name: "x/y" },
+        { modelId: "p/q", name: "p/q" },
+      ],
+    };
+    const state = translateBackendState({ models, modes: null, configOptions: null }, descriptor());
+    for (const e of state.model!.availableModels) {
+      expect(e.effortOptions).toEqual([]);
+      expect(e.provider).toBeNull();
+    }
+    expect(state.model!.current.effort).toBeNull();
+  });
+
+  it("description present / absent round-trips for opted-in backends (case 14)", () => {
+    const models: RawModelState = {
+      currentModelId: "claude-sonnet",
+      availableModels: [
+        { modelId: "claude-sonnet", name: "Sonnet", description: "Smart and balanced" },
+        { modelId: "claude-haiku", name: "Haiku" },
+      ],
+    };
+    const desc = descriptor({ showModelDescriptions: true });
+    const state = translateBackendState({ models, modes: null, configOptions: null }, desc);
+    expect(state.model!.availableModels[0].description).toBe("Smart and balanced");
+    expect(state.model!.availableModels[1].description).toBeUndefined();
+  });
+
+  it("EffortOption shape from suffix grouping ≡ shape from effortConfigFor (case 15)", () => {
+    // Suffix path: gpt-5 with low/medium/high
+    const suffixModels: RawModelState = {
+      currentModelId: "openai/gpt-5/medium",
+      availableModels: [
+        { modelId: "openai/gpt-5/low", name: "GPT-5 (low)" },
+        { modelId: "openai/gpt-5/medium", name: "GPT-5 (medium)" },
+        { modelId: "openai/gpt-5/high", name: "GPT-5 (high)" },
+      ],
+    };
+    const suffixState = translateBackendState(
+      { models: suffixModels, modes: null, configOptions: null },
+      suffixDescriptor()
+    );
+    const suffixOpts = suffixState.model!.availableModels[0].effortOptions;
+
+    // Descriptor path: same effort levels via effortConfigFor
+    const cfgOpt = selectOption("effort", [
+      { value: "low" },
+      { value: "medium" },
+      { value: "high" },
+    ]);
+    const descrModels: RawModelState = {
+      currentModelId: "claude-sonnet",
+      availableModels: [{ modelId: "claude-sonnet", name: "Sonnet" }],
+    };
+    const descrState = translateBackendState(
+      { models: descrModels, modes: null, configOptions: null },
+      descriptor({
+        wire: {
+          encode: passthroughWire.encode,
+          decode: passthroughWire.decode,
+          effortConfigFor: () => cfgOpt,
+        },
+      })
+    );
+    const descrOpts = descrState.model!.availableModels[0].effortOptions;
+
+    // Both produce {value, label} shape — labels differ (Default vs from
+    // configOption name) but value vocabulary aligns.
+    expect(suffixOpts.every((o) => "value" in o && "label" in o)).toBe(true);
+    expect(descrOpts.every((o) => "value" in o && "label" in o)).toBe(true);
+    // Values: suffix path adds null when bare exists, but here it doesn't.
+    expect(suffixOpts.map((o) => o.value)).toEqual(["low", "medium", "high"]);
+    expect(descrOpts.map((o) => o.value)).toEqual(["low", "medium", "high"]);
+  });
+
+  it("wire.decode → wire.encode round-trip identity (case 16)", () => {
+    const wireIds = ["openai/gpt-5", "openai/gpt-5/low", "anthropic/sonnet/high"];
+    for (const id of wireIds) {
+      const decoded = suffixWire.decode(id);
+      expect(suffixWire.encode(decoded.selection)).toBe(id);
+    }
+  });
+});
+
+describe("translateBackendState — mode (setMode style)", () => {
+  const mapping: ModeMapping = {
+    kind: "setMode",
+    canonical: { default: "default", plan: "plan", auto: "bypassPermissions" },
+  };
+
+  it("filters canonical options to those advertised in availableModes", () => {
+    const modes: RawModeState = {
+      currentModeId: "default",
+      availableModes: [
+        { id: "default", name: "Default" },
+        { id: "plan", name: "Plan" },
+      ],
+    };
+    const state = translateBackendState(
+      { models: null, modes, configOptions: null },
+      descriptor({ getModeMapping: () => mapping })
+    );
+    expect(state.mode).not.toBeNull();
+    expect(state.mode!.options.map((o) => o.value)).toEqual(["default", "plan"]);
+    expect(state.mode!.current).toBe("default");
+    expect(state.mode!.apply.default).toEqual({ kind: "setMode", nativeId: "default" });
+    expect(state.mode!.apply.plan).toEqual({ kind: "setMode", nativeId: "plan" });
+  });
+
+  it("returns null mode when descriptor exposes no mapping", () => {
+    const modes: RawModeState = {
+      currentModeId: "default",
+      availableModes: [{ id: "default", name: "Default" }],
+    };
+    const state = translateBackendState({ models: null, modes, configOptions: null }, descriptor());
+    expect(state.mode).toBeNull();
+  });
+
+  it("reverse-projects unmapped native modes to null current", () => {
+    const modes: RawModeState = {
+      currentModeId: "acceptEdits",
+      availableModes: [
+        { id: "default", name: "Default" },
+        { id: "plan", name: "Plan" },
+        { id: "acceptEdits", name: "Accept Edits" },
+      ],
+    };
+    const state = translateBackendState(
+      { models: null, modes, configOptions: null },
+      descriptor({ getModeMapping: () => mapping })
+    );
+    expect(state.mode!.current).toBeNull();
+  });
+});
+
+describe("translateBackendState — mode (configOption style)", () => {
+  it("builds canonical options from a select configOption's enum values", () => {
+    const configOptions: BackendConfigOption[] = [
+      {
+        id: "agent",
+        type: "select",
+        category: null,
+        name: "Agent",
+        currentValue: "build",
+        options: [
+          { value: "build", name: "Build" },
+          { value: "plan", name: "Plan" },
+        ],
+      },
+    ];
+    const mapping: ModeMapping = {
+      kind: "configOption",
+      configId: "agent",
+      canonical: { default: "build", plan: "plan" },
+    };
+    const state = translateBackendState(
+      { models: null, modes: null, configOptions },
+      descriptor({ getModeMapping: () => mapping })
+    );
+    expect(state.mode!.options.map((o) => o.value)).toEqual(["default", "plan"]);
+    expect(state.mode!.current).toBe("default");
+    expect(state.mode!.apply.default).toEqual({
+      kind: "setConfigOption",
+      configId: "agent",
+      value: "build",
+    });
+  });
+});
+
+describe("translateBackendState — invariants", () => {
+  it("current.baseModelId matches one of availableModels (case 20)", () => {
+    const models: RawModelState = {
+      currentModelId: "openai/gpt-5/low",
+      availableModels: [
+        { modelId: "openai/gpt-5", name: "GPT-5" },
+        { modelId: "openai/gpt-5/low", name: "GPT-5 low" },
+      ],
+    };
+    const state = translateBackendState(
+      { models, modes: null, configOptions: null },
+      suffixDescriptor()
+    );
+    expect(findModelEntry(state.model, state.model!.current.baseModelId)).toBeDefined();
+  });
+
+  it("current.effort is null or matches a value in the corresponding entry's effortOptions (case 21)", () => {
+    const models: RawModelState = {
+      currentModelId: "openai/gpt-5/low",
+      availableModels: [
+        { modelId: "openai/gpt-5", name: "GPT-5" },
+        { modelId: "openai/gpt-5/low", name: "GPT-5 low" },
+      ],
+    };
+    const state = translateBackendState(
+      { models, modes: null, configOptions: null },
+      suffixDescriptor()
+    );
+    const cur = state.model!.current;
+    const entry = findModelEntry(state.model, cur.baseModelId)!;
+    expect(cur.effort === null || entry.effortOptions.some((o) => o.value === cur.effort)).toBe(
+      true
+    );
+  });
+});
+
+describe("modelCatalogSignature", () => {
+  it("distinguishes discovery lifecycle and catalog content", () => {
+    const signatures = [
+      modelCatalogSignature(null),
+      modelCatalogSignature({ availableModels: null }),
+      modelCatalogSignature({
+        availableModels: [
+          { baseModelId: "alpha", name: "Alpha", provider: null, effortOptions: [] },
+        ],
+      }),
+      modelCatalogSignature({
+        availableModels: [{ baseModelId: "beta", name: "Beta", provider: null, effortOptions: [] }],
+      }),
+    ];
+
+    expect(new Set(signatures).size).toBe(signatures.length);
+  });
+});
+
+describe("modelStateSignature", () => {
+  it("returns empty string when model is null", () => {
+    expect(modelStateSignature(null)).toBe("");
+    expect(modelStateSignature({ model: null, mode: null })).toBe("");
+  });
+
+  it("is identical for equivalent model slices regardless of mode", () => {
+    const sharedModel: BackendState["model"] = {
+      current: { baseModelId: "x", effort: null },
+      apply: { kind: "setModel" },
+      availableModels: [{ baseModelId: "x", name: "X", provider: null, effortOptions: [] }],
+    };
+    const a: BackendState = { model: sharedModel, mode: null };
+    const b: BackendState = {
+      model: sharedModel,
+      mode: { current: "plan", options: [{ value: "plan", label: "Plan" }], apply: {} },
+    };
+    expect(modelStateSignature(a)).toBe(modelStateSignature(b));
+  });
+
+  it("differs when current model flips", () => {
+    const a: BackendState = {
+      model: {
+        current: { baseModelId: "x", effort: null },
+        apply: { kind: "setModel" },
+        availableModels: [
+          { baseModelId: "x", name: "X", provider: null, effortOptions: [] },
+          { baseModelId: "y", name: "Y", provider: null, effortOptions: [] },
+        ],
+      },
+      mode: null,
+    };
+    const b: BackendState = {
+      ...a,
+      model: { ...a.model!, current: { baseModelId: "y", effort: null } },
+    };
+    expect(modelStateSignature(a)).not.toBe(modelStateSignature(b));
+  });
+
+  it("differs when the apply channel flips (setModel vs setConfigOption)", () => {
+    const base: NonNullable<BackendState["model"]> = {
+      current: { baseModelId: "x", effort: null },
+      availableModels: [{ baseModelId: "x", name: "X", provider: null, effortOptions: [] }],
+      apply: { kind: "setModel" },
+    };
+    const a: BackendState = { model: base, mode: null };
+    const b: BackendState = {
+      model: { ...base, apply: { kind: "setConfigOption", configId: "model" } },
+      mode: null,
+    };
+    expect(modelStateSignature(a)).not.toBe(modelStateSignature(b));
+  });
+
+  it("differs when a config-option-backed effort channel appears", () => {
+    const base: NonNullable<BackendState["model"]> = {
+      current: { baseModelId: "x", effort: null },
+      availableModels: [{ baseModelId: "x", name: "X", provider: null, effortOptions: [] }],
+      apply: { kind: "setConfigOption", configId: "model" },
+    };
+    const a: BackendState = { model: base, mode: null };
+    const b: BackendState = {
+      model: {
+        ...base,
+        apply: { kind: "setConfigOption", configId: "model", effortConfigId: "effort" },
+      },
+      mode: null,
+    };
+    expect(modelStateSignature(a)).not.toBe(modelStateSignature(b));
+  });
+});
+
+describe("modeStateSignature", () => {
+  it("returns empty string when mode is null", () => {
+    expect(modeStateSignature(null)).toBe("");
+    expect(modeStateSignature({ model: null, mode: null })).toBe("");
+  });
+
+  it("is identical for equivalent mode slices regardless of model", () => {
+    const sharedMode: BackendState["mode"] = {
+      current: "plan",
+      options: [{ value: "plan", label: "Plan" }],
+      apply: { plan: { kind: "setMode", nativeId: "plan" } },
+    };
+    const a: BackendState = { model: null, mode: sharedMode };
+    const b: BackendState = {
+      model: {
+        current: { baseModelId: "x", effort: null },
+        apply: { kind: "setModel" },
+        availableModels: [{ baseModelId: "x", name: "X", provider: null, effortOptions: [] }],
+      },
+      mode: sharedMode,
+    };
+    expect(modeStateSignature(a)).toBe(modeStateSignature(b));
+  });
+
+  it("differs when current mode flips", () => {
+    const opts = [
+      { value: "plan" as const, label: "Plan" },
+      { value: "default" as const, label: "Default" },
+    ];
+    const a: BackendState = {
+      model: null,
+      mode: { current: "plan", options: opts, apply: {} },
+    };
+    const b: BackendState = {
+      model: null,
+      mode: { current: "default", options: opts, apply: {} },
+    };
+    expect(modeStateSignature(a)).not.toBe(modeStateSignature(b));
+  });
+
+  it("differs when an option's apply-spec kind flips", () => {
+    const opts = [{ value: "plan" as const, label: "Plan" }];
+    const a: BackendState = {
+      model: null,
+      mode: {
+        current: "plan",
+        options: opts,
+        apply: { plan: { kind: "setMode", nativeId: "plan" } },
+      },
+    };
+    const b: BackendState = {
+      model: null,
+      mode: {
+        current: "plan",
+        options: opts,
+        apply: { plan: { kind: "setConfigOption", configId: "mode", value: "plan" } },
+      },
+    };
+    expect(modeStateSignature(a)).not.toBe(modeStateSignature(b));
+  });
+});

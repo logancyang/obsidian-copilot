@@ -22,6 +22,7 @@ Before diving into specific fixes, try these steps first:
 **Cause**: The model you selected doesn't have a valid API key for its provider.
 
 **Fix**:
+
 1. Go to **Settings → Copilot → Basic → Set Keys**
 2. Enter the API key for the provider your model uses
 3. If you're unsure which provider a model uses, check **Settings → Copilot → Model** — each model shows its provider
@@ -31,6 +32,7 @@ Before diving into specific fixes, try these steps first:
 **Cause**: You've sent too many requests to the API in a short time.
 
 **Fix**:
+
 - Wait a minute and try again
 - If this happens frequently during indexing, reduce **Embedding Requests per Minute** in QA settings (try 10–20)
 - Consider upgrading your API plan with the provider
@@ -40,6 +42,7 @@ Before diving into specific fixes, try these steps first:
 **Cause**: Network issue, provider outage, or the request took too long.
 
 **Fix**:
+
 - Check your internet connection
 - Try again after a few seconds
 - Check the provider's status page for outages
@@ -50,6 +53,7 @@ Before diving into specific fixes, try these steps first:
 **Cause**: You're trying to use Vault QA or semantic search but the vault hasn't been indexed yet.
 
 **Fix**:
+
 1. Make sure you have an embedding model configured with a valid API key (**Settings → Copilot → QA → Embedding Model**)
 2. Run **Command palette → Index (refresh) vault**
 3. Wait for indexing to complete
@@ -69,6 +73,7 @@ Before diving into specific fixes, try these steps first:
 ### Notes Not Found in Search
 
 Even after indexing, relevant notes aren't being returned? Try:
+
 1. Switch to **Copilot Plus** mode and use `@vault` for more powerful search
 2. Try the **multilingual embedding model** for non-English notes
 3. Review your QA inclusions/exclusions to confirm the notes aren't filtered out
@@ -90,6 +95,7 @@ Even after indexing, relevant notes aren't being returned? Try:
 **Problem**: "Connection refused" or model not responding
 
 **Fix**:
+
 - Make sure Ollama is running: open a terminal and run `ollama serve`
 - Verify the model is downloaded: `ollama list`
 - Check that the port in Copilot settings matches (default: 11434)
@@ -101,6 +107,7 @@ Even after indexing, relevant notes aren't being returned? Try:
 
 **Fix**:
 Azure OpenAI requires all four fields to be filled in correctly:
+
 1. API Key
 2. Instance Name (your Azure resource name, e.g., `my-azure-openai`)
 3. Deployment Name (the name you gave your model deployment)
@@ -113,6 +120,7 @@ Any missing or incorrect field will cause errors.
 **Problem**: "Model not found" or access denied
 
 **Fix**:
+
 - Always use **cross-region inference profile IDs**, not bare model IDs:
   - ✅ `us.anthropic.claude-sonnet-4-5-20250929-v1:0`
   - ❌ `anthropic.claude-sonnet-4-5-20250929-v1:0`
@@ -124,6 +132,7 @@ Any missing or incorrect field will cause errors.
 **Problem**: "Token expired" or authentication fails
 
 **Fix**:
+
 - Go to **Settings → Copilot → Basic → Set Keys**
 - Click **Connect GitHub Copilot** to re-authenticate via OAuth
 - Make sure your GitHub Copilot subscription is active
@@ -133,6 +142,7 @@ Any missing or incorrect field will cause errors.
 **Problem**: "QUOTA_EXCEEDED" or slow responses
 
 **Fix**:
+
 - Check your quota at https://console.cloud.google.com
 - Try switching to the Flash model (faster, higher quota)
 - Consider using Google via OpenRouter instead for a unified quota
@@ -142,6 +152,7 @@ Any missing or incorrect field will cause errors.
 **Problem**: Response cuts off or streaming errors
 
 **Fix**:
+
 - DeepSeek reasoning models (deepseek-reasoner) can produce very long outputs; try increasing Max Tokens
 - If you see streaming errors, check the DeepSeek status page
 - Try switching between deepseek-chat and deepseek-reasoner
@@ -155,6 +166,7 @@ Any missing or incorrect field will cause errors.
 **Cause**: Large vault with many notes, or low rate limit setting.
 
 **Fix**:
+
 - Check **Embedding Requests per Minute** — higher values speed up indexing but may cause rate limits
 - Use exclusions to skip folders you don't need indexed (e.g., large archive folders)
 - Use the incremental **Index (refresh) vault** command instead of Force Reindex when possible
@@ -165,6 +177,7 @@ Any missing or incorrect field will cause errors.
 **Cause**: Large lexical search index or many indexed files.
 
 **Fix**:
+
 - Reduce **Lexical Search RAM Limit** in QA settings (default 100 MB, range 20–1000 MB)
 - Add more folders to exclusions to reduce the index size
 - On mobile, disable indexing altogether
@@ -174,6 +187,7 @@ Any missing or incorrect field will cause errors.
 **Cause**: Rendering many chat messages or a very long conversation.
 
 **Fix**:
+
 - Start a new chat — long conversations can slow down rendering
 - Auto-compact will trigger automatically at 128,000 tokens to keep conversations manageable
 - Lower your auto-compact threshold if you're hitting performance issues early
@@ -186,17 +200,21 @@ Any missing or incorrect field will cause errors.
 
 If your settings get into a bad state, you can reset:
 
-1. Go to **Settings → Copilot** → find the reset option
-2. Or delete the `data.json` file from the plugin folder: `.obsidian/plugins/copilot/data.json`
+1. Go to **Settings → Copilot** → find the reset option.
 
-⚠️ Resetting clears all your settings. API keys kept in `data.json` (standard storage) are removed, but keys stored in the Obsidian Keychain are **not** — to erase those, use **Settings → Copilot → Advanced → API Key Storage → Delete All Keys**. Back up your keys first.
+⚠️ Resetting clears your non-secret settings, but it does **not** erase keys from the Obsidian Keychain. To erase them, use **Settings → Copilot → Advanced → API Key Storage → Delete All Keys**. Back up your keys first.
+
+Do not delete `.obsidian/plugins/copilot/data.json` as a substitute for the in-app reset. That file contains the vault's Keychain namespace; deleting it can make existing credentials unreachable and require you to re-enter them.
 
 ### API Key Storage
 
-Copilot has two ways to store API keys:
+Copilot v4 stores API keys, license keys, and authentication tokens only in the **Obsidian Keychain**. These credentials are not stored in `data.json`.
 
-- **Standard storage**: API keys are saved in `data.json` in plain text. Existing vaults stay in this mode until you choose to migrate.
-- **Obsidian Keychain**: New installs use this by default. You can also switch an existing vault by going to **Settings → Copilot → Advanced → API Key Storage** and clicking **Migrate to Obsidian Keychain**. After migration, `data.json` no longer contains your API keys.
+If your vault still had credentials in `data.json` when you upgraded, Copilot copied that file to `data-v3-credentials-backup-<id>.json` in the same plugin folder before clearing it, and showed you the exact path once on startup. Copilot never reads, decrypts, or imports that backup; it exists purely so your keys are not lost.
+
+Open it, paste each key into the matching field in Settings, and delete the file once they all work.
+
+Values that begin with `enc_` were encrypted by an older Copilot version and cannot be read back. Get fresh keys from those providers and enter the new ones instead.
 
 The Obsidian Keychain is per device. If you sync your vault to another device, you may need to re-enter API keys there.
 
@@ -226,11 +244,15 @@ Yes — use `[[Note Title]]` syntax directly in your message. Copilot adds that 
 
 ### How do I make Copilot always reply in English?
 
-Go to **Settings → Copilot → Advanced → Default System Prompt**, create a custom prompt, and add "Always respond in English." as an instruction. See [System Prompts](system-prompts.md).
+For Agent Mode, go to **Settings → Copilot → Basic → Custom instructions** and add "Always
+respond in English." to the **Custom vault instructions** box. For Chat mode, create a prompt file in the
+`system-prompts/` sub-folder of your Copilot folder and pick it per conversation from the chat
+settings gear. See [Instructions and System Prompts](system-prompts.md).
 
 ### Can Copilot understand images in my notes?
 
 Yes, but only with models that have **Vision** capability (shown by a vision icon in the model list). Make sure:
+
 1. You're using a vision-capable model
 2. **Settings → Copilot → Basic → Pass markdown images to AI** is enabled
 
@@ -259,7 +281,7 @@ Yes. You can have API keys configured for multiple providers simultaneously and 
 
 ### Where are my saved chats stored?
 
-Chat conversations are saved as markdown files in your vault, in the folder `copilot/copilot-conversations/` by default. You can change this folder in **Settings → Copilot → Basic → Default save folder**.
+Chat conversations are saved as markdown files in your vault, in the `copilot-conversations/` sub-folder of your Copilot folder (by default `copilot/copilot-conversations/`). To change where new chats are saved, change the root in **Settings → Copilot → Basic → Copilot folder location** — every Copilot sub-folder derives from it. Changing the root affects only new chats; conversations you have already saved stay in the old folder unless you move them yourself.
 
 ### How do I clear the Copilot cache?
 
@@ -267,17 +289,21 @@ Use **Command palette → Clear Copilot cache**. This clears cached responses an
 
 ### What is the `copilot/` folder in my vault?
 
-The `copilot/` folder is created by the plugin and stores:
+The `copilot/` folder is your Copilot folder — the default root the plugin uses to store its own files:
+
 - `copilot-conversations/` — Saved chat histories
 - `copilot-custom-prompts/` — Your custom commands
 - `system-prompts/` — Your custom system prompts
 - `memory/` — Saved AI memories (if enabled)
+- `skills/` — Agent skills
+- `projects/` — Project files
 
-This folder is automatically excluded from vault search to avoid cluttering results.
+You can rename this root in **Settings → Copilot → Basic → Copilot folder location**; all of the sub-folders above derive from it. The Copilot folder is automatically excluded from vault search to avoid cluttering results. If you change the root, the old folder is not moved for you and stays excluded from search permanently — any folder that has ever been your Copilot folder is kept out of search results even after you switch away from it.
 
 ### How do I switch modes?
 
 Click the mode selector at the top of the chat panel. Available modes:
+
 - Chat
 - Vault QA (Basic)
 - Copilot Plus (requires license)
@@ -286,6 +312,7 @@ Click the mode selector at the top of the chat panel. Available modes:
 ### The AI keeps forgetting what we talked about earlier
 
 This usually means the conversation has grown too long and older turns are being trimmed from context. Options:
+
 - Lower **Conversation Turns in Context** in Model settings
 - Let auto-compact handle it (it summarizes old turns automatically)
 - Start a new chat and reference the previous chat file

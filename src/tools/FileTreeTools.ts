@@ -1,4 +1,4 @@
-import { TFile, TFolder } from "obsidian";
+import { App, TFile, TFolder } from "obsidian";
 import { getMatchingPatterns, shouldIndexFile } from "@/search/searchUtils";
 import { z } from "zod";
 import { createLangChainTool } from "./createLangChainTool";
@@ -23,6 +23,7 @@ function getFileExtension(filename: string): string {
 }
 
 function buildFileTree(
+  app: App,
   folder: TFolder,
   includeFiles: boolean = true
 ): Record<string, FileTreeNode> {
@@ -37,7 +38,7 @@ function buildFileTree(
   for (const child of folder.children) {
     if (isTFile(child)) {
       // Only include file if it passes the pattern checks
-      if (shouldIndexFile(child, inclusions, exclusions)) {
+      if (shouldIndexFile(app, child, inclusions, exclusions)) {
         // Only add to files array if we're including files
         if (includeFiles) {
           files.push(child.name);
@@ -50,7 +51,7 @@ function buildFileTree(
         }
       }
     } else if (isTFolder(child)) {
-      const subResult = buildFileTree(child, includeFiles);
+      const subResult = buildFileTree(app, child, includeFiles);
       // Only include folder if it has any content after filtering
       if (Object.keys(subResult).length > 0) {
         subFolders[child.name] = subResult[child.name];
@@ -93,14 +94,14 @@ function buildFileTree(
   return { vault: node };
 }
 
-const createGetFileTreeTool = (root: TFolder) =>
+const createGetFileTreeTool = (app: App, root: TFolder) =>
   createLangChainTool({
     name: "getFileTree",
     description: "Get the file tree as a nested structure of folders and files",
     schema: z.object({}),
     func: async () => {
       // First try building the tree with files included
-      const tree = buildFileTree(root, true);
+      const tree = buildFileTree(app, root, true);
 
       const prompt = `A JSON represents the file tree as a nested structure:
 * The root object has a key "vault" which contains a FileTreeNode object.
@@ -115,7 +116,7 @@ const createGetFileTreeTool = (root: TFolder) =>
       // If the file tree is larger than 0.5MB, use the simplified version instead.
       if (jsonResult.length > 500000) {
         // Rebuild tree without file lists
-        const simplifiedTree = buildFileTree(root, false);
+        const simplifiedTree = buildFileTree(app, root, false);
         return prompt + JSON.stringify(simplifiedTree);
       }
 

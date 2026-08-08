@@ -8,7 +8,7 @@ import { extractNoteFiles, withSuppressedTokenWarnings } from "@/utils";
 import { Document } from "@langchain/core/documents";
 import { BaseRetriever } from "@langchain/core/retrievers";
 import { search } from "@orama/orama";
-import { TFile } from "obsidian";
+import { TFile, Vault } from "obsidian";
 
 export class HybridRetriever extends BaseRetriever {
   public lc_namespace = ["hybrid_retriever"];
@@ -22,7 +22,8 @@ export class HybridRetriever extends BaseRetriever {
       textWeight?: number;
       returnAll?: boolean;
       useRerankerThreshold?: number; // reranking API is only called with this set
-    }
+    },
+    private vault: Vault
   ) {
     super();
   }
@@ -31,7 +32,7 @@ export class HybridRetriever extends BaseRetriever {
     // Wrap the entire function in token warning suppression
     return withSuppressedTokenWarnings(async () => {
       // Extract note TFiles wrapped in [[]] from the query
-      const noteFiles = extractNoteFiles(query, app.vault);
+      const noteFiles = extractNoteFiles(query, this.vault);
       // Add note titles to salient terms
       const noteTitles = noteFiles.map((file) => file.basename);
       // Use Set to ensure uniqueness when combining terms
@@ -220,7 +221,7 @@ export class HybridRetriever extends BaseRetriever {
       logInfo("Daily note date range:", dailyNotes[0], dailyNotes[dailyNotes.length - 1]);
 
       // Perform the first search with title filter
-      const dailyNoteFiles = extractNoteFiles(dailyNotes.join(", "), app.vault);
+      const dailyNoteFiles = extractNoteFiles(dailyNotes.join(", "), this.vault);
       const dailyNoteResults = await this.getExplicitChunks(dailyNoteFiles);
 
       // Set includeInContext to true for all dailyNoteResults

@@ -8,7 +8,7 @@ import {
   getNotesFromPath,
   getNotesFromTags,
 } from "@/utils";
-import { Notice, TFile, Vault } from "obsidian";
+import { App, Notice, TFile, Vault } from "obsidian";
 import * as settingsModelModule from "@/settings/model";
 import { PromptSortStrategy } from "@/types";
 import { sortSlashCommands } from "@/commands/customCommandUtils";
@@ -46,6 +46,7 @@ jest.mock("@/utils", () => {
 
 describe("processedPrompt()", () => {
   let mockVault: Vault;
+  let mockApp: App;
   let mockActiveNote: TFile;
 
   beforeEach(() => {
@@ -65,6 +66,12 @@ describe("processedPrompt()", () => {
         }),
       },
     } as unknown as Vault;
+    mockApp = {
+      vault: mockVault,
+      metadataCache: { getFileCache: jest.fn() },
+      workspace: { getActiveFile: jest.fn() },
+      fileManager: { processFrontMatter: jest.fn() },
+    } as unknown as App;
     mockActiveNote = mockTFile({
       path: "path/to/active/note.md",
       basename: "Active Note",
@@ -87,7 +94,13 @@ describe("processedPrompt()", () => {
     (getFileName as jest.Mock).mockReturnValueOnce("Variable Note");
     (getNotesFromPath as jest.Mock).mockReturnValueOnce([mockActiveNote]);
 
-    const result = await processPrompt(doc.content, selectedText, mockVault, mockActiveNote);
+    const result = await processPrompt(
+      mockApp,
+      doc.content,
+      selectedText,
+      mockVault,
+      mockActiveNote
+    );
 
     expect(result.processedPrompt).toBe(
       'This is a {variable} and {selected_text}.\n\n<selected_text>\nhere is some selected text 12345\n</selected_text>\n\n<variable name="variable">\n<variable_note>\n<path>path/to/active/note.md</path>\n## Variable Note\n\nhere is the note content for note0\n</variable_note>\n</variable>'
@@ -120,7 +133,13 @@ describe("processedPrompt()", () => {
       .mockReturnValueOnce([mockNote1])
       .mockReturnValueOnce([mockNote2]);
 
-    const result = await processPrompt(doc.content, selectedText, mockVault, mockActiveNote);
+    const result = await processPrompt(
+      mockApp,
+      doc.content,
+      selectedText,
+      mockVault,
+      mockActiveNote
+    );
 
     expect(result.processedPrompt).toBe(
       'This is a {variable1} and {variable2}.\n\n<variable name="variable1">\n<variable_note>\n<path>path/to/note1.md</path>\n## Variable1 Note\n\nhere is the note content for note0\n</variable_note>\n</variable>\n\n<variable name="variable2">\n<variable_note>\n<path>path/to/note2.md</path>\n## Variable2 Note\n\nnote content for note1\n</variable_note>\n</variable>'
@@ -141,7 +160,13 @@ describe("processedPrompt()", () => {
     };
     const selectedText = "here is some selected text 12345";
 
-    const result = await processPrompt(doc.content, selectedText, mockVault, mockActiveNote);
+    const result = await processPrompt(
+      mockApp,
+      doc.content,
+      selectedText,
+      mockVault,
+      mockActiveNote
+    );
 
     expect(result.processedPrompt).toBe(
       "Rewrite the following text {selected_text}\n\n<selected_text>\nhere is some selected text 12345\n</selected_text>"
@@ -153,7 +178,14 @@ describe("processedPrompt()", () => {
     const customPrompt = "Rewrite the following text {}";
     const selectedText = "here is some selected text 12345";
 
-    const result = await processPrompt(customPrompt, selectedText, mockVault, mockActiveNote, true);
+    const result = await processPrompt(
+      mockApp,
+      customPrompt,
+      selectedText,
+      mockVault,
+      mockActiveNote,
+      true
+    );
 
     // {} should be preserved as literal, not replaced
     expect(result.processedPrompt).toBe("Rewrite the following text {}\n\n");
@@ -178,7 +210,13 @@ describe("processedPrompt()", () => {
     const { getFileName } = jest.requireMock<{ getFileName: jest.Mock }>("@/utils");
     getFileName.mockReturnValue("Active Note");
 
-    const result = await processPrompt(doc.content, selectedText, mockVault, mockActiveNote);
+    const result = await processPrompt(
+      mockApp,
+      doc.content,
+      selectedText,
+      mockVault,
+      mockActiveNote
+    );
 
     expect(result.processedPrompt).toBe(
       'This is the active note: {activenote}\n\n<variable name="activenote">\n<variable_note>\n<path>path/to/active/note.md</path>\n## Active Note\n\nContent of the active note\n</variable_note>\n</variable>'
@@ -199,7 +237,7 @@ describe("processedPrompt()", () => {
     };
     const selectedText = "";
 
-    const result = await processPrompt(doc.content, selectedText, mockVault, undefined);
+    const result = await processPrompt(mockApp, doc.content, selectedText, mockVault, undefined);
 
     expect(result.processedPrompt).toBe("This is the active note: {activeNote}\n\n");
     expect(result.includedFiles).toEqual([]);
@@ -218,7 +256,13 @@ describe("processedPrompt()", () => {
     };
     const selectedText = "selected text";
 
-    const result = await processPrompt(doc.content, selectedText, mockVault, mockActiveNote);
+    const result = await processPrompt(
+      mockApp,
+      doc.content,
+      selectedText,
+      mockVault,
+      mockActiveNote
+    );
 
     expect(result.processedPrompt).toBe("This is a test prompt with no variables.\n\n");
     expect(result.includedFiles).toEqual([]);
@@ -244,7 +288,13 @@ describe("processedPrompt()", () => {
     // Mock getFileContent to return content for the note
     (getFileContent as jest.Mock).mockResolvedValue("Note content for #tag");
 
-    const result = await processPrompt(customPrompt, selectedText, mockVault, mockActiveNote);
+    const result = await processPrompt(
+      mockApp,
+      customPrompt,
+      selectedText,
+      mockVault,
+      mockActiveNote
+    );
 
     expect(result.processedPrompt).toBe(
       'Notes related to {#tag} are:\n\n<variable name="#tag">\n<variable_note>\n<path>path/to/tagged/note.md</path>\n## Tagged Note\n\nNote content for #tag\n</variable_note>\n</variable>'
@@ -283,7 +333,13 @@ describe("processedPrompt()", () => {
       return "";
     });
 
-    const result = await processPrompt(customPrompt, selectedText, mockVault, mockActiveNote);
+    const result = await processPrompt(
+      mockApp,
+      customPrompt,
+      selectedText,
+      mockVault,
+      mockActiveNote
+    );
 
     expect(result.processedPrompt).toBe(
       'Notes related to {#tag1,#tag2,#tag3} are:\n\n<variable name="#tag1,#tag2,#tag3">\n<variable_note>\n<path>path/to/tagged/note1.md</path>\n## Tagged Note 1\n\nNote content for #tag1\n</variable_note>\n\n<variable_note>\n<path>path/to/tagged/note2.md</path>\n## Tagged Note 2\n\nNote content for #tag2\n</variable_note>\n</variable>'
@@ -301,7 +357,13 @@ describe("processedPrompt()", () => {
     (extractTemplateNoteFiles as jest.Mock).mockReturnValue([mockTestNote]);
     (getFileContent as jest.Mock).mockResolvedValue("Test note content");
 
-    const result = await processPrompt(customPrompt, selectedText, mockVault, mockActiveNote);
+    const result = await processPrompt(
+      mockApp,
+      customPrompt,
+      selectedText,
+      mockVault,
+      mockActiveNote
+    );
 
     expect(result.processedPrompt).toContain("Content of [[Test Note]] is important");
     expect(result.processedPrompt).toContain("<note_context>");
@@ -332,7 +394,13 @@ describe("processedPrompt()", () => {
     // Mock getNotesFromPath to return our mock note
     (getNotesFromPath as jest.Mock).mockReturnValue([mockNoteFile]);
 
-    const result = await processPrompt(customPrompt, selectedText, mockVault, mockActiveNote);
+    const result = await processPrompt(
+      mockApp,
+      customPrompt,
+      selectedText,
+      mockVault,
+      mockActiveNote
+    );
 
     // Verify the prompt text is preserved
     expect(result.processedPrompt).toContain(
@@ -375,7 +443,13 @@ describe("processedPrompt()", () => {
     // Mock getNotesFromPath to return our mock note
     (getNotesFromPath as jest.Mock).mockReturnValue([mockNote1]);
 
-    const result = await processPrompt(customPrompt, selectedText, mockVault, mockActiveNote);
+    const result = await processPrompt(
+      mockApp,
+      customPrompt,
+      selectedText,
+      mockVault,
+      mockActiveNote
+    );
 
     expect(result.processedPrompt).toContain(
       "{[[Note1]]} content and [[Note2]] are both important"
@@ -413,7 +487,13 @@ describe("processedPrompt()", () => {
       return "";
     });
 
-    const result = await processPrompt(customPrompt, selectedText, mockVault, mockActiveNote);
+    const result = await processPrompt(
+      mockApp,
+      customPrompt,
+      selectedText,
+      mockVault,
+      mockActiveNote
+    );
 
     expect(result.processedPrompt).toContain(
       "{[[Note1]]} is related to {[[Note2]]} and {[[Note3]]}."
@@ -440,7 +520,13 @@ describe("processedPrompt()", () => {
     // Mock the necessary functions
     (extractTemplateNoteFiles as jest.Mock).mockReturnValue([]); // Assume it returns empty if note doesn't exist
 
-    const result = await processPrompt(customPrompt, selectedText, mockVault, mockActiveNote);
+    const result = await processPrompt(
+      mockApp,
+      customPrompt,
+      selectedText,
+      mockVault,
+      mockActiveNote
+    );
 
     expect(result.processedPrompt).toBe("[[Non-existent Note]] should not cause errors.\n\n");
     expect(result.includedFiles).toEqual([]);
@@ -464,7 +550,13 @@ describe("processedPrompt()", () => {
 
     (getFileContent as jest.Mock).mockResolvedValue("Content of the active note");
 
-    const result = await processPrompt(doc.content, selectedText, mockVault, mockActiveNote);
+    const result = await processPrompt(
+      mockApp,
+      doc.content,
+      selectedText,
+      mockVault,
+      mockActiveNote
+    );
 
     // Check that getFileContent was called with the active note at least once
     expect(getFileContent).toHaveBeenCalledWith(mockActiveNote, mockVault);
@@ -488,7 +580,13 @@ describe("processedPrompt()", () => {
 
     (getFileContent as jest.Mock).mockResolvedValue("Content of the active note");
 
-    const result = await processPrompt(doc.content, selectedText, mockVault, mockActiveNote);
+    const result = await processPrompt(
+      mockApp,
+      doc.content,
+      selectedText,
+      mockVault,
+      mockActiveNote
+    );
 
     expect(result.processedPrompt).toBe(
       'Summarize this: {selected_text}\n\n<selected_text type="active_note">\nContent of the active note\n</selected_text>'
@@ -514,7 +612,13 @@ describe("processedPrompt()", () => {
     const { getFileName } = jest.requireMock<{ getFileName: jest.Mock }>("@/utils");
     getFileName.mockReturnValue("Active Note");
 
-    const result = await processPrompt(doc.content, selectedText, mockVault, mockActiveNote);
+    const result = await processPrompt(
+      mockApp,
+      doc.content,
+      selectedText,
+      mockVault,
+      mockActiveNote
+    );
 
     expect(result.processedPrompt).toBe(
       'Summarize this: {selected_text}. Additional info: {activeNote}\n\n<selected_text type="active_note">\nContent of the active note\n</selected_text>'
@@ -539,7 +643,13 @@ describe("processedPrompt()", () => {
 
     (getFileContent as jest.Mock).mockResolvedValue("Content of the active note");
 
-    const result = await processPrompt(doc.content, selectedText, mockVault, mockActiveNote);
+    const result = await processPrompt(
+      mockApp,
+      doc.content,
+      selectedText,
+      mockVault,
+      mockActiveNote
+    );
 
     expect(result.processedPrompt).toBe(
       "Analyze this: {selected_text}\n\n<selected_text>\nThis is the selected text\n</selected_text>"
@@ -577,7 +687,13 @@ describe("processedPrompt()", () => {
       return "";
     });
 
-    const result = await processPrompt(doc.content, selectedText, mockVault, mockActiveNote);
+    const result = await processPrompt(
+      mockApp,
+      doc.content,
+      selectedText,
+      mockVault,
+      mockActiveNote
+    );
 
     expect(result.processedPrompt).toBe(
       'This is a test prompt with {invalidVariable} name and {activeNote}\n\n<variable name="activeNote">\n<variable_note>\n<path>path/to/active/note.md</path>\n## Active Note\n\nActive Note Content\n</variable_note>\n</variable>'
@@ -721,7 +837,7 @@ describe("parseCustomCommandFile", () => {
 
   it("parses a custom command file with frontmatter and content", async () => {
     const { parseCustomCommandFile } = await import("@/commands/customCommandUtils");
-    const result = await parseCustomCommandFile(mockFile);
+    const result = await parseCustomCommandFile(window.app, mockFile);
     expect(result).toEqual({
       title: "Test Command",
       modelKey: "gpt-4",
@@ -743,7 +859,7 @@ describe("parseCustomCommandFile", () => {
       window.app.metadataCache as unknown as { getFileCache: jest.Mock }
     ).getFileCache.mockReturnValue({});
     const { parseCustomCommandFile } = await import("@/commands/customCommandUtils");
-    const result = await parseCustomCommandFile(mockFile);
+    const result = await parseCustomCommandFile(window.app, mockFile);
     expect(result).toEqual({
       title: "Test Command",
       modelKey: "",

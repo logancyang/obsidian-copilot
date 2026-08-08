@@ -9,8 +9,9 @@ import {
 } from "@/commands/constants";
 import { CustomCommand } from "@/commands/type";
 import { logWarn } from "@/logger";
-import { normalizePath, Notice, TAbstractFile, TFile, Vault } from "obsidian";
+import { App, Notice, TAbstractFile, TFile, Vault } from "obsidian";
 import { getSettings } from "@/settings/model";
+import { getEffectiveCustomPromptsFolder } from "@/settings/copilotFolder";
 import {
   updateCachedCommands,
   getCachedCustomCommands,
@@ -76,7 +77,7 @@ export function getCommandId(commandName: string) {
 }
 
 export function getCustomCommandsFolder(): string {
-  return normalizePath(getSettings().customPromptsFolder);
+  return getEffectiveCustomPromptsFolder();
 }
 
 export function getCommandFilePath(title: string): string {
@@ -97,7 +98,7 @@ export function isCustomCommandFile(file: TAbstractFile): boolean {
   return true;
 }
 
-export function hasOrderFrontmatter(file: TFile): boolean {
+export function hasOrderFrontmatter(app: App, file: TFile): boolean {
   const metadata = app.metadataCache.getFileCache(file);
   return metadata?.frontmatter?.[COPILOT_COMMAND_CONTEXT_MENU_ORDER] != null;
 }
@@ -105,7 +106,7 @@ export function hasOrderFrontmatter(file: TFile): boolean {
 /**
  * Parse a TFile as a CustomCommand by reading its content and extracting frontmatter.
  */
-export async function parseCustomCommandFile(file: TFile): Promise<CustomCommand> {
+export async function parseCustomCommandFile(app: App, file: TFile): Promise<CustomCommand> {
   const rawContent = await app.vault.read(file);
   const content = stripFrontmatter(rawContent);
   const metadata = app.metadataCache.getFileCache(file);
@@ -129,9 +130,18 @@ export async function parseCustomCommandFile(file: TFile): Promise<CustomCommand
   };
 }
 
-export async function loadAllCustomCommands(): Promise<CustomCommand[]> {
+/**
+ * Fetch all custom commands from the vault WITHOUT writing the global cache.
+ * Use this when the caller must coordinate cache writes itself (e.g. latest-wins
+ * folder reloads) so a superseded async reload cannot clobber a newer result.
+ */
+export async function fetchAllCustomCommands(app: App): Promise<CustomCommand[]> {
   const files = app.vault.getFiles().filter((file) => isCustomCommandFile(file));
-  const commands: CustomCommand[] = await Promise.all(files.map(parseCustomCommandFile));
+  return await Promise.all(files.map((file) => parseCustomCommandFile(app, file)));
+}
+
+export async function loadAllCustomCommands(app: App): Promise<CustomCommand[]> {
+  const commands = await fetchAllCustomCommands(app);
   updateCachedCommands(commands);
   return commands;
 }
@@ -184,11 +194,13 @@ export function sortSlashCommands(commands: CustomCommand[]): CustomCommand[] {
  * if it's not already present.
  */
 export async function processCommandPrompt(
+  app: App,
   prompt: string,
   selectedText: string,
   skipAppendingSelectedText = false
 ) {
   const result = await processPrompt(
+    app,
     prompt,
     selectedText,
     app.vault,
@@ -261,6 +273,7 @@ interface VariableProcessingResult {
  * files.
  */
 async function extractVariablesFromPrompt(
+  app: App,
   customPrompt: string,
   vault: Vault,
   activeNote?: TFile | null
@@ -294,7 +307,7 @@ async function extractVariablesFromPrompt(
         .slice(1)
         .split(",")
         .map((tag) => tag.trim());
-      const noteFiles = getNotesFromTags(vault, tagNames);
+      const noteFiles = getNotesFromTags(app, tagNames);
       const notesContent: string[] = [];
       for (const file of noteFiles) {
         const content = await getFileContent(file, vault);
@@ -352,6 +365,7 @@ export interface ProcessedPromptResult {
  * @param skipEmptyBraces - When true, treats `{}` as a literal and skips selected-text/active-note expansion.
  */
 export async function processPrompt(
+  app: App,
   customPrompt: string,
   selectedText: string,
   vault: Vault,
@@ -374,6 +388,7 @@ export async function processPrompt(
 
   // Extract variables and track files included through them
   const { variablesMap, includedFiles: variableFiles } = await extractVariablesFromPrompt(
+    app,
     customPrompt,
     vault,
     activeNote
@@ -489,7 +504,7 @@ export function getNextCustomCommandOrder(): number {
  * adds missing fields, does not overwrite existing values.
  * This is idempotent and does not touch the file content.
  */
-export async function ensureCommandFrontmatter(file: TFile, command: CustomCommand) {
+export async function ensureCommandFrontmatter(app: App, file: TFile, command: CustomCommand) {
   try {
     addPendingFileWrite(file.path);
     await app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {

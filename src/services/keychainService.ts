@@ -1,11 +1,10 @@
 import { type App, type SecretStorage, FileSystemAdapter } from "obsidian";
 import { type CopilotSettings, getModelKeyFromModel, getSettings } from "@/settings/model";
 import { type CustomModel } from "@/aiParams";
-import { isSensitiveKey } from "@/encryptionService";
 import {
   stripKeychainFields,
   cleanupLegacyFields,
-  isKeychainOnly,
+  isSensitiveKey,
   MODEL_SECRET_FIELDS,
   TOP_LEVEL_SECRET_FIELDS,
 } from "@/services/settingsSecretTransforms";
@@ -185,7 +184,7 @@ function toModelKeychainId(
 /** Result of a keychain-only hydrate pass. */
 export interface HydrateResult {
   settings: CopilotSettings;
-  /** True if any keychain read failed — caller may need to fall back to disk. */
+  /** True if any keychain read failed. */
   hadFailures: boolean;
 }
 
@@ -205,7 +204,6 @@ export type SaveDataFn = (data: CopilotSettings) => Promise<void>;
  *
  * Responsibilities:
  * - Store and retrieve API keys and tokens in the OS keychain
- * - Backfill secrets from data.json to keychain on upgrade (one-time per field)
  * - Hydrate in-memory settings with plaintext secrets on startup
  * - Extract secrets from settings for persistence
  * - Forget all secrets (destructive, user-initiated)
@@ -291,12 +289,27 @@ export class KeychainService {
     }
   }
 
-  /** Write a value directly to the keychain using a pre-computed ID. */
+  /** Write a value directly to the keychain using a pre-computed ID.
+   *
+   *  CALLER CONTRACT: `keychainId` must be vault-namespaced — typically
+   *  `copilot-v{vaultId}-...` — so it is swept by
+   *  `clearAllVaultSecrets()` and isolated from other vaults / plugins.
+   *  This method is a low-level bridge; it does not validate the
+   *  prefix because some legacy callers compute their own ids. New
+   *  code should derive the id via `toKeychainId(getVaultId(), …)` or
+   *  an equivalent vault-namespaced helper. */
   setSecretById(keychainId: string, value: string): void {
     this.storage.setSecret(keychainId, value);
   }
 
-  /** Delete a keychain entry by its pre-computed ID. */
+  /** Read a value directly from the keychain using a pre-computed ID.
+   *  See `setSecretById` for the caller contract on `keychainId`. */
+  getSecretById(keychainId: string): string | null {
+    return this.storage.getSecret(keychainId);
+  }
+
+  /** Delete a keychain entry by its pre-computed ID.
+   *  See `setSecretById` for the caller contract on `keychainId`. */
   deleteSecretById(keychainId: string): void {
     this.removeSecret(keychainId);
   }
@@ -337,15 +350,13 @@ export class KeychainService {
   /**
    * Replace each secret field in `settings` with the keychain value for that
    * field. This method is strictly read-only — it never writes to the keychain
-   * and never reads from disk. The simplified opt-in flow performs all keychain
-   * writes through `persistSecrets()` (normal saves) or
-   * `migrateDiskSecretsToKeychain()` (one-shot user action).
+   * and never reads from disk. All keychain writes flow through
+   * `persistSecrets()` during settings persistence.
    *
    * Per-field logic:
    * - keychain `""` (tombstone) → set field to `""` (don't resurrect)
    * - keychain has value → use keychain value
-   * - keychain `null` → leave the field as-is (caller already loaded from disk
-   *   when appropriate; in keychain-only mode `null` simply means "no value")
+   * - keychain `null` → leave the stripped field empty
    *
    * @param settings - Sanitised settings. Values are replaced in a shallow copy.
    * @returns Updated settings with secrets hydrated from the keychain, plus
@@ -481,8 +492,8 @@ export class KeychainService {
    *
    * Reason: uses `removeSecret()` which prefers real deletion via the
    * undocumented `deleteSecret()` and falls back to empty-string tombstone.
-   * Resurrection from data.json is prevented by `_diskSecretsCleared = true`
-   * (set by the caller after this method succeeds).
+   * The caller strips data.json before invoking this method so cleared entries
+   * cannot be restored from disk on the next load.
    */
   clearAllVaultSecrets(): void {
     const vaultPrefix = `copilot-v${this.vaultId}-`;
@@ -527,26 +538,16 @@ export class KeychainService {
    * (which could potentially resurrect old values).
    *
    * @param saveData - Callback to write data.json.
-   * @param refreshDiskState - Callback to refresh the cached disk-secret flag after save.
    * @param syncMemory - Callback to update in-memory settings without re-entering
    *   the normal persist path. The caller must suppress the subscriber-triggered
    *   `persistSettings()` before calling this (via `suppressNextPersistOnce()`).
    */
   async forgetAllSecrets(
     saveData: SaveDataFn,
-    refreshDiskState: (data: CopilotSettings) => void,
-    syncMemory: (data: Partial<CopilotSettings>) => void,
-    /** When true, the caller should NOT suppress the subscriber-triggered persist. */
-    onDiskSaveFailed?: () => void
+    syncMemory: (data: Partial<CopilotSettings>) => void
   ): Promise<void> {
-    // 0. Refuse the operation in a stranded vault (keychain-only mode but
-    // SecretStorage unavailable on this build). Otherwise we'd strip disk and
-    // memory while leaving the existing OS keychain entries intact — the user
-    // would believe their keys are gone, then watch them reappear after
-    // upgrading Obsidian or opening the vault on a capable build. Refusing
-    // up-front keeps the destructive intent honest.
     const current = getSettings();
-    if (isKeychainOnly(current) && !this.isAvailable()) {
+    if (!this.isAvailable()) {
       throw new Error(
         "Cannot delete API keys from the Obsidian Keychain because Secure Storage is " +
           "unavailable in this Obsidian build. Update Obsidian to 1.11.4 or later, or open " +
@@ -557,7 +558,7 @@ export class KeychainService {
     // enumerate vault entries to clear them. Refuse BEFORE stripping disk so
     // we don't leave the user with stripped data.json AND residual Keychain
     // entries that would resurrect on next hydrate.
-    if (this.isAvailable() && typeof this.app.secretStorage?.listSecrets !== "function") {
+    if (typeof this.app.secretStorage?.listSecrets !== "function") {
       throw new Error(
         "Cannot delete all API keys because this Obsidian build does not support " +
           "enumerating Keychain entries. Update Obsidian to a newer version and retry."
@@ -565,32 +566,16 @@ export class KeychainService {
     }
 
     // 1. Build stripped settings — before touching any durable store.
-    const stripped = stripKeychainFields(current) as CopilotSettings & {
-      _keychainOnly?: boolean;
-    };
-    // Reason: only flip the vault into keychain-only mode when Secure Storage
-    // is actually usable on this build. Without it, the subsequent persist
-    // path treats the vault as "stranded" and silently strips any newly
-    // entered API keys from data.json — turning "Delete All Keys" into a
-    // one-click way to brick auth setup on older Obsidian builds. A vault
-    // that was already keychain-only stays that way through
-    // `stripKeychainFields(current)`, so this guard never accidentally
-    // downgrades a stranded vault.
-    if (this.isAvailable()) {
-      stripped._keychainOnly = true;
-    }
+    const stripped = stripKeychainFields(current);
 
-    // 2. Write stripped data.json BEFORE clearing keychain.
-    // Reason: if a crash occurs after keychain clear but before disk write,
-    // the next startup sees "keychain empty + disk has secrets" and backfill
-    // revives the deleted keys. Writing disk first closes that window.
+    // 2. Write stripped data.json BEFORE clearing Keychain.
+    // Reason: a disk-write failure can then abort without also leaving the
+    // Keychain partially cleared, so the user can retry from a coherent state.
     const toSave = cleanupLegacyFields(stripped);
     try {
       await saveData(toSave);
-      refreshDiskState(toSave);
     } catch (error) {
       console.error("forgetAllSecrets: saveData failed — aborting keychain clear", error);
-      if (onDiskSaveFailed) onDiskSaveFailed();
       new Notice(
         "Failed to remove API keys from data.json. Obsidian Keychain was NOT cleared. Please try again."
       );
@@ -599,12 +584,10 @@ export class KeychainService {
 
     // 3. Clear keychain AFTER disk is safely stripped.
     let keychainError: Error | undefined;
-    if (this.isAvailable()) {
-      try {
-        this.clearAllVaultSecrets();
-      } catch (e) {
-        keychainError = e instanceof Error ? e : new Error(String(e));
-      }
+    try {
+      this.clearAllVaultSecrets();
+    } catch (e) {
+      keychainError = e instanceof Error ? e : new Error(String(e));
     }
 
     // 4. Always sync in-memory state — even on partial keychain failure.

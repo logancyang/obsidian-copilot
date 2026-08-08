@@ -1,0 +1,266 @@
+/** Pure grouping logic for `ConfiguredModelEnableList`, split from the React container so it's testable with plain data. */
+
+import { isOpencodeZenWireId, type ModelEnableGroup, type ModelEnableRow } from "@/agentMode";
+import {
+  COPILOT_PLUS_MODELS,
+  capabilitiesFromConfiguredInfo,
+  type ConfiguredModel,
+  type Provider,
+} from "@/modelManagement";
+
+/** One candidate model joined to its provider, plus current enabled state. */
+export interface Candidate {
+  configuredModel: ConfiguredModel;
+  provider: Provider;
+  enabled: boolean;
+}
+
+/** The two candidate buckets a backend's configured models partition into. */
+export interface CandidatePartition {
+  /** BYOK/Plus configured models (opencode candidates only). */
+  byokPlusCandidates: Candidate[];
+  /** This agent's own agent-origin models. */
+  agentOriginCandidates: Candidate[];
+}
+
+/**
+ * Split configured models into this backend's candidate buckets: agent-origin
+ * models matching `agentType`, plus BYOK/Plus models for opencode only.
+ *
+ * For opencode, a BYOK/Plus provider it can't route (`isOpencodeRoutable`
+ * false — azure / bedrock / self-hosted) is dropped to avoid a dead toggle:
+ * `opencodeEnabledModelEntries` skips unroutable providers, so enabling one
+ * would never reach the agent or picker.
+ */
+export function partitionCandidates(
+  configuredModels: readonly ConfiguredModel[],
+  providers: Readonly<Record<string, Provider>>,
+  enabledIds: ReadonlySet<string>,
+  agentType: string,
+  isOpencode: boolean,
+  isOpencodeRoutable?: (provider: Provider) => boolean
+): CandidatePartition {
+  const byokPlusCandidates: Candidate[] = [];
+  const agentOriginCandidates: Candidate[] = [];
+  for (const configuredModel of configuredModels) {
+    const provider = providers[configuredModel.providerId];
+    if (!provider) continue;
+    const candidate: Candidate = {
+      configuredModel,
+      provider,
+      enabled: enabledIds.has(configuredModel.configuredModelId),
+    };
+    const origin = provider.origin;
+    if (origin.kind === "agent") {
+      // Agent-origin models are exclusive to their agent's picker.
+      if (origin.agentType === agentType) agentOriginCandidates.push(candidate);
+      continue;
+    }
+    // BYOK / Plus rows are candidates for opencode only — and only when
+    // opencode can actually route the provider (no dead toggles).
+    if (isOpencode && (origin.kind === "byok" || origin.kind === "copilot-plus")) {
+      if (isOpencodeRoutable && !isOpencodeRoutable(provider)) continue;
+      byokPlusCandidates.push(candidate);
+    }
+  }
+  return { byokPlusCandidates, agentOriginCandidates };
+}
+
+/**
+ * Partition for the non-agent "chat" backend (Quick Chat). Every BYOK /
+ * Copilot Plus configured chat model is a candidate, bucketed one-group-per-
+ * provider by `buildModelEnableGroups`. Agent-origin models are excluded — the
+ * chat backend instantiates via LangChain (`ChatModelManager`), which can't
+ * drive an agent CLI's models — and embedding models are excluded since they
+ * aren't chat models.
+ */
+export function partitionChatCandidates(
+  configuredModels: readonly ConfiguredModel[],
+  providers: Readonly<Record<string, Provider>>,
+  enabledIds: ReadonlySet<string>
+): CandidatePartition {
+  const byokPlusCandidates: Candidate[] = [];
+  for (const configuredModel of configuredModels) {
+    if (configuredModel.info.isEmbedding) continue;
+    const provider = providers[configuredModel.providerId];
+    if (!provider) continue;
+    if (provider.origin.kind === "agent") continue;
+    byokPlusCandidates.push({
+      configuredModel,
+      provider,
+      enabled: enabledIds.has(configuredModel.configuredModelId),
+    });
+  }
+  return { byokPlusCandidates, agentOriginCandidates: [] };
+}
+
+/**
+ * The opencode-only sub-group label: the wire-id prefix (e.g.
+ * `opencode/big-pickle` → `opencode`). All opencode-only models live under one
+ * agent provider with full-prefixed ids, so sub-grouping comes from the prefix,
+ * not separate Provider rows. Falls back to the provider name when unprefixed.
+ */
+export function opencodeOnlySubGroupLabel(model: ConfiguredModel, provider: Provider): string {
+  const slash = model.info.id.indexOf("/");
+  if (slash > 0) return model.info.id.slice(0, slash);
+  return provider.displayName;
+}
+
+/**
+ * A `ModelEnableRow` from a candidate. The secondary line is the model's
+ * capability blurb (`info.description`), which only the curated agent backends
+ * persist (claude, codex); BYOK/Plus and opencode carry none and so render a
+ * single line. We deliberately don't fall back to the wire id for display — it
+ * duplicates the label — but we still carry it in `wireId` so search keeps
+ * matching it. This keeps the row identical to the chat picker.
+ */
+export function toRow(candidate: Candidate): ModelEnableRow {
+  const { configuredModel, enabled } = candidate;
+  const { displayName, id, description } = configuredModel.info;
+  return {
+    id: configuredModel.configuredModelId,
+    label: displayName || id,
+    description: description || undefined,
+    wireId: id,
+    enabled,
+    isFree: isOpencodeZenWireId(id),
+    capabilities: capabilitiesFromConfiguredInfo(configuredModel.info),
+  };
+}
+
+/** Case-insensitive match of a row against a (lowercased) search query. */
+export function rowMatches(row: ModelEnableRow, q: string): boolean {
+  if (!q) return true;
+  return (
+    row.label.toLowerCase().includes(q) ||
+    row.id.toLowerCase().includes(q) ||
+    (row.wireId?.toLowerCase().includes(q) ?? false) ||
+    (row.description?.toLowerCase().includes(q) ?? false)
+  );
+}
+
+/** Provider-origin kind, used to label the per-group disambiguation badge. */
+type OriginKind = Provider["origin"]["kind"];
+
+/** User-facing badge label for a provider's origin. */
+function originBadgeLabel(kind: OriginKind): string {
+  switch (kind) {
+    case "byok":
+      return "BYOK";
+    case "copilot-plus":
+      return "Copilot";
+    case "agent":
+      return "Agent Provided";
+  }
+}
+
+/** A built group paired with the origin kind every row in it shares. */
+interface OriginGroup {
+  group: ModelEnableGroup;
+  kind: OriginKind;
+}
+
+/**
+ * Provider-grouped rows for the shared list. BYOK/Plus candidates get one group
+ * per provider; agent-origin candidates get wire-prefix sub-groups for opencode
+ * (`opencode`, `openrouter`, …) or a per-provider group for claude/codex. All
+ * groups render the same flat way. Groups emptied by `query` are dropped.
+ *
+ * Each group maps to a single origin, so when the list spans more than one
+ * origin (opencode mixes BYOK/Plus/agent) we tag every group with an origin
+ * badge to disambiguate; a single-origin list (claude/codex) gets none.
+ *
+ * @param copilotProviderMissing - Whether no Copilot provider is registered,
+ *   which is when the lineup is worth advertising as a locked group. The caller
+ *   answers it because only it can see the provider rows — and the answer is not
+ *   inferable from the groups built here, since registering the provider and
+ *   reconciling its models are separate writes.
+ */
+export function buildModelEnableGroups(
+  partition: CandidatePartition,
+  isOpencode: boolean,
+  query: string,
+  copilotProviderMissing: boolean
+): ModelEnableGroup[] {
+  const q = query.trim().toLowerCase();
+  const out: OriginGroup[] = [];
+
+  // BYOK/Plus providers — one group per provider.
+  const byProvider = new Map<string, { label: string; kind: OriginKind; rows: ModelEnableRow[] }>();
+  for (const candidate of partition.byokPlusCandidates) {
+    const row = toRow(candidate);
+    if (!rowMatches(row, q)) continue;
+    const key = candidate.provider.providerId;
+    const bucket = byProvider.get(key);
+    if (bucket) bucket.rows.push(row);
+    else
+      byProvider.set(key, {
+        label: candidate.provider.displayName,
+        kind: candidate.provider.origin.kind,
+        rows: [row],
+      });
+  }
+  for (const [key, { label, kind, rows }] of byProvider) {
+    out.push({ group: { key: `byok:${key}`, label, rows }, kind });
+  }
+
+  // Agent-origin models — opencode-only sub-groups (by wire prefix) or a
+  // provider group for claude/codex.
+  const bySubGroup = new Map<string, { label: string; rows: ModelEnableRow[] }>();
+  for (const candidate of partition.agentOriginCandidates) {
+    const label = isOpencode
+      ? opencodeOnlySubGroupLabel(candidate.configuredModel, candidate.provider)
+      : candidate.provider.displayName;
+    const row = toRow(candidate);
+    if (!rowMatches(row, q)) continue;
+    const bucket = bySubGroup.get(label);
+    if (bucket) bucket.rows.push(row);
+    else bySubGroup.set(label, { label, rows: [row] });
+  }
+  for (const [label, { rows }] of bySubGroup) {
+    out.push({ group: { key: `agent:${label}`, label, rows }, kind: "agent" });
+  }
+
+  // No Copilot provider means no license, which is exactly when the lineup is
+  // worth advertising: synthesize the group so it is discoverable instead of
+  // absent. Tagged `copilot-plus` so the highlight, badge, tooltip, and float
+  // below apply to it unchanged — a locked group is the same group, minus the
+  // ability to act on it. Only opencode can route these models, and only its
+  // list mixes in non-agent providers at all.
+  if (isOpencode && copilotProviderMissing) {
+    const rows = COPILOT_PLUS_MODELS.map(
+      (model): ModelEnableRow => ({
+        id: `__locked_copilot__${model.id}`,
+        label: model.displayName || model.id,
+        description: model.description,
+        wireId: model.id,
+        enabled: false,
+        locked: true,
+      })
+    ).filter((row) => rowMatches(row, q));
+    if (rows.length > 0) {
+      out.push({
+        group: { key: "locked:copilot-plus", label: "Copilot", rows },
+        kind: "copilot-plus",
+      });
+    }
+  }
+
+  // Copilot Plus is highlighted and floated to the top; its provider name
+  // already reads "Copilot", so instead of a disambiguating origin badge
+  // it carries a "privacy" badge plus a license-required hover hint. Every
+  // other origin gets an origin badge only when the list mixes origins.
+  const mixed = new Set(out.map((o) => o.kind)).size > 1;
+  for (const o of out) {
+    if (o.kind === "copilot-plus") {
+      o.group.highlight = true;
+      o.group.badge = "privacy";
+      o.group.tooltip = "Copilot license required";
+    } else if (mixed) {
+      o.group.badge = originBadgeLabel(o.kind);
+    }
+  }
+  // Stable sort (V8 sort is stable): Copilot Plus first, others keep their order.
+  out.sort((a, b) => Number(b.kind === "copilot-plus") - Number(a.kind === "copilot-plus"));
+  return out.map((o) => o.group);
+}

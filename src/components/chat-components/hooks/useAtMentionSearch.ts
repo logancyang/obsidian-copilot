@@ -1,15 +1,23 @@
 import React, { useMemo } from "react";
-import { Platform, TFolder, TFile } from "obsidian";
+import { TFolder, TFile } from "obsidian";
+import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { FileText, Wrench, Folder, FileClock, Globe, CircleDashed } from "lucide-react";
 import fuzzysort from "fuzzysort";
 import { getToolDescription } from "@/tools/toolManager";
-import { AVAILABLE_TOOLS } from "../constants/tools";
+import { AVAILABLE_TOOLS } from "@/components/chat-components/constants/tools";
 import { useAllNotes } from "./useAllNotes";
 import { useAllFolders } from "./useAllFolders";
 import { useOpenWebTabs } from "./useOpenWebTabs";
 import { useActiveWebTabState } from "./useActiveWebTabState";
-import { AtMentionCategory, AtMentionOption, CategoryOption } from "./useAtMentionCategories";
-import { getSettings } from "@/settings/model";
+import {
+  AgentMentionBrand,
+  AtMentionCategory,
+  AtMentionOption,
+  CategoryOption,
+  EMPTY_AGENT_MENTION_BRANDS,
+} from "./useAtMentionCategories";
+import { getEffectiveCustomPromptsFolder } from "@/settings/copilotFolder";
+import { SelfHostCloudWarningIcon } from "@/components/ui/SelfHostCloudWarningIcon";
 
 // Maximum number of results to show in @ mention search
 const MAX_SEARCH_RESULTS = 30;
@@ -22,8 +30,10 @@ export function useAtMentionSearch(
   mode: "category" | "search",
   selectedCategory: AtMentionCategory | undefined,
   isCopilotPlus: boolean,
+  showTools: boolean,
   availableCategoryOptions: CategoryOption[],
-  currentActiveFile: TFile | null = null
+  currentActiveFile: TFile | null = null,
+  agentBrands: ReadonlyArray<AgentMentionBrand> = EMPTY_AGENT_MENTION_BRANDS
 ): (CategoryOption | AtMentionOption)[] {
   // Get raw data without pre-filtering
   const allNotes = useAllNotes(isCopilotPlus);
@@ -33,7 +43,7 @@ export function useAtMentionSearch(
   // - In category mode with a search query (searching across all categories)
   // - In search mode when webTabs category is selected
   const shouldEnableWebTabPolling =
-    Platform.isDesktopApp &&
+    isDesktopRuntime() &&
     ((mode === "category" && query.trim().length > 0) ||
       (mode === "search" && selectedCategory === "webTabs"));
   const openWebTabs = useOpenWebTabs({ enabled: shouldEnableWebTabPolling });
@@ -59,7 +69,7 @@ export function useAtMentionSearch(
 
   const toolItems: AtMentionOption[] = useMemo(
     () =>
-      isCopilotPlus
+      showTools
         ? AVAILABLE_TOOLS.map((tool) => ({
             key: `tool-${tool}`,
             title: tool,
@@ -70,7 +80,7 @@ export function useAtMentionSearch(
             icon: React.createElement(Wrench, { className: "tw-size-4" }),
           }))
         : [],
-    [isCopilotPlus]
+    [showTools]
   );
 
   const folderItems: AtMentionOption[] = useMemo(
@@ -90,7 +100,7 @@ export function useAtMentionSearch(
 
   const webTabItems: AtMentionOption[] = useMemo(
     () =>
-      Platform.isDesktopApp
+      isDesktopRuntime()
         ? openWebTabs.map((tab, index) => {
             const isLoaded = tab.isLoaded !== false;
             return {
@@ -110,6 +120,26 @@ export function useAtMentionSearch(
           })
         : [],
     [openWebTabs]
+  );
+
+  const agentItems: AtMentionOption[] = useMemo(
+    () =>
+      agentBrands.map((brand) => ({
+        key: `agent-${brand.id}`,
+        title: brand.displayName,
+        subtitle: undefined,
+        category: "agents",
+        data: brand.id,
+        content: undefined,
+        icon: React.createElement(brand.Icon, { className: "tw-size-4" }),
+        // Cloud agents keep their mention option but get a cloud-egress warning
+        // beside the name while Self-Host Mode is on.
+        trailingContent: brand.needsSelfHostWarning
+          ? React.createElement(SelfHostCloudWarningIcon)
+          : undefined,
+        searchKeyword: `${brand.displayName} ${brand.id}`,
+      })),
+    [agentBrands]
   );
 
   return useMemo(() => {
@@ -159,6 +189,13 @@ export function useAtMentionSearch(
         return tool.title.toLowerCase().includes(queryLower);
       });
 
+      // Agents rank first: match on display name or backend id (case-insensitive).
+      const matchingAgents = agentItems.filter(
+        (agent) =>
+          agent.title.toLowerCase().includes(queryLower) ||
+          (typeof agent.data === "string" && agent.data.toLowerCase().includes(queryLower))
+      );
+
       // Check if "active note" contains the query as a substring (case-insensitive)
       const activeNoteTitle = "active note";
       const activeNoteMatches = activeNoteTitle.includes(queryLower);
@@ -201,8 +238,10 @@ export function useAtMentionSearch(
 
       const rankedNonToolItems = fuzzySearchResults.map((result) => result.obj);
 
-      // Tools first, then Active Web Tab / Active Note (if matches), then everything else
+      // Agents first, then Tools, then Active Web Tab / Active Note (if matches),
+      // then everything else
       return [
+        ...matchingAgents,
         ...matchingTools,
         ...(activeWebTabOption ? [activeWebTabOption] : []),
         ...(activeNoteOption ? [activeNoteOption] : []),
@@ -213,6 +252,9 @@ export function useAtMentionSearch(
       let items: AtMentionOption[] = [];
 
       switch (selectedCategory) {
+        case "agents":
+          items = agentItems;
+          break;
         case "notes":
           items = noteItems;
           break;
@@ -231,7 +273,7 @@ export function useAtMentionSearch(
       if (!query) {
         // For notes category with no query, rank custom command notes lower
         if (selectedCategory === "notes") {
-          const customPromptsFolder = getSettings().customPromptsFolder;
+          const customPromptsFolder = getEffectiveCustomPromptsFolder();
           const regularNotes = items.filter(
             (item) =>
               !(
@@ -269,6 +311,7 @@ export function useAtMentionSearch(
     toolItems,
     folderItems,
     webTabItems,
+    agentItems,
     availableCategoryOptions,
     activeWebTab,
     currentActiveFile,

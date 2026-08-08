@@ -52,6 +52,15 @@ export function isWebSelectedTextContext(ctx: SelectedTextContext): ctx is WebSe
 }
 
 /**
+ * Type guard for note selected text context
+ */
+export function isNoteSelectedTextContext(
+  ctx: SelectedTextContext
+): ctx is NoteSelectedTextContext {
+  return ctx.sourceType === "note";
+}
+
+/**
  * Context for web tabs from Web Viewer
  */
 export interface WebTabContext {

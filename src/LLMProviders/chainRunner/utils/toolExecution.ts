@@ -1,6 +1,6 @@
 import { StructuredTool } from "@langchain/core/tools";
 import { logError, logInfo, logWarn } from "@/logger";
-import { checkIsPlusUser, isSelfHostModeValid } from "@/plusUtils";
+import { checkIsPaidUser, isSelfHostModeValid } from "@/plusUtils";
 import { getSettings } from "@/settings/model";
 import { ToolManager } from "@/tools/toolManager";
 import { ToolRegistry } from "@/tools/ToolRegistry";
@@ -64,8 +64,8 @@ export async function executeSequentialToolCall(
 
     // Check if tool requires Plus subscription
     if (metadata?.isPlusOnly) {
-      const isPlusUser = await checkIsPlusUser();
-      if (!isPlusUser && !isSelfHostModeValid()) {
+      const isPaidUser = await checkIsPaidUser();
+      if (!isPaidUser && !isSelfHostModeValid()) {
         return {
           toolName: toolCall.name,
           result: `Error: ${getToolDisplayName(toolCall.name)} requires a Copilot Plus subscription`,

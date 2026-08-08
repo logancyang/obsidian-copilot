@@ -20,18 +20,21 @@ import { CustomCommandChatModal } from "@/commands/CustomCommandChatModal";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { ApplyCustomCommandModal } from "@/components/modals/ApplyCustomCommandModal";
 import { YoutubeTranscriptModal } from "@/components/modals/YoutubeTranscriptModal";
-import { checkIsPlusUser } from "@/plusUtils";
+import { checkIsPaidUser } from "@/plusUtils";
 // Debug modals removed with search v3
-import CopilotPlugin from "@/main";
-import { shouldUseMiyo } from "@/miyo/miyoUtils";
+import type CopilotPlugin from "@/main";
+import { getSearchBackend } from "@/miyo/miyoUtils";
 import { getAllQAMarkdownContent } from "@/search/searchUtils";
-import { CopilotSettings } from "@/settings/model";
 import { NoteSelectedTextContext, WebSelectedTextContext } from "@/types/message";
 import { ensureFolderExists, isSourceModeOn } from "@/utils";
+import { getEffectiveCopilotFolder } from "@/settings/copilotFolder";
+import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { Editor, MarkdownView, Notice, TFile } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
-import { COMMAND_IDS, COMMAND_ICONS, COMMAND_NAMES, CommandId } from "../constants";
+import { COMMAND_IDS, COMMAND_ICONS, COMMAND_NAMES, CommandId } from "@/constants";
 import { setSelectedTextContexts } from "@/aiParams";
+
+type PublishFile = (file: TFile) => void;
 
 /**
  * Add a command to the plugin. Supports async callbacks; errors are logged.
@@ -87,11 +90,19 @@ function addCheckCommand(
   });
 }
 
-export function registerCommands(
-  plugin: CopilotPlugin,
-  prev: CopilotSettings | undefined,
-  next: CopilotSettings
-) {
+export function registerCommands(plugin: CopilotPlugin, publish: PublishFile) {
+  addCheckCommand(plugin, COMMAND_IDS.PUBLISH_FILE_TO_SYMPOSIUM, (checking) => {
+    const activeFile = plugin.app.workspace.getActiveFile();
+    if (!(activeFile instanceof TFile) || activeFile.extension !== "md") {
+      return false;
+    }
+
+    if (!checking) {
+      publish(activeFile);
+    }
+    return true;
+  });
+
   addEditorCommand(plugin, COMMAND_IDS.COUNT_WORD_AND_TOKENS_SELECTION, async (editor: Editor) => {
     const selectedText = editor.getSelection();
     const wordCount = selectedText.split(" ").length;
@@ -122,10 +133,29 @@ export function registerCommands(
     await plugin.activateView();
   });
 
+  addCommand(plugin, COMMAND_IDS.OPEN_RELEVANT_NOTES_VIEW, async () => {
+    await plugin.activateRelevantNotesView();
+  });
+
   addCommand(plugin, COMMAND_IDS.NEW_CHAT, async () => {
     clearRecordedPromptPayload();
     await plugin.newChat();
   });
+
+  // Agent Mode is always on, but requires subprocess support — register the
+  // agent commands only where the Node runtime exists (real desktop, not
+  // `emulateMobile`, where importing Agent Mode would crash).
+  if (isDesktopRuntime()) {
+    addCommand(plugin, COMMAND_IDS.OPEN_AGENT_CHAT_WINDOW, () => {
+      void plugin.activateAgentView();
+    });
+    addCommand(plugin, COMMAND_IDS.TOGGLE_AGENT_CHAT_WINDOW, () => {
+      void plugin.toggleAgentView();
+    });
+    addCommand(plugin, COMMAND_IDS.NEW_AGENT_CHAT, () => {
+      void plugin.newAgentChat();
+    });
+  }
 
   // Quick Command - opens a modal dialog for quick interactions
   // Note: For inline floating panel experience, use Quick Ask instead
@@ -134,11 +164,11 @@ export function registerCommands(
 
     if (checking) {
       // Return true only if we're not in source mode
-      return !!(!isSourceModeOn() && activeView && activeView.editor);
+      return !!(!isSourceModeOn(plugin.app) && activeView && activeView.editor);
     }
 
     // Need to check this again because it can still be triggered via shortcut.
-    if (isSourceModeOn()) {
+    if (isSourceModeOn(plugin.app)) {
       new Notice("Quick command is not available in source mode.");
       return false;
     }
@@ -191,7 +221,7 @@ export function registerCommands(
   addCommand(plugin, COMMAND_IDS.CLEAR_LOCAL_COPILOT_INDEX, async () => {
     const { getSettings } = await import("@/settings/model");
     const settings = getSettings();
-    const isMiyoEnabled = shouldUseMiyo(settings);
+    const isMiyoEnabled = getSearchBackend(settings) === "miyo";
     if (isMiyoEnabled) {
       new Notice(
         "Miyo folders are managed in Miyo. Remove the folder there if you want to clear it."
@@ -225,7 +255,7 @@ export function registerCommands(
   addCommand(plugin, COMMAND_IDS.GARBAGE_COLLECT_COPILOT_INDEX, async () => {
     try {
       const { getSettings } = await import("@/settings/model");
-      if (shouldUseMiyo(getSettings())) {
+      if (getSearchBackend(getSettings()) === "miyo") {
         new Notice(
           "Miyo manages file cleanup automatically. Run Index (refresh) vault to trigger a scan if needed."
         );
@@ -253,7 +283,7 @@ export function registerCommands(
         const count = await VectorStoreManager.getInstance().indexVaultToVectorStore(false, {
           userInitiated: true,
         });
-        if (shouldUseMiyo(settings)) {
+        if (getSearchBackend(settings) === "miyo") {
           new Notice("Miyo folder index refresh started. Open the Miyo app to check details.");
         } else {
           new Notice(`Semantic search index refreshed with ${count} documents.`);
@@ -291,7 +321,7 @@ export function registerCommands(
         const count = await VectorStoreManager.getInstance().indexVaultToVectorStore(true, {
           userInitiated: true,
         });
-        if (shouldUseMiyo(settings)) {
+        if (getSearchBackend(settings) === "miyo") {
           new Notice("Miyo folder index refresh started. Open the Miyo app to check details.");
         } else {
           new Notice(`Semantic search index rebuilt with ${count} documents.`);
@@ -328,7 +358,7 @@ export function registerCommands(
       // Categorize files
       for (const file of allMarkdownFiles) {
         // Check if file should be indexed based on settings
-        if (!shouldIndexFile(file, inclusions, exclusions)) {
+        if (!shouldIndexFile(plugin.app, file, inclusions, exclusions)) {
           excludedFiles.add(file.path);
           continue;
         }
@@ -380,11 +410,11 @@ export function registerCommands(
 
       // Create or update the file in the vault
       const fileName = `Copilot-Indexed-Files-${new Date().toLocaleDateString().replace(/\//g, "-")}.md`;
-      const folderPath = "copilot";
+      const folderPath = getEffectiveCopilotFolder();
       const filePath = `${folderPath}/${fileName}`;
 
       // Ensure destination folder exists (supports mobile and nested)
-      await ensureFolderExists(folderPath);
+      await ensureFolderExists(plugin.app.vault, folderPath);
 
       const existingFile = plugin.app.vault.getAbstractFileByPath(filePath);
       if (existingFile instanceof TFile) {
@@ -455,10 +485,10 @@ export function registerCommands(
 
       // Create the debug file
       const fileName = `Copilot-Embedding-Debug-${activeFile.basename.replace(/[\\/:*?"<>|]/g, "_")}.md`;
-      const folderPath = "copilot";
+      const folderPath = getEffectiveCopilotFolder();
       const filePath = `${folderPath}/${fileName}`;
 
-      await ensureFolderExists(folderPath);
+      await ensureFolderExists(plugin.app.vault, folderPath);
 
       const existingFile = plugin.app.vault.getAbstractFileByPath(filePath);
       if (existingFile instanceof TFile) {
@@ -481,14 +511,25 @@ export function registerCommands(
   // Add clear Copilot cache command
   addCommand(plugin, COMMAND_IDS.CLEAR_COPILOT_CACHE, async () => {
     try {
-      await plugin.fileParserManager.clearPDFCache();
+      await plugin.fileParserManager.clearPDFCache(plugin.app.vault);
 
       // Clear project context cache
       await ProjectContextCache.getInstance().clearAllCache();
 
       // Clear file content cache (get FileCache instance and clear it)
       const fileCache = FileCache.getInstance<string>();
-      await fileCache.clear();
+      await fileCache.clear(plugin.app.vault);
+
+      // Clear the off-vault shared conversion cache (Agent Mode snapshots +
+      // markers). Desktop-gated + dynamic import so node:fs / conversionsLocation
+      // never load on mobile (this command module is registered on all platforms).
+      // clear() is root-confined to `context-cache/` — it never ascends to the
+      // parent `vaults/<id>/`, so `agent-chat-index.json` is untouched.
+      if (isDesktopRuntime()) {
+        const { cacheRoot } = await import("@/context/conversionsLocation");
+        const { createNodeContextCacheFs } = await import("@/context/contextCacheFs");
+        await createNodeContextCacheFs(cacheRoot(plugin.app)).clear();
+      }
 
       new Notice("All Copilot caches cleared successfully");
     } catch (error) {
@@ -558,20 +599,18 @@ export function registerCommands(
     setSelectedTextContexts([selectedTextContext]);
 
     // Open chat window to show the context was added
-    await plugin.activateView();
+    await plugin.activateChatViewForContext();
   });
 
   // Add web selection to chat context command (manual)
   addCommand(plugin, COMMAND_IDS.ADD_WEB_SELECTION_TO_CHAT_CONTEXT, async () => {
-    const { Platform } = await import("obsidian");
-    if (!Platform.isDesktopApp) {
+    if (!isDesktopRuntime()) {
       new Notice("Web selection is only available on desktop");
       return;
     }
 
-    const { getWebViewerService } = await import(
-      "@/services/webViewerService/webViewerServiceSingleton"
-    );
+    const { getWebViewerService } =
+      await import("@/services/webViewerService/webViewerServiceSingleton");
 
     try {
       const service = getWebViewerService(plugin.app);
@@ -604,7 +643,7 @@ export function registerCommands(
       setSelectedTextContexts([webSelectedTextContext]);
 
       // Open chat window to show the context was added
-      await plugin.activateView();
+      await plugin.activateChatViewForContext();
     } catch (error) {
       logError("Error adding web selection to context:", error);
       new Notice("Failed to get web selection");
@@ -634,8 +673,8 @@ export function registerCommands(
 
   // Add command to download YouTube script (Copilot Plus only)
   addCommand(plugin, COMMAND_IDS.DOWNLOAD_YOUTUBE_SCRIPT, async () => {
-    const isPlusUser = await checkIsPlusUser();
-    if (!isPlusUser) {
+    const isPaidUser = await checkIsPaidUser(plugin.app);
+    if (!isPaidUser) {
       new Notice("Download YouTube Script (plus) is a Copilot Plus feature");
       return;
     }
@@ -651,11 +690,11 @@ export function registerCommands(
 
     if (checking) {
       // Return true only if we're not in source mode and have an active editor
-      return !!(!isSourceModeOn() && activeView && activeView.editor);
+      return !!(!isSourceModeOn(plugin.app) && activeView && activeView.editor);
     }
 
     // Need to check this again because it can still be triggered via shortcut
-    if (isSourceModeOn()) {
+    if (isSourceModeOn(plugin.app)) {
       new Notice("Quick Ask is not available in source mode.");
       return false;
     }

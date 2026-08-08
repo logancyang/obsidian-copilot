@@ -11,7 +11,6 @@ import { ChatMessage } from "@/types/message";
 import {
   extractChatHistory,
   extractUniqueTitlesFromDocs,
-  findCustomModel,
   getMessageRole,
   withSuppressedTokenWarnings,
 } from "@/utils";
@@ -27,7 +26,6 @@ import {
 } from "./utils/citationUtils";
 import { recordPromptPayload } from "./utils/promptPayloadRecorder";
 import { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
-import { getModelKey } from "@/aiParams";
 
 export class VaultQAChainRunner extends BaseChainRunner {
   async run(
@@ -42,20 +40,15 @@ export class VaultQAChainRunner extends BaseChainRunner {
     }
   ): Promise<string> {
     // Check if the current model has reasoning capability
-    const settings = getSettings();
-    const modelKey = getModelKey();
     let excludeThinking = false;
 
-    try {
-      const currentModel = findCustomModel(modelKey, settings.activeModels);
+    const currentModel = this.chainManager.chatModelManager.getActiveModel();
+    if (currentModel) {
       // Exclude thinking blocks if model doesn't have REASONING capability
       excludeThinking = !currentModel.capabilities?.includes(ModelCapability.REASONING);
-    } catch (error) {
+    } else {
       // If we can't find the model, default to including thinking blocks
-      logInfo(
-        "Could not determine model capabilities, defaulting to include thinking blocks",
-        error
-      );
+      logInfo("Could not determine model capabilities, defaulting to include thinking blocks");
     }
 
     const streamer = new ThinkBlockStreamer(updateCurrentAiMessage, excludeThinking);
@@ -99,7 +92,7 @@ export class VaultQAChainRunner extends BaseChainRunner {
 
       // Step 5a: Run FilterRetriever for guaranteed title/tag matches
       const hasTagTerms = tags.length > 0;
-      const filterRetriever = new FilterRetriever(app, {
+      const filterRetriever = new FilterRetriever(this.chainManager.app, {
         salientTerms: hasTagTerms ? [...tags] : [],
         maxK: settings.maxSourceChunks,
         returnAll: hasTagTerms,
@@ -111,7 +104,7 @@ export class VaultQAChainRunner extends BaseChainRunner {
       // When Miyo is active, Orama isn't initialized either, so also skip semantic → use lexical.
       const miyoActive = RetrieverFactory.isMiyoActive();
       const retrieverResult = await RetrieverFactory.createRetriever(
-        app,
+        this.chainManager.app,
         {
           minSimilarityScore: 0.01,
           maxK: settings.maxSourceChunks,

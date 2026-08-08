@@ -13,8 +13,6 @@ let requestUrlImpl = jest.fn().mockResolvedValue({
 });
 
 module.exports = {
-  // Reason: normalizePath is used by projectPaths.ts; identity function is sufficient for tests
-  normalizePath: jest.fn().mockImplementation((p) => p),
   moment: jest.requireActual("moment"),
   requestUrl: (...args) => requestUrlImpl(...args),
   __setRequestUrlImpl: (impl) => {
@@ -45,7 +43,33 @@ module.exports = {
   }),
   Platform: {
     isDesktop: true,
+    isDesktopApp: true,
+    isMobile: false,
+    // Filesystem case sensitivity is behaviour some code branches on; default to
+    // the case-sensitive branch so a test must opt in to folding explicitly.
+    isWin: false,
+    isMacOS: false,
+    isIosApp: false,
   },
+  FileSystemAdapter: class FileSystemAdapter {
+    constructor(basePath = "/vault") {
+      this._basePath = basePath;
+      this.read = jest.fn();
+      this.write = jest.fn();
+      this.exists = jest.fn().mockResolvedValue(true);
+      this.mkdir = jest.fn().mockResolvedValue(undefined);
+      this.list = jest.fn().mockResolvedValue({ files: [], folders: [] });
+      this.remove = jest.fn().mockResolvedValue(undefined);
+    }
+    getBasePath() {
+      return this._basePath;
+    }
+    getFullPath(p) {
+      const rel = String(p).replace(/\\/g, "/").replace(/^\/+/, "");
+      return rel ? `${this._basePath}/${rel}` : this._basePath;
+    }
+  },
+  normalizePath: (p) => String(p).replace(/\\\\/g, "/").replace(/\/+/g, "/"),
   parseYaml: jest.fn().mockImplementation((content) => {
     return parseYamlString(content);
   }),
@@ -55,6 +79,16 @@ module.exports = {
       this.close = jest.fn();
       this.onOpen = jest.fn();
       this.onClose = jest.fn();
+    }
+  },
+  // Base class for FolderSearchModal & friends; subclasses only need it to be
+  // constructable so suites that pull them into the module graph can load.
+  FuzzySuggestModal: class FuzzySuggestModal {
+    constructor(app) {
+      this.app = app;
+      this.open = jest.fn();
+      this.close = jest.fn();
+      this.setPlaceholder = jest.fn();
     }
   },
   App: jest.fn().mockImplementation(() => ({

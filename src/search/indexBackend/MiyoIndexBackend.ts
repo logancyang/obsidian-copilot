@@ -42,9 +42,15 @@ export class MiyoIndexBackend implements SemanticIndexBackend {
       const baseUrl = await this.getBaseUrl();
       await this.client.getFolder(baseUrl, this.getFolderName());
     } catch (error) {
+      // Keep the raw cause in the console for devs; the user gets plain,
+      // actionable guidance. The usual cause is that Miyo isn't running or this
+      // vault hasn't been added to Miyo as a folder.
       logWarn(`Miyo backend initialization failed: ${error}`);
+      const folderName = this.getFolderName();
+      const named = folderName ? ` ("${folderName}")` : "";
       new Notice(
-        "Failed to initialize Miyo backend. Check Miyo service discovery or folder setup."
+        `Miyo isn't available for this vault${named}. ` +
+          `Make sure Miyo is running and this vault is added to it.`
       );
     }
   }

@@ -1,6 +1,7 @@
-import { CustomModel, useModelKey } from "@/aiParams";
+import { useModelKey } from "@/aiParams";
 import { processCommandPrompt } from "@/commands/customCommandUtils";
 import { MenuCommandModal, type ContentState } from "@/components/command-ui";
+import { useApp } from "@/context";
 import {
   MODAL_MIN_HEIGHT_COMPACT,
   MODAL_MIN_HEIGHT_EXPANDED,
@@ -8,7 +9,9 @@ import {
 import { SelectionHighlight } from "@/editor/selectionHighlight";
 import { createHighlightReplaceGuard, type ReplaceGuard } from "@/editor/replaceGuard";
 import { logError } from "@/logger";
-import { cleanMessageForCopy, findCustomModel, insertIntoEditor } from "@/utils";
+import { cleanMessageForCopy, insertIntoEditor } from "@/utils";
+import { useChatModelPicker } from "@/components/chat-components/useChatModelPicker";
+import { useResolvedChatBackendModel } from "@/hooks/useResolvedChatBackendModel";
 import { computeVerticalPlacement } from "@/utils/panelPlacement";
 import { computeSelectionAnchors } from "@/utils/selectionAnchors";
 import type { EditorView } from "@codemirror/view";
@@ -110,6 +113,7 @@ function CustomCommandChatModalContent({
   anchorBottom,
   behaviorConfig,
 }: CustomCommandChatModalContentProps) {
+  const app = useApp();
   // Resolve behavior configuration
   const behavior = useMemo(
     () => resolveBehaviorConfig(command, behaviorConfig),
@@ -210,30 +214,14 @@ function CustomCommandChatModalContent({
     updateSetting("quickCommandIncludeNoteContext", checked);
   }, []);
 
-  // Safely resolve the selected model with fallback to first enabled model
-  const resolvedModel = useMemo((): CustomModel | null => {
-    try {
-      const model = findCustomModel(userSelectedModelKey, settings.activeModels);
-      // Treat disabled models as invalid selections (ModelSelector won't present them)
-      if (!model.enabled) {
-        throw new Error(`Selected model is disabled: ${userSelectedModelKey}`);
-      }
-      return model;
-    } catch {
-      // Stale model key can happen when a model is removed/renamed/disabled; don't crash the modal.
-      // Avoid side effects during render; notify/log in the effect below.
-      return settings.activeModels.find((m) => m.enabled) ?? null;
-    }
-  }, [userSelectedModelKey, settings.activeModels]);
+  // Resolve the selected chat-backend model (preferred id → first enabled → null).
+  const resolvedModel = useResolvedChatBackendModel(app, userSelectedModelKey);
 
-  // Compute the key for the resolved model
-  const resolvedModelKey = useMemo(() => {
-    if (!resolvedModel) return null;
-    return `${resolvedModel.name}|${resolvedModel.provider}`;
-  }, [resolvedModel]);
-
-  // Effective model key for the UI — falls back to user selection when resolution fails.
-  const effectiveModelKey = resolvedModelKey ?? userSelectedModelKey;
+  // Chat-backend picker entries; `value` reflects the effective model.
+  const chatPicker = useChatModelPicker({
+    value: userSelectedModelKey,
+    onChange: handleModelChange,
+  });
 
   // Use shared streaming hook
   const {
@@ -300,7 +288,7 @@ function CustomCommandChatModalContent({
       try {
         const result = await runTurn(async (ctx: StreamingChatTurnContext) => {
           if (ctx.signal.aborted) return "";
-          const prompt = await processCommandPrompt(command.content, originalText);
+          const prompt = await processCommandPrompt(app, command.content, originalText);
           lastInputPromptRef.current = prompt;
           return prompt;
         });
@@ -324,7 +312,7 @@ function CustomCommandChatModalContent({
       cancelled = true;
       stopStreaming(ABORT_REASON.UNMOUNT);
     };
-  }, [behavior.autoExecuteOnOpen, command.content, originalText, runTurn, stopStreaming]);
+  }, [app, behavior.autoExecuteOnOpen, command.content, originalText, runTurn, stopStreaming]);
 
   const handleFollowUpSubmit = async () => {
     if (!followUpValue.trim()) return;
@@ -357,7 +345,7 @@ function CustomCommandChatModalContent({
         }
 
         // Process prompt (expand placeholders)
-        const prompt = await processCommandPrompt(rawInput, originalText, !isFirstTurn);
+        const prompt = await processCommandPrompt(app, rawInput, originalText, !isFirstTurn);
         lastInputPromptRef.current = prompt;
         return prompt;
       });
@@ -439,8 +427,9 @@ function CustomCommandChatModalContent({
       followUpValue={followUpValue}
       onFollowUpChange={setFollowUpValue}
       onFollowUpSubmit={handleFollowUpSubmit}
-      selectedModel={effectiveModelKey}
-      onSelectModel={handleModelChange}
+      selectedModel={chatPicker.value}
+      onSelectModel={chatPicker.onChange}
+      models={chatPicker.models}
       onStop={handleStop}
       onCopy={handleCopy}
       onInsert={handleInsert}
@@ -685,7 +674,7 @@ export class CustomCommandChatModal {
     const { anchorBottom, ...initialPosition } = this.getInitialPosition(activeView);
 
     const handleInsert = (message: string) => {
-      void insertIntoEditor(message);
+      void insertIntoEditor(this.app, message);
       this.close();
     };
 

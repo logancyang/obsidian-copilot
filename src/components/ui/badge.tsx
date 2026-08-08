@@ -10,8 +10,13 @@ const badgeVariants = cva(
       variant: {
         default: "tw-bg-primary-alt tw-shadow",
         secondary: "tw-bg-secondary-alt",
-        destructive: "tw-bg-modifier-error tw-shadow",
+        destructive: "tw-bg-modifier-error tw-text-on-accent tw-shadow",
         outline: "tw-border tw-border-solid tw-border-border",
+        // Label stays on the base's body ink: `--text-success` is a bright green
+        // tuned for the plain background and measures ~2.2:1 on this tint in
+        // light themes. The tint and the caller's check glyph carry the meaning.
+        success: "tw-bg-success",
+        accent: "tw-bg-interactive-accent tw-text-on-accent",
       },
     },
     defaultVariants: {
@@ -21,8 +26,7 @@ const badgeVariants = cva(
 );
 
 export interface BadgeProps
-  extends React.HTMLAttributes<HTMLDivElement>,
-    VariantProps<typeof badgeVariants> {}
+  extends React.HTMLAttributes<HTMLDivElement>, VariantProps<typeof badgeVariants> {}
 
 const Badge = React.forwardRef<HTMLDivElement, BadgeProps>(
   ({ className, variant, ...props }, ref) => (

@@ -1,0 +1,1 @@
+export { ClaudeBackendDescriptor } from "./descriptor";

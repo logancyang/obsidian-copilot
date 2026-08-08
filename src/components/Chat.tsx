@@ -4,6 +4,7 @@ import {
   getSelectedTextContexts,
   ProjectConfig,
   removeSelectedTextContext,
+  subscribeToProjectChange,
   useChainType,
   updateIndexingProgressState,
   useIndexingProgress,
@@ -17,8 +18,9 @@ import { logInfo, logError } from "@/logger";
 import type { WebTabContext } from "@/types/message";
 
 import { ChatControls, reloadCurrentProject } from "@/components/chat-components/ChatControls";
-import ChatInput from "@/components/chat-components/ChatInput";
+import ChatInput from "@/components/chat-components/ChatModeInput";
 import ChatMessages from "@/components/chat-components/ChatMessages";
+import { useChatModelPicker } from "@/components/chat-components/useChatModelPicker";
 import { NewVersionBanner } from "@/components/chat-components/NewVersionBanner";
 import { ProjectList } from "@/components/chat-components/ProjectList";
 import IndexingProgressCard from "@/components/IndexingProgressCard";
@@ -31,7 +33,7 @@ import {
   RESTRICTION_MESSAGES,
   USER_SENDER,
 } from "@/constants";
-import { AppContext, EventTargetContext } from "@/context";
+import { AppContext, ChatViewEventTarget, EventTargetContext } from "@/context";
 import { ChatInputProvider, useChatInput } from "@/context/ChatInputContext";
 import { useChatManager } from "@/hooks/useChatManager";
 import { useChatFileDrop } from "@/hooks/useChatFileDrop";
@@ -40,19 +42,27 @@ import ChainManager from "@/LLMProviders/chainManager";
 import { clearRecordedPromptPayload } from "@/LLMProviders/chainRunner/utils/promptPayloadRecorder";
 import { logFileManager } from "@/logFileManager";
 import CopilotPlugin from "@/main";
-import { useIsPlusUser } from "@/plusUtils";
+import { useIsPaidUser } from "@/plusUtils";
 import { ProjectFileManager } from "@/projects/ProjectFileManager";
 import { useProjects } from "@/projects/state";
-import { useSettingsValue } from "@/settings/model";
-import { ChatUIState } from "@/state/ChatUIState";
+import { getModelKeyFromModel, useSettingsValue } from "@/settings/model";
+import { ChatManagerChatUIState } from "@/state/ChatUIState";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { ChatMessage } from "@/types/message";
-import { err2String, isPlusChain } from "@/utils";
+import { err2String, isPlusChain, modelSupportsVision } from "@/utils";
 import { arrayBufferToBase64 } from "@/utils/base64";
 import { appendUniqueFiles } from "@/utils/fileListUtils";
 import { Notice, TFile } from "obsidian";
 import { ContextManageModal } from "@/components/modals/project/context-manage-modal";
-import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { v4 as uuidv4 } from "uuid";
 import { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import { useActiveWebTabState } from "@/components/chat-components/hooks/useActiveWebTabState";
@@ -66,7 +76,7 @@ interface ChatProps {
   fileParserManager: FileParserManager;
   plugin: CopilotPlugin;
   mode?: ChatMode;
-  chatUIState: ChatUIState;
+  chatUIState: ChatManagerChatUIState;
 }
 
 // Internal component that has access to the ChatInput context
@@ -84,8 +94,17 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
   const eventTarget = useContext(EventTargetContext);
 
   const { messages: chatHistory, addMessage: rawAddMessage } = useChatManager(chatUIState);
-  const [currentModelKey] = useModelKey();
+  const [currentModelKey, setCurrentModelKey] = useModelKey();
   const [currentChain] = useChainType();
+  const currentProject = useSyncExternalStore(subscribeToProjectChange, getCurrentProject);
+  // Non-agent chat picker sourced from the model-management "chat" backend.
+  const chatModelPicker = useChatModelPicker({
+    value:
+      currentChain === ChainType.PROJECT_CHAIN
+        ? currentProject?.projectModelKey || currentModelKey
+        : currentModelKey,
+    onChange: setCurrentModelKey,
+  });
   const [currentAiMessage, setCurrentAiMessage] = useState("");
   const [inputMessage, setInputMessage] = useState("");
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -246,7 +265,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
 
   const [previousMode, setPreviousMode] = useState<ChainType | null>(null);
   const [selectedChain, setSelectedChain] = useChainType();
-  const isPlusUser = useIsPlusUser();
+  const isPaidUser = useIsPaidUser();
 
   const appContext = useContext(AppContext);
   const app = plugin.app || appContext;
@@ -291,6 +310,23 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     if (hasUrlsInContext && !isPlusChain(currentChain)) {
       // Show notice but continue processing the message without URL context
       new Notice(RESTRICTION_MESSAGES.URL_PROCESSING_RESTRICTED);
+    }
+
+    // Hard-block sending images to a model that is KNOWN to lack vision. We only
+    // block when capabilities are populated (an empty array still means "known");
+    // undefined capabilities mean "unknown" and must not block. Inputs are left
+    // intact so the user can switch models without retyping.
+    if (selectedImages.length > 0) {
+      const activeModel = chatModelPicker.models.find(
+        (m) => getModelKeyFromModel(m) === chatModelPicker.value
+      );
+      if (Array.isArray(activeModel?.capabilities) && !modelSupportsVision(activeModel)) {
+        const modelLabel = activeModel.displayName || activeModel.name;
+        new Notice(
+          `${modelLabel} doesn't support images. Switch to a vision-capable model to send images.`
+        );
+        return;
+      }
     }
 
     try {
@@ -372,7 +408,6 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
         await handleSaveAsNote();
       }
 
-      // Get the LLM message for AI processing
       const llmMessage = chatUIState.getLLMMessage(messageId);
       if (llmMessage) {
         await getAIResponse(
@@ -642,6 +677,24 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     // Cleanup function
     return () => {
       eventTarget?.removeEventListener(EVENT_NAMES.CHAT_IS_VISIBLE, handleChatVisibility);
+    };
+  }, [eventTarget, chatInput]);
+
+  // Insert text routed from outside the chat (e.g. the Relevant Notes pane's
+  // "Add to Chat") into this chat's input. The bus latches text queued before
+  // this listener attaches, so a freshly-opened view still receives it on mount.
+  useEffect(() => {
+    const bus = eventTarget instanceof ChatViewEventTarget ? eventTarget : null;
+    const handleInsertText = (e: Event) => {
+      bus?.consumePendingInsertText();
+      const text = (e as CustomEvent<{ text?: string }>).detail?.text;
+      if (typeof text === "string") chatInput.insertTextWithPills(text, true);
+    };
+    eventTarget?.addEventListener(EVENT_NAMES.INSERT_TEXT_TO_CHAT, handleInsertText);
+    const pending = bus?.consumePendingInsertText();
+    if (typeof pending === "string") chatInput.insertTextWithPills(pending, true);
+    return () => {
+      eventTarget?.removeEventListener(EVENT_NAMES.INSERT_TEXT_TO_CHAT, handleInsertText);
     };
   }, [eventTarget, chatInput]);
 
@@ -916,6 +969,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
               onAddImage={handleAddImage}
               setSelectedImages={setSelectedImages}
               disableModelSwitch={selectedChain === ChainType.PROJECT_CHAIN}
+              modelPickerOverride={chatModelPicker}
               selectedTextContexts={selectedTextContexts}
               onRemoveSelectedText={handleRemoveSelectedText}
               showProgressCard={() => {
@@ -961,7 +1015,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
                   } else {
                     // default back to chat or plus mode
                     setSelectedChain(
-                      isPlusUser ? ChainType.COPILOT_PLUS_CHAIN : ChainType.LLM_CHAIN
+                      isPaidUser ? ChainType.COPILOT_PLUS_CHAIN : ChainType.LLM_CHAIN
                     );
                   }
                 }}

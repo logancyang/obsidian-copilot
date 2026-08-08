@@ -1,10 +1,10 @@
 import { getSettings } from "@/settings/model";
-import { Vault } from "obsidian";
+import { App } from "obsidian";
 import { isDesktopRuntime } from "@/services/obsidianCli/ObsidianCliClient";
-import { editFileTool, writeFileTool } from "./ComposerTools";
+import { createEditFileTool, createWriteFileTool } from "./ComposerTools";
 import { createGetFileTreeTool } from "./FileTreeTools";
-import { updateMemoryTool } from "./memoryTools";
-import { readNoteTool } from "./NoteTools";
+import { createUpdateMemoryTool } from "./memoryTools";
+import { createReadNoteTool } from "./NoteTools";
 import { obsidianRandomReadTool } from "./ObsidianCliDailyTools";
 import {
   obsidianBasesTool,
@@ -14,7 +14,7 @@ import {
   obsidianTasksTool,
   obsidianTemplatesTool,
 } from "./ObsidianCliTools";
-import { localSearchTool, webSearchTool } from "./SearchTools";
+import { createLocalSearchTool, webSearchTool } from "./SearchTools";
 import { createGetTagListTool } from "./TagTools";
 import {
   convertTimeBetweenTimezonesTool,
@@ -26,19 +26,21 @@ import { ToolDefinition, ToolRegistry } from "./ToolRegistry";
 import { youtubeTranscriptionTool } from "./YoutubeTools";
 
 /**
- * Define all built-in tools with their metadata
+ * Define all built-in tools with their metadata. App-dependent tools are
+ * instantiated from their factories with the provided `app`.
  */
-export const BUILTIN_TOOLS: ToolDefinition[] = [
-  // Search tools
-  {
-    tool: localSearchTool,
-    metadata: {
-      id: "localSearch",
-      displayName: "Vault Search",
-      description: "Search through your vault notes",
-      category: "search",
-      copilotCommands: ["@vault"],
-      customPromptInstructions: `For localSearch (searching notes based on their contents in the vault):
+function getBuiltinTools(app: App): ToolDefinition[] {
+  return [
+    // Search tools
+    {
+      tool: createLocalSearchTool(app),
+      metadata: {
+        id: "localSearch",
+        displayName: "Vault Search",
+        description: "Search through your vault notes",
+        category: "search",
+        copilotCommands: ["@vault"],
+        customPromptInstructions: `For localSearch (searching notes based on their contents in the vault):
 - You MUST always provide both "query" (string) and "salientTerms" (array of strings)
 - salientTerms MUST be extracted from the user's original query - never invent new terms
 - They are keywords used for BM25 full-text search to find notes containing those exact words
@@ -72,37 +74,37 @@ For time-based searches with meaningful terms (e.g., "python debugging notes fro
 
 For broad searches:
 - If the user wants a comprehensive list, use getFileTree to get all note titles as reference. This helps verify search completeness and identify notes the search may have missed.`,
+      },
     },
-  },
-  {
-    tool: webSearchTool,
-    metadata: {
-      id: "webSearch",
-      displayName: "Web Search",
-      description:
-        "Search the INTERNET (NOT vault notes) when user explicitly asks for web/online information",
-      category: "search",
-      copilotCommands: ["@websearch", "@web"],
-      customPromptInstructions: `For webSearch:
+    {
+      tool: webSearchTool,
+      metadata: {
+        id: "webSearch",
+        displayName: "Web Search",
+        description:
+          "Search the INTERNET (NOT vault notes) when user explicitly asks for web/online information",
+        category: "search",
+        copilotCommands: ["@websearch", "@web"],
+        customPromptInstructions: `For webSearch:
 - ONLY use when the user's query contains explicit web-search intent like:
   * "web search", "internet search", "online search"
   * "Google", "search online", "look up online", "search the web"
 - Always provide an empty chatHistory array
 
 Example: "search the web for python tutorials" → query: "python tutorials", chatHistory: []`,
+      },
     },
-  },
 
-  // Time tools (always enabled)
-  {
-    tool: getCurrentTimeTool,
-    metadata: {
-      id: "getCurrentTime",
-      displayName: "Get Current Time",
-      description: "Get the current time in any timezone",
-      category: "time",
-      isAlwaysEnabled: true,
-      customPromptInstructions: `For time queries (IMPORTANT: Always use UTC offsets, not timezone names):
+    // Time tools (always enabled)
+    {
+      tool: getCurrentTimeTool,
+      metadata: {
+        id: "getCurrentTime",
+        displayName: "Get Current Time",
+        description: "Get the current time in any timezone",
+        category: "time",
+        isAlwaysEnabled: true,
+        customPromptInstructions: `For time queries (IMPORTANT: Always use UTC offsets, not timezone names):
 
 - If the user mentions a specific city, country, or timezone name (e.g., "Tokyo", "Japan", "JST"), you MUST convert it to the correct UTC offset and pass it via the timezoneOffset parameter (e.g., "+9").
 - Only omit timezoneOffset when the user asks for the current local time without naming any location or timezone.
@@ -112,58 +114,58 @@ Examples:
 - "what time is it" (local time) → call with no parameters
 - "what time is it in Tokyo" (UTC+9) → timezoneOffset: "+9"
 - "what time is it in New York" (UTC-5 or UTC-4 depending on DST) → timezoneOffset: "-5"`,
+      },
     },
-  },
-  {
-    tool: getTimeInfoByEpochTool,
-    metadata: {
-      id: "getTimeInfoByEpoch",
-      displayName: "Get Time Info",
-      description: "Convert epoch timestamp to human-readable format",
-      category: "time",
-      isAlwaysEnabled: true,
+    {
+      tool: getTimeInfoByEpochTool,
+      metadata: {
+        id: "getTimeInfoByEpoch",
+        displayName: "Get Time Info",
+        description: "Convert epoch timestamp to human-readable format",
+        category: "time",
+        isAlwaysEnabled: true,
+      },
     },
-  },
-  {
-    tool: getTimeRangeMsTool,
-    metadata: {
-      id: "getTimeRangeMs",
-      displayName: "Get Time Range",
-      description: "Convert time expressions to date ranges",
-      category: "time",
-      isAlwaysEnabled: true,
-      customPromptInstructions: `For time-based queries:
+    {
+      tool: getTimeRangeMsTool,
+      metadata: {
+        id: "getTimeRangeMs",
+        displayName: "Get Time Range",
+        description: "Convert time expressions to date ranges",
+        category: "time",
+        isAlwaysEnabled: true,
+        customPromptInstructions: `For time-based queries:
 - Use this tool to convert time expressions like "last week", "yesterday", "last month" to proper time ranges
 - This is typically the first step before using localSearch with a time range
 
 Example: For "last week" → timeExpression: "last week"`,
+      },
     },
-  },
-  {
-    tool: convertTimeBetweenTimezonesTool,
-    metadata: {
-      id: "convertTimeBetweenTimezones",
-      displayName: "Convert Timezones",
-      description: "Convert time between different timezones",
-      category: "time",
-      isAlwaysEnabled: true,
-      customPromptInstructions: `For timezone conversions:
+    {
+      tool: convertTimeBetweenTimezonesTool,
+      metadata: {
+        id: "convertTimeBetweenTimezones",
+        displayName: "Convert Timezones",
+        description: "Convert time between different timezones",
+        category: "time",
+        isAlwaysEnabled: true,
+        customPromptInstructions: `For timezone conversions:
 
 Example: "what time is 6pm PT in Tokyo" (PT is UTC-8 or UTC-7, Tokyo is UTC+9) → time: "6pm", fromOffset: "-8", toOffset: "+9"`,
+      },
     },
-  },
 
-  // File tools
-  {
-    tool: readNoteTool,
-    metadata: {
-      id: "readNote",
-      displayName: "Read Note",
-      description: "Read a specific note in sequential chunks using its own line-chunking logic.",
-      category: "file",
-      requiresVault: true,
-      isAlwaysEnabled: true,
-      customPromptInstructions: `For readNote:
+    // File tools
+    {
+      tool: createReadNoteTool(app),
+      metadata: {
+        id: "readNote",
+        displayName: "Read Note",
+        description: "Read a specific note in sequential chunks using its own line-chunking logic.",
+        category: "file",
+        requiresVault: true,
+        isAlwaysEnabled: true,
+        customPromptInstructions: `For readNote:
 - Decide based on the user's request: only call this tool when the question requires reading note content.
 - If the user asks about a note title that is already mentioned in the current or previous turns of the conversation, or linked in <active_note> or <note_context> blocks, call readNote directly—do not use localSearch to look it up. Even if the note title mention is partial but similar to what you have seen in the context, try to infer the correct note path from context. Skip the tool when a note is irrelevant to the user query.
 - If the user asks about notes linked from that note, read the original note first, then follow the "linkedNotes" paths returned in the tool result to inspect those linked notes.
@@ -176,19 +178,19 @@ Example: "what time is 6pm PT in Tokyo" (PT is UTC-8 or UTC-7, Tokyo is UTC+9) �
 Examples:
 - First chunk: notePath: "Projects/launch-plan.md" (chunkIndex omitted or 0)
 - Next chunk: notePath: "Projects/launch-plan.md", chunkIndex: 1`,
+      },
     },
-  },
-  {
-    tool: writeFileTool,
-    metadata: {
-      id: "writeFile",
-      displayName: "Write to File",
-      description: "Create or rewrite files in your vault",
-      category: "file",
-      requiresVault: true,
-      timeoutMs: 0, // No timeout - waits for user preview decision
-      copilotCommands: ["@composer"],
-      customPromptInstructions: `For writeFile:
+    {
+      tool: createWriteFileTool(app),
+      metadata: {
+        id: "writeFile",
+        displayName: "Write to File",
+        description: "Create or rewrite files in your vault",
+        category: "file",
+        requiresVault: true,
+        timeoutMs: 0, // No timeout - waits for user preview decision
+        copilotCommands: ["@composer"],
+        customPromptInstructions: `For writeFile:
 - NEVER display the file content directly in your response
 - Always pass the complete file content to the tool
 - Include the full path to the file
@@ -200,18 +202,18 @@ Examples:
 Examples:
 - Basic: path: "path/to/note.md", content: "FULL CONTENT OF THE NOTE"
 - Skip confirmation: path: "path/to/note.md", content: "FULL CONTENT", confirmation: false`,
+      },
     },
-  },
-  {
-    tool: editFileTool,
-    metadata: {
-      id: "editFile",
-      displayName: "Edit File",
-      description: "Make a targeted, single-match edit to an existing file",
-      category: "file",
-      requiresVault: true,
-      timeoutMs: 0, // No timeout - waits for user preview decision
-      customPromptInstructions: `For editFile:
+    {
+      tool: createEditFileTool(app),
+      metadata: {
+        id: "editFile",
+        displayName: "Edit File",
+        description: "Make a targeted, single-match edit to an existing file",
+        category: "file",
+        requiresVault: true,
+        timeoutMs: 0, // No timeout - waits for user preview decision
+        customPromptInstructions: `For editFile:
 - Use for targeted edits; use writeFile for major rewrites or new files
 - oldText must uniquely identify the location — include surrounding context lines if needed
 - The tool automatically handles minor whitespace/quote differences (fuzzy matching)
@@ -221,34 +223,35 @@ Example: Add "Bob Johnson" to attendees in notes/meeting.md:
 path: "notes/meeting.md"
 oldText: "## Attendees\\n- John Smith\\n- Jane Doe"
 newText: "## Attendees\\n- John Smith\\n- Jane Doe\\n- Bob Johnson"`,
+      },
     },
-  },
 
-  // Media tools
-  {
-    tool: youtubeTranscriptionTool,
-    metadata: {
-      id: "youtubeTranscription",
-      displayName: "YouTube Transcription",
-      description: "Get transcripts from YouTube videos",
-      category: "media",
-      isPlusOnly: true,
-      requiresUserMessageContent: true,
-      customPromptInstructions: `For youtubeTranscription:
+    // Media tools
+    {
+      tool: youtubeTranscriptionTool,
+      metadata: {
+        id: "youtubeTranscription",
+        displayName: "YouTube Transcription",
+        description: "Get transcripts from YouTube videos",
+        category: "media",
+        isPlusOnly: true,
+        requiresUserMessageContent: true,
+        customPromptInstructions: `For youtubeTranscription:
 - Use when user provides YouTube URLs
 - No parameters needed - the tool will process URLs from the conversation`,
+      },
     },
-  },
-];
+  ];
+}
 
 /**
  * Register the file tree tool separately as it needs vault access
  */
-export function registerFileTreeTool(vault: Vault): void {
+export function registerFileTreeTool(app: App): void {
   const registry = ToolRegistry.getInstance();
 
   registry.register({
-    tool: createGetFileTreeTool(vault.getRoot()),
+    tool: createGetFileTreeTool(app, app.vault.getRoot()),
     metadata: {
       id: "getFileTree",
       displayName: "File Tree",
@@ -274,11 +277,11 @@ Example queries that should use getFileTree:
 /**
  * Register the tag list tool separately to ensure metadata cache access is available.
  */
-export function registerTagListTool(): void {
+export function registerTagListTool(app: App): void {
   const registry = ToolRegistry.getInstance();
 
   registry.register({
-    tool: createGetTagListTool(),
+    tool: createGetTagListTool(app),
     metadata: {
       id: "getTagList",
       displayName: "Tag List",
@@ -303,11 +306,11 @@ Examples:
 /**
  * Register the memory tool separately as it depends on saved memory setting
  */
-export function registerMemoryTool(): void {
+export function registerMemoryTool(app: App): void {
   const registry = ToolRegistry.getInstance();
 
   registry.register({
-    tool: updateMemoryTool,
+    tool: createUpdateMemoryTool(app),
     metadata: {
       id: "updateMemory",
       displayName: "Update Memory",
@@ -482,15 +485,15 @@ Base file YAML reference (for creating new .base files with writeFile):
  * This function registers tool definitions, not user preferences.
  * User-enabled tools are filtered dynamically when retrieved.
  *
- * @param vault - Optional Obsidian vault. When provided, enables registration of vault-dependent tools like file tree
+ * @param app - Optional Obsidian app. When provided, enables registration of app-dependent tools (search, readNote, writeFile, editFile, file tree, tag list, memory).
  */
-export function initializeBuiltinTools(vault?: Vault): void {
+export function initializeBuiltinTools(app?: App): void {
   const registry = ToolRegistry.getInstance();
   const settings = getSettings();
 
-  // Only reinitialize if tools have changed or vault/memory status has changed
+  // Only reinitialize if tools have changed or app/memory status has changed
   const hasFileTree = registry.getToolMetadata("getFileTree") !== undefined;
-  const shouldHaveFileTree = vault !== undefined;
+  const shouldHaveFileTree = app !== undefined;
   const hasUpdateMemoryTool = registry.getToolMetadata("updateMemory") !== undefined;
   const shouldHaveMemoryTool = settings.enableSavedMemory;
 
@@ -502,18 +505,17 @@ export function initializeBuiltinTools(vault?: Vault): void {
     // Clear any existing tools
     registry.clear();
 
-    // Register all built-in tools
-    registry.registerAll(BUILTIN_TOOLS);
+    // Register app-dependent built-in tools (most built-ins need the vault or
+    // metadata cache; they're instantiated from factories with `app`).
+    if (app) {
+      registry.registerAll(getBuiltinTools(app));
+      registerFileTreeTool(app);
+      registerTagListTool(app);
 
-    // Register vault-dependent tools if vault is available
-    if (vault) {
-      registerFileTreeTool(vault);
-      registerTagListTool();
-    }
-
-    // Register memory tool if saved memory is enabled
-    if (settings.enableSavedMemory) {
-      registerMemoryTool();
+      // Register memory tool if saved memory is enabled
+      if (settings.enableSavedMemory) {
+        registerMemoryTool(app);
+      }
     }
 
     // Register desktop-only CLI tools (invisible on mobile)

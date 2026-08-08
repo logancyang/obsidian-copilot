@@ -26,7 +26,7 @@ describe("ContextProcessor.processSelectedTextContexts", () => {
     mockSelectedTextContexts.length = 0;
 
     // Get singleton instance
-    processor = ContextProcessor.getInstance();
+    processor = ContextProcessor.getInstance(window.app);
   });
 
   it("should return empty string when no selected text contexts", () => {

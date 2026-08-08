@@ -12,7 +12,7 @@ import {
 import { BasePillNode, getEditorDocument, SerializedBasePillNode } from "./BasePillNode";
 import { TruncatedPillText } from "./TruncatedPillText";
 import { PillBadge } from "./PillBadge";
-import { useActiveFile } from "../context/ActiveFileContext";
+import { useActiveFile } from "@/components/chat-components/context/ActiveFileContext";
 
 // Active note pill doesn't store any file-specific data
 // It always represents the current active file

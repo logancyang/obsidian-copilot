@@ -6,6 +6,7 @@ import { SearchBar } from "@/components/ui/SearchBar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
+import { ChatIconWithAttention } from "@/components/chat-components/ChatIconWithAttention";
 import { logError } from "@/logger";
 import { useSettingsValue } from "@/settings/model";
 import { sortByStrategy } from "@/utils/recentUsageManager";
@@ -19,7 +20,25 @@ export interface ChatHistoryItem {
   title: string;
   createdAt: Date;
   lastAccessedAt: Date;
+  /** Backend that produced this chat (Agent Mode only). Used to resolve a
+   * brand icon in the popover via the caller-supplied `getIcon` resolver. */
+  backendId?: string;
+  /** Owning Agent Project id when known, or `undefined` for global chats. The
+   * GLOBAL_SCOPE default is applied in the Agent Mode session layer, not here,
+   * to keep this generic helper free of cross-layer scope imports. */
+  projectId?: string;
+  /** A live in-memory session bound to this chat is flagging for attention
+   * (finished / errored / paused while backgrounded). In-memory only and valid
+   * for the app's lifetime — purely-on-disk chats never carry it. Populated by
+   * the Agent Mode session layer; absent on plain conversation history. */
+  needsAttention?: boolean;
 }
+
+type ChatHistoryIconResolver = (
+  item: ChatHistoryItem
+) => React.ComponentType<{ className?: string }> | undefined;
+
+type ChatHistoryBadgeResolver = (item: ChatHistoryItem) => React.ReactNode;
 
 interface ChatHistoryPopoverProps {
   children: React.ReactNode;
@@ -28,6 +47,23 @@ interface ChatHistoryPopoverProps {
   onDeleteChat: (id: string) => Promise<void>;
   onLoadChat?: (id: string) => Promise<void>;
   onOpenSourceFile?: (id: string) => Promise<void>;
+  /** Optional resolver that maps a history item to a row icon. When it
+   * returns `undefined` (or is not supplied), the row falls back to
+   * `MessageCircle`. */
+  getIcon?: ChatHistoryIconResolver;
+  /** Optional metadata badge rendered beside a chat title. */
+  getBadge?: ChatHistoryBadgeResolver;
+  /**
+   * Preferred open direction, chosen by the trigger's geometry — not the
+   * platform. Defaults suit a trigger pinned to the bottom of the pane (the
+   * control-bar History button): open upward, right-aligned. The landing's
+   * full-width "View all" row passes `side="bottom" align="start"` so it opens
+   * downward like an accordion. Radix still flips/shifts to stay on-screen, so
+   * these are preferences, not hard positions (mobile and narrow sidebars are
+   * handled by that collision avoidance, not by branching on `Platform`).
+   */
+  side?: "top" | "right" | "bottom" | "left";
+  align?: "start" | "center" | "end";
 }
 
 export function ChatHistoryPopover({
@@ -37,6 +73,10 @@ export function ChatHistoryPopover({
   onDeleteChat,
   onLoadChat,
   onOpenSourceFile,
+  getIcon,
+  getBadge,
+  side = "top",
+  align = "end",
 }: ChatHistoryPopoverProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -266,7 +306,16 @@ export function ChatHistoryPopover({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>{children}</PopoverTrigger>
-      <PopoverContent className="tw-w-80 tw-p-0" align="end" side="top">
+      {/* collisionPadding keeps the content off the screen bezel when Radix
+          flips/shifts it (default is 0 — it would otherwise hug the edge on
+          mobile / narrow sidebars); the max-w cap stops the 320px content from
+          overflowing a very small viewport. */}
+      <PopoverContent
+        className="tw-w-80 tw-max-w-[calc(100vw-2rem)] tw-p-0"
+        align={align}
+        side={side}
+        collisionPadding={16}
+      >
         <div className="tw-flex tw-max-h-[400px] tw-flex-col">
           <div className="tw-shrink-0 tw-border-b tw-p-1">
             <SearchBar value={searchQuery} onChange={setSearchQuery} />
@@ -306,6 +355,8 @@ export function ChatHistoryPopover({
                             onOpenSourceFile={onOpenSourceFile}
                             isMobile={isMobile}
                             confirmDeleteId={confirmDeleteId}
+                            getIcon={getIcon}
+                            getBadge={getBadge}
                           />
                         ))}
                       </div>
@@ -344,6 +395,8 @@ interface ChatHistoryItemProps {
   onOpenSourceFile?: (id: string) => void;
   isMobile: boolean;
   confirmDeleteId: string | null;
+  getIcon?: ChatHistoryIconResolver;
+  getBadge?: ChatHistoryBadgeResolver;
 }
 
 function ChatHistoryItem({
@@ -360,11 +413,18 @@ function ChatHistoryItem({
   onOpenSourceFile,
   isMobile,
   confirmDeleteId,
+  getIcon,
+  getBadge,
 }: ChatHistoryItemProps) {
+  const RowIcon = getIcon?.(chat) ?? MessageCircle;
   if (isEditing) {
     return (
       <div className="tw-flex tw-items-center tw-gap-2 tw-rounded-md tw-p-2">
-        <MessageCircle className="tw-size-3 tw-shrink-0 tw-text-muted" />
+        <ChatIconWithAttention
+          icon={RowIcon}
+          needsAttention={chat.needsAttention}
+          iconClassName="tw-size-3 tw-text-muted"
+        />
         <Input
           value={editingTitle}
           onChange={(e) => onEditingTitleChange(e.target.value)}
@@ -395,13 +455,20 @@ function ChatHistoryItem({
       )}
       onClick={() => onLoadChat(chat.id)}
     >
-      <MessageCircle className="tw-size-3 tw-shrink-0 tw-text-muted" />
+      <ChatIconWithAttention
+        icon={RowIcon}
+        needsAttention={chat.needsAttention}
+        iconClassName="tw-size-3 tw-text-muted"
+      />
 
-      <div className="tw-min-w-0 tw-flex-1">
-        <span className="tw-block tw-truncate tw-text-sm tw-font-medium tw-text-normal">
-          {chat.title}
-        </span>
-      </div>
+      <span
+        className="tw-block tw-min-w-0 tw-flex-1 tw-truncate tw-text-sm tw-font-medium tw-text-normal"
+        title={chat.title}
+      >
+        {chat.title}
+      </span>
+
+      {getBadge?.(chat)}
 
       <div
         className={cn(

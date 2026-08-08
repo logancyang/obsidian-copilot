@@ -1,5 +1,7 @@
+import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import { sanitizeVaultPathSegment } from "@/projects/projectPaths";
 import { getCachedProjectRecords } from "@/projects/state";
+import type { RecentUsageManager } from "@/utils/recentUsageManager";
 import { formatDateTime } from "@/utils";
 import { readFrontmatterViaAdapter } from "@/utils/vaultAdapterUtils";
 import { App, TFile } from "obsidian";
@@ -121,7 +123,7 @@ export async function filterChatHistoryFiles(
  * First checks frontmatter.topic, then extracts from filename by removing
  * project ID prefix, date/time patterns, and normalizing separators.
  */
-export function extractChatTitle(file: TFile): string {
+export function extractChatTitle(app: App, file: TFile): string {
   // Read the file's front matter
   const frontmatter = app.metadataCache.getFileCache(file)?.frontmatter;
 
@@ -170,7 +172,7 @@ export function extractChatTitle(file: TFile): string {
  * Extract chat creation date from a file.
  * Uses frontmatter.epoch if available, falls back to file creation time.
  */
-export function extractChatDate(file: TFile): Date {
+export function extractChatDate(app: App, file: TFile): Date {
   const frontmatter = app.metadataCache.getFileCache(file)?.frontmatter;
 
   if (frontmatter && frontmatter.epoch) {
@@ -186,7 +188,7 @@ export function extractChatDate(file: TFile): Date {
  * Extract chat last accessed time (epoch ms) from a file.
  * Uses frontmatter.lastAccessedAt if available, returns null otherwise.
  */
-export function extractChatLastAccessedAtMs(file: TFile): number | null {
+export function extractChatLastAccessedAtMs(app: App, file: TFile): number | null {
   const frontmatter = app.metadataCache.getFileCache(file)?.frontmatter;
   const rawValue = frontmatter?.lastAccessedAt;
 
@@ -210,12 +212,56 @@ export function extractChatLastAccessedAtMs(file: TFile): number | null {
 }
 
 /**
+ * Extract chat last accessed date from a file.
+ * Uses extractChatLastAccessedAtMs and returns a Date when available, null otherwise.
+ */
+export function extractChatLastAccessedAt(app: App, file: TFile): Date | null {
+  const lastAccessedAtMs = extractChatLastAccessedAtMs(app, file);
+  return lastAccessedAtMs ? new Date(lastAccessedAtMs) : null;
+}
+
+/**
+ * Build a `ChatHistoryItem` from a chat file, blending the in-memory
+ * lastAccessedAt (for immediate UI feedback after a load/save) with the
+ * persisted frontmatter value. Used by both the legacy and Agent Mode
+ * chat-history flows so the two lists rank identically.
+ */
+export function fileToHistoryItem(
+  app: App,
+  file: TFile,
+  lastAccessedAtManager: RecentUsageManager<string>
+): ChatHistoryItem {
+  const createdAt = extractChatDate(app, file);
+  const persistedLastAccessedAtMs = extractChatLastAccessedAtMs(app, file);
+  const effectiveLastAccessedAtMs = lastAccessedAtManager.getEffectiveLastUsedAt(
+    file.path,
+    persistedLastAccessedAtMs ?? createdAt.getTime()
+  );
+  const frontmatter = app.metadataCache.getFileCache(file)?.frontmatter;
+  const rawBackendId = frontmatter?.backendId;
+  const backendId =
+    typeof rawBackendId === "string" && rawBackendId.trim() ? rawBackendId.trim() : undefined;
+  // Reason: expose the raw frontmatter projectId (undefined when absent). The
+  // GLOBAL_SCOPE default for unscoped chats is applied by the Agent Mode session
+  // layer, keeping this util free of a cross-layer scope import.
+  const projectId = coerceProjectId(frontmatter?.projectId);
+  return {
+    id: file.path,
+    title: extractChatTitle(app, file),
+    createdAt,
+    lastAccessedAt: new Date(effectiveLastAccessedAtMs),
+    backendId,
+    projectId,
+  };
+}
+
+/**
  * Get formatted display text for a chat file (title + formatted date).
  * Used in chat history modals and similar UI components.
  */
-export function getChatDisplayText(file: TFile): string {
-  const title = extractChatTitle(file);
-  const date = extractChatDate(file);
+export function getChatDisplayText(app: App, file: TFile): string {
+  const title = extractChatTitle(app, file);
+  const date = extractChatDate(app, file);
   const formattedDateTime = formatDateTime(date);
   return `${title} - ${formattedDateTime.display}`;
 }

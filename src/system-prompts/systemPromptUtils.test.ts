@@ -7,7 +7,7 @@ import {
   generateCopyPromptName,
 } from "@/system-prompts/systemPromptUtils";
 import { UserSystemPrompt } from "@/system-prompts/type";
-import { TFile, TAbstractFile, normalizePath } from "obsidian";
+import { TFile, TAbstractFile } from "obsidian";
 import * as settingsModel from "@/settings/model";
 import type { CopilotSettings } from "@/settings/model";
 import { mockTFile } from "@/__tests__/mockObsidian";
@@ -25,6 +25,16 @@ jest.mock("@/settings/model", () => ({
     userSystemPromptsFolder: "SystemPrompts",
   })),
 }));
+
+// The folder read point derives from copilotFolder in production; these tests
+// exercise path-composition/file-matching, so the derived accessor is shimmed
+// to the folder each test configures via getSettings().userSystemPromptsFolder.
+jest.mock("@/settings/copilotFolder", () => {
+  const { getSettings } = jest.requireMock<typeof import("@/settings/model")>("@/settings/model");
+  return {
+    getEffectiveSystemPromptsFolder: jest.fn(() => getSettings().userSystemPromptsFolder),
+  };
+});
 
 // Mock state management
 jest.mock("@/system-prompts/state", () => ({
@@ -116,23 +126,13 @@ describe("validatePromptName", () => {
 });
 
 describe("getSystemPromptsFolder", () => {
-  it("returns the system prompts folder path from settings", () => {
+  it("returns the effective (copilotFolder-derived) system prompts folder", () => {
     jest.spyOn(settingsModel, "getSettings").mockReturnValue({
       userSystemPromptsFolder: "CustomFolder/SystemPrompts",
     } as CopilotSettings);
 
     const result = getSystemPromptsFolder();
     expect(result).toBe("CustomFolder/SystemPrompts");
-  });
-
-  it("normalizes the path", () => {
-    jest.spyOn(settingsModel, "getSettings").mockReturnValue({
-      userSystemPromptsFolder: "SystemPrompts",
-    } as CopilotSettings);
-
-    const result = getSystemPromptsFolder();
-    expect(normalizePath).toHaveBeenCalled();
-    expect(result).toBe("SystemPrompts");
   });
 });
 
@@ -289,7 +289,7 @@ This is the prompt content.`;
       },
     });
 
-    const result = await parseSystemPromptFile(mockFile);
+    const result = await parseSystemPromptFile(app, mockFile);
 
     expect(result).toEqual({
       title: "Test Prompt",
@@ -306,7 +306,7 @@ This is the prompt content.`;
     (app.vault.read as jest.Mock).mockResolvedValue(rawContent);
     (app.metadataCache.getFileCache as jest.Mock).mockReturnValue({});
 
-    const result = await parseSystemPromptFile(mockFile);
+    const result = await parseSystemPromptFile(app, mockFile);
 
     expect(result).toEqual({
       title: "Test Prompt",
@@ -330,7 +330,7 @@ Content here.`;
       },
     });
 
-    const result = await parseSystemPromptFile(mockFile);
+    const result = await parseSystemPromptFile(app, mockFile);
 
     expect(result).toEqual({
       title: "Test Prompt",
@@ -355,7 +355,7 @@ Line 2`;
       },
     });
 
-    const result = await parseSystemPromptFile(mockFile);
+    const result = await parseSystemPromptFile(app, mockFile);
 
     expect(result.content).toBe("Line 1\nLine 2");
     expect(result.content).not.toContain("---");
@@ -374,7 +374,7 @@ Content with --- separator in the middle.`;
       },
     });
 
-    const result = await parseSystemPromptFile(mockFile);
+    const result = await parseSystemPromptFile(app, mockFile);
 
     expect(result.content).toBe("Content with --- separator in the middle.");
   });

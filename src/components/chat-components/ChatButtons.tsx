@@ -1,36 +1,25 @@
-import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { CopyButton } from "@/components/chat-components/CopyButton";
+import { MessageActionButton } from "@/components/chat-components/MessageActionButton";
 import { USER_SENDER } from "@/constants";
 import { cn } from "@/lib/utils";
 import { ChatMessage } from "@/types/message";
-import {
-  Check,
-  Copy,
-  LibraryBig,
-  PenSquare,
-  RotateCw,
-  TextCursorInput,
-  Trash2,
-} from "lucide-react";
+import { cleanMessageForCopy } from "@/utils";
+import { LibraryBig, PenSquare, RotateCw, TextCursorInput, Trash2 } from "lucide-react";
 import { Platform } from "obsidian";
 import React from "react";
 
 interface ChatButtonsProps {
   message: ChatMessage;
-  onCopy: () => void;
-  isCopied: boolean;
   onInsertIntoEditor?: () => void;
   onRegenerate?: () => void;
   onEdit?: () => void;
-  onDelete: () => void;
+  onDelete?: () => void;
   onShowSources?: () => void;
   hasSources: boolean;
 }
 
 export const ChatButtons: React.FC<ChatButtonsProps> = ({
   message,
-  onCopy,
-  isCopied,
   onInsertIntoEditor,
   onRegenerate,
   onEdit,
@@ -46,80 +35,25 @@ export const ChatButtons: React.FC<ChatButtonsProps> = ({
     >
       {message.sender === USER_SENDER ? (
         <>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost2" size="fit" onClick={onCopy} title="Copy">
-                {isCopied ? <Check className="tw-size-4" /> : <Copy className="tw-size-4" />}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Copy</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button onClick={onEdit} variant="ghost2" size="fit" title="Edit">
-                <PenSquare className="tw-size-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Edit</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button onClick={onDelete} variant="ghost2" size="fit" title="Delete">
-                <Trash2 className="tw-size-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Delete</TooltipContent>
-          </Tooltip>
+          <CopyButton text={cleanMessageForCopy(message.message)} />
+          {onEdit && <MessageActionButton label="Edit" icon={PenSquare} onClick={onEdit} />}
+          {onDelete && <MessageActionButton label="Delete" icon={Trash2} onClick={onDelete} />}
         </>
       ) : (
         <>
           {hasSources && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button onClick={onShowSources} variant="ghost2" size="fit" title="Show Sources">
-                  <LibraryBig className="tw-size-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Show Sources</TooltipContent>
-            </Tooltip>
+            <MessageActionButton label="Show Sources" icon={LibraryBig} onClick={onShowSources} />
           )}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                onClick={onInsertIntoEditor}
-                variant="ghost2"
-                size="fit"
-                title="Insert / Replace at cursor"
-              >
-                <TextCursorInput className="tw-size-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Insert / Replace at cursor</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost2" size="fit" onClick={onCopy} title="Copy">
-                {isCopied ? <Check className="tw-size-4" /> : <Copy className="tw-size-4" />}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Copy</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button onClick={onRegenerate} variant="ghost2" size="fit" title="Regenerate">
-                <RotateCw className="tw-size-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Regenerate</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button onClick={onDelete} variant="ghost2" size="fit" title="Delete">
-                <Trash2 className="tw-size-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Delete</TooltipContent>
-          </Tooltip>
+          <MessageActionButton
+            label="Insert / Replace at cursor"
+            icon={TextCursorInput}
+            onClick={onInsertIntoEditor}
+          />
+          <CopyButton text={cleanMessageForCopy(message.message)} />
+          {onRegenerate && (
+            <MessageActionButton label="Regenerate" icon={RotateCw} onClick={onRegenerate} />
+          )}
+          {onDelete && <MessageActionButton label="Delete" icon={Trash2} onClick={onDelete} />}
         </>
       )}
     </div>

@@ -83,7 +83,8 @@ describe("readNoteTool", () => {
       },
     } as unknown as typeof window.app;
 
-    ({ readNoteTool } = await import("./NoteTools"));
+    const { createReadNoteTool } = await import("./NoteTools");
+    readNoteTool = createReadNoteTool(window.app);
   });
 
   afterEach(() => {
@@ -131,6 +132,21 @@ describe("readNoteTool", () => {
     expect(result.chunkIndex).toBe(1);
     expect(result.content).toBe(lines.slice(200).join("\n"));
   });
+
+  it.each(["-1", "1.5", "abc"])(
+    "returns invalid_chunk_index for non-negative-integer chunkIndex %p",
+    async (chunkIndex) => {
+      const notePath = "Notes/bad-index.md";
+      const file = new MockTFile(notePath);
+      getAbstractFileByPathMock.mockReturnValue(file);
+      mockRead.mockResolvedValue(["Line 1", "Line 2"].join("\n"));
+
+      const result = await invokeReadNoteTool(readNoteTool, { notePath, chunkIndex });
+
+      expect(result.status).toBe("invalid_chunk_index");
+      expect(result.content).toBeUndefined();
+    }
+  );
 
   it("returns not_found when the note cannot be resolved", async () => {
     const notePath = "Notes/missing.md";

@@ -2,7 +2,7 @@ import { AGENT_LOOP_TIMEOUT_MS } from "@/constants";
 import { MessageContent } from "@/imageProcessing/imageProcessor";
 import { logError, logInfo, logWarn } from "@/logger";
 import { UserMemoryManager } from "@/memory/UserMemoryManager";
-import { checkIsPlusUser } from "@/plusUtils";
+import { checkIsPaidUser } from "@/plusUtils";
 import { getSettings } from "@/settings/model";
 import { getSystemPromptWithMemory } from "@/system-prompts/systemPromptBuilder";
 import { initializeBuiltinTools } from "@/tools/builtinTools";
@@ -133,7 +133,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
 
     // Initialize tools if not already done
     if (registry.getAllTools().length === 0) {
-      initializeBuiltinTools(this.chainManager.app?.vault);
+      initializeBuiltinTools(this.chainManager.app);
     }
 
     // Get enabled tool IDs from settings
@@ -386,7 +386,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
     this.llmFormattedMessages = [];
     this.lastDisplayedContent = "";
 
-    const isPlusUser = await checkIsPlusUser({
+    const isPaidUser = await checkIsPaidUser(this.chainManager.app, {
       isAutonomousAgent: true,
     });
 
@@ -395,7 +395,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
     // Agent mode should never show thinking tokens in the response
     const thinkStreamer = new ThinkBlockStreamer(updateCurrentAiMessage, true);
 
-    if (!isPlusUser) {
+    if (!isPaidUser) {
       await this.handleError(
         new Error("Invalid license key"),
         thinkStreamer.processErrorChunk.bind(thinkStreamer) as (message: string) => void

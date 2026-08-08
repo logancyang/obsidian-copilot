@@ -121,7 +121,7 @@ Go to **Settings → Copilot → Command** to manage all your custom commands:
 
 ### Custom Prompts Folder
 
-Commands are stored as markdown files in your vault. The default folder is `copilot/copilot-custom-prompts/`. You can change this in **Settings → Copilot → Basic → Custom prompts folder**.
+Commands are stored as markdown files in your vault, in the `copilot-custom-prompts/` sub-folder of your Copilot folder (by default `copilot/copilot-custom-prompts/`). This location is derived from your Copilot folder — change the root in **Settings → Copilot → Basic → Copilot folder location** to change where new commands are saved. There is no separate custom-prompts folder setting anymore.
 
 ---
 

@@ -30,6 +30,9 @@ jest.mock("@/logger", () => ({
 jest.mock("@/system-prompts/systemPromptUtils", () => ({
   getSystemPromptsFolder: jest.fn(() => "SystemPrompts"),
   getPromptFilePath: jest.fn((title: string) => `SystemPrompts/${title}.md`),
+  getPromptFilePathInFolder: jest.fn(
+    (title: string, folder?: string) => `${folder ?? "SystemPrompts"}/${title}.md`
+  ),
   ensurePromptFrontmatter: jest.fn(),
   loadAllSystemPrompts: jest.fn(),
 }));
@@ -90,7 +93,7 @@ describe("migrateSystemPromptsFromSettings", () => {
       userSystemPrompt: "",
     });
 
-    await migrateSystemPromptsFromSettings(mockVault);
+    await migrateSystemPromptsFromSettings(window.app);
 
     expect(logger.logInfo).toHaveBeenCalledWith("No legacy userSystemPrompt to migrate");
     expect(mockVault.create).not.toHaveBeenCalled();
@@ -101,7 +104,7 @@ describe("migrateSystemPromptsFromSettings", () => {
       userSystemPrompt: "   ",
     });
 
-    await migrateSystemPromptsFromSettings(mockVault);
+    await migrateSystemPromptsFromSettings(window.app);
 
     expect(logger.logInfo).toHaveBeenCalledWith("No legacy userSystemPrompt to migrate");
     expect(mockVault.create).not.toHaveBeenCalled();
@@ -119,9 +122,9 @@ describe("migrateSystemPromptsFromSettings", () => {
         })
       ); // File created
 
-    await migrateSystemPromptsFromSettings(mockVault);
+    await migrateSystemPromptsFromSettings(window.app);
 
-    expect(utils.ensureFolderExists).toHaveBeenCalledWith("SystemPrompts");
+    expect(utils.ensureFolderExists).toHaveBeenCalledWith(mockVault, "SystemPrompts");
   });
 
   it("does not create folder if it already exists", async () => {
@@ -136,10 +139,10 @@ describe("migrateSystemPromptsFromSettings", () => {
         })
       ); // File created
 
-    await migrateSystemPromptsFromSettings(mockVault);
+    await migrateSystemPromptsFromSettings(window.app);
 
     // ensureFolderExists is always called, but it handles existing folders gracefully
-    expect(utils.ensureFolderExists).toHaveBeenCalledWith("SystemPrompts");
+    expect(utils.ensureFolderExists).toHaveBeenCalledWith(mockVault, "SystemPrompts");
   });
 
   it("migrates legacy prompt to file with correct content", async () => {
@@ -155,7 +158,7 @@ describe("migrateSystemPromptsFromSettings", () => {
         })
       ); // File created
 
-    await migrateSystemPromptsFromSettings(mockVault);
+    await migrateSystemPromptsFromSettings(window.app);
 
     expect(mockVault.create).toHaveBeenCalledWith(
       "SystemPrompts/Migrated Custom System Prompt.md",
@@ -177,7 +180,7 @@ describe("migrateSystemPromptsFromSettings", () => {
         })
       );
 
-    await migrateSystemPromptsFromSettings(mockVault);
+    await migrateSystemPromptsFromSettings(window.app);
 
     // Whitespace should be preserved (only line endings normalized)
     expect(mockVault.create).toHaveBeenCalledWith(
@@ -201,9 +204,10 @@ describe("migrateSystemPromptsFromSettings", () => {
 
     Object.setPrototypeOf(mockFile, TFile.prototype);
 
-    await migrateSystemPromptsFromSettings(mockVault);
+    await migrateSystemPromptsFromSettings(window.app);
 
     expect(systemPromptUtils.ensurePromptFrontmatter).toHaveBeenCalledWith(
+      window.app,
       mockFile,
       expect.objectContaining({
         title: "Migrated Custom System Prompt",
@@ -227,7 +231,7 @@ describe("migrateSystemPromptsFromSettings", () => {
 
     Object.setPrototypeOf(mockFile, TFile.prototype);
 
-    await migrateSystemPromptsFromSettings(mockVault);
+    await migrateSystemPromptsFromSettings(window.app);
 
     expect(settingsModel.updateSetting).toHaveBeenCalledWith("userSystemPrompt", "");
   });
@@ -247,7 +251,7 @@ describe("migrateSystemPromptsFromSettings", () => {
 
     Object.setPrototypeOf(mockFile, TFile.prototype);
 
-    await migrateSystemPromptsFromSettings(mockVault);
+    await migrateSystemPromptsFromSettings(window.app);
 
     expect(settingsModel.updateSetting).toHaveBeenCalledWith(
       "defaultSystemPromptTitle",
@@ -270,7 +274,7 @@ describe("migrateSystemPromptsFromSettings", () => {
 
     Object.setPrototypeOf(mockFile, TFile.prototype);
 
-    await migrateSystemPromptsFromSettings(mockVault);
+    await migrateSystemPromptsFromSettings(window.app);
 
     expect(systemPromptUtils.loadAllSystemPrompts).toHaveBeenCalled();
   });
@@ -298,7 +302,7 @@ describe("migrateSystemPromptsFromSettings", () => {
       .mockReturnValueOnce(null) // "...Prompt 2" doesn't exist
       .mockReturnValueOnce(newFile); // File created
 
-    await migrateSystemPromptsFromSettings(mockVault);
+    await migrateSystemPromptsFromSettings(window.app);
 
     // Should create file with unique name
     expect(mockVault.create).toHaveBeenCalledWith(
@@ -333,7 +337,7 @@ describe("migrateSystemPromptsFromSettings", () => {
       .mockReturnValueOnce(null) // "...Prompt 3" doesn't exist
       .mockReturnValueOnce(newFile); // File created
 
-    await migrateSystemPromptsFromSettings(mockVault);
+    await migrateSystemPromptsFromSettings(window.app);
 
     expect(mockVault.create).toHaveBeenCalledWith(
       "SystemPrompts/Migrated Custom System Prompt 3.md",
@@ -356,7 +360,7 @@ describe("migrateSystemPromptsFromSettings", () => {
 
     Object.setPrototypeOf(mockFile, TFile.prototype);
 
-    await migrateSystemPromptsFromSettings(mockVault);
+    await migrateSystemPromptsFromSettings(window.app);
 
     expect(logger.logInfo).toHaveBeenCalledWith("Cleared legacy userSystemPrompt field");
   });
@@ -372,7 +376,7 @@ describe("migrateSystemPromptsFromSettings", () => {
     // Fail on initial folder creation and unsupported folder creation
     (utils.ensureFolderExists as jest.Mock).mockRejectedValue(error);
 
-    await migrateSystemPromptsFromSettings(mockVault);
+    await migrateSystemPromptsFromSettings(window.app);
 
     expect(logger.logError).toHaveBeenCalledWith(
       "Failed to migrate legacy userSystemPrompt:",
@@ -392,7 +396,7 @@ describe("migrateSystemPromptsFromSettings", () => {
     (mockVault.getAbstractFileByPath as jest.Mock).mockReturnValue(null);
     (utils.ensureFolderExists as jest.Mock).mockRejectedValue(error);
 
-    await expect(migrateSystemPromptsFromSettings(mockVault)).resolves.not.toThrow();
+    await expect(migrateSystemPromptsFromSettings(window.app)).resolves.not.toThrow();
   });
 
   it("sets correct timestamps for migrated prompt", async () => {
@@ -411,10 +415,11 @@ describe("migrateSystemPromptsFromSettings", () => {
     Object.setPrototypeOf(mockFile, TFile.prototype);
 
     const beforeTime = Date.now();
-    await migrateSystemPromptsFromSettings(mockVault);
+    await migrateSystemPromptsFromSettings(window.app);
     const afterTime = Date.now();
 
     expect(systemPromptUtils.ensurePromptFrontmatter).toHaveBeenCalledWith(
+      window.app,
       mockFile,
       expect.objectContaining({
         title: "Migrated Custom System Prompt",
@@ -423,7 +428,7 @@ describe("migrateSystemPromptsFromSettings", () => {
       })
     );
 
-    const callArgs = (systemPromptUtils.ensurePromptFrontmatter as jest.Mock).mock.calls[0][1] as {
+    const callArgs = (systemPromptUtils.ensurePromptFrontmatter as jest.Mock).mock.calls[0][2] as {
       createdMs: number;
       modifiedMs: number;
     };
@@ -456,7 +461,7 @@ describe("migrateSystemPromptsFromSettings", () => {
         `---\ntest: true\n---\nDifferent content that does not match!`
       );
 
-      await migrateSystemPromptsFromSettings(mockVault);
+      await migrateSystemPromptsFromSettings(window.app);
 
       // Should save to unsupported folder
       expect(mockVault.create).toHaveBeenCalledWith(
@@ -482,7 +487,7 @@ describe("migrateSystemPromptsFromSettings", () => {
         .mockRejectedValueOnce(error) // First call fails (main migration)
         .mockRejectedValueOnce(error); // Second call fails (unsupported save)
 
-      await migrateSystemPromptsFromSettings(mockVault);
+      await migrateSystemPromptsFromSettings(window.app);
 
       // Should NOT clear userSystemPrompt when all save attempts fail
       expect(settingsModel.updateSetting).not.toHaveBeenCalledWith("userSystemPrompt", "");
@@ -507,7 +512,7 @@ describe("migrateSystemPromptsFromSettings", () => {
       // Simulate vault.read throwing an error during verification
       (mockVault.read as jest.Mock).mockRejectedValueOnce(new Error("Failed to read file"));
 
-      await migrateSystemPromptsFromSettings(mockVault);
+      await migrateSystemPromptsFromSettings(window.app);
 
       // Should save to unsupported folder
       expect(mockVault.create).toHaveBeenCalledWith(
@@ -534,7 +539,7 @@ describe("migrateSystemPromptsFromSettings", () => {
         .mockReturnValueOnce(null) // File does not exist check
         .mockReturnValueOnce(null); // unsupported file does not exist
 
-      await migrateSystemPromptsFromSettings(mockVault);
+      await migrateSystemPromptsFromSettings(window.app);
 
       // Should save to unsupported folder
       expect(mockVault.create).toHaveBeenCalledWith(
@@ -563,7 +568,7 @@ describe("migrateSystemPromptsFromSettings", () => {
 
       // Default vault.read mock will return content matching legacyPrompt
 
-      await migrateSystemPromptsFromSettings(mockVault);
+      await migrateSystemPromptsFromSettings(window.app);
 
       // Should clear userSystemPrompt after successful verification
       expect(settingsModel.updateSetting).toHaveBeenCalledWith("userSystemPrompt", "");
@@ -590,7 +595,7 @@ describe("migrateSystemPromptsFromSettings", () => {
 
       // Default vault.read mock will return content matching legacyPrompt (whitespace preserved)
 
-      await migrateSystemPromptsFromSettings(mockVault);
+      await migrateSystemPromptsFromSettings(window.app);
 
       // Should succeed - whitespace is preserved exactly
       expect(settingsModel.updateSetting).toHaveBeenCalledWith("userSystemPrompt", "");
@@ -617,7 +622,7 @@ describe("migrateSystemPromptsFromSettings", () => {
         `---\ntest: true\n---\nLine 1\nLine 2\nLine 3`
       );
 
-      await migrateSystemPromptsFromSettings(mockVault);
+      await migrateSystemPromptsFromSettings(window.app);
 
       // Should succeed - CRLF/LF differences are normalized
       expect(settingsModel.updateSetting).toHaveBeenCalledWith("userSystemPrompt", "");
@@ -646,7 +651,7 @@ describe("migrateSystemPromptsFromSettings", () => {
         `---\ntest: true\n---\n\n${legacyPrompt}`
       );
 
-      await migrateSystemPromptsFromSettings(mockVault);
+      await migrateSystemPromptsFromSettings(window.app);
 
       // Should succeed - leading newlines are now stripped before comparison
       expect(settingsModel.updateSetting).toHaveBeenCalledWith("userSystemPrompt", "");

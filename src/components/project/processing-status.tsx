@@ -13,12 +13,17 @@ import { Progress } from "@/components/ui/progress";
 import { TruncatedText } from "@/components/TruncatedText";
 import type { ProcessingItem } from "@/components/project/processingAdapter";
 import {
+  getProcessingStatusLabel,
+  processingItemKey,
+  ProcessingStatusIcon,
+} from "@/components/project/processingItemStatusView";
+import {
   AlertCircle,
+  ArrowUpRight,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
   Clock,
-  ArrowUpRight,
   FileImage,
   FileText,
   FileVideo,
@@ -43,36 +48,14 @@ interface ProcessingStatusProps {
   maxHeight?: string;
   /** When false, hides the title and description. Use for embedding inside another panel. */
   showHeader?: boolean;
-}
-
-/**
- * Renders the status icon for a ProcessingItem.
- * For ready+contentEmpty items, shows a warning HelpCircle instead of a green checkmark.
- */
-function StatusIcon({
-  status,
-  contentEmpty,
-}: {
-  status: ProcessingItem["status"];
-  contentEmpty?: boolean;
-}) {
-  // Reason: contentEmpty is a sub-state of "ready" — item was fetched but had no extractable content.
-  if (status === "ready" && contentEmpty) {
-    return <HelpCircle className="tw-size-3.5 tw-text-warning" />;
-  }
-
-  switch (status) {
-    case "ready":
-      return <CheckCircle2 className="tw-size-3.5 tw-text-success" />;
-    case "processing":
-      return <Loader2 className="tw-size-3.5 tw-animate-spin tw-text-loading" />;
-    case "failed":
-      return <AlertCircle className="tw-size-3.5 tw-text-error" />;
-    case "pending":
-      return <Clock className="tw-size-3.5 tw-text-muted" />;
-    case "unsupported":
-      return <HelpCircle className="tw-size-3.5 tw-text-muted" />;
-  }
+  /** Optional: retry by full item — agent per-source retry needs `cacheKind`,
+   * which `onRetry(id)` can't carry. Takes precedence over `onRetry`. */
+  onRetryItem?: (item: ProcessingItem) => void;
+  /** Optional: "N markdown files — no conversion needed" note under From Files. */
+  skippedMarkdownCount?: number;
+  /** When true, render the grouped list directly without the collapsible summary
+   * bar — for a modal that supplies its own header / filter / footer chrome. */
+  hideSummaryBar?: boolean;
 }
 
 function FileTypeIcon({ fileType }: { fileType: ProcessingItem["fileType"] }) {
@@ -103,28 +86,6 @@ function getStatusCounts(items: ProcessingItem[]) {
   };
 }
 
-/**
- * Returns the human-readable label for a given status.
- * For ready+contentEmpty items the caller should override to "No content".
- */
-function getStatusLabel(status: ProcessingItem["status"], contentEmpty?: boolean): string {
-  // Reason: "No content" is a UI-only distinction within the "ready" status.
-  if (status === "ready" && contentEmpty) return "No content";
-
-  switch (status) {
-    case "ready":
-      return "Converted";
-    case "processing":
-      return "Converting...";
-    case "failed":
-      return "Failed";
-    case "pending":
-      return "Queued";
-    case "unsupported":
-      return "Unsupported";
-  }
-}
-
 /** Status priority for sorting: active/problematic items first, completed last. */
 const STATUS_SORT_PRIORITY: Record<ProcessingItem["status"], number> = {
   processing: 0,
@@ -149,12 +110,72 @@ export function ProcessingStatus({
   defaultExpanded = false,
   maxHeight,
   showHeader = true,
+  onRetryItem,
+  skippedMarkdownCount = 0,
+  hideSummaryBar = false,
 }: ProcessingStatusProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const counts = getStatusCounts(items);
 
   const sortedFileItems = sortByStatusPriority(items.filter((i) => i.source === "file"));
   const sortedUrlItems = sortByStatusPriority(items.filter((i) => i.source === "url"));
+
+  // The grouped From Files / From URLs body, shared by the collapsible (CAG /
+  // embedded) and the bare (modal) layouts.
+  const groupsBody = (
+    <div className="tw-space-y-3 tw-p-3">
+      {sortedFileItems.length > 0 && (
+        <div className="tw-space-y-2">
+          <div className="tw-flex tw-items-center tw-gap-1.5 tw-px-1">
+            <FolderOpen className="tw-size-3.5 tw-text-accent" />
+            <span className="tw-text-ui-smaller tw-font-medium tw-text-muted">
+              From Files ({sortedFileItems.length})
+            </span>
+          </div>
+          <ScrollableList maxHeight={maxHeight || "200px"}>
+            {sortedFileItems.map((item) => (
+              <ProcessingItemRow
+                key={processingItemKey(item)}
+                item={item}
+                onRetry={onRetry}
+                onRetryItem={onRetryItem}
+                onOpenCached={onOpenCachedItem ? () => onOpenCachedItem(item) : undefined}
+              />
+            ))}
+          </ScrollableList>
+          {skippedMarkdownCount > 0 && (
+            <div className="tw-px-1 tw-text-ui-smaller tw-text-faint">
+              {skippedMarkdownCount} markdown {skippedMarkdownCount === 1 ? "file" : "files"} — no
+              conversion needed
+            </div>
+          )}
+        </div>
+      )}
+
+      {sortedUrlItems.length > 0 && (
+        <div className="tw-space-y-2">
+          <div className="tw-flex tw-items-center tw-gap-1.5 tw-px-1">
+            <Globe className="tw-size-3.5 tw-text-accent" />
+            <span className="tw-text-ui-smaller tw-font-medium tw-text-muted">
+              From URLs ({sortedUrlItems.length})
+            </span>
+          </div>
+          <ScrollableList maxHeight={maxHeight || "200px"}>
+            {sortedUrlItems.map((item) => (
+              <ProcessingItemRow
+                key={processingItemKey(item)}
+                item={item}
+                onRetry={onRetry}
+                onRetryItem={onRetryItem}
+                onOpenCached={onOpenCachedItem ? () => onOpenCachedItem(item) : undefined}
+                onRemove={onRemoveUrl ? () => onRemoveUrl(item) : undefined}
+              />
+            ))}
+          </ScrollableList>
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div className="tw-space-y-2">
@@ -180,127 +201,84 @@ export function ProcessingStatus({
       )}
 
       {/* Status Panel — only when there are items to show */}
-      {items.length > 0 && (
-        <div className="tw-rounded-lg tw-border tw-border-border">
-          <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
-            {/* Summary Bar */}
-            <CollapsibleTrigger asChild>
-              <Button
-                variant="secondary"
-                className=" tw-flex tw-h-auto tw-w-full tw-items-center tw-justify-between tw-rounded-lg tw-p-3 tw-text-left tw-transition-colors hover:tw-bg-modifier-hover"
-              >
-                <div className="tw-flex tw-items-center tw-gap-2">
-                  <div className="tw-flex tw-items-center tw-gap-1.5">
-                    {counts.ready > 0 && (
-                      <Badge
-                        variant="secondary"
-                        className="tw-h-5 tw-gap-1 tw-bg-success tw-px-1.5 tw-text-ui-smaller tw-text-success"
-                      >
-                        <CheckCircle2 className="tw-size-3" />
-                        {counts.ready}
-                      </Badge>
-                    )}
-                    {counts.processing > 0 && (
-                      <Badge
-                        variant="secondary"
-                        className="tw-h-5 tw-gap-1 tw-px-1.5 tw-text-ui-smaller"
-                      >
-                        <Loader2 className="tw-size-3 tw-animate-spin" />
-                        {counts.processing}
-                      </Badge>
-                    )}
-                    {counts.pending > 0 && (
-                      <Badge
-                        variant="secondary"
-                        className="tw-h-5 tw-gap-1 tw-px-1.5 tw-text-ui-smaller"
-                      >
-                        <Clock className="tw-size-3" />
-                        {counts.pending}
-                      </Badge>
-                    )}
-                    {counts.failed > 0 && (
-                      <Badge
-                        variant="secondary"
-                        className="tw-h-5 tw-gap-1 tw-bg-error tw-px-1.5 tw-text-ui-smaller tw-text-error"
-                      >
-                        <AlertCircle className="tw-size-3" />
-                        {counts.failed}
-                      </Badge>
-                    )}
-                    {/* Reason: unsupported items get a neutral gray badge to distinguish
+      {items.length > 0 &&
+        (hideSummaryBar ? (
+          <div className="tw-rounded-lg tw-border tw-border-border">{groupsBody}</div>
+        ) : (
+          <div className="tw-rounded-lg tw-border tw-border-border">
+            <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
+              {/* Summary Bar */}
+              <CollapsibleTrigger asChild>
+                <Button
+                  variant="secondary"
+                  className=" tw-flex tw-h-auto tw-w-full tw-items-center tw-justify-between tw-rounded-lg tw-p-3 tw-text-left tw-transition-colors hover:tw-bg-modifier-hover"
+                >
+                  <div className="tw-flex tw-items-center tw-gap-2">
+                    <div className="tw-flex tw-items-center tw-gap-1.5">
+                      {counts.ready > 0 && (
+                        <Badge
+                          variant="secondary"
+                          className="tw-h-5 tw-gap-1 tw-bg-success tw-px-1.5 tw-text-ui-smaller tw-text-success"
+                        >
+                          <CheckCircle2 className="tw-size-3" />
+                          {counts.ready}
+                        </Badge>
+                      )}
+                      {counts.processing > 0 && (
+                        <Badge
+                          variant="secondary"
+                          className="tw-h-5 tw-gap-1 tw-px-1.5 tw-text-ui-smaller"
+                        >
+                          <Loader2 className="tw-size-3 tw-animate-spin" />
+                          {counts.processing}
+                        </Badge>
+                      )}
+                      {counts.pending > 0 && (
+                        <Badge
+                          variant="secondary"
+                          className="tw-h-5 tw-gap-1 tw-px-1.5 tw-text-ui-smaller"
+                        >
+                          <Clock className="tw-size-3" />
+                          {counts.pending}
+                        </Badge>
+                      )}
+                      {counts.failed > 0 && (
+                        <Badge
+                          variant="secondary"
+                          className="tw-h-5 tw-gap-1 tw-bg-error tw-px-1.5 tw-text-ui-smaller tw-text-error"
+                        >
+                          <AlertCircle className="tw-size-3" />
+                          {counts.failed}
+                        </Badge>
+                      )}
+                      {/* Reason: unsupported items get a neutral gray badge to distinguish
                         them from errors — they're not failures, just unprocessable file types. */}
-                    {counts.unsupported > 0 && (
-                      <Badge
-                        variant="secondary"
-                        className="tw-h-5 tw-gap-1 tw-px-1.5 tw-text-ui-smaller tw-text-muted"
-                      >
-                        <HelpCircle className="tw-size-3" />
-                        {counts.unsupported}
-                      </Badge>
-                    )}
-                  </div>
-                  <span className="tw-text-ui-smaller tw-text-muted">{counts.total} items</span>
-                </div>
-                {isExpanded ? (
-                  <ChevronDown className="tw-size-4 tw-text-muted" />
-                ) : (
-                  <ChevronRight className="tw-size-4 tw-text-muted" />
-                )}
-              </Button>
-            </CollapsibleTrigger>
-
-            <CollapsibleContent>
-              {/* Reason: each section scrolls independently so files don't push URLs out of view */}
-              <div className="tw-space-y-3 tw-border-t tw-border-border tw-p-3">
-                {/* From Files Section */}
-                {sortedFileItems.length > 0 && (
-                  <div className="tw-space-y-2">
-                    <div className="tw-flex tw-items-center tw-gap-1.5 tw-px-1">
-                      <FolderOpen className="tw-size-3.5 tw-text-accent" />
-                      <span className="tw-text-ui-smaller tw-font-medium tw-text-muted">
-                        From Files ({sortedFileItems.length})
-                      </span>
+                      {counts.unsupported > 0 && (
+                        <Badge
+                          variant="secondary"
+                          className="tw-h-5 tw-gap-1 tw-px-1.5 tw-text-ui-smaller tw-text-muted"
+                        >
+                          <HelpCircle className="tw-size-3" />
+                          {counts.unsupported}
+                        </Badge>
+                      )}
                     </div>
-                    <ScrollableList maxHeight={maxHeight || "200px"}>
-                      {sortedFileItems.map((item) => (
-                        <ProcessingItemRow
-                          key={item.id}
-                          item={item}
-                          onRetry={onRetry}
-                          onOpenCached={onOpenCachedItem ? () => onOpenCachedItem(item) : undefined}
-                        />
-                      ))}
-                    </ScrollableList>
+                    <span className="tw-text-ui-smaller tw-text-muted">{counts.total} items</span>
                   </div>
-                )}
+                  {isExpanded ? (
+                    <ChevronDown className="tw-size-4 tw-text-muted" />
+                  ) : (
+                    <ChevronRight className="tw-size-4 tw-text-muted" />
+                  )}
+                </Button>
+              </CollapsibleTrigger>
 
-                {/* From URLs Section */}
-                {sortedUrlItems.length > 0 && (
-                  <div className="tw-space-y-2">
-                    <div className="tw-flex tw-items-center tw-gap-1.5 tw-px-1">
-                      <Globe className="tw-size-3.5 tw-text-accent" />
-                      <span className="tw-text-ui-smaller tw-font-medium tw-text-muted">
-                        From URLs ({sortedUrlItems.length})
-                      </span>
-                    </div>
-                    <ScrollableList maxHeight={maxHeight || "200px"}>
-                      {sortedUrlItems.map((item) => (
-                        <ProcessingItemRow
-                          key={item.id}
-                          item={item}
-                          onRetry={onRetry}
-                          onOpenCached={onOpenCachedItem ? () => onOpenCachedItem(item) : undefined}
-                          onRemove={onRemoveUrl ? () => onRemoveUrl(item) : undefined}
-                        />
-                      ))}
-                    </ScrollableList>
-                  </div>
-                )}
-              </div>
-            </CollapsibleContent>
-          </Collapsible>
-        </div>
-      )}
+              <CollapsibleContent>
+                <div className="tw-border-t tw-border-border">{groupsBody}</div>
+              </CollapsibleContent>
+            </Collapsible>
+          </div>
+        ))}
     </div>
   );
 }
@@ -348,11 +326,14 @@ function ScrollableList({ maxHeight, children }: { maxHeight: string; children: 
 function ProcessingItemRow({
   item,
   onRetry,
+  onRetryItem,
   onOpenCached,
   onRemove,
 }: {
   item: ProcessingItem;
   onRetry?: (id: string) => void;
+  /** Full-item retry (agent per-source); takes precedence over `onRetry`. */
+  onRetryItem?: (item: ProcessingItem) => void;
   /** Callback to open the cached parsed content for this file item. */
   onOpenCached?: () => void;
   /** Callback to remove this URL from the project config. Only for URL items. */
@@ -393,10 +374,10 @@ function ProcessingItemRow({
                   Exception: contentEmpty items need a visible "No content" label. */}
               {(item.status !== "ready" || item.contentEmpty) && (
                 <span className="tw-text-ui-smaller tw-text-muted">
-                  {getStatusLabel(item.status, item.contentEmpty)}
+                  {getProcessingStatusLabel(item.status, item.contentEmpty)}
                 </span>
               )}
-              <StatusIcon status={item.status} contentEmpty={item.contentEmpty} />
+              <ProcessingStatusIcon item={item} tooltip={false} />
             </div>
           </div>
         </div>
@@ -420,12 +401,16 @@ function ProcessingItemRow({
             {item.error || "Conversion failed"}
           </TruncatedText>
           <div className="tw-flex tw-shrink-0 tw-items-center tw-gap-1">
-            {onRetry && (
+            {(onRetry || onRetryItem) && (
               <Button
                 variant="ghost2"
                 size="icon"
                 aria-label="Retry"
-                onClick={() => onRetry(item.id)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onRetryItem) onRetryItem(item);
+                  else onRetry?.(item.id);
+                }}
                 title="Retry"
                 className="tw-size-5 tw-text-muted hover:tw-text-accent"
               >

@@ -21,6 +21,7 @@ import {
 import { loadAllProjects } from "@/projects/projectUtils";
 import { PROJECT_CONFIG_FILE_NAME, PROJECTS_UNSUPPORTED_FOLDER_NAME } from "@/projects/constants";
 import { getSettings, subscribeToSettingsChange } from "@/settings/model";
+import { deriveProjectsFolder } from "@/settings/copilotFolder";
 import { debounce } from "@/utils/debounce";
 import { App, Notice, TAbstractFile, Vault } from "obsidian";
 
@@ -29,11 +30,14 @@ import { App, Notice, TAbstractFile, Vault } from "obsidian";
  * Aligned with system-prompts Register pattern.
  *
  * Responsibilities:
- * - Auto-sync project.md create/modify/delete/rename to in-memory cache
+ * - Auto-sync project config (project.md) create/modify/delete/rename to cache
  * - Listen for projectsFolder setting changes with latest-wins reload
  * - Avoid event loops from pending file writes
+ *
+ * AGENTS.md is an instruction file rather than a project config, so these handlers ignore it.
  */
 export class ProjectRegister {
+  private app: App;
   private vault: Vault;
   private manager: ProjectFileManager;
   private settingsUnsubscriber?: () => void;
@@ -43,6 +47,7 @@ export class ProjectRegister {
   private fileModifyDebouncers = new Map<string, ReturnType<typeof debounce>>();
 
   constructor(app: App) {
+    this.app = app;
     this.vault = app.vault;
     this.manager = ProjectFileManager.getInstance(app);
   }
@@ -69,6 +74,10 @@ export class ProjectRegister {
     for (const d of this.fileModifyDebouncers.values()) d.cancel();
     this.fileModifyDebouncers.clear();
     this.debouncedFolderChange.cancel();
+    // Cancelling only stops a reload that has not started. Bumping the
+    // generation also retires one already in flight, so a torn-down instance
+    // cannot commit records into the store a new instance now owns.
+    this.folderChangeRequestId++;
     this.settingsUnsubscriber?.();
 
     this.vault.off("create", this.handleFileCreation);
@@ -95,8 +104,11 @@ export class ProjectRegister {
     prev: ReturnType<typeof getSettings>,
     next: ReturnType<typeof getSettings>
   ): void => {
-    if (prev.projectsFolder !== next.projectsFolder) {
-      this.debouncedFolderChange(next.projectsFolder);
+    // Reason: the folder is derived from the configurable copilotFolder root, so
+    // compare the derived paths rather than the retired projectsFolder field.
+    const nextFolder = deriveProjectsFolder(next);
+    if (deriveProjectsFolder(prev) !== nextFolder) {
+      this.debouncedFolderChange(nextFolder);
     }
   };
 
@@ -141,6 +153,10 @@ export class ProjectRegister {
         )
       );
 
+      // Clearing the caches is per-file disk I/O, so a newer reload can start
+      // and finish inside it; without this second check whichever handler
+      // resumes last would install its own records over the newer ones.
+      if (currentRequestId !== this.folderChangeRequestId) return;
       updateCachedProjectRecords(nextRecords);
 
       // Reason: don't call setCurrentProject(null) here — ProjectManager's
@@ -180,6 +196,9 @@ export class ProjectRegister {
         )
       );
 
+      // A newer reload may have committed while these clears were awaited;
+      // wiping the records now would discard its results.
+      if (currentRequestId !== this.folderChangeRequestId) return;
       updateCachedProjectRecords([]);
 
       logError(`[Projects] Failed to reload after folder change: ${nextFolder}`, error);
@@ -210,7 +229,7 @@ export class ProjectRegister {
     if (!isProjectConfigFile(file) || isPendingFileWrite(file.path)) return;
 
     try {
-      const record = await parseProjectConfigFile(file);
+      const record = await parseProjectConfigFile(this.app, file);
       if (!record) return;
 
       // Duplicate id: keep first in cache, ignore incoming
@@ -223,8 +242,8 @@ export class ProjectRegister {
         return;
       }
 
-      await ensureProjectFrontmatter(file, record);
-      const updated = await parseProjectConfigFile(file);
+      await ensureProjectFrontmatter(this.app, file, record);
+      const updated = await parseProjectConfigFile(this.app, file);
       if (updated) upsertCachedProjectRecord(updated);
     } catch (error) {
       logError(`[Projects] Error on file creation: ${file.path}`, error);
@@ -266,7 +285,7 @@ export class ProjectRegister {
         // Reason: rescan to re-admit any previously-ignored duplicate-id files
         // that were hidden while the deleted file was the "kept" entry.
         // Re-merge legacy projects after rescan so unmigrated fallback entries stay visible.
-        void loadAllProjects().catch((err) =>
+        void loadAllProjects(this.app).catch((err) =>
           logError("[Projects] Rescan after delete failed", err)
         );
       }
@@ -295,7 +314,7 @@ export class ProjectRegister {
       // Reason: validate the new file before deleting the old cache entry,
       // so a duplicate-ID rename doesn't leave a cache gap.
       if (isValidNow) {
-        const record = await parseProjectConfigFile(file);
+        const record = await parseProjectConfigFile(this.app, file);
         if (!record) {
           if (wasValid) deleteCachedProjectRecordByFilePath(oldPath);
           return;
@@ -316,8 +335,8 @@ export class ProjectRegister {
           return;
         }
 
-        await ensureProjectFrontmatter(file, record);
-        const updated = await parseProjectConfigFile(file);
+        await ensureProjectFrontmatter(this.app, file, record);
+        const updated = await parseProjectConfigFile(this.app, file);
         if (updated) {
           // Reason: use atomic replace to avoid transient disappearance gap.
           // delete+upsert causes the subscriber to see the active project as missing
@@ -351,7 +370,7 @@ export class ProjectRegister {
 
         // Reason: rescan to re-admit any previously-ignored duplicate-id files
         // that were hidden while the moved file was the "kept" entry.
-        void loadAllProjects().catch((err) =>
+        void loadAllProjects(this.app).catch((err) =>
           logError("[Projects] Rescan after rename-out failed", err)
         );
       }
@@ -377,7 +396,7 @@ export class ProjectRegister {
     if (!isProjectConfigFile(file) || isPendingFileWrite(file.path)) return;
 
     try {
-      const record = await parseProjectConfigFile(file);
+      const record = await parseProjectConfigFile(this.app, file);
       if (!record) {
         // Reason: file became invalid YAML — remove stale cache entry and clear selection
         // if this was the active project, so UI and chain don't use stale config.
@@ -390,7 +409,7 @@ export class ProjectRegister {
               logError("[Projects] Failed to clear context cache on invalid edit", err)
             );
           // Reason: rescan to re-admit previously-ignored duplicate-id files
-          void loadAllProjects().catch((err) =>
+          void loadAllProjects(this.app).catch((err) =>
             logError("[Projects] Rescan after invalid edit failed", err)
           );
         }
@@ -409,7 +428,7 @@ export class ProjectRegister {
               logError("[Projects] Failed to clear context cache on duplicate edit", err)
             );
           // Reason: rescan to re-admit previously-ignored duplicate-id files
-          void loadAllProjects().catch((err) =>
+          void loadAllProjects(this.app).catch((err) =>
             logError("[Projects] Rescan after duplicate edit failed", err)
           );
         }

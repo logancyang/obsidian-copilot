@@ -14,6 +14,7 @@ const customTwMerge = extendTailwindMerge({
         "text-ui-small",
         "text-ui-medium",
         "text-ui-larger",
+        "text-ui-title",
       ],
     },
   },

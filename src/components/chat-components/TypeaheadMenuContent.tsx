@@ -9,6 +9,9 @@ export interface TypeaheadOption {
   content?: string;
   category?: string;
   icon?: React.ReactNode;
+  /** Trailing adornment rendered after the title (e.g. a warning icon). Kept as
+   *  an opaque node so the generic menu never depends on the caller's domain. */
+  trailingContent?: React.ReactNode;
   /** Whether this option is disabled and cannot be selected */
   disabled?: boolean;
   /** Tooltip text explaining why this option is disabled */
@@ -181,8 +184,11 @@ export function TypeaheadMenuContent({
                         </div>
                       )}
                       <div className="tw-flex tw-min-w-0 tw-flex-1 tw-flex-col tw-gap-0.5">
-                        <div className="tw-truncate tw-font-medium tw-text-normal">
-                          {option.title}
+                        <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-1">
+                          <span className="tw-truncate tw-font-medium tw-text-normal">
+                            {option.title}
+                          </span>
+                          {option.trailingContent}
                         </div>
                         {option.subtitle && (
                           <div className="tw-truncate tw-text-xs tw-text-muted">

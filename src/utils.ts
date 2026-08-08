@@ -7,24 +7,22 @@ import { ChainType } from "@/chainType";
 import {
   ALLOWED_NOTE_CONTEXT_EXTENSIONS,
   ChatModelProviders,
-  EmbeddingModelProviders,
+  ModelCapability,
   NOMIC_EMBED_TEXT,
   Provider,
   ProviderInfo,
   ProviderMetadata,
-  SettingKeyProviders,
   TEXT_READABLE_EXTENSIONS,
 } from "@/constants";
 import { logInfo, logWarn } from "@/logger";
-import { CopilotSettings } from "@/settings/model";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { Document } from "@langchain/core/documents";
 import { MemoryVariables } from "@langchain/core/memory";
 import { DateTime } from "luxon";
-import { MarkdownView, Notice, TFile, Vault, normalizePath, requestUrl } from "obsidian";
+import { App, MarkdownView, Notice, TFile, Vault, normalizePath, requestUrl } from "obsidian";
 import { CustomModel } from "./aiParams";
-import { getApiKeyForProvider } from "@/utils/modelUtils";
-export { err2String } from "@/errorFormat";
+import { formatUsageCapError } from "@/utils/usageCapError";
+export { checkModelApiKey, err2String, getProviderLabel } from "@/lib/model-display-utils";
 
 /**
  * Unified type for fetch implementation.
@@ -83,17 +81,23 @@ function isLicenseKeyError(error: unknown): boolean {
   const message = err?.message as string | undefined;
   return Boolean(
     errorDetail.reason === "Invalid license key" ||
-      message === "Invalid license key" ||
-      message?.includes("status 403") ||
-      errorDetail.status === 403
+    message === "Invalid license key" ||
+    message?.includes("status 403") ||
+    errorDetail.status === 403
   );
 }
 
 export function getApiErrorMessage(error: unknown): string {
-  const errorDetail = extractErrorDetail(error);
   if (isLicenseKeyError(error)) {
     return ERROR_MESSAGES.INVALID_LICENSE_KEY_USER;
   }
+  // Usage-cap (plan limit) errors get a friendly, actionable message with a link to
+  // the usage dashboard to purchase credits, instead of the raw relay error text.
+  const capMessage = formatUsageCapError(error);
+  if (capMessage) {
+    return capMessage;
+  }
+  const errorDetail = extractErrorDetail(error);
   return (
     errorDetail.message ||
     (errorDetail.reason ? `Error: ${errorDetail.reason}` : ERROR_MESSAGES.UNKNOWN_ERROR)
@@ -193,11 +197,12 @@ export function stripFrontmatter(content: string, options: StripFrontmatterOptio
 }
 
 /**
+ * @param app - The Obsidian app instance.
  * @param file - The note file to get tags from.
  * @param frontmatterOnly - Whether to only get tags from frontmatter.
  * @returns An array of lowercase tags without the hash symbol.
  */
-export function getTagsFromNote(file: TFile, frontmatterOnly = true): string[] {
+export function getTagsFromNote(app: App, file: TFile, frontmatterOnly = true): string[] {
   const metadata = app.metadataCache.getFileCache(file);
   const frontmatterTags = metadata?.frontmatter?.tags;
   const allTags = new Set<string>();
@@ -225,25 +230,86 @@ export function getTagsFromNote(file: TFile, frontmatterOnly = true): string[] {
   return Array.from(allTags);
 }
 
+/** Canonical empty array for property values, frozen for referential stability. */
+const EMPTY_PROPERTY_VALUES = Object.freeze([]) as unknown as string[];
+
+/**
+ * Read the values of a single frontmatter property from a note. Backs the
+ * Project "Property" context source, which includes notes by a user-defined
+ * frontmatter field (e.g. `Topics: Physics`) rather than by tag — the taxonomy
+ * some vaults use in place of tags, which forbid spaces and slugs.
+ *
+ * @param app - The Obsidian app instance.
+ * @param file - The note whose frontmatter is read.
+ * @param key - The frontmatter property name to read.
+ * @returns The property's values as strings: each element for a list property,
+ * a single element for a scalar, and an empty array when the key is absent.
+ */
+export function getPropertyValuesFromNote(app: App, file: TFile, key: string): string[] {
+  const frontmatter = app.metadataCache.getFileCache(file)?.frontmatter;
+  // Reason: `hasOwnProperty` (not `in`) so an absent key never reads an inherited
+  // member — e.g. `key: "constructor"` on a note without it would otherwise
+  // surface the prototype's function value.
+  if (!frontmatter || !Object.hasOwn(frontmatter, key)) {
+    return EMPTY_PROPERTY_VALUES;
+  }
+  const raw = (frontmatter as Record<string, unknown>)[key];
+  // Reason: only scalars round-trip through the `[key:value]` grammar. An object
+  // value would collapse to "[object Object]" (many distinct maps → one indistinct
+  // value), so drop non-scalars here rather than match on an ambiguous string.
+  const values: unknown[] = Array.isArray(raw) ? (raw as unknown[]) : [raw];
+  const scalars = values.filter(isScalarPropertyValue);
+  if (scalars.length === 0) {
+    return EMPTY_PROPERTY_VALUES;
+  }
+  return scalars.map((value) => String(value));
+}
+
+/** Whether a frontmatter value is a scalar that the `[key:value]` grammar can represent. */
+function isScalarPropertyValue(value: unknown): value is string | number | boolean {
+  const type = typeof value;
+  return type === "string" || type === "number" || type === "boolean";
+}
+
+/**
+ * Whether a note declares a frontmatter property, regardless of its value.
+ * Backs the key-only Project property source (`[key:]`): a note with an empty
+ * or null-valued key (e.g. `Topics:` or `Topics: []`) still has the key and so
+ * must match, which a values-length check would miss.
+ *
+ * @param app - The Obsidian app instance.
+ * @param file - The note whose frontmatter is inspected.
+ * @param key - The frontmatter property name to look for.
+ * @returns True when the note's frontmatter contains the key.
+ */
+export function noteHasProperty(app: App, file: TFile, key: string): boolean {
+  const frontmatter: Record<string, unknown> | undefined =
+    app.metadataCache.getFileCache(file)?.frontmatter;
+  // Reason: `hasOwnProperty` (not `in`) so `[constructor:]` / `[toString:]` match
+  // only notes that actually declare that key, not every note whose frontmatter
+  // inherits it from Object.prototype.
+  return frontmatter != null && Object.hasOwn(frontmatter, key);
+}
+
 /**
  * Get notes from tags.
- * @param vault - The vault to get notes from.
+ * @param app - The Obsidian app instance.
  * @param tags - The tags to get notes from. Tags should be with the hash symbol.
  * @param noteFiles - The notes to get notes from.
  * @returns An array of note files.
  */
-export function getNotesFromTags(vault: Vault, tags: string[], noteFiles?: TFile[]): TFile[] {
+export function getNotesFromTags(app: App, tags: string[], noteFiles?: TFile[]): TFile[] {
   if (tags.length === 0) {
     return [];
   }
 
   tags = tags.map((tag) => stripHash(tag));
 
-  const files = noteFiles && noteFiles.length > 0 ? noteFiles : getNotesFromPath(vault, "/");
+  const files = noteFiles && noteFiles.length > 0 ? noteFiles : getNotesFromPath(app.vault, "/");
   const filesWithTag = [];
 
   for (const file of files) {
-    const noteTags = getTagsFromNote(file);
+    const noteTags = getTagsFromNote(app, file);
     if (tags.some((tag) => noteTags.includes(tag))) {
       filesWithTag.push(file);
     }
@@ -281,7 +347,7 @@ export const formatDateTime = (
  *
  * Throws if any segment conflicts with an existing file.
  */
-export async function ensureFolderExists(folderPath: string): Promise<void> {
+export async function ensureFolderExists(vault: Vault, folderPath: string): Promise<void> {
   const path = normalizePath(folderPath).replace(/^\/+/, "").replace(/\/+$/, "");
   if (!path) return; // nothing to ensure
 
@@ -291,7 +357,7 @@ export async function ensureFolderExists(folderPath: string): Promise<void> {
   for (const part of parts) {
     current = current ? `${current}/${part}` : part;
 
-    const existing = app.vault.getAbstractFileByPath(current);
+    const existing = vault.getAbstractFileByPath(current);
     if (existing) {
       if (existing instanceof TFile) {
         throw new Error(`Path conflict: "${current}" exists as a file, expected folder.`);
@@ -301,7 +367,7 @@ export async function ensureFolderExists(folderPath: string): Promise<void> {
     }
 
     // Create this level; parents are guaranteed to exist from previous iterations
-    await app.vault.adapter.mkdir(current);
+    await vault.adapter.mkdir(current);
   }
 }
 
@@ -821,17 +887,18 @@ export function findCustomModel(modelKey: string, activeModels: CustomModel[]): 
   return model;
 }
 
+// Capabilities can be undefined when a model's vision support is simply unknown;
+// callers that hard-block on missing vision must treat undefined as "unknown", not "no".
+export function modelSupportsVision(model: CustomModel): boolean {
+  return !!model.capabilities?.includes(ModelCapability.VISION);
+}
+
 export function getProviderInfo(provider: string): ProviderMetadata {
   const info = ProviderInfo[provider as Provider];
   return {
     ...info,
     label: info.label || provider,
   };
-}
-
-export function getProviderLabel(provider: string, model?: CustomModel): string {
-  const baseLabel = ProviderInfo[provider as Provider]?.label || provider;
-  return baseLabel + (model?.believerExclusive && baseLabel === "Copilot Plus" ? "(Believer)" : "");
 }
 
 /**
@@ -879,11 +946,31 @@ export function cleanMessageForCopy(message: string): string {
 }
 
 /**
+ * Inserts text at the cursor of the most recent markdown editor, replacing the
+ * current selection when there is one. Resolves the target leaf via the passed
+ * `app` (no global `app`) and threads that same `app` into `insertIntoEditor`
+ * so selection detection and insertion always target the same editor — even in
+ * a popout window where the global `app` would resolve a different leaf.
+ */
+export async function insertAtCursor(app: App, text: string) {
+  let leaf = app.workspace.getMostRecentLeaf();
+  if (!leaf || !(leaf.view instanceof MarkdownView)) {
+    leaf = app.workspace.getLeaf(false);
+    if (!leaf || !(leaf.view instanceof MarkdownView)) return;
+  }
+  const hasSelection = leaf.view.editor.getSelection().length > 0;
+  await insertIntoEditor(app, text, hasSelection);
+}
+
+/**
  * Inserts a message into the active markdown editor, optionally replacing the current selection.
  * Uses a single CM6 transaction to avoid undo stack splitting.
  * Ensures the inserted/replaced range is selected after the operation.
+ *
+ * Resolves the target leaf from the passed `app` (not the global) so the write
+ * lands in the caller's window — critical for popout-window chats.
  */
-export async function insertIntoEditor(message: string, replace: boolean = false) {
+export async function insertIntoEditor(app: App, message: string, replace: boolean = false) {
   let leaf = app.workspace.getMostRecentLeaf();
   if (!leaf) {
     new Notice("No active leaf found.");
@@ -1107,77 +1194,6 @@ export function getMessageRole(
   return isOSeriesModel(model) ? "human" : defaultRole;
 }
 
-export function getNeedSetKeyProvider(): Provider[] {
-  // List of providers to exclude
-  const excludeProviders: Provider[] = [
-    ChatModelProviders.OPENAI_FORMAT,
-    ChatModelProviders.OLLAMA,
-    ChatModelProviders.LM_STUDIO,
-    ChatModelProviders.AZURE_OPENAI,
-    ChatModelProviders.GITHUB_COPILOT,
-    EmbeddingModelProviders.COPILOT_PLUS,
-    EmbeddingModelProviders.COPILOT_PLUS_JINA,
-  ];
-
-  return (Object.keys(ProviderInfo) as Provider[]).filter((key) => !excludeProviders.includes(key));
-}
-
-export function checkModelApiKey(
-  model: CustomModel,
-  settings: Readonly<CopilotSettings>
-): {
-  hasApiKey: boolean;
-  errorNotice?: string;
-} {
-  const provider = model.provider as ChatModelProviders;
-  if (provider === ChatModelProviders.AMAZON_BEDROCK) {
-    const apiKey = model.apiKey || settings.amazonBedrockApiKey;
-    if (!apiKey) {
-      return {
-        hasApiKey: false,
-        errorNotice:
-          "Amazon Bedrock API key is missing. Please add a key in Settings > API Keys or update the model configuration.",
-      };
-    }
-
-    // Region defaults to us-east-1 if not specified, so API key is the only required check
-    return { hasApiKey: true };
-  }
-
-  // GitHub Copilot uses OAuth, not API key
-  if (provider === ChatModelProviders.GITHUB_COPILOT) {
-    const hasAuth = Boolean(
-      model.apiKey || settings.githubCopilotToken || settings.githubCopilotAccessToken
-    );
-    if (!hasAuth) {
-      return {
-        hasApiKey: false,
-        errorNotice:
-          "GitHub Copilot is not authenticated. Please connect it in Settings > Copilot > Basic Tab > Set Keys.",
-      };
-    }
-    return { hasApiKey: true };
-  }
-
-  const needSetKeyPath = !!getNeedSetKeyProvider().find((p) => p === provider);
-  const hasNoApiKey = !getApiKeyForProvider(model.provider as SettingKeyProviders, model);
-
-  // For Providers that require setting a key in the dialog, an inspection is necessary.
-  if (needSetKeyPath && hasNoApiKey) {
-    const notice =
-      `Please configure API Key for ${model.name} in settings first.` +
-      "\nPath: Settings > copilot plugin > Basic Tab > Set Keys";
-    return {
-      hasApiKey: false,
-      errorNotice: notice,
-    };
-  }
-
-  return {
-    hasApiKey: true,
-  };
-}
-
 /**
  * Extracts text content from a message chunk that could be either a string
  * or an array of content objects (Claude 3.7 format)
@@ -1300,7 +1316,7 @@ export async function withTimeout<T>(
 /**
  * Check if the current Obsidian editor setting is in source mode
  */
-export function isSourceModeOn(): boolean {
+export function isSourceModeOn(app: App): boolean {
   const view = app.workspace.getActiveViewOfType(MarkdownView);
   if (!view) return true;
 
@@ -1396,10 +1412,15 @@ export function sanitizeFilePath(filePath: string): string {
 
 /**
  * Opens a file in the workspace, reusing an existing tab if the file is already open.
+ * @param app - The Obsidian app instance
  * @param file - The TFile to open
  * @param focusIfOpen - If true, focuses the existing leaf if the file is already open (default: true)
  */
-export async function openFileInWorkspace(file: TFile, focusIfOpen: boolean = true): Promise<void> {
+export async function openFileInWorkspace(
+  app: App,
+  file: TFile,
+  focusIfOpen: boolean = true
+): Promise<void> {
   // Check if the file is already open in any leaf
   let existingLeaf = null;
   app.workspace.iterateAllLeaves((leaf) => {

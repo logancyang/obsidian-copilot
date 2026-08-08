@@ -114,7 +114,7 @@ Example: `private, Work/Confidential, #private` excludes the private folder, a s
 
 > **Note**: Tag matching works with tags in the note's **properties (frontmatter)**, not inline tags within the note body.
 
-The `copilot` folder is always excluded automatically (it contains the plugin's own files).
+Your Copilot folder is always excluded automatically (it holds the plugin's own files — conversations, prompts, memory, skills, and projects). This covers the default `copilot` folder, your current Copilot folder if you changed it in **Settings → Copilot → Basic → Copilot folder location**, and every folder that has previously been your Copilot folder. Past Copilot folders stay excluded permanently, so any files the plugin left behind after a folder change never leak into search results.
 
 ### Inclusions
 
@@ -177,5 +177,4 @@ On mobile, you can still use Vault QA with lexical search, but semantic search w
 ## Related
 
 - [Agent Mode and Tools](agent-mode-and-tools.md) — How @vault uses the index in Plus mode
-- [Models and Parameters](models-and-parameters.md) — Choosing an embedding model
 - [Copilot Plus and Self-Host](copilot-plus-and-self-host.md) — Miyo-powered local semantic search

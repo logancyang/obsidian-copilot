@@ -1,8 +1,8 @@
-import { AlertCircle, CheckCircle, CircleDashed, FileText, Loader2, X } from "lucide-react";
-import { Platform, TFile, TFolder } from "obsidian";
+import { AlertCircle, CheckCircle, CircleDashed, Loader2 } from "lucide-react";
+import { TFile, TFolder } from "obsidian";
 import React, { useRef, useState } from "react";
+import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   ContextNoteBadge,
   ContextActiveNoteBadge,
@@ -10,14 +10,15 @@ import {
   ContextWebTabBadge,
   ContextUrlBadge,
   ContextFolderBadge,
-  FaviconOrGlobe,
+  ContextSelectedTextBadge,
 } from "@/components/chat-components/ContextBadges";
-import { SelectedTextContext, WebTabContext, isWebSelectedTextContext } from "@/types/message";
+import { SelectedTextContext, WebTabContext } from "@/types/message";
 import { ChainType } from "@/chainType";
 import { Separator } from "@/components/ui/separator";
 import { useChainType, useIndexingProgress } from "@/aiParams";
+import { useApp } from "@/context";
 import { useProjectContextStatus } from "@/hooks/useProjectContextStatus";
-import { getDomainFromUrl, isPlusChain, openFileInWorkspace } from "@/utils";
+import { isPlusChain, openFileInWorkspace } from "@/utils";
 import { mergeWebTabContexts } from "@/utils/urlNormalization";
 import { AtMentionTypeahead } from "./AtMentionTypeahead";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -37,64 +38,19 @@ interface ChatContextMenuProps {
   onRemoveContext: (category: string, data: string) => void;
   showProgressCard: () => void;
   showIndexingCard?: () => void;
-  onTypeaheadSelect: (category: string, data: TFile | string | TFolder | WebTabContext) => void;
+  onTypeaheadSelect: (
+    category: string,
+    data: TFile | string | TFolder | WebTabContext | null
+  ) => void;
   lexicalEditorRef?: React.RefObject<{ focus: () => void }>;
-}
-
-function ContextSelection({
-  selectedText,
-  onRemoveContext,
-}: {
-  selectedText: SelectedTextContext;
-  onRemoveContext: (category: string, data: string) => void;
-}) {
-  // Handle web selected text
-  if (isWebSelectedTextContext(selectedText)) {
-    const domain = getDomainFromUrl(selectedText.url);
-    return (
-      <Badge className="tw-items-center tw-py-0 tw-pl-2 tw-pr-0.5 tw-text-xs">
-        <div className="tw-flex tw-items-center tw-gap-1">
-          <FaviconOrGlobe faviconUrl={selectedText.faviconUrl} />
-          <span className="tw-max-w-40 tw-truncate">{selectedText.title || domain}</span>
-          <span className="tw-text-xs tw-text-faint">Selection</span>
-        </div>
-        <Button
-          variant="ghost2"
-          size="fit"
-          onClick={() => onRemoveContext("selectedText", selectedText.id)}
-          aria-label="Remove from context"
-          className="tw-text-muted"
-        >
-          <X className="tw-size-4" />
-        </Button>
-      </Badge>
-    );
-  }
-
-  // Handle note selected text (default)
-  const lineRange =
-    selectedText.startLine === selectedText.endLine
-      ? `L${selectedText.startLine}`
-      : `L${selectedText.startLine}-${selectedText.endLine}`;
-
-  return (
-    <Badge className="tw-items-center tw-py-0 tw-pl-2 tw-pr-0.5 tw-text-xs">
-      <div className="tw-flex tw-items-center tw-gap-1">
-        <FileText className="tw-size-3" />
-        <span className="tw-max-w-40 tw-truncate">{selectedText.noteTitle}</span>
-        <span className="tw-text-xs tw-text-faint">{lineRange}</span>
-      </div>
-      <Button
-        variant="ghost2"
-        size="fit"
-        onClick={() => onRemoveContext("selectedText", selectedText.id)}
-        aria-label="Remove from context"
-        className="tw-text-muted"
-      >
-        <X className="tw-size-4" />
-      </Button>
-    </Badge>
-  );
+  hideAddContextButton?: boolean;
+  /**
+   * True in Agent Mode. Suppresses the legacy CAG project-status icon (Agent
+   * Mode mounts its own status trigger outside this row) and collapses the row
+   * entirely when there are no badges — Agent Mode has no "@ Add context"
+   * button here, so an empty row would just push the editor down (#205).
+   */
+  isAgentMode?: boolean;
 }
 
 export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
@@ -112,7 +68,10 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
   showIndexingCard,
   onTypeaheadSelect,
   lexicalEditorRef,
+  hideAddContextButton = false,
+  isAgentMode = false,
 }) => {
+  const app = useApp();
   const [currentChain] = useChainType();
   const contextStatus = useProjectContextStatus();
   const [indexingState] = useIndexingProgress();
@@ -144,7 +103,7 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
    * Handles clicking on a badge to open the file in a new tab (or focus existing tab)
    */
   const handleBadgeClick = (file: TFile) => {
-    void openFileInWorkspace(file);
+    void openFileInWorkspace(app, file);
   };
 
   const uniqueNotes = React.useMemo(() => {
@@ -162,7 +121,7 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
 
   const activeNoteVisible = includeActiveNote && !hasAnySelection && Boolean(currentActiveFile);
   const activeWebTabVisible =
-    includeActiveWebTab && !hasAnySelection && Boolean(activeWebTab) && Platform.isDesktopApp;
+    includeActiveWebTab && !hasAnySelection && Boolean(activeWebTab) && isDesktopRuntime();
 
   const hasContext =
     uniqueNotes.length > 0 ||
@@ -172,6 +131,13 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
     uniqueWebTabs.length > 0 ||
     activeNoteVisible ||
     activeWebTabVisible;
+
+  // Agent Mode only: with no "@ Add context" button and the status trigger
+  // living outside this row, an empty row is pure dead height above the
+  // editor — drop it. Legacy Chat must keep rendering (the "@" button below).
+  if (isAgentMode && !hasContext) {
+    return null;
+  }
 
   // Get contextStatus from the shared hook
   const getContextStatusIcon = () => {
@@ -189,30 +155,34 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
 
   return (
     <div className="tw-flex tw-w-full tw-items-start tw-gap-1">
-      <div className="tw-flex tw-h-full tw-items-start">
-        <Popover open={showTypeahead} onOpenChange={setShowTypeahead}>
-          <PopoverTrigger asChild>
-            <Button
-              ref={buttonRef}
-              variant="ghost2"
-              size="fit"
-              className="tw-ml-1 tw-rounded-sm tw-border tw-border-solid tw-border-border tw-text-muted"
-            >
-              <span className="tw-text-base tw-font-medium tw-leading-none">@</span>
-              {!hasContext && <span className="tw-pr-1 tw-text-sm tw-leading-4">Add context</span>}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="tw-w-[400px] tw-p-0" align="start" side="top" sideOffset={4}>
-            <AtMentionTypeahead
-              isOpen={showTypeahead}
-              onClose={handleTypeaheadClose}
-              onSelect={handleTypeaheadSelect}
-              isCopilotPlus={isCopilotPlus}
-              currentActiveFile={currentActiveFile}
-            />
-          </PopoverContent>
-        </Popover>
-      </div>
+      {!hideAddContextButton && (
+        <div className="tw-flex tw-h-full tw-items-start">
+          <Popover open={showTypeahead} onOpenChange={setShowTypeahead}>
+            <PopoverTrigger asChild>
+              <Button
+                ref={buttonRef}
+                variant="ghost2"
+                size="fit"
+                className="tw-ml-1 tw-rounded-sm tw-border tw-border-solid tw-border-border tw-text-muted"
+              >
+                <span className="tw-text-base tw-font-medium tw-leading-none">@</span>
+                {!hasContext && (
+                  <span className="tw-pr-1 tw-text-sm tw-leading-4">Add context</span>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="tw-w-[400px] tw-p-0" align="start" side="top" sideOffset={4}>
+              <AtMentionTypeahead
+                isOpen={showTypeahead}
+                onClose={handleTypeaheadClose}
+                onSelect={handleTypeaheadSelect}
+                isCopilotPlus={isCopilotPlus}
+                currentActiveFile={currentActiveFile}
+              />
+            </PopoverContent>
+          </Popover>
+        </div>
+      )}
       <div className="tw-flex tw-flex-1 tw-flex-wrap tw-gap-1">
         {activeNoteVisible && currentActiveFile && (
           <ContextActiveNoteBadge
@@ -253,15 +223,15 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
           />
         ))}
         {selectedTextContexts.map((selectedText) => (
-          <ContextSelection
+          <ContextSelectedTextBadge
             key={selectedText.id}
             selectedText={selectedText}
-            onRemoveContext={onRemoveContext}
+            onRemove={() => onRemoveContext("selectedText", selectedText.id)}
           />
         ))}
       </div>
 
-      {currentChain === ChainType.PROJECT_CHAIN && (
+      {!isAgentMode && currentChain === ChainType.PROJECT_CHAIN && (
         <>
           <Separator orientation="vertical" />
           <div className="">

@@ -1,4 +1,4 @@
-import { NoteIdRank } from "../interfaces";
+import { NoteIdRank } from "@/search/v3/interfaces";
 import { adaptiveCutoff } from "./AdaptiveCutoff";
 
 /** Helper: create chunks from a note */

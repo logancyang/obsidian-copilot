@@ -12,12 +12,25 @@
 import { DEFAULT_SETTINGS } from "@/constants";
 import { type CopilotSettings } from "@/settings/model";
 import { type CustomModel } from "@/aiParams";
-import { isSensitiveKey } from "@/encryptionService";
 // Reason: do NOT import from @/logger here. The logger depends on getSettings(),
 // but this module runs during settings loading (before setSettings).
 
 /** Model-level fields that are managed by the keychain. */
 export const MODEL_SECRET_FIELDS = ["apiKey"] as const;
+
+/** Check whether a settings key holds a sensitive value. */
+export function isSensitiveKey(key: string): boolean {
+  const lower = key.toLowerCase();
+  const normalized = lower.replace(/[_-]/g, "");
+  return (
+    normalized.includes("apikey") ||
+    lower.endsWith("token") ||
+    lower.endsWith("accesstoken") ||
+    lower.endsWith("secret") ||
+    lower.endsWith("password") ||
+    lower.endsWith("licensekey")
+  );
+}
 
 /**
  * Canonical list of top-level secret field names known at compile time.
@@ -48,9 +61,6 @@ function asRecord(obj: CopilotSettings): Record<string, unknown> {
 /**
  * Check whether `data.json` (the raw on-disk data) still contains any
  * non-empty sensitive field values.
- *
- * Used as a condition for showing the migration modal: if the disk already
- * has no secrets, there is nothing to clear.
  *
  * @param rawData - The raw data as loaded from disk (before hydration).
  */
@@ -86,9 +96,6 @@ export function hasPersistedSecrets(rawData: Record<string, unknown>): boolean {
 /**
  * Return a deep copy of `settings` with all keychain-covered fields set to `""`.
  *
- * Used when `_diskSecretsCleared === true` — the user has confirmed all
- * devices are upgraded, so data.json should no longer carry secrets.
- *
  * DESIGN NOTE: this iterates `Object.keys(settings)` rather than
  * `TOP_LEVEL_SECRET_FIELDS`. That is intentional and not an asymmetry bug.
  * `hydrateFromKeychain()` writes any non-empty keychain value back onto the
@@ -110,8 +117,12 @@ export function stripKeychainFields(settings: CopilotSettings): CopilotSettings 
   }
 
   // Strip model-level secrets
-  out.activeModels = stripModelSecrets(settings.activeModels ?? []);
-  out.activeEmbeddingModels = stripModelSecrets(settings.activeEmbeddingModels ?? []);
+  if ("activeModels" in out) {
+    out.activeModels = stripModelSecrets(settings.activeModels ?? []);
+  }
+  if ("activeEmbeddingModels" in out) {
+    out.activeEmbeddingModels = stripModelSecrets(settings.activeEmbeddingModels ?? []);
+  }
 
   return out as unknown as CopilotSettings;
 }
@@ -134,8 +145,7 @@ function stripModelSecrets(models: CustomModel[]): CustomModel[] {
 // ---------------------------------------------------------------------------
 
 /**
- * Remove legacy keychain/encryption fields from a settings object and migrate
- * older field names forward.
+ * Remove legacy keychain/encryption fields from a settings object.
  *
  * Called on:
  * - Load path (after sanitize, before keychain hydrate)
@@ -153,25 +163,14 @@ export function cleanupLegacyFields(settings: CopilotSettings): CopilotSettings 
   // strip them on every cleanup so they never make it back to data.json.
   delete out._keychainMigratedAt;
   delete out._migrationModalDismissed;
-  // Reason: `_diskSecretsCleared` was renamed to `_keychainOnly` for clarity.
-  // Migrate the value forward only when the new field is absent so a later
-  // explicit set always wins.
-  if (out._diskSecretsCleared !== undefined && out._keychainOnly === undefined) {
-    out._keychainOnly = out._diskSecretsCleared;
-  }
   delete out._diskSecretsCleared;
+  delete out._keychainOnly;
+  // Copilot no longer manages MCP servers. Remove the retired nested config on
+  // every load/save so headers and environment values cannot remain in data.json.
+  if (out.agentMode && typeof out.agentMode === "object" && !Array.isArray(out.agentMode)) {
+    const agentMode = { ...(out.agentMode as Record<string, unknown>) };
+    delete agentMode.mcpServers;
+    out.agentMode = agentMode;
+  }
   return out as unknown as CopilotSettings;
-}
-
-// ---------------------------------------------------------------------------
-// isKeychainOnly
-// ---------------------------------------------------------------------------
-
-/**
- * Whether the OS keychain is the single source of truth for secrets in this
- * vault. Centralised check so business code does not sprinkle
- * `_keychainOnly === true` comparisons throughout the codebase.
- */
-export function isKeychainOnly(settings: CopilotSettings): boolean {
-  return (settings as unknown as Record<string, unknown>)._keychainOnly === true;
 }

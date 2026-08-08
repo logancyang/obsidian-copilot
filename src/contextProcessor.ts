@@ -8,7 +8,7 @@ import { WebViewerTimeoutError } from "@/services/webViewerService/webViewerServ
 import { FileParserManager } from "@/tools/FileParserManager";
 import { isPlusChain, isTextReadableFile } from "@/utils";
 import { normalizeUrlString } from "@/utils/urlNormalization";
-import { TFile, Vault, Notice } from "obsidian";
+import { App, TFile, Vault, Notice } from "obsidian";
 import {
   NOTE_CONTEXT_PROMPT_TAG,
   EMBEDDED_PDF_TAG,
@@ -59,12 +59,25 @@ interface MarkdownSegment {
 
 export class ContextProcessor {
   private static instance: ContextProcessor;
+  private app: App;
 
-  private constructor() {}
+  private constructor(app: App) {
+    this.app = app;
+  }
 
-  static getInstance(): ContextProcessor {
+  /**
+   * Returns the singleton. `app` is required on the first call (which creates
+   * the instance) and ignored afterward; the plugin seeds it once at load
+   * (see main.ts) so subsequent call sites can omit it.
+   */
+  static getInstance(app?: App): ContextProcessor {
     if (!ContextProcessor.instance) {
-      ContextProcessor.instance = new ContextProcessor();
+      if (!app) {
+        throw new Error(
+          "ContextProcessor.getInstance() requires `app` on first call (seed it at plugin load)."
+        );
+      }
+      ContextProcessor.instance = new ContextProcessor(app);
     }
     return ContextProcessor.instance;
   }
@@ -106,7 +119,7 @@ export class ContextProcessor {
   async processDataviewBlocks(content: string, sourcePath: string): Promise<string> {
     // Check if Dataview plugin is available
     const dataviewPlugin = (
-      app as unknown as { plugins?: { plugins?: { dataview?: { api?: DataviewApi } } } }
+      this.app as unknown as { plugins?: { plugins?: { dataview?: { api?: DataviewApi } } } }
     ).plugins?.plugins?.dataview;
     if (!dataviewPlugin) {
       return content; // Dataview not installed, return content as-is
@@ -356,7 +369,7 @@ export class ContextProcessor {
     const resolvedFile =
       target.path === null
         ? sourceNote
-        : app.metadataCache.getFirstLinkpathDest(target.path, sourceNote.path);
+        : this.app.metadataCache.getFirstLinkpathDest(target.path, sourceNote.path);
 
     if (!(resolvedFile instanceof TFile)) {
       return this.formatEmbeddedNoteBlock({
@@ -460,7 +473,7 @@ export class ContextProcessor {
     fileContent: string,
     focus: EmbeddedLinkTarget
   ): MarkdownSegment {
-    const cache = app.metadataCache.getFileCache(note);
+    const cache = this.app.metadataCache.getFileCache(note);
 
     if (focus.blockId) {
       const block = cache?.blocks?.[focus.blockId];
@@ -829,7 +842,7 @@ export class ContextProcessor {
     const normalTabs: Array<{ url: string; title?: string; faviconUrl?: string }> = [];
     const seenUrls = new Set<string>();
     const seenVideoIds = new Set<string>(); // Deduplicate YouTube videos by videoId
-    const service = getWebViewerService(app);
+    const service = getWebViewerService(this.app);
 
     /**
      * Check if a tab should be skipped due to deduplication.

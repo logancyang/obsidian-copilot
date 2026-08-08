@@ -6,8 +6,8 @@ import {
   EMPTY_SYSTEM_PROMPT,
 } from "@/system-prompts/constants";
 import { UserSystemPrompt } from "@/system-prompts/type";
-import { normalizePath, TAbstractFile, TFile } from "obsidian";
-import { getSettings } from "@/settings/model";
+import { App, normalizePath, TAbstractFile, TFile } from "obsidian";
+import { getEffectiveSystemPromptsFolder } from "@/settings/copilotFolder";
 import { stripFrontmatter } from "@/utils";
 import {
   updateCachedSystemPrompts,
@@ -53,10 +53,10 @@ export function validatePromptName(
 }
 
 /**
- * Get the system prompts folder path from settings
+ * Get the system prompts folder path, derived from the configurable copilotFolder root.
  */
 export function getSystemPromptsFolder(): string {
-  return normalizePath(getSettings().userSystemPromptsFolder);
+  return getEffectiveSystemPromptsFolder();
 }
 
 /**
@@ -67,11 +67,17 @@ export function getPromptFilePath(title: string): string {
 }
 
 /**
- * Get the file path for a system prompt by title in a specific folder
+ * Get the file path for a system prompt by title in a specific folder.
+ *
+ * Callers that create or move a prompt should pass `folder` explicitly and use
+ * the same value they ensured: the prompts folder derives from the Copilot root,
+ * so resolving it twice around an `await` can ensure one directory and write
+ * into another.
+ *
  * @param title - The title of the prompt
  * @param folder - Optional folder path (defaults to current settings folder)
  */
-function getPromptFilePathInFolder(title: string, folder?: string): string {
+export function getPromptFilePathInFolder(title: string, folder?: string): string {
   const folderPath = folder ? normalizePath(folder) : getSystemPromptsFolder();
   return normalizePath(`${folderPath}/${title}.md`);
 }
@@ -117,7 +123,7 @@ function coerceFrontmatterNumber(value: unknown, fallback: number): number {
 /**
  * Parse a TFile as a UserSystemPrompt by reading its content and extracting frontmatter
  */
-export async function parseSystemPromptFile(file: TFile): Promise<UserSystemPrompt> {
+export async function parseSystemPromptFile(app: App, file: TFile): Promise<UserSystemPrompt> {
   const rawContent = await app.vault.read(file);
   const content = stripFrontmatter(rawContent);
   const metadata = app.metadataCache.getFileCache(file);
@@ -149,16 +155,16 @@ export async function parseSystemPromptFile(file: TFile): Promise<UserSystemProm
  * Fetch all system prompts from the vault without updating cache
  * Use this when you need to control cache updates yourself (e.g., for latest-wins semantics)
  */
-export async function fetchAllSystemPrompts(): Promise<UserSystemPrompt[]> {
+export async function fetchAllSystemPrompts(app: App): Promise<UserSystemPrompt[]> {
   const files = app.vault.getFiles().filter((file) => isSystemPromptFile(file));
-  return await Promise.all(files.map(parseSystemPromptFile));
+  return await Promise.all(files.map((file) => parseSystemPromptFile(app, file)));
 }
 
 /**
  * Load all system prompts from the vault and update cache
  */
-export async function loadAllSystemPrompts(): Promise<UserSystemPrompt[]> {
-  const prompts = await fetchAllSystemPrompts();
+export async function loadAllSystemPrompts(app: App): Promise<UserSystemPrompt[]> {
+  const prompts = await fetchAllSystemPrompts(app);
   updateCachedSystemPrompts(prompts);
   return prompts;
 }
@@ -168,7 +174,7 @@ export async function loadAllSystemPrompts(): Promise<UserSystemPrompt[]> {
  * Only adds missing fields, does not overwrite existing values.
  * This is idempotent and does not touch the file content.
  */
-export async function ensurePromptFrontmatter(file: TFile, prompt: UserSystemPrompt) {
+export async function ensurePromptFrontmatter(app: App, file: TFile, prompt: UserSystemPrompt) {
   // Check if already pending to avoid nested add/remove issues
   const alreadyPending = isPendingFileWrite(file.path);
   const now = Date.now();
@@ -230,6 +236,7 @@ export function generateCopyPromptName(
  * @param folder - Optional folder path (defaults to current settings folder)
  */
 export async function updatePromptDefaultFlag(
+  app: App,
   title: string,
   isDefault: boolean,
   folder?: string

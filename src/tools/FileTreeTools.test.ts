@@ -1,8 +1,11 @@
 import * as searchUtils from "@/search/searchUtils";
 import { mockTFile, mockTFolder } from "@/__tests__/mockObsidian";
 import { ToolManager } from "@/tools/toolManager";
-import { TFile, TFolder } from "obsidian";
+import { App, TFile, TFolder } from "obsidian";
 import { buildFileTree, createGetFileTreeTool } from "./FileTreeTools";
+
+// shouldIndexFile is mocked, so the app is only threaded through and never inspected.
+const mockApp = {} as unknown as App;
 
 // Mock the searchUtils functions
 jest.mock("@/search/searchUtils", () => ({
@@ -85,7 +88,7 @@ describe("FileTreeTools", () => {
 
   it("should generate correct file tree structure with files and extension counts", async () => {
     // Test buildFileTree function directly
-    const tree = buildFileTree(root);
+    const tree = buildFileTree(mockApp, root);
 
     // Define expected tree structure
     const expectedTree = {
@@ -114,7 +117,7 @@ describe("FileTreeTools", () => {
     expect(tree).toEqual(expectedTree);
 
     // Also test the tool to ensure it uses buildFileTree correctly
-    const tool = createGetFileTreeTool(root);
+    const tool = createGetFileTreeTool(mockApp, root);
     const result = (await ToolManager.callTool(tool, {})) as string;
 
     // Extract JSON part after the prompt
@@ -126,7 +129,7 @@ describe("FileTreeTools", () => {
 
   it("should handle size limit by rebuilding without files", async () => {
     // Test buildFileTree with size limit handling
-    const tree = buildFileTree(root, false);
+    const tree = buildFileTree(mockApp, root, false);
 
     // Define expected simplified tree structure
     const expectedTree = {
@@ -153,12 +156,14 @@ describe("FileTreeTools", () => {
 
   it("should exclude files based on patterns", async () => {
     // Mock shouldIndexFile to exclude all files in projects folder
-    (searchUtils.shouldIndexFile as jest.Mock).mockImplementation((file: { path: string }) => {
-      return !file.path.includes("projects");
-    });
+    (searchUtils.shouldIndexFile as jest.Mock).mockImplementation(
+      (_app: unknown, file: { path: string }) => {
+        return !file.path.includes("projects");
+      }
+    );
 
     // Test buildFileTree with exclusion patterns
-    const tree = buildFileTree(root);
+    const tree = buildFileTree(mockApp, root);
 
     // Define expected tree with projects excluded
     const expectedTree = {
@@ -188,7 +193,7 @@ describe("FileTreeTools", () => {
     (searchUtils.shouldIndexFile as jest.Mock).mockReturnValue(false);
 
     // Test buildFileTree with all files excluded
-    const tree = buildFileTree(root);
+    const tree = buildFileTree(mockApp, root);
 
     const expectedTree = {};
 

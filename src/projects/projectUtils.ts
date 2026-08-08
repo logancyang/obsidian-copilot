@@ -24,7 +24,7 @@ import {
 import { ProjectFileRecord, ProjectScanDiagnostics } from "@/projects/type";
 import { stripFrontmatter } from "@/utils";
 import { logError, logWarn } from "@/logger";
-import { parseYaml, TFile, TFolder } from "obsidian";
+import { App, parseYaml, TFile, TFolder } from "obsidian";
 import {
   addPendingFileWrite,
   isPendingFileWrite,
@@ -34,6 +34,7 @@ import {
 
 // Re-export path utilities so existing consumers don't need to change imports
 export {
+  getProjectAnchorFromConfigPath,
   getProjectsFolder,
   getProjectsUnsupportedFolder,
   getProjectFolderPath,
@@ -54,6 +55,7 @@ export {
  * @param timestamps - Created and last-used timestamps
  */
 export async function writeProjectFrontmatter(
+  app: App,
   file: TFile,
   project: ProjectConfig,
   folderName: string,
@@ -150,7 +152,9 @@ function joinUrlsArrayToString(urls: string[]): string {
 }
 
 /**
- * Parse a project.md file into a ProjectFileRecord.
+ * Parse a project config file (`project.md`) into a ProjectFileRecord. The legacy
+ * `systemPrompt` comes from the body for missing-AGENTS compatibility; metadata/config
+ * comes from frontmatter. AGENTS.md is intentionally not a project record.
  *
  * Key constraints:
  * - id: frontmatter is authoritative, folder name is fallback
@@ -158,10 +162,13 @@ function joinUrlsArrayToString(urls: string[]): string {
  * - inclusions/exclusions: kept as encoded strings with YAML folding stripped
  * - webUrls/youtubeUrls: stored as YAML arrays, converted to newline strings for runtime
  *
- * @param file - project.md TFile
+ * @param file - recognized project config TFile
  * @returns ProjectFileRecord, or null if parse fails
  */
-export async function parseProjectConfigFile(file: TFile): Promise<ProjectFileRecord | null> {
+export async function parseProjectConfigFile(
+  app: App,
+  file: TFile
+): Promise<ProjectFileRecord | null> {
   // Reason: vault.read() calls internal TFile.cache which doesn't exist on synthetic TFiles
   // created by resolveFileByPath() for hidden-folder or not-yet-indexed files.
   // Use the cached real TFile for vault API calls; fall back to adapter for synthetic files.
@@ -282,18 +289,18 @@ export async function parseProjectConfigFile(file: TFile): Promise<ProjectFileRe
 }
 
 /**
- * Scan all project config files with duplicate id detection.
+ * Scan all project config files (`project.md`) with per-id deduplication.
  *
  * Performance: only traverses the projectsFolder subtree, not the entire vault.
  * Looks for \<projectsFolder\>/\<folderName\>/project.md (one level deep).
  *
- * Duplicate rules:
- * - Build id -> path[] index during scan
- * - On duplicate: logWarn, keep first by path alphabetical order (stable)
+ * Dedup rule:
+ * - Per id (across folders): build id -> path[] index; on duplicate logWarn and keep the
+ *   first by folder/path order (stable).
  *
  * @returns Records and diagnostics
  */
-export async function scanAllProjectConfigFiles(): Promise<{
+export async function scanAllProjectConfigFiles(app: App): Promise<{
   records: ProjectFileRecord[];
   diagnostics: ProjectScanDiagnostics;
 }> {
@@ -330,6 +337,7 @@ export async function scanAllProjectConfigFiles(): Promise<{
     }
   }
 
+  // Reason: stable ordering by path keeps duplicate-id "keep first" deterministic across folders.
   files.sort((a, b) => a.path.localeCompare(b.path));
 
   const duplicateIdIndex: Record<string, string[]> = {};
@@ -339,7 +347,7 @@ export async function scanAllProjectConfigFiles(): Promise<{
   for (const file of files) {
     let record: ProjectFileRecord | null;
     try {
-      record = await parseProjectConfigFile(file);
+      record = await parseProjectConfigFile(app, file);
     } catch (error) {
       logError(`[Projects] Failed to parse project file, skipping: ${file.path}`, error);
       ignoredFiles.push(file.path);
@@ -380,8 +388,8 @@ export async function scanAllProjectConfigFiles(): Promise<{
  *
  * @returns Array of ProjectFileRecord
  */
-export async function loadAllProjects(): Promise<ProjectFileRecord[]> {
-  const { records } = await scanAllProjectConfigFiles();
+export async function loadAllProjects(app: App): Promise<ProjectFileRecord[]> {
+  const { records } = await scanAllProjectConfigFiles(app);
   updateCachedProjectRecords(records);
   return records;
 }
@@ -390,8 +398,8 @@ export async function loadAllProjects(): Promise<ProjectFileRecord[]> {
  * Fetch all projects from vault without updating the cache.
  * @returns Array of ProjectFileRecord
  */
-export async function fetchAllProjects(): Promise<ProjectFileRecord[]> {
-  const { records } = await scanAllProjectConfigFiles();
+export async function fetchAllProjects(app: App): Promise<ProjectFileRecord[]> {
+  const { records } = await scanAllProjectConfigFiles(app);
   return records;
 }
 
@@ -402,6 +410,7 @@ export async function fetchAllProjects(): Promise<ProjectFileRecord[]> {
  * @param record - Parsed record providing default values
  */
 export async function ensureProjectFrontmatter(
+  app: App,
   file: TFile,
   record: ProjectFileRecord
 ): Promise<void> {

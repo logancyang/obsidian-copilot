@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { App, Platform } from "obsidian";
+import { App } from "obsidian";
 import { useApp } from "@/context";
+import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { getWebViewerService } from "@/services/webViewerService/webViewerServiceSingleton";
 import type { WebTabContext } from "@/types/message";
 
@@ -129,7 +130,7 @@ export function useOpenWebTabs(options: UseOpenWebTabsOptions = {}): WebTabConte
     }
 
     // Web Viewer is desktop-only
-    if (!Platform.isDesktopApp) {
+    if (!isDesktopRuntime()) {
       setTabs([]);
       return;
     }

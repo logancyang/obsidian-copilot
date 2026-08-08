@@ -1,6 +1,15 @@
 import React, { useLayoutEffect, useMemo, useRef, useState } from "react";
 
-import { ChevronDown, ChevronUp, FileText, Folder, Hash, Tag, X } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  FileText,
+  Folder,
+  Hash,
+  SlidersHorizontal,
+  Tag,
+  X,
+} from "lucide-react";
 
 import { TruncatedText } from "@/components/TruncatedText";
 import { Badge } from "@/components/ui/badge";
@@ -10,6 +19,7 @@ import {
   categorizePatterns,
   createPatternSettingsValue,
   getDecodedPatterns,
+  parsePropertyPattern,
 } from "@/search/searchUtils";
 
 const PATTERN_TYPE_CONFIG = {
@@ -17,23 +27,37 @@ const PATTERN_TYPE_CONFIG = {
   tag: { icon: Tag, colorClass: "tw-text-context-manager-orange" },
   note: { icon: FileText, colorClass: "tw-text-context-manager-blue" },
   extension: { icon: Hash, colorClass: "tw-text-context-manager-green" },
+  property: { icon: SlidersHorizontal, colorClass: "tw-text-context-manager-purple" },
 } as const;
 
 type PatternType = keyof typeof PATTERN_TYPE_CONFIG;
 
 /** Ordered list of pattern types for consistent badge rendering */
-const PATTERN_TYPES: PatternType[] = ["folder", "tag", "note", "extension"];
+const PATTERN_TYPES: PatternType[] = ["folder", "tag", "note", "extension", "property"];
 
 const CATEGORY_MAP = {
   folder: "folderPatterns",
   tag: "tagPatterns",
   note: "notePatterns",
   extension: "extensionPatterns",
+  property: "propertyPatterns",
 } as const;
 
 interface BadgeItem {
   pattern: string;
   type: PatternType;
+}
+
+/**
+ * Display label for a badge/chip. Property patterns render as `key: value` (or
+ * `key: (any)` for the key-only form) so they read like the frontmatter the user
+ * wrote; every other type shows its raw pattern unchanged.
+ */
+export function getBadgeLabel(item: BadgeItem): string {
+  if (item.type !== "property") return item.pattern;
+  const parsed = parsePropertyPattern(item.pattern);
+  if (!parsed) return item.pattern;
+  return parsed.value ? `${parsed.key}: ${parsed.value}` : `${parsed.key}: (any)`;
 }
 
 interface ProjectContextBadgeListProps {
@@ -48,6 +72,11 @@ interface ProjectContextBadgeListProps {
   maxExpandedHeight?: number;
   /** Optional action element rendered on the right of the control bar (e.g. "Manage Context" button). */
   actionSlot?: React.ReactNode;
+  /**
+   * Drop the content container's own border/padding so the list can embed in a
+   * caller-owned box (e.g. the agent landing's combined chips-and-drop area).
+   */
+  borderless?: boolean;
 }
 
 /** Decode, deduplicate, and categorize a pattern string into badge items */
@@ -87,6 +116,7 @@ export const ProjectContextBadgeList: React.FC<ProjectContextBadgeListProps> = (
   maxCollapsedHeight = 84,
   maxExpandedHeight = 200,
   actionSlot,
+  borderless = false,
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isOverflowing, setIsOverflowing] = useState(false);
@@ -140,6 +170,7 @@ export const ProjectContextBadgeList: React.FC<ProjectContextBadgeListProps> = (
   ) => {
     const config = PATTERN_TYPE_CONFIG[item.type];
     const Icon = config.icon;
+    const label = getBadgeLabel(item);
     return (
       <Badge
         key={`${isExclusion ? "ex" : "in"}:${item.type}:${item.pattern}`}
@@ -150,14 +181,12 @@ export const ProjectContextBadgeList: React.FC<ProjectContextBadgeListProps> = (
         )}
       >
         <Icon className={cn("tw-size-4 tw-shrink-0 sm:tw-size-3", config.colorClass)} />
-        <TruncatedText className="tw-max-w-[100px] sm:tw-max-w-[120px]">
-          {item.pattern}
-        </TruncatedText>
+        <TruncatedText className="tw-max-w-[100px] sm:tw-max-w-[120px]">{label}</TruncatedText>
         {onRemove && (
           <Button
             variant="ghost2"
             size="fit"
-            aria-label={`Remove ${item.pattern}`}
+            aria-label={`Remove ${label}`}
             className="tw-h-auto tw-p-0"
             onClick={() => onRemove(item.pattern, item.type)}
           >
@@ -183,7 +212,12 @@ export const ProjectContextBadgeList: React.FC<ProjectContextBadgeListProps> = (
   return (
     <div className="tw-flex tw-flex-col tw-gap-2">
       {/* Content container */}
-      <div className="tw-relative tw-rounded-md tw-border tw-border-solid tw-border-border tw-p-2">
+      <div
+        className={cn(
+          "tw-relative",
+          !borderless && "tw-rounded-md tw-border tw-border-solid tw-border-border tw-p-2"
+        )}
+      >
         <div
           ref={contentRef}
           className={cn(

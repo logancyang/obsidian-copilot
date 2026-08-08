@@ -1,7 +1,8 @@
-import { TFile, Vault } from "obsidian";
+import { App, TFile, Vault } from "obsidian";
 import {
   ensurePromptFrontmatter,
   getPromptFilePath,
+  getPromptFilePathInFolder,
   getSystemPromptsFolder,
   loadAllSystemPrompts,
 } from "@/system-prompts/systemPromptUtils";
@@ -58,7 +59,7 @@ async function saveFailedMigrationToUnsupported(
 ): Promise<string> {
   const folder = getSystemPromptsFolder();
   const unsupportedFolder = `${folder}/unsupported`;
-  await ensureFolderExists(unsupportedFolder);
+  await ensureFolderExists(vault, unsupportedFolder);
 
   // Generate unique filename to avoid conflicts
   const baseName = "Migrated System Prompt (Failed Verification)";
@@ -133,7 +134,8 @@ async function verifyMigratedContent(
  * 4. Only clears userSystemPrompt after successfully saving to file system (normal or unsupported)
  * 5. If all save attempts fail, preserves userSystemPrompt for data safety
  */
-export async function migrateSystemPromptsFromSettings(vault: Vault): Promise<void> {
+export async function migrateSystemPromptsFromSettings(app: App): Promise<void> {
+  const vault = app.vault;
   const settings = getSettings();
   const legacyPrompt = settings.userSystemPrompt;
 
@@ -148,12 +150,13 @@ export async function migrateSystemPromptsFromSettings(vault: Vault): Promise<vo
 
     // Ensure the system prompts folder exists (creates nested folders recursively)
     const folder = getSystemPromptsFolder();
-    await ensureFolderExists(folder);
+    await ensureFolderExists(vault, folder);
 
     // Generate a unique name if default name already exists
     // Reason: Prevents data loss when file exists with different content
     const promptName = generateUniquePromptName(MIGRATED_PROMPT_NAME, vault);
-    const filePath = getPromptFilePath(promptName);
+    // Same folder that was just ensured, not a fresh lookup.
+    const filePath = getPromptFilePathInFolder(promptName, folder);
 
     if (promptName !== MIGRATED_PROMPT_NAME) {
       logInfo(`Default name already exists, using unique name: "${promptName}"`);
@@ -179,7 +182,7 @@ export async function migrateSystemPromptsFromSettings(vault: Vault): Promise<vo
       throw new Error("File not found after creation");
     }
 
-    await ensurePromptFrontmatter(file, newPrompt);
+    await ensurePromptFrontmatter(app, file, newPrompt);
 
     // Step 3: Write-then-verify - read back and confirm content matches
     // Reason: Ensures data was actually persisted before marking migration complete
@@ -191,7 +194,7 @@ export async function migrateSystemPromptsFromSettings(vault: Vault): Promise<vo
 
       // Best-effort: Try to reload prompts, but don't fail migration if reload fails
       try {
-        await loadAllSystemPrompts();
+        await loadAllSystemPrompts(app);
       } catch (loadError) {
         logWarn("Failed to reload prompts after migration:", loadError);
       }
@@ -218,7 +221,7 @@ export async function migrateSystemPromptsFromSettings(vault: Vault): Promise<vo
 
       // Best-effort: Try to reload prompts, but don't fail if reload fails
       try {
-        await loadAllSystemPrompts();
+        await loadAllSystemPrompts(app);
       } catch (loadError) {
         logWarn("Failed to reload prompts after failed migration:", loadError);
       }

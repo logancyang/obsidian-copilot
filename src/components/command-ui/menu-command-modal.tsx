@@ -5,12 +5,13 @@ import { DraggableModal } from "./draggable-modal";
 import { CommandLabel } from "./command-label";
 import { ContentArea, type ContentState } from "./content-area";
 import { FollowUpInput } from "./follow-up-input";
-import { ModelSelector } from "@/components/ui/ModelSelector";
+import { ModelSelector, type ModelSelectorEntry } from "@/components/ui/ModelSelector";
 import { Checkbox } from "@/components/ui/checkbox";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { ActionButtons } from "./action-buttons";
 import { MODAL_MIN_HEIGHT_COMPACT, MODAL_MIN_HEIGHT_EXPANDED } from "./constants";
 import { Button } from "@/components/ui/button";
+import { useSettingsValue } from "@/settings/model";
 
 interface MenuCommandModalProps {
   open: boolean;
@@ -30,6 +31,8 @@ interface MenuCommandModalProps {
   selectedModel: string;
   /** Callback when model changes */
   onSelectModel: (modelKey: string) => void;
+  /** Optional model list override (e.g. the chat-backend picker entries). */
+  models?: ModelSelectorEntry[];
   onStop?: () => void;
   onCopy?: () => void;
   onInsert?: () => void;
@@ -74,6 +77,7 @@ export function MenuCommandModal({
   onFollowUpSubmit,
   selectedModel,
   onSelectModel,
+  models,
   onStop,
   onCopy,
   onInsert,
@@ -86,6 +90,7 @@ export function MenuCommandModal({
   onIncludeNoteContextChange,
   renderMarkdown,
 }: MenuCommandModalProps) {
+  const settings = useSettingsValue();
   // P0 Fix: Treat streaming as "loading" state to show Stop button
   const actionState =
     contentState.type === "loading"
@@ -185,6 +190,8 @@ export function MenuCommandModal({
               variant="ghost"
               value={selectedModel}
               onChange={onSelectModel}
+              models={models ?? settings.activeModels}
+              apiKeySettings={models ? undefined : settings}
               disabled={isBusy}
             />
             {onIncludeNoteContextChange && (

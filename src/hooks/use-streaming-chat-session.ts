@@ -81,11 +81,6 @@ interface ChainAndMemory {
   memory: BaseChatMemory;
 }
 
-/** Returns a stable key for caching chain per model. */
-function getModelKey(model: CustomModel): string {
-  return `${model.name}|${model.provider}`;
-}
-
 /** Returns true if an aborted signal should skip persistence/commit. */
 function shouldSkipPersistOnAbort(signal: AbortSignal): boolean {
   if (!signal.aborted) return false;
@@ -134,10 +129,10 @@ export function useStreamingChatSession(
   const currentModelKeyRef = useRef<string | null>(null);
   const currentSystemPromptRef = useRef<string | null>(null);
 
-  const modelKey = useMemo(() => {
-    if (!model) return null;
-    return getModelKey(model);
-  }, [model]);
+  // Stable per-model cache key for chain recreation. Bridged chat-backend
+  // models always carry a configuredModelId; anything without one is treated
+  // as no usable model (the runTurn/getOrCreateChain guards fall back to onNoModel).
+  const modelKey = useMemo(() => model?.configuredModelId ?? null, [model]);
 
   const setStreamingTextThrottled = useRafThrottledCallback((text: string) => {
     if (!isMountedRef.current) return;

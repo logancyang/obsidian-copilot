@@ -1,4 +1,5 @@
 import { ProjectConfig } from "@/aiParams";
+import { removeGeneratedInstructionFiles } from "@/instructions/agentsFile";
 import { ProjectContextCache } from "@/cache/projectContextCache";
 import { logError, logInfo, logWarn } from "@/logger";
 import {
@@ -19,6 +20,7 @@ import {
 import { ProjectFileRecord } from "@/projects/type";
 import {
   fetchAllProjects,
+  getProjectAnchorFromConfigPath,
   getProjectConfigFilePath,
   getProjectFolderPath,
   getProjectsFolder,
@@ -37,6 +39,7 @@ import {
   upsertCachedProjectRecord,
 } from "@/projects/state";
 import { ensureFolderExists } from "@/utils";
+import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { RecentUsageManager } from "@/utils/recentUsageManager";
 import {
   isInVaultCache,
@@ -88,7 +91,7 @@ export class ProjectFileManager {
   public async initialize(): Promise<void> {
     logInfo("[Projects] Initializing ProjectFileManager");
     await ensureProjectsMigratedIfNeeded(this.app);
-    await loadAllProjects();
+    await loadAllProjects(this.app);
   }
 
   /**
@@ -111,14 +114,14 @@ export class ProjectFileManager {
    * Reload all projects from vault (full scan + cache replace).
    */
   public async reloadProjects(): Promise<ProjectFileRecord[]> {
-    return await loadAllProjects();
+    return await loadAllProjects(this.app);
   }
 
   /**
    * Fetch all projects from vault without updating cache.
    */
   public async fetchProjects(): Promise<ProjectFileRecord[]> {
-    return await fetchAllProjects();
+    return await fetchAllProjects(this.app);
   }
 
   /**
@@ -225,7 +228,7 @@ export class ProjectFileManager {
   }
 
   /**
-   * Create a new project file (\<projectsFolder\>/\<id\>/project.md).
+   * Create a new project record at \<projectsFolder\>/\<folderName\>/project.md.
    * @param project - ProjectConfig to create
    * @returns Newly created ProjectFileRecord
    */
@@ -272,8 +275,8 @@ export class ProjectFileManager {
     try {
       addPendingFileWrite(filePath);
 
-      await ensureFolderExists(getProjectsFolder());
-      await ensureFolderExists(folderPath);
+      await ensureFolderExists(this.vault, getProjectsFolder());
+      await ensureFolderExists(this.vault, folderPath);
 
       // Reason: detect folder name collisions where a different project id sanitizes to the
       // same folder (e.g. "a/b" and "a\\b" both produce "a_b"). Check both cache and filesystem.
@@ -298,7 +301,10 @@ export class ProjectFileManager {
       const file = await this.vault.create(filePath, project.systemPrompt || "");
 
       try {
-        await writeProjectFrontmatter(file, project, folderName, { createdMs, lastUsedMs });
+        await writeProjectFrontmatter(this.app, file, project, folderName, {
+          createdMs,
+          lastUsedMs,
+        });
       } catch (fmError) {
         // Reason: rollback the created file to avoid leaving a "poisoned" file without frontmatter
         await this.rollbackCreatedFile(filePath, folderPath);
@@ -352,6 +358,14 @@ export class ProjectFileManager {
 
     let filePath = existing.filePath;
     let folderName = existing.folderName;
+    // Every path below derives from the record's OWN location, never the live
+    // projects root. A Copilot root change activates immediately while
+    // ProjectRegister reloads its cache on a 1s trailing debounce, so an update
+    // started in that window would otherwise rename and write inside a
+    // different tree — destructively when the new root is a previously-used one
+    // that already holds a project of this name.
+    const { projectsRoot } = getProjectAnchorFromConfigPath(existing.filePath);
+    const projectFolderIn = (name: string) => normalizePath(`${projectsRoot}/${name}`);
 
     // Reason: when the project name changes, the folder should be renamed to match.
     // This keeps vault browsing intuitive (folder = project name).
@@ -359,8 +373,10 @@ export class ProjectFileManager {
     let oldFilePathForPending: string | null = null;
 
     if (nextFolderName !== existing.folderName) {
-      const newFolderPath = getProjectFolderPath(nextFolderName);
-      const newFilePath = getProjectConfigFilePath(nextFolderName);
+      const newFolderPath = projectFolderIn(nextFolderName);
+      // Reason: a folder rename keeps the config basename (`project.md`), so the new config
+      // path is just `project.md` under the renamed folder.
+      const newFilePath = getProjectConfigFilePath(nextFolderName, projectsRoot);
 
       // Check collision: cache (case-insensitive) + filesystem
       const folderKey = nextFolderName.toLowerCase();
@@ -376,7 +392,7 @@ export class ProjectFileManager {
       // (e.g. "foo" → "Foo") reports the old folder as "already existing". Skip the
       // disk-conflict check when the paths differ only in case.
       const isCaseOnlyRename =
-        newFolderPath.toLowerCase() === getProjectFolderPath(existing.folderName).toLowerCase();
+        newFolderPath.toLowerCase() === projectFolderIn(existing.folderName).toLowerCase();
       if (!isCaseOnlyRename && (await this.vault.adapter.exists(newFolderPath))) {
         throw new Error(`Cannot rename project folder: "${newFolderPath}" already exists on disk`);
       }
@@ -387,7 +403,7 @@ export class ProjectFileManager {
       addPendingFileWrite(newFilePath);
 
       try {
-        const oldFolderPath = getProjectFolderPath(existing.folderName);
+        const oldFolderPath = projectFolderIn(existing.folderName);
         // Reason: use vault-cache-aware rename when possible, adapter fallback for hidden folders
         const folderObj = this.vault.getAbstractFileByPath(oldFolderPath);
         if (folderObj instanceof TFolder) {
@@ -420,16 +436,16 @@ export class ProjectFileManager {
 
       // Reason: use resolveFileByPath to handle both vault-cached and hidden-folder files.
       // getAbstractFileByPath returns null for hidden folders even when the file exists on disk.
-      let file = await resolveFileByPath(app, filePath);
+      let file = await resolveFileByPath(this.app, filePath);
       let materialized = false;
 
       // Reason: if the file doesn't exist anywhere (e.g. legacy project merged into cache before
       // migration completed), materialize it now so the update can proceed.
       if (!file) {
         logInfo(`[Projects] Materializing missing vault file for project: ${normalizedId}`);
-        const folderPath = getProjectFolderPath(folderName);
-        await ensureFolderExists(getProjectsFolder());
-        await ensureFolderExists(folderPath);
+        const folderPath = projectFolderIn(folderName);
+        await ensureFolderExists(this.vault, projectsRoot);
+        await ensureFolderExists(this.vault, folderPath);
         file = await this.vault.create(filePath, nextProject.systemPrompt || "");
         materialized = true;
       }
@@ -451,16 +467,15 @@ export class ProjectFileManager {
 
       // Reason: processFrontMatter (used by writeProjectFrontmatter) does not work reliably
       // on synthetic TFiles for hidden folders. Split into cached-file and adapter-based paths.
-      if (isInVaultCache(app, filePath)) {
+      if (isInVaultCache(this.app, filePath)) {
         // Vault-cached file: use processFrontMatter for safe field-level updates
         try {
-          await writeProjectFrontmatter(file, projectForWrite, folderName, {
+          await writeProjectFrontmatter(this.app, file, projectForWrite, folderName, {
             createdMs,
             lastUsedMs,
           });
         } catch (fmError) {
-          if (materialized)
-            await this.rollbackCreatedFile(filePath, getProjectFolderPath(folderName));
+          if (materialized) await this.rollbackCreatedFile(filePath, projectFolderIn(folderName));
           throw fmError;
         }
 
@@ -499,8 +514,8 @@ export class ProjectFileManager {
       // to prevent leaving the project in an inconsistent location.
       if (oldFilePathForPending && folderName !== existing.folderName) {
         try {
-          const oldFolderPath = getProjectFolderPath(existing.folderName);
-          const newFolderPath = getProjectFolderPath(folderName);
+          const oldFolderPath = projectFolderIn(existing.folderName);
+          const newFolderPath = projectFolderIn(folderName);
           // Reason: use vault.rename() for cached folders (same as forward rename) so
           // the vault cache stays consistent. Fall back to adapter for hidden folders.
           const renamedFolder = this.vault.getAbstractFileByPath(newFolderPath);
@@ -530,8 +545,8 @@ export class ProjectFileManager {
   }
 
   /**
-   * Delete a project by id. Deletes only the managed project.md file, then removes
-   * the folder if it is empty (to avoid deleting user-created files).
+   * Delete a project by id. Deletes only the managed project.md file, then removes the folder
+   * if it is empty. AGENTS.md and other user-editable files are preserved.
    * @param projectId - Project id to delete
    */
   public async deleteProject(projectId: string): Promise<void> {
@@ -542,7 +557,10 @@ export class ProjectFileManager {
       return;
     }
 
-    const folderPath = getProjectFolderPath(existing.folderName);
+    // From the record's own config path: deleting via the live root would target
+    // a same-named project in a different tree during the window after a root
+    // change but before ProjectRegister reloads its cache.
+    const { projectFolderPath: folderPath } = getProjectAnchorFromConfigPath(existing.filePath);
 
     try {
       addPendingFileWrite(existing.filePath);
@@ -562,6 +580,11 @@ export class ProjectFileManager {
       // Reason: clear cache immediately after file deletion to prevent phantom project
       // state if the subsequent folder cleanup fails.
       deleteCachedProjectRecordById(normalizedId);
+
+      // Drop Copilot's own instruction wiring (marker-owned mirror, import-only CLAUDE.md) so
+      // the folder can empty and a same-named project created later cannot inherit this one's
+      // instructions through the mirror conversion. User-authored files are preserved.
+      await removeGeneratedInstructionFiles(this.app, folderPath);
 
       // Cleanup: remove the folder only if it is empty after deleting project.md.
       // Best-effort: the project file is already gone, so cleanup failure
@@ -586,11 +609,25 @@ export class ProjectFileManager {
         .clearForProject(existing.project)
         .catch((err) => logError("[Projects] Failed to clear context cache on delete", err));
 
+      // Reason: the vault-level cache above leaves the off-vault failure-marker
+      // bucket (markers/<md5(projectId)>) behind. Clearing it stops a project
+      // recreated under the same id from inheriting stale negative-cache state.
+      // Desktop-gated + dynamically imported so node-backed cache modules never
+      // load on mobile; best-effort so a cleanup failure can't strand the delete.
+      if (isDesktopRuntime()) {
+        const { clearProjectMarkers } = await import("@/context/projectMarkerCleanup");
+        await clearProjectMarkers(this.app, normalizedId).catch((err) =>
+          logError(`[Projects] Failed to clear off-vault failure markers on delete`, err)
+        );
+      }
+
       logInfo(`[Projects] Deleted project: ${normalizedId} -> ${folderPath}`);
 
       // Reason: rescan to re-admit any previously-ignored duplicate-id files.
       // The register won't fire (pending guard), so we trigger rescan here.
-      void loadAllProjects().catch((err) => logError("[Projects] Rescan after delete failed", err));
+      void loadAllProjects(this.app).catch((err) =>
+        logError("[Projects] Rescan after delete failed", err)
+      );
     } finally {
       removePendingFileWrite(existing.filePath);
     }
@@ -617,7 +654,7 @@ export class ProjectFileManager {
       if (timestampToPersist === null) return;
 
       const filePath = normalizePath(record.filePath);
-      const file = await resolveFileByPath(app, filePath);
+      const file = await resolveFileByPath(this.app, filePath);
       if (!file) return;
 
       // Reason: use alreadyPending pattern to avoid clearing another in-flight pending write
@@ -626,23 +663,26 @@ export class ProjectFileManager {
       try {
         if (!alreadyPending) addPendingFileWrite(filePath);
 
-        if (isInVaultCache(app, filePath)) {
+        if (isInVaultCache(this.app, filePath)) {
           // Vault-cached file: use processFrontMatter for safe field-level update
-          await app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
-            const existing = Number(frontmatter[COPILOT_PROJECT_LAST_USED]);
-            const existingMs = Number.isFinite(existing) && existing > 0 ? existing : 0;
-            actualPersistedValue = Math.max(existingMs, timestampToPersist);
-            if (existingMs === actualPersistedValue) return;
-            frontmatter[COPILOT_PROJECT_LAST_USED] = actualPersistedValue;
-          });
+          await this.app.fileManager.processFrontMatter(
+            file,
+            (frontmatter: Record<string, unknown>) => {
+              const existing = Number(frontmatter[COPILOT_PROJECT_LAST_USED]);
+              const existingMs = Number.isFinite(existing) && existing > 0 ? existing : 0;
+              actualPersistedValue = Math.max(existingMs, timestampToPersist);
+              if (existingMs === actualPersistedValue) return;
+              frontmatter[COPILOT_PROJECT_LAST_USED] = actualPersistedValue;
+            }
+          );
         } else {
           // Hidden-folder file: use adapter-based frontmatter patch
-          const adapterFm = await readFrontmatterViaAdapter(app, filePath);
+          const adapterFm = await readFrontmatterViaAdapter(this.app, filePath);
           const existing = Number(adapterFm?.[COPILOT_PROJECT_LAST_USED]);
           const existingMs = Number.isFinite(existing) && existing > 0 ? existing : 0;
           actualPersistedValue = Math.max(existingMs, timestampToPersist);
           if (existingMs !== actualPersistedValue) {
-            await patchFrontmatter(app, filePath, {
+            await patchFrontmatter(this.app, filePath, {
               [COPILOT_PROJECT_LAST_USED]: actualPersistedValue,
             });
           }

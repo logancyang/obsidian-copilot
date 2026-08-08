@@ -1,14 +1,15 @@
 import { err2String } from "@/errorFormat";
-import { TFile } from "obsidian";
+import { App, TFile } from "obsidian";
 import { ensureFolderExists } from "@/utils";
 import { getSettings } from "@/settings/model";
-import { isSensitiveKey } from "@/encryptionService";
+import { getEffectiveCopilotFolder } from "@/settings/copilotFolder";
+import { isSensitiveKey } from "@/services/settingsSecretTransforms";
 
 type LogLevel = "INFO" | "WARN" | "ERROR";
 
 /**
  * Manages a rolling log file that keeps the last N entries and works on desktop and mobile.
- * - Writes to <vault>/copilot/copilot-log.md
+ * - Writes to <vault>/<copilotFolder>/copilot-log.md
  * - Maintains an in-memory ring buffer of the last 500 entries
  * - Debounced flush to reduce I/O; single-line entries to preserve accurate line limits
  */
@@ -20,6 +21,7 @@ class LogFileManager {
   private buffer: string[] = [];
   private initialized = false;
   private flushing = false;
+  private app: App | null = null;
 
   static getInstance(): LogFileManager {
     if (!LogFileManager.instance) {
@@ -28,8 +30,18 @@ class LogFileManager {
     return LogFileManager.instance;
   }
 
+  /**
+   * Seed the Obsidian app. The logger is a module-level singleton created before
+   * plugin load, so `app` is injected here once during onload (see main.ts)
+   * rather than read from the global.
+   */
+  setApp(app: App): void {
+    this.app = app;
+  }
+
   getLogPath(): string {
-    return "copilot/copilot-log.md"; // under copilot/
+    // Under the configurable copilot root folder.
+    return `${getEffectiveCopilotFolder()}/copilot-log.md`;
   }
 
   /** Ensure the log manager is initialized. Always starts with an empty buffer. */
@@ -37,15 +49,6 @@ class LogFileManager {
     if (this.initialized) return;
     // Start with empty buffer - log file is only an export artifact
     this.initialized = true;
-  }
-
-  private hasVault(): boolean {
-    // global `app` is available in Obsidian environment
-    try {
-      return typeof app !== "undefined" && !!app.vault?.adapter;
-    } catch {
-      return false;
-    }
   }
 
   private sanitizeForSingleLine(value: unknown): string {
@@ -121,7 +124,8 @@ class LogFileManager {
   }
 
   async flush(): Promise<void> {
-    if (!this.hasVault()) return;
+    const app = this.app;
+    if (!app?.vault?.adapter) return;
     if (this.flushing) return;
     this.flushing = true;
     try {
@@ -141,7 +145,8 @@ class LogFileManager {
 
   async clear(): Promise<void> {
     this.buffer = [];
-    if (!this.hasVault()) return;
+    const app = this.app;
+    if (!app?.vault?.adapter) return;
     try {
       const path = this.getLogPath();
       if (await app.vault.adapter.exists(path)) {
@@ -203,7 +208,8 @@ class LogFileManager {
   }
 
   async openLogFile(): Promise<void> {
-    if (!this.hasVault()) return;
+    const app = this.app;
+    if (!app?.vault?.adapter) return;
     const path = this.getLogPath();
 
     // Snapshot the current buffer
@@ -226,7 +232,7 @@ class LogFileManager {
       const content = bufferSnapshot.join("\n") + (bufferSnapshot.length ? "\n" : "");
       const folder = path.includes("/") ? path.split("/").slice(0, -1).join("/") : "";
       if (folder) {
-        await ensureFolderExists(folder);
+        await ensureFolderExists(app.vault, folder);
       }
 
       const fileExists = await app.vault.adapter.exists(path);

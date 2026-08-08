@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useApp } from "@/context";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -9,10 +9,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AlertTriangle, ArrowUpRight, RotateCcw, Settings } from "lucide-react";
 import { SettingSwitch } from "@/components/ui/setting-switch";
-import { ModelParametersEditor } from "@/components/ui/ModelParametersEditor";
-import { CustomModel, getModelKey } from "@/aiParams";
-import { getSettings, updateSetting } from "@/settings/model";
-import { debounce } from "@/utils/debounce";
 import {
   getDefaultSystemPromptTitle,
   getDisableBuiltinSystemPrompt,
@@ -22,34 +18,8 @@ import {
   useSystemPrompts,
 } from "@/system-prompts";
 
-/**
- * Optional model parameters that can be reset to global defaults
- * These are model-specific overrides that should be cleared on reset
- */
-const RESETTABLE_MODEL_PARAMS: (keyof CustomModel)[] = [
-  "topP",
-  "frequencyPenalty",
-  "reasoningEffort",
-  "verbosity",
-];
-
 export function ChatSettingsPopover() {
   const app = useApp();
-  const settings = getSettings();
-  const modelKey = getModelKey();
-
-  // Find the currently selected model (original model)
-  const originalModel = settings.activeModels.find(
-    (model) => `${model.name}|${model.provider}` === modelKey
-  );
-
-  // Local editing state
-  const [localModel, setLocalModel] = useState<CustomModel | undefined>(originalModel);
-  const [prevModelKey, setPrevModelKey] = useState(modelKey);
-  if (prevModelKey !== modelKey) {
-    setPrevModelKey(modelKey);
-    setLocalModel(originalModel);
-  }
 
   // System prompt state (session-level, in-memory)
   const prompts = useSystemPrompts();
@@ -83,95 +53,28 @@ export function ChatSettingsPopover() {
     }
   }, [showConfirmation]);
 
-  // Debounced save function - must be defined before handleOpenChange.
-  // Uses debounce.cancel() / debounce.flush() to manage pending writes on unmount.
-  const debouncedSave = useMemo(
-    () =>
-      debounce((updatedModel: CustomModel) => {
-        const updatedModels = settings.activeModels.map((model) =>
-          `${model.name}|${model.provider}` === modelKey ? updatedModel : model
-        );
-        updateSetting("activeModels", updatedModels);
-      }, 500),
-    [settings.activeModels, modelKey]
-  );
-
-  // Cleanup debounced save on unmount to ensure pending changes are persisted
-  useEffect(() => {
-    return () => {
-      debouncedSave.flush();
-      debouncedSave.cancel();
-    };
-  }, [debouncedSave]);
-
   /**
    * Sync global disableBuiltinSystemPrompt state to local UI state when popover opens
    * This ensures the UI reflects the current state after chat switches (new chat or load history)
    */
-  const handleOpenChange = useCallback(
-    (open: boolean) => {
-      if (!open) {
-        // Flush pending debounced saves when popover closes to ensure changes are persisted
-        // Reason: cancel() would discard user's last modification if they close quickly
-        debouncedSave.flush();
+  const handleOpenChange = useCallback((open: boolean) => {
+    if (open) {
+      const currentValue = getDisableBuiltinSystemPrompt();
+      setDisableBuiltin(currentValue);
+      if (!currentValue) {
+        setShowConfirmation(false);
       }
-      if (open) {
-        const currentValue = getDisableBuiltinSystemPrompt();
-        setDisableBuiltin(currentValue);
-        if (!currentValue) {
-          setShowConfirmation(false);
-        }
-      }
-    },
-    [debouncedSave]
-  );
-
-  /**
-   * Update model parameters (immediately update UI, delayed save)
-   */
-  const handleParamChange = useCallback(
-    (field: keyof CustomModel, value: CustomModel[keyof CustomModel]) => {
-      if (!localModel) return;
-
-      const updatedModel = { ...localModel, [field]: value };
-      setLocalModel(updatedModel);
-      debouncedSave(updatedModel);
-    },
-    [localModel, debouncedSave]
-  );
-
-  /**
-   * Reset parameters (delete model-specific values, revert to global defaults)
-   */
-  const handleParamReset = useCallback(
-    (field: keyof CustomModel) => {
-      if (!localModel) return;
-
-      const updatedModel = { ...localModel };
-      delete updatedModel[field];
-      setLocalModel(updatedModel);
-      debouncedSave(updatedModel);
-    },
-    [localModel, debouncedSave]
-  );
+    }
+  }, []);
 
   const handleReset = useCallback(() => {
-    // Reset all optional parameters in one operation
-    // Reason: Calling handleParamReset multiple times would capture stale localModel
-    // Reference: Command module uses single object construction pattern
-    if (localModel) {
-      const updatedModel = { ...localModel };
-      RESETTABLE_MODEL_PARAMS.forEach((key) => delete updatedModel[key]);
-      setLocalModel(updatedModel);
-      debouncedSave(updatedModel);
-    }
     // Reset session prompt to use global default
     setSessionPrompt("");
     setDisableBuiltin(false);
     setShowConfirmation(false);
     // Clear session settings
     setDisableBuiltinSystemPrompt(false);
-  }, [localModel, debouncedSave, setSessionPrompt]);
+  }, [setSessionPrompt]);
 
   const handleDisableBuiltinToggle = (checked: boolean) => {
     if (checked) {
@@ -203,10 +106,6 @@ export function ChatSettingsPopover() {
     const filePath = getPromptFilePath(displayValue);
     void app.workspace.openLinkText(filePath, "", true);
   };
-
-  if (!localModel) {
-    return null;
-  }
 
   return (
     <Popover onOpenChange={handleOpenChange}>
@@ -281,17 +180,6 @@ export function ChatSettingsPopover() {
                   </div>
                 </div>
               </div>
-
-              {/* Model Parameters Editor */}
-              <ModelParametersEditor
-                model={localModel}
-                settings={settings}
-                onChange={handleParamChange}
-                onReset={handleParamReset}
-                showTokenLimit={true}
-              />
-
-              <Separator />
 
               {/* Disable Builtin System Prompt */}
               <div className="tw-space-y-3">
@@ -372,9 +260,7 @@ export function ChatSettingsPopover() {
             <div className="tw-flex tw-flex-row tw-flex-wrap">
               <span className="tw-text-xs tw-text-normal">
                 <span className=" tw-italic">System Prompt and Disable Builtin System Prompt</span>{" "}
-                <strong>apply to this chat session only</strong>;
-                <br />
-                other settings are <strong>bound to the current model</strong>.
+                <strong>apply to this chat session only</strong>.
               </span>
             </div>
           </div>

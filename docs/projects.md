@@ -1,6 +1,8 @@
 # Projects
 
-Projects are focused AI workspaces. Each project has its own model, system prompt, context sources, and completely isolated chat history. Use projects to keep separate AI conversations per client, topic, or area of work.
+Projects are focused AI workspaces. Each project has its own instructions, context sources, and
+isolated chat history. Use projects to keep separate AI conversations per client, topic, or area
+of work.
 
 Projects support **50+ file types** beyond markdown, including PDFs, Word documents, PowerPoint, Excel, images, and more — making them ideal for analyzing large or diverse document collections.
 
@@ -14,10 +16,11 @@ In regular chat, all conversations share the same settings and model. Projects l
 
 - **A specific context** — Specific notes, folders, URLs, or YouTube videos the AI always has access to
 - **A dedicated model** — Different projects can use different AI models
-- **A custom system prompt** — Each project can have its own instructions for the AI
+- **Project instructions** — Each Agent Mode project can have its own `AGENTS.md`
 - **Isolated chat history** — Conversations in one project don't mix with conversations in another
 
 **Example use cases:**
+
 - A "Research" project that always has your research notes as context
 - A "Client Work" project with a specific system prompt and access to client-related notes
 - A "Learning" project with YouTube video URLs for study materials
@@ -39,19 +42,36 @@ In regular chat, all conversations share the same settings and model. Projects l
 Each project has the following settings:
 
 ### Name
+
 A short name for the project. Appears in the project list.
 
 ### Description
+
 An optional description of what the project is for.
 
 ### Model
-Choose which AI model to use for this project. The available options depend on which models you have enabled.
+
+Choose which AI model to use for this project. The available options are the models enabled under
+**Settings → Copilot → Basic → Agents → Quick Chat models**.
 
 ### Model Settings
+
 Override the default temperature and max tokens specifically for this project.
 
-### System Prompt
-Set a custom system prompt for this project. This replaces (or supplements) the global default. See [System Prompts](system-prompts.md) for details.
+### Agent Mode Instructions
+
+Open the project info popover and select **AGENTS.md**. This opens the real file in Obsidian; there
+is no separate prompt editor in project settings.
+
+Vault instructions apply first, followed by the project's `AGENTS.md`, so project rules take
+precedence. For an older project without `AGENTS.md`, the file is initialized from the Project
+System Prompt already stored in `project.md` — the first time you open it, or automatically when
+you next start a chat in that project, so existing projects keep working without any migration
+step. A legacy Copilot-generated mirror is converted to that same text; user-authored files are
+left alone, and a project with no instructions gets no file at all.
+
+`project.md` remains the project's metadata and context configuration record. It is not the agent
+instruction file and is not renamed or migrated.
 
 ---
 
@@ -61,10 +81,17 @@ Projects let you pre-load context that is always available in the project's chat
 
 ### File Inclusions and Exclusions
 
-Specify which notes or folders to include in this project's context:
+Specify which notes or folders to include in this project's context. You can include by:
 
-- **Inclusions**: Only these notes/folders are available for search and context
-- **Exclusions**: These notes/folders are excluded from context
+- **Tag** (e.g. `#research`) — all notes with that frontmatter tag. Expanded at query time, so new notes are included automatically.
+- **Folder** (e.g. `daily/`) — all markdown files in the folder, recursively. Also expanded at query time.
+- **Note link** (e.g. `[[Project Brief]]`) — a specific note, included verbatim. Use this for pinning a foundational document or README.
+- **Extension** (e.g. `*.py`) — all files with that extension. Expanded at query time.
+- **Property** (e.g. `[Topics:Physics]` or `[Subject:]`) — notes matching a frontmatter field. Syntax:
+  - `[key:value]` — include notes where the property `key` equals `value` (case-insensitive, trimmed). A list property matches when any element matches.
+  - `[key:]` — include notes that declare the property `key`, regardless of its value.
+
+**Exclusions**: These notes/folders are excluded from context.
 
 This scopes the AI's knowledge to just the notes relevant to your project.
 
@@ -120,6 +147,6 @@ As an alpha feature, projects have some known limitations:
 ## Related
 
 - [Chat Interface](chat-interface.md) — Chat modes overview, new chat behavior, history
-- [System Prompts](system-prompts.md) — Custom system prompts for projects
+- [Instructions and System Prompts](system-prompts.md) — Vault and project instructions
 - [Context and Mentions](context-and-mentions.md) — How context works
 - [Copilot Plus and Self-Host](copilot-plus-and-self-host.md) — Plus features

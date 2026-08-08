@@ -1,0 +1,235 @@
+import { Badge } from "@/components/ui/badge";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { FreeModelWarningIcon } from "@/components/ui/FreeModelWarningIcon";
+import { LicenseRequiredIcon } from "@/components/ui/LicenseRequiredIcon";
+import { HelpTooltip } from "@/components/ui/help-tooltip";
+import { ModelCapabilityIcons, hasCapabilityIcons } from "@/components/ui/model-display";
+import { SearchBar } from "@/components/ui/SearchBar";
+import { SettingSwitch } from "@/components/ui/setting-switch";
+import type { ModelCapability } from "@/constants";
+import { cn } from "@/lib/utils";
+import { ChevronRight, KeyRound } from "lucide-react";
+import React from "react";
+
+/** A single toggleable model row. */
+export interface ModelEnableRow {
+  /** Stable identity used for the toggle callback (a `configuredModelId`). */
+  id: string;
+  /** Primary label shown to the user. */
+  label: string;
+  /** Optional secondary line — the model's capability blurb. */
+  description?: string;
+  /** Wire id, matched by search but never rendered (it duplicates the label). */
+  wireId?: string;
+  /** Whether the model is currently enabled. */
+  enabled: boolean;
+  /** Modality icons (vision/websearch) shown beside the label; reasoning is not rendered. */
+  capabilities?: ModelCapability[];
+  /**
+   * `true` for a free model (zero catalog cost) routed through a third party.
+   * Renders a privacy-warning icon + tooltip beside the label, since such
+   * providers may retain or train on prompts. Self-hosted / local models
+   * (Ollama, LM Studio) are excluded.
+   */
+  isFree?: boolean;
+  /**
+   * `true` for a Copilot model the user has no license to run, listed so the
+   * lineup is discoverable before they buy. Renders a lock icon beside the label
+   * and a disabled toggle — the row is an advertisement, not a control.
+   */
+  locked?: boolean;
+}
+
+/** A provider-display-name-grouped section of model rows. */
+export interface ModelEnableGroup {
+  /** Stable key used for React keys. */
+  key: string;
+  /** Group heading — a provider display name (no glyphs/avatars). */
+  label: string;
+  /**
+   * Short badge shown after the label. For most origins it's an origin tag
+   * (e.g. "BYOK", "Agent Provided") set only when the list spans multiple
+   * origins, so it actually disambiguates. Copilot Plus instead carries a
+   * "privacy" badge.
+   */
+  badge?: string;
+  /**
+   * Optional hover hint rendered as a small icon after the badge (e.g.
+   * "Copilot license required" for the Copilot Plus group).
+   */
+  tooltip?: string;
+  /**
+   * Visually emphasize the group header (accent color). Set for Copilot Plus,
+   * which the caller also floats to the top of the list.
+   */
+  highlight?: boolean;
+  rows: ModelEnableRow[];
+}
+
+interface ModelEnableListProps {
+  /** Provider-grouped rows to render. Already filtered/derived by the caller. */
+  groups: ModelEnableGroup[];
+  /** Toggle handler — `enabled` is the next desired state. */
+  onToggle: (id: string, enabled: boolean) => void;
+  /** Search query (controlled). */
+  query: string;
+  onQueryChange: (next: string) => void;
+  /** Placeholder for the search box. */
+  searchPlaceholder?: string;
+  /** Rendered when there are no groups/rows to show (after filtering). */
+  emptyState?: React.ReactNode;
+  /**
+   * When set, only the group with this key starts expanded; all others start
+   * collapsed. A user's explicit expand/collapse still wins (tracked per key),
+   * and search still forces every group open. Omit (default) to start every
+   * group open. Pass a stable scalar (e.g. `groups[0]?.key`), never a fresh
+   * array/object, so this doesn't churn the collapse state.
+   */
+  defaultOpenGroupKey?: string;
+}
+
+/**
+ * Presentational toggle list for agent model curation: provider-grouped rows, a
+ * search box, and a switch per row. Owns no registry/atom access — the container
+ * passes grouped data and `onToggle`. Group headings show the provider display
+ * name only (no glyphs/avatars).
+ */
+export const ModelEnableList: React.FC<ModelEnableListProps> = ({
+  groups,
+  onToggle,
+  query,
+  onQueryChange,
+  searchPlaceholder = "Search models…",
+  emptyState,
+  defaultOpenGroupKey,
+}) => {
+  const searching = query.trim().length > 0;
+
+  // Track only the groups the user explicitly toggled (key → user's open/closed
+  // intent); untouched groups fall back to the default. While searching, force
+  // every group open so matches are never hidden; the remembered intent
+  // re-applies once the query clears.
+  //
+  // Default when a key hasn't been touched:
+  //   - `defaultOpenGroupKey` set → only that group is open (first-group-open);
+  //   - otherwise → every group is open (legacy behavior, e.g. Quick Chat).
+  const [userOpen, setUserOpen] = React.useState<Record<string, boolean>>({});
+  const isOpen = (key: string) => {
+    if (searching) return true;
+    if (key in userOpen) return userOpen[key];
+    return defaultOpenGroupKey === undefined || key === defaultOpenGroupKey;
+  };
+  const handleOpenChange = (key: string, open: boolean) =>
+    setUserOpen((prev) => ({ ...prev, [key]: open }));
+
+  const renderRows = (rows: ModelEnableRow[]): React.ReactNode => (
+    <div className="tw-space-y-1">
+      {rows.map((row) => (
+        <div
+          key={row.id}
+          className={cn(
+            "tw-flex tw-items-center tw-justify-between tw-gap-2 tw-rounded tw-px-2 tw-py-1",
+            "hover:tw-bg-modifier-hover"
+          )}
+        >
+          <div className="tw-min-w-0">
+            <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-1">
+              <span className="tw-truncate">{row.label}</span>
+              {row.locked && <LicenseRequiredIcon />}
+              {row.isFree && <FreeModelWarningIcon />}
+              {hasCapabilityIcons(row.capabilities) && (
+                <span className="tw-flex tw-shrink-0 tw-items-center tw-gap-0.5">
+                  <ModelCapabilityIcons capabilities={row.capabilities} iconSize={14} />
+                </span>
+              )}
+            </div>
+            {row.description && (
+              <div className="tw-truncate tw-text-xs tw-text-muted">{row.description}</div>
+            )}
+          </div>
+          <SettingSwitch
+            checked={row.enabled}
+            disabled={row.locked}
+            onCheckedChange={(next) => onToggle(row.id, next)}
+          />
+        </div>
+      ))}
+    </div>
+  );
+
+  const hasRows = groups.some((g) => g.rows.length > 0);
+
+  return (
+    <div className="tw-flex tw-flex-col tw-gap-2">
+      <SearchBar value={query} onChange={onQueryChange} placeholder={searchPlaceholder} />
+
+      {/* Caps the list at roughly ten rows (a row is ~32px: 20px of text, 8px of
+          padding, 4px of gap) so a long catalog scrolls inside the card instead
+          of pushing everything below it off the settings pane. */}
+      <div className="tw-max-h-80 tw-overflow-y-auto tw-pr-1">
+        {!hasRows ? (
+          <div className="tw-py-6 tw-text-center tw-text-sm tw-text-muted">
+            {emptyState ?? (searching ? `No models match “${query.trim()}”.` : "No models.")}
+          </div>
+        ) : (
+          <div className="tw-space-y-2">
+            {groups
+              .filter((g) => g.rows.length > 0)
+              .map((group) => (
+                <Collapsible
+                  key={group.key}
+                  open={isOpen(group.key)}
+                  onOpenChange={(open) => handleOpenChange(group.key, open)}
+                >
+                  <CollapsibleTrigger asChild>
+                    <div className="tw-flex tw-w-full tw-cursor-pointer tw-items-center tw-gap-1 tw-rounded tw-px-2 tw-py-1.5 tw-text-left tw-text-ui-medium tw-font-bold hover:tw-bg-modifier-hover">
+                      <ChevronRight
+                        className={cn(
+                          "tw-size-3 tw-shrink-0 tw-text-muted tw-transition-transform",
+                          isOpen(group.key) && "tw-rotate-90"
+                        )}
+                      />
+                      <span
+                        className={cn(
+                          "tw-truncate",
+                          group.highlight && "tw-font-bold tw-text-accent"
+                        )}
+                      >
+                        {group.label}
+                      </span>
+                      {group.badge && (
+                        <Badge variant="secondary" className="tw-shrink-0 tw-font-normal">
+                          {group.badge}
+                        </Badge>
+                      )}
+                      {group.tooltip && (
+                        // Stop pointer/click from bubbling to the CollapsibleTrigger so
+                        // tapping the hint (which opens the tooltip on mobile) doesn't
+                        // also collapse/expand the group.
+                        <span
+                          className="tw-flex tw-shrink-0 tw-items-center"
+                          onClick={(e) => e.stopPropagation()}
+                          onPointerDown={(e) => e.stopPropagation()}
+                        >
+                          <HelpTooltip
+                            content={group.tooltip}
+                            side="top"
+                            buttonClassName="tw-size-4"
+                          >
+                            <KeyRound className="tw-size-3.5 tw-shrink-0 tw-text-muted" />
+                          </HelpTooltip>
+                        </span>
+                      )}
+                    </div>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <div className="tw-pl-4">{renderRows(group.rows)}</div>
+                  </CollapsibleContent>
+                </Collapsible>
+              ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};

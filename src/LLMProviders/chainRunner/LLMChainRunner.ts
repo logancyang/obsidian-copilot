@@ -1,14 +1,12 @@
 import { ABORT_REASON, ModelCapability } from "@/constants";
 import { LayerToMessagesConverter } from "@/context/LayerToMessagesConverter";
 import { logInfo } from "@/logger";
-import { getSettings } from "@/settings/model";
 import { ChatMessage } from "@/types/message";
-import { findCustomModel, withSuppressedTokenWarnings } from "@/utils";
+import { withSuppressedTokenWarnings } from "@/utils";
 import { BaseChainRunner } from "./BaseChainRunner";
 import { loadAndAddChatHistory } from "./utils/chatHistoryUtils";
 import { recordPromptPayload } from "./utils/promptPayloadRecorder";
 import { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
-import { getModelKey } from "@/aiParams";
 
 export class LLMChainRunner extends BaseChainRunner {
   /**
@@ -82,20 +80,15 @@ export class LLMChainRunner extends BaseChainRunner {
     }
   ): Promise<string> {
     // Check if the current model has reasoning capability
-    const settings = getSettings();
-    const modelKey = getModelKey();
     let excludeThinking = false;
 
-    try {
-      const currentModel = findCustomModel(modelKey, settings.activeModels);
+    const currentModel = this.chainManager.chatModelManager.getActiveModel();
+    if (currentModel) {
       // Exclude thinking blocks if model doesn't have REASONING capability
       excludeThinking = !currentModel.capabilities?.includes(ModelCapability.REASONING);
-    } catch (error) {
+    } else {
       // If we can't find the model, default to including thinking blocks
-      logInfo(
-        "Could not determine model capabilities, defaulting to include thinking blocks",
-        error
-      );
+      logInfo("Could not determine model capabilities, defaulting to include thinking blocks");
     }
 
     const streamer = new ThinkBlockStreamer(updateCurrentAiMessage, excludeThinking);

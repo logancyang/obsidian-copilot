@@ -393,7 +393,7 @@ export class IndexOperations {
     // If overwrite is true, return all markdown files that match current filters
     if (overwrite) {
       return allMarkdownFiles.filter((file) => {
-        return shouldIndexFile(file, inclusions, exclusions);
+        return shouldIndexFile(this.app, file, inclusions, exclusions);
       });
     }
 
@@ -407,7 +407,7 @@ export class IndexOperations {
     const emptyFiles = new Set<string>();
 
     for (const file of allMarkdownFiles) {
-      if (!shouldIndexFile(file, inclusions, exclusions)) {
+      if (!shouldIndexFile(this.app, file, inclusions, exclusions)) {
         continue;
       }
 

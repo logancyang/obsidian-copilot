@@ -196,6 +196,7 @@ describe("ChatManager", () => {
         undefined
       );
       expect(mockContextManager.processMessageContext).toHaveBeenCalledWith(
+        mockPlugin.app,
         mockMessage,
         mockFileParserManager,
         mockPlugin.app.vault,
@@ -306,6 +307,7 @@ describe("ChatManager", () => {
       expect(result).toBe(true);
       expect(mockMessageRepo.editMessage).toHaveBeenCalledWith("msg-1", "Edited message");
       expect(mockContextManager.reprocessMessageContext).toHaveBeenCalledWith(
+        mockPlugin.app,
         "msg-1",
         mockMessageRepo,
         mockFileParserManager,
@@ -401,6 +403,7 @@ describe("ChatManager", () => {
 
       expect(result).toBe(true);
       expect(mockContextManager.reprocessMessageContext).toHaveBeenCalledWith(
+        mockPlugin.app,
         "msg-1",
         expect.anything(), // messageRepo
         expect.anything(), // fileParserManager
@@ -667,6 +670,7 @@ describe("ChatManager", () => {
 
         expect(result).toBe(true);
         expect(mockContextManager.reprocessMessageContext).toHaveBeenCalledWith(
+          mockPlugin.app,
           "msg-1",
           mockMessageRepo,
           mockFileParserManager,
@@ -1282,7 +1286,7 @@ describe("ChatManager", () => {
         expect(processPrompt).not.toHaveBeenCalled();
 
         // Trailing whitespace should be preserved (no trimEnd when templates not processed)
-        const systemPromptArg = mockContextManager.processMessageContext.mock.calls[0][7];
+        const systemPromptArg = mockContextManager.processMessageContext.mock.calls[0][8];
         expect(systemPromptArg).toContain(userCustomPrompt);
       });
 
@@ -1320,7 +1324,7 @@ describe("ChatManager", () => {
         expect(processPrompt).toHaveBeenCalled();
 
         // JSON content should be preserved (processPrompt handles it internally)
-        const systemPromptArg = mockContextManager.processMessageContext.mock.calls[0][7];
+        const systemPromptArg = mockContextManager.processMessageContext.mock.calls[0][8];
         expect(systemPromptArg).toContain(userCustomPrompt.trimEnd());
       });
 
@@ -1354,6 +1358,7 @@ describe("ChatManager", () => {
 
         // Verify processPrompt was called with skipEmptyBraces: true
         expect(processPrompt).toHaveBeenCalledWith(
+          mockPlugin.app,
           userCustomPrompt,
           "",
           mockPlugin.app.vault,
@@ -1362,7 +1367,7 @@ describe("ChatManager", () => {
         );
 
         // Verify {} is preserved as literal
-        const systemPromptArg = mockContextManager.processMessageContext.mock.calls[0][7];
+        const systemPromptArg = mockContextManager.processMessageContext.mock.calls[0][8];
         expect(systemPromptArg).toContain("{}");
       });
 
@@ -1396,7 +1401,7 @@ describe("ChatManager", () => {
         await chatManager.sendMessage("Hello", context, ChainType.LLM_CHAIN);
 
         // Since processPrompt doesn't modify the JSON, trailing whitespace is trimmed by trimEnd()
-        const systemPromptArg = mockContextManager.processMessageContext.mock.calls[0][7];
+        const systemPromptArg = mockContextManager.processMessageContext.mock.calls[0][8];
         expect(systemPromptArg).toContain('{"format": "json"}');
       });
 
@@ -1476,6 +1481,7 @@ describe("ChatManager", () => {
 
         // Verify processPrompt was called with correct arguments
         expect(processPrompt).toHaveBeenCalledWith(
+          mockPlugin.app, // app
           userCustomPrompt, // prompt
           "", // selectedText (empty for system prompts)
           mockPlugin.app.vault, // vault
@@ -1513,6 +1519,7 @@ describe("ChatManager", () => {
 
         // Verify contextManager received includedFiles
         expect(mockContextManager.processMessageContext).toHaveBeenCalledWith(
+          mockPlugin.app,
           mockMessage,
           mockFileParserManager,
           mockPlugin.app.vault,
@@ -1558,7 +1565,7 @@ describe("ChatManager", () => {
         await chatManager.sendMessage("Hello", context, ChainType.LLM_CHAIN);
 
         // Verify the system prompt passed to contextManager has injected content
-        const systemPromptArg = mockContextManager.processMessageContext.mock.calls[0][7];
+        const systemPromptArg = mockContextManager.processMessageContext.mock.calls[0][8];
         expect(systemPromptArg).toContain("<user_custom_instructions>");
         expect(systemPromptArg).toContain(processedContent.trimEnd());
         expect(systemPromptArg).toContain("</user_custom_instructions>");
@@ -1592,7 +1599,7 @@ describe("ChatManager", () => {
         await chatManager.sendMessage("Hello", context, ChainType.LLM_CHAIN);
 
         // Verify the $ characters are preserved exactly as-is
-        const systemPromptArg = mockContextManager.processMessageContext.mock.calls[0][7];
+        const systemPromptArg = mockContextManager.processMessageContext.mock.calls[0][8];
         expect(systemPromptArg).toContain("$100");
         expect(systemPromptArg).toContain("$&");
         expect(systemPromptArg).toContain("$1");
@@ -1646,7 +1653,7 @@ describe("ChatManager", () => {
         await chatManager.sendMessage("Hello", context, ChainType.LLM_CHAIN);
 
         // Verify $ characters from processed content are preserved
-        const systemPromptArg = mockContextManager.processMessageContext.mock.calls[0][7];
+        const systemPromptArg = mockContextManager.processMessageContext.mock.calls[0][8];
         expect(systemPromptArg).toContain("$100");
         expect(systemPromptArg).toContain("$50");
         expect(systemPromptArg).toContain("$&");
@@ -1697,6 +1704,7 @@ describe("ChatManager", () => {
         // Verify processPrompt was only called with user custom prompt, not memory
         expect(processPrompt).toHaveBeenCalledTimes(1);
         expect(processPrompt).toHaveBeenCalledWith(
+          mockPlugin.app,
           userCustomPrompt, // Only user custom prompt
           "",
           mockPlugin.app.vault,
@@ -1705,7 +1713,7 @@ describe("ChatManager", () => {
         );
 
         // Verify the final system prompt still contains memory prefix
-        const systemPromptArg = mockContextManager.processMessageContext.mock.calls[0][7];
+        const systemPromptArg = mockContextManager.processMessageContext.mock.calls[0][8];
         expect(systemPromptArg).toContain(memoryContent);
       });
     });
@@ -1772,7 +1780,7 @@ describe("ChatManager", () => {
         await chatManager.sendMessage("Hello", context, ChainType.LLM_CHAIN);
 
         // Verify the system prompt is the processed content (not wrapped in block)
-        const systemPromptArg = mockContextManager.processMessageContext.mock.calls[0][7];
+        const systemPromptArg = mockContextManager.processMessageContext.mock.calls[0][8];
         expect(systemPromptArg).toBe(processedContent.trimEnd());
         // Should NOT contain the original unprocessed prompt
         expect(systemPromptArg).not.toContain(userCustomPrompt);
@@ -1804,7 +1812,7 @@ describe("ChatManager", () => {
 
         await chatManager.sendMessage("Hello", context, ChainType.LLM_CHAIN);
 
-        const systemPromptArg = mockContextManager.processMessageContext.mock.calls[0][7];
+        const systemPromptArg = mockContextManager.processMessageContext.mock.calls[0][8];
         // Should contain memory prefix
         expect(systemPromptArg).toContain(memoryContent);
         // Should contain processed content
@@ -1848,7 +1856,7 @@ describe("ChatManager", () => {
         expect(mockContextManager.processMessageContext).toHaveBeenCalled();
 
         // In fallback case, should return original basePromptWithMemory unchanged
-        const systemPromptArg = mockContextManager.processMessageContext.mock.calls[0][7];
+        const systemPromptArg = mockContextManager.processMessageContext.mock.calls[0][8];
         expect(systemPromptArg).toBe("Memory\n\nACTUAL_SYSTEM_PROMPT_THAT_DOESNT_MATCH");
       });
     });
@@ -1902,6 +1910,7 @@ describe("ChatManager", () => {
 
         // Verify processPrompt was called for project system prompt
         expect(processPrompt).toHaveBeenCalledWith(
+          mockPlugin.app,
           mockProject.systemPrompt,
           "",
           mockPlugin.app.vault,
@@ -1910,7 +1919,7 @@ describe("ChatManager", () => {
         );
 
         // Verify the final prompt contains project blocks
-        const systemPromptArg = mockContextManager.processMessageContext.mock.calls[0][7];
+        const systemPromptArg = mockContextManager.processMessageContext.mock.calls[0][8];
         expect(systemPromptArg).toContain("<project_system_prompt>");
         expect(systemPromptArg).toContain("PROCESSED_PROJECT_PROMPT");
         expect(systemPromptArg).toContain("</project_system_prompt>");
@@ -1919,7 +1928,7 @@ describe("ChatManager", () => {
         expect(systemPromptArg).toContain("</project_context>");
 
         // Verify includedFiles contains project file
-        const includedFilesArg = mockContextManager.processMessageContext.mock.calls[0][8];
+        const includedFilesArg = mockContextManager.processMessageContext.mock.calls[0][9];
         expect(includedFilesArg).toContainEqual(projectIncludedFile);
       });
 
@@ -1974,7 +1983,7 @@ describe("ChatManager", () => {
         expect(processPrompt).toHaveBeenCalledTimes(2);
 
         // Verify includedFiles contains both files
-        const includedFilesArg = mockContextManager.processMessageContext.mock.calls[0][8];
+        const includedFilesArg = mockContextManager.processMessageContext.mock.calls[0][9];
         expect(includedFilesArg).toContainEqual(userIncludedFile);
         expect(includedFilesArg).toContainEqual(projectIncludedFile);
       });
@@ -2009,7 +2018,7 @@ describe("ChatManager", () => {
 
         await chatManager.sendMessage("Hello", context, ChainType.PROJECT_CHAIN);
 
-        const systemPromptArg = mockContextManager.processMessageContext.mock.calls[0][7];
+        const systemPromptArg = mockContextManager.processMessageContext.mock.calls[0][8];
         expect(systemPromptArg).toContain("<project_system_prompt>");
         expect(systemPromptArg).not.toContain("<project_context>");
       });

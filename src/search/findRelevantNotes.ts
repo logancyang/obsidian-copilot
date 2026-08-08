@@ -5,19 +5,18 @@ import {
   getMiyoFilePath,
   getMiyoFolderName,
   getVaultRelativeMiyoPath,
-  shouldUseMiyo,
+  getSearchBackend,
 } from "@/miyo/miyoUtils";
 import { getBacklinkedNotes, getLinkedNotes } from "@/noteUtils";
 import { DBOperations } from "@/search/dbOperations";
 import type { SemanticIndexDocument } from "@/search/indexBackend/SemanticIndexBackend";
+import { createCopilotPatternFilter } from "@/search/searchUtils";
 import VectorStoreManager from "@/search/vectorStoreManager";
 import { getSettings } from "@/settings/model";
 import { InternalTypedDocument, Orama, Result } from "@orama/orama";
-import { TFile } from "obsidian";
+import { App, TFile } from "obsidian";
 
 const MAX_K = 20;
-const ORIGINAL_WEIGHT = 0.7;
-const LINKS_WEIGHT = 0.3;
 
 /**
  * Determine whether Miyo-backed relevant-note scoring should be used.
@@ -25,7 +24,7 @@ const LINKS_WEIGHT = 0.3;
  * @returns True when Miyo mode and self-host access validation are active.
  */
 function shouldUseMiyoForRelevantNotes(): boolean {
-  return shouldUseMiyo(getSettings());
+  return getSearchBackend(getSettings()) === "miyo";
 }
 
 /**
@@ -124,10 +123,14 @@ async function calculateSimilarityScoreFromOrama({
 /**
  * Calculate similarity scores using Miyo's related-note endpoint.
  *
+ * @param app - The Obsidian app instance.
  * @param filePath - Source note path.
  * @returns Map of note paths to max similarity score.
  */
-async function calculateSimilarityScoreFromMiyo(filePath: string): Promise<Map<string, number>> {
+async function calculateSimilarityScoreFromMiyo(
+  app: App,
+  filePath: string
+): Promise<Map<string, number>> {
   const settings = getSettings();
   const miyoClient = new MiyoClient();
   const folderName = getMiyoFolderName(app);
@@ -181,12 +184,13 @@ async function calculateSimilarityScoreFromMiyo(filePath: string): Promise<Map<s
 /**
  * Calculate similarity scores by selecting the best available backend strategy.
  *
+ * @param app - The Obsidian app instance.
  * @param filePath - Source note path.
  * @returns Map of note paths to max similarity score.
  */
-async function calculateSimilarityScore(filePath: string): Promise<Map<string, number>> {
+async function calculateSimilarityScore(app: App, filePath: string): Promise<Map<string, number>> {
   if (shouldUseMiyoForRelevantNotes()) {
-    return calculateSimilarityScoreFromMiyo(filePath);
+    return calculateSimilarityScoreFromMiyo(app, filePath);
   }
 
   const currentNoteDocs = await VectorStoreManager.getInstance().getDocumentsByPath(filePath);
@@ -216,24 +220,25 @@ async function calculateSimilarityScore(filePath: string): Promise<Map<string, n
     return new Map();
   }
 
-  return calculateSimilarityScoreFromMiyo(filePath);
+  return calculateSimilarityScoreFromMiyo(app, filePath);
 }
 
 /**
  * Build outgoing/backlink relationship flags for the source note.
  *
+ * @param app - The Obsidian app instance.
  * @param file - Source note file.
  * @returns Map keyed by note path with link metadata.
  */
-function getNoteLinks(file: TFile) {
+function getNoteLinks(app: App, file: TFile) {
   const resultMap = new Map<string, { links: boolean; backlinks: boolean }>();
-  const linkedNotes = getLinkedNotes(file);
+  const linkedNotes = getLinkedNotes(app, file);
   const linkedNotePaths = linkedNotes.map((note) => note.path);
   for (const notePath of linkedNotePaths) {
     resultMap.set(notePath, { links: true, backlinks: false });
   }
 
-  const backlinkedNotes = getBacklinkedNotes(file);
+  const backlinkedNotes = getBacklinkedNotes(app, file);
   const backlinkedNotePaths = backlinkedNotes.map((note) => note.path);
   for (const notePath of backlinkedNotePaths) {
     if (resultMap.has(notePath)) {
@@ -244,38 +249,6 @@ function getNoteLinks(file: TFile) {
   }
 
   return resultMap;
-}
-
-/**
- * Merge semantic similarity scores with note link heuristics.
- *
- * @param similarityScoreMap - Semantic score map.
- * @param noteLinks - Outgoing/backlink flags map.
- * @returns Combined score map used for ranking.
- */
-function mergeScoreMaps(
-  similarityScoreMap: Map<string, number>,
-  noteLinks: Map<string, { links: boolean; backlinks: boolean }>
-) {
-  const mergedMap = new Map<string, number>();
-  const totalWeight = ORIGINAL_WEIGHT + LINKS_WEIGHT;
-  for (const [key, value] of similarityScoreMap) {
-    mergedMap.set(key, (value * ORIGINAL_WEIGHT) / totalWeight);
-  }
-  for (const [key, value] of noteLinks) {
-    let score = 0;
-    if (value.links && value.backlinks) {
-      score = LINKS_WEIGHT;
-    } else if (value.links) {
-      // If the note only has outgoing or incoming links, give it a 80% links
-      // weight.
-      score = LINKS_WEIGHT * 0.8;
-    } else if (value.backlinks) {
-      score = LINKS_WEIGHT * 0.8;
-    }
-    mergedMap.set(key, (mergedMap.get(key) ?? 0) + score);
-  }
-  return mergedMap;
 }
 
 export type RelevantNoteEntry = {
@@ -292,15 +265,19 @@ export type RelevantNoteEntry = {
 };
 
 /**
- * Finds the relevant notes for the given file path.
+ * Finds relevant notes for a file while enforcing Copilot's live search scope
+ * across semantic and link-derived candidates.
  *
+ * @param app - The Obsidian app instance.
  * @param filePath - The file path to find relevant notes for.
- * @returns The relevant notes hits for the given file path. Empty array if no
- *   relevant notes are found or the index does not exist.
+ * @returns Relevant-note hits allowed by the current inclusion/exclusion rules.
+ *   Empty when no allowed notes are found or the index does not exist.
  */
 export async function findRelevantNotes({
+  app,
   filePath,
 }: {
+  app: App;
   filePath: string;
 }): Promise<RelevantNoteEntry[]> {
   const file = app.vault.getAbstractFileByPath(filePath);
@@ -308,50 +285,44 @@ export async function findRelevantNotes({
     return [];
   }
 
-  const similarityScoreMap = await calculateSimilarityScore(filePath);
-  const noteLinks = getNoteLinks(file);
-  const mergedScoreMap = mergeScoreMaps(similarityScoreMap, noteLinks);
-  const sortedHits = Array.from(mergedScoreMap.entries()).sort((a, b) => {
-    const aPath = a[0];
-    const bPath = b[0];
-    const aCategory = getSimilarityCategory(similarityScoreMap.get(aPath) ?? 0);
-    const bCategory = getSimilarityCategory(similarityScoreMap.get(bPath) ?? 0);
+  const similarityScoreMap = await calculateSimilarityScore(app, filePath);
+  const noteLinks = getNoteLinks(app, file);
 
-    if (aCategory !== bCategory) {
-      return bCategory - aCategory;
-    }
-
-    return b[1] - a[1];
-  });
-  return sortedHits
-    .map(([path, score]) => {
+  // Rank purely by semantic similarity so the displayed percentages stay
+  // monotonic down the list. Linked/backlinked notes still appear, but a link
+  // never boosts ranking: link-only notes have no similarity score and sort to
+  // the bottom (they render without a meter in the UI).
+  const candidatePaths = new Set<string>([...similarityScoreMap.keys(), ...noteLinks.keys()]);
+  candidatePaths.delete(filePath);
+  const sortedPaths = Array.from(candidatePaths)
+    .filter(createCopilotPatternFilter(app))
+    .sort((aPath, bPath) => {
+      const aScore = similarityScoreMap.get(aPath);
+      const bScore = similarityScoreMap.get(bPath);
+      if (aScore == null && bScore == null) return 0;
+      if (aScore == null) return 1;
+      if (bScore == null) return -1;
+      return bScore - aScore;
+    });
+  return sortedPaths
+    .map((path) => {
       const file = app.vault.getAbstractFileByPath(path);
       if (!(file instanceof TFile) || file.extension !== "md") {
         return null;
       }
+      const similarityScore = similarityScoreMap.get(path);
       return {
         note: {
           path,
           title: file.basename,
         },
         metadata: {
-          score,
-          similarityScore: similarityScoreMap.get(path),
+          score: similarityScore ?? 0,
+          similarityScore,
           hasOutgoingLinks: noteLinks.get(path)?.links ?? false,
           hasBacklinks: noteLinks.get(path)?.backlinks ?? false,
         },
       };
     })
     .filter((entry) => entry !== null);
-}
-
-/**
- * Gets the similarity category for the given score.
- * @param score - The score to get the similarity category for.
- * @returns The similarity category. 1 is low, 2 is medium, 3 is high.
- */
-export function getSimilarityCategory(score: number): number {
-  if (score > 0.7) return 3;
-  if (score > 0.55) return 2;
-  return 1;
 }

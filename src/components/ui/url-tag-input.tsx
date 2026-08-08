@@ -10,8 +10,9 @@
  */
 
 import { Button } from "@/components/ui/button";
-import { type UrlItem, detectUrlType, isValidUrl } from "@/utils/urlTagUtils";
-import { TruncatedText } from "@/components/TruncatedText";
+import { parseUrlsFromText } from "@/lib/url-tag";
+import type { UrlItem } from "@/lib/url-tag";
+import { TruncatedText } from "@/components/ui/truncated-text";
 import { ClipboardPaste, Globe, Link, X } from "lucide-react";
 import React, {
   useCallback,
@@ -27,35 +28,25 @@ interface UrlTagInputProps {
   onRemove: (id: string) => void;
 }
 
-/** Generate a short random ID */
-function generateId(): string {
-  return Math.random().toString(36).substring(2, 9);
-}
-
 export function UrlTagInput({ urls, onAdd, onRemove }: UrlTagInputProps) {
   const [inputValue, setInputValue] = useState("");
   const [isFocused, setIsFocused] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Reason: Existing URL set for dedup — prevents duplicate entries on add
-  const existingUrls = new Set(urls.map((u) => u.url.trim()));
-
+  // DESIGN NOTE: this CAG-shared input now routes through the same scheme-anchored
+  // `parseUrlsFromText` as the agent surfaces. That tightens CAG parsing — a single
+  // bare host (example.com) still adds, but a multi-token bare-host blob
+  // ("foo.com bar.com") no longer batch-adds. This is an INTENTIONAL, user-approved
+  // change (chose "scheme lock"), unifying all three URL entry points to stop prose
+  // tokens (`1.`, `(context.urls)`, CJK sentences) from being stored as real URLs.
+  // It is a deliberate exception to "CAG zero behavior change".
   const parseAndAddUrls = (text: string) => {
-    const urlStrings = text
-      .split(/[\n\s]+/)
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0 && isValidUrl(s));
-
-    if (urlStrings.length === 0) return;
-
-    const newUrls: UrlItem[] = [];
-    for (const raw of urlStrings) {
-      const url = raw.startsWith("http") ? raw : `https://${raw}`;
-      if (existingUrls.has(url)) continue;
-      existingUrls.add(url);
-      newUrls.push({ id: generateId(), url, type: detectUrlType(raw) });
-    }
-
+    // Reason: shared parser normalizes, classifies web/youtube, and dedups against
+    // the current list (stable ids) — same behavior as the +URL modal / Manage panel.
+    const newUrls = parseUrlsFromText(
+      text,
+      urls.map((u) => u.url)
+    );
     if (newUrls.length > 0) {
       onAdd(newUrls);
     }
@@ -74,11 +65,18 @@ export function UrlTagInput({ urls, onAdd, onRemove }: UrlTagInputProps) {
 
   const handlePaste = (e: ClipboardEvent<HTMLInputElement>) => {
     const pastedText = e.clipboardData.getData("text");
-    // Reason: If paste contains multiple URLs, intercept and batch-process
-    if (pastedText.includes("\n") || pastedText.split(/\s+/).filter(isValidUrl).length > 1) {
-      e.preventDefault();
-      parseAndAddUrls(pastedText);
-    }
+    // Only intercept a multi-URL batch paste. A single URL (or text that yields
+    // none — a prose/bare-host blob, or a fragment completing a typed URL) falls
+    // through to the input so it's visible/editable, never silently swallowed and
+    // never clobbering what the user already typed.
+    const parsed = parseUrlsFromText(
+      pastedText,
+      urls.map((u) => u.url)
+    );
+    if (parsed.length <= 1) return;
+    e.preventDefault();
+    onAdd(parsed);
+    setInputValue("");
   };
 
   const handlePasteFromClipboard = async () => {

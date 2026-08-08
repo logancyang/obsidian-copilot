@@ -1,4 +1,4 @@
-# System Prompts
+# Instructions and System Prompts
 
 A system prompt is a set of instructions you give the AI that shapes how it behaves in all conversations. Think of it as a persistent briefing: "You are an assistant that helps me with academic writing. Always cite sources. Respond in formal English."
 
@@ -6,10 +6,10 @@ A system prompt is a set of instructions you give the AI that shapes how it beha
 
 ## Overview
 
-Copilot has two layers of system prompts:
+Copilot has two instruction surfaces:
 
-1. **Built-in system prompt** — Always active. Defines core behaviors specific to Obsidian (how to format Obsidian links, how to handle note references, etc.)
-2. **Custom system prompt** — Optional. You can write your own instructions that are appended to the built-in prompt.
+1. **Built-in system prompt** — Internal Agent Mode behavior maintained by Copilot.
+2. **User instructions** — `AGENTS.md` for Agent Mode; selectable custom prompt files for Chat mode.
 
 ---
 
@@ -32,32 +32,63 @@ This prompt ensures Copilot's output is correctly formatted for Obsidian and awa
 
 ---
 
-## Custom System Prompts
+## Agent Mode Instructions
 
-Custom system prompts let you add your own instructions on top of the built-in prompt.
+Agent Mode uses the standard `AGENTS.md` file:
+
+- Vault-wide instructions live at `<vault>/AGENTS.md`.
+- Project instructions live at `<project>/AGENTS.md`.
+- Project instructions are more specific and take precedence over vault instructions.
+
+Each file has two edit surfaces, and both write the same file:
+
+- **Vault instructions** — **Settings → Copilot → Basic → Custom instructions** has a
+  **Custom vault instructions** box that saves as you type. **Open AGENTS.md** beside it opens
+  the file as an ordinary note instead.
+- **Project instructions** — the Edit Project dialog has a **Project instructions** box that
+  saves when you accept the dialog. The project info popover's **AGENTS.md** row opens the file
+  as a note.
+
+Because these are ordinary notes, the box and the editor always agree; use whichever suits the
+edit. If a file is missing, opening or saving creates it. Copilot also adds an `@AGENTS.md`
+reference to the sibling `CLAUDE.md` without replacing other content, so Claude reads the same
+instructions as Codex and OpenCode.
+
+Changes apply to new agent sessions.
+
+### Upgrading from an earlier version
+
+- A project that had a **Project System Prompt** is migrated automatically: the first time a
+  session starts in it, that text moves into the project's `AGENTS.md` and is removed from the
+  project record, so it lives in exactly one place.
+- The vault-level `AGENTS.md` starts **blank**. Your Chat system prompt files are not copied
+  into it — they remain in the `system-prompts/` sub-folder of your Copilot folder, and
+  Settings shows a notice pointing there. Open one and paste across anything you want Agent
+  Mode to keep following.
+
+Your own hand-written `AGENTS.md` and `CLAUDE.md` files are never replaced.
+
+---
+
+## Chat Mode Custom System Prompts
+
+Chat mode custom system prompts let you add instructions on top of its built-in prompt.
 
 ### Where They're Stored
 
-Custom system prompts are stored as markdown files in your vault, in the folder:
+Custom system prompts are stored as markdown files in your vault, in the `system-prompts/` sub-folder of your Copilot folder:
+
 ```
 copilot/system-prompts/
 ```
 
-You can change this folder in **Settings → Copilot → Advanced → System Prompts Folder Name**.
+This location is derived from your Copilot folder. To move it, change the root in **Settings → Copilot → Basic → Copilot folder location** — every Copilot sub-folder follows that root, so it is no longer configured on its own. Changing the root affects only where new prompts are saved; existing prompt files stay where they are unless you move them yourself.
 
 ### Creating a System Prompt
 
-#### From Settings
-
-1. Go to **Settings → Copilot → Advanced**
-2. Under **User System Prompt**, click the `+` button
-3. Enter a title for the prompt (e.g., "Academic Writing")
-4. A new markdown file is created in your system prompts folder
-5. Open the file and write your instructions
-
-#### From the System Prompts Folder
-
-Create any `.md` file in the `copilot/system-prompts/` folder. Its filename (without `.md`) becomes the prompt's title.
+Create any `.md` file in the `copilot/system-prompts/` folder, like any other note. Its
+filename (without `.md`) becomes the prompt's title, and the file body is the prompt. New
+files appear in the chat prompt picker automatically.
 
 ### Writing Good System Prompts
 
@@ -70,8 +101,10 @@ Tips for effective system prompts:
 - **Limit scope**: "Only answer questions related to my research notes on climate science"
 
 **Example system prompt:**
+
 ```markdown
 You are a Zettelkasten assistant helping me build a knowledge base.
+
 - Always connect new ideas to existing notes when possible
 - Suggest up to 3 related concepts per response
 - Format all note suggestions as [[Note Title]]
@@ -80,25 +113,17 @@ You are a Zettelkasten assistant helping me build a knowledge base.
 
 ---
 
-## Setting a Global Default
+## Choosing a Prompt (Gear Icon)
 
-You can set one of your custom prompts as the global default — it will be used for all new chat sessions:
-
-1. Go to **Settings → Copilot → Advanced**
-2. Under **Default System Prompt**, select your prompt from the dropdown
-3. Any new conversation will start with this prompt active
-
-To stop using a custom default, select **None (use built-in prompt)** from the dropdown.
-
----
-
-## Per-Session Override (Gear Icon)
-
-You can override the system prompt for just the current conversation:
+Prompts are selected per conversation:
 
 1. Click the **gear icon** in the chat panel toolbar
-2. Select a different system prompt (or type a one-off prompt directly)
-3. This applies to the current session only and resets when you start a new chat
+2. Select a system prompt from the list, or **None (use built-in prompt)**
+3. The selection applies to the current session and resets when you start a new chat
+
+The Settings section that set a global chat default was removed. A default chosen in an
+earlier version keeps applying to new chats until you pick a different prompt (or **None**)
+in a conversation. This applies to Chat mode only — Agent Mode reads `AGENTS.md` instead.
 
 ---
 
@@ -113,14 +138,15 @@ Both sets of instructions are active simultaneously. Your custom instructions ca
 
 ---
 
-## Per-Project System Prompts
+## Per-Project Instructions
 
-Each [Project](projects.md) can have its own system prompt, independent of the global default. Configure this in the project settings under **System Prompt**.
+Agent Mode projects use their own `AGENTS.md`. Legacy Chat mode projects retain their existing
+Project System Prompt field.
 
 ---
 
 ## Related
 
 - [Chat Interface](chat-interface.md) — Per-session gear settings
-- [Projects](projects.md) — Per-project system prompts
+- [Projects](projects.md) — Per-project instructions
 - [Getting Started](getting-started.md) — Initial setup

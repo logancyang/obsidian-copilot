@@ -1,7 +1,7 @@
 import { logInfo, logWarn } from "@/logger";
 import { getSettings } from "@/settings/model";
 import { err2String } from "@/utils";
-import { Platform } from "obsidian";
+import { isDesktopRuntime } from "@/utils/desktopRuntime";
 
 /**
  * Service discovery payload for Miyo local service.
@@ -55,7 +55,7 @@ export class MiyoServiceDiscovery {
       return this.cachedBaseUrl;
     }
 
-    if (!Platform.isDesktopApp) {
+    if (!isDesktopRuntime()) {
       return null;
     }
 

@@ -1,3 +1,4 @@
+import { App } from "obsidian";
 import { CustomCommandManager } from "@/commands/customCommandManager";
 import { getCustomCommandsFolder, validateCommandName } from "@/commands/customCommandUtils";
 import { CustomCommand } from "@/commands/type";
@@ -15,11 +16,11 @@ import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { getCachedCustomCommands } from "@/commands/state";
 import { logError } from "@/logger";
 
-async function saveUnsupportedCommands(commands: CustomCommand[]) {
+async function saveUnsupportedCommands(app: App, commands: CustomCommand[]) {
   const folderPath = getCustomCommandsFolder();
   const unsupportedFolderPath = `${folderPath}/unsupported`;
   // Ensure nested structure exists regardless of platform
-  await ensureFolderExists(unsupportedFolderPath);
+  await ensureFolderExists(app.vault, unsupportedFolderPath);
   return Promise.all(
     commands.map(async (command) => {
       const filePath = `${unsupportedFolderPath}/${command.title}.md`;
@@ -36,7 +37,7 @@ async function saveUnsupportedCommands(commands: CustomCommand[]) {
 }
 
 /** Migrates the legacy commands in data.json to the new note format. */
-export async function migrateCommands() {
+export async function migrateCommands(app: App) {
   const legacyCommands = getSettings().inlineEditCommands;
   if (!legacyCommands || legacyCommands.length === 0) {
     return;
@@ -78,7 +79,7 @@ export async function migrateCommands() {
 
   let message = `We have upgraded your commands to the new format. They are now also stored as notes in ${getCustomCommandsFolder()}.`;
   if (unsupportedCommands.length > 0) {
-    await saveUnsupportedCommands(unsupportedCommands);
+    await saveUnsupportedCommands(app, unsupportedCommands);
     message += `\n\nWe found ${unsupportedCommands.length} unsupported commands. They are saved in ${getCustomCommandsFolder()}/unsupported. To fix them, please resolve the errors and move the note file out of the unsupported folder.`;
   }
 
@@ -98,7 +99,7 @@ export async function generateDefaultCommands(): Promise<void> {
 }
 
 /** Suggests the default commands if the user has not created any commands yet. */
-export async function suggestDefaultCommands(): Promise<void> {
+export async function suggestDefaultCommands(app: App): Promise<void> {
   const suggestedCommand = getSettings().suggestedDefaultCommands;
   if (suggestedCommand) {
     // We only show the modal once

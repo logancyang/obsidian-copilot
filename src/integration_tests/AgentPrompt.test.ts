@@ -223,7 +223,7 @@ describe("Agent Prompt Integration Test - Direct Model Testing", () => {
       // Initialize built-in tools with all tools available
       const registry = ToolRegistry.getInstance();
       registry.clear(); // Clear any existing tools
-      initializeBuiltinTools(mockApp.vault as any);
+      initializeBuiltinTools(mockApp as any);
 
       // Get available tools and filter to enabled ones
       const { getSettings } = await import("@/settings/model");

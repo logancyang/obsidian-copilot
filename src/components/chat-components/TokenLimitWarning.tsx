@@ -1,7 +1,4 @@
-import { getModelKey, type CustomModel } from "@/aiParams";
 import { Button } from "@/components/ui/button";
-import { getModelKeyFromModel, getSettings, updateSetting } from "@/settings/model";
-import { ModelEditModal } from "@/settings/v2/components/ModelEditDialog";
 import { ChatMessage } from "@/types/message";
 import { AlertTriangle } from "lucide-react";
 import { App, Notice } from "obsidian";
@@ -18,30 +15,11 @@ interface TokenLimitWarningProps {
  */
 export const TokenLimitWarning: React.FC<TokenLimitWarningProps> = ({ message, app }) => {
   const handleOpenSettings = () => {
-    const settings = getSettings();
-    const currentModelKey = getModelKey();
-
-    // Find the current model
-    const model = settings.activeModels.find((m) => getModelKeyFromModel(m) === currentModelKey);
-
-    if (!model) {
-      new Notice("Could not find the current model settings");
-      return;
-    }
-
-    // Create update handler
-    const handleModelUpdate = (
-      isEmbedding: boolean,
-      original: CustomModel,
-      updated: CustomModel
-    ) => {
-      const updatedModels = settings.activeModels.map((m) => (m === original ? updated : m));
-      updateSetting("activeModels", updatedModels);
+    const setting = app as App & {
+      setting: { openTabById: (id: string) => { display: () => void } };
     };
-
-    // Open the model edit modal
-    const modal = new ModelEditModal(app, model, false, handleModelUpdate);
-    modal.open();
+    setting.setting.openTabById("copilot").display();
+    new Notice("Adjust the global token limit in Copilot settings.");
   };
 
   return (

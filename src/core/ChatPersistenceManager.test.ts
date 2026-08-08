@@ -4,6 +4,9 @@ import { App, Notice, TFile } from "obsidian";
 import type { MessageRepository } from "./MessageRepository";
 import { ChatPersistenceManager } from "./ChatPersistenceManager";
 import { mockTFile } from "@/__tests__/mockObsidian";
+import { getSettings } from "@/settings/model";
+import { getEffectiveConversationsFolder } from "@/settings/copilotFolder";
+import { ensureFolderExists } from "@/utils";
 
 const USER_SENDER = "user";
 const AI_SENDER = "ai";
@@ -27,8 +30,10 @@ jest.mock("@/settings/model", () => ({
     defaultSaveFolder: "test-folder",
     defaultConversationTag: "copilot-conversation",
     defaultConversationNoteName: "{$topic}@{$date}_{$time}",
-    generateAIChatTitleOnSave: true,
   }),
+}));
+jest.mock("@/settings/copilotFolder", () => ({
+  getEffectiveConversationsFolder: jest.fn(() => "test-folder"),
 }));
 jest.mock("@/aiParams", () => ({
   getCurrentProject: jest.fn().mockReturnValue(null),
@@ -109,7 +114,7 @@ type MockApp = {
     };
   };
   metadataCache: { getFileCache: jest.Mock };
-  fileManager: { processFrontMatter: jest.Mock };
+  fileManager: { processFrontMatter: jest.Mock; renameFile: jest.Mock };
 };
 
 type MockMessageRepo = { getDisplayMessages: jest.Mock };
@@ -145,6 +150,7 @@ describe("ChatPersistenceManager", () => {
       },
       fileManager: {
         processFrontMatter: jest.fn(),
+        renameFile: jest.fn(),
       },
     };
 
@@ -373,6 +379,48 @@ Nature's quiet song`);
       );
       const savedContent = mockApp.vault.create.mock.calls[0][1] as string;
       expect(savedContent).not.toContain("topic:");
+    });
+
+    it("writes under the folder captured at entry, not one a mid-save root change swaps in", async () => {
+      // The folder is captured once at entry and threaded through ensure, the
+      // existing-file lookup, filename generation, and the conflict/fallback
+      // paths. Simulate a Copilot-root change landing after the save starts:
+      // the entry read returns the old folder, every later read the new one.
+      // The created path must stay under the old folder — the save must not
+      // ensure one directory and then create the file under another.
+      // Only override the entry read; later reads fall back to the default
+      // mock ("test-folder"), so this can't leak a permanent return value into
+      // sibling tests. The created path must stay under the entry-captured
+      // "old-folder", proving the save doesn't re-resolve mid-operation.
+      const folderMock = jest.mocked(getEffectiveConversationsFolder);
+      folderMock.mockReturnValueOnce("old-folder");
+
+      const messages: ChatMessage[] = [
+        {
+          id: "1",
+          message: "Hello",
+          sender: USER_SENDER,
+          timestamp: {
+            epoch: 1695513480000,
+            display: "2024/09/23 22:18:00",
+            fileName: "2024_09_23_221800",
+          },
+          isVisible: true,
+        },
+      ];
+      mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
+      // No existing file, folder empty, target path free → single clean create.
+      mockApp.vault.getMarkdownFiles.mockReturnValue([]);
+      mockApp.vault.getAbstractFileByPath.mockReturnValue(null);
+      mockApp.vault.adapter.exists.mockResolvedValue(false);
+
+      await persistenceManager.saveChat("gpt-4");
+
+      const createdPath = mockApp.vault.create.mock.calls[0][0] as string;
+      expect(createdPath.startsWith("old-folder/")).toBe(true);
+      expect(createdPath).not.toContain("test-folder");
+      // ensureFolderExists must target the same captured folder.
+      expect(ensureFolderExists).toHaveBeenCalledWith(expect.anything(), "old-folder");
     });
 
     it("should use AI topic text from structured responses without object artifacts", async () => {
@@ -1590,6 +1638,35 @@ tags:
     });
   });
 
+  describe("frozen conversation tag", () => {
+    it("writes the built-in tag independent of the persisted defaultConversationTag", () => {
+      // The tag is frozen to a constant. Feed a custom setting value: if a
+      // regression made generateNoteContent read the setting again, the custom
+      // value would leak into the note and fail the assertion below.
+      const gs = getSettings as jest.Mock;
+      gs.mockReturnValue({
+        defaultSaveFolder: "test-folder",
+        defaultConversationTag: "user-custom-tag",
+        defaultConversationNoteName: "{$topic}@{$date}_{$time}",
+      });
+      try {
+        const noteContent = asInternal(persistenceManager).generateNoteContent(
+          "**user**: hi",
+          1695513480000,
+          "gpt-4"
+        );
+        expect(noteContent).toContain("tags:\n  - copilot-conversation");
+        expect(noteContent).not.toContain("user-custom-tag");
+      } finally {
+        gs.mockReturnValue({
+          defaultSaveFolder: "test-folder",
+          defaultConversationTag: "copilot-conversation",
+          defaultConversationNoteName: "{$topic}@{$date}_{$time}",
+        });
+      }
+    });
+  });
+
   describe("lastAccessedAt preservation", () => {
     it("should preserve lastAccessedAt when updating existing file", async () => {
       const messages: ChatMessage[] = [
@@ -1714,6 +1791,42 @@ tags:
       );
 
       getFilesSpy.mockRestore();
+    });
+  });
+
+  describe("renameFileToMatchTopic", () => {
+    beforeEach(() => {
+      // A fixed topic → deterministic target basename; the folder comes from the
+      // file's own path, which is what these tests exercise.
+      mockMessageRepo.getDisplayMessages.mockReturnValue([]);
+      jest
+        .mocked(getEffectiveConversationsFolder)
+        .mockReturnValue("live-root/copilot-conversations");
+    });
+
+    it("keeps a nested chat in its own folder, ignoring the live root", async () => {
+      const file = mockTFile({ path: "old-root/copilot-conversations/chat.md" });
+      mockApp.metadataCache.getFileCache.mockReturnValue({ frontmatter: { epoch: 1695513480000 } });
+
+      await persistenceManager.renameFileToMatchTopic(null, file, "New Topic");
+
+      const newPath = mockApp.fileManager.renameFile.mock.calls[0][1] as string;
+      expect(newPath.startsWith("old-root/copilot-conversations/")).toBe(true);
+      // Must not follow the (changed) live root.
+      expect(newPath).not.toContain("live-root");
+    });
+
+    it("does not produce a leading slash when renaming a vault-root file", async () => {
+      // Hidden-directory chats use synthetic TFiles with parent === null; a
+      // top-level path has no slash, so the parent folder is empty. The result
+      // must be a bare vault-root name, never "/name.md".
+      const file = mockTFile({ path: "chat.md" });
+      mockApp.metadataCache.getFileCache.mockReturnValue({ frontmatter: { epoch: 1695513480000 } });
+
+      await persistenceManager.renameFileToMatchTopic(null, file, "New Topic");
+
+      const newPath = mockApp.fileManager.renameFile.mock.calls[0][1] as string;
+      expect(newPath.startsWith("/")).toBe(false);
     });
   });
 });

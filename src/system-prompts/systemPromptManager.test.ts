@@ -28,6 +28,11 @@ jest.mock("@/utils", () => ({
 jest.mock("@/system-prompts/systemPromptUtils", () => ({
   validatePromptName: jest.fn(),
   getPromptFilePath: jest.fn(),
+  // createPrompt pins one folder and derives the path from it; the other paths
+  // still use the bare accessor.
+  getPromptFilePathInFolder: jest.fn((title: string, folder?: string) =>
+    folder ? `${folder}/${title}.md` : `SystemPrompts/${title}.md`
+  ),
   getSystemPromptsFolder: jest.fn(() => "SystemPrompts"),
   loadAllSystemPrompts: jest.fn(),
   ensurePromptFrontmatter: jest.fn(),
@@ -77,7 +82,7 @@ describe("SystemPromptManager", () => {
     } as unknown as typeof window.app;
 
     // Initialize manager
-    manager = SystemPromptManager.getInstance(mockVault);
+    manager = SystemPromptManager.getInstance(window.app);
   });
 
   afterEach(() => {
@@ -91,15 +96,15 @@ describe("SystemPromptManager", () => {
       expect(instance1).toBe(instance2);
     });
 
-    it("throws error if vault not provided on first call", () => {
+    it("throws error if app not provided on first call", () => {
       (SystemPromptManager as unknown as Record<string, unknown>).instance = undefined;
       expect(() => SystemPromptManager.getInstance()).toThrow(
-        "Vault is required for first initialization"
+        "App is required for first initialization"
       );
     });
 
-    it("does not require vault on subsequent calls", () => {
-      const instance1 = SystemPromptManager.getInstance(mockVault);
+    it("does not require app on subsequent calls", () => {
+      const instance1 = SystemPromptManager.getInstance(window.app);
       const instance2 = SystemPromptManager.getInstance();
       expect(instance1).toBe(instance2);
     });
@@ -129,6 +134,24 @@ describe("SystemPromptManager", () => {
       (state.getCachedSystemPrompts as jest.Mock).mockReturnValue([]);
     });
 
+    it("creates the file in the same folder it ensured, even if the root then moves", async () => {
+      // The prompts folder derives from the Copilot root. Resolving it once for
+      // the ensure and again for the file path would create the prompt outside
+      // the directory just created if the root changed in between.
+      const mockedFolder = systemPromptUtils.getSystemPromptsFolder as jest.Mock;
+      mockedFolder.mockReturnValueOnce("SystemPrompts");
+      mockedFolder.mockReturnValue("moved/SystemPrompts");
+      const mockFile = mockTFile({ path: "SystemPrompts/New Prompt.md" });
+      Object.setPrototypeOf(mockFile, TFile.prototype);
+      (mockVault.getAbstractFileByPath as jest.Mock).mockReturnValue(mockFile);
+
+      await manager.createPrompt(newPrompt);
+
+      expect(utils.ensureFolderExists).toHaveBeenCalledWith(mockVault, "SystemPrompts");
+      expect(mockVault.create).toHaveBeenCalledWith("SystemPrompts/New Prompt.md", "Test content");
+      mockedFolder.mockReturnValue("SystemPrompts");
+    });
+
     it("creates a new prompt file", async () => {
       const mockFile = mockTFile({ path: "SystemPrompts/New Prompt.md" });
       Object.setPrototypeOf(mockFile, TFile.prototype);
@@ -136,9 +159,13 @@ describe("SystemPromptManager", () => {
 
       await manager.createPrompt(newPrompt);
 
-      expect(utils.ensureFolderExists).toHaveBeenCalledWith("SystemPrompts");
+      expect(utils.ensureFolderExists).toHaveBeenCalledWith(mockVault, "SystemPrompts");
       expect(mockVault.create).toHaveBeenCalledWith("SystemPrompts/New Prompt.md", "Test content");
-      expect(systemPromptUtils.ensurePromptFrontmatter).toHaveBeenCalledWith(mockFile, newPrompt);
+      expect(systemPromptUtils.ensurePromptFrontmatter).toHaveBeenCalledWith(
+        window.app,
+        mockFile,
+        newPrompt
+      );
     });
 
     it("updates cache after creation", async () => {

@@ -106,6 +106,29 @@ export function getDisableBuiltinSystemPrompt(): boolean {
 }
 
 /**
+ * Subscribe to changes in the session-level system-prompt state: the selected
+ * prompt title, the "disable builtin" toggle, and the prompts list (whose
+ * contents feed `getEffectiveSystemPromptContent`). Returns an unsubscribe
+ * function.
+ *
+ * Used by Agent Mode to recompute its composed system prompt and restart
+ * spawn-time backends when the effective prompt changes. This fires on any of
+ * those atoms changing — including no-op list reloads — so callers should
+ * debounce by comparing a derived key (e.g. `getEffectiveUserPrompt()` +
+ * `getDisableBuiltinSystemPrompt()`).
+ */
+export function subscribeToSystemPromptChange(callback: () => void): () => void {
+  const unsubscribers = [
+    systemPromptsStore.sub(selectedPromptTitleAtom, callback),
+    systemPromptsStore.sub(disableBuiltinSystemPromptAtom, callback),
+    systemPromptsStore.sub(systemPromptsAtom, callback),
+  ];
+  return () => {
+    for (const unsubscribe of unsubscribers) unsubscribe();
+  };
+}
+
+/**
  * Pending file writes to prevent infinite loops when modifying files
  */
 const pendingFileWrites = new Set<string>();

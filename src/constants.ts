@@ -4,20 +4,72 @@ import { v4 as uuidv4 } from "uuid";
 import { ChainType } from "./chainType";
 import { PromptSortStrategy } from "./types";
 
+// Copilot website usage dashboard (view usage, purchase credits). Used as the
+// fallback link when a usage-cap error doesn't carry its own dashboard_url.
+export const USAGE_DASHBOARD_URL = "https://www.obsidiancopilot.com/en/dashboard/token-usage";
+
+// Miyo's public homepage — where users download the Miyo desktop app and read
+// about it. Distinct from the Copilot site; used by the "download / pair with
+// Miyo" links in settings.
+export const MIYO_HOMEPAGE_URL = "https://www.miyo.md/";
+
 export const BREVILABS_API_BASE_URL = "https://api.brevilabs.com/v1";
 export const BREVILABS_MODELS_BASE_URL = "https://models.brevilabs.com/v1";
 export const CHAT_VIEWTYPE = "copilot-chat-view";
+export const CHAT_AGENT_VIEWTYPE = "copilot-agent-chat-view";
+export const AGENT_CHAT_MODE = "agent";
+export const RELEVANT_NOTES_VIEWTYPE = "copilot-relevant-notes-view";
+
+// Custom Obsidian icon for Agent Mode surfaces (view tab, ribbon, commands).
+// The v4 monochrome brand mark, normalized from its source viewBox "4 4 152 127"
+// into Obsidian's 0 0 100 100 icon space; currentColor lets it track the theme
+// and the active/hover tab state instead of a fixed fill. Register via addIcon().
+export const COPILOT_AGENT_ICON_ID = "copilot-agent";
+
+// The brand glyph as raw vector data — the single source of truth shared by the
+// native `addIcon` registration (string) and the `CopilotBrandIcon` React
+// component (JSX). Both derive from these primitives, so they cannot drift.
+// The 0 0 100 100 viewBox is intentionally NOT shared here: `addIcon` always
+// wraps its content in Obsidian's own `<svg viewBox="0 0 100 100">`, so that box
+// is fixed by the Obsidian API, not chosen by us — `CopilotBrandIcon` simply
+// matches it. If a future review flags the hardcoded viewBox, point them here.
+export const COPILOT_AGENT_ICON_TRANSFORM = "translate(0 8.2) scale(0.6579) translate(-4 -4)";
+export const COPILOT_AGENT_ICON_PATH =
+  "M75.9 6.9c-6.8 1.4-12.5 6-35.5 29.3-33.5 33.8-33.5 33.9-34.2 62.2-0.3 12.4 0 20.2 0.7 22.7 2.4 7.8 10.8 11.2 17.6 7.1 1.7-1.1 14.9-14.1 29.5-29.1 14.5-14.9 26.7-27 27-26.9 0.3 0.2 12.4 12.4 27 27.3 14.6 14.8 27.6 27.8 29 28.7 5.1 3.6 13.6 1.4 16.5-4.2 1.2-2.3 1.5-6.9 1.5-22.3 0-22.9-1.2-28.6-8.3-37.9-7.6-10.2-50-52.3-54.9-54.6-5.1-2.4-10.9-3.2-15.9-2.3z";
+
+// Inner SVG markup string consumed by Obsidian's `addIcon` (which wraps it in an
+// `<svg viewBox="0 0 100 100">`). Built from the shared primitives above.
+export const COPILOT_AGENT_ICON_SVG = `<g transform="${COPILOT_AGENT_ICON_TRANSFORM}"><path fill="currentColor" d="${COPILOT_AGENT_ICON_PATH}"/></g>`;
+
 export const USER_SENDER = "user";
 export const AI_SENDER = "ai";
 
 // Default folder names
 export const COPILOT_FOLDER_ROOT = "copilot";
+// Configurable root all Copilot sub-folders derive from (PR-乙). Defaults to
+// the historical hardcoded root so existing vaults keep their layout.
+export const DEFAULT_COPILOT_FOLDER = COPILOT_FOLDER_ROOT;
 const DEFAULT_CHAT_HISTORY_FOLDER = `${COPILOT_FOLDER_ROOT}/copilot-conversations`;
 const DEFAULT_CUSTOM_PROMPTS_FOLDER = `${COPILOT_FOLDER_ROOT}/copilot-custom-prompts`;
 const DEFAULT_MEMORY_FOLDER = `${COPILOT_FOLDER_ROOT}/memory`;
 const DEFAULT_SYSTEM_PROMPTS_FOLDER = `${COPILOT_FOLDER_ROOT}/system-prompts`;
 const DEFAULT_PROJECTS_FOLDER = `${COPILOT_FOLDER_ROOT}/projects`;
+export const DEFAULT_SKILLS_FOLDER = `${COPILOT_FOLDER_ROOT}/skills`;
 const DEFAULT_CONVERTED_DOC_OUTPUT_FOLDER = "";
+// Built-in tag written into every saved conversation's frontmatter. Frozen as a
+// constant: no code reads the tag to identify conversations — they are keyed by
+// folder + epoch — so built-in history is unaffected by the freeze.
+//
+// DESIGN NOTE (accepted compatibility break): a vault that had customized the
+// old `defaultConversationTag` keeps that value in data.json, but it is no
+// longer read, and existing notes are never rewritten. Such a vault therefore
+// ends up with two markers, and the user's own tag-based queries, searches and
+// automations see only the older half. That cost was accepted deliberately to
+// converge on one built-in marker; grandfathering the persisted value was
+// rejected because a hidden setting would then steer output forever. Batch
+// remediation is tracked in obsidian-copilot-preview#224.
+// If a future review flags this again, point them at this note.
+export const COPILOT_CONVERSATION_TAG = "copilot-conversation";
 export const DEFAULT_QA_EXCLUSIONS_SETTING = COPILOT_FOLDER_ROOT;
 export const DEFAULT_SYSTEM_PROMPT = `You are Obsidian Copilot, a helpful assistant that integrates AI to Obsidian note-taking.
   1. Never mention that you do not have access to something. Always rely on the user provided context.
@@ -135,6 +187,7 @@ export const PLUS_UTM_MEDIUMS = {
   EXPIRED_MODAL: "expired_modal",
   CHAT_MODE_SELECT: "chat_mode_select",
   MODE_SELECT_TOOLTIP: "mode_select_tooltip",
+  MULTI_AGENT: "multi_agent",
 };
 export type PlusUtmMedium = (typeof PLUS_UTM_MEDIUMS)[keyof typeof PLUS_UTM_MEDIUMS];
 
@@ -171,6 +224,14 @@ export const DEFAULT_OLLAMA_NUM_CTX = 131072;
 
 export enum ChatModels {
   COPILOT_PLUS_FLASH = "copilot-plus-flash",
+  // Additional Copilot Plus relay models (served via the brevilabs proxy).
+  COPILOT_PLUS_KIMI_K2_6 = "kimi-k2.6",
+  COPILOT_PLUS_GLM_5_2 = "glm-5.2",
+  COPILOT_PLUS_KIMI_K2_7_CODE = "kimi-k2.7-code",
+  COPILOT_PLUS_DEEPSEEK_V4_PRO = "deepseek-v4-pro",
+  COPILOT_PLUS_DEEPSEEK_V4_FLASH_0731 = "deepseek-v4-flash-0731",
+  COPILOT_PLUS_MIMO_V2_5 = "mimo-v2.5",
+  COPILOT_PLUS_MINIMAX_M2_7 = "minimax-m2.7",
   GPT_5_5 = "gpt-5.5",
   GPT_5_4_mini = "gpt-5.4-mini",
   GPT_41 = "gpt-4.1",
@@ -716,14 +777,14 @@ export const ProviderInfo: Record<Provider, ProviderMetadata> = {
     listModelURL: "",
   },
   [EmbeddingModelProviders.COPILOT_PLUS]: {
-    label: "Copilot Plus",
+    label: "Copilot",
     host: BREVILABS_MODELS_BASE_URL,
     curlBaseURL: BREVILABS_MODELS_BASE_URL,
     keyManagementURL: "",
     listModelURL: "",
   },
   [EmbeddingModelProviders.COPILOT_PLUS_JINA]: {
-    label: "Copilot Plus",
+    label: "Copilot",
     host: BREVILABS_MODELS_BASE_URL,
     curlBaseURL: BREVILABS_MODELS_BASE_URL,
     keyManagementURL: "",
@@ -792,9 +853,13 @@ export const COMMAND_IDS = {
   LIST_INDEXED_FILES: "copilot-list-indexed-files",
   LOAD_COPILOT_CHAT_CONVERSATION: "load-copilot-chat-conversation",
   NEW_CHAT: "new-chat",
+  NEW_AGENT_CHAT: "new-agent-chat",
   OPEN_COPILOT_CHAT_WINDOW: "chat-open-window",
+  OPEN_AGENT_CHAT_WINDOW: "agent-chat-open-window",
+  OPEN_RELEVANT_NOTES_VIEW: "open-relevant-notes-view",
   SEARCH_ORAMA_DB: "copilot-search-orama-db",
   TOGGLE_COPILOT_CHAT_WINDOW: "chat-toggle-window",
+  TOGGLE_AGENT_CHAT_WINDOW: "agent-chat-toggle-window",
   ADD_SELECTION_TO_CHAT_CONTEXT: "add-selection-to-chat-context",
   ADD_WEB_SELECTION_TO_CHAT_CONTEXT: "add-web-selection-to-chat-context",
   ADD_CUSTOM_COMMAND: "add-custom-command",
@@ -802,6 +867,7 @@ export const COMMAND_IDS = {
   OPEN_LOG_FILE: "open-log-file",
   CLEAR_LOG_FILE: "clear-log-file",
   DOWNLOAD_YOUTUBE_SCRIPT: "download-youtube-script",
+  PUBLISH_FILE_TO_SYMPOSIUM: "publish-file-to-symposium",
   TRIGGER_QUICK_ASK: "trigger-quick-ask",
 } as const;
 
@@ -820,9 +886,13 @@ export const COMMAND_NAMES: Record<CommandId, string> = {
   [COMMAND_IDS.LIST_INDEXED_FILES]: "List all indexed files (debug)",
   [COMMAND_IDS.LOAD_COPILOT_CHAT_CONVERSATION]: "Load Copilot chat conversation",
   [COMMAND_IDS.NEW_CHAT]: "New Copilot Chat",
+  [COMMAND_IDS.NEW_AGENT_CHAT]: "New Copilot Agent Chat",
   [COMMAND_IDS.OPEN_COPILOT_CHAT_WINDOW]: "Open Copilot Chat Window",
+  [COMMAND_IDS.OPEN_AGENT_CHAT_WINDOW]: "Open Copilot Agent Chat Window",
+  [COMMAND_IDS.OPEN_RELEVANT_NOTES_VIEW]: "Open Relevant Notes",
   [COMMAND_IDS.SEARCH_ORAMA_DB]: "Search semantic index (debug)",
   [COMMAND_IDS.TOGGLE_COPILOT_CHAT_WINDOW]: "Toggle Copilot Chat Window",
+  [COMMAND_IDS.TOGGLE_AGENT_CHAT_WINDOW]: "Toggle Copilot Agent Chat Window",
   [COMMAND_IDS.ADD_SELECTION_TO_CHAT_CONTEXT]: "Add selection to chat context",
   [COMMAND_IDS.ADD_WEB_SELECTION_TO_CHAT_CONTEXT]: "Add web selection to chat context",
   [COMMAND_IDS.ADD_CUSTOM_COMMAND]: "Add new custom command",
@@ -830,6 +900,7 @@ export const COMMAND_NAMES: Record<CommandId, string> = {
   [COMMAND_IDS.OPEN_LOG_FILE]: "Create log file",
   [COMMAND_IDS.CLEAR_LOG_FILE]: "Clear log file",
   [COMMAND_IDS.DOWNLOAD_YOUTUBE_SCRIPT]: "Download YouTube Script (plus)",
+  [COMMAND_IDS.PUBLISH_FILE_TO_SYMPOSIUM]: "Publish file to Symposium",
   [COMMAND_IDS.TRIGGER_QUICK_ASK]: "Quick Ask",
 };
 
@@ -841,8 +912,12 @@ export type CommandId = (typeof COMMAND_IDS)[keyof typeof COMMAND_IDS];
  */
 export const COMMAND_ICONS: Partial<Record<CommandId, string>> = {
   [COMMAND_IDS.NEW_CHAT]: "message-square-plus",
+  [COMMAND_IDS.NEW_AGENT_CHAT]: COPILOT_AGENT_ICON_ID,
   [COMMAND_IDS.OPEN_COPILOT_CHAT_WINDOW]: "message-square",
+  [COMMAND_IDS.OPEN_AGENT_CHAT_WINDOW]: COPILOT_AGENT_ICON_ID,
+  [COMMAND_IDS.OPEN_RELEVANT_NOTES_VIEW]: "files",
   [COMMAND_IDS.TOGGLE_COPILOT_CHAT_WINDOW]: "message-square",
+  [COMMAND_IDS.TOGGLE_AGENT_CHAT_WINDOW]: COPILOT_AGENT_ICON_ID,
   [COMMAND_IDS.LOAD_COPILOT_CHAT_CONVERSATION]: "history",
   [COMMAND_IDS.TRIGGER_QUICK_COMMAND]: "terminal-square",
   [COMMAND_IDS.TRIGGER_QUICK_ASK]: "sparkles",
@@ -860,6 +935,7 @@ export const COMMAND_ICONS: Partial<Record<CommandId, string>> = {
   [COMMAND_IDS.OPEN_LOG_FILE]: "file-text",
   [COMMAND_IDS.CLEAR_LOG_FILE]: "file-x",
   [COMMAND_IDS.DOWNLOAD_YOUTUBE_SCRIPT]: "youtube",
+  [COMMAND_IDS.PUBLISH_FILE_TO_SYMPOSIUM]: "share-2",
 };
 
 /**
@@ -885,9 +961,17 @@ export const RESTRICTION_MESSAGES = {
     `${extension.toUpperCase()} files are not supported in the current mode.`,
 } as const;
 
+export const OPENCODE_RELEASE_URL_TEMPLATE =
+  "https://github.com/sst/opencode/releases/download/v{version}/{asset}";
+export const OPENCODE_RELEASE_API_URL_TEMPLATE =
+  "https://api.github.com/repos/sst/opencode/releases/tags/v{version}";
+
 export const DEFAULT_SETTINGS: CopilotSettings = {
   userId: uuidv4(),
+  isPaidUser: false,
   isPlusUser: false,
+  entitlementToken: "",
+  entitlementExpiresAt: 0,
   plusLicenseKey: "",
   openAIApiKey: "",
   openAIOrgId: "",
@@ -922,10 +1006,17 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   openAIProxyBaseUrl: "",
   openAIEmbeddingProxyBaseUrl: "",
   stream: true,
+  copilotFolder: DEFAULT_COPILOT_FOLDER,
+  // Every folder ever activated as the Copilot root (seeded with the legacy
+  // root in the v8 migration). Kept append-only so each historical root stays
+  // permanently excluded from QA indexing even after the root is changed.
+  copilotRootHistory: [],
+  // True only when a legacy (v1-v7) vault was migrated to v8; WS-D reads it to
+  // decide whether to show the one-time folder-relocation prompt, then clears it.
+  upgradedToV8FromLegacy: false,
   defaultSaveFolder: DEFAULT_CHAT_HISTORY_FOLDER,
   defaultConversationTag: "copilot-conversation",
   autosaveChat: true,
-  generateAIChatTitleOnSave: true,
   autoAddActiveContentToContext: true,
   defaultOpenArea: DEFAULT_OPEN_AREA.VIEW,
   defaultSendShortcut: SEND_SHORTCUT.ENTER,
@@ -946,7 +1037,6 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   embeddingBatchSize: 16,
   disableIndexOnMobile: true,
   showSuggestedPrompts: true,
-  showRelevantNotes: true,
   numPartitions: 1,
   lexicalSearchRamLimit: 100, // Default 100 MB
   promptUsageTimestamps: {},
@@ -965,16 +1055,15 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   enableSemanticSearchV3: false,
   enableSelfHostMode: false,
   enableMiyo: false,
+  enableMiyoSearchSkill: false,
   miyoSearchAll: false,
-  selfHostModeValidatedAt: null,
-  selfHostValidationCount: 0,
-  selfHostUrl: "",
-  selfHostApiKey: "",
   miyoServerUrl: "",
+  miyoSyncedExclusions: "",
   selfHostSearchProvider: "firecrawl",
   firecrawlApiKey: "",
   perplexityApiKey: "",
   supadataApiKey: "",
+  docProcessorBackend: "plus",
   enableLexicalBoosts: true,
   suggestedDefaultCommands: false,
   autonomousAgentMaxIterations: 4,
@@ -1004,12 +1093,32 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   defaultSystemPromptTitle: "",
   autoCompactThreshold: 128000,
   convertedDocOutputFolder: DEFAULT_CONVERTED_DOC_OUTPUT_FOLDER,
+  agentMode: {
+    byok: {},
+    activeBackend: "opencode",
+    backends: {},
+    // On by default so the diagnostic frame log is already capturing when a
+    // user hits a bug and clicks "Report an issue" (it can't capture
+    // retroactively). The migration in src/settings/model.ts preserves an
+    // explicit prior choice, so anyone who turned it off stays off. The privacy
+    // disclosure lives in the Report-issue modal, shown only when the user
+    // chooses to share the log.
+    debugFullFrames: true,
+    welcomeDismissed: false,
+    skills: {
+      folder: DEFAULT_SKILLS_FOLDER,
+    },
+  },
+  providers: {},
+  configuredModels: [],
+  backends: {},
 };
 
 export const EVENT_NAMES = {
   CHAT_IS_VISIBLE: "chat-is-visible",
   ACTIVE_LEAF_CHANGE: "active-leaf-change",
   ABORT_STREAM: "abort-stream",
+  INSERT_TEXT_TO_CHAT: "insert-text-to-chat",
 };
 
 export enum ABORT_REASON {

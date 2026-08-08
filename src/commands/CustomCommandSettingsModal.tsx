@@ -7,14 +7,13 @@ import { Textarea } from "@/components/ui/textarea";
 import React, { useState } from "react";
 import { Root } from "react-dom/client";
 import { createPluginRoot } from "@/utils/react/createPluginRoot";
-import { getModelKeyFromModel, useSettingsValue } from "@/settings/model";
-import { getModelDisplayText } from "@/components/ui/model-display";
 import { cn } from "@/lib/utils";
 import { ChevronDown } from "lucide-react";
 import { logError } from "@/logger";
 import { CustomPromptSyntaxInstruction } from "@/components/CustomPromptSyntaxInstruction";
 import { CustomCommand } from "@/commands/type";
 import { validateCommandName } from "@/commands/customCommandUtils";
+import { useChatBackendModelOptions } from "@/hooks/useChatBackendModelOptions";
 
 type FormErrors = {
   title?: string;
@@ -32,14 +31,13 @@ function CustomCommandSettingsModalContent({
   onConfirm: (command: CustomCommand) => void;
   onCancel: () => void;
 }) {
-  const settings = useSettingsValue();
-  const activeModels = settings.activeModels
-    .filter((m) => m.enabled)
-    .map((model) => ({
-      label: getModelDisplayText(model),
-      value: getModelKeyFromModel(model),
-    }));
-  const [command, setCommand] = useState(initialCommand);
+  const { options: activeModels, resolveSelectionId } = useChatBackendModelOptions();
+  const [command, setCommand] = useState(() => ({
+    ...initialCommand,
+    modelKey: initialCommand.modelKey
+      ? resolveSelectionId(initialCommand.modelKey) || initialCommand.modelKey
+      : "",
+  }));
   const [errors, setErrors] = useState<FormErrors>({});
 
   const handleUpdate = (field: keyof CustomCommand, value: CustomCommand[keyof CustomCommand]) => {

@@ -70,7 +70,9 @@ describe("TagTools", () => {
   });
 
   it("returns combined tag statistics by default", async () => {
-    const tool = createGetTagListTool();
+    const tool = createGetTagListTool(
+      getMockApp() as unknown as Parameters<typeof createGetTagListTool>[0]
+    );
     const result = (await ToolManager.callTool(tool, {})) as string;
 
     const payload = parsePayload(result);
@@ -105,7 +107,9 @@ describe("TagTools", () => {
   });
 
   it("supports frontmatter-only mode", async () => {
-    const tool = createGetTagListTool();
+    const tool = createGetTagListTool(
+      getMockApp() as unknown as Parameters<typeof createGetTagListTool>[0]
+    );
     const result = (await ToolManager.callTool(tool, { includeInline: false })) as string;
 
     const payload = parsePayload(result);
@@ -131,7 +135,9 @@ describe("TagTools", () => {
   });
 
   it("limits entries when maxEntries is provided", async () => {
-    const tool = createGetTagListTool();
+    const tool = createGetTagListTool(
+      getMockApp() as unknown as Parameters<typeof createGetTagListTool>[0]
+    );
     const result = (await ToolManager.callTool(tool, { maxEntries: 2 })) as string;
 
     const payload = parsePayload(result);
@@ -148,7 +154,9 @@ describe("TagTools", () => {
     getMockApp().metadataCache.getTags.mockReturnValue({});
     getMockApp().metadataCache.getFrontmatterTags.mockReturnValue({});
 
-    const tool = createGetTagListTool();
+    const tool = createGetTagListTool(
+      getMockApp() as unknown as Parameters<typeof createGetTagListTool>[0]
+    );
     const result = (await ToolManager.callTool(tool, {})) as string;
 
     const payload = parsePayload(result);
@@ -168,7 +176,9 @@ describe("TagTools", () => {
       "##Weird/Tag": 1,
     });
 
-    const tool = createGetTagListTool();
+    const tool = createGetTagListTool(
+      getMockApp() as unknown as Parameters<typeof createGetTagListTool>[0]
+    );
     const result = (await ToolManager.callTool(tool, {})) as string;
 
     const payload = parsePayload(result);
@@ -197,7 +207,9 @@ describe("TagTools", () => {
       "#project": 3,
     });
 
-    const tool = createGetTagListTool();
+    const tool = createGetTagListTool(
+      getMockApp() as unknown as Parameters<typeof createGetTagListTool>[0]
+    );
     const result = (await ToolManager.callTool(tool, {})) as string;
 
     const payload = parsePayload(result);

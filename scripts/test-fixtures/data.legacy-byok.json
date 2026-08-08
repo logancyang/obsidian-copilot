@@ -1,0 +1,74 @@
+{
+  "userId": "test-legacy-byok",
+  "anthropicApiKey": "sk-test-anthropic-0000",
+  "openAIApiKey": "sk-test-openai-0000",
+  "openAIOrgId": "org-test-0000",
+  "openRouterAiApiKey": "sk-test-openrouter-toplevel",
+  "siliconflowApiKey": "sk-test-siliconflow-0000",
+  "googleApiKey": "",
+  "amazonBedrockApiKey": "sk-test-bedrock-0000",
+  "amazonBedrockRegion": "us-east-1",
+  "activeModels": [
+    { "name": "claude-sonnet-4-5", "provider": "anthropic", "enabled": true, "isBuiltIn": false },
+    { "name": "gpt-4o", "provider": "openai", "enabled": true, "isBuiltIn": false },
+    { "name": "gpt-5.5", "provider": "openai", "enabled": true, "isBuiltIn": true, "core": true },
+    { "name": "x-ai/grok-4.3", "provider": "openrouterai", "enabled": true, "isBuiltIn": false },
+    {
+      "name": "qwen/qwen-2.5-coder",
+      "provider": "openrouterai",
+      "enabled": true,
+      "isBuiltIn": false,
+      "apiKey": "sk-test-openrouter-per-model"
+    },
+    {
+      "name": "deepseek-ai/DeepSeek-V3",
+      "provider": "siliconflow",
+      "enabled": true,
+      "isBuiltIn": false,
+      "baseUrl": "https://api.siliconflow.com/v1"
+    },
+    {
+      "name": "BAAI/bge-m3",
+      "provider": "siliconflow",
+      "enabled": true,
+      "isBuiltIn": false,
+      "isEmbeddingModel": true
+    },
+    {
+      "name": "anthropic.claude-3-5-sonnet-v2",
+      "provider": "amazon-bedrock",
+      "enabled": true,
+      "isBuiltIn": false
+    },
+    { "name": "gemini-2.5-pro", "provider": "google", "enabled": true, "isBuiltIn": false },
+    {
+      "name": "deepseek/deepseek-chat",
+      "provider": "openrouterai",
+      "enabled": false,
+      "isBuiltIn": false
+    },
+    { "name": "copilot-plus-flash", "provider": "copilot-plus", "enabled": true, "isBuiltIn": true }
+  ],
+  "providers": {
+    "existing-anthropic-1": {
+      "providerId": "existing-anthropic-1",
+      "providerType": "anthropic",
+      "displayName": "My Anthropic (pre-existing)",
+      "baseUrl": "https://api.anthropic.com",
+      "origin": { "kind": "byok", "catalogProviderId": "anthropic" },
+      "apiKeyKeychainId": null,
+      "addedAt": 1735689600000
+    }
+  },
+  "configuredModels": [
+    {
+      "configuredModelId": "existing-cm-1",
+      "providerId": "existing-anthropic-1",
+      "info": { "id": "claude-sonnet-4-5", "displayName": "Claude Sonnet 4.5" },
+      "configuredAt": 1735689600000
+    }
+  ],
+  "backends": {
+    "chat": { "enabledModels": ["existing-cm-1"] }
+  }
+}

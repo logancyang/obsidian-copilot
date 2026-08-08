@@ -4,10 +4,10 @@ import { updateIndexingProgressState } from "@/aiParams";
 import { CustomError } from "@/error";
 import { logInfo, logWarn } from "@/logger";
 import EmbeddingsManager from "@/LLMProviders/embeddingManager";
-import { shouldUseMiyo } from "@/miyo/miyoUtils";
+import { getSearchBackend } from "@/miyo/miyoUtils";
 import { CopilotSettings, getSettings, subscribeToSettingsChange } from "@/settings/model";
 import { Orama } from "@orama/orama";
-import { Notice, Platform, TFile } from "obsidian";
+import { App, Notice, Platform, TFile } from "obsidian";
 import { MiyoIndexBackend } from "./indexBackend/MiyoIndexBackend";
 import { OramaIndexBackend } from "./indexBackend/OramaIndexBackend";
 import type {
@@ -29,8 +29,10 @@ export default class VectorStoreManager {
   private oramaBackend: OramaIndexBackend;
   private miyoBackend: MiyoIndexBackend;
   private activeBackendKey: "orama" | "miyo";
+  private app: App;
 
-  private constructor() {
+  private constructor(app: App) {
+    this.app = app;
     this.embeddingsManager = EmbeddingsManager.getInstance();
     this.oramaBackend = new OramaIndexBackend(app);
     this.miyoBackend = new MiyoIndexBackend(app);
@@ -43,9 +45,19 @@ export default class VectorStoreManager {
     this.setupSettingsSubscription();
   }
 
-  static getInstance(): VectorStoreManager {
+  /**
+   * Returns the singleton. `app` is required on the first call (which creates
+   * the instance) and ignored afterward; the plugin seeds it once at load
+   * (see main.ts) so subsequent call sites can omit it.
+   */
+  static getInstance(app?: App): VectorStoreManager {
     if (!VectorStoreManager.instance) {
-      VectorStoreManager.instance = new VectorStoreManager();
+      if (!app) {
+        throw new Error(
+          "VectorStoreManager.getInstance() requires `app` on first call (seed it at plugin load)."
+        );
+      }
+      VectorStoreManager.instance = new VectorStoreManager(app);
     }
     return VectorStoreManager.instance;
   }
@@ -217,7 +229,7 @@ export default class VectorStoreManager {
    * @returns True when Miyo should be the active backend.
    */
   private shouldUseMiyo(settings: CopilotSettings): boolean {
-    return shouldUseMiyo(settings);
+    return getSearchBackend(settings) === "miyo";
   }
 
   /**
@@ -247,9 +259,9 @@ export default class VectorStoreManager {
 
     this.activeBackendKey = nextBackendKey;
     this.indexBackend = nextBackendKey === "miyo" ? this.miyoBackend : this.oramaBackend;
-    this.indexOps = new IndexOperations(app, this.indexBackend, this.embeddingsManager);
+    this.indexOps = new IndexOperations(this.app, this.indexBackend, this.embeddingsManager);
     this.eventHandler.cleanup();
-    this.eventHandler = new IndexEventHandler(app, this.indexOps, this.indexBackend);
+    this.eventHandler = new IndexEventHandler(this.app, this.indexOps, this.indexBackend);
 
     if (getSettings().debug) {
       logInfo(`VectorStoreManager: switched backend to ${nextBackendKey}`);

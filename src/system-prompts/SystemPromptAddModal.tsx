@@ -12,6 +12,7 @@ import { validatePromptName } from "@/system-prompts/systemPromptUtils";
 import { SystemPromptManager } from "@/system-prompts/systemPromptManager";
 import { EMPTY_SYSTEM_PROMPT } from "@/system-prompts/constants";
 import { useSettingsValue } from "@/settings/model";
+import { deriveSystemPromptsFolder } from "@/settings/copilotFolder";
 import { SystemPromptSyntaxInstruction } from "@/components/SystemPromptSyntaxInstruction";
 import { logError } from "@/logger";
 
@@ -69,7 +70,9 @@ interface SystemPromptAddModalContentProps {
   contentEl: HTMLElement;
 }
 
-function SystemPromptAddModalContent({
+/** Exported for testing: the modal's React body, so the derived-path banner can
+ * be asserted without mounting the Obsidian `Modal` shell. */
+export function SystemPromptAddModalContent({
   prompts,
   onConfirm,
   onCancel,
@@ -124,8 +127,8 @@ function SystemPromptAddModalContent({
         <Lightbulb className="tw-size-5 tw-shrink-0" />
         <div className="tw-flex-1">
           System prompts are automatically loaded from .md files in your system prompts folder{" "}
-          <strong>{settings.userSystemPromptsFolder}</strong>. Modifying the files will also update
-          the system prompt settings.
+          <strong>{deriveSystemPromptsFolder(settings)}</strong>. Modifying the files will also
+          update the system prompt settings.
         </div>
       </div>
 

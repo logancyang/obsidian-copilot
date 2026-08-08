@@ -1,6 +1,6 @@
 import { ProjectConfig } from "@/aiParams";
 import { ContextCache, ProjectContextCache } from "@/cache/projectContextCache";
-import type { TFile } from "obsidian";
+import type { App, TFile } from "obsidian";
 
 // Mock dependencies
 interface MockFileStat {
@@ -49,6 +49,7 @@ jest.mock("@/utils/hash", () => ({
 
 // Mock plusUtils
 jest.mock("@/plusUtils", () => ({
+  useIsPaidUser: jest.fn(),
   useIsPlusUser: jest.fn(),
   navigateToPlusPage: jest.fn(),
 }));
@@ -160,7 +161,7 @@ describe("ProjectContextCache", () => {
     mockApp.vault.adapter.write.mockResolvedValue(undefined);
 
     // Get actual instance and clear any existing cache
-    projectContextCache = ProjectContextCache.getInstance();
+    projectContextCache = ProjectContextCache.getInstance(mockApp as unknown as App);
 
     // Mock project with minimal properties for testing
     mockProject = {

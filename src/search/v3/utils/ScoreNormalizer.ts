@@ -1,4 +1,4 @@
-import { NoteIdRank, SearchExplanation } from "../interfaces";
+import { NoteIdRank, SearchExplanation } from "@/search/v3/interfaces";
 
 /**
  * Configuration for score normalization

@@ -2,6 +2,7 @@ import { App, TFile } from "obsidian";
 import { ChatMessage } from "@/types/message";
 import { logInfo, logError, logWarn } from "@/logger";
 import { getSettings } from "@/settings/model";
+import { getEffectiveMemoryFolder } from "@/settings/copilotFolder";
 import { ensureFolderExists } from "@/utils";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
@@ -26,9 +27,13 @@ export class UserMemoryManager {
    */
   private async loadMemory(): Promise<void> {
     try {
+      // One folder for both reads: resolving twice could pair a recent-history
+      // file from one root with saved memories from another if the root moves
+      // between them.
+      const memoryFolder = getEffectiveMemoryFolder();
       // Load recent conversations
       const recentConversationsFile = this.app.vault.getAbstractFileByPath(
-        this.getRecentConversationFilePath()
+        this.getRecentConversationFilePath(memoryFolder)
       );
       if (recentConversationsFile instanceof TFile) {
         this.recentConversationsContent = await this.app.vault.read(recentConversationsFile);
@@ -39,7 +44,7 @@ export class UserMemoryManager {
 
       // Load saved memories
       const savedMemoriesFile = this.app.vault.getAbstractFileByPath(
-        this.getSavedMemoriesFilePath()
+        this.getSavedMemoriesFilePath(memoryFolder)
       );
       if (savedMemoriesFile instanceof TFile) {
         this.savedMemoriesContent = await this.app.vault.read(savedMemoriesFile);
@@ -83,7 +88,7 @@ export class UserMemoryManager {
   async updateSavedMemory(
     query: string,
     chatModel: BaseChatModel
-  ): Promise<{ content?: string; error?: string }> {
+  ): Promise<{ content?: string; error?: string; filePath?: string }> {
     const settings = getSettings();
 
     // Only proceed if saved memory is enabled
@@ -100,15 +105,19 @@ export class UserMemoryManager {
     }
 
     try {
-      // Ensure user memory folder exists
-      await this.ensureMemoryFolderExists();
+      // Captured BEFORE the model call, unlike the recent-conversation path:
+      // this is a read-modify-write whose model output is derived from THIS
+      // file's existing content, so redirecting the write to a root that
+      // changed meanwhile would overwrite that file with a foreign snapshot.
+      const memoryFolder = getEffectiveMemoryFolder();
+      await this.ensureMemoryFolderExists(memoryFolder);
       // Add to saved memories file
-      const result = await this.updateSavedMemoryFile(
-        this.getSavedMemoriesFilePath(),
-        query,
-        chatModel
-      );
-      return result;
+      const filePath = this.getSavedMemoriesFilePath(memoryFolder);
+      const result = await this.updateSavedMemoryFile(filePath, query, chatModel);
+      // Report the path actually written, not a re-resolved one: the root can
+      // move during the model call, and a caller resolving it afterwards would
+      // name a file this write never touched.
+      return { ...result, filePath };
     } catch (error) {
       return {
         error: "Error saving memory: " + (error instanceof Error ? error.message : String(error)),
@@ -195,9 +204,6 @@ export class UserMemoryManager {
 
     this.isUpdatingMemory = true;
     try {
-      // Ensure user memory folder exists
-      await this.ensureMemoryFolderExists();
-
       if (!chatModel) {
         logError("[UserMemoryManager] No chat model available, skipping memory update");
         return;
@@ -210,8 +216,14 @@ export class UserMemoryManager {
 
       // Extract and save conversation summary to recent conversations
       const conversationSection = await this.createConversationSection(messages, chatModel);
+      // Resolve the folder AFTER the model call, not before: a Copilot root
+      // change during it moves the memory folder, and the summary does not
+      // depend on the old location — so the current root is where the user
+      // expects it, and ensuring the same value we write guarantees it exists.
+      const memoryFolder = getEffectiveMemoryFolder();
+      await this.ensureMemoryFolderExists(memoryFolder);
       await this.addToRecentConversationsFile(
-        this.getRecentConversationFilePath(),
+        this.getRecentConversationFilePath(memoryFolder),
         conversationSection
       );
     } catch (error) {
@@ -222,23 +234,25 @@ export class UserMemoryManager {
   }
 
   /**
-   * Ensure the user memory folder exists
+   * Ensure the memory folder an operation has committed to exists.
+   *
+   * Takes the folder rather than resolving it so an operation cannot ensure one
+   * directory and then write into another: the memory folder derives from the
+   * Copilot root, which the user can move mid-operation. Mirrors the snapshot
+   * discipline the chat-save paths already use.
+   *
+   * @param memoryFolder - Folder this operation resolved once and will write to.
    */
-  private async ensureMemoryFolderExists(): Promise<void> {
-    const settings = getSettings();
-    const memoryFolderPath = settings.memoryFolderName;
-
-    await ensureFolderExists(memoryFolderPath);
+  private async ensureMemoryFolderExists(memoryFolder: string): Promise<void> {
+    await ensureFolderExists(this.app.vault, memoryFolder);
   }
 
-  private getRecentConversationFilePath(): string {
-    const settings = getSettings();
-    return `${settings.memoryFolderName}/Recent Conversations.md`;
+  private getRecentConversationFilePath(memoryFolder = getEffectiveMemoryFolder()): string {
+    return `${memoryFolder}/Recent Conversations.md`;
   }
 
-  public getSavedMemoriesFilePath(): string {
-    const settings = getSettings();
-    return `${settings.memoryFolderName}/Saved Memories.md`;
+  public getSavedMemoriesFilePath(memoryFolder = getEffectiveMemoryFolder()): string {
+    return `${memoryFolder}/Saved Memories.md`;
   }
 
   /**

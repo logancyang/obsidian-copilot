@@ -1,5 +1,5 @@
 import React from "react";
-import { render, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import ChatSingleMessage, {
   normalizeFootnoteRendering,
 } from "@/components/chat-components/ChatSingleMessage";
@@ -19,6 +19,7 @@ jest.mock("@/settings/model", () => ({
       },
     ],
   })),
+  getSettings: jest.fn(() => ({ debug: false })),
 }));
 
 jest.mock("@/aiParams", () => ({
@@ -36,18 +37,26 @@ jest.mock("@/LLMProviders/chainRunner/utils/citationUtils", () => ({
 }));
 
 jest.mock("obsidian", () => {
-  const renderMarkdown = jest.fn().mockResolvedValue(undefined);
+  // Mirrors the modern `MarkdownRenderer.render(app, md, el, sourcePath, component)`
+  // signature — `md` is the second argument, not the first.
+  const render = jest.fn().mockResolvedValue(undefined);
   return {
     MarkdownRenderer: {
-      renderMarkdown,
+      render,
     },
     Component: class {
       load() {}
       unload() {}
+      register(_cb: () => void) {}
     },
     MarkdownView: class {},
     TFile: class {},
     App: class {},
+    ItemView: class {
+      // eslint-disable-next-line obsidianmd/prefer-active-doc -- jsdom mock creating the root containerEl; single realm, no owner element to derive `.doc` from
+      containerEl = document.createElement("div");
+    },
+    WorkspaceLeaf: class {},
     Platform: {
       isMobile: false,
     },
@@ -59,12 +68,12 @@ jest.mock("obsidian", () => {
         /* noop */
       }
     },
-    __renderMarkdownMock: renderMarkdown,
+    __renderMock: render,
   };
 });
 
-const { __renderMarkdownMock: renderMarkdownMock } = jest.requireMock<{
-  __renderMarkdownMock: jest.Mock;
+const { __renderMock: renderMarkdownMock } = jest.requireMock<{
+  __renderMock: jest.Mock;
 }>("obsidian");
 
 // ---------------------------------------------------------------------------
@@ -123,7 +132,7 @@ describe("think block rendering — closing tags are not consumed by indented co
     const messageText = `<think>${thinkContent}</think>Here is my answer.`;
 
     const capturedMarkdown: string[] = [];
-    renderMarkdownMock.mockImplementation(async (md: string, el: HTMLElement) => {
+    renderMarkdownMock.mockImplementation(async (_app: unknown, md: string, el: HTMLElement) => {
       capturedMarkdown.push(md);
       el.textContent = "rendered";
     });
@@ -149,7 +158,7 @@ describe("think block rendering — closing tags are not consumed by indented co
     const messageText = `<think>${thinkContent}</think>Response text.`;
 
     const capturedMarkdown: string[] = [];
-    renderMarkdownMock.mockImplementation(async (md: string, el: HTMLElement) => {
+    renderMarkdownMock.mockImplementation(async (_app: unknown, md: string, el: HTMLElement) => {
       capturedMarkdown.push(md);
       el.textContent = "rendered";
     });
@@ -175,7 +184,7 @@ describe("think block rendering — closing tags are not consumed by indented co
     const messageText = "<think>Thinking:\n    *   Still streaming.";
 
     const capturedMarkdown: string[] = [];
-    renderMarkdownMock.mockImplementation(async (md: string, el: HTMLElement) => {
+    renderMarkdownMock.mockImplementation(async (_app: unknown, md: string, el: HTMLElement) => {
       capturedMarkdown.push(md);
       el.textContent = "rendered";
     });
@@ -283,10 +292,11 @@ describe("ChatSingleMessage", () => {
   });
 
   it("normalizes rendered footnotes for assistant messages", async () => {
-    renderMarkdownMock.mockImplementation(async (_markdown: string, el: HTMLElement) => {
-      el.append(
-        ...new DOMParser().parseFromString(
-          `
+    renderMarkdownMock.mockImplementation(
+      async (_app: unknown, _markdown: string, el: HTMLElement) => {
+        el.append(
+          ...new DOMParser().parseFromString(
+            `
         <p>Example <sup><a href="#fn-2">2-1</a></sup></p>
         <hr class="content-hr" />
         <div class="footnotes">
@@ -298,10 +308,11 @@ describe("ChatSingleMessage", () => {
           </ol>
         </div>
       `,
-          "text/html"
-        ).body.children
-      );
-    });
+            "text/html"
+          ).body.children
+        );
+      }
+    );
 
     const { container } = render(
       <TooltipProvider>
@@ -322,5 +333,57 @@ describe("ChatSingleMessage", () => {
     expect(messageSegment?.querySelector(".footnote-backref")).toBeNull();
     expect(messageSegment?.querySelector(".content-hr")).not.toBeNull();
     expect(messageSegment?.querySelector('a[href="#fn-2"]')?.textContent).toBe("2");
+  });
+
+  it("marks rendered text segments with markdown-rendered for native reading-view styling", async () => {
+    const { container } = render(
+      <TooltipProvider>
+        <ChatSingleMessage
+          message={baseMessage}
+          app={createAppStub()}
+          isStreaming={false}
+          onDelete={() => {}}
+        />
+      </TooltipProvider>
+    );
+
+    await waitFor(() => expect(renderMarkdownMock).toHaveBeenCalled());
+
+    const messageSegment = container.querySelector(".message-segment");
+    expect(messageSegment).toBeTruthy();
+    expect(messageSegment?.classList.contains("markdown-rendered")).toBe(true);
+  });
+
+  it("shows supplied Agent Mode metadata instead of the timestamp in the response footer", async () => {
+    const timestamp = "2026/08/07 20:31:10";
+    const { rerender } = render(
+      <TooltipProvider>
+        <ChatSingleMessage
+          message={{ ...baseMessage, timestamp: { epoch: 1, display: timestamp, fileName: "now" } }}
+          app={createAppStub()}
+          isStreaming={false}
+          footerStart={<span>Worked for 24s</span>}
+        />
+      </TooltipProvider>
+    );
+
+    await waitFor(() => expect(renderMarkdownMock).toHaveBeenCalled());
+
+    const duration = screen.getByText("Worked for 24s");
+    const footer = duration.closest(".tw-justify-between");
+    expect(footer?.classList.contains("tw-items-center")).toBe(true);
+    expect(footer?.contains(screen.getByTitle("Copy"))).toBe(true);
+    expect(screen.queryByText(timestamp)).toBeNull();
+
+    rerender(
+      <TooltipProvider>
+        <ChatSingleMessage
+          message={{ ...baseMessage, timestamp: { epoch: 1, display: timestamp, fileName: "now" } }}
+          app={createAppStub()}
+          isStreaming={false}
+        />
+      </TooltipProvider>
+    );
+    expect(screen.getByText(timestamp)).toBeTruthy();
   });
 });

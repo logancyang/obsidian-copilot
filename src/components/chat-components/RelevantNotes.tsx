@@ -1,37 +1,34 @@
-import { Badge } from "@/components/ui/badge";
+import { useIndexingProgress } from "@/aiParams";
+import { SemanticSearchToggleModal } from "@/components/modals/SemanticSearchToggleModal";
 import { Button } from "@/components/ui/button";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
+import { Progress } from "@/components/ui/progress";
 import { useApp } from "@/context";
-import { HelpTooltip } from "@/components/ui/help-tooltip";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { useChatInput } from "@/context/ChatInputContext";
 import { useActiveFile } from "@/hooks/useActiveFile";
 import { useNoteDrag } from "@/hooks/useNoteDrag";
 import { cn } from "@/lib/utils";
 import { logError, logWarn } from "@/logger";
-import { SemanticSearchToggleModal } from "@/components/modals/SemanticSearchToggleModal";
-import { shouldUseMiyo } from "@/miyo/miyoUtils";
-import {
-  findRelevantNotes,
-  getSimilarityCategory,
-  RelevantNoteEntry,
-} from "@/search/findRelevantNotes";
+import { getSearchBackend } from "@/miyo/miyoUtils";
+import { findRelevantNotes, RelevantNoteEntry } from "@/search/findRelevantNotes";
 import { onIndexChanged } from "@/search/indexSignal";
+import { getMatchingPatterns, shouldIndexFile } from "@/search/searchUtils";
+import { useSettingsValue } from "@/settings/model";
 import {
   ArrowRight,
-  ChevronDown,
-  ChevronRight,
-  ChevronUp,
+  EyeOff,
   FileInput,
   FileOutput,
+  FileText,
+  GitFork,
+  Loader2,
   PlusCircle,
-  RefreshCcw,
+  RefreshCw,
 } from "lucide-react";
-import { Notice, TFile } from "obsidian";
-import React, { memo, useCallback, useEffect, useState } from "react";
+import { TFile } from "obsidian";
+import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
 
 function useRelevantNotes(refresher: number) {
+  const app = useApp();
   const [relevantNotes, setRelevantNotes] = useState<RelevantNoteEntry[]>([]);
   const [signalTick, setSignalTick] = useState(0);
   const activeFile = useActiveFile();
@@ -42,7 +39,7 @@ function useRelevantNotes(refresher: number) {
     async function fetchNotes() {
       if (!activeFile?.path) return;
       try {
-        const notes = await findRelevantNotes({ filePath: activeFile.path });
+        const notes = await findRelevantNotes({ app, filePath: activeFile.path });
         setRelevantNotes(notes);
       } catch (error) {
         logWarn("Failed to fetch relevant notes", error);
@@ -51,7 +48,7 @@ function useRelevantNotes(refresher: number) {
     }
 
     void fetchNotes();
-  }, [activeFile?.path, refresher, signalTick]);
+  }, [app, activeFile?.path, refresher, signalTick]);
 
   return relevantNotes;
 }
@@ -70,7 +67,7 @@ function useHasIndex(notePath: string, refresher: number) {
         const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
         const { getSettings } = await import("@/settings/model");
         const settings = getSettings();
-        const useMiyo = shouldUseMiyo(settings);
+        const useMiyo = getSearchBackend(settings) === "miyo";
 
         if (useMiyo) {
           const isEmpty = await VectorStoreManager.getInstance().isIndexEmpty();
@@ -90,30 +87,68 @@ function useHasIndex(notePath: string, refresher: number) {
   return hasIndex;
 }
 
-function SimilarityBadge({ score }: { score: number }) {
-  const category = getSimilarityCategory(score);
-  let text = "🔴";
-  if (category === 2) text = "🟠";
-  if (category === 3) text = "🟢";
-  return <span className="tw-text-sm">{text}</span>;
+/** Map a 0–1 similarity score directly to the meter fill width (70% → 70%). */
+function meterWidth(score: number): string {
+  return `${Math.max(0, Math.min(100, score * 100))}%`;
 }
 
-function RelevantNote({
+/** Color-grade the meter: stronger matches lean fully into the theme accent. */
+function meterColor(score: number): string {
+  const pct = score * 100;
+  const k = Math.max(0, Math.min(1, (pct - 30) / 45));
+  return `color-mix(in srgb, var(--interactive-accent) ${Math.round(40 + 60 * k)}%, var(--text-faint))`;
+}
+
+function RelevanceMeter({ score, className }: { score: number; className?: string }) {
+  return (
+    <div
+      className={cn(
+        "tw-h-[3px] tw-w-full tw-overflow-hidden tw-rounded-full tw-bg-modifier-hover",
+        className
+      )}
+    >
+      <div
+        className={cn("copilot-relevance-meter-fill tw-h-full tw-rounded-full")}
+        style={
+          {
+            "--relevance-meter-fill": meterWidth(score),
+            "--relevance-meter-color": meterColor(score),
+          } as React.CSSProperties
+        }
+      />
+    </div>
+  );
+}
+
+function LinkBadge({ icon, label }: { icon: React.ReactNode; label: string }) {
+  return (
+    <span
+      title={label}
+      className="tw-flex tw-items-center tw-justify-center tw-rounded-sm tw-bg-modifier-hover tw-p-1 tw-text-faint"
+    >
+      {icon}
+    </span>
+  );
+}
+
+function RelevantNoteHoverCard({
   note,
   onAddToChat,
   onNavigateToNote,
+  children,
 }: {
   note: RelevantNoteEntry;
   onAddToChat: () => void;
-  onNavigateToNote: (openInNewLeaf: boolean) => void;
+  onNavigateToNote: () => void;
+  children: React.ReactNode;
 }) {
   const app = useApp();
-  const [isOpen, setIsOpen] = useState(false);
+  const [open, setOpen] = useState(false);
   const [fileContent, setFileContent] = useState<string | null>(null);
-  const handleDragStart = useNoteDrag();
+  const similarity = note.metadata.similarityScore;
 
   const loadContent = useCallback(async () => {
-    if (fileContent) return; // Don't load if we already have content
+    if (fileContent) return; // Don't reload once cached
     const file = app.vault.getAbstractFileByPath(note.note.path);
     if (file instanceof TFile) {
       const content = await app.vault.cachedRead(file);
@@ -127,39 +162,119 @@ function RelevantNote({
         }
       }
 
-      // Take first 1000 characters as preview
-      setFileContent(cleanContent.slice(0, 1000) + (cleanContent.length > 1000 ? "..." : ""));
+      setFileContent(cleanContent);
     }
   }, [app, fileContent, note.note.path]);
 
   useEffect(() => {
-    if (isOpen) {
+    if (open) {
       void loadContent();
     }
-  }, [isOpen, loadContent]);
+  }, [open, loadContent]);
 
   return (
-    <Collapsible
-      open={isOpen}
-      onOpenChange={setIsOpen}
-      className="tw-rounded-md tw-border tw-border-solid tw-border-border"
-    >
-      <div className={cn("tw-flex tw-items-center tw-justify-between tw-gap-2 tw-p-2")}>
-        <Button variant="ghost2" size="icon" className="tw-shrink-0" asChild>
-          <CollapsibleTrigger>
-            <ChevronRight
-              className={cn("tw-size-4 tw-transition-transform tw-duration-200", {
-                "rotate-90": isOpen,
-              })}
-            />
-          </CollapsibleTrigger>
-        </Button>
-
-        <div className="tw-flex tw-shrink-0 tw-items-center tw-gap-2">
-          <SimilarityBadge score={note.metadata.similarityScore ?? 0} />
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverAnchor asChild>
+        <div onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
+          {children}
+        </div>
+      </PopoverAnchor>
+      <PopoverContent
+        side="left"
+        align="start"
+        sideOffset={0}
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+        onOpenAutoFocus={(e) => e.preventDefault()}
+        className="tw-flex tw-w-fit tw-min-w-72 tw-max-w-96 tw-flex-col tw-gap-3 tw-overflow-hidden tw-p-3"
+      >
+        <div className="tw-flex tw-flex-col tw-gap-1">
+          <span className="tw-text-sm tw-font-semibold tw-text-normal">{note.note.title}</span>
+          <span className="tw-flex tw-items-center tw-gap-1.5 tw-text-xs tw-text-faint">
+            <FileText className="tw-size-3.5 tw-shrink-0" />
+            <span className="tw-truncate">{note.note.path}</span>
+          </span>
         </div>
 
-        <div className="tw-flex-1 tw-overflow-hidden">
+        {fileContent && (
+          <p className="tw-m-0 tw-max-h-64 tw-overflow-y-auto tw-whitespace-pre-line tw-text-xs tw-leading-normal tw-text-muted">
+            {fileContent}
+          </p>
+        )}
+
+        {similarity != null && (
+          <div className="tw-flex tw-items-center tw-gap-2">
+            <span className="tw-shrink-0 tw-text-xs tw-text-faint">Similarity</span>
+            <RelevanceMeter score={similarity} className="tw-h-1 tw-flex-1" />
+            <span className="tw-shrink-0 tw-text-xs tw-font-medium tw-tabular-nums tw-text-normal">
+              {(similarity * 100).toFixed(1)}%
+            </span>
+          </div>
+        )}
+
+        {(note.metadata.hasOutgoingLinks || note.metadata.hasBacklinks) && (
+          <div className="tw-flex tw-items-center tw-gap-4 tw-text-xs tw-text-faint">
+            {note.metadata.hasOutgoingLinks && (
+              <span className="tw-flex tw-items-center tw-gap-1">
+                <FileOutput className="tw-size-3.5" />
+                Outgoing links
+              </span>
+            )}
+            {note.metadata.hasBacklinks && (
+              <span className="tw-flex tw-items-center tw-gap-1">
+                <FileInput className="tw-size-3.5" />
+                Backlinks
+              </span>
+            )}
+          </div>
+        )}
+
+        <div className="tw-flex tw-gap-2">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={onAddToChat}
+            className="tw-flex-1 tw-gap-1.5"
+          >
+            <PlusCircle className="tw-size-4" />
+            Add to Chat
+          </Button>
+          <Button
+            variant="default"
+            size="sm"
+            onClick={onNavigateToNote}
+            className="tw-flex-1 tw-gap-1.5"
+          >
+            Open note
+            <ArrowRight className="tw-size-4" />
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function RelevantNoteRow({
+  note,
+  onAddToChat,
+  onNavigateToNote,
+}: {
+  note: RelevantNoteEntry;
+  onAddToChat: () => void;
+  onNavigateToNote: () => void;
+}) {
+  const app = useApp();
+  const handleDragStart = useNoteDrag();
+  const similarity = note.metadata.similarityScore;
+
+  return (
+    <RelevantNoteHoverCard
+      note={note}
+      onAddToChat={onAddToChat}
+      onNavigateToNote={onNavigateToNote}
+    >
+      <div className="tw-group tw-rounded-md tw-px-2.5 tw-py-1.5 tw-transition-colors hover:tw-bg-modifier-hover">
+        <div className="tw-flex tw-min-h-6 tw-items-center tw-gap-2">
           <a
             draggable
             onDragStart={(e) => {
@@ -170,137 +285,156 @@ function RelevantNote({
             }}
             onClick={(e) => {
               e.preventDefault();
-              const openInNewLeaf = e.metaKey || e.ctrlKey;
-              onNavigateToNote(openInNewLeaf);
+              onNavigateToNote();
             }}
             onAuxClick={(e) => {
               if (e.button === 1) {
-                // Middle click
                 e.preventDefault();
-                onNavigateToNote(true);
+                onNavigateToNote();
               }
             }}
-            className="tw-block tw-w-full tw-truncate tw-text-sm tw-font-bold tw-text-normal"
-            title={`${note.note.title} - drag to insert wikilink`}
+            className="tw-min-w-0 tw-flex-1 tw-cursor-pointer tw-truncate tw-text-sm tw-font-medium tw-text-normal !tw-no-underline"
           >
             {note.note.title}
           </a>
-        </div>
 
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="ghost2" size="icon" onClick={onAddToChat} className="tw-shrink-0">
+          <div className="tw-flex tw-shrink-0 tw-items-center tw-gap-1.5 group-hover:tw-hidden">
+            {note.metadata.hasOutgoingLinks && (
+              <LinkBadge icon={<FileOutput className="tw-size-3" />} label="Outgoing link" />
+            )}
+            {note.metadata.hasBacklinks && (
+              <LinkBadge icon={<FileInput className="tw-size-3" />} label="Backlink" />
+            )}
+            {similarity != null && (
+              <span className="tw-text-xs tw-font-medium tw-tabular-nums tw-text-muted">
+                {Math.round(similarity * 100)}%
+              </span>
+            )}
+          </div>
+
+          <div className="tw-hidden tw-shrink-0 tw-items-center tw-gap-0.5 group-hover:tw-flex">
+            <Button
+              variant="ghost2"
+              size="icon"
+              title="Add to Chat"
+              className="tw-size-6 tw-p-0"
+              onClick={(e) => {
+                e.stopPropagation();
+                onAddToChat();
+              }}
+            >
               <PlusCircle className="tw-size-4" />
             </Button>
-          </TooltipTrigger>
-          <TooltipContent>Add to Chat</TooltipContent>
-        </Tooltip>
-      </div>
-
-      <CollapsibleContent>
-        <div className="tw-border-[0px] tw-border-t tw-border-solid tw-border-border tw-px-4 tw-py-2">
-          <div className="tw-whitespace-pre-wrap tw-text-wrap tw-break-all tw-text-xs tw-text-muted tw-opacity-75">
-            {note.note.path}
+            <Button
+              variant="ghost2"
+              size="icon"
+              title="Open note"
+              className="tw-size-6 tw-p-0"
+              onClick={(e) => {
+                e.stopPropagation();
+                onNavigateToNote();
+              }}
+            >
+              <ArrowRight className="tw-size-4" />
+            </Button>
           </div>
-          {fileContent && (
-            <div className="tw-overflow-hidden tw-whitespace-pre-wrap tw-border-t tw-border-border tw-pb-4 tw-pt-2 tw-text-xs tw-text-normal">
-              {fileContent}
-            </div>
-          )}
         </div>
 
-        <div className="tw-flex tw-items-center tw-gap-4 tw-border-[0px] tw-border-t tw-border-solid tw-border-border tw-px-4 tw-py-2 tw-text-xs tw-text-muted">
-          {note.metadata.similarityScore != null && (
-            <div className="tw-flex tw-items-center tw-gap-1">
-              <span>Similarity: {(note.metadata.similarityScore * 100).toFixed(1)}%</span>
-            </div>
-          )}
-          {note.metadata.hasOutgoingLinks && (
-            <div className="tw-flex tw-items-center tw-gap-1">
-              <FileOutput className="tw-size-4" />
-              <span>Outgoing links</span>
-            </div>
-          )}
-          {note.metadata.hasBacklinks && (
-            <div className="tw-flex tw-items-center tw-gap-1">
-              <FileInput className="tw-size-4" />
-              <span>Backlinks</span>
-            </div>
-          )}
-        </div>
-      </CollapsibleContent>
-    </Collapsible>
+        {similarity != null && <RelevanceMeter score={similarity} className="tw-mt-1.5" />}
+      </div>
+    </RelevantNoteHoverCard>
   );
 }
 
-function RelevantNotePopover({
-  note,
-  onAddToChat,
-  onNavigateToNote,
-  children,
+function RelevantNotesToolbar({
+  activeFileName,
+  isBuilding,
+  onBuild,
 }: {
-  note: RelevantNoteEntry;
-  onAddToChat: () => void;
-  onNavigateToNote: (openInNewLeaf: boolean) => void;
-  children: React.ReactNode;
+  activeFileName: string | undefined;
+  isBuilding: boolean;
+  onBuild: () => void;
 }) {
   return (
-    <Popover key={note.note.path}>
-      <PopoverTrigger asChild>{children}</PopoverTrigger>
-      <PopoverContent className="tw-flex tw-w-fit tw-min-w-72 tw-max-w-96 tw-flex-col tw-gap-2 tw-overflow-hidden">
-        <span className="tw-text-sm tw-text-normal">{note.note.title}</span>
-        <span className="tw-text-xs tw-text-muted">{note.note.path}</span>
-        <div className="tw-flex tw-gap-2">
-          <button
-            type="button"
-            onClick={onAddToChat}
-            className="tw-inline-flex tw-items-center tw-gap-2 tw-border tw-border-solid tw-border-border !tw-bg-transparent !tw-shadow-none hover:!tw-bg-interactive-hover"
-          >
-            Add to Chat <PlusCircle className="tw-size-4" />
-          </button>
-          <button
-            type="button"
-            onClick={(e) => {
-              const openInNewLeaf = e.metaKey || e.ctrlKey;
-              onNavigateToNote(openInNewLeaf);
-            }}
-            className="tw-inline-flex tw-items-center tw-gap-2 tw-border tw-border-solid tw-border-border !tw-bg-transparent !tw-shadow-none hover:!tw-bg-interactive-hover"
-          >
-            Navigate to Note <ArrowRight className="tw-size-4" />
-          </button>
-        </div>
-      </PopoverContent>
-    </Popover>
+    <div className="tw-flex tw-flex-none tw-items-center tw-gap-2 tw-border-[0px] tw-border-b tw-border-solid tw-border-border tw-px-3 tw-py-2">
+      <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-1.5 tw-text-xs tw-text-faint">
+        <span className="tw-shrink-0">Relevant to</span>
+        {activeFileName ? (
+          <span className="tw-flex tw-min-w-0 tw-items-center tw-gap-1 tw-text-muted">
+            <FileText className="tw-size-3.5 tw-shrink-0" />
+            <span className="tw-truncate tw-font-medium tw-text-normal">{activeFileName}</span>
+          </span>
+        ) : (
+          <span className="tw-text-muted">—</span>
+        )}
+      </div>
+      <Button
+        variant="secondary"
+        size="sm"
+        disabled={isBuilding}
+        onClick={onBuild}
+        className="tw-ml-auto tw-shrink-0 tw-gap-1.5"
+      >
+        <RefreshCw className={cn("tw-size-3.5", isBuilding && "tw-animate-spin")} />
+        {isBuilding ? "Building…" : "Build index"}
+      </Button>
+    </div>
   );
+}
+
+function BuildOverlay({ indexedCount, totalFiles }: { indexedCount: number; totalFiles: number }) {
+  const progress = totalFiles > 0 ? Math.round((indexedCount / totalFiles) * 100) : 0;
+  return (
+    <div className="tw-absolute tw-inset-0 tw-flex tw-flex-col tw-items-center tw-justify-center tw-gap-4 tw-px-10 tw-text-center tw-backdrop-blur-sm tw-bg-primary/90">
+      <Loader2 className="tw-size-6 tw-animate-spin tw-text-accent" />
+      <span className="tw-text-sm tw-font-semibold tw-text-normal">Indexing your vault</span>
+      <Progress value={progress} className="tw-h-1 tw-w-48" />
+      {totalFiles > 0 && (
+        <span className="tw-text-xs tw-tabular-nums tw-text-faint">
+          {indexedCount} / {totalFiles} notes embedded
+        </span>
+      )}
+    </div>
+  );
+}
+
+interface RelevantNotesProps {
+  className?: string;
+  /** Insert text (a `[[wikilink]]`) into the target chat input. */
+  onAddToChat: (text: string) => void;
 }
 
 export const RelevantNotes = memo(
-  ({ className, defaultOpen = false }: { className?: string; defaultOpen?: boolean }) => {
+  ({ className, onAddToChat }: RelevantNotesProps): React.ReactElement => {
     const app = useApp();
     const [refresher, setRefresher] = useState(0);
-    const [isOpen, setIsOpen] = useState(defaultOpen);
     const relevantNotes = useRelevantNotes(refresher);
     const activeFile = useActiveFile();
-    const chatInput = useChatInput();
     const hasIndex = useHasIndex(activeFile?.path ?? "", refresher);
-    const handleDragStart = useNoteDrag();
-    const navigateToNote = (notePath: string, openInNewLeaf = false) => {
+    const [indexingState] = useIndexingProgress();
+    const settings = useSettingsValue();
+
+    // The active note itself is excluded from the index (by the QA
+    // inclusion/exclusion settings or an internal exclusion), so no relevant
+    // notes can ever be computed for it — surface that instead of a build
+    // prompt or a bare "none found".
+    const isActiveFileExcluded = useMemo(() => {
+      if (!activeFile) return false;
+      const { inclusions, exclusions } = getMatchingPatterns({
+        inclusions: settings.qaInclusions,
+        exclusions: settings.qaExclusions,
+      });
+      return !shouldIndexFile(app, activeFile, inclusions, exclusions);
+    }, [app, activeFile, settings.qaInclusions, settings.qaExclusions]);
+    const navigateToNote = (notePath: string) => {
       const file = app.vault.getAbstractFileByPath(notePath);
       if (file instanceof TFile) {
-        const leaf = app.workspace.getLeaf(openInNewLeaf);
+        const leaf = app.workspace.getLeaf(true);
         void leaf.openFile(file).catch((err) => logError("openFile failed", err));
       }
     };
     const addToChat = (prompt: string) => {
-      chatInput.insertTextWithPills(`[[${prompt}]]`, true);
-    };
-    const refreshIndex = async () => {
-      if (activeFile) {
-        const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
-        await VectorStoreManager.getInstance().reindexFile(activeFile);
-        new Notice(`Refreshed index for ${activeFile.basename}`);
-        setRefresher(refresher + 1);
-      }
+      onAddToChat(`[[${prompt}]]`);
     };
 
     const handleBuildIndex = async () => {
@@ -332,100 +466,95 @@ export const RelevantNotes = memo(
     };
 
     return (
-      <div
-        className={cn(
-          "tw-w-full tw-border tw-border-solid tw-border-transparent tw-border-b-border tw-pb-2",
-          className
-        )}
-      >
-        <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-          <div className="tw-flex tw-items-center tw-justify-between tw-pb-2 tw-pl-1">
-            <div className="tw-flex tw-flex-1 tw-items-center tw-gap-2">
-              <span className="tw-font-semibold tw-text-normal">Relevant Notes</span>
-              <HelpTooltip
-                content="Relevance is a combination of semantic similarity and links. Requires semantic search setting on."
-                contentClassName="tw-w-64"
-                buttonClassName="tw-size-4 tw-text-muted"
-              />
-            </div>
-            <div className="tw-flex tw-items-center">
-              {hasIndex ? (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button variant="ghost2" size="icon" onClick={() => void refreshIndex()}>
-                      <RefreshCcw className="tw-size-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom">Reindex Current Note</TooltipContent>
-                </Tooltip>
-              ) : (
-                <Button variant="secondary" size="sm" onClick={() => void handleBuildIndex()}>
-                  Build Index
-                </Button>
-              )}
-              {relevantNotes.length > 0 && (
-                <CollapsibleTrigger asChild>
-                  <Button variant="ghost2" size="icon">
-                    {isOpen ? (
-                      <ChevronUp className="tw-size-5" />
-                    ) : (
-                      <ChevronDown className="tw-size-5" />
-                    )}
-                  </Button>
-                </CollapsibleTrigger>
-              )}
+      <div className={cn("tw-flex tw-min-h-full tw-w-full tw-flex-1 tw-flex-col", className)}>
+        {isActiveFileExcluded && (
+          <div
+            data-relevant-notes-empty-state
+            className="tw-flex tw-flex-1 tw-flex-col tw-items-center tw-justify-center tw-px-6"
+          >
+            <div className="tw-flex tw-w-full tw-max-w-xs tw-flex-col tw-items-center tw-gap-6 tw-text-center">
+              <div className="tw-flex tw-size-16 tw-items-center tw-justify-center tw-rounded-xl tw-border tw-border-solid tw-border-border tw-bg-secondary">
+                <EyeOff className="tw-size-7 tw-text-muted" />
+              </div>
+              <div className="tw-flex tw-flex-col tw-gap-1.5">
+                <span className="tw-text-lg tw-font-semibold tw-text-normal">
+                  This note is excluded
+                </span>
+                <span className="tw-text-sm tw-text-muted">
+                  It falls outside your semantic index settings, so related notes can&apos;t be
+                  shown here. Adjust inclusions or exclusions in Copilot settings to include it.
+                </span>
+              </div>
             </div>
           </div>
-          {relevantNotes.length === 0 && hasIndex && (
-            <div className="tw-flex tw-max-h-12 tw-flex-wrap tw-items-center tw-gap-x-2 tw-gap-y-1 tw-overflow-y-hidden tw-px-1">
-              <span className="tw-text-xs tw-text-muted">No relevant notes found</span>
-            </div>
-          )}
-          {!isOpen && relevantNotes.length > 0 && (
-            <div className="tw-flex tw-max-h-6 tw-flex-wrap tw-gap-x-2 tw-gap-y-1 tw-overflow-y-hidden tw-px-1">
-              {relevantNotes.map((note) => (
-                <RelevantNotePopover
-                  key={note.note.path}
-                  note={note}
-                  onAddToChat={() => addToChat(note.note.title)}
-                  onNavigateToNote={(openInNewLeaf: boolean) =>
-                    navigateToNote(note.note.path, openInNewLeaf)
-                  }
+        )}
+
+        {!isActiveFileExcluded && !hasIndex && (
+          <div
+            data-relevant-notes-empty-state
+            className="tw-flex tw-flex-1 tw-flex-col tw-items-center tw-justify-center tw-px-6"
+          >
+            <div className="tw-flex tw-w-full tw-max-w-xs tw-flex-col tw-items-center tw-gap-6 tw-text-center">
+              <div className="tw-flex tw-size-16 tw-items-center tw-justify-center tw-rounded-xl tw-border tw-border-solid tw-border-border tw-bg-secondary">
+                <GitFork className="tw-size-7 tw-text-accent" />
+              </div>
+              <div className="tw-flex tw-flex-col tw-gap-1.5">
+                <span className="tw-text-lg tw-font-semibold tw-text-normal">
+                  No semantic index yet
+                </span>
+                <span className="tw-text-sm tw-text-muted">
+                  {"Build it once to surface notes related to whatever you're writing."}
+                </span>
+              </div>
+              <div className="tw-flex tw-w-full tw-flex-col tw-items-center tw-gap-3">
+                <Button
+                  variant="default"
+                  onClick={() => void handleBuildIndex()}
+                  className="tw-h-11 tw-w-full tw-gap-2 tw-rounded-lg"
                 >
-                  <Badge
-                    variant="outline"
-                    key={note.note.path}
-                    draggable
-                    onDragStart={(e) => {
-                      const file = app.vault.getAbstractFileByPath(note.note.path);
-                      if (file instanceof TFile) {
-                        handleDragStart(e, file);
-                      }
-                    }}
-                    className="tw-max-w-40 tw-text-xs tw-text-muted hover:tw-cursor-pointer hover:tw-bg-interactive-hover"
-                    title={`${note.note.title} - drag to insert wikilink`}
-                  >
-                    <span className="tw-truncate">{note.note.title}</span>
-                  </Badge>
-                </RelevantNotePopover>
-              ))}
+                  <GitFork className="tw-size-4" />
+                  Build index
+                </Button>
+              </div>
             </div>
-          )}
-          <CollapsibleContent>
-            <div className="tw-flex tw-max-h-screen tw-flex-col tw-gap-2 tw-overflow-y-auto tw-px-1 tw-py-2">
-              {relevantNotes.map((note) => (
-                <RelevantNote
-                  note={note}
-                  key={note.note.path}
-                  onAddToChat={() => addToChat(note.note.title)}
-                  onNavigateToNote={(openInNewLeaf: boolean) =>
-                    navigateToNote(note.note.path, openInNewLeaf)
-                  }
+          </div>
+        )}
+
+        {!isActiveFileExcluded && hasIndex && (
+          <>
+            <RelevantNotesToolbar
+              activeFileName={activeFile?.basename}
+              isBuilding={indexingState.isActive}
+              onBuild={() => void handleBuildIndex()}
+            />
+            <div className="tw-relative tw-min-h-0 tw-flex-1">
+              <div className="tw-absolute tw-inset-0 tw-overflow-y-auto tw-p-2">
+                {relevantNotes.length === 0 ? (
+                  <div className="tw-flex tw-h-full tw-items-center tw-justify-center tw-px-4 tw-text-center">
+                    <span className="tw-text-sm tw-text-muted">No relevant notes found</span>
+                  </div>
+                ) : (
+                  <div className="tw-flex tw-flex-col tw-gap-0.5">
+                    {relevantNotes.map((note) => (
+                      <RelevantNoteRow
+                        key={note.note.path}
+                        note={note}
+                        onAddToChat={() => addToChat(note.note.title)}
+                        onNavigateToNote={() => navigateToNote(note.note.path)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+              {indexingState.isActive && (
+                <BuildOverlay
+                  indexedCount={indexingState.indexedCount}
+                  totalFiles={indexingState.totalFiles}
                 />
-              ))}
+              )}
             </div>
-          </CollapsibleContent>
-        </Collapsible>
+          </>
+        )}
       </div>
     );
   }

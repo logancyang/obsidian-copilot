@@ -1,6 +1,6 @@
 import { logInfo } from "@/logger";
-import { NoteIdRank } from "../interfaces";
-import { extractNotePathFromChunkId } from "../utils/chunkIdUtils";
+import { NoteIdRank } from "@/search/v3/interfaces";
+import { extractNotePathFromChunkId } from "@/search/v3/utils/chunkIdUtils";
 
 /**
  * Configuration for adaptive score-based cutoff

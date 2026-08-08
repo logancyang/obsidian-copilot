@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-OBSIDIAN_BIN="/Applications/Obsidian.app/Contents/MacOS/obsidian"
+OBSIDIAN_BIN="${OBSIDIAN_BIN:-/Applications/Obsidian.app/Contents/MacOS/obsidian}"
 
 if [[ -z "${COPILOT_TEST_VAULT_PATH:-}" ]]; then
   cat >&2 <<'EOF'
@@ -33,8 +33,34 @@ fi
 WORKTREE_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$WORKTREE_ROOT"
 
+# Guard: refuse to run if the worktree lives inside the target vault. Otherwise
+# the build artifacts and source tree become vault content, Obsidian indexes
+# the whole repo on the next reload, and the plugin dir may coincide with the
+# worktree (deploying onto itself).
+WORKTREE_REAL="$(cd "$WORKTREE_ROOT" && pwd -P)"
+VAULT_REAL="$(cd "$VAULT_PATH" && pwd -P)"
+case "$WORKTREE_REAL" in
+  "$VAULT_REAL"|"$VAULT_REAL"/*)
+    cat >&2 <<EOF
+error: the worktree is inside the test vault — refusing to deploy.
+  worktree: $WORKTREE_REAL
+  vault:    $VAULT_REAL
+Move the worktree outside the vault, or point \$COPILOT_TEST_VAULT_PATH
+at a different vault, then re-run.
+EOF
+    exit 1
+    ;;
+esac
+
 echo "==> Installing dependencies"
 npm install --prefer-offline --no-audit --no-fund
+
+BRANCH="$(git -C "$WORKTREE_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"
+BUILD_COMMIT="$(git -C "$WORKTREE_ROOT" rev-parse --short=8 HEAD 2>/dev/null || echo unknown)"
+BUILD_STATE="clean"
+if [[ -n "$(git -C "$WORKTREE_ROOT" status --porcelain --untracked-files=normal 2>/dev/null)" ]]; then
+  BUILD_STATE="dirty"
+fi
 
 echo "==> Building plugin"
 npm run build
@@ -48,37 +74,83 @@ fi
 PLUGIN_DIR="$VAULT_PATH/.obsidian/plugins/$PLUGIN_ID"
 mkdir -p "$PLUGIN_DIR"
 
-echo "==> Linking artifacts into $PLUGIN_DIR"
+echo "==> Copying artifacts into $PLUGIN_DIR"
 for f in main.js styles.css; do
   if [[ ! -f "$WORKTREE_ROOT/$f" ]]; then
     echo "error: expected build artifact missing: $WORKTREE_ROOT/$f" >&2
     exit 1
   fi
-  ln -sfn "$WORKTREE_ROOT/$f" "$PLUGIN_DIR/$f"
+  rm -f "$PLUGIN_DIR/$f"
+  cp -f "$WORKTREE_ROOT/$f" "$PLUGIN_DIR/$f"
 done
 
-# Write a branch- and timestamp-tagged manifest.json (real file, not a symlink)
-# so Obsidian's Community plugins list visibly reflects which worktree/branch
-# is loaded and when this build was deployed.
-BRANCH="$(git -C "$WORKTREE_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"
 BUILD_TS="$(date +%Y%m%d-%H%M%S)"
-echo "==> Writing branch-tagged manifest.json (branch: $BRANCH, build: $BUILD_TS)"
 rm -f "$PLUGIN_DIR/manifest.json"
-SRC="$WORKTREE_ROOT/manifest.json" DEST="$PLUGIN_DIR/manifest.json" BRANCH="$BRANCH" BUILD_TS="$BUILD_TS" node -e '
-  const fs = require("fs");
-  const m = JSON.parse(fs.readFileSync(process.env.SRC, "utf8"));
-  m.name = m.name + " [" + process.env.BRANCH + " @ " + process.env.BUILD_TS + "]";
-  m.description = "[branch: " + process.env.BRANCH + " | build: " + process.env.BUILD_TS + "] " + m.description;
-  fs.writeFileSync(process.env.DEST, JSON.stringify(m, null, 2) + "\n");
-'
+BUILD_TAG="$(
+  SRC="$WORKTREE_ROOT/manifest.json" \
+    DEST="$PLUGIN_DIR/manifest.json" \
+    ARTIFACT_DIR="$PLUGIN_DIR" \
+    BRANCH="$BRANCH" \
+    BUILD_COMMIT="$BUILD_COMMIT" \
+    BUILD_STATE="$BUILD_STATE" \
+    BUILD_TS="$BUILD_TS" \
+    node -e '
+    const crypto = require("node:crypto");
+    const fs = require("node:fs");
+    const path = require("node:path");
+    const hash = crypto.createHash("sha256");
+    for (const file of ["main.js", "styles.css"]) {
+      hash.update(file);
+      hash.update("\0");
+      hash.update(fs.readFileSync(path.join(process.env.ARTIFACT_DIR, file)));
+      hash.update("\0");
+    }
+    const bundleSha = hash.digest("hex").slice(0, 12);
+    const buildTag = [
+      process.env.BUILD_COMMIT,
+      process.env.BUILD_STATE,
+      bundleSha,
+    ].join("-");
+    const manifest = JSON.parse(fs.readFileSync(process.env.SRC, "utf8"));
+    const versionSeparator = manifest.version.includes("+") ? "." : "+";
+    manifest.version += versionSeparator + [
+      "dev",
+      process.env.BUILD_COMMIT,
+      process.env.BUILD_STATE,
+      bundleSha,
+    ].join(".");
+    manifest.name += " [" + buildTag + "]";
+    manifest.description = [
+      "[dev build: " + buildTag,
+      "branch: " + process.env.BRANCH,
+      "built: " + process.env.BUILD_TS + "]",
+    ].join(" | ") + " " + manifest.description;
+    fs.writeFileSync(process.env.DEST, JSON.stringify(manifest, null, 2) + "\n");
+    process.stdout.write(buildTag);
+  '
+)"
+echo "==> Wrote development manifest (build: $BUILD_TAG, branch: $BRANCH)"
 
-echo "==> Reloading plugin in Obsidian"
+# Reload by toggling disable -> enable, NOT `plugin:reload`. On this setup
+# `plugin:reload` returns success but does NOT re-run the plugin's onload, so the
+# freshly deployed main.js never executes. A disable+enable cycle re-runs onload.
+#
+# CRITICAL: the Obsidian CLI picks its TARGET VAULT from the current working
+# directory (it resolves the vault enclosing $PWD; `vault=` does NOT override
+# this). So we MUST run the CLI from inside the target vault's directory, or the
+# reload silently hits whatever vault the caller's cwd sits in (e.g. the
+# repo/worktree vault) instead of the deploy target. Hence the `cd "$VAULT_PATH"`.
+echo "==> Reloading plugin in Obsidian (vault dir: $VAULT_PATH)"
 if [[ ! -x "$OBSIDIAN_BIN" ]]; then
   echo "warning: Obsidian CLI not found at $OBSIDIAN_BIN; skipping reload." >&2
 else
-  if ! "$OBSIDIAN_BIN" plugin:enable id="$PLUGIN_ID" >/dev/null 2>&1 \
-     || ! "$OBSIDIAN_BIN" plugin:reload id="$PLUGIN_ID" >/dev/null 2>&1; then
-    echo "warning: Obsidian doesn't appear to be running. Start it and the symlinked plugin will load on next open." >&2
+  ( cd "$VAULT_PATH" && "$OBSIDIAN_BIN" plugin:disable id="$PLUGIN_ID" >/dev/null 2>&1 ) || true
+  if ( cd "$VAULT_PATH" && "$OBSIDIAN_BIN" plugin:enable id="$PLUGIN_ID" >/dev/null 2>&1 ); then
+    echo "    reloaded (onload re-ran). Note: the sidebar manifest label only"
+    echo "    refreshes on a full Obsidian restart; use a dev-console marker to"
+    echo "    confirm the loaded build, not the label."
+  else
+    echo "warning: could not reload via the CLI. Is Obsidian running with this vault open? The plugin will load on next open." >&2
   fi
 fi
 
@@ -86,6 +158,7 @@ echo
 echo "Done."
 echo "  worktree: $WORKTREE_ROOT"
 echo "  branch:   $BRANCH"
-echo "  build:    $BUILD_TS"
+echo "  build:    $BUILD_TAG"
+echo "  built:    $BUILD_TS"
 echo "  vault:    $VAULT_PATH"
 echo "  plugin:   $PLUGIN_ID"

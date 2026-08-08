@@ -46,7 +46,7 @@ export default class ProjectManager {
     this.app = app;
     this.plugin = plugin;
     this.currentProjectId = null;
-    this.chainMangerInstance = new ChainManager(app);
+    this.chainMangerInstance = new ChainManager(app, plugin.modelManagement);
     this.projectContextCache = ProjectContextCache.getInstance();
     this.fileParserManager = new FileParserManager(
       BrevilabsClient.getInstance(),
@@ -778,7 +778,7 @@ modified: ${stat ? new Date(stat.mtime).toISOString() : "unknown"}`;
         webUrl,
         "web",
         async () => {
-          const result = await mention.processUrls(webUrl);
+          const result = await mention.processUrls(this.app.vault, webUrl);
 
           if (result.processedErrorUrls[webUrl]) {
             throw new Error(result.processedErrorUrls[webUrl]);
@@ -1033,7 +1033,7 @@ modified: ${stat ? new Date(stat.mtime).toISOString() : "unknown"}`;
     });
 
     return this.app.vault.getFiles().filter((file: TFile) => {
-      return shouldIndexFile(file, inclusionPatterns, exclusionPatterns, true);
+      return shouldIndexFile(this.app, file, inclusionPatterns, exclusionPatterns, true);
     });
   }
 

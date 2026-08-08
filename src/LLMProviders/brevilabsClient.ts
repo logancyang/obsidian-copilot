@@ -1,11 +1,10 @@
 import { BREVILABS_API_BASE_URL } from "@/constants";
-import { getDecryptedKey } from "@/encryptionService";
 import { MissingPlusLicenseError } from "@/error";
 import { logInfo } from "@/logger";
-import { turnOffPlus, turnOnPlus } from "@/plusUtils";
+import { applyEntitlement, markPaidPendingEntitlement, turnOffPaid } from "@/plusUtils";
 import { getSettings } from "@/settings/model";
 import { arrayBufferToBase64 } from "@/utils/base64";
-import { requestUrl } from "obsidian";
+import { App, requestUrl } from "obsidian";
 
 /**
  * Build a multipart/form-data body buffer from a FormData instance.
@@ -81,7 +80,13 @@ function parseBrevilabsResponse<T>(
     }
     return { data: null, error: new Error(`HTTP error: ${response.status}`) };
   }
-  logInfo(`[API ${endpoint} request]:`, data);
+  // Redact the signed entitlement JWS so it never lands in the shared
+  // copilot-log.md when a license response is logged.
+  const loggable =
+    data && typeof data === "object" && "entitlement" in data
+      ? { ...(data as Record<string, unknown>), entitlement: "[redacted]" }
+      : data;
+  logInfo(`[API ${endpoint} request]:`, loggable);
   return { data: data as T };
 }
 
@@ -149,6 +154,8 @@ export interface Twitter4llmResponse {
 export interface LicenseResponse {
   is_valid: boolean;
   plan: string;
+  /** Signed entitlement token (JWS). Absent when the server could not issue one. */
+  entitlement?: string;
 }
 
 export class BrevilabsClient {
@@ -199,7 +206,7 @@ export class BrevilabsClient {
       "X-Client-Version": this.pluginVersion,
     };
     if (!excludeAuthHeader) {
-      headers.Authorization = `Bearer ${await getDecryptedKey(getSettings().plusLicenseKey)}`;
+      headers.Authorization = `Bearer ${getSettings().plusLicenseKey}`;
     }
     const response = await requestUrl({
       url: url.toString(),
@@ -234,7 +241,7 @@ export class BrevilabsClient {
         method: "POST",
         headers: {
           "Content-Type": contentType,
-          Authorization: `Bearer ${await getDecryptedKey(getSettings().plusLicenseKey)}`,
+          Authorization: `Bearer ${getSettings().plusLicenseKey}`,
           "X-Client-Version": this.pluginVersion,
         },
         body,
@@ -247,17 +254,26 @@ export class BrevilabsClient {
   }
 
   /**
-   * Validate the license key and update the isPlusUser setting.
+   * Validate the license key and update the entitlement flags (isPaidUser /
+   * isPlusUser). A verified signed entitlement determines strict feature access;
+   * otherwise a confirmed license remains paid while those features stay closed.
    * @param context Optional context object containing the features that the user is using to validate the license key.
    * @returns true if the license key is valid, false if the license key is invalid, and undefined if
    * unknown error.
    */
   async validateLicenseKey(
+    app?: App,
     context?: Record<string, unknown>
   ): Promise<{ isValid: boolean | undefined; plan?: string }> {
+    // Identity this response will belong to. Validations can overlap (startup,
+    // a send-boundary re-check, the user pasting a different key), and every
+    // branch below mutates global entitlement state, so a response that outlives
+    // the key it was requested for must be discarded rather than applied.
+    const requestedLicenseKey = getSettings().plusLicenseKey;
+
     // Build the request body with proper structure
     const requestBody: Record<string, unknown> = {
-      license_key: await getDecryptedKey(getSettings().plusLicenseKey),
+      license_key: requestedLicenseKey,
     };
 
     // Safely spread context if provided, ensuring no conflicts with required fields
@@ -287,15 +303,32 @@ export class BrevilabsClient {
       true
     );
 
+    // The key changed under us while this was in flight, so this answer is about
+    // a license the user no longer has. Applying it would let a slow response for
+    // an eligible key land after a downgraded key's, restoring revoked features
+    // (and the token that carries them) for the rest of that token's lifetime.
+    if (getSettings().plusLicenseKey !== requestedLicenseKey) {
+      return { isValid: undefined };
+    }
+
     if (error) {
       if (error.message === "Invalid license key") {
-        turnOffPlus();
+        turnOffPaid(app);
         return { isValid: false };
       }
       // Do nothing if the error is not about the invalid license key
       return { isValid: undefined };
     }
-    turnOnPlus();
+    if (data?.entitlement) {
+      // An unverifiable token is not an authoritative negative, but it cannot
+      // grant strict features until its claims can be trusted.
+      const verified = await applyEntitlement(data.entitlement);
+      if (!verified) {
+        markPaidPendingEntitlement();
+      }
+    } else {
+      markPaidPendingEntitlement();
+    }
     return { isValid: true, plan: data?.plan };
   }
 

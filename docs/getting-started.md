@@ -9,6 +9,7 @@ Copilot for Obsidian is an AI-powered plugin that brings large language models (
 - **Note editing**: Ask the AI to write or update your notes for you
 - **Semantic search**: Find notes by meaning, not just keywords
 - **Custom commands**: Run AI-powered prompts on selected text
+- **Public sharing**: Publish Markdown notes to Symposium with a shareable link
 - **Web search**: Fetch and summarize information from the internet
 - **Memory**: Have the AI remember facts about you across conversations
 
@@ -37,18 +38,18 @@ Go to **Settings** → **Copilot** (scroll down to the Community Plugins section
 
 On the **Basic** tab, click **Set Keys** to open the API key dialog. Enter the key for your chosen provider:
 
-| Provider | Where to get a key |
-|---|---|
-| OpenRouter (default) | https://openrouter.ai/keys |
-| OpenAI | https://platform.openai.com/api-keys |
-| Anthropic | https://console.anthropic.com/settings/keys |
-| Google Gemini | https://makersuite.google.com/app/apikey |
+| Provider             | Where to get a key                          |
+| -------------------- | ------------------------------------------- |
+| OpenRouter (default) | https://openrouter.ai/keys                  |
+| OpenAI               | https://platform.openai.com/api-keys        |
+| Anthropic            | https://console.anthropic.com/settings/keys |
+| Google Gemini        | https://makersuite.google.com/app/apikey    |
 
 The default model is **OpenRouter Gemini 2.5 Flash**, which requires an OpenRouter API key. If you'd prefer a different provider, set up that key first, then change the default model.
 
 ### Step 3: Choose a Default Model
 
-Still on the **Basic** tab, use the **Default Chat Model** dropdown to select the model you want to use. Any model whose provider has an API key configured will be available.
+Add a provider and its models on the **Models (BYOK)** tab, then open **Basic → Agents → Quick Chat**: enable the ones you want to see in chat under **Quick Chat models**, and pick the one new chats start with under **Default model**.
 
 ### Step 4: Choose a Chat Mode
 
@@ -74,6 +75,7 @@ You can open Copilot in several ways:
 ### Sidebar vs. Editor Tab
 
 By default, Copilot opens as a **view** (sidebar panel). You can change this in Settings → Copilot → Basic → **Open chat in**:
+
 - **View** — Opens in the sidebar, stays visible as you work
 - **Editor** — Opens as an editor tab, giving it more screen space
 
@@ -91,18 +93,34 @@ The AI will automatically include your currently open note as context, so you ca
 
 ---
 
+## Publish a Note to Symposium
+
+Run **Publish file to Symposium** from the command palette, a Markdown note's File explorer menu, its note menu, or the editor's **Copilot** submenu. Copilot asks for confirmation because anyone with the resulting link can read the published page.
+
+After publishing, Copilot stores the full public link in the note's `symposium` property. Run the same action again to update the existing page or withdraw its public link. Symposium deletes its stored copy, but it cannot recall copies that readers or caches already fetched. Withdrawing the page also removes the property from the note.
+
+Copilot appends successful publishes, updates, and withdrawals to the hidden Markdown history file at `.symposium/publish-history.md`. It is recovery history only: the note's `symposium` property remains the source of truth. If that property is damaged, recover the public link from the history file; its rows remain after a note is deleted.
+
+If Publish or Delete succeeds but the note's property cannot be updated, reopening the dialog resumes that local change without contacting Symposium again. If the initial publish response is lost, Copilot blocks another attempt until the plugin reloads to avoid creating a duplicate page.
+
+Updates fail closed. If Symposium rejects an update for any reason, including when the remote page is missing, Copilot preserves the note's existing `symposium` property and does not create a replacement page.
+
+Copilot stops before publishing when a note's frontmatter is malformed or is not a YAML property map.
+
+---
+
 ## Keyboard Shortcuts
 
 These are the default shortcuts. You can customize them in **Obsidian Settings** → **Hotkeys** → search for "Copilot".
 
-| Action | Default Shortcut |
-|---|---|
-| Open Copilot Chat Window | *(unbound — assign in Hotkeys)* |
-| Toggle Copilot Chat Window | *(unbound — assign in Hotkeys)* |
-| New Copilot Chat | *(unbound — assign in Hotkeys)* |
-| Quick Ask (floating input) | *(unbound — assign in Hotkeys)* |
-| Trigger Quick Command | *(unbound — assign in Hotkeys)* |
-| Add selection to chat context | *(unbound — assign in Hotkeys)* |
+| Action                        | Default Shortcut                |
+| ----------------------------- | ------------------------------- |
+| Open Copilot Chat Window      | _(unbound — assign in Hotkeys)_ |
+| Toggle Copilot Chat Window    | _(unbound — assign in Hotkeys)_ |
+| New Copilot Chat              | _(unbound — assign in Hotkeys)_ |
+| Quick Ask (floating input)    | _(unbound — assign in Hotkeys)_ |
+| Trigger Quick Command         | _(unbound — assign in Hotkeys)_ |
+| Add selection to chat context | _(unbound — assign in Hotkeys)_ |
 
 ### Send Shortcut
 
@@ -118,7 +136,7 @@ By default, **Enter** sends a message and **Shift+Enter** adds a new line. You c
 The AI "brain" behind Copilot — a model trained on vast text to understand and generate human language, powering chat, summarization, and writing assistance.
 
 **API (Application Programming Interface)**
-A way for Copilot to communicate with external AI services. You provide an API key, which is like a password that lets Copilot use a provider's AI models on your behalf. Note: an OpenAI API key is *different* from a ChatGPT Plus subscription — you don't need ChatGPT Plus to use Copilot.
+A way for Copilot to communicate with external AI services. You provide an API key, which is like a password that lets Copilot use a provider's AI models on your behalf. Note: an OpenAI API key is _different_ from a ChatGPT Plus subscription — you don't need ChatGPT Plus to use Copilot.
 
 **API Key**
 A secret token from an AI provider that authorizes Copilot to make requests. Most providers require you to have a billing account with a positive balance.

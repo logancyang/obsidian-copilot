@@ -1,29 +1,42 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
-import { TFile, App } from "obsidian";
-import { TypeaheadMenuPortal } from "../TypeaheadMenuPortal";
-import { useTypeaheadPlugin } from "../hooks/useTypeaheadPlugin";
-import { $replaceTriggeredTextWithPill, PillData } from "../utils/lexicalTextUtils";
+import { TFile } from "obsidian";
+import { useApp } from "@/context";
+import { TypeaheadMenuPortal } from "@/components/chat-components/TypeaheadMenuPortal";
+import { useTypeaheadPlugin } from "@/components/chat-components/hooks/useTypeaheadPlugin";
+import {
+  $replaceTriggeredTextWithPill,
+  PillData,
+} from "@/components/chat-components/utils/lexicalTextUtils";
 import {
   useAtMentionCategories,
+  AgentMentionBrand,
   AtMentionCategory,
   AtMentionOption,
   CategoryOption,
-} from "../hooks/useAtMentionCategories";
-import { useAtMentionSearch } from "../hooks/useAtMentionSearch";
-
-// Get app instance
-declare const app: App;
+  EMPTY_AGENT_MENTION_BRANDS,
+} from "@/components/chat-components/hooks/useAtMentionCategories";
+import { useAtMentionSearch } from "@/components/chat-components/hooks/useAtMentionSearch";
 
 interface AtMentionCommandPluginProps {
   isCopilotPlus?: boolean;
+  /** Whether to surface Copilot built-in `@` tools (category + search hits). */
+  showTools?: boolean;
   currentActiveFile?: TFile | null;
+  /**
+   * Installed coding agents mentionable in this composer. Non-empty only in
+   * Agent Mode; surfaces the "Agents" typeahead group and inserts agent pills.
+   */
+  agentBrands?: ReadonlyArray<AgentMentionBrand>;
 }
 
 export function AtMentionCommandPlugin({
   isCopilotPlus = false,
+  showTools = false,
   currentActiveFile = null,
+  agentBrands = EMPTY_AGENT_MENTION_BRANDS,
 }: AtMentionCommandPluginProps): JSX.Element {
+  const app = useApp();
   const [editor] = useLexicalComposerContext();
   const [extendedState, setExtendedState] = useState<{
     mode: "category" | "search";
@@ -35,34 +48,45 @@ export function AtMentionCommandPlugin({
   // State to track preview content for the currently highlighted note
   const [currentPreviewContent, setCurrentPreviewContent] = useState<string>("");
 
-  // Use the shared at-mention categories hook
-  const availableCategoryOptions = useAtMentionCategories(isCopilotPlus);
+  // Use the shared at-mention categories hook. Action categories (e.g. Images,
+  // which opens a file picker) are not supported inline because the editor has
+  // no pill representation for them — they only appear in the `+` popover.
+  const allCategoryOptions = useAtMentionCategories(showTools, agentBrands.length > 0);
+  const availableCategoryOptions = useMemo(
+    () => allCategoryOptions.filter((c) => !c.isAction),
+    [allCategoryOptions]
+  );
 
   // Load note content for preview using shared utilities
-  const loadNoteContentForPreview = useCallback(async (file: TFile | null) => {
-    if (!file) {
-      setCurrentPreviewContent("");
-      return;
-    }
-    try {
-      // Handle PDF and canvas files - treat as empty content (no preview)
-      if (file.extension === "pdf" || file.extension === "canvas") {
+  const loadNoteContentForPreview = useCallback(
+    async (file: TFile | null) => {
+      if (!file) {
         setCurrentPreviewContent("");
         return;
       }
+      try {
+        // Handle PDF and canvas files - treat as empty content (no preview)
+        if (file.extension === "pdf" || file.extension === "canvas") {
+          setCurrentPreviewContent("");
+          return;
+        }
 
-      const content = await app.vault.cachedRead(file);
-      const contentWithoutFrontmatter = content.replace(/^---\s*\n[\s\S]*?\n---\s*\n?/, "").trim();
-      const truncatedContent =
-        contentWithoutFrontmatter.length > 300
-          ? contentWithoutFrontmatter.slice(0, 300) + "..."
-          : contentWithoutFrontmatter;
+        const content = await app.vault.cachedRead(file);
+        const contentWithoutFrontmatter = content
+          .replace(/^---\s*\n[\s\S]*?\n---\s*\n?/, "")
+          .trim();
+        const truncatedContent =
+          contentWithoutFrontmatter.length > 300
+            ? contentWithoutFrontmatter.slice(0, 300) + "..."
+            : contentWithoutFrontmatter;
 
-      setCurrentPreviewContent(truncatedContent);
-    } catch {
-      setCurrentPreviewContent("Failed to load content");
-    }
-  }, []);
+        setCurrentPreviewContent(truncatedContent);
+      } catch {
+        setCurrentPreviewContent("Failed to load content");
+      }
+    },
+    [app]
+  );
 
   // Temporary state for query to resolve circular dependency
   const [currentQuery, setCurrentQuery] = useState("");
@@ -73,8 +97,10 @@ export function AtMentionCommandPlugin({
     extendedState.mode,
     extendedState.selectedCategory,
     isCopilotPlus,
+    showTools,
     availableCategoryOptions,
-    currentActiveFile
+    currentActiveFile,
+    agentBrands
   );
 
   // Type guard functions
@@ -113,10 +139,10 @@ export function AtMentionCommandPlugin({
           editor.update(() => {
             $replaceTriggeredTextWithPill("@", { type: "active-note" });
           });
-        } else {
-          // Regular pill
+        } else if (!option.isAction) {
+          // isAction excludes action-only categories like "images"
           const pillData: PillData = {
-            type: option.category,
+            type: option.category as PillData["type"],
             title: option.title,
             data: option.data,
           };

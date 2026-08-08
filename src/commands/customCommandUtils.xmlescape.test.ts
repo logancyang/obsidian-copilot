@@ -1,5 +1,5 @@
 import { processPrompt } from "@/commands/customCommandUtils";
-import { TFile, Vault } from "obsidian";
+import { App, TFile, Vault } from "obsidian";
 import { getFileContent, getFileName, getNotesFromPath } from "@/utils";
 import { mockTFile } from "@/__tests__/mockObsidian";
 
@@ -22,6 +22,7 @@ jest.mock("@/settings/model", () => ({
 
 describe("XML Escaping in processPrompt", () => {
   let mockVault: Vault;
+  let mockApp: App;
   let mockActiveNote: TFile;
 
   beforeEach(() => {
@@ -36,6 +37,13 @@ describe("XML Escaping in processPrompt", () => {
       },
     } as unknown as Vault;
 
+    mockApp = {
+      vault: mockVault,
+      metadataCache: { getFileCache: jest.fn() },
+      workspace: { getActiveFile: jest.fn() },
+      fileManager: { processFrontMatter: jest.fn() },
+    } as unknown as App;
+
     mockActiveNote = mockTFile({
       path: "path/to/active/note.md",
       basename: "Active Note",
@@ -46,7 +54,13 @@ describe("XML Escaping in processPrompt", () => {
     const customPrompt = "Process this: {}";
     const selectedText = "<tag>content & \"quotes\" 'apostrophes'</tag>";
 
-    const result = await processPrompt(customPrompt, selectedText, mockVault, mockActiveNote);
+    const result = await processPrompt(
+      mockApp,
+      customPrompt,
+      selectedText,
+      mockVault,
+      mockActiveNote
+    );
 
     // Should contain the original unescaped text
     expect(result.processedPrompt).toContain(selectedText);
@@ -69,7 +83,7 @@ describe("XML Escaping in processPrompt", () => {
     (getFileName as jest.Mock).mockReturnValue(mockNote.basename);
     (getFileContent as jest.Mock).mockResolvedValue('Content with <xml> & special "chars"');
 
-    const result = await processPrompt(customPrompt, "", mockVault, mockActiveNote);
+    const result = await processPrompt(mockApp, customPrompt, "", mockVault, mockActiveNote);
 
     // Check variable name is NOT escaped in attribute
     expect(result.processedPrompt).toContain('name="my"variable<>"');
@@ -91,7 +105,7 @@ describe("XML Escaping in processPrompt", () => {
     );
     (getFileName as jest.Mock).mockReturnValue(mockActiveNote.basename);
 
-    const result = await processPrompt(customPrompt, "", mockVault, mockActiveNote);
+    const result = await processPrompt(mockApp, customPrompt, "", mockVault, mockActiveNote);
 
     // Check basename is NOT escaped
     expect(result.processedPrompt).toContain("Note <with> \"XML\" & 'special' chars");
@@ -114,7 +128,7 @@ describe("XML Escaping in processPrompt", () => {
     ).extractTemplateNoteFiles.mockReturnValue([mockNote]);
     (getFileContent as jest.Mock).mockResolvedValue("Content with & and < and >");
 
-    const result = await processPrompt(customPrompt, "", mockVault, mockActiveNote);
+    const result = await processPrompt(mockApp, customPrompt, "", mockVault, mockActiveNote);
 
     // Check title is NOT escaped
     expect(result.processedPrompt).toContain('<title>Special & "Note"</title>');
@@ -141,7 +155,7 @@ describe("XML Escaping in processPrompt", () => {
     (getFileName as jest.Mock).mockReturnValue(mockNote.basename);
     (getFileContent as jest.Mock).mockResolvedValue("Content: <tag> & </tag>");
 
-    const result = await processPrompt(customPrompt, "", mockVault, mockActiveNote);
+    const result = await processPrompt(mockApp, customPrompt, "", mockVault, mockActiveNote);
 
     // Check tag variable name is NOT escaped
     expect(result.processedPrompt).toContain('name="#tag&special"');

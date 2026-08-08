@@ -22,3 +22,26 @@ if (typeof Node !== "undefined" && !Object.prototype.hasOwnProperty.call(Node.pr
     configurable: true,
   });
 }
+
+// Polyfill Obsidian's `HTMLElement.setCssProps` augmentation (sets one or more
+// CSS custom properties) so plugin code that calls it — e.g. the autosizing
+// `Textarea` — works under jsdom.
+if (typeof HTMLElement !== "undefined" && typeof HTMLElement.prototype.setCssProps !== "function") {
+  HTMLElement.prototype.setCssProps = function (props) {
+    for (const [name, value] of Object.entries(props)) {
+      this.style.setProperty(name, value);
+    }
+  };
+}
+
+// Obsidian exposes `activeDocument` / `activeWindow` globals pointing at the
+// focused popout's document/window. Under jsdom there's only one document, so
+// alias them onto `window` (the jsdom global object) — plugin code that portals
+// into `activeDocument.body` (e.g. the Radix tooltip) would otherwise throw
+// `activeDocument is not defined`.
+if (typeof window.activeDocument === "undefined") {
+  window.activeDocument = window.document;
+}
+if (typeof window.activeWindow === "undefined") {
+  window.activeWindow = window;
+}

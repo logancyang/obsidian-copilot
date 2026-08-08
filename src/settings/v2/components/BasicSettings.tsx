@@ -1,38 +1,235 @@
-import { ChainType } from "@/chainType";
+import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { Input } from "@/components/ui/input";
-import { getModelDisplayWithIcons } from "@/components/ui/model-display";
 import { SettingItem } from "@/components/ui/setting-item";
-import { DEFAULT_OPEN_AREA, PLUS_UTM_MEDIUMS, SEND_SHORTCUT } from "@/constants";
+import { SettingDisclosure } from "@/components/ui/setting-disclosure";
+import { SettingSection } from "@/components/ui/setting-section";
+import { DEFAULT_OPEN_AREA, SEND_SHORTCUT } from "@/constants";
 import { useApp } from "@/context";
-import { useTab } from "@/contexts/TabContext";
+import { usePlugin } from "@/contexts/PluginContext";
 import { cn } from "@/lib/utils";
-import { createPlusPageUrl } from "@/plusUtils";
-import { getModelKeyFromModel, updateSetting, useSettingsValue } from "@/settings/model";
+import { verifyMiyoScope } from "@/miyo/miyoResync";
+import { shouldSurfaceMiyoResync } from "@/miyo/miyoUtils";
+import { openAgentsFile, writeAgentsFile } from "@/instructions/agentsFile";
+import { useAgentsFileDraft } from "@/instructions/useAgentsFileDraft";
+import { logError } from "@/logger";
+import { debounce } from "@/utils/debounce";
+import { ensureCopilotSubfolders } from "@/settings/copilotFolder";
+import {
+  applyCopilotRootChange,
+  copilotRootContainsNotes,
+  findCopilotRootFileConflict,
+  isKnownCopilotRoot,
+} from "@/settings/copilotRootChange";
+import {
+  getSettings,
+  updateSetting,
+  useSettingsValue,
+  validateCopilotFolder,
+} from "@/settings/model";
+import { DesktopOnlySettingsPanel } from "@/settings/v2/components/DesktopOnlySettingsPanel";
+import { LegacyChatPromptsNotice } from "@/settings/v2/components/LegacyChatPromptsNotice";
 import { PlusSettings } from "@/settings/v2/components/PlusSettings";
-import { checkModelApiKey, formatDateTime } from "@/utils";
-import { isSortStrategy } from "@/utils/recentUsageManager";
-import { Key, Loader2 } from "lucide-react";
+import { VaultInstructionsSetting } from "@/settings/v2/components/VaultInstructionsSetting";
+import { formatDateTime } from "@/utils";
+import { isDesktopRuntime } from "@/utils/desktopRuntime";
+import { revealFolderInExplorer } from "@/utils/revealFolderInExplorer";
+import { Folder, FolderSync, Loader2 } from "lucide-react";
 import { Notice } from "obsidian";
-import React, { useState } from "react";
-import { ApiKeyDialog } from "./ApiKeyDialog";
+import React, { useEffect, useMemo, useState } from "react";
 
-const ChainType2Label: Record<ChainType, string> = {
-  [ChainType.LLM_CHAIN]: "Chat",
-  [ChainType.VAULT_QA_CHAIN]: "Vault QA (Basic)",
-  [ChainType.COPILOT_PLUS_CHAIN]: "Copilot Plus",
-  [ChainType.PROJECT_CHAIN]: "Projects (alpha)",
+const LazyAgentSettings = React.lazy(() =>
+  import("@/settings/v2/components/AgentSettings").then((module) => ({
+    default: module.AgentSettings,
+  }))
+);
+
+/**
+ * The Agents block of the Basic tab, behind the desktop gate. `React.lazy`
+ * defers the import until this actually renders, so the desktop check runs
+ * before the `@/agentMode` barrel — which pulls in Node-only modules that throw
+ * on evaluation under a mobile runtime — is ever requested.
+ */
+const AgentsSection: React.FC = () => {
+  if (!isDesktopRuntime()) {
+    return <DesktopOnlySettingsPanel message="Agent settings are available on desktop." />;
+  }
+  return (
+    <React.Suspense fallback={null}>
+      <LazyAgentSettings />
+    </React.Suspense>
+  );
 };
+
+/**
+ * Body of the "Change Copilot folder" confirmation modal. Leads with a
+ * folder-sync icon header, then states the two things the user must know before
+ * committing: files are not moved, and the old root stays permanently excluded
+ * from search.
+ */
+function CopilotFolderChangeNotice({ oldRoot, newRoot }: { oldRoot: string; newRoot: string }) {
+  return (
+    <div className="tw-flex tw-flex-col tw-gap-4">
+      <div className="tw-flex tw-items-center tw-gap-3 tw-text-normal">
+        <FolderSync className="tw-size-6 tw-shrink-0 tw-text-accent" />
+        <h2 className="tw-m-0 tw-text-xl tw-font-bold">Change Copilot folder</h2>
+      </div>
+      <p className="tw-m-0 tw-text-muted">
+        Copilot will keep new chats and data under <code>{newRoot}/</code>. Your files aren&apos;t
+        moved — your old data stays in <strong className="tw-text-normal">{oldRoot}/</strong>, which
+        stays permanently excluded from search. Move it over if you want; Obsidian updates the
+        links.
+      </p>
+    </div>
+  );
+}
 
 export const BasicSettings: React.FC = () => {
   const app = useApp();
   const settings = useSettingsValue();
-  const { setSelectedTab } = useTab();
+  // From the plugin, not captured here: this tab mounts the first time the user
+  // selects it, so a tab first opened after a reload would vouch for the
+  // incoming lifecycle while still holding the outgoing vault's `app`.
+  const { miyoMutationSession } = usePlugin();
   const [isChecking, setIsChecking] = useState(false);
+  const [templateOpen, setTemplateOpen] = useState(false);
   const [conversationNoteName, setConversationNoteName] = useState(
     settings.defaultConversationNoteName || "{$date}_{$time}__{$topic}"
   );
+
+  // Draft + explicit Apply for the Copilot root. Reason: persisting on every
+  // keystroke would re-point every derived sub-folder and trigger reload
+  // watchers per character; a root change also needs an up-front confirmation.
+  const persistedRoot = settings.copilotFolder;
+  const [folderDraft, setFolderDraft] = useState(persistedRoot);
+
+  useEffect(() => {
+    /* eslint-disable @eslint-react/hooks-extra/no-direct-set-state-in-use-effect -- resync the draft when the persisted root changes underneath us (e.g. Reset Settings or a completed change) */
+    setFolderDraft(persistedRoot);
+    /* eslint-enable @eslint-react/hooks-extra/no-direct-set-state-in-use-effect */
+  }, [persistedRoot]);
+
+  const [vaultInstructions, setVaultInstructions] = useAgentsFileDraft(app, "");
+
+  // Settings have no Save button, so the file follows the textarea. Debounced because the
+  // alternative is one vault write per keystroke; flushed on unmount so closing the tab
+  // mid-sentence still lands the last edit.
+  const saveVaultInstructions = useMemo(() => {
+    // One chain rather than one promise per call. Debouncing bounds how OFTEN a write starts,
+    // not how long one takes: a slow vault (a synced or network-backed one) can still have a
+    // save in flight when the next debounce fires, and if that older write lands second it
+    // overwrites the newer text with no error and nothing on screen to show for it. Queuing
+    // also gives `flush()` a promise that settles only once every queued write has landed.
+    let queue: Promise<void> = Promise.resolve();
+    const enqueue = (next: string): Promise<void> => {
+      queue = queue.then(() =>
+        writeAgentsFile(app, "", next).catch((error) => {
+          logError("Failed to save vault instructions.", error);
+          new Notice("Failed to save AGENTS.md.");
+        })
+      );
+      return queue;
+    };
+    return debounce(enqueue, 1000);
+  }, [app]);
+  useEffect(() => () => void saveVaultInstructions.flush(), [saveVaultInstructions]);
+
+  const handleOpenVaultInstructions = async () => {
+    // Awaited, not fire-and-forget: `openAgentsFile` creates the file when it is missing, so
+    // racing an in-flight save lets both paths see it as absent and create it. The loser's
+    // write then fails and takes whatever the user typed inside the debounce window with it.
+    await saveVaultInstructions.flush();
+    // The settings modal sits above the workspace, so close it or the file opens behind it.
+    (app as unknown as { setting: { close: () => void } }).setting.close();
+    // Empty content on purpose: a vault AGENTS.md starts blank. Nothing is migrated into it,
+    // so what the user sees here is only ever what they wrote.
+    try {
+      await openAgentsFile(app, "", "", true);
+    } catch (error) {
+      logError("Failed to open vault AGENTS.md.", error);
+      new Notice(error instanceof Error ? error.message : "Failed to open AGENTS.md.");
+    }
+  };
+
+  const applyFolderChange = () => {
+    const validation = validateCopilotFolder(folderDraft);
+    if (!validation.ok) {
+      new Notice(`Invalid Copilot folder: ${validation.reason}`, 5000);
+      return;
+    }
+    const folder = validation.folder;
+    if (folder === persistedRoot) {
+      new Notice("That's already the Copilot folder.", 3000);
+      return;
+    }
+    // Reason: a path (or ancestor) occupied by an existing FILE would accept
+    // and persist fine, but every folder creation under it fails from then on
+    // — the first visible symptom being a failed chat save much later.
+    const conflict = findCopilotRootFileConflict(app, folder);
+    if (conflict) {
+      new Notice(
+        `"${conflict}" is an existing file, so "${folder}" can't be used as a folder. Choose another location.`,
+        8000
+      );
+      return;
+    }
+    // Reason: a root that already holds ordinary notes would be excluded from
+    // search wholesale once activated, silently hiding those notes. A root
+    // Copilot used before is exempt — its only Markdown is Copilot's own
+    // leftover data (chats/memory/prompts), and it stays QA-excluded via
+    // history, so re-activating it hides nothing new.
+    if (
+      !isKnownCopilotRoot(folder, settings.copilotRootHistory) &&
+      copilotRootContainsNotes(app, folder)
+    ) {
+      new Notice(
+        `"${folder}" already contains notes. Choose a folder that isn't used for regular notes, otherwise those notes would be excluded from search.`,
+        8000
+      );
+      return;
+    }
+    new ConfirmModal(
+      app,
+      () => {
+        void applyCopilotRootChange(app, folder)
+          .then(() => {
+            // The root moved, so Miyo's server-side exclusions no longer match.
+            // Surface it and stop there: changing a local folder setting must
+            // not mutate a remote registration on its own, and the Miyo tab's
+            // banner carries the explicit Resync. Reads fresh settings — the
+            // React `settings` closure predates the root change.
+            const fresh = getSettings();
+            const notice = () =>
+              new Notice("Miyo search needs a resync — open the Miyo settings tab.", 6000);
+            if (shouldSurfaceMiyoResync(app, fresh)) {
+              notice();
+            } else if (fresh.miyoSyncedExclusions === "") {
+              // No local evidence — but a registration made before receipts
+              // existed leaves none, and neither does one whose receipt a
+              // Reset Settings wiped. Such a vault is still indexed, and its
+              // Relay can read the new root, while nothing local would ever
+              // report it: the startup notice is gated on the same empty
+              // receipt. Only asking the server can tell that apart from
+              // "never used Miyo". Read-only — it never mutates the
+              // registration; a covering record just self-heals the receipt.
+              void verifyMiyoScope(app, miyoMutationSession).then((scope) => {
+                if (scope === "stale") notice();
+              });
+            }
+          })
+          .then(() => ensureCopilotSubfolders(app.vault, { copilotFolder: folder }))
+          .then(() => new Notice(`Copilot folder changed to "${folder}".`, 4000))
+          .catch(() => new Notice("Failed to change the Copilot folder. Check the logs.", 5000));
+      },
+      <CopilotFolderChangeNotice oldRoot={persistedRoot} newRoot={folder} />,
+      "",
+      "Change folder",
+      "Cancel",
+      () => setFolderDraft(persistedRoot)
+    ).open();
+  };
 
   const applyCustomNoteFormat = () => {
     setIsChecking(true);
@@ -84,43 +281,159 @@ export const BasicSettings: React.FC = () => {
     }
   };
 
-  const defaultModelActivated = !!settings.activeModels.find(
-    (m) => m.enabled && getModelKeyFromModel(m) === settings.defaultModelKey
-  );
-  const enableActivatedModels = settings.activeModels
-    .filter((m) => m.enabled)
-    .map((model) => ({
-      label: getModelDisplayWithIcons(model),
-      value: getModelKeyFromModel(model),
-    }));
-
   return (
     <div className="tw-space-y-4">
       <PlusSettings />
 
+      <AgentsSection />
+
       {/* General Section */}
-      <section>
-        <div className="tw-mb-3 tw-text-xl tw-font-bold">General</div>
-        <div className="tw-space-y-4">
-          <div className="tw-space-y-4">
-            {/* API Key Section */}
+      <SettingSection label="General">
+        <SettingItem
+          type="select"
+          title="Open Plugin In"
+          description="Choose where to open the plugin."
+          value={settings.defaultOpenArea}
+          onChange={(value) => updateSetting("defaultOpenArea", value as DEFAULT_OPEN_AREA)}
+          options={[
+            { label: "Sidebar View", value: DEFAULT_OPEN_AREA.VIEW },
+            { label: "Editor", value: DEFAULT_OPEN_AREA.EDITOR },
+          ]}
+        />
+
+        <SettingItem
+          type="select"
+          title="Send Shortcut"
+          description={
+            <div className="tw-flex tw-items-center tw-gap-1.5">
+              <span className="tw-leading-none">Keyboard shortcut to send messages.</span>
+              <HelpTooltip
+                content={
+                  <div className="tw-flex tw-max-w-96 tw-flex-col tw-gap-2 tw-py-4">
+                    <div className="tw-text-xs tw-text-muted">
+                      If your selected shortcut doesn&#39;t work, check{" "}
+                      <strong>Obsidian → Hotkeys</strong> to see if another command is using the
+                      same key combination.
+                    </div>
+                  </div>
+                }
+              />
+            </div>
+          }
+          value={settings.defaultSendShortcut}
+          onChange={(value) => updateSetting("defaultSendShortcut", value as SEND_SHORTCUT)}
+          options={[
+            { label: "Enter", value: SEND_SHORTCUT.ENTER },
+            { label: "Shift + Enter", value: SEND_SHORTCUT.SHIFT_ENTER },
+          ]}
+        />
+
+        <SettingItem
+          type="custom"
+          title="Copilot folder location"
+          description="Where Copilot keeps conversations, prompts, memory and more. All sub-folders derive from this."
+        >
+          <div className="tw-flex tw-items-center tw-gap-2">
+            <Input
+              type="text"
+              value={folderDraft}
+              onChange={(e) => setFolderDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  applyFolderChange();
+                }
+              }}
+              placeholder="copilot"
+              className="tw-w-full sm:tw-w-[160px]"
+              aria-label="Copilot folder"
+            />
+            <Button
+              variant="secondary"
+              onClick={applyFolderChange}
+              aria-label="Apply Copilot folder"
+            >
+              Apply
+            </Button>
+            <Button
+              variant="secondary"
+              size="icon"
+              onClick={() => revealFolderInExplorer(app, settings.copilotFolder)}
+              aria-label="Open Copilot folder"
+              title="Open Copilot folder"
+            >
+              <Folder className="tw-size-4" />
+            </Button>
+          </div>
+        </SettingItem>
+      </SettingSection>
+
+      <SettingSection label="Custom instructions">
+        <LegacyChatPromptsNotice />
+        {vaultInstructions !== null && (
+          <VaultInstructionsSetting
+            value={vaultInstructions}
+            onChange={(next) => {
+              setVaultInstructions(next);
+              // Typing never waits on the write; only Open does, via `flush()`.
+              void saveVaultInstructions(next);
+            }}
+            onOpen={() => void handleOpenVaultInstructions()}
+          />
+        )}
+      </SettingSection>
+
+      {/* Saving Conversations Section */}
+      <SettingSection label="Saving conversations">
+        <SettingItem
+          type="switch"
+          title="Autosave Chat as Markdown"
+          description="Writes each chat to a Markdown note in your vault after every user message and AI response. With this off, agent chats still appear in Recent Chats from session history; only the Markdown note is skipped."
+          checked={settings.autosaveChat}
+          onCheckedChange={(checked) => updateSetting("autosaveChat", checked)}
+        />
+
+        {/* Not gated on autosave: the "Save Chat as Note" button appears only
+            when autosave is off, and it names its note from this same template,
+            so gating would hide the control exactly where it is the only one. */}
+        <Collapsible open={templateOpen} onOpenChange={setTemplateOpen}>
+          <CollapsibleTrigger asChild>
+            <SettingDisclosure open={templateOpen} />
+          </CollapsibleTrigger>
+          <CollapsibleContent>
             <SettingItem
               type="custom"
-              title="API Keys"
+              title="Conversation Filename Template"
               description={
-                <div className="tw-flex tw-items-center tw-gap-1.5">
+                <div className="tw-flex tw-items-start tw-gap-1.5 ">
                   <span className="tw-leading-none">
-                    Configure API keys for different AI providers
+                    Customize the format of saved conversation note names.
                   </span>
                   <HelpTooltip
                     content={
                       <div className="tw-flex tw-max-w-96 tw-flex-col tw-gap-2 tw-py-4">
                         <div className="tw-text-sm tw-font-medium tw-text-accent">
-                          API key required for chat and QA features
+                          Note: All the following variables must be included in the template.
                         </div>
-                        <div className="tw-text-xs tw-text-muted">
-                          To enable chat and QA functionality, please provide an API key from your
-                          selected provider.
+                        <div>
+                          <div className="tw-text-sm tw-font-medium tw-text-muted">
+                            Available variables:
+                          </div>
+                          <ul className="tw-pl-4 tw-text-sm tw-text-muted">
+                            <li>
+                              <strong>{"{$date}"}</strong>: Date in YYYYMMDD format
+                            </li>
+                            <li>
+                              <strong>{"{$time}"}</strong>: Time in HHMMSS format
+                            </li>
+                            <li>
+                              <strong>{"{$topic}"}</strong>: Chat conversation topic
+                            </li>
+                          </ul>
+                          <i className="tw-mt-2 tw-text-sm tw-text-muted">
+                            Example: {"{$date}_{$time}__{$topic}"} →
+                            20250114_153232__polish_this_article_[[Readme]]
+                          </i>
                         </div>
                       </div>
                     }
@@ -128,347 +441,38 @@ export const BasicSettings: React.FC = () => {
                 </div>
               }
             >
-              <Button
-                onClick={() => {
-                  new ApiKeyDialog(app, () => setSelectedTab("model")).open();
-                }}
-                variant="secondary"
-                className="tw-flex tw-w-full tw-items-center tw-justify-center tw-gap-2 sm:tw-w-auto sm:tw-justify-start"
-              >
-                Set Keys
-                <Key className="tw-size-4" />
-              </Button>
+              <div className="tw-flex tw-w-[320px] tw-items-center tw-gap-1.5">
+                <Input
+                  type="text"
+                  className={cn(
+                    "tw-min-w-[80px] tw-grow tw-transition-all tw-duration-200",
+                    isChecking ? "tw-w-[80px]" : "tw-w-[120px]"
+                  )}
+                  placeholder="{$date}_{$time}__{$topic}"
+                  value={conversationNoteName}
+                  onChange={(e) => setConversationNoteName(e.target.value)}
+                  disabled={isChecking}
+                />
+
+                <Button
+                  onClick={() => applyCustomNoteFormat()}
+                  disabled={isChecking}
+                  variant="secondary"
+                >
+                  {isChecking ? (
+                    <>
+                      <Loader2 className="tw-mr-2 tw-size-4 tw-animate-spin" />
+                      Apply
+                    </>
+                  ) : (
+                    "Apply"
+                  )}
+                </Button>
+              </div>
             </SettingItem>
-          </div>
-          <SettingItem
-            type="select"
-            title="Default Chat Model"
-            description={
-              <div className="tw-flex tw-items-center tw-gap-1.5">
-                <span className="tw-leading-none">Select the Chat model to use</span>
-                <HelpTooltip
-                  content={
-                    <div className="tw-flex tw-max-w-96 tw-flex-col tw-gap-2 tw-py-4">
-                      <div className="tw-text-sm tw-font-medium tw-text-accent">
-                        Default model is OpenRouter Gemini 2.5 Flash
-                      </div>
-                      <div className="tw-text-xs tw-text-muted">
-                        Set your OpenRouter API key in &apos;API keys&apos; to use this model, or
-                        select a different model from another provider.
-                      </div>
-                    </div>
-                  }
-                />
-              </div>
-            }
-            value={defaultModelActivated ? settings.defaultModelKey : "Select Model"}
-            onChange={(value) => {
-              const selectedModel = settings.activeModels.find(
-                (m) => m.enabled && getModelKeyFromModel(m) === value
-              );
-              if (!selectedModel) return;
-
-              const { hasApiKey, errorNotice } = checkModelApiKey(selectedModel, settings);
-              if (!hasApiKey && errorNotice) {
-                // Keep selection allowed; error will surface in chat on send
-              }
-              updateSetting("defaultModelKey", value);
-            }}
-            options={
-              defaultModelActivated
-                ? enableActivatedModels
-                : [{ label: "Select Model", value: "Select Model" }, ...enableActivatedModels]
-            }
-            placeholder="Model"
-          />
-
-          {/* Basic Configuration Group */}
-          <SettingItem
-            type="select"
-            title="Default Mode"
-            description={
-              <div className="tw-flex tw-items-center tw-gap-1.5">
-                <span className="tw-leading-none">Select the default chat mode</span>
-                <HelpTooltip
-                  content={
-                    <div className="tw-flex tw-max-w-96 tw-flex-col tw-gap-2">
-                      <ul className="tw-pl-4 tw-text-sm tw-text-muted">
-                        <li>
-                          <strong>Chat:</strong> Regular chat mode for general conversations and
-                          tasks. <i>Free to use with your own API key.</i>
-                        </li>
-                        <li>
-                          <strong>Vault QA (Basic):</strong> Ask questions about your vault content
-                          with semantic search. <i>Free to use with your own API key.</i>
-                        </li>
-                        <li>
-                          <strong>Copilot Plus:</strong> Covers all features of the 2 free modes,
-                          plus advanced paid features including chat context menu, advanced search,
-                          AI agents, and more. Check out{" "}
-                          <a
-                            href={createPlusPageUrl(PLUS_UTM_MEDIUMS.MODE_SELECT_TOOLTIP)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="tw-text-accent hover:tw-text-accent-hover"
-                          >
-                            obsidiancopilot.com
-                          </a>{" "}
-                          for more details.
-                        </li>
-                      </ul>
-                    </div>
-                  }
-                />
-              </div>
-            }
-            value={settings.defaultChainType}
-            onChange={(value) => updateSetting("defaultChainType", value as ChainType)}
-            options={Object.entries(ChainType2Label).map(([key, value]) => ({
-              label: value,
-              value: key,
-            }))}
-          />
-
-          <SettingItem
-            type="select"
-            title="Open Plugin In"
-            description="Choose where to open the plugin"
-            value={settings.defaultOpenArea}
-            onChange={(value) => updateSetting("defaultOpenArea", value as DEFAULT_OPEN_AREA)}
-            options={[
-              { label: "Sidebar View", value: DEFAULT_OPEN_AREA.VIEW },
-              { label: "Editor", value: DEFAULT_OPEN_AREA.EDITOR },
-            ]}
-          />
-
-          <SettingItem
-            type="select"
-            title="Send Shortcut"
-            description={
-              <div className="tw-flex tw-items-center tw-gap-1.5">
-                <span className="tw-leading-none">Choose keyboard shortcut to send messages</span>
-                <HelpTooltip
-                  content={
-                    <div className="tw-flex tw-max-w-96 tw-flex-col tw-gap-2 tw-py-4">
-                      <div className="tw-text-sm tw-font-medium tw-text-accent">
-                        Shortcut not working?
-                      </div>
-                      <div className="tw-text-xs tw-text-muted">
-                        If your selected shortcut doesn&#39;t work, check
-                        <strong> Obsidian&#39;s Settings → Hotkeys</strong> to see if another
-                        command is using the same key combination. <br />
-                        You may need to remove or change the conflicting hotkey first.
-                      </div>
-                    </div>
-                  }
-                />
-              </div>
-            }
-            value={settings.defaultSendShortcut}
-            onChange={(value) => updateSetting("defaultSendShortcut", value as SEND_SHORTCUT)}
-            options={[
-              { label: "Enter", value: SEND_SHORTCUT.ENTER },
-              { label: "Shift + Enter", value: SEND_SHORTCUT.SHIFT_ENTER },
-            ]}
-          />
-
-          <SettingItem
-            type="switch"
-            title="Auto-Add Active Content to Context"
-            description="Automatically add the active note or Web Viewer tab (Desktop only) to chat context when sending messages."
-            checked={settings.autoAddActiveContentToContext}
-            onCheckedChange={(checked) => {
-              updateSetting("autoAddActiveContentToContext", checked);
-            }}
-          />
-
-          <SettingItem
-            type="switch"
-            title="Auto-Add Selection to Context"
-            description="Automatically add selected text from notes or Web Viewer (Desktop only) to chat context. Disable to use manual command instead."
-            checked={settings.autoAddSelectionToContext}
-            onCheckedChange={(checked) => {
-              updateSetting("autoAddSelectionToContext", checked);
-            }}
-          />
-
-          <SettingItem
-            type="switch"
-            title="Images in Markdown"
-            description="Pass embedded images in markdown to the AI along with the text. Only works with multimodal models."
-            checked={settings.passMarkdownImages}
-            onCheckedChange={(checked) => {
-              updateSetting("passMarkdownImages", checked);
-            }}
-          />
-
-          <SettingItem
-            type="switch"
-            title="Suggested Prompts"
-            description="Show suggested prompts in the chat view"
-            checked={settings.showSuggestedPrompts}
-            onCheckedChange={(checked) => updateSetting("showSuggestedPrompts", checked)}
-          />
-
-          <SettingItem
-            type="switch"
-            title="Relevant Notes"
-            description="Show relevant notes in the chat view"
-            checked={settings.showRelevantNotes}
-            onCheckedChange={(checked) => updateSetting("showRelevantNotes", checked)}
-          />
-        </div>
-      </section>
-
-      {/* Saving Conversations Section */}
-      <section>
-        <div className="tw-mb-3 tw-text-xl tw-font-bold">Saving Conversations</div>
-        <div className="tw-space-y-4">
-          <SettingItem
-            type="switch"
-            title="Autosave Chat"
-            description="Automatically saves the chat after every user message and AI response."
-            checked={settings.autosaveChat}
-            onCheckedChange={(checked) => updateSetting("autosaveChat", checked)}
-          />
-
-          <SettingItem
-            type="switch"
-            title="Generate AI Chat Title on Save"
-            description="When enabled, uses an AI model to generate a concise title for saved chat notes. When disabled, uses the first 10 words of the first user message."
-            checked={settings.generateAIChatTitleOnSave}
-            onCheckedChange={(checked) => updateSetting("generateAIChatTitleOnSave", checked)}
-          />
-
-          <SettingItem
-            type="text"
-            title="Default Conversation Folder Name"
-            description="The default folder name where chat conversations will be saved. Default is 'copilot/copilot-conversations'"
-            value={settings.defaultSaveFolder}
-            onChange={(value) => updateSetting("defaultSaveFolder", value)}
-            placeholder="copilot/copilot-conversations"
-          />
-
-          <SettingItem
-            type="text"
-            title="Default Conversation Tag"
-            description="The default tag to be used when saving a conversation. Default is 'ai-conversations'"
-            value={settings.defaultConversationTag}
-            onChange={(value) => updateSetting("defaultConversationTag", value)}
-            placeholder="ai-conversations"
-          />
-
-          <SettingItem
-            type="custom"
-            title="Conversation Filename Template"
-            description={
-              <div className="tw-flex tw-items-start tw-gap-1.5 ">
-                <span className="tw-leading-none">
-                  Customize the format of saved conversation note names.
-                </span>
-                <HelpTooltip
-                  content={
-                    <div className="tw-flex tw-max-w-96 tw-flex-col tw-gap-2 tw-py-4">
-                      <div className="tw-text-sm tw-font-medium tw-text-accent">
-                        Note: All the following variables must be included in the template.
-                      </div>
-                      <div>
-                        <div className="tw-text-sm tw-font-medium tw-text-muted">
-                          Available variables:
-                        </div>
-                        <ul className="tw-pl-4 tw-text-sm tw-text-muted">
-                          <li>
-                            <strong>{"{$date}"}</strong>: Date in YYYYMMDD format
-                          </li>
-                          <li>
-                            <strong>{"{$time}"}</strong>: Time in HHMMSS format
-                          </li>
-                          <li>
-                            <strong>{"{$topic}"}</strong>: Chat conversation topic
-                          </li>
-                        </ul>
-                        <i className="tw-mt-2 tw-text-sm tw-text-muted">
-                          Example: {"{$date}_{$time}__{$topic}"} →
-                          20250114_153232__polish_this_article_[[Readme]]
-                        </i>
-                      </div>
-                    </div>
-                  }
-                />
-              </div>
-            }
-          >
-            <div className="tw-flex tw-w-[320px] tw-items-center tw-gap-1.5">
-              <Input
-                type="text"
-                className={cn(
-                  "tw-min-w-[80px] tw-grow tw-transition-all tw-duration-200",
-                  isChecking ? "tw-w-[80px]" : "tw-w-[120px]"
-                )}
-                placeholder="{$date}_{$time}__{$topic}"
-                value={conversationNoteName}
-                onChange={(e) => setConversationNoteName(e.target.value)}
-                disabled={isChecking}
-              />
-
-              <Button
-                onClick={() => applyCustomNoteFormat()}
-                disabled={isChecking}
-                variant="secondary"
-              >
-                {isChecking ? (
-                  <>
-                    <Loader2 className="tw-mr-2 tw-size-4 tw-animate-spin" />
-                    Apply
-                  </>
-                ) : (
-                  "Apply"
-                )}
-              </Button>
-            </div>
-          </SettingItem>
-        </div>
-      </section>
-
-      {/* Sorting Section */}
-      <section>
-        <div className="tw-mb-3 tw-text-xl tw-font-bold">Sorting</div>
-        <div className="tw-space-y-4">
-          <SettingItem
-            type="select"
-            title="Chat History Sort Strategy"
-            description="Sort order for the chat history list"
-            value={settings.chatHistorySortStrategy}
-            onChange={(value) => {
-              if (isSortStrategy(value)) {
-                updateSetting("chatHistorySortStrategy", value);
-              }
-            }}
-            options={[
-              { label: "Recency", value: "recent" },
-              { label: "Created", value: "created" },
-              { label: "Alphabetical", value: "name" },
-            ]}
-          />
-
-          <SettingItem
-            type="select"
-            title="Project List Sort Strategy"
-            description="Sort order for the project list"
-            value={settings.projectListSortStrategy}
-            onChange={(value) => {
-              if (isSortStrategy(value)) {
-                updateSetting("projectListSortStrategy", value);
-              }
-            }}
-            options={[
-              { label: "Recency", value: "recent" },
-              { label: "Created", value: "created" },
-              { label: "Alphabetical", value: "name" },
-            ]}
-          />
-        </div>
-      </section>
+          </CollapsibleContent>
+        </Collapsible>
+      </SettingSection>
     </div>
   );
 };

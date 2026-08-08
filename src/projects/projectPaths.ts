@@ -1,13 +1,48 @@
 import { PROJECT_CONFIG_FILE_NAME, PROJECTS_UNSUPPORTED_FOLDER_NAME } from "@/projects/constants";
-import { getSettings } from "@/settings/model";
+import { getEffectiveProjectsFolder } from "@/settings/copilotFolder";
 import { normalizePath, TAbstractFile, TFile, Vault } from "obsidian";
 
 /**
- * Get the projects root folder path from settings.
+ * Get the projects root folder path, derived from the configurable copilotFolder root.
  * @returns Normalized vault path
  */
 export function getProjectsFolder(): string {
-  return normalizePath(getSettings().projectsFolder);
+  return getEffectiveProjectsFolder();
+}
+
+/**
+ * Locate an existing project from its own config path instead of the live root.
+ *
+ * For a project that is already on disk, `record.filePath` is the authority —
+ * not whatever root is configured right now. The two disagree for at least a
+ * second after a Copilot root change: the root activates immediately while
+ * `ProjectRegister` reloads its cache on a 1s trailing debounce, so an operation
+ * started in that window holds a record from the old tree. Deriving paths from
+ * the live root there would rename, write, or mirror into a DIFFERENT tree —
+ * destructively so when the new root is a previously-used Copilot root that
+ * already holds a project of the same name (re-activating one is supported, and
+ * the note-content guard exempts it).
+ *
+ * @param configFilePath - A record's `filePath` (`\<root\>/\<folder\>/project.md`).
+ * @returns The project's own folder and the projects root that contains it.
+ */
+export function getProjectAnchorFromConfigPath(configFilePath: string): {
+  projectFolderPath: string;
+  projectsRoot: string;
+} {
+  const segments = normalizePath(configFilePath).split("/");
+  // Records only ever come from a path `isProjectConfigFile` accepted, which is
+  // exactly `<root>/<folder>/project.md`. Anything shorter cannot name a tree,
+  // so throw rather than invent one: a naive slice would silently truncate
+  // ("project.md" -> "project."), and falling back to the live root would
+  // reintroduce the very dependency this function exists to remove.
+  if (segments.length < 3) {
+    throw new Error(`Not a project config path: "${configFilePath}"`);
+  }
+  return {
+    projectFolderPath: segments.slice(0, -1).join("/"),
+    projectsRoot: segments.slice(0, -2).join("/"),
+  };
 }
 
 /**
@@ -28,7 +63,11 @@ export function getProjectFolderPath(folderName: string): string {
 }
 
 /**
- * Get a project's config file (project.md) path.
+ * Get a project's config file (`project.md`) path for read/write/create operations.
+ *
+ * `project.md` is the single recognized config name; a folder rename keeps this same
+ * basename, so this path is correct for both new projects and rebasing onto a renamed folder.
+ *
  * @param folderName - Project folder name
  * @param folderOverride - Optional root folder override
  * @returns Normalized vault path
@@ -39,12 +78,15 @@ export function getProjectConfigFilePath(folderName: string, folderOverride?: st
 }
 
 /**
- * Check if a file is a project config file (project.md).
+ * Check if a file is a project config file (`project.md`).
  *
  * Rules:
  * - Must be under projectsFolder
  * - Path must be: \<projectsFolder\>/\<folderName\>/project.md (exactly 2 levels deep)
  * - Excludes unsupported/ directory
+ *
+ * `AGENTS.md` is intentionally not recognized here because it contains instructions, not
+ * project metadata/configuration.
  *
  * @param file - Vault abstract file
  * @returns Type guard: true if file is a valid project config TFile
@@ -67,8 +109,8 @@ export function isProjectConfigFile(file: TAbstractFile): file is TFile {
 }
 
 /**
- * Extract the project folder name from a project.md path.
- * @param filePath - Vault path of project.md
+ * Extract the project folder name from a `project.md` path.
+ * @param filePath - Vault path of a recognized project config file
  * @returns Folder name, or null if path is invalid
  */
 export function getProjectFolderNameFromConfigPath(filePath: string): string | null {

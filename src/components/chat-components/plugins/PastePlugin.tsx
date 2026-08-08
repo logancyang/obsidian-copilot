@@ -1,7 +1,11 @@
 import React from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { $getSelection, $isRangeSelection, PASTE_COMMAND, COMMAND_PRIORITY_HIGH } from "lexical";
-import { parseTextForPills, createNodesFromSegments } from "../utils/lexicalTextUtils";
+import { useApp } from "@/context";
+import {
+  parseTextForPills,
+  createNodesFromSegments,
+} from "@/components/chat-components/utils/lexicalTextUtils";
 
 interface PastePluginProps {
   enableURLPills?: boolean;
@@ -14,6 +18,7 @@ interface PastePluginProps {
  * invalid references are left as plain text.
  */
 export function PastePlugin({ enableURLPills = false, onImagePaste }: PastePluginProps): null {
+  const app = useApp();
   const [editor] = useLexicalComposerContext();
 
   React.useEffect(() => {
@@ -61,7 +66,7 @@ export function PastePlugin({ enableURLPills = false, onImagePaste }: PastePlugi
         }
 
         // Parse the text for all pill types
-        const segments = parseTextForPills(plainText, {
+        const segments = parseTextForPills(app, plainText, {
           includeNotes: true,
           includeURLs: enableURLPills,
           includeTools: true,
@@ -103,7 +108,7 @@ export function PastePlugin({ enableURLPills = false, onImagePaste }: PastePlugi
       },
       COMMAND_PRIORITY_HIGH
     );
-  }, [editor, enableURLPills, onImagePaste]);
+  }, [editor, enableURLPills, onImagePaste, app]);
 
   return null;
 }

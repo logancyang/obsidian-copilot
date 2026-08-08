@@ -1,10 +1,11 @@
-import { TFile, Vault } from "obsidian";
+import { App, TFile, Vault } from "obsidian";
 import { UserSystemPrompt } from "@/system-prompts/type";
 import {
   ensurePromptFrontmatter,
   fetchAllSystemPrompts,
   generateCopyPromptName,
   getPromptFilePath,
+  getPromptFilePathInFolder,
   getSystemPromptsFolder,
   loadAllSystemPrompts,
   validatePromptName,
@@ -34,21 +35,23 @@ import { getSettings, updateSetting } from "@/settings/model";
  */
 export class SystemPromptManager {
   private static instance: SystemPromptManager;
+  private app: App;
   private vault: Vault;
 
-  private constructor(vault: Vault) {
-    this.vault = vault;
+  private constructor(app: App) {
+    this.app = app;
+    this.vault = app.vault;
   }
 
   /**
    * Get the singleton instance
    */
-  public static getInstance(vault?: Vault): SystemPromptManager {
+  public static getInstance(app?: App): SystemPromptManager {
     if (!SystemPromptManager.instance) {
-      if (!vault) {
-        throw new Error("Vault is required for first initialization");
+      if (!app) {
+        throw new Error("App is required for first initialization");
       }
-      SystemPromptManager.instance = new SystemPromptManager(vault);
+      SystemPromptManager.instance = new SystemPromptManager(app);
     }
     return SystemPromptManager.instance;
   }
@@ -58,7 +61,7 @@ export class SystemPromptManager {
    */
   public async initialize(): Promise<void> {
     logInfo("Initializing SystemPromptManager");
-    await loadAllSystemPrompts();
+    await loadAllSystemPrompts(this.app);
   }
 
   /**
@@ -74,14 +77,17 @@ export class SystemPromptManager {
       throw new Error(error);
     }
 
-    const filePath = getPromptFilePath(prompt.title);
+    // One folder for the whole create: resolving it again for the file path
+    // could ensure one directory and create the prompt in another if the
+    // Copilot root moves in between.
     const folderPath = getSystemPromptsFolder();
+    const filePath = getPromptFilePathInFolder(prompt.title, folderPath);
 
     try {
       addPendingFileWrite(filePath);
 
       // Ensure nested folders are created cross-platform
-      await ensureFolderExists(folderPath);
+      await ensureFolderExists(this.vault, folderPath);
 
       // Create the file
       await this.vault.create(filePath, prompt.content);
@@ -89,7 +95,7 @@ export class SystemPromptManager {
       // Add frontmatter
       const file = this.vault.getAbstractFileByPath(filePath);
       if (file instanceof TFile) {
-        await ensurePromptFrontmatter(file, prompt);
+        await ensurePromptFrontmatter(this.app, file, prompt);
       }
 
       // Update cache directly instead of reloading all files
@@ -137,7 +143,7 @@ export class SystemPromptManager {
       if (isRename) {
         const oldFile = this.vault.getAbstractFileByPath(oldPath);
         if (oldFile instanceof TFile) {
-          await app.fileManager.renameFile(oldFile, newPath);
+          await this.app.fileManager.renameFile(oldFile, newPath);
         }
       }
 
@@ -148,11 +154,14 @@ export class SystemPromptManager {
 
         // Update frontmatter - write back ALL fields since vault.modify clears frontmatter
         // Reference: Command module writes all fields in processFrontMatter
-        await app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
-          frontmatter[COPILOT_SYSTEM_PROMPT_CREATED] = newPrompt.createdMs;
-          frontmatter[COPILOT_SYSTEM_PROMPT_MODIFIED] = newPrompt.modifiedMs;
-          frontmatter[COPILOT_SYSTEM_PROMPT_LAST_USED] = newPrompt.lastUsedMs;
-        });
+        await this.app.fileManager.processFrontMatter(
+          file,
+          (frontmatter: Record<string, unknown>) => {
+            frontmatter[COPILOT_SYSTEM_PROMPT_CREATED] = newPrompt.createdMs;
+            frontmatter[COPILOT_SYSTEM_PROMPT_MODIFIED] = newPrompt.modifiedMs;
+            frontmatter[COPILOT_SYSTEM_PROMPT_LAST_USED] = newPrompt.lastUsedMs;
+          }
+        );
       }
 
       // Update cache directly instead of reloading all files
@@ -193,7 +202,7 @@ export class SystemPromptManager {
       // Delete the file first
       const file = this.vault.getAbstractFileByPath(filePath);
       if (file instanceof TFile) {
-        await trashFile(app, file);
+        await trashFile(this.app, file);
       }
 
       // Clear state only after successful deletion to maintain consistency
@@ -251,7 +260,7 @@ export class SystemPromptManager {
    * Reload all prompts from file system and update cache
    */
   public async reloadPrompts(): Promise<UserSystemPrompt[]> {
-    return await loadAllSystemPrompts();
+    return await loadAllSystemPrompts(this.app);
   }
 
   /**
@@ -259,6 +268,6 @@ export class SystemPromptManager {
    * Use this when you need to control cache updates yourself (e.g., for latest-wins semantics)
    */
   public async fetchPrompts(): Promise<UserSystemPrompt[]> {
-    return await fetchAllSystemPrompts();
+    return await fetchAllSystemPrompts(this.app);
   }
 }

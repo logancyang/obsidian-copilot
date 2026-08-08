@@ -24,7 +24,7 @@ describe("ContextProcessor - Dataview Integration", () => {
   let originalConsoleError: typeof console.error;
 
   beforeEach(() => {
-    contextProcessor = ContextProcessor.getInstance();
+    contextProcessor = ContextProcessor.getInstance(window.app);
     // Reset plugins for each test
     setPlugins({});
     // Save and mock console.error to suppress expected error messages

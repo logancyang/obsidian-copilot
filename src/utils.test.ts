@@ -7,7 +7,10 @@ import {
   getModelInfo,
   getNotesFromPath,
   getNotesFromTags,
+  getPropertyValuesFromNote,
+  noteHasProperty,
   getUtf8ByteLength,
+  insertAtCursor,
   isFolderMatch,
   shouldUseGitHubCopilotResponsesApi,
   processVariableNameForNotePath,
@@ -68,6 +71,8 @@ jest.mock("obsidian", () => {
   return {
     TFile: MockTFile,
     Vault: MockVault,
+    MarkdownView: class MockMarkdownView {},
+    Notice: class MockNotice {},
   };
 });
 
@@ -286,11 +291,10 @@ describe("getNotesFromTags", () => {
   });
 
   it("should return files with specified tags 1", async () => {
-    const mockVault = new Obsidian.Vault();
     const tags = ["#tag1"];
     const expectedPaths = ["test/test2/note1.md", "note4.md"];
 
-    const result = getNotesFromTags(mockVault, tags);
+    const result = getNotesFromTags(mockApp, tags);
     const resultPaths = result.map((fileWithTags) => fileWithTags.path);
 
     expect(resultPaths).toEqual(expect.arrayContaining(expectedPaths));
@@ -298,21 +302,19 @@ describe("getNotesFromTags", () => {
   });
 
   it("should return an empty array if no files match the specified nonexistent tags", async () => {
-    const mockVault = new Obsidian.Vault();
     const tags = ["#nonexistentTag"];
     const expected: string[] = [];
 
-    const result = getNotesFromTags(mockVault, tags);
+    const result = getNotesFromTags(mockApp, tags);
 
     expect(result).toEqual(expected);
   });
 
   it("should handle multiple tags, returning files that match any of them", async () => {
-    const mockVault = new Obsidian.Vault();
     const tags = ["#tag2", "#tag4"];
     const expectedPaths = ["test/test2/note1.md", "test/note2.md", "note4.md"];
 
-    const result = getNotesFromTags(mockVault, tags);
+    const result = getNotesFromTags(mockApp, tags);
     const resultPaths = result.map((fileWithTags) => fileWithTags.path);
 
     expect(resultPaths).toEqual(expect.arrayContaining(expectedPaths));
@@ -320,7 +322,6 @@ describe("getNotesFromTags", () => {
   });
 
   it("should handle both path and tags, returning files under the specified path with the specified tags", async () => {
-    const mockVault = new Obsidian.Vault();
     const tags = ["#tag1"];
     type TFileCtor = new (path: string) => TFile;
     const noteFiles: TFile[] = [
@@ -329,7 +330,7 @@ describe("getNotesFromTags", () => {
     ];
     const expectedPaths = ["test/test2/note1.md"];
 
-    const result = getNotesFromTags(mockVault, tags, noteFiles);
+    const result = getNotesFromTags(mockApp, tags, noteFiles);
     const resultPaths = result.map((fileWithTags) => fileWithTags.path);
 
     expect(resultPaths).toEqual(expect.arrayContaining(expectedPaths));
@@ -337,12 +338,125 @@ describe("getNotesFromTags", () => {
   });
 
   it("should ignore inline tags and only consider frontmatter tags", async () => {
-    const mockVault = new Obsidian.Vault();
-
     const tags = ["#inlineTag1"];
-    const result = getNotesFromTags(mockVault, tags);
+    const result = getNotesFromTags(mockApp, tags);
 
     expect(result).toEqual([]); // Should return empty since inline tags are ignored
+  });
+});
+
+describe("utils", () => {
+  describe("getPropertyValuesFromNote()", () => {
+    // getPropertyValuesFromNote only reads app.metadataCache.getFileCache(file),
+    // which is mocked per-case, so the file argument itself is never inspected.
+    const file = new TFile();
+    const withFrontmatter = (frontmatter: Record<string, unknown>) =>
+      mockMetadataCache.getFileCache.mockReturnValue({ frontmatter });
+
+    beforeEach(() => {
+      mockMetadataCache.getFileCache.mockReset();
+    });
+
+    it("returns each element of a list property as a string", () => {
+      withFrontmatter({ Topics: ["Physics", "Math"] });
+      expect(getPropertyValuesFromNote(mockApp, file, "Topics")).toEqual(["Physics", "Math"]);
+    });
+
+    it("wraps a scalar property in a single-element array", () => {
+      withFrontmatter({ Subject: "Einstein" });
+      expect(getPropertyValuesFromNote(mockApp, file, "Subject")).toEqual(["Einstein"]);
+    });
+
+    it("stringifies non-string scalar values", () => {
+      withFrontmatter({ Year: 2024 });
+      expect(getPropertyValuesFromNote(mockApp, file, "Year")).toEqual(["2024"]);
+    });
+
+    it("returns an empty array when the key is absent", () => {
+      withFrontmatter({ Topics: ["Physics"] });
+      expect(getPropertyValuesFromNote(mockApp, file, "Subject")).toEqual([]);
+    });
+
+    it("returns an empty array when the note has no frontmatter", () => {
+      mockMetadataCache.getFileCache.mockReturnValue({});
+      expect(getPropertyValuesFromNote(mockApp, file, "Topics")).toEqual([]);
+    });
+
+    it("drops non-scalar values instead of collapsing them to [object Object]", () => {
+      withFrontmatter({ meta: { owner: "Alice" } });
+      expect(getPropertyValuesFromNote(mockApp, file, "meta")).toEqual([]);
+    });
+
+    it("keeps only the scalar elements of a mixed list", () => {
+      withFrontmatter({ Topics: ["Physics", { nested: true }, 2024] });
+      expect(getPropertyValuesFromNote(mockApp, file, "Topics")).toEqual(["Physics", "2024"]);
+    });
+
+    it("returns an empty array for a key inherited from Object.prototype", () => {
+      withFrontmatter({ Topics: "Physics" });
+      expect(getPropertyValuesFromNote(mockApp, file, "constructor")).toEqual([]);
+    });
+
+    it("returns the canonical empty array for null values", () => {
+      withFrontmatter({ Topics: null });
+      const result1 = getPropertyValuesFromNote(mockApp, file, "Topics");
+      const result2 = getPropertyValuesFromNote(mockApp, file, "Topics");
+      expect(result1).toEqual([]);
+      expect(result1).toBe(result2); // referential stability
+    });
+
+    it("returns the canonical empty array for empty list values", () => {
+      withFrontmatter({ Topics: [] });
+      const result1 = getPropertyValuesFromNote(mockApp, file, "Topics");
+      const result2 = getPropertyValuesFromNote(mockApp, file, "Topics");
+      expect(result1).toEqual([]);
+      expect(result1).toBe(result2); // referential stability
+    });
+
+    it("returns the canonical empty array for non-scalar-only lists", () => {
+      withFrontmatter({ Topics: [{ nested: true }, { another: "object" }] });
+      const result1 = getPropertyValuesFromNote(mockApp, file, "Topics");
+      const result2 = getPropertyValuesFromNote(mockApp, file, "Topics");
+      expect(result1).toEqual([]);
+      expect(result1).toBe(result2); // referential stability
+    });
+  });
+
+  describe("noteHasProperty()", () => {
+    const file = new TFile();
+
+    beforeEach(() => {
+      mockMetadataCache.getFileCache.mockReset();
+    });
+
+    it("returns true when the key is present with a value", () => {
+      mockMetadataCache.getFileCache.mockReturnValue({ frontmatter: { Topics: "Physics" } });
+      expect(noteHasProperty(mockApp, file, "Topics")).toBe(true);
+    });
+
+    it("returns true when the key is present but its value is empty or null", () => {
+      mockMetadataCache.getFileCache.mockReturnValue({ frontmatter: { Topics: null } });
+      expect(noteHasProperty(mockApp, file, "Topics")).toBe(true);
+
+      mockMetadataCache.getFileCache.mockReturnValue({ frontmatter: { Topics: [] } });
+      expect(noteHasProperty(mockApp, file, "Topics")).toBe(true);
+    });
+
+    it("returns false when the key is absent", () => {
+      mockMetadataCache.getFileCache.mockReturnValue({ frontmatter: { Subject: "x" } });
+      expect(noteHasProperty(mockApp, file, "Topics")).toBe(false);
+    });
+
+    it("returns false when the note has no frontmatter", () => {
+      mockMetadataCache.getFileCache.mockReturnValue({});
+      expect(noteHasProperty(mockApp, file, "Topics")).toBe(false);
+    });
+
+    it("returns false for a key inherited from Object.prototype", () => {
+      mockMetadataCache.getFileCache.mockReturnValue({ frontmatter: { Topics: "Physics" } });
+      expect(noteHasProperty(mockApp, file, "constructor")).toBe(false);
+      expect(noteHasProperty(mockApp, file, "toString")).toBe(false);
+    });
   });
 });
 
@@ -983,5 +1097,72 @@ describe("getModelInfo", () => {
     expect(getModelInfo("claude-opus-4-1-20250805").usesAdaptiveThinking).toBe(false);
     // Dated 4.7 still matches because the minor is delimited by "-".
     expect(getModelInfo("claude-opus-4-7-20260115").usesAdaptiveThinking).toBe(true);
+  });
+});
+
+describe("insertAtCursor", () => {
+  const from = { line: 0, ch: 0 };
+  const to = { line: 0, ch: 5 };
+
+  // Builds an app whose most-recent leaf is a markdown view with the given
+  // selection. `editor.cm` is undefined so `insertIntoEditor` takes its Editor
+  // API fallback path, letting us assert on `replaceRange`.
+  function makeApp(selection: string) {
+    const editor = {
+      getSelection: jest.fn(() => selection),
+      getCursor: jest.fn((which: string) => (which === "from" ? from : to)),
+      replaceRange: jest.fn(),
+      setSelection: jest.fn(),
+      focus: jest.fn(),
+      cm: undefined,
+    };
+    const view = new (Obsidian.MarkdownView as unknown as new () => { editor: unknown })();
+    view.editor = editor;
+    const leaf = { view };
+    const app = {
+      workspace: {
+        getMostRecentLeaf: jest.fn(() => leaf),
+        getLeaf: jest.fn(() => leaf),
+      },
+    };
+    return { app, editor };
+  }
+
+  it("inserts at the cursor when there is no selection", async () => {
+    const { app, editor } = makeApp("");
+
+    await insertAtCursor(app as never, "hello");
+
+    expect(editor.replaceRange).toHaveBeenCalledWith("hello", to, to);
+  });
+
+  it("replaces from the selection start when text is selected", async () => {
+    const { app, editor } = makeApp("selected");
+
+    await insertAtCursor(app as never, "hello");
+
+    expect(editor.replaceRange).toHaveBeenCalledWith("hello", from, to);
+  });
+
+  it("threads the passed app into the insertion (no global app)", async () => {
+    const { app, editor } = makeApp("");
+
+    await insertAtCursor(app as never, "hello");
+
+    // The write resolves its leaf through the passed app, not a global one.
+    expect(app.workspace.getMostRecentLeaf).toHaveBeenCalled();
+    expect(editor.replaceRange).toHaveBeenCalled();
+  });
+
+  it("does nothing when there is no markdown view to insert into", async () => {
+    const leaf = { view: {} };
+    const app = {
+      workspace: {
+        getMostRecentLeaf: jest.fn(() => leaf),
+        getLeaf: jest.fn(() => leaf),
+      },
+    };
+
+    await expect(insertAtCursor(app as never, "hello")).resolves.toBeUndefined();
   });
 });

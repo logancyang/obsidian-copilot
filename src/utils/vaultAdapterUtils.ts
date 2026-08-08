@@ -1,4 +1,14 @@
-import { App, TAbstractFile, TFile, TFolder } from "obsidian";
+import { App, Platform, TAbstractFile, TFile, TFolder } from "obsidian";
+
+/**
+ * Whether the host filesystem treats paths case-insensitively — i.e. whether two spellings of
+ * one path can name the same file. Callers that fold case on a path MUST gate on this: on a
+ * case-sensitive volume `agents.md` and `AGENTS.md` really are two different files, and
+ * conflating them silently redirects reads and writes to the wrong one.
+ */
+export function hasCaseInsensitiveFilesystem(): boolean {
+  return Platform.isWin || Platform.isMacOS || Platform.isIosApp;
+}
 
 /**
  * Move a file or folder to the user's configured trash via FileManager.trashFile (Obsidian 1.4+).
@@ -130,6 +140,31 @@ export async function readFrontmatterViaAdapter(
     }
   }
   return result;
+}
+
+/** True when an error message indicates an existing-file conflict from vault.create. */
+export function isFileAlreadyExistsError(error: unknown): boolean {
+  if (!error) return false;
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : JSON.stringify(error);
+  return message.toLowerCase().includes("already exists");
+}
+
+/** True when an error message indicates an ENAMETOOLONG filesystem failure. */
+export function isNameTooLongError(error: unknown): boolean {
+  if (!error) return false;
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : JSON.stringify(error);
+  const normalized = message.toLowerCase();
+  return normalized.includes("enametoolong") || normalized.includes("name too long");
 }
 
 /**

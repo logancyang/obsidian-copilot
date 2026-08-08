@@ -1,4 +1,5 @@
 import { ChatButtons } from "@/components/chat-components/ChatButtons";
+import { AssistantResponseFooter } from "@/components/ui/AssistantResponseFooter";
 import { SourcesModal } from "@/components/modals/SourcesModal";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
@@ -34,9 +35,10 @@ import { parseReasoningBlock } from "@/LLMProviders/chainRunner/utils/AgentReaso
 import { processInlineCitations } from "@/LLMProviders/chainRunner/utils/citationUtils";
 import { logError } from "@/logger";
 import { ChatMessage } from "@/types/message";
-import { cleanMessageForCopy, extractYoutubeVideoId, insertIntoEditor } from "@/utils";
+import { extractYoutubeVideoId, insertAtCursor } from "@/utils";
 import { preprocessAIResponse } from "@/utils/markdownPreprocess";
-import { App, Component, MarkdownRenderer, MarkdownView, TFile } from "obsidian";
+import { renderMarkdown } from "@/utils/renderMarkdown";
+import { App, Component, TFile } from "obsidian";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSettingsValue } from "@/settings/model";
 import {
@@ -301,7 +303,9 @@ interface ChatSingleMessageProps {
   isStreaming: boolean;
   onRegenerate?: () => void;
   onEdit?: (newMessage: string) => void;
-  onDelete: () => void;
+  onDelete?: () => void;
+  /** Agent Mode metadata placed at the response footer's leading edge, before the timestamp. */
+  footerStart?: React.ReactNode;
 }
 
 const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
@@ -311,8 +315,8 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   onRegenerate,
   onEdit,
   onDelete,
+  footerStart,
 }) => {
-  const [isCopied, setIsCopied] = useState<boolean>(false);
   const [isEditing, setIsEditing] = useState<boolean>(false);
   const parsedReasoningBlock = useMemo(
     () => parseReasoningBlock(message.message),
@@ -362,24 +366,6 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
 
   // Check if current model has reasoning capability
   const settings = useSettingsValue();
-
-  const copyToClipboard = () => {
-    if (!navigator.clipboard || !navigator.clipboard.writeText) {
-      return;
-    }
-
-    const cleanedContent = cleanMessageForCopy(message.message);
-    navigator.clipboard
-      .writeText(cleanedContent)
-      .then(() => {
-        setIsCopied(true);
-
-        window.setTimeout(() => {
-          setIsCopied(false);
-        }, 2000);
-      })
-      .catch((err) => logError("Clipboard writeText failed", err));
-  };
 
   const preprocess = useCallback(
     (content: string): string => {
@@ -550,14 +536,6 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         '<span class="copilot-citation-ref">[$1]</span>'
       );
 
-      // Transform [[link]] to clickable format but exclude ![[]] image links
-      const noteLinksProcessed = replaceLinks(
-        citationPlaceholderProcessed,
-        /(?<!!)\[\[([^\]]+)]]/g,
-        (file: TFile) =>
-          `<a href="obsidian://open?file=${encodeURIComponent(file.path)}">${file.basename}</a>`
-      );
-
       /**
        * Converts YouTube video embeds to static thumbnails during streaming.
        * This prevents iframe flickering caused by repeated DOM recreation.
@@ -585,7 +563,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         });
       };
 
-      return processYouTubeEmbed(noteLinksProcessed);
+      return processYouTubeEmbed(citationPlaceholderProcessed);
     },
     [app, isStreaming, settings.enableInlineCitations, collapsibleOpenStateMap]
   );
@@ -682,6 +660,9 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         // Bind DOM ops to the document that owns the message container so
         // popout-window chats don't pick up the wrong document if focus shifts.
         const doc = contentRef.current.doc;
+        // Resolve internal links against the active note so vaults with
+        // duplicate basenames or heading-only links open the right file.
+        const sourcePath = app.workspace.getActiveFile()?.path ?? "";
         // Track existing tool call and error block IDs
         const existingToolCallIds = new Set<string>();
         const existingErrorIds = new Set<string>();
@@ -710,7 +691,11 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
             const insertBefore = contentRef.current!.children[currentIndex];
 
             const textDiv = doc.createElement("div");
-            textDiv.className = "message-segment";
+            // `markdown-rendered` opts the container into Obsidian's native
+            // reading-view stylesheet so reloaded messages match the live
+            // render path (AgentMarkdownText). Most visibly, it restores the
+            // gray background pill on inline `<code>` spans.
+            textDiv.className = "message-segment markdown-rendered";
 
             if (insertBefore) {
               contentRef.current!.insertBefore(textDiv, insertBefore);
@@ -718,14 +703,9 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
               contentRef.current!.appendChild(textDiv);
             }
 
-            void MarkdownRenderer.renderMarkdown(
-              segment.content,
-              textDiv,
-              "",
-              componentRef.current!
-            )
+            void renderMarkdown(app, segment.content, textDiv, sourcePath, componentRef.current!)
               .then(() => normalizeFootnoteRendering(textDiv))
-              .catch((err) => logError("renderMarkdown failed", err));
+              .catch((err: unknown) => logError("renderMarkdown failed", err));
             currentIndex++;
           } else if (segment.type === "toolCall" && segment.toolCall) {
             const toolCallId = segment.toolCall.id;
@@ -922,15 +902,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   };
 
   const handleInsertIntoEditor = () => {
-    let leaf = app.workspace.getMostRecentLeaf();
-    if (!leaf || !(leaf.view instanceof MarkdownView)) {
-      leaf = app.workspace.getLeaf(false);
-      if (!leaf || !(leaf.view instanceof MarkdownView)) return;
-    }
-
-    const editor = leaf.view.editor;
-    const hasSelection = editor.getSelection().length > 0;
-    void insertIntoEditor(message.message, hasSelection);
+    void insertAtCursor(app, message.message);
   };
 
   const renderMessageContent = () => {
@@ -1034,20 +1006,21 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           )}
 
           {!isStreaming && (
-            <div className="tw-flex tw-items-center tw-justify-between">
-              <div className="tw-text-xs tw-text-faint">{message.timestamp?.display}</div>
-              <ChatButtons
-                message={message}
-                onCopy={copyToClipboard}
-                isCopied={isCopied}
-                onInsertIntoEditor={handleInsertIntoEditor}
-                onRegenerate={onRegenerate}
-                onEdit={handleEdit}
-                onDelete={onDelete}
-                onShowSources={handleShowSources}
-                hasSources={message.sources && message.sources.length > 0 ? true : false}
-              />
-            </div>
+            <AssistantResponseFooter
+              leading={footerStart}
+              timestamp={message.timestamp?.display}
+              actions={
+                <ChatButtons
+                  message={message}
+                  onInsertIntoEditor={handleInsertIntoEditor}
+                  onRegenerate={onRegenerate}
+                  onEdit={onEdit ? handleEdit : undefined}
+                  onDelete={onDelete}
+                  onShowSources={handleShowSources}
+                  hasSources={message.sources && message.sources.length > 0 ? true : false}
+                />
+              }
+            />
           )}
         </div>
       </div>

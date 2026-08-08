@@ -1,15 +1,14 @@
 import ChainManager from "@/LLMProviders/chainManager";
 import Chat from "@/components/Chat";
-import { ChatViewLayout } from "@/components/chat-components/ChatViewLayout";
 import { CHAT_VIEWTYPE } from "@/constants";
-import { EventTargetContext } from "@/context";
+import { ChatViewEventTarget, EventTargetContext } from "@/context";
 import CopilotPlugin from "@/main";
 import { FileParserManager } from "@/tools/FileParserManager";
-import { createPluginRoot } from "@/utils/react/createPluginRoot";
+import { registerActiveLeafChangeBridge } from "@/utils/registerActiveLeafChangeBridge";
+import { mountPluginViewRoot, type PluginViewRootHandle } from "@/utils/react/mountPluginViewRoot";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { ItemView, Platform, WorkspaceLeaf } from "obsidian";
 import * as React from "react";
-import { Root } from "react-dom/client";
 
 export default class CopilotView extends ItemView {
   private get chainManager(): ChainManager {
@@ -17,14 +16,12 @@ export default class CopilotView extends ItemView {
   }
 
   private fileParserManager: FileParserManager;
-  private root: Root | null = null;
+  private viewRoot: PluginViewRootHandle | null = null;
   private handleSaveAsNote: (() => Promise<void>) | null = null;
   private keyboardObserver: MutationObserver | null = null;
   private drawerHideObserver: MutationObserver | null = null;
-  private layout: ChatViewLayout | null = null;
   private lastDrawerEl: HTMLElement | null = null;
-  private windowMigrationDestroy: (() => void) | null = null;
-  eventTarget: EventTarget;
+  eventTarget: ChatViewEventTarget;
 
   constructor(
     leaf: WorkspaceLeaf,
@@ -33,7 +30,7 @@ export default class CopilotView extends ItemView {
     super(leaf);
     this.app = plugin.app;
     this.fileParserManager = plugin.fileParserManager;
-    this.eventTarget = new EventTarget();
+    this.eventTarget = new ChatViewEventTarget();
     this.plugin = plugin;
   }
 
@@ -56,31 +53,11 @@ export default class CopilotView extends ItemView {
   }
 
   async onOpen(): Promise<void> {
-    this.root = createPluginRoot(this.containerEl.children[1], this.app);
-    const handleSaveAsNote = (saveFunction: () => Promise<void>) => {
-      this.handleSaveAsNote = saveFunction;
-    };
-    const updateUserMessageHistory = (newMessage: string) => {
-      this.plugin.updateUserMessageHistory(newMessage);
-    };
-
-    this.renderView(handleSaveAsNote, updateUserMessageHistory);
-    this.layout = new ChatViewLayout(this.containerEl, this.app.workspace);
+    this.viewRoot = mountPluginViewRoot(this.containerEl, this.app, () => this.renderTree());
     this.setupMobileKeyboardObserver();
     this.setupDrawerHideObserver();
 
-    // Reason: When the leaf is dragged to (or back from) an Obsidian popout, the
-    // containerEl is reparented into a different window's document but onOpen
-    // does not re-fire. Lexical's editor._window stays bound to the original
-    // window, so input events fired in the popout never reach the editor.
-    // Tearing down and recreating the React root forces Lexical to re-register
-    // its root element under the new window — typing works again.
-    this.windowMigrationDestroy = this.containerEl.onWindowMigrated(() => {
-      if (!this.root) return;
-      this.root.unmount();
-      this.root = createPluginRoot(this.containerEl.children[1], this.app);
-      this.renderView(handleSaveAsNote, updateUserMessageHistory);
-    });
+    registerActiveLeafChangeBridge(this, this.eventTarget);
 
     // Reason: The view can move between containers (e.g. editor tab → drawer)
     // without onOpen firing again. Re-bind the drawer observer on layout changes
@@ -176,21 +153,24 @@ export default class CopilotView extends ItemView {
     });
   }
 
-  private renderView(
-    handleSaveAsNote: (saveFunction: () => Promise<void>) => void,
-    updateUserMessageHistory: (newMessage: string) => void
-  ): void {
-    if (!this.root) return;
+  private setSaveHandler = (saveFunction: () => Promise<void>): void => {
+    this.handleSaveAsNote = saveFunction;
+  };
 
-    this.root.render(
+  private handleUpdateUserMessageHistory = (newMessage: string): void => {
+    this.plugin.updateUserMessageHistory(newMessage);
+  };
+
+  private renderTree(): React.ReactNode {
+    return (
       <EventTargetContext.Provider value={this.eventTarget}>
         <Tooltip.Provider delayDuration={0}>
           <Chat
             chainManager={this.chainManager}
-            updateUserMessageHistory={updateUserMessageHistory}
+            updateUserMessageHistory={this.handleUpdateUserMessageHistory}
             fileParserManager={this.fileParserManager}
             plugin={this.plugin}
-            onSaveChat={handleSaveAsNote}
+            onSaveChat={this.setSaveHandler}
             chatUIState={this.plugin.chatUIState}
           />
         </Tooltip.Provider>
@@ -205,16 +185,9 @@ export default class CopilotView extends ItemView {
   }
 
   updateView(): void {
-    // Note: The new architecture handles message loading through ChatManager
-    // The messages will be loaded when the Chat component initializes
-    const handleSaveAsNote = (saveFunction: () => Promise<void>) => {
-      this.handleSaveAsNote = saveFunction;
-    };
-    const updateUserMessageHistory = (newMessage: string) => {
-      this.plugin.updateUserMessageHistory(newMessage);
-    };
-
-    this.renderView(handleSaveAsNote, updateUserMessageHistory);
+    // The new architecture loads messages through ChatManager when the Chat
+    // component initializes; this just re-renders the existing tree.
+    this.viewRoot?.rerender();
   }
 
   async onClose(): Promise<void> {
@@ -222,19 +195,13 @@ export default class CopilotView extends ItemView {
     this.keyboardObserver = null;
     this.drawerHideObserver?.disconnect();
     this.drawerHideObserver = null;
-    this.windowMigrationDestroy?.();
-    this.windowMigrationDestroy = null;
-    this.layout?.destroy();
-    this.layout = null;
     // Reason: Clean up the class on the tracked drawer element when the view is closed.
     // Use lastDrawerEl instead of querying closest(), because the view may have already
     // been detached from the drawer DOM by the time onClose fires.
     this.lastDrawerEl?.classList.remove("copilot-keyboard-open");
     this.lastDrawerEl = null;
 
-    if (this.root) {
-      this.root.unmount();
-      this.root = null;
-    }
+    this.viewRoot?.unmount();
+    this.viewRoot = null;
   }
 }

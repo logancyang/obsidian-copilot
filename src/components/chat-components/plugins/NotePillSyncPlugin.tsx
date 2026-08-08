@@ -1,5 +1,5 @@
 import React from "react";
-import { $isNotePillNode } from "../pills/NotePillNode";
+import { $isNotePillNode } from "@/components/chat-components/pills/NotePillNode";
 import { GenericPillSyncPlugin, PillSyncConfig } from "./GenericPillSyncPlugin";
 
 /**
