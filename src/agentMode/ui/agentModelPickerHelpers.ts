@@ -376,7 +376,7 @@ export function buildPickerEntries(
     // above so neither relabels these rows: an unset-up agent's readiness reason
     // would replace "Copilot license required" with the wrong fix, and the
     // emptiness check for the loading/error placeholder must not count them.
-    if (descriptor.routesCopilotModels && shouldPreviewCopilotModels(settings)) {
+    if (descriptor.routesCopilotModels && shouldPreviewCopilotModels(settings.providers)) {
       entries.splice(
         sectionStart,
         0,

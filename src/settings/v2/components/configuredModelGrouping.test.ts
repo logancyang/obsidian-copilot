@@ -357,7 +357,7 @@ describe("buildModelEnableGroups", () => {
         },
       ],
     };
-    const groups = buildModelEnableGroups(partition, true, "");
+    const groups = buildModelEnableGroups(partition, true, "", false);
     const byokGroup = groups.find((g) => g.key === "byok:byok-1");
     expect(byokGroup?.label).toBe("Anthropic");
 
@@ -383,7 +383,7 @@ describe("buildModelEnableGroups", () => {
         },
       ],
     };
-    const groups = buildModelEnableGroups(partition, true, "pickle");
+    const groups = buildModelEnableGroups(partition, true, "pickle", false);
     expect(groups.map((g) => g.label)).toEqual(["opencode"]);
     expect(groups[0].rows.map((r) => r.id)).toEqual(["m-oc1"]);
   });
@@ -400,7 +400,7 @@ describe("buildModelEnableGroups", () => {
         },
       ],
     };
-    const groups = buildModelEnableGroups(partition, false, "");
+    const groups = buildModelEnableGroups(partition, false, "", false);
     expect(groups).toHaveLength(1);
     expect(groups[0].label).toBe("Codex");
   });
@@ -417,7 +417,7 @@ describe("buildModelEnableGroups", () => {
       agentOriginCandidates: [],
     };
 
-    const groups = buildModelEnableGroups(partition, true, "");
+    const groups = buildModelEnableGroups(partition, true, "", true);
 
     // Same position, badge, and tooltip a licensed user's group gets — only the
     // rows differ, and only by being unusable.
@@ -429,7 +429,7 @@ describe("buildModelEnableGroups", () => {
     expect(groups[0].rows.every((row) => row.locked && !row.enabled)).toBe(true);
   });
 
-  it("leaves the real Copilot group alone rather than adding a locked one beside it", () => {
+  it("adds no locked group once a Copilot provider is registered, whether or not it has rows yet", () => {
     const plusProvider: Provider = {
       providerId: "plus-1",
       providerType: "openai-compatible",
@@ -448,10 +448,21 @@ describe("buildModelEnableGroups", () => {
       agentOriginCandidates: [],
     };
 
-    const groups = buildModelEnableGroups(partition, true, "");
+    const withRows = buildModelEnableGroups(partition, true, "", false);
+    // Registering the provider and reconciling its models are separate writes, so
+    // a licensed user can hold the provider with nothing under it. Inferring the
+    // lock from the groups built here told exactly that user a license was
+    // required, over eight toggles they had already paid for.
+    const beforeRows = buildModelEnableGroups(
+      { byokPlusCandidates: [], agentOriginCandidates: [] },
+      true,
+      "",
+      false
+    );
 
-    expect(groups.filter((g) => g.label === "Copilot")).toHaveLength(1);
-    expect(groups[0].rows.every((row) => row.locked)).toBe(false);
+    expect(withRows.filter((g) => g.label === "Copilot")).toHaveLength(1);
+    expect(withRows[0].rows.every((row) => row.locked)).toBe(false);
+    expect(beforeRows).toHaveLength(0);
   });
 
   it("adds no locked group for an agent that cannot route Copilot models", () => {
@@ -466,7 +477,7 @@ describe("buildModelEnableGroups", () => {
       ],
     };
 
-    const groups = buildModelEnableGroups(partition, false, "");
+    const groups = buildModelEnableGroups(partition, false, "", true);
 
     expect(groups.some((g) => g.rows.some((row) => row.locked))).toBe(false);
   });
@@ -474,8 +485,8 @@ describe("buildModelEnableGroups", () => {
   it("filters the locked rows by the search query like any others", () => {
     const empty = { byokPlusCandidates: [], agentOriginCandidates: [] };
 
-    const matching = buildModelEnableGroups(empty, true, "flash");
-    const missing = buildModelEnableGroups(empty, true, "no-such-model");
+    const matching = buildModelEnableGroups(empty, true, "flash", true);
+    const missing = buildModelEnableGroups(empty, true, "no-such-model", true);
 
     expect(matching[0].rows.length).toBeGreaterThan(0);
     expect(matching[0].rows.every((row) => /flash/i.test(row.label + row.wireId))).toBe(true);
@@ -511,7 +522,7 @@ describe("buildModelEnableGroups", () => {
         },
       ],
     };
-    const groups = buildModelEnableGroups(partition, true, "");
+    const groups = buildModelEnableGroups(partition, true, "", false);
     expect(groups.find((g) => g.key === "byok:byok-1")?.badge).toBe("BYOK");
     expect(groups.find((g) => g.label === "opencode")?.badge).toBe("Agent Provided");
   });
@@ -545,7 +556,7 @@ describe("buildModelEnableGroups", () => {
         },
       ],
     };
-    const groups = buildModelEnableGroups(partition, true, "");
+    const groups = buildModelEnableGroups(partition, true, "", false);
     // Copilot Plus is first regardless of candidate order.
     expect(groups[0].key).toBe("byok:plus-1");
     expect(groups[0].highlight).toBe(true);
@@ -567,7 +578,7 @@ describe("buildModelEnableGroups", () => {
         },
       ],
     };
-    const groups = buildModelEnableGroups(partition, false, "");
+    const groups = buildModelEnableGroups(partition, false, "", false);
     expect(groups[0].badge).toBeUndefined();
   });
 });

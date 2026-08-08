@@ -3,17 +3,17 @@ import { lockedCopilotEntries, shouldPreviewCopilotModels } from "./lockedCopilo
 
 import type { CopilotSettings } from "@/settings/model";
 
-function settingsWithProviders(providers: Record<string, unknown>): CopilotSettings {
-  return { providers } as unknown as CopilotSettings;
+function providerRows(providers: Record<string, unknown>): CopilotSettings["providers"] {
+  return providers as unknown as CopilotSettings["providers"];
 }
 
 describe("lockedCopilotEntries", () => {
   describe("shouldPreviewCopilotModels()", () => {
     it("previews when no Copilot provider is registered", () => {
-      expect(shouldPreviewCopilotModels(settingsWithProviders({}))).toBe(true);
+      expect(shouldPreviewCopilotModels(providerRows({}))).toBe(true);
       expect(
         shouldPreviewCopilotModels(
-          settingsWithProviders({ "byok-1": { providerId: "byok-1", origin: { kind: "byok" } } })
+          providerRows({ "byok-1": { providerId: "byok-1", origin: { kind: "byok" } } })
         )
       ).toBe(true);
     });
@@ -21,7 +21,7 @@ describe("lockedCopilotEntries", () => {
     it("stops previewing once the Copilot provider is registered, so locked copies never sit beside working models", () => {
       expect(
         shouldPreviewCopilotModels(
-          settingsWithProviders({
+          providerRows({
             "plus-1": { providerId: "plus-1", origin: { kind: "copilot-plus" } },
           })
         )

@@ -63,8 +63,9 @@ export function useChatModelPicker(params: {
   // Advertised, never selectable: kept out of `models` below so selection,
   // fallback, and the stored value can never resolve to one.
   const lockedRows = React.useMemo(
-    () => (shouldPreviewCopilotModels(settings) ? lockedCopilotEntries() : EMPTY_LOCKED_ROWS),
-    [settings]
+    () =>
+      shouldPreviewCopilotModels(settings.providers) ? lockedCopilotEntries() : EMPTY_LOCKED_ROWS,
+    [settings.providers]
   );
 
   const { models, byModelKey, idToModelKey } = React.useMemo(() => {

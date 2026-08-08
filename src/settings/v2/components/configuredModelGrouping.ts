@@ -169,11 +169,18 @@ interface OriginGroup {
  * Each group maps to a single origin, so when the list spans more than one
  * origin (opencode mixes BYOK/Plus/agent) we tag every group with an origin
  * badge to disambiguate; a single-origin list (claude/codex) gets none.
+ *
+ * @param copilotProviderMissing - Whether no Copilot provider is registered,
+ *   which is when the lineup is worth advertising as a locked group. The caller
+ *   answers it because only it can see the provider rows — and the answer is not
+ *   inferable from the groups built here, since registering the provider and
+ *   reconciling its models are separate writes.
  */
 export function buildModelEnableGroups(
   partition: CandidatePartition,
   isOpencode: boolean,
-  query: string
+  query: string,
+  copilotProviderMissing: boolean
 ): ModelEnableGroup[] {
   const q = query.trim().toLowerCase();
   const out: OriginGroup[] = [];
@@ -220,7 +227,7 @@ export function buildModelEnableGroups(
   // below apply to it unchanged — a locked group is the same group, minus the
   // ability to act on it. Only opencode can route these models, and only its
   // list mixes in non-agent providers at all.
-  if (isOpencode && !out.some((o) => o.kind === "copilot-plus")) {
+  if (isOpencode && copilotProviderMissing) {
     const rows = COPILOT_PLUS_MODELS.map(
       (model): ModelEnableRow => ({
         id: `__locked_copilot__${model.id}`,

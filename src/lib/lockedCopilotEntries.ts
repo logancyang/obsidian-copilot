@@ -22,19 +22,22 @@ const PREVIEWED_MODELS = COPILOT_PLUS_MODELS.filter((model) =>
 );
 
 /**
- * Whether the pickers should advertise the lineup — true exactly when no Copilot
+ * Whether a surface should advertise the lineup — true exactly when no Copilot
  * provider is registered, which is the absence these rows exist to fill.
  *
  * Deliberately not `!isPaidUser`: the two agree in practice, but a license state
  * that has not resolved while the provider is still registered would put locked
  * copies beside working models. Asking about the provider cannot produce that.
  *
- * @param settings - Caller-owned settings snapshot holding the provider rows.
+ * Equally deliberately not "are there Copilot rows to render": registering the
+ * provider and reconciling its models are separate writes, so a failure between
+ * them leaves a licensed user with the provider and no rows — and inferring from
+ * the rows would then advertise a license they already bought.
+ *
+ * @param providers - Caller-owned provider rows, keyed by provider id.
  */
-export function shouldPreviewCopilotModels(settings: CopilotSettings): boolean {
-  return !Object.values(settings.providers).some(
-    (provider) => provider.origin.kind === "copilot-plus"
-  );
+export function shouldPreviewCopilotModels(providers: CopilotSettings["providers"]): boolean {
+  return !Object.values(providers).some((provider) => provider.origin.kind === "copilot-plus");
 }
 
 /**
