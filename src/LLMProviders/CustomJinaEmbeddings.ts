@@ -169,7 +169,7 @@ export class CustomJinaEmbeddings extends Embeddings implements JinaEmbeddingsPa
    * Sends a single embeddings request and returns vectors in response order.
    */
   private async embeddingWithRetry(body: EmbeddingCreateParams): Promise<number[][]> {
-    const response = await fetch(this.baseUrl, {
+    const response = await safeFetchNoThrow(this.baseUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -184,3 +184,4 @@ export class CustomJinaEmbeddings extends Embeddings implements JinaEmbeddingsPa
     return (embeddingData as EmbeddingResponse).data.map(({ embedding }) => embedding);
   }
 }
+import { safeFetchNoThrow } from "@/utils";

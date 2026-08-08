@@ -3,6 +3,7 @@ import { ChatOpenAICompletions } from "@langchain/openai";
 import { COPILOT_API_BASE, GitHubCopilotProvider } from "./GitHubCopilotProvider";
 import { buildGitHubCopilotAuthedFetch } from "./GitHubCopilotResponsesModel";
 import type { FetchImplementation } from "@/utils";
+import { getNativeStreamingFetch } from "@/network/streamingFetch";
 import { extractTextFromChunk } from "@/utils";
 
 // Approximate characters per token for English text
@@ -104,8 +105,7 @@ export class GitHubCopilotChatModel extends ChatOpenAICompletions {
     const { fetchImplementation, configuration, apiKey, ...rest } = fields;
 
     const provider = GitHubCopilotProvider.getInstance();
-    // scorecard: streaming requires fetch — cannot use requestUrl
-    const baseFetch = fetchImplementation ?? configuration?.fetch ?? fetch;
+    const baseFetch = fetchImplementation ?? configuration?.fetch ?? getNativeStreamingFetch();
     const authedFetch = GitHubCopilotChatModel.buildAuthedFetch(provider, baseFetch);
 
     super({

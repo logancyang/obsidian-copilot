@@ -1,5 +1,6 @@
 // The trailing slash resolves the browser-compatible npm package instead of Node's built-in.
 import { Buffer } from "buffer/";
+import { getNativeStreamingFetch } from "@/network/streamingFetch";
 
 import {
   BaseChatModel,
@@ -123,13 +124,7 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
 
     super(baseParams);
 
-    // scorecard: streaming requires fetch — cannot use requestUrl
-    const globalFetch = typeof fetch !== "undefined" ? fetch.bind(window) : undefined;
-
-    this.fetchImpl = fetchImplementation ?? globalFetch;
-    if (!this.fetchImpl) {
-      throw new Error("No fetch implementation available for Amazon Bedrock requests.");
-    }
+    this.fetchImpl = fetchImplementation ?? getNativeStreamingFetch();
 
     if ((baseParams as { streaming?: boolean }).streaming && !streamEndpoint) {
       logWarn(

@@ -1,6 +1,7 @@
 import { ChatOpenAI } from "@langchain/openai";
 import { COPILOT_API_BASE, GitHubCopilotProvider } from "./GitHubCopilotProvider";
 import type { FetchImplementation } from "@/utils";
+import { getNativeStreamingFetch } from "@/network/streamingFetch";
 
 /** Extract the constructor fields type from ChatOpenAI. */
 type ChatOpenAIFields = NonNullable<ConstructorParameters<typeof ChatOpenAI>[0]>;
@@ -92,7 +93,7 @@ export class GitHubCopilotResponsesModel extends ChatOpenAI {
     const { fetchImplementation, configuration, apiKey, ...rest } = fields;
 
     const provider = GitHubCopilotProvider.getInstance();
-    const baseFetch = fetchImplementation ?? configuration?.fetch ?? fetch;
+    const baseFetch = fetchImplementation ?? configuration?.fetch ?? getNativeStreamingFetch();
     const authedFetch = buildGitHubCopilotAuthedFetch(provider, baseFetch);
 
     super({
