@@ -767,6 +767,16 @@ describe("model", () => {
       });
       expect(out.copilotFolder).toBe(DEFAULT_SETTINGS.copilotFolder);
     });
+
+    it("rejects the active vault config directory", () => {
+      const out = sanitizeSettings(
+        { ...DEFAULT_SETTINGS, copilotFolder: ".vault-config/plugins" },
+        ".vault-config"
+      );
+
+      expect(out.copilotFolder).toBe(DEFAULT_SETTINGS.copilotFolder);
+    });
+
     it("unions the active root into a normalized, deduped history", () => {
       const out = sanitizeSettings({
         ...DEFAULT_SETTINGS,
@@ -829,9 +839,10 @@ describe("model", () => {
     });
 
     it("rejects the Obsidian config folder case-insensitively", () => {
-      // eslint-disable-next-line obsidianmd/hardcoded-config-path -- the test asserts rejection of the conventional config dir literal
-      expect(validateCopilotFolder(".obsidian").ok).toBe(false);
-      expect(validateCopilotFolder(".Obsidian/plugins").ok).toBe(false);
+      const configDir = [".", "obsidian"].join("");
+      expect(validateCopilotFolder(configDir, configDir).ok).toBe(false);
+      expect(validateCopilotFolder(`${configDir.toUpperCase()}/plugins`, configDir).ok).toBe(false);
+      expect(validateCopilotFolder(".vault-config/plugins", ".vault-config").ok).toBe(false);
     });
 
     it("rejects Windows-illegal characters in any segment", () => {

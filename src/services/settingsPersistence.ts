@@ -125,11 +125,13 @@ export async function flushPersistence(): Promise<void> {
  * @param backupLegacyCredentials - Copies data.json before its credentials are
  *   stripped. Stripping is skipped unless this reports a copy exists, so a
  *   pre-v4 vault cannot lose the only record of its keys.
+ * @param configDir - Active vault configuration directory used to reject overlapping data roots.
  */
 export async function loadSettingsWithKeychain(
   rawData: unknown,
   saveData: (data: CopilotSettings) => Promise<void>,
-  backupLegacyCredentials: (rawData: unknown) => Promise<LegacyBackupResult>
+  backupLegacyCredentials: (rawData: unknown) => Promise<LegacyBackupResult>,
+  configDir?: string
 ): Promise<CopilotSettings> {
   const isFreshInstall = rawData == null;
   const rawSettings = cloneRawSettings(rawData);
@@ -178,7 +180,7 @@ export async function loadSettingsWithKeychain(
   }
 
   const runtimeSource = isFreshInstall ? structuredClone(DEFAULT_SETTINGS) : rawSettings;
-  const sanitized = cleanupLegacyFields(sanitizeSettings(runtimeSource));
+  const sanitized = cleanupLegacyFields(sanitizeSettings(runtimeSource, configDir));
   const baseline = stripKeychainFields({ ...sanitized, _keychainVaultId: vaultId });
 
   if (!keychain.isAvailable()) {

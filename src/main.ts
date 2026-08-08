@@ -1114,7 +1114,8 @@ export default class CopilotPlugin extends Plugin {
           exists: (path) => this.app.vault.adapter.exists(path),
           write: (path, contents) => this.app.vault.adapter.write(path, contents),
           rename: (from, to) => this.app.vault.adapter.rename(from, to),
-        })
+        }),
+      this.app.vault.configDir
     );
     // Mirror this device's `agentMode.deviceProfiles` segment into the flat
     // agent fields the rest of the code reads (GitHub #2539). `saveData` below

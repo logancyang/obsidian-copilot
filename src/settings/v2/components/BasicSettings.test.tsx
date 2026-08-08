@@ -22,7 +22,10 @@ jest.mock("@/utils/desktopRuntime", () => ({ isDesktopRuntime: () => isDesktopRu
 jest.mock("@/context", () => {
   // One object for the whole suite: the real useApp reads a context-provided singleton, so a
   // fresh object per render would hand hooks a changing dependency Obsidian never gives them.
-  const app = { vault: { getMarkdownFiles: () => [] }, setting: { close: jest.fn() } };
+  const app = {
+    vault: { configDir: ".vault-config", getMarkdownFiles: () => [] },
+    setting: { close: jest.fn() },
+  };
   return {
     // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook; name must match the export
     useApp: () => app,
@@ -163,6 +166,18 @@ describe("BasicSettings", () => {
     render(<BasicSettings />);
     fireEvent.change(screen.getByLabelText("Copilot folder"), { target: { value: "../escape" } });
     fireEvent.click(screen.getByRole("button", { name: "Apply Copilot folder" }));
+    expect(Notice).toHaveBeenCalledTimes(1);
+    expect(modalCtor).not.toHaveBeenCalled();
+    expect(applyCopilotRootChange).not.toHaveBeenCalled();
+  });
+
+  it("rejects a root inside the vault's active config directory", () => {
+    render(<BasicSettings />);
+    fireEvent.change(screen.getByLabelText("Copilot folder"), {
+      target: { value: ".vault-config/plugins" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Apply Copilot folder" }));
+
     expect(Notice).toHaveBeenCalledTimes(1);
     expect(modalCtor).not.toHaveBeenCalled();
     expect(applyCopilotRootChange).not.toHaveBeenCalled();

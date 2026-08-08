@@ -673,8 +673,11 @@ export function normalizeModelProvider(provider: string): string {
 /**
  * Sanitizes the settings to ensure they are valid.
  * Note: This will be better handled by Zod in the future.
+ *
+ * @param settings Settings candidate to normalize for runtime use.
+ * @param configDir Active vault configuration directory, when available.
  */
-export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
+export function sanitizeSettings(settings: CopilotSettings, configDir?: string): CopilotSettings {
   // If settings is null/undefined, use DEFAULT_SETTINGS
   const settingsToSanitize = settings || DEFAULT_SETTINGS;
   const rawSettings = settingsToSanitize as unknown as Record<string, unknown>;
@@ -941,7 +944,8 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   // .obsidian, control/Windows-illegal chars) shared with the settings UI; an
   // invalid persisted value falls back to the default rather than being trusted.
   const copilotFolderValidation = validateCopilotFolder(
-    typeof settingsToSanitize.copilotFolder === "string" ? settingsToSanitize.copilotFolder : ""
+    typeof settingsToSanitize.copilotFolder === "string" ? settingsToSanitize.copilotFolder : "",
+    configDir
   );
   sanitizedSettings.copilotFolder = copilotFolderValidation.ok
     ? copilotFolderValidation.folder
@@ -1124,17 +1128,8 @@ function sanitizeAgentMode(raw: unknown): CopilotSettings["agentMode"] {
 // creating `NUL` or `con.md` fails or misbehaves at the filesystem layer.
 const WINDOWS_RESERVED_NAME_RE = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i;
 
-// eslint-disable-next-line no-control-regex
+// eslint-disable-next-line no-control-regex -- settings paths must reject embedded control bytes
 const CONTROL_CHAR_RE = /[\u0000-\u001f\u007f]/;
-
-/**
- * The conventional Obsidian config-folder name, rejected as a Copilot root so a
- * misconfigured root can't collide with Obsidian's own config. This is a pure,
- * Vault-less syntax check, so it can only guard the near-universal default —
- * users who relocated their config dir get no false positive here.
- */
-// eslint-disable-next-line obsidianmd/hardcoded-config-path -- pure validator has no Vault to read configDir; guard the conventional default
-const CONVENTIONAL_OBSIDIAN_CONFIG_DIR = ".obsidian";
 
 /**
  * Validate a user-entered "Skills folder" value against the rules in
@@ -1215,15 +1210,17 @@ export function validateSkillsFolder(
  * Unlike {@link validateSkillsFolder}, absolute and drive-letter paths are
  * rejected rather than stripped: the root is the trust boundary every derived
  * sub-folder inherits, so a leading-slash value is treated as a mistake to
- * surface, not silently rewritten. The `.obsidian` config folder is rejected
- * to keep Copilot data from colliding with Obsidian's own config.
+ * surface, not silently rewritten. The active config folder is rejected to
+ * keep Copilot data from colliding with Obsidian's own configuration.
  *
  * @param value Raw user input.
+ * @param configDir Active vault configuration directory, when available.
  * @returns `{ ok: true, folder }` with the trimmed, trailing-slash-stripped
  *   value, or `{ ok: false, reason }` carrying a UI-ready message.
  */
 export function validateCopilotFolder(
-  value: string
+  value: string,
+  configDir?: string
 ): { ok: true; folder: string } | { ok: false; reason: string } {
   if (typeof value !== "string" || value.trim().length === 0) {
     return { ok: false, reason: "Folder name cannot be empty." };
@@ -1237,6 +1234,21 @@ export function validateCopilotFolder(
   const cleaned = trimmed.replace(/\\/g, "/").replace(/\/+$/, "");
   if (cleaned.length === 0) {
     return { ok: false, reason: "Folder name cannot be empty." };
+  }
+  const normalizedConfigDir = configDir
+    ?.trim()
+    .replace(/\\/g, "/")
+    .replace(/^\/+|\/+$/g, "")
+    .toLowerCase();
+  const cleanedLower = cleaned.toLowerCase();
+  if (
+    normalizedConfigDir &&
+    (cleanedLower === normalizedConfigDir || cleanedLower.startsWith(`${normalizedConfigDir}/`))
+  ) {
+    return {
+      ok: false,
+      reason: "Folder path cannot use the Obsidian config folder.",
+    };
   }
   for (const segment of cleaned.split("/")) {
     if (segment.length === 0) {
@@ -1267,12 +1279,6 @@ export function validateCopilotFolder(
     // editable — real support needs adapter-backed CRUD plus frontmatter
     // handling. Deferred as a follow-up.
     // If a future review flags this again, point them at this note.
-    if (segment.toLowerCase() === CONVENTIONAL_OBSIDIAN_CONFIG_DIR) {
-      return {
-        ok: false,
-        reason: "Folder path cannot use the Obsidian config folder.",
-      };
-    }
     if (CONTROL_CHAR_RE.test(segment)) {
       return { ok: false, reason: "Folder path contains illegal control characters." };
     }

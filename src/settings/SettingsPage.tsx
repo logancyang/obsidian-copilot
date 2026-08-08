@@ -3,17 +3,54 @@ import { CHAT_VIEWTYPE } from "@/constants";
 import CopilotPlugin from "@/main";
 import { getSettings } from "@/settings/model";
 import { logInfo, logError } from "@/logger";
-import { App, Notice, PluginSettingTab } from "obsidian";
+import { App, Notice, PluginSettingTab, type Setting } from "obsidian";
 import React from "react";
 import SettingsMainV2 from "@/settings/v2/SettingsMainV2";
 import { createPluginRoot } from "@/utils/react/createPluginRoot";
 
+interface CopilotSettingDefinition {
+  name: string;
+  aliases: string[];
+  render: (setting: Setting) => void | (() => void);
+}
+
+/**
+ * Hosts Copilot's React settings surface within both legacy and searchable
+ * Obsidian settings lifecycles.
+ */
 export class CopilotSettingTab extends PluginSettingTab {
   plugin: CopilotPlugin;
 
   constructor(app: App, plugin: CopilotPlugin) {
     super(app, plugin);
     this.plugin = plugin;
+  }
+
+  /**
+   * Expose the existing React settings application to Obsidian's declarative
+   * settings host while retaining `display()` for pre-1.13 installations.
+   *
+   * @returns Search metadata and a renderer for the Copilot settings surface.
+   */
+  getSettingDefinitions(): CopilotSettingDefinition[] {
+    return [
+      {
+        name: "Copilot settings",
+        aliases: [
+          "Basic settings",
+          "BYOK models and providers",
+          "Miyo semantic search",
+          "Agent skills",
+          "Custom commands",
+          "Self-hosted models",
+          "Advanced settings",
+        ],
+        render: (setting) => {
+          setting.settingEl.addClass("copilot-settings-definition");
+          return this.renderSettings(setting.settingEl);
+        },
+      },
+    ];
   }
 
   async reloadPlugin() {
@@ -61,12 +98,16 @@ export class CopilotSettingTab extends PluginSettingTab {
   }
 
   display(): void {
-    const { containerEl } = this;
-    containerEl.empty();
-    containerEl.addClass("tw-select-text");
-    const div = containerEl.createDiv("div");
-    const sections = createPluginRoot(div, this.app);
+    this.renderSettings(this.containerEl);
+  }
 
-    sections.render(<SettingsMainV2 plugin={this.plugin} />);
+  private renderSettings(container: HTMLElement): () => void {
+    container.empty();
+    container.addClass("tw-select-text");
+    const div = container.createDiv();
+    const root = createPluginRoot(div, this.app);
+
+    root.render(<SettingsMainV2 plugin={this.plugin} />);
+    return () => root.unmount();
   }
 }

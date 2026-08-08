@@ -39,12 +39,13 @@ async function loadModule(overrides: Record<string, unknown> = {}) {
     KeychainService: { getInstance: jest.fn(() => keychain) },
   }));
   jest.doMock("@/logger", () => ({ logWarn: jest.fn() }));
+  const sanitizeSettings = jest.fn((settings: CopilotSettings) => settings);
   jest.doMock("@/settings/model", () => ({
-    sanitizeSettings: jest.fn((settings: CopilotSettings) => settings),
+    sanitizeSettings,
   }));
 
   const module = await import("@/services/settingsPersistence");
-  return { module, keychain };
+  return { module, keychain, sanitizeSettings };
 }
 
 describe("settingsPersistence", () => {
@@ -131,6 +132,19 @@ describe("settingsPersistence", () => {
   });
 
   describe("loadSettingsWithKeychain()", () => {
+    it("uses the active vault config directory when sanitizing settings", async () => {
+      const { module, sanitizeSettings } = await loadModule();
+
+      await module.loadSettingsWithKeychain(
+        null,
+        jest.fn().mockResolvedValue(undefined),
+        backedUp,
+        ".vault-config"
+      );
+
+      expect(sanitizeSettings).toHaveBeenCalledWith(expect.anything(), ".vault-config");
+    });
+
     it("discards disk credentials and exposes only Keychain-hydrated values", async () => {
       const { module, keychain } = await loadModule();
       keychain.hydrateFromKeychain.mockImplementation(async (settings: CopilotSettings) => ({
