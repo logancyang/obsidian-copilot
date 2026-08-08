@@ -40,13 +40,19 @@ Agent Mode uses the standard `AGENTS.md` file:
 - Project instructions live at `<project>/AGENTS.md`.
 - Project instructions are more specific and take precedence over vault instructions.
 
-Go to **Settings → Copilot → Basic → Agent instructions → Open AGENTS.md** to open the
-vault file. In a project, open the project info popover and select **AGENTS.md**.
+Each file has two edit surfaces, and both write the same file:
 
-Copilot uses Obsidian's normal Markdown editor rather than a separate Settings editor. If a file
-is missing, the open action creates it. Copilot also adds an `@AGENTS.md` reference to the
-sibling `CLAUDE.md` without replacing other content, so Claude reads the same instructions as
-Codex and OpenCode.
+- **Vault instructions** — **Settings → Copilot → Basic → Custom instructions** has a
+  **Custom vault instructions** box that saves as you type. **Open AGENTS.md** beside it opens
+  the file as an ordinary note instead.
+- **Project instructions** — the Edit Project dialog has a **Project instructions** box that
+  saves when you accept the dialog. The project info popover's **AGENTS.md** row opens the file
+  as a note.
+
+Because these are ordinary notes, the box and the editor always agree; use whichever suits the
+edit. If a file is missing, opening or saving creates it. Copilot also adds an `@AGENTS.md`
+reference to the sibling `CLAUDE.md` without replacing other content, so Claude reads the same
+instructions as Codex and OpenCode.
 
 Changes apply to new agent sessions.
 
