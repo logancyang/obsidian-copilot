@@ -382,13 +382,14 @@ export const ClaudeBackendDescriptor: ClaudeDescriptor = {
   },
 
   /**
-   * Replay the intended effort on a freshly created session. The Claude
+   * Replay the intended effort before a fresh or resumed session becomes
+   * ready for user input. The Claude
    * SDK adapter probes the model catalog asynchronously, so the effort
    * `SessionConfigOption` may not be present yet when this runs;
    * `replayPersistedEffort` subscribes to the session and applies once the
    * option arrives (with a timeout guard to avoid leaking listeners on
-   * agents that never report effort). Mode is never persisted — the
-   * Claude SDK's natural starting mode is already canonical `default`.
+   * agents that never report effort). Mode persistence is handled by the
+   * session manager after this hook settles.
    *
    * A transient cross-backend pick seeds the session with the user's drafted
    * effort via `seededSelection`; that intent wins over the persisted default,

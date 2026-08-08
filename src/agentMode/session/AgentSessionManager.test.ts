@@ -2321,16 +2321,27 @@ describe("AgentSessionManager chat history aggregation", () => {
       expect(manager.getActiveSession()).toBe(session);
     });
 
-    it("applies initial backend config before returning a resumed session", async () => {
-      const backendState = (effort: string): BackendState => ({
+    it("applies persisted backend config and mode before returning a resumed session", async () => {
+      const backendState = (effort: string, mode: "default" | "auto"): BackendState => ({
         model: {
           current: { baseModelId: "sonnet", effort },
           availableModels: [],
           apply: { kind: "setModel" },
         },
-        mode: null,
+        mode: {
+          current: mode,
+          options: [
+            { value: "default", label: "Default" },
+            { value: "auto", label: "Auto" },
+          ],
+          apply: {
+            default: { kind: "setMode", nativeId: "default" },
+            auto: { kind: "setMode", nativeId: "bypassPermissions" },
+          },
+        },
       });
-      const setSessionConfigOption = jest.fn(async () => backendState("high"));
+      const setSessionConfigOption = jest.fn(async () => backendState("high", "default"));
+      const setSessionMode = jest.fn(async () => backendState("high", "auto"));
       const backend = {
         ...makeMockBackendProcess(),
         loadSession: jest.fn(async () => {
@@ -2338,9 +2349,10 @@ describe("AgentSessionManager chat history aggregation", () => {
         }),
         resumeSession: jest.fn(async ({ sessionId }: { sessionId: string }) => ({
           sessionId,
-          state: backendState("low"),
+          state: backendState("low", "default"),
         })),
         setSessionConfigOption,
+        setSessionMode,
       };
       let releaseApply: () => void = () => {};
       let markApplyStarted: () => void = () => {};
@@ -2360,6 +2372,13 @@ describe("AgentSessionManager chat history aggregation", () => {
         createBackendProcess: jest.fn(() => backend),
         applyInitialSessionConfig,
       });
+      const settings = {
+        agentMode: {
+          activeBackend: "claude",
+          backends: { claude: { defaultMode: "auto" } },
+        },
+      };
+      (mockedGetSettings as jest.Mock).mockReturnValueOnce(settings).mockReturnValueOnce(settings);
 
       let returned = false;
       const loading = manager
@@ -2384,7 +2403,98 @@ describe("AgentSessionManager chat history aggregation", () => {
         configId: "effort",
         value: "high",
       });
+      expect(setSessionMode).toHaveBeenCalledWith({
+        sessionId: "saved-chat",
+        modeId: "bypassPermissions",
+      });
       expect(session.getState()?.model?.current.effort).toBe("high");
+      expect(session.getState()?.mode?.current).toBe("auto");
+    });
+
+    it("keeps focus on the most recently opened history row when resumes finish out of order", async () => {
+      const backend = {
+        ...makeMockBackendProcess(),
+        loadSession: jest.fn(async () => {
+          throw new MethodUnsupportedError("session/load");
+        }),
+        resumeSession: jest.fn(async ({ sessionId }: { sessionId: string }) => ({
+          sessionId,
+          state: { model: null, mode: null },
+        })),
+      };
+      let releaseFirst: () => void = () => {};
+      let markFirstStarted: () => void = () => {};
+      const firstStarted = new Promise<void>((resolve) => {
+        markFirstStarted = resolve;
+      });
+      const firstRelease = new Promise<void>((resolve) => {
+        releaseFirst = resolve;
+      });
+      const applyInitialSessionConfig = jest.fn(async (session: AgentSession) => {
+        if (session.getBackendSessionId() !== "first-chat") return;
+        markFirstStarted();
+        await firstRelease;
+      });
+      const { manager } = buildHistoryHarness({
+        backendId: "claude",
+        createBackendProcess: jest.fn(() => backend),
+        applyInitialSessionConfig,
+      });
+
+      const firstLoading = manager.loadNativeSessionFromHistory("claude", "first-chat");
+      await firstStarted;
+      const second = await manager.loadNativeSessionFromHistory("claude", "second-chat");
+      expect(manager.getActiveSession()).toBe(second);
+
+      releaseFirst();
+      const first = await firstLoading;
+
+      expect(first).not.toBe(second);
+      expect(manager.getSessions()).toHaveLength(2);
+      expect(manager.getActiveSession()).toBe(second);
+    });
+
+    it("shares one in-flight resume when the same history row is opened twice", async () => {
+      const resumeSession = jest.fn(async ({ sessionId }: { sessionId: string }) => ({
+        sessionId,
+        state: { model: null, mode: null },
+      }));
+      const backend = {
+        ...makeMockBackendProcess(),
+        loadSession: jest.fn(async () => {
+          throw new MethodUnsupportedError("session/load");
+        }),
+        resumeSession,
+      };
+      let releaseApply: () => void = () => {};
+      let markApplyStarted: () => void = () => {};
+      const applyStarted = new Promise<void>((resolve) => {
+        markApplyStarted = resolve;
+      });
+      const applyRelease = new Promise<void>((resolve) => {
+        releaseApply = resolve;
+      });
+      const applyInitialSessionConfig = jest.fn(async () => {
+        markApplyStarted();
+        await applyRelease;
+      });
+      const { manager } = buildHistoryHarness({
+        backendId: "claude",
+        createBackendProcess: jest.fn(() => backend),
+        applyInitialSessionConfig,
+      });
+
+      const firstLoading = manager.loadNativeSessionFromHistory("claude", "saved-chat");
+      await applyStarted;
+      const secondLoading = manager.loadNativeSessionFromHistory("claude", "saved-chat");
+      releaseApply();
+      const [first, second] = await Promise.all([firstLoading, secondLoading]);
+
+      expect(first).toBe(second);
+      expect(resumeSession).toHaveBeenCalledTimes(1);
+      expect(applyInitialSessionConfig).toHaveBeenCalledTimes(1);
+      expect(manager.getSessions()).toEqual([first]);
+      expect(manager.getActiveSession()).toBe(first);
     });
   });
 

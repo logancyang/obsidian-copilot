@@ -342,11 +342,12 @@ export interface BackendDescriptor {
   ): ModeMapping | null;
 
   /**
-   * Optional: replay persisted state on a freshly created session. Runs
-   * once after `createSession` resolves. `seededSelection` is the exact
-   * (model, effort) the session was created with — a transient cross-backend
-   * pick carries the user's drafted effort here, which must win over the
-   * backend's persisted default so the pick isn't overwritten on startup.
+   * Optional: replay persisted state before a newly created or resumed session
+   * becomes ready for user input. `seededSelection` is the exact (model, effort)
+   * used for a fresh session; it is absent on resume because the existing
+   * backend session supplies its model. A transient cross-backend pick carries
+   * the user's drafted effort here, which must win over the backend's persisted
+   * default so the pick isn't overwritten on startup.
    */
   applyInitialSessionConfig?(
     session: AgentSession,

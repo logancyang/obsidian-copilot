@@ -317,6 +317,13 @@ export class AgentSessionManager {
   // Serializes replacements for one logical input even after its runtime session id changes.
   // The cursor retains the last successful owner when an individual replacement fails.
   private readonly replacementCursorByChatInputId = new Map<string, Promise<string>>();
+  // Native session identity is stable across markdown/native history surfaces.
+  // Sharing one resume prevents duplicate AgentSessions and backend handlers
+  // when the same row is opened again before the first load settles.
+  private readonly resumedSessionPromiseById = new Map<string, Promise<AgentSession | null>>();
+  // History opens may finish out of order. Only the most recent request may
+  // move focus; older successful loads remain available as background tabs.
+  private latestHistoryLoadRequestId = 0;
   private pendingCreates = 0;
   private listeners = new Set<() => void>();
   private disposed = false;
@@ -2734,6 +2741,7 @@ export class AgentSessionManager {
     if (this.disposed) {
       throw new Error("AgentSessionManager has been shut down");
     }
+    const requestId = ++this.latestHistoryLoadRequestId;
 
     for (const [internalId, state] of this.sessionState.entries()) {
       if (state.path !== file.path) continue;
@@ -2793,9 +2801,11 @@ export class AgentSessionManager {
       // merged history ranks this chat correctly after a reopen.
       void this.opts.sessionIndex?.touch(loaded.backendId, loaded.sessionId);
     }
-    this.lastActiveByScope.set(projectId, session.internalId);
-    this.absorbIntoEmptyActiveTab(session, previousActiveId);
-    this.notify();
+    if (requestId === this.latestHistoryLoadRequestId) {
+      this.setActiveSession(session.internalId);
+      this.absorbIntoEmptyActiveTab(session, previousActiveId);
+      this.notify();
+    }
     return session;
   }
 
@@ -2841,6 +2851,7 @@ export class AgentSessionManager {
     if (this.disposed) {
       throw new Error("AgentSessionManager has been shut down");
     }
+    const requestId = ++this.latestHistoryLoadRequestId;
     // Identity is the (backendId, sessionId) pair — searched together so an
     // id collision across backends can't hide the correct already-open tab.
     const existing = this.findLiveSession(backendId, sessionId);
@@ -2895,9 +2906,11 @@ export class AgentSessionManager {
       session.restoreLabel(entry.title, entry.titleSource === "user" ? "user" : "agent");
     }
     if (index) await index.touch(backendId, sessionId);
-    this.lastActiveByScope.set(projectId, session.internalId);
-    this.absorbIntoEmptyActiveTab(session, previousActiveId);
-    this.notify();
+    if (requestId === this.latestHistoryLoadRequestId) {
+      this.setActiveSession(session.internalId);
+      this.absorbIntoEmptyActiveTab(session, previousActiveId);
+      this.notify();
+    }
     return session;
   }
 
@@ -2939,6 +2952,27 @@ export class AgentSessionManager {
    * fresh session.
    */
   private async tryResumeSessionFromHistory(
+    backendId: BackendId,
+    sessionId: SessionId,
+    projectId: ProjectScopeId
+  ): Promise<AgentSession | null> {
+    const existing = this.findLiveSession(backendId, sessionId);
+    if (existing) return existing;
+
+    const key = buildNativeChatId(backendId, sessionId);
+    const inFlight = this.resumedSessionPromiseById.get(key);
+    if (inFlight) return inFlight;
+
+    const resume = this.resumeSessionFromHistory(backendId, sessionId, projectId).finally(() => {
+      if (this.resumedSessionPromiseById.get(key) === resume) {
+        this.resumedSessionPromiseById.delete(key);
+      }
+    });
+    this.resumedSessionPromiseById.set(key, resume);
+    return resume;
+  }
+
+  private async resumeSessionFromHistory(
     backendId: BackendId,
     sessionId: SessionId,
     projectId: ProjectScopeId
@@ -3080,6 +3114,7 @@ export class AgentSessionManager {
         );
       }
     }
+    await replayPersistedMode(session, this.getDefaultMode(backendId));
     if (this.disposed) {
       await session.dispose();
       this.finishPendingCreate();
@@ -3091,9 +3126,6 @@ export class AgentSessionManager {
     this.sessions.set(session.internalId, session);
     this.chatUIStates.set(session.internalId, new AgentChatUIState(session));
     this.detachedFromTabIds.delete(session.internalId);
-    this.activeSessionId = session.internalId;
-    this.activeProjectId = projectId;
-    this.lastActiveByScope.set(projectId, session.internalId);
     this.attachAutoSave(session);
     this.attachAttentionTracking(session);
     this.lastError = null;
