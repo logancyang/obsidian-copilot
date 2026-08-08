@@ -1,6 +1,7 @@
+import { AgentMessageActions } from "@/agentMode/ui/AgentMessageActions";
 import { AgentMarkdownText } from "@/agentMode/ui/AgentMarkdownText";
-import { AgentTurnDurationIndicator } from "@/agentMode/ui/AgentTurnDurationIndicator";
 import { ReasoningBlock } from "@/agentMode/ui/ReasoningBlock";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { useApp } from "@/context";
 import type { Meta, StoryObj } from "@/lib/story";
 import React from "react";
@@ -26,18 +27,24 @@ export const Active: StoryObj<ReasoningBlockProps> = {
   args: { isStreaming: true },
 };
 
-/** Matches the real trail order so all three content edges can be inspected together. */
+/** Matches the completed trail order so the response footer can be inspected as one row. */
 const ReasoningResponseDurationDemo: React.FC = () => {
   const app = useApp();
   return (
-    <div>
-      <ReasoningBlock part={REASONING} isStreaming />
-      <AgentMarkdownText
-        text="The reasoning and duration indicators now share the response's left edge."
-        app={app}
-      />
-      <AgentTurnDurationIndicator status="running" startedAtMs={Date.now() - 138_000} />
-    </div>
+    <TooltipProvider>
+      <div className="tw-group tw-flex tw-flex-col tw-gap-1">
+        <ReasoningBlock part={REASONING} isStreaming={false} />
+        <AgentMarkdownText
+          text="The completed duration now shares a centered footer with the response controls."
+          app={app}
+        />
+        <AgentMessageActions
+          text="The completed duration now shares a centered footer with the response controls."
+          app={app}
+          durationMs={138_000}
+        />
+      </div>
+    </TooltipProvider>
   );
 };
 

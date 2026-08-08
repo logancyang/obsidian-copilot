@@ -152,6 +152,10 @@ describe("AgentTrail", () => {
     expect(screen.getByText("Worked for")).toBeTruthy();
     expect(screen.getByText("2m 18s")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Worked for/i })).toBeNull();
+    const footer = screen.getByText("Worked for").closest(".tw-justify-between");
+    expect(footer?.classList.contains("tw-items-center")).toBe(true);
+    expect(footer?.contains(screen.getByTitle("Copy"))).toBe(true);
+    expect(footer?.contains(screen.getByTitle("Insert / Replace at cursor"))).toBe(true);
     // The trailing prose renders as the final answer.
     expect(screen.getByText("The final answer.")).toBeTruthy();
     // The research tool card renders inline (not folded behind a toggle).

@@ -1,3 +1,4 @@
+import { AgentTurnDurationIndicator } from "@/agentMode/ui/AgentTurnDurationIndicator";
 import { CopyButton } from "@/components/chat-components/CopyButton";
 import { MessageActionButton } from "@/components/chat-components/MessageActionButton";
 import { cn } from "@/lib/utils";
@@ -11,6 +12,8 @@ interface AgentMessageActionsProps {
    *  `cleanMessageForCopy` by the trail. Copied / inserted verbatim. */
   text: string;
   app: App;
+  /** Frozen wall-clock duration shown beside the completed response controls. */
+  durationMs?: number;
 }
 
 /**
@@ -19,17 +22,31 @@ interface AgentMessageActionsProps {
  * but acts on the trail's final answer text rather than a `ChatMessage` —
  * regenerate / edit / delete can slot into this same row later.
  */
-export const AgentMessageActions: React.FC<AgentMessageActionsProps> = ({ text, app }) => (
+export const AgentMessageActions: React.FC<AgentMessageActionsProps> = ({
+  text,
+  app,
+  durationMs,
+}) => (
   <div
-    className={cn("tw-flex tw-justify-end tw-gap-1", {
-      "group-hover:opacity-100 opacity-0": !Platform.isMobile,
-    })}
+    className={cn(
+      "tw-flex tw-items-center",
+      durationMs === undefined ? "tw-justify-end" : "tw-justify-between"
+    )}
   >
-    <MessageActionButton
-      label="Insert / Replace at cursor"
-      icon={TextCursorInput}
-      onClick={() => void insertAtCursor(app, text)}
-    />
-    <CopyButton text={text} />
+    {durationMs !== undefined ? (
+      <AgentTurnDurationIndicator status="complete" durationMs={durationMs} inline />
+    ) : null}
+    <div
+      className={cn("tw-flex tw-items-center tw-gap-1", {
+        "group-hover:opacity-100 opacity-0": !Platform.isMobile,
+      })}
+    >
+      <MessageActionButton
+        label="Insert / Replace at cursor"
+        icon={TextCursorInput}
+        onClick={() => void insertAtCursor(app, text)}
+      />
+      <CopyButton text={text} />
+    </div>
   </div>
 );

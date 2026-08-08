@@ -19,6 +19,8 @@ interface FanoutMessageCardProps {
   message: AgentChatMessage;
   turn: FanoutTurn;
   app: App;
+  /** Agent Mode metadata placed beside the timestamp in the response footer. */
+  footerStart?: React.ReactNode;
 }
 
 /**
@@ -29,7 +31,7 @@ interface FanoutMessageCardProps {
  * selected tab so the action bar can target it.
  */
 export const FanoutMessageCard: React.FC<FanoutMessageCardProps> = memo(
-  ({ message, turn, app }) => {
+  ({ message, turn, app, footerStart }) => {
     const [selected, setSelected] = useState<FanoutOptionValue>(() => defaultFanoutOption(turn));
 
     // Fall back to the summary if the selected slot disappears (defensive).
@@ -71,7 +73,10 @@ export const FanoutMessageCard: React.FC<FanoutMessageCardProps> = memo(
           <div className="tw-flex tw-max-w-full tw-flex-col tw-gap-2 tw-overflow-hidden">
             <FanoutTurnView turn={turn} app={app} value={activeValue} onSelect={setSelected} />
             <div className="tw-flex tw-items-center tw-justify-between">
-              <div className="tw-text-xs tw-text-faint">{message.timestamp?.display}</div>
+              <div className="tw-flex tw-items-center tw-gap-2">
+                <div className="tw-text-xs tw-text-faint">{message.timestamp?.display}</div>
+                {footerStart}
+              </div>
               <ChatButtons
                 message={buttonsMessage}
                 onInsertIntoEditor={handleInsert}

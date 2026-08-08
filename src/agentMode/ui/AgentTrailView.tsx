@@ -24,7 +24,7 @@ import { App } from "obsidian";
 interface AgentTrailProps {
   parts: AgentMessagePart[];
   /** True iff this message is the one currently being streamed by the
-   *  agent. Drives reasoning-block spinner / timer. */
+   *  agent. Drives the reasoning block and whole-turn live states. */
   isStreaming: boolean;
   /** Turn start used by the live whole-turn timer. */
   turnStartedAtMs?: number;
@@ -49,20 +49,20 @@ export const AgentTrail: React.FC<AgentTrailProps> = ({
   // the message is still streaming and on cancelled turns (treated as having no
   // user-visible answer), plus whenever there is no prose to act on.
   const answer = agentResponseText(parts);
-  const actions =
+  const footer =
     !isStreaming && turnStopReason !== "cancelled" && answer.length > 0 ? (
-      <AgentMessageActions text={answer} app={app} />
+      <AgentMessageActions text={answer} app={app} durationMs={turnDurationMs} />
+    ) : turnDurationMs !== undefined ? (
+      <AgentTurnDurationIndicator status="complete" durationMs={turnDurationMs} inline />
     ) : null;
 
   return (
     <div className="tw-group tw-flex tw-flex-col tw-gap-1">
       <LinearTrail parts={parts} isStreaming={isStreaming} app={app} />
-      {turnDurationMs !== undefined ? (
-        <AgentTurnDurationIndicator status="complete" durationMs={turnDurationMs} />
-      ) : isStreaming && turnStartedAtMs !== undefined ? (
+      {isStreaming && turnStartedAtMs !== undefined ? (
         <AgentTurnDurationIndicator status="running" startedAtMs={turnStartedAtMs} />
       ) : null}
-      {actions}
+      {footer}
     </div>
   );
 };

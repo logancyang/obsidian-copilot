@@ -1,5 +1,5 @@
 import React from "react";
-import { render, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import ChatSingleMessage, {
   normalizeFootnoteRendering,
 } from "@/components/chat-components/ChatSingleMessage";
@@ -352,5 +352,24 @@ describe("ChatSingleMessage", () => {
     const messageSegment = container.querySelector(".message-segment");
     expect(messageSegment).toBeTruthy();
     expect(messageSegment?.classList.contains("markdown-rendered")).toBe(true);
+  });
+
+  it("places supplied Agent Mode metadata in the centered response footer", async () => {
+    render(
+      <TooltipProvider>
+        <ChatSingleMessage
+          message={baseMessage}
+          app={createAppStub()}
+          isStreaming={false}
+          footerStart={<span>Worked for 24s</span>}
+        />
+      </TooltipProvider>
+    );
+
+    await waitFor(() => expect(renderMarkdownMock).toHaveBeenCalled());
+
+    const footer = screen.getByText("Worked for 24s").closest(".tw-justify-between");
+    expect(footer?.classList.contains("tw-items-center")).toBe(true);
+    expect(footer?.contains(screen.getByTitle("Copy"))).toBe(true);
   });
 });

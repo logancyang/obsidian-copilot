@@ -303,6 +303,8 @@ interface ChatSingleMessageProps {
   onRegenerate?: () => void;
   onEdit?: (newMessage: string) => void;
   onDelete?: () => void;
+  /** Agent Mode metadata placed beside the timestamp in the response footer. */
+  footerStart?: React.ReactNode;
 }
 
 const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
@@ -312,6 +314,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   onRegenerate,
   onEdit,
   onDelete,
+  footerStart,
 }) => {
   const [isEditing, setIsEditing] = useState<boolean>(false);
   const parsedReasoningBlock = useMemo(
@@ -1003,7 +1006,10 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
 
           {!isStreaming && (
             <div className="tw-flex tw-items-center tw-justify-between">
-              <div className="tw-text-xs tw-text-faint">{message.timestamp?.display}</div>
+              <div className="tw-flex tw-items-center tw-gap-2">
+                <div className="tw-text-xs tw-text-faint">{message.timestamp?.display}</div>
+                {footerStart}
+              </div>
               <ChatButtons
                 message={message}
                 onInsertIntoEditor={handleInsertIntoEditor}

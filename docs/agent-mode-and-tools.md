@@ -61,7 +61,9 @@ If you've turned on reduced motion in your operating system, the prompts still r
 
 While an agent turn is running, the activity trail shows **Worked for** with a live elapsed-time counter and the animated Copilot icon. The counter measures the full wall-clock time from sending the prompt until the turn finishes, including tool use and any time spent waiting for a permission or answer.
 
-When the turn finishes, the time freezes and the Copilot icon becomes static. The completed duration remains visible beneath the latest response until you send the next prompt, when a new counter takes its place. Leading zero units are omitted, so durations appear as `18s`, `2m 18s`, or `1h 2m 18s`.
+While a reasoning step is active, its brain row shows an animated ellipsis rather than a second timer. When that step finishes, the row changes to **Thought for** with its frozen duration.
+
+When the turn finishes, the time freezes and the Copilot icon becomes static. The completed duration moves into the same footer row as the response controls and remains visible until you send the next prompt, when a new counter takes its place. Leading zero units are omitted, so durations appear as `18s`, `2m 18s`, or `1h 2m 18s`.
 
 ## Choosing an Operating Mode
 

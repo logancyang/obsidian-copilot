@@ -91,5 +91,18 @@ describe("AgentTurnDurationIndicator", () => {
 
       expect(screen.getByText("2m 18s")).toBeTruthy();
     });
+
+    it("removes block spacing when the completed duration shares a response footer", () => {
+      const { container } = render(
+        <AgentTurnDurationIndicator status="complete" durationMs={24_000} inline />
+      );
+
+      const root = container.firstElementChild;
+      const row = screen.getByText("Worked for").parentElement?.parentElement;
+      expect(root?.classList.contains("tw-mb-2")).toBe(false);
+      expect(root?.classList.contains("tw-mt-1")).toBe(false);
+      expect(row?.classList.contains("tw-items-center")).toBe(true);
+      expect(row?.classList.contains("tw-pl-1")).toBe(true);
+    });
   });
 });

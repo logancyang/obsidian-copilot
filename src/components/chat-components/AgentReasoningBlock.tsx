@@ -57,9 +57,21 @@ export const AgentReasoningBlock: React.FC<AgentReasoningBlockProps> = ({
             <Brain className="tw-size-3.5 tw-text-muted" />
           </span>
 
-          {/* Title and timer */}
-          <span className="tw-font-medium">{isActive ? "Reasoning" : "Thought for"}</span>
-          <span className="tw-text-muted">{formatDuration(elapsedSeconds * 1000)}</span>
+          <span className="tw-font-medium">
+            {isActive ? (
+              <>
+                Reasoning
+                <span className="copilot-shimmer-text" aria-hidden="true">
+                  ...
+                </span>
+              </>
+            ) : (
+              "Thought for"
+            )}
+          </span>
+          {!isActive ? (
+            <span className="tw-text-muted">{formatDuration(elapsedSeconds * 1000)}</span>
+          ) : null}
 
           {canExpand && (
             <ChevronRight

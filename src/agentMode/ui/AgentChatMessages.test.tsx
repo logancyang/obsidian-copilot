@@ -16,7 +16,18 @@ jest.mock("@/hooks/useChatScrolling", () => ({
 
 jest.mock("@/components/chat-components/ChatSingleMessage", () => ({
   __esModule: true,
-  default: ({ message }: { message: { message: string } }) => <div>{message.message}</div>,
+  default: ({
+    message,
+    footerStart,
+  }: {
+    message: { message: string };
+    footerStart?: React.ReactNode;
+  }) => (
+    <div>
+      {message.message}
+      <div data-testid="single-message-footer">{footerStart}</div>
+    </div>
+  ),
 }));
 
 function assistantMessage(
@@ -64,6 +75,9 @@ describe("AgentChatMessages", () => {
       );
 
       expect(screen.getByText("2m 18s")).toBeTruthy();
+      expect(screen.getByTestId("single-message-footer").textContent).toContain(
+        "Worked for 2m 18s"
+      );
       expect(container.querySelector(".copilot-spinner")).toBeTruthy();
       expect(container.querySelector(".copilot-spinner-dot-0")).toBeNull();
     });

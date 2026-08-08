@@ -1,5 +1,7 @@
+import { AgentMessageActions } from "@/agentMode/ui/AgentMessageActions";
 import { AgentMarkdownText } from "@/agentMode/ui/AgentMarkdownText";
 import { AgentTurnDurationIndicator } from "@/agentMode/ui/AgentTurnDurationIndicator";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { useApp } from "@/context";
 import type { Meta, StoryObj } from "@/lib/story";
 import React from "react";
@@ -28,13 +30,19 @@ export const Complete: StoryObj<AgentTurnDurationIndicatorProps> = {
 const AlignedWithResponseDemo: React.FC = () => {
   const app = useApp();
   return (
-    <div>
-      <AgentMarkdownText
-        text="I excluded generated Copilot conversation logs and notes where AI was only mentioned incidentally."
-        app={app}
-      />
-      <AgentTurnDurationIndicator status="complete" durationMs={24_000} />
-    </div>
+    <TooltipProvider>
+      <div className="tw-group tw-flex tw-flex-col tw-gap-1">
+        <AgentMarkdownText
+          text="I excluded generated Copilot conversation logs and notes where AI was only mentioned incidentally."
+          app={app}
+        />
+        <AgentMessageActions
+          text="I excluded generated Copilot conversation logs and notes where AI was only mentioned incidentally."
+          app={app}
+          durationMs={24_000}
+        />
+      </div>
+    </TooltipProvider>
   );
 };
 

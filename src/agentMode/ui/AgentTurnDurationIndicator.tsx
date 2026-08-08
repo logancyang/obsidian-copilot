@@ -1,12 +1,18 @@
 import { CopilotSpinner } from "@/components/chat-components/CopilotSpinner";
+import { cn } from "@/lib/utils";
 import React, { useEffect, useRef, useState } from "react";
 
-interface RunningTurnDurationProps {
+interface TurnDurationLayoutProps {
+  /** Remove block spacing when the duration shares a response footer row. */
+  inline?: boolean;
+}
+
+interface RunningTurnDurationProps extends TurnDurationLayoutProps {
   status: "running";
   startedAtMs: number;
 }
 
-interface CompletedTurnDurationProps {
+interface CompletedTurnDurationProps extends TurnDurationLayoutProps {
   status: "complete";
   durationMs: number;
 }
@@ -48,9 +54,17 @@ export const AgentTurnDurationIndicator: React.FC<AgentTurnDurationIndicatorProp
   return (
     <div
       ref={rootRef}
-      className="tw-mb-2 tw-mt-1 tw-w-full tw-text-ui-medium max-md:tw-mb-1.5 max-md:tw-mt-0.5"
+      className={cn(
+        "tw-text-ui-medium",
+        !props.inline && "tw-mb-2 tw-mt-1 tw-w-full max-md:tw-mb-1.5 max-md:tw-mt-0.5"
+      )}
     >
-      <div className="tw-flex tw-w-full tw-items-center tw-gap-1.5 tw-pl-1 tw-text-left tw-text-ui-small tw-text-muted">
+      <div
+        className={cn(
+          "tw-flex tw-items-center tw-gap-1.5 tw-pl-1 tw-text-left tw-text-ui-small tw-text-muted",
+          !props.inline && "tw-w-full"
+        )}
+      >
         <span className="tw-flex tw-size-icon-xs tw-shrink-0 tw-items-center tw-justify-start">
           <CopilotSpinner animated={isRunning} />
         </span>

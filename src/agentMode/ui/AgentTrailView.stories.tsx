@@ -80,7 +80,9 @@ const TrailDemo: React.FC<{ parts: AgentMessagePart[]; isStreaming?: boolean }> 
         parts={parts}
         isStreaming={isStreaming}
         turnStartedAtMs={isStreaming ? Date.now() - 138_000 : undefined}
+        turnDurationMs={isStreaming ? undefined : 138_000}
         app={app}
+        turnStopReason={isStreaming ? undefined : "end_turn"}
       />
     </TooltipProvider>
   );
