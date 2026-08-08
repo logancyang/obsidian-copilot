@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@/lib/story";
 import {
   VaultInstructionsSetting,
   type VaultInstructionsSettingProps,
-} from "@/settings/v2/components/VaultInstructionsSetting";
+} from "./VaultInstructionsSetting";
 
 const meta = {
   title: "Settings/Vault Instructions Setting",
