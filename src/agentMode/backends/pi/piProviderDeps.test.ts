@@ -7,10 +7,6 @@ jest.mock("@/logger", () => ({
   logError: jest.fn(),
 }));
 
-jest.mock("@/encryptionService", () => ({
-  getDecryptedKey: jest.fn(async (key: string) => `decrypted:${key}`),
-}));
-
 const getSettings = jest.fn();
 jest.mock("@/settings/model", () => ({
   getSettings: () => getSettings(),
@@ -20,8 +16,10 @@ jest.mock("@/settings/model", () => ({
 // module scope) stays out of this suite. The helper's own behavior — default to
 // requiring a key when the flag predates the field — is covered in its module.
 jest.mock("@/modelManagement", () => ({
-  providerRequiresApiKey: (provider: { requiresApiKey?: boolean }) =>
-    provider.requiresApiKey ?? true,
+  providerNeedsResolvedApiKey: (provider: {
+    requiresApiKey?: boolean;
+    apiKeyKeychainId?: string | null;
+  }) => (provider.requiresApiKey ?? true) || !!provider.apiKeyKeychainId,
 }));
 
 function byokRow(overrides: Record<string, unknown> = {}) {
@@ -52,10 +50,10 @@ describe("piProviderDeps", () => {
       });
     });
 
-    it("decrypts the Copilot Plus license key", async () => {
+    it("uses the Copilot Plus license key hydrated into runtime settings", async () => {
       const deps = await resolvePiProviderDeps(pluginWithKey("k"));
 
-      expect(deps.plusLicenseKey).toBe("decrypted:license");
+      expect(deps.plusLicenseKey).toBe("license");
     });
 
     it("exposes a user's OpenAI-compatible endpoint with its configured models", async () => {
@@ -122,6 +120,57 @@ describe("piProviderDeps", () => {
           modelIds: ["llama3.2"],
         },
       ]);
+    });
+
+    it("keeps a keyless custom endpoint on a public host when its persisted contract allows it (https://github.com/logancyang/obsidian-copilot/issues/2895)", async () => {
+      getSettings.mockReturnValue({
+        plusLicenseKey: "license",
+        providers: {
+          publicGateway: byokRow({
+            providerId: "publicGateway",
+            displayName: "Trusted gateway",
+            baseUrl: "https://trusted-gateway.example.com/v1",
+            requiresApiKey: false,
+          }),
+        },
+        configuredModels: [
+          {
+            configuredModelId: "c1",
+            providerId: "publicGateway",
+            info: { id: "qwen3.8-27b" },
+          },
+        ],
+      });
+
+      const deps = await resolvePiProviderDeps(pluginWithKey(null));
+
+      expect(deps.byokProviders).toEqual([
+        {
+          id: "publicGateway",
+          displayName: "Trusted gateway",
+          baseUrl: "https://trusted-gateway.example.com/v1",
+          apiKey: "",
+          requiresApiKey: false,
+          modelIds: ["qwen3.8-27b"],
+        },
+      ]);
+    });
+
+    it("skips an optional-auth provider when its stored key can no longer be resolved (https://github.com/logancyang/obsidian-copilot/issues/2895)", async () => {
+      getSettings.mockReturnValue({
+        plusLicenseKey: "license",
+        providers: {
+          p1: byokRow({
+            requiresApiKey: false,
+            apiKeyKeychainId: "keychain-p1",
+          }),
+        },
+        configuredModels: [{ configuredModelId: "c1", providerId: "p1", info: { id: "gpt-5.5" } }],
+      });
+
+      const deps = await resolvePiProviderDeps(pluginWithKey(null));
+
+      expect(deps.byokProviders).toHaveLength(0);
     });
 
     it("skips rows that cannot answer: wrong type, no key, no models, no base url", async () => {

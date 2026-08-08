@@ -1,5 +1,4 @@
-import { getDecryptedKey } from "@/encryptionService";
-import { providerRequiresApiKey } from "@/modelManagement";
+import { providerNeedsResolvedApiKey } from "@/modelManagement";
 import type CopilotPlugin from "@/main";
 import { getSettings } from "@/settings/model";
 import type { PiByokProvider, PiFetchResponse, PiProviderDeps } from "@/pi/types";
@@ -25,7 +24,10 @@ async function collectByokProviders(plugin: CopilotPlugin): Promise<readonly PiB
       .filter((model) => model.providerId === provider.providerId)
       .map((model) => model.info.id);
     if (modelIds.length === 0) continue;
-    const requiresApiKey = providerRequiresApiKey(provider);
+    // Optional-auth endpoints with a stored key must fail closed when that
+    // key can no longer be resolved rather than silently becoming keyless.
+    // https://github.com/logancyang/obsidian-copilot/issues/2895
+    const requiresApiKey = providerNeedsResolvedApiKey(provider);
     const apiKey =
       (await plugin.modelManagement.providerRegistry.getApiKey(provider.providerId)) ?? "";
     // A local runner (Ollama, LM Studio) is usable with no key at all; only an
@@ -50,7 +52,7 @@ async function collectByokProviders(plugin: CopilotPlugin): Promise<readonly PiB
  */
 export async function resolvePiProviderDeps(plugin: CopilotPlugin): Promise<PiProviderDeps> {
   return {
-    plusLicenseKey: await getDecryptedKey(getSettings().plusLicenseKey),
+    plusLicenseKey: getSettings().plusLicenseKey,
     byokProviders: await collectByokProviders(plugin),
     // Native fetch, not `safeFetch`: the model proxy allows the Obsidian
     // origin, and `safeFetch` buffers the whole body, which would defeat

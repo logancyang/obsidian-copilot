@@ -17,6 +17,7 @@ Open [**Settings → Copilot → Basic → Agents**](settings.md#basic). Configu
 | **opencode** | Recommended for most people                     | Copilot-hosted models, your API providers, or local OpenAI-compatible APIs |
 | **Claude**   | You already use Claude Code                     | Your Claude Code installation and Anthropic account                        |
 | **Codex**    | You already use the Codex CLI and Codex account | Your Codex CLI login through the `codex-acp` adapter                       |
+| **Pi**       | You want a built-in agent with no separate CLI  | Copilot-hosted models or your OpenAI-compatible providers                  |
 
 For opencode and Codex, **Managed by Copilot** uses the version Copilot tests. **My own binary** remains available, but other versions may not work correctly with Copilot. The Configure dialog reminds you of this when you choose your own binary.
 
@@ -82,6 +83,10 @@ You can also choose **Sign in** on the Agent Chat status card. For terminal logi
 Switching to your own Codex binary removes unused managed downloads. Your custom binary and account credentials remain on your computer. Cancel is available during downloads; configuration changes finish before another action can start.
 
 If your adapter is below the supported minimum, select **Configure** in Settings to manage it. Agent Chat also offers **Upgrade**, with shared progress and errors. Copilot uses the login stored by the bundled Codex CLI. Models added under **BYOK** do not join the Codex model list.
+
+### Pi
+
+Pi is built into Copilot and needs no separate CLI installation. Enable it under **Settings → Copilot → Basic → Agents → Pi**; it can use Copilot Plus models or models from your configured OpenAI-compatible providers.
 
 For Windows-specific installation help, see [Windows setup for Agent Chat](agent-mode-windows-setup.md).
 

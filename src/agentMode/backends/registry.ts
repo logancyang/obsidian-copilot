@@ -43,6 +43,7 @@ export function backendDisplayOrder(): BackendDescriptor[] {
       OpencodeBackendDescriptor,
       ClaudeBackendDescriptor,
       CodexBackendDescriptor,
+      PiBackendDescriptor,
     ];
   }
   return displayOrderCache;
