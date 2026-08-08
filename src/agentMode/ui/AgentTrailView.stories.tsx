@@ -91,10 +91,11 @@ const UNIFIED_CARDS: AgentMessagePart[] = [
  * the Copy / Insert row, whose `MessageActionButton` expects a provider from an
  * ancestor rather than supplying its own.
  */
-const TrailDemo: React.FC<{ parts: AgentMessagePart[]; isStreaming?: boolean }> = ({
-  parts,
-  isStreaming = false,
-}) => {
+const TrailDemo: React.FC<{
+  parts: AgentMessagePart[];
+  isStreaming?: boolean;
+  showCompletedDuration?: boolean;
+}> = ({ parts, isStreaming = false, showCompletedDuration = true }) => {
   const app = useApp();
   return (
     <TooltipProvider>
@@ -102,7 +103,8 @@ const TrailDemo: React.FC<{ parts: AgentMessagePart[]; isStreaming?: boolean }> 
         parts={parts}
         isStreaming={isStreaming}
         turnStartedAtMs={isStreaming ? Date.now() - 138_000 : undefined}
-        turnDurationMs={isStreaming ? undefined : 138_000}
+        turnDurationMs={!isStreaming && showCompletedDuration ? 138_000 : undefined}
+        timestamp="2026/08/07 20:31:10"
         app={app}
         turnStopReason={isStreaming ? undefined : "end_turn"}
       />
@@ -130,4 +132,9 @@ export const Streaming: StoryObj<AgentTrailProps> = {
 /** Reasoning and every tool-card family share one inset, chevron, and expanded rail. */
 export const UnifiedCardStyles: StoryObj<AgentTrailProps> = {
   render: () => <TrailDemo parts={UNIFIED_CARDS} />,
+};
+
+/** A restored structured turn falls back to its timestamp when no duration was persisted. */
+export const CompletedWithoutDuration: StoryObj<AgentTrailProps> = {
+  render: () => <TrailDemo parts={UNIFIED_CARDS} showCompletedDuration={false} />,
 };

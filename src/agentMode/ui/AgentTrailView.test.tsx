@@ -126,10 +126,23 @@ describe("AgentTrail", () => {
     expect(screen.queryByTitle("Insert / Replace at cursor")).toBeNull();
   });
 
+  it("shows the running duration instead of the timestamp while streaming", () => {
+    renderTrail({
+      isStreaming: true,
+      turnStopReason: undefined,
+      turnStartedAtMs: Date.now() - 24_000,
+      timestamp: "2026/08/07 20:31:10",
+    });
+
+    expect(screen.getByText("Worked for")).toBeTruthy();
+    expect(screen.queryByText("2026/08/07 20:31:10")).toBeNull();
+  });
+
   it("renders neither button when the turn was cancelled", () => {
-    renderTrail({ turnStopReason: "cancelled" });
+    renderTrail({ turnStopReason: "cancelled", timestamp: "2026/08/07 20:31:10" });
     expect(screen.queryByTitle("Copy")).toBeNull();
     expect(screen.queryByTitle("Insert / Replace at cursor")).toBeNull();
+    expect(screen.getByText("2026/08/07 20:31:10")).toBeTruthy();
   });
 
   it("renders neither button when the turn produced no trailing prose", () => {
@@ -137,6 +150,15 @@ describe("AgentTrail", () => {
     expect(screen.queryByTitle("Copy")).toBeNull();
     expect(screen.queryByTitle("Insert / Replace at cursor")).toBeNull();
   });
+
+  it("shows the timestamp with response controls when a completed duration is unavailable", () => {
+    renderTrail({ timestamp: "2026/08/07 20:31:10" });
+
+    expect(screen.getByText("2026/08/07 20:31:10")).toBeTruthy();
+    expect(screen.getByTitle("Copy")).toBeTruthy();
+    expect(screen.queryByText("Worked for")).toBeNull();
+  });
+
   it("keeps research inline while showing a non-collapsible completed duration", () => {
     renderTrail({
       parts: [
@@ -147,10 +169,12 @@ describe("AgentTrail", () => {
       ],
       turnStopReason: "end_turn",
       turnDurationMs: 138_000,
+      timestamp: "2026/08/07 20:31:10",
     });
 
     expect(screen.getByText("Worked for")).toBeTruthy();
     expect(screen.getByText("2m 18s")).toBeTruthy();
+    expect(screen.queryByText("2026/08/07 20:31:10")).toBeNull();
     expect(screen.queryByRole("button", { name: /Worked for/i })).toBeNull();
     const footer = screen.getByText("Worked for").closest(".tw-justify-between");
     expect(footer?.classList.contains("tw-items-center")).toBe(true);

@@ -35,16 +35,7 @@ const CompletedDuration: React.FC = () => (
 const CompletedResponseVariantsDemo: React.FC = () => (
   <div className="tw-flex tw-min-w-0 tw-flex-col tw-gap-5">
     <section className="tw-min-w-0">
-      <div className="tw-mb-2 tw-text-xs tw-font-medium tw-text-muted">
-        Structured activity trail
-      </div>
-      <AssistantResponseFooter leading={<CompletedDuration />} actions={<StoryActions />} />
-    </section>
-
-    <section className="tw-min-w-0">
-      <div className="tw-mb-2 tw-text-xs tw-font-medium tw-text-muted">
-        Plain Agent Mode response
-      </div>
+      <div className="tw-mb-2 tw-text-xs tw-font-medium tw-text-muted">Latest structured turn</div>
       <AssistantResponseFooter
         leading={<CompletedDuration />}
         timestamp="2026/08/07 20:31:10"
@@ -54,7 +45,14 @@ const CompletedResponseVariantsDemo: React.FC = () => (
 
     <section className="tw-min-w-0">
       <div className="tw-mb-2 tw-text-xs tw-font-medium tw-text-muted">
-        Multi-agent fan-out response
+        Structured turn without a duration
+      </div>
+      <AssistantResponseFooter timestamp="2026/08/07 20:31:10" actions={<StoryActions />} />
+    </section>
+
+    <section className="tw-min-w-0">
+      <div className="tw-mb-2 tw-text-xs tw-font-medium tw-text-muted">
+        Plain or fan-out response with a duration
       </div>
       <AssistantResponseFooter
         leading={<CompletedDuration />}
@@ -65,7 +63,7 @@ const CompletedResponseVariantsDemo: React.FC = () => (
   </div>
 );
 
-/** Full timestamps exercise the narrow-pane ordering called out in review. */
+/** Every footer shows either the duration or its timestamp, never both. */
 export const CompletedResponseVariants: StoryObj<AssistantResponseFooterProps> = {
   render: CompletedResponseVariantsDemo,
 };

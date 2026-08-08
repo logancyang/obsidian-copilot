@@ -15,6 +15,8 @@ interface AgentMessageActionsProps {
   app: App;
   /** Frozen wall-clock duration shown beside the completed response controls. */
   durationMs?: number;
+  /** Message creation time used when no completed duration is available. */
+  timestamp?: string;
 }
 
 /**
@@ -27,6 +29,7 @@ export const AgentMessageActions: React.FC<AgentMessageActionsProps> = ({
   text,
   app,
   durationMs,
+  timestamp,
 }) => (
   <AssistantResponseFooter
     leading={
@@ -34,6 +37,7 @@ export const AgentMessageActions: React.FC<AgentMessageActionsProps> = ({
         <AgentTurnDurationIndicator status="complete" durationMs={durationMs} inline />
       ) : undefined
     }
+    timestamp={timestamp}
     actions={
       <div
         className={cn("tw-flex tw-items-center tw-gap-1", {

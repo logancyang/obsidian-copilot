@@ -30,6 +30,12 @@ jest.mock("@/components/chat-components/ChatSingleMessage", () => ({
   ),
 }));
 
+jest.mock("@/agentMode/ui/AgentTrailView", () => ({
+  AgentTrail: ({ timestamp }: { timestamp?: string }) => (
+    <div data-testid="agent-trail-timestamp">{timestamp}</div>
+  ),
+}));
+
 function assistantMessage(
   id: string,
   timestampMs: number,
@@ -97,6 +103,21 @@ describe("AgentChatMessages", () => {
 
       act(() => jest.advanceTimersByTime(1_000));
       expect(screen.getByText("3s")).toBeTruthy();
+    });
+
+    it("passes the message timestamp to a structured trail without a duration", () => {
+      const timestamp = "2026/08/07 20:31:10";
+      renderMessages(
+        [
+          assistantMessage("answer-1", 62_000, {
+            timestamp: { epoch: 62_000, display: timestamp, fileName: "20260807_203110" },
+            parts: [{ kind: "thought", text: "Inspect the response." }],
+          }),
+        ],
+        false
+      );
+
+      expect(screen.getByTestId("agent-trail-timestamp").textContent).toBe(timestamp);
     });
   });
 });

@@ -354,9 +354,9 @@ describe("ChatSingleMessage", () => {
     expect(messageSegment?.classList.contains("markdown-rendered")).toBe(true);
   });
 
-  it("places supplied Agent Mode metadata before the timestamp in the response footer", async () => {
+  it("shows supplied Agent Mode metadata instead of the timestamp in the response footer", async () => {
     const timestamp = "2026/08/07 20:31:10";
-    render(
+    const { rerender } = render(
       <TooltipProvider>
         <ChatSingleMessage
           message={{ ...baseMessage, timestamp: { epoch: 1, display: timestamp, fileName: "now" } }}
@@ -373,11 +373,17 @@ describe("ChatSingleMessage", () => {
     const footer = duration.closest(".tw-justify-between");
     expect(footer?.classList.contains("tw-items-center")).toBe(true);
     expect(footer?.contains(screen.getByTitle("Copy"))).toBe(true);
-    expect(
-      Boolean(
-        duration.compareDocumentPosition(screen.getByText(timestamp)) &
-        Node.DOCUMENT_POSITION_FOLLOWING
-      )
-    ).toBe(true);
+    expect(screen.queryByText(timestamp)).toBeNull();
+
+    rerender(
+      <TooltipProvider>
+        <ChatSingleMessage
+          message={{ ...baseMessage, timestamp: { epoch: 1, display: timestamp, fileName: "now" } }}
+          app={createAppStub()}
+          isStreaming={false}
+        />
+      </TooltipProvider>
+    );
+    expect(screen.getByText(timestamp)).toBeTruthy();
   });
 });

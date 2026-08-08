@@ -189,6 +189,7 @@ const AgentChatMessages = memo(
                       isStreaming={message.id === streamingMessageId}
                       turnStartedAtMs={runningTurnStartedAtMs}
                       turnDurationMs={completedTurnDurationMs}
+                      timestamp={message.timestamp?.display}
                       app={app}
                       turnStopReason={message.turnStopReason}
                     />

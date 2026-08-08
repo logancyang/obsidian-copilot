@@ -63,7 +63,7 @@ While an agent turn is running, the activity trail shows **Worked for** with a l
 
 While a reasoning step is active, its brain row shows an animated ellipsis rather than a second timer. When that step finishes, the row changes to **Thought for** with its frozen duration.
 
-When the turn finishes, the time freezes and the Copilot icon becomes static. The completed duration moves to the leading edge of the same footer row as the response controls; when a response timestamp is shown, it follows the duration. The duration remains visible until you send the next prompt, when a new counter takes its place. Leading zero units are omitted, so durations appear as `18s`, `2m 18s`, or `1h 2m 18s`.
+When the turn finishes, the time freezes and the Copilot icon becomes static. The completed duration moves to the leading edge of the same footer row as the response controls. When a duration is unavailable, the message timestamp appears in that position instead; only one of the two is shown. The duration remains visible until you send the next prompt, when that completed response falls back to its timestamp and the new turn owns the live counter. Leading zero units are omitted, so durations appear as `18s`, `2m 18s`, or `1h 2m 18s`.
 
 ## Choosing an Operating Mode
 

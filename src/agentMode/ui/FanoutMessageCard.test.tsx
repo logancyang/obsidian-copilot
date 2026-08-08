@@ -31,7 +31,7 @@ jest.mock("obsidian", () => ({
 
 describe("FanoutMessageCard", () => {
   describe("FanoutMessageCard()", () => {
-    it("places supplied duration metadata before the timestamp in the response footer", () => {
+    it("shows supplied duration metadata instead of the timestamp in the response footer", () => {
       const timestamp = "2026/08/07 20:31:10";
       const message: AgentChatMessage = {
         id: "fanout-1",
@@ -45,7 +45,7 @@ describe("FanoutMessageCard", () => {
         summary: { status: "done", text: "Summary response" },
       };
 
-      render(
+      const { rerender } = render(
         <TooltipProvider>
           <FanoutMessageCard
             message={message}
@@ -60,12 +60,14 @@ describe("FanoutMessageCard", () => {
       const footer = duration.closest(".tw-justify-between");
       expect(footer?.classList.contains("tw-items-center")).toBe(true);
       expect(footer?.contains(screen.getByTitle("Copy"))).toBe(true);
-      expect(
-        Boolean(
-          duration.compareDocumentPosition(screen.getByText(timestamp)) &
-          Node.DOCUMENT_POSITION_FOLLOWING
-        )
-      ).toBe(true);
+      expect(screen.queryByText(timestamp)).toBeNull();
+
+      rerender(
+        <TooltipProvider>
+          <FanoutMessageCard message={message} turn={turn} app={{} as never} />
+        </TooltipProvider>
+      );
+      expect(screen.getByText(timestamp)).toBeTruthy();
     });
   });
 });

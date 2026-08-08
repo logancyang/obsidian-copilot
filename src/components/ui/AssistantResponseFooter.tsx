@@ -3,10 +3,10 @@ import React from "react";
 export interface AssistantResponseFooterProps {
   /** Metadata anchored to the response's leading edge, such as whole-turn duration. */
   leading?: React.ReactNode;
-  /** Optional creation time shown after leading metadata. */
+  /** Creation time shown only when leading metadata is absent. */
   timestamp?: React.ReactNode;
   /** Response controls anchored to the trailing edge. */
-  actions: React.ReactNode;
+  actions?: React.ReactNode;
 }
 
 /**
@@ -18,7 +18,9 @@ export const AssistantResponseFooter: React.FC<AssistantResponseFooterProps> = (
   actions,
 }) => {
   const hasLeading = leading !== undefined && leading !== null && leading !== false;
-  const hasTimestamp = timestamp !== undefined && timestamp !== null && timestamp !== false;
+  const hasTimestamp =
+    !hasLeading && timestamp !== undefined && timestamp !== null && timestamp !== false;
+  const hasActions = actions !== undefined && actions !== null && actions !== false;
   const hasMetadata = hasLeading || hasTimestamp;
 
   return (
@@ -35,7 +37,11 @@ export const AssistantResponseFooter: React.FC<AssistantResponseFooterProps> = (
           ) : null}
         </div>
       ) : null}
-      <div className="tw-ml-auto tw-shrink-0">{actions}</div>
+      {hasActions ? (
+        <div data-response-footer-actions className="tw-ml-auto tw-shrink-0">
+          {actions}
+        </div>
+      ) : null}
     </div>
   );
 };

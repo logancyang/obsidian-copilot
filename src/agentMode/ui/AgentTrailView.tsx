@@ -18,6 +18,7 @@ import type { ToolSummaryContext } from "@/agentMode/ui/toolSummaries";
 import { useThinkingClock } from "@/agentMode/ui/useThinkingClock";
 import { useTrailExpansion, type TrailExpansion } from "@/agentMode/ui/useTrailExpansion";
 import { AgentTurnDurationIndicator } from "@/agentMode/ui/AgentTurnDurationIndicator";
+import { AssistantResponseFooter } from "@/components/ui/AssistantResponseFooter";
 import { getVaultBase } from "@/utils/vaultPath";
 import { App } from "obsidian";
 
@@ -30,6 +31,8 @@ interface AgentTrailProps {
   turnStartedAtMs?: number;
   /** Frozen whole-turn duration retained after the latest turn completes. */
   turnDurationMs?: number;
+  /** Message creation time used when this turn has no visible duration. */
+  timestamp?: string;
   /** Obsidian `App` for the markdown renderer used by `text` parts. */
   app: App;
   /** Backend stopReason once the turn has ended. Only `cancelled` suppresses
@@ -42,6 +45,7 @@ export const AgentTrail: React.FC<AgentTrailProps> = ({
   isStreaming,
   turnStartedAtMs,
   turnDurationMs,
+  timestamp,
   app,
   turnStopReason,
 }) => {
@@ -49,17 +53,29 @@ export const AgentTrail: React.FC<AgentTrailProps> = ({
   // the message is still streaming and on cancelled turns (treated as having no
   // user-visible answer), plus whenever there is no prose to act on.
   const answer = agentResponseText(parts);
+  const hasRunningDuration = isStreaming && turnStartedAtMs !== undefined;
   const footer =
     !isStreaming && turnStopReason !== "cancelled" && answer.length > 0 ? (
-      <AgentMessageActions text={answer} app={app} durationMs={turnDurationMs} />
+      <AgentMessageActions
+        text={answer}
+        app={app}
+        durationMs={turnDurationMs}
+        timestamp={timestamp}
+      />
     ) : turnDurationMs !== undefined ? (
-      <AgentTurnDurationIndicator status="complete" durationMs={turnDurationMs} inline />
+      <AssistantResponseFooter
+        leading={
+          <AgentTurnDurationIndicator status="complete" durationMs={turnDurationMs} inline />
+        }
+      />
+    ) : !hasRunningDuration && timestamp ? (
+      <AssistantResponseFooter timestamp={timestamp} />
     ) : null;
 
   return (
     <div className="tw-group tw-flex tw-flex-col tw-gap-1">
       <LinearTrail parts={parts} isStreaming={isStreaming} app={app} />
-      {isStreaming && turnStartedAtMs !== undefined ? (
+      {hasRunningDuration ? (
         <AgentTurnDurationIndicator status="running" startedAtMs={turnStartedAtMs} />
       ) : null}
       {footer}
