@@ -324,6 +324,27 @@ describe("ReportIssueFlow", () => {
         ).toBeNull();
       });
 
+      it("uploads again on Retry and finishes on the second attempt", async () => {
+        // The first failure must leave the flow able to try again, not merely
+        // showing a button: the single-flight lock is released in a `finally`,
+        // and a lock left held would make Retry silently do nothing.
+        const upload = jest
+          .fn()
+          .mockResolvedValueOnce({ ok: false, error: "Network request failed" })
+          .mockResolvedValueOnce({ ok: true, result: uploadResult, issueUrl: linkedIssueUrl });
+        const { props } = renderFlow({ upload });
+        submit();
+        await waitFor(() => expect(screen.getByText(prepared.zipName)).toBeTruthy());
+
+        fireEvent.click(uploadButton());
+        await waitFor(() => expect(screen.getByText("Could not upload the report")).toBeTruthy());
+
+        fireEvent.click(screen.getByRole("button", { name: "Retry upload" }));
+
+        await waitFor(() => expect(upload).toHaveBeenCalledTimes(2));
+        expect(props.openIssuePage).toHaveBeenCalledWith(linkedIssueUrl);
+      });
+
       it("replaces the upload control with a spinner on click, so a second click has nothing to hit", async () => {
         let resolveUpload: (outcome: UploadOutcome) => void = () => {};
         const upload = jest.fn(
@@ -372,6 +393,33 @@ describe("ReportIssueFlow", () => {
         // it. The report is on the server; withholding the link would leave the
         // user with an upload they can neither see nor use.
         expect(props.openIssuePage).toHaveBeenCalledWith(linkedIssueUrl);
+      });
+
+      it("stays quiet when the upload fails after the modal closes", async () => {
+        // The mirror of the case above, and the reason the success path cannot
+        // just drop its mounted check: a late failure has no surface left to
+        // report on, so it must not open a browser or write state into an
+        // unmounted tree.
+        let rejectUpload: (outcome: UploadOutcome) => void = () => {};
+        const upload = jest.fn(
+          () =>
+            new Promise<UploadOutcome>((resolve) => {
+              rejectUpload = resolve;
+            })
+        );
+        const { props, unmount } = renderFlow({ upload });
+        submit();
+        await waitFor(() => expect(screen.getByText(prepared.zipName)).toBeTruthy());
+
+        fireEvent.click(uploadButton());
+        await waitFor(() => expect(upload).toHaveBeenCalled());
+
+        unmount();
+        await act(async () => {
+          rejectUpload({ ok: false, error: "Network request failed" });
+        });
+
+        expect(props.openIssuePage).not.toHaveBeenCalled();
       });
 
       it("shows a spinner in place of the button row while uploading", async () => {
