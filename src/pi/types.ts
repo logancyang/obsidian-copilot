@@ -33,9 +33,9 @@ export interface PiByokProvider {
   /** Empty for a keyless endpoint (a local runner such as Ollama or LM Studio). */
   apiKey: string;
   /**
-   * Whether this endpoint refuses requests without a key. A keyless local
-   * runner is configured even with an empty `apiKey`, so it must not be
-   * treated as unauthenticated.
+   * Whether this configured provider needs a resolved key. This is also true
+   * for an optional-auth endpoint with a stored key pointer, so a missing
+   * secret cannot silently downgrade an authenticated setup to keyless.
    */
   requiresApiKey: boolean;
   modelIds: readonly string[];
