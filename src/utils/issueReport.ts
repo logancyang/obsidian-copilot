@@ -13,6 +13,7 @@
  * absolute home paths and may carry tokens or emails.
  */
 
+import { requireDesktopModule } from "@/utils/desktopRuntime";
 import { redactLogText } from "./redactLog";
 
 /**
@@ -187,10 +188,8 @@ export function buildReportIssueUrl(input: ReportInput, attachedFiles: string[])
 }
 
 function getNodeReportRuntime(): ReportRuntime {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const fs = require("node:fs/promises") as typeof import("node:fs/promises");
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const path = require("node:path") as typeof import("node:path");
+  const fs = requireDesktopModule<typeof import("node:fs/promises")>("node:fs/promises");
+  const path = requireDesktopModule<typeof import("node:path")>("node:path");
   return {
     join: (...parts: string[]) => path.join(...parts),
     mkdir: async (p, opts) => {

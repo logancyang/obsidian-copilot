@@ -1,4 +1,5 @@
 import { logWarn } from "@/logger";
+import { requireDesktopModule } from "@/utils/desktopRuntime";
 
 interface ElectronRect {
   x: number;
@@ -33,8 +34,7 @@ interface ElectronRemote {
  */
 export async function captureViewScreenshot(el: HTMLElement): Promise<Uint8Array | null> {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const electron = require("electron") as { remote?: ElectronRemote } | undefined;
+    const electron = requireDesktopModule<{ remote?: ElectronRemote } | undefined>("electron");
     const remote = electron?.remote;
     if (!remote) return null;
 

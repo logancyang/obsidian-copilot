@@ -1,5 +1,7 @@
-import * as fs from "node:fs";
-import * as path from "node:path";
+import { requireDesktopModule } from "@/utils/desktopRuntime";
+
+const fs = requireDesktopModule<typeof import("node:fs")>("node:fs");
+const path = requireDesktopModule<typeof import("node:path")>("node:path");
 
 export const COPILOT_OBSIDIAN_CLI_ENV = "COPILOT_OBSIDIAN_CLI";
 

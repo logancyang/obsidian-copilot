@@ -10,7 +10,9 @@
  * Pure leaf: callers inject `homeDir`, `platform`, `env`, and `fs` so tests
  * don't touch real disk.
  */
-import * as path from "node:path";
+import { requireDesktopModule } from "@/utils/desktopRuntime";
+
+const path = requireDesktopModule<typeof import("node:path")>("node:path");
 
 import { WELL_KNOWN_BIN_DIRS } from "@/utils/binaryPath";
 import { nodeToolBinDirCandidates, type NodeToolFs } from "@/utils/nodeToolBinDirs";

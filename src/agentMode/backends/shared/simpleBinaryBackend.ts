@@ -1,4 +1,6 @@
-import * as fs from "node:fs";
+import { requireDesktopModule } from "@/utils/desktopRuntime";
+
+const fs = requireDesktopModule<typeof import("node:fs")>("node:fs");
 import type { App } from "obsidian";
 import type CopilotPlugin from "@/main";
 import { AcpBackendProcess } from "@/agentMode/acp/AcpBackendProcess";

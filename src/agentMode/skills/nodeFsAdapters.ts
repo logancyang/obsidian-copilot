@@ -1,6 +1,8 @@
 import { logWarn } from "@/logger";
-import * as fs from "node:fs";
-import * as path from "node:path";
+import { requireDesktopModule } from "@/utils/desktopRuntime";
+
+const fs = requireDesktopModule<typeof import("node:fs")>("node:fs");
+const path = requireDesktopModule<typeof import("node:path")>("node:path");
 import type { ProjectDiscoveryFs } from "./discoverProjectSkills";
 import type { MigrateSkillFs } from "./migrateProjectSkill";
 import { errCode } from "@/utils/errorUtils";

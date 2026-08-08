@@ -4,7 +4,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { logError, logInfo } from "@/logger";
 import { captureViewScreenshot } from "@/utils/captureViewScreenshot";
-import { isDesktopRuntime } from "@/utils/desktopRuntime";
+import { isDesktopRuntime, requireDesktopModule } from "@/utils/desktopRuntime";
 import { assembleReportBundle, type ReportEnvInfo } from "@/utils/issueReport";
 import { findLatestOpencodeLog } from "@/utils/opencodeLog";
 import { createPluginRoot } from "@/utils/react/createPluginRoot";
@@ -40,10 +40,9 @@ interface ElectronShell {
 
 function getElectronShell(): ElectronShell | null {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const electron = require("electron") as
-      | { shell?: ElectronShell; remote?: { shell?: ElectronShell } }
-      | undefined;
+    const electron = requireDesktopModule<
+      { shell?: ElectronShell; remote?: { shell?: ElectronShell } } | undefined
+    >("electron");
     return electron?.shell ?? electron?.remote?.shell ?? null;
   } catch {
     return null;
@@ -52,10 +51,8 @@ function getElectronShell(): ElectronShell | null {
 
 function reportsRootDir(): string | null {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const os = require("node:os") as typeof import("node:os");
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const path = require("node:path") as typeof import("node:path");
+    const os = requireDesktopModule<typeof import("node:os")>("node:os");
+    const path = requireDesktopModule<typeof import("node:path")>("node:path");
     return path.join(os.tmpdir(), "obsidian-copilot", "reports");
   } catch {
     return null;
@@ -258,8 +255,7 @@ export class ReportIssueModal extends Modal {
 
 async function resolveOpencodeLogPath(): Promise<string | null> {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const os = require("node:os") as typeof import("node:os");
+    const os = requireDesktopModule<typeof import("node:os")>("node:os");
     // Resolve the log dir from the same env OpencodeBackend spawns opencode with:
     // user env overrides (e.g. XDG_DATA_HOME / HOME) relocate opencode's data dir,
     // so the log lives wherever the merged env points, not the ambient one.

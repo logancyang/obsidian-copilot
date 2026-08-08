@@ -16,3 +16,20 @@ export function isDesktopRuntime(): boolean {
   // eslint-disable-next-line no-restricted-properties -- this helper owns the canonical check
   return Platform.isDesktopApp && !Platform.isMobile;
 }
+
+/**
+ * Load a Node module only after both Obsidian and the emulation-aware runtime
+ * check confirm that Node APIs are available.
+ *
+ * @param moduleId - Node module identifier to load from Electron's CommonJS runtime.
+ * @returns The requested Node module.
+ */
+export function requireDesktopModule<T>(moduleId: string): T {
+  if (!Platform.isDesktop) {
+    throw new Error(`Node module "${moduleId}" is unavailable outside Obsidian desktop.`);
+  }
+  if (!isDesktopRuntime()) {
+    throw new Error(`Node module "${moduleId}" is unavailable while mobile mode is active.`);
+  }
+  return module.require(moduleId) as T;
+}

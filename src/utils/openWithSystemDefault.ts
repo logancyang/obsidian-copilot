@@ -1,4 +1,5 @@
 import { logError } from "@/logger";
+import { requireDesktopModule } from "@/utils/desktopRuntime";
 import { Notice } from "obsidian";
 
 /**
@@ -12,11 +13,10 @@ import { Notice } from "obsidian";
  */
 export async function openWithSystemDefault(absPath: string): Promise<void> {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const electron = require("electron") as {
+    const electron = requireDesktopModule<{
       shell?: { openPath?: (path: string) => Promise<string> };
       remote?: { shell?: { openPath?: (path: string) => Promise<string> } };
-    };
+    }>("electron");
     const shell = electron.shell ?? electron.remote?.shell;
     if (!shell?.openPath) {
       new Notice(`Open this file manually: ${absPath}`);

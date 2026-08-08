@@ -5,6 +5,8 @@
  * land in the same NDJSON file. `tag` distinguishes the source.
  */
 
+import { requireDesktopModule } from "@/utils/desktopRuntime";
+
 export interface FrameRecord {
   ts: string;
   dir: "→" | "←";
@@ -308,14 +310,10 @@ export function getFrameLogPaths(vaultBasePath: string, runtime: NodeRuntime): F
 
 function getNodeRuntime(): NodeRuntime | null {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const fs = require("node:fs/promises") as typeof import("node:fs/promises");
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const os = require("node:os") as typeof import("node:os");
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const path = require("node:path") as typeof import("node:path");
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const electron = require("electron") as {
+    const fs = requireDesktopModule<typeof import("node:fs/promises")>("node:fs/promises");
+    const os = requireDesktopModule<typeof import("node:os")>("node:os");
+    const path = requireDesktopModule<typeof import("node:path")>("node:path");
+    const electron = requireDesktopModule<{
       shell?: {
         openPath?: (path: string) => Promise<string>;
         showItemInFolder?: (path: string) => void;
@@ -326,7 +324,7 @@ function getNodeRuntime(): NodeRuntime | null {
           showItemInFolder?: (path: string) => void;
         };
       };
-    };
+    }>("electron");
     const shell = electron.shell ?? electron.remote?.shell;
     return {
       tmpdir: () => os.tmpdir(),

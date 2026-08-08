@@ -22,9 +22,12 @@ import {
   type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 import { App } from "obsidian";
-import { access, readFile } from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
+import { requireDesktopModule } from "@/utils/desktopRuntime";
+
+const { access, readFile } =
+  requireDesktopModule<typeof import("node:fs/promises")>("node:fs/promises");
+const os = requireDesktopModule<typeof import("node:os")>("node:os");
+const path = requireDesktopModule<typeof import("node:path")>("node:path");
 import { v4 as uuidv4 } from "uuid";
 import { translateBackendState } from "@/agentMode/session/translateBackendState";
 import { parseClaudeTranscript } from "./claudeSessionTranscript";

@@ -1,6 +1,8 @@
 import { type App, Platform } from "obsidian";
-import os from "node:os";
-import * as path from "node:path";
+import { requireDesktopModule } from "@/utils/desktopRuntime";
+
+const os = requireDesktopModule<typeof import("node:os")>("node:os");
+const path = requireDesktopModule<typeof import("node:path")>("node:path");
 import type CopilotPlugin from "@/main";
 import { logError } from "@/logger";
 import { getSettings, subscribeToSettingsChange, type CopilotSettings } from "@/settings/model";

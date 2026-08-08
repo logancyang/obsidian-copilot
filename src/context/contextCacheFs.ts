@@ -1,3 +1,5 @@
+import { requireDesktopModule } from "@/utils/desktopRuntime";
+
 /**
  * Minimal filesystem surface the project-context materializer needs. Kept as an
  * injectable interface so the cache logic stays pure and unit-testable with an
@@ -68,10 +70,8 @@ let atomicTempSeq = 0;
  *  - `list` / `remove` / `clear` tolerate a missing target (`[]` / idempotent).
  */
 export function createNodeContextCacheFs(root: string): NodeContextCacheFs {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports, import/no-nodejs-modules
-  const fs = require("node:fs") as typeof import("node:fs");
-  // eslint-disable-next-line @typescript-eslint/no-require-imports, import/no-nodejs-modules
-  const nodePath = require("node:path") as typeof import("node:path");
+  const fs = requireDesktopModule<typeof import("node:fs")>("node:fs");
+  const nodePath = requireDesktopModule<typeof import("node:path")>("node:path");
 
   const rootAbs = nodePath.resolve(root);
 

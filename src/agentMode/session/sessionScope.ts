@@ -1,4 +1,6 @@
-import { dirname, join } from "node:path";
+import { requireDesktopModule } from "@/utils/desktopRuntime";
+
+const nodePath = requireDesktopModule<typeof import("node:path")>("node:path");
 import { getCachedProjectRecordById, getCachedProjectRecords } from "@/projects/state";
 import { GLOBAL_SCOPE, type ProjectScopeId } from "@/agentMode/session/scope";
 
@@ -29,7 +31,7 @@ export function resolveScopeCwd(vaultBasePath: string, projectId: ProjectScopeId
   if (!record) throw new OrphanedProjectError(projectId);
   // Reason: project folders live at `dirname(config)`; a config sitting at the
   // vault root yields ".", which join() collapses back to the vault root.
-  return join(vaultBasePath, dirname(record.filePath));
+  return nodePath.join(vaultBasePath, nodePath.dirname(record.filePath));
 }
 
 /** Whether `projectId` still resolves to a live scope (global is always live). */
@@ -51,7 +53,7 @@ export function resolveProjectIdForCwd(vaultBasePath: string, cwd: string): stri
   const target = norm(cwd);
   if (target === norm(vaultBasePath)) return undefined;
   for (const record of getCachedProjectRecords()) {
-    if (target === norm(join(vaultBasePath, dirname(record.filePath)))) {
+    if (target === norm(nodePath.join(vaultBasePath, nodePath.dirname(record.filePath)))) {
       return record.project.id;
     }
   }

@@ -1,5 +1,8 @@
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
-import * as path from "node:path";
+import { requireDesktopModule } from "@/utils/desktopRuntime";
+
+const { mkdir, readFile, stat, writeFile } =
+  requireDesktopModule<typeof import("node:fs/promises")>("node:fs/promises");
+const path = requireDesktopModule<typeof import("node:path")>("node:path");
 import type { AgentSessionIndexStorage } from "./AgentSessionIndex";
 
 /**

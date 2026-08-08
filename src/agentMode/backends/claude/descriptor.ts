@@ -1,6 +1,8 @@
-import * as fs from "node:fs";
-import * as os from "node:os";
-import * as path from "node:path";
+import { requireDesktopModule } from "@/utils/desktopRuntime";
+
+const fs = requireDesktopModule<typeof import("node:fs")>("node:fs");
+const os = requireDesktopModule<typeof import("node:os")>("node:os");
+const path = requireDesktopModule<typeof import("node:path")>("node:path");
 import { logWarn } from "@/logger";
 import type CopilotPlugin from "@/main";
 import {

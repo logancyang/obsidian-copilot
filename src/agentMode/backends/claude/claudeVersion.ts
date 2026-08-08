@@ -1,6 +1,9 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { compareSemver } from "@/utils/semver";
+import { requireDesktopModule } from "@/utils/desktopRuntime";
+
+const { execFile } =
+  requireDesktopModule<typeof import("node:child_process")>("node:child_process");
+const { promisify } = requireDesktopModule<typeof import("node:util")>("node:util");
 
 const execFileAsync = promisify(execFile);
 const VERSION_TIMEOUT_MS = 10_000;

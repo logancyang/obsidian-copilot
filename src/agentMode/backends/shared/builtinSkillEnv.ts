@@ -1,4 +1,6 @@
-import * as os from "node:os";
+import { requireDesktopModule } from "@/utils/desktopRuntime";
+
+const os = requireDesktopModule<typeof import("node:os")>("node:os");
 import { BREVILABS_API_BASE_URL } from "@/constants";
 import { getSettings } from "@/settings/model";
 import { getMiyoCustomUrl } from "@/miyo/miyoUtils";

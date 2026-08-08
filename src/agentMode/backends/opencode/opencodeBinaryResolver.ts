@@ -9,7 +9,9 @@
  * never emit `.cmd` / `.bat` / `.ps1` shims — ACP spawns over stdio without
  * `shell: true`, so those break stream-json.
  */
-import * as path from "node:path";
+import { requireDesktopModule } from "@/utils/desktopRuntime";
+
+const path = requireDesktopModule<typeof import("node:path")>("node:path");
 
 import { WELL_KNOWN_BIN_DIRS } from "@/utils/binaryPath";
 import { nodeToolBinDirCandidates, type NodeToolFs } from "@/utils/nodeToolBinDirs";

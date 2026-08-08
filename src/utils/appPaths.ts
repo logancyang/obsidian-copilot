@@ -1,5 +1,7 @@
 import { type App, FileSystemAdapter } from "obsidian";
-import * as path from "node:path";
+import { requireDesktopModule } from "@/utils/desktopRuntime";
+
+const path = requireDesktopModule<typeof import("node:path")>("node:path");
 import { md5 } from "@/utils/hash";
 
 /**

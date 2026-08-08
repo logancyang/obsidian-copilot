@@ -4,20 +4,24 @@ import { compareSemver } from "@/utils/semver";
 import { logError, logInfo, logWarn } from "@/logger";
 import type CopilotPlugin from "@/main";
 import { getSettings, setSettings, type OpencodeBackendSettings } from "@/settings/model";
-import { execFile, spawn } from "node:child_process";
-import { randomBytes } from "node:crypto";
-import * as fs from "node:fs";
-import * as https from "node:https";
-import { IncomingMessage } from "node:http";
 import { FileSystemAdapter, requestUrl } from "obsidian";
-import * as os from "node:os";
-import * as path from "node:path";
-import { promisify } from "node:util";
 import { renameWithRetry } from "@/agentMode/skills/renameWithRetry";
 import { copilotAppDataDir } from "@/utils/appPaths";
+import { requireDesktopModule } from "@/utils/desktopRuntime";
 import { detectOpencodeCliPath } from "./opencodeCliDetector";
 import { expectedBinaryName, resolveOpencodeTarget } from "./platformResolver";
 import type { InstallState as BackendInstallState } from "@/agentMode/session/types";
+
+type IncomingMessage = import("node:http").IncomingMessage;
+
+const { execFile, spawn } =
+  requireDesktopModule<typeof import("node:child_process")>("node:child_process");
+const { randomBytes } = requireDesktopModule<typeof import("node:crypto")>("node:crypto");
+const fs = requireDesktopModule<typeof import("node:fs")>("node:fs");
+const https = requireDesktopModule<typeof import("node:https")>("node:https");
+const os = requireDesktopModule<typeof import("node:os")>("node:os");
+const path = requireDesktopModule<typeof import("node:path")>("node:path");
+const { promisify } = requireDesktopModule<typeof import("node:util")>("node:util");
 
 const execFileAsync = promisify(execFile);
 const DOWNLOAD_INACTIVITY_TIMEOUT_MS = 30_000;
@@ -879,7 +883,7 @@ async function removeDir(p: string): Promise<void> {
 
 /** Recursively sum the byte size of all files under `dir`; 0 if it's absent. */
 async function dirSize(dir: string): Promise<number> {
-  let entries: fs.Dirent[];
+  let entries: import("node:fs").Dirent[];
   try {
     entries = await fs.promises.readdir(dir, { withFileTypes: true });
   } catch {

@@ -4,7 +4,9 @@
  * Agent Mode's no-shell ACP process path, so this resolver probes native
  * `.exe` locations first and only falls back to the generic PATH detector.
  */
-import * as path from "node:path";
+import { requireDesktopModule } from "@/utils/desktopRuntime";
+
+const path = requireDesktopModule<typeof import("node:path")>("node:path");
 
 import { nodeToolBinDirCandidates, type NodeToolFs } from "@/utils/nodeToolBinDirs";
 

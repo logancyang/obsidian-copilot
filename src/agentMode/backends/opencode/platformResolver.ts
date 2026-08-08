@@ -1,6 +1,9 @@
-import { execFile as execFileCb } from "node:child_process";
-import * as fs from "node:fs";
-import { promisify } from "node:util";
+import { requireDesktopModule } from "@/utils/desktopRuntime";
+
+const { execFile: execFileCb } =
+  requireDesktopModule<typeof import("node:child_process")>("node:child_process");
+const fs = requireDesktopModule<typeof import("node:fs")>("node:fs");
+const { promisify } = requireDesktopModule<typeof import("node:util")>("node:util");
 
 const execFile = promisify(execFileCb);
 

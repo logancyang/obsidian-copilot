@@ -9,11 +9,15 @@
  * listener, and persisting credentials to the OS keychain. We never read or
  * write the token ourselves; we only invoke the CLI and re-read its status.
  */
-import { execFile, spawn } from "node:child_process";
-import { type Readable } from "node:stream";
-import { promisify } from "node:util";
 import { logInfo, logWarn } from "@/logger";
 import { err2String } from "@/utils";
+import { requireDesktopModule } from "@/utils/desktopRuntime";
+
+type Readable = import("node:stream").Readable;
+
+const { execFile, spawn } =
+  requireDesktopModule<typeof import("node:child_process")>("node:child_process");
+const { promisify } = requireDesktopModule<typeof import("node:util")>("node:util");
 
 const execFileAsync = promisify(execFile);
 

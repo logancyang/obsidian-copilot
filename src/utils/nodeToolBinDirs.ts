@@ -16,7 +16,9 @@
  * Pure leaf: callers inject `homeDir`, `platform`, `env`, and `fs` so tests
  * don't touch real disk.
  */
-import * as path from "node:path";
+import { requireDesktopModule } from "@/utils/desktopRuntime";
+
+const path = requireDesktopModule<typeof import("node:path")>("node:path");
 
 export interface NodeToolFs {
   existsSync: (p: string) => boolean;
@@ -149,7 +151,7 @@ function fnmBaseDirs(
   homeDir: string,
   env: NodeJS.ProcessEnv,
   platform: NodeJS.Platform,
-  p: path.PlatformPath
+  p: import("node:path").PlatformPath
 ): string[] {
   if (env.FNM_DIR) return [env.FNM_DIR];
   if (platform === "darwin") {
@@ -170,7 +172,7 @@ function enumerateVersionBins(
   fs: NodeToolFs,
   versionsDir: string,
   subPath: string[],
-  p: path.PlatformPath
+  p: import("node:path").PlatformPath
 ): string[] {
   let entries: string[];
   try {

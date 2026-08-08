@@ -1,7 +1,10 @@
-import { lstat, mkdtemp, readFile, rm, unlink, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import * as path from "node:path";
-import { pathToFileURL } from "node:url";
+import { requireDesktopModule } from "@/utils/desktopRuntime";
+
+const { lstat, mkdtemp, readFile, rm, unlink, writeFile } =
+  requireDesktopModule<typeof import("node:fs/promises")>("node:fs/promises");
+const { tmpdir } = requireDesktopModule<typeof import("node:os")>("node:os");
+const path = requireDesktopModule<typeof import("node:path")>("node:path");
+const { pathToFileURL } = requireDesktopModule<typeof import("node:url")>("node:url");
 
 import { SYMPOSIUM_AGENT_HANDOFF_DIR, SYMPOSIUM_MAX_HTML_BYTES } from "@/symposium/constants";
 import {

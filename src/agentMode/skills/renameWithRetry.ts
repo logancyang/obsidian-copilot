@@ -1,4 +1,6 @@
-import * as fs from "node:fs";
+import { requireDesktopModule } from "@/utils/desktopRuntime";
+
+const fs = requireDesktopModule<typeof import("node:fs")>("node:fs");
 
 /**
  * Retry-aware `fs.rename`. Windows commonly fails the first attempt when

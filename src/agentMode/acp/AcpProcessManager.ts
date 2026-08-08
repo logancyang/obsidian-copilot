@@ -1,6 +1,11 @@
 import { logError, logInfo, logWarn } from "@/logger";
-import { ChildProcessByStdio, spawn } from "node:child_process";
-import { Readable, Writable } from "node:stream";
+import { requireDesktopModule } from "@/utils/desktopRuntime";
+
+type Readable = import("node:stream").Readable;
+type Writable = import("node:stream").Writable;
+
+const { spawn } = requireDesktopModule<typeof import("node:child_process")>("node:child_process");
+const { Readable, Writable } = requireDesktopModule<typeof import("node:stream")>("node:stream");
 
 const SIGTERM_GRACE_MS = 3_000;
 
@@ -25,7 +30,9 @@ export interface AcpProcessManagerOptions {
  * graceful SIGTERM→SIGKILL teardown.
  */
 export class AcpProcessManager {
-  private child: ChildProcessByStdio<Writable, Readable, Readable> | null = null;
+  private child:
+    | import("node:child_process").ChildProcessByStdio<Writable, Readable, Readable>
+    | null = null;
   private exitListeners = new Set<(code: number | null, signal: NodeJS.Signals | null) => void>();
   private hasExited = false;
   private exitCode: number | null = null;

@@ -1,7 +1,10 @@
-import { execFile } from "node:child_process";
-import * as fs from "node:fs";
-import * as path from "node:path";
-import { promisify } from "node:util";
+import { requireDesktopModule } from "@/utils/desktopRuntime";
+
+const { execFile } =
+  requireDesktopModule<typeof import("node:child_process")>("node:child_process");
+const fs = requireDesktopModule<typeof import("node:fs")>("node:fs");
+const path = requireDesktopModule<typeof import("node:path")>("node:path");
+const { promisify } = requireDesktopModule<typeof import("node:util")>("node:util");
 
 import { augmentPathForDetection } from "@/utils/binaryPath";
 

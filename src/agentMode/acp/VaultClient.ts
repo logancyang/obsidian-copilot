@@ -12,7 +12,9 @@ import type {
 import { RequestError } from "@agentclientprotocol/sdk";
 import { logInfo, logWarn } from "@/logger";
 import { App, FileSystemAdapter, normalizePath } from "obsidian";
-import * as path from "node:path";
+import { requireDesktopModule } from "@/utils/desktopRuntime";
+
+const path = requireDesktopModule<typeof import("node:path")>("node:path");
 
 export interface PermissionPrompter {
   (req: RequestPermissionRequest): Promise<RequestPermissionResponse>;

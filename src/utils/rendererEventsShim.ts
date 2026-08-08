@@ -1,5 +1,5 @@
 import { Platform } from "obsidian";
-import { EventEmitter } from "node:events";
+import { requireDesktopModule } from "@/utils/desktopRuntime";
 
 type SetMaxListenersFn = (n?: number, ...targets: unknown[]) => void;
 type MarkedFn = SetMaxListenersFn & { [APPLIED]?: boolean };
@@ -50,6 +50,7 @@ function hasAbortSignalShape(value: unknown): boolean {
  */
 export function installRendererEventsShim(): void {
   if (Platform.isMobile) return;
+  const { EventEmitter } = requireDesktopModule<typeof import("node:events")>("node:events");
   const target = EventEmitter as unknown as { setMaxListeners: MarkedFn };
   const original = target.setMaxListeners;
   if (original[APPLIED]) return;

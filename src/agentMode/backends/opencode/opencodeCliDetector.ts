@@ -1,6 +1,8 @@
 import { detectBinary } from "@/utils/detectBinary";
-import * as fs from "node:fs";
-import * as os from "node:os";
+import { requireDesktopModule } from "@/utils/desktopRuntime";
+
+const fs = requireDesktopModule<typeof import("node:fs")>("node:fs");
+const os = requireDesktopModule<typeof import("node:os")>("node:os");
 import { resolveOpencodeBinary } from "./opencodeBinaryResolver";
 
 /**
