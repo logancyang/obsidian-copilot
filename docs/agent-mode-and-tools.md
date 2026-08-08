@@ -72,6 +72,7 @@ The mode picker beside the message box controls how much the active agent can do
 - **Auto** — the agent works with its Auto permissions. Depending on the agent and its configuration, some actions may still require approval.
 
 The available modes depend on the selected agent. Copilot normalizes equivalent modes across supported versions of Claude, Codex, and OpenCode.
+Your most recent mode is remembered per agent and applied when you start a new chat or reopen a saved one.
 
 With Claude you can decide how much **Auto** actually hands over, under
 **Settings → Copilot → Agents → Claude → Auto mode permissions**:

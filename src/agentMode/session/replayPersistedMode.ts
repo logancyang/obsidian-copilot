@@ -4,8 +4,8 @@ import { MethodUnsupportedError } from "./errors";
 import type { CopilotMode } from "./types";
 
 /**
- * Re-apply the user's sticky permission-mode preference to a freshly created
- * session, so a new conversation reopens in the mode they last chose (e.g.
+ * Re-apply the user's sticky permission-mode preference to a newly created or
+ * resumed session, so a conversation opens in the mode they last chose (e.g.
  * `auto`) instead of always resetting to the agent's natural starting mode.
  *
  * Backend-agnostic: it dispatches through the canonical `mode.apply` spec the
