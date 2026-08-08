@@ -116,19 +116,24 @@ export const BasicSettings: React.FC = () => {
   // Settings have no Save button, so the file follows the textarea. Debounced because the
   // alternative is one vault write per keystroke; flushed on unmount so closing the tab
   // mid-sentence still lands the last edit.
-  // Returns the write so a caller that needs the file on disk can await `flush()`.
-  const saveVaultInstructions = useMemo(
-    () =>
-      debounce(
-        (next: string) =>
-          writeAgentsFile(app, "", next).catch((error) => {
-            logError("Failed to save vault instructions.", error);
-            new Notice("Failed to save AGENTS.md.");
-          }),
-        1000
-      ),
-    [app]
-  );
+  const saveVaultInstructions = useMemo(() => {
+    // One chain rather than one promise per call. Debouncing bounds how OFTEN a write starts,
+    // not how long one takes: a slow vault (a synced or network-backed one) can still have a
+    // save in flight when the next debounce fires, and if that older write lands second it
+    // overwrites the newer text with no error and nothing on screen to show for it. Queuing
+    // also gives `flush()` a promise that settles only once every queued write has landed.
+    let queue: Promise<void> = Promise.resolve();
+    const enqueue = (next: string): Promise<void> => {
+      queue = queue.then(() =>
+        writeAgentsFile(app, "", next).catch((error) => {
+          logError("Failed to save vault instructions.", error);
+          new Notice("Failed to save AGENTS.md.");
+        })
+      );
+      return queue;
+    };
+    return debounce(enqueue, 1000);
+  }, [app]);
   useEffect(() => () => void saveVaultInstructions.flush(), [saveVaultInstructions]);
 
   const handleOpenVaultInstructions = async () => {

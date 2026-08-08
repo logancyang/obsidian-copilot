@@ -331,11 +331,50 @@ describe("BasicSettings", () => {
 
       // The debounce is what keeps this from being one vault write per keystroke.
       expect(writeAgentsFile).not.toHaveBeenCalled();
-      act(() => {
+      // Async act: writes go through a queue, so the call starts a microtask after the timer.
+      await act(async () => {
         jest.advanceTimersByTime(1000);
       });
 
       expect(writeAgentsFile).toHaveBeenCalledWith(expect.anything(), "", "Always cite.");
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("queues instruction writes so a slow save cannot land after — and overwrite — a newer one", async () => {
+    jest.useFakeTimers();
+    try {
+      let settleFirst!: () => void;
+      writeAgentsFile.mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            settleFirst = resolve;
+          })
+      );
+      render(<BasicSettings />);
+      const editor = await screen.findByRole("textbox", { name: "Custom vault instructions" });
+
+      fireEvent.change(editor, { target: { value: "First" } });
+      await act(async () => {
+        jest.advanceTimersByTime(1000);
+      });
+      expect(writeAgentsFile).toHaveBeenCalledTimes(1);
+
+      // Second debounce fires while the first write is still in flight.
+      fireEvent.change(editor, { target: { value: "Second" } });
+      await act(async () => {
+        jest.advanceTimersByTime(1000);
+      });
+      expect(writeAgentsFile).toHaveBeenCalledTimes(1);
+
+      settleFirst();
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      expect(writeAgentsFile).toHaveBeenCalledTimes(2);
+      expect(writeAgentsFile).toHaveBeenLastCalledWith(expect.anything(), "", "Second");
     } finally {
       jest.useRealTimers();
     }
@@ -348,6 +387,9 @@ describe("BasicSettings", () => {
       const editor = await screen.findByRole("textbox", { name: "Custom vault instructions" });
       fireEvent.change(editor, { target: { value: "Half a thou" } });
       unmount();
+      await act(async () => {
+        await Promise.resolve();
+      });
 
       expect(writeAgentsFile).toHaveBeenCalledWith(expect.anything(), "", "Half a thou");
     } finally {
