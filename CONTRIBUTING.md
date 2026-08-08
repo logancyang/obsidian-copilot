@@ -49,9 +49,18 @@ In the case of Copilot for Obsidian, you will need to:
 6. Ensure your editor respects the `.editorconfig` and Prettier settings.
 7. Run `npm run dev` in your repo to see the effect of your changes.
 8. Before committing, run `npm run format` to ensure all files are properly formatted.
-9. When you are ready to make a pull request, ensure to make your changes in **a branch on your fork**, and then submit a pull request to the **main repo**.
+9. Before opening a pull request, run `npm run review:obsidian` as described below.
+10. When you are ready to make a pull request, ensure to make your changes in **a branch on your fork**, and then submit a pull request to the **main repo**.
 
 Try to be descriptive in your branch names and pull requests. Happy coding!
+
+### Obsidian community review preflight
+
+`npm run review:obsidian` reproduces the public Obsidian source, CSS, manifest/license, and runtime dependency checks. Errors fail the command; warnings remain visible for conservative follow-up work when an automatic cleanup could change plugin behavior or UI. The command rebuilds and scans the packaged `styles.css`, then runs rejection fixtures to ensure every guarded review family is still detected.
+
+ESLint and Stylelint findings include the file, line, rule, and message; the same details appear as annotations in GitHub Actions. Dependency-audit findings remain visible for explicit, compatibility-tested follow-up work; critical advisories block the preflight.
+
+The upstream review packages are pinned in `package.json`. Update those versions and the lockfile together, review the upstream rule changes, and rerun the complete preflight before committing an upgrade. Do not weaken an error merely to re-establish a passing baseline, and do not promote a warning to blocking until its remediation is behavior-preserving.
 
 #### Fast Iteration with `npm run test:vault` (macOS)
 

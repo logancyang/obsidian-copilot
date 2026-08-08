@@ -1,6 +1,5 @@
 // Reason: `buffer` is the npm polyfill (browser-compatible), bundled by esbuild
 // so the same Buffer code path works on desktop (Electron) and mobile (WebView).
-// eslint-disable-next-line import/no-nodejs-modules -- this package import is the browser polyfill, not the Node built-in
 import { Buffer } from "buffer";
 
 import {

@@ -17,6 +17,7 @@ export default [
       "designdocs/**",
       "docs/**",
       ".claude/**",
+      "src/review-fixtures/**",
     ],
   },
 
@@ -271,6 +272,11 @@ export default [
     },
     rules: {
       "import/no-nodejs-modules": "off",
+      "obsidianmd/no-nodejs-modules": "off",
+      "obsidianmd/prefer-create-el": "off",
+      "eslint-comments/disable-enable-pair": "off",
+      "eslint-comments/no-restricted-disable": "off",
+      "eslint-comments/require-description": "off",
       // Tests intentionally consume the global `app` mock (window.app, set up in
       // __mocks__/obsidian.js) to feed it into the parameterized production
       // functions under test. The footgun the ban guards against (popout windows,
@@ -309,6 +315,7 @@ export default [
     files: [
       "*.{js,mjs,cjs}",
       "scripts/**",
+      "dev/gallery/esbuild.config.mjs",
       "esbuild.config.mjs",
       "version-bump.mjs",
       "wasmPlugin.mjs",
@@ -323,6 +330,20 @@ export default [
     },
     rules: {
       "import/no-nodejs-modules": "off",
+      "obsidianmd/no-nodejs-modules": "off",
+      "eslint-comments/disable-enable-pair": "off",
+      "eslint-comments/no-restricted-disable": "off",
+      "eslint-comments/require-description": "off",
+      "obsidianmd/rule-custom-message": "off",
+    },
+  },
+
+  // CommonJS tools use require() by construction. The renderer patch also
+  // runs only from the Node build pipeline despite its historical .js suffix.
+  {
+    files: ["**/*.cjs", "scripts/patchRendererUnsafeUnref.js"],
+    rules: {
+      "@typescript-eslint/no-require-imports": "off",
     },
   },
 
@@ -557,8 +578,8 @@ export default [
     },
   },
 
-  // package.json: keep depend/ban-dependencies enabled (from obsidianmd
-  // recommended) but allow the deps we deliberately keep.
+  // package.json: keep depend/ban-dependencies enabled from obsidianmd's
+  // recommended config and make deliberate dependency choices explicit here.
   {
     files: ["**/package.json"],
     rules: {

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-require-imports */
 "use strict";
 
 const fs = require("fs");
@@ -76,7 +75,7 @@ const patchRendererUnsafeUnref = {
               "found. The matcher likely missed them after a minifier change."
           );
         }
-         
+
         console.log("[patch-renderer-unsafe-unref] no sites to rewrite (SDK not bundled yet)");
         return;
       }
@@ -96,7 +95,7 @@ const patchRendererUnsafeUnref = {
       }
 
       fs.writeFileSync(outfile, out, "utf8");
-       
+
       console.log(`[patch-renderer-unsafe-unref] rewrote ${totalRewritten} site(s)`);
     });
   },

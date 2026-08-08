@@ -1,9 +1,7 @@
 import type { App } from "obsidian";
 // These builders produce absolute, OS-native paths for the desktop-only
 // off-vault cache; mobile never reaches them (Agent Mode is desktop-gated).
-// eslint-disable-next-line import/no-nodejs-modules -- this module is reachable only through the desktop-gated conversion cache
 import os from "node:os";
-// eslint-disable-next-line import/no-nodejs-modules -- this module is reachable only through the desktop-gated conversion cache
 import * as path from "node:path";
 import { copilotAppDataDir, getVaultId } from "@/utils/appPaths";
 import { md5 } from "@/utils/hash";

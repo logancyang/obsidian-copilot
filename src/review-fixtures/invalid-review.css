@@ -1,0 +1,3 @@
+.review-fixture:has(button) {
+  display: block !important;
+}
