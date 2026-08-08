@@ -10,6 +10,7 @@ import {
   extractSubAgentReturnText,
   lookupToolSummary,
 } from "@/agentMode/ui/toolSummaries";
+import { AgentActivityCard } from "@/components/chat-components/AgentActivityCard";
 
 interface SubAgentCardProps {
   parent: ToolCallPart;
@@ -47,63 +48,52 @@ export const SubAgentCard: React.FC<SubAgentCardProps> = ({
   const returnText = extractSubAgentReturnText(parent);
 
   return (
-    <div className="tw-my-1 tw-flex tw-flex-col tw-gap-0.5">
-      <div
-        className="tw-flex tw-cursor-pointer tw-items-center tw-gap-1.5 tw-text-sm tw-text-muted hover:tw-text-normal"
-        onClick={() => setOpen((v) => !v)}
-        role="button"
-      >
-        <Icon className="tw-size-3.5 tw-shrink-0 tw-text-muted" />
-        <span className="tw-flex-1 tw-truncate tw-font-medium">{line}</span>
-        <StatusBadge status={parent.status} />
-        {open ? (
-          <ChevronDown className="tw-size-3 tw-text-muted" />
-        ) : (
-          <ChevronRight className="tw-size-3 tw-text-muted" />
-        )}
-      </div>
-      {outcome ? <div className="tw-pl-5 tw-text-xs tw-text-muted">{outcome}</div> : null}
-      {open ? (
-        <div className="tw-mt-2 tw-flex tw-flex-col tw-gap-1 tw-border-l tw-border-border tw-pl-3">
-          {childCounts.tools > 0 || childCounts.reasoning > 0 || truncated ? (
-            <div className="tw-text-xs tw-text-muted">{describeCounts(childCounts, truncated)}</div>
-          ) : null}
-          {inputPrompt ? (
-            <div className="tw-my-1">
-              <div
-                className="tw-flex tw-cursor-pointer tw-items-center tw-gap-2 tw-text-xs tw-text-muted"
-                onClick={() => setPromptOpen((v) => !v)}
-                role="button"
-              >
-                <span className="tw-flex-1 tw-truncate">Prompt</span>
-                {promptOpen ? (
-                  <ChevronDown className="tw-size-3" />
-                ) : (
-                  <ChevronRight className="tw-size-3" />
-                )}
-              </div>
-              {promptOpen ? (
-                <div className="tw-mt-1 tw-border-l-[2px] tw-border-border tw-pl-2">
-                  <AgentMarkdownText text={inputPrompt} app={app} />
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-          {truncated ? (
-            <div className="tw-text-xs tw-text-muted">
-              Nested sub-agent — expand the parent to drill in.
-            </div>
-          ) : (
-            childNodes.map((c, i) => renderNode(c, i))
-          )}
-          {returnText ? (
-            <div className="tw-my-1 tw-border-l-[2px] tw-border-border tw-pl-2">
-              <AgentMarkdownText text={returnText} app={app} />
+    <AgentActivityCard
+      icon={Icon}
+      label={line}
+      trailing={<StatusBadge status={parent.status} />}
+      secondary={outcome}
+      expandable
+      open={open}
+      onToggle={() => setOpen((value) => !value)}
+    >
+      {childCounts.tools > 0 || childCounts.reasoning > 0 || truncated ? (
+        <div className="tw-text-xs tw-text-muted">{describeCounts(childCounts, truncated)}</div>
+      ) : null}
+      {inputPrompt ? (
+        <div className="tw-my-1">
+          <div
+            className="tw-flex tw-cursor-pointer tw-items-center tw-gap-2 tw-text-xs tw-text-muted"
+            onClick={() => setPromptOpen((v) => !v)}
+            role="button"
+          >
+            <span className="tw-flex-1 tw-truncate">Prompt</span>
+            {promptOpen ? (
+              <ChevronDown className="tw-size-3" />
+            ) : (
+              <ChevronRight className="tw-size-3" />
+            )}
+          </div>
+          {promptOpen ? (
+            <div className="tw-mt-1 tw-border-l-[2px] tw-border-border tw-pl-2">
+              <AgentMarkdownText text={inputPrompt} app={app} />
             </div>
           ) : null}
         </div>
       ) : null}
-    </div>
+      {truncated ? (
+        <div className="tw-text-xs tw-text-muted">
+          Nested sub-agent — expand the parent to drill in.
+        </div>
+      ) : (
+        childNodes.map((c, i) => renderNode(c, i))
+      )}
+      {returnText ? (
+        <div className="tw-my-1 tw-border-l-[2px] tw-border-border tw-pl-2">
+          <AgentMarkdownText text={returnText} app={app} />
+        </div>
+      ) : null}
+    </AgentActivityCard>
   );
 };
 

@@ -1,11 +1,12 @@
-import React, { useId } from "react";
-import { ChevronDown, ChevronRight, Layers, Loader2, type LucideIcon } from "lucide-react";
+import React from "react";
+import { Layers, Loader2, type LucideIcon } from "lucide-react";
 import {
   summarizeActivity,
   type ActivityGroupNode,
   type ActivityMember,
 } from "@/agentMode/ui/activityGroups";
 import { pickToolIcon } from "@/agentMode/ui/toolIcons";
+import { AgentActivityCard } from "@/components/chat-components/AgentActivityCard";
 
 export interface ActivityGroupCardProps {
   group: ActivityGroupNode;
@@ -49,7 +50,6 @@ export const ActivityGroupCard: React.FC<ActivityGroupCardProps> = ({
   renderMember,
   liveStep,
 }) => {
-  const bodyId = useId();
   const summary = summarizeActivity(group.members, { thinkingMs });
   const Icon = groupIcon(group.members);
   const isProcessing = group.members.some(
@@ -57,50 +57,26 @@ export const ActivityGroupCard: React.FC<ActivityGroupCardProps> = ({
   );
 
   return (
-    <div className="tw-my-1 tw-flex tw-flex-col tw-gap-0.5">
-      {/* A native `button` here inherits Obsidian's button chrome — a grey fill
-          and an inset shadow that no Tailwind reset outranks — so the row would
-          render as a pill among the trail's flat rows. Every sibling card uses
-          this shape for the same reason; the keyboard handler keeps it operable. */}
-      <div
-        role="button"
-        tabIndex={0}
-        aria-expanded={open}
-        aria-controls={bodyId}
-        onClick={onToggle}
-        onKeyDown={(e) => {
-          if (e.key !== "Enter" && e.key !== " ") return;
-          e.preventDefault();
-          onToggle();
-        }}
-        className="tw-flex tw-cursor-pointer tw-items-center tw-gap-1.5 tw-text-sm tw-text-muted hover:tw-text-normal"
-      >
-        <Icon className="tw-size-3.5 tw-shrink-0 tw-text-muted" />
-        <span className="tw-flex-1 tw-truncate tw-font-medium">{summary.line}</span>
-        {summary.failed > 0 ? (
-          <span className="tw-shrink-0 tw-text-xs tw-text-muted">{summary.failed} failed</span>
-        ) : null}
-        {isProcessing ? (
-          <Loader2 className="tw-size-3 tw-shrink-0 tw-animate-spin tw-text-loading" />
-        ) : null}
-        {open ? (
-          <ChevronDown className="tw-size-3 tw-shrink-0 tw-text-muted" />
-        ) : (
-          <ChevronRight className="tw-size-3 tw-shrink-0 tw-text-muted" />
-        )}
-      </div>
-      {!open && liveStep ? (
-        <div className="tw-truncate tw-pl-5 tw-text-xs tw-text-muted">{liveStep}</div>
-      ) : null}
-      {open ? (
-        <div
-          id={bodyId}
-          className="tw-mt-1 tw-flex tw-flex-col tw-border-l tw-border-border tw-pl-3"
-        >
-          {group.members.map((m, i) => renderMember(m, i))}
-        </div>
-      ) : null}
-    </div>
+    <AgentActivityCard
+      icon={Icon}
+      label={summary.line}
+      trailing={
+        <>
+          {summary.failed > 0 ? (
+            <span className="tw-shrink-0 tw-text-xs tw-text-muted">{summary.failed} failed</span>
+          ) : null}
+          {isProcessing ? (
+            <Loader2 className="tw-size-3 tw-shrink-0 tw-animate-spin tw-text-loading" />
+          ) : null}
+        </>
+      }
+      secondary={!open ? liveStep : undefined}
+      expandable
+      open={open}
+      onToggle={onToggle}
+    >
+      {group.members.map((m, i) => renderMember(m, i))}
+    </AgentActivityCard>
   );
 };
 

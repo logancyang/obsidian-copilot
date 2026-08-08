@@ -1,8 +1,7 @@
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { AgentActivityCard } from "@/components/chat-components/AgentActivityCard";
 import { formatDuration } from "@/lib/duration";
-import { cn } from "@/lib/utils";
 import { ReasoningStatus } from "@/LLMProviders/chainRunner/utils/AgentReasoningState";
-import { Brain, ChevronRight } from "lucide-react";
+import { Brain } from "lucide-react";
 import React, { useState } from "react";
 
 interface AgentReasoningBlockProps {
@@ -39,25 +38,11 @@ export const AgentReasoningBlock: React.FC<AgentReasoningBlockProps> = ({
   const canExpand = steps.length > 0;
 
   return (
-    <Collapsible
-      open={isExpanded}
-      onOpenChange={canExpand ? setIsExpanded : undefined}
-      disabled={!canExpand}
-      className="tw-my-1 tw-flex tw-w-full tw-flex-col tw-gap-0.5"
-    >
-      <CollapsibleTrigger asChild disabled={!canExpand}>
-        <div
-          className={cn(
-            "tw-flex tw-w-full tw-items-center tw-gap-1.5 tw-pl-1 tw-text-left tw-text-sm tw-text-muted hover:tw-text-normal",
-            canExpand ? "tw-cursor-pointer" : "tw-cursor-default"
-          )}
-        >
-          {/* Reasoning keeps one identity while the separate turn-duration row owns the Copilot mark. */}
-          <span className="tw-flex tw-size-3.5 tw-shrink-0 tw-items-center tw-justify-center">
-            <Brain className="tw-size-3.5 tw-text-muted" />
-          </span>
-
-          <span className="tw-font-medium">
+    <AgentActivityCard
+      icon={Brain}
+      label={
+        <>
+          <span>
             {isActive ? (
               <>
                 Reasoning
@@ -70,33 +55,24 @@ export const AgentReasoningBlock: React.FC<AgentReasoningBlockProps> = ({
             )}
           </span>
           {!isActive ? (
-            <span className="tw-text-muted">{formatDuration(elapsedSeconds * 1000)}</span>
+            <span className="tw-font-normal tw-text-muted">
+              {formatDuration(elapsedSeconds * 1000)}
+            </span>
           ) : null}
-
-          {canExpand && (
-            <ChevronRight
-              className={cn(
-                "tw-ml-auto tw-size-3 tw-text-muted tw-transition-transform",
-                isExpanded && "tw-rotate-90"
-              )}
-            />
-          )}
-        </div>
-      </CollapsibleTrigger>
-
-      {/* Steps - visible when expanded or actively reasoning */}
-      <CollapsibleContent>
-        {steps.length > 0 && (
-          <ul className="tw-mt-1 tw-list-outside tw-list-disc tw-space-y-1.5 tw-pl-5 max-md:tw-space-y-1">
-            {steps.map((step, i) => (
-              // eslint-disable-next-line @eslint-react/no-array-index-key -- steps are append-only with no stable id; text may repeat
-              <li key={i} className="tw-text-xs tw-leading-[1.4] tw-text-muted">
-                {step}
-              </li>
-            ))}
-          </ul>
-        )}
-      </CollapsibleContent>
-    </Collapsible>
+        </>
+      }
+      expandable={canExpand}
+      open={isExpanded}
+      onToggle={() => setIsExpanded((expanded) => !expanded)}
+    >
+      <ul className="tw-list-outside tw-list-disc tw-space-y-1.5 tw-pl-4 max-md:tw-space-y-1">
+        {steps.map((step, i) => (
+          // eslint-disable-next-line @eslint-react/no-array-index-key -- steps are append-only with no stable id; text may repeat
+          <li key={i} className="tw-text-xs tw-leading-[1.4] tw-text-muted">
+            {step}
+          </li>
+        ))}
+      </ul>
+    </AgentActivityCard>
   );
 };

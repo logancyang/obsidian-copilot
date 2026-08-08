@@ -270,7 +270,7 @@ While the agent is working, the chat shows what it is doing. A single action get
 
 When the agent performs several actions in a row, they are collapsed into one summary row instead of a long list — for example "Read 2 files, ran 5 commands, thought for 51s". While that work is still in progress, the current step (like the command being run) appears beneath the summary and updates as the agent moves on.
 
-Click a summary row to expand it and see every action inside, each with its own status line. An expanded row stays open — even as new actions stream into it — until you collapse it again.
+Reasoning, individual tool calls, grouped activity, and delegated agents use the same aligned status-row style. Whenever a row has more detail, it shows the same disclosure arrow and can be opened with a click or the keyboard. Expanded details appear on the same indented rail, and an activity group stays open — even as new actions stream into it — until you collapse it again.
 
 Only background work is grouped this way. The agent's own messages, plan checklists, questions to you, and delegated sub-agents always stay visible as separate rows.
 

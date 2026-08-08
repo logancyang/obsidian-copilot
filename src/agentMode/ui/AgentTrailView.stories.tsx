@@ -63,6 +63,28 @@ const STREAMING: AgentMessagePart[] = [
   }),
 ];
 
+/** Every expandable activity family sharing one header and folding treatment. */
+const UNIFIED_CARDS: AgentMessagePart[] = [
+  think("I should inspect the source before changing it."),
+  say("The reasoning row uses the same inset and disclosure treatment as the work below."),
+  tool("read-1", "Read", {
+    locations: [{ path: "src/agentMode/ui/AgentTrailView.tsx" }],
+    output: [{ type: "text", text: "export const AgentTrail = ..." }],
+  }),
+  say("A single expandable tool remains its own row."),
+  tool("read-2", "Read", { locations: [{ path: "src/agentMode/ui/ActionCard.tsx" }] }),
+  tool("test-1", "Bash", { input: { description: "Run focused activity-card tests" } }),
+  say("Consecutive work folds into a group with the same header geometry."),
+  tool("delegate-1", "Task", {
+    input: { subagent_type: "Explore", description: "Check nested trail cards" },
+  }),
+  tool("delegate-read", "Read", {
+    parentToolCallId: "delegate-1",
+    locations: [{ path: "src/agentMode/ui/SubAgentCard.tsx" }],
+  }),
+  say("Reasoning, individual tools, grouped work, and delegated work now align."),
+];
+
 /**
  * `AgentTrail` renders markdown, so it needs the host's real `App`. The
  * `TooltipProvider` is the story's own scaffolding: a completed turn renders
@@ -103,4 +125,9 @@ export const GroupedTurn: StoryObj<AgentTrailProps> = {
 /** The last group shows the step in flight; earlier groups stay quiet. */
 export const Streaming: StoryObj<AgentTrailProps> = {
   render: () => <TrailDemo parts={STREAMING} isStreaming />,
+};
+
+/** Reasoning and every tool-card family share one inset, chevron, and expanded rail. */
+export const UnifiedCardStyles: StoryObj<AgentTrailProps> = {
+  render: () => <TrailDemo parts={UNIFIED_CARDS} />,
 };
