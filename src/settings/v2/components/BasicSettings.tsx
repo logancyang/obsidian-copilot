@@ -13,7 +13,6 @@ import { cn } from "@/lib/utils";
 import { verifyMiyoScope } from "@/miyo/miyoResync";
 import { shouldSurfaceMiyoResync } from "@/miyo/miyoUtils";
 import { openAgentsFile, writeAgentsFile } from "@/instructions/agentsFile";
-import { InstructionsTextarea } from "@/instructions/InstructionsTextarea";
 import { useAgentsFileDraft } from "@/instructions/useAgentsFileDraft";
 import { logError } from "@/logger";
 import { debounce } from "@/utils/debounce";
@@ -33,10 +32,11 @@ import {
 import { DesktopOnlySettingsPanel } from "@/settings/v2/components/DesktopOnlySettingsPanel";
 import { LegacyChatPromptsNotice } from "@/settings/v2/components/LegacyChatPromptsNotice";
 import { PlusSettings } from "@/settings/v2/components/PlusSettings";
+import { VaultInstructionsSetting } from "@/settings/v2/components/VaultInstructionsSetting";
 import { formatDateTime } from "@/utils";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { revealFolderInExplorer } from "@/utils/revealFolderInExplorer";
-import { ArrowUpRight, Folder, FolderSync, Loader2 } from "lucide-react";
+import { Folder, FolderSync, Loader2 } from "lucide-react";
 import { Notice } from "obsidian";
 import React, { useEffect, useMemo, useState } from "react";
 
@@ -371,30 +371,15 @@ export const BasicSettings: React.FC = () => {
       <SettingSection label="Custom instructions">
         <LegacyChatPromptsNotice />
         {vaultInstructions !== null && (
-          <SettingItem
-            type="custom"
-            // Rows are vertically centered by default, which leaves the label floating beside
-            // the middle of an editor this tall.
-            className="sm:tw-items-start"
-            title="Custom vault instructions"
-            description="Your custom instructions for the agent to follow for every vault interaction. Saved to AGENTS.md in your vault root, which you can also edit as a note."
-          >
-            <div className="tw-flex tw-w-full tw-flex-col tw-items-end tw-gap-2">
-              <InstructionsTextarea
-                label="Custom vault instructions"
-                value={vaultInstructions}
-                onChange={(next) => {
-                  setVaultInstructions(next);
-                  // Typing never waits on the write; only Open does, via `flush()`.
-                  void saveVaultInstructions(next);
-                }}
-              />
-              <Button variant="secondary" onClick={() => void handleOpenVaultInstructions()}>
-                <ArrowUpRight className="tw-size-4" />
-                Open AGENTS.md
-              </Button>
-            </div>
-          </SettingItem>
+          <VaultInstructionsSetting
+            value={vaultInstructions}
+            onChange={(next) => {
+              setVaultInstructions(next);
+              // Typing never waits on the write; only Open does, via `flush()`.
+              void saveVaultInstructions(next);
+            }}
+            onOpen={() => void handleOpenVaultInstructions()}
+          />
         )}
       </SettingSection>
 
