@@ -31,12 +31,13 @@ jest.mock("obsidian", () => ({
 
 describe("FanoutMessageCard", () => {
   describe("FanoutMessageCard()", () => {
-    it("places supplied duration metadata in the centered response footer", () => {
+    it("places supplied duration metadata before the timestamp in the response footer", () => {
+      const timestamp = "2026/08/07 20:31:10";
       const message: AgentChatMessage = {
         id: "fanout-1",
         sender: AI_SENDER,
         message: "Summary response",
-        timestamp: { epoch: 1, display: "now", fileName: "now" },
+        timestamp: { epoch: 1, display: timestamp, fileName: "now" },
         isVisible: true,
       };
       const turn: FanoutTurn = {
@@ -55,9 +56,16 @@ describe("FanoutMessageCard", () => {
         </TooltipProvider>
       );
 
-      const footer = screen.getByText("Worked for 24s").closest(".tw-justify-between");
+      const duration = screen.getByText("Worked for 24s");
+      const footer = duration.closest(".tw-justify-between");
       expect(footer?.classList.contains("tw-items-center")).toBe(true);
       expect(footer?.contains(screen.getByTitle("Copy"))).toBe(true);
+      expect(
+        Boolean(
+          duration.compareDocumentPosition(screen.getByText(timestamp)) &
+          Node.DOCUMENT_POSITION_FOLLOWING
+        )
+      ).toBe(true);
     });
   });
 });
