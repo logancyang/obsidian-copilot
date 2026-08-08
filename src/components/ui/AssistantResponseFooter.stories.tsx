@@ -35,7 +35,7 @@ const CompletedDuration: React.FC = () => (
 const CompletedResponseVariantsDemo: React.FC = () => (
   <div className="tw-flex tw-min-w-0 tw-flex-col tw-gap-5">
     <section className="tw-min-w-0">
-      <div className="tw-mb-2 tw-text-xs tw-font-medium tw-text-muted">Latest structured turn</div>
+      <div className="tw-mb-2 tw-text-xs tw-font-medium tw-text-muted">Completed duration</div>
       <AssistantResponseFooter
         leading={<CompletedDuration />}
         timestamp="2026/08/07 20:31:10"
@@ -44,21 +44,8 @@ const CompletedResponseVariantsDemo: React.FC = () => (
     </section>
 
     <section className="tw-min-w-0">
-      <div className="tw-mb-2 tw-text-xs tw-font-medium tw-text-muted">
-        Structured turn without a duration
-      </div>
+      <div className="tw-mb-2 tw-text-xs tw-font-medium tw-text-muted">Timestamp fallback</div>
       <AssistantResponseFooter timestamp="2026/08/07 20:31:10" actions={<StoryActions />} />
-    </section>
-
-    <section className="tw-min-w-0">
-      <div className="tw-mb-2 tw-text-xs tw-font-medium tw-text-muted">
-        Plain or fan-out response with a duration
-      </div>
-      <AssistantResponseFooter
-        leading={<CompletedDuration />}
-        timestamp="2026/08/07 20:31:10"
-        actions={<StoryActions />}
-      />
     </section>
   </div>
 );
