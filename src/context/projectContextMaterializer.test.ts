@@ -194,9 +194,29 @@ describe("ensureProjectContextMaterialized", () => {
     const result = await ensureProjectContextMaterialized(app, "p1", CWD);
 
     expect(result.projectContextBlock).toContain("<project_context>");
-    expect(result.projectContextBlock).toContain("## Included notes");
+    // Property matches are an expansion, listed apart from the declared `[[note]]`
+    // sources so they can never push one past the entry cap.
+    expect(result.projectContextBlock).toContain("## Notes matching an included property");
     expect(result.projectContextBlock).toContain("`/vault/Notes/Relativity.md`");
     expect(result.projectContextBlock).not.toContain("Cooking");
+  });
+
+  it("lists a note reached by both a title and a property once, as a declaration", async () => {
+    getRecord.mockReturnValue(record({ inclusions: "[[Relativity]],[Topics:Physics]" }));
+    getPatterns.mockReturnValue(
+      patterns({ notePatterns: ["[[Relativity]]"], propertyPatterns: ["[Topics:Physics]"] })
+    );
+    const app = fakeApp([{ path: "Notes/Relativity.md", ext: "md" }]);
+    indexFile.mockReturnValue(true);
+
+    const result = await ensureProjectContextMaterialized(app, "p1", CWD);
+
+    const block = result.projectContextBlock ?? "";
+    expect(block.match(/\/vault\/Notes\/Relativity\.md/g)).toHaveLength(1);
+    // The declaration wins the row, so the note keeps its place among the sources
+    // that survive the entry cap rather than trailing behind the expansions.
+    expect(block).toContain("## Included notes");
+    expect(block).not.toContain("## Notes matching an included property");
   });
 
   it("still emits <project_context> for a property-only project when no note currently matches", async () => {

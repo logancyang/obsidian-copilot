@@ -79,6 +79,15 @@ const EMPTY_DIRECTORIES: string[] = Object.freeze([] as string[]) as string[];
 const EMPTY_MANIFEST_ENTRIES: ManifestPathEntry[] = Object.freeze(
   [] as ManifestPathEntry[]
 ) as ManifestPathEntry[];
+
+/**
+ * Identity of a resolved manifest entry for dedupe. Keyed on the absolute path
+ * when one resolved, since that is what the agent actually reads; an unresolved
+ * pattern falls back to its `vaultPath` so two of them still compare equal.
+ */
+function manifestEntryKey(entry: ManifestPathEntry): string {
+  return entry.absPath ?? entry.vaultPath;
+}
 /**
  * Frozen fallback result for the "no usable record / whole-run failure" exits —
  * NO `contextSignature`, so it never clears a caller's dirty flag (nothing was
@@ -338,20 +347,19 @@ async function runMaterialize(
       cwd,
       adapter
     );
-    // Property-matched notes join the note sources so the agent gets each note's
-    // absolute path; dedupe by resolved path so a note included via BOTH a
-    // [[title]] and a property isn't listed twice.
-    const resolvedNotes = resolveNotePaths(app, notes, adapter);
-    const propertyNotes = resolvePropertyNotePaths(app, properties, exclusions, adapter);
-    const seenNotePaths = new Set(resolvedNotes.map((entry) => entry.absPath ?? entry.vaultPath));
-    const noteEntries = [...resolvedNotes];
-    for (const entry of propertyNotes) {
-      const key = entry.absPath ?? entry.vaultPath;
-      if (!seenNotePaths.has(key)) {
-        seenNotePaths.add(key);
-        noteEntries.push(entry);
-      }
-    }
+    // Property matches stay a SEPARATE list from the declared `[[title]]` notes:
+    // the manifest lists declarations ahead of expansions so a broad property
+    // can't push a hand-added source out of the entry cap. Deduped by resolved
+    // path so a note included via BOTH a [[title]] and a property is listed once,
+    // under the declaration.
+    const noteEntries = resolveNotePaths(app, notes, adapter);
+    const declaredNotePaths = new Set(noteEntries.map(manifestEntryKey));
+    const propertyNoteEntries = resolvePropertyNotePaths(
+      app,
+      properties,
+      exclusions,
+      adapter
+    ).filter((entry) => !declaredNotePaths.has(manifestEntryKey(entry)));
 
     const files: FileSource[] = inclusions
       ? listMaterializeCandidates(app, contextSource).map((file) => ({
@@ -425,6 +433,7 @@ async function runMaterialize(
       extensions,
       tags,
       properties,
+      propertyNotes: propertyNoteEntries,
       webUrls,
       youtubeUrls,
       materialized: manifestEntries,
