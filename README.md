@@ -56,7 +56,7 @@ This is the future we believe in. If you share this vision, please support this 
 - [The What](#the-what)
 - [The Why](#the-why)
 - [Key Features](#key-features)
-- [Copilot V3 is a New Era 🔥](#copilot-v3-is-a-new-era-)
+- [Copilot v4: Agent Mode, Reimagined 🚀](#copilot-v4-agent-mode-reimagined-)
 - [Why People Love It ❤️](#why-people-love-it-️)
 - [Get Started](#get-started)
   - [Install Obsidian Copilot](#install-obsidian-copilot)
@@ -78,15 +78,13 @@ This is the future we believe in. If you share this vision, please support this 
 - [**Copilot Plus Disclosure**](#copilot-plus-disclosure)
 - [**Authors**](#authors)
 
-## Copilot V3 is a New Era 🔥
+## Copilot v4: Agent Mode, Reimagined 🚀
 
-After months of hard work, we have revamped the codebase and adopted a new paradigm for our agentic infrastructure. It opens the door for easier addition of agentic tools (MCP support coming). We will provide a new version of the documentation soon. Here is a couple of new things that you cannot miss!
+Our biggest leap yet. **Copilot v4** lets you run the most capable coding agents available — **opencode**, **Claude Code**, or **Codex** — natively inside your vault, tuned for knowledge work and entirely on your terms. Bring your own agent, keep every note on your device, and let it plan, search, and act across your Second Brain. No lock-in, no compromise.
 
-- FOR ALL USERS: You can do vault search out-of-the-box **without building an index first** (Indexing is still available but optional behind the "Semantic Search" toggle in QA settings).
-- FOR FREE USERS: Image support and chat context menu are available to all users starting from v3.0.0!
-- FOR PLUS USERS: **Autonomous agent** is available with vault search, web search, youtube, composer and soon a lot other tools! **Long-term memory** is also a tool the agent can use by itself starting from 3.1.0!
+**Join Supporter to experience the magic of Copilot v4 now!**
 
-Read the [Changelog](https://github.com/logancyang/obsidian-copilot/releases/tag/3.0.0).
+👉 **[Discover Copilot v4 →](https://www.obsidiancopilot.com/v4)**
 
 ## Why People Love It ❤️
 
