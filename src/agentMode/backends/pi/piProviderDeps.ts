@@ -1,4 +1,3 @@
-import { getDecryptedKey } from "@/encryptionService";
 import { providerRequiresApiKey } from "@/modelManagement";
 import type CopilotPlugin from "@/main";
 import { getSettings } from "@/settings/model";
@@ -50,7 +49,7 @@ async function collectByokProviders(plugin: CopilotPlugin): Promise<readonly PiB
  */
 export async function resolvePiProviderDeps(plugin: CopilotPlugin): Promise<PiProviderDeps> {
   return {
-    plusLicenseKey: await getDecryptedKey(getSettings().plusLicenseKey),
+    plusLicenseKey: getSettings().plusLicenseKey,
     byokProviders: await collectByokProviders(plugin),
     // Native fetch, not `safeFetch`: the model proxy allows the Obsidian
     // origin, and `safeFetch` buffers the whole body, which would defeat

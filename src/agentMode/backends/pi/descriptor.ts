@@ -49,6 +49,9 @@ export const PiBackendDescriptor: BackendDescriptor = {
   Icon: PiLogo,
   // Routed through the Copilot Plus model proxy by default.
   selfHostable: false,
+  routesCopilotModels: true,
+  setupDescription:
+    "Copilot Plus models, or models from your OpenAI-compatible providers. Built into Copilot with no separate install.",
   skillsProjectDir: ".pi/skills",
   crossDiscoveredAgents: [],
   restartOnManagedSkillsChange: false,
@@ -79,7 +82,7 @@ export const PiBackendDescriptor: BackendDescriptor = {
   },
 
   openInstallUI(): void {
-    new Notice("Pi is built in. Enable it under Settings → Agent Mode.");
+    new Notice("Pi is built in. Enable it under Settings → Copilot → Basic → Agents → Pi.");
   },
 
   async applySelection(session: AgentSession, selection: ModelSelection): Promise<void> {

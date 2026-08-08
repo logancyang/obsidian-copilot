@@ -140,7 +140,7 @@ describe("PiBackendProcess", () => {
         fileStore,
       });
 
-      const { state } = await proc.newSession({ cwd: "/vault", mcpServers: [] });
+      const { state } = await proc.newSession({ cwd: "/vault" });
 
       expect(state.model?.current.baseModelId).toBe("copilot-plus/kimi-k2.6");
     });
@@ -158,13 +158,13 @@ describe("PiBackendProcess", () => {
         fileStore,
       });
 
-      const { state } = await proc.newSession({ cwd: "/vault", mcpServers: [] });
+      const { state } = await proc.newSession({ cwd: "/vault" });
 
       expect(state.model?.current.baseModelId).toBe("copilot-plus/copilot-plus-flash");
     });
 
     it("advertises the whole catalog to the picker", async () => {
-      const { state } = await createProcess().newSession({ cwd: "/vault", mcpServers: [] });
+      const { state } = await createProcess().newSession({ cwd: "/vault" });
 
       // The same bare id served by two providers stays two distinct rows.
       expect(state.model?.availableModels.map((m) => m.baseModelId)).toEqual([
@@ -177,8 +177,8 @@ describe("PiBackendProcess", () => {
     it("builds the provider collection once across sessions", async () => {
       const proc = createProcess();
 
-      await proc.newSession({ cwd: "/vault", mcpServers: [] });
-      await proc.newSession({ cwd: "/vault", mcpServers: [] });
+      await proc.newSession({ cwd: "/vault" });
+      await proc.newSession({ cwd: "/vault" });
 
       expect(refresh).toHaveBeenCalledTimes(1);
     });
@@ -187,7 +187,7 @@ describe("PiBackendProcess", () => {
   describe("registerSessionHandler()", () => {
     it("replays events that arrived before the handler registered", async () => {
       const proc = createProcess();
-      const { sessionId } = await proc.newSession({ cwd: "/vault", mcpServers: [] });
+      const { sessionId } = await proc.newSession({ cwd: "/vault" });
       emit({
         type: "message_update",
         message: {},
@@ -208,7 +208,7 @@ describe("PiBackendProcess", () => {
   describe("prompt()", () => {
     it("sends the text blocks and reports the turn ended", async () => {
       const proc = createProcess();
-      const { sessionId } = await proc.newSession({ cwd: "/vault", mcpServers: [] });
+      const { sessionId } = await proc.newSession({ cwd: "/vault" });
 
       const result = await proc.prompt({
         sessionId,
@@ -224,7 +224,7 @@ describe("PiBackendProcess", () => {
 
     it("forwards image blocks alongside the text", async () => {
       const proc = createProcess();
-      const { sessionId } = await proc.newSession({ cwd: "/vault", mcpServers: [] });
+      const { sessionId } = await proc.newSession({ cwd: "/vault" });
 
       await proc.prompt({
         sessionId,
@@ -247,7 +247,7 @@ describe("PiBackendProcess", () => {
 
     it("publishes a usage snapshot when the turn ends", async () => {
       const proc = createProcess();
-      const { sessionId } = await proc.newSession({ cwd: "/vault", mcpServers: [] });
+      const { sessionId } = await proc.newSession({ cwd: "/vault" });
       const seen: SessionEvent[] = [];
       proc.registerSessionHandler(sessionId, (event) => seen.push(event));
 
@@ -263,7 +263,7 @@ describe("PiBackendProcess", () => {
   describe("setSessionModel()", () => {
     it("switches the live session and reports the new selection", async () => {
       const proc = createProcess();
-      const { sessionId } = await proc.newSession({ cwd: "/vault", mcpServers: [] });
+      const { sessionId } = await proc.newSession({ cwd: "/vault" });
 
       // The local endpoint serves the same bare id as Copilot Plus, so the
       // selection has to reach that provider rather than the first id match.
@@ -280,7 +280,7 @@ describe("PiBackendProcess", () => {
   describe("cancel()", () => {
     it("aborts the running turn", async () => {
       const proc = createProcess();
-      const { sessionId } = await proc.newSession({ cwd: "/vault", mcpServers: [] });
+      const { sessionId } = await proc.newSession({ cwd: "/vault" });
 
       await proc.cancel({ sessionId });
 
@@ -293,7 +293,7 @@ describe("PiBackendProcess", () => {
 
     it("reports a stopped turn as cancelled, not as a completed one", async () => {
       const proc = createProcess();
-      const { sessionId } = await proc.newSession({ cwd: "/vault", mcpServers: [] });
+      const { sessionId } = await proc.newSession({ cwd: "/vault" });
       engine.prompt.mockImplementationOnce(async () => {
         await proc.cancel({ sessionId });
       });
@@ -305,7 +305,7 @@ describe("PiBackendProcess", () => {
 
     it("swallows the abort rejection but still surfaces a real turn failure", async () => {
       const proc = createProcess();
-      const { sessionId } = await proc.newSession({ cwd: "/vault", mcpServers: [] });
+      const { sessionId } = await proc.newSession({ cwd: "/vault" });
       engine.prompt.mockImplementationOnce(async () => {
         await proc.cancel({ sessionId });
         throw new Error("aborted");
@@ -347,11 +347,11 @@ describe("PiBackendProcess", () => {
   describe("resumeSession()", () => {
     it("reopens the stored transcript so the model keeps its history", async () => {
       const proc = createProcess();
-      const { sessionId } = await proc.newSession({ cwd: "/vault", mcpServers: [] });
+      const { sessionId } = await proc.newSession({ cwd: "/vault" });
       await proc.shutdown();
 
       const resumed = createProcess();
-      const output = await resumed.resumeSession({ sessionId, cwd: "/vault", mcpServers: [] });
+      const output = await resumed.resumeSession({ sessionId, cwd: "/vault" });
 
       expect(output.sessionId).toBe(sessionId);
       expect(output.state.model?.current.baseModelId).toBe("copilot-plus/copilot-plus-flash");
@@ -359,10 +359,10 @@ describe("PiBackendProcess", () => {
 
     it("streams into the resumed session", async () => {
       const proc = createProcess();
-      const { sessionId } = await proc.newSession({ cwd: "/vault", mcpServers: [] });
+      const { sessionId } = await proc.newSession({ cwd: "/vault" });
       await proc.shutdown();
       const resumed = createProcess();
-      await resumed.resumeSession({ sessionId, cwd: "/vault", mcpServers: [] });
+      await resumed.resumeSession({ sessionId, cwd: "/vault" });
       const seen: SessionEvent[] = [];
       resumed.registerSessionHandler(sessionId, (event) => seen.push(event));
 
@@ -377,13 +377,13 @@ describe("PiBackendProcess", () => {
 
     it("fails loudly when the transcript is not on this device", async () => {
       await expect(
-        createProcess().resumeSession({ sessionId: "never-here", cwd: "/vault", mcpServers: [] })
+        createProcess().resumeSession({ sessionId: "never-here", cwd: "/vault" })
       ).rejects.toThrow();
     });
 
     it("reports whether a transcript exists locally, so dead rows can be hidden", async () => {
       const proc = createProcess();
-      const { sessionId } = await proc.newSession({ cwd: "/vault", mcpServers: [] });
+      const { sessionId } = await proc.newSession({ cwd: "/vault" });
 
       await expect(proc.sessionExistsLocally({ sessionId })).resolves.toBe(true);
       await expect(proc.sessionExistsLocally({ sessionId: "other" })).resolves.toBe(false);
@@ -393,7 +393,7 @@ describe("PiBackendProcess", () => {
   describe("shutdown()", () => {
     it("aborts live sessions, notifies exit listeners, and stops running", async () => {
       const proc = createProcess();
-      await proc.newSession({ cwd: "/vault", mcpServers: [] });
+      await proc.newSession({ cwd: "/vault" });
       const onExit = jest.fn();
       proc.onExit(onExit);
 

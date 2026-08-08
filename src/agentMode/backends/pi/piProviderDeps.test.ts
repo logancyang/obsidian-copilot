@@ -7,10 +7,6 @@ jest.mock("@/logger", () => ({
   logError: jest.fn(),
 }));
 
-jest.mock("@/encryptionService", () => ({
-  getDecryptedKey: jest.fn(async (key: string) => `decrypted:${key}`),
-}));
-
 const getSettings = jest.fn();
 jest.mock("@/settings/model", () => ({
   getSettings: () => getSettings(),
@@ -52,10 +48,10 @@ describe("piProviderDeps", () => {
       });
     });
 
-    it("decrypts the Copilot Plus license key", async () => {
+    it("uses the Copilot Plus license key hydrated into runtime settings", async () => {
       const deps = await resolvePiProviderDeps(pluginWithKey("k"));
 
-      expect(deps.plusLicenseKey).toBe("decrypted:license");
+      expect(deps.plusLicenseKey).toBe("license");
     });
 
     it("exposes a user's OpenAI-compatible endpoint with its configured models", async () => {
