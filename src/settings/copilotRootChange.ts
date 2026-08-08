@@ -197,7 +197,7 @@ export function findCopilotRootFileConflict(app: App, folder: string): string | 
  * @param newRoot - The user-entered root; re-validated defensively.
  */
 export async function applyCopilotRootChange(app: App, newRoot: string): Promise<void> {
-  const validation = validateCopilotFolder(newRoot);
+  const validation = validateCopilotFolder(newRoot, app.vault.configDir);
   if (!validation.ok) {
     logWarn("Copilot root change rejected an invalid folder value.", validation.reason);
     return;

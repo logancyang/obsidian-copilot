@@ -744,6 +744,15 @@ describe("model", () => {
       expect(out.copilotFolder).toBe("notes/ai");
     });
 
+    it("preserves an existing config-like root without vault context", () => {
+      const out = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        copilotFolder: ".vault-config/plugins/copilot-data",
+      });
+
+      expect(out.copilotFolder).toBe(".vault-config/plugins/copilot-data");
+    });
+
     it("rejects a parent-traversal path", () => {
       const out = sanitizeSettings({
         ...DEFAULT_SETTINGS,
@@ -767,6 +776,7 @@ describe("model", () => {
       });
       expect(out.copilotFolder).toBe(DEFAULT_SETTINGS.copilotFolder);
     });
+
     it("unions the active root into a normalized, deduped history", () => {
       const out = sanitizeSettings({
         ...DEFAULT_SETTINGS,
@@ -828,10 +838,12 @@ describe("model", () => {
       expect(validateCopilotFolder("a/./b").ok).toBe(false);
     });
 
-    it("rejects the Obsidian config folder case-insensitively", () => {
-      // eslint-disable-next-line obsidianmd/hardcoded-config-path -- the test asserts rejection of the conventional config dir literal
-      expect(validateCopilotFolder(".obsidian").ok).toBe(false);
-      expect(validateCopilotFolder(".Obsidian/plugins").ok).toBe(false);
+    it("rejects roots that overlap the active config folder at a segment boundary", () => {
+      const configDir = ".vault-config";
+      expect(validateCopilotFolder(configDir, configDir).ok).toBe(false);
+      expect(validateCopilotFolder(`${configDir.toUpperCase()}/plugins`, configDir).ok).toBe(false);
+      expect(validateCopilotFolder("copilot", "copilot/system-prompts").ok).toBe(false);
+      expect(validateCopilotFolder("copilot-data", "copilot/system-prompts").ok).toBe(true);
     });
 
     it("rejects Windows-illegal characters in any segment", () => {

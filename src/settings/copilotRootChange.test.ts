@@ -36,7 +36,7 @@ jest.mock("@/settings/copilotSaveData", () => ({
 }));
 
 /** Minimal App; the plugin lookup is mocked away via getCopilotSaveData. */
-const app = {} as App;
+const app = { vault: { configDir: ".vault-config" } } as unknown as App;
 
 /** Minimal App whose vault reports the given Markdown file paths. */
 function appWithMarkdown(paths: string[]): App {
