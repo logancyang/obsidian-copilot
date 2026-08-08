@@ -1,4 +1,4 @@
-import { render } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import React from "react";
 import { LicenseRequiredIcon } from "./LicenseRequiredIcon";
 
@@ -12,6 +12,15 @@ describe("LicenseRequiredIcon", () => {
       // inherit. Without the reset the tooltip cannot open and the greyed row
       // has nothing left to say why it is locked.
       expect(container.firstElementChild?.className).toContain("tw-pointer-events-auto");
+    });
+
+    it("states the reason in text, since the tooltip only answers a hover", () => {
+      render(<LicenseRequiredIcon />);
+
+      // The tooltip content renders on hover, and a disabled row can take
+      // neither hover nor focus from a keyboard, so this hidden copy is the
+      // reason's only route into the row's accessible name.
+      expect(screen.getByText("Copilot license required")).toBeTruthy();
     });
 
     it("keeps a caller's classes alongside its own", () => {

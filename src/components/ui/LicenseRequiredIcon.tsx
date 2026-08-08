@@ -13,8 +13,8 @@ const LICENSE_REQUIRED = "Copilot license required";
  * Parallels {@link FreeModelWarningIcon}: same Radix `HelpTooltip` with
  * `delayDuration={0}` for instant hover, and no `aria-label` (that makes
  * Obsidian attach its own native tooltip, which throws `isShown is not a
- * function` here — the tooltip text already conveys the meaning). Muted rather
- * than amber: a locked model is an offer, not a warning.
+ * function` here). Muted rather than amber: a locked model is an offer, not a
+ * warning.
  */
 export function LicenseRequiredIcon({ className }: { className?: string }) {
   return (
@@ -33,6 +33,10 @@ export function LicenseRequiredIcon({ className }: { className?: string }) {
       <HelpTooltip content={LICENSE_REQUIRED} side="top" delayDuration={0}>
         <Lock className="tw-size-3.5" />
       </HelpTooltip>
+      {/* A hover tooltip reaches pointer users only, and the row is disabled, so
+          nothing in it can take focus. Carrying the reason as hidden text folds
+          it into the row's accessible name instead. */}
+      <span className="tw-sr-only">{LICENSE_REQUIRED}</span>
     </span>
   );
 }
