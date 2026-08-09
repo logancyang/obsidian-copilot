@@ -62,6 +62,8 @@ ESLint and Stylelint findings include the file, line, rule, and message; the sam
 
 The upstream review packages are pinned in `package.json`. Update those versions and the lockfile together, review the upstream rule changes, and rerun the complete preflight before committing an upgrade. Do not weaken an error merely to re-establish a passing baseline, and do not promote a warning to blocking until its remediation is behavior-preserving.
 
+Maintainers should also read the [review-gate maintenance guide](./designdocs/OBSIDIAN_COMMUNITY_REVIEW.md) before changing review rules, severities, or fixtures.
+
 #### Fast Iteration with `npm run test:vault` (macOS)
 
 If you work across multiple worktrees or just want one command to build and load the plugin into a test vault, use `npm run test:vault`. It runs `npm install`, builds, symlinks `main.js` / `manifest.json` / `styles.css` from the worktree into the vault's `.obsidian/plugins/copilot/` folder, and reloads the plugin in Obsidian via its CLI.
