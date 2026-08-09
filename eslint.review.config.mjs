@@ -1,4 +1,7 @@
 import baseConfig from "./eslint.config.mjs";
+import typescriptParser from "@typescript-eslint/parser";
+import obsidianmd from "eslint-plugin-obsidianmd";
+import { PlainTextParser } from "eslint-plugin-obsidianmd/dist/lib/plainTextParser.js";
 
 const sourceFiles = ["src/**/*.{ts,tsx}", "dev/gallery/**/*.{ts,tsx}"];
 
@@ -29,6 +32,30 @@ export default [
             "Use Obsidian requestUrl instead of fetch unless a reviewed streaming adapter requires fetch.",
         },
       ],
+    },
+  },
+  {
+    files: ["**/*manifest.json"],
+    languageOptions: {
+      parser: typescriptParser,
+    },
+    plugins: { obsidianmd },
+    rules: {
+      // The upstream rule combines schema failures with copy guidance. The
+      // package gate promotes only its schema findings to blocking errors.
+      "obsidianmd/validate-manifest": "warn",
+    },
+  },
+  {
+    files: ["**/*LICENSE"],
+    // eslint-plugin-obsidianmd does not yet export a flat config for LICENSE,
+    // so use the plain-text parser bundled with the pinned plugin version.
+    languageOptions: {
+      parser: PlainTextParser,
+    },
+    plugins: { obsidianmd },
+    rules: {
+      "obsidianmd/validate-license": "warn",
     },
   },
   {

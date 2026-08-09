@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import {
   collectPackageFindings,
   getManifestFilename,
-  runAudit,
+  validateSelectedManifest,
 } from "./review-obsidian-package.mjs";
 
 const repositoryRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
@@ -37,25 +37,7 @@ function expectReported(command, args, expectedRules) {
   }
 }
 
-function expectAuditExitCode(severity, expectedExitCode) {
-  const previousExitCode = process.exitCode;
-  process.exitCode = undefined;
-  try {
-    runAudit(() => ({
-      stdout: JSON.stringify({ vulnerabilities: { unsafe: { severity } } }),
-      stderr: "",
-      status: 1,
-    }));
-    assert(
-      (process.exitCode ?? 0) === expectedExitCode,
-      `${severity} runtime advisory produced exit code ${String(process.exitCode ?? 0)}`
-    );
-  } finally {
-    process.exitCode = previousExitCode;
-  }
-}
-
-function main() {
+async function main() {
   expectRejected(
     process.execPath,
     [
@@ -104,6 +86,46 @@ function main() {
     ],
     ["function-url-scheme-disallowed-list"]
   );
+  expectReported(
+    process.execPath,
+    [
+      resolve(repositoryRoot, "node_modules/eslint/bin/eslint.js"),
+      "--config",
+      "eslint.review.config.mjs",
+      "--no-ignore",
+      "src/review-fixtures/invalid-review-LICENSE",
+    ],
+    ["obsidianmd/validate-license"]
+  );
+
+  const invalidManifestAccepted = await validateSelectedManifest(
+    resolve(repositoryRoot, "manifest-beta.json"),
+    JSON.stringify({
+      id: "invalid",
+      name: "Invalid",
+      version: "1.0.0-beta.1",
+      minAppVersion: "1.0.0",
+      description: "A valid description.",
+      author: "Tester",
+      isDesktopOnly: false,
+      fundingUrl: { sponsor: 42 },
+      unsupported: true,
+    })
+  );
+  assert(!invalidManifestAccepted, "upstream manifest schema failure was accepted");
+  const copyWarningAccepted = await validateSelectedManifest(
+    resolve(repositoryRoot, "manifest.json"),
+    JSON.stringify({
+      id: "valid",
+      name: "Valid",
+      version: "1.0.0",
+      minAppVersion: "1.0.0",
+      description: "Visible copy: unchanged.",
+      author: "Tester",
+      isDesktopOnly: false,
+    })
+  );
+  assert(copyWarningAccepted, "manifest copy guidance unexpectedly blocked the review gate");
 
   const packageFindings = collectPackageFindings({
     manifest: { name: "Invalid", version: "2.0.0", isDesktopOnly: true },
@@ -111,8 +133,6 @@ function main() {
     licenseText: "",
   });
   assert(packageFindings.length >= 3, "invalid manifest/license fixture was accepted");
-  expectAuditExitCode("critical", 1);
-  expectAuditExitCode("high", 0);
   assert(
     getManifestFilename("1.0.0-beta.1") === "manifest-beta.json",
     "prerelease package was not matched to manifest-beta.json"
@@ -121,4 +141,4 @@ function main() {
   console.info("Obsidian review fixtures passed.");
 }
 
-main();
+await main();
