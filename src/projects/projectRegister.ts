@@ -22,7 +22,7 @@ import { loadAllProjects } from "@/projects/projectUtils";
 import { PROJECT_CONFIG_FILE_NAME, PROJECTS_UNSUPPORTED_FOLDER_NAME } from "@/projects/constants";
 import { getSettings, subscribeToSettingsChange } from "@/settings/model";
 import { deriveProjectsFolder } from "@/settings/copilotFolder";
-import { debounce } from "@/utils/debounce";
+import { debounce, type DebouncedFunction } from "@/utils/debounce";
 import { App, Notice, TAbstractFile, Vault } from "obsidian";
 
 /**
@@ -44,7 +44,10 @@ export class ProjectRegister {
   /** Monotonic request id for latest-wins semantics on folder change. */
   private folderChangeRequestId = 0;
   /** Per-file debounced modify handlers to avoid cross-file debounce collisions. */
-  private fileModifyDebouncers = new Map<string, ReturnType<typeof debounce>>();
+  private fileModifyDebouncers = new Map<
+    string,
+    DebouncedFunction<(file: TAbstractFile) => void>
+  >();
 
   constructor(app: App) {
     this.app = app;
@@ -460,7 +463,9 @@ export class ProjectRegister {
    * Reason: per-file debounce avoids cross-file collisions where modifying projectA
    * within the debounce window of projectB would drop projectB's cache update.
    */
-  private getFileModifyDebouncer(filePath: string): ReturnType<typeof debounce> {
+  private getFileModifyDebouncer(
+    filePath: string
+  ): DebouncedFunction<(file: TAbstractFile) => void> {
     let d = this.fileModifyDebouncers.get(filePath);
     if (!d) {
       d = debounce(

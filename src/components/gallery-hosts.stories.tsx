@@ -1,6 +1,4 @@
-// eslint-disable-next-line no-restricted-syntax, @typescript-eslint/no-restricted-imports -- This host fixture explicitly exercises the separate dev-only provider boundary.
-import { GalleryProviders } from "../../dev/gallery/GalleryProviders";
-import { galleryHostFixtures } from "@/components/gallery-hosts.fixtures";
+import { GalleryProviders, galleryHostFixtures } from "@/components/gallery-hosts.fixtures";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { SettingItem } from "@/components/ui/setting-item";

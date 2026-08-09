@@ -59,7 +59,7 @@ export function buildWebTabsWithActiveSnapshot(
     // Clear any existing isActive flags to ensure only one active tab
     const clearedTabs: WebTabContext[] = sanitizedTabs.map((tab) => {
       if (tab.isActive) {
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars -- ignore malformed candidates and continue to the next tab
         const { isActive: _unused, ...rest } = tab;
         return rest;
       }

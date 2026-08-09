@@ -82,7 +82,7 @@ function resolveUnindexedVaultPath(app: App, filePath: string): UnindexedPathRes
   try {
     // Desktop-only: loaded lazily after the vault-base guard, which is null
     // wherever the FileSystemAdapter (and thus node) is unavailable.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- realpath is loaded only after confirming a desktop filesystem adapter
     const fs = require("node:fs") as typeof import("node:fs");
     // Realpath both sides so a vault base that itself sits behind a symlink
     // (e.g. /tmp on macOS) still compares equal to the resolved target.

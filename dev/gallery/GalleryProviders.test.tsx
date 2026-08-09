@@ -2,7 +2,7 @@ import { AppContext, EventTargetContext, useApp } from "@/context";
 import { render } from "@testing-library/react";
 import type { App } from "obsidian";
 import * as React from "react";
-import { GalleryProviders } from "./GalleryProviders";
+import { GalleryProviders } from "@/components/gallery-hosts.fixtures";
 
 interface ContextProbeProps {
   onRead: (app: App, eventTarget: EventTarget | undefined) => void;

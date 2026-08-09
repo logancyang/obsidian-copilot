@@ -112,7 +112,7 @@ export default function AgentContextSection({
   // is the intended prop→optimistic-state sync; the lint rule's blanket warning
   // about set-state-in-effect doesn't fit a guarded reconciliation like this.
   useEffect(() => {
-    // eslint-disable-next-line @eslint-react/hooks-extra/no-direct-set-state-in-use-effect
+    // eslint-disable-next-line @eslint-react/hooks-extra/no-direct-set-state-in-use-effect -- reset transient expansion when the selected context changes
     if (!pendingRef.current && !writingRef.current) setDraft(externalContext);
   }, [externalContext]);
 

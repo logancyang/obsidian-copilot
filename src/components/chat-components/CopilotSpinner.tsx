@@ -38,7 +38,7 @@ export const CopilotSpinner: React.FC<CopilotSpinnerProps> = ({ animated = true 
             cx={cx}
             cy={cy}
             r={DOT_SIZE / 2}
-            // eslint-disable-next-line tailwindcss/no-custom-classname
+            // eslint-disable-next-line tailwindcss/no-custom-classname -- spinner-dot is a component animation class defined in source CSS
             className={cn(
               "copilot-spinner-dot",
               animated && `copilot-spinner-dot-${dot.animIndex}`

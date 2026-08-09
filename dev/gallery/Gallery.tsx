@@ -458,7 +458,7 @@ function SettingsTabStoryHost({
     </div>
   );
 }
-/* eslint-enable tailwindcss/no-custom-classname */
+/* eslint-enable tailwindcss/no-custom-classname -- resume checking outside the Obsidian settings host */
 
 function renderLeafStory(
   story: StoryDefinition,

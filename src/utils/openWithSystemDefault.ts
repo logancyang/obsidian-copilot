@@ -12,7 +12,7 @@ import { Notice } from "obsidian";
  */
 export async function openWithSystemDefault(absPath: string): Promise<void> {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- Electron shell is optional and loaded lazily for this desktop-only action
     const electron = require("electron") as {
       shell?: { openPath?: (path: string) => Promise<string> };
       remote?: { shell?: { openPath?: (path: string) => Promise<string> } };

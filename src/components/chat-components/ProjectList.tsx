@@ -200,11 +200,11 @@ export const ProjectList = memo(
       if (!selectedProject) return;
       const stillExists = projects.some((p) => p.id === selectedProject.id);
       if (stillExists) return;
-      // eslint-disable-next-line @eslint-react/hooks-extra/no-direct-set-state-in-use-effect
+      // eslint-disable-next-line @eslint-react/hooks-extra/no-direct-set-state-in-use-effect -- synchronize local selection after the selected project disappears
       setSelectedProject(null);
-      // eslint-disable-next-line @eslint-react/hooks-extra/no-direct-set-state-in-use-effect
+      // eslint-disable-next-line @eslint-react/hooks-extra/no-direct-set-state-in-use-effect -- synchronize the dependent input visibility in the same committed transition
       setShowChatInput(false);
-      // eslint-disable-next-line @eslint-react/hooks-extra/no-direct-set-state-in-use-effect
+      // eslint-disable-next-line @eslint-react/hooks-extra/no-direct-set-state-in-use-effect -- keep the project list open after clearing its missing selection
       setIsOpen(true);
       showChatUI(false);
     }, [projects, selectedProject, showChatUI]);

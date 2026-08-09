@@ -55,7 +55,7 @@ export function validateCommandName(
     return null; // No change needed
   }
 
-  // eslint-disable-next-line no-control-regex
+  // eslint-disable-next-line no-control-regex -- command paths must reject embedded control bytes
   const invalidChars = /[#<>:"/\\|?*[\]^\x00-\x1F]/g;
   if (invalidChars.test(trimmedName)) {
     return 'Command name contains invalid characters. Avoid using: < > : " / \\ | ? * [ ] ^';

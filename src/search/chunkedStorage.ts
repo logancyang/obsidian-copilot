@@ -1,8 +1,9 @@
 // DEPRECATED: Legacy partitioned Orama store. v3 uses JSONL snapshots + MemoryIndexManager.
 import { CustomError } from "@/error";
 import { logInfo } from "@/logger";
+import type { CopilotOrama, CopilotOramaSchema } from "@/search/dbOperations";
 import { getSettings } from "@/settings/model";
-import { create, load, Orama, RawData, save } from "@orama/orama";
+import { create, load, RawData, save } from "@orama/orama";
 import { App } from "obsidian";
 
 const CHUNK_PREFIX = "copilot-index-chunk-";
@@ -10,7 +11,7 @@ const LEGACY_INDEX_SUFFIX = ".json";
 
 export interface ChunkMetadata {
   numPartitions: number;
-  schema: Record<string, string>;
+  schema: CopilotOramaSchema;
   lastModified: number;
   documentPartitions: Record<string, number>;
 }
@@ -105,8 +106,7 @@ export class ChunkedStorage {
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Orama<any> is required here as it controls Orama's type inference
-  async saveDatabase(db: Orama<any>): Promise<void> {
+  async saveDatabase(db: CopilotOrama): Promise<void> {
     try {
       const rawData: RawData = save(db);
       const numPartitions = getSettings().numPartitions;
@@ -243,15 +243,14 @@ export class ChunkedStorage {
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Orama<any> is required here as it controls Orama's type inference
-  async loadDatabase(): Promise<Orama<any>> {
+  async loadDatabase(): Promise<CopilotOrama> {
     try {
       const legacyPath = this.getLegacyPath();
 
       // Try loading legacy format first
       if (await this.app.vault.adapter.exists(legacyPath)) {
         const legacyData = JSON.parse(await this.app.vault.adapter.read(legacyPath)) as RawData & {
-          schema?: Record<string, string>;
+          schema?: CopilotOramaSchema;
         };
         if (!legacyData?.schema) {
           throw new CustomError("Invalid legacy database format");

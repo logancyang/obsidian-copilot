@@ -68,9 +68,9 @@ let atomicTempSeq = 0;
  *  - `list` / `remove` / `clear` tolerate a missing target (`[]` / idempotent).
  */
 export function createNodeContextCacheFs(root: string): NodeContextCacheFs {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports, import/no-nodejs-modules
+  // eslint-disable-next-line @typescript-eslint/no-require-imports, import/no-nodejs-modules -- desktop cache access is loaded only inside this explicitly constructed Node adapter
   const fs = require("node:fs") as typeof import("node:fs");
-  // eslint-disable-next-line @typescript-eslint/no-require-imports, import/no-nodejs-modules
+  // eslint-disable-next-line @typescript-eslint/no-require-imports, import/no-nodejs-modules -- desktop path handling stays behind the same Node adapter boundary
   const nodePath = require("node:path") as typeof import("node:path");
 
   const rootAbs = nodePath.resolve(root);

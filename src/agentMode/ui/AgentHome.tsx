@@ -358,7 +358,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   // appear in an id, so distinct id sets always produce distinct keys.
   const sessions = manager.getSessions();
   const liveKey = sessions.map((s) => s.chatInputId).join("\0");
-  const liveChatInputIds = useMemo(() => sessions.map((s) => s.chatInputId), [liveKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const liveChatInputIds = useMemo(() => sessions.map((s) => s.chatInputId), [liveKey]); // eslint-disable-line react-hooks/exhaustive-deps -- liveKey is the stable signature for the freshly allocated sessions list
   // Per-chat-input compose drafts live in the shell (the common owner) so the
   // active turn's `loading` (transcript spinner) and the drop overlay's drag
   // state can be read directly here, instead of being mirrored up from the
@@ -441,7 +441,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     if (!isProjectScope) return null;
     const record = getCachedProjectRecordById(activeProjectId);
     return record ? getProjectLandingCaptureSignature(app, record) : null;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- projects intentionally re-derives metadata read through the project cache
   }, [app, isProjectScope, activeProjectId, projects]);
   useRefreshEmptyLandingOnContextSourceChange({
     activeProjectId,
@@ -499,7 +499,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   // a session, so it doesn't flicker as tokens arrive. sessionId is the
   // intentional re-roll trigger — not read inside the factory, so exhaustive-deps
   // flags it; the dep is deliberate (same as the liveChatInputIds memo above).
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- sessionId intentionally re-rolls the otherwise argument-free greeting factory
   const greeting = useMemo(() => pickRandomGreeting(), [sessionId]);
 
   // Populate the chats list whenever a landing (global or per-project) is shown

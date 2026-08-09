@@ -1,7 +1,6 @@
 import { Embeddings } from "@langchain/core/embeddings";
-import { Orama } from "@orama/orama";
 import { App } from "obsidian";
-import { DBOperations } from "@/search/dbOperations";
+import { DBOperations, type CopilotOrama } from "@/search/dbOperations";
 import type {
   SemanticIndexBackend,
   SemanticIndexDocument,
@@ -197,8 +196,7 @@ export class OramaIndexBackend implements SemanticIndexBackend {
   /**
    * Return the underlying Orama database instance when available.
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Orama<any> is the correct API type
-  public getDb(): Orama<any> | undefined {
+  public getDb(): CopilotOrama | undefined {
     return this.dbOps.getDb();
   }
 

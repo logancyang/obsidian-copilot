@@ -210,7 +210,7 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
     if (!catalogProviderId) return EMPTY_METADATA;
     return api.catalogService.getProvider(catalogProviderId)?.models ?? EMPTY_METADATA;
     // `catalogVersion` re-runs this once the catalog lands.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- catalogVersion intentionally invalidates metadata read through catalogService
   }, [catalogProviderId, api, catalogVersion]);
 
   const [displayName, setDisplayName] = useState(() =>

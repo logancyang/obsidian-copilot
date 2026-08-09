@@ -266,7 +266,7 @@ export const MiyoSettings: React.FC = () => {
   useEffect(() => {
     /* eslint-disable @eslint-react/hooks-extra/no-direct-set-state-in-use-effect -- reset the stale verdict when the inputs it was derived from change underneath us */
     setServerScopeStale(null);
-    /* eslint-enable @eslint-react/hooks-extra/no-direct-set-state-in-use-effect */
+    /* eslint-enable @eslint-react/hooks-extra/no-direct-set-state-in-use-effect -- resume checking after resetting derived verification state */
     // No local-only gate: the verify is a read-only lookup that works against a
     // remote Miyo too, and it's the only way a remote user's banner can ever
     // clear (they have no local register flow to write a receipt). Unreachable

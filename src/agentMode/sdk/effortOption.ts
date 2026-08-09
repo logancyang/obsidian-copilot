@@ -106,7 +106,7 @@ export async function probeClaudeSdkCatalog(
   pathToClaudeCodeExecutable: string,
   envOverrides?: Record<string, string>
 ): Promise<ModelInfo[]> {
-  // eslint-disable-next-line require-yield
+  // eslint-disable-next-line require-yield -- the async generator matches the SDK hook contract without yielding
   const noopPrompt = (async function* (): AsyncIterable<SDKUserMessage> {
     await new Promise<void>(() => {});
   })();
