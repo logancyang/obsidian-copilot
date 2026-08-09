@@ -35,6 +35,14 @@ async function lintSourceFixture(code, filePath) {
   const eslint = new ESLint({
     cwd: repositoryRoot,
     ignore: false,
+    overrideConfig: {
+      languageOptions: {
+        parserOptions: {
+          // CI single-run programs otherwise replace lintText input with the anchor file on disk.
+          disallowAutomaticSingleRunInference: true,
+        },
+      },
+    },
     overrideConfigFile: resolve(repositoryRoot, "eslint.review.config.mjs"),
   });
   const [result] = await eslint.lintText(code, {
