@@ -108,7 +108,7 @@ export const BasicSettings: React.FC = () => {
   useEffect(() => {
     /* eslint-disable @eslint-react/hooks-extra/no-direct-set-state-in-use-effect -- resync the draft when the persisted root changes underneath us (e.g. Reset Settings or a completed change) */
     setFolderDraft(persistedRoot);
-    /* eslint-enable @eslint-react/hooks-extra/no-direct-set-state-in-use-effect */
+    /* eslint-enable @eslint-react/hooks-extra/no-direct-set-state-in-use-effect -- resume checking after persisted-root synchronization */
   }, [persistedRoot]);
 
   const [vaultInstructions, setVaultInstructions] = useAgentsFileDraft(app, "");
@@ -154,7 +154,7 @@ export const BasicSettings: React.FC = () => {
   };
 
   const applyFolderChange = () => {
-    const validation = validateCopilotFolder(folderDraft);
+    const validation = validateCopilotFolder(folderDraft, app.vault.configDir);
     if (!validation.ok) {
       new Notice(`Invalid Copilot folder: ${validation.reason}`, 5000);
       return;
