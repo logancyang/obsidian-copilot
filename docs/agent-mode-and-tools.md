@@ -39,6 +39,8 @@ Selecting a row only previews its action. **Start chat** saves that agent as the
 
 The Claude setup dialog can also sign you in before a chat starts. After confirming or auto-detecting the Claude Code binary, click **Sign in** to open Claude's browser login. If the Claude CLI cannot open the browser itself, click **Open sign-in page** while sign-in is running to open the fallback URL.
 
+Under **Settings → Copilot → Basic → Agents**, each enabled agent can use a default model and effort for new chats. **Default effort** stays in place when you switch models; if the selected model does not offer effort levels, the control is disabled and shows **Not supported**.
+
 ### Choosing the OpenCode Binary Source
 
 Before OpenCode is set up, its row under **Settings → Copilot → Basic → Agents → opencode** offers both sources directly: **Download opencode** fetches an official release for Copilot to manage, and **I already have it** looks for an OpenCode you installed yourself. If that search finds nothing, a **Configure** button appears next to them so you can type the path by hand.

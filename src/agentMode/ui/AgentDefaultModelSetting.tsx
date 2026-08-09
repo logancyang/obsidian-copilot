@@ -4,6 +4,7 @@ import { useSettingsValue } from "@/settings/model";
 import React, { useSyncExternalStore } from "react";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import type { BackendDescriptor, EnabledModelEntry } from "@/agentMode/session/types";
+import { AgentDefaultEffortSetting } from "@/agentMode/ui/AgentDefaultEffortSetting";
 import {
   EMPTY_EFFORT_OPTIONS,
   MISSING_KEY_LABEL,
@@ -19,6 +20,7 @@ interface Props {
 /** Sentinel option representing "no stored default — let the agent choose". */
 const AGENT_DEFAULT_VALUE = "__agent_default__";
 const AGENT_DEFAULT_LABEL = "Agent default";
+const EFFORT_NOT_SUPPORTED_LABEL = "Not supported";
 
 /**
  * Per-agent "Default model" picker shown in each toggled-on agent's settings
@@ -59,8 +61,9 @@ export const AgentDefaultModelSetting: React.FC<Props> = ({ descriptor, manager 
   if ((!enabled || enabled.length === 0) && !hasExplicitDefault) return null;
 
   const selectedBaseId = current?.baseModelId ?? AGENT_DEFAULT_VALUE;
-  // Only a concrete default exposes an effort row; the agent-default case
-  // lets the agent choose effort, so there's nothing to persist.
+  // Only a concrete default can expose effort options. The row itself stays
+  // mounted so async catalog refreshes and model toggles cannot shift the
+  // settings below it; unsupported states disable the control instead.
   const rawEffortOptions = hasExplicitDefault
     ? resolveEffortOptions(manager, descriptor.id, selectedBaseId)
     : EMPTY_EFFORT_OPTIONS;
@@ -74,7 +77,6 @@ export const AgentDefaultModelSetting: React.FC<Props> = ({ descriptor, manager 
     rawEffortOptions.length > 0 && !rawEffortOptions.some((o) => o.value === null)
       ? [{ value: null, label: AGENT_DEFAULT_LABEL }, ...rawEffortOptions]
       : rawEffortOptions;
-
   const onModelChange = (baseModelId: string): void => {
     if (baseModelId === AGENT_DEFAULT_VALUE) {
       manager
@@ -127,15 +129,12 @@ export const AgentDefaultModelSetting: React.FC<Props> = ({ descriptor, manager 
         onChange={onModelChange}
         options={modelOptions}
       />
-      {effortOptions.length > 0 && (
-        <SettingItem
-          type="select"
-          title="Default effort"
-          value={current?.effort ?? ""}
-          onChange={(value) => onEffortChange(value === "" ? null : value)}
-          options={effortOptions.map((o) => ({ label: o.label, value: o.value ?? "" }))}
-        />
-      )}
+      <AgentDefaultEffortSetting
+        value={current?.effort ?? null}
+        options={effortOptions}
+        disabledLabel={hasExplicitDefault ? EFFORT_NOT_SUPPORTED_LABEL : AGENT_DEFAULT_LABEL}
+        onChange={onEffortChange}
+      />
     </>
   );
 };

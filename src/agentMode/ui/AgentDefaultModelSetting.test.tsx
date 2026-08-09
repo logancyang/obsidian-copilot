@@ -44,6 +44,13 @@ function makeManager(opts: {
   } as unknown as AgentSessionManager;
 }
 
+function getSettingSelect(title: string): HTMLSelectElement {
+  const row = screen.getByText(title).parentElement?.parentElement;
+  const select = row?.querySelector("select");
+  if (!(select instanceof HTMLSelectElement)) throw new Error(`${title} select was not rendered`);
+  return select;
+}
+
 describe("AgentDefaultModelSetting", () => {
   it("persists a model-only change with agent-default effort, not the first option", () => {
     const persist = jest.fn().mockResolvedValue(undefined);
@@ -90,16 +97,41 @@ describe("AgentDefaultModelSetting", () => {
     expect(screen.queryByText(/BYOK \(Add API key\)/)).not.toBeNull();
   });
 
-  it("represents an unset default as 'Agent default' with no effort row", () => {
+  it("represents an unset default as 'Agent default' with a disabled effort row", () => {
     const manager = makeManager({
       defaultSelection: null,
       effortByModel: { opus: [{ value: "high", label: "High" }] },
     });
     render(<AgentDefaultModelSetting descriptor={makeDescriptor()} manager={manager} />);
     // The model select shows the sentinel, not the first enabled model.
-    expect(screen.getByDisplayValue("Agent default")).not.toBeNull();
-    // No concrete default → the agent picks effort, so no Default effort row.
-    expect(screen.queryByText("Default effort")).toBeNull();
+    expect(getSettingSelect("Default model").value).toBe("__agent_default__");
+    // No concrete default → the agent picks effort, but the row keeps its layout space.
+    expect(getSettingSelect("Default effort").disabled).toBe(true);
+  });
+
+  it("keeps the same effort row mounted while model support changes", () => {
+    const descriptor = makeDescriptor();
+    const supportedManager = makeManager({
+      defaultSelection: { baseModelId: "opus", effort: null },
+      effortByModel: { opus: [{ value: "high", label: "High" }] },
+    });
+    const unsupportedManager = makeManager({
+      defaultSelection: { baseModelId: "sonnet", effort: null },
+    });
+    const { rerender } = render(
+      <AgentDefaultModelSetting descriptor={descriptor} manager={supportedManager} />
+    );
+
+    const effortTitle = screen.getByText("Default effort");
+    expect(getSettingSelect("Default effort").disabled).toBe(false);
+
+    rerender(<AgentDefaultModelSetting descriptor={descriptor} manager={unsupportedManager} />);
+    expect(screen.getByText("Default effort")).toBe(effortTitle);
+    expect(getSettingSelect("Default effort").disabled).toBe(true);
+
+    rerender(<AgentDefaultModelSetting descriptor={descriptor} manager={supportedManager} />);
+    expect(screen.getByText("Default effort")).toBe(effortTitle);
+    expect(getSettingSelect("Default effort").disabled).toBe(false);
   });
 
   it("selecting 'Agent default' clears the stored default", () => {
