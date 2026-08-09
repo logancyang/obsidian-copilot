@@ -1,4 +1,3 @@
-/* eslint-disable obsidianmd/prefer-active-doc -- jsdom tests explicitly pass their single document realm */
 import {
   buildSymposiumDocument,
   createSymposiumDocument,

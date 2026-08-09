@@ -26,6 +26,8 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: "npm"
       - run: npm ci
+      - name: Obsidian community review gate
+        run: npm run review:obsidian
       - run: npm run lint
       - run: npm run test:mobile-load
       - run: npm test

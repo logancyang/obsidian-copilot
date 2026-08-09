@@ -53,7 +53,6 @@ jest.mock("obsidian", () => {
     TFile: class {},
     App: class {},
     ItemView: class {
-      // eslint-disable-next-line obsidianmd/prefer-active-doc -- jsdom mock creating the root containerEl; single realm, no owner element to derive `.doc` from
       containerEl = document.createElement("div");
     },
     WorkspaceLeaf: class {},

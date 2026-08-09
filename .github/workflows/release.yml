@@ -24,9 +24,9 @@ jobs:
     runs-on: ubuntu-latest
 
     permissions:
-      contents: write       # required to create GitHub releases and tags
-      attestations: write   # required to publish artifact attestations
-      id-token: write       # required for the workflow's OIDC token (used to sign attestations)
+      contents: write # required to create GitHub releases and tags
+      attestations: write # required to publish artifact attestations
+      id-token: write # required for the workflow's OIDC token (used to sign attestations)
 
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -127,6 +127,10 @@ jobs:
       - name: Install dependencies
         if: steps.semver.outputs.is_release == 'true'
         run: npm ci
+
+      - name: Obsidian community review gate
+        if: steps.semver.outputs.is_release == 'true'
+        run: npm run review:obsidian
 
       # ── Step 6: Build the plugin ─────────────────────────────────────────────
       - name: Build

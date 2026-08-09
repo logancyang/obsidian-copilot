@@ -1,4 +1,3 @@
-/* eslint-disable obsidianmd/prefer-active-doc -- jsdom unit test runs in a single realm; activeDocument is unavailable */
 import { openWithSystemDefault } from "@/utils/openWithSystemDefault";
 import { renderMarkdown } from "@/utils/renderMarkdown";
 import { __resetVaultBaseCache } from "@/utils/vaultPath";
