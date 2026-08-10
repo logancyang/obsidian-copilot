@@ -197,6 +197,17 @@ function toKeychainId(vaultId: string, settingsKey: string): string {
   return `${prefix}${readable.slice(0, readableBudget)}-${hash}${suffix}`;
 }
 
+/** Build a readable, unique, vault-scoped API-key ID for a named provider. */
+function toProviderKeychainId(vaultId: string, providerName: string, providerId: string): string {
+  const prefix = "copilot-";
+  const instanceId = providerId.replace(/[^a-z0-9]/gi, "").slice(0, 8) || "provider";
+  const suffix = `-api-key-p${instanceId.toLowerCase()}-v${vaultId}`;
+  const nameBudget = MAX_SECRET_ID_LENGTH - prefix.length - suffix.length;
+  const readableName = toReadableSecretSegment(providerName) || "provider";
+  const name = readableName.slice(0, nameBudget).replace(/-$/, "");
+  return `${prefix}${name}${suffix}`;
+}
+
 /** Build the legacy ID for a model-level secret. */
 function toLegacyModelKeychainId(
   vaultId: string,
@@ -301,6 +312,11 @@ export class KeychainService {
   /** Get the current vault namespace ID. */
   getVaultId(): string {
     return this.vaultId;
+  }
+
+  /** Return the readable SecretStorage ID for one provider's API key. */
+  getProviderSecretId(providerName: string, providerId: string): string {
+    return toProviderKeychainId(this.vaultId, providerName, providerId);
   }
 
   /**

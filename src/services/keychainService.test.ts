@@ -208,6 +208,21 @@ describe("keychainService", () => {
       });
     });
 
+    describe("getProviderSecretId()", () => {
+      it("uses the provider name and keeps long labels within the SecretStorage limit", () => {
+        const service = KeychainService.getInstance(makeApp());
+        service.setVaultId("1234abcd");
+        const providerId = "b818d2de-184f-4e3e-8ff5-cad6dfab31f3";
+
+        expect(service.getProviderSecretId("Anthropic Team", providerId)).toBe(
+          "copilot-anthropic-team-api-key-pb818d2de-v1234abcd"
+        );
+        expect(
+          service.getProviderSecretId("A very long provider name ".repeat(5), providerId).length
+        ).toBeLessThanOrEqual(64);
+      });
+    });
+
     // ---------------------------------------------------------------------------
     // hydrateFromKeychain — hydration and legacy-ID migration
     // ---------------------------------------------------------------------------

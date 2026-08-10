@@ -36,37 +36,11 @@ import type { ProviderAdapterRegistry } from "./adapters/ProviderAdapterRegistry
 // stable reference even when two distinct filters both yield zero rows.
 const EMPTY_LIST: readonly Provider[] = Object.freeze([]);
 
-const MAX_SECRET_ID_LENGTH = 64;
-const PROVIDER_INSTANCE_ID_LENGTH = 8;
-
 /** Format the legacy opaque keychain ID for a provider.
  *
  * Kept so existing credentials can be moved to readable IDs without re-entry. */
 function legacyProviderKeychainId(vaultId: string, providerId: string): string {
   return `copilot-v${vaultId}-provider-${providerId}`;
-}
-
-/** Convert a provider label into a SecretStorage-safe readable segment. */
-function providerNameSegment(provider: Provider): string {
-  const normalize = (value: string) =>
-    value
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-|-$/g, "");
-
-  return normalize(provider.displayName) || normalize(provider.providerType) || "provider";
-}
-
-/** Format a readable, unique, vault-scoped API-key ID for a provider. */
-function providerKeychainId(vaultId: string, provider: Provider): string {
-  const prefix = "copilot-";
-  const instanceId =
-    provider.providerId.replace(/[^a-z0-9]/gi, "").slice(0, PROVIDER_INSTANCE_ID_LENGTH) ||
-    "provider";
-  const suffix = `-api-key-p${instanceId.toLowerCase()}-v${vaultId}`;
-  const nameBudget = MAX_SECRET_ID_LENGTH - prefix.length - suffix.length;
-  const name = providerNameSegment(provider).slice(0, nameBudget).replace(/-$/, "");
-  return `${prefix}${name}${suffix}`;
 }
 
 export class ProviderRegistry {
@@ -267,7 +241,10 @@ export class ProviderRegistry {
     const value = keychain.getSecretById(legacyId);
     if (value === null) return legacyId;
 
-    const readableId = providerKeychainId(keychain.getVaultId(), provider);
+    const readableId = keychain.getProviderSecretId(
+      provider.displayName.trim() || provider.providerType,
+      provider.providerId
+    );
     try {
       keychain.setSecretById(readableId, value);
       this.#setApiKeyKeychainId(provider.providerId, readableId);
@@ -344,7 +321,7 @@ export class ProviderRegistry {
     const keychainId =
       row.apiKeyKeychainId && !isLegacyId
         ? row.apiKeyKeychainId
-        : providerKeychainId(keychain.getVaultId(), row);
+        : keychain.getProviderSecretId(row.displayName.trim() || row.providerType, row.providerId);
     // New providers persist their pointer before the first write so a failed
     // write leaves a recoverable dangling pointer. Legacy providers reverse
     // that order: the readable copy must exist before their working opaque

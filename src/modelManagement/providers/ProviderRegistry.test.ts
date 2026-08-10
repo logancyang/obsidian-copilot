@@ -266,20 +266,6 @@ describe("ProviderRegistry", () => {
     expect(secrets.has(legacyId)).toBe(false);
   });
 
-  it("keeps readable provider IDs within the SecretStorage length limit", async () => {
-    const id = await registry.add({
-      providerType: "anthropic",
-      displayName: "A very long provider display name ".repeat(5),
-      origin: { kind: "byok" },
-    });
-
-    await registry.setApiKey(id, "sk-long-name");
-
-    const keychainId = registry.get(id)?.apiKeyKeychainId;
-    expect(keychainId).toContain("-api-key-p");
-    expect(keychainId).toHaveLength(64);
-  });
-
   it("update() ignores attempts to overwrite apiKeyKeychainId", async () => {
     const id = await registry.add({
       providerType: "anthropic",
