@@ -81,6 +81,5 @@ Never edit `styles.css` directly; regenerate it with `npm run build:tailwind`.
 - [`stylelint.packaged.config.mjs`](../stylelint.packaged.config.mjs)
 - [`scripts/review-obsidian-package.mjs`](../scripts/review-obsidian-package.mjs)
 - [`scripts/review-obsidian-fixtures.mjs`](../scripts/review-obsidian-fixtures.mjs)
-- [`src/review-fixtures/`](../src/review-fixtures/)
 - [Pull-request workflow](../.github/workflows/node.js.yml)
 - [Release workflow](../.github/workflows/release.yml)
