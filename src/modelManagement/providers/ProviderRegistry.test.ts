@@ -211,7 +211,7 @@ describe("ProviderRegistry", () => {
     expect(await registry.getApiKey(id)).toBe("sk-rotated");
   });
 
-  it("migrates UUID-only provider entries to readable names during startup migration", async () => {
+  it("copies UUID-only provider entries while retaining their compatibility fallback", async () => {
     const { id, legacyId, vaultId } = await seedLegacyProviderCredential(registry, app, secrets);
 
     registry.migrateLegacyApiKeyIds();
@@ -220,7 +220,7 @@ describe("ProviderRegistry", () => {
     const readableId = `copilot-anthropic-team-api-key-p${instanceId}-v${vaultId}`;
     expect(registry.get(id)?.apiKeyKeychainId).toBe(readableId);
     expect(secrets.get(readableId)).toBe("sk-existing");
-    expect(secrets.has(legacyId)).toBe(false);
+    expect(secrets.get(legacyId)).toBe("sk-existing");
     expect(await registry.getApiKey(id)).toBe("sk-existing");
   });
 
@@ -239,17 +239,16 @@ describe("ProviderRegistry", () => {
     expect(await registry.getApiKey(id)).toBe("sk-existing");
   });
 
-  it("keeps the readable provider credential usable when legacy deletion fails", async () => {
-    const { id, legacyId } = await seedLegacyProviderCredential(registry, app, secrets);
-    (app.secretStorage as unknown as { deleteSecret(id: string): void }).deleteSecret = () => {
-      throw new Error("keychain locked");
-    };
+  it("refreshes a partial readable copy from the still-authoritative legacy pointer", async () => {
+    const { id, legacyId, vaultId } = await seedLegacyProviderCredential(registry, app, secrets);
+    const instanceId = id.replace(/-/g, "").slice(0, 8);
+    const readableId = `copilot-anthropic-team-api-key-p${instanceId}-v${vaultId}`;
+    secrets.set(readableId, "stale-partial-copy");
 
     registry.migrateLegacyApiKeyIds();
 
-    const readableId = registry.get(id)?.apiKeyKeychainId;
-    expect(readableId).toMatch(/^copilot-anthropic-team-api-key-p[0-9a-f]{8}-v[0-9a-f]{8}$/);
-    expect(secrets.get(readableId!)).toBe("sk-existing");
+    expect(registry.get(id)?.apiKeyKeychainId).toBe(readableId);
+    expect(secrets.get(readableId)).toBe("sk-existing");
     expect(secrets.get(legacyId)).toBe("sk-existing");
     expect(await registry.getApiKey(id)).toBe("sk-existing");
   });
@@ -263,7 +262,27 @@ describe("ProviderRegistry", () => {
     const readableId = registry.get(id)?.apiKeyKeychainId;
     expect(readableId).toMatch(/^copilot-anthropic-team-api-key-p[0-9a-f]{8}-v[0-9a-f]{8}$/);
     expect(secrets.get(readableId!)).toBe("sk-new");
-    expect(secrets.has(legacyId)).toBe(false);
+    expect(secrets.get(legacyId)).toBe("sk-new");
+
+    await registry.setApiKey(id, "sk-rotated-again");
+    expect(secrets.get(readableId!)).toBe("sk-rotated-again");
+    expect(secrets.get(legacyId)).toBe("sk-rotated-again");
+  });
+
+  it("keeps the latest key at the legacy pointer when creating its readable copy fails", async () => {
+    const { id, legacyId } = await seedLegacyProviderCredential(registry, app, secrets);
+    (app.secretStorage as unknown as { setSecret(id: string, value: string): void }).setSecret = (
+      target,
+      value
+    ) => {
+      if (target !== legacyId) throw new Error("keychain locked");
+      secrets.set(target, value);
+    };
+
+    await expect(registry.setApiKey(id, "sk-new")).rejects.toThrow("keychain locked");
+
+    expect(registry.get(id)?.apiKeyKeychainId).toBe(legacyId);
+    expect(secrets.get(legacyId)).toBe("sk-new");
   });
 
   it("update() ignores attempts to overwrite apiKeyKeychainId", async () => {
@@ -296,30 +315,29 @@ describe("ProviderRegistry", () => {
     expect(await registry.getApiKey(id)).toBeNull();
   });
 
-  it("clearApiKey drops the keychain entry and clears the pointer", async () => {
-    const id = await registry.add({
-      providerType: "anthropic",
-      displayName: "A",
-      origin: { kind: "byok" },
-    });
-    await registry.setApiKey(id, "sk-x");
+  it("clearApiKey drops readable and legacy entries before clearing the pointer", async () => {
+    const { id, legacyId } = await seedLegacyProviderCredential(registry, app, secrets);
+    registry.migrateLegacyApiKeyIds();
+    const readableId = registry.get(id)!.apiKeyKeychainId!;
+
     await registry.clearApiKey(id);
+
     expect(registry.get(id)!.apiKeyKeychainId).toBeNull();
     expect(await registry.getApiKey(id)).toBeNull();
+    expect(secrets.has(readableId)).toBe(false);
+    expect(secrets.has(legacyId)).toBe(false);
   });
 
-  it("remove() drops the row and the keychain entry", async () => {
-    const id = await registry.add({
-      providerType: "anthropic",
-      displayName: "A",
-      origin: { kind: "byok" },
-    });
-    await registry.setApiKey(id, "sk-x");
+  it("remove() drops the row plus its readable and legacy keychain entries", async () => {
+    const { id, legacyId } = await seedLegacyProviderCredential(registry, app, secrets);
+    registry.migrateLegacyApiKeyIds();
     const keychainId = registry.get(id)!.apiKeyKeychainId!;
+
     await registry.remove(id);
+
     expect(registry.get(id)).toBeUndefined();
-    // Verify keychain side cleaned up by reading raw storage.
     expect(KeychainService.getInstance(app).getSecretById(keychainId)).toBeNull();
+    expect(secrets.has(legacyId)).toBe(false);
   });
 
   it("verify() dispatches to the adapter for the row's providerType", async () => {

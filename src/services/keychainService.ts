@@ -152,7 +152,7 @@ function normalizeKeychainId(raw: string, maxLength = MAX_SECRET_ID_LENGTH): str
 
 /**
  * Build the legacy vault-prefixed ID used before credential names became readable.
- * Kept only so existing credentials can be migrated without requiring re-entry.
+ * Kept so existing credentials can be copied without requiring re-entry.
  *
  * Reason: top-level settings keys are short (e.g. "openAIApiKey" → 22 chars total),
  * so truncation is extremely unlikely, but we enforce the cap defensively.
@@ -355,9 +355,9 @@ export class KeychainService {
   }
 
   /**
-   * Read the current ID, falling back to and best-effort renaming its legacy entry.
-   * The new value is written before the old entry is removed so a failed migration
-   * never makes a credential unavailable.
+   * Read the current ID, falling back to and best-effort copying its legacy entry.
+   * The legacy value remains as a compatibility backup so upgrades, downgrades,
+   * and failed writes cannot make a credential unavailable.
    */
   private getSecretWithLegacyFallback(id: string, legacyId: string): string | null {
     const value = this.storage.getSecret(id);
@@ -369,19 +369,16 @@ export class KeychainService {
     try {
       this.storage.setSecret(id, legacyValue);
     } catch (error) {
-      console.warn(`Could not rename legacy Keychain entry "${legacyId}".`, error);
+      console.warn(`Could not copy legacy Keychain entry "${legacyId}".`, error);
       return legacyValue;
     }
 
-    try {
-      this.removeSecret(legacyId);
-    } catch (error) {
-      // The readable entry already holds the value, so leaving the duplicate is
-      // safer than reporting a credential load failure.
-      console.warn(`Could not remove legacy Keychain entry "${legacyId}".`, error);
-    }
-
     return legacyValue;
+  }
+
+  /** Include the legacy ID when it already exists so compatibility copies stay synchronized. */
+  private getSecretIdsForWrite(id: string, legacyId: string): string[] {
+    return this.storage.getSecret(legacyId) === null ? [id] : [id, legacyId];
   }
 
   /** Write a value directly to the keychain using a pre-computed ID.
@@ -413,7 +410,10 @@ export class KeychainService {
   /** Store a top-level secret in the keychain. */
   setSecret(settingsKey: string, value: string): void {
     const id = toKeychainId(this.vaultId, settingsKey);
-    this.storage.setSecret(id, value);
+    const legacyId = toLegacyKeychainId(this.vaultId, settingsKey);
+    for (const targetId of this.getSecretIdsForWrite(id, legacyId)) {
+      this.storage.setSecret(targetId, value);
+    }
   }
 
   /** Retrieve a top-level secret from the keychain. Returns `null` if not found. */
@@ -431,7 +431,10 @@ export class KeychainService {
     value: string
   ): void {
     const id = toModelKeychainId(this.vaultId, scope, modelIdentity, field);
-    this.storage.setSecret(id, value);
+    const legacyId = toLegacyModelKeychainId(this.vaultId, scope, modelIdentity, field);
+    for (const targetId of this.getSecretIdsForWrite(id, legacyId)) {
+      this.storage.setSecret(targetId, value);
+    }
   }
 
   /** Retrieve a model-level secret from the keychain. Returns `null` if not found. */
@@ -442,14 +445,15 @@ export class KeychainService {
   }
 
   // ---------------------------------------------------------------------------
-  // hydrateFromKeychain — keychain hydration and legacy-ID migration
+  // hydrateFromKeychain — hydration and non-destructive legacy copying
   // ---------------------------------------------------------------------------
 
   /**
    * Replace each secret field in `settings` with the keychain value for that
-   * field. Reads may rename a legacy machine-oriented entry after its value is
-   * safely copied to the readable ID. This method never reads from disk; ordinary
-   * settings writes still flow through `persistSecrets()`.
+   * field. Reads may copy a legacy machine-oriented entry to its readable ID,
+   * while retaining the legacy value as a compatibility backup. This method
+   * never reads from disk; ordinary settings writes still flow through
+   * `persistSecrets()`.
    *
    * Per-field logic:
    * - keychain `""` (tombstone) → set field to `""` (don't resurrect)
@@ -536,13 +540,15 @@ export class KeychainService {
       if (!isSecretKey(key)) continue;
       const value = (settings as unknown as Record<string, unknown>)[key];
       const id = toKeychainId(this.vaultId, key);
+      const legacyId = toLegacyKeychainId(this.vaultId, key);
+      const ids = this.getSecretIdsForWrite(id, legacyId);
 
       if (typeof value === "string" && value.length > 0) {
-        secretEntries.push([id, value]);
+        secretEntries.push(...ids.map((targetId): [string, string] => [targetId, value]));
       } else if (prevSettings) {
         const prevValue = (prevSettings as unknown as Record<string, unknown>)[key];
         if (typeof prevValue === "string" && prevValue.length > 0) {
-          clearedSecretIds.push(id);
+          clearedSecretIds.push(...ids);
         }
       }
     }
@@ -781,13 +787,15 @@ export class KeychainService {
       for (const field of MODEL_SECRET_FIELDS) {
         const value = model[field];
         const id = toModelKeychainId(this.vaultId, scope, identity, field);
+        const legacyId = toLegacyModelKeychainId(this.vaultId, scope, identity, field);
+        const ids = this.getSecretIdsForWrite(id, legacyId);
 
         if (typeof value === "string" && value.length > 0) {
-          secretEntries.push([id, value]);
+          secretEntries.push(...ids.map((targetId): [string, string] => [targetId, value]));
         } else if (prevModel && clearedSecretIds) {
           const prevValue = prevModel[field];
           if (typeof prevValue === "string" && prevValue.length > 0) {
-            clearedSecretIds.push(id);
+            clearedSecretIds.push(...ids);
           }
         }
       }
@@ -816,7 +824,9 @@ export class KeychainService {
           if (typeof prevValue !== "string" || prevValue.length === 0) {
             return [];
           }
-          return [toModelKeychainId(this.vaultId, scope, identity, field)];
+          const id = toModelKeychainId(this.vaultId, scope, identity, field);
+          const legacyId = toLegacyModelKeychainId(this.vaultId, scope, identity, field);
+          return this.getSecretIdsForWrite(id, legacyId);
         });
       });
   }

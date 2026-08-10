@@ -38,7 +38,7 @@ const EMPTY_LIST: readonly Provider[] = Object.freeze([]);
 
 /** Format the legacy opaque keychain ID for a provider.
  *
- * Kept so existing credentials can be moved to readable IDs without re-entry. */
+ * Kept so existing credentials can be copied to readable IDs without re-entry. */
 function legacyProviderKeychainId(vaultId: string, providerId: string): string {
   return `copilot-v${vaultId}-provider-${providerId}`;
 }
@@ -212,14 +212,14 @@ export class ProviderRegistry {
     });
   }
 
-  /** Rename every provider API-key entry that still uses the opaque UUID-only format. */
+  /** Copy opaque provider API-key entries to readable IDs without removing their fallback. */
   migrateLegacyApiKeyIds(): void {
     for (const provider of Object.values(getSettings().providers)) {
       try {
         this.#migrateLegacyApiKeyId(provider);
       } catch (err) {
         logWarn(
-          `[modelManagement] ProviderRegistry: failed to rename keychain entry for ${provider.displayName}`,
+          `[modelManagement] ProviderRegistry: failed to copy keychain entry for ${provider.displayName}`,
           err
         );
       }
@@ -227,8 +227,8 @@ export class ProviderRegistry {
   }
 
   /**
-   * Copy one legacy provider credential before moving its persisted pointer and
-   * removing the opaque entry. Returns the ID that remains safe to read.
+   * Copy one legacy provider credential before moving its persisted pointer.
+   * The legacy value remains synchronized as a rollback-safe fallback.
    */
   #migrateLegacyApiKeyId(provider: Provider): string | null {
     const currentId = provider.apiKeyKeychainId ?? null;
@@ -238,15 +238,20 @@ export class ProviderRegistry {
     const legacyId = legacyProviderKeychainId(keychain.getVaultId(), provider.providerId);
     if (currentId !== legacyId) return currentId;
 
-    const value = keychain.getSecretById(legacyId);
-    if (value === null) return legacyId;
-
     const readableId = keychain.getProviderSecretId(
       provider.displayName.trim() || provider.providerType,
       provider.providerId
     );
+    const legacyValue = keychain.getSecretById(legacyId);
+    const readableValue = keychain.getSecretById(readableId);
+    if (legacyValue === null && readableValue === null) return legacyId;
+
     try {
-      keychain.setSecretById(readableId, value);
+      // The persisted legacy pointer remains authoritative until it moves. If a
+      // prior attempt left a partial readable copy, refresh it from that source.
+      if (legacyValue !== null && readableValue !== legacyValue) {
+        keychain.setSecretById(readableId, legacyValue);
+      }
       this.#setApiKeyKeychainId(provider.providerId, readableId);
     } catch (err) {
       logWarn(
@@ -255,16 +260,22 @@ export class ProviderRegistry {
       );
       return legacyId;
     }
-
-    try {
-      keychain.deleteSecretById(legacyId);
-    } catch (err) {
-      logWarn(
-        `[modelManagement] ProviderRegistry: failed to remove legacy keychain entry for ${provider.displayName}`,
-        err
-      );
-    }
     return readableId;
+  }
+
+  /** Delete the active provider secret and any retained legacy compatibility copy. */
+  #deleteApiKeySecrets(provider: Provider): void {
+    const keychain = KeychainService.getInstance(this.#app);
+    const legacyId = legacyProviderKeychainId(keychain.getVaultId(), provider.providerId);
+    const ids = new Set([provider.apiKeyKeychainId, legacyId]);
+    for (const id of ids) {
+      if (!id) continue;
+      try {
+        keychain.deleteSecretById(id);
+      } catch (err) {
+        logError(`[modelManagement] ProviderRegistry: failed to clear keychain entry`, err);
+      }
+    }
   }
 
   /**
@@ -275,13 +286,7 @@ export class ProviderRegistry {
   async remove(providerId: string): Promise<void> {
     const existing = getSettings().providers[providerId];
     if (!existing) return;
-    if (existing.apiKeyKeychainId) {
-      try {
-        KeychainService.getInstance(this.#app).deleteSecretById(existing.apiKeyKeychainId);
-      } catch (err) {
-        logError(`[modelManagement] ProviderRegistry.remove: failed to clear keychain`, err);
-      }
-    }
+    this.#deleteApiKeySecrets(existing);
     setSettings((cur) => {
       const next = { ...cur.providers };
       delete next[providerId];
@@ -323,22 +328,27 @@ export class ProviderRegistry {
         ? row.apiKeyKeychainId
         : keychain.getProviderSecretId(row.displayName.trim() || row.providerType, row.providerId);
     // New providers persist their pointer before the first write so a failed
-    // write leaves a recoverable dangling pointer. Legacy providers reverse
-    // that order: the readable copy must exist before their working opaque
-    // pointer moves, otherwise a failed rename could lose access to the key.
+    // write leaves a recoverable dangling pointer. Legacy providers update both
+    // copies before their pointer moves, so failed settings persistence still
+    // leaves the latest credential at the old durable location.
     if (!row.apiKeyKeychainId) {
       this.#setApiKeyKeychainId(providerId, keychainId);
     }
-    keychain.setSecretById(keychainId, apiKey);
     if (isLegacyId) {
+      keychain.setSecretById(legacyId, apiKey);
+      keychain.setSecretById(keychainId, apiKey);
       this.#setApiKeyKeychainId(providerId, keychainId);
-      try {
-        keychain.deleteSecretById(legacyId);
-      } catch (err) {
-        logWarn(
-          `[modelManagement] ProviderRegistry.setApiKey: failed to remove legacy keychain entry`,
-          err
-        );
+    } else {
+      keychain.setSecretById(keychainId, apiKey);
+      if (keychain.getSecretById(legacyId) !== null) {
+        try {
+          keychain.setSecretById(legacyId, apiKey);
+        } catch (err) {
+          logWarn(
+            `[modelManagement] ProviderRegistry.setApiKey: failed to refresh legacy keychain fallback`,
+            err
+          );
+        }
       }
     }
     this.#emit();
@@ -349,11 +359,7 @@ export class ProviderRegistry {
     const row = getSettings().providers[providerId];
     if (!row) return;
     if (row.apiKeyKeychainId) {
-      try {
-        KeychainService.getInstance(this.#app).deleteSecretById(row.apiKeyKeychainId);
-      } catch (err) {
-        logError(`[modelManagement] ProviderRegistry.clearApiKey: failed to delete keychain`, err);
-      }
+      this.#deleteApiKeySecrets(row);
       this.#setApiKeyKeychainId(providerId, null);
       this.#emit();
     }

@@ -224,7 +224,7 @@ describe("keychainService", () => {
     });
 
     // ---------------------------------------------------------------------------
-    // hydrateFromKeychain — hydration and legacy-ID migration
+    // hydrateFromKeychain — hydration and non-destructive legacy copying
     // ---------------------------------------------------------------------------
 
     describe("hydrateFromKeychain()", () => {
@@ -336,7 +336,7 @@ describe("keychainService", () => {
         );
       });
 
-      it("renames a legacy top-level entry after copying its value to the readable ID", async () => {
+      it("copies a legacy top-level entry without removing its compatibility fallback", async () => {
         const secretStorage = makeSecretStorage();
         const service = KeychainService.getInstance(makeApp({ secretStorage }));
         service.setVaultId("1234abcd");
@@ -353,7 +353,7 @@ describe("keychainService", () => {
         expect(secretStorage.getSecret).toHaveBeenCalledWith(readableId);
         expect(secretStorage.getSecret).toHaveBeenCalledWith(legacyId);
         expect(secretStorage.setSecret).toHaveBeenCalledWith(readableId, "sk-legacy");
-        expect(secretStorage.deleteSecret).toHaveBeenCalledWith(legacyId);
+        expect(secretStorage.deleteSecret).not.toHaveBeenCalled();
       });
 
       it("keeps a legacy credential available when writing its readable entry fails", async () => {
@@ -375,39 +375,13 @@ describe("keychainService", () => {
         expect(result.hadFailures).toBe(false);
         expect(secretStorage.deleteSecret).not.toHaveBeenCalled();
         expect(warn).toHaveBeenCalledWith(
-          `Could not rename legacy Keychain entry "${legacyId}".`,
+          `Could not copy legacy Keychain entry "${legacyId}".`,
           expect.any(Error)
         );
         warn.mockRestore();
       });
 
-      it("hydrates from the readable copy when removing its legacy duplicate fails", async () => {
-        const warn = jest.spyOn(console, "warn").mockImplementation(() => undefined);
-        const secretStorage = makeSecretStorage();
-        const service = KeychainService.getInstance(makeApp({ secretStorage }));
-        service.setVaultId("1234abcd");
-        const readableId = "copilot-openai-api-key-v1234abcd";
-        const legacyId = "copilot-v1234abcd-open-a-i-api-key";
-        secretStorage.getSecret.mockImplementation((id: string) =>
-          id === legacyId ? "sk-legacy" : null
-        );
-        secretStorage.deleteSecret.mockImplementation(() => {
-          throw new Error("locked");
-        });
-
-        const result = await service.hydrateFromKeychain(makeSettings({ openAIApiKey: "" }));
-
-        expect(result.settings.openAIApiKey).toBe("sk-legacy");
-        expect(result.hadFailures).toBe(false);
-        expect(secretStorage.setSecret).toHaveBeenCalledWith(readableId, "sk-legacy");
-        expect(warn).toHaveBeenCalledWith(
-          `Could not remove legacy Keychain entry "${legacyId}".`,
-          expect.any(Error)
-        );
-        warn.mockRestore();
-      });
-
-      it("renames a legacy model entry using a readable model and scope", async () => {
+      it("copies a legacy model entry without removing its compatibility fallback", async () => {
         const secretStorage = makeSecretStorage();
         const service = KeychainService.getInstance(makeApp({ secretStorage }));
         service.setVaultId("1234abcd");
@@ -423,7 +397,7 @@ describe("keychainService", () => {
 
         expect(result.settings.activeModels[0].apiKey).toBe("model-legacy");
         expect(secretStorage.setSecret).toHaveBeenCalledWith(readableId, "model-legacy");
-        expect(secretStorage.deleteSecret).toHaveBeenCalledWith(legacyId);
+        expect(secretStorage.deleteSecret).not.toHaveBeenCalled();
       });
     });
 
@@ -498,6 +472,43 @@ describe("keychainService", () => {
           ])
         );
         expect(result.secretEntries.every(([id]) => id.length <= 64)).toBe(true);
+      });
+
+      it("keeps existing legacy copies synchronized for rollback compatibility", () => {
+        const secretStorage = makeSecretStorage();
+        secretStorage.getSecret.mockImplementation((id: string) =>
+          id.startsWith("copilot-v1234abcd-") ? "legacy-value" : null
+        );
+        const service = KeychainService.getInstance(makeApp({ secretStorage }));
+        service.setVaultId("1234abcd");
+
+        const current = makeSettings({
+          openAIApiKey: "sk-current",
+          activeModels: [makeModel({ apiKey: "model-current" })],
+        });
+        const result = service.persistSecrets(current);
+
+        expect(result.secretEntries).toEqual(
+          expect.arrayContaining([
+            ["copilot-openai-api-key-v1234abcd", "sk-current"],
+            ["copilot-v1234abcd-open-a-i-api-key", "sk-current"],
+            ["copilot-gpt-4-openai-00000000-chat-api-key-v1234abcd", "model-current"],
+            ["copilot-v1234abcd-model-api-key-chat-gpt-4-openai-00000000", "model-current"],
+          ])
+        );
+
+        const cleared = service.persistSecrets(
+          makeSettings({ openAIApiKey: "", activeModels: [] }),
+          current
+        );
+        expect(cleared.keychainIdsToDelete).toEqual(
+          expect.arrayContaining([
+            "copilot-openai-api-key-v1234abcd",
+            "copilot-v1234abcd-open-a-i-api-key",
+            "copilot-gpt-4-openai-00000000-chat-api-key-v1234abcd",
+            "copilot-v1234abcd-model-api-key-chat-gpt-4-openai-00000000",
+          ])
+        );
       });
 
       it("keeps long top-level and model credential IDs within the SecretStorage limit", () => {

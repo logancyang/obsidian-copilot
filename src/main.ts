@@ -247,8 +247,9 @@ export default class CopilotPlugin extends Plugin {
         }
       })();
     });
-    // Provider rows persist their Keychain pointer in settings. Rename opaque
-    // UUID-only entries only after the subscriber can durably save that pointer.
+    // Provider rows persist their Keychain pointer in settings. Copy opaque
+    // UUID-only entries only after the subscriber can save the readable pointer;
+    // the legacy value remains as a compatibility fallback.
     this.modelManagement.providerRegistry.migrateLegacyApiKeyIds();
     // One-time settings migrations. Runs after the persist subscriber is wired
     // (so every mutation is saved) and after createModelManagement, and before
