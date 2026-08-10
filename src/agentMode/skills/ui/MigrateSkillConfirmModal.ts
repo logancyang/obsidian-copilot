@@ -130,8 +130,8 @@ export class MigrateSkillConfirmModal extends Modal {
         const li = list.createEl("li", {
           cls: "tw-flex tw-items-baseline tw-gap-2",
         });
-        li.createEl("span", { cls: "tw-text-faint", text: "•" });
-        li.createEl("span", { cls: "tw-flex-1", text: path });
+        li.createSpan({ cls: "tw-text-faint", text: "•" });
+        li.createSpan({ cls: "tw-flex-1", text: path });
       }
     }
 
@@ -147,7 +147,7 @@ export class MigrateSkillConfirmModal extends Modal {
     }
 
     // "Copilot will:" action list.
-    const willHeader = contentEl.createEl("div", {
+    const willHeader = contentEl.createDiv({
       cls: "tw-text-ui-smaller tw-text-muted",
       text: "Copilot will:",
     });
@@ -159,15 +159,15 @@ export class MigrateSkillConfirmModal extends Modal {
       const li = actionList.createEl("li", {
         cls: "tw-flex tw-items-baseline tw-gap-2",
       });
-      li.createEl("span", { cls: "tw-text-faint", text: "•" });
-      const body = li.createEl("span", { cls: "tw-flex-1" });
-      body.createEl("span", {
+      li.createSpan({ cls: "tw-text-faint", text: "•" });
+      const body = li.createSpan({ cls: "tw-flex-1" });
+      body.createSpan({
         cls: "tw-inline-block tw-min-w-[64px] tw-text-muted",
         text: line.verb,
       });
-      body.createEl("span", { text: ` ${line.detail}` });
+      body.createSpan({ text: ` ${line.detail}` });
       if (line.note !== undefined && line.note.length > 0) {
-        body.createEl("span", {
+        body.createSpan({
           cls: "tw-ml-1.5 tw-font-sans tw-text-smallest tw-text-faint",
           text: line.note,
         });
@@ -194,10 +194,10 @@ export class MigrateSkillConfirmModal extends Modal {
     checkbox.addEventListener("change", () => {
       this.suppressFuture = checkbox.checked;
     });
-    checkboxRow.createEl("span", { text: "Don't ask again for future migrations" });
+    checkboxRow.createSpan({ text: "Don't ask again for future migrations" });
 
     // Buttons.
-    const buttonRow = contentEl.createEl("div", {
+    const buttonRow = contentEl.createDiv({
       cls: "tw-flex tw-justify-end tw-gap-2 tw-pt-2",
     });
     const cancelBtn = buttonRow.createEl("button", {

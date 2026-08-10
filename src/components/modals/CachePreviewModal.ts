@@ -57,7 +57,7 @@ export class CachePreviewModal extends Modal {
     });
     const fileIconEl = titleWrapper.createDiv({ cls: "tw-text-muted tw-shrink-0" });
     setIcon(fileIconEl, "file-text");
-    titleWrapper.createEl("span", {
+    titleWrapper.createSpan({
       text: this.title,
       cls: "tw-font-semibold tw-text-normal tw-truncate",
     });

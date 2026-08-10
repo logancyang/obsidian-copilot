@@ -47,7 +47,7 @@ export interface ChatUIState {
   readonly chatHistory: ChatMessage[];
   addMessage(message: ChatMessage): void;
   clearChatHistory(): void;
-  replaceMessages(messages: ChatMessage[]): void;
+  replaceMessages(messages: ChatMessage[]): Promise<void>;
   getDebugInfo(): unknown;
   loadMessages(messages: ChatMessage[]): Promise<void>;
   handleProjectSwitch(): Promise<void>;
