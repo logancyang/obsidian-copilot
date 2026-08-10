@@ -131,7 +131,7 @@ When the conversation includes a \`<project_context>\` block:
 
 /**
  * Resolves conflicts between the two AGENTS.md scopes. Each harness loads instruction files
- * with its own rules — opencode 1.16.0 collects every ancestor AGENTS.md nearest-first, so
+ * with its own rules — opencode 1.18.16 collects every ancestor AGENTS.md nearest-first, so
  * the project file arrives *before* the vault one — and none of those orders is configurable
  * through a documented seam. Stating the rule in prompt text is therefore the only place the
  * precedence holds for every backend at once, and it costs the same bytes in all of them.
