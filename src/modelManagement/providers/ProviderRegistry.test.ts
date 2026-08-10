@@ -211,46 +211,48 @@ describe("ProviderRegistry", () => {
     expect(await registry.getApiKey(id)).toBe("sk-rotated");
   });
 
-  it("copies UUID-only provider entries while retaining their compatibility fallback", async () => {
-    const { id, legacyId, vaultId } = await seedLegacyProviderCredential(registry, app, secrets);
+  describe("migrateLegacyApiKeyIds()", () => {
+    it("copies UUID-only provider entries while retaining their compatibility fallback", async () => {
+      const { id, legacyId, vaultId } = await seedLegacyProviderCredential(registry, app, secrets);
 
-    registry.migrateLegacyApiKeyIds();
+      registry.migrateLegacyApiKeyIds();
 
-    const instanceId = id.replace(/-/g, "").slice(0, 8);
-    const readableId = `copilot-anthropic-team-api-key-p${instanceId}-v${vaultId}`;
-    expect(registry.get(id)?.apiKeyKeychainId).toBe(readableId);
-    expect(secrets.get(readableId)).toBe("sk-existing");
-    expect(secrets.get(legacyId)).toBe("sk-existing");
-    expect(await registry.getApiKey(id)).toBe("sk-existing");
-  });
+      const instanceId = id.replace(/-/g, "").slice(0, 8);
+      const readableId = `copilot-anthropic-team-api-key-p${instanceId}-v${vaultId}`;
+      expect(registry.get(id)?.apiKeyKeychainId).toBe(readableId);
+      expect(secrets.get(readableId)).toBe("sk-existing");
+      expect(secrets.get(legacyId)).toBe("sk-existing");
+      expect(await registry.getApiKey(id)).toBe("sk-existing");
+    });
 
-  it("keeps the legacy pointer and credential when a readable provider entry cannot be written", async () => {
-    const { id, legacyId } = await seedLegacyProviderCredential(registry, app, secrets);
-    (app.secretStorage as unknown as { setSecret(id: string, value: string): void }).setSecret = (
-      target
-    ) => {
-      if (target !== legacyId) throw new Error("keychain locked");
-    };
+    it("keeps the legacy pointer and credential when a readable provider entry cannot be written", async () => {
+      const { id, legacyId } = await seedLegacyProviderCredential(registry, app, secrets);
+      (app.secretStorage as unknown as { setSecret(id: string, value: string): void }).setSecret = (
+        target
+      ) => {
+        if (target !== legacyId) throw new Error("keychain locked");
+      };
 
-    registry.migrateLegacyApiKeyIds();
+      registry.migrateLegacyApiKeyIds();
 
-    expect(registry.get(id)?.apiKeyKeychainId).toBe(legacyId);
-    expect(secrets.get(legacyId)).toBe("sk-existing");
-    expect(await registry.getApiKey(id)).toBe("sk-existing");
-  });
+      expect(registry.get(id)?.apiKeyKeychainId).toBe(legacyId);
+      expect(secrets.get(legacyId)).toBe("sk-existing");
+      expect(await registry.getApiKey(id)).toBe("sk-existing");
+    });
 
-  it("refreshes a partial readable copy from the still-authoritative legacy pointer", async () => {
-    const { id, legacyId, vaultId } = await seedLegacyProviderCredential(registry, app, secrets);
-    const instanceId = id.replace(/-/g, "").slice(0, 8);
-    const readableId = `copilot-anthropic-team-api-key-p${instanceId}-v${vaultId}`;
-    secrets.set(readableId, "stale-partial-copy");
+    it("refreshes a partial readable copy from the still-authoritative legacy pointer", async () => {
+      const { id, legacyId, vaultId } = await seedLegacyProviderCredential(registry, app, secrets);
+      const instanceId = id.replace(/-/g, "").slice(0, 8);
+      const readableId = `copilot-anthropic-team-api-key-p${instanceId}-v${vaultId}`;
+      secrets.set(readableId, "stale-partial-copy");
 
-    registry.migrateLegacyApiKeyIds();
+      registry.migrateLegacyApiKeyIds();
 
-    expect(registry.get(id)?.apiKeyKeychainId).toBe(readableId);
-    expect(secrets.get(readableId)).toBe("sk-existing");
-    expect(secrets.get(legacyId)).toBe("sk-existing");
-    expect(await registry.getApiKey(id)).toBe("sk-existing");
+      expect(registry.get(id)?.apiKeyKeychainId).toBe(readableId);
+      expect(secrets.get(readableId)).toBe("sk-existing");
+      expect(secrets.get(legacyId)).toBe("sk-existing");
+      expect(await registry.getApiKey(id)).toBe("sk-existing");
+    });
   });
 
   it("moves a legacy provider pointer when an API key is replaced", async () => {
