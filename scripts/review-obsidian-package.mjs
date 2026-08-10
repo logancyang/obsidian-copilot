@@ -1,10 +1,17 @@
 import { ESLint } from "eslint";
+import obsidianmd from "eslint-plugin-obsidianmd";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repositoryRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const manifestCopyMessageIds = new Set(["descriptionFormat", "noForbiddenWords"]);
+const runtimeDependencyRule = obsidianmd.configs.recommended
+  .map((config) => config.rules?.["depend/ban-dependencies"])
+  .find((rule) => rule !== undefined);
+if (!Array.isArray(runtimeDependencyRule)) {
+  throw new Error("Obsidian's recommended dependency review rule is unavailable");
+}
 
 /**
  * Select the manifest that represents the package version being validated.
@@ -87,7 +94,7 @@ export async function lintRuntimeDependencies(packageJson) {
     overrideConfigFile: resolve(repositoryRoot, "eslint.review.config.mjs"),
     overrideConfig: {
       rules: {
-        "depend/ban-dependencies": ["warn", { presets: ["native", "microutilities", "preferred"] }],
+        "depend/ban-dependencies": ["warn", ...runtimeDependencyRule.slice(1)],
       },
     },
   });
