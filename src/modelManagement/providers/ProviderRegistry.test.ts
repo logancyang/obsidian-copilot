@@ -340,7 +340,7 @@ describe("ProviderRegistry", () => {
     it("retries a failed legacy deletion on the next migration", async () => {
       const { id, legacyId } = await seedLegacyProviderCredential(registry, app, secrets);
       const secretStorage = app.secretStorage as unknown as { deleteSecret(id: string): void };
-      const deleteSecret = secretStorage.deleteSecret.bind(secretStorage);
+      const deleteSecret = secretStorage.deleteSecret;
       let deleteAttempts = 0;
       secretStorage.deleteSecret = (target) => {
         deleteAttempts += 1;
