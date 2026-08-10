@@ -102,6 +102,28 @@ function getVaultBasePath(app: App): string | undefined {
 /** Max length enforced by Obsidian's SecretStorage API. */
 const MAX_SECRET_ID_LENGTH = 64;
 
+/** Stable, user-facing names for credentials whose setting keys use different product branding. */
+const SECRET_ID_LABEL_OVERRIDES: Readonly<Record<string, string>> = Object.freeze({
+  azureOpenAIApiKey: "azure-openai-api-key",
+  googleApiKey: "gemini-api-key",
+  openAIApiKey: "openai-api-key",
+  openRouterAiApiKey: "openrouter-api-key",
+  plusLicenseKey: "plus-license",
+});
+
+/** Convert an internal settings key into a readable SecretStorage ID segment. */
+function toReadableSecretSegment(settingsKey: string): string {
+  const override = SECRET_ID_LABEL_OVERRIDES[settingsKey];
+  if (override) return override;
+
+  return settingsKey
+    .replace(/([a-z0-9])([A-Z])/g, "$1-$2")
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1-$2")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
 /**
  * Normalize a raw string into a keychain-safe ID segment.
  * Reason: SecretStorage IDs must be lowercase alphanumeric with dashes, 64 chars max.
@@ -129,8 +151,8 @@ function normalizeKeychainId(raw: string, maxLength = MAX_SECRET_ID_LENGTH): str
 }
 
 /**
- * Convert a camelCase settings key to a vault-namespaced kebab-case keychain ID.
- * Format: `copilot-v{8hex}-{kebab-key}`, capped at 64 chars.
+ * Build the legacy vault-prefixed ID used before credential names became readable.
+ * Kept only so existing credentials can be migrated without requiring re-entry.
  *
  * Reason: top-level settings keys are short (e.g. "openAIApiKey" → 22 chars total),
  * so truncation is extremely unlikely, but we enforce the cap defensively.
@@ -143,7 +165,7 @@ function normalizeKeychainId(raw: string, maxLength = MAX_SECRET_ID_LENGTH): str
  * for existing keychain entries. If a future field with unusual characters
  * is added to EXTRA_SECRET_KEYS, revisit. Point future reviewers here.
  */
-function toKeychainId(vaultId: string, settingsKey: string): string {
+function toLegacyKeychainId(vaultId: string, settingsKey: string): string {
   const prefix = `copilot-v${vaultId}-`;
   const kebab = settingsKey
     .replace(/([A-Z])/g, "-$1")
@@ -157,15 +179,26 @@ function toKeychainId(vaultId: string, settingsKey: string): string {
 }
 
 /**
- * Build a keychain ID for a model-level secret.
- * Format: `copilot-v{8hex}-model-{field}-{scope}-{normalized}`
+ * Build a readable, vault-namespaced ID for a top-level credential.
+ * Format: `copilot-{credential-name}-v{8hex}`.
  *
- * Reason: the fixed prefix consumes up to ~28 chars, so `normalizeKeychainId`
- * receives the remaining budget to stay within the 64-char SecretStorage limit.
- * Reason: include the field name in the segment so that different secret fields
- * on the same model (e.g. apiKey vs a future field) get distinct keychain IDs.
+ * The vault ID stays at the end so the credential name is the first thing users
+ * see while entries remain isolated across vaults.
  */
-function toModelKeychainId(
+function toKeychainId(vaultId: string, settingsKey: string): string {
+  const prefix = "copilot-";
+  const suffix = `-v${vaultId}`;
+  const readable = toReadableSecretSegment(settingsKey);
+  const id = prefix + readable + suffix;
+  if (id.length <= MAX_SECRET_ID_LENGTH) return id;
+
+  const hash = md5(settingsKey).slice(0, 8);
+  const readableBudget = MAX_SECRET_ID_LENGTH - prefix.length - suffix.length - hash.length - 1;
+  return `${prefix}${readable.slice(0, readableBudget)}-${hash}${suffix}`;
+}
+
+/** Build the legacy ID for a model-level secret. */
+function toLegacyModelKeychainId(
   vaultId: string,
   scope: ModelScope,
   modelIdentity: string,
@@ -179,6 +212,22 @@ function toModelKeychainId(
   const budget = MAX_SECRET_ID_LENGTH - prefix.length;
   const normalizedModel = normalizeKeychainId(modelIdentity, budget);
   return prefix + normalizedModel;
+}
+
+/**
+ * Build a readable, vault-namespaced ID for a model-level credential.
+ * Format: `copilot-{model}-{scope}-{field}-v{8hex}`.
+ */
+function toModelKeychainId(
+  vaultId: string,
+  scope: ModelScope,
+  modelIdentity: string,
+  field: ModelSecretField
+): string {
+  const prefix = "copilot-";
+  const suffix = `-${scope}-${toReadableSecretSegment(field)}-v${vaultId}`;
+  const modelBudget = MAX_SECRET_ID_LENGTH - prefix.length - suffix.length;
+  return prefix + normalizeKeychainId(modelIdentity, modelBudget) + suffix;
 }
 
 /** Result of a keychain-only hydrate pass. */
@@ -289,10 +338,41 @@ export class KeychainService {
     }
   }
 
+  /**
+   * Read the current ID, falling back to and best-effort renaming its legacy entry.
+   * The new value is written before the old entry is removed so a failed migration
+   * never makes a credential unavailable.
+   */
+  private getSecretWithLegacyFallback(id: string, legacyId: string): string | null {
+    const value = this.storage.getSecret(id);
+    if (value !== null) return value;
+
+    const legacyValue = this.storage.getSecret(legacyId);
+    if (legacyValue === null) return null;
+
+    try {
+      this.storage.setSecret(id, legacyValue);
+    } catch (error) {
+      console.warn(`Could not rename legacy Keychain entry "${legacyId}".`, error);
+      return legacyValue;
+    }
+
+    try {
+      this.removeSecret(legacyId);
+    } catch (error) {
+      // The readable entry already holds the value, so leaving the duplicate is
+      // safer than reporting a credential load failure.
+      console.warn(`Could not remove legacy Keychain entry "${legacyId}".`, error);
+    }
+
+    return legacyValue;
+  }
+
   /** Write a value directly to the keychain using a pre-computed ID.
    *
    *  CALLER CONTRACT: `keychainId` must be vault-namespaced — typically
-   *  `copilot-v{vaultId}-...` — so it is swept by
+   *  either legacy `copilot-v{vaultId}-...` or readable `copilot-...-v{vaultId}`
+   *  form — so it is swept by
    *  `clearAllVaultSecrets()` and isolated from other vaults / plugins.
    *  This method is a low-level bridge; it does not validate the
    *  prefix because some legacy callers compute their own ids. New
@@ -323,7 +403,8 @@ export class KeychainService {
   /** Retrieve a top-level secret from the keychain. Returns `null` if not found. */
   getSecret(settingsKey: string): string | null {
     const id = toKeychainId(this.vaultId, settingsKey);
-    return this.storage.getSecret(id);
+    const legacyId = toLegacyKeychainId(this.vaultId, settingsKey);
+    return this.getSecretWithLegacyFallback(id, legacyId);
   }
 
   /** Store a model-level secret in the keychain. */
@@ -340,18 +421,19 @@ export class KeychainService {
   /** Retrieve a model-level secret from the keychain. Returns `null` if not found. */
   getModelSecret(scope: ModelScope, modelIdentity: string, field: ModelSecretField): string | null {
     const id = toModelKeychainId(this.vaultId, scope, modelIdentity, field);
-    return this.storage.getSecret(id);
+    const legacyId = toLegacyModelKeychainId(this.vaultId, scope, modelIdentity, field);
+    return this.getSecretWithLegacyFallback(id, legacyId);
   }
 
   // ---------------------------------------------------------------------------
-  // hydrateFromKeychain — read-only keychain hydration
+  // hydrateFromKeychain — keychain hydration and legacy-ID migration
   // ---------------------------------------------------------------------------
 
   /**
    * Replace each secret field in `settings` with the keychain value for that
-   * field. This method is strictly read-only — it never writes to the keychain
-   * and never reads from disk. All keychain writes flow through
-   * `persistSecrets()` during settings persistence.
+   * field. Reads may rename a legacy machine-oriented entry after its value is
+   * safely copied to the readable ID. This method never reads from disk; ordinary
+   * settings writes still flow through `persistSecrets()`.
    *
    * Per-field logic:
    * - keychain `""` (tombstone) → set field to `""` (don't resurrect)
@@ -496,7 +578,8 @@ export class KeychainService {
    * cannot be restored from disk on the next load.
    */
   clearAllVaultSecrets(): void {
-    const vaultPrefix = `copilot-v${this.vaultId}-`;
+    const legacyVaultPrefix = `copilot-v${this.vaultId}-`;
+    const readableVaultSuffix = `-v${this.vaultId}`;
     // Reason: defensive feature detection. The destructive flow already
     // stripped data.json by the time it reaches us; if `listSecrets()` is
     // missing on this Obsidian build we cannot enumerate vault entries and
@@ -511,7 +594,10 @@ export class KeychainService {
     const allIds = this.storage.listSecrets();
     const failures: string[] = [];
     for (const id of allIds) {
-      if (id.startsWith(vaultPrefix)) {
+      const belongsToVault =
+        id.startsWith(legacyVaultPrefix) ||
+        (id.startsWith("copilot-") && id.endsWith(readableVaultSuffix));
+      if (belongsToVault) {
         try {
           this.removeSecret(id);
         } catch {

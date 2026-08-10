@@ -209,7 +209,7 @@ describe("keychainService", () => {
     });
 
     // ---------------------------------------------------------------------------
-    // hydrateFromKeychain — read-only keychain hydration
+    // hydrateFromKeychain — hydration and legacy-ID migration
     // ---------------------------------------------------------------------------
 
     describe("hydrateFromKeychain()", () => {
@@ -224,7 +224,7 @@ describe("keychainService", () => {
 
         expect(result.settings.openAIApiKey).toBe("");
         expect(result.hadFailures).toBe(false);
-        // Reason: hydrateFromKeychain is strictly read-only.
+        // Current readable entries do not need a migration write.
         expect(secretStorage.setSecret).not.toHaveBeenCalled();
       });
 
@@ -288,7 +288,7 @@ describe("keychainService", () => {
         // must iterate the canonical field set, not just Object.keys(settings).
         const secretStorage = makeSecretStorage();
         secretStorage.getSecret.mockImplementation((id: string) =>
-          id.endsWith("open-a-i-api-key") ? "sk-recovered" : null
+          id.startsWith("copilot-openai-api-key-v") ? "sk-recovered" : null
         );
         const service = KeychainService.getInstance(makeApp({ secretStorage }));
 
@@ -320,6 +320,96 @@ describe("keychainService", () => {
           "legacy-value"
         );
       });
+
+      it("renames a legacy top-level entry after copying its value to the readable ID", async () => {
+        const secretStorage = makeSecretStorage();
+        const service = KeychainService.getInstance(makeApp({ secretStorage }));
+        service.setVaultId("1234abcd");
+        const readableId = "copilot-openai-api-key-v1234abcd";
+        const legacyId = "copilot-v1234abcd-open-a-i-api-key";
+        secretStorage.getSecret.mockImplementation((id: string) =>
+          id === legacyId ? "sk-legacy" : null
+        );
+
+        const result = await service.hydrateFromKeychain(makeSettings({ openAIApiKey: "" }));
+
+        expect(result.settings.openAIApiKey).toBe("sk-legacy");
+        expect(result.hadFailures).toBe(false);
+        expect(secretStorage.getSecret).toHaveBeenCalledWith(readableId);
+        expect(secretStorage.getSecret).toHaveBeenCalledWith(legacyId);
+        expect(secretStorage.setSecret).toHaveBeenCalledWith(readableId, "sk-legacy");
+        expect(secretStorage.deleteSecret).toHaveBeenCalledWith(legacyId);
+      });
+
+      it("keeps a legacy credential available when writing its readable entry fails", async () => {
+        const warn = jest.spyOn(console, "warn").mockImplementation(() => undefined);
+        const secretStorage = makeSecretStorage();
+        const service = KeychainService.getInstance(makeApp({ secretStorage }));
+        service.setVaultId("1234abcd");
+        const legacyId = "copilot-v1234abcd-open-a-i-api-key";
+        secretStorage.getSecret.mockImplementation((id: string) =>
+          id === legacyId ? "sk-legacy" : null
+        );
+        secretStorage.setSecret.mockImplementation(() => {
+          throw new Error("locked");
+        });
+
+        const result = await service.hydrateFromKeychain(makeSettings({ openAIApiKey: "" }));
+
+        expect(result.settings.openAIApiKey).toBe("sk-legacy");
+        expect(result.hadFailures).toBe(false);
+        expect(secretStorage.deleteSecret).not.toHaveBeenCalled();
+        expect(warn).toHaveBeenCalledWith(
+          `Could not rename legacy Keychain entry "${legacyId}".`,
+          expect.any(Error)
+        );
+        warn.mockRestore();
+      });
+
+      it("hydrates from the readable copy when removing its legacy duplicate fails", async () => {
+        const warn = jest.spyOn(console, "warn").mockImplementation(() => undefined);
+        const secretStorage = makeSecretStorage();
+        const service = KeychainService.getInstance(makeApp({ secretStorage }));
+        service.setVaultId("1234abcd");
+        const readableId = "copilot-openai-api-key-v1234abcd";
+        const legacyId = "copilot-v1234abcd-open-a-i-api-key";
+        secretStorage.getSecret.mockImplementation((id: string) =>
+          id === legacyId ? "sk-legacy" : null
+        );
+        secretStorage.deleteSecret.mockImplementation(() => {
+          throw new Error("locked");
+        });
+
+        const result = await service.hydrateFromKeychain(makeSettings({ openAIApiKey: "" }));
+
+        expect(result.settings.openAIApiKey).toBe("sk-legacy");
+        expect(result.hadFailures).toBe(false);
+        expect(secretStorage.setSecret).toHaveBeenCalledWith(readableId, "sk-legacy");
+        expect(warn).toHaveBeenCalledWith(
+          `Could not remove legacy Keychain entry "${legacyId}".`,
+          expect.any(Error)
+        );
+        warn.mockRestore();
+      });
+
+      it("renames a legacy model entry using a readable model and scope", async () => {
+        const secretStorage = makeSecretStorage();
+        const service = KeychainService.getInstance(makeApp({ secretStorage }));
+        service.setVaultId("1234abcd");
+        const readableId = "copilot-gpt-4-openai-00000000-chat-api-key-v1234abcd";
+        const legacyId = "copilot-v1234abcd-model-api-key-chat-gpt-4-openai-00000000";
+        secretStorage.getSecret.mockImplementation((id: string) =>
+          id === legacyId ? "model-legacy" : null
+        );
+
+        const result = await service.hydrateFromKeychain(
+          makeSettings({ activeModels: [makeModel({ apiKey: "" })] })
+        );
+
+        expect(result.settings.activeModels[0].apiKey).toBe("model-legacy");
+        expect(secretStorage.setSecret).toHaveBeenCalledWith(readableId, "model-legacy");
+        expect(secretStorage.deleteSecret).toHaveBeenCalledWith(legacyId);
+      });
     });
 
     // ---------------------------------------------------------------------------
@@ -329,6 +419,7 @@ describe("keychainService", () => {
     describe("persistSecrets()", () => {
       it("collects current secrets and tombstones cleared or deleted IDs", () => {
         const service = KeychainService.getInstance(makeApp());
+        service.setVaultId("1234abcd");
 
         const current = makeSettings({
           openAIApiKey: "sk-current",
@@ -353,16 +444,16 @@ describe("keychainService", () => {
 
         // Reason: should collect the current openAIApiKey and the kept model's apiKey
         const entryIds = result.secretEntries.map(([id]) => id);
-        expect(entryIds.some((id) => id.includes("open-a-i-api-key"))).toBe(true);
-        expect(entryIds.some((id) => id.includes("model-api-key-chat"))).toBe(true);
+        expect(entryIds).toContain("copilot-openai-api-key-v1234abcd");
+        expect(entryIds).toContain("copilot-kept-openai-00000000-chat-api-key-v1234abcd");
 
         // Reason: should mark deleted models and cleared googleApiKey for tombstone
-        expect(result.keychainIdsToDelete.some((id) => id.includes("google-api-key"))).toBe(true);
-        expect(result.keychainIdsToDelete.some((id) => id.includes("model-api-key-chat"))).toBe(
-          true
+        expect(result.keychainIdsToDelete).toContain("copilot-gemini-api-key-v1234abcd");
+        expect(result.keychainIdsToDelete).toContain(
+          "copilot-deleted-openai-00000000-chat-api-key-v1234abcd"
         );
         expect(
-          result.keychainIdsToDelete.some((id) => id.includes("model-api-key-embedding"))
+          result.keychainIdsToDelete.some((id) => id.endsWith("-embedding-api-key-v1234abcd"))
         ).toBe(true);
 
         // Reason: persistSecrets must not mutate the input settings objects
@@ -370,6 +461,48 @@ describe("keychainService", () => {
         expect(current.activeModels[0].apiKey).toBe("chat-secret");
         expect(prev.openAIApiKey).toBe("sk-prev");
         expect(prev.activeModels[0].apiKey).toBe("chat-prev");
+      });
+
+      it("uses readable provider and product names for common credentials", () => {
+        const service = KeychainService.getInstance(makeApp());
+        service.setVaultId("1234abcd");
+
+        const result = service.persistSecrets(
+          makeSettings({
+            googleApiKey: "gemini-key",
+            plusLicenseKey: "license",
+            supadataApiKey: "supadata-key",
+          })
+        );
+
+        expect(result.secretEntries).toEqual(
+          expect.arrayContaining([
+            ["copilot-gemini-api-key-v1234abcd", "gemini-key"],
+            ["copilot-plus-license-v1234abcd", "license"],
+            ["copilot-supadata-api-key-v1234abcd", "supadata-key"],
+          ])
+        );
+        expect(result.secretEntries.every(([id]) => id.length <= 64)).toBe(true);
+      });
+
+      it("keeps long top-level and model credential IDs within the SecretStorage limit", () => {
+        const service = KeychainService.getInstance(makeApp());
+        service.setVaultId("1234abcd");
+        const longSettingsKey = `${"customProvider".repeat(8)}ApiKey`;
+
+        const result = service.persistSecrets(
+          makeSettings({
+            [longSettingsKey]: "top-level-key",
+            activeModels: [
+              makeModel({ name: "a-very-long-custom-model-name".repeat(5), apiKey: "model-key" }),
+            ],
+          })
+        );
+
+        const ids = result.secretEntries.map(([id]) => id);
+        expect(ids).toHaveLength(2);
+        expect(ids.every((id) => id.length <= 64)).toBe(true);
+        expect(ids.every((id) => id.endsWith("-v1234abcd"))).toBe(true);
       });
     });
 
@@ -386,7 +519,9 @@ describe("keychainService", () => {
         // Reason: listSecrets returns IDs for this vault and one from another vault
         secretStorage.listSecrets.mockReturnValue([
           `copilot-v${vaultId}-open-a-i-api-key`,
+          `copilot-gemini-api-key-v${vaultId}`,
           "copilot-vother000-google-api-key",
+          "copilot-gemini-api-key-vother000",
         ]);
 
         (getSettings as jest.Mock).mockReturnValue(
@@ -405,8 +540,14 @@ describe("keychainService", () => {
         expect(secretStorage.deleteSecret).toHaveBeenCalledWith(
           `copilot-v${vaultId}-open-a-i-api-key`
         );
+        expect(secretStorage.deleteSecret).toHaveBeenCalledWith(
+          `copilot-gemini-api-key-v${vaultId}`
+        );
         expect(secretStorage.deleteSecret).not.toHaveBeenCalledWith(
           "copilot-vother000-google-api-key"
+        );
+        expect(secretStorage.deleteSecret).not.toHaveBeenCalledWith(
+          "copilot-gemini-api-key-vother000"
         );
 
         // Reason: should save stripped settings to disk with secrets blanked
