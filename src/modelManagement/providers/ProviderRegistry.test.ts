@@ -190,25 +190,59 @@ describe("ProviderRegistry", () => {
     await expect(registry.update("nope", { displayName: "x" })).rejects.toThrow(/unknown/);
   });
 
-  it("setApiKey mints apiKeyKeychainId on first call and reuses it on rotation", async () => {
-    const id = await registry.add({
-      providerType: "anthropic",
-      displayName: "Anthropic (prod)",
-      origin: { kind: "byok" },
+  describe("setApiKey()", () => {
+    it("mints apiKeyKeychainId on first call and reuses it on rotation", async () => {
+      const id = await registry.add({
+        providerType: "anthropic",
+        displayName: "Anthropic (prod)",
+        origin: { kind: "byok" },
+      });
+      expect(registry.get(id)!.apiKeyKeychainId).toBeNull();
+
+      await registry.setApiKey(id, "sk-first");
+      const firstKeychainId = registry.get(id)!.apiKeyKeychainId;
+      const vaultId = KeychainService.getInstance(app).getVaultId();
+      const instanceId = id.replace(/-/g, "").slice(0, 8);
+      expect(firstKeychainId).toBe(`copilot-anthropic-prod-api-key-p${instanceId}-v${vaultId}`);
+      expect(firstKeychainId!.length).toBeLessThanOrEqual(64);
+      expect(await registry.getApiKey(id)).toBe("sk-first");
+
+      await registry.setApiKey(id, "sk-rotated");
+      expect(registry.get(id)!.apiKeyKeychainId).toBe(firstKeychainId);
+      expect(await registry.getApiKey(id)).toBe("sk-rotated");
     });
-    expect(registry.get(id)!.apiKeyKeychainId).toBeNull();
 
-    await registry.setApiKey(id, "sk-first");
-    const firstKeychainId = registry.get(id)!.apiKeyKeychainId;
-    const vaultId = KeychainService.getInstance(app).getVaultId();
-    const instanceId = id.replace(/-/g, "").slice(0, 8);
-    expect(firstKeychainId).toBe(`copilot-anthropic-prod-api-key-p${instanceId}-v${vaultId}`);
-    expect(firstKeychainId!.length).toBeLessThanOrEqual(64);
-    expect(await registry.getApiKey(id)).toBe("sk-first");
+    it("moves a legacy provider pointer when an API key is replaced", async () => {
+      const { id, legacyId } = await seedLegacyProviderCredential(registry, app, secrets);
+      secrets.set(legacyId, "sk-old");
 
-    await registry.setApiKey(id, "sk-rotated");
-    expect(registry.get(id)!.apiKeyKeychainId).toBe(firstKeychainId);
-    expect(await registry.getApiKey(id)).toBe("sk-rotated");
+      await registry.setApiKey(id, "sk-new");
+
+      const readableId = registry.get(id)?.apiKeyKeychainId;
+      expect(readableId).toMatch(/^copilot-anthropic-team-api-key-p[0-9a-f]{8}-v[0-9a-f]{8}$/);
+      expect(secrets.get(readableId!)).toBe("sk-new");
+      expect(secrets.get(legacyId)).toBe("sk-new");
+
+      await registry.setApiKey(id, "sk-rotated-again");
+      expect(secrets.get(readableId!)).toBe("sk-rotated-again");
+      expect(secrets.get(legacyId)).toBe("sk-rotated-again");
+    });
+
+    it("keeps the latest key at the legacy pointer when creating its readable copy fails", async () => {
+      const { id, legacyId } = await seedLegacyProviderCredential(registry, app, secrets);
+      (app.secretStorage as unknown as { setSecret(id: string, value: string): void }).setSecret = (
+        target,
+        value
+      ) => {
+        if (target !== legacyId) throw new Error("keychain locked");
+        secrets.set(target, value);
+      };
+
+      await expect(registry.setApiKey(id, "sk-new")).rejects.toThrow("keychain locked");
+
+      expect(registry.get(id)?.apiKeyKeychainId).toBe(legacyId);
+      expect(secrets.get(legacyId)).toBe("sk-new");
+    });
   });
 
   describe("migrateLegacyApiKeyIds()", () => {
@@ -253,38 +287,6 @@ describe("ProviderRegistry", () => {
       expect(secrets.get(legacyId)).toBe("sk-existing");
       expect(await registry.getApiKey(id)).toBe("sk-existing");
     });
-  });
-
-  it("moves a legacy provider pointer when an API key is replaced", async () => {
-    const { id, legacyId } = await seedLegacyProviderCredential(registry, app, secrets);
-    secrets.set(legacyId, "sk-old");
-
-    await registry.setApiKey(id, "sk-new");
-
-    const readableId = registry.get(id)?.apiKeyKeychainId;
-    expect(readableId).toMatch(/^copilot-anthropic-team-api-key-p[0-9a-f]{8}-v[0-9a-f]{8}$/);
-    expect(secrets.get(readableId!)).toBe("sk-new");
-    expect(secrets.get(legacyId)).toBe("sk-new");
-
-    await registry.setApiKey(id, "sk-rotated-again");
-    expect(secrets.get(readableId!)).toBe("sk-rotated-again");
-    expect(secrets.get(legacyId)).toBe("sk-rotated-again");
-  });
-
-  it("keeps the latest key at the legacy pointer when creating its readable copy fails", async () => {
-    const { id, legacyId } = await seedLegacyProviderCredential(registry, app, secrets);
-    (app.secretStorage as unknown as { setSecret(id: string, value: string): void }).setSecret = (
-      target,
-      value
-    ) => {
-      if (target !== legacyId) throw new Error("keychain locked");
-      secrets.set(target, value);
-    };
-
-    await expect(registry.setApiKey(id, "sk-new")).rejects.toThrow("keychain locked");
-
-    expect(registry.get(id)?.apiKeyKeychainId).toBe(legacyId);
-    expect(secrets.get(legacyId)).toBe("sk-new");
   });
 
   it("update() ignores attempts to overwrite apiKeyKeychainId", async () => {
