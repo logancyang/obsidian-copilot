@@ -38,16 +38,18 @@ describe("tool schemas are JSON-Schema serializable for tool binding", () => {
     }
   );
 
-  test("writeFile preserves arbitrary object content", () => {
-    const tool = createWriteFileTool(mockApp);
-    const content = {
-      nodes: [{ id: "node-1", type: "text", text: "Hello" }],
-      metadata: { custom: true },
-    };
+  describe("createWriteFileTool()", () => {
+    it("preserves arbitrary object content", () => {
+      const tool = createWriteFileTool(mockApp);
+      const content = {
+        nodes: [{ id: "node-1", type: "text", text: "Hello" }],
+        metadata: { custom: true },
+      };
 
-    expect(tool.schema.parse({ path: "canvas/example.canvas", content })).toEqual({
-      path: "canvas/example.canvas",
-      content,
+      expect(tool.schema.parse({ path: "canvas/example.canvas", content })).toEqual({
+        path: "canvas/example.canvas",
+        content,
+      });
     });
   });
 });
