@@ -36,12 +36,7 @@ export { getSourceType as detectSourceType } from "./contextBlockRegistry";
 // Re-export chat history compaction for backwards compatibility
 export { compactChatHistoryContent } from "./ChatHistoryCompactor";
 
-/**
- * Extract the source identifier from an XML block.
- * @deprecated Use extractSourceFromBlock from contextBlockRegistry instead
- */
-export function extractSource(xmlBlock: string): string {
-  // Try common source extractors in order
+function extractSourceFromCommonTags(xmlBlock: string): string {
   const pathMatch = /<path>([^<]+)<\/path>/.exec(xmlBlock);
   if (pathMatch) return pathMatch[1];
 
@@ -52,6 +47,14 @@ export function extractSource(xmlBlock: string): string {
   if (nameMatch) return nameMatch[1];
 
   return "";
+}
+
+/**
+ * Extract the source identifier from an XML block.
+ * @deprecated Use extractSourceFromBlock from contextBlockRegistry instead
+ */
+export function extractSource(xmlBlock: string): string {
+  return extractSourceFromCommonTags(xmlBlock);
 }
 
 /**
@@ -120,7 +123,8 @@ export function compactXmlBlock(
     return xmlBlock;
   }
 
-  const source = extractSourceFromBlock(xmlBlock, blockType) || extractSource(xmlBlock);
+  const source =
+    extractSourceFromBlock(xmlBlock, blockType) || extractSourceFromCommonTags(xmlBlock);
   const content = extractContentFromBlock(xmlBlock);
   const sourceType = getSourceType(blockType);
 

@@ -1160,7 +1160,7 @@ export default class CopilotPlugin extends Plugin {
       this.app,
       chatFiles,
       this.chatHistoryLastAccessedAtManager,
-      this.loadChatHistory.bind(this) as (file: TFile) => void
+      (file) => void this.loadChatHistory(file)
     ).open();
   }
 

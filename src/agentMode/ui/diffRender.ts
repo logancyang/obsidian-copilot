@@ -26,7 +26,7 @@ export function formatAgentInput(v: unknown): string | null {
     if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") {
       return String(v);
     }
-    return Object.prototype.toString.call(v) as string;
+    return String(Object.prototype.toString.call(v));
   }
 }
 

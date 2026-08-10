@@ -94,7 +94,7 @@ const writeFileSchema = z.object({
           The path must end with explicit file extension, such as .md or .canvas .
           Prefer to create new files in existing folders or root folder unless the user's request specifies otherwise.
           The path must be relative to the root of the vault.`),
-  content: z.union([z.string(), z.object({}).passthrough()])
+  content: z.union([z.string(), z.object({}).loose()])
     .describe(`(Required) The content to write to the file. Can be either a string or an object.
           ALWAYS provide the COMPLETE intended content of the file, without any truncation or omissions. 
           You MUST include ALL parts of the file, even if they haven't been modified.

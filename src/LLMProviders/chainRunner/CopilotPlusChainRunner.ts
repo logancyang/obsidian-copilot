@@ -771,9 +771,8 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
       isCopilotPlus: true,
     });
     if (!isPaidUser) {
-      await this.handleError(
-        new Error("Invalid license key"),
-        thinkStreamer.processErrorChunk.bind(thinkStreamer) as (message: string) => void
+      await this.handleError(new Error("Invalid license key"), (message) =>
+        thinkStreamer.processErrorChunk(message)
       );
       const errorResponse = thinkStreamer.close().content;
 
@@ -947,10 +946,7 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
         logInfo("CopilotPlus stream aborted by user", { reason: abortController.signal.reason });
         // Don't show error message for user-initiated aborts
       } else {
-        await this.handleError(
-          error,
-          thinkStreamer.processErrorChunk.bind(thinkStreamer) as (message: string) => void
-        );
+        await this.handleError(error, (message) => thinkStreamer.processErrorChunk(message));
       }
     }
 
