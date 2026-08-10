@@ -355,16 +355,16 @@ export class KeychainService {
   }
 
   /**
-   * Read the current ID, falling back to and best-effort copying its legacy entry.
-   * The legacy value remains as a compatibility backup so upgrades, downgrades,
-   * and failed writes cannot make a credential unavailable.
+   * Read the current ID while reconciling any retained legacy entry.
+   * The legacy value stays authoritative because downgraded Copilot versions
+   * write only that ID; best-effort copying it forward preserves rotations made
+   * before the user upgrades again.
    */
   private getSecretWithLegacyFallback(id: string, legacyId: string): string | null {
     const value = this.storage.getSecret(id);
-    if (value !== null) return value;
-
     const legacyValue = this.storage.getSecret(legacyId);
-    if (legacyValue === null) return null;
+    if (legacyValue === null) return value;
+    if (value === legacyValue) return legacyValue;
 
     try {
       this.storage.setSecret(id, legacyValue);

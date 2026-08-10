@@ -356,6 +356,25 @@ describe("keychainService", () => {
         expect(secretStorage.deleteSecret).not.toHaveBeenCalled();
       });
 
+      it("preserves a credential rotated by a downgraded version", async () => {
+        const secretStorage = makeSecretStorage();
+        const service = KeychainService.getInstance(makeApp({ secretStorage }));
+        service.setVaultId("1234abcd");
+        const readableId = "copilot-openai-api-key-v1234abcd";
+        const legacyId = "copilot-v1234abcd-open-a-i-api-key";
+        secretStorage.getSecret.mockImplementation((id: string) => {
+          if (id === readableId) return "sk-stale-readable";
+          if (id === legacyId) return "sk-rotated-on-downgrade";
+          return null;
+        });
+
+        const result = await service.hydrateFromKeychain(makeSettings({ openAIApiKey: "" }));
+
+        expect(result.settings.openAIApiKey).toBe("sk-rotated-on-downgrade");
+        expect(secretStorage.setSecret).toHaveBeenCalledWith(readableId, "sk-rotated-on-downgrade");
+        expect(secretStorage.deleteSecret).not.toHaveBeenCalled();
+      });
+
       it("keeps a legacy credential available when writing its readable entry fails", async () => {
         const warn = jest.spyOn(console, "warn").mockImplementation(() => undefined);
         const secretStorage = makeSecretStorage();
