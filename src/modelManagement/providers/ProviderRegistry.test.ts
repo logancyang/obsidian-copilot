@@ -89,6 +89,7 @@ describe("ProviderRegistry", () => {
   let secrets: SecretStore;
 
   beforeEach(() => {
+    jest.spyOn(console, "warn").mockImplementation(() => undefined);
     resetSettings();
     KeychainService.resetInstance();
     const fake = makeFakeApp();
@@ -100,6 +101,10 @@ describe("ProviderRegistry", () => {
     adapters = new ProviderAdapterRegistry();
     adapters.register(anthropicStub);
     registry = new ProviderRegistry(app, adapters);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   it("add() mints id, stamps addedAt, persists the row", async () => {
@@ -198,6 +203,7 @@ describe("ProviderRegistry", () => {
         origin: { kind: "byok" },
       });
       expect(registry.get(id)!.apiKeyKeychainId).toBeNull();
+      const setSecret = jest.spyOn(app.secretStorage!, "setSecret");
 
       await registry.setApiKey(id, "sk-first");
       const firstKeychainId = registry.get(id)!.apiKeyKeychainId;
@@ -210,6 +216,7 @@ describe("ProviderRegistry", () => {
       await registry.setApiKey(id, "sk-rotated");
       expect(registry.get(id)!.apiKeyKeychainId).toBe(firstKeychainId);
       expect(await registry.getApiKey(id)).toBe("sk-rotated");
+      expect(setSecret.mock.calls.some(([key]) => key.includes("-migration-"))).toBe(false);
     });
 
     it("moves a legacy pointer while writing only the readable entry", async () => {
@@ -245,18 +252,22 @@ describe("ProviderRegistry", () => {
     });
 
     it("leaves the working legacy key and pointer untouched when read-back verification fails", async () => {
-      const { id, legacyId } = await seedLegacyProviderCredential(registry, app, secrets);
+      const { id, legacyId, vaultId } = await seedLegacyProviderCredential(registry, app, secrets);
+      const instanceId = id.replace(/-/g, "").slice(0, 8);
+      const readableId = `copilot-v${vaultId}-anthropic-team-api-key-p${instanceId}`;
       (app.secretStorage as unknown as { setSecret(id: string, value: string): void }).setSecret = (
-        target
+        target,
+        value
       ) => {
-        secrets.set(target, "corrupted");
+        secrets.set(target, target === readableId ? "corrupted" : value);
       };
 
       await expect(registry.setApiKey(id, "sk-new")).rejects.toThrow(/could not verify/);
 
       expect(registry.get(id)?.apiKeyKeychainId).toBe(legacyId);
       expect(secrets.get(legacyId)).toBe("sk-existing");
-      expect([...secrets.keys()]).toEqual([legacyId]);
+      expect(secrets.has(readableId)).toBe(false);
+      expect([...secrets.keys()].some((key) => key.includes("-migration-"))).toBe(false);
     });
   });
 
@@ -323,11 +334,14 @@ describe("ProviderRegistry", () => {
     });
 
     it("keeps the legacy pointer when the readable copy cannot be verified", async () => {
-      const { id, legacyId } = await seedLegacyProviderCredential(registry, app, secrets);
+      const { id, legacyId, vaultId } = await seedLegacyProviderCredential(registry, app, secrets);
+      const instanceId = id.replace(/-/g, "").slice(0, 8);
+      const readableId = `copilot-v${vaultId}-anthropic-team-api-key-p${instanceId}`;
       (app.secretStorage as unknown as { setSecret(id: string, value: string): void }).setSecret = (
-        target
+        target,
+        value
       ) => {
-        secrets.set(target, "corrupted");
+        secrets.set(target, target === readableId ? "corrupted" : value);
       };
 
       registry.migrateLegacyApiKeyIds();
@@ -337,14 +351,47 @@ describe("ProviderRegistry", () => {
       expect(await registry.getApiKey(id)).toBe("sk-existing");
     });
 
+    it("does not promote an unverified readable entry when its cleanup fails", async () => {
+      const { id, legacyId, vaultId } = await seedLegacyProviderCredential(registry, app, secrets);
+      const instanceId = id.replace(/-/g, "").slice(0, 8);
+      const readableId = `copilot-v${vaultId}-anthropic-team-api-key-p${instanceId}`;
+      const secretStorage = app.secretStorage as unknown as {
+        setSecret(id: string, value: string): void;
+        deleteSecret(id: string): void;
+      };
+      let corruptReadableWrite = true;
+      let blockReadableDelete = true;
+      secretStorage.setSecret = (target, value) => {
+        secrets.set(target, target === readableId && corruptReadableWrite ? "corrupted" : value);
+      };
+      secretStorage.deleteSecret = (target) => {
+        if (target === readableId && blockReadableDelete) throw new Error("keychain locked");
+        secrets.delete(target);
+      };
+
+      registry.migrateLegacyApiKeyIds();
+      expect(registry.get(id)?.apiKeyKeychainId).toBe(legacyId);
+      expect(secrets.get(readableId)).toBe("corrupted");
+      expect(secrets.get(legacyId)).toBe("sk-existing");
+
+      corruptReadableWrite = false;
+      blockReadableDelete = false;
+      registry.migrateLegacyApiKeyIds();
+      expect(registry.get(id)?.apiKeyKeychainId).toBe(readableId);
+      expect(secrets.get(readableId)).toBe("sk-existing");
+      expect(secrets.has(legacyId)).toBe(false);
+    });
+
     it("retries a failed legacy deletion on the next migration", async () => {
       const { id, legacyId } = await seedLegacyProviderCredential(registry, app, secrets);
       const secretStorage = app.secretStorage as unknown as { deleteSecret(id: string): void };
       const deleteSecret = secretStorage.deleteSecret;
       let deleteAttempts = 0;
       secretStorage.deleteSecret = (target) => {
-        deleteAttempts += 1;
-        if (deleteAttempts === 1) throw new Error("keychain locked");
+        if (target === legacyId) {
+          deleteAttempts += 1;
+          if (deleteAttempts === 1) throw new Error("keychain locked");
+        }
         deleteSecret(target);
       };
 

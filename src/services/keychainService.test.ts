@@ -241,6 +241,29 @@ describe("keychainService", () => {
     });
 
     // ---------------------------------------------------------------------------
+    describe("setSecretById()", () => {
+      it("does not turn recovery-state read failures into ordinary write failures", () => {
+        const warn = jest.spyOn(console, "warn").mockImplementation(() => undefined);
+        const { secretStorage, secrets } = makeStoredSecretStorage();
+        secretStorage.getSecret.mockImplementation((id: string) => {
+          if (id.includes("-migration-")) throw new Error("locked");
+          return secrets.has(id) ? secrets.get(id)! : null;
+        });
+        const service = KeychainService.getInstance(makeApp({ secretStorage }));
+        service.setVaultId("1234abcd");
+        const readableId = "copilot-v1234abcd-openai-api-key";
+
+        service.setSecretById(readableId, "sk-current");
+
+        expect(secrets.get(readableId)).toBe("sk-current");
+        expect(warn).toHaveBeenCalledWith(
+          `Could not clear Keychain migration state for "${readableId}".`,
+          expect.any(Error)
+        );
+        warn.mockRestore();
+      });
+    });
+
     describe("setSecret()", () => {
       it("writes a top-level credential only to its readable ID", () => {
         const legacyId = "copilot-v1234abcd-open-a-i-api-key";
@@ -272,6 +295,43 @@ describe("keychainService", () => {
           "model-current"
         );
         expect(secrets.get(legacyId)).toBe("model-legacy");
+      });
+    });
+
+    describe("migrateSecretById()", () => {
+      it("returns the readable entry after a verified legacy copy", () => {
+        const readableId = "copilot-v1234abcd-openai-api-key";
+        const legacyId = "copilot-v1234abcd-open-a-i-api-key";
+        const { secretStorage, secrets } = makeStoredSecretStorage({
+          [legacyId]: "sk-legacy",
+        });
+        const service = KeychainService.getInstance(makeApp({ secretStorage }));
+        service.setVaultId("1234abcd");
+
+        expect(service.migrateSecretById(readableId, legacyId)).toEqual({
+          keychainId: readableId,
+          value: "sk-legacy",
+        });
+        expect(secrets.get(readableId)).toBe("sk-legacy");
+        expect(secrets.has(legacyId)).toBe(false);
+      });
+    });
+
+    describe("setSecretByIdWithLegacyMigration()", () => {
+      it("removes the legacy entry only after the readable value verifies", () => {
+        const readableId = "copilot-v1234abcd-openai-api-key";
+        const legacyId = "copilot-v1234abcd-open-a-i-api-key";
+        const { secretStorage, secrets } = makeStoredSecretStorage({
+          [legacyId]: "sk-legacy",
+        });
+        const service = KeychainService.getInstance(makeApp({ secretStorage }));
+        service.setVaultId("1234abcd");
+
+        service.setSecretByIdWithLegacyMigration(readableId, legacyId, "sk-current");
+
+        expect(secrets.get(readableId)).toBe("sk-current");
+        expect(secrets.has(legacyId)).toBe(false);
+        expect([...secrets.keys()].some((id) => id.includes("-migration-"))).toBe(false);
       });
     });
 
@@ -457,8 +517,8 @@ describe("keychainService", () => {
         const { secretStorage, secrets } = makeStoredSecretStorage({
           [legacyId]: "sk-legacy",
         });
-        secretStorage.setSecret.mockImplementation((id: string) => {
-          secrets.set(id, "corrupted");
+        secretStorage.setSecret.mockImplementation((id: string, value: string) => {
+          secrets.set(id, id === readableId ? "corrupted" : value);
         });
         const service = KeychainService.getInstance(makeApp({ secretStorage }));
         service.setVaultId("1234abcd");
@@ -468,10 +528,46 @@ describe("keychainService", () => {
         expect(result.settings.openAIApiKey).toBe("sk-legacy");
         expect(secrets.get(legacyId)).toBe("sk-legacy");
         expect(secrets.has(readableId)).toBe(false);
+        expect([...secrets.keys()].some((id) => id.includes("-migration-"))).toBe(false);
         expect(secretStorage.deleteSecret).toHaveBeenCalledWith(readableId);
         expect(warn).toHaveBeenCalledWith(
           `Could not verify migrated Keychain entry "${readableId}".`
         );
+        warn.mockRestore();
+      });
+
+      it("keeps the legacy credential authoritative until unverified cleanup succeeds", async () => {
+        const warn = jest.spyOn(console, "warn").mockImplementation(() => undefined);
+        const readableId = "copilot-v1234abcd-openai-api-key";
+        const legacyId = "copilot-v1234abcd-open-a-i-api-key";
+        const { secretStorage, secrets } = makeStoredSecretStorage({
+          [legacyId]: "sk-legacy",
+        });
+        let corruptReadableWrite = true;
+        let blockReadableDelete = true;
+        secretStorage.setSecret.mockImplementation((id: string, value: string) => {
+          secrets.set(id, id === readableId && corruptReadableWrite ? "corrupted" : value);
+        });
+        secretStorage.deleteSecret.mockImplementation((id: string) => {
+          if (id === readableId && blockReadableDelete) throw new Error("locked");
+          secrets.delete(id);
+        });
+        const service = KeychainService.getInstance(makeApp({ secretStorage }));
+        service.setVaultId("1234abcd");
+
+        const first = await service.hydrateFromKeychain(makeSettings({ openAIApiKey: "" }));
+        expect(first.settings.openAIApiKey).toBe("sk-legacy");
+        expect(secrets.get(readableId)).toBe("corrupted");
+        expect(secrets.get(legacyId)).toBe("sk-legacy");
+        expect([...secrets.keys()].some((id) => id.includes("-migration-"))).toBe(true);
+
+        corruptReadableWrite = false;
+        blockReadableDelete = false;
+        const second = await service.hydrateFromKeychain(makeSettings({ openAIApiKey: "" }));
+        expect(second.settings.openAIApiKey).toBe("sk-legacy");
+        expect(secrets.get(readableId)).toBe("sk-legacy");
+        expect(secrets.has(legacyId)).toBe(false);
+        expect([...secrets.keys()].some((id) => id.includes("-migration-"))).toBe(false);
         warn.mockRestore();
       });
 
@@ -484,8 +580,10 @@ describe("keychainService", () => {
         });
         let deleteAttempts = 0;
         secretStorage.deleteSecret.mockImplementation((id: string) => {
-          deleteAttempts += 1;
-          if (deleteAttempts === 1) throw new Error("locked");
+          if (id === legacyId) {
+            deleteAttempts += 1;
+            if (deleteAttempts === 1) throw new Error("locked");
+          }
           secrets.delete(id);
         });
         const service = KeychainService.getInstance(makeApp({ secretStorage }));

@@ -241,11 +241,22 @@ function toModelKeychainId(
   return prefix + normalizeKeychainId(modelIdentity, modelBudget) + suffix;
 }
 
+// Build a temporary recovery marker for an in-progress credential copy.
+function toMigrationMarkerId(vaultId: string, readableId: string): string {
+  return `copilot-v${vaultId}-migration-${md5(readableId).slice(0, 12)}`;
+}
+
 /** Result of a keychain-only hydrate pass. */
 export interface HydrateResult {
   settings: CopilotSettings;
   /** True if any keychain read failed. */
   hadFailures: boolean;
+}
+
+/** A credential selected from either its readable or legacy SecretStorage entry. */
+export interface SecretMigrationResult {
+  keychainId: string;
+  value: string;
 }
 
 /** Output of `persistSecrets()` — what to write to keychain and what to clean up. */
@@ -365,44 +376,140 @@ export class KeychainService {
     }
   }
 
-  /**
-   * Read a readable entry, migrating its legacy predecessor only when needed.
-   * The copy is read back before the legacy entry is removed so an interrupted
-   * or rejected write never deletes the working credential.
-   */
-  private getSecretWithLegacyMigration(id: string, legacyId: string): string | null {
-    if (id === legacyId) return this.storage.getSecret(id);
-
-    const value = this.storage.getSecret(id);
-    if (value !== null) {
-      this.removeLegacySecret(legacyId);
-      return value;
-    }
-
-    const legacyValue = this.storage.getSecret(legacyId);
-    if (legacyValue === null) return null;
-
+  // Remove an entry only when its absence or tombstone can be read back.
+  private removeSecretAndConfirm(id: string): boolean {
     try {
-      this.storage.setSecret(id, legacyValue);
-      const migratedValue = this.storage.getSecret(id);
-      if (migratedValue !== legacyValue) {
-        if (migratedValue !== null) {
-          try {
-            this.removeSecret(id);
-          } catch (error) {
-            console.warn(`Could not remove unverified Keychain entry "${id}".`, error);
-          }
-        }
-        console.warn(`Could not verify migrated Keychain entry "${id}".`);
-        return legacyValue;
+      this.removeSecret(id);
+      const value = this.storage.getSecret(id);
+      return value === null || value === "";
+    } catch (error) {
+      console.warn(`Could not remove Keychain entry "${id}".`, error);
+      return false;
+    }
+  }
+
+  // Persist and verify one phase of the recovery marker.
+  private setMigrationMarker(markerId: string, state: "pending" | "verified"): void {
+    this.storage.setSecret(markerId, state);
+    if (this.storage.getSecret(markerId) !== state) {
+      throw new Error(`could not verify Keychain migration marker "${markerId}"`);
+    }
+  }
+
+  // Best-effort removal after an ordinary readable write or explicit deletion.
+  private clearMigrationMarker(id: string): void {
+    try {
+      const markerId = toMigrationMarkerId(this.vaultId, id);
+      const markerValue = this.storage.getSecret(markerId);
+      if (markerValue !== null && markerValue !== "") {
+        this.removeSecretAndConfirm(markerId);
       }
     } catch (error) {
-      console.warn(`Could not migrate legacy Keychain entry "${legacyId}".`, error);
-      return legacyValue;
+      console.warn(`Could not clear Keychain migration state for "${id}".`, error);
+    }
+  }
+
+  // Copy a value while leaving recoverable state until verification completes.
+  private writeReadableSecret(id: string, legacyId: string, value: string): boolean {
+    const markerId = toMigrationMarkerId(this.vaultId, id);
+    let attemptedReadableWrite = false;
+    let verified = false;
+    try {
+      this.setMigrationMarker(markerId, "pending");
+      attemptedReadableWrite = true;
+      this.storage.setSecret(id, value);
+      if (this.storage.getSecret(id) !== value) {
+        if (this.removeSecretAndConfirm(id)) {
+          this.removeSecretAndConfirm(markerId);
+        }
+        return false;
+      }
+      this.setMigrationMarker(markerId, "verified");
+      verified = true;
+    } catch (error) {
+      if (attemptedReadableWrite && !verified && this.removeSecretAndConfirm(id)) {
+        this.removeSecretAndConfirm(markerId);
+      }
+      throw error;
     }
 
     this.removeLegacySecret(legacyId);
-    return legacyValue;
+    this.removeSecretAndConfirm(markerId);
+    return true;
+  }
+
+  /**
+   * Select a readable entry or safely copy its legacy predecessor.
+   * A temporary marker keeps the legacy value authoritative across restarts
+   * until the readable copy and its verification state are both durable.
+   *
+   * @param id Readable SecretStorage ID that should become authoritative.
+   * @param legacyId Previous SecretStorage ID that may still hold the working value.
+   */
+  migrateSecretById(id: string, legacyId: string): SecretMigrationResult | null {
+    if (id === legacyId) {
+      const value = this.storage.getSecret(id);
+      return value === null ? null : { keychainId: id, value };
+    }
+
+    const markerId = toMigrationMarkerId(this.vaultId, id);
+    let value = this.storage.getSecret(id);
+    const markerValue = this.storage.getSecret(markerId);
+    let legacyValue: string | null | undefined;
+    if (markerValue === "verified" && value !== null) {
+      this.removeLegacySecret(legacyId);
+      this.removeSecretAndConfirm(markerId);
+      return { keychainId: id, value };
+    }
+    if (markerValue !== null && markerValue !== "") {
+      legacyValue = this.storage.getSecret(legacyId);
+      if (legacyValue === null) {
+        this.removeSecretAndConfirm(markerId);
+        return value === null ? null : { keychainId: id, value };
+      }
+      if (value !== null && !this.removeSecretAndConfirm(id)) {
+        return { keychainId: legacyId, value: legacyValue };
+      }
+      this.removeSecretAndConfirm(markerId);
+      value = null;
+    }
+
+    if (value !== null) {
+      this.removeLegacySecret(legacyId);
+      return { keychainId: id, value };
+    }
+
+    legacyValue ??= this.storage.getSecret(legacyId);
+    if (legacyValue === null) return null;
+
+    try {
+      if (!this.writeReadableSecret(id, legacyId, legacyValue)) {
+        console.warn(`Could not verify migrated Keychain entry "${id}".`);
+        return { keychainId: legacyId, value: legacyValue };
+      }
+    } catch (error) {
+      console.warn(`Could not migrate legacy Keychain entry "${legacyId}".`, error);
+      return { keychainId: legacyId, value: legacyValue };
+    }
+    return { keychainId: id, value: legacyValue };
+  }
+
+  /**
+   * Write and verify a readable replacement before removing its working legacy entry.
+   *
+   * @param id Readable SecretStorage ID to receive the value.
+   * @param legacyId Previous SecretStorage ID to preserve until verification succeeds.
+   * @param value Credential value requested by the current write.
+   */
+  setSecretByIdWithLegacyMigration(id: string, legacyId: string, value: string): void {
+    if (!this.writeReadableSecret(id, legacyId, value)) {
+      throw new Error(`could not verify readable Keychain entry "${id}"`);
+    }
+  }
+
+  /** Read a readable entry, migrating its legacy predecessor only when needed. */
+  private getSecretWithLegacyMigration(id: string, legacyId: string): string | null {
+    return this.migrateSecretById(id, legacyId)?.value ?? null;
   }
 
   /** Return both current and legacy IDs without duplicating unchanged names. */
@@ -421,6 +528,7 @@ export class KeychainService {
    *  an equivalent vault-namespaced helper. */
   setSecretById(keychainId: string, value: string): void {
     this.storage.setSecret(keychainId, value);
+    this.clearMigrationMarker(keychainId);
   }
 
   /** Read a value directly from the keychain using a pre-computed ID.
@@ -433,12 +541,13 @@ export class KeychainService {
    *  See `setSecretById` for the caller contract on `keychainId`. */
   deleteSecretById(keychainId: string): void {
     this.removeSecret(keychainId);
+    this.clearMigrationMarker(keychainId);
   }
 
   /** Store a top-level secret in the keychain. */
   setSecret(settingsKey: string, value: string): void {
     const id = toKeychainId(this.vaultId, settingsKey);
-    this.storage.setSecret(id, value);
+    this.setSecretById(id, value);
   }
 
   /** Retrieve a top-level secret from the keychain. Returns `null` if not found. */
@@ -456,7 +565,7 @@ export class KeychainService {
     value: string
   ): void {
     const id = toModelKeychainId(this.vaultId, scope, modelIdentity, field);
-    this.storage.setSecret(id, value);
+    this.setSecretById(id, value);
   }
 
   /** Retrieve a model-level secret from the keychain. Returns `null` if not found. */

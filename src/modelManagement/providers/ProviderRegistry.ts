@@ -240,63 +240,12 @@ export class ProviderRegistry {
           provider.providerId
         )
       : currentId;
-    const readableValue = keychain.getSecretById(readableId);
-    if (readableValue !== null) {
-      if (hasLegacyPointer) {
-        this.#setApiKeyKeychainId(provider.providerId, readableId);
-      }
-      this.#deleteLegacyApiKey(keychain, legacyId, provider.displayName);
-      return readableId;
+    const migrated = keychain.migrateSecretById(readableId, legacyId);
+    if (!migrated) return currentId;
+    if (hasLegacyPointer && migrated.keychainId === readableId) {
+      this.#setApiKeyKeychainId(provider.providerId, readableId);
     }
-
-    const legacyValue = keychain.getSecretById(legacyId);
-    if (legacyValue === null) return currentId;
-
-    try {
-      keychain.setSecretById(readableId, legacyValue);
-      const migratedValue = keychain.getSecretById(readableId);
-      if (migratedValue !== legacyValue) {
-        if (migratedValue !== null) {
-          try {
-            keychain.deleteSecretById(readableId);
-          } catch (err) {
-            logWarn(
-              `[modelManagement] ProviderRegistry: failed to remove unverified ${provider.displayName} credential`,
-              err
-            );
-          }
-        }
-        logWarn(
-          `[modelManagement] ProviderRegistry: could not verify migrated ${provider.displayName} credential`
-        );
-        return legacyId;
-      }
-      if (hasLegacyPointer) {
-        this.#setApiKeyKeychainId(provider.providerId, readableId);
-      }
-    } catch (err) {
-      logWarn(
-        `[modelManagement] ProviderRegistry: failed to migrate ${provider.displayName} credential to its readable keychain entry`,
-        err
-      );
-      return legacyId;
-    }
-    this.#deleteLegacyApiKey(keychain, legacyId, provider.displayName);
-    return readableId;
-  }
-
-  /** Best-effort cleanup after a readable provider entry is known to be durable. */
-  #deleteLegacyApiKey(keychain: KeychainService, legacyId: string, providerName: string): void {
-    try {
-      if (keychain.getSecretById(legacyId) !== null) {
-        keychain.deleteSecretById(legacyId);
-      }
-    } catch (err) {
-      logWarn(
-        `[modelManagement] ProviderRegistry: failed to remove legacy keychain entry for ${providerName}`,
-        err
-      );
-    }
+    return migrated.keychainId;
   }
 
   /** Delete active, readable, and legacy provider secrets after explicit removal. */
@@ -373,26 +322,11 @@ export class ProviderRegistry {
     if (!row.apiKeyKeychainId) {
       this.#setApiKeyKeychainId(providerId, keychainId);
     }
-    keychain.setSecretById(keychainId, apiKey);
     if (isLegacyId) {
-      const writtenValue = keychain.getSecretById(keychainId);
-      if (writtenValue !== apiKey) {
-        if (writtenValue !== null) {
-          try {
-            keychain.deleteSecretById(keychainId);
-          } catch (err) {
-            logWarn(
-              `[modelManagement] ProviderRegistry.setApiKey: failed to remove unverified readable entry`,
-              err
-            );
-          }
-        }
-        throw new Error(
-          `[modelManagement] ProviderRegistry.setApiKey: could not verify readable keychain entry`
-        );
-      }
+      keychain.setSecretByIdWithLegacyMigration(keychainId, legacyId, apiKey);
       this.#setApiKeyKeychainId(providerId, keychainId);
-      this.#deleteLegacyApiKey(keychain, legacyId, row.displayName);
+    } else {
+      keychain.setSecretById(keychainId, apiKey);
     }
     this.#emit();
   }
