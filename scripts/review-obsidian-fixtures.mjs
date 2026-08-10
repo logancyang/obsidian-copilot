@@ -5,6 +5,7 @@ import { ESLint } from "eslint";
 import {
   collectPackageFindings,
   getManifestFilename,
+  lintRuntimeDependencies,
   validateSelectedManifest,
 } from "./review-obsidian-package.mjs";
 
@@ -200,6 +201,23 @@ async function main() {
     licenseText: "",
   });
   assert(packageFindings.length >= 3, "invalid manifest/license fixture was accepted");
+  const runtimeDependencyResult = await lintRuntimeDependencies({
+    dependencies: { dotenv: "^17.4.2" },
+  });
+  assert(
+    runtimeDependencyResult.errorCount === 0,
+    "runtime dependency guidance unexpectedly blocked the review gate"
+  );
+  expectEslintRules(runtimeDependencyResult, ["depend/ban-dependencies"]);
+  const developmentDependencyResult = await lintRuntimeDependencies({
+    devDependencies: { dotenv: "^17.4.2" },
+  });
+  assert(
+    developmentDependencyResult.messages.every(
+      (message) => message.ruleId !== "depend/ban-dependencies"
+    ),
+    "development-only dependency was reported as a runtime dependency"
+  );
   assert(
     getManifestFilename("1.0.0-beta.1") === "manifest-beta.json",
     "prerelease package was not matched to manifest-beta.json"

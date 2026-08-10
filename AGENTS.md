@@ -45,6 +45,7 @@ Read the matching guide when your task touches that area — they aren't loaded 
 | using a specific LLM provider (e.g. AWS Bedrock)                      | [`designdocs/agents/VENDOR_GUIDE.md`](./designdocs/agents/VENDOR_GUIDE.md)                      |
 | running a multi-step dev session                                      | [`designdocs/agents/PROCESS_GUIDE.md`](./designdocs/agents/PROCESS_GUIDE.md)                    |
 | changing user-facing behavior                                         | [`designdocs/agents/DOCS_GUIDE.md`](./designdocs/agents/DOCS_GUIDE.md)                          |
+| reviewing code or preparing an Obsidian submission                    | [`designdocs/OBSIDIAN_COMMUNITY_REVIEW.md`](./designdocs/OBSIDIAN_COMMUNITY_REVIEW.md)          |
 
 ## Important notes
 
@@ -56,6 +57,14 @@ Read the matching guide when your task touches that area — they aren't loaded 
 - Message & chat architecture (Repository → Manager → UIState → UI; single `MessageRepository`; per-project isolation) → [`designdocs/MESSAGE_ARCHITECTURE.md`](./designdocs/MESSAGE_ARCHITECTURE.md).
 - Tech debt and known issues → [`designdocs/todo/TECHDEBT.md`](./designdocs/todo/TECHDEBT.md). Current session plan → [`TODO.md`](./TODO.md).
 - Available Tailwind tokens/classes → [`tailwind.config.js`](./tailwind.config.js).
+
+## Obsidian review guidelines
+
+When reviewing code or preparing a PR that changes plugin source, CSS, package metadata, or dependencies, run `npm run review:obsidian` and inspect its warning output. Obsidian review errors are blockers. Fix warnings only when runtime, UI, and persisted behavior remain equivalent; leave risky warnings visible and nonblocking.
+
+Review changed lines for desktop-only Node imports, `fetch` outside justified streaming adapters, async callbacks passed to void-returning APIs, global `app` access, console use, deprecated APIs, runtime dependency replacements, native DOM creation instead of Obsidian helpers, external CSS URLs, `!important`, and `:has()`. Never suppress, ignore, or downgrade a review rule just to make the gate green.
+
+If the authenticated community review finds something the local gate missed, first check the pinned official Obsidian lint packages, then add a regression fixture outside source roots. See [`designdocs/OBSIDIAN_COMMUNITY_REVIEW.md`](./designdocs/OBSIDIAN_COMMUNITY_REVIEW.md) for the parity and risk policy.
 
 <!-- brevilabs-review-guidelines:start (synced from Brevilabs/brevilabs-skills — edit there, not here) -->
 

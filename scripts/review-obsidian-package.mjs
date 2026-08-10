@@ -74,6 +74,41 @@ export async function validateSelectedManifest(manifestPath, manifestText) {
   return !messages.some((message) => message.severity === 2);
 }
 
+/**
+ * Apply Obsidian's dependency guidance to production dependencies without
+ * inheriting allowances needed only by tests and development tooling.
+ *
+ * @param {Record<string, unknown>} packageJson - Parsed package.json contents.
+ * @returns {Promise<import("eslint").ESLint.LintResult>} Upstream dependency findings.
+ */
+export async function lintRuntimeDependencies(packageJson) {
+  const eslint = new ESLint({
+    cwd: repositoryRoot,
+    overrideConfigFile: resolve(repositoryRoot, "eslint.review.config.mjs"),
+    overrideConfig: {
+      rules: {
+        "depend/ban-dependencies": ["warn", { presets: ["native", "microutilities", "preferred"] }],
+      },
+    },
+  });
+  const [result] = await eslint.lintText(
+    JSON.stringify({ dependencies: packageJson.dependencies ?? {} }, null, 2),
+    { filePath: resolve(repositoryRoot, "package.json") }
+  );
+  return result;
+}
+
+async function printLintResult(result) {
+  const eslint = new ESLint({
+    overrideConfigFile: resolve(repositoryRoot, "eslint.review.config.mjs"),
+  });
+  const formatter = await eslint.loadFormatter(
+    resolve(repositoryRoot, "scripts/eslint-github-formatter.cjs")
+  );
+  const output = await formatter.format([result]);
+  if (output) process.stdout.write(`${output}\n`);
+}
+
 function readJson(path) {
   return JSON.parse(readFileSync(path, "utf8"));
 }
@@ -109,7 +144,9 @@ async function main() {
     process.exitCode = 1;
     return;
   }
-  console.info("Obsidian package metadata and license validation passed.");
+
+  await printLintResult(await lintRuntimeDependencies(packageJson));
+  console.info("Obsidian package metadata, dependency, and license validation passed.");
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
