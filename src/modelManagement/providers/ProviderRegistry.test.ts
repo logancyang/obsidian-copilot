@@ -287,6 +287,25 @@ describe("ProviderRegistry", () => {
       expect(secrets.get(legacyId)).toBe("sk-existing");
       expect(await registry.getApiKey(id)).toBe("sk-existing");
     });
+
+    it("copies a device-local legacy entry when settings sync a readable pointer", async () => {
+      const { id, legacyId, vaultId } = await seedLegacyProviderCredential(registry, app, secrets);
+      const instanceId = id.replace(/-/g, "").slice(0, 8);
+      const readableId = `copilot-v${vaultId}-anthropic-team-api-key-p${instanceId}`;
+      setSettings((current) => ({
+        providers: {
+          ...current.providers,
+          [id]: { ...current.providers[id], apiKeyKeychainId: readableId },
+        },
+      }));
+
+      registry.migrateLegacyApiKeyIds();
+
+      expect(registry.get(id)?.apiKeyKeychainId).toBe(readableId);
+      expect(secrets.get(readableId)).toBe("sk-existing");
+      expect(secrets.get(legacyId)).toBe("sk-existing");
+      expect(await registry.getApiKey(id)).toBe("sk-existing");
+    });
   });
 
   it("update() ignores attempts to overwrite apiKeyKeychainId", async () => {

@@ -227,8 +227,9 @@ export class ProviderRegistry {
   }
 
   /**
-   * Copy one legacy provider credential before moving its persisted pointer.
-   * The legacy value remains synchronized as a rollback-safe fallback.
+   * Reconcile one provider credential with its readable persisted pointer.
+   * A synced pointer may arrive on a device whose OS Keychain still contains
+   * only the local legacy entry, so pointer shape alone cannot prove migration.
    */
   #migrateLegacyApiKeyId(provider: Provider): string | null {
     const currentId = provider.apiKeyKeychainId ?? null;
@@ -236,29 +237,34 @@ export class ProviderRegistry {
 
     const keychain = KeychainService.getInstance(this.#app);
     const legacyId = legacyProviderKeychainId(keychain.getVaultId(), provider.providerId);
-    if (currentId !== legacyId) return currentId;
-
-    const readableId = keychain.getProviderSecretId(
-      provider.displayName.trim() || provider.providerType,
-      provider.providerId
-    );
-    const legacyValue = keychain.getSecretById(legacyId);
+    const hasLegacyPointer = currentId === legacyId;
+    const readableId = hasLegacyPointer
+      ? keychain.getProviderSecretId(
+          provider.displayName.trim() || provider.providerType,
+          provider.providerId
+        )
+      : currentId;
     const readableValue = keychain.getSecretById(readableId);
-    if (legacyValue === null && readableValue === null) return legacyId;
+    if (!hasLegacyPointer && readableValue !== null) return readableId;
+
+    const legacyValue = keychain.getSecretById(legacyId);
+    if (legacyValue === null && readableValue === null) return currentId;
 
     try {
-      // The persisted legacy pointer remains authoritative until it moves. If a
-      // prior attempt left a partial readable copy, refresh it from that source.
+      // A local legacy value is authoritative while the readable target is
+      // absent or the persisted pointer still names that legacy entry.
       if (legacyValue !== null && readableValue !== legacyValue) {
         keychain.setSecretById(readableId, legacyValue);
       }
-      this.#setApiKeyKeychainId(provider.providerId, readableId);
+      if (hasLegacyPointer) {
+        this.#setApiKeyKeychainId(provider.providerId, readableId);
+      }
     } catch (err) {
       logWarn(
         `[modelManagement] ProviderRegistry: failed to copy ${provider.displayName} credential to its readable keychain entry`,
         err
       );
-      return legacyId;
+      return legacyValue !== null ? legacyId : readableId;
     }
     return readableId;
   }
