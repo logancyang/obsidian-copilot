@@ -39,6 +39,11 @@ So the single region we could have kept permanently cached was instead the one t
 
 This is one captured request, OpenCode 1.16.0, session opened at the vault root. Character counts are for the complete serialized sections, not the visible excerpt.
 
+> Update (2026-08-10): the managed OpenCode pin advanced to 1.18.16 after a
+> real ACP initialize/session/config-option/prompt smoke test. The measurements
+> below remain the historical 1.16.0 capture; they were not relabeled as new
+> wire evidence.
+
 ```text
   ┌─ Tool definitions ─────────────────────── 49,940 chars ─┐
   ├─ System message (OpenCode joins 4 parts)   47,781 chars ─┤
@@ -254,7 +259,7 @@ Each of these would couple Copilot to OpenCode internals or provider-specific wi
 2. **No cutting the tool array**, despite it being the single largest region at 49,940 characters. It is the best-behaved region we have: byte-identical on every request at a pinned version, sorted upstream, fully cached. The only lever is OpenCode's per-agent `tools: {write: false}` map, which its own documentation marks **deprecated**, and which is keyed by version-specific tool names. A rename on upgrade would silently re-enable what we disabled. That trades a cached-token saving for an upgrade-fragility bug.
 3. **No suppression of the legacy `~/.claude/CLAUDE.md` global fallback.** Upstream-owned, observable, out of scope.
 4. **No provider cache breakpoints, `cache_control` objects, or routing keys.** These vary by OpenCode version, SDK and provider.
-5. **No OpenCode pin change.** The version-pinned wire smoke test that would gate a future pin bump is follow-up work.
+5. **No OpenCode pin change in this analysis.** The later 1.18.16 bump was gated by a real ACP initialize/session/config-option/prompt smoke test; recapturing provider request bytes remains follow-up work.
 6. **No Pi cache assessment.** The payload observer and normalized section capture belong to the Pi integration work.
 
 ## How the contract is enforced
