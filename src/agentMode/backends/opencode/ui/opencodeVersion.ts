@@ -2,7 +2,7 @@
 // versions the installer uses without widening the story import fence.
 
 /** opencode release Copilot downloads for a managed installation. */
-export const OPENCODE_PINNED_VERSION = "1.16.0";
+export const OPENCODE_PINNED_VERSION = "1.18.16";
 
 /**
  * Oldest opencode release that satisfies Agent Mode's ACP contract. Version
