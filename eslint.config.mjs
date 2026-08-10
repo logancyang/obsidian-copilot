@@ -17,7 +17,6 @@ export default [
       "designdocs/**",
       "docs/**",
       ".claude/**",
-      "src/review-fixtures/**",
     ],
   },
 
