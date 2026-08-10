@@ -19,9 +19,9 @@ The safety rule is simple: review compliance must not change plugin behavior, pe
 | -------------------------- | ------------------------------------------------------------------------------------------------ |
 | `review:obsidian:package`  | Select and validate stable or prerelease metadata plus repository release invariants             |
 | `review:obsidian:source`   | Scan source, gallery code, `package.json`, and `LICENSE` with the upstream Obsidian ESLint rules |
-| `review:obsidian:styles`   | Scan `src/styles/tailwind.css` and generated `styles.css`                                        |
+| `review:obsidian:styles`   | Scan all source/gallery CSS and generated `styles.css`                                           |
 | `review:obsidian:audit`    | Report production advisories and block critical ones                                             |
-| `review:obsidian:fixtures` | Prove each blocking review family is rejected                                                    |
+| `review:obsidian:fixtures` | Prove blockers are rejected and no tracked source is ignored                                     |
 
 The same command runs in pull-request CI and in the release workflow before packaging.
 

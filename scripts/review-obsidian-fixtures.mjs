@@ -1,5 +1,5 @@
-import { spawnSync } from "node:child_process";
-import { resolve } from "node:path";
+import { execFileSync, spawnSync } from "node:child_process";
+import { extname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ESLint } from "eslint";
 import {
@@ -9,6 +9,8 @@ import {
 } from "./review-obsidian-package.mjs";
 
 const repositoryRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
+const reviewSourceRoots = ["src", "dev/gallery"];
+const reviewSourceExtensions = new Set([".cjs", ".js", ".jsx", ".mjs", ".ts", ".tsx"]);
 
 // Negative examples must not be real source files because the authenticated
 // community reviewer scans them without the repository's local ignore rules.
@@ -29,6 +31,15 @@ const invalidLicenseFixture = "Copyright (C) 2020-2025 by Dynalist Inc.\n";
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
+}
+
+function listTrackedReviewSources() {
+  return execFileSync("git", ["ls-files", "-z", "--", ...reviewSourceRoots], {
+    cwd: repositoryRoot,
+    encoding: "utf8",
+  })
+    .split("\0")
+    .filter((filePath) => reviewSourceExtensions.has(extname(filePath)));
 }
 
 async function lintSourceFixture(code, filePath) {
@@ -85,6 +96,19 @@ function expectReported(command, args, expectedRules, input) {
 }
 
 async function main() {
+  const baseEslint = new ESLint({
+    cwd: repositoryRoot,
+    overrideConfigFile: resolve(repositoryRoot, "eslint.config.mjs"),
+  });
+  const ignoredSources = [];
+  for (const filePath of listTrackedReviewSources()) {
+    if (await baseEslint.isPathIgnored(filePath)) ignoredSources.push(filePath);
+  }
+  assert(
+    ignoredSources.length === 0,
+    `Tracked files under Obsidian review source roots are hidden by the base ESLint config:\n${ignoredSources.join("\n")}\nMove non-source fixtures outside the review roots instead of ignoring them.`
+  );
+
   const invalidSourceResult = await lintSourceFixture(invalidSourceFixture, "src/utils.ts");
   assert(invalidSourceResult.errorCount > 0, "ESLint accepted its invalid source fixture");
   expectEslintRules(invalidSourceResult, [
