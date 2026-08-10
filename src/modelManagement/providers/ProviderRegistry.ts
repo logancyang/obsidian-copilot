@@ -22,7 +22,7 @@
 import type { App } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
 
-import { logError } from "@/logger";
+import { logError, logWarn } from "@/logger";
 import { KeychainService } from "@/services/keychainService";
 import { getSettings, setSettings } from "@/settings/model";
 import { frozenOr, sliceMemo, sliceMemoByKey } from "@/utils/sliceCache";
@@ -36,14 +36,37 @@ import type { ProviderAdapterRegistry } from "./adapters/ProviderAdapterRegistry
 // stable reference even when two distinct filters both yield zero rows.
 const EMPTY_LIST: readonly Provider[] = Object.freeze([]);
 
-/** Format the keychain id for a given providerId.
+const MAX_SECRET_ID_LENGTH = 64;
+const PROVIDER_INSTANCE_ID_LENGTH = 8;
+
+/** Format the legacy opaque keychain ID for a provider.
  *
- * Reason: vault-namespaced (`copilot-v{vaultId}-...`) so the entry is
- * picked up by `KeychainService.clearAllVaultSecrets()`, which scopes
- * cleanup by that exact prefix. A flat `copilot-provider-{id}` id would
- * silently leak past "Delete All Keys" and vault uninstall. */
-function providerKeychainId(vaultId: string, providerId: string): string {
+ * Kept so existing credentials can be moved to readable IDs without re-entry. */
+function legacyProviderKeychainId(vaultId: string, providerId: string): string {
   return `copilot-v${vaultId}-provider-${providerId}`;
+}
+
+/** Convert a provider label into a SecretStorage-safe readable segment. */
+function providerNameSegment(provider: Provider): string {
+  const normalize = (value: string) =>
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "");
+
+  return normalize(provider.displayName) || normalize(provider.providerType) || "provider";
+}
+
+/** Format a readable, unique, vault-scoped API-key ID for a provider. */
+function providerKeychainId(vaultId: string, provider: Provider): string {
+  const prefix = "copilot-";
+  const instanceId =
+    provider.providerId.replace(/[^a-z0-9]/gi, "").slice(0, PROVIDER_INSTANCE_ID_LENGTH) ||
+    "provider";
+  const suffix = `-api-key-p${instanceId.toLowerCase()}-v${vaultId}`;
+  const nameBudget = MAX_SECRET_ID_LENGTH - prefix.length - suffix.length;
+  const name = providerNameSegment(provider).slice(0, nameBudget).replace(/-$/, "");
+  return `${prefix}${name}${suffix}`;
 }
 
 export class ProviderRegistry {
@@ -215,6 +238,58 @@ export class ProviderRegistry {
     });
   }
 
+  /** Rename every provider API-key entry that still uses the opaque UUID-only format. */
+  migrateLegacyApiKeyIds(): void {
+    for (const provider of Object.values(getSettings().providers)) {
+      try {
+        this.#migrateLegacyApiKeyId(provider);
+      } catch (err) {
+        logWarn(
+          `[modelManagement] ProviderRegistry: failed to rename keychain entry for ${provider.displayName}`,
+          err
+        );
+      }
+    }
+  }
+
+  /**
+   * Copy one legacy provider credential before moving its persisted pointer and
+   * removing the opaque entry. Returns the ID that remains safe to read.
+   */
+  #migrateLegacyApiKeyId(provider: Provider): string | null {
+    const currentId = provider.apiKeyKeychainId ?? null;
+    if (!currentId) return null;
+
+    const keychain = KeychainService.getInstance(this.#app);
+    const legacyId = legacyProviderKeychainId(keychain.getVaultId(), provider.providerId);
+    if (currentId !== legacyId) return currentId;
+
+    const value = keychain.getSecretById(legacyId);
+    if (value === null) return legacyId;
+
+    const readableId = providerKeychainId(keychain.getVaultId(), provider);
+    try {
+      keychain.setSecretById(readableId, value);
+      this.#setApiKeyKeychainId(provider.providerId, readableId);
+    } catch (err) {
+      logWarn(
+        `[modelManagement] ProviderRegistry: failed to copy ${provider.displayName} credential to its readable keychain entry`,
+        err
+      );
+      return legacyId;
+    }
+
+    try {
+      keychain.deleteSecretById(legacyId);
+    } catch (err) {
+      logWarn(
+        `[modelManagement] ProviderRegistry: failed to remove legacy keychain entry for ${provider.displayName}`,
+        err
+      );
+    }
+    return readableId;
+  }
+
   /**
    * Removes the row from `settings.providers` and clears its keychain
    * entry. Cross-slice cascade (ConfiguredModels + BackendConfig refs)
@@ -249,7 +324,8 @@ export class ProviderRegistry {
   async getApiKey(providerId: string): Promise<string | null> {
     const row = getSettings().providers[providerId];
     if (!row || !row.apiKeyKeychainId) return null;
-    return KeychainService.getInstance(this.#app).getSecretById(row.apiKeyKeychainId);
+    const keychainId = this.#migrateLegacyApiKeyId(row);
+    return keychainId ? KeychainService.getInstance(this.#app).getSecretById(keychainId) : null;
   }
 
   /** Generates a fresh `apiKeyKeychainId` if the provider doesn't
@@ -263,17 +339,31 @@ export class ProviderRegistry {
       );
     }
     const keychain = KeychainService.getInstance(this.#app);
+    const legacyId = legacyProviderKeychainId(keychain.getVaultId(), providerId);
+    const isLegacyId = row.apiKeyKeychainId === legacyId;
     const keychainId =
-      row.apiKeyKeychainId ?? providerKeychainId(keychain.getVaultId(), providerId);
-    // Persist the row's pointer BEFORE writing to the keychain so a
-    // crash (or a keychain write that throws) between the two leaves a
-    // recoverable dangling pointer (empty keychain → getApiKey returns
-    // null; clearApiKey / remove still know which id to clean up)
-    // rather than an orphaned keychain entry that no row points at.
-    if (row.apiKeyKeychainId !== keychainId) {
+      row.apiKeyKeychainId && !isLegacyId
+        ? row.apiKeyKeychainId
+        : providerKeychainId(keychain.getVaultId(), row);
+    // New providers persist their pointer before the first write so a failed
+    // write leaves a recoverable dangling pointer. Legacy providers reverse
+    // that order: the readable copy must exist before their working opaque
+    // pointer moves, otherwise a failed rename could lose access to the key.
+    if (!row.apiKeyKeychainId) {
       this.#setApiKeyKeychainId(providerId, keychainId);
     }
     keychain.setSecretById(keychainId, apiKey);
+    if (isLegacyId) {
+      this.#setApiKeyKeychainId(providerId, keychainId);
+      try {
+        keychain.deleteSecretById(legacyId);
+      } catch (err) {
+        logWarn(
+          `[modelManagement] ProviderRegistry.setApiKey: failed to remove legacy keychain entry`,
+          err
+        );
+      }
+    }
     this.#emit();
   }
 

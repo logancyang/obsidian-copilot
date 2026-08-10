@@ -247,6 +247,9 @@ export default class CopilotPlugin extends Plugin {
         }
       })();
     });
+    // Provider rows persist their Keychain pointer in settings. Rename opaque
+    // UUID-only entries only after the subscriber can durably save that pointer.
+    this.modelManagement.providerRegistry.migrateLegacyApiKeyIds();
     // One-time settings migrations. Runs after the persist subscriber is wired
     // (so every mutation is saved) and after createModelManagement, and before
     // agent/model-discovery init below — so migrated BYOK providers are present
