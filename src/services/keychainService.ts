@@ -180,28 +180,28 @@ function toLegacyKeychainId(vaultId: string, settingsKey: string): string {
 
 /**
  * Build a readable, vault-namespaced ID for a top-level credential.
- * Format: `copilot-{credential-name}-v{8hex}`.
+ * Format: `copilot-v{8hex}-{credential-name}`.
  *
- * The vault ID stays at the end so the credential name is the first thing users
- * see while entries remain isolated across vaults.
+ * The established vault prefix lets downgraded Copilot versions include these
+ * entries in Delete All Keys while the credential label remains recognizable.
  */
 function toKeychainId(vaultId: string, settingsKey: string): string {
-  const prefix = "copilot-";
-  const suffix = `-v${vaultId}`;
+  const prefix = `copilot-v${vaultId}-`;
   const readable = toReadableSecretSegment(settingsKey);
-  const id = prefix + readable + suffix;
+  const id = prefix + readable;
   if (id.length <= MAX_SECRET_ID_LENGTH) return id;
 
   const hash = md5(settingsKey).slice(0, 8);
-  const readableBudget = MAX_SECRET_ID_LENGTH - prefix.length - suffix.length - hash.length - 1;
-  return `${prefix}${readable.slice(0, readableBudget)}-${hash}${suffix}`;
+  const readableBudget = MAX_SECRET_ID_LENGTH - prefix.length - hash.length - 1;
+  const truncated = readable.slice(0, readableBudget).replace(/-$/, "");
+  return `${prefix}${truncated}-${hash}`;
 }
 
 /** Build a readable, unique, vault-scoped API-key ID for a named provider. */
 function toProviderKeychainId(vaultId: string, providerName: string, providerId: string): string {
-  const prefix = "copilot-";
+  const prefix = `copilot-v${vaultId}-`;
   const instanceId = providerId.replace(/[^a-z0-9]/gi, "").slice(0, 8) || "provider";
-  const suffix = `-api-key-p${instanceId.toLowerCase()}-v${vaultId}`;
+  const suffix = `-api-key-p${instanceId.toLowerCase()}`;
   const nameBudget = MAX_SECRET_ID_LENGTH - prefix.length - suffix.length;
   const readableName = toReadableSecretSegment(providerName) || "provider";
   const name = readableName.slice(0, nameBudget).replace(/-$/, "");
@@ -227,7 +227,7 @@ function toLegacyModelKeychainId(
 
 /**
  * Build a readable, vault-namespaced ID for a model-level credential.
- * Format: `copilot-{model}-{scope}-{field}-v{8hex}`.
+ * Format: `copilot-v{8hex}-{model}-{scope}-{field}`.
  */
 function toModelKeychainId(
   vaultId: string,
@@ -235,8 +235,8 @@ function toModelKeychainId(
   modelIdentity: string,
   field: ModelSecretField
 ): string {
-  const prefix = "copilot-";
-  const suffix = `-${scope}-${toReadableSecretSegment(field)}-v${vaultId}`;
+  const prefix = `copilot-v${vaultId}-`;
+  const suffix = `-${scope}-${toReadableSecretSegment(field)}`;
   const modelBudget = MAX_SECRET_ID_LENGTH - prefix.length - suffix.length;
   return prefix + normalizeKeychainId(modelIdentity, modelBudget) + suffix;
 }
@@ -384,9 +384,8 @@ export class KeychainService {
   /** Write a value directly to the keychain using a pre-computed ID.
    *
    *  CALLER CONTRACT: `keychainId` must be vault-namespaced — typically
-   *  either legacy `copilot-v{vaultId}-...` or readable `copilot-...-v{vaultId}`
-   *  form — so it is swept by
-   *  `clearAllVaultSecrets()` and isolated from other vaults / plugins.
+   *  `copilot-v{vaultId}-...` — so it is swept by `clearAllVaultSecrets()`
+   *  and isolated from other vaults / plugins.
    *  This method is a low-level bridge; it does not validate the
    *  prefix because some legacy callers compute their own ids. New
    *  code should derive the id via `toKeychainId(getVaultId(), …)` or
@@ -600,8 +599,7 @@ export class KeychainService {
    * cannot be restored from disk on the next load.
    */
   clearAllVaultSecrets(): void {
-    const legacyVaultPrefix = `copilot-v${this.vaultId}-`;
-    const readableVaultSuffix = `-v${this.vaultId}`;
+    const vaultPrefix = `copilot-v${this.vaultId}-`;
     // Reason: defensive feature detection. The destructive flow already
     // stripped data.json by the time it reaches us; if `listSecrets()` is
     // missing on this Obsidian build we cannot enumerate vault entries and
@@ -616,10 +614,7 @@ export class KeychainService {
     const allIds = this.storage.listSecrets();
     const failures: string[] = [];
     for (const id of allIds) {
-      const belongsToVault =
-        id.startsWith(legacyVaultPrefix) ||
-        (id.startsWith("copilot-") && id.endsWith(readableVaultSuffix));
-      if (belongsToVault) {
+      if (id.startsWith(vaultPrefix)) {
         try {
           this.removeSecret(id);
         } catch {
