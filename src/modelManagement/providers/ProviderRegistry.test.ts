@@ -212,7 +212,7 @@ describe("ProviderRegistry", () => {
       expect(await registry.getApiKey(id)).toBe("sk-rotated");
     });
 
-    it("moves a legacy provider pointer when an API key is replaced", async () => {
+    it("moves a legacy pointer while writing only the readable entry", async () => {
       const { id, legacyId } = await seedLegacyProviderCredential(registry, app, secrets);
       secrets.set(legacyId, "sk-old");
 
@@ -221,14 +221,14 @@ describe("ProviderRegistry", () => {
       const readableId = registry.get(id)?.apiKeyKeychainId;
       expect(readableId).toMatch(/^copilot-v[0-9a-f]{8}-anthropic-team-api-key-p[0-9a-f]{8}$/);
       expect(secrets.get(readableId!)).toBe("sk-new");
-      expect(secrets.get(legacyId)).toBe("sk-new");
+      expect(secrets.has(legacyId)).toBe(false);
 
       await registry.setApiKey(id, "sk-rotated-again");
       expect(secrets.get(readableId!)).toBe("sk-rotated-again");
-      expect(secrets.get(legacyId)).toBe("sk-rotated-again");
+      expect(secrets.has(legacyId)).toBe(false);
     });
 
-    it("keeps the latest key at the legacy pointer when creating its readable copy fails", async () => {
+    it("leaves the working legacy key and pointer untouched when the readable write fails", async () => {
       const { id, legacyId } = await seedLegacyProviderCredential(registry, app, secrets);
       (app.secretStorage as unknown as { setSecret(id: string, value: string): void }).setSecret = (
         target,
@@ -241,12 +241,27 @@ describe("ProviderRegistry", () => {
       await expect(registry.setApiKey(id, "sk-new")).rejects.toThrow("keychain locked");
 
       expect(registry.get(id)?.apiKeyKeychainId).toBe(legacyId);
-      expect(secrets.get(legacyId)).toBe("sk-new");
+      expect(secrets.get(legacyId)).toBe("sk-existing");
+    });
+
+    it("leaves the working legacy key and pointer untouched when read-back verification fails", async () => {
+      const { id, legacyId } = await seedLegacyProviderCredential(registry, app, secrets);
+      (app.secretStorage as unknown as { setSecret(id: string, value: string): void }).setSecret = (
+        target
+      ) => {
+        secrets.set(target, "corrupted");
+      };
+
+      await expect(registry.setApiKey(id, "sk-new")).rejects.toThrow(/could not verify/);
+
+      expect(registry.get(id)?.apiKeyKeychainId).toBe(legacyId);
+      expect(secrets.get(legacyId)).toBe("sk-existing");
+      expect([...secrets.keys()]).toEqual([legacyId]);
     });
   });
 
   describe("migrateLegacyApiKeyIds()", () => {
-    it("copies UUID-only provider entries while retaining their compatibility fallback", async () => {
+    it("copies, verifies, and removes UUID-only provider entries", async () => {
       const { id, legacyId, vaultId } = await seedLegacyProviderCredential(registry, app, secrets);
 
       registry.migrateLegacyApiKeyIds();
@@ -255,7 +270,7 @@ describe("ProviderRegistry", () => {
       const readableId = `copilot-v${vaultId}-anthropic-team-api-key-p${instanceId}`;
       expect(registry.get(id)?.apiKeyKeychainId).toBe(readableId);
       expect(secrets.get(readableId)).toBe("sk-existing");
-      expect(secrets.get(legacyId)).toBe("sk-existing");
+      expect(secrets.has(legacyId)).toBe(false);
       expect(await registry.getApiKey(id)).toBe("sk-existing");
     });
 
@@ -274,7 +289,7 @@ describe("ProviderRegistry", () => {
       expect(await registry.getApiKey(id)).toBe("sk-existing");
     });
 
-    it("refreshes a partial readable copy from the still-authoritative legacy pointer", async () => {
+    it("keeps an existing readable value authoritative and removes the stale legacy entry", async () => {
       const { id, legacyId, vaultId } = await seedLegacyProviderCredential(registry, app, secrets);
       const instanceId = id.replace(/-/g, "").slice(0, 8);
       const readableId = `copilot-v${vaultId}-anthropic-team-api-key-p${instanceId}`;
@@ -283,9 +298,9 @@ describe("ProviderRegistry", () => {
       registry.migrateLegacyApiKeyIds();
 
       expect(registry.get(id)?.apiKeyKeychainId).toBe(readableId);
-      expect(secrets.get(readableId)).toBe("sk-existing");
-      expect(secrets.get(legacyId)).toBe("sk-existing");
-      expect(await registry.getApiKey(id)).toBe("sk-existing");
+      expect(secrets.get(readableId)).toBe("stale-partial-copy");
+      expect(secrets.has(legacyId)).toBe(false);
+      expect(await registry.getApiKey(id)).toBe("stale-partial-copy");
     });
 
     it("copies a device-local legacy entry when settings sync a readable pointer", async () => {
@@ -303,8 +318,44 @@ describe("ProviderRegistry", () => {
 
       expect(registry.get(id)?.apiKeyKeychainId).toBe(readableId);
       expect(secrets.get(readableId)).toBe("sk-existing");
+      expect(secrets.has(legacyId)).toBe(false);
+      expect(await registry.getApiKey(id)).toBe("sk-existing");
+    });
+
+    it("keeps the legacy pointer when the readable copy cannot be verified", async () => {
+      const { id, legacyId } = await seedLegacyProviderCredential(registry, app, secrets);
+      (app.secretStorage as unknown as { setSecret(id: string, value: string): void }).setSecret = (
+        target
+      ) => {
+        secrets.set(target, "corrupted");
+      };
+
+      registry.migrateLegacyApiKeyIds();
+
+      expect(registry.get(id)?.apiKeyKeychainId).toBe(legacyId);
       expect(secrets.get(legacyId)).toBe("sk-existing");
       expect(await registry.getApiKey(id)).toBe("sk-existing");
+    });
+
+    it("retries a failed legacy deletion on the next migration", async () => {
+      const { id, legacyId } = await seedLegacyProviderCredential(registry, app, secrets);
+      const secretStorage = app.secretStorage as unknown as { deleteSecret(id: string): void };
+      const deleteSecret = secretStorage.deleteSecret.bind(secretStorage);
+      let deleteAttempts = 0;
+      secretStorage.deleteSecret = (target) => {
+        deleteAttempts += 1;
+        if (deleteAttempts === 1) throw new Error("keychain locked");
+        deleteSecret(target);
+      };
+
+      registry.migrateLegacyApiKeyIds();
+      const readableId = registry.get(id)!.apiKeyKeychainId!;
+      expect(secrets.get(readableId)).toBe("sk-existing");
+      expect(secrets.get(legacyId)).toBe("sk-existing");
+
+      registry.migrateLegacyApiKeyIds();
+      expect(secrets.has(legacyId)).toBe(false);
+      expect(deleteAttempts).toBe(2);
     });
   });
 

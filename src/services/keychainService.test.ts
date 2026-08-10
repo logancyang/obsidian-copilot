@@ -119,6 +119,23 @@ function makeSecretStorage() {
   };
 }
 
+/** Fake SecretStorage backed by a map so migration writes can be read back. */
+function makeStoredSecretStorage(initial: Record<string, string> = {}) {
+  const secrets = new Map(Object.entries(initial));
+  const secretStorage = makeSecretStorage();
+  secretStorage.getSecret.mockImplementation((id: string) =>
+    secrets.has(id) ? secrets.get(id)! : null
+  );
+  secretStorage.setSecret.mockImplementation((id: string, value: string) => {
+    secrets.set(id, value);
+  });
+  secretStorage.deleteSecret.mockImplementation((id: string) => {
+    secrets.delete(id);
+  });
+  secretStorage.listSecrets.mockImplementation(() => [...secrets.keys()]);
+  return { secretStorage, secrets };
+}
+
 /** Create a FileSystemAdapter mock with a given basePath. */
 function makeAdapter(basePath: string) {
   const adapter = new FileSystemAdapter();
@@ -224,7 +241,41 @@ describe("keychainService", () => {
     });
 
     // ---------------------------------------------------------------------------
-    // hydrateFromKeychain — hydration and non-destructive legacy copying
+    describe("setSecret()", () => {
+      it("writes a top-level credential only to its readable ID", () => {
+        const legacyId = "copilot-v1234abcd-open-a-i-api-key";
+        const { secretStorage, secrets } = makeStoredSecretStorage({
+          [legacyId]: "sk-legacy",
+        });
+        const service = KeychainService.getInstance(makeApp({ secretStorage }));
+        service.setVaultId("1234abcd");
+
+        service.setSecret("openAIApiKey", "sk-current");
+
+        expect(secrets.get("copilot-v1234abcd-openai-api-key")).toBe("sk-current");
+        expect(secrets.get(legacyId)).toBe("sk-legacy");
+      });
+    });
+
+    describe("setModelSecret()", () => {
+      it("writes a model credential only to its readable ID", () => {
+        const legacyId = "copilot-v1234abcd-model-api-key-chat-gpt-4-openai-00000000";
+        const { secretStorage, secrets } = makeStoredSecretStorage({
+          [legacyId]: "model-legacy",
+        });
+        const service = KeychainService.getInstance(makeApp({ secretStorage }));
+        service.setVaultId("1234abcd");
+
+        service.setModelSecret("chat", "gpt-4|openai", "apiKey", "model-current");
+
+        expect(secrets.get("copilot-v1234abcd-gpt-4-openai-00000000-chat-api-key")).toBe(
+          "model-current"
+        );
+        expect(secrets.get(legacyId)).toBe("model-legacy");
+      });
+    });
+
+    // hydrateFromKeychain — hydration and one-way legacy migration
     // ---------------------------------------------------------------------------
 
     describe("hydrateFromKeychain()", () => {
@@ -336,15 +387,14 @@ describe("keychainService", () => {
         );
       });
 
-      it("copies a legacy top-level entry without removing its compatibility fallback", async () => {
-        const secretStorage = makeSecretStorage();
-        const service = KeychainService.getInstance(makeApp({ secretStorage }));
-        service.setVaultId("1234abcd");
+      it("copies, verifies, and removes a legacy top-level entry", async () => {
         const readableId = "copilot-v1234abcd-openai-api-key";
         const legacyId = "copilot-v1234abcd-open-a-i-api-key";
-        secretStorage.getSecret.mockImplementation((id: string) =>
-          id === legacyId ? "sk-legacy" : null
-        );
+        const { secretStorage, secrets } = makeStoredSecretStorage({
+          [legacyId]: "sk-legacy",
+        });
+        const service = KeychainService.getInstance(makeApp({ secretStorage }));
+        service.setVaultId("1234abcd");
 
         const result = await service.hydrateFromKeychain(makeSettings({ openAIApiKey: "" }));
 
@@ -353,26 +403,26 @@ describe("keychainService", () => {
         expect(secretStorage.getSecret).toHaveBeenCalledWith(readableId);
         expect(secretStorage.getSecret).toHaveBeenCalledWith(legacyId);
         expect(secretStorage.setSecret).toHaveBeenCalledWith(readableId, "sk-legacy");
-        expect(secretStorage.deleteSecret).not.toHaveBeenCalled();
+        expect(secretStorage.deleteSecret).toHaveBeenCalledWith(legacyId);
+        expect(secrets.get(readableId)).toBe("sk-legacy");
+        expect(secrets.has(legacyId)).toBe(false);
       });
 
-      it("preserves a credential rotated by a downgraded version", async () => {
-        const secretStorage = makeSecretStorage();
-        const service = KeychainService.getInstance(makeApp({ secretStorage }));
-        service.setVaultId("1234abcd");
+      it("keeps the readable value when both IDs exist and removes the stale legacy entry", async () => {
         const readableId = "copilot-v1234abcd-openai-api-key";
         const legacyId = "copilot-v1234abcd-open-a-i-api-key";
-        secretStorage.getSecret.mockImplementation((id: string) => {
-          if (id === readableId) return "sk-stale-readable";
-          if (id === legacyId) return "sk-rotated-on-downgrade";
-          return null;
+        const { secretStorage, secrets } = makeStoredSecretStorage({
+          [readableId]: "sk-readable",
+          [legacyId]: "sk-stale-legacy",
         });
+        const service = KeychainService.getInstance(makeApp({ secretStorage }));
+        service.setVaultId("1234abcd");
 
         const result = await service.hydrateFromKeychain(makeSettings({ openAIApiKey: "" }));
 
-        expect(result.settings.openAIApiKey).toBe("sk-rotated-on-downgrade");
-        expect(secretStorage.setSecret).toHaveBeenCalledWith(readableId, "sk-rotated-on-downgrade");
-        expect(secretStorage.deleteSecret).not.toHaveBeenCalled();
+        expect(result.settings.openAIApiKey).toBe("sk-readable");
+        expect(secretStorage.setSecret).not.toHaveBeenCalled();
+        expect(secrets.has(legacyId)).toBe(false);
       });
 
       it("keeps a legacy credential available when writing its readable entry fails", async () => {
@@ -394,21 +444,73 @@ describe("keychainService", () => {
         expect(result.hadFailures).toBe(false);
         expect(secretStorage.deleteSecret).not.toHaveBeenCalled();
         expect(warn).toHaveBeenCalledWith(
-          `Could not copy legacy Keychain entry "${legacyId}".`,
+          `Could not migrate legacy Keychain entry "${legacyId}".`,
           expect.any(Error)
         );
         warn.mockRestore();
       });
 
-      it("copies a legacy model entry without removing its compatibility fallback", async () => {
-        const secretStorage = makeSecretStorage();
+      it("keeps the legacy credential when the readable copy cannot be verified", async () => {
+        const warn = jest.spyOn(console, "warn").mockImplementation(() => undefined);
+        const readableId = "copilot-v1234abcd-openai-api-key";
+        const legacyId = "copilot-v1234abcd-open-a-i-api-key";
+        const { secretStorage, secrets } = makeStoredSecretStorage({
+          [legacyId]: "sk-legacy",
+        });
+        secretStorage.setSecret.mockImplementation((id: string) => {
+          secrets.set(id, "corrupted");
+        });
         const service = KeychainService.getInstance(makeApp({ secretStorage }));
         service.setVaultId("1234abcd");
+
+        const result = await service.hydrateFromKeychain(makeSettings({ openAIApiKey: "" }));
+
+        expect(result.settings.openAIApiKey).toBe("sk-legacy");
+        expect(secrets.get(legacyId)).toBe("sk-legacy");
+        expect(secrets.has(readableId)).toBe(false);
+        expect(secretStorage.deleteSecret).toHaveBeenCalledWith(readableId);
+        expect(warn).toHaveBeenCalledWith(
+          `Could not verify migrated Keychain entry "${readableId}".`
+        );
+        warn.mockRestore();
+      });
+
+      it("retries a failed legacy deletion on the next read", async () => {
+        const warn = jest.spyOn(console, "warn").mockImplementation(() => undefined);
+        const readableId = "copilot-v1234abcd-openai-api-key";
+        const legacyId = "copilot-v1234abcd-open-a-i-api-key";
+        const { secretStorage, secrets } = makeStoredSecretStorage({
+          [legacyId]: "sk-legacy",
+        });
+        let deleteAttempts = 0;
+        secretStorage.deleteSecret.mockImplementation((id: string) => {
+          deleteAttempts += 1;
+          if (deleteAttempts === 1) throw new Error("locked");
+          secrets.delete(id);
+        });
+        const service = KeychainService.getInstance(makeApp({ secretStorage }));
+        service.setVaultId("1234abcd");
+
+        const first = await service.hydrateFromKeychain(makeSettings({ openAIApiKey: "" }));
+        expect(first.settings.openAIApiKey).toBe("sk-legacy");
+        expect(secrets.get(readableId)).toBe("sk-legacy");
+        expect(secrets.get(legacyId)).toBe("sk-legacy");
+
+        const second = await service.hydrateFromKeychain(makeSettings({ openAIApiKey: "" }));
+        expect(second.settings.openAIApiKey).toBe("sk-legacy");
+        expect(secrets.has(legacyId)).toBe(false);
+        expect(deleteAttempts).toBe(2);
+        warn.mockRestore();
+      });
+
+      it("copies, verifies, and removes a legacy model entry", async () => {
         const readableId = "copilot-v1234abcd-gpt-4-openai-00000000-chat-api-key";
         const legacyId = "copilot-v1234abcd-model-api-key-chat-gpt-4-openai-00000000";
-        secretStorage.getSecret.mockImplementation((id: string) =>
-          id === legacyId ? "model-legacy" : null
-        );
+        const { secretStorage, secrets } = makeStoredSecretStorage({
+          [legacyId]: "model-legacy",
+        });
+        const service = KeychainService.getInstance(makeApp({ secretStorage }));
+        service.setVaultId("1234abcd");
 
         const result = await service.hydrateFromKeychain(
           makeSettings({ activeModels: [makeModel({ apiKey: "" })] })
@@ -416,7 +518,8 @@ describe("keychainService", () => {
 
         expect(result.settings.activeModels[0].apiKey).toBe("model-legacy");
         expect(secretStorage.setSecret).toHaveBeenCalledWith(readableId, "model-legacy");
-        expect(secretStorage.deleteSecret).not.toHaveBeenCalled();
+        expect(secrets.get(readableId)).toBe("model-legacy");
+        expect(secrets.has(legacyId)).toBe(false);
       });
     });
 
@@ -493,12 +596,8 @@ describe("keychainService", () => {
         expect(result.secretEntries.every(([id]) => id.length <= 64)).toBe(true);
       });
 
-      it("keeps existing legacy copies synchronized for rollback compatibility", () => {
-        const secretStorage = makeSecretStorage();
-        secretStorage.getSecret.mockImplementation((id: string) =>
-          id.startsWith("copilot-v1234abcd-") ? "legacy-value" : null
-        );
-        const service = KeychainService.getInstance(makeApp({ secretStorage }));
+      it("writes only readable IDs and schedules both forms for explicit cleanup", () => {
+        const service = KeychainService.getInstance(makeApp());
         service.setVaultId("1234abcd");
 
         const current = makeSettings({
@@ -507,14 +606,10 @@ describe("keychainService", () => {
         });
         const result = service.persistSecrets(current);
 
-        expect(result.secretEntries).toEqual(
-          expect.arrayContaining([
-            ["copilot-v1234abcd-openai-api-key", "sk-current"],
-            ["copilot-v1234abcd-open-a-i-api-key", "sk-current"],
-            ["copilot-v1234abcd-gpt-4-openai-00000000-chat-api-key", "model-current"],
-            ["copilot-v1234abcd-model-api-key-chat-gpt-4-openai-00000000", "model-current"],
-          ])
-        );
+        expect(result.secretEntries).toEqual([
+          ["copilot-v1234abcd-openai-api-key", "sk-current"],
+          ["copilot-v1234abcd-gpt-4-openai-00000000-chat-api-key", "model-current"],
+        ]);
 
         const cleared = service.persistSecrets(
           makeSettings({ openAIApiKey: "", activeModels: [] }),
