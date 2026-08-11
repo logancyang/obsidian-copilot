@@ -726,6 +726,50 @@ describe("issueReport", () => {
       expect(shot?.reason).toContain("EACCES");
     });
 
+    it("packs an attachment again once the user restores it after a rebuild dropped it", async () => {
+      const { runtime, writes, files } = makeRuntime();
+      const assembled = await assembleReportBundle(baseInput, runtime);
+      const staged = files.get(`${BUNDLE_DIR}/screenshot.png`);
+      files.delete(`${BUNDLE_DIR}/screenshot.png`);
+
+      // First rebuild demotes it, which is the whole point of the removal path.
+      const dropped = await zipReportBundle(assembled, runtime);
+      expect(dropped.attachments.find((a) => a.name === "screenshot.png")?.status).toBe("skipped");
+
+      // The user puts the file back and rebuilds again. The demoted outcome is
+      // what the review step feeds back in, so a rebuild that reads its
+      // candidates off the previous result can never see the restored file.
+      files.set(`${BUNDLE_DIR}/screenshot.png`, staged ?? "");
+      const { zipPath, attachments } = await zipReportBundle(
+        { ...assembled, attachments: dropped.attachments },
+        runtime
+      );
+
+      const shot = attachments.find((a) => a.name === "screenshot.png");
+      expect(shot?.status).toBe("included");
+      expect(shot?.bytes).toBeGreaterThan(0);
+      const raw = new TextDecoder().decode(
+        writes.filter((w) => w.path === zipPath).at(-1)?.data ?? new Uint8Array()
+      );
+      expect(raw).toContain("screenshot.png");
+    });
+
+    it("leaves an attachment skipped when a rebuild finds it still absent", async () => {
+      const { runtime, files } = makeRuntime();
+      const assembled = await assembleReportBundle(baseInput, runtime);
+      files.delete(`${BUNDLE_DIR}/screenshot.png`);
+
+      const dropped = await zipReportBundle(assembled, runtime);
+      const { attachments } = await zipReportBundle(
+        { ...assembled, attachments: dropped.attachments },
+        runtime
+      );
+
+      const shot = attachments.find((a) => a.name === "screenshot.png");
+      expect(shot?.status).toBe("skipped");
+      expect(shot?.reason).toBe("Removed from the report folder before the rebuild.");
+    });
+
     it("still refuses to pack once report.md itself is gone", async () => {
       const { runtime, files } = makeRuntime();
       const report = await assembleReportBundle(baseInput, runtime);

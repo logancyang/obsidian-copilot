@@ -147,7 +147,13 @@ export interface AttachmentOutcome {
   id: string;
   /** Basename inside the bundle folder. */
   name: string;
-  /** Absolute path of the written file; null unless `status` is `included`. */
+  /**
+   * Where the file was staged, or null when the source was never written at
+   * all. Survives a demotion to `skipped`/`failed` on purpose — it is the
+   * location a later rebuild looks at again, not a claim that the file is
+   * there right now. Clearing it on demotion makes that first failure
+   * permanent.
+   */
   absPath: string | null;
   /** Bytes actually written; 0 unless `status` is `included`. */
   bytes: number;
@@ -304,9 +310,13 @@ export async function zipReportBundle(
   issueDraft: ReportIssueDraft;
   manualIssueUrl: string;
 }> {
+  // Candidacy is `absPath`, not `status`: anything the assembler staged gets
+  // looked at again, however the last rebuild judged it. A source that was
+  // never staged (a log turned off, a capture that produced nothing) has no
+  // path and so keeps its own reason rather than being retried and relabelled
+  // as a removal.
   const packable = report.attachments.filter(
-    (a): a is AttachmentOutcome & { absPath: string } =>
-      a.status === "included" && a.absPath !== null
+    (a): a is AttachmentOutcome & { absPath: string } => a.absPath !== null
   );
 
   // Weigh the staging folder before reading any of it. Not the report budget —
@@ -326,7 +336,6 @@ export async function zipReportBundle(
   // issue to file, and `draftFromPackedNote` says so in as many words.
   const asRemoved = (a: AttachmentOutcome): AttachmentOutcome => ({
     ...a,
-    absPath: null,
     bytes: 0,
     status: "skipped",
     reason: "Removed from the report folder before the rebuild.",
@@ -340,7 +349,7 @@ export async function zipReportBundle(
   const afterReadError = (a: AttachmentOutcome, err: unknown): AttachmentOutcome =>
     isMissingFileError(err)
       ? asRemoved(a)
-      : { ...a, absPath: null, bytes: 0, status: "failed", reason: describeFailure(err) };
+      : { ...a, bytes: 0, status: "failed", reason: describeFailure(err) };
 
   const unreadable = new Map<string, unknown>();
 
@@ -363,7 +372,9 @@ export async function zipReportBundle(
   const attachments: AttachmentOutcome[] = [];
   let readBytes = 0;
   for (const attachment of report.attachments) {
-    if (attachment.status !== "included" || !attachment.absPath) {
+    // Same candidate test as the weigh pass above, so the two halves of the
+    // packer never disagree about what is worth trying.
+    if (!attachment.absPath) {
       attachments.push(attachment);
       continue;
     }
@@ -391,7 +402,16 @@ export async function zipReportBundle(
       );
     }
     entries[attachment.name] = data;
-    attachments.push({ ...attachment, bytes: data.length });
+    // A successful read restates the whole outcome rather than patching `bytes`
+    // onto it: this attachment may be arriving from a previous rebuild's
+    // demotion, and leaving that `status`/`reason` in place would pack the file
+    // while still telling the user it was removed.
+    attachments.push({
+      ...attachment,
+      bytes: data.length,
+      status: "included",
+      reason: undefined,
+    });
   }
 
   // Everything the issue is built from, settled before a byte is compressed:
