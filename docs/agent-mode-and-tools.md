@@ -2,7 +2,7 @@
 
 Agent Mode is Copilot's dedicated desktop workspace for tasks that need more than a single chat response. It connects Obsidian to a supported coding agent, which can inspect your vault, use its own tools and skills, and make changes with the permissions you choose.
 
-A single-agent chat does **not** require Copilot Plus. You need one supported agent and whatever account or model access that agent requires. Copilot Plus adds [multi-agent work and relay-backed skills](copilot-plus-and-self-host.md#agent-mode-and-copilot-plus).
+A single-agent chat does **not** require a Copilot license. You need one supported agent and whatever account or model access that agent requires. A [paid Copilot plan](copilot-plus-and-self-host.md#agent-mode-with-a-copilot-license) can add multi-agent work and relay-backed skills.
 
 Agent Mode is available in the desktop app, not on mobile.
 
@@ -13,7 +13,7 @@ Agent Mode is available in the desktop app, not on mobile.
 - Click the **Agent** icon in the left ribbon.
 - Or run **Open Copilot Agent Chat Window** from the command palette.
 
-Agent Mode is a separate view from [Quick Chat](chat-interface.md). The Chat, Vault QA, Copilot Plus, and Projects modes in Quick Chat continue to work independently.
+Agent Mode is a separate view from [Quick Chat](chat-interface.md). The Chat, Vault QA, paid Quick Chat, and Projects workflows continue to work independently.
 
 On first use, Agent Mode asks you to select and configure an agent:
 
@@ -86,7 +86,7 @@ While a reasoning step is active, its brain row shows an animated ellipsis rathe
 
 When the turn finishes, the time freezes and the Copilot icon becomes static. The completed duration moves to the leading edge of the same footer row as the response controls. When a duration is unavailable, the message timestamp appears in that position instead; only one of the two is shown. The duration remains visible until you send the next prompt, when that completed response falls back to its timestamp and the new turn owns the live counter. Leading zero units are omitted, so durations appear as `18s`, `2m 18s`, or `1h 2m 18s`.
 
-> The **Autonomous Agent Max Iterations**, **Tool Settings**, diff preview, and auto-accept controls under the Plus settings belong to the legacy Copilot Plus mode in Quick Chat. They do not limit or configure a dedicated Agent Mode session.
+> The **Autonomous Agent Max Iterations**, **Tool Settings**, diff preview, and auto-accept controls under **Settings → Copilot → Plus** belong to the legacy paid Quick Chat tool loop. They do not limit or configure a dedicated Agent Mode session.
 
 ---
 
@@ -103,7 +103,7 @@ Agent Mode can receive:
 
 Use the context controls above the message box, drag in an image, or mention a note with `[[Note Title]]`. Type `/` to use custom commands and available skills.
 
-The `@vault`, `@websearch`, `@composer`, and `@memory` tool mentions are controls for Copilot Plus mode in Quick Chat. In Agent Mode, the selected agent decides when to use its native tools and installed skills.
+The `@vault`, `@websearch`, `@composer`, and `@memory` tool mentions are controls for paid Quick Chat. In Agent Mode, the selected agent decides when to use its native tools and installed skills.
 
 ---
 
@@ -126,11 +126,11 @@ The Obsidian CLI skill requires a compatible Obsidian installation and a running
 
 Agents choose between vault and web evidence based on your request. They normally search your vault for questions about your notes and the web for current or external information. Copilot never intentionally adds text from your vault to a web query unless your request requires researching that text.
 
-Copilot Plus can provide relay-backed skills for web search and fetch, PDF reading, YouTube transcripts, and X posts. Without a license, the agent can use its native alternatives when available.
+A Copilot license can unlock relay-backed skills for web search and fetch, PDF reading, YouTube transcripts, and X posts. Without a license, the agent can use its native alternatives when available.
 
 For PDF and EPUB files, **Settings → Copilot → Miyo → Document Processor** also applies to Agent Mode:
 
-- **Plus** uses the Copilot Plus document reader, with another available reader as a fallback.
+- **Plus** (the plan-tier option shown in settings) uses the hosted document reader, with another available reader as a fallback.
 - **Miyo** parses documents locally. It requires the Miyo app on the same computer as Obsidian; a remote Miyo server is not enough for Agent Mode document parsing.
 
 When Miyo is selected, Copilot removes the cloud PDF skill so the document is not sent to that parser accidentally. Changing the processor restarts running agents so the new choice takes effect.
@@ -166,4 +166,4 @@ Review the files before attaching them: the activity log can contain prompts, no
 - [Getting Started](getting-started.md) — Install Copilot and start your first chat
 - [Context and Mentions](context-and-mentions.md) — Control what information Copilot receives
 - [Projects](projects.md) — Give Agent Mode reusable project context and instructions
-- [Copilot Plus and Self-Host](copilot-plus-and-self-host.md) — Licensing, models, and relay-backed features
+- [Paid Plans and Self-Host](copilot-plus-and-self-host.md) — Licensing, models, and relay-backed features

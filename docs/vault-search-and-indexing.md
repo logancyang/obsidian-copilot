@@ -23,7 +23,7 @@ Lexical search finds notes that contain the exact words you used. It's fast, req
 
 Semantic search finds notes that are conceptually related, even if they don't share exact words.
 
-- **Used in**: Vault QA and Copilot Plus modes — but **disabled by default**. You must explicitly enable it.
+- **Used in**: Vault QA and paid Quick Chat — but **disabled by default**. You must explicitly enable it.
 - **How it works**: Converts your notes into numerical vectors (using an embedding model), then finds notes whose vectors are closest to your query
 - **Strengths**: Finds notes by concept and meaning, great for "fuzzy" recall
 - **Cost**: Requires embedding API calls (costs money for paid embedding models)
@@ -39,11 +39,11 @@ The semantic search index stores the vector embeddings of your notes. Manage it 
 
 Controls when Copilot automatically updates the index:
 
-| Strategy           | When the index updates                                                 |
-| ------------------ | ---------------------------------------------------------------------- |
-| **NEVER**          | Manual only — you must trigger indexing yourself                       |
-| **ON STARTUP**     | Updates when Obsidian starts or the plugin reloads                     |
-| **ON MODE SWITCH** | Updates when you switch to Vault QA or Copilot Plus mode (Recommended) |
+| Strategy           | When the index updates                                               |
+| ------------------ | -------------------------------------------------------------------- |
+| **NEVER**          | Manual only — you must trigger indexing yourself                     |
+| **ON STARTUP**     | Updates when Obsidian starts or the plugin reloads                   |
+| **ON MODE SWITCH** | Updates when you switch to Vault QA or paid Quick Chat (Recommended) |
 
 The default is **ON MODE SWITCH**.
 
@@ -179,4 +179,4 @@ On mobile, you can still use Vault QA with lexical search, but semantic search w
 ## Related
 
 - [Agent Mode and Tools](agent-mode-and-tools.md) — How coding agents work with vault and web evidence
-- [Copilot Plus and Self-Host](copilot-plus-and-self-host.md) — Miyo-powered local semantic search
+- [Paid Plans and Self-Host](copilot-plus-and-self-host.md) — Miyo-powered local semantic search

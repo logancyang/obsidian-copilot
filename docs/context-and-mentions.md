@@ -72,11 +72,11 @@ Paste a URL or type `@https://...` to fetch and include a web page's content:
 @https://example.com/article summarize this article
 ```
 
-URL processing requires Copilot Plus. YouTube URLs are handled specially — Copilot will fetch the video transcript automatically.
+URL processing requires an active Copilot license. YouTube URLs are handled specially — Copilot will fetch the video transcript automatically.
 
 ### Tool Mentions
 
-These special @-mentions explicitly trigger tools in Copilot Plus mode:
+These special @-mentions explicitly trigger paid Quick Chat tools:
 
 | Mention                | What it does                                     |
 | ---------------------- | ------------------------------------------------ |
@@ -106,7 +106,7 @@ In the dedicated desktop Agent Mode view, use the controls above the message box
 - the active Copilot web tab; and
 - images when the selected model supports vision.
 
-You can also mention a note with `[[Note Title]]`, use `/` to expand a custom command or skill, and open an [Agent Mode project](projects.md) to load reusable project context. Mentioning multiple agents with `@` starts multi-agent work and requires Copilot Plus.
+You can also mention a note with `[[Note Title]]`, use `/` to expand a custom command or skill, and open an [Agent Mode project](projects.md) to load reusable project context. Mentioning multiple agents with `@` starts multi-agent work and requires a paid plan with multi-agent access.
 
 ---
 
@@ -124,7 +124,7 @@ Use the command palette: **Add web selection to chat context**
 
 Works similarly but captures selected text from the Web Viewer. Available on desktop only.
 
-### Adding a PDF as Context (Copilot Plus)
+### Adding a PDF as Context (Copilot License)
 
 Click the **+ Add context** button above the chat input to attach a PDF file. The PDF is converted to text and included as context for your message.
 
@@ -142,16 +142,16 @@ When context items are added to your message, Copilot shows small pills or badge
 
 ## Context Behavior by Mode
 
-| Context Type           | Chat              | Vault QA          | Copilot Plus | Agent Mode            |
-| ---------------------- | ----------------- | ----------------- | ------------ | --------------------- |
-| Active note            | Yes (auto)        | Yes (auto)        | Yes (auto)   | Yes (toggle)          |
-| Selected text          | Yes (auto)        | Yes (auto)        | Yes (auto)   | Yes                   |
-| Note / folder mentions | Yes               | Yes               | Yes          | Notes                 |
-| URL processing         | Copilot Plus only | Copilot Plus only | Yes          | Native agent or skill |
-| `@vault` search        | Yes (explicit)    | Auto              | Auto         | Not shown             |
-| `@websearch`           | No                | No                | Yes          | Not shown             |
-| Images (vision)        | Yes               | Yes               | Yes          | Yes                   |
-| Active web tab         | Desktop only      | Desktop only      | Desktop only | Desktop only          |
+| Context Type           | Chat             | Vault QA         | Paid Quick Chat | Agent Mode            |
+| ---------------------- | ---------------- | ---------------- | --------------- | --------------------- |
+| Active note            | Yes (auto)       | Yes (auto)       | Yes (auto)      | Yes (toggle)          |
+| Selected text          | Yes (auto)       | Yes (auto)       | Yes (auto)      | Yes                   |
+| Note / folder mentions | Yes              | Yes              | Yes             | Notes                 |
+| URL processing         | License required | License required | Yes             | Native agent or skill |
+| `@vault` search        | Yes (explicit)   | Auto             | Auto            | Not shown             |
+| `@websearch`           | No               | No               | Yes             | Not shown             |
+| Images (vision)        | Yes              | Yes              | Yes             | Yes                   |
+| Active web tab         | Desktop only     | Desktop only     | Desktop only    | Desktop only          |
 
 ---
 

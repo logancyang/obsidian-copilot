@@ -1,16 +1,16 @@
-# Copilot Plus and Self-Host
+# Paid Plans and Self-Host
 
-**Copilot Plus** is a premium tier that unlocks advanced features beyond the free, API-key-based experience. **Self-Host Mode** is an additional option for Copilot Plus Lifetime/Believer subscribers who want to run their own infrastructure.
+Copilot's paid plans unlock features beyond the free, API-key-based experience. **Plus** is one paid plan tier; it is not a separate Copilot product. **Self-Host Mode** is an additional option for eligible Lifetime and legacy Believer or Supporter license holders who want to run their own infrastructure.
 
 ---
 
-## Copilot Plus
+## Paid Copilot Plans
 
-### What Is Copilot Plus?
+### What Does a Paid Plan Include?
 
-Copilot Plus is a subscription that enables:
+A paid Copilot plan can enable:
 
-- **Copilot Plus mode in Quick Chat** — An autonomous tool loop for search, memory, and file work
+- **Paid Quick Chat tools** — An autonomous tool loop for search, memory, and file work
 - **Multi-agent work in Agent Mode** — Mention several agents with `@` to delegate parts of a task
 - **Relay-backed Agent Mode skills** — Web search and fetch, PDF reading, YouTube transcripts, and X posts
 - **File editing tools** — Write to File and Replace in File for AI-driven note editing
@@ -19,13 +19,13 @@ Copilot Plus is a subscription that enables:
 - **Memory system** — Persistent memory across conversations
 - **Included models** — A set of chat models that need no API key of your own, from fast everyday ones to top-tier reasoners ([the full list](#models-included-with-your-license))
 - **URL processing** — Fetch and summarize web pages as context
-- **Copilot Plus embedding models** — High-quality embeddings, selected under semantic search rather than by activating a license
+- **Licensed embedding models** — High-quality embeddings selected under semantic search
 
-### Setting Up Copilot Plus
+### Activate a Copilot License
 
 1. Get a license key from your dashboard at **https://www.obsidiancopilot.com/en/dashboard**
-2. Go to **Settings → Copilot → Basic** (or the Plus banner in the settings)
-3. Enter your license key in the **Copilot Plus License Key** field
+2. Go to **Settings → Copilot → Basic → Copilot License**
+3. Enter your license key
 4. Features unlock automatically
 
 A welcome dialog then offers to make **copilot-plus-flash** your default model.
@@ -39,11 +39,11 @@ Applying it never changes your embedding model or rebuilds your vault index.
 Semantic search is configured separately — see
 [Vault search and indexing](vault-search-and-indexing.md).
 
-### Agent Mode and Copilot Plus
+### Agent Mode with a Copilot License
 
-You do not need a Copilot Plus license to run one OpenCode, Claude, or Codex session in Agent Mode. The selected agent still needs its own account or model access.
+You do not need a Copilot license to run one OpenCode, Claude, or Codex session in Agent Mode. The selected agent still needs its own account or model access.
 
-Copilot Plus adds multi-agent mentions and relay-backed skills for web research, documents, YouTube, and X. When a relay skill is unavailable, the agent can fall back to a native tool when it has one. Copilot-hosted models currently appear under OpenCode; Claude and Codex continue to use models from their own subscriptions.
+A paid plan can add multi-agent mentions and relay-backed skills for web research, documents, YouTube, and X. When a relay skill is unavailable, the agent can fall back to a native tool when it has one. Copilot-hosted models currently appear under OpenCode; Claude and Codex continue to use models from their own subscriptions.
 
 The badge at the top of the license section names your plan once the key is
 working — **Plus**, **Lite**, or **Lifetime** for a Believer or Supporter
@@ -94,7 +94,7 @@ not appear under those two.
 
 **Copilot Plus Flash** becomes the default for chat and for every agent that can
 run it if you accept the offer in the welcome dialog when your license
-activates — see [Setting Up Copilot Plus](#setting-up-copilot-plus) above.
+activates — see [Activate a Copilot License](#activate-a-copilot-license) above.
 
 ### Before you have a license
 
@@ -136,7 +136,7 @@ Copilot saves this to a memory file in your vault and references it in future co
 
 ## Document Processor
 
-When Copilot processes PDFs and other non-markdown files (in Plus mode), it converts them to markdown for the AI to read.
+When Copilot processes PDFs and other non-markdown files through paid Quick Chat, it converts them to markdown for the AI to read.
 
 You can optionally save the converted markdown to a folder in your vault:
 
@@ -149,9 +149,9 @@ You can optionally save the converted markdown to a folder in your vault:
 
 ### What Is Self-Host Mode?
 
-Self-Host Mode lets you replace Copilot's cloud services with your own infrastructure. Instead of relying on Copilot's Plus backend, you run everything locally or on your own server.
+Self-Host Mode lets you replace Copilot's hosted backend services with your own infrastructure, running them locally or on your own server.
 
-**Requires**: A Copilot Plus Lifetime or Believer license (not available on monthly subscriptions).
+**Requires**: An eligible Lifetime, legacy Believer, or Supporter license (not available on monthly subscriptions).
 
 ### What Self-Host Mode Enables
 

@@ -110,7 +110,7 @@ Inside the chat input, type `/` followed by the command name to run it:
 
 The command runs in the context of your current chat session and active note.
 
-> **Note**: The `@composer` mention (for AI note editing) requires Copilot Plus. In free modes, `@composer` will not be available.
+> **Note**: The `@composer` mention (for AI note editing) requires an active Copilot license. In free modes, `@composer` will not be available.
 
 ---
 

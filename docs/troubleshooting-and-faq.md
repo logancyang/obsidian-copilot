@@ -74,17 +74,17 @@ Before diving into specific fixes, try these steps first:
 
 Even after indexing, relevant notes aren't being returned? Try:
 
-1. Switch to **Copilot Plus** mode and use `@vault` for more powerful search
+1. Switch to **paid Quick Chat** and use `@vault` for more powerful search
 2. Try the **multilingual embedding model** for non-English notes
 3. Review your QA inclusions/exclusions to confirm the notes aren't filtered out
 4. Run **List all indexed files** (debug command) to verify the notes are indexed
 5. Run **Force reindex vault** for a clean rebuild
 
-### "Non-markdown files are only available in Copilot Plus"
+### "Non-markdown files require a Copilot license"
 
 **Cause**: You tried to use a PDF, image, or other non-markdown file as context in a free mode.
 
-**Fix**: In Quick Chat, switch to Copilot Plus mode or convert the file to markdown manually. In Agent Mode, document support depends on the active agent, its skills, and the selected document processor.
+**Fix**: In Quick Chat, switch to paid Quick Chat or convert the file to markdown manually. In Agent Mode, document support depends on the active agent, its skills, and the selected document processor.
 
 ---
 
@@ -234,9 +234,9 @@ For reporting bugs:
 
 Copilot itself doesn't store your notes on any server. However, when you send a message, the content (including any context from your notes) is sent to the AI provider you've configured (OpenAI, Anthropic, etc.) via their API. Each provider has its own privacy policy. Your notes are not sent anywhere until you actively use the chat.
 
-The memory system stores data in your vault locally. Chat history is saved as markdown files in your vault. Nothing is stored on Copilot's servers unless you use Copilot Plus cloud features.
+The memory system stores data in your vault locally. Chat history is saved as markdown files in your vault. Nothing is stored on Copilot's servers unless you use licensed cloud features.
 
-**For maximum privacy**: Google Gemini's paid API (the basis for copilot-plus-flash) does not use API request data to train its models. For complete local privacy, consider using Ollama or LM Studio with a local model — nothing leaves your machine. Self-host mode is available now for lifetime license holders — see [Copilot Plus and Self-Host](copilot-plus-and-self-host.md) for details.
+**For maximum privacy**: Google Gemini's paid API (the basis for copilot-plus-flash) does not use API request data to train its models. For complete local privacy, consider using Ollama or LM Studio with a local model — nothing leaves your machine. Self-host mode is available now for eligible lifetime license holders — see [Paid Plans and Self-Host](copilot-plus-and-self-host.md) for details.
 
 ### Can I reference a specific note in chat?
 
@@ -259,7 +259,7 @@ Yes, but only with models that have **Vision** capability (shown by a vision ico
 ### Why can't Copilot read my PDF?
 
 - Large PDFs (over 10 MB) should be converted to markdown first
-- In Copilot Plus mode, use **+ Add context** to attach a PDF — it will be converted automatically
+- In paid Quick Chat, use **+ Add context** to attach a PDF — it will be converted automatically
 - In Agent Mode, use an agent or document skill that supports PDF, or choose Miyo as the local document processor
 - For reusable document collections, add the sources to a project
 
@@ -274,7 +274,7 @@ Lexical vault search works offline. Semantic search requires an embedding model,
 - **Chat** — General conversation. The AI only has access to your current note and anything you explicitly mention.
 - **Vault QA** — Specifically designed for asking questions about your vault. Copilot automatically searches your notes for relevant content and includes it as context.
 
-For most question-and-answer tasks over your vault, use **Vault QA** or **Copilot Plus** mode.
+For most question-and-answer tasks over your vault, use **Vault QA** or paid Quick Chat.
 
 ### Can I use multiple providers at the same time?
 
@@ -307,7 +307,7 @@ Click the mode selector at the top of Quick Chat. Available modes:
 
 - Chat
 - Vault QA (Basic)
-- Copilot Plus (requires license)
+- Paid Quick Chat (requires a license)
 - Projects
 
 Agent Mode is a separate desktop view, not an item in this selector. Click the **Agent** ribbon icon or run **Open Copilot Agent Chat Window**, then choose OpenCode, Claude, or Codex.

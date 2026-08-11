@@ -58,7 +58,7 @@ Use the **Default Mode** dropdown to set which mode opens by default:
 
 - **Chat** — General conversation, good for most tasks
 - **Vault QA** — Ask questions answered from your notes
-- **Copilot Plus** — Licensed Quick Chat mode with web, memory, and autonomous tools
+- **Paid Quick Chat** — Licensed mode with web, memory, and autonomous tools
 - **Projects** — Focused workspaces (alpha feature)
 
 Most users should start with **Chat** mode.
@@ -71,7 +71,7 @@ Agent Mode is a separate desktop view for longer tasks. Click the **Agent** ribb
 - **Claude** — uses Claude Code and your Anthropic sign-in.
 - **Codex** — uses Codex and your OpenAI sign-in.
 
-A single-agent session does not require Copilot Plus. The selected agent still needs its own account or model access. See [Agent Mode and Tools](agent-mode-and-tools.md) for setup and permissions.
+A single-agent session does not require a Copilot license. The selected agent still needs its own account or model access. See [Agent Mode and Tools](agent-mode-and-tools.md) for setup and permissions.
 
 ---
 
