@@ -210,7 +210,7 @@ Do not delete `.obsidian/plugins/copilot/data.json` as a substitute for the in-a
 
 Copilot v4 stores API keys, license keys, and authentication tokens only in the **Obsidian Keychain**. These credentials are not stored in `data.json`.
 
-If your vault still had credentials in `data.json` when you upgraded, Copilot copied that file to `data-v3-credentials-backup-<id>.json` in the same plugin folder before clearing it, and showed you the exact path once on startup. Copilot never reads, decrypts, or imports that backup; it exists purely so your keys are not lost.
+If your vault still had credentials in `data.json` when you upgraded, Copilot copied that file to `data-v3-credentials-backup-<id>.json` in the same plugin folder before clearing it. The single startup upgrade summary shows the exact path alongside any other migration results. Copilot never reads, decrypts, or imports that backup; it exists purely so your keys are not lost.
 
 Open it, paste each key into the matching field in Settings, and delete the file once they all work.
 

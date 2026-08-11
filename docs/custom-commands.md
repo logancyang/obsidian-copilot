@@ -117,6 +117,7 @@ Go to **Settings → Copilot → Command** to manage all your custom commands:
 - **Reorder** — Drag commands to change their order (affects the context menu and command list)
 - **Duplicate** — Copy an existing command as a starting point
 - **Delete** — Remove a command permanently
+- **Generate Default** — Add Copilot's recommended starter commands when you want them
 - **Sort strategy** — Choose how commands are sorted: manually, by recent use, or alphabetically
 
 ### Custom Prompts Folder

@@ -50,6 +50,7 @@ import {
 } from "@/utils/vaultAdapterUtils";
 import { App, normalizePath, stringifyYaml, TFile, TFolder, Vault } from "obsidian";
 import { ensureProjectsMigratedIfNeeded } from "@/projects/projectMigration";
+import type { StartupMigrationItem } from "@/services/startupMigration";
 
 /**
  * Project file manager (aligned with system-prompts Manager pattern).
@@ -88,10 +89,11 @@ export class ProjectFileManager {
    * projects from vault files. Migration unconditionally clears settings.projectList
    * after backing up failures to unsupported/ (no retry/merge — single source of truth).
    */
-  public async initialize(): Promise<void> {
+  public async initialize(): Promise<StartupMigrationItem | null> {
     logInfo("[Projects] Initializing ProjectFileManager");
-    await ensureProjectsMigratedIfNeeded(this.app);
+    const migrationResult = await ensureProjectsMigratedIfNeeded(this.app);
     await loadAllProjects(this.app);
+    return migrationResult;
   }
 
   /**
