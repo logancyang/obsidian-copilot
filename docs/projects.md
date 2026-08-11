@@ -43,7 +43,9 @@ Projects can prepare these sources for each conversation:
 - **Web URL** — page content fetched through Copilot's hosted service; requires a Copilot license.
 - **YouTube URL** — the transcript fetched through Copilot's hosted service; requires a Copilot license.
 
-You can also exclude notes and folders. Large source sets take longer to prepare. If you send a message while context is still loading, Agent Mode queues it and runs it when the context is ready.
+You can also exclude notes and folders from prepared context. Exclusions are not access controls: an agent's native tools can still read an excluded file inside an included folder. Do not include a folder that contains confidential files the agent must not access.
+
+Large source sets take longer to prepare. If you send a message while context is still loading, Agent Mode queues it and runs it when the context is ready.
 
 PDFs, EPUBs, and other supported binary files included through a project source are converted by Copilot's hosted document service before the agent runs. This project-context path requires a Copilot license and does not use the **Document Processor** setting, so choosing Miyo does not keep those project files local. For local-only handling, do not include those files in project context; ask the active agent to read them with its own local tools or skills instead.
 

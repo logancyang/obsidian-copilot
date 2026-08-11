@@ -31,11 +31,15 @@ Copilot is now installed. An Agent icon appears in the left sidebar ribbon on de
 
 ## First-Time Setup
 
-### Step 1: Open Plugin Settings
+Quick Chat and Agent Mode have separate setup requirements. Choose either path below; you can set up the other later.
+
+### Quick Chat Setup
+
+#### 1. Open Plugin Settings
 
 Go to **Settings** → **Copilot** (scroll down to the Community Plugins section).
 
-### Step 2: Add an API Key
+#### 2. Add an API Key
 
 On the **Basic** tab, click **Set Keys** to open the API key dialog. Enter the key for your chosen provider:
 
@@ -48,11 +52,11 @@ On the **Basic** tab, click **Set Keys** to open the API key dialog. Enter the k
 
 The default model is **OpenRouter Gemini 2.5 Flash**, which requires an OpenRouter API key. If you'd prefer a different provider, set up that key first, then change the default model.
 
-### Step 3: Choose a Default Model
+#### 3. Choose a Default Model
 
 Add a provider and its models on the **Models (BYOK)** tab, then open **Basic → Agents → Quick Chat**: enable the ones you want to see in chat under **Quick Chat models**, and pick the one new chats start with under **Default model**.
 
-### Step 4: Choose a Quick Chat Mode
+#### 4. Choose a Quick Chat Mode
 
 Use the **Default Mode** dropdown to set which mode opens by default:
 
@@ -63,9 +67,9 @@ Use the **Default Mode** dropdown to set which mode opens by default:
 
 Most users should start with **Chat** mode.
 
-### Step 5: Set Up Agent Mode (Optional, Desktop)
+### Agent Mode Setup (Desktop)
 
-Agent Mode is a separate desktop view for longer tasks. Click the **Agent** ribbon icon or run **Open Copilot Agent Chat Window**, then choose:
+You do not need to complete the Quick Chat setup above. Click the **Agent** ribbon icon or run **Open Copilot Agent Chat Window**, then choose:
 
 - **OpenCode** — recommended; Copilot can download and manage it for you.
 - **Claude** — uses Claude Code and your Anthropic sign-in.
