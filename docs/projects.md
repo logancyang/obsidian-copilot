@@ -6,10 +6,6 @@ of work.
 
 Projects support **50+ file types** beyond markdown, including PDFs, Word documents, PowerPoint, Excel, images, and more — making them ideal for analyzing large or diverse document collections.
 
-> **Note**: Projects is an alpha feature. It may have rough edges and is subject to change.
-
----
-
 ## Overview
 
 In regular chat, all conversations share the same settings and model. Projects let you create dedicated workspaces with:
@@ -31,7 +27,7 @@ In regular chat, all conversations share the same settings and model. Projects l
 
 1. Open the chat panel
 2. Click the mode selector at the top of the chat
-3. Select **Projects (alpha)**
+3. Select **Projects**
 4. Click **New Project** (or the `+` button)
 5. Fill in the project details and save
 
@@ -135,7 +131,7 @@ Sort strategy: **Settings → Copilot → Basic → Project list sort strategy**
 
 ## Limitations
 
-As an alpha feature, projects have some known limitations:
+Projects have some known limitations:
 
 - Large context sources (many notes or large files) may slow down context loading
 - The context loading on project switch is synchronous — the AI isn't available until loading completes

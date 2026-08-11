@@ -231,8 +231,7 @@ export class ContextManager {
       let finalProcessedMessage = processedUserMessage + contextPortion;
 
       // 10. Auto-compact if context exceeds threshold (tokens * 4 = chars estimate)
-      // Projects mode uses a fixed 800k token threshold
-      // TODO(logan): deprecate this threshold when Projects mode is out of alpha
+      // Projects mode uses a fixed 1M token threshold.
       const PROJECT_COMPACT_THRESHOLD = 1000000;
       const tokenThreshold =
         chainType === ChainType.PROJECT_CHAIN

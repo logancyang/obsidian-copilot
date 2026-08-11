@@ -263,7 +263,7 @@ export function ChatControls({
                   copilot plus
                 </div>
               )}
-              {selectedChain === ChainType.PROJECT_CHAIN && "projects (alpha)"}
+              {selectedChain === ChainType.PROJECT_CHAIN && "projects"}
               <ChevronDown className="tw-mt-0.5 tw-size-5" />
             </Button>
           </DropdownMenuTrigger>
@@ -313,7 +313,7 @@ export function ChatControls({
                 }}
               >
                 <LibraryBig className="tw-size-4" />
-                projects (alpha)
+                projects
               </DropdownMenuItem>
             ) : (
               <DropdownMenuItem
