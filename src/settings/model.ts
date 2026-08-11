@@ -255,6 +255,8 @@ export interface CopilotSettings {
    * renaming or moving the vault folder does not orphan keychain entries.
    */
   _keychainVaultId?: string;
+  /** Device-owned backup receipt retained until its recovery instructions are shown. */
+  _pendingCredentialRecovery?: { deviceId: string; path: string; encrypted: boolean };
   /**
    * Schema version, bumped by one-time migrations in `src/settings/migrations`.
    * Absent on pre-versioned installs (treated as `0`). Deliberately NOT in

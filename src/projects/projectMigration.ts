@@ -1,5 +1,4 @@
 import { ProjectConfig } from "@/aiParams";
-import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { logError, logInfo, logWarn } from "@/logger";
 import { COPILOT_PROJECT_ID, PROJECTS_UNSUPPORTED_FOLDER_NAME } from "@/projects/constants";
 import { reconcileLegacyAgentsResidue } from "@/projects/legacyAgentsResidue";
@@ -19,8 +18,9 @@ import {
 } from "@/projects/projectUtils";
 import { addPendingFileWrite, removePendingFileWrite } from "@/projects/state";
 import { getSettings, updateSetting } from "@/settings/model";
+import type { StartupMigrationItem } from "@/services/startupMigration";
 import { ensureFolderExists, stripFrontmatter } from "@/utils";
-import { App, Notice, normalizePath, parseYaml, TFile, TFolder, Vault } from "obsidian";
+import { App, normalizePath, parseYaml, TFile, TFolder, Vault } from "obsidian";
 import { trashFile } from "@/utils/vaultAdapterUtils";
 
 /**
@@ -249,7 +249,9 @@ function getMigrationFolderName(projectId: string, projectName?: string): string
  *
  * @param app - Obsidian App instance
  */
-export async function migrateProjectsFromSettingsToVault(app: App): Promise<void> {
+export async function migrateProjectsFromSettingsToVault(
+  app: App
+): Promise<StartupMigrationItem | null> {
   // One root for the whole pass. This runs on layout-ready and loops with awaits
   // per project, so re-reading the live root mid-pass could plan against one
   // tree and write into another.
@@ -260,7 +262,7 @@ export async function migrateProjectsFromSettingsToVault(app: App): Promise<void
 
   if (legacyProjects.length === 0) {
     logInfo("[Projects] No legacy projects to migrate");
-    return;
+    return null;
   }
 
   logInfo(`[Projects] Migrating ${legacyProjects.length} legacy projects to vault files...`);
@@ -458,67 +460,40 @@ export async function migrateProjectsFromSettingsToVault(app: App): Promise<void
   const projectsFolder = getProjectsFolder();
   const unsupportedFolder = getProjectsUnsupportedFolder();
 
-  // Reason: reveal the target folder in Obsidian's file explorer so users can
-  // quickly navigate to their migrated project files or unsupported backups.
-  const revealFolderInExplorer = (folderPath: string) => {
-    const folder = vault.getAbstractFileByPath(folderPath);
-    if (folder instanceof TFolder) {
-      // Reason: use the internal file-explorer plugin API to reveal and highlight the folder.
-      const fileExplorer = (
-        app as unknown as {
-          internalPlugins?: {
-            getPluginById?: (id: string) =>
-              | {
-                  enabled?: boolean;
-                  instance?: { revealInFolder?: (folder: TFolder) => void };
-                }
-              | undefined;
-          };
-        }
-      ).internalPlugins?.getPluginById?.("file-explorer");
-      if (fileExplorer?.enabled && fileExplorer.instance?.revealInFolder) {
-        fileExplorer.instance.revealInFolder(folder);
-      }
-    } else {
-      // Reason: hidden-folder files are not in vault cache, so revealInFolder silently fails.
-      new Notice(`Folder "${folderPath}" is hidden and cannot be revealed in Obsidian's explorer.`);
-    }
-  };
-
   if (failedCount === 0) {
     logInfo(
       `[Projects] Migration succeeded: all ${successCount} project(s) migrated to vault files`
     );
-    new ConfirmModal(
-      app,
-      () => revealFolderInExplorer(projectsFolder),
-      `Your projects have been upgraded to the new file-based format. They are now stored in: ${projectsFolder}\n\nYou can now:\n• Edit project settings directly in the file\n• View and manage project files in the vault\n• All ${successCount} project(s) were migrated successfully.`,
-      "🚀 Projects Upgraded",
-      "Show in Folder",
-      "OK"
-    ).open();
+    return {
+      id: "projects",
+      title: "Projects",
+      status: "success",
+      summary: `All ${successCount} project${successCount === 1 ? " was" : "s were"} migrated to note files.`,
+      details: [`Stored in ${projectsFolder}.`],
+    };
   } else if (successCount > 0) {
     logWarn(
       `[Projects] Migration partially succeeded: ${successCount} migrated, ${failedCount} failed`
     );
-    new ConfirmModal(
-      app,
-      () => revealFolderInExplorer(projectsFolder),
-      `⚠️ Projects migration partially completed.\n\n✅ ${successCount} project(s) migrated successfully.\n❌ ${failedCount} project(s) failed — their data has been backed up to:\n${unsupportedFolder}\n\nYou can manually recover failed projects from the unsupported folder.`,
-      "⚠️ Projects Migration: Partial Success",
-      "Show in Folder",
-      "OK"
-    ).open();
+    return {
+      id: "projects",
+      title: "Projects",
+      status: "action-required",
+      summary: `${successCount} project${successCount === 1 ? " was" : "s were"} migrated; ${failedCount} could not be migrated.`,
+      details: [
+        `Migrated projects are in ${projectsFolder}.`,
+        `Recover the remaining projects from ${unsupportedFolder}.`,
+      ],
+    };
   } else {
     logWarn("[Projects] Migration failed: no projects were migrated");
-    new ConfirmModal(
-      app,
-      () => revealFolderInExplorer(unsupportedFolder),
-      `⚠️ Projects migration could not be completed.\n\nYour project data has been backed up to:\n${unsupportedFolder}\n\nTo recover:\n1. Open the files in the unsupported folder\n2. Review the content\n3. Recreate the projects manually`,
-      "⚠️ Projects Migration Failed",
-      "Show in Folder",
-      "OK"
-    ).open();
+    return {
+      id: "projects",
+      title: "Projects",
+      status: "error",
+      summary: "No projects could be migrated, but recovery copies were created.",
+      details: [`Recover the projects from ${unsupportedFolder}.`],
+    };
   }
 }
 
@@ -637,10 +612,13 @@ async function migrateProjectFolderNames(app: App): Promise<void> {
   }
 }
 
-export async function ensureProjectsMigratedIfNeeded(app: App): Promise<void> {
+export async function ensureProjectsMigratedIfNeeded(
+  app: App
+): Promise<StartupMigrationItem | null> {
   const legacyProjects = getSettings().projectList || [];
+  let migrationResult: StartupMigrationItem | null = null;
   if (legacyProjects.length > 0) {
-    await migrateProjectsFromSettingsToVault(app);
+    migrationResult = await migrateProjectsFromSettingsToVault(app);
   }
 
   // Reason: dev-only — restore `project.md` from any unreleased PR2b-1 `AGENTS.md`-only config
@@ -651,4 +629,5 @@ export async function ensureProjectsMigratedIfNeeded(app: App): Promise<void> {
   // to name-based folders. This also handles pre-existing projects from before the
   // naming convention change. Runs before loadAllProjects() in initialization flow.
   await migrateProjectFolderNames(app);
+  return migrationResult;
 }

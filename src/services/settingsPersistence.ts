@@ -13,8 +13,10 @@ import { logWarn } from "@/logger";
 import { KeychainService } from "@/services/keychainService";
 import { type LegacyBackupResult } from "@/services/legacyCredentialBackup";
 import { cleanupLegacyFields, stripKeychainFields } from "@/services/settingsSecretTransforms";
+import type { StartupMigrationItem } from "@/services/startupMigration";
 import { CURRENT_SETTINGS_VERSION } from "@/settings/migrations/version";
 import { type CopilotSettings, sanitizeSettings } from "@/settings/model";
+import { getDeviceId } from "@/utils/deviceId";
 import { Notice } from "obsidian";
 
 let writeQueue: Promise<void> = Promise.resolve();
@@ -113,6 +115,34 @@ export async function flushPersistence(): Promise<void> {
   await writeQueue;
 }
 
+function credentialMigrationFromRecovery(
+  recovery: CopilotSettings["_pendingCredentialRecovery"]
+): StartupMigrationItem | null {
+  if (
+    !recovery ||
+    recovery.deviceId !== getDeviceId() ||
+    typeof recovery.path !== "string" ||
+    typeof recovery.encrypted !== "boolean"
+  ) {
+    return null;
+  }
+  return {
+    id: "credentials",
+    title: "API keys",
+    status: "action-required",
+    summary: "Credential storage moved to the Obsidian Keychain.",
+    details: recovery.encrypted
+      ? [
+          `Previous keys were copied to ${recovery.path}.`,
+          "Some keys are encrypted and cannot be read back. Get fresh keys from those providers and enter them in Settings.",
+        ]
+      : [
+          `Previous keys were copied to ${recovery.path}.`,
+          "Re-enter the keys in Settings, then delete the backup file.",
+        ],
+  };
+}
+
 /**
  * Load settings without trusting secrets from data.json.
  *
@@ -125,11 +155,14 @@ export async function flushPersistence(): Promise<void> {
  * @param backupLegacyCredentials - Copies data.json before its credentials are
  *   stripped. Stripping is skipped unless this reports a copy exists, so a
  *   pre-v4 vault cannot lose the only record of its keys.
+ * @param onMigration - Receives the legacy credential outcome when startup is
+ *   collecting migration results into a single summary.
  */
 export async function loadSettingsWithKeychain(
   rawData: unknown,
   saveData: (data: CopilotSettings) => Promise<void>,
-  backupLegacyCredentials: (rawData: unknown) => Promise<LegacyBackupResult>
+  backupLegacyCredentials: (rawData: unknown) => Promise<LegacyBackupResult>,
+  onMigration?: (item: StartupMigrationItem) => void
 ): Promise<CopilotSettings> {
   const isFreshInstall = rawData == null;
   const rawSettings = cloneRawSettings(rawData);
@@ -139,8 +172,29 @@ export async function loadSettingsWithKeychain(
     ? persistedVaultId
     : keychain.getVaultId();
   keychain.setVaultId(vaultId);
-
   const diskSettings = buildDiskSettings(rawData, vaultId, isFreshInstall);
+  let credentialMigration = credentialMigrationFromRecovery(
+    diskSettings._pendingCredentialRecovery
+  );
+
+  const reportCredentialMigration = (): void => {
+    if (credentialMigration && onMigration) {
+      onMigration(credentialMigration);
+    }
+  };
+  const showFallbackNotice = (message: string, duration?: number): void => {
+    if (!onMigration || !credentialMigration) new Notice(message, duration);
+  };
+  const markCredentialError = (detail: string, summary?: string): void => {
+    if (!credentialMigration) return;
+    credentialMigration = {
+      ...credentialMigration,
+      status: "error",
+      summary: summary ?? credentialMigration.summary,
+      details: [...(credentialMigration.details ?? []), detail],
+    };
+  };
+
   if (JSON.stringify(rawSettings) !== JSON.stringify(diskSettings)) {
     const backup = await backupLegacyCredentials(rawData);
     if (backup.status === "failed") {
@@ -149,7 +203,14 @@ export async function loadSettingsWithKeychain(
       // and not the ordinary settings writes that migrations and the settings
       // subscriber trigger moments later. Retried on the next load.
       legacyCredentialsUnprotected = true;
-      new Notice(
+      credentialMigration = {
+        id: "credentials",
+        title: "API keys",
+        status: "error",
+        summary: "API keys could not be backed up, so data.json was left untouched.",
+        details: ["Check that the vault is writable, then restart Obsidian to retry."],
+      };
+      showFallbackNotice(
         "Copilot could not back up the API keys stored in data.json, so it left the file untouched. Check that the vault is writable, then restart Obsidian."
       );
     } else {
@@ -160,7 +221,15 @@ export async function loadSettingsWithKeychain(
         // Reason: `enc_*` values cannot be pasted back in, since v4 stores
         // ciphertext verbatim as the key. Those users need fresh keys, so the
         // "copy them across" instruction would send them in circles.
-        new Notice(
+        diskSettings._pendingCredentialRecovery = {
+          deviceId: getDeviceId(),
+          path: backup.path,
+          encrypted: backup.encrypted,
+        };
+        credentialMigration = credentialMigrationFromRecovery(
+          diskSettings._pendingCredentialRecovery
+        );
+        showFallbackNotice(
           backup.encrypted
             ? `Copilot moved credential storage to the Obsidian Keychain. Your previous keys were copied to ${backup.path}, but some are encrypted and cannot be read back. Get fresh keys from those providers and enter them in Settings.`
             : `Copilot moved credential storage to the Obsidian Keychain. Your previous keys were copied to ${backup.path}. Re-enter them in Settings, then delete that file.`,
@@ -170,7 +239,11 @@ export async function loadSettingsWithKeychain(
       try {
         await saveData(diskSettings);
       } catch {
-        new Notice(
+        markCredentialError(
+          "Check that the vault is writable, then restart Obsidian to retry.",
+          "API keys were backed up, but could not be removed from data.json."
+        );
+        showFallbackNotice(
           "Copilot could not remove API keys from data.json. Check that the vault is writable, then restart Obsidian."
         );
       }
@@ -179,22 +252,34 @@ export async function loadSettingsWithKeychain(
 
   const runtimeSource = isFreshInstall ? structuredClone(DEFAULT_SETTINGS) : rawSettings;
   const sanitized = cleanupLegacyFields(sanitizeSettings(runtimeSource));
-  const baseline = stripKeychainFields({ ...sanitized, _keychainVaultId: vaultId });
+  const baseline = stripKeychainFields({
+    ...sanitized,
+    _keychainVaultId: vaultId,
+    _pendingCredentialRecovery: diskSettings._pendingCredentialRecovery,
+  });
 
   if (!keychain.isAvailable()) {
-    new Notice(
+    markCredentialError(
+      "Obsidian Keychain is unavailable in this Obsidian build, so keys cannot be loaded or saved."
+    );
+    showFallbackNotice(
       "Obsidian Keychain is unavailable. Copilot cannot load or save API keys in this Obsidian build."
     );
+    reportCredentialMigration();
     lastPersistedSettings = structuredClone(baseline);
     return baseline;
   }
 
   const { settings: hydrated, hadFailures } = await keychain.hydrateFromKeychain(baseline);
   if (hadFailures) {
-    new Notice(
+    markCredentialError(
+      "Some API keys could not be loaded from the Obsidian Keychain. Restart Obsidian if the issue persists."
+    );
+    showFallbackNotice(
       "Some API keys could not be loaded from the Obsidian Keychain. Restart Obsidian if the issue persists."
     );
   }
+  reportCredentialMigration();
   lastPersistedSettings = structuredClone(hydrated);
   return hydrated;
 }

@@ -22,6 +22,7 @@ import { loadAllProjects } from "@/projects/projectUtils";
 import { PROJECT_CONFIG_FILE_NAME, PROJECTS_UNSUPPORTED_FOLDER_NAME } from "@/projects/constants";
 import { getSettings, subscribeToSettingsChange } from "@/settings/model";
 import { deriveProjectsFolder } from "@/settings/copilotFolder";
+import type { StartupMigrationItem } from "@/services/startupMigration";
 import { debounce, type DebouncedFunction } from "@/utils/debounce";
 import { App, Notice, TAbstractFile, Vault } from "obsidian";
 
@@ -65,9 +66,9 @@ export class ProjectRegister {
    * before migration has completed. Deferring to initialize() (called from
    * onLayoutReady) avoids this race.
    */
-  async initialize(): Promise<void> {
+  async initialize(): Promise<StartupMigrationItem | null> {
     this.initializeEventListeners();
-    await this.manager.initialize();
+    return this.manager.initialize();
   }
 
   /**

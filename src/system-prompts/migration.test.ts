@@ -46,13 +46,6 @@ jest.mock("@/utils", () => {
   };
 });
 
-// Mock ConfirmModal
-jest.mock("@/components/modals/ConfirmModal", () => ({
-  ConfirmModal: jest.fn().mockImplementation(() => ({
-    open: jest.fn(),
-  })),
-}));
-
 describe("migrateSystemPromptsFromSettings", () => {
   let mockVault: Vault;
   let originalApp: typeof window.app;
@@ -93,10 +86,11 @@ describe("migrateSystemPromptsFromSettings", () => {
       userSystemPrompt: "",
     });
 
-    await migrateSystemPromptsFromSettings(window.app);
+    const result = await migrateSystemPromptsFromSettings(window.app);
 
     expect(logger.logInfo).toHaveBeenCalledWith("No legacy userSystemPrompt to migrate");
     expect(mockVault.create).not.toHaveBeenCalled();
+    expect(result).toBeNull();
   });
 
   it("skips migration when userSystemPrompt is whitespace only", async () => {
@@ -158,12 +152,13 @@ describe("migrateSystemPromptsFromSettings", () => {
         })
       ); // File created
 
-    await migrateSystemPromptsFromSettings(window.app);
+    const result = await migrateSystemPromptsFromSettings(window.app);
 
     expect(mockVault.create).toHaveBeenCalledWith(
       "SystemPrompts/Migrated Custom System Prompt.md",
       legacyPrompt
     );
+    expect(result).toEqual(expect.objectContaining({ id: "system-prompt", status: "success" }));
   });
 
   it("preserves whitespace from legacy prompt content", async () => {
