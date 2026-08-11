@@ -167,7 +167,7 @@ Copilot is a product of Brevilabs LLC and is not affiliated with Obsidian. Plus 
 - Paid hosted models and cloud-backed features require network access.
 - **Privacy and data handling:**
   - **Free tier:** Your messages and notes are sent only to your configured LLM provider, such as OpenAI, Anthropic, or Google. Nothing goes to Brevilabs servers.
-  - **Plus tier:** Messages go to your configured LLM provider. File conversions, including PDF, DOCX, EPUB, and images, are processed by Brevilabs servers only when you explicitly trigger those features through `@` commands.
+  - **Plus tier:** Messages go to your configured LLM provider. Brevilabs processes files and external sources only for hosted features you configure or invoke, including paid Quick Chat `@` commands and Agent Mode project context.
   - **Processing, not retention:** We process data to deliver the feature you requested, then discard it. No message content, file uploads, or documents are retained on our servers after processing.
   - **User ID:** A randomly generated UUID is sent with Plus API requests for service delivery, license abuse prevention, and rate limiting. It is not used for tracking, profiling, or analytics.
 - See the [privacy policy](https://www.obsidiancopilot.com/en/privacy) for more details.

@@ -40,8 +40,8 @@ Projects can prepare these sources for each conversation:
 - **Note link**, such as `[[Project Brief]]` — one specific note.
 - **Extension**, such as `*.py` — files with that extension.
 - **Property**, such as `[Topics:Physics]` or `[Subject:]` — notes whose frontmatter value matches, or notes that declare the property.
-- **Web URL** — fetched page content.
-- **YouTube URL** — the video's transcript.
+- **Web URL** — page content fetched through Copilot's hosted service; requires a Copilot license.
+- **YouTube URL** — the transcript fetched through Copilot's hosted service; requires a Copilot license.
 
 You can also exclude notes and folders. Large source sets take longer to prepare. If you send a message while context is still loading, Agent Mode queues it and runs it when the context is ready.
 
