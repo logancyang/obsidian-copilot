@@ -6,11 +6,12 @@
  * `resetSettings` / `setSettings`).
  */
 
-import { resetSettings, getSettings } from "@/settings/model";
+import { resetSettings, getSettings, setSettings } from "@/settings/model";
 import { KeychainService } from "@/services/keychainService";
 
 import type { ProviderAdapter } from "./adapters/ProviderAdapter";
 import { ProviderAdapterRegistry } from "./adapters/ProviderAdapterRegistry";
+import { buildProviderKeychainId } from "./providerIdentity";
 import { ProviderRegistry } from "./ProviderRegistry";
 
 import type { App } from "obsidian";
@@ -24,13 +25,18 @@ jest.mock("@/logger", () => ({
 
 type SecretStore = Map<string, string>;
 
-function makeFakeApp(): { app: App; secrets: SecretStore } {
+function makeFakeApp(): {
+  app: App;
+  secrets: SecretStore;
+  setSecret: jest.Mock<void, [string, string]>;
+} {
   const secrets: SecretStore = new Map();
+  const setSecret = jest.fn((id: string, value: string) => {
+    secrets.set(id, value);
+  });
   const app = {
     secretStorage: {
-      setSecret: (id: string, value: string) => {
-        secrets.set(id, value);
-      },
+      setSecret,
       getSecret: (id: string) => (secrets.has(id) ? secrets.get(id)! : null),
       listSecrets: () => Array.from(secrets.keys()),
       deleteSecret: (id: string) => {
@@ -44,7 +50,7 @@ function makeFakeApp(): { app: App; secrets: SecretStore } {
       adapter: {},
     },
   } as unknown as App;
-  return { app, secrets };
+  return { app, secrets, setSecret };
 }
 
 const anthropicStub: ProviderAdapter = {
@@ -64,12 +70,16 @@ describe("ProviderRegistry", () => {
   let app: App;
   let adapters: ProviderAdapterRegistry;
   let registry: ProviderRegistry;
+  let secrets: SecretStore;
+  let setSecret: jest.Mock<void, [string, string]>;
 
   beforeEach(() => {
     resetSettings();
     KeychainService.resetInstance();
     const fake = makeFakeApp();
     app = fake.app;
+    secrets = fake.secrets;
+    setSecret = fake.setSecret;
     // Eager init so subsequent KeychainService.getInstance() calls inside
     // the registry hit the same singleton.
     KeychainService.getInstance(app);
@@ -95,6 +105,39 @@ describe("ProviderRegistry", () => {
     expect(row?.origin).toEqual({ kind: "byok" });
     expect(row?.addedAt).toBeGreaterThanOrEqual(before);
     expect(row?.apiKeyKeychainId).toBeNull();
+  });
+
+  it("add() trims names and allocates case-insensitive suffixes without collisions", async () => {
+    const first = await registry.add({
+      providerType: "anthropic",
+      displayName: " OpenRouter ",
+      origin: { kind: "byok" },
+    });
+    const second = await registry.add({
+      providerType: "anthropic",
+      displayName: "openrouter 2",
+      origin: { kind: "byok" },
+    });
+    const third = await registry.add({
+      providerType: "anthropic",
+      displayName: "OPENROUTER",
+      origin: { kind: "byok" },
+    });
+
+    expect(registry.get(first)?.displayName).toBe("OpenRouter");
+    expect(registry.get(second)?.displayName).toBe("openrouter 2");
+    expect(registry.get(third)?.displayName).toBe("OPENROUTER 3");
+  });
+
+  it("add() rejects a blank provider name without persisting a row", async () => {
+    await expect(
+      registry.add({
+        providerType: "anthropic",
+        displayName: "  ",
+        origin: { kind: "byok" },
+      })
+    ).rejects.toThrow(/cannot be empty/i);
+    expect(registry.list()).toHaveLength(0);
   });
 
   it("list() / listByOrigin / listByProviderType return stable references when settings unchanged", async () => {
@@ -166,7 +209,106 @@ describe("ProviderRegistry", () => {
     await expect(registry.update("nope", { displayName: "x" })).rejects.toThrow(/unknown/);
   });
 
-  it("setApiKey mints apiKeyKeychainId on first call and reuses it on rotation", async () => {
+  it("update() keeps renamed providers unique and moves their existing secret", async () => {
+    await registry.add({
+      providerType: "anthropic",
+      displayName: "OpenRouter",
+      origin: { kind: "byok" },
+    });
+    const id = await registry.add({
+      providerType: "anthropic",
+      displayName: "Anthropic",
+      origin: { kind: "byok" },
+    });
+    await registry.setApiKey(id, "sk-real");
+    const oldKeychainId = registry.get(id)!.apiKeyKeychainId!;
+
+    await registry.update(id, { displayName: " openrouter " });
+
+    const row = registry.get(id)!;
+    const expectedKeychainId = buildProviderKeychainId(
+      KeychainService.getInstance(app).getVaultId(),
+      "openrouter 2",
+      id
+    );
+    expect(row.displayName).toBe("openrouter 2");
+    expect(row.apiKeyKeychainId).toBe(expectedKeychainId);
+    expect(secrets.get(expectedKeychainId)).toBe("sk-real");
+    expect(secrets.has(oldKeychainId)).toBe(false);
+  });
+
+  it.each([
+    ["punctuation-equivalent slugs", "Open.Router", "Open Router"],
+    ["Unicode-only names", "\u6d4b\u8bd5", "\u751f\u4ea7"],
+    [
+      "long names with the same readable prefix",
+      `${"Long Provider ".repeat(8)}First`,
+      `${"Long Provider ".repeat(8)}Second`,
+    ],
+  ])("update() moves the secret when renaming %s", async (_scenario, firstName, secondName) => {
+    const id = await registry.add({
+      providerType: "anthropic",
+      displayName: firstName,
+      origin: { kind: "byok" },
+    });
+    await registry.setApiKey(id, "sk-real");
+    const oldKeychainId = registry.get(id)!.apiKeyKeychainId!;
+
+    await registry.update(id, { displayName: secondName });
+
+    const row = registry.get(id)!;
+    expect(row.apiKeyKeychainId).not.toBe(oldKeychainId);
+    expect(secrets.get(row.apiKeyKeychainId!)).toBe("sk-real");
+    expect(secrets.has(oldKeychainId)).toBe(false);
+  });
+
+  it("update() leaves the old name, pointer, and secret intact when the new write fails", async () => {
+    const id = await registry.add({
+      providerType: "anthropic",
+      displayName: "Original",
+      origin: { kind: "byok" },
+    });
+    await registry.setApiKey(id, "sk-real");
+    const oldRow = registry.get(id)!;
+    const oldKeychainId = oldRow.apiKeyKeychainId!;
+    setSecret.mockImplementationOnce(() => {
+      throw new Error("keychain rejected write");
+    });
+
+    await expect(registry.update(id, { displayName: "Renamed" })).rejects.toThrow(
+      "keychain rejected write"
+    );
+
+    expect(registry.get(id)).toEqual(oldRow);
+    expect(secrets.get(oldKeychainId)).toBe("sk-real");
+    expect(secrets.size).toBe(1);
+  });
+
+  it("update() reconciles a legacy UUID pointer during a non-name update", async () => {
+    const id = await registry.add({
+      providerType: "anthropic",
+      displayName: "Anthropic Prod",
+      origin: { kind: "byok" },
+    });
+    const vaultId = KeychainService.getInstance(app).getVaultId();
+    const legacyKeychainId = `copilot-v${vaultId}-provider-${id}`;
+    secrets.set(legacyKeychainId, "sk-legacy");
+    setSettings((cur) => ({
+      providers: {
+        ...cur.providers,
+        [id]: { ...cur.providers[id], apiKeyKeychainId: legacyKeychainId },
+      },
+    }));
+
+    await registry.update(id, { baseUrl: "https://example.test" });
+
+    const expectedKeychainId = buildProviderKeychainId(vaultId, "Anthropic Prod", id);
+    expect(registry.get(id)?.apiKeyKeychainId).toBe(expectedKeychainId);
+    expect(secrets.get(expectedKeychainId)).toBe("sk-legacy");
+    expect(secrets.has(legacyKeychainId)).toBe(false);
+  });
+
+  it("setApiKey mints a readable apiKeyKeychainId on first call and reuses it on rotation", async () => {
     const id = await registry.add({
       providerType: "anthropic",
       displayName: "A",
@@ -177,9 +319,8 @@ describe("ProviderRegistry", () => {
     await registry.setApiKey(id, "sk-first");
     const firstKeychainId = registry.get(id)!.apiKeyKeychainId;
     const vaultId = KeychainService.getInstance(app).getVaultId();
-    // Vault-namespaced so `KeychainService.clearAllVaultSecrets()` (which
-    // filters by `copilot-v{vaultId}-`) sweeps these entries.
-    expect(firstKeychainId).toBe(`copilot-v${vaultId}-provider-${id}`);
+    expect(firstKeychainId).toBe(buildProviderKeychainId(vaultId, "A", id));
+    expect(firstKeychainId).toMatch(/^copilot-v[a-z0-9]+-provider-a-[a-f0-9]{8}-[a-f0-9]{8}$/);
     expect(await registry.getApiKey(id)).toBe("sk-first");
 
     await registry.setApiKey(id, "sk-rotated");
