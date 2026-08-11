@@ -2,6 +2,8 @@ import {
   allocateUniqueProviderDisplayName,
   buildProviderKeychainId,
   normalizeProviderDisplayName,
+  providerDisplayNameKey,
+  providerKeychainStableToken,
 } from "./providerIdentity";
 
 describe("providerIdentity", () => {
@@ -32,6 +34,24 @@ describe("providerIdentity", () => {
       expect(allocateUniqueProviderDisplayName("  Anthropic Prod ", ["Anthropic Dev"])).toBe(
         "Anthropic Prod"
       );
+    });
+  });
+
+  describe("providerDisplayNameKey()", () => {
+    it("normalizes canonical Unicode forms and casing for comparison", () => {
+      expect(providerDisplayNameKey(" CAF\u00c9 ")).toBe(providerDisplayNameKey("cafe\u0301"));
+    });
+  });
+
+  describe("providerKeychainStableToken()", () => {
+    it("is deterministic and changes with the immutable provider id", () => {
+      expect(providerKeychainStableToken("provider-a")).toBe(
+        providerKeychainStableToken("provider-a")
+      );
+      expect(providerKeychainStableToken("provider-a")).not.toBe(
+        providerKeychainStableToken("provider-b")
+      );
+      expect(providerKeychainStableToken("provider-a")).toMatch(/^[a-f0-9]{8}$/);
     });
   });
 

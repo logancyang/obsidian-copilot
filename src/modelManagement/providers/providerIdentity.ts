@@ -4,7 +4,8 @@ const MAX_SECRET_ID_LENGTH = 64;
 const PROVIDER_NAME_TOKEN_LENGTH = 8;
 const PROVIDER_TOKEN_LENGTH = 8;
 
-function comparableProviderName(displayName: string): string {
+/** Return the canonical comparison key used by the global uniqueness invariant. */
+export function providerDisplayNameKey(displayName: string): string {
   return normalizeProviderDisplayName(displayName).normalize("NFKC").toLowerCase();
 }
 
@@ -55,15 +56,20 @@ export function allocateUniqueProviderDisplayName(
   const reserved = new Set<string>();
   for (const name of reservedNames) {
     const normalized = name.trim();
-    if (normalized) reserved.add(comparableProviderName(normalized));
+    if (normalized) reserved.add(providerDisplayNameKey(normalized));
   }
-  if (!reserved.has(comparableProviderName(baseName))) return baseName;
+  if (!reserved.has(providerDisplayNameKey(baseName))) return baseName;
 
   let suffix = 2;
-  while (reserved.has(comparableProviderName(`${baseName} ${suffix}`))) {
+  while (reserved.has(providerDisplayNameKey(`${baseName} ${suffix}`))) {
     suffix += 1;
   }
   return `${baseName} ${suffix}`;
+}
+
+/** Return the stable suffix used to discover a provider's prior readable IDs. */
+export function providerKeychainStableToken(providerId: string): string {
+  return md5(providerId).slice(0, PROVIDER_TOKEN_LENGTH);
 }
 
 /**
@@ -89,7 +95,7 @@ export function buildProviderKeychainId(
   const prefix = `copilot-v${vaultId}-provider-`;
   const normalizedDisplayName = normalizeProviderDisplayName(displayName).normalize("NFKC");
   const nameToken = md5(normalizedDisplayName).slice(0, PROVIDER_NAME_TOKEN_LENGTH);
-  const token = md5(providerId).slice(0, PROVIDER_TOKEN_LENGTH);
+  const token = providerKeychainStableToken(providerId);
   const suffix = `-${nameToken}-${token}`;
   const nameBudget = MAX_SECRET_ID_LENGTH - prefix.length - suffix.length;
   if (nameBudget < 1) {

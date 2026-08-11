@@ -308,6 +308,11 @@ export class KeychainService {
     return this.storage.getSecret(keychainId);
   }
 
+  /** List keychain IDs so callers can reconcile device-local renamed entries. */
+  listSecretIds(): string[] {
+    return this.storage.listSecrets();
+  }
+
   /** Delete a keychain entry by its pre-computed ID.
    *  See `setSecretById` for the caller contract on `keychainId`. */
   deleteSecretById(keychainId: string): void {
