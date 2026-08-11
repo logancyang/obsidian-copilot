@@ -3,6 +3,7 @@ import {
   buildProviderKeychainId,
   normalizeProviderDisplayName,
   providerDisplayNameKey,
+  providerDisplayNameValidationError,
   providerKeychainStableToken,
 } from "./providerIdentity";
 
@@ -40,6 +41,18 @@ describe("providerIdentity", () => {
   describe("providerDisplayNameKey()", () => {
     it("normalizes canonical Unicode forms and casing for comparison", () => {
       expect(providerDisplayNameKey(" CAF\u00c9 ")).toBe(providerDisplayNameKey("cafe\u0301"));
+    });
+  });
+
+  describe("providerDisplayNameValidationError()", () => {
+    it("rejects blank and globally duplicate names using the canonical comparison", () => {
+      expect(providerDisplayNameValidationError(" \t ", ["OpenRouter"])).toBe(
+        "Enter a provider name."
+      );
+      expect(providerDisplayNameValidationError(" ｏｐｅｎｒｏｕｔｅｒ ", ["OpenRouter"])).toBe(
+        "A provider with this name already exists. Choose a different name."
+      );
+      expect(providerDisplayNameValidationError("OpenRouter 2", ["OpenRouter"])).toBeNull();
     });
   });
 

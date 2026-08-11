@@ -8,13 +8,13 @@ Copilot includes 16 built-in AI providers, and you can add an unlimited number o
 
 1. Go to **Settings → Copilot → Models (BYOK)**
 2. Add a provider
-3. Enter the provider API key and select the models you want to configure
+3. Enter a unique provider display name, the provider API key, and the models you want to configure
 4. Click Save
 5. Enable models for chat under **Basic → Agents → Quick Chat models**
 
-You can configure multiple providers simultaneously and switch between them by changing the default model.
+You can configure multiple providers simultaneously and switch between them by changing the default model. Provider display names must be unique across Copilot (names that differ only by capitalization or Unicode formatting count as the same name). When you add another instance of a provider, Copilot suggests the next available numbered name, such as `OpenRouter 2`.
 
-Copilot stores provider credentials in this device's Obsidian Keychain. Synced vault settings do not transfer credentials to another device, so enter the required keys separately on each device.
+Copilot stores provider credentials in this device's Obsidian Keychain. The keychain entry uses a readable, safely encoded form of the provider display name, and renaming a provider moves its credential to an entry that matches the new name. Synced vault settings do not transfer credentials to another device, so enter the required keys separately on each device.
 
 ---
 

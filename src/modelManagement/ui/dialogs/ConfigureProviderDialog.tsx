@@ -31,13 +31,19 @@ import { SearchBar } from "@/components/ui/SearchBar";
 import { useApp } from "@/context";
 import { logError } from "@/logger";
 import type { ModelManagementApi } from "@/modelManagement/createModelManagement";
+import {
+  allocateUniqueProviderDisplayName,
+  normalizeProviderDisplayName,
+  providerDisplayNameValidationError,
+} from "@/modelManagement/providers/providerIdentity";
 import { BYOK_DEFAULT_AUTO_ENROLL } from "@/modelManagement/setup/ByokSetupApi";
 import { providerRequiresApiKey } from "@/modelManagement/providers/providerRequiresApiKey";
-import { byokProvidersAtom, configuredModelsAtom } from "@/modelManagement/state/atoms";
+import { configuredModelsAtom, providersAtom } from "@/modelManagement/state/atoms";
 import type { ModelInfo, ProviderType } from "@/modelManagement/types/catalog";
 import type { ConfiguredModel, Provider } from "@/modelManagement/types/persisted";
 import type { ProviderDefinition, VerificationResult } from "@/modelManagement/types/runtime";
 import { ModelChecklist } from "@/modelManagement/ui/components/ModelChecklist";
+import { ProviderDisplayNameField } from "@/modelManagement/ui/components/ProviderDisplayNameField";
 import {
   ModelManagementProvider,
   useModelManagement,
@@ -83,15 +89,20 @@ interface ConfigureProviderFormProps {
  */
 export const ConfigureProviderForm: React.FC<ConfigureProviderFormProps> = ({ state, onClose }) => {
   const api = useModelManagement();
-  const byokProviders = useAtomValue(byokProvidersAtom, { store: settingsStore });
+  const providersById = useAtomValue(providersAtom, { store: settingsStore });
   const configuredModels = useAtomValue(configuredModelsAtom, { store: settingsStore });
+
+  const providers = useMemo(() => Object.values(providersById), [providersById]);
 
   const provider = useMemo<Provider | undefined>(
     () =>
       state.mode === "edit"
-        ? byokProviders.find((p) => p.providerId === state.providerId)
+        ? providers.find(
+            (candidate) =>
+              candidate.providerId === state.providerId && candidate.origin.kind === "byok"
+          )
         : undefined,
-    [state, byokProviders]
+    [state, providers]
   );
 
   const existingModels = useMemo(
@@ -145,6 +156,7 @@ export const ConfigureProviderForm: React.FC<ConfigureProviderFormProps> = ({ st
       state={state}
       onClose={onClose}
       provider={provider}
+      providers={providers}
       existingModels={existingModels}
       initialApiKey={initialApiKey}
     />
@@ -156,6 +168,7 @@ interface ConfigureProviderBodyProps {
   onClose: () => void;
   /** Guaranteed defined in edit mode (the gate waits for it); undefined in new mode. */
   provider: Provider | undefined;
+  providers: readonly Provider[];
   existingModels: readonly ConfiguredModel[];
   /** Edit mode: the stored API key, resolved by the gate. `null` for a
    *  keyless provider (or a probe failure). Always `null` in new mode. */
@@ -166,6 +179,7 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
   state,
   onClose,
   provider,
+  providers,
   existingModels,
   initialApiKey,
 }) => {
@@ -213,9 +227,13 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- catalogVersion intentionally invalidates metadata read through catalogService
   }, [catalogProviderId, api, catalogVersion]);
 
-  const [displayName, setDisplayName] = useState(() =>
-    state.mode === "new" ? state.source.displayName : (provider?.displayName ?? "")
-  );
+  const [displayName, setDisplayName] = useState(() => {
+    if (state.mode === "edit") return provider?.displayName ?? "";
+    return allocateUniqueProviderDisplayName(
+      state.source.displayName,
+      providers.map((candidate) => candidate.displayName)
+    );
+  });
   // Edit mode seeds with the resolved stored key (plaintext — it's what
   // opencode injects; the field masks it via PasswordInput's reveal toggle).
   const [apiKey, setApiKey] = useState(() => initialApiKey ?? "");
@@ -229,6 +247,17 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
   const [testing, setTesting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [modelQuery, setModelQuery] = useState("");
+
+  const reservedProviderNames = useMemo(
+    () =>
+      providers
+        .filter((candidate) => state.mode !== "edit" || candidate.providerId !== state.providerId)
+        .map((candidate) => candidate.displayName),
+    [providers, state]
+  );
+  const displayNameError = providerDisplayNameValidationError(displayName, reservedProviderNames);
+  const validatedDisplayName =
+    displayNameError === null ? normalizeProviderDisplayName(displayName) : null;
 
   // Whether this provider needs a key. New mode reads the picked definition;
   // edit mode reads the explicit persisted flag — never inferred from the
@@ -326,7 +355,7 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
   };
 
   const handleSaveNew = async (): Promise<void> => {
-    if (state.mode !== "new" || !providerType) return;
+    if (state.mode !== "new" || !providerType || validatedDisplayName === null) return;
     setSaving(true);
     try {
       // B2: auto-verify a present key before persisting so an untested-but-
@@ -343,7 +372,7 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
       await api.setup.byok.setupProvider({
         catalogProviderId: state.source.catalogProviderId,
         providerType,
-        displayName,
+        displayName: validatedDisplayName,
         baseUrl: effectiveBaseUrl || undefined,
         apiKey: apiKey || undefined,
         requiresApiKey: state.source.requiresApiKey,
@@ -360,7 +389,7 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
   };
 
   const handleSaveEdit = async (): Promise<void> => {
-    if (state.mode !== "edit" || !provider) return;
+    if (state.mode !== "edit" || !provider || validatedDisplayName === null) return;
     setSaving(true);
     try {
       // B2: re-verify only a *changed* key (unchanged keys skip the probe and
@@ -377,7 +406,7 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
         providerId: state.providerId,
         apiKey,
         initialApiKey,
-        displayName,
+        displayName: validatedDisplayName,
         effectiveBaseUrl,
         extras,
         existingModels,
@@ -438,7 +467,11 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
   // requires working credentials) or ones the user explicitly typed, so a
   // non-empty selection already implies a usable setup. On top of that, gate
   // on a present + non-conclusively-invalid key.
-  const canSave = pool.selectedWireIds.size > 0 && !missingRequiredKey && !verificationBlocksSave;
+  const canSave =
+    pool.selectedWireIds.size > 0 &&
+    !missingRequiredKey &&
+    !verificationBlocksSave &&
+    displayNameError === null;
 
   const testFailed = verification?.ok === false;
 
@@ -456,9 +489,11 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
       </div>
 
       <div className="tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-gap-4 tw-overflow-y-auto tw-px-2 tw-py-1">
-        <FormField label="Display name">
-          <Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
-        </FormField>
+        <ProviderDisplayNameField
+          value={displayName}
+          onChange={setDisplayName}
+          errorMessage={displayNameError}
+        />
 
         <FormField
           label={

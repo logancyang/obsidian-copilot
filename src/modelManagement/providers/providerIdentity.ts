@@ -9,6 +9,27 @@ export function providerDisplayNameKey(displayName: string): string {
   return normalizeProviderDisplayName(displayName).normalize("NFKC").toLowerCase();
 }
 
+/**
+ * Return the user-facing validation error for a requested provider name.
+ *
+ * @param displayName - Name currently entered by the user.
+ * @param reservedNames - Names owned by every other persisted provider.
+ */
+export function providerDisplayNameValidationError(
+  displayName: string,
+  reservedNames: Iterable<string>
+): string | null {
+  if (!displayName.trim()) return "Enter a provider name.";
+
+  const requestedKey = providerDisplayNameKey(displayName);
+  for (const reservedName of reservedNames) {
+    if (reservedName.trim() && providerDisplayNameKey(reservedName) === requestedKey) {
+      return "A provider with this name already exists. Choose a different name.";
+    }
+  }
+  return null;
+}
+
 function readableKeychainSegment(displayName: string): string {
   const normalizedDisplayName = normalizeProviderDisplayName(displayName);
   let segment = "";
