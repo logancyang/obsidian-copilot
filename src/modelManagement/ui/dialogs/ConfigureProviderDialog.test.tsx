@@ -40,27 +40,35 @@ jest.mock("@/modelManagement/ui/ModelManagementContext", () => ({
 jest.mock("@/context", () => ({ useApp: () => ({}) }));
 jest.mock("@/modelManagement/state/atoms", () => {
   const jotai = jest.requireActual<typeof import("jotai")>("jotai");
+  const providers = {
+    p1: {
+      providerId: "p1",
+      providerType: "anthropic",
+      displayName: "Anthropic",
+      baseUrl: "https://api.anthropic.com",
+      origin: { kind: "byok", catalogProviderId: "anthropic" },
+      addedAt: 0,
+    },
+    "p-custom": {
+      // Catalog-less edit-mode row (template-origin); used to assert the
+      // fetch path works with a saved key when the user hasn't re-typed it.
+      providerId: "p-custom",
+      providerType: "openai-compatible",
+      displayName: "Custom",
+      baseUrl: "https://proxy.example/v1",
+      origin: { kind: "byok" },
+      addedAt: 0,
+    },
+    "p-agent": {
+      providerId: "p-agent",
+      providerType: "openai-compatible",
+      displayName: "Agent Shared",
+      origin: { kind: "agent", agentType: "opencode" },
+      addedAt: 0,
+    },
+  };
   return {
-    byokProvidersAtom: jotai.atom([
-      {
-        providerId: "p1",
-        providerType: "anthropic",
-        displayName: "Anthropic",
-        baseUrl: "https://api.anthropic.com",
-        origin: { kind: "byok", catalogProviderId: "anthropic" },
-        addedAt: 0,
-      },
-      {
-        // Catalog-less edit-mode row (template-origin); used to assert the
-        // fetch path works with a saved key when the user hasn't re-typed it.
-        providerId: "p-custom",
-        providerType: "openai-compatible",
-        displayName: "Custom",
-        baseUrl: "https://proxy.example/v1",
-        origin: { kind: "byok" },
-        addedAt: 0,
-      },
-    ]),
+    providersAtom: jotai.atom(providers),
     configuredModelsAtom: jotai.atom([
       {
         configuredModelId: "cm1",
@@ -168,6 +176,49 @@ function rowCheckbox(id: string): HTMLElement {
 }
 
 describe("ConfigureProviderForm (new mode)", () => {
+  it("suggests the next available provider name across all persisted providers", () => {
+    render(
+      <ConfigureProviderForm
+        state={{ mode: "new", source: { ...ollamaSource, displayName: "Agent Shared" } }}
+        onClose={jest.fn()}
+      />
+    );
+
+    expect(screen.getByRole<HTMLInputElement>("textbox", { name: /Display name/i }).value).toBe(
+      "Agent Shared 2"
+    );
+  });
+
+  it("shows an inline error and disables Save for a globally duplicate typed name", () => {
+    render(
+      <ConfigureProviderForm state={{ mode: "new", source: ollamaSource }} onClose={jest.fn()} />
+    );
+    manualAddId("llama3.2");
+
+    fireEvent.change(screen.getByRole("textbox", { name: /Display name/i }), {
+      target: { value: " ＡＧＥＮＴ ＳＨＡＲＥＤ " },
+    });
+
+    expect(screen.getByText(/already exists/i)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Save" }).hasAttribute("disabled")).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(mockSetupProvider).not.toHaveBeenCalled();
+  });
+
+  it("shows an inline error and disables Save for a blank name", () => {
+    render(
+      <ConfigureProviderForm state={{ mode: "new", source: ollamaSource }} onClose={jest.fn()} />
+    );
+    manualAddId("llama3.2");
+
+    fireEvent.change(screen.getByRole("textbox", { name: /Display name/i }), {
+      target: { value: "   " },
+    });
+
+    expect(screen.getByText("Enter a provider name.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Save" }).hasAttribute("disabled")).toBe(true);
+  });
+
   it("skips the mount fetch when the source requires an API key and the field is empty", () => {
     render(
       <ConfigureProviderForm state={{ mode: "new", source: anthropicSource }} onClose={jest.fn()} />
@@ -232,7 +283,7 @@ describe("ConfigureProviderForm (new mode)", () => {
       expect.objectContaining({
         catalogProviderId: "anthropic",
         providerType: "anthropic",
-        displayName: "Anthropic",
+        displayName: "Anthropic 2",
         baseUrl: "https://api.anthropic.com",
         models: [
           // The manually-added id matches a catalog entry, so the saved
@@ -327,6 +378,24 @@ describe("ConfigureProviderForm (new mode)", () => {
 });
 
 describe("ConfigureProviderForm (edit mode)", () => {
+  it("excludes the provider being edited but blocks another provider's name", async () => {
+    render(
+      <ConfigureProviderForm state={{ mode: "edit", providerId: "p1" }} onClose={jest.fn()} />
+    );
+
+    const nameInput = await screen.findByRole<HTMLInputElement>("textbox", {
+      name: /Display name/i,
+    });
+    expect(nameInput.value).toBe("Anthropic");
+    expect(screen.queryByText(/already exists/i)).toBeNull();
+
+    fireEvent.change(nameInput, { target: { value: " custom " } });
+    expect(screen.getByText(/already exists/i)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Save" }).hasAttribute("disabled")).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
   it("seeds the selection from existing configured models", async () => {
     render(
       <ConfigureProviderForm state={{ mode: "edit", providerId: "p1" }} onClose={jest.fn()} />
