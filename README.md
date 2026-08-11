@@ -1,345 +1,180 @@
 <h1 align="center">Copilot for Obsidian</h1>
 
-<h2 align="center">
-The Ultimate AI Assistant for Your Second Brain
-</h2>
+<p align="center"><strong>Copilot Makes Obsidian the Knowledge Worker's IDE</strong></p>
+
+<p align="center"><strong>Rewritten end to end. Copilot V4 puts frontier agents natively inside Obsidian.</strong></p>
 
 <p align="center">
-  <img src="https://img.shields.io/github/v/release/logancyang/obsidian-copilot?style=for-the-badge&sort=semver" alt="GitHub release (latest SemVer)">
-  <img src="https://img.shields.io/badge/dynamic/json?logo=obsidian&color=%23483699&label=downloads&query=%24%5B%22copilot%22%5D.downloads&url=https%3A%2F%2Fraw.githubusercontent.com%2Fobsidianmd%2Fobsidian-releases%2Fmaster%2Fcommunity-plugin-stats.json&style=for-the-badge" alt="Obsidian Downloads">
+  <a href="https://obsidian.md/blog/2024-goty-winners/"><img src="./images/llm-integration.svg" width="640" alt="Best LLM Integration Award"></a>
 </p>
 
 <p align="center">
-  <a href="https://www.obsidiancopilot.com/en/docs">Documentation</a> |
-  <a href="https://www.youtube.com/@loganhallucinates">Youtube</a> |
-  <a href="https://github.com/logancyang/obsidian-copilot/issues/new?template=bug_report.md">Report Bug</a> |
-  <a href="https://github.com/logancyang/obsidian-copilot/issues/new?template=feature_request.md">Request Feature</a>
+  <a href="https://obsidian.md/plugins?id=copilot"><strong>No. 1 Obsidian AI Plugin</strong></a>
 </p>
 
 <p align="center">
-  <a href="https://example.com](https://obsidian.md/blog/2024-goty-winners/">
-    <img src="./images/reward-banner.svg" alt="Reward Banner" width="400"/>
-  </a>
+  <img src="https://img.shields.io/badge/dynamic/json?logo=obsidian&color=%23483699&label=downloads&query=%24%5B%22copilot%22%5D.downloads&url=https%3A%2F%2Fraw.githubusercontent.com%2Fobsidianmd%2Fobsidian-releases%2Fmaster%2Fcommunity-plugin-stats.json&style=flat-square" alt="Obsidian downloads" align="absmiddle">
+  <img src="https://img.shields.io/github/v/release/logancyang/obsidian-copilot?style=flat-square&sort=semver" alt="Latest release" align="absmiddle">
 </p>
-
-## The What
-
-_Copilot for Obsidian_ is your in‑vault AI assistant with chat-based vault search, web and YouTube support, powerful context processing, and ever-expanding agentic capabilities within Obsidian's highly customizable workspace - all while keeping your data under **your** control.
-
-## The Why
-
-Today's AI giants want **you trapped**: your data on their servers, prompts locked to their models, and switching costs that keep you paying. When they change pricing, shut down features, or terminate your account, you lose everything you built.
-
-We are building the opposite. Our goal is to create a portable agentic experience with no provider lock-in. **Data is always yours.** Use whatever LLM you like. Imagine that a brand new model drops, you run it on your own hardware, and it already knows about you (_long-term memory_), knows how to run _the same commands and tools_ you have defined over time (as just markdown files), and becomes the thought partner and assistant that you _own_. This is AI that grows with you, not a subscription you're hostage to.
-
-This is the future we believe in. If you share this vision, please support this project!
-
-## Key Features
-
-- **🔒 Your data is 100% yours**: Local search and storage, and full control of your data if you use self-hosted models.
-- **🧠 Bring Your Own Model**: Tap any OpenAI-compatible or local model to uncover insights, spark connections, and create content.
-- **🖼️ Multimedia understanding**: Drop in webpages, YouTube videos, images, PDFs, EPUBS, or real-time web search for quick insights.
-- **🔍 Smart Vault Search**: Search your vault with chat, no setup required. Embeddings are optional. Copilot delivers results right away.
-- **✍️ Composer and Quick Commands**: Interact with your writing with chat, apply changes with 1 click.
-- **🗂️ Project Mode**: Create AI-ready context based on folders and tags. Think NotebookLM but inside your vault!
-- **🤖 Agent Mode (Plus)**: Unlock an autonomous agent with built-in tool calling. No commands needed. Copilot automatically triggers vault, web searches or any other relevant tool when relevant.
 
 <p align="center">
-  <em>Copilot's Agent can call the proper tools on its own upon your request.</em>
+  <img src="./images/copilot-v4-agent-mode.png" alt="Copilot V4 agent organizing research into connected Obsidian notes" width="1200">
 </p>
-<p align="center">
-  <img src="./images/product-ui-screenshot.png" alt="Product UI screenshot" width="800"/>
-</p>
-
-## Table of Contents
-
-- [The What](#the-what)
-- [The Why](#the-why)
-- [Key Features](#key-features)
-- [Copilot v4: Agent Mode, Reimagined 🚀](#copilot-v4-agent-mode-reimagined-)
-- [Why People Love It ❤️](#why-people-love-it-️)
-- [Get Started](#get-started)
-  - [Install Obsidian Copilot](#install-obsidian-copilot)
-  - [Set API Keys](#set-api-keys)
-- [Usage](#usage)
-  - [Free User](#free-user)
-    - [**Chat Mode: reference notes and discuss ideas with Copilot**](#chat-mode-reference-notes-and-discuss-ideas-with-copilot)
-    - [**Vault QA Mode: chat with your entire vault**](#vault-qa-mode-chat-with-your-entire-vault)
-    - [Copilot's Command Palette](#copilots-command-palette)
-    - [**Relevant Notes: notes suggestions based on semantic similarity and links**](#relevant-notes-notes-suggestions-based-on-semantic-similarity-and-links)
-  - [Copilot Plus/Believer](#copilot-plusbeliever)
-    - [**Get Precision Insights From a Specific Time Window**](#get-precision-insights-from-a-specific-time-window)
-    - [**Agent Mode: Autonomous Tool Calling**](#agent-mode-autonomous-tool-calling)
-    - [**Understand Images in Your Notes**](#understand-images-in-your-notes)
-    - [**One Prompt, Every Source—Instant Summaries from PDFs, Videos, and Web**](#one-prompt-every-sourceinstant-summaries-from-pdfs-videos-and-web)
-- [**Need Help?**](#need-help)
-- [**FAQ**](#faq)
-- [**🙏 Thank You**](#-thank-you)
-- [**Copilot Plus Disclosure**](#copilot-plus-disclosure)
-- [**Authors**](#authors)
-
-## Copilot v4: Agent Mode, Reimagined 🚀
-
-Our biggest leap yet. **Copilot v4** lets you run the most capable coding agents available — **opencode**, **Claude Code**, or **Codex** — natively inside your vault, tuned for knowledge work and entirely on your terms. Bring your own agent, keep every note on your device, and let it plan, search, and act across your Second Brain. No lock-in, no compromise.
-
-**Join Supporter to experience the magic of Copilot v4 now!**
-
-👉 **[Discover Copilot v4 →](https://www.obsidiancopilot.com/v4)**
-
-## Why People Love It ❤️
-
-- *"Copilot is the missing link that turns Obsidian into a true second brain. I use it to draft investment memos with text, code, and visuals—all in one place. It’s the first tool that truly unifies how I search, process, organize, and retrieve knowledge without ever leaving Obsidian. With AI-powered search, organization, and reasoning built into my notes, it unlocks insights I’d otherwise miss. My workflow is faster, deeper, and more connected than ever—I can’t imagine working without it."* - @jasonzhangb, Investor & Research Analyst
-- *"Since discovering Copilot, my writing process has been completely transformed. Conversing with my own articles and thoughts is the most refreshing experience I’ve had in decades.”* - Mat QV, Writer
-- *"Copilot has transformed our family—not just as a productivity assistant, but as a therapist. I introduced it to my non‑technical wife, Mania, who was stressed about our daughter’s upcoming exam; within an hour, she gained clarity on her mindset and next steps, finding calm and confidence."* - @screenfluent, A Loving Husband
-
-## Get Started
-
-### Install Obsidian Copilot
-
-1. Open **Obsidian → Settings → Community plugins**.
-2. Turn off **Safe mode** (if enabled).
-3. Click **Browse**, search for **“Copilot for Obsidian”**.
-4. Click **Install**, then **Enable**.
-
-### Set API Keys
-
-**Free User**
-
-1. Go to **Obsidian → Settings → Copilot → Basic** and click **Set Keys**.
-2. Choose your AI provider(s) (e.g., **OpenRouter, Gemini, OpenAI, Anthropic, Cohere**) and paste your API key(s). **OpenRouter is recommended.**
-
-**Copilot Plus/Believer**
-
-1. Copy your license key at your [dashboard](https://www.obsidiancopilot.com/en/dashboard). _Don’t forget to join our wonderful Discord community!_
-2. Go to **Obsidian → Settings → Copilot → Basic** and paste the key into in the **Copilot Plus** card.
-
-## Usage
-
-### Free User
-
-#### **Chat Mode: reference notes and discuss ideas with Copilot**
-
-Use `@` to add context and chat with your note.
 
 <p align="center">
-    <img src="./images/Add-Context.png" alt="Chat Mode" width="700">
+  <a href="https://obsidian.md/plugins?id=copilot"><strong>Install in Obsidian</strong></a> ·
+  <a href="https://www.obsidiancopilot.com/en/pricing">Plans</a>
 </p>
 
-Ask Copilot:
+---
 
-> _Summarize [[Q3 Retrospective]] and identify the top 3 action items for Q4 based on the notes in {01-Projects}._
+## Free with the AI you already pay for
+
+Bring your own Claude or ChatGPT subscription and use Copilot for free. The plugin is open source, and each way of bringing your own AI maps to an agent that runs natively in your vault:
+
+| You have                                                               | Copilot runs    |
+| ---------------------------------------------------------------------- | --------------- |
+| Claude subscription                                                    | **Claude Code** |
+| ChatGPT subscription                                                   | **Codex**       |
+| API keys or local models (OpenAI, Google, Ollama, LM Studio, and more) | **opencode**    |
+
+Prefer not to juggle API keys? The new [**Lite**](https://www.obsidiancopilot.com/en/pricing) plan runs opencode on Copilot-hosted models with enterprise-grade privacy for $7.99 a month, and unlocks most paid features.
+
+<sub>Provider terms and usage limits still apply.</sub>
+
+## Rebuilt from the ground up
+
+V4 is an entire rewrite. Instead of a single built-in assistant, real agents plan, search, use tools, and write results back to your notes.
+
+- **Speaks fluent Obsidian.** Agents write wikilinks, canvases, and Markdown. The work lands in your vault and stays linked to everything around it.
+- **Tabs, like a browser.** Open a different agent in each tab and work several threads at once: one summarizing a paper while another reorganizes your inbox.
+- **Project Mode, scoped to the work.** Give an agent its own project, with a per-project `AGENTS.md` that steers how it behaves inside that project.
+- **Quick Ask, without leaving the page.** Assign a shortcut in Hotkeys (we recommend `Ctrl/Cmd+K`) and trigger an inline, turn-by-turn window right from the note area, so you can ask a quick question without losing your place.
+- **Finds that vague thought instantly.** Ask in half-remembered language and Copilot searches your vault by meaning, powered by [Miyo](https://miyo.md/), our local indexing engine.
+- **Any model, zero lock-in.** OpenAI, Anthropic, Google, Ollama, LM Studio, or any OpenAI-compatible endpoint. Switch whenever you want.
+- **One setup, every agent.** Add a skill once, then enable it across opencode, Claude Code, and Codex.
+
+> **"Where's that note about attention only reading some of the tokens?"**
+>
+> Found it in `[[Sparse attention]]`: "Attend to a learned subset of tokens instead of the full window: quality holds while compute drops."
+>
+> You also captured this in `[[2026-08-03 Native sparse attention]]` and `[[2026-08-01 Longformer revisited]]`.
+
+## One prompt, every agent
+
+> [!IMPORTANT]
+> Multi-agent collaboration is a **Copilot Plus** feature, included for Plus subscribers and Supporters.
+
+Mention several agents in one prompt and each works it in parallel. Copilot combines their answers into a single result, so you get three perspectives for the effort of one question.
+
+```text
+@claude @codex @opencode Review my draft on sparse attention and flag claims that newer papers contradict.
+```
+
+## Pick your plan
+
+| Plan                                                        | What you get                                                                                                                                                                                                                 |
+| ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [**Free**](https://www.obsidiancopilot.com/en/pricing)      | The full plugin with your own subscriptions, API keys, or local models: agents, Project Mode, Quick Ask, [semantic search](https://miyo.md/), and inline commands.                                                           |
+| [**Lite**](https://www.obsidiancopilot.com/en/pricing)      | Our most affordable license: Copilot hosted models without API-key setup (subject to 5h and weekly quota).                                                                                                                   |
+| [**Plus**](https://www.obsidiancopilot.com/en/pricing)      | Everything: 3x the token allowance of Lite, multi-agent collaboration, better web search, better PDF parsing, built-in skills like YouTube and X capture, and [Symposium](https://symposium.md/) publishing.                 |
+| [**Supporter**](https://www.obsidiancopilot.com/en/pricing) | Lifetime self-host mode, two years of Plus included, lifetime [Miyo](https://miyo.md/), exclusive access to bleeding edge features in preview, and 15% extra credit forever on Copilot credit purchases from your dashboard. |
+
+<p align="center"><a href="https://www.obsidiancopilot.com/en/pricing"><strong>Compare plans →</strong></a></p>
 
 <p align="center">
-    <img src="./images/Chat-Mode.png" alt="Chat Mode" width="700">
+  <img src="./images/copilot-model-quota-dashboard.png" alt="Model quota bars for Copilot Plus Flash, DeepSeek, MiniMax, MiMo, Kimi, GLM, and other models" width="800">
 </p>
 
-#### **Vault QA Mode: chat with your entire vault**
+<p align="center"><sub>Copilot hosted models included in your license. Find your own usage on the <a href="https://www.obsidiancopilot.com/en/dashboard/token-usage">token usage dashboard</a>.</sub></p>
 
-Ask Copilot:
+## Start in three steps
 
-> _What are the recurring themes in my research regarding the intersection of AI and SaaS?_
+1. [Install Copilot](https://obsidian.md/plugins?id=copilot) from Obsidian Community Plugins.
+2. Open Copilot and choose opencode, Claude Code, or Codex.
+3. Connect your subscription, API key, or local model and start working in your vault.
 
-<p align="center">
-    <img src="./images/Vault-Mode.png" alt="Vault Mode" width="700">
-</p>
+## Trusted by people who think for a living
 
-#### Copilot's Command Palette
-
-Copilot's Command Palette puts powerful AI capabilities at your fingertips. Access all commands in chat window via `/` or via
-right-click menu on selected text.
-
-**Add selection to chat context**
-
-Select text and add it to context. Recommend shortcut: `ctrl/cmd + L`
-
-<p align="center">
-    <img src="./images/Add-Selection-to-Context.png" alt="Add Selection to Context" width="700">
-</p>
-
-**Quick Command**
-
-Select text and apply action without opening chat. Recommend shortcut: `ctrl/cmd + K`
-
-<p align="center">
-    <img src="./images/Quick-Command.png" alt="Quick Command" width="700">
-</p>
-
-**Edit and Apply with One Click**
-
-Select text and edit with one RIGHT click.
-
-<p align="center">
-    <img src="./images/One-Click-Commands.png" alt="One-Click Commands" width="700">
-</p>
-
-**Create your Command**
-
-Create commands and workflows in `Settings → Copilot → Command → Add Cmd`.
-
-<p align="center">
-    <img src="./images/Create-Command.png" alt="Create Command" width="700">
-</p>
-
-**Command Palette in Chat**
-
-Type `/` to use Command Palette in chat window.
-
-<p align="center">
-    <img src="./images/Prompt-Palette.png" alt="Prompt Palette" width="700">
-</p>
-
-#### **Relevant Notes: notes suggestions based on semantic similarity and links**
-
-Open it from the command palette (**Open Relevant Notes**) to get its own pane that surfaces related content and links for whatever note you're viewing.
-
-Use it to quickly reference past research, ideas, or decisions—no need to search or switch tabs.
-
-<p align="center">
-    <img src="./images/Relevant-Notes.png" alt="Relevant Notes" width="700">
-</p>
-
-### Copilot Plus/Believer
-
-Copilot Plus brings powerful AI agentic capabilities, context-aware actions and seamless tool integration—built to elevate your knowledge work in Obsidian.
-
-#### **Get Precision Insights From a Specific Time Window**
-
-In agent mode, ask copilot:
-
-> _What did I do last week?_
-
-<p align="center">
-    <img src="./images/Time-Based-Queries.png" alt="Time-Based Queries" width="700">
-</p>
-
-#### **Agent Mode: Autonomous Tool Calling**
-
-Copilot's agent automatically calls the right tools—no manual commands needed. Just ask, and it searches the web, queries your vault, and combines insights seamlessly.
-
-Ask Copilot in agent mode:
-
-> _Research web and my vault and draft a note on AI SaaS onboarding best practices._
-
-<p align="center">
-    <img src="./images/Agent-Mode.png" alt="Agent Mode" width="700">
-</p>
-
-#### **Understand Images in Your Notes**
-
-Copilot can analyze images embedded in your notes—from wireframes and diagrams to screenshots and photos. Get detailed feedback, suggestions, and insights based on visual content.
-
-Ask Copilot to analyze your wireframes:
-
-> _Analyze the wireframe in [[UX Design - Mobile App Wireframes]] and suggest improvements for the navigation flow._
-
-<p align="center">
-    <img src="./images/Note-Image.png" alt="Image Understanding" width="700">
-</p>
-
-#### **One Prompt, Every Source—Instant Summaries from PDFs, Videos, and Web**
-
-In agent mode, ask Copilot
-
-> \*Compare the information about [Agent Memory] from this youtube video: [URL], this PDF [file], and @web[search results]. Start with your
-
-     conclusion in bullet points in your response*
-
-<p align="center">
-    <img src="./images/One-Prompt-Every-Source.png" alt="One Prompt, Every Source" width="700">
-</p>
-
-## **Need Help?**
-
-- Check the [documentation](https://www.obsidiancopilot.com/en/docs) for setup guides, how-tos, and advanced features.
-- Watch [Youtube](https://www.youtube.com/@loganhallucinates) for walkthroughs.
-- If you're experiencing a bug or have a feature idea, please follow the steps below to help us help you faster:
-  - 🐛 Bug Report Checklist
-    - ☑️Use the [bug report template](https://github.com/logancyang/obsidian-copilot/issues/new?template=bug_report.md) when reporting an issue
-    - ☑️Enable Debug Mode in Copilot Settings → Advanced for more detailed logs
-    - ☑️Open the dev console to collect error messages:
-      - Mac: Cmd + Option + I
-      - Windows: Ctrl + Shift + I
-    - ☑️Turn off all other plugins, keeping only Copilot enabled
-    - ☑️Attach relevant console logs to your report
-    - ☑️Submit your bug report [here](https://github.com/logancyang/obsidian-copilot/issues/new?template=bug_report.md)
-  - 💡 Feature Request Checklist
-    - ☑️Use the [feature request template](https://github.com/logancyang/obsidian-copilot/issues/new?template=feature_request.md) for requesting a new feature
-    - ☑️Clearly describe the feature, why it matters, and how it would help
-    - ☑️Submit your feature request [here](https://github.com/logancyang/obsidian-copilot/issues/new?template=feature_request.md)
-
-## **FAQ**
+> "The first tool that truly unifies how I search, organize, and retrieve knowledge without ever leaving Obsidian. My workflow is faster, deeper, and more connected. I can't imagine working without it."
+>
+> **Jason Zhang**, Investor & Research Analyst
 
 <details>
-  <summary><strong>Why isn’t Vault search finding my notes?</strong></summary>
+<summary><strong>More from the community</strong></summary>
 
-If you're using the Vault QA mode (or the tool <code>@vault</code> in Plus), try the following:
+> "I drop meeting transcriptions, personal notes, and architecture ideas into my vault. Copilot gives me a personal assistant that finds missing puzzle pieces and surfaces relevant info during live calls, no manual searches."
+>
+> **Brad Decker**, CTO, Concierge Auctions
 
-- Ensure you have a working embedding model from your AI model's provider (e.g. OpenAI). Watch this video: [AI Model Setup (API Key)](https://www.youtube.com/watch?v=mzMbiamzOqM)
-- Ensure your Copilot indexing is up-to-date. Watch this video: [Vault Mode](https://www.youtube.com/watch?v=hBLMWE8WRFU)
-- If issues persist, run <strong>Force Re-Index</strong> or use <strong>List Indexed Files</strong> from the Command Palette to inspect what's included in the index.
-- ⚠️ <strong>Don’t switch embedding models after indexing</strong>—it can break the results.
+> "Since discovering Copilot, my writing process has been completely transformed. Conversing with my own articles and thoughts is the most refreshing experience I've had in decades."
+>
+> **Mat QV**, Professional Writer
+
 </details>
 
+## Frequently asked questions
+
 <details>
-  <summary><strong>Why is my AI model returning error code 429: ‘Insufficient Quota’?</strong></summary>
+<summary><strong>How is V4 different from previous versions?</strong></summary>
 
-Most likely this is happening because you haven’t configured billing with your chosen model provider—or you’ve hit your monthly quota. For example, OpenAI typically caps individual accounts at $120/month. To resolve:
-
-- ▶️ Watch the “AI Model Setup” video: [AI Model Setup (API Key)](https://www.youtube.com/watch?v=mzMbiamzOqM)
-- 🔍 Verify your billing settings in your OpenAI dashboard
-- 💳 Add a payment method if one isn’t already on file
-- 📊 Check your usage dashboard for any quota or limit warnings
-
-If you’re using a different provider, please refer to their documentation and billing policies for the equivalent steps.
+V4 rebuilds Copilot from scratch, with agents as the main interface instead of a single built-in assistant. Frontier agents run natively inside your vault with full tool use, and around them V4 adds tabs for parallel sessions, Project Mode with its own `AGENTS.md`, and skills you configure once and share across every agent.
 
 </details>
 
 <details>
-  <summary><strong>Why am I getting a token limit error?</strong></summary>
+<summary><strong>What does a license add?</strong></summary>
 
-Please refer to your model provider’s documentation for the context window size.
-
-⚠️ If you set a large <strong>max token limit</strong> in your Copilot settings, you may encounter this error.
-
-- <strong>Max tokens</strong> refers to <em>completion tokens</em>, not input tokens.
-- A higher output token limit means less room for input!
-
-🧠 Behind-the-scenes prompts for Copilot commands also consume tokens, so:
-
-- Keep your message length short
-- Set a reasonable max token value to avoid hitting the cap
-
-💡 For QA with unlimited context, switch to the <strong>Vault QA</strong> mode in the dropdown (Copilot v2.1.0+ required).
+Built-in models with zero setup, multi-agent collaboration, a web-search backend built for agents, PDF parsing that preserves tables and layout, built-in skills such as YouTube and X capture, and Symposium, which publishes a note as a shareable webpage in one click. Lite covers most of these at the lowest price; multi-agent collaboration is included with Plus and Supporter.
 
 </details>
 
-## **🙏 Thank You**
+<details>
+<summary><strong>I'm a V3 user. What happens to my setup?</strong></summary>
 
-If you share the vision of building the most powerful AI agent for our second brain, consider [sponsoring this project](https://github.com/sponsors/logancyang) or buying me a coffee. Help spread the word by sharing Copilot for Obsidian on Twitter/X, Reddit, or your favorite platform!
+V4 arrives as a normal plugin update. Your settings, custom prompts, API keys, and existing Copilot Plus license carry over, and Quick Ask plus vault QA keep working as before.
+
+</details>
+
+<details>
+<summary><strong>How is my data handled?</strong></summary>
+
+Your notes remain plain files in your vault, and the search index is stored locally. On the free tier, requests go only to the model provider you configure. Licensed features may use Brevilabs services for the processing you explicitly request. See the [disclosure below](#copilot-plus-disclosure) and the [privacy policy](https://www.obsidiancopilot.com/en/privacy).
+
+</details>
+
+## Help and links
+
+[YouTube](https://www.youtube.com/@loganhallucinates) · [Report a bug](https://github.com/logancyang/obsidian-copilot/issues/new?template=bug_report.md) · [Request a feature](https://github.com/logancyang/obsidian-copilot/issues/new?template=feature_request.md) · [Privacy](https://www.obsidiancopilot.com/en/privacy)
+
+## Support the project
+
+If you share our vision for a powerful, portable AI agent for your second brain, consider [sponsoring Copilot on GitHub](https://github.com/sponsors/logancyang) or buying us a coffee.
 
 <p align="center">
-  <img src="https://camo.githubusercontent.com/7b8f7343bfc6e3c65c7901846637b603fd812f1a5f768d8b0572558bde859eb9/68747470733a2f2f63646e2e6275796d6561636f666665652e636f6d2f627574746f6e732f76322f64656661756c742d79656c6c6f772e706e67" alt="BuyMeACoffee" width="200">
+  <a href="https://github.com/sponsors/logancyang"><img src="https://img.shields.io/github/sponsors/logancyang?style=for-the-badge&logo=githubsponsors&label=Sponsor" alt="Sponsor Copilot on GitHub"></a>
+  <img src="https://camo.githubusercontent.com/7b8f7343bfc6e3c65c7901846637b603fd812f1a5f768d8b0572558bde859eb9/68747470733a2f2f63646e2e6275796d6561636f666665652e636f6d2f627574746f6e732f76322f64656661756c742d79656c6c6f772e706e67" alt="Buy Me a Coffee" width="165">
 </p>
 
-**Acknowledgments**
+### Thank you to our GitHub Sponsors
 
 Special thanks to our top sponsors: @mikelaaron, @pedramamini, @Arlorean, @dashinja, @azagore, @MTGMAD, @gpythomas, @emaynard, @scmarinelli, @borthwick, @adamhill, @gluecode, @rusi, @timgrote, @JiaruiYu-Consilium, @ddocta, @AMOz1, @chchwy, @pborenstein, @GitTom, @kazukgw, @mjluser1, @joesfer, @rwaal, @turnoutnow-harpreet, @dreznicek, @xrise-informatik, @jeremygentles, @ZhengRui, @bfoujols, @jsmith0475, @pagiaddlemon, @sebbyyyywebbyyy, @royschwartz2, @vikram11, @amiable-dev, @khalidhalim, @DrJsPBs, @chishaku, @Andrea18500, @shayonpal, @rhm2k, @snorcup, @JohnBub, @obstinatelark, @jonashaefele, @vishnu2kmohan
 
-## **Copilot Plus Disclosure**
+## Copilot Plus Disclosure
 
-Copilot Plus is a premium product of Brevilabs LLC and it is not affiliated with Obsidian. It offers a powerful agentic AI integration into Obsidian. Please check out our website [obsidiancopilot.com](https://obsidiancopilot.com/) for more details!
+Copilot Plus is a premium product of Brevilabs LLC and is not affiliated with Obsidian. Visit [obsidiancopilot.com](https://obsidiancopilot.com/) for details.
 
 - An account and payment are required for full access.
-- Copilot Plus requires network use to facilitate the AI agent.
-- **Privacy & Data Handling**:
-  - **Free tier**: Your messages and notes are sent only to your configured LLM provider (OpenAI, Anthropic, Google, etc.). Nothing goes to Brevilabs servers.
-  - **Plus tier**: Messages go to your configured LLM provider. File conversions (PDF, DOCX, EPUB, images, etc.) are processed by Brevilabs servers only when you explicitly trigger these features via `@` commands.
-  - **Processing vs. Retention**: We process your data to deliver the feature you requested, then discard it. No message content, file uploads, or documents are retained on our servers after processing.
-  - **User ID**: A randomly generated UUID is sent with Plus API requests for service delivery (license abuse prevention, rate limiting) but is not used for user tracking, profiling, or analytics.
-- Please see the privacy policy on the website for more details.
-- The frontend code of Copilot plugin is fully open-source. However, the backend code facilitating the AI agents is close-sourced and proprietary.
-- We offer a full refund if you are not satisfied with the product within 14 days of your purchase, no questions asked.
+- Copilot Plus requires network access to provide its AI agent services.
+- **Privacy and data handling:**
+  - **Free tier:** Your messages and notes are sent only to your configured LLM provider, such as OpenAI, Anthropic, or Google. Nothing goes to Brevilabs servers.
+  - **Plus tier:** Messages go to your configured LLM provider. File conversions, including PDF, DOCX, EPUB, and images, are processed by Brevilabs servers only when you explicitly trigger those features through `@` commands.
+  - **Processing, not retention:** We process data to deliver the feature you requested, then discard it. No message content, file uploads, or documents are retained on our servers after processing.
+  - **User ID:** A randomly generated UUID is sent with Plus API requests for service delivery, license abuse prevention, and rate limiting. It is not used for tracking, profiling, or analytics.
+- See the [privacy policy](https://www.obsidiancopilot.com/en/privacy) for more details.
+- The Copilot plugin frontend is fully open source. Backend services that facilitate AI agents are closed source and proprietary.
+- We offer a full refund within 14 days of purchase if you are not satisfied.
 
-## **Authors**
+## Authors
 
-Brevilabs Team | Email: logan@brevilabs.com | X/Twitter: [@logancyang](https://twitter.com/logancyang)
+Brevilabs Team · [logan@brevilabs.com](mailto:logan@brevilabs.com) · [@logancyang](https://twitter.com/logancyang)
