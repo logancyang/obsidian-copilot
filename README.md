@@ -152,8 +152,7 @@ Your notes remain plain files in your vault, and the search index is stored loca
 If you share our vision for a powerful, portable AI agent for your second brain, consider [sponsoring Copilot on GitHub](https://github.com/sponsors/logancyang) or buying us a coffee.
 
 <p align="center">
-  <a href="https://github.com/sponsors/logancyang"><img src="https://img.shields.io/github/sponsors/logancyang?style=for-the-badge&logo=githubsponsors&label=Sponsor" alt="Sponsor Copilot on GitHub"></a>
-  <img src="https://camo.githubusercontent.com/7b8f7343bfc6e3c65c7901846637b603fd812f1a5f768d8b0572558bde859eb9/68747470733a2f2f63646e2e6275796d6561636f666665652e636f6d2f627574746f6e732f76322f64656661756c742d79656c6c6f772e706e67" alt="Buy Me a Coffee" width="165">
+  <a href="https://www.buymeacoffee.com/logancyang"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" width="165"></a>
 </p>
 
 ### Thank you to our GitHub Sponsors
