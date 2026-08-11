@@ -200,7 +200,7 @@ function toKeychainId(vaultId: string, settingsKey: string): string {
 /** Build a readable, unique, vault-scoped API-key ID for a named provider. */
 function toProviderKeychainId(vaultId: string, providerName: string, providerId: string): string {
   const prefix = `copilot-v${vaultId}-`;
-  const instanceId = providerId.replace(/[^a-z0-9]/gi, "").slice(0, 8) || "provider";
+  const instanceId = md5(providerId).slice(-16);
   const suffix = `-api-key-p${instanceId.toLowerCase()}`;
   const nameBudget = MAX_SECRET_ID_LENGTH - prefix.length - suffix.length;
   const readableName = toReadableSecretSegment(providerName) || "provider";

@@ -64,7 +64,7 @@ async function seedLegacyProviderCredential(
   registry: ProviderRegistry,
   app: App,
   secrets: SecretStore
-): Promise<{ id: string; legacyId: string; vaultId: string }> {
+): Promise<{ id: string; legacyId: string }> {
   const id = await registry.add({
     providerType: "anthropic",
     displayName: "Anthropic Team",
@@ -79,7 +79,11 @@ async function seedLegacyProviderCredential(
       [id]: { ...current.providers[id], apiKeyKeychainId: legacyId },
     },
   }));
-  return { id, legacyId, vaultId };
+  return { id, legacyId };
+}
+
+function readableProviderCredentialId(app: App, providerId: string, providerName: string): string {
+  return KeychainService.getInstance(app).getProviderSecretId(providerName, providerId);
 }
 
 describe("ProviderRegistry", () => {
@@ -207,9 +211,7 @@ describe("ProviderRegistry", () => {
 
       await registry.setApiKey(id, "sk-first");
       const firstKeychainId = registry.get(id)!.apiKeyKeychainId;
-      const vaultId = KeychainService.getInstance(app).getVaultId();
-      const instanceId = id.replace(/-/g, "").slice(0, 8);
-      expect(firstKeychainId).toBe(`copilot-v${vaultId}-anthropic-prod-api-key-p${instanceId}`);
+      expect(firstKeychainId).toBe(readableProviderCredentialId(app, id, "Anthropic (prod)"));
       expect(firstKeychainId!.length).toBeLessThanOrEqual(64);
       expect(await registry.getApiKey(id)).toBe("sk-first");
 
@@ -226,7 +228,7 @@ describe("ProviderRegistry", () => {
       await registry.setApiKey(id, "sk-new");
 
       const readableId = registry.get(id)?.apiKeyKeychainId;
-      expect(readableId).toMatch(/^copilot-v[0-9a-f]{8}-anthropic-team-api-key-p[0-9a-f]{8}$/);
+      expect(readableId).toMatch(/^copilot-v[0-9a-f]{8}-anthropic-team-api-key-p[0-9a-f]{16}$/);
       expect(secrets.get(readableId!)).toBe("sk-new");
       expect(secrets.has(legacyId)).toBe(false);
 
@@ -252,9 +254,8 @@ describe("ProviderRegistry", () => {
     });
 
     it("leaves the working legacy key and pointer untouched when read-back verification fails", async () => {
-      const { id, legacyId, vaultId } = await seedLegacyProviderCredential(registry, app, secrets);
-      const instanceId = id.replace(/-/g, "").slice(0, 8);
-      const readableId = `copilot-v${vaultId}-anthropic-team-api-key-p${instanceId}`;
+      const { id, legacyId } = await seedLegacyProviderCredential(registry, app, secrets);
+      const readableId = readableProviderCredentialId(app, id, "Anthropic Team");
       (app.secretStorage as unknown as { setSecret(id: string, value: string): void }).setSecret = (
         target,
         value
@@ -273,12 +274,11 @@ describe("ProviderRegistry", () => {
 
   describe("migrateLegacyApiKeyIds()", () => {
     it("copies, verifies, and removes UUID-only provider entries", async () => {
-      const { id, legacyId, vaultId } = await seedLegacyProviderCredential(registry, app, secrets);
+      const { id, legacyId } = await seedLegacyProviderCredential(registry, app, secrets);
 
       registry.migrateLegacyApiKeyIds();
 
-      const instanceId = id.replace(/-/g, "").slice(0, 8);
-      const readableId = `copilot-v${vaultId}-anthropic-team-api-key-p${instanceId}`;
+      const readableId = readableProviderCredentialId(app, id, "Anthropic Team");
       expect(registry.get(id)?.apiKeyKeychainId).toBe(readableId);
       expect(secrets.get(readableId)).toBe("sk-existing");
       expect(secrets.has(legacyId)).toBe(false);
@@ -301,9 +301,8 @@ describe("ProviderRegistry", () => {
     });
 
     it("keeps an existing readable value authoritative and removes the stale legacy entry", async () => {
-      const { id, legacyId, vaultId } = await seedLegacyProviderCredential(registry, app, secrets);
-      const instanceId = id.replace(/-/g, "").slice(0, 8);
-      const readableId = `copilot-v${vaultId}-anthropic-team-api-key-p${instanceId}`;
+      const { id, legacyId } = await seedLegacyProviderCredential(registry, app, secrets);
+      const readableId = readableProviderCredentialId(app, id, "Anthropic Team");
       secrets.set(readableId, "stale-partial-copy");
 
       registry.migrateLegacyApiKeyIds();
@@ -315,9 +314,8 @@ describe("ProviderRegistry", () => {
     });
 
     it("copies a device-local legacy entry when settings sync a readable pointer", async () => {
-      const { id, legacyId, vaultId } = await seedLegacyProviderCredential(registry, app, secrets);
-      const instanceId = id.replace(/-/g, "").slice(0, 8);
-      const readableId = `copilot-v${vaultId}-anthropic-team-api-key-p${instanceId}`;
+      const { id, legacyId } = await seedLegacyProviderCredential(registry, app, secrets);
+      const readableId = readableProviderCredentialId(app, id, "Anthropic Team");
       setSettings((current) => ({
         providers: {
           ...current.providers,
@@ -334,9 +332,8 @@ describe("ProviderRegistry", () => {
     });
 
     it("keeps the legacy pointer when the readable copy cannot be verified", async () => {
-      const { id, legacyId, vaultId } = await seedLegacyProviderCredential(registry, app, secrets);
-      const instanceId = id.replace(/-/g, "").slice(0, 8);
-      const readableId = `copilot-v${vaultId}-anthropic-team-api-key-p${instanceId}`;
+      const { id, legacyId } = await seedLegacyProviderCredential(registry, app, secrets);
+      const readableId = readableProviderCredentialId(app, id, "Anthropic Team");
       (app.secretStorage as unknown as { setSecret(id: string, value: string): void }).setSecret = (
         target,
         value
@@ -352,9 +349,8 @@ describe("ProviderRegistry", () => {
     });
 
     it("does not promote an unverified readable entry when its cleanup fails", async () => {
-      const { id, legacyId, vaultId } = await seedLegacyProviderCredential(registry, app, secrets);
-      const instanceId = id.replace(/-/g, "").slice(0, 8);
-      const readableId = `copilot-v${vaultId}-anthropic-team-api-key-p${instanceId}`;
+      const { id, legacyId } = await seedLegacyProviderCredential(registry, app, secrets);
+      const readableId = readableProviderCredentialId(app, id, "Anthropic Team");
       const secretStorage = app.secretStorage as unknown as {
         setSecret(id: string, value: string): void;
         deleteSecret(id: string): void;

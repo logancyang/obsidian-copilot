@@ -226,14 +226,15 @@ describe("keychainService", () => {
     });
 
     describe("getProviderSecretId()", () => {
-      it("uses the provider name and keeps long labels within the SecretStorage limit", () => {
+      it("uses the provider name, distinguishes similar IDs, and stays within the limit", () => {
         const service = KeychainService.getInstance(makeApp());
         service.setVaultId("1234abcd");
         const providerId = "b818d2de-184f-4e3e-8ff5-cad6dfab31f3";
+        const similarProviderId = "b818d2de-ffff-4e3e-8ff5-cad6dfab31f3";
+        const id = service.getProviderSecretId("Anthropic Team", providerId);
 
-        expect(service.getProviderSecretId("Anthropic Team", providerId)).toBe(
-          "copilot-v1234abcd-anthropic-team-api-key-pb818d2de"
-        );
+        expect(id).toMatch(/^copilot-v1234abcd-anthropic-team-api-key-p[0-9a-f]{16}$/);
+        expect(service.getProviderSecretId("Anthropic Team", similarProviderId)).not.toBe(id);
         expect(
           service.getProviderSecretId("A very long provider name ".repeat(5), providerId).length
         ).toBeLessThanOrEqual(64);
