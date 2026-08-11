@@ -17,6 +17,8 @@ Real agents tuned for your links and structure, working like they belong in your
 - **Multi-agent collaboration** _(Plus)_. Mention `@claude @codex @opencode` in one prompt and each agent works it in parallel, then Copilot combines their answers into one result.
 - **One skill, every agent.** Set up a skill once, then enable it for opencode, Claude Code, or Codex with a click.
 
+> **Note:** Agent Mode is **desktop-only** for now. On mobile, Copilot keeps working with the classic chat experience (now called **Quick Chat**).
+
 ### 🔑 Bring the subscription you already pay for
 
 Copilot is free and open source — bring your own AI:
@@ -46,13 +48,13 @@ Quick Ask inline panel (assign a hotkey — we recommend `Ctrl/Cmd+K`), redesign
 V4 arrives as a normal plugin update. Your settings, custom prompts, and license carry over, and Copilot runs a one-time migration on first launch that ends with a summary of everything it did. A few things to know:
 
 - **Back up your vault before updating.** The migration is automatic, but this is a major architectural change and a backup is cheap insurance.
-- **Your old chat is now "Quick Chat."** Agent Mode is the new main view. The classic V3 chat is still here — open the command palette and run **"New Copilot Quick Chat"**. Quick Ask and vault QA keep working as before.
+- **Your old chat is now "Quick Chat."** Agent Mode is the new main view on desktop. The classic V3 chat is still here — open the command palette and run **"New Copilot Quick Chat"** — and it remains the chat experience on mobile. Quick Ask and vault QA keep working as before.
 - **One `copilot` folder for everything.** Conversations, custom prompts, skills, memory, system prompts, and projects now live under a single parent folder (default: `copilot`, configurable in settings). Existing files are moved automatically; if you had customized any of those paths, a one-time notice lists the old and new locations.
 - **API keys move to the Obsidian keychain.** For security, keys are migrated out of `data.json`, with a backup saved in your plugin folder.
 
 ## 📦 Install
 
-Update Copilot from **Obsidian → Community Plugins**. If you were on the V4 preview via BRAT, you can remove the beta repo from BRAT and switch back to the official release.
+Update Copilot from **Obsidian → Community Plugins**. On the V4 preview via BRAT? Keep the beta repo — the official v4.0.0 is released there as well, so you'll get it through BRAT too.
 
 ---
 
