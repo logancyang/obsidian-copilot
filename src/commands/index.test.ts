@@ -17,6 +17,20 @@ function markdownFile(path: string): TFile {
 
 describe("commands", () => {
   describe("registerCommands()", () => {
+    it("registers the new Quick Chat command with a name distinct from Agent Chat", () => {
+      const commands: Command[] = [];
+      const plugin = {
+        addCommand: jest.fn((command: Command) => commands.push(command)),
+        app: { workspace: { getActiveFile: jest.fn(() => null) } },
+      } as unknown as CopilotPlugin;
+
+      registerCommands(plugin, jest.fn());
+
+      const command = commands.find(({ id }) => id === COMMAND_IDS.NEW_CHAT);
+      expect(command?.name).toBe("New Copilot Quick Chat");
+      expect(command?.name).not.toBe(COMMAND_NAMES[COMMAND_IDS.NEW_AGENT_CHAT]);
+    });
+
     it("registers the Symposium palette command and publishes the active Markdown file", () => {
       const activeFile = markdownFile("Notes/Active.md");
       const commands: Command[] = [];

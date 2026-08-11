@@ -307,7 +307,7 @@ Click the mode selector at the top of the chat panel. Available modes:
 - Chat
 - Vault QA (Basic)
 - Copilot Plus (requires license)
-- Projects (alpha)
+- Projects
 
 ### The AI keeps forgetting what we talked about earlier
 

@@ -885,7 +885,7 @@ export const COMMAND_NAMES: Record<CommandId, string> = {
   [COMMAND_IDS.INSPECT_COPILOT_INDEX_BY_NOTE_PATHS]: "Inspect Copilot index by note paths (debug)",
   [COMMAND_IDS.LIST_INDEXED_FILES]: "List all indexed files (debug)",
   [COMMAND_IDS.LOAD_COPILOT_CHAT_CONVERSATION]: "Load Copilot chat conversation",
-  [COMMAND_IDS.NEW_CHAT]: "New Copilot Chat",
+  [COMMAND_IDS.NEW_CHAT]: "New Copilot Quick Chat",
   [COMMAND_IDS.NEW_AGENT_CHAT]: "New Copilot Agent Chat",
   [COMMAND_IDS.OPEN_COPILOT_CHAT_WINDOW]: "Open Copilot Chat Window",
   [COMMAND_IDS.OPEN_AGENT_CHAT_WINDOW]: "Open Copilot Agent Chat Window",

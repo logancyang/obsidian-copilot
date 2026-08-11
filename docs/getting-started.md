@@ -58,7 +58,7 @@ Use the **Default Mode** dropdown to set which mode opens by default:
 - **Chat** — General conversation, good for most tasks
 - **Vault QA** — Ask questions answered from your notes
 - **Copilot Plus** — Advanced mode with autonomous agent and tools (requires Copilot Plus license)
-- **Projects** — Focused workspaces (alpha feature)
+- **Projects** — Focused workspaces with their own context and chat history
 
 Most users should start with **Chat** mode.
 
@@ -117,7 +117,7 @@ These are the default shortcuts. You can customize them in **Obsidian Settings**
 | ----------------------------- | ------------------------------- |
 | Open Copilot Chat Window      | _(unbound — assign in Hotkeys)_ |
 | Toggle Copilot Chat Window    | _(unbound — assign in Hotkeys)_ |
-| New Copilot Chat              | _(unbound — assign in Hotkeys)_ |
+| New Copilot Quick Chat        | _(unbound — assign in Hotkeys)_ |
 | Quick Ask (floating input)    | _(unbound — assign in Hotkeys)_ |
 | Trigger Quick Command         | _(unbound — assign in Hotkeys)_ |
 | Add selection to chat context | _(unbound — assign in Hotkeys)_ |

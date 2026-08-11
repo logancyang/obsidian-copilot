@@ -174,10 +174,10 @@ describe("AgentSettings", () => {
     await waitFor(() => expect(mockPreloadModels).toHaveBeenCalledWith("opencode"));
   });
 
-  it("labels the section Agents and marks it alpha", () => {
+  it("labels the section Agents without an alpha badge", () => {
     render(<AgentSettings />);
     expect(screen.getByText("Agents")).not.toBeNull();
-    expect(screen.getByText("alpha")).not.toBeNull();
+    expect(screen.queryByText("alpha")).toBeNull();
   });
 
   it("renders the four sub-tabs in order: OpenCode, Claude, Codex, Quick Chat", () => {

@@ -37,19 +37,6 @@ function getScrollableParent(el: HTMLElement): HTMLElement | null {
 }
 
 /**
- * Section label for the Agents block. The `alpha` badge is deliberately quiet —
- * it qualifies the heading rather than competing with it.
- */
-const AGENTS_SECTION_LABEL = (
-  <span className="tw-inline-flex tw-items-center tw-gap-1.5">
-    Agents
-    <Badge variant="outline" className="tw-px-1.5 tw-py-0 tw-font-normal">
-      alpha
-    </Badge>
-  </span>
-);
-
-/**
  * The "Agents" section of the Basic settings tab. Owns the global
  * default-backend picker and a sub-tab strip with one panel per backend plus a
  * Quick Chat panel. Each backend panel curates that backend's default model,
@@ -112,7 +99,7 @@ export const AgentSettings: React.FC = () => {
 
   return (
     <section className="tw-space-y-4">
-      <SettingSection label={AGENTS_SECTION_LABEL}>
+      <SettingSection label="Agents">
         <SettingItem
           type="select"
           title="Default backend"
