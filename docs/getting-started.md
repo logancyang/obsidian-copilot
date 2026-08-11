@@ -58,7 +58,7 @@ Use the **Default Mode** dropdown to set which mode opens by default:
 
 - **Chat** — General conversation, good for most tasks
 - **Vault QA** — Ask questions answered from your notes
-- **Paid Quick Chat** — Licensed mode with web, memory, and autonomous tools
+- **copilot plus** — Paid Quick Chat with licensed web, memory, and autonomous tools
 - **Projects** — Focused workspaces (alpha feature)
 
 Most users should start with **Chat** mode.

@@ -4,7 +4,7 @@ Projects are focused AI workspaces with their own instructions, reusable context
 
 Projects are an alpha feature and may change.
 
-Projects can work with 50+ file types when the selected agent and document skills support them, including PDFs, Office documents, images, and source code.
+Projects can work with 50+ file types, including PDFs, Office documents, images, and source code. Copilot prepares supported binary project files with its hosted document service before the agent runs; this requires a Copilot license.
 
 ---
 
@@ -45,7 +45,7 @@ Projects can prepare these sources for each conversation:
 
 You can also exclude notes and folders. Large source sets take longer to prepare. If you send a message while context is still loading, Agent Mode queues it and runs it when the context is ready.
 
-Projects can work with many file formats through the active agent and available document skills. Whether a particular file can be read depends on the selected agent, installed skills, and document processor.
+PDFs, EPUBs, and other supported binary files included through a project source are converted by Copilot's hosted document service before the agent runs. This project-context path requires a Copilot license and does not use the **Document Processor** setting, so choosing Miyo does not keep those project files local. For local-only handling, do not include those files in project context; ask the active agent to read them with its own local tools or skills instead.
 
 ### Switch or manage projects
 

@@ -74,7 +74,7 @@ Before diving into specific fixes, try these steps first:
 
 Even after indexing, relevant notes aren't being returned? Try:
 
-1. Switch to **paid Quick Chat** and use `@vault` for more powerful search
+1. Switch to **copilot plus** (paid Quick Chat) and use `@vault` for more powerful search
 2. Try the **multilingual embedding model** for non-English notes
 3. Review your QA inclusions/exclusions to confirm the notes aren't filtered out
 4. Run **List all indexed files** (debug command) to verify the notes are indexed
@@ -84,7 +84,7 @@ Even after indexing, relevant notes aren't being returned? Try:
 
 **Cause**: You tried to use a PDF, image, or other non-markdown file as context in a free mode.
 
-**Fix**: In Quick Chat, switch to paid Quick Chat or convert the file to markdown manually. In Agent Mode, document support depends on the active agent, its skills, and the selected document processor.
+**Fix**: In Quick Chat, switch to **copilot plus** (paid Quick Chat) or convert the file to markdown manually. In Agent Mode, document support depends on the active agent, its skills, and the selected document processor.
 
 ---
 
@@ -307,7 +307,7 @@ Click the mode selector at the top of Quick Chat. Available modes:
 
 - Chat
 - Vault QA (Basic)
-- Paid Quick Chat (requires a license)
+- **copilot plus** (paid Quick Chat; requires a license)
 - Projects
 
 Agent Mode is a separate desktop view, not an item in this selector. Click the **Agent** ribbon icon or run **Open Copilot Agent Chat Window**, then choose OpenCode, Claude, or Codex.

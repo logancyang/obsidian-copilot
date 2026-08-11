@@ -43,7 +43,7 @@ Controls when Copilot automatically updates the index:
 | ------------------ | -------------------------------------------------------------------- |
 | **NEVER**          | Manual only — you must trigger indexing yourself                     |
 | **ON STARTUP**     | Updates when Obsidian starts or the plugin reloads                   |
-| **ON MODE SWITCH** | Updates when you switch to Vault QA or paid Quick Chat (Recommended) |
+| **ON MODE SWITCH** | Updates when you switch to Vault QA or **copilot plus** (paid Quick Chat) |
 
 The default is **ON MODE SWITCH**.
 

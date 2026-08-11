@@ -18,9 +18,9 @@ General-purpose conversation. Good for writing, brainstorming, summarizing, or a
 
 Ask questions about your vault content. Copilot uses lexical search (keyword matching) to find relevant notes and passes them as context to the AI. No indexing required. Good for quick questions about your notes.
 
-### Paid Quick Chat
+### Paid Quick Chat (shown as `copilot plus`)
 
-Requires an active [Copilot license](copilot-plus-and-self-host.md). Combines Chat and Vault QA with the legacy Quick Chat autonomous loop, which can:
+Select **copilot plus** in the mode selector. This paid Quick Chat mode requires an active [Copilot license](copilot-plus-and-self-host.md) and combines Chat and Vault QA with the legacy Quick Chat autonomous loop, which can:
 
 - Search your vault and the web
 - Read and edit notes
