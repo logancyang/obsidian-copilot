@@ -25,7 +25,7 @@ The most powerful mode. Requires a [Copilot Plus](copilot-plus-and-self-host.md)
 - Remember things across conversations
 - Use a growing set of tools automatically
 
-### Projects (alpha)
+### Projects
 
 Focused workspaces with their own context, model, system prompt, and isolated chat history. Useful for keeping separate AI conversations per project. See [Projects](projects.md) for details.
 
@@ -157,7 +157,7 @@ Click the **pencil/new chat icon** to start a fresh conversation. This:
 2. Clears the chat window
 3. Resets the context to your currently active note
 
-You can also use the command palette: **New Copilot Chat**.
+You can also use the command palette: **New Copilot Quick Chat**.
 
 ---
 
