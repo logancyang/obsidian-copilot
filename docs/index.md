@@ -23,8 +23,9 @@ Welcome to the official documentation for **Copilot for Obsidian**, an AI-powere
 ## Quick Start
 
 1. Install Copilot from Obsidian Community Plugins
-2. Add a provider under Settings → Copilot → Models (BYOK)
-3. Run **Open Copilot Chat Window** for Quick Chat, or click the Agent ribbon icon for Agent Mode
-4. Start chatting
+2. Choose a path:
+   - **Quick Chat:** Add a provider under **Settings → Copilot → Models (BYOK)**, then run **Open Copilot Chat Window**.
+   - **Agent Mode:** Click the Agent ribbon icon and set up OpenCode, Claude, or Codex with that agent's own account or model access.
+3. Start chatting
 
 For a full walkthrough, see [Getting Started](getting-started.md).
