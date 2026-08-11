@@ -249,6 +249,43 @@ it("v7: keys off persisted enableMiyo, not the mobile-sensitive search backend",
 });
 
 describe("runSettingsMigrations()", () => {
+  it("v9: normalizes and de-duplicates provider names for a v8 vault", async () => {
+    mockGetSettings.mockReturnValue(
+      settings({
+        settingsVersion: 8,
+        providers: {
+          first: {
+            providerId: "provider-a",
+            providerType: "anthropic",
+            displayName: " OpenRouter ",
+            origin: { kind: "byok" },
+            addedAt: 1,
+            apiKeyKeychainId: null,
+          },
+          second: {
+            providerId: "provider-b",
+            providerType: "anthropic",
+            displayName: "openrouter",
+            origin: { kind: "agent", agentType: "claude" },
+            addedAt: 2,
+            apiKeyKeychainId: null,
+          },
+        },
+      })
+    );
+    const { api, setupProvider } = makeApi();
+
+    await runSettingsMigrations(api);
+
+    const providerWrite = mockSetSettings.mock.calls.find((call) => "providers" in call[0])?.[0] as
+      | { providers: Record<string, { displayName: string }> }
+      | undefined;
+    expect(providerWrite?.providers.first.displayName).toBe("OpenRouter");
+    expect(providerWrite?.providers.second.displayName).toBe("openrouter 2");
+    expect(setupProvider).not.toHaveBeenCalled();
+    expect(mockSetSettings).toHaveBeenCalledWith({ settingsVersion: CURRENT_SETTINGS_VERSION });
+  });
+
   it("v8: seeds copilotFolder for a v7 vault", async () => {
     // A v7 vault predates the configurable root and must be stamped with the
     // historical default so the derived sub-folder accessors have a base.

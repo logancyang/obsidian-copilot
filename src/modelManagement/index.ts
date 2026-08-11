@@ -32,6 +32,14 @@ export { CatalogDownloadService } from "./catalog/CatalogDownloadService";
 export type { CatalogDownloadDeps, CatalogRefreshResult } from "./catalog/CatalogDownloadService";
 
 export { ProviderRegistry } from "./providers/ProviderRegistry";
+export type { ProviderCredentialReconciliationResult } from "./providers/ProviderRegistry";
+export {
+  allocateUniqueProviderDisplayName,
+  buildProviderKeychainId,
+  normalizeProviderDisplayName,
+  providerDisplayNameKey,
+  providerKeychainStableToken,
+} from "./providers/providerIdentity";
 export { isSelfHostedProvider, isSelfHostedUrl } from "./providers/isSelfHostedProvider";
 export { providerNeedsSelfHostWarning } from "./providers/selfHostPolicy";
 export type { SelfHostPolicyInput } from "./providers/selfHostPolicy";

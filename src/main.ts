@@ -65,7 +65,7 @@ import {
 } from "@/services/webViewerService/webViewerServiceSingleton";
 import { WebSelectionTracker } from "@/services/webViewerService/webViewerServiceSelection";
 import VectorStoreManager from "@/search/vectorStoreManager";
-import { runSettingsMigrations } from "@/settings/migrations";
+import { prepareProviderStartup } from "@/services/providerStartup";
 import { CopilotSettingTab } from "@/settings/SettingsPage";
 import {
   type CopilotSettings,
@@ -229,9 +229,6 @@ export default class CopilotPlugin extends Plugin {
         syncCopilotPlusProvider(this.modelManagement, !!isPaidUser, licenseKey)
       );
     };
-    // Initial reconcile: an already-signed-in user's `isPaidUser` is restored
-    // from disk without firing the subscription, so register on load.
-    syncPlus(getSettings().isPaidUser, getSettings().plusLicenseKey);
     this.settingsUnsubscriber = subscribeToSettingsChange((prev, next) => {
       void (async () => {
         try {
@@ -255,12 +252,13 @@ export default class CopilotPlugin extends Plugin {
         }
       })();
     });
-    // One-time settings migrations. Runs after the persist subscriber is wired
-    // (so every mutation is saved) and after createModelManagement, and before
-    // agent/model-discovery init below — so migrated BYOK providers are present
-    // when OpenCode first enumerates models. Awaited for deterministic ordering;
-    // it's a fast, one-time, no-op for already-migrated/fresh vaults.
-    await runSettingsMigrations(this.modelManagement);
+    // Repair synced provider names and this device's local keychain before Plus
+    // or agent discovery can read either. Credential reconciliation runs on every
+    // load even when the versioned settings migration is already current.
+    await prepareProviderStartup(this.modelManagement);
+    // An already-signed-in user's `isPaidUser` is restored from disk without
+    // firing the subscription, so register only after provider repair settles.
+    syncPlus(getSettings().isPaidUser, getSettings().plusLicenseKey);
     const isLegacyUpgrade = getSettings().upgradedToV8FromLegacy;
     this.addSettingTab(new CopilotSettingTab(this.app, this));
 

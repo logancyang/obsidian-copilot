@@ -208,6 +208,22 @@ describe("keychainService", () => {
       });
     });
 
+    describe("listSecretIds()", () => {
+      it("returns the IDs exposed by Obsidian SecretStorage", () => {
+        const secretStorage = makeSecretStorage();
+        secretStorage.listSecrets.mockReturnValue(["first", "second"]);
+        const service = KeychainService.getInstance(makeApp({ secretStorage }));
+
+        expect(service.listSecretIds()).toEqual(["first", "second"]);
+      });
+
+      it("throws the keychain availability error when SecretStorage is absent", () => {
+        const service = KeychainService.getInstance(makeApp({ secretStorage: null }));
+
+        expect(() => service.listSecretIds()).toThrow(/not available/i);
+      });
+    });
+
     // ---------------------------------------------------------------------------
     // hydrateFromKeychain — read-only keychain hydration
     // ---------------------------------------------------------------------------

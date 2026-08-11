@@ -11,7 +11,7 @@ import { KeychainService } from "@/services/keychainService";
 
 import type { ProviderAdapter } from "./adapters/ProviderAdapter";
 import { ProviderAdapterRegistry } from "./adapters/ProviderAdapterRegistry";
-import { buildProviderKeychainId } from "./providerIdentity";
+import { buildProviderKeychainId, providerKeychainStableToken } from "./providerIdentity";
 import { ProviderRegistry } from "./ProviderRegistry";
 
 import type { App } from "obsidian";
@@ -29,19 +29,25 @@ function makeFakeApp(): {
   app: App;
   secrets: SecretStore;
   setSecret: jest.Mock<void, [string, string]>;
+  getSecret: jest.Mock<string | null, [string]>;
+  listSecrets: jest.Mock<string[], []>;
+  deleteSecret: jest.Mock<void, [string]>;
 } {
   const secrets: SecretStore = new Map();
   const setSecret = jest.fn((id: string, value: string) => {
     secrets.set(id, value);
   });
+  const getSecret = jest.fn((id: string) => (secrets.has(id) ? secrets.get(id)! : null));
+  const listSecrets = jest.fn(() => Array.from(secrets.keys()));
+  const deleteSecret = jest.fn((id: string) => {
+    secrets.delete(id);
+  });
   const app = {
     secretStorage: {
       setSecret,
-      getSecret: (id: string) => (secrets.has(id) ? secrets.get(id)! : null),
-      listSecrets: () => Array.from(secrets.keys()),
-      deleteSecret: (id: string) => {
-        secrets.delete(id);
-      },
+      getSecret,
+      listSecrets,
+      deleteSecret,
     },
     vault: {
       // FileSystemAdapter shape is irrelevant for this test — vaultId
@@ -50,7 +56,7 @@ function makeFakeApp(): {
       adapter: {},
     },
   } as unknown as App;
-  return { app, secrets, setSecret };
+  return { app, secrets, setSecret, getSecret, listSecrets, deleteSecret };
 }
 
 const anthropicStub: ProviderAdapter = {
@@ -66,12 +72,22 @@ const anthropicStub: ProviderAdapter = {
   }),
 };
 
+function setProviderPointer(providerId: string, apiKeyKeychainId: string | null | undefined): void {
+  setSettings((cur) => ({
+    providers: {
+      ...cur.providers,
+      [providerId]: { ...cur.providers[providerId], apiKeyKeychainId },
+    },
+  }));
+}
+
 describe("ProviderRegistry", () => {
   let app: App;
   let adapters: ProviderAdapterRegistry;
   let registry: ProviderRegistry;
   let secrets: SecretStore;
   let setSecret: jest.Mock<void, [string, string]>;
+  let listSecrets: jest.Mock<string[], []>;
 
   beforeEach(() => {
     resetSettings();
@@ -80,6 +96,7 @@ describe("ProviderRegistry", () => {
     app = fake.app;
     secrets = fake.secrets;
     setSecret = fake.setSecret;
+    listSecrets = fake.listSecrets;
     // Eager init so subsequent KeychainService.getInstance() calls inside
     // the registry hit the same singleton.
     KeychainService.getInstance(app);
@@ -306,6 +323,392 @@ describe("ProviderRegistry", () => {
     expect(registry.get(id)?.apiKeyKeychainId).toBe(expectedKeychainId);
     expect(secrets.get(expectedKeychainId)).toBe("sk-legacy");
     expect(secrets.has(legacyKeychainId)).toBe(false);
+  });
+
+  describe("reconcileCredentials()", () => {
+    it("migrates an exact legacy UUID credential to the current readable ID", async () => {
+      const id = await registry.add({
+        providerType: "anthropic",
+        displayName: "Anthropic Prod",
+        origin: { kind: "byok" },
+      });
+      const vaultId = KeychainService.getInstance(app).getVaultId();
+      const legacyId = `copilot-v${vaultId}-provider-${id}`;
+      const expectedId = buildProviderKeychainId(vaultId, "Anthropic Prod", id);
+      setProviderPointer(id, legacyId);
+      secrets.set(legacyId, "sk-legacy");
+
+      const result = await registry.reconcileCredentials();
+
+      expect(result).toMatchObject({ migrated: 1, repointed: 1, conflicts: 0 });
+      expect(registry.get(id)?.apiKeyKeychainId).toBe(expectedId);
+      expect(secrets.get(expectedId)).toBe("sk-legacy");
+      expect(secrets.has(legacyId)).toBe(false);
+    });
+
+    it("infers an exact legacy UUID credential for a row whose pointer predates explicit intent", async () => {
+      const id = await registry.add({
+        providerType: "anthropic",
+        displayName: "Anthropic Prod",
+        origin: { kind: "byok" },
+      });
+      const vaultId = KeychainService.getInstance(app).getVaultId();
+      const legacyId = `copilot-v${vaultId}-provider-${id}`;
+      const expectedId = buildProviderKeychainId(vaultId, "Anthropic Prod", id);
+      setProviderPointer(id, undefined);
+      secrets.set(legacyId, "sk-legacy");
+
+      const result = await registry.reconcileCredentials();
+
+      expect(result).toMatchObject({ migrated: 1, repointed: 1, conflicts: 0 });
+      expect(registry.get(id)?.apiKeyKeychainId).toBe(expectedId);
+      expect(secrets.get(expectedId)).toBe("sk-legacy");
+      expect(secrets.has(legacyId)).toBe(false);
+    });
+
+    it("preserves an undefined legacy pointer when credential inference is ambiguous", async () => {
+      const id = await registry.add({
+        providerType: "anthropic",
+        displayName: "Current Name",
+        origin: { kind: "byok" },
+      });
+      const vaultId = KeychainService.getInstance(app).getVaultId();
+      const legacyId = `copilot-v${vaultId}-provider-${id}`;
+      const oldNameId = buildProviderKeychainId(vaultId, "Prior Name", id);
+      const expectedId = buildProviderKeychainId(vaultId, "Current Name", id);
+      setProviderPointer(id, undefined);
+      secrets.set(legacyId, "sk-legacy");
+      secrets.set(oldNameId, "sk-old-name");
+
+      const result = await registry.reconcileCredentials();
+
+      expect(result).toMatchObject({ migrated: 0, repointed: 0, deleted: 0, conflicts: 1 });
+      expect(registry.get(id)?.apiKeyKeychainId).toBeUndefined();
+      expect(secrets.has(expectedId)).toBe(false);
+      expect(secrets.get(legacyId)).toBe("sk-legacy");
+      expect(secrets.get(oldNameId)).toBe("sk-old-name");
+    });
+
+    it("recovers a prior readable ID after synced settings already contain a rename", async () => {
+      const id = await registry.add({
+        providerType: "anthropic",
+        displayName: "New Name",
+        origin: { kind: "byok" },
+      });
+      const vaultId = KeychainService.getInstance(app).getVaultId();
+      const expectedId = buildProviderKeychainId(vaultId, "New Name", id);
+      const oldNameId = buildProviderKeychainId(vaultId, "Old Name", id);
+      setProviderPointer(id, expectedId);
+      secrets.set(oldNameId, "sk-local-old-name");
+
+      const result = await registry.reconcileCredentials();
+
+      expect(result).toMatchObject({ migrated: 1, repointed: 0, conflicts: 0 });
+      expect(secrets.get(expectedId)).toBe("sk-local-old-name");
+      expect(secrets.has(oldNameId)).toBe(false);
+    });
+
+    it("does not overwrite a populated destination that differs from the current pointer", async () => {
+      const id = await registry.add({
+        providerType: "anthropic",
+        displayName: "Current Name",
+        origin: { kind: "byok" },
+      });
+      const vaultId = KeychainService.getInstance(app).getVaultId();
+      const expectedId = buildProviderKeychainId(vaultId, "Current Name", id);
+      const pointerId = buildProviderKeychainId(vaultId, "Prior Name", id);
+      setProviderPointer(id, pointerId);
+      secrets.set(pointerId, "sk-pointer");
+      secrets.set(expectedId, "sk-destination");
+
+      const result = await registry.reconcileCredentials();
+
+      expect(result.conflicts).toBe(1);
+      expect(result.migrated).toBe(0);
+      expect(registry.get(id)?.apiKeyKeychainId).toBe(pointerId);
+      await expect(registry.getApiKey(id)).resolves.toBe("sk-pointer");
+      expect(secrets.get(pointerId)).toBe("sk-pointer");
+      expect(secrets.get(expectedId)).toBe("sk-destination");
+    });
+
+    it("does not activate ambiguous stable-token candidates", async () => {
+      const id = await registry.add({
+        providerType: "anthropic",
+        displayName: "Current Name",
+        origin: { kind: "byok" },
+      });
+      const vaultId = KeychainService.getInstance(app).getVaultId();
+      const token = providerKeychainStableToken(id);
+      const firstCandidate = `copilot-v${vaultId}-provider-a-old-${token}`;
+      const secondCandidate = `copilot-v${vaultId}-provider-b-old-${token}`;
+      const expectedId = buildProviderKeychainId(vaultId, "Current Name", id);
+      setProviderPointer(id, expectedId);
+      secrets.set(secondCandidate, "sk-second");
+      secrets.set(firstCandidate, "sk-first");
+
+      const result = await registry.reconcileCredentials();
+
+      expect(result.conflicts).toBe(1);
+      expect(result.migrated).toBe(0);
+      expect(secrets.has(expectedId)).toBe(false);
+      expect(secrets.get(firstCandidate)).toBe("sk-first");
+      expect(secrets.get(secondCandidate)).toBe("sk-second");
+      expect(registry.get(id)?.apiKeyKeychainId).toBe(expectedId);
+    });
+
+    it("does not let an unpointed UUID credential override a differing stable alias", async () => {
+      const id = await registry.add({
+        providerType: "anthropic",
+        displayName: "Current Name",
+        origin: { kind: "byok" },
+      });
+      const vaultId = KeychainService.getInstance(app).getVaultId();
+      const missingPointerId = buildProviderKeychainId(vaultId, "Missing Pointer", id);
+      const expectedId = buildProviderKeychainId(vaultId, "Current Name", id);
+      const legacyId = `copilot-v${vaultId}-provider-${id}`;
+      const oldNameId = buildProviderKeychainId(vaultId, "Prior Name", id);
+      setProviderPointer(id, missingPointerId);
+      secrets.set(legacyId, "sk-legacy");
+      secrets.set(oldNameId, "sk-old-name");
+
+      const result = await registry.reconcileCredentials();
+
+      expect(result).toMatchObject({ migrated: 0, repointed: 0, deleted: 0, conflicts: 1 });
+      expect(registry.get(id)?.apiKeyKeychainId).toBe(missingPointerId);
+      expect(secrets.has(expectedId)).toBe(false);
+      expect(secrets.get(legacyId)).toBe("sk-legacy");
+      expect(secrets.get(oldNameId)).toBe("sk-old-name");
+    });
+
+    it("cleans listed tombstones while preserving and canonicalizing synced key intent", async () => {
+      const id = await registry.add({
+        providerType: "anthropic",
+        displayName: "Current Name",
+        origin: { kind: "byok" },
+      });
+      const vaultId = KeychainService.getInstance(app).getVaultId();
+      const tombstoneId = buildProviderKeychainId(vaultId, "Prior Name", id);
+      const expectedId = buildProviderKeychainId(vaultId, "Current Name", id);
+      setProviderPointer(id, tombstoneId);
+      secrets.set(tombstoneId, "");
+
+      const result = await registry.reconcileCredentials();
+
+      expect(result).toMatchObject({ migrated: 1, repointed: 1, deleted: 1 });
+      expect(registry.get(id)?.apiKeyKeychainId).toBe(expectedId);
+      expect(secrets.has(tombstoneId)).toBe(false);
+      expect(secrets.get(expectedId)).toBe("");
+    });
+
+    it("leaves providers without credentials pointer-free", async () => {
+      const id = await registry.add({
+        providerType: "anthropic",
+        displayName: "Current Name",
+        origin: { kind: "byok" },
+      });
+
+      const result = await registry.reconcileCredentials();
+
+      expect(result).toMatchObject({ migrated: 0, repointed: 0, deleted: 0 });
+      expect(registry.get(id)?.apiKeyKeychainId).toBeNull();
+      expect(secrets.size).toBe(0);
+    });
+
+    it("canonicalizes a non-null synced pointer on a device without the credential", async () => {
+      const id = await registry.add({
+        providerType: "anthropic",
+        displayName: "Current Name",
+        origin: { kind: "byok" },
+      });
+      const vaultId = KeychainService.getInstance(app).getVaultId();
+      const priorId = buildProviderKeychainId(vaultId, "Prior Name", id);
+      const expectedId = buildProviderKeychainId(vaultId, "Current Name", id);
+      setProviderPointer(id, priorId);
+
+      const result = await registry.reconcileCredentials();
+
+      expect(result).toMatchObject({ migrated: 0, repointed: 1, deleted: 0 });
+      expect(registry.get(id)?.apiKeyKeychainId).toBe(expectedId);
+      expect(secrets.size).toBe(0);
+    });
+
+    it("does not reactivate a leftover local credential after settings sync an explicit clear", async () => {
+      const id = await registry.add({
+        providerType: "anthropic",
+        displayName: "Current Name",
+        origin: { kind: "byok" },
+      });
+      const vaultId = KeychainService.getInstance(app).getVaultId();
+      const oldNameId = buildProviderKeychainId(vaultId, "Prior Name", id);
+      const expectedId = buildProviderKeychainId(vaultId, "Current Name", id);
+      secrets.set(oldNameId, "sk-leftover");
+
+      const result = await registry.reconcileCredentials();
+
+      expect(result).toMatchObject({ migrated: 0, repointed: 0, deleted: 0 });
+      expect(registry.get(id)?.apiKeyKeychainId).toBeNull();
+      expect(secrets.has(expectedId)).toBe(false);
+      expect(secrets.get(oldNameId)).toBe("sk-leftover");
+    });
+
+    it("honors a canonical tombstone instead of resurrecting an old readable credential", async () => {
+      const id = await registry.add({
+        providerType: "anthropic",
+        displayName: "Current Name",
+        origin: { kind: "byok" },
+      });
+      const vaultId = KeychainService.getInstance(app).getVaultId();
+      const expectedId = buildProviderKeychainId(vaultId, "Current Name", id);
+      const oldNameId = buildProviderKeychainId(vaultId, "Prior Name", id);
+      setProviderPointer(id, oldNameId);
+      secrets.set(expectedId, "");
+      secrets.set(oldNameId, "sk-old");
+
+      const result = await registry.reconcileCredentials();
+
+      expect(result).toMatchObject({ migrated: 0, repointed: 1, conflicts: 1 });
+      expect(registry.get(id)?.apiKeyKeychainId).toBe(expectedId);
+      expect(secrets.get(expectedId)).toBe("");
+      expect(secrets.get(oldNameId)).toBe("sk-old");
+    });
+
+    it("propagates a pointed tombstone without reactivating a populated old alias", async () => {
+      const id = await registry.add({
+        providerType: "anthropic",
+        displayName: "Current Name",
+        origin: { kind: "byok" },
+      });
+      const vaultId = KeychainService.getInstance(app).getVaultId();
+      const expectedId = buildProviderKeychainId(vaultId, "Current Name", id);
+      const tombstoneId = buildProviderKeychainId(vaultId, "Cleared Name", id);
+      const populatedAliasId = buildProviderKeychainId(vaultId, "Prior Name", id);
+      setProviderPointer(id, tombstoneId);
+      secrets.set(tombstoneId, "");
+      secrets.set(populatedAliasId, "sk-old");
+
+      const result = await registry.reconcileCredentials();
+
+      expect(result).toMatchObject({
+        migrated: 1,
+        repointed: 1,
+        deleted: 1,
+        conflicts: 1,
+      });
+      expect(registry.get(id)?.apiKeyKeychainId).toBe(expectedId);
+      await expect(registry.getApiKey(id)).resolves.toBe("");
+      expect(secrets.has(tombstoneId)).toBe(false);
+      expect(secrets.get(expectedId)).toBe("");
+      expect(secrets.get(populatedAliasId)).toBe("sk-old");
+    });
+
+    it("keeps a pointed tombstone active when writing the canonical tombstone fails", async () => {
+      const id = await registry.add({
+        providerType: "anthropic",
+        displayName: "Current Name",
+        origin: { kind: "byok" },
+      });
+      const vaultId = KeychainService.getInstance(app).getVaultId();
+      const expectedId = buildProviderKeychainId(vaultId, "Current Name", id);
+      const tombstoneId = buildProviderKeychainId(vaultId, "Cleared Name", id);
+      const populatedAliasId = buildProviderKeychainId(vaultId, "Prior Name", id);
+      setProviderPointer(id, tombstoneId);
+      secrets.set(tombstoneId, "");
+      secrets.set(populatedAliasId, "sk-old");
+      setSecret.mockImplementationOnce(() => {
+        throw new Error("keychain locked");
+      });
+
+      const result = await registry.reconcileCredentials();
+
+      expect(result.failures).toHaveLength(1);
+      expect(result.migrated).toBe(0);
+      expect(registry.get(id)?.apiKeyKeychainId).toBe(tombstoneId);
+      await expect(registry.getApiKey(id)).resolves.toBe("");
+      expect(secrets.has(expectedId)).toBe(false);
+      expect(secrets.get(tombstoneId)).toBe("");
+      expect(secrets.get(populatedAliasId)).toBe("sk-old");
+    });
+
+    it("leaves the source and pointer intact when the destination write fails", async () => {
+      const id = await registry.add({
+        providerType: "anthropic",
+        displayName: "Current Name",
+        origin: { kind: "byok" },
+      });
+      const vaultId = KeychainService.getInstance(app).getVaultId();
+      const sourceId = buildProviderKeychainId(vaultId, "Prior Name", id);
+      secrets.set(sourceId, "sk-source");
+      setProviderPointer(id, sourceId);
+      setSecret.mockImplementationOnce(() => {
+        throw new Error("keychain locked");
+      });
+
+      const result = await registry.reconcileCredentials();
+
+      expect(result.failures).toHaveLength(1);
+      expect(registry.get(id)?.apiKeyKeychainId).toBe(sourceId);
+      expect(secrets.get(sourceId)).toBe("sk-source");
+      expect(secrets.size).toBe(1);
+    });
+
+    it("uses known pointers safely when SecretStorage enumeration fails", async () => {
+      const id = await registry.add({
+        providerType: "anthropic",
+        displayName: "Current Name",
+        origin: { kind: "byok" },
+      });
+      const vaultId = KeychainService.getInstance(app).getVaultId();
+      const sourceId = buildProviderKeychainId(vaultId, "Prior Name", id);
+      const expectedId = buildProviderKeychainId(vaultId, "Current Name", id);
+      secrets.set(sourceId, "sk-source");
+      setProviderPointer(id, sourceId);
+      listSecrets.mockImplementationOnce(() => {
+        throw new Error("enumeration failed");
+      });
+
+      const result = await registry.reconcileCredentials();
+
+      expect(result.failures).toHaveLength(1);
+      expect(secrets.get(expectedId)).toBe("sk-source");
+      expect(secrets.get(sourceId)).toBe("sk-source");
+      expect(registry.get(id)?.apiKeyKeychainId).toBe(expectedId);
+    });
+
+    it("leaves an undefined legacy pointer untouched when SecretStorage enumeration fails", async () => {
+      const id = await registry.add({
+        providerType: "anthropic",
+        displayName: "Current Name",
+        origin: { kind: "byok" },
+      });
+      const vaultId = KeychainService.getInstance(app).getVaultId();
+      const expectedId = buildProviderKeychainId(vaultId, "Current Name", id);
+      const sourceId = buildProviderKeychainId(vaultId, "Prior Name", id);
+      setProviderPointer(id, undefined);
+      secrets.set(sourceId, "sk-undiscovered");
+      listSecrets.mockImplementationOnce(() => {
+        throw new Error("enumeration failed");
+      });
+
+      const result = await registry.reconcileCredentials();
+
+      expect(result.failures).toHaveLength(1);
+      expect(result.migrated).toBe(0);
+      expect(secrets.has(expectedId)).toBe(false);
+      expect(secrets.get(sourceId)).toBe("sk-undiscovered");
+      expect(registry.get(id)?.apiKeyKeychainId).toBeUndefined();
+    });
+
+    it("degrades safely when SecretStorage is unavailable", async () => {
+      KeychainService.resetInstance();
+      const unavailableApp = { vault: { adapter: {} } } as unknown as App;
+      const unavailableRegistry = new ProviderRegistry(unavailableApp, adapters);
+
+      await expect(unavailableRegistry.reconcileCredentials()).resolves.toMatchObject({
+        unavailable: true,
+        migrated: 0,
+        repointed: 0,
+      });
+    });
   });
 
   it("setApiKey mints a readable apiKeyKeychainId on first call and reuses it on rotation", async () => {

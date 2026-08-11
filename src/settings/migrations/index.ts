@@ -17,6 +17,7 @@ import type { ModelManagementApi } from "@/modelManagement";
 import { getSettings, normalizeRootFolders, setSettings } from "@/settings/model";
 
 import { executeByokMigration } from "./byokMigration";
+import { planProviderNameMigration } from "./providerNameMigration";
 import { planRequiresApiKeyBackfill } from "./requiresApiKeyMigration";
 import { CURRENT_SETTINGS_VERSION } from "./version";
 
@@ -88,6 +89,14 @@ export async function runSettingsMigrations(api: ModelManagementApi): Promise<vo
     // so they must get the flag too. WS-D still only prompts users who actually
     // customized a folder, so a default user is never shown the modal.
     setSettings({ upgradedToV8FromLegacy: true });
+  }
+
+  // v9: provider display names become the readable keychain identity. Normalize
+  // every origin together so a synced settings file cannot contain two providers
+  // that map to the same user-facing name.
+  if (fromVersion < 9) {
+    const migrated = planProviderNameMigration(getSettings().providers);
+    if (migrated) setSettings({ providers: migrated });
   }
 
   // Bump unconditionally after the migrations so a per-provider failure can't

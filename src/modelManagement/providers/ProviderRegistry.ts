@@ -22,7 +22,7 @@
 import type { App } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
 
-import { logError } from "@/logger";
+import { logError, logWarn } from "@/logger";
 import { KeychainService } from "@/services/keychainService";
 import { getSettings, setSettings } from "@/settings/model";
 import { frozenOr, sliceMemo, sliceMemoByKey } from "@/utils/sliceCache";
@@ -31,11 +31,33 @@ import type { ProviderType } from "@/modelManagement/types/catalog";
 import type { Provider, ProviderOrigin } from "@/modelManagement/types/persisted";
 import type { VerificationResult } from "@/modelManagement/types/runtime";
 import type { ProviderAdapterRegistry } from "./adapters/ProviderAdapterRegistry";
-import { allocateUniqueProviderDisplayName, buildProviderKeychainId } from "./providerIdentity";
+import {
+  allocateUniqueProviderDisplayName,
+  buildProviderKeychainId,
+  providerKeychainStableToken,
+} from "./providerIdentity";
 
 // Frozen empty shared across all filtered views so consumers see a
 // stable reference even when two distinct filters both yield zero rows.
 const EMPTY_LIST: readonly Provider[] = Object.freeze([]);
+
+/** Observable outcome of one device-local provider credential reconciliation pass. */
+export interface ProviderCredentialReconciliationResult {
+  migrated: number;
+  repointed: number;
+  deleted: number;
+  conflicts: number;
+  failures: string[];
+  unavailable: boolean;
+}
+
+function addCandidate(candidates: string[], candidate: string | null | undefined): void {
+  if (candidate && !candidates.includes(candidate)) candidates.push(candidate);
+}
+
+function hasSecretValue(value: string | null): value is string {
+  return value !== null && value !== "";
+}
 
 /** Manages persisted provider identities and their vault-scoped credentials. */
 export class ProviderRegistry {
@@ -287,6 +309,350 @@ export class ProviderRegistry {
     const row = getSettings().providers[providerId];
     if (!row || !row.apiKeyKeychainId) return null;
     return KeychainService.getInstance(this.#app).getSecretById(row.apiKeyKeychainId);
+  }
+
+  /**
+   * Reconcile every provider pointer and device-local credential with its current readable ID.
+   * Runs on every startup because settings sync can deliver a rename before this device has
+   * moved the corresponding local keychain entry.
+   */
+  async reconcileCredentials(): Promise<ProviderCredentialReconciliationResult> {
+    const result: ProviderCredentialReconciliationResult = {
+      migrated: 0,
+      repointed: 0,
+      deleted: 0,
+      conflicts: 0,
+      failures: [],
+      unavailable: false,
+    };
+    const keychain = KeychainService.getInstance(this.#app);
+    if (!keychain.isAvailable()) {
+      result.unavailable = true;
+      return result;
+    }
+
+    let listedIds: string[] = [];
+    let enumerationComplete = true;
+    try {
+      listedIds = keychain.listSecretIds();
+    } catch (err) {
+      enumerationComplete = false;
+      const failure = "failed to list SecretStorage IDs";
+      result.failures.push(failure);
+      logError(`[modelManagement] ProviderRegistry.reconcileCredentials: ${failure}`, err);
+    }
+    const listedIdSet = new Set(listedIds);
+    let changed = false;
+
+    for (const row of [...Object.values(getSettings().providers)].sort((a, b) =>
+      a.providerId.localeCompare(b.providerId)
+    )) {
+      const vaultId = keychain.getVaultId();
+      let expectedId: string;
+      try {
+        expectedId = buildProviderKeychainId(vaultId, row.displayName, row.providerId);
+      } catch (err) {
+        const failure = `provider ${row.providerId}: invalid readable keychain identity`;
+        result.failures.push(failure);
+        logError(`[modelManagement] ProviderRegistry.reconcileCredentials: ${failure}`, err);
+        continue;
+      }
+
+      const legacyId = `copilot-v${vaultId}-provider-${row.providerId}`;
+      const providerPrefix = `copilot-v${vaultId}-provider-`;
+      const stableSuffix = `-${providerKeychainStableToken(row.providerId)}`;
+      const stableCandidates = enumerationComplete
+        ? listedIds
+            .filter((id) => id.startsWith(providerPrefix) && id.endsWith(stableSuffix))
+            .sort()
+        : [];
+      const candidateIds: string[] = [];
+      addCandidate(candidateIds, row.apiKeyKeychainId);
+      addCandidate(candidateIds, expectedId);
+      if (enumerationComplete) addCandidate(candidateIds, legacyId);
+      for (const candidate of stableCandidates) addCandidate(candidateIds, candidate);
+
+      const values = new Map<string, string | null>();
+      let readFailed = false;
+      for (const candidateId of candidateIds) {
+        try {
+          values.set(candidateId, keychain.getSecretById(candidateId));
+        } catch (err) {
+          const failure = `provider ${row.providerId}: failed to read ${candidateId}`;
+          result.failures.push(failure);
+          logError(`[modelManagement] ProviderRegistry.reconcileCredentials: ${failure}`, err);
+          readFailed = true;
+          break;
+        }
+      }
+      if (readFailed) continue;
+
+      const pointerId = row.apiKeyKeychainId;
+      const destinationValue = values.get(expectedId) ?? null;
+      const populated = candidateIds.filter((id) => hasSecretValue(values.get(id) ?? null));
+
+      // Undefined predates the explicit pointer contract, so it permits inference
+      // only from a complete, unambiguous view of this device's keychain.
+      if (pointerId === undefined) {
+        if (!enumerationComplete) continue;
+        if (destinationValue === "") {
+          if (populated.length > 0) {
+            result.conflicts += 1;
+            logWarn(
+              `[modelManagement] ProviderRegistry.reconcileCredentials: provider ${row.providerId} has a canonical tombstone; preserving older credentials`
+            );
+          }
+          continue;
+        }
+
+        const inferredValues = new Set(populated.map((id) => values.get(id)!));
+        if (inferredValues.size > 1) {
+          result.conflicts += 1;
+          logWarn(
+            `[modelManagement] ProviderRegistry.reconcileCredentials: provider ${row.providerId} has ambiguous legacy credentials; preserving every candidate`
+          );
+          continue;
+        }
+        const inferredSourceId = populated[0];
+        if (!inferredSourceId) continue;
+        const inferredValue = values.get(inferredSourceId)!;
+
+        if (destinationValue === null) {
+          try {
+            keychain.setSecretById(expectedId, inferredValue);
+            result.migrated += 1;
+          } catch (err) {
+            const failure = `provider ${row.providerId}: failed to write ${expectedId}`;
+            result.failures.push(failure);
+            logError(`[modelManagement] ProviderRegistry.reconcileCredentials: ${failure}`, err);
+            continue;
+          }
+        }
+
+        this.#setApiKeyKeychainId(row.providerId, expectedId);
+        result.repointed += 1;
+        changed = true;
+        for (const candidateId of candidateIds) {
+          if (candidateId === expectedId) continue;
+          const value = values.get(candidateId) ?? null;
+          const mayDelete =
+            value === inferredValue || (!hasSecretValue(value) && listedIdSet.has(candidateId));
+          if (!mayDelete) continue;
+          try {
+            keychain.deleteSecretById(candidateId);
+            result.deleted += 1;
+          } catch (err) {
+            const failure = `provider ${row.providerId}: failed to delete ${candidateId}`;
+            result.failures.push(failure);
+            logError(`[modelManagement] ProviderRegistry.reconcileCredentials: ${failure}`, err);
+          }
+        }
+        continue;
+      }
+
+      // A null pointer is synced clear intent. Device-local leftovers must never
+      // reactivate a provider whose settings explicitly say it has no credential.
+      if (pointerId === null) {
+        const orphanValues = new Set(populated.map((id) => values.get(id)!));
+        if (orphanValues.size > 1) {
+          result.conflicts += 1;
+          logWarn(
+            `[modelManagement] ProviderRegistry.reconcileCredentials: provider ${row.providerId} has ambiguous orphan credentials; preserving every candidate`
+          );
+          continue;
+        }
+        if (enumerationComplete) {
+          for (const candidateId of candidateIds) {
+            if (values.get(candidateId) !== "" || !listedIdSet.has(candidateId)) continue;
+            try {
+              keychain.deleteSecretById(candidateId);
+              result.deleted += 1;
+            } catch (err) {
+              const failure = `provider ${row.providerId}: failed to delete ${candidateId}`;
+              result.failures.push(failure);
+              logError(`[modelManagement] ProviderRegistry.reconcileCredentials: ${failure}`, err);
+            }
+          }
+        }
+        continue;
+      }
+
+      const pointerValue = values.get(pointerId) ?? null;
+      if (pointerValue === "") {
+        if (hasSecretValue(destinationValue)) {
+          result.conflicts += 1;
+          logWarn(
+            `[modelManagement] ProviderRegistry.reconcileCredentials: provider ${row.providerId} has a pointed tombstone and populated destination; preserving both`
+          );
+          continue;
+        }
+        if (populated.length > 0) {
+          result.conflicts += 1;
+          logWarn(
+            `[modelManagement] ProviderRegistry.reconcileCredentials: provider ${row.providerId} has a pointed tombstone; preserving older credentials`
+          );
+        }
+        if (destinationValue === null) {
+          try {
+            keychain.setSecretById(expectedId, "");
+            result.migrated += 1;
+          } catch (err) {
+            const failure = `provider ${row.providerId}: failed to write ${expectedId}`;
+            result.failures.push(failure);
+            logError(`[modelManagement] ProviderRegistry.reconcileCredentials: ${failure}`, err);
+            continue;
+          }
+        }
+        if (pointerId !== expectedId) {
+          this.#setApiKeyKeychainId(row.providerId, expectedId);
+          result.repointed += 1;
+          changed = true;
+        }
+        if (enumerationComplete) {
+          for (const candidateId of candidateIds) {
+            if (
+              candidateId === expectedId ||
+              values.get(candidateId) !== "" ||
+              !listedIdSet.has(candidateId)
+            ) {
+              continue;
+            }
+            try {
+              keychain.deleteSecretById(candidateId);
+              result.deleted += 1;
+            } catch (err) {
+              const failure = `provider ${row.providerId}: failed to delete ${candidateId}`;
+              result.failures.push(failure);
+              logError(`[modelManagement] ProviderRegistry.reconcileCredentials: ${failure}`, err);
+            }
+          }
+        }
+        continue;
+      }
+
+      // A tombstone at the canonical destination is stronger than any older
+      // device-local value: it prevents an alias from resurrecting a cleared key.
+      if (destinationValue === "") {
+        const oldPopulated = populated.filter((id) => id !== expectedId);
+        if (oldPopulated.length > 0) {
+          result.conflicts += 1;
+          logWarn(
+            `[modelManagement] ProviderRegistry.reconcileCredentials: provider ${row.providerId} has a canonical tombstone; preserving older credentials`
+          );
+        }
+        if (pointerId !== expectedId) {
+          this.#setApiKeyKeychainId(row.providerId, expectedId);
+          result.repointed += 1;
+          changed = true;
+        }
+        if (enumerationComplete) {
+          for (const candidateId of candidateIds) {
+            if (
+              candidateId === expectedId ||
+              values.get(candidateId) !== "" ||
+              !listedIdSet.has(candidateId)
+            ) {
+              continue;
+            }
+            try {
+              keychain.deleteSecretById(candidateId);
+              result.deleted += 1;
+            } catch (err) {
+              const failure = `provider ${row.providerId}: failed to delete ${candidateId}`;
+              result.failures.push(failure);
+              logError(`[modelManagement] ProviderRegistry.reconcileCredentials: ${failure}`, err);
+            }
+          }
+        }
+        continue;
+      }
+
+      let sourceId: string | undefined;
+      if (hasSecretValue(pointerValue)) sourceId = pointerId;
+      else if (hasSecretValue(destinationValue)) sourceId = expectedId;
+
+      if (!sourceId && enumerationComplete) {
+        const unpointedIds: string[] = [];
+        addCandidate(unpointedIds, legacyId);
+        for (const candidateId of stableCandidates) addCandidate(unpointedIds, candidateId);
+        const unpointedValues = new Map<string, string>();
+        for (const candidateId of unpointedIds) {
+          const value = values.get(candidateId) ?? null;
+          if (hasSecretValue(value) && !unpointedValues.has(value)) {
+            unpointedValues.set(value, candidateId);
+          }
+        }
+        if (unpointedValues.size > 1) {
+          result.conflicts += 1;
+          logWarn(
+            `[modelManagement] ProviderRegistry.reconcileCredentials: provider ${row.providerId} has ambiguous unpointed credentials; preserving every candidate`
+          );
+          continue;
+        }
+        sourceId = unpointedValues.values().next().value;
+      }
+
+      const sourceValue = sourceId ? (values.get(sourceId) ?? null) : null;
+      if (
+        hasSecretValue(destinationValue) &&
+        hasSecretValue(sourceValue) &&
+        sourceId !== expectedId &&
+        sourceValue !== destinationValue
+      ) {
+        result.conflicts += 1;
+        logWarn(
+          `[modelManagement] ProviderRegistry.reconcileCredentials: provider ${row.providerId} has a differing destination; preserving both credentials`
+        );
+        continue;
+      }
+
+      const differingValues = new Set(populated.map((id) => values.get(id)!));
+      if (differingValues.size > 1) {
+        result.conflicts += 1;
+        logWarn(
+          `[modelManagement] ProviderRegistry.reconcileCredentials: provider ${row.providerId} has multiple credential candidates; preserving non-selected values`
+        );
+      }
+
+      if (destinationValue === null && hasSecretValue(sourceValue)) {
+        try {
+          keychain.setSecretById(expectedId, sourceValue);
+          result.migrated += 1;
+        } catch (err) {
+          const failure = `provider ${row.providerId}: failed to write ${expectedId}`;
+          result.failures.push(failure);
+          logError(`[modelManagement] ProviderRegistry.reconcileCredentials: ${failure}`, err);
+          continue;
+        }
+      }
+
+      if (pointerId !== expectedId) {
+        this.#setApiKeyKeychainId(row.providerId, expectedId);
+        result.repointed += 1;
+        changed = true;
+      }
+
+      if (!enumerationComplete) continue;
+      for (const candidateId of candidateIds) {
+        if (candidateId === expectedId) continue;
+        const value = values.get(candidateId) ?? null;
+        const mayDelete =
+          (hasSecretValue(sourceValue) && value === sourceValue) ||
+          (!hasSecretValue(value) && listedIdSet.has(candidateId));
+        if (!mayDelete) continue;
+        try {
+          keychain.deleteSecretById(candidateId);
+          result.deleted += 1;
+        } catch (err) {
+          const failure = `provider ${row.providerId}: failed to delete ${candidateId}`;
+          result.failures.push(failure);
+          logError(`[modelManagement] ProviderRegistry.reconcileCredentials: ${failure}`, err);
+        }
+      }
+    }
+
+    if (changed || result.migrated > 0) this.#emit();
+    return result;
   }
 
   /** Stores the API key under the provider's readable identity and persists its pointer. */
