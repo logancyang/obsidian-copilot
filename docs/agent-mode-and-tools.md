@@ -21,7 +21,7 @@ On first use, Agent Mode asks you to select and configure an agent:
 - **Claude** — uses Claude Code and your Anthropic sign-in.
 - **Codex** — uses Codex and your OpenAI sign-in.
 
-An **Installed** agent can start. **Update required** or **Error** opens setup with recovery guidance. Selecting an unconfigured agent opens its setup without changing your default until you start a chat.
+For an **Installed** agent, select it and choose **Start chat**. For an unconfigured agent or one marked **Update required** or **Error**, select it and choose **Configure** to open setup with recovery guidance. Your default changes only when you start a chat.
 
 After the chat starts, use the picker beside the message box to change the agent or model. Your draft message and attachments stay in place when you switch. **New Chat** starts with an empty message box.
 
@@ -128,10 +128,12 @@ Agents choose between vault and web evidence based on your request. They normall
 
 A Copilot license can unlock relay-backed skills for web search and fetch, PDF reading, YouTube transcripts, and X posts. Without a license, the agent can use its native alternatives when available.
 
-For PDF and EPUB files, **Settings → Copilot → Miyo → Document Processor** also applies to Agent Mode:
+For PDF files, **Settings → Copilot → Miyo → Document Processor** also applies to Agent Mode:
 
-- **Plus** (the plan-tier option shown in settings) uses the hosted document reader, with another available reader as a fallback.
-- **Miyo** parses documents locally. It requires the Miyo app on the same computer as Obsidian; a remote Miyo server is not enough for Agent Mode document parsing.
+- **Plus** (the plan-tier option shown in settings) uses the hosted PDF reader, with another available reader as a fallback.
+- **Miyo** parses PDF and EPUB files locally. It requires the Miyo app on the same computer as Obsidian; a remote Miyo server is not enough for Agent Mode document parsing.
+
+With Plus selected, EPUB support depends on the active agent's own tools; Copilot does not provide a hosted EPUB reader in Agent Mode.
 
 When Miyo is selected, Copilot removes the cloud PDF skill so the document is not sent to that parser accidentally. Changing the processor restarts running agents so the new choice takes effect.
 
