@@ -84,7 +84,7 @@ Even after indexing, relevant notes aren't being returned? Try:
 
 **Cause**: You tried to use a PDF, image, or other non-markdown file as context in a free mode.
 
-**Fix**: Switch to Copilot Plus mode, or convert the file to markdown manually.
+**Fix**: In Quick Chat, switch to Copilot Plus mode or convert the file to markdown manually. In Agent Mode, document support depends on the active agent, its skills, and the selected document processor.
 
 ---
 
@@ -260,7 +260,8 @@ Yes, but only with models that have **Vision** capability (shown by a vision ico
 
 - Large PDFs (over 10 MB) should be converted to markdown first
 - In Copilot Plus mode, use **+ Add context** to attach a PDF — it will be converted automatically
-- For large PDF collections, **Projects mode** is better suited (supports PDF as context natively)
+- In Agent Mode, use an agent or document skill that supports PDF, or choose Miyo as the local document processor
+- For reusable document collections, add the sources to a project
 
 ### Can I use Copilot offline?
 
@@ -302,12 +303,14 @@ You can rename this root in **Settings → Copilot → Basic → Copilot folder 
 
 ### How do I switch modes?
 
-Click the mode selector at the top of the chat panel. Available modes:
+Click the mode selector at the top of Quick Chat. Available modes:
 
 - Chat
 - Vault QA (Basic)
 - Copilot Plus (requires license)
 - Projects
+
+Agent Mode is a separate desktop view, not an item in this selector. Click the **Agent** ribbon icon or run **Open Copilot Agent Chat Window**, then choose OpenCode, Claude, or Codex.
 
 ### The AI keeps forgetting what we talked about earlier
 

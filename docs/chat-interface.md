@@ -1,12 +1,14 @@
-# Chat Interface
+# Quick Chat Interface
 
-The Copilot chat panel is the main way you interact with AI in Obsidian. This guide covers everything about the chat UI: modes, message controls, history, settings, and advanced features like auto-compact.
+Quick Chat is Copilot's conversational panel for asking questions, working with the active note, and searching your vault. This guide covers its modes, message controls, history, settings, and auto-compact behavior.
+
+For longer tasks that use a coding agent and its tools, open the separate [Agent Mode](agent-mode-and-tools.md) desktop view.
 
 ---
 
 ## Chat Modes
 
-Copilot offers four modes. You can switch between them using the mode selector at the top of the chat panel.
+Quick Chat offers four modes. Switch between them with the mode selector at the top of the panel.
 
 ### Chat
 
@@ -18,16 +20,22 @@ Ask questions about your vault content. Copilot uses lexical search (keyword mat
 
 ### Copilot Plus
 
-The most powerful mode. Requires a [Copilot Plus](copilot-plus-and-self-host.md) license. Combines Chat and Vault QA with an autonomous agent that can:
+Requires a [Copilot Plus](copilot-plus-and-self-host.md) license. Combines Chat and Vault QA with the legacy Quick Chat autonomous loop, which can:
 
 - Search your vault and the web
 - Read and edit notes
 - Remember things across conversations
 - Use a growing set of tools automatically
 
-### Projects
+This is different from the dedicated Agent Mode view. A single Agent Mode session does not require a Copilot Plus license.
+
+### Projects (alpha)
 
 Focused workspaces with their own context, model, system prompt, and isolated chat history. Useful for keeping separate AI conversations per project. See [Projects](projects.md) for details.
+
+## Agent Mode
+
+Agent Mode is not another Quick Chat mode. On desktop, click the **Agent** ribbon icon or run **Open Copilot Agent Chat Window**. It connects Copilot to OpenCode, Claude, or Codex and gives that agent its native tools, skills, and permission controls. See [Agent Mode and Tools](agent-mode-and-tools.md).
 
 ---
 
@@ -165,5 +173,5 @@ You can also use the command palette: **New Copilot Quick Chat**.
 
 - [Context and Mentions](context-and-mentions.md) — Control what context the AI sees
 - [System Prompts](system-prompts.md) — Customize AI behavior with system prompts
-- [Agent Mode and Tools](agent-mode-and-tools.md) — What Plus mode can do
+- [Agent Mode and Tools](agent-mode-and-tools.md) — Use OpenCode, Claude, or Codex in the dedicated desktop view
 - [Projects](projects.md) — Isolated workspaces with separate histories

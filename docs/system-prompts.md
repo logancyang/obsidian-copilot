@@ -8,14 +8,14 @@ A system prompt is a set of instructions you give the AI that shapes how it beha
 
 Copilot has two instruction surfaces:
 
-1. **Built-in system prompt** — Internal Agent Mode behavior maintained by Copilot.
+1. **Built-in system prompt** — Internal Copilot behavior maintained by the plugin.
 2. **User instructions** — `AGENTS.md` for Agent Mode; selectable custom prompt files for Chat mode.
 
 ---
 
 ## Built-In System Prompt
 
-The built-in prompt is always active and cannot be edited. It tells the AI:
+The built-in prompt is active by default and cannot be edited. It tells the AI:
 
 - It is "Obsidian Copilot" — an AI integrated into Obsidian
 - How to format Obsidian internal links: `[[Note Title]]`
@@ -28,7 +28,7 @@ The built-in prompt is always active and cannot be edited. It tells the AI:
 
 This prompt ensures Copilot's output is correctly formatted for Obsidian and aware of its context.
 
-> **Warning**: Disabling the built-in prompt can break features like Vault QA, memory, and agent tools. Avoid disabling it unless you have a specific reason.
+You can disable it for a session from the chat settings. Doing so can break features such as Vault QA and memory, so leave it enabled unless you have a specific replacement.
 
 ---
 

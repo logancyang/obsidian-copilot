@@ -39,10 +39,10 @@ The semantic search index stores the vector embeddings of your notes. Manage it 
 
 Controls when Copilot automatically updates the index:
 
-| Strategy | When the index updates |
-|---|---|
-| **NEVER** | Manual only — you must trigger indexing yourself |
-| **ON STARTUP** | Updates when Obsidian starts or the plugin reloads |
+| Strategy           | When the index updates                                                 |
+| ------------------ | ---------------------------------------------------------------------- |
+| **NEVER**          | Manual only — you must trigger indexing yourself                       |
+| **ON STARTUP**     | Updates when Obsidian starts or the plugin reloads                     |
 | **ON MODE SWITCH** | Updates when you switch to Vault QA or Copilot Plus mode (Recommended) |
 
 The default is **ON MODE SWITCH**.
@@ -60,6 +60,7 @@ Updates only notes that have been added, modified, or deleted since the last ind
 **Command palette → Force reindex vault**
 
 Rebuilds the entire index from scratch. Use this if:
+
 - You changed your embedding model
 - The index seems corrupted or missing results
 - You've made many changes and want a clean state
@@ -104,6 +105,7 @@ This shows the total token count across your vault, which you can use to estimat
 **Settings → Copilot → QA → Exclusions**
 
 Comma-separated list of patterns. Notes matching these patterns are excluded. Supports:
+
 - Folder names: `private` — excludes the folder named "private"
 - Folder paths: `Work/Confidential` — excludes that specific subfolder
 - File extensions: `.pdf` — excludes all PDF files
@@ -176,5 +178,5 @@ On mobile, you can still use Vault QA with lexical search, but semantic search w
 
 ## Related
 
-- [Agent Mode and Tools](agent-mode-and-tools.md) — How @vault uses the index in Plus mode
+- [Agent Mode and Tools](agent-mode-and-tools.md) — How coding agents work with vault and web evidence
 - [Copilot Plus and Self-Host](copilot-plus-and-self-host.md) — Miyo-powered local semantic search

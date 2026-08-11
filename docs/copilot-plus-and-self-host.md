@@ -10,7 +10,9 @@
 
 Copilot Plus is a subscription that enables:
 
-- **Autonomous agent mode** — AI that reasons step-by-step and uses tools automatically
+- **Copilot Plus mode in Quick Chat** — An autonomous tool loop for search, memory, and file work
+- **Multi-agent work in Agent Mode** — Mention several agents with `@` to delegate parts of a task
+- **Relay-backed Agent Mode skills** — Web search and fetch, PDF reading, YouTube transcripts, and X posts
 - **File editing tools** — Write to File and Replace in File for AI-driven note editing
 - **Web search** — Search the internet from chat
 - **YouTube transcription** — Fetch video transcripts and use them as context
@@ -36,6 +38,12 @@ default yourself under **Settings → Basic → Agents**, per agent and for Quic
 Applying it never changes your embedding model or rebuilds your vault index.
 Semantic search is configured separately — see
 [Vault search and indexing](vault-search-and-indexing.md).
+
+### Agent Mode and Copilot Plus
+
+You do not need a Copilot Plus license to run one OpenCode, Claude, or Codex session in Agent Mode. The selected agent still needs its own account or model access.
+
+Copilot Plus adds multi-agent mentions and relay-backed skills for web research, documents, YouTube, and X. When a relay skill is unavailable, the agent can fall back to a native tool when it has one. Copilot-hosted models currently appear under OpenCode; Claude and Codex continue to use models from their own subscriptions.
 
 The badge at the top of the license section names your plan once the key is
 working — **Plus**, **Lite**, or **Lifetime** for a Believer or Supporter
@@ -211,6 +219,6 @@ Leave empty to use automatic local discovery.
 
 ## Related
 
-- [Agent Mode and Tools](agent-mode-and-tools.md) — Using the autonomous agent
+- [Agent Mode and Tools](agent-mode-and-tools.md) — Use OpenCode, Claude, or Codex in the dedicated desktop view
 - [Vault Search and Indexing](vault-search-and-indexing.md) — How Miyo enhances semantic search
 - [Getting Started](getting-started.md) — First-time setup
