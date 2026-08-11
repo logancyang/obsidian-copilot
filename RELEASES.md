@@ -1,5 +1,65 @@
 # Release Notes
 
+# Copilot v4.0.0 — The Official V4 Release 🎉
+
+Copilot has been rewritten end to end. Instead of a single built-in assistant, frontier agents — **Claude Code**, **Codex**, and **opencode** — now run natively inside Obsidian: they plan, search your vault by meaning, use tools, and write results back to your notes in fluent Obsidian — wikilinks, canvases, Markdown.
+
+Huge thanks to every Believer who ran the six preview builds since June and filed the reports that shaped this release. 🙏
+
+## ✨ Highlights
+
+### 🤖 Run Claude Code, Codex, and opencode inside Obsidian
+
+Real agents tuned for your links and structure, working like they belong in your vault:
+
+- **Tabs, like a browser.** Open a different agent in each tab and work several threads at once.
+- **Project Mode.** Give an agent its own scoped project, with a per-project `AGENTS.md` that steers how it behaves there.
+- **Multi-agent collaboration** _(Plus)_. Mention `@claude @codex @opencode` in one prompt and each agent works it in parallel, then Copilot combines their answers into one result.
+- **One skill, every agent.** Set up a skill once, then enable it for opencode, Claude Code, or Codex with a click.
+
+### 🔑 Bring the subscription you already pay for
+
+Copilot is free and open source — bring your own AI:
+
+| You have                                                      | Copilot runs    |
+| ------------------------------------------------------------- | --------------- |
+| Claude subscription                                           | **Claude Code** |
+| ChatGPT subscription                                          | **Codex**       |
+| API keys or local models (OpenAI, Google, Ollama, LM Studio…) | **opencode**    |
+
+Prefer zero setup? The new [**Lite**](https://www.obsidiancopilot.com/en/pricing) plan runs opencode on Copilot-hosted models with enterprise-grade privacy for $7.99/month.
+
+### 🔍 Miyo — local semantic search and document understanding, free for everyone
+
+Ask in half-remembered language and Copilot finds the note by meaning, powered by [Miyo](https://miyo.md/), our local indexing engine. Your index stays on your machine — and with Miyo as your Document Processor, PDFs and EPUBs are parsed locally too, so nothing leaves your computer.
+
+### 🌐 Symposium — agent-first publishing _(Plus and above)_
+
+Right-click any note and publish it as a clean webpage on [Symposium](https://symposium.md/), update it after edits, or withdraw it — all without leaving Obsidian. Or just tell your agent _"publish this note"_: it builds the page and shows you a preview and a confirmation before anything goes public.
+
+### And a lot more from the preview cycle
+
+Quick Ask inline panel (assign a hotkey — we recommend `Ctrl/Cmd+K`), redesigned Settings, per-agent default models, a context and cost meter in the composer, an in-app Report an Issue button, and built-in cross-agent skills like web search, PDF reading, YouTube transcripts, and X capture _(Plus)_.
+
+## ⚠️ Upgrading from V3 — read this first
+
+V4 arrives as a normal plugin update. Your settings, custom prompts, and license carry over, and Copilot runs a one-time migration on first launch that ends with a summary of everything it did. A few things to know:
+
+- **Back up your vault before updating.** The migration is automatic, but this is a major architectural change and a backup is cheap insurance.
+- **Your old chat is now "Quick Chat."** Agent Mode is the new main view. The classic V3 chat is still here — open the command palette and run **"New Copilot Quick Chat"**. Quick Ask and vault QA keep working as before.
+- **One `copilot` folder for everything.** Conversations, custom prompts, skills, memory, system prompts, and projects now live under a single parent folder (default: `copilot`, configurable in settings). Existing files are moved automatically; if you had customized any of those paths, a one-time notice lists the old and new locations.
+- **API keys move to the Obsidian keychain.** For security, keys are migrated out of `data.json`, with a backup saved in your plugin folder.
+
+## 📦 Install
+
+Update Copilot from **Obsidian → Community Plugins**. If you were on the V4 preview via BRAT, you can remove the beta repo from BRAT and switch back to the official release.
+
+---
+
+Report issues on [GitHub](https://github.com/logancyang/obsidian-copilot/issues) · [Docs & plans](https://www.obsidiancopilot.com/) · [Privacy](https://www.obsidiancopilot.com/en/privacy) · [Full changelog](https://github.com/logancyang/obsidian-copilot/compare/3.3.3...4.0.0)
+
+---
+
 # Copilot for Obsidian - Release v3.3.3 🛠️
 
 This patch brings a fresh Gemini model, squashes a nasty Copilot Plus freeze, and makes it much easier to verify your dev build is actually loaded in Obsidian. Thanks to @logancyang and @zeroliu for the quick turnaround!
