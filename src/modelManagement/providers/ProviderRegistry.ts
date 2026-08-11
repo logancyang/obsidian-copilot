@@ -235,10 +235,7 @@ export class ProviderRegistry {
     const legacyId = legacyProviderKeychainId(keychain.getVaultId(), provider.providerId);
     const hasLegacyPointer = currentId === legacyId;
     const readableId = hasLegacyPointer
-      ? keychain.getProviderSecretId(
-          provider.displayName.trim() || provider.providerType,
-          provider.providerId
-        )
+      ? keychain.getProviderSecretId(provider.providerType, provider.providerId)
       : currentId;
     const migrated = keychain.migrateSecretById(readableId, legacyId);
     if (!migrated) return currentId;
@@ -252,10 +249,7 @@ export class ProviderRegistry {
   #deleteApiKeySecrets(provider: Provider): void {
     const keychain = KeychainService.getInstance(this.#app);
     const legacyId = legacyProviderKeychainId(keychain.getVaultId(), provider.providerId);
-    const readableId = keychain.getProviderSecretId(
-      provider.displayName.trim() || provider.providerType,
-      provider.providerId
-    );
+    const readableId = keychain.getProviderSecretId(provider.providerType, provider.providerId);
     const ids = new Set([provider.apiKeyKeychainId, readableId, legacyId]);
     for (const id of ids) {
       if (!id) continue;
@@ -315,7 +309,7 @@ export class ProviderRegistry {
     const keychainId =
       row.apiKeyKeychainId && !isLegacyId
         ? row.apiKeyKeychainId
-        : keychain.getProviderSecretId(row.displayName.trim() || row.providerType, row.providerId);
+        : keychain.getProviderSecretId(row.providerType, row.providerId);
     // New providers persist their pointer before the first write so a failed
     // write leaves a recoverable dangling pointer. Legacy providers move their
     // pointer only after the readable write succeeds.

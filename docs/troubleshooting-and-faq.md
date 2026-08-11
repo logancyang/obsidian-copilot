@@ -210,7 +210,7 @@ Do not delete `.obsidian/plugins/copilot/data.json` as a substitute for the in-a
 
 Copilot v4 stores API keys, license keys, and authentication tokens only in the **Obsidian Keychain**. These credentials are not stored in `data.json`.
 
-Copilot names its Keychain entries by purpose so they are easy to recognize and manage. For example, Gemini, Supadata, and Copilot Plus credentials appear as `copilot-v…-gemini-api-key`, `copilot-v…-supadata-api-key`, and `copilot-v…-plus-license`. Provider-specific keys include the provider label, such as `copilot-v…-anthropic-team-api-key-p…`; the short vault and provider segments distinguish vaults and multiple accounts.
+Copilot names its Keychain entries by purpose so they are easy to recognize and manage. For example, Gemini, Supadata, and Copilot Plus credentials appear as `copilot-v…-gemini-api-key`, `copilot-v…-supadata-api-key`, and `copilot-v…-plus-license`. Provider-specific keys include the provider type, such as `copilot-v…-anthropic-api-key-p…`; the short vault and provider segments distinguish vaults and multiple accounts.
 
 Existing Copilot credentials move to readable names automatically. Copilot first copies and verifies the value, then removes the old unreadable entry. If the Keychain temporarily rejects the copy or cleanup, the working entry is kept and migration retries later. After migration, older Copilot versions may ask you to re-enter a credential; upgrading again restores access to the readable entry.
 
