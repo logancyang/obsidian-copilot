@@ -60,6 +60,15 @@ const anthropicStub: ProviderAdapter = {
   }),
 };
 
+function setProviderKeychainId(providerId: string, keychainId: string): void {
+  setSettings((current) => ({
+    providers: {
+      ...current.providers,
+      [providerId]: { ...current.providers[providerId], apiKeyKeychainId: keychainId },
+    },
+  }));
+}
+
 async function seedLegacyProviderCredential(
   registry: ProviderRegistry,
   app: App,
@@ -73,12 +82,7 @@ async function seedLegacyProviderCredential(
   const vaultId = KeychainService.getInstance(app).getVaultId();
   const legacyId = `copilot-v${vaultId}-provider-${id}`;
   secrets.set(legacyId, "sk-existing");
-  setSettings((current) => ({
-    providers: {
-      ...current.providers,
-      [id]: { ...current.providers[id], apiKeyKeychainId: legacyId },
-    },
-  }));
+  setProviderKeychainId(id, legacyId);
   return { id, legacyId };
 }
 
@@ -316,12 +320,7 @@ describe("ProviderRegistry", () => {
     it("copies a device-local legacy entry when settings sync a readable pointer", async () => {
       const { id, legacyId } = await seedLegacyProviderCredential(registry, app, secrets);
       const readableId = readableProviderCredentialId(app, id);
-      setSettings((current) => ({
-        providers: {
-          ...current.providers,
-          [id]: { ...current.providers[id], apiKeyKeychainId: readableId },
-        },
-      }));
+      setProviderKeychainId(id, readableId);
 
       registry.migrateLegacyApiKeyIds();
 
@@ -331,9 +330,10 @@ describe("ProviderRegistry", () => {
       expect(await registry.getApiKey(id)).toBe("sk-existing");
     });
 
-    it("keeps the legacy pointer when the readable copy cannot be verified", async () => {
+    it("restores the legacy pointer when a synced readable copy cannot be verified", async () => {
       const { id, legacyId } = await seedLegacyProviderCredential(registry, app, secrets);
       const readableId = readableProviderCredentialId(app, id);
+      setProviderKeychainId(id, readableId);
       (app.secretStorage as unknown as { setSecret(id: string, value: string): void }).setSecret = (
         target,
         value

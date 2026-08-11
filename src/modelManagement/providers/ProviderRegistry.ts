@@ -239,8 +239,8 @@ export class ProviderRegistry {
       : currentId;
     const migrated = keychain.migrateSecretById(readableId, legacyId);
     if (!migrated) return currentId;
-    if (hasLegacyPointer && migrated.keychainId === readableId) {
-      this.#setApiKeyKeychainId(provider.providerId, readableId);
+    if (migrated.keychainId !== currentId) {
+      this.#setApiKeyKeychainId(provider.providerId, migrated.keychainId);
     }
     return migrated.keychainId;
   }

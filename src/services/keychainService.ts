@@ -388,20 +388,21 @@ export class KeychainService {
     }
   }
 
-  // Persist and verify one phase of the recovery marker.
-  private setMigrationMarker(markerId: string, state: "pending" | "verified"): void {
-    this.storage.setSecret(markerId, state);
-    if (this.storage.getSecret(markerId) !== state) {
+  // Persist and verify the recovery marker before writing a readable copy.
+  private setMigrationMarker(markerId: string): void {
+    this.storage.setSecret(markerId, "pending");
+    if (this.storage.getSecret(markerId) !== "pending") {
       throw new Error(`could not verify Keychain migration marker "${markerId}"`);
     }
   }
 
-  // Best-effort removal after an ordinary readable write or explicit deletion.
-  private clearMigrationMarker(id: string): void {
+  // Best-effort removal after a verified readable write or explicit deletion.
+  private clearMigrationMarker(id: string, expectedValue?: string): void {
     try {
       const markerId = toMigrationMarkerId(this.vaultId, id);
       const markerValue = this.storage.getSecret(markerId);
       if (markerValue !== null && markerValue !== "") {
+        if (expectedValue !== undefined && this.storage.getSecret(id) !== expectedValue) return;
         this.removeSecretAndConfirm(markerId);
       }
     } catch (error) {
@@ -413,9 +414,8 @@ export class KeychainService {
   private writeReadableSecret(id: string, legacyId: string, value: string): boolean {
     const markerId = toMigrationMarkerId(this.vaultId, id);
     let attemptedReadableWrite = false;
-    let verified = false;
     try {
-      this.setMigrationMarker(markerId, "pending");
+      this.setMigrationMarker(markerId);
       attemptedReadableWrite = true;
       this.storage.setSecret(id, value);
       if (this.storage.getSecret(id) !== value) {
@@ -424,10 +424,8 @@ export class KeychainService {
         }
         return false;
       }
-      this.setMigrationMarker(markerId, "verified");
-      verified = true;
     } catch (error) {
-      if (attemptedReadableWrite && !verified && this.removeSecretAndConfirm(id)) {
+      if (attemptedReadableWrite && this.removeSecretAndConfirm(id)) {
         this.removeSecretAndConfirm(markerId);
       }
       throw error;
@@ -456,11 +454,6 @@ export class KeychainService {
     let value = this.storage.getSecret(id);
     const markerValue = this.storage.getSecret(markerId);
     let legacyValue: string | null | undefined;
-    if (markerValue === "verified" && value !== null) {
-      this.removeLegacySecret(legacyId);
-      this.removeSecretAndConfirm(markerId);
-      return { keychainId: id, value };
-    }
     if (markerValue !== null && markerValue !== "") {
       legacyValue = this.storage.getSecret(legacyId);
       if (legacyValue === null) {
@@ -528,7 +521,7 @@ export class KeychainService {
    *  an equivalent vault-namespaced helper. */
   setSecretById(keychainId: string, value: string): void {
     this.storage.setSecret(keychainId, value);
-    this.clearMigrationMarker(keychainId);
+    this.clearMigrationMarker(keychainId, value);
   }
 
   /** Read a value directly from the keychain using a pre-computed ID.

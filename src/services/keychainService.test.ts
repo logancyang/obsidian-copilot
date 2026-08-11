@@ -562,6 +562,8 @@ describe("keychainService", () => {
         expect(secrets.get(legacyId)).toBe("sk-legacy");
         expect([...secrets.keys()].some((id) => id.includes("-migration-"))).toBe(true);
 
+        service.setSecretById(readableId, first.settings.openAIApiKey);
+        expect([...secrets.keys()].some((id) => id.includes("-migration-"))).toBe(true);
         corruptReadableWrite = false;
         blockReadableDelete = false;
         const second = await service.hydrateFromKeychain(makeSettings({ openAIApiKey: "" }));
