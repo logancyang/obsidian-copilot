@@ -211,6 +211,7 @@ export default class EmbeddingManager {
       [EmbeddingModelProviders.COPILOT_PLUS]: {
         modelName,
         apiKey: settings.plusLicenseKey,
+        headers: BrevilabsClient.getInstance().getPluginVersionHeaders(),
         timeout: 10000,
         batchSize: getSettings().embeddingBatchSize,
         configuration: {
@@ -221,6 +222,7 @@ export default class EmbeddingManager {
       [EmbeddingModelProviders.COPILOT_PLUS_JINA]: {
         model: modelName,
         apiKey: settings.plusLicenseKey,
+        headers: BrevilabsClient.getInstance().getPluginVersionHeaders(),
         timeout: 10000,
         batchSize: getSettings().embeddingBatchSize,
         dimensions: customModel.dimensions,

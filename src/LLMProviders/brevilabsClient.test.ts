@@ -40,6 +40,17 @@ const MANUAL_LICENSE_CHECK = { trigger: "manual" } as const;
 
 describe("brevilabsClient", () => {
   describe("BrevilabsClient", () => {
+    describe("getPluginVersionHeaders()", () => {
+      it("exposes the plugin version as the shared client-version header", () => {
+        const client = BrevilabsClient.getInstance();
+        client.setPluginVersion("4.0.0-preview-260802");
+
+        expect(client.getPluginVersionHeaders()).toEqual({
+          "X-Client-Version": "4.0.0-preview-260802",
+        });
+      });
+    });
+
     describe("validateLicenseKey()", () => {
       beforeEach(() => {
         jest.clearAllMocks();

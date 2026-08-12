@@ -279,6 +279,7 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
       new OpencodeBackend({
         providerRegistry,
         backendConfigRegistry,
+        clientVersion: args.clientVersion,
         // Activates the opencode external_directory allow rule for the off-vault
         // shared conversions cache. vaultId/path derivation lives entirely in
         // conversionsLocation — this backend never duplicates it.

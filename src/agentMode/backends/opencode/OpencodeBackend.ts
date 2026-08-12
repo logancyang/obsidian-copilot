@@ -57,6 +57,7 @@ export const OPENCODE_CANONICAL_MODE_AGENT_IDS: Partial<Record<CopilotMode, stri
 export interface OpencodeModelDeps {
   providerRegistry: ProviderRegistry;
   backendConfigRegistry: BackendConfigRegistry;
+  clientVersion?: string;
   /**
    * Resolves the off-vault shared conversions cache root (absolute path) for
    * this vault, or `undefined` when unavailable. Injected so this backend never
@@ -120,7 +121,7 @@ export class OpencodeBackend implements AcpBackend {
       );
     }
     // Builtin skills consume plugin-managed runtime paths and credentials.
-    const builtinSkillEnv = await buildBuiltinSkillEnv("", ctx.vaultBasePath);
+    const builtinSkillEnv = await buildBuiltinSkillEnv(this.#deps.clientVersion, ctx.vaultBasePath);
 
     return {
       command: binaryPath,
@@ -242,6 +243,9 @@ export async function buildOpencodeConfig(
         options: {
           ...(apiKey ? { apiKey } : {}),
           ...(baseURL ? { baseURL } : {}),
+          ...(origin.kind === "copilot-plus" && deps.clientVersion
+            ? { headers: { "X-Client-Version": deps.clientVersion } }
+            : {}),
         },
       };
       provider[mapping.id] = providerConfig;

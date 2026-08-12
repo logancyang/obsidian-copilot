@@ -197,6 +197,10 @@ export class BrevilabsClient {
     this.pluginVersion = pluginVersion;
   }
 
+  getPluginVersionHeaders(): Record<string, string> {
+    return { "X-Client-Version": this.pluginVersion };
+  }
+
   private async makeRequest<T>(
     endpoint: string,
     body: Record<string, unknown>,
@@ -219,7 +223,7 @@ export class BrevilabsClient {
     }
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
-      "X-Client-Version": this.pluginVersion,
+      ...this.getPluginVersionHeaders(),
     };
     if (!excludeAuthHeader) {
       headers.Authorization = `Bearer ${getSettings().plusLicenseKey}`;
@@ -258,7 +262,7 @@ export class BrevilabsClient {
         headers: {
           "Content-Type": contentType,
           Authorization: `Bearer ${getSettings().plusLicenseKey}`,
-          "X-Client-Version": this.pluginVersion,
+          ...this.getPluginVersionHeaders(),
         },
         body,
         throw: false,
