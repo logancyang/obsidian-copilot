@@ -1,4 +1,5 @@
 import { TFile, App } from "obsidian";
+import { logWarn } from "@/logger";
 
 /**
  * Loads and processes note content for preview display.
@@ -33,7 +34,7 @@ async function loadNoteContentForPreview(
 
     return truncatedContent;
   } catch (error) {
-    console.warn("Failed to read note content:", error);
+    logWarn("Failed to read note content:", error);
     return "Failed to load content";
   }
 }

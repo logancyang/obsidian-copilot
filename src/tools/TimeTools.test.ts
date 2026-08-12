@@ -1,4 +1,5 @@
 import { DateTime } from "luxon";
+import * as logger from "@/logger";
 import { getTimeRangeMsTool } from "./TimeTools";
 
 type InvokableTool = { invoke: (args: Record<string, unknown>) => Promise<string> };
@@ -363,16 +364,16 @@ describe("Time Expression Tests", () => {
   });
 
   describe("Invalid Expressions", () => {
-    let consoleWarnSpy: jest.SpyInstance;
+    let logWarnSpy: jest.SpyInstance;
 
     beforeEach(() => {
-      // Mock console.warn to suppress expected warnings
-      consoleWarnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+      // Mock logWarn to suppress expected warnings
+      logWarnSpy = jest.spyOn(logger, "logWarn").mockImplementation(() => {});
     });
 
     afterEach(() => {
-      // Restore console.warn after each test
-      consoleWarnSpy.mockRestore();
+      // Restore logWarn after each test
+      logWarnSpy.mockRestore();
     });
 
     test.each(["invalid time", "", "random text", "week of invalid"])(
@@ -380,10 +381,8 @@ describe("Time Expression Tests", () => {
       async (expression) => {
         const result = await getTimeRangeMs(expression);
         expect(result).toBeUndefined();
-        // Verify that console.warn was called with the expected message
-        expect(consoleWarnSpy).toHaveBeenCalledWith(
-          `Unable to parse time expression: ${expression}`
-        );
+        // Verify that logWarn was called with the expected message
+        expect(logWarnSpy).toHaveBeenCalledWith(`Unable to parse time expression: ${expression}`);
       }
     );
   });

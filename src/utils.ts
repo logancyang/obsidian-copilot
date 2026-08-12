@@ -521,7 +521,7 @@ function resolveNoteFilesFromTitles(noteTitles: string[], vault: Vault): TFile[]
         } else {
           // Multiple files with same title - this shouldn't happen
           // as we should be using full paths for duplicate titles
-          console.warn(
+          logWarn(
             `Found multiple files with title "${noteTitle}". Expected a full path for duplicate titles.`
           );
         }

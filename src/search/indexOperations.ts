@@ -523,7 +523,7 @@ export class IndexOperations {
     if (filePath) {
       if (context.batch) {
         // Detailed batch processing error logging
-        console.error("Batch processing error:", {
+        logError("Batch processing error:", {
           error,
           batchSize: context.batch.length || 0,
           firstChunk: context.batch[0]
@@ -537,11 +537,11 @@ export class IndexOperations {
           errorMessage: error instanceof Error ? error.message : String(error),
         });
       } else {
-        console.error(`Error indexing file ${filePath}:`, error);
+        logError(`Error indexing file ${filePath}:`, error);
       }
       context.errors?.push(filePath);
     } else {
-      console.error("Fatal error during indexing:", error);
+      logError("Fatal error during indexing:", error);
     }
 
     // Handle json stringify string length error consistently

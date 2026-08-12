@@ -7,7 +7,7 @@ import {
   ModelCapability,
   ProviderInfo,
 } from "@/constants";
-import { logError, logInfo } from "@/logger";
+import { logError, logInfo, logWarn } from "@/logger";
 import { isPaidEnabled } from "@/plusUtils";
 import {
   CopilotSettings,
@@ -737,7 +737,7 @@ export default class ChatModelManager {
     allModels.forEach((model) => {
       if (model.enabled) {
         if (!Object.values(ChatModelProviders).includes(model.provider as ChatModelProviders)) {
-          console.warn(`Unknown provider: ${model.provider} for model: ${model.name}`);
+          logWarn(`Unknown provider: ${model.provider} for model: ${model.name}`);
           return;
         }
 
@@ -783,7 +783,7 @@ export default class ChatModelManager {
       model.provider as ChatModelProviders
     ] as unknown as ChatConstructorType;
     if (!constructor) {
-      console.warn(`Unknown provider: ${model.provider} for model: ${model.name}`);
+      logWarn(`Unknown provider: ${model.provider} for model: ${model.name}`);
       throw new Error(`Unknown provider: ${model.provider} for model: ${model.name}`);
     }
     return constructor;
