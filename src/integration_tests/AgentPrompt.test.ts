@@ -72,13 +72,25 @@ jest.mock("@orama/orama", () => ({
 
 import { AutonomousAgentChainRunner } from "@/LLMProviders/chainRunner";
 import { jest } from "@jest/globals";
-import * as dotenv from "dotenv";
+import * as fs from "fs";
 
 // Add TextDecoderStream polyfill for Node.js environments
 import "web-streams-polyfill/dist/polyfill.js";
 
-// Load environment variables from .env.test
-dotenv.config({ path: ".env.test" });
+// Load environment variables from .env.test without a dotenv dependency; existing
+// environment variables win, matching dotenv's default behavior.
+function loadTestEnv(path: string): void {
+  if (!fs.existsSync(path)) return;
+  for (const line of fs.readFileSync(path, "utf8").split(/\r?\n/)) {
+    const match = /^\s*(?:export\s+)?([\w.-]+)\s*=\s*(.*?)\s*$/.exec(line);
+    if (!match) continue;
+    const [, key, rawValue] = match;
+    const value = /^(['"]).*\1$/.test(rawValue) ? rawValue.slice(1, -1) : rawValue;
+    if (process.env[key] === undefined) process.env[key] = value;
+  }
+}
+
+loadTestEnv(".env.test");
 
 // Add contains method to Array prototype for compatibility
 Array.prototype.contains = Array.prototype.includes;
