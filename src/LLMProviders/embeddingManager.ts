@@ -154,7 +154,9 @@ export default class EmbeddingManager {
     // Check if model is believer-exclusive but user is not on believer plan
     if (customModel.believerExclusive) {
       const brevilabsClient = BrevilabsClient.getInstance();
-      const result = await brevilabsClient.validateLicenseKey();
+      const result = await brevilabsClient.validateLicenseKey(undefined, {
+        trigger: "model_gate",
+      });
       if (!result.plan || result.plan.toLowerCase() !== "believer") {
         new Notice("Believer-only model, please consider upgrading to Believer to access it.");
         throw new CustomError("Believer-only model selected but user is not on Believer plan");

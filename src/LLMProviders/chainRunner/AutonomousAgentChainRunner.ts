@@ -387,6 +387,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
     this.lastDisplayedContent = "";
 
     const isPaidUser = await checkIsPaidUser(this.chainManager.app, {
+      trigger: "chat_turn",
       isAutonomousAgent: true,
     });
 

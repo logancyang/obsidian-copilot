@@ -32,10 +32,18 @@ jest.mock("@/entitlement", () => ({
   verifyEntitlement: (...args: [string, unknown?]) => mockVerifyEntitlement(...args),
 }));
 
-const mockValidateLicenseKey = jest.fn<Promise<{ isValid: boolean | undefined }>, []>();
+const mockValidateLicenseKey = jest.fn<
+  Promise<{ isValid: boolean | undefined }>,
+  [unknown, Record<string, unknown>]
+>();
 
 jest.mock("@/LLMProviders/brevilabsClient", () => ({
-  BrevilabsClient: { getInstance: () => ({ validateLicenseKey: () => mockValidateLicenseKey() }) },
+  BrevilabsClient: {
+    getInstance: () => ({
+      validateLicenseKey: (app: unknown, context: Record<string, unknown>) =>
+        mockValidateLicenseKey(app, context),
+    }),
+  },
 }));
 
 const mockSetModelKey = jest.fn<void, [string]>();
@@ -686,7 +694,7 @@ describe("plusUtils", () => {
     it("returns false without reaching the server when no license key is set", async () => {
       mockGetSettings.mockReturnValue(buildSettings({ plusLicenseKey: "" }));
 
-      expect(await checkIsPaidUser()).toBe(false);
+      expect(await checkIsPaidUser(undefined, { trigger: "manual" })).toBe(false);
       expect(mockValidateLicenseKey).not.toHaveBeenCalled();
     });
 
@@ -694,7 +702,8 @@ describe("plusUtils", () => {
       mockGetSettings.mockReturnValue(buildSettings({ plusLicenseKey: "key", isPaidUser: true }));
       mockValidateLicenseKey.mockResolvedValue({ isValid: false });
 
-      expect(await checkIsPaidUser()).toBe(false);
+      expect(await checkIsPaidUser(undefined, { trigger: "manual" })).toBe(false);
+      expect(mockValidateLicenseKey).toHaveBeenCalledWith(undefined, { trigger: "manual" });
     });
 
     it("keeps an unexpired entitlement working when the license server is unreachable", async () => {
@@ -705,7 +714,7 @@ describe("plusUtils", () => {
       mockGetSettings.mockReturnValue(tokenBackedSettings({ plusLicenseKey: "key" }));
       mockValidateLicenseKey.mockRejectedValue(new Error("net::ERR_INTERNET_DISCONNECTED"));
 
-      expect(await checkIsPaidUser()).toBe(true);
+      expect(await checkIsPaidUser(undefined, { trigger: "manual" })).toBe(true);
       expect(mockValidateLicenseKey).toHaveBeenCalled();
     });
 
@@ -714,7 +723,7 @@ describe("plusUtils", () => {
       mockGetSettings.mockReturnValue(tokenBackedSettings({ plusLicenseKey: "key" }));
       mockValidateLicenseKey.mockResolvedValue({ isValid: undefined });
 
-      expect(await checkIsPaidUser()).toBe(true);
+      expect(await checkIsPaidUser(undefined, { trigger: "manual" })).toBe(true);
     });
 
     it("stops a turn whose entitlement expired while renewal was failing", async () => {
@@ -725,7 +734,7 @@ describe("plusUtils", () => {
       mockGetSettings.mockReturnValue(tokenBackedSettings({ plusLicenseKey: "key" }));
       mockValidateLicenseKey.mockResolvedValue({ isValid: undefined });
 
-      expect(await checkIsPaidUser()).toBe(false);
+      expect(await checkIsPaidUser(undefined, { trigger: "manual" })).toBe(false);
     });
 
     it("refuses the offline fallback to an unexpired free-tier token", async () => {
@@ -746,7 +755,7 @@ describe("plusUtils", () => {
       mockGetSettings.mockReturnValue(tokenBackedSettings({ plusLicenseKey: "key" }));
       mockValidateLicenseKey.mockRejectedValue(new Error("net::ERR_INTERNET_DISCONNECTED"));
 
-      expect(await checkIsPaidUser()).toBe(false);
+      expect(await checkIsPaidUser(undefined, { trigger: "manual" })).toBe(false);
     });
 
     it("does not grant offline access on persisted flags alone (edited data.json)", async () => {
@@ -755,7 +764,7 @@ describe("plusUtils", () => {
       );
       mockValidateLicenseKey.mockRejectedValue(new Error("net::ERR_INTERNET_DISCONNECTED"));
 
-      expect(await checkIsPaidUser()).toBe(false);
+      expect(await checkIsPaidUser(undefined, { trigger: "manual" })).toBe(false);
     });
   });
 

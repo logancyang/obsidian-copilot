@@ -36,6 +36,7 @@ function stubRequest(outcome: RequestOutcome, onRequest?: () => void): void {
 }
 
 const VALID_LICENSE_RESPONSE = { entitlement: "signed-token", plan: "supporter" };
+const MANUAL_LICENSE_CHECK = { trigger: "manual" } as const;
 
 describe("brevilabsClient", () => {
   describe("BrevilabsClient", () => {
@@ -49,18 +50,50 @@ describe("brevilabsClient", () => {
       it("applies the signed entitlement when the license key is unchanged", async () => {
         stubRequest({ data: VALID_LICENSE_RESPONSE, error: null });
 
-        const result = await BrevilabsClient.getInstance().validateLicenseKey();
+        const result = await BrevilabsClient.getInstance().validateLicenseKey(
+          undefined,
+          MANUAL_LICENSE_CHECK
+        );
 
         expect(result).toEqual({ isValid: true, plan: "supporter" });
         expect(mockApplyEntitlement).toHaveBeenCalledWith("signed-token");
         expect(mockMarkPaidPendingEntitlement).not.toHaveBeenCalled();
       });
 
+      it("forwards the required trigger and optional feature to the license endpoint", async () => {
+        const makeRequest = jest.fn().mockResolvedValue({
+          data: VALID_LICENSE_RESPONSE,
+          error: null,
+        });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- verifies the private HTTP boundary
+        (BrevilabsClient.getInstance() as any).makeRequest = makeRequest;
+
+        await BrevilabsClient.getInstance().validateLicenseKey(undefined, {
+          trigger: "chat_turn",
+          feature: "multi_agent_per_turn",
+        });
+
+        expect(makeRequest).toHaveBeenCalledWith(
+          "/license",
+          {
+            license_key: "key-A",
+            trigger: "chat_turn",
+            feature: "multi_agent_per_turn",
+          },
+          "POST",
+          true,
+          true
+        );
+      });
+
       it("falls back to paid-pending when the server's token cannot be verified", async () => {
         mockApplyEntitlement.mockResolvedValue(false);
         stubRequest({ data: VALID_LICENSE_RESPONSE, error: null });
 
-        const result = await BrevilabsClient.getInstance().validateLicenseKey();
+        const result = await BrevilabsClient.getInstance().validateLicenseKey(
+          undefined,
+          MANUAL_LICENSE_CHECK
+        );
 
         expect(result).toEqual({ isValid: true, plan: "supporter" });
         expect(mockApplyEntitlement).toHaveBeenCalledWith("signed-token");
@@ -72,7 +105,10 @@ describe("brevilabsClient", () => {
         async (plan) => {
           stubRequest({ data: { plan }, error: null });
 
-          const result = await BrevilabsClient.getInstance().validateLicenseKey();
+          const result = await BrevilabsClient.getInstance().validateLicenseKey(
+            undefined,
+            MANUAL_LICENSE_CHECK
+          );
 
           expect(result).toEqual({ isValid: true, plan });
           expect(mockMarkPaidPendingEntitlement).toHaveBeenCalled();
@@ -83,7 +119,10 @@ describe("brevilabsClient", () => {
       it("revokes entitlement when the server rejects the key", async () => {
         stubRequest({ data: null, error: new Error("Invalid license key") });
 
-        const result = await BrevilabsClient.getInstance().validateLicenseKey();
+        const result = await BrevilabsClient.getInstance().validateLicenseKey(
+          undefined,
+          MANUAL_LICENSE_CHECK
+        );
 
         expect(result).toEqual({ isValid: false });
         expect(mockTurnOffPaid).toHaveBeenCalled();
@@ -97,7 +136,10 @@ describe("brevilabsClient", () => {
           mockGetSettings.mockReturnValue({ plusLicenseKey: "key-B" });
         });
 
-        const result = await BrevilabsClient.getInstance().validateLicenseKey();
+        const result = await BrevilabsClient.getInstance().validateLicenseKey(
+          undefined,
+          MANUAL_LICENSE_CHECK
+        );
 
         expect(result).toEqual({ isValid: undefined });
         expect(mockApplyEntitlement).not.toHaveBeenCalled();
@@ -111,7 +153,10 @@ describe("brevilabsClient", () => {
           mockGetSettings.mockReturnValue({ plusLicenseKey: "key-B" });
         });
 
-        const result = await BrevilabsClient.getInstance().validateLicenseKey();
+        const result = await BrevilabsClient.getInstance().validateLicenseKey(
+          undefined,
+          MANUAL_LICENSE_CHECK
+        );
 
         expect(result).toEqual({ isValid: undefined });
         expect(mockTurnOffPaid).not.toHaveBeenCalled();

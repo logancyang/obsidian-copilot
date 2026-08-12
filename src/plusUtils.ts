@@ -8,7 +8,7 @@ import {
   PlusUtmMedium,
 } from "@/constants";
 import { EntitlementFeature, verifyEntitlement } from "@/entitlement";
-import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
+import { BrevilabsClient, LicenseCheckContext } from "@/LLMProviders/brevilabsClient";
 import { logError, logInfo, logWarn } from "@/logger";
 import {
   CopilotSettings,
@@ -239,8 +239,9 @@ export async function ensureMultiAgentEntitlement(
   // Re-verify so a stale-false cache for a real Plus user still gets through;
   // `validateLicenseKey` applies the signed entitlement or paid-pending state.
   await BrevilabsClient.getInstance().validateLicenseKey(app, {
-    feature: "multi_agent_per_turn",
     ...context,
+    trigger: "chat_turn",
+    feature: "multi_agent_per_turn",
   });
   return isPlusEnabled();
 }
@@ -282,8 +283,8 @@ export function useCanUseMultiAgent(): boolean {
  * closed — quietly rerouting their searches to the cloud.
  */
 export async function checkIsPaidUser(
-  app?: App,
-  context?: Record<string, unknown>
+  app: App | undefined,
+  context: LicenseCheckContext
 ): Promise<boolean | undefined> {
   if (!getSettings().plusLicenseKey) {
     turnOffPaid(app);

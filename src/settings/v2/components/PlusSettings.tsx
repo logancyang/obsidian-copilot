@@ -128,7 +128,7 @@ export function PlusSettings() {
           onClick={async () => {
             updateSetting("plusLicenseKey", localLicenseKey);
             setIsChecking(true);
-            const result = await checkIsPaidUser(app);
+            const result = await checkIsPaidUser(app, { trigger: "manual" });
             setIsChecking(false);
             if (!result) {
               setError("Invalid license key");
