@@ -12,6 +12,7 @@ Copilot for Obsidian is an AI-powered plugin that brings large language models (
 - **Public sharing**: Publish Markdown notes to Symposium with a shareable link
 - **Web search**: Fetch and summarize information from the internet
 - **Memory**: Have the AI remember facts about you across conversations
+- **Agent Mode**: Use OpenCode, Claude, or Codex for multi-step work in your vault on desktop
 
 Copilot supports 16+ AI providers including OpenAI, Anthropic, Google Gemini, Ollama (local), and more.
 
@@ -24,17 +25,21 @@ Copilot supports 16+ AI providers including OpenAI, Anthropic, Google Gemini, Ol
 3. Click **Browse** and search for **Copilot**
 4. Click **Install**, then **Enable**
 
-Copilot is now installed. A robot icon will appear in the left sidebar ribbon.
+Copilot is now installed. An Agent icon appears in the left sidebar ribbon on desktop.
 
 ---
 
 ## First-Time Setup
 
-### Step 1: Open Plugin Settings
+Quick Chat and Agent Mode have separate setup requirements. Choose either path below; you can set up the other later.
+
+### Quick Chat Setup
+
+#### 1. Open Plugin Settings
 
 Go to **Settings** → **Copilot** (scroll down to the Community Plugins section).
 
-### Step 2: Add an API Key
+#### 2. Add an API Key
 
 On the **Basic** tab, click **Set Keys** to open the API key dialog. Enter the key for your chosen provider:
 
@@ -47,30 +52,41 @@ On the **Basic** tab, click **Set Keys** to open the API key dialog. Enter the k
 
 The default model is **OpenRouter Gemini 2.5 Flash**, which requires an OpenRouter API key. If you'd prefer a different provider, set up that key first, then change the default model.
 
-### Step 3: Choose a Default Model
+#### 3. Choose a Default Model
 
 Add a provider and its models on the **Models (BYOK)** tab, then open **Basic → Agents → Quick Chat**: enable the ones you want to see in chat under **Quick Chat models**, and pick the one new chats start with under **Default model**.
 
-### Step 4: Choose a Chat Mode
+#### 4. Choose a Quick Chat Mode
 
 Use the **Default Mode** dropdown to set which mode opens by default:
 
 - **Chat** — General conversation, good for most tasks
 - **Vault QA** — Ask questions answered from your notes
-- **Copilot Plus** — Advanced mode with autonomous agent and tools (requires Copilot Plus license)
-- **Projects** — Focused workspaces with their own context and chat history
+- **copilot plus** — Paid Quick Chat with licensed web, memory, and autonomous tools
+- **Projects** — Focused workspaces (alpha feature)
 
 Most users should start with **Chat** mode.
 
+### Agent Mode Setup (Desktop)
+
+You do not need to complete the Quick Chat setup above. Click the **Agent** ribbon icon or run **Open Copilot Agent Chat Window**, then choose:
+
+- **OpenCode** — recommended; Copilot can download and manage it for you.
+- **Claude** — uses Claude Code and your Anthropic sign-in.
+- **Codex** — uses Codex and your OpenAI sign-in.
+
+A single-agent session does not require a Copilot license. The selected agent still needs its own account or model access. See [Agent Mode and Tools](agent-mode-and-tools.md) for setup and permissions.
+
 ---
 
-## Opening the Chat Panel
+## Opening Quick Chat
 
 You can open Copilot in several ways:
 
-- Click the **robot icon** in the left ribbon (sidebar)
 - Use the command palette: `Ctrl/Cmd+P` → **Open Copilot Chat Window**
 - Use the hotkey `Ctrl/Cmd+P` → **Toggle Copilot Chat Window** to show/hide it
+
+To open Agent Mode instead, click the **Agent** ribbon icon or run **Open Copilot Agent Chat Window**.
 
 ### Sidebar vs. Editor Tab
 
@@ -81,7 +97,7 @@ By default, Copilot opens as a **view** (sidebar panel). You can change this in 
 
 ---
 
-## Your First Conversation
+## Your First Quick Chat Conversation
 
 1. Open the chat panel
 2. Type your message in the input box at the bottom
@@ -161,6 +177,7 @@ A database that stores your notes as mathematical vectors (embeddings) so they c
 ## Next Steps
 
 - [Chat Interface](chat-interface.md) — Learn about modes, history, and settings
+- [Agent Mode and Tools](agent-mode-and-tools.md) — Set up an agent for multi-step work
 - [LLM Providers](llm-providers.md) — Set up your preferred AI provider
 - [Context and Mentions](context-and-mentions.md) — Control what context the AI sees
 - [Vault Search and Indexing](vault-search-and-indexing.md) — Set up semantic search over your notes

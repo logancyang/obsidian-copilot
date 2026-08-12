@@ -66,4 +66,4 @@ The dropdown contains models enabled under **Quick Chat models**, in that same p
 ## Related
 
 - [LLM Providers](llm-providers.md) — Set up API keys for your provider
-- [Copilot Plus and Self-Host](copilot-plus-and-self-host.md) — The models included with a license
+- [Paid Plans and Self-Host](copilot-plus-and-self-host.md) — The models included with a license

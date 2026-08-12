@@ -63,7 +63,7 @@ V4 is an entire rewrite. Instead of a single built-in assistant, real agents pla
 ## One prompt, every agent
 
 > [!IMPORTANT]
-> Multi-agent collaboration is a **Copilot Plus** feature, included for Plus subscribers and Supporters.
+> Multi-agent collaboration is included with the **Plus** and **Supporter** plans.
 
 Mention several agents in one prompt and each works it in parallel. Copilot combines their answers into a single result, so you get three perspectives for the effort of one question.
 
@@ -132,14 +132,14 @@ Built-in models with zero setup, multi-agent collaboration, a web-search backend
 <details>
 <summary><strong>I'm a V3 user. What happens to my setup?</strong></summary>
 
-V4 arrives as a normal plugin update. Your settings, custom prompts, API keys, and existing Copilot Plus license carry over, and Quick Ask plus vault QA keep working as before.
+V4 arrives as a normal plugin update. Your settings, custom prompts, API keys, and existing Copilot license carry over, and Quick Ask plus vault QA keep working as before.
 
 </details>
 
 <details>
 <summary><strong>How is my data handled?</strong></summary>
 
-Your notes remain plain files in your vault, and the search index is stored locally. On the free tier, requests go only to the model provider you configure. Licensed features may use Brevilabs services for the processing you explicitly request. See the [disclosure below](#copilot-plus-disclosure) and the [privacy policy](https://www.obsidiancopilot.com/en/privacy).
+Your notes remain plain files in your vault, and the search index is stored locally. On the free tier, requests go only to the model provider you configure. Licensed features may use Brevilabs services for the processing you explicitly request. See the [disclosure below](#paid-plan-disclosure) and the [privacy policy](https://www.obsidiancopilot.com/en/privacy).
 
 </details>
 
@@ -159,17 +159,17 @@ If you share our vision for a powerful, portable AI agent for your second brain,
 
 Special thanks to our top sponsors: @mikelaaron, @pedramamini, @Arlorean, @dashinja, @azagore, @MTGMAD, @gpythomas, @emaynard, @scmarinelli, @borthwick, @adamhill, @gluecode, @rusi, @timgrote, @JiaruiYu-Consilium, @ddocta, @AMOz1, @chchwy, @pborenstein, @GitTom, @kazukgw, @mjluser1, @joesfer, @rwaal, @turnoutnow-harpreet, @dreznicek, @xrise-informatik, @jeremygentles, @ZhengRui, @bfoujols, @jsmith0475, @pagiaddlemon, @sebbyyyywebbyyy, @royschwartz2, @vikram11, @amiable-dev, @khalidhalim, @DrJsPBs, @chishaku, @Andrea18500, @shayonpal, @rhm2k, @snorcup, @JohnBub, @obstinatelark, @jonashaefele, @vishnu2kmohan
 
-## Copilot Plus Disclosure
+## Paid Plan Disclosure
 
-Copilot Plus is a premium product of Brevilabs LLC and is not affiliated with Obsidian. Visit [obsidiancopilot.com](https://obsidiancopilot.com/) for details.
+Copilot is a product of Brevilabs LLC and is not affiliated with Obsidian. Plus is one of its paid plan tiers. Visit [obsidiancopilot.com](https://obsidiancopilot.com/) for details.
 
 - An account and payment are required for full access.
-- Copilot Plus requires network access to provide its AI agent services.
+- Paid hosted models and cloud-backed features require network access.
 - **Privacy and data handling:**
   - **Free tier:** Your messages and notes are sent only to your configured LLM provider, such as OpenAI, Anthropic, or Google. Nothing goes to Brevilabs servers.
-  - **Plus tier:** Messages go to your configured LLM provider. File conversions, including PDF, DOCX, EPUB, and images, are processed by Brevilabs servers only when you explicitly trigger those features through `@` commands.
+  - **Eligible paid tiers:** Messages and attached note context go to the model provider you select. If you select an included Copilot-hosted chat model, that provider is Brevilabs and it receives the full prompt. If you select an included Copilot-hosted embedding model, Brevilabs receives the note text being indexed. Brevilabs also receives inputs for hosted features you invoke, including search queries, URLs, and files used by paid Quick Chat `@` commands and Agent Mode project context.
   - **Processing, not retention:** We process data to deliver the feature you requested, then discard it. No message content, file uploads, or documents are retained on our servers after processing.
-  - **User ID:** A randomly generated UUID is sent with Plus API requests for service delivery, license abuse prevention, and rate limiting. It is not used for tracking, profiling, or analytics.
+  - **User ID:** A randomly generated UUID is sent with hosted feature requests for service delivery, license abuse prevention, and rate limiting. It is not used for tracking, profiling, or analytics.
 - See the [privacy policy](https://www.obsidiancopilot.com/en/privacy) for more details.
 - The Copilot plugin frontend is fully open source. Backend services that facilitate AI agents are closed source and proprietary.
 - We offer a full refund within 14 days of purchase if you are not satisfied.

@@ -468,4 +468,4 @@ Shape varies — includes at minimum:
 }
 ```
 
-Plus live stats fields populated by the folder manager.
+Additional live stats fields are populated by the folder manager.
