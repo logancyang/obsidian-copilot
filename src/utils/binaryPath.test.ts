@@ -1,8 +1,13 @@
+import { Platform } from "obsidian";
+import * as os from "node:os";
+import * as path from "node:path";
+
 import { resolveNodeToolBinDirs } from "@/utils/nodeToolBinDirs";
 
 import {
   augmentPathForDetection,
   detectionSearchDirs,
+  formatBinaryPathForDisplay,
   mergePath,
   WELL_KNOWN_BIN_DIRS,
 } from "./binaryPath";
@@ -66,5 +71,53 @@ describe("augmentPathForDetection", () => {
     // This is the exact PATH Obsidian sees when launched from Finder/Dock.
     const result = augmentPathForDetection("/usr/bin:/bin:/usr/sbin:/sbin");
     expect(result.split(":")).toContain("/opt/homebrew/bin");
+  });
+
+  test("throws the desktop-only error on non-desktop runtimes instead of a TypeError", () => {
+    const platform = Platform as { isMobile: boolean };
+    platform.isMobile = true;
+    try {
+      expect(() => augmentPathForDetection("/usr/bin")).toThrow(/unavailable outside the desktop/);
+    } finally {
+      platform.isMobile = false;
+    }
+  });
+});
+
+describe("formatBinaryPathForDisplay", () => {
+  test("collapses the home directory to ~ on desktop", () => {
+    const abs = path.join(os.homedir(), ".local", "bin", "claude");
+    expect(formatBinaryPathForDisplay(abs)).toMatch(/^~[/\\]/);
+  });
+
+  test("throws the desktop-only error on non-desktop runtimes instead of a TypeError", () => {
+    const platform = Platform as { isMobile: boolean };
+    platform.isMobile = true;
+    try {
+      expect(() => formatBinaryPathForDisplay("/x/y")).toThrow(/unavailable outside the desktop/);
+    } finally {
+      platform.isMobile = false;
+    }
+  });
+});
+
+describe("module evaluation", () => {
+  test("does not require Node built-ins at module evaluation time", () => {
+    // The module is on the eager settings-UI import graph, which mobile also
+    // evaluates; an eval-time require of a Node built-in would crash the
+    // plugin at load there.
+    const throwingIds = ["os", "fs", "path", "node:os", "node:fs", "node:path"];
+    try {
+      jest.isolateModules(() => {
+        for (const id of throwingIds) {
+          jest.doMock(id, () => {
+            throw new Error(`eager require of ${id}`);
+          });
+        }
+        expect(() => void jest.requireActual("./binaryPath")).not.toThrow();
+      });
+    } finally {
+      for (const id of throwingIds) jest.dontMock(id);
+    }
   });
 });

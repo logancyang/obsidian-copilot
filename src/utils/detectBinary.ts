@@ -1,11 +1,19 @@
-import { execFile } from "node:child_process";
-import * as fs from "node:fs";
-import * as path from "node:path";
-import { promisify } from "node:util";
-
 import { augmentPathForDetection } from "@/utils/binaryPath";
+import { requireNodeModule } from "@/utils/desktopRuntime";
 
-const execFileAsync = promisify(execFile);
+/**
+ * Promisified `execFile` resolved at call time so the module evaluates
+ * without touching Node built-ins (mobile-safe module graph).
+ */
+function getExecFileAsync(): (
+  cmd: string,
+  args: readonly string[],
+  options: { timeout: number; env: NodeJS.ProcessEnv }
+) => Promise<{ stdout: string; stderr: string }> {
+  const { execFile } = requireNodeModule<typeof import("node:child_process")>("child_process");
+  const { promisify } = requireNodeModule<typeof import("node:util")>("util");
+  return promisify(execFile);
+}
 
 /**
  * Allowed shape for binary names handed to `which`/`where`. Restricts to
@@ -48,6 +56,7 @@ export async function detectBinary(name: string): Promise<string | null> {
   const isWindows = process.platform === "win32";
   const cmd = isWindows ? "where" : "which";
   const env = { ...process.env, PATH: augmentPathForDetection(process.env.PATH) };
+  const execFileAsync = getExecFileAsync();
   try {
     const { stdout } = await execFileAsync(cmd, [name], { timeout: 5000, env });
     const matches = stdout
@@ -70,6 +79,7 @@ export async function detectBinary(name: string): Promise<string | null> {
  * than handing back a path that fails to launch.
  */
 function pickWindowsExecutable(matches: string[]): string | null {
+  const path = requireNodeModule<typeof import("node:path")>("path");
   const spawnable = matches.filter(
     (m) => !/\.(cmd|bat|ps1)$/i.test(m) && path.win32.extname(m) !== ""
   );
@@ -84,6 +94,7 @@ function pickWindowsExecutable(matches: string[]): string | null {
  * misconfigurations at config time rather than at spawn time.
  */
 export async function validateExecutableFile(p: string): Promise<string | null> {
+  const fs = requireNodeModule<typeof import("node:fs")>("fs");
   const stat = await fs.promises.stat(p).catch(() => null);
   if (!stat || !stat.isFile()) return `No file at ${p}.`;
   if (process.platform !== "win32") {

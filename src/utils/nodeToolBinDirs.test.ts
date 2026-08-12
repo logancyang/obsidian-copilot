@@ -1,3 +1,5 @@
+import { Platform } from "obsidian";
+
 import { resolveNodeToolBinDirs } from "@/utils/nodeToolBinDirs";
 import type { NodeToolBinDirsInput, NodeToolFs } from "@/utils/nodeToolBinDirs";
 
@@ -238,5 +240,35 @@ describe("resolveNodeToolBinDirs (windows)", () => {
       winInput({ env: { NVM_SYMLINK: symlink }, fs: makeFs({ dirs: [symlink] }) })
     );
     expect(dirs).toContain(symlink);
+  });
+});
+
+describe("module evaluation", () => {
+  test("does not require Node built-ins at module evaluation time", () => {
+    // The module is imported by settings-UI helpers that mobile also
+    // evaluates; an eval-time require would crash the plugin at load there.
+    const throwingIds = ["path", "node:path"];
+    try {
+      jest.isolateModules(() => {
+        for (const id of throwingIds) {
+          jest.doMock(id, () => {
+            throw new Error(`eager require of ${id}`);
+          });
+        }
+        expect(() => void jest.requireActual("./nodeToolBinDirs")).not.toThrow();
+      });
+    } finally {
+      for (const id of throwingIds) jest.dontMock(id);
+    }
+  });
+
+  test("throws the desktop-only error when resolving on non-desktop runtimes", () => {
+    const platform = Platform as { isMobile: boolean };
+    platform.isMobile = true;
+    try {
+      expect(() => resolveNodeToolBinDirs(unixInput())).toThrow(/unavailable outside the desktop/);
+    } finally {
+      platform.isMobile = false;
+    }
   });
 });

@@ -1,6 +1,4 @@
-import * as fs from "node:fs";
-import * as os from "node:os";
-
+import { requireNodeModule } from "@/utils/desktopRuntime";
 import { collapseHomeDir } from "@/utils/pathUtils";
 import { resolveNodeToolBinDirs } from "@/utils/nodeToolBinDirs";
 
@@ -48,6 +46,8 @@ export function mergePath(candidates: readonly string[], inherited: string | und
  * nvm `node` on PATH.
  */
 function nodeToolBinDirs(): string[] {
+  const os = requireNodeModule<typeof import("node:os")>("os");
+  const fs = requireNodeModule<typeof import("node:fs")>("fs");
   return resolveNodeToolBinDirs({
     homeDir: os.homedir(),
     platform: process.platform,
@@ -96,5 +96,6 @@ export function augmentPathForDetection(inherited: string | undefined): string {
  * Display-only — the stored/spawned path keeps its real absolute form.
  */
 export function formatBinaryPathForDisplay(absolutePath: string): string {
+  const os = requireNodeModule<typeof import("node:os")>("os");
   return collapseHomeDir(absolutePath, os.homedir(), process.platform === "win32");
 }

@@ -3,6 +3,8 @@ jest.mock("obsidian", () => ({
   // referenced by the manager class but not by these tests.
   FileSystemAdapter: class {},
   requestUrl: jest.fn(),
+  // requireNodeModule() gates the Node built-ins these paths resolve through.
+  Platform: { isDesktopApp: true, isMobile: false },
 }));
 
 jest.mock("@/logger", () => ({

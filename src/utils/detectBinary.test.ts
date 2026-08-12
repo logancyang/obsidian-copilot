@@ -1,6 +1,7 @@
+import { Platform } from "obsidian";
 import { promisify } from "node:util";
 
-import { detectBinary } from "./detectBinary";
+import { detectBinary, validateExecutableFile } from "./detectBinary";
 
 // Keep the augmented PATH deterministic across CI/dev machines; the live
 // version-manager probe is covered in nodeToolBinDirs.test.ts.
@@ -16,7 +17,9 @@ type ExecFileArgs = [
 
 const execFileMock = jest.fn<void, ExecFileArgs>();
 
-jest.mock("node:child_process", () => {
+// Mock the bare module id — the form requireNodeModule() resolves at call
+// time (it names the same core module instance as "node:child_process").
+jest.mock("child_process", () => {
   const fn = (...args: ExecFileArgs): void => execFileMock(...args);
   // `node:util.promisify` consults this symbol to resolve to `{ stdout, stderr }`.
   // Without it the promisified call resolves to just `stdout`, which would
@@ -147,5 +150,61 @@ describe("detectBinary", () => {
       cb(null, "/opt/homebrew/bin/codex-acp\n/usr/local/bin/codex-acp\n", "")
     );
     await expect(detectBinary("codex-acp")).resolves.toBe("/opt/homebrew/bin/codex-acp");
+  });
+
+  test("does not require Node built-ins at module evaluation time", () => {
+    // A module-scope promisify(execFile) dereferences an undefined module on
+    // mobile and kills the plugin at load. Bare "child_process" is file-wide
+    // mocked above so it stays benign here; an eager regression still
+    // surfaces through "util" (module-scope promisify) or any node:-prefixed
+    // static import.
+    const throwingIds = [
+      "util",
+      "fs",
+      "path",
+      "os",
+      "node:child_process",
+      "node:util",
+      "node:fs",
+      "node:path",
+      "node:os",
+    ];
+    try {
+      jest.isolateModules(() => {
+        for (const id of throwingIds) {
+          jest.doMock(id, () => {
+            throw new Error(`eager require of ${id}`);
+          });
+        }
+        expect(() => void jest.requireActual("./detectBinary")).not.toThrow();
+      });
+    } finally {
+      for (const id of throwingIds) jest.dontMock(id);
+    }
+  });
+
+  test("rejects with the desktop-only error on non-desktop runtimes instead of a TypeError", async () => {
+    const platform = Platform as { isMobile: boolean };
+    platform.isMobile = true;
+    try {
+      await expect(detectBinary("codex-acp")).rejects.toThrow(/unavailable outside the desktop/);
+      expect(execFileMock).not.toHaveBeenCalled();
+    } finally {
+      platform.isMobile = false;
+    }
+  });
+});
+
+describe("validateExecutableFile", () => {
+  test("rejects with the desktop-only error on non-desktop runtimes instead of a TypeError", async () => {
+    const platform = Platform as { isMobile: boolean };
+    platform.isMobile = true;
+    try {
+      await expect(validateExecutableFile("/usr/local/bin/tool")).rejects.toThrow(
+        /unavailable outside the desktop/
+      );
+    } finally {
+      platform.isMobile = false;
+    }
   });
 });

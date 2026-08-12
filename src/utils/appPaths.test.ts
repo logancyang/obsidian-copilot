@@ -1,5 +1,5 @@
 import type { App } from "obsidian";
-import { FileSystemAdapter } from "obsidian";
+import { FileSystemAdapter, Platform } from "obsidian";
 import * as path from "node:path";
 import { md5 } from "@/utils/hash";
 import { COPILOT_APP_DIR_NAME, copilotAppDataDir, getVaultId } from "./appPaths";
@@ -13,6 +13,36 @@ describe("copilotAppDataDir", () => {
     expect(COPILOT_APP_DIR_NAME).toBe(".obsidian-copilot");
     // Guard against a regression to the GitHub-Copilot-CLI-colliding name.
     expect(COPILOT_APP_DIR_NAME).not.toBe(".copilot");
+  });
+
+  it("throws the desktop-only error on non-desktop runtimes instead of a TypeError", () => {
+    const platform = Platform as { isMobile: boolean };
+    platform.isMobile = true;
+    try {
+      expect(() => copilotAppDataDir("/Users/me")).toThrow(/unavailable outside the desktop/);
+    } finally {
+      platform.isMobile = false;
+    }
+  });
+});
+
+describe("module evaluation", () => {
+  it("does not require Node built-ins at module evaluation time", () => {
+    // appPaths sits on the eager context-cache import graph, which mobile
+    // also evaluates; an eval-time require would crash the plugin at load.
+    const throwingIds = ["path", "node:path"];
+    try {
+      jest.isolateModules(() => {
+        for (const id of throwingIds) {
+          jest.doMock(id, () => {
+            throw new Error(`eager require of ${id}`);
+          });
+        }
+        expect(() => void jest.requireActual("./appPaths")).not.toThrow();
+      });
+    } finally {
+      for (const id of throwingIds) jest.dontMock(id);
+    }
   });
 });
 

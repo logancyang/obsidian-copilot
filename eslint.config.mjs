@@ -396,21 +396,16 @@ export default [
   // Agent Mode: backends spawn subprocesses (ACP) and the in-process Claude
   // SDK uses node:async_hooks. The plugin runs in Electron renderer where
   // these modules are available; the desktop-only Agent Mode is also gated by
-  // `Platform.isMobile` at runtime in main.ts.
-  // detectBinary / binaryPath / nodeToolBinDirs / rendererEventsShim are
-  // sibling utilities pulled in by agent-mode wiring and share the same
-  // Electron-renderer assumptions. The Symposium handoff consumer is likewise
-  // desktop-only, but remains in the host publishing layer. openVaultPath
-  // lazy-requires node:fs behind a desktop vault-base guard, mirroring
-  // opencodeLog.
+  // `Platform.isMobile` at runtime in main.ts. The Symposium handoff consumer
+  // is likewise desktop-only, but remains in the host publishing layer.
+  // openVaultPath lazy-requires node:fs behind a desktop vault-base guard,
+  // mirroring opencodeLog. Modules converted to call-time
+  // `requireNodeModule()` guards (see src/utils/desktopRuntime.ts) need no
+  // exemption; the goal is to shrink this list to empty as remaining
+  // subsystems convert (logancyang/obsidian-copilot-preview#299).
   {
     files: [
       "src/agentMode/**",
-      "src/utils/appPaths.ts",
-      "src/utils/detectBinary.ts",
-      "src/utils/binaryPath.ts",
-      "src/utils/nodeToolBinDirs.ts",
-      "src/utils/rendererEventsShim.ts",
       "src/utils/issueReport.ts",
       "src/utils/opencodeLog.ts",
       "src/utils/openVaultPath.ts",
