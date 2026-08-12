@@ -236,7 +236,7 @@ export async function ensureMultiAgentEntitlement(app?: App): Promise<boolean> {
   // Re-verify so a stale-false cache for a real Plus user still gets through;
   // `validateLicenseKey` applies the signed entitlement or paid-pending state.
   await BrevilabsClient.getInstance().validateLicenseKey(app, {
-    trigger: "chat_turn",
+    trigger: "multi_agent_per_turn",
   });
   return isPlusEnabled();
 }

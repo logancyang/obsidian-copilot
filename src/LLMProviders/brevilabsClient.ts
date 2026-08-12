@@ -164,6 +164,7 @@ export type LicenseCheckTrigger =
   | "manual"
   | "refresh"
   | "chat_turn"
+  | "multi_agent_per_turn"
   | "tool_call"
   | "model_gate";
 

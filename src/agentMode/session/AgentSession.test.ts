@@ -1670,7 +1670,9 @@ describe("ensureMultiAgentEntitlement (paywall helper)", () => {
     const ensure = await loadHelper(false);
     await expect(ensure()).resolves.toBe(true);
     expect(validateLicenseKey).toHaveBeenCalledTimes(1);
-    expect(validateLicenseKey.mock.calls[0][1]).toMatchObject({ trigger: "chat_turn" });
+    expect(validateLicenseKey.mock.calls[0][1]).toMatchObject({
+      trigger: "multi_agent_per_turn",
+    });
   });
 
   it("slow path: a Lite user (paid but below Plus) is blocked", async () => {
