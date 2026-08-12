@@ -15,11 +15,6 @@ If your plugin does not need CSS, delete this file.
 
 */
 
-/* Popover needs to render on top of the workspace-leaf-resize-handle */
-[data-radix-popper-content-wrapper] {
-  z-index: 9999 !important;
-}
-
 .copilot-symposium-modal {
   width: min(32rem, calc(100vw - 2rem));
   min-width: 0;
@@ -406,7 +401,7 @@ If your plugin does not need CSS, delete this file.
   background-color: transparent;
   padding: 0;
   color: var(--code-normal);
-  line-height: 1.5 !important;
+  line-height: 1.5;
   display: block;
   white-space: pre-wrap;
   word-wrap: break-word;
@@ -1084,21 +1079,27 @@ If your plugin does not need CSS, delete this file.
   position: relative;
 }
 
-/* Override Obsidian's default contenteditable border */
-.copilot-quick-ask-overlay [contenteditable] {
-  border: none !important;
-  box-shadow: none !important;
-  outline: none !important;
+/* Override Obsidian's default contenteditable border. The extra ancestor and
+   explicit focus states outrank app/theme [contenteditable] and focus rules
+   (themes load after plugin CSS) without !important. */
+.copilot-quick-ask-overlay-root .copilot-quick-ask-overlay [contenteditable],
+.copilot-quick-ask-overlay-root .copilot-quick-ask-overlay [contenteditable]:focus,
+.copilot-quick-ask-overlay-root .copilot-quick-ask-overlay [contenteditable]:focus-visible {
+  border: none;
+  box-shadow: none;
+  outline: none;
 }
 
-/* Reason: The overlay is mounted inside CM6 editor DOM, which has its own
-   selection handling that prevents normal text selection in child elements.
-   Only target message text containers (marked with data-quick-ask-selectable)
-   to avoid overriding user-select on buttons and other interactive controls. */
+/* Obsidian sets `user-select: none` on `body`, so every element in the overlay
+   inherits it and message text cannot be selected. Naming the text containers
+   directly restores selection: a rule that matches the element always beats an
+   inherited value, so no !important is needed. Only the message containers
+   (marked with data-quick-ask-selectable) are targeted, to leave buttons and
+   other interactive controls unselectable. */
 .copilot-quick-ask-overlay [data-quick-ask-selectable],
 .copilot-quick-ask-overlay [data-quick-ask-selectable] * {
-  user-select: text !important;
-  -webkit-user-select: text !important;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .copilot-quick-ask-overlay-root {
