@@ -53,6 +53,15 @@ npm audit --omit=dev --audit-level=critical
 
 Warnings remain for cases where automatic cleanup could change behavior or UI, including desktop Node imports, streaming `fetch`, async React callbacks, Obsidian DOM helpers, declarative settings search, `!important`, `:has()`, and manifest copy. Do not suppress them. Fix one warning family at a time with behavior-specific tests.
 
+### Permanent `fetch` disclosures
+
+`requestUrl` supports neither streaming responses nor AbortSignal, so the following call sites must keep `fetch` and carry a `// scorecard:` comment. Any remaining scorecard `fetch` warning must match this list:
+
+- `src/LLMProviders/BedrockChatModel.ts` — Bedrock SSE streaming.
+- `src/LLMProviders/ChatLMStudio.ts` — `window.fetch` fallback wrapped for LM Studio body sanitization in a streaming ChatOpenAI.
+
+Non-streaming JSON requests (for example the Jina and custom OpenAI embedding adapters) route through `safeFetchNoThrow`, which uses `requestUrl`.
+
 Provider smoke tests for Jina and Bedrock streaming/non-streaming are needed only when their adapters or network boundaries change.
 
 ## Maintenance checklist
