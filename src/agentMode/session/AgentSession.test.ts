@@ -1633,9 +1633,7 @@ describe("ensureMultiAgentEntitlement (paywall helper)", () => {
     validateLicenseKey.mockReset();
   });
 
-  async function loadHelper(
-    isPlus: boolean
-  ): Promise<(app?: unknown, ctx?: Record<string, unknown>) => Promise<boolean>> {
+  async function loadHelper(isPlus: boolean): Promise<(app?: unknown) => Promise<boolean>> {
     settings = { isPlusUser: isPlus, isPaidUser: isPlus, enableSelfHostMode: false };
     jest.doMock("@/plusUtils", () => jest.requireActual("@/plusUtils"));
     jest.doMock("@/logger", () => ({
@@ -1672,11 +1670,7 @@ describe("ensureMultiAgentEntitlement (paywall helper)", () => {
     const ensure = await loadHelper(false);
     await expect(ensure()).resolves.toBe(true);
     expect(validateLicenseKey).toHaveBeenCalledTimes(1);
-    // The trigger and feature context are forwarded for backend telemetry/upsell.
-    expect(validateLicenseKey.mock.calls[0][1]).toMatchObject({
-      trigger: "chat_turn",
-      feature: "multi_agent_per_turn",
-    });
+    expect(validateLicenseKey.mock.calls[0][1]).toMatchObject({ trigger: "chat_turn" });
   });
 
   it("slow path: a Lite user (paid but below Plus) is blocked", async () => {

@@ -170,7 +170,6 @@ export type LicenseCheckTrigger =
 /** Product context attached to each license validation request. */
 export interface LicenseCheckContext {
   trigger: LicenseCheckTrigger;
-  feature?: string;
   [key: string]: unknown;
 }
 

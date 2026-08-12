@@ -229,19 +229,14 @@ export function canUseMultiAgent(): boolean {
  * broad `isValid`) so Lite stays blocked. Anything not confirmed >= Plus is a
  * HARD block (no single-agent fallback).
  */
-export async function ensureMultiAgentEntitlement(
-  app?: App,
-  context?: Record<string, unknown>
-): Promise<boolean> {
+export async function ensureMultiAgentEntitlement(app?: App): Promise<boolean> {
   if (isPlusEnabled()) {
     return true;
   }
   // Re-verify so a stale-false cache for a real Plus user still gets through;
   // `validateLicenseKey` applies the signed entitlement or paid-pending state.
   await BrevilabsClient.getInstance().validateLicenseKey(app, {
-    ...context,
     trigger: "chat_turn",
-    feature: "multi_agent_per_turn",
   });
   return isPlusEnabled();
 }

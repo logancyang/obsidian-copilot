@@ -60,7 +60,7 @@ describe("brevilabsClient", () => {
         expect(mockMarkPaidPendingEntitlement).not.toHaveBeenCalled();
       });
 
-      it("forwards the required trigger and optional feature to the license endpoint", async () => {
+      it("forwards the required trigger to the license endpoint", async () => {
         const makeRequest = jest.fn().mockResolvedValue({
           data: VALID_LICENSE_RESPONSE,
           error: null,
@@ -70,7 +70,6 @@ describe("brevilabsClient", () => {
 
         await BrevilabsClient.getInstance().validateLicenseKey(undefined, {
           trigger: "chat_turn",
-          feature: "multi_agent_per_turn",
         });
 
         expect(makeRequest).toHaveBeenCalledWith(
@@ -78,7 +77,6 @@ describe("brevilabsClient", () => {
           {
             license_key: "key-A",
             trigger: "chat_turn",
-            feature: "multi_agent_per_turn",
           },
           "POST",
           true,
