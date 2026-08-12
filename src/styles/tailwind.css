@@ -28,12 +28,12 @@ If your plugin does not need CSS, delete this file.
 
 /* Agent Configure dialogs draw their own full-bleed bands (header, sections,
    footer), so the hosting modal must contribute no padding of its own —
-   otherwise every band's divider stops short of both edges. Keying off the
-   body rather than a class the modal has to remember means every host that
-   renders the shell opts in, the component gallery included. Themes disagree
-   about which element carries the padding, hence both targets. */
-.modal:has(.copilot-config-dialog),
-.modal:has(.copilot-config-dialog) .modal-content {
+   otherwise every band's divider stops short of both edges. ConfigDialogShell
+   toggles `copilot-config-modal` on its closest `.modal` host in an effect, so
+   every host that renders the shell opts in, the component gallery included.
+   Themes disagree about which element carries the padding, hence both targets. */
+.modal.copilot-config-modal,
+.modal.copilot-config-modal .modal-content {
   padding: 0;
 }
 
@@ -41,11 +41,11 @@ If your plugin does not need CSS, delete this file.
    host that sets a title anyway must not stack a second heading above the
    shell's own. Suppressing it here rather than per host keeps every future
    caller correct by default. */
-.modal:has(.copilot-config-dialog) .modal-header {
+.modal.copilot-config-modal .modal-header {
   margin-bottom: 0;
 }
 
-.modal:has(.copilot-config-dialog) .modal-title {
+.modal.copilot-config-modal .modal-title {
   display: none;
 }
 
@@ -907,45 +907,46 @@ body.is-mobile
   padding-bottom: var(--size-4-1) !important;
 }
 
-/* Editor mode for mobile - new version (with bottom navbar visible): reserve navbar space */
-@supports selector(body:has(*)) {
-  body.is-mobile:has(.mobile-navbar):not(.is-hidden-nav)
-    .workspace-tab-container
-    :is(
-      .workspace-leaf-content[data-type="copilot-chat-view"],
-      .workspace-leaf-content[data-type="copilot-agent-chat-view"],
-      .workspace-leaf-content[data-type="copilot-component-gallery"]
-    )
-    .view-content {
-    padding-bottom: calc(
-      var(--navbar-height, 50px) + max(var(--safe-area-inset-bottom, 0px), var(--size-4-3)) +
-        var(--size-4-1)
-    ) !important;
-  }
+/* Editor mode for mobile - new version (with bottom navbar visible): reserve
+   navbar space. `copilot-has-mobile-navbar` is maintained by the plugin
+   (attachMobileNavbarBodyClass) whenever a `.mobile-navbar` element exists —
+   an explicit class instead of anchoring a `:has` probe on body, which the
+   browser would re-evaluate on any DOM mutation, including every streamed
+   chat token. */
+body.is-mobile.copilot-has-mobile-navbar:not(.is-hidden-nav)
+  .workspace-tab-container
+  :is(
+    .workspace-leaf-content[data-type="copilot-chat-view"],
+    .workspace-leaf-content[data-type="copilot-agent-chat-view"],
+    .workspace-leaf-content[data-type="copilot-component-gallery"]
+  )
+  .view-content {
+  padding-bottom: calc(
+    var(--navbar-height, 50px) + max(var(--safe-area-inset-bottom, 0px), var(--size-4-3)) +
+      var(--size-4-1)
+  ) !important;
 }
 
 /* ApplyView for mobile - new version (with bottom navbar visible): reserve navbar space */
-@supports selector(body:has(*)) {
-  body.is-mobile:has(.mobile-navbar):not(.is-hidden-nav)
-    .workspace-tab-container
-    .workspace-leaf-content[data-type="obsidian-copilot-apply-view"]
-    .view-content {
-    padding-bottom: calc(
-      var(--navbar-height, 50px) + max(var(--safe-area-inset-bottom, 0px), var(--size-4-3)) +
-        var(--size-4-1) + var(--size-4-4)
-    ) !important;
-  }
+body.is-mobile.copilot-has-mobile-navbar:not(.is-hidden-nav)
+  .workspace-tab-container
+  .workspace-leaf-content[data-type="obsidian-copilot-apply-view"]
+  .view-content {
+  padding-bottom: calc(
+    var(--navbar-height, 50px) + max(var(--safe-area-inset-bottom, 0px), var(--size-4-3)) +
+      var(--size-4-1) + var(--size-4-4)
+  ) !important;
+}
 
-  /* Lift the fixed Accept/Reject button bar above the navbar */
-  body.is-mobile:has(.mobile-navbar):not(.is-hidden-nav)
-    .workspace-tab-container
-    .workspace-leaf-content[data-type="obsidian-copilot-apply-view"]
-    .tw-fixed.tw-bottom-4 {
-    bottom: calc(
-      var(--navbar-height, 50px) + max(var(--safe-area-inset-bottom, 0px), var(--size-4-3)) +
-        var(--size-4-1)
-    ) !important;
-  }
+/* Lift the fixed Accept/Reject button bar above the navbar */
+body.is-mobile.copilot-has-mobile-navbar:not(.is-hidden-nav)
+  .workspace-tab-container
+  .workspace-leaf-content[data-type="obsidian-copilot-apply-view"]
+  .tw-fixed.tw-bottom-4 {
+  bottom: calc(
+    var(--navbar-height, 50px) + max(var(--safe-area-inset-bottom, 0px), var(--size-4-3)) +
+      var(--size-4-1)
+  ) !important;
 }
 
 /* Hide drawer header and tab-options when keyboard is open in Copilot's drawer */

@@ -2,7 +2,7 @@ import { ConfigStatusBadge } from "@/agentMode/backends/shared/installStatus";
 import type { InstallState } from "@/agentMode/session/types";
 import { Button } from "@/components/ui/button";
 import { AlertTriangle } from "lucide-react";
-import React from "react";
+import React, { useLayoutEffect, useRef } from "react";
 
 interface ConfigDialogShellProps {
   /** Dialog heading. Owned here, not by the modal's native title chrome, so it can share a line with the badge. */
@@ -19,6 +19,14 @@ interface ConfigDialogShellProps {
 }
 
 /**
+ * Marker class the shell toggles on its hosting `.modal` element. Stylesheet
+ * rules key off it to zero the host's padding, collapse the native header, and
+ * hide the native title — an explicit class instead of `:has()`, which the
+ * Obsidian review flags for its broad style-invalidation cost.
+ */
+export const CONFIG_MODAL_CLASS = "copilot-config-modal";
+
+/**
  * Presentational layout shared by every agent's Configure dialog so the header,
  * sections, and footer stay visually consistent across the three (intentionally
  * bespoke) bodies. Rendered inside a per-agent `ReactModal` subclass — it is not
@@ -26,9 +34,12 @@ interface ConfigDialogShellProps {
  * Obsidian's native title element empty.
  *
  * Every band owns its own padding so the dividers between them run edge to edge.
- * The `copilot-config-dialog` marker class is what makes that hold: a stylesheet
- * rule keys off it to zero the padding the hosting modal would otherwise
- * contribute, which would inset every divider by a theme-dependent amount.
+ * That holds because the shell marks its closest `.modal` host with
+ * {@link CONFIG_MODAL_CLASS}: a stylesheet rule keys off it to zero the padding
+ * the host would otherwise contribute, which would inset every divider by a
+ * theme-dependent amount. Toggling the class from the shell (rather than asking
+ * each host to remember it) keeps every host that renders the shell correct by
+ * default, the component gallery included.
  */
 export const ConfigDialogShell: React.FC<ConfigDialogShellProps> = ({
   title,
@@ -37,27 +48,40 @@ export const ConfigDialogShell: React.FC<ConfigDialogShellProps> = ({
   children,
   footer,
   onClose,
-}) => (
-  <div className="copilot-config-dialog tw-flex tw-flex-col">
-    <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-2 tw-px-4 tw-pb-3 tw-pt-4">
-      <h3 className="tw-m-0 tw-text-ui-medium tw-font-semibold tw-leading-tight tw-text-normal">
-        {title}
-      </h3>
-      <ConfigStatusBadge state={state} />
-    </div>
-    {(state.kind === "incompatible" || state.kind === "error") && warning && (
-      <div className="tw-px-4 tw-pb-3">{warning}</div>
-    )}
-    {children}
-    <div className="copilot-divider-t tw-flex tw-justify-end tw-gap-2 tw-bg-secondary tw-px-4 tw-py-3">
-      {footer ?? (
-        <Button variant="default" size="default" onClick={onClose}>
-          Done
-        </Button>
+}) => {
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  // Layout effect so the host's padding is stripped before first paint —
+  // a passive effect would flash the theme's padded modal for one frame.
+  useLayoutEffect(() => {
+    const modal = rootRef.current?.closest(".modal");
+    if (!modal) return;
+    modal.classList.add(CONFIG_MODAL_CLASS);
+    return () => modal.classList.remove(CONFIG_MODAL_CLASS);
+  }, []);
+
+  return (
+    <div ref={rootRef} className="tw-flex tw-flex-col">
+      <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-2 tw-px-4 tw-pb-3 tw-pt-4">
+        <h3 className="tw-m-0 tw-text-ui-medium tw-font-semibold tw-leading-tight tw-text-normal">
+          {title}
+        </h3>
+        <ConfigStatusBadge state={state} />
+      </div>
+      {(state.kind === "incompatible" || state.kind === "error") && warning && (
+        <div className="tw-px-4 tw-pb-3">{warning}</div>
       )}
+      {children}
+      <div className="copilot-divider-t tw-flex tw-justify-end tw-gap-2 tw-bg-secondary tw-px-4 tw-py-3">
+        {footer ?? (
+          <Button variant="default" size="default" onClick={onClose}>
+            Done
+          </Button>
+        )}
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 interface ConfigWarningStripProps {
   /** Readiness state; only the states that carry a message are worth a strip. */

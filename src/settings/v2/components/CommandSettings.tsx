@@ -207,7 +207,9 @@ const SortableTableRow: React.FC<{
         </div>
       </TableCell>
       <TableCell>{command.title}</TableCell>
-      <TableCell className="tw-text-center">
+      {/* Checkbox-hosting cells zero their right padding themselves — the
+          TableCell primitive's contract (see table.tsx). */}
+      <TableCell className="tw-pr-0 tw-text-center">
         <Checkbox
           checked={command.showInContextMenu}
           onCheckedChange={(checked) => {
@@ -222,7 +224,7 @@ const SortableTableRow: React.FC<{
           className="tw-mx-auto"
         />
       </TableCell>
-      <TableCell className="tw-text-center">
+      <TableCell className="tw-pr-0 tw-text-center">
         <Checkbox
           checked={command.showInSlashMenu}
           onCheckedChange={safeAsyncHandler(async (checked) =>
