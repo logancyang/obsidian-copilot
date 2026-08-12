@@ -44,9 +44,7 @@ export function KeyboardPlugin({
         }
 
         // Ignore Enter key during IME composition (e.g., Chinese, Japanese, Korean input).
-        // event.isComposing is set by the browser while a composition session is active.
-        // key "Process" is the standard indicator used during IME input.
-        if (event.isComposing || event.key === "Process") {
+        if (isImeCompositionEvent(event)) {
           event.preventDefault();
           return true;
         }
@@ -72,7 +70,7 @@ export function KeyboardPlugin({
       (event: KeyboardEvent | null) => {
         if (!event) return false;
         // Some IMEs use ESC to dismiss the candidate window — don't cancel mid-composition.
-        if (event.isComposing || event.keyCode === 229) {
+        if (isImeCompositionEvent(event)) {
           return false;
         }
         event.preventDefault();
@@ -101,6 +99,19 @@ export function KeyboardPlugin({
   }, [editor, onShiftTab]);
 
   return null;
+}
+
+/**
+ * Detects keydown events that belong to an active IME composition session
+ * (e.g., Chinese, Japanese, Korean input) so handlers can avoid acting on them.
+ * event.isComposing is set by the browser while a composition session is active;
+ * key "Process" is the standard value browsers report for keys consumed by an IME.
+ * Exported for testing purposes.
+ * @param event - The keyboard event to check
+ * @returns True if the event is part of an IME composition session
+ */
+export function isImeCompositionEvent(event: KeyboardEvent): boolean {
+  return event.isComposing || event.key === "Process";
 }
 
 /**
