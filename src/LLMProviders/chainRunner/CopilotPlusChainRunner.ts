@@ -768,7 +768,7 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
     let sources: { title: string; path: string; score: number; explanation?: unknown }[] = [];
 
     const isPaidUser = await checkIsPaidUser(this.chainManager.app, {
-      trigger: "chat_turn",
+      trigger: "legacy_chat_turn",
       isCopilotPlus: true,
     });
     if (!isPaidUser) {

@@ -163,7 +163,7 @@ export type LicenseCheckTrigger =
   | "startup"
   | "manual"
   | "refresh"
-  | "chat_turn"
+  | "legacy_chat_turn"
   | "multi_agent_per_turn"
   | "tool_call"
   | "model_gate";

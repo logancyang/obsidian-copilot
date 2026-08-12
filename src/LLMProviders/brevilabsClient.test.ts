@@ -69,14 +69,14 @@ describe("brevilabsClient", () => {
         (BrevilabsClient.getInstance() as any).makeRequest = makeRequest;
 
         await BrevilabsClient.getInstance().validateLicenseKey(undefined, {
-          trigger: "chat_turn",
+          trigger: "legacy_chat_turn",
         });
 
         expect(makeRequest).toHaveBeenCalledWith(
           "/license",
           {
             license_key: "key-A",
-            trigger: "chat_turn",
+            trigger: "legacy_chat_turn",
           },
           "POST",
           true,
