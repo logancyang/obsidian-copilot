@@ -66,6 +66,7 @@ import React, {
 import { v4 as uuidv4 } from "uuid";
 import { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import { useActiveWebTabState } from "@/components/chat-components/hooks/useActiveWebTabState";
+import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
 type ChatMode = "default" | "project";
 
@@ -894,9 +895,9 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
           loading={loading}
           loadingMessage={loadingMessage}
           app={app}
-          onRegenerate={handleRegenerate}
-          onEdit={handleEdit}
-          onDelete={handleDelete}
+          onRegenerate={safeAsyncHandler(handleRegenerate)}
+          onEdit={safeAsyncHandler(handleEdit)}
+          onDelete={safeAsyncHandler(handleDelete)}
           onReplaceChat={setInputMessage}
           showHelperComponents={selectedChain !== ChainType.PROJECT_CHAIN}
         />
@@ -954,7 +955,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
             <ChatInput
               inputMessage={inputMessage}
               setInputMessage={setInputMessage}
-              handleSendMessage={handleSendMessage}
+              handleSendMessage={safeAsyncHandler(handleSendMessage)}
               isGenerating={loading}
               onStopGenerating={() => handleStopGenerating(ABORT_REASON.USER_STOPPED)}
               app={app}

@@ -28,6 +28,7 @@ import {
   type StreamingChatTurnContext,
 } from "@/hooks/use-streaming-chat-session";
 import { ABORT_REASON } from "@/constants";
+import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
 // ============================================================================
 // Behavior Config - Replaces mode-based branching
@@ -426,12 +427,12 @@ function CustomCommandChatModalContent({
       onEditableContentChange={setEditedText}
       followUpValue={followUpValue}
       onFollowUpChange={setFollowUpValue}
-      onFollowUpSubmit={handleFollowUpSubmit}
+      onFollowUpSubmit={safeAsyncHandler(handleFollowUpSubmit)}
       selectedModel={chatPicker.value}
       onSelectModel={chatPicker.onChange}
       models={chatPicker.models}
       onStop={handleStop}
-      onCopy={handleCopy}
+      onCopy={safeAsyncHandler(handleCopy)}
       onInsert={handleInsert}
       onReplace={handleReplace}
       initialPosition={initialPosition}

@@ -119,7 +119,7 @@ export function UrlTagInput({ urls, onAdd, onRemove }: UrlTagInputProps) {
         </div>
         <Button
           variant="secondary"
-          onClick={handlePasteFromClipboard}
+          onClick={() => void handlePasteFromClipboard()}
           title="Paste from clipboard"
           className="tw-px-2"
         >

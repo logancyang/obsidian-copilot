@@ -38,6 +38,7 @@ import { useChatBackendModelOptions } from "@/hooks/useChatBackendModelOptions";
 import { App, Modal, Notice } from "obsidian";
 import React, { useEffect, useMemo, useState } from "react";
 import { Root } from "react-dom/client";
+import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
 export interface AddProjectModalContentProps {
   initialProject?: ProjectConfig;
@@ -613,7 +614,7 @@ export function AddProjectModalContent({
           <Button variant="ghost" onClick={onCancel} disabled={isSubmitting}>
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={isSubmitting || !isFormValid()}>
+          <Button onClick={safeAsyncHandler(handleSave)} disabled={isSubmitting || !isFormValid()}>
             {isSubmitting ? "Saving..." : "Save"}
           </Button>
         </div>

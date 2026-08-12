@@ -626,7 +626,18 @@ export default class CopilotPlugin extends Plugin {
     }
   }
 
-  async onunload() {
+  onunload(): void {
+    // Obsidian never awaits onunload, so the async tail of teardown is
+    // fire-and-forget by nature; declaring onunload void makes that explicit.
+    // teardown() is invoked synchronously, so everything above its first
+    // `await` still runs before this call returns, and a failure partway
+    // through is logged instead of becoming an unhandled rejection.
+    this.teardown().catch((error) => {
+      logError("Copilot: plugin teardown failed during unload:", error);
+    });
+  }
+
+  private async teardown(): Promise<void> {
     // End the Miyo mutation lifecycle HERE, as the first statement: everything
     // above the first `await` runs before the next `onload()` can possibly
     // start, so this carries none of the late-continuation risk that keeps
@@ -637,11 +648,11 @@ export default class CopilotPlugin extends Plugin {
     resetMiyoMutations();
 
     // Best-effort flush of pending keychain/data.json writes.
-    // Reason: onunload() is void in Obsidian's type system, but awaiting here
-    // is no worse than fire-and-forget, and consistent with the log flush below.
-    // (The KeychainService singleton and the persistence module's own state
-    // reset at the START of the next onload — see the comment there for the
-    // late-write race that motivated it.)
+    // Reason: Obsidian does not await teardown, but awaiting here keeps the
+    // remaining steps ordered after the flush, consistent with the log flush
+    // below. (The KeychainService singleton and the persistence module's own
+    // state reset at the START of the next onload — see the comment there for
+    // the late-write race that motivated it.)
     await flushPersistence();
 
     // Clear all persistent selection highlights before unload

@@ -25,6 +25,7 @@ import { splitUrlsStringToArray } from "@/projects/projectUtils";
 import CopilotPlugin from "@/main";
 import { useApp } from "@/context";
 import { logError } from "@/logger";
+import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
 interface ProgressCardProps {
   plugin?: CopilotPlugin;
@@ -185,7 +186,7 @@ export default function ProgressCard({ plugin, setHiddenCard, onEditContext }: P
                     items={processingData.items}
                     onRetry={handleRetry}
                     onOpenCachedItem={projectCache != null ? handleOpenCachedItem : undefined}
-                    onRemoveUrl={handleRemoveUrl}
+                    onRemoveUrl={safeAsyncHandler(handleRemoveUrl)}
                     defaultExpanded
                     maxHeight="200px"
                   />

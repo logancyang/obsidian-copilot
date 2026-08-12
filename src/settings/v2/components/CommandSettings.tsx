@@ -47,6 +47,7 @@ import { useApp } from "@/context";
 import { SettingItem } from "@/components/ui/setting-item";
 import { SettingSection } from "@/components/ui/setting-section";
 import { Notice } from "obsidian";
+import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
 const MobileCommandCard: React.FC<{
   command: CustomCommand;
@@ -132,7 +133,7 @@ const MobileCommandCard: React.FC<{
         </div>
         <Checkbox
           checked={command.showInSlashMenu}
-          onCheckedChange={(checked) =>
+          onCheckedChange={safeAsyncHandler(async (checked) =>
             onUpdate(
               {
                 ...command,
@@ -140,7 +141,7 @@ const MobileCommandCard: React.FC<{
               },
               command.title
             )
-          }
+          )}
         />
       </div>
     </div>
@@ -224,7 +225,7 @@ const SortableTableRow: React.FC<{
       <TableCell className="tw-text-center">
         <Checkbox
           checked={command.showInSlashMenu}
-          onCheckedChange={(checked) =>
+          onCheckedChange={safeAsyncHandler(async (checked) =>
             onUpdate(
               {
                 ...command,
@@ -232,7 +233,7 @@ const SortableTableRow: React.FC<{
               },
               command.title
             )
-          }
+          )}
           className="tw-mx-auto"
         />
       </TableCell>
@@ -258,7 +259,7 @@ const SortableTableRow: React.FC<{
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => onCopy(command)}
+            onClick={safeAsyncHandler(async () => onCopy(command))}
             title="Duplicate command"
           >
             <CopyPlus className="tw-size-4" />

@@ -38,6 +38,7 @@ import React, { memo, useEffect, useMemo, useState } from "react";
 import { filterProjects } from "@/utils/projectUtils";
 import { useRecentUsageManagerRevision } from "@/hooks/useRecentUsageManagerRevision";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
 function ProjectItem({
   project,
@@ -473,7 +474,7 @@ export const ProjectList = memo(
                             project={project}
                             loadContext={handleLoadContext}
                             onEdit={handleEditProject}
-                            onDelete={handleDeleteProject}
+                            onDelete={safeAsyncHandler(handleDeleteProject)}
                           />
                         ))}
                       </div>

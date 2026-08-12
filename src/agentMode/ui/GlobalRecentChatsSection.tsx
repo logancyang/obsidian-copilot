@@ -25,6 +25,7 @@ import {
   X,
 } from "lucide-react";
 import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
 /** Stable noop for rows that aren't being renamed (they never invoke onSaveEdit). */
 const NOOP_SAVE = (): void => {};
@@ -485,7 +486,7 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
                   // every keystroke.
                   editingTitle={editingId === item.id ? editingTitle : ""}
                   confirmingDelete={confirmDeleteId === item.id}
-                  onOpen={onLoadChat}
+                  onOpen={safeAsyncHandler(onLoadChat)}
                   onStartEdit={handleStartEdit}
                   onEditingTitleChange={setEditingTitle}
                   // Only the editing row needs the live save handler (it changes

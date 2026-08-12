@@ -55,6 +55,7 @@ import { useAtomValue } from "jotai";
 import { FileSearch, Files, Folder, MessageSquare } from "lucide-react";
 import { Notice } from "obsidian";
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
 interface AgentHomeProps {
   backend: AgentChatBackend;
@@ -545,7 +546,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
             onUpdateTitle={handleUpdateChatTitle}
             onDeleteChat={handleDeleteChat}
             onOpenSourceFile={handleOpenSourceFile}
-            onLoadHistory={handleLoadChatHistory}
+            onLoadHistory={safeAsyncHandler(handleLoadChatHistory)}
             runningChatIds={runningChatIds}
             attentionChatIds={attentionChatIds}
             projectNamesById={projectNamesById}
@@ -633,7 +634,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
             onUpdateTitle={handleUpdateChatTitle}
             onDeleteChat={handleDeleteChat}
             onOpenSourceFile={handleOpenSourceFile}
-            onLoadHistory={handleLoadChatHistory}
+            onLoadHistory={safeAsyncHandler(handleLoadChatHistory)}
             runningChatIds={runningChatIds}
             attentionChatIds={attentionChatIds}
           />
