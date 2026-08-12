@@ -26,6 +26,17 @@ jest.mock("@langchain/google-genai", () => {
   }
   return { ChatGoogleGenerativeAI };
 });
+jest.mock("./ChatOpenRouter", () => {
+  class ChatOpenRouter {
+    static configs: unknown[] = [];
+    constructor(config: unknown) {
+      ChatOpenRouter.configs.push(config);
+    }
+  }
+  return { ChatOpenRouter };
+});
+
+import { BrevilabsClient } from "./brevilabsClient";
 
 function bridgedModel(overrides: Partial<CustomModel> = {}): CustomModel {
   return {
@@ -106,6 +117,21 @@ describe("ChatModelManager bridged models", () => {
     );
 
     setSettings({ activeModels: [] });
+  });
+
+  it("sends the plugin version with Copilot Plus chat requests", async () => {
+    const OpenRouterMock = jest.requireMock("./ChatOpenRouter").ChatOpenRouter as {
+      configs: Array<{ configuration?: { defaultHeaders?: Record<string, string> } }>;
+    };
+    BrevilabsClient.getInstance().setPluginVersion("4.0.0-preview-260802");
+
+    await ChatModelManager.getInstance().createModelInstanceFromBridged(
+      bridgedModel({ provider: ChatModelProviders.COPILOT_PLUS, apiKey: "bridge-key" })
+    );
+
+    expect(OpenRouterMock.configs.at(-1)?.configuration?.defaultHeaders).toEqual({
+      "X-Client-Version": "4.0.0-preview-260802",
+    });
   });
 
   it("retains the active bridged model for temperature overrides", async () => {

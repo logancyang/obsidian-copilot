@@ -39,6 +39,7 @@ import { Notice } from "obsidian";
 import { ChatOpenRouter } from "./ChatOpenRouter";
 import { ChatLMStudio } from "./ChatLMStudio";
 import { BedrockChatModel, type BedrockChatModelFields } from "./BedrockChatModel";
+import { BrevilabsClient } from "./brevilabsClient";
 import { GitHubCopilotChatModel } from "@/LLMProviders/githubCopilot/GitHubCopilotChatModel";
 import { GitHubCopilotResponsesModel } from "@/LLMProviders/githubCopilot/GitHubCopilotResponsesModel";
 import type { SafetySetting } from "@google/generative-ai";
@@ -465,6 +466,7 @@ export default class ChatModelManager {
         configuration: {
           baseURL: BREVILABS_MODELS_BASE_URL,
           fetch: safeFetch,
+          defaultHeaders: BrevilabsClient.getInstance().getPluginVersionHeaders(),
         },
         // Reasoning is opt-in: forward the user's per-model effort pick only for
         // REASONING-capable models, and gate enableReasoning on an EXPLICIT effort.

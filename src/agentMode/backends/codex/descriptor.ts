@@ -182,7 +182,7 @@ export const CodexBackendDescriptor: BackendDescriptor = {
     // symlink. The per-agent toggle drives whether the symlink exists; no
     // deny synthesis is needed because Codex does not cross-discover from
     // `.claude/skills/` or `.opencode/skills/`.
-    return simpleBinaryBackendProcess(args, new CodexBackend());
+    return simpleBinaryBackendProcess(args, new CodexBackend(args.clientVersion));
   },
 
   SettingsPanel: CodexSettingsPanel,
