@@ -33,6 +33,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { cn } from "@/lib/utils";
 import { logError } from "@/logger";
 import { updateSetting, useSettingsValue } from "@/settings/model";
+import { settingsSearchAnchorAttrs } from "@/lib/settingsSearchAnchor";
 import { PromptSortStrategy } from "@/types";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { EMPTY_COMMAND } from "@/commands/constants";
@@ -408,7 +409,10 @@ export const CommandSettings: React.FC = () => {
   return (
     <div className="tw-space-y-4" ref={containerRef}>
       <section className={cn("tw-flex tw-flex-col tw-gap-4")}>
-        <div className="tw-flex tw-flex-col tw-gap-2">
+        <div
+          {...settingsSearchAnchorAttrs("Custom Commands")}
+          className="tw-flex tw-flex-col tw-gap-2"
+        >
           <div className="tw-text-xl tw-font-bold">Custom Commands</div>
           <div className="tw-text-sm tw-text-muted">
             Preset prompts you trigger from the editor right-click menu or with a <code>/</code>{" "}

@@ -49,7 +49,9 @@ npm audit --omit=dev --audit-level=critical
 
 ## Retained warnings
 
-Warnings remain for cases where automatic cleanup could change behavior or UI, including desktop Node imports, streaming `fetch`, async React callbacks, Obsidian DOM helpers, declarative settings search, `!important`, `:has()`, and manifest copy. Do not suppress them. Fix one warning family at a time with behavior-specific tests.
+Warnings remain for cases where automatic cleanup could change behavior or UI, including desktop Node imports, streaming `fetch`, async React callbacks, Obsidian DOM helpers, `!important`, `:has()`, and manifest copy. Do not suppress them. Fix one warning family at a time with behavior-specific tests.
+
+Declarative settings search is addressed: `CopilotSettingTab.getSettingDefinitions()` serves searchable definitions from the manifest in `src/settings/v2/settingsSearch.ts`, and chosen results deep-link into the React settings UI. The React controls themselves stay imperative; `getControlValue`/`setControlValue` round-tripping is a separate project.
 
 Provider smoke tests for Jina, Bedrock streaming/non-streaming, and legacy GitHub Copilot models are needed only when their adapters or network boundaries change.
 

@@ -23,6 +23,7 @@ import { deriveSkillsFolder } from "@/settings/copilotFolder";
 import { openWithSystemDefault } from "@/utils/openWithSystemDefault";
 import { getVaultBase, toVaultRelative } from "@/utils/vaultPath";
 import { useSettingsValue } from "@/settings/model";
+import { settingsSearchAnchorAttrs } from "@/lib/settingsSearchAnchor";
 import { AlertTriangle, Search } from "lucide-react";
 import { App, FileSystemAdapter, Notice, TFile, TFolder } from "obsidian";
 import { useApp } from "@/context";
@@ -208,7 +209,10 @@ export const SkillsSettings: React.FC = () => {
   return (
     <div ref={containerRef} className="tw-space-y-4">
       <section>
-        <div className="tw-mb-4 tw-flex tw-flex-col tw-gap-2">
+        <div
+          {...settingsSearchAnchorAttrs("Skills")}
+          className="tw-mb-4 tw-flex tw-flex-col tw-gap-2"
+        >
           <div className="tw-text-xl tw-font-bold">Skills</div>
           <div className="tw-text-sm tw-text-muted">
             Skills are instruction packets your agents can run - things like &ldquo;review a

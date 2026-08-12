@@ -39,6 +39,8 @@ Quick Chat and Agent Mode have separate setup requirements. Choose either path b
 
 Go to **Settings** → **Copilot** (scroll down to the Community Plugins section).
 
+On Obsidian 1.13 or newer you can also type a Copilot setting's name (for example "Send Shortcut" or "Debug Mode") into the search box at the top of the Settings window — picking the result opens Copilot's settings on the right tab and jumps to that setting.
+
 #### 2. Add an API Key
 
 On the **Basic** tab, click **Set Keys** to open the API key dialog. Enter the key for your chosen provider:

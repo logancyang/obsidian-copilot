@@ -12,6 +12,7 @@ import {
   useLicenseState,
 } from "@/plusUtils";
 import { updateSetting, useSettingsValue } from "@/settings/model";
+import { settingsSearchAnchorAttrs } from "@/lib/settingsSearchAnchor";
 import { ExternalLink, Loader2 } from "lucide-react";
 import React, { useState } from "react";
 
@@ -47,7 +48,10 @@ export function PlusSettings() {
   const usageData = getPlusUsageMock();
 
   return (
-    <section className="tw-flex tw-flex-col tw-gap-4 tw-rounded-xl tw-border tw-border-solid tw-border-border tw-p-4 tw-shadow-sm tw-bg-interactive-accent/10">
+    <section
+      {...settingsSearchAnchorAttrs("Copilot License")}
+      className="tw-flex tw-flex-col tw-gap-4 tw-rounded-xl tw-border tw-border-solid tw-border-border tw-p-4 tw-shadow-sm tw-bg-interactive-accent/10"
+    >
       <div className="tw-flex tw-items-center tw-justify-between tw-gap-2 tw-text-lg tw-font-semibold">
         <span>Copilot License</span>
         {licenseStatus === "active" && (

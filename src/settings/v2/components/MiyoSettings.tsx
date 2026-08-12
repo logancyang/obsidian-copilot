@@ -38,6 +38,7 @@ import {
   MiyoConnectModal,
 } from "@/settings/v2/components/MiyoConnectModal";
 import { MiyoStatusRow } from "@/settings/v2/components/MiyoStatusRow";
+import { settingsSearchAnchorAttrs } from "@/lib/settingsSearchAnchor";
 import { err2String } from "@/utils";
 import { getVaultBase } from "@/utils/vaultPath";
 import { extractAppIgnoreSettings, getSystemExcludedFolders } from "@/search/searchUtils";
@@ -104,6 +105,7 @@ const CapabilityRow: React.FC<CapabilityRowProps> = ({
   indented = false,
 }) => (
   <div
+    {...settingsSearchAnchorAttrs(title)}
     className={cn(
       "tw-flex tw-flex-col tw-items-start tw-justify-between tw-gap-4 tw-py-4 sm:tw-flex-row sm:tw-items-center",
       // `!` so the indent beats the parent's `[&>*]:tw-px-4` (equal specificity,

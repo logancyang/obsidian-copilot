@@ -28,6 +28,7 @@ import {
 import { AddProviderModal } from "@/modelManagement/ui/dialogs/AddProviderDialog";
 import { ConfigureProviderModal } from "@/modelManagement/ui/dialogs/ConfigureProviderDialog";
 import { settingsStore, useSettingsValue } from "@/settings/model";
+import { settingsSearchAnchorAttrs } from "@/lib/settingsSearchAnchor";
 import { useAtomValue } from "jotai";
 import { Plus, ShieldCheck } from "lucide-react";
 import { Notice } from "obsidian";
@@ -138,7 +139,10 @@ export const ByokPanel: React.FC = () => {
 
   return (
     <div className="tw-flex tw-flex-col tw-gap-4 tw-py-4">
-      <div className="tw-flex tw-items-start tw-justify-between tw-gap-4">
+      <div
+        {...settingsSearchAnchorAttrs("Bring Your Own Key")}
+        className="tw-flex tw-items-start tw-justify-between tw-gap-4"
+      >
         <div className="tw-flex tw-flex-col tw-gap-1">
           <div className="tw-text-xl tw-font-bold tw-text-normal">Bring Your Own Key</div>
           <div className="tw-max-w-xl tw-text-sm tw-text-muted">

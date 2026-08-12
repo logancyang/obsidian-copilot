@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { type CapabilityStatus } from "@/miyo/miyoStatusStore";
+import { settingsSearchAnchorAttrs } from "@/lib/settingsSearchAnchor";
 import { ArrowUpRight } from "lucide-react";
 import React from "react";
 
@@ -60,7 +61,10 @@ export const MiyoStatusRow: React.FC<MiyoStatusRowProps> = ({
 }) => (
   // items-start (not center): the status sub-line makes the left column taller, and
   // the mock top-aligns the action button against it (dc.html Connector/Search chat).
-  <div className="tw-flex tw-flex-col tw-items-start tw-justify-between tw-gap-4 tw-py-4 sm:tw-flex-row sm:tw-items-start">
+  <div
+    {...settingsSearchAnchorAttrs(title)}
+    className="tw-flex tw-flex-col tw-items-start tw-justify-between tw-gap-4 tw-py-4 sm:tw-flex-row sm:tw-items-start"
+  >
     <div className="tw-w-full tw-space-y-1.5 sm:tw-w-[320px]">
       <div className="tw-flex tw-items-center tw-gap-2 tw-text-sm tw-font-medium tw-leading-none">
         {title}

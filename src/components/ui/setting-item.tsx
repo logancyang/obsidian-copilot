@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
 import { cn } from "@/lib/utils";
+import { settingsSearchAnchorAttrs } from "@/lib/settingsSearchAnchor";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Textarea } from "@/components/ui/textarea";
@@ -219,6 +220,7 @@ export function SettingItem(props: SettingItemProps) {
 
   return (
     <div
+      {...settingsSearchAnchorAttrs(title)}
       className={cn(
         "tw-flex tw-flex-col tw-items-start tw-justify-between tw-gap-4 tw-py-4 sm:tw-flex-row sm:tw-items-center",
         "tw-w-full",

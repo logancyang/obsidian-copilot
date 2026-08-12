@@ -11,6 +11,12 @@ import { CommandSettings } from "@/settings/v2/components/CommandSettings";
 import { Cog, Command, Cpu, ShieldCheck, Sigma, Sparkle, Wrench } from "lucide-react";
 import React from "react";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
+import { SETTINGS_SEARCH_ANCHOR_ATTR } from "@/lib/settingsSearchAnchor";
+import {
+  SETTINGS_TAB_IDS,
+  subscribeSettingsDeepLink,
+  type SettingsTabId,
+} from "@/settings/v2/settingsSearch";
 import { AdvancedSettings } from "./components/AdvancedSettings";
 import { BasicSettings } from "./components/BasicSettings";
 import { DesktopOnlySettingsPanel } from "./components/DesktopOnlySettingsPanel";
@@ -33,8 +39,8 @@ import { SelfHostSettings } from "./components/SelfHostSettings";
 // The relabeled "Keyword (built-in) vs Miyo (semantic search)" engine toggle
 // and honest embedding-caveat copy land in a follow-up PR, not here. If a review
 // flags the missing QA/search UI again, point them at this note.
-const TAB_IDS = ["basic", "byok", "miyo", "skills", "command", "selfhost", "advanced"] as const;
-type TabId = (typeof TAB_IDS)[number];
+const TAB_IDS = SETTINGS_TAB_IDS;
+type TabId = SettingsTabId;
 
 const LazySkillsSettings = React.lazy(() =>
   import("@/agentMode").then((module) => ({ default: module.SkillsSettings }))
@@ -95,11 +101,54 @@ const tabs: TabItemType[] = TAB_IDS.map((id) => ({
   label: TAB_LABELS[id],
 }));
 
+/** How long the deep-linked row keeps Obsidian's `is-flashing` highlight. */
+const DEEP_LINK_FLASH_MS = 750;
+
 const SettingsContent: React.FC = () => {
   const { selectedTab, setSelectedTab } = useTab();
+  const rootRef = React.useRef<HTMLDivElement>(null);
+  // The anchor rides in a ref (it must not retrigger renders on its own);
+  // the tick is the state that sequences "scroll after the tab committed".
+  const pendingAnchorRef = React.useRef<string | null>(null);
+  const [deepLinkTick, setDeepLinkTick] = React.useState(0);
+
+  // Settings-search deep links: switch to the mapped tab first, then scroll
+  // once that tab's content has committed (the effect below).
+  React.useEffect(() => {
+    return subscribeSettingsDeepLink((link) => {
+      pendingAnchorRef.current = link.anchor;
+      setSelectedTab(link.tabId);
+      setDeepLinkTick((tick) => tick + 1);
+    });
+  }, [setSelectedTab]);
+
+  React.useEffect(() => {
+    if (deepLinkTick === 0) return;
+    const anchor = pendingAnchorRef.current;
+    pendingAnchorRef.current = null;
+    if (!anchor) return;
+    const target = rootRef.current?.querySelector<HTMLElement>(
+      `[${SETTINGS_SEARCH_ANCHOR_ATTR}="${anchor}"]`
+    );
+    // Anchors are best-effort: rows hidden behind collapsed or conditional UI
+    // may be absent, in which case landing on the tab is the whole deep link.
+    if (!target) return;
+    target.scrollIntoView({ block: "center" });
+    // Obsidian's own settings search flashes its target row via this class;
+    // reusing it keeps the highlight native-looking and theme-aware.
+    target.classList.add("is-flashing");
+    const flashTimeout = window.setTimeout(
+      () => target.classList.remove("is-flashing"),
+      DEEP_LINK_FLASH_MS
+    );
+    return () => {
+      window.clearTimeout(flashTimeout);
+      target.classList.remove("is-flashing");
+    };
+  }, [deepLinkTick]);
 
   return (
-    <div className="tw-flex tw-flex-col">
+    <div ref={rootRef} className="tw-flex tw-flex-col">
       <div className="tw-flex tw-flex-wrap tw-rounded-lg">
         {tabs.map((tab, index) => (
           <TabItem

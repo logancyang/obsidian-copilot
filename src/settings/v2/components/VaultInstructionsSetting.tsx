@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { InstructionsTextarea } from "@/instructions/InstructionsTextarea";
+import { settingsSearchAnchorAttrs } from "@/lib/settingsSearchAnchor";
 import { ArrowUpRight } from "lucide-react";
 import React from "react";
 
@@ -17,7 +18,10 @@ export const VaultInstructionsSetting: React.FC<VaultInstructionsSettingProps> =
   onChange,
   onOpen,
 }) => (
-  <div className="tw-flex tw-w-full tw-flex-col tw-gap-4 tw-py-4">
+  <div
+    {...settingsSearchAnchorAttrs("Custom vault instructions")}
+    className="tw-flex tw-w-full tw-flex-col tw-gap-4 tw-py-4"
+  >
     <div className="tw-grid tw-w-full tw-grid-cols-[minmax(0,1fr)_auto] tw-items-center tw-gap-4">
       <div className="tw-space-y-1.5">
         <div className="tw-text-sm tw-font-medium tw-leading-none">Custom vault instructions</div>

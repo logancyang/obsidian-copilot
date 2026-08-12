@@ -7,16 +7,20 @@
 
 import type CopilotPlugin from "@/main";
 import SettingsMainV2 from "@/settings/v2/SettingsMainV2";
-import { render, screen } from "@testing-library/react";
+import { requestSettingsDeepLink } from "@/settings/v2/settingsSearch";
+import { act, render, screen } from "@testing-library/react";
 import React from "react";
 
 // Every tab body is stubbed empty. The real panels reach for the keychain, Node,
-// and the network, none of which has any bearing on the strip above them.
+// and the network, none of which has any bearing on the strip above them. The
+// Advanced stub renders one anchored row so deep-link scrolling is observable.
 jest.mock("@/settings/v2/components/BasicSettings", () => ({ BasicSettings: () => null }));
 jest.mock("@/settings/v2/components/MiyoSettings", () => ({ MiyoSettings: () => null }));
 jest.mock("@/settings/v2/components/SelfHostSettings", () => ({ SelfHostSettings: () => null }));
 jest.mock("@/settings/v2/components/CommandSettings", () => ({ CommandSettings: () => null }));
-jest.mock("@/settings/v2/components/AdvancedSettings", () => ({ AdvancedSettings: () => null }));
+jest.mock("@/settings/v2/components/AdvancedSettings", () => ({
+  AdvancedSettings: () => <div data-copilot-setting="debug-mode" data-testid="debug-mode-row" />,
+}));
 jest.mock("@/settings/v2/components/DesktopOnlySettingsPanel", () => ({
   DesktopOnlySettingsPanel: () => null,
 }));
@@ -53,6 +57,44 @@ describe("SettingsMainV2", () => {
       render(<SettingsMainV2 plugin={plugin} />);
 
       expect(screen.queryByRole("tab", { name: /agents/i })).toBeNull();
+    });
+
+    it("switches to the deep-linked tab and scrolls its anchored row into view", () => {
+      const scrollIntoView = jest.fn();
+      window.HTMLElement.prototype.scrollIntoView = scrollIntoView;
+      render(<SettingsMainV2 plugin={plugin} />);
+
+      act(() => {
+        requestSettingsDeepLink({ tabId: "advanced", anchor: "debug-mode" });
+      });
+
+      expect(screen.getByRole("tab", { name: "Advanced" }).getAttribute("aria-selected")).toBe(
+        "true"
+      );
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: "center" });
+      expect(screen.getByTestId("debug-mode-row").classList.contains("is-flashing")).toBe(true);
+    });
+
+    it("still switches tabs when the deep-linked anchor is absent from the tab", () => {
+      render(<SettingsMainV2 plugin={plugin} />);
+
+      act(() => {
+        requestSettingsDeepLink({ tabId: "command", anchor: "not-rendered" });
+      });
+
+      expect(screen.getByRole("tab", { name: "Command" }).getAttribute("aria-selected")).toBe(
+        "true"
+      );
+    });
+
+    it("applies a deep link buffered before the settings UI mounted", () => {
+      requestSettingsDeepLink({ tabId: "selfhost", anchor: "enable-self-host-mode" });
+
+      render(<SettingsMainV2 plugin={plugin} />);
+
+      expect(screen.getByRole("tab", { name: "Self-Host" }).getAttribute("aria-selected")).toBe(
+        "true"
+      );
     });
   });
 });

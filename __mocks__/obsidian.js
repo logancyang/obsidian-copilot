@@ -73,6 +73,13 @@ module.exports = {
   parseYaml: jest.fn().mockImplementation((content) => {
     return parseYamlString(content);
   }),
+  PluginSettingTab: class PluginSettingTab {
+    constructor(app, plugin) {
+      this.app = app;
+      this.plugin = plugin;
+      this.containerEl = window.document.createElement("div");
+    }
+  },
   Modal: class Modal {
     constructor() {
       this.open = jest.fn();

@@ -1261,3 +1261,37 @@ body.is-mobile div[data-radix-popper-content-wrapper] {
 .copilot-fade-mask-bottom {
   background: linear-gradient(to top, var(--background-primary), transparent);
 }
+
+/* Settings-search support (Obsidian 1.13+ declarative tab rendering).
+   The host row carries the whole React settings app: undo the standard
+   setting-row chrome (row layout, card padding, divider) so the app lays
+   out exactly like the pre-1.13 container. The compound selectors match
+   the specificity of Obsidian's grouped-row rules so the reset wins. */
+.copilot-settings-app-host,
+.setting-group .setting-item.copilot-settings-app-host {
+  display: block;
+  border: none;
+  border-radius: 0;
+  background-color: transparent;
+  padding: 0;
+  margin: 0;
+}
+
+.setting-group .setting-item.copilot-settings-app-host::before {
+  content: none;
+}
+
+/* The `.setting-items` list around the host paints a card (background +
+   border); the app supplies its own surfaces, so drop the frame. */
+.setting-group .setting-items.copilot-settings-app-items {
+  background-color: transparent;
+  border: none;
+}
+
+/* Marker rows exist only so Obsidian can index and target a setting in
+   search; they are never shown (Obsidian's own show/hide only touches
+   inline display, so this class keeps them hidden). */
+.copilot-setting-search-marker,
+.setting-group .setting-item.copilot-setting-search-marker {
+  display: none;
+}
