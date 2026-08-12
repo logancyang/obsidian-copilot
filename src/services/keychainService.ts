@@ -10,10 +10,10 @@ import {
 } from "@/services/settingsSecretTransforms";
 import { Notice } from "obsidian";
 import { md5 } from "@/utils/hash";
+// The logger is safe even though this module runs during settings loading
+// (before setSettings): getSettings() falls back to DEFAULT_SETTINGS, and log
+// entries buffer in memory until the app is attached to the log file manager.
 import { logError, logWarn } from "@/logger";
-// Reason: do NOT import logInfo/logWarn/logError here. The logger depends on
-// getSettings(), but this module runs during settings loading (before setSettings).
-// Use console.* directly for all logging in this file.
 
 /**
  * Fields that are sensitive but don't match the `isSensitiveKey()` heuristic.
