@@ -11,11 +11,11 @@ describe("chatHistoryUtils", () => {
     it("should process BaseMessage objects correctly", () => {
       const rawHistory = [
         {
-          _getType: () => "human",
+          getType: () => "human",
           content: "Hello",
         },
         {
-          _getType: () => "ai",
+          getType: () => "ai",
           content: "Hi there!",
         },
       ];
@@ -36,11 +36,11 @@ describe("chatHistoryUtils", () => {
 
       const rawHistory = [
         {
-          _getType: () => "human",
+          getType: () => "human",
           content: multimodalContent,
         },
         {
-          _getType: () => "ai",
+          getType: () => "ai",
           content: "This is an image of a cat.",
         },
       ];
@@ -56,11 +56,11 @@ describe("chatHistoryUtils", () => {
     it("should skip system messages", () => {
       const rawHistory = [
         {
-          _getType: () => "system",
+          getType: () => "system",
           content: "You are a helpful assistant",
         },
         {
-          _getType: () => "human",
+          getType: () => "human",
           content: "Hello",
         },
       ];
@@ -105,7 +105,7 @@ describe("chatHistoryUtils", () => {
         null,
         undefined,
         {
-          _getType: () => "human",
+          getType: () => "human",
           content: "Hello",
         },
         {},
@@ -120,7 +120,7 @@ describe("chatHistoryUtils", () => {
     it("should handle messages with unknown types", () => {
       const rawHistory = [
         {
-          _getType: () => "unknown",
+          getType: () => "unknown",
           content: "Some content",
         },
         {
@@ -139,11 +139,11 @@ describe("chatHistoryUtils", () => {
     it("should add processed messages to target array", () => {
       const rawHistory = [
         {
-          _getType: () => "human",
+          getType: () => "human",
           content: "Hello",
         },
         {
-          _getType: () => "ai",
+          getType: () => "ai",
           content: "Hi there!",
         },
       ];
@@ -160,7 +160,7 @@ describe("chatHistoryUtils", () => {
     it("should append to existing messages", () => {
       const rawHistory = [
         {
-          _getType: () => "human",
+          getType: () => "human",
           content: "Hello",
         },
       ];

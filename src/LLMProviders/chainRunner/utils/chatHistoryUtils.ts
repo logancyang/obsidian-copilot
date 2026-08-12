@@ -23,9 +23,9 @@ export function processRawChatHistory(rawHistory: unknown[]): ProcessedMessage[]
     if (!message) continue;
     const msg = message as Record<string, unknown>;
 
-    // Check if this is a BaseMessage with _getType method
-    if (typeof msg._getType === "function") {
-      const messageType = (msg._getType as () => string)();
+    // Check if this is a BaseMessage with getType method
+    if (typeof msg.getType === "function") {
+      const messageType = (msg.getType as () => string)();
 
       // Only process human and AI messages
       if (messageType === "human") {

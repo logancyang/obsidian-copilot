@@ -1,5 +1,5 @@
 import { BaseChatModelParams } from "@langchain/core/language_models/chat_models";
-import { AIMessageChunk, BaseMessage } from "@langchain/core/messages";
+import { AIMessage, AIMessageChunk, BaseMessage } from "@langchain/core/messages";
 import type { UsageMetadata } from "@langchain/core/messages";
 import { ChatGenerationChunk } from "@langchain/core/outputs";
 import { ChatOpenAI } from "@langchain/openai";
@@ -239,9 +239,7 @@ export class ChatOpenRouter extends ChatOpenAI {
     return messages.map((msg) => {
       const msgRecord = msg as unknown as Record<string, unknown>;
       const role =
-        typeof msg._getType === "function"
-          ? msg._getType()
-          : ((msgRecord.role as string) ?? "user");
+        typeof msg.getType === "function" ? msg.getType() : ((msgRecord.role as string) ?? "user");
       const mappedRole =
         role === "human"
           ? "user"
@@ -257,15 +255,25 @@ export class ChatOpenRouter extends ChatOpenAI {
         } as OpenRouterMessageParam;
       }
 
-      if (msg.additional_kwargs?.function_call) {
+      // First-class tool_calls on AIMessage (used by the autonomous agent when
+      // reconstructing assistant turns) must be serialized to the OpenAI wire format,
+      // otherwise the following "tool" role messages would violate the protocol.
+      if (AIMessage.isInstance(msg) && msg.tool_calls && msg.tool_calls.length > 0) {
         return {
-          role: mappedRole,
+          role: "assistant",
           content: msg.content,
-          function_call: msg.additional_kwargs.function_call,
+          tool_calls: msg.tool_calls.map((toolCall) => ({
+            id: toolCall.id ?? "",
+            type: "function" as const,
+            function: {
+              name: toolCall.name,
+              arguments: JSON.stringify(toolCall.args ?? {}),
+            },
+          })),
         } as OpenRouterMessageParam;
       }
 
-      // Handle modern tool_calls format (used by autonomous agent)
+      // Raw OpenAI-format tool_calls carried through additional_kwargs
       if (msg.additional_kwargs?.tool_calls) {
         return {
           role: mappedRole,
@@ -299,10 +307,6 @@ export class ChatOpenRouter extends ChatOpenAI {
     const toolCallChunks = this.extractToolCallChunks(delta.tool_calls);
 
     const additionalKwargs: Record<string, unknown> = {};
-
-    if (delta.function_call) {
-      additionalKwargs.function_call = delta.function_call;
-    }
 
     if (Array.isArray(delta.tool_calls)) {
       additionalKwargs.tool_calls = delta.tool_calls;
