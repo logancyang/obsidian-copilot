@@ -7,7 +7,7 @@
 import { webcrypto } from "crypto";
 
 import type { EntitlementClaims } from "./types";
-import { verifyEntitlement, type VerifyEntitlementOptions } from "./verify";
+import { base64UrlToBytes, verifyEntitlement, type VerifyEntitlementOptions } from "./verify";
 
 // Node's webcrypto.SubtleCrypto and the DOM SubtleCrypto differ only in unrelated
 // overloads (e.g. Ed25519); cast to the DOM type the API expects.
@@ -56,6 +56,103 @@ function plusClaims(overrides: Partial<EntitlementClaims> = {}): Record<string, 
     ...overrides,
   };
 }
+
+describe("base64UrlToBytes", () => {
+  /**
+   * Oracle: base64url decode via the platform `atob`, the browser-native path
+   * this module's decoder must match byte-for-byte — including which inputs
+   * throw — so license verification is provably unchanged.
+   */
+  function atobOracle(segment: string): Uint8Array {
+    const normalized = segment.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized + "=".repeat((4 - (normalized.length % 4)) % 4);
+    const binary = atob(padded);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes;
+  }
+
+  /** Assert decode output (or throwing) is identical to the atob oracle. */
+  function expectSameAsAtob(segment: string) {
+    let expected: number[] | null = null;
+    try {
+      expected = Array.from(atobOracle(segment));
+    } catch {
+      expected = null;
+    }
+    if (expected === null) {
+      expect(() => base64UrlToBytes(segment)).toThrow();
+    } else {
+      expect(Array.from(base64UrlToBytes(segment))).toEqual(expected);
+    }
+  }
+
+  it("decodes representative JWS segments identically to atob across all padding variants", () => {
+    // Byte lengths 1..6 cover every implied-padding variant ("", "=", "==") twice.
+    for (const text of ["a", "ab", "abc", "abcd", "abcde", "abcdef"]) {
+      expectSameAsAtob(base64UrlEncode(text));
+    }
+    expectSameAsAtob("");
+    expectSameAsAtob(base64UrlEncode(JSON.stringify({ alg: "ES256", typ: "JWT", kid: KID })));
+    expectSameAsAtob(base64UrlEncode(JSON.stringify(plusClaims())));
+  });
+
+  it("round-trips every byte value and pseudo-random signature-sized payloads", () => {
+    const allBytes = new Uint8Array(256).map((_, i) => i);
+    expect(Array.from(base64UrlToBytes(base64UrlEncode(allBytes)))).toEqual(Array.from(allBytes));
+
+    // Deterministic LCG so failures are reproducible; 64 bytes matches an ES256 signature.
+    let seed = 42;
+    const nextByte = () => {
+      seed = (seed * 1103515245 + 12345) % 2147483648;
+      return seed % 256;
+    };
+    for (let round = 0; round < 50; round++) {
+      const bytes = new Uint8Array(64).map(nextByte);
+      const segment = base64UrlEncode(bytes);
+      expect(Array.from(base64UrlToBytes(segment))).toEqual(Array.from(bytes));
+      expectSameAsAtob(segment);
+    }
+  });
+
+  it("decodes multi-byte UTF-8 payloads identically to atob", () => {
+    const unicode = JSON.stringify({ user_id: "héllo-世界-🎉", note: "ünïcode✓" });
+    const segment = base64UrlEncode(unicode);
+    expectSameAsAtob(segment);
+    expect(new TextDecoder().decode(base64UrlToBytes(segment))).toBe(unicode);
+  });
+
+  it("accepts explicit padding and whitespace exactly where atob does", () => {
+    for (const segment of ["QQ==", "QUI=", "QUJD", "QQ", "QUI", "QU J", "\tQUJD\n"]) {
+      expectSameAsAtob(segment);
+    }
+  });
+
+  it("rejects exactly the malformed segments atob rejects", () => {
+    for (const segment of ["A", "abc!x", "ab=c", "€€€€", "Q===", "QUJD "]) {
+      expectSameAsAtob(segment);
+    }
+  });
+
+  it("agrees with atob on a deterministic fuzz sweep of arbitrary strings", () => {
+    const chars = "ABCXYZabcxyz0189+/-_= \t\n!€中🎉.";
+    let seed = 7;
+    const nextInt = (max: number) => {
+      seed = (seed * 1103515245 + 12345) % 2147483648;
+      return seed % max;
+    };
+    for (let round = 0; round < 500; round++) {
+      const length = nextInt(24);
+      let segment = "";
+      for (let i = 0; i < length; i++) {
+        segment += chars[nextInt(chars.length)];
+      }
+      expectSameAsAtob(segment);
+    }
+  });
+});
 
 describe("verifyEntitlement", () => {
   let keyPair: CryptoKeyPair;

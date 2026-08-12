@@ -21,16 +21,46 @@ interface JwsHeader {
   kid?: string;
 }
 
-/** Decode a base64url segment to bytes. */
-function base64UrlToBytes(segment: string): Uint8Array {
-  const normalized = segment.replace(/-/g, "+").replace(/_/g, "/");
-  const padded = normalized + "=".repeat((4 - (normalized.length % 4)) % 4);
-  const binary = atob(padded);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
+const BASE64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+/**
+ * WHATWG forgiving-base64 decode — the exact algorithm `atob` implements —
+ * in pure TypeScript. Plugin review flags `atob` as deprecated (Node typings),
+ * and the suggested `Buffer` is a desktop-only Node built-in unavailable on
+ * mobile, so neither platform decoder is usable here.
+ */
+function decodeBase64(data: string): Uint8Array {
+  let input = data.replace(/[\t\n\f\r ]/g, "");
+  if (input.length % 4 === 0) {
+    input = input.replace(/={1,2}$/, "");
+  }
+  if (input.length % 4 === 1) {
+    throw new Error("Invalid base64 length");
+  }
+  const bytes = new Uint8Array(Math.floor((input.length * 3) / 4));
+  let buffer = 0;
+  let bitCount = 0;
+  let index = 0;
+  for (const char of input) {
+    const value = BASE64_ALPHABET.indexOf(char);
+    if (value < 0) {
+      throw new Error("Invalid base64 character");
+    }
+    buffer = (buffer << 6) | value;
+    bitCount += 6;
+    if (bitCount >= 8) {
+      bitCount -= 8;
+      bytes[index++] = (buffer >> bitCount) & 0xff;
+    }
   }
   return bytes;
+}
+
+/** Decode a base64url segment to bytes. Exported for equivalence testing. */
+export function base64UrlToBytes(segment: string): Uint8Array {
+  const normalized = segment.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = normalized + "=".repeat((4 - (normalized.length % 4)) % 4);
+  return decodeBase64(padded);
 }
 
 function parseJsonSegment<T>(segment: string): T | null {
