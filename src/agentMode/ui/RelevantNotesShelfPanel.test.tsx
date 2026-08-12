@@ -1,5 +1,7 @@
 import { RelevantNotesShelfPanel } from "@/agentMode/ui/RelevantNotesShelfPanel";
+import { AppContext } from "@/context";
 import { render, screen } from "@testing-library/react";
+import type { App } from "obsidian";
 import React from "react";
 
 jest.mock("@/agentMode/ui/homeShelfPrefs", () => ({
@@ -16,8 +18,11 @@ jest.mock("@/components/chat-components/RelevantNotes", () => ({
 describe("RelevantNotesShelfPanel", () => {
   describe("RelevantNotesShelfPanel()", () => {
     it("fills the Agent Home shelf and reserves vertical spacing for empty states", () => {
+      // homeShelfPrefs is mocked, so the app is never dereferenced.
       const { container } = render(
-        <RelevantNotesShelfPanel onPopOut={jest.fn()} onAddToChat={jest.fn()} />
+        <AppContext.Provider value={{} as App}>
+          <RelevantNotesShelfPanel onPopOut={jest.fn()} onAddToChat={jest.fn()} />
+        </AppContext.Provider>
       );
 
       const panel = container.firstElementChild as HTMLElement;
