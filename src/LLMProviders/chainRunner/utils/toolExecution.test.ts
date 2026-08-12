@@ -98,6 +98,7 @@ describe("toolExecution", () => {
         result: "Error: plusTool requires a Copilot Plus subscription",
         success: false,
       });
+      expect(mockCheckIsPaidUser).toHaveBeenCalledWith(undefined, { trigger: "tool_call" });
       expect(mockCallTool).not.toHaveBeenCalled();
     });
 

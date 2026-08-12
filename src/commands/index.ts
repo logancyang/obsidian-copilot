@@ -673,7 +673,7 @@ export function registerCommands(plugin: CopilotPlugin, publish: PublishFile) {
 
   // Add command to download YouTube script (Copilot Plus only)
   addCommand(plugin, COMMAND_IDS.DOWNLOAD_YOUTUBE_SCRIPT, async () => {
-    const isPaidUser = await checkIsPaidUser(plugin.app);
+    const isPaidUser = await checkIsPaidUser(plugin.app, { trigger: "tool_call" });
     if (!isPaidUser) {
       new Notice("Download YouTube Script (plus) is a Copilot Plus feature");
       return;

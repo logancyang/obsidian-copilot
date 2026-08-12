@@ -284,7 +284,7 @@ export default class CopilotPlugin extends Plugin {
     // signature re-proves itself. The network re-validation below overrides
     // with the server's token.
     void verifyCachedEntitlement();
-    if (!isLegacyUpgrade) void checkIsPaidUser(this.app);
+    if (!isLegacyUpgrade) void checkIsPaidUser(this.app, { trigger: "startup" });
     // Entitlement tokens expire (~14 days), and the gates honor that expiry even
     // mid-session. Without a refresh, an Obsidian window left open past `exp`
     // loses self-host — which silently reroutes web search and document parsing
@@ -292,7 +292,10 @@ export default class CopilotPlugin extends Plugin {
     // Each /license call mints a fresh token, so re-validating daily keeps an
     // online session current; offline users still lapse at `exp`, as intended.
     this.registerInterval(
-      window.setInterval(() => void checkIsPaidUser(this.app), ENTITLEMENT_REFRESH_INTERVAL_MS)
+      window.setInterval(
+        () => void checkIsPaidUser(this.app, { trigger: "refresh" }),
+        ENTITLEMENT_REFRESH_INTERVAL_MS
+      )
     );
 
     // Initialize ProjectManager
@@ -552,7 +555,7 @@ export default class CopilotPlugin extends Plugin {
         }
       : null;
     if (isLegacyUpgrade) {
-      void checkIsPaidUser(needsLicenseReentry ? undefined : this.app);
+      void checkIsPaidUser(needsLicenseReentry ? undefined : this.app, { trigger: "startup" });
     }
 
     await runStartupMigrationSummary({

@@ -1229,7 +1229,7 @@ export class AgentSession {
    * against `/license`.
    */
   private ensureMultiAgentEntitlement(): Promise<boolean> {
-    return ensureMultiAgentEntitlement(this.getApp?.(), { feature: "multi_agent_per_turn" });
+    return ensureMultiAgentEntitlement(this.getApp?.());
   }
 
   /**

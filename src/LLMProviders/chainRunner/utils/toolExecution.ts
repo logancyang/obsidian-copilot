@@ -64,7 +64,7 @@ export async function executeSequentialToolCall(
 
     // Check if tool requires Plus subscription
     if (metadata?.isPlusOnly) {
-      const isPaidUser = await checkIsPaidUser();
+      const isPaidUser = await checkIsPaidUser(undefined, { trigger: "tool_call" });
       if (!isPaidUser && !isSelfHostModeValid()) {
         return {
           toolName: toolCall.name,

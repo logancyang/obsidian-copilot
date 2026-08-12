@@ -3,6 +3,7 @@ import { act, render, screen } from "@testing-library/react";
 import React from "react";
 
 const updateSetting = jest.fn<void, unknown[]>();
+const mockApp = {};
 let currentSettings = { ...DEFAULT_SETTINGS };
 jest.mock("@/settings/model", () => ({
   updateSetting: (...a: unknown[]) => updateSetting(...a),
@@ -27,7 +28,7 @@ jest.mock("@/plusUtils", () => ({
 
 jest.mock("@/context", () => ({
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook
-  useApp: () => ({}),
+  useApp: () => mockApp,
 }));
 
 jest.mock("@/components/modals/CopilotPlusWelcomeModal", () => ({
@@ -93,6 +94,7 @@ describe("PlusSettings", () => {
         screen.getByRole("button", { name: "Apply" }).click();
       });
 
+      expect(checkIsPaidUser).toHaveBeenCalledWith(mockApp, { trigger: "manual" });
       expect(screen.queryByText("Inactive")).toBeNull();
       expect(screen.queryByText("All of it for a few dollars a month.")).toBeNull();
 

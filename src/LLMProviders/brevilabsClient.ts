@@ -158,6 +158,22 @@ export interface LicenseResponse {
   entitlement?: string;
 }
 
+/** Why the plugin is revalidating a stored license. */
+export type LicenseCheckTrigger =
+  | "startup"
+  | "manual"
+  | "refresh"
+  | "legacy_chat_turn"
+  | "multi_agent_per_turn"
+  | "tool_call"
+  | "model_gate";
+
+/** Product context attached to each license validation request. */
+export interface LicenseCheckContext {
+  trigger: LicenseCheckTrigger;
+  [key: string]: unknown;
+}
+
 export class BrevilabsClient {
   private static instance: BrevilabsClient;
   private pluginVersion: string = "Unknown";
@@ -257,13 +273,13 @@ export class BrevilabsClient {
    * Validate the license key and update the entitlement flags (isPaidUser /
    * isPlusUser). A verified signed entitlement determines strict feature access;
    * otherwise a confirmed license remains paid while those features stay closed.
-   * @param context Optional context object containing the features that the user is using to validate the license key.
+   * @param context Required product context describing why the license key is being validated.
    * @returns true if the license key is valid, false if the license key is invalid, and undefined if
    * unknown error.
    */
   async validateLicenseKey(
-    app?: App,
-    context?: Record<string, unknown>
+    app: App | undefined,
+    context: LicenseCheckContext
   ): Promise<{ isValid: boolean | undefined; plan?: string }> {
     // Identity this response will belong to. Validations can overlap (startup,
     // a send-boundary re-check, the user pasting a different key), and every
