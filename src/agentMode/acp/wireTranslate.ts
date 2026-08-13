@@ -360,6 +360,12 @@ function todoToolPlanFromAcp(
 
 function acpUpdateToSessionUpdate(update: SessionNotification["update"]): SessionUpdate {
   switch (update.sessionUpdate) {
+    case "user_message_chunk":
+      return {
+        sessionUpdate: "user_message_chunk",
+        content: promptContentFromAcp(update.content) ?? { type: "text", text: "" },
+        messageId: update.messageId ?? undefined,
+      };
     case "agent_message_chunk":
       return {
         sessionUpdate: "agent_message_chunk",

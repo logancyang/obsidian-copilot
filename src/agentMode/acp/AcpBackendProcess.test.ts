@@ -519,6 +519,119 @@ describe("AcpBackendProcess", () => {
     });
   });
 
+  describe("loadSession()", () => {
+    /** Reach the VaultClient the backend wired in, to push replayed frames. */
+    function replayer(backend: AcpBackendProcess): (update: unknown) => void {
+      const client = getVaultClient(backend) as unknown as {
+        sessionUpdate: (n: unknown) => void;
+      };
+      return (update: unknown) => client.sessionUpdate({ sessionId: "ses_load", update });
+    }
+
+    async function startLoadCapableBackend(): Promise<AcpBackendProcess> {
+      mockInitializeResult = { protocolVersion: 1, agentCapabilities: { loadSession: true } };
+      const backend = new AcpBackendProcess(
+        buildApp(),
+        buildStubBackend(),
+        "1.0.0",
+        buildStubDescriptor()
+      );
+      await backend.start();
+      return backend;
+    }
+
+    it("returns the conversation the agent replays during the call", async () => {
+      const backend = await startLoadCapableBackend();
+      mockLoadSession.mockImplementationOnce(async () => {
+        const push = replayer(backend);
+        push({
+          sessionUpdate: "user_message_chunk",
+          messageId: "m1",
+          content: { type: "text", text: "hi" },
+        });
+        push({
+          sessionUpdate: "agent_message_chunk",
+          messageId: "m2",
+          content: { type: "text", text: "hello" },
+        });
+        return {};
+      });
+
+      const result = await backend.loadSession({ sessionId: "ses_load", cwd: "/vault" });
+
+      expect(result.transcript?.map((m) => m.message)).toEqual(["hi", "hello"]);
+    });
+
+    it("collects a replay longer than the pending-update buffer allows", async () => {
+      const backend = await startLoadCapableBackend();
+      mockLoadSession.mockImplementationOnce(async () => {
+        const push = replayer(backend);
+        // Well past PENDING_UPDATE_LIMIT: the accumulator must not share that cap.
+        for (let i = 0; i < 40; i++) {
+          push({
+            sessionUpdate: "user_message_chunk",
+            messageId: `u${i}`,
+            content: { type: "text", text: `ask ${i}` },
+          });
+          push({
+            sessionUpdate: "agent_message_chunk",
+            messageId: `a${i}`,
+            content: { type: "text", text: `answer ${i}` },
+          });
+        }
+        return {};
+      });
+
+      const result = await backend.loadSession({ sessionId: "ses_load", cwd: "/vault" });
+
+      expect(result.transcript).toHaveLength(80);
+      expect(result.transcript?.[79].message).toBe("answer 39");
+    });
+
+    it("keeps routing session-level updates to the handler while replaying", async () => {
+      const backend = await startLoadCapableBackend();
+      const handler = jest.fn();
+      backend.registerSessionHandler("ses_load", handler);
+      mockLoadSession.mockImplementationOnce(async () => {
+        replayer(backend)({ sessionUpdate: "usage_update", used: 19_545, size: 200_000 });
+        return {};
+      });
+
+      await backend.loadSession({ sessionId: "ses_load", cwd: "/vault" });
+
+      expect(handler.mock.calls.map((c) => c[0].update.sessionUpdate)).toContain("usage_update");
+    });
+
+    it("omits the transcript when the agent replays nothing", async () => {
+      const backend = await startLoadCapableBackend();
+      mockLoadSession.mockResolvedValueOnce({});
+
+      const result = await backend.loadSession({ sessionId: "ses_load", cwd: "/vault" });
+
+      expect(result.transcript).toBeUndefined();
+    });
+
+    it("stops accumulating once the call fails", async () => {
+      const backend = await startLoadCapableBackend();
+      mockLoadSession.mockRejectedValueOnce(new Error("load blew up"));
+      await expect(backend.loadSession({ sessionId: "ses_load", cwd: "/vault" })).rejects.toThrow(
+        "load blew up"
+      );
+
+      // A frame arriving after the failed call belongs to nobody, so it must
+      // reach normal routing rather than a retired accumulator.
+      const handler = jest.fn();
+      backend.registerSessionHandler("ses_load", handler);
+      replayer(backend)({
+        sessionUpdate: "agent_message_chunk",
+        messageId: "late",
+        content: { type: "text", text: "stray" },
+      });
+
+      expect(handler).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe("prompt-result usage fallback", () => {
     // Reach the mock connection's `prompt` jest.fn so a test can stub the
     // turn-level `usage` the backend reads after `prompt()` resolves.
