@@ -17,6 +17,7 @@ Welcome to the official documentation for **Copilot for Obsidian**, an AI-powere
 | [Windows Setup for Agent Mode](agent-mode-windows-setup.md) | Connecting OpenCode, Claude Code, or Codex to Agent Mode on Windows             |
 | [Projects](projects.md)                                     | Focused Agent Mode and Quick Chat workspaces with isolated context and history  |
 | [System Prompts](system-prompts.md)                         | Customizing AI behavior with built-in and custom system prompts                 |
+| [AGENTS.md Examples](agents-md-examples.md)                 | Popular personal AGENTS.md files worth studying as references                   |
 | [Paid Plans and Self-Host](copilot-plus-and-self-host.md)   | Paid-plan features, memory system, self-host mode, Miyo                         |
 | [Troubleshooting and FAQ](troubleshooting-and-faq.md)       | Common errors, provider-specific issues, performance, FAQ                       |
 
