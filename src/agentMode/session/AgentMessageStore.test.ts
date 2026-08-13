@@ -247,6 +247,32 @@ describe("AgentMessageStore", () => {
     expect(msg?.turnDurationMs).toBe(12_345);
   });
 
+  describe("loadMessages()", () => {
+    it("keeps a message that has no send time undated instead of stamping the load time", () => {
+      // A replayed ACP transcript carries no times, and a saved chat can hold
+      // "Unknown time". Stamping now would date every restored message to the
+      // reopen, and autosave would write that back over the original.
+      const store = new AgentMessageStore();
+
+      store.loadMessages([
+        { id: "u1", sender: USER_SENDER, message: "hi", timestamp: null, isVisible: true },
+      ]);
+
+      expect(store.getDisplayMessages()[0].timestamp).toBeNull();
+    });
+
+    it("keeps the send time a message arrived with", () => {
+      const store = new AgentMessageStore();
+      const sent = formatDateTime(new Date("2026-01-02T03:04:05Z"));
+
+      store.loadMessages([
+        { id: "u1", sender: USER_SENDER, message: "hi", timestamp: sent, isVisible: true },
+      ]);
+
+      expect(store.getDisplayMessages()[0].timestamp).toEqual(sent);
+    });
+  });
+
   describe("extendTurnDuration()", () => {
     it("advances only an already-completed turn", () => {
       const store = new AgentMessageStore();

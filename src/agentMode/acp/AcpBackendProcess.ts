@@ -537,7 +537,8 @@ export class AcpBackendProcess implements BackendProcess {
 
   async loadSession(params: LoadSessionInput): Promise<LoadSessionOutput> {
     const sessionId = params.sessionId;
-    // Install a temporary collector to intercept replay frames
+    // Installed before the request goes out: the agent replays the conversation
+    // while it is in flight, so a collector added afterwards would miss it.
     const collector = createReplayTranscriptState();
     this.loadSessionCollectors.set(sessionId, collector);
 
