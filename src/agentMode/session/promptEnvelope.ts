@@ -13,20 +13,27 @@ const CLOSE_TAG = "</user-message>";
  * what the *agent* stored gets the wrapped form instead, and has to undo it or
  * the restored bubble shows the whole context block as if the user had typed it.
  *
- * The wrapper is delimited by its *last* closing tag, not its first. Taking the
- * first would silently cut the rest of a prompt that types `</user-message>`
- * into the composer, and requiring the tag to end the text would miss a stored
- * prompt that has anything after the envelope — the Claude adapter appends a
- * note in place of an image it cannot send, and the transcript hands both
- * blocks over as one string.
+ * The envelope closes the prompt, so both tags are searched for from the end.
+ * The context blocks in front of it inline whole note excerpts verbatim, so a
+ * note that merely mentions `<user-message>` would otherwise be mistaken for
+ * the wrapper and restore the user's bubble as the tail of that context. The
+ * closing tag is taken last for the same reason, and because a prompt can be
+ * stored with something after the envelope — the Claude adapter appends a note
+ * in place of an image it cannot send, and the transcript hands both blocks
+ * over as one string.
+ *
+ * The tags are not escaped, so this cannot be exact: a user who types
+ * `<user-message>` into the composer loses everything before it. That is a
+ * deliberate prompt, where an excerpt is any note the user attached, so the
+ * larger surface wins.
  *
  * @param content - Stored prompt text, wrapped or not.
  * @returns What the user typed, or `content` unchanged when there is no wrapper
  *   (prompts sent without attached context are not wrapped).
  */
 export function stripUserMessageWrapper(content: string): string {
-  const start = content.indexOf(OPEN_TAG);
   const end = content.lastIndexOf(CLOSE_TAG);
+  const start = end === -1 ? -1 : content.lastIndexOf(OPEN_TAG, end);
   if (start === -1 || end <= start) return content;
   // The envelope puts the prompt on its own lines; those two are the wrapper's,
   // not the user's.

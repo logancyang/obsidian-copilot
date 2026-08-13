@@ -21,6 +21,24 @@ describe("promptEnvelope", () => {
       expect(stripUserMessageWrapper("just a question")).toBe("just a question");
     });
 
+    it("ignores a wrapper tag that an attached note excerpt happens to contain", () => {
+      // Excerpts are inlined verbatim, so any note mentioning the tag would
+      // otherwise be mistaken for the envelope.
+      const wrapped =
+        "<copilot-context>\nSelected excerpts:\n  the <user-message> tag wraps the prompt\n" +
+        "</copilot-context>\n\n<user-message>\nhi\n</user-message>";
+
+      expect(stripUserMessageWrapper(wrapped)).toBe("hi");
+    });
+
+    it("ignores a complete wrapper pair inside an attached note excerpt", () => {
+      const wrapped =
+        "<copilot-context>\nSelected excerpts:\n  <user-message>sample</user-message>\n" +
+        "</copilot-context>\n\n<user-message>\nhi\n</user-message>";
+
+      expect(stripUserMessageWrapper(wrapped)).toBe("hi");
+    });
+
     it("keeps a closing tag the user typed inside the prompt", () => {
       const wrapped = "<user-message>\nwhat does </user-message> mean?\n</user-message>";
 
