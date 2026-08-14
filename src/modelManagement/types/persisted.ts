@@ -68,11 +68,11 @@ export type ProviderOrigin =
  * doesn't enforce singleton.
  */
 export interface Provider {
-  /** UUID; primary key. Also the keychain namespace (BYOK only). */
+  /** UUID; immutable primary key for persisted provider and model references. */
   providerId: string;
   /** Single dispatch field. See `ProviderType` in catalog.ts. */
   providerType: ProviderType;
-  /** User-editable label (BYOK) or auto-assigned (agent / Plus). */
+  /** Unique user-editable label (BYOK) or auto-assigned name (agent / Plus). */
   displayName: string;
   /** Overrides what the wizard pre-filled from catalog / template. */
   baseUrl?: string;

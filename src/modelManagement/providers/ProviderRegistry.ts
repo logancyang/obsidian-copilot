@@ -31,21 +31,13 @@ import type { ProviderType } from "@/modelManagement/types/catalog";
 import type { Provider, ProviderOrigin } from "@/modelManagement/types/persisted";
 import type { VerificationResult } from "@/modelManagement/types/runtime";
 import type { ProviderAdapterRegistry } from "./adapters/ProviderAdapterRegistry";
+import { allocateUniqueProviderDisplayName, buildProviderKeychainId } from "./providerIdentity";
 
 // Frozen empty shared across all filtered views so consumers see a
 // stable reference even when two distinct filters both yield zero rows.
 const EMPTY_LIST: readonly Provider[] = Object.freeze([]);
 
-/** Format the keychain id for a given providerId.
- *
- * Reason: vault-namespaced (`copilot-v{vaultId}-...`) so the entry is
- * picked up by `KeychainService.clearAllVaultSecrets()`, which scopes
- * cleanup by that exact prefix. A flat `copilot-provider-{id}` id would
- * silently leak past "Delete All Keys" and vault uninstall. */
-function providerKeychainId(vaultId: string, providerId: string): string {
-  return `copilot-v${vaultId}-provider-${providerId}`;
-}
-
+/** Manages persisted provider identities and their vault-scoped credentials. */
 export class ProviderRegistry {
   readonly #app: App;
   readonly #adapters: ProviderAdapterRegistry;
@@ -139,8 +131,13 @@ export class ProviderRegistry {
    */
   async add(input: Omit<Provider, "providerId" | "addedAt" | "apiKeyKeychainId">): Promise<string> {
     const providerId = uuidv4();
+    const displayName = allocateUniqueProviderDisplayName(
+      input.displayName,
+      Object.values(getSettings().providers).map((provider) => provider.displayName)
+    );
     const row: Provider = {
       ...input,
+      displayName,
       providerId,
       addedAt: Date.now(),
       apiKeyKeychainId: null,
@@ -187,8 +184,48 @@ export class ProviderRegistry {
     delete safePatch.apiKeyKeychainId;
     delete safePatch.providerType;
     delete safePatch.origin;
+    if ("displayName" in safePatch) {
+      if (typeof safePatch.displayName !== "string") {
+        throw new Error("Provider name must be a string");
+      }
+      safePatch.displayName = allocateUniqueProviderDisplayName(
+        safePatch.displayName,
+        Object.values(getSettings().providers)
+          .filter((provider) => provider.providerId !== providerId)
+          .map((provider) => provider.displayName)
+      );
+    }
     if (Object.keys(safePatch).length === 0) return;
     const next: Provider = { ...existing, ...(safePatch as Partial<Provider>) };
+
+    if (existing.apiKeyKeychainId) {
+      const keychain = KeychainService.getInstance(this.#app);
+      const nextKeychainId = buildProviderKeychainId(
+        keychain.getVaultId(),
+        next.displayName,
+        providerId
+      );
+      if (nextKeychainId !== existing.apiKeyKeychainId) {
+        const apiKey = keychain.getSecretById(existing.apiKeyKeychainId);
+        if (apiKey !== null) {
+          keychain.setSecretById(nextKeychainId, apiKey);
+        }
+        setSettings((cur) => ({
+          providers: {
+            ...cur.providers,
+            [providerId]: { ...next, apiKeyKeychainId: nextKeychainId },
+          },
+        }));
+        try {
+          keychain.deleteSecretById(existing.apiKeyKeychainId);
+        } catch (err) {
+          logError(`[modelManagement] ProviderRegistry.update: failed to clear old keychain`, err);
+        }
+        this.#emit();
+        return;
+      }
+    }
+
     setSettings((cur) => ({
       providers: { ...cur.providers, [providerId]: next },
     }));
@@ -252,9 +289,7 @@ export class ProviderRegistry {
     return KeychainService.getInstance(this.#app).getSecretById(row.apiKeyKeychainId);
   }
 
-  /** Generates a fresh `apiKeyKeychainId` if the provider doesn't
-   *  yet have one; persists the row. Re-calling with a different key
-   *  rotates in place (same keychain id, new value). */
+  /** Stores the API key under the provider's readable identity and persists its pointer. */
   async setApiKey(providerId: string, apiKey: string): Promise<void> {
     const row = getSettings().providers[providerId];
     if (!row) {
@@ -263,17 +298,23 @@ export class ProviderRegistry {
       );
     }
     const keychain = KeychainService.getInstance(this.#app);
-    const keychainId =
-      row.apiKeyKeychainId ?? providerKeychainId(keychain.getVaultId(), providerId);
-    // Persist the row's pointer BEFORE writing to the keychain so a
-    // crash (or a keychain write that throws) between the two leaves a
-    // recoverable dangling pointer (empty keychain → getApiKey returns
-    // null; clearApiKey / remove still know which id to clean up)
-    // rather than an orphaned keychain entry that no row points at.
+    const keychainId = buildProviderKeychainId(keychain.getVaultId(), row.displayName, providerId);
+    // The destination must be durable before the settings pointer moves;
+    // otherwise a rejected keychain write would make the existing secret unreachable.
+    keychain.setSecretById(keychainId, apiKey);
     if (row.apiKeyKeychainId !== keychainId) {
       this.#setApiKeyKeychainId(providerId, keychainId);
+      if (row.apiKeyKeychainId) {
+        try {
+          keychain.deleteSecretById(row.apiKeyKeychainId);
+        } catch (err) {
+          logError(
+            `[modelManagement] ProviderRegistry.setApiKey: failed to clear old keychain`,
+            err
+          );
+        }
+      }
     }
-    keychain.setSecretById(keychainId, apiKey);
     this.#emit();
   }
 
