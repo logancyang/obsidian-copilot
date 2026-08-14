@@ -13,8 +13,12 @@ import type { AgentChatMessage } from "@/agentMode/session/types";
  */
 export interface ReplayTranscriptState {
   messages: AgentChatMessage[];
-  /** The message currently being accumulated, or null before the first chunk. */
-  current: { sender: string; text: string } | null;
+  /**
+   * The message currently being accumulated, or null before the first chunk.
+   * `wireId` is the backend's message id and is tracked for user messages only —
+   * see the boundary rule on {@link consumeReplayUpdate}.
+   */
+  current: { sender: string; wireId: string | undefined; text: string } | null;
 }
 
 export function createReplayTranscriptState(): ReplayTranscriptState {
@@ -31,23 +35,28 @@ export function createReplayTranscriptState(): ReplayTranscriptState {
  * soon as it carries any parts, so partial tool restoration would hide the
  * answer text itself.
  *
- * DESIGN NOTE — a message ends when the *sender* changes, and only then. ACP
- * chunks may carry a `messageId`, and the protocol says a change of id starts a
- * new message, but that granularity does not exist in this plugin: a turn is
- * driven by one `session/prompt`, `AgentSession.sendPrompt` creates exactly one
- * assistant message for it, and every chunk of that turn is appended to it
- * regardless of id (`AgentSession.resolveContentTarget`). Splitting a replay on
- * id therefore invents bubbles the live view never showed — an answer either
- * side of a tool call came back as two messages. ACP 0.20.0 has no way for an
- * agent to open a turn on its own, so a user chunk always separates two
- * assistant turns and the sender switch is a complete boundary signal, given a
- * replay that emits each turn whole. Two prompts merge when nothing from the
- * agent separates them — a turn cancelled, refused, or failed before it emitted
- * anything — and one prompt splits if a backend interleaves an earlier turn's
- * activity between the chunks of a message. Neither appeared in any captured
- * replay, and both are the accepted cost of matching the live view everywhere
- * else. If a future review proposes restoring id-based splitting, point them
- * at this note.
+ * DESIGN NOTE — the boundary rule is deliberately asymmetric, because the two
+ * senders map onto ACP's `messageId` differently.
+ *
+ * A *user* bubble is one prompt (`AgentSession.sendPrompt` adds exactly one per
+ * prompt), so a user chunk continues the current message only when it repeats
+ * that message's id, and starts a new one otherwise. Defaulting to "new" is what
+ * keeps two prompts apart when the agent emitted nothing between them — what a
+ * turn cancelled, refused, or failed before it spoke leaves behind — which
+ * sender alone cannot do. The id is optional, so a replay can carry user chunks
+ * without one, and defaulting to "continue" would then run two prompts together
+ * into a single bubble. The joining branch earns its place because the protocol
+ * lets one message arrive as several chunks that share a `messageId`.
+ *
+ * An *assistant* bubble is one turn, deliberately coarser than the protocol's
+ * message. Every chunk of a turn is appended to a single placeholder whatever
+ * its id (`AgentSession.resolveContentTarget`), so an answer either side of a
+ * tool call is one bubble live. Honouring id changes here would invent bubbles
+ * the user never saw, so assistant ids are ignored and the sender switch ends
+ * the message.
+ *
+ * If a future review proposes making the two senders behave the same, point
+ * them at this note.
  *
  * @param state - Accumulator to mutate.
  * @param update - The wire-shaped update from the replay burst.
@@ -63,9 +72,12 @@ export function consumeReplayUpdate(
   update: SessionNotification["update"]
 ): boolean {
   let sender: string;
+  // Tracked for user chunks only; assistant ids never move a boundary.
+  let wireId: string | undefined;
   switch (update.sessionUpdate) {
     case "user_message_chunk":
       sender = USER_SENDER;
+      wireId = update.messageId ?? undefined;
       break;
     // A frame whose content is dropped still marks the agent as the sender. A
     // turn that only thought, or only ran a tool, is a complete turn in the
@@ -90,8 +102,8 @@ export function consumeReplayUpdate(
       return false;
   }
 
-  if (state.current?.sender !== sender) flushCurrent(state);
-  const current = (state.current ??= { sender, text: "" });
+  if (startsNewMessage(state.current, sender, wireId)) flushCurrent(state);
+  const current = (state.current ??= { sender, wireId, text: "" });
   // Only conversation text is rebuilt; dropping the rest is also what keeps it
   // away from the live handler, where a replayed `plan` (or the `todowrite`
   // tool call opencode synthesizes one from) would overwrite the resumed
@@ -116,6 +128,23 @@ export function finishReplayTranscript(
 ): AgentChatMessage[] | undefined {
   flushCurrent(state);
   return state.messages.length > 0 ? state.messages : undefined;
+}
+
+/**
+ * Whether this chunk ends the message being accumulated. A sender switch always
+ * does. Within one sender, only a *user* chunk repeating the current message's
+ * id continues it; an absent or different id starts a new prompt — see the
+ * boundary rule on {@link consumeReplayUpdate}.
+ */
+function startsNewMessage(
+  current: ReplayTranscriptState["current"],
+  sender: string,
+  wireId: string | undefined
+): boolean {
+  if (!current) return true;
+  if (current.sender !== sender) return true;
+  if (sender !== USER_SENDER) return false;
+  return wireId === undefined || wireId !== current.wireId;
 }
 
 function flushCurrent(state: ReplayTranscriptState): void {

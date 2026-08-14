@@ -7,7 +7,7 @@ import {
   type ReplayTranscriptState,
 } from "./replayTranscript";
 
-/** Build a wire-shaped replay chunk. `messageId` is set to prove it is ignored. */
+/** Build a wire-shaped replay chunk, optionally carrying a backend message id. */
 function chunk(
   sessionUpdate: "user_message_chunk" | "agent_message_chunk" | "agent_thought_chunk",
   text: string,
@@ -112,6 +112,50 @@ describe("replayTranscript", () => {
       ]);
     });
 
+    it("separates two prompts that carry different message ids", () => {
+      // A turn cancelled, refused, or failed before the agent said anything
+      // leaves its prompt in history with nothing after it, so the next prompt
+      // follows immediately and only the id tells them apart.
+      const transcript = replay([
+        chunk("user_message_chunk", "cancelled prompt", "u1"),
+        chunk("user_message_chunk", "next prompt", "u2"),
+        chunk("agent_message_chunk", "answer"),
+      ]);
+
+      expect(transcript?.map((m) => m.message)).toEqual([
+        "cancelled prompt",
+        "next prompt",
+        "answer",
+      ]);
+    });
+
+    it("joins the chunks of one prompt that share a message id", () => {
+      const transcript = replay([
+        chunk("user_message_chunk", "one prompt ", "u1"),
+        chunk("user_message_chunk", "in two chunks", "u1"),
+      ]);
+
+      expect(transcript?.map((m) => m.message)).toEqual(["one prompt in two chunks"]);
+    });
+
+    it("separates two prompts that the agent replayed without any message id", () => {
+      // The id is optional, so a replay can carry user chunks without one. Only
+      // a repeated id proves two chunks are one prompt, so without one each
+      // chunk stands alone — otherwise the pair below would come back as a
+      // single run-on bubble.
+      const transcript = replay([
+        chunk("user_message_chunk", "cancelled prompt"),
+        chunk("user_message_chunk", "next prompt"),
+        chunk("agent_message_chunk", "answer"),
+      ]);
+
+      expect(transcript?.map((m) => m.message)).toEqual([
+        "cancelled prompt",
+        "next prompt",
+        "answer",
+      ]);
+    });
+
     it("keeps a thought out of the transcript without ending the turn it sits in", () => {
       const transcript = replay([
         chunk("user_message_chunk", "why?"),
@@ -154,9 +198,9 @@ describe("replayTranscript", () => {
       // nothing about who is speaking and must not break the message it lands
       // in.
       const transcript = replay([
-        chunk("user_message_chunk", "one prompt "),
+        chunk("user_message_chunk", "one prompt ", "u1"),
         activity("tool_call_update"),
-        chunk("user_message_chunk", "in two chunks"),
+        chunk("user_message_chunk", "in two chunks", "u1"),
         chunk("agent_message_chunk", "answer"),
       ]);
 
