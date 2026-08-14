@@ -126,29 +126,23 @@ describe("configuredModelToCustomModel", () => {
     expect(custom.baseUrl).toBe("https://api.example.com/v1");
   });
 
-  it("uses the CORS-free transport only for catalog-less BYOK OpenAI-compatible endpoints (https://github.com/logancyang/obsidian-copilot-preview/issues/313)", () => {
-    const customEndpoint = configuredModelToCustomModel({
-      provider: provider({ baseUrl: "https://work.example.com/v1" }),
+  it("preserves the provider's explicit Quick Chat CORS choice (https://github.com/logancyang/obsidian-copilot-preview/issues/313)", () => {
+    const corsEnabled = configuredModelToCustomModel({
+      provider: provider({ baseUrl: "https://work.example.com/v1", enableCors: true }),
       configuredModel: configuredModel(),
       apiKey: "key-123",
     });
-    const catalogProvider = configuredModelToCustomModel({
+    const streaming = configuredModelToCustomModel({
       provider: provider({
         baseUrl: "https://openrouter.ai/api/v1",
+        enableCors: false,
         origin: { kind: "byok", catalogProviderId: "openrouter" },
       }),
       configuredModel: configuredModel(),
       apiKey: "key-123",
     });
-    const agentProvider = configuredModelToCustomModel({
-      provider: provider({ origin: { kind: "agent", agentType: "opencode" } }),
-      configuredModel: configuredModel(),
-      apiKey: null,
-    });
-
-    expect(customEndpoint.enableCors).toBe(true);
-    expect(catalogProvider.enableCors).toBeUndefined();
-    expect(agentProvider.enableCors).toBeUndefined();
+    expect(corsEnabled.enableCors).toBe(true);
+    expect(streaming.enableCors).toBe(false);
   });
 
   it("substitutes a placeholder key only for keyless providers", () => {

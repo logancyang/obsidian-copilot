@@ -159,7 +159,7 @@ A desktop app for running local models with a GUI.
 
 - **Default port**: 1234
 - **URL**: `http://localhost:1234/v1`
-- **Setup**: Install LM Studio, load a model, go to the Developer tab, click "Start Server", then add the model in Copilot
+- **Setup**: Install LM Studio, load a model, go to the Developer tab, enable CORS for streaming, click "Start Server", then add the model in Copilot. If server-side CORS is unavailable, turn on **Enable CORS** in the Copilot provider settings instead.
 - **No API key required**
 
 ### 3rd Party (OpenAI-Format)
@@ -169,7 +169,7 @@ For any API that follows the OpenAI API format. Useful for custom deployments, p
 - **Requires**: Base URL and optionally an API key
 - **Use when**: Your provider isn't in the list but speaks OpenAI-format
 
-> **CORS compatibility**: Copilot automatically uses Obsidian's CORS-free network path for custom and local OpenAI-compatible endpoints. No CORS toggle is required. Because this path waits for the complete HTTP response, these providers may show a reply all at once instead of token by token.
+> **CORS compatibility**: If the connection test succeeds but Quick Chat cannot send a message, edit the provider and turn on **Enable CORS**. This uses Obsidian's CORS-free network path, which waits for the complete response instead of streaming it token by token.
 
 ---
 

@@ -188,6 +188,18 @@ describe("ByokSetupApi.setupProvider", () => {
     expect(provider.apiKeyKeychainId).toBeNull();
   });
 
+  it("persists the provider's Quick Chat CORS choice (https://github.com/logancyang/obsidian-copilot-preview/issues/313)", async () => {
+    const result = await api.setupProvider({
+      providerType: "openai-compatible",
+      displayName: "Work endpoint",
+      baseUrl: "https://work.example.com/v1",
+      enableCors: true,
+      models: [{ id: "work-model", displayName: "Work model" }],
+    });
+
+    expect(providers.get(result.providerId)?.enableCors).toBe(true);
+  });
+
   it("respects the caller's `isEmbedding` flag when deciding auto-enrollment", async () => {
     const result = await api.setupProvider({
       providerType: "openai-compatible",

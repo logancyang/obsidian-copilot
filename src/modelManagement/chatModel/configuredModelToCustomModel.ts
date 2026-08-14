@@ -145,15 +145,10 @@ export function configuredModelToCustomModel(params: {
     baseUrl: provider.baseUrl,
     apiKey: resolvedApiKey,
     // https://github.com/logancyang/obsidian-copilot-preview/issues/313:
-    // custom endpoints can pass verification through requestUrl but fail chat
-    // when native fetch enforces browser CORS. Catalog-backed providers keep
-    // native fetch so their responses can stream incrementally.
-    enableCors:
-      provider.providerType === "openai-compatible" &&
-      provider.origin.kind === "byok" &&
-      provider.origin.catalogProviderId === undefined
-        ? true
-        : undefined,
+    // verification can pass through requestUrl while Quick Chat fails through
+    // native fetch. Preserve the user's explicit compatibility-versus-streaming
+    // choice when bridging the provider into the legacy chat runtime.
+    enableCors: provider.enableCors,
     capabilities,
     openAIOrgId: extraString(extras, "openAIOrgId"),
     azureOpenAIApiInstanceName: extraString(extras, "azureInstanceName"),
