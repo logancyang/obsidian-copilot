@@ -94,9 +94,9 @@ describe("getMiyoStatusSnapshot (initial)", () => {
 });
 
 describe("refreshMiyoStatus health mapping", () => {
-  it("maps a full healthy payload to per-capability available", async () => {
+  it("maps a full healthy payload with idle chat sync to per-capability available", async () => {
     mockFetchHealth.mockResolvedValue(
-      okHealth({ relay: { status: "connected" }, chat_sync: { configured: true, active: true } })
+      okHealth({ relay: { status: "connected" }, chat_sync: { configured: true, active: false } })
     );
     const store = loadStore();
     const snap = await store.refreshMiyoStatus();
@@ -105,6 +105,15 @@ describe("refreshMiyoStatus health mapping", () => {
     expect(snap.chatSync).toBe("available");
     expect(snap.documentProcessor).toBe("available");
     expect(snap.source).toBe("fresh");
+  });
+
+  it("reports unconfigured chat sync as unavailable", async () => {
+    mockFetchHealth.mockResolvedValue(
+      okHealth({ chat_sync: { configured: false, active: false } })
+    );
+    const store = loadStore();
+
+    expect((await store.refreshMiyoStatus()).chatSync).toBe("unavailable");
   });
 
   it("degrades only the connector when relay is absent (unknown, not off)", async () => {
