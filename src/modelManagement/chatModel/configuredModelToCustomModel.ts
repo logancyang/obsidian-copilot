@@ -144,6 +144,15 @@ export function configuredModelToCustomModel(params: {
     enabled: true,
     baseUrl: provider.baseUrl,
     apiKey: resolvedApiKey,
+    // Catalog-less BYOK endpoints have no browser-CORS contract. Route them
+    // through Obsidian's request layer automatically; catalog-backed providers
+    // keep native fetch so their responses can stream incrementally.
+    enableCors:
+      provider.providerType === "openai-compatible" &&
+      provider.origin.kind === "byok" &&
+      provider.origin.catalogProviderId === undefined
+        ? true
+        : undefined,
     capabilities,
     openAIOrgId: extraString(extras, "openAIOrgId"),
     azureOpenAIApiInstanceName: extraString(extras, "azureInstanceName"),
