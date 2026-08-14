@@ -95,13 +95,14 @@ function seedSkills(skills: Skill[]): void {
 function makeProvider(
   providerId: string,
   origin: ProviderOrigin,
-  overrides: Partial<Pick<Provider, "providerType" | "baseUrl" | "displayName">> = {}
+  overrides: Partial<Pick<Provider, "providerType" | "baseUrl" | "displayName" | "enableCors">> = {}
 ): Provider {
   return {
     providerId,
     providerType: overrides.providerType ?? "anthropic",
     displayName: overrides.displayName ?? providerId,
     baseUrl: overrides.baseUrl,
+    enableCors: overrides.enableCors,
     origin,
     addedAt: 0,
   };
@@ -404,6 +405,29 @@ describe("buildOpencodeConfig — provider/model injection", () => {
       provider: Record<string, { options?: { apiKey?: string } }>;
     };
     expect(cfg.provider["p-custom"].options?.apiKey).toBe("secret-key");
+  });
+
+  it("does not forward the Quick Chat CORS choice to OpenCode Agent (https://github.com/logancyang/obsidian-copilot-preview/issues/313)", async () => {
+    const provider = makeProvider(
+      "p-custom",
+      { kind: "byok" },
+      {
+        providerType: "openai-compatible",
+        baseUrl: "https://my-endpoint/v1",
+        displayName: "Custom",
+        enableCors: true,
+      }
+    );
+    const deps = makeDeps({
+      resolved: [okEntry(provider, makeModel("p-custom", "gpt-5.5"))],
+      keys: { "p-custom": "secret-key" },
+    });
+    const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
+      provider: Record<string, { options?: Record<string, unknown> }>;
+    };
+
+    expect(cfg.provider["p-custom"]).not.toHaveProperty("enableCors");
+    expect(cfg.provider["p-custom"].options).not.toHaveProperty("enableCors");
   });
 
   it("skips an OpenAI-compatible BYOK provider with no baseUrl", async () => {

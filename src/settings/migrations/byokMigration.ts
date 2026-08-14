@@ -190,6 +190,7 @@ interface ResolvedCandidate {
   mapping: LegacyProviderMapping;
   apiKey?: string;
   baseUrl?: string;
+  enableCors: boolean;
   extras?: Record<string, unknown>;
 }
 
@@ -218,7 +219,13 @@ function resolveCandidate(model: CustomModel, settings: CopilotSettings): Resolv
     if (!apiKey) return null; // key-based providers need a usable key
   }
 
-  return { mapping, apiKey, baseUrl, extras: buildExtras(model, settings, mapping.providerType) };
+  return {
+    mapping,
+    apiKey,
+    baseUrl,
+    enableCors: model.enableCors ?? false,
+    extras: buildExtras(model, settings, mapping.providerType),
+  };
 }
 
 function toModelInfo(model: CustomModel): ModelInfo {
@@ -227,9 +234,10 @@ function toModelInfo(model: CustomModel): ModelInfo {
 
 /**
  * Pure: legacy settings → BYOK provider-setup descriptors. Models are grouped
- * into one provider per `(providerType, catalogProviderId, baseUrl, apiKey)` so
- * distinct credentials become distinct provider instances; model ids are
- * de-duped within a group (last wins) to satisfy `bulkSet`.
+ * into one provider per
+ * `(providerType, catalogProviderId, baseUrl, apiKey, enableCors)` so distinct
+ * credentials and transport choices become distinct provider instances; model
+ * ids are de-duped within a group (last wins) to satisfy `bulkSet`.
  */
 export function planByokMigration(settings: CopilotSettings): SetupProviderInput[] {
   const groups = new Map<
@@ -240,13 +248,17 @@ export function planByokMigration(settings: CopilotSettings): SetupProviderInput
   for (const model of settings.activeModels ?? []) {
     const candidate = resolveCandidate(model, settings);
     if (!candidate) continue;
-    const { mapping, apiKey, baseUrl, extras } = candidate;
+    const { mapping, apiKey, baseUrl, enableCors, extras } = candidate;
 
+    // https://github.com/logancyang/obsidian-copilot-preview/issues/313:
+    // legacy models sharing an endpoint can carry different CORS choices, so
+    // keep them in separate providers instead of silently dropping one choice.
     const groupKey = [
       mapping.providerType,
       mapping.catalogProviderId ?? "",
       normalizeUrl(baseUrl),
       apiKey ?? "",
+      enableCors ? "cors" : "stream",
     ].join(" ");
 
     let group = groups.get(groupKey);
@@ -260,6 +272,7 @@ export function planByokMigration(settings: CopilotSettings): SetupProviderInput
         // legacy mapping is key-based. Persist it explicitly so the runtime
         // never re-infers from the endpoint.
         requiresApiKey: !mapping.requiresBaseUrl,
+        enableCors,
       };
       if (mapping.catalogProviderId) input.catalogProviderId = mapping.catalogProviderId;
       if (baseUrl) input.baseUrl = baseUrl;
@@ -281,7 +294,10 @@ export function planByokMigration(settings: CopilotSettings): SetupProviderInput
 
 /** A pre-existing BYOK provider equivalent to a planned descriptor (same
  *  identity: type + catalog id + base URL). Key is intentionally NOT part of
- *  the match — a keyless existing row still counts as "already present". */
+ *  the match — a keyless existing row still counts as "already present".
+ *  https://github.com/logancyang/obsidian-copilot-preview/issues/313: CORS is
+ *  also excluded so an already-migrated provider is left as-is rather than
+ *  duplicated when its legacy choice can no longer be recovered reliably. */
 function isDuplicateByok(provider: Provider, descriptor: SetupProviderInput): boolean {
   if (provider.origin.kind !== "byok") return false;
   return (
