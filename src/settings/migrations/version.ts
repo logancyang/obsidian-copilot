@@ -16,5 +16,6 @@
  *   6   → seed `docProcessorBackend` from effective Miyo state.
  *   7   → seed `enableMiyoSearchSkill` from persisted `enableMiyo` intent.
  *   8   → seed `copilotFolder` root so derived sub-folder accessors resolve.
+ *   9   → fold Codex's per-effort configured models into one row per base model.
  */
-export const CURRENT_SETTINGS_VERSION = 8;
+export const CURRENT_SETTINGS_VERSION = 9;

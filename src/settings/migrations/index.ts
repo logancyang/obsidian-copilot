@@ -14,9 +14,15 @@ import { DEFAULT_COPILOT_FOLDER } from "@/constants";
 import { logInfo } from "@/logger";
 import { seedDocProcessorBackend } from "@/miyo/miyoUtils";
 import type { ModelManagementApi } from "@/modelManagement";
-import { getSettings, normalizeRootFolders, setSettings } from "@/settings/model";
+import {
+  getSettings,
+  normalizeRootFolders,
+  setSettings,
+  updateAgentModeBackendFields,
+} from "@/settings/model";
 
 import { executeByokMigration } from "./byokMigration";
+import { planCodexModelIdCollapse } from "./codexModelIdMigration";
 import { planRequiresApiKeyBackfill } from "./requiresApiKeyMigration";
 import { CURRENT_SETTINGS_VERSION } from "./version";
 
@@ -88,6 +94,27 @@ export async function runSettingsMigrations(api: ModelManagementApi): Promise<vo
     // so they must get the flag too. WS-D still only prompts users who actually
     // customized a folder, so a default user is never shown the modal.
     setSettings({ upgradedToV8FromLegacy: true });
+  }
+
+  // v9: fold Codex's per-effort configured models (`gpt-5.6-sol[low]` …
+  // `[ultra]`) into one row per base model. Must run before agent/model
+  // discovery: once the codex codec reads the real `<base>[<effort>]` format,
+  // the first probe reports base ids and would otherwise prune every bracketed
+  // row the user's enabled set points at.
+  if (fromVersion < 9) {
+    const collapse = planCodexModelIdCollapse(getSettings());
+    if (collapse) {
+      setSettings({
+        configuredModels: collapse.configuredModels,
+        backends: {
+          ...getSettings().backends,
+          codex: { enabledModels: collapse.enabledModels },
+        },
+      });
+      if (collapse.defaultModel) {
+        updateAgentModeBackendFields("codex", { defaultModel: collapse.defaultModel });
+      }
+    }
   }
 
   // Bump unconditionally after the migrations so a per-provider failure can't
