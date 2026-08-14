@@ -126,7 +126,7 @@ describe("configuredModelToCustomModel", () => {
     expect(custom.baseUrl).toBe("https://api.example.com/v1");
   });
 
-  it("uses the CORS-free transport only for catalog-less BYOK OpenAI-compatible endpoints", () => {
+  it("uses the CORS-free transport only for catalog-less BYOK OpenAI-compatible endpoints (https://github.com/logancyang/obsidian-copilot-preview/issues/313)", () => {
     const customEndpoint = configuredModelToCustomModel({
       provider: provider({ baseUrl: "https://work.example.com/v1" }),
       configuredModel: configuredModel(),
