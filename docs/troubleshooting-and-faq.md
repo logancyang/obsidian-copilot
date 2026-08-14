@@ -299,7 +299,9 @@ The `copilot/` folder is your Copilot folder — the default root the plugin use
 - `skills/` — Agent skills
 - `projects/` — Project files
 
-You can rename this root in **Settings → Copilot → Basic → Copilot folder location**; all of the sub-folders above derive from it. The Copilot folder is automatically excluded from vault search to avoid cluttering results. If you change the root, the old folder is not moved for you and stays excluded from search permanently — any folder that has ever been your Copilot folder is kept out of search results even after you switch away from it.
+You can rename this root in **Settings → Copilot → Basic → Copilot folder location**; all of the sub-folders above derive from it. The Copilot folder is automatically excluded from Copilot search to avoid cluttering results. If you change the root, the old folder is not moved for you and stays excluded from Copilot search permanently — any folder that has ever been your Copilot folder is kept out of Copilot search results even after you switch away from it.
+
+You can select a folder that already contains Markdown files. Copilot will ask you to confirm because every Markdown file under that folder — including regular notes — will be excluded from Copilot search. This does not affect Obsidian's built-in search. Canceling the confirmation leaves your current Copilot folder unchanged.
 
 ### How do I switch modes?
 

@@ -21,7 +21,6 @@ import {
   applyCopilotRootChange,
   copilotRootContainsNotes,
   findCopilotRootFileConflict,
-  isKnownCopilotRoot,
 } from "@/settings/copilotRootChange";
 import {
   getSettings,
@@ -30,13 +29,14 @@ import {
   validateCopilotFolder,
 } from "@/settings/model";
 import { DesktopOnlySettingsPanel } from "@/settings/v2/components/DesktopOnlySettingsPanel";
+import { CopilotFolderChangeNotice } from "@/settings/v2/components/CopilotFolderChangeNotice";
 import { LegacyChatPromptsNotice } from "@/settings/v2/components/LegacyChatPromptsNotice";
 import { PlusSettings } from "@/settings/v2/components/PlusSettings";
 import { VaultInstructionsSetting } from "@/settings/v2/components/VaultInstructionsSetting";
 import { formatDateTime } from "@/utils";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { revealFolderInExplorer } from "@/utils/revealFolderInExplorer";
-import { Folder, FolderSync, Loader2 } from "lucide-react";
+import { Folder, Loader2 } from "lucide-react";
 import { Notice } from "obsidian";
 import React, { useEffect, useMemo, useState } from "react";
 
@@ -62,29 +62,6 @@ const AgentsSection: React.FC = () => {
     </React.Suspense>
   );
 };
-
-/**
- * Body of the "Change Copilot folder" confirmation modal. Leads with a
- * folder-sync icon header, then states the two things the user must know before
- * committing: files are not moved, and the old root stays permanently excluded
- * from search.
- */
-function CopilotFolderChangeNotice({ oldRoot, newRoot }: { oldRoot: string; newRoot: string }) {
-  return (
-    <div className="tw-flex tw-flex-col tw-gap-4">
-      <div className="tw-flex tw-items-center tw-gap-3 tw-text-normal">
-        <FolderSync className="tw-size-6 tw-shrink-0 tw-text-accent" />
-        <h2 className="tw-m-0 tw-text-xl tw-font-bold">Change Copilot folder</h2>
-      </div>
-      <p className="tw-m-0 tw-text-muted">
-        Copilot will keep new chats and data under <code>{newRoot}/</code>. Your files aren&apos;t
-        moved — your old data stays in <strong className="tw-text-normal">{oldRoot}/</strong>, which
-        stays permanently excluded from search. Move it over if you want; Obsidian updates the
-        links.
-      </p>
-    </div>
-  );
-}
 
 export const BasicSettings: React.FC = () => {
   const app = useApp();
@@ -175,21 +152,10 @@ export const BasicSettings: React.FC = () => {
       );
       return;
     }
-    // Reason: a root that already holds ordinary notes would be excluded from
-    // search wholesale once activated, silently hiding those notes. A root
-    // Copilot used before is exempt — its only Markdown is Copilot's own
-    // leftover data (chats/memory/prompts), and it stays QA-excluded via
-    // history, so re-activating it hides nothing new.
-    if (
-      !isKnownCopilotRoot(folder, settings.copilotRootHistory) &&
-      copilotRootContainsNotes(app, folder)
-    ) {
-      new Notice(
-        `"${folder}" already contains notes. Choose a folder that isn't used for regular notes, otherwise those notes would be excluded from search.`,
-        8000
-      );
-      return;
-    }
+    // Existing Markdown is allowed, but activating the root will exclude all of
+    // it from Copilot search. Put that lasting consequence in the confirmation
+    // instead of silently accepting or rejecting the user's explicit choice.
+    const containsMarkdown = copilotRootContainsNotes(app, folder);
     new ConfirmModal(
       app,
       () => {
@@ -223,9 +189,13 @@ export const BasicSettings: React.FC = () => {
           .then(() => new Notice(`Copilot folder changed to "${folder}".`, 4000))
           .catch(() => new Notice("Failed to change the Copilot folder. Check the logs.", 5000));
       },
-      <CopilotFolderChangeNotice oldRoot={persistedRoot} newRoot={folder} />,
+      <CopilotFolderChangeNotice
+        oldRoot={persistedRoot}
+        newRoot={folder}
+        containsMarkdown={containsMarkdown}
+      />,
       "",
-      "Change folder",
+      containsMarkdown ? "Use folder" : "Change folder",
       "Cancel",
       () => setFolderDraft(persistedRoot)
     ).open();
