@@ -34,7 +34,7 @@ export const CopilotFolderChangeNotice: React.FC<CopilotFolderChangeNoticeProps>
       {containsMarkdown && (
         <div
           className={cn(
-            "tw-border-warning tw-flex tw-items-start tw-gap-2 tw-rounded-lg tw-border tw-border-solid",
+            "tw-flex tw-items-start tw-gap-2 tw-rounded-lg tw-border tw-border-solid tw-border-warning/40",
             "tw-bg-secondary tw-px-3 tw-py-2.5 tw-text-xs tw-text-normal"
           )}
           role="alert"
