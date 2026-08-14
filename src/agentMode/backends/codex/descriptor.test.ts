@@ -1,6 +1,7 @@
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import { translateBackendState } from "@/agentMode/session/translateBackendState";
 import type {
+  BackendConfigOption,
   BackendState,
   EffortOption,
   PermissionOption,
@@ -45,7 +46,7 @@ const SOL_EFFORTS: EffortOption[] = ["low", "medium", "high", "xhigh", "max", "u
 /**
  * Transcribed from a live `codex-acp@1.1.10` `session/new` reply: one entry per
  * (base model × effort) pair, addressed as `<base>[<effort>]`, with a different
- * effort set per model.
+ * effort set per model and a blurb describing that one effort.
  */
 const ADVERTISED_CATALOG: RawModelState = {
   currentModelId: "gpt-5.6-sol[high]",
@@ -53,15 +54,34 @@ const ADVERTISED_CATALOG: RawModelState = {
     ...["low", "medium", "high", "xhigh", "max", "ultra"].map((effort) => ({
       modelId: `gpt-5.6-sol[${effort}]`,
       name: `GPT-5.6-Sol (${effort})`,
-      description: "Latest frontier agentic coding model.",
+      description: `Latest frontier agentic coding model. Reasoning depth: ${effort}`,
     })),
     ...["low", "medium", "high", "xhigh"].map((effort) => ({
       modelId: `gpt-5.5[${effort}]`,
       name: `GPT-5.5 (${effort})`,
-      description: "Frontier model for complex coding, research, and real-world work.",
+      description: `Frontier model for complex coding. Reasoning depth: ${effort}`,
     })),
   ],
 };
+
+/** The `category:"model"` option the same reply carries, listing base models only. */
+const ADVERTISED_CONFIG_OPTIONS: BackendConfigOption[] = [
+  {
+    id: "model",
+    type: "select",
+    category: "model",
+    name: "Model",
+    currentValue: "gpt-5.6-sol",
+    options: [
+      {
+        value: "gpt-5.6-sol",
+        name: "GPT-5.6-Sol",
+        description: "Latest frontier agentic coding model.",
+      },
+      { value: "gpt-5.5", name: "GPT-5.5", description: "Frontier model for complex coding." },
+    ],
+  },
+];
 
 describe("descriptor", () => {
   describe("CodexBackendDescriptor", () => {
@@ -124,6 +144,19 @@ describe("descriptor", () => {
         // The same catalog gives gpt-5.5 no `max`/`ultra` — availability is
         // per-model, never a vocabulary Copilot applies uniformly.
         expect(efforts("gpt-5.5")).toEqual(["low", "medium", "high", "xhigh"]);
+      });
+
+      it("describes a collapsed row with the base model's blurb, not the first variant's", () => {
+        const state = translateBackendState(
+          { models: ADVERTISED_CATALOG, modes: null, configOptions: ADVERTISED_CONFIG_OPTIONS },
+          CodexBackendDescriptor
+        );
+
+        // Without the config option the row would inherit `[low]`'s blurb —
+        // "Fast responses with lighter reasoning" on a row spanning low→ultra.
+        expect(
+          state.model?.availableModels.find((e) => e.baseModelId === "gpt-5.6-sol")?.description
+        ).toBe("Latest frontier agentic coding model.");
       });
 
       it("reports the agent's active model and effort as the current selection", () => {
