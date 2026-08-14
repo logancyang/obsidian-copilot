@@ -311,6 +311,21 @@ describe("ProviderRegistry", () => {
       expect(listener).toHaveBeenCalledTimes(6);
     });
 
+    it("does not notify Agent consumers for a Quick Chat-only CORS update (https://github.com/logancyang/obsidian-copilot-preview/issues/313)", async () => {
+      const id = await registry.add({
+        providerType: "openai-compatible",
+        displayName: "Work endpoint",
+        origin: { kind: "byok" },
+      });
+      const listener = jest.fn();
+      registry.subscribe(listener);
+
+      await registry.update(id, { enableCors: true });
+
+      expect(registry.get(id)?.enableCors).toBe(true);
+      expect(listener).not.toHaveBeenCalled();
+    });
+
     // Regression: keychain writes must complete before #emit() fires.
     // Otherwise subscribers reading apiKey inside their listener (e.g. the
     // opencode-restart wiring re-reading provider creds) would observe the

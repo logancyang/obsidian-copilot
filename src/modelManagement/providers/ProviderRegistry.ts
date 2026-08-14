@@ -187,12 +187,22 @@ export class ProviderRegistry {
     delete safePatch.apiKeyKeychainId;
     delete safePatch.providerType;
     delete safePatch.origin;
+    for (const key of Object.keys(safePatch)) {
+      if (Object.is(existing[key as keyof Provider], safePatch[key])) {
+        delete safePatch[key];
+      }
+    }
     if (Object.keys(safePatch).length === 0) return;
+    // https://github.com/logancyang/obsidian-copilot-preview/issues/313:
+    // enableCors selects only Quick Chat's renderer transport. Do not restart
+    // OpenCode Agent for a CORS-only edit; the settings subscription already
+    // rebuilds Quick Chat with the updated provider row.
+    const affectsAgentProviderConfig = Object.keys(safePatch).some((key) => key !== "enableCors");
     const next: Provider = { ...existing, ...(safePatch as Partial<Provider>) };
     setSettings((cur) => ({
       providers: { ...cur.providers, [providerId]: next },
     }));
-    this.#emit();
+    if (affectsAgentProviderConfig) this.#emit();
   }
 
   /** Internal: writes `apiKeyKeychainId` on the row. Bypasses the public
