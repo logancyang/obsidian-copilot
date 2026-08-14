@@ -15,10 +15,10 @@ const VALID_TODOS = [
 ];
 
 const testAcpNotificationToEvents = () => {
-  it("carries a user message chunk through instead of the unknown-discriminant title reset", () => {
-    // opencode echoes the prompt on every live turn. Without its own case this
-    // lands on the fallback, which synthesizes a titleless `session_info_update`
-    // — and a backend whose titles are trusted then clears the chat's label.
+  it("drops a user message chunk instead of reporting it as a titleless session update", () => {
+    // A backend may echo the prompt on every live turn. Translating it would reach
+    // the unknown-discriminant fallback, which reports a titleless session
+    // update — and a backend whose titles are trusted then clears the label.
     const events = acpNotificationToEvents(
       notification({
         sessionUpdate: "user_message_chunk",
@@ -26,12 +26,7 @@ const testAcpNotificationToEvents = () => {
       })
     );
 
-    expect(events).toHaveLength(1);
-    expect(events[0].update).toEqual({
-      sessionUpdate: "user_message_chunk",
-      content: { type: "text", text: "hi" },
-      messageId: undefined,
-    });
+    expect(events).toEqual([]);
   });
 
   it("appends a plan event after a todowrite tool_call carrying rawInput.todos", () => {

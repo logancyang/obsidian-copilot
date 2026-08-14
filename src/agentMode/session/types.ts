@@ -512,7 +512,6 @@ export interface PlanSummary {
  * model/mode/configOption deltas, so consumers don't see raw catalog shapes.
  */
 export type SessionUpdate =
-  | { sessionUpdate: "user_message_chunk"; content: PromptContent; messageId?: string }
   | { sessionUpdate: "agent_message_chunk"; content: PromptContent; messageId?: string }
   | { sessionUpdate: "agent_thought_chunk"; content: PromptContent; messageId?: string }
   | ({ sessionUpdate: "tool_call" } & ToolCallSnapshot)
