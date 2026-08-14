@@ -217,12 +217,15 @@ describe("model", () => {
   describe("resetSettings()", () => {
     it("keeps top-level, per-model, provider credentials, and configured models reachable after a reload", async () => {
       const keychainStore = new Map<string, string>();
-      const { settingsModel, persistenceModule, seedSettings } = await loadModule({
+      const { settingsModel, persistenceModule, keychain, seedSettings } = await loadModule({
         keychainStore,
       });
 
+      // Reason: must be valid 8-hex or the loader silently ignores it and falls
+      // back to the mock's "vault1234" — masking whether the persisted
+      // namespace actually round-trips.
       seedSettings({
-        _keychainVaultId: "vault1234",
+        _keychainVaultId: "a1b2c3d4",
         openAIApiKey: "sk-top-level",
         providers: {
           byok_openai: makeProvider({
@@ -258,6 +261,10 @@ describe("model", () => {
         savedToDisk = structuredClone(data);
       });
 
+      // The keychain namespace survives reset: `setSettings` merges rather
+      // than replaces, and neither DEFAULT_SETTINGS nor the preserved slices
+      // carry the key, so the pre-reset value flows through to disk untouched.
+      expect(savedToDisk?._keychainVaultId).toBe("a1b2c3d4");
       // data.json must never carry the plaintext in keychain-only mode.
       expect(savedToDisk?.openAIApiKey).toBe("");
       expect(savedToDisk?.activeModels.find((m) => m.name === "custom-gpt")?.apiKey).toBe("");
@@ -268,6 +275,10 @@ describe("model", () => {
         noLegacyBackup
       );
 
+      // Reload adopted the persisted namespace, not the getVaultId() fallback
+      // ("vault1234") — proving preserved keys stay addressable under their
+      // original vault id.
+      expect(keychain.setVaultId).toHaveBeenCalledWith("a1b2c3d4");
       expect(reloaded.openAIApiKey).toBe("sk-top-level");
       expect(reloaded.activeModels.find((m) => m.name === "custom-gpt")?.apiKey).toBe(
         "sk-model-key"
@@ -286,7 +297,7 @@ describe("model", () => {
 
       const builtin = BUILTIN_CHAT_MODELS[0];
       seedSettings({
-        _keychainVaultId: "vault1234",
+        _keychainVaultId: "a1b2c3d4",
         activeModels: [
           makeModel({
             name: builtin.name,

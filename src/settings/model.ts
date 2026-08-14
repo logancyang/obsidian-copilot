@@ -828,6 +828,13 @@ function preserveConfiguredModelsForProviders(
  * Preserving the rows above is what makes that note safe: the keychain entries
  * this function deliberately leaves behind stay reachable, instead of becoming
  * orphans no surviving pointer names.
+ *
+ * DESIGN NOTE — `_keychainVaultId` needs no entry in the preserved lists.
+ * `setSettings` merges (`{ ...prev, ...partial }`), and neither
+ * `DEFAULT_SETTINGS` nor the preserved slices carry that key, so the
+ * pre-reset keychain namespace flows through reset untouched; the
+ * reset → persist → reload integration test asserts it survives to disk.
+ * If a future review flags this again, point them at this note.
  */
 export function resetSettings(): void {
   const current = getSettings();
