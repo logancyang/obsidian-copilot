@@ -253,15 +253,13 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     openSourceFile: handleOpenSourceFile,
   } = useAgentHistoryControls(manager, plugin, activeProjectId);
 
-  // One wrapper instance for both landing shelves. GlobalRecentChatsSection
-  // refreshes in an effect keyed to `onLoadHistory`, and a completed load
-  // stores a fresh items array that re-renders this component — so a wrapper
-  // built per render would re-arm that effect with its own result and loop
-  // until the tab unmounts.
-  const handleLoadChatHistorySafely = useMemo(
-    () => safeAsyncHandler(handleLoadChatHistory),
-    [handleLoadChatHistory]
-  );
+  // GlobalRecentChatsSection refreshes in an effect keyed to `onLoadHistory`,
+  // and a completed load stores a fresh items array that re-renders this
+  // component — so this wrapper must not change identity per render, or the
+  // effect re-arms with its own result and loops until the tab unmounts.
+  // `safeAsyncHandler` keeps one wrapper per handler identity, which holds here
+  // because `handleLoadChatHistory` only changes with the scope.
+  const handleLoadChatHistorySafely = safeAsyncHandler(handleLoadChatHistory);
 
   // Recent-list rows show a spinner for any chat whose backend turn is still
   // running in the background (the session keeps streaming when its tab is

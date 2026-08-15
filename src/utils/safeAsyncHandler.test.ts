@@ -51,6 +51,43 @@ describe("safeAsyncHandler", () => {
       expect(mockedLogError).not.toHaveBeenCalled();
     });
 
+    it("returns the same wrapper for a handler it has already adapted", () => {
+      const handler = async () => undefined;
+
+      expect(safeAsyncHandler(handler)).toBe(safeAsyncHandler(handler));
+    });
+
+    it("returns a distinct wrapper per handler, so two handlers never share one", () => {
+      const first = async () => "first";
+      const second = async () => "second";
+
+      expect(safeAsyncHandler(first)).not.toBe(safeAsyncHandler(second));
+    });
+
+    it("forwards to the original handler when the wrapper is served from the cache", async () => {
+      const handler = jest.fn(async (id: string) => id);
+      safeAsyncHandler(handler);
+
+      safeAsyncHandler(handler)("chat-1");
+
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(handler).toHaveBeenCalledWith("chat-1");
+    });
+
+    it("logs rejections through a cached wrapper as it does through a fresh one", async () => {
+      const failure = new Error("load failed");
+      const handler = async () => {
+        throw failure;
+      };
+      safeAsyncHandler(handler);
+
+      safeAsyncHandler(handler)();
+      await Promise.resolve();
+
+      expect(mockedLogError).toHaveBeenCalledTimes(1);
+      expect(mockedLogError).toHaveBeenCalledWith(expect.any(String), failure);
+    });
+
     it("handles each invocation independently, logging every rejection", async () => {
       let calls = 0;
       const wrapped = safeAsyncHandler(async () => {

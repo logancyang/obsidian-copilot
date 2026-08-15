@@ -790,16 +790,6 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
   // Note: pendingMessages loading has been removed as ChatManager now handles
   // message persistence and loading automatically based on project context
 
-  // Built once per underlying handler: ChatMessages is memoized on shallow prop
-  // equality, so a wrapper allocated inline would remap and rerender the whole
-  // message list on every composer keystroke.
-  const handleRegenerateSafely = useMemo(
-    () => safeAsyncHandler(handleRegenerate),
-    [handleRegenerate]
-  );
-  const handleEditSafely = useMemo(() => safeAsyncHandler(handleEdit), [handleEdit]);
-  const handleDeleteSafely = useMemo(() => safeAsyncHandler(handleDelete), [handleDelete]);
-
   const renderChatComponents = () => (
     <>
       <div className="tw-flex tw-size-full tw-flex-col tw-overflow-hidden">
@@ -811,9 +801,9 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
           loading={loading}
           loadingMessage={loadingMessage}
           app={app}
-          onRegenerate={handleRegenerateSafely}
-          onEdit={handleEditSafely}
-          onDelete={handleDeleteSafely}
+          onRegenerate={safeAsyncHandler(handleRegenerate)}
+          onEdit={safeAsyncHandler(handleEdit)}
+          onDelete={safeAsyncHandler(handleDelete)}
           onReplaceChat={setInputMessage}
           showHelperComponents
         />

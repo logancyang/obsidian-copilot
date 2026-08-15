@@ -416,11 +416,11 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
     [onOpenSourceFile]
   );
 
-  // Built once, not per row: wrapping inside the render map would hand every
-  // row a fresh `onOpen` on each keystroke of the search/rename fields and
-  // defeat RecentChatRow's memo, which the surrounding props go out of their
-  // way to preserve.
-  const handleOpen = useMemo(() => safeAsyncHandler(onLoadChat), [onLoadChat]);
+  // Stable across renders because `safeAsyncHandler` keeps one wrapper per
+  // handler identity — RecentChatRow's memo, which the surrounding props go out
+  // of their way to preserve, would otherwise break on every keystroke of the
+  // search and rename fields.
+  const handleOpen = safeAsyncHandler(onLoadChat);
 
   // Stable references so the memoized rows aren't all re-rendered on every
   // section render (an inline arrow here would defeat RecentChatRow's memo).
