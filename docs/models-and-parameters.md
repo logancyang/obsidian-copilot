@@ -53,8 +53,9 @@ stays with the current agent.
 
 A model or effort picked beside the message box applies to that chat; it does
 not replace the saved **Default model** or **Default effort**. Saved agent
-defaults are used for new chats and multi-agent answers. If you change a saved
-default while a chat is open, that chat adopts it on its next turn.
+defaults are used for new chats and multi-agent answers. Changes to an explicit
+default apply to open chats on their next turn; choosing **Agent default**
+leaves open chats unchanged.
 
 In **Quick Chat**, the picker shows only enabled **Quick Chat models**. Its
 **Default model** is the model new Quick Chat conversations start with.
