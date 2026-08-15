@@ -274,8 +274,7 @@ export class ChatManager {
       );
 
       // Create the message with initial content
-      const currentRepo = this.messageRepo;
-      const messageId = currentRepo.addMessage(
+      const messageId = this.messageRepo.addMessage(
         displayText,
         displayText, // Will be updated with processed content
         USER_SENDER,
@@ -289,7 +288,7 @@ export class ChatManager {
       }
 
       // Get the message for context processing
-      const message = currentRepo.getMessage(messageId);
+      const message = this.messageRepo.getMessage(messageId);
       if (!message) {
         throw new Error(`Failed to retrieve message ${messageId}`);
       }
@@ -307,14 +306,14 @@ export class ChatManager {
         chainType,
         includeActiveNote,
         activeNote,
-        currentRepo, // Pass MessageRepository for L2 building
+        this.messageRepo, // Pass MessageRepository for L2 building
         systemPrompt,
         systemPromptIncludedFiles,
         updateLoadingMessage
       );
 
       // Update the processed content
-      currentRepo.updateProcessedText(messageId, processedContent, contextEnvelope);
+      this.messageRepo.updateProcessedText(messageId, processedContent, contextEnvelope);
 
       logInfo(`[ChatManager] Successfully sent message ${messageId}`);
       return messageId;
@@ -344,8 +343,7 @@ export class ChatManager {
       logInfo(`[ChatManager] Editing message ${messageId}: "${newText}"`);
 
       // Edit the message text only - context remains unchanged (see design note above)
-      const currentRepo = this.messageRepo;
-      const editSuccess = currentRepo.editMessage(messageId, newText);
+      const editSuccess = this.messageRepo.editMessage(messageId, newText);
       if (!editSuccess) {
         return false;
       }
@@ -357,7 +355,7 @@ export class ChatManager {
       await this.contextManager.reprocessMessageContext(
         this.plugin.app,
         messageId,
-        currentRepo,
+        this.messageRepo,
         this.fileParserManager,
         this.plugin.app.vault,
         chainType,
@@ -391,15 +389,14 @@ export class ChatManager {
       logInfo(`[ChatManager] Regenerating message ${messageId}`);
 
       // Find the message to regenerate
-      const currentRepo = this.messageRepo;
-      const message = currentRepo.getMessage(messageId);
+      const message = this.messageRepo.getMessage(messageId);
       if (!message) {
         logInfo(`[ChatManager] Message not found: ${messageId}`);
         return false;
       }
 
       // Find the corresponding user message (should be the previous message)
-      const displayMessages = currentRepo.getDisplayMessages();
+      const displayMessages = this.messageRepo.getDisplayMessages();
       const messageIndex = displayMessages.findIndex((msg) => msg.id === messageId);
 
       if (messageIndex <= 0) {
@@ -414,7 +411,7 @@ export class ChatManager {
       }
 
       // Truncate messages after the user message
-      currentRepo.truncateAfter(messageIndex - 1);
+      this.messageRepo.truncateAfter(messageIndex - 1);
 
       // Notify that truncation happened
       if (onTruncate) {
@@ -430,7 +427,7 @@ export class ChatManager {
         return false;
       }
 
-      let llmMessage = currentRepo.getLLMMessage(userMessage.id);
+      let llmMessage = this.messageRepo.getLLMMessage(userMessage.id);
       if (!llmMessage) {
         logInfo(`[ChatManager] LLM message not found for regeneration`);
         return false;
@@ -447,7 +444,7 @@ export class ChatManager {
         await this.contextManager.reprocessMessageContext(
           this.plugin.app,
           userMessage.id,
-          currentRepo,
+          this.messageRepo,
           this.fileParserManager,
           this.plugin.app.vault,
           chainType,
@@ -457,7 +454,7 @@ export class ChatManager {
           systemPromptIncludedFiles
         );
         // Re-fetch the LLM message with the newly created envelope
-        llmMessage = currentRepo.getLLMMessage(userMessage.id)!;
+        llmMessage = this.messageRepo.getLLMMessage(userMessage.id)!;
       }
 
       // Run the chain to regenerate the response
@@ -485,8 +482,7 @@ export class ChatManager {
     try {
       logInfo(`[ChatManager] Deleting message ${messageId}`);
 
-      const currentRepo = this.messageRepo;
-      const deleteSuccess = currentRepo.deleteMessage(messageId);
+      const deleteSuccess = this.messageRepo.deleteMessage(messageId);
       if (!deleteSuccess) {
         return false;
       }
@@ -506,8 +502,7 @@ export class ChatManager {
    * Add a message
    */
   addMessage(message: ChatMessage): string {
-    const currentRepo = this.messageRepo;
-    const messageId = currentRepo.addMessage(message);
+    const messageId = this.messageRepo.addMessage(message);
     return messageId;
   }
 
@@ -515,8 +510,7 @@ export class ChatManager {
    * Clear all messages
    */
   clearMessages(): void {
-    const currentRepo = this.messageRepo;
-    currentRepo.clear();
+    this.messageRepo.clear();
     // Clear chain memory directly (fire-and-forget; errors are logged but do not block UI)
     void this.chainManager.memoryManager
       .clearChatMemory()
@@ -528,8 +522,7 @@ export class ChatManager {
    * Truncate messages after a specific message ID
    */
   async truncateAfterMessageId(messageId: string): Promise<void> {
-    const currentRepo = this.messageRepo;
-    currentRepo.truncateAfterMessageId(messageId);
+    this.messageRepo.truncateAfterMessageId(messageId);
 
     // Update chain memory after truncation
     await this.updateChainMemory();
@@ -541,32 +534,28 @@ export class ChatManager {
    * Get display messages for UI
    */
   getDisplayMessages(): ChatMessage[] {
-    const currentRepo = this.messageRepo;
-    return currentRepo.getDisplayMessages();
+    return this.messageRepo.getDisplayMessages();
   }
 
   /**
    * Get LLM messages for AI communication
    */
   getLLMMessages(): ChatMessage[] {
-    const currentRepo = this.messageRepo;
-    return currentRepo.getLLMMessages();
+    return this.messageRepo.getLLMMessages();
   }
 
   /**
    * Get a specific message by ID (display version)
    */
   getMessage(id: string): ChatMessage | undefined {
-    const currentRepo = this.messageRepo;
-    return currentRepo.getMessage(id);
+    return this.messageRepo.getMessage(id);
   }
 
   /**
    * Get a specific message for LLM processing
    */
   getLLMMessage(id: string): ChatMessage | undefined {
-    const currentRepo = this.messageRepo;
-    return currentRepo.getLLMMessage(id);
+    return this.messageRepo.getLLMMessage(id);
   }
 
   /**
@@ -574,8 +563,7 @@ export class ChatManager {
    */
   private async updateChainMemory(): Promise<void> {
     try {
-      const currentRepo = this.messageRepo;
-      const llmMessages = currentRepo.getLLMMessages();
+      const llmMessages = this.messageRepo.getLLMMessages();
       await updateChatMemory(llmMessages, this.chainManager.memoryManager);
       logInfo(`[ChatManager] Updated chain memory with ${llmMessages.length} messages`);
     } catch (error) {
@@ -587,10 +575,9 @@ export class ChatManager {
    * Load messages from saved chat
    */
   async loadMessages(messages: ChatMessage[]): Promise<void> {
-    const currentRepo = this.messageRepo;
-    currentRepo.clear();
+    this.messageRepo.clear();
     messages.forEach((msg) => {
-      currentRepo.addMessage(msg);
+      this.messageRepo.addMessage(msg);
     });
 
     // Update chain memory with loaded messages
@@ -634,9 +621,8 @@ export class ChatManager {
     const messages = await this.persistenceManager.loadChat(file);
 
     // Add messages to the current repository
-    const currentRepo = this.messageRepo;
     for (const message of messages) {
-      currentRepo.addMessage(message);
+      this.messageRepo.addMessage(message);
     }
 
     // Update chain memory with loaded messages
