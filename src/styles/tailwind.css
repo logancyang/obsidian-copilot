@@ -890,29 +890,6 @@ If your plugin does not need CSS, delete this file.
   opacity: 1;
 }
 
-/* Maybe ob's error removed the hierarchy, so add hierarchy to the modal box on mobile for now */
-.is-phone .modal .modal-close-button {
-  z-index: var(--layer-modal);
-}
-
-/* Editor mode for mobile - legacy (no bottom navbar): minimal padding */
-body.is-mobile
-  .workspace-tab-container
-  :is(
-    .workspace-leaf-content[data-type="copilot-chat-view"],
-    .workspace-leaf-content[data-type="copilot-agent-chat-view"],
-    .workspace-leaf-content[data-type="copilot-component-gallery"]
-  )
-  .view-content {
-  padding-bottom: var(--size-4-1) !important;
-}
-
-/* Hide drawer header and tab-options when keyboard is open in Copilot's drawer */
-body.is-mobile .workspace-drawer.copilot-keyboard-open .workspace-drawer-header,
-body.is-mobile .workspace-drawer.copilot-keyboard-open .workspace-drawer-tab-options {
-  display: none !important;
-}
-
 /* Collapsible sources styling */
 .copilot-sources {
   margin-top: var(--size-4-1);
@@ -1024,11 +1001,6 @@ body.is-mobile .workspace-drawer.copilot-keyboard-open .workspace-drawer-tab-opt
 }
 .copilot-citation-link:hover {
   text-decoration: underline;
-}
-
-/* fix the width of the popover on mobile */
-body.is-mobile div[data-radix-popper-content-wrapper] {
-  min-width: fit-content !important;
 }
 
 /* Copilot Cross Spinner Animation
