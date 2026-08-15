@@ -271,15 +271,6 @@ export class ChatOpenRouter extends ChatOpenAI {
         } as OpenRouterMessageParam;
       }
 
-      // Raw OpenAI-format tool_calls carried through additional_kwargs
-      if (msg.additional_kwargs?.tool_calls) {
-        return {
-          role: mappedRole,
-          content: msg.content,
-          tool_calls: msg.additional_kwargs.tool_calls,
-        } as OpenRouterMessageParam;
-      }
-
       return {
         role: mappedRole,
         content: msg.content,
@@ -305,10 +296,6 @@ export class ChatOpenRouter extends ChatOpenAI {
     const toolCallChunks = this.extractToolCallChunks(delta.tool_calls);
 
     const additionalKwargs: Record<string, unknown> = {};
-
-    if (Array.isArray(delta.tool_calls)) {
-      additionalKwargs.tool_calls = delta.tool_calls;
-    }
 
     const deltaPayload: Record<string, unknown> = {};
     if (reasoningText) {
