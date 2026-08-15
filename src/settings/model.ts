@@ -994,11 +994,10 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
     sanitizedSettings.chatHistorySortStrategy = DEFAULT_SETTINGS.chatHistorySortStrategy;
   }
 
-  // A vault last used while Quick Chat still had a Projects mode persisted
-  // `defaultChainType: "project"`, and Obsidian Sync can carry that value to a
-  // device that never saw the mode. Coercing it here — rather than at the
-  // dropdown — means chain construction never sees a retired member and throws
-  // "Unsupported chain type" before the user can pick anything.
+  // Fall back when the persisted chain type isn't one this build offers. A vault
+  // last used with Quick Chat's Projects mode still holds "project" here, and
+  // chain construction would throw "Unsupported chain type" on it before the
+  // user could pick anything else.
   // https://github.com/logancyang/obsidian-copilot-preview/issues/310
   if (!Object.values(ChainType).includes(sanitizedSettings.defaultChainType)) {
     sanitizedSettings.defaultChainType = DEFAULT_SETTINGS.defaultChainType;
