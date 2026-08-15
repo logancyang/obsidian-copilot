@@ -12,6 +12,7 @@ The safety rule is simple: review compliance must not change plugin behavior, pe
 - Forbidden source suppressions were replaced with types or narrower boundaries, not runtime rewrites.
 - The OpenCode Default effort row stays mounted. Unsupported models disable it with “Not supported” so the model list never shifts.
 - Safe element-owned DOM creation was migrated to Obsidian helpers. Provider networking, async handlers, document-owned DOM creation, settings search, and risky CSS warnings were deliberately not rewritten by this stack.
+- `src/logger.ts` is the only console boundary, and it calls only the methods upstream's `no-console` allows: `debug`, `warn`, `error`. Reaching for `console.log` or `console.table` there is not an option, because the upstream config also bans disabling `no-console` through `eslint-comments/no-restricted-disable`. `console.debug` is in the repo's own `no-restricted-syntax` logging boundary so callers cannot route around `logInfo()`.
 - Type-aware ESLint rules are switched off for every file that is not `.ts`/`.tsx`, scoped by excluding TypeScript rather than by listing non-TypeScript extensions. `eslint-plugin-obsidianmd` decides which files its type-aware rules apply to and that selection differs between versions, so an extension list falls out of date silently. A type-aware rule reaching an untyped target such as `manifest.json` or `LICENSE` fails to load, and ESLint aborts the whole gate rather than reporting findings.
 
 ## Gate stages

@@ -124,6 +124,10 @@ const restrictedConsoleCalls = [
     selector: "CallExpression[callee.object.name='console'][callee.property.name='error']",
     message: "Use logError() from '@/logger' instead of console.error().",
   },
+  {
+    selector: "CallExpression[callee.object.name='console'][callee.property.name='debug']",
+    message: "Use logInfo() from '@/logger' instead of console.debug().",
+  },
 ];
 
 export default [
