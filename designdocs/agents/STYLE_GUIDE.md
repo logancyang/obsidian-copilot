@@ -61,6 +61,13 @@ carry the **why** — the things a reader cannot recover by reading the code.
 - **Comment the why, not the what.** Document non-obvious constraints,
   invariants, gotchas, and "why this exists / why not the obvious alternative".
   If a comment only restates what the next line plainly says, delete it.
+- **Write comments for a first-time reader of the current code.** A comment must
+  make sense without the PR, review discussion, or knowledge of an earlier
+  implementation. Explain the current invariant or constraint; do not narrate
+  what this change added, removed, preserved, or intentionally stopped doing.
+  Put change history in the PR description. When backward compatibility is
+  part of the current runtime contract, describe the persisted state being
+  supported and why that support is currently necessary.
 - **Document exported functions and public methods of exported classes when the
   contract is not self-evident.** JSDoc is optional for a simple callable whose
   purpose and parameters are already unambiguous. When JSDoc is needed, explain

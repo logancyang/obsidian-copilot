@@ -1,19 +1,14 @@
 /**
  * Device-local UI preferences for the Agent Home shelf, persisted via
  * Obsidian's vault-scoped `App.loadLocalStorage` / `App.saveLocalStorage`
- * (which never sync). Mirrors the storage idiom in `deviceId.ts`: every access
- * is wrapped in try/catch, reads return a safe default on failure, and writes
- * swallow errors so a broken-storage device (disabled / restricted) never
- * crashes the UI — it just loses persistence.
+ * (which never sync).
  *
  * These are intentionally device-local: which shelf tab you last viewed and
  * whether you dismissed the pop-out hint are per-device UI state, not content
  * that should ride a synced `data.json` to your other devices.
  *
- * Legacy raw values intentionally reset instead of being migrated: these are
- * cosmetic preferences, so preserving them does not justify extending the raw
- * storage migration needed for device identity.
- * https://github.com/logancyang/obsidian-copilot-preview/issues/298
+ * Storage failures are non-fatal: reads return a safe default and writes are
+ * ignored so unavailable storage cannot crash the UI.
  */
 
 import { logWarn } from "@/logger";
