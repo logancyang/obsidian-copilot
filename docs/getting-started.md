@@ -39,14 +39,16 @@ Claude uses the account held by the Claude Code CLI. You do not paste that accou
 
 Copilot connects to Codex through the `codex-acp` adapter. If you already use Codex:
 
-1. Install the adapter:
+1. Install the adapter for your platform:
+   - **Windows:** follow [Windows Setup for Agent](agent-mode-windows-setup.md#3-use-codex-instead). Its PowerShell installer downloads the native `codex-acp.exe` that Copilot requires.
+   - **macOS or Linux:** run:
 
-   ```bash
-   npm install -g @agentclientprotocol/codex-acp
-   ```
+     ```bash
+     npm install -g @agentclientprotocol/codex-acp
+     ```
 
 2. Run `codex login` if the Codex CLI is not already signed in.
-3. Open **Basic → Agents → Codex → Configure**, then use **Auto-detect** or enter the path to `codex-acp`.
+3. Open **Basic → Agents → Codex → Configure**, then use **Auto-detect** or enter the path to `codex-acp.exe` on Windows or `codex-acp` on macOS and Linux.
 
 Codex inherits the Codex CLI's credentials; there is no Codex key to paste into Copilot.
 
