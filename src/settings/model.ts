@@ -4,7 +4,7 @@ import { atom, createStore, useAtomValue } from "jotai";
 import { v4 as uuidv4 } from "uuid";
 
 import type { CopilotMode, ModelSelection } from "@/agentMode";
-import { type ChainType } from "@/chainType";
+import { ChainType } from "@/chainType";
 import type { BackendConfig, BackendType, ConfiguredModel, Provider } from "@/modelManagement";
 import { type SortStrategy, isSortStrategy } from "@/utils/recentUsageManager";
 import {
@@ -992,6 +992,16 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
     sanitizedSettings.chatHistorySortStrategy === "manual"
   ) {
     sanitizedSettings.chatHistorySortStrategy = DEFAULT_SETTINGS.chatHistorySortStrategy;
+  }
+
+  // A vault last used while Quick Chat still had a Projects mode persisted
+  // `defaultChainType: "project"`, and Obsidian Sync can carry that value to a
+  // device that never saw the mode. Coercing it here — rather than at the
+  // dropdown — means chain construction never sees a retired member and throws
+  // "Unsupported chain type" before the user can pick anything.
+  // https://github.com/logancyang/obsidian-copilot-preview/issues/310
+  if (!Object.values(ChainType).includes(sanitizedSettings.defaultChainType)) {
+    sanitizedSettings.defaultChainType = DEFAULT_SETTINGS.defaultChainType;
   }
 
   const userSystemPromptsFolder = (settingsToSanitize.userSystemPromptsFolder || "").trim();
