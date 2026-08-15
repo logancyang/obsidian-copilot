@@ -1,3 +1,5 @@
+import React, { memo } from "react";
+import { render } from "@testing-library/react";
 import { logError } from "@/logger";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
@@ -86,6 +88,36 @@ describe("safeAsyncHandler", () => {
 
       expect(mockedLogError).toHaveBeenCalledTimes(1);
       expect(mockedLogError).toHaveBeenCalledWith(expect.any(String), failure);
+    });
+
+    it("leaves a memoized child unrendered when its parent rerenders around it", () => {
+      // The shape every call site relies on: wrap during render, hand the result
+      // to a memo'd child, and rerender the parent for an unrelated reason (a
+      // composer keystroke, a streamed token). A wrapper allocated per render
+      // would break the child's shallow prop comparison and remap the list.
+      const renderChild = jest.fn();
+      const Child = memo(function Child({ onAct }: { onAct: () => void }) {
+        renderChild();
+        return (
+          <button type="button" onClick={onAct}>
+            act
+          </button>
+        );
+      });
+      const handler = async () => undefined;
+      function Parent({ unrelated }: { unrelated: number }) {
+        return (
+          <div data-testid={`parent-${unrelated}`}>
+            <Child onAct={safeAsyncHandler(handler)} />
+          </div>
+        );
+      }
+
+      const { rerender } = render(<Parent unrelated={1} />);
+      rerender(<Parent unrelated={2} />);
+      rerender(<Parent unrelated={3} />);
+
+      expect(renderChild).toHaveBeenCalledTimes(1);
     });
 
     it("handles each invocation independently, logging every rejection", async () => {
