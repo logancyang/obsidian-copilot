@@ -321,6 +321,11 @@ export class KeychainService {
     this.storage.setSecret(id, value);
   }
 
+  /** Delete a top-level secret from the keychain. */
+  deleteSecret(settingsKey: string): void {
+    this.removeSecret(toKeychainId(this.vaultId, settingsKey));
+  }
+
   /** Retrieve a top-level secret from the keychain. Returns `null` if not found. */
   getSecret(settingsKey: string): string | null {
     const id = toKeychainId(this.vaultId, settingsKey);

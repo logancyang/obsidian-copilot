@@ -20,7 +20,6 @@ describe("settingsSecretTransforms", () => {
     it.each([
       "openAIApiKey",
       "api_key",
-      "githubCopilotToken",
       "accessToken",
       "clientSecret",
       "password",
@@ -117,6 +116,9 @@ describe("settingsSecretTransforms", () => {
         _migrationModalDismissed: true,
         _diskSecretsCleared: true,
         _keychainOnly: true,
+        githubCopilotAccessToken: "gho_access",
+        githubCopilotToken: "tid=copilot",
+        githubCopilotTokenExpiresAt: 1893456000,
         agentMode: {
           ...DEFAULT_SETTINGS.agentMode,
           mcpServers: [
@@ -141,6 +143,9 @@ describe("settingsSecretTransforms", () => {
       expect(result._migrationModalDismissed).toBeUndefined();
       expect(result._diskSecretsCleared).toBeUndefined();
       expect(result._keychainOnly).toBeUndefined();
+      expect(result.githubCopilotAccessToken).toBeUndefined();
+      expect(result.githubCopilotToken).toBeUndefined();
+      expect(result.githubCopilotTokenExpiresAt).toBeUndefined();
       expect((result.agentMode as Record<string, unknown>).mcpServers).toBeUndefined();
       expect(settings as unknown as Record<string, unknown>).toHaveProperty("_keychainOnly", true);
       expect((settings.agentMode as unknown as Record<string, unknown>).mcpServers).toHaveLength(1);
