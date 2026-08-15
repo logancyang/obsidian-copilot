@@ -1,29 +1,9 @@
 import esbuild from "esbuild";
-import { transform as svgrTransform } from "@svgr/core";
-import jsxPlugin from "@svgr/plugin-jsx";
-import { readFile } from "node:fs/promises";
 import process from "process";
 import { createRequire } from "module";
 import wasmPlugin from "./wasmPlugin.mjs";
-import nodeModuleShim from "./nodeModuleShim.mjs";
-
-// Inline SVGR plugin: each `import Foo from "./foo.svg"` resolves to a React
-// component (`React.FC<SVGProps<SVGSVGElement>>`) instead of a raw string.
-// Source SVGs use `fill="currentColor"`, so theme color follows automatically.
-const svgrPlugin = {
-  name: "svgr",
-  setup(build) {
-    build.onLoad({ filter: /\.svg$/ }, async (args) => {
-      const svg = await readFile(args.path, "utf8");
-      const contents = await svgrTransform(
-        svg,
-        { jsxRuntime: "classic", typescript: false, plugins: [jsxPlugin] },
-        { filePath: args.path, caller: { name: "esbuild-plugin-inline-svgr" } }
-      );
-      return { contents, loader: "jsx" };
-    });
-  },
-};
+import nodeModuleShim, { nodeBuiltinExternals } from "./nodeModuleShim.mjs";
+import svgrPlugin from "./svgrPlugin.mjs";
 
 // CommonJS plugin loaded via createRequire — pure JS, no ESM export needed.
 const patchRendererUnsafeUnref = createRequire(import.meta.url)(
@@ -87,38 +67,7 @@ const context = await esbuild.context({
     "@lezer/common",
     "@lezer/highlight",
     "@lezer/lr",
-    // Node.js built-in modules (available in Electron) - except `module` /
-    // `node:module` which we shim. Both prefixed (`node:foo`) and bare
-    // (`foo`) forms are listed because @anthropic-ai/claude-agent-sdk and
-    // its transitive deps mix the two styles.
-    "node:fs",
-    "node:fs/promises",
-    "node:path",
-    "node:os",
-    "node:url",
-    "node:buffer",
-    "node:stream",
-    "node:crypto",
-    "node:events",
-    "node:async_hooks",
-    "node:child_process",
-    "node:http",
-    "node:https",
-    "node:util",
-    "node:readline",
-    "node:process",
-    "async_hooks",
-    "child_process",
-    "crypto",
-    "events",
-    "fs",
-    "fs/promises",
-    "os",
-    "path",
-    "process",
-    "readline",
-    "url",
-    "util",
+    ...nodeBuiltinExternals,
   ],
   format: "cjs",
   target: "es2020",
