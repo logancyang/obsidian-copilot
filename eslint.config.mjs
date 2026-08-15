@@ -64,6 +64,38 @@ const copilotLintPlugin = {
   },
 };
 
+// obsidianmd ships its rules as warnings, and a warning stream nobody gates on
+// is how 30 `prefer-create-el` violations reached the plugin's community listing
+// unnoticed. Promote every rule the codebase already satisfies to an error so
+// the next one fails `npm run lint` in CI on the PR that introduces it. Rules
+// listed here keep the recommended severity because they have a known backlog or
+// a deliberate override; each needs its own reason, not a blanket exemption.
+const OBSIDIANMD_UNRATCHETED = new Set([
+  // Declarative settings migration, tracked by logancyang/obsidian-copilot-preview#297.
+  "settings-tab/prefer-setting-definitions",
+  // Turned off below; promoting here would resurrect them.
+  "ui/sentence-case",
+  "platform",
+  // Configured below with a project-specific message payload.
+  "rule-custom-message",
+]);
+
+// Only raise the severity of rules the recommended config already turns on.
+// Rules it leaves off are its own judgement call; adopting one is a separate
+// decision with its own cleanup, not something this ratchet should smuggle in.
+const OBSIDIANMD_RATCHET = Object.fromEntries(
+  Object.entries(
+    (Array.isArray(obsidianmd.configs.recommended)
+      ? obsidianmd.configs.recommended
+      : [obsidianmd.configs.recommended]
+    ).reduce((rules, block) => Object.assign(rules, block.rules), {})
+  )
+    .filter(([id]) => id.startsWith("obsidianmd/"))
+    .filter(([, severity]) => severity !== "off" && severity !== 0)
+    .filter(([id]) => !OBSIDIANMD_UNRATCHETED.has(id.slice("obsidianmd/".length)))
+    .map(([id]) => [id, "error"])
+);
+
 const restrictedSourceImports = [
   {
     selector:
@@ -633,11 +665,7 @@ export default [
       "@typescript-eslint/no-floating-promises": "error",
       "@typescript-eslint/no-unsafe-return": "error",
       "@typescript-eslint/unbound-method": "error",
-      // The community directory surfaces native DOM construction as a warning on
-      // the plugin's listing. Source is clean of it, so block regressions here
-      // rather than letting them accumulate back into the listing. Type-aware, so
-      // it can only live in this block.
-      "obsidianmd/prefer-create-el": "error",
+      ...OBSIDIANMD_RATCHET,
       // TypeScript handles undefined-identifier detection (and does so cross-realm
       // correctly); per typescript-eslint's own guidance, disable no-undef on TS.
       "no-undef": "off",
@@ -698,13 +726,16 @@ export default [
     },
   },
 
-  // Tests build fixture DOM against jsdom, which has no Obsidian helpers, so the
-  // native API is the right call there. Same "placed last" reason as above: the
-  // TS-only block promotes this rule to an error for shipped source.
+  // Tests run under Jest against jsdom, not inside Obsidian on a phone: they
+  // build fixture DOM with the native API because the Obsidian helpers do not
+  // exist there, and they import Node built-ins directly because Node is the
+  // runtime. Both rules stay errors for shipped source; this block is placed
+  // last so it overrides the ratchet in the TS-only block above.
   {
     files: ["**/*.test.{ts,tsx}"],
     rules: {
       "obsidianmd/prefer-create-el": "off",
+      "obsidianmd/no-nodejs-modules": "off",
     },
   },
 ];
