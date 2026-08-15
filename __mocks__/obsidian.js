@@ -74,7 +74,22 @@ module.exports = {
     return parseYamlString(content);
   }),
   Modal: class Modal {
-    constructor() {
+    constructor(app) {
+      this.app = app;
+      // Mirrors the element tree Obsidian's own Modal builds in its constructor,
+      // in the same nesting order, so subclasses that reach for `modalEl` or
+      // walk up from `contentEl` behave here as they do at runtime.
+      const doc = window.document;
+      this.containerEl = doc.createElement("div");
+      this.containerEl.className = "modal-container";
+      this.modalEl = this.containerEl.appendChild(doc.createElement("div"));
+      this.modalEl.className = "modal";
+      this.headerEl = this.modalEl.appendChild(doc.createElement("div"));
+      this.headerEl.className = "modal-header";
+      this.titleEl = this.headerEl.appendChild(doc.createElement("div"));
+      this.titleEl.className = "modal-title";
+      this.contentEl = this.modalEl.appendChild(doc.createElement("div"));
+      this.contentEl.className = "modal-content";
       this.open = jest.fn();
       this.close = jest.fn();
       this.onOpen = jest.fn();

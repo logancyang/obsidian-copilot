@@ -103,6 +103,19 @@ if (typeof HTMLElement !== "undefined" && typeof HTMLElement.prototype.setCssPro
   };
 }
 
+// Polyfill the Obsidian `HTMLElement` augmentations that plugin code reaches for
+// when building chrome by hand, so those paths are exercisable under jsdom.
+if (typeof HTMLElement !== "undefined" && typeof HTMLElement.prototype.addClass !== "function") {
+  HTMLElement.prototype.addClass = function (...classes) {
+    this.classList.add(...classes);
+  };
+}
+if (typeof HTMLElement !== "undefined" && typeof HTMLElement.prototype.setText !== "function") {
+  HTMLElement.prototype.setText = function (text) {
+    this.textContent = text;
+  };
+}
+
 // Obsidian exposes `activeDocument` / `activeWindow` globals pointing at the
 // focused popout's document/window. Under jsdom there's only one document, so
 // alias them onto `window` (the jsdom global object) — plugin code that portals

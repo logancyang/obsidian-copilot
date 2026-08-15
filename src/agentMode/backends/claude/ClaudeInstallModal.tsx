@@ -1,4 +1,5 @@
 import { ClaudeConfigView } from "@/agentMode/backends/claude/ui/ClaudeConfigView";
+import { CONFIG_MODAL_CLASS } from "@/agentMode/backends/shared/ui/ConfigDialogShell";
 import { useBackendAuthState } from "@/agentMode/session/useBackendAuthState";
 import { ReactModal } from "@/components/modals/ReactModal";
 import { getSettings, setSettings, useSettingsValue } from "@/settings/model";
@@ -78,7 +79,8 @@ export class ClaudeInstallModal extends ReactModal {
     app: App,
     private readonly descriptor: ClaudeDescriptor
   ) {
-    super(app, "Configure Claude");
+    // No native title: ConfigDialogShell draws its own heading beside the badge.
+    super(app, undefined, CONFIG_MODAL_CLASS);
   }
 
   protected renderContent(close: () => void): React.ReactElement {

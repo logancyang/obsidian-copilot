@@ -40,6 +40,8 @@ export interface StoryDefinition {
   host: Host;
   id: string;
   layout: Layout;
+  /** Extra class for the `modal` host's frame; see `GalleryParameters`. */
+  modalClass?: string;
   name: string;
   render(): React.ReactNode;
   title: string;
@@ -293,7 +295,7 @@ class GalleryStoryModal extends ReactModal {
     private readonly ownerId: string,
     private readonly onDidClose: () => void
   ) {
-    super(app, story.name);
+    super(app, story.name, story.modalClass);
   }
 
   protected renderContent(): React.ReactElement {
@@ -722,6 +724,7 @@ export function createGalleryCatalog(
         host: gallery.host ?? "leaf",
         id,
         layout: gallery.layout ?? "padded",
+        modalClass: gallery.modalClass,
         name: story.name ?? exportName,
         render: () =>
           story.render
