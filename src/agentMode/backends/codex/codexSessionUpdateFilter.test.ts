@@ -50,19 +50,23 @@ describe("codexSessionUpdateFilter", () => {
       ).toBe(true);
     });
 
-    it("keeps non-message and non-text updates", () => {
-      expect(
-        shouldRouteCodexSessionUpdate({
-          sessionUpdate: "agent_thought_chunk",
-          content: { type: "text", text: "Warning: Skill descriptions were shortened to fit " },
-        })
-      ).toBe(true);
-      expect(
-        shouldRouteCodexSessionUpdate({
-          sessionUpdate: "agent_message_chunk",
-          content: { type: "image", mimeType: "image/png", data: "aGk=" },
-        })
-      ).toBe(true);
-    });
+    it(
+      "keeps non-message and non-text updates for " +
+        "https://github.com/logancyang/obsidian-copilot-preview/issues/315",
+      () => {
+        expect(
+          shouldRouteCodexSessionUpdate({
+            sessionUpdate: "agent_thought_chunk",
+            content: { type: "text", text: "Warning: Skill descriptions were shortened to fit " },
+          })
+        ).toBe(true);
+        expect(
+          shouldRouteCodexSessionUpdate({
+            sessionUpdate: "agent_message_chunk",
+            content: { type: "image", mimeType: "image/png", data: "aGk=" },
+          })
+        ).toBe(true);
+      }
+    );
   });
 });
