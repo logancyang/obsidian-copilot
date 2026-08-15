@@ -71,7 +71,7 @@ function buildApp(basePath = "/vault"): App {
   return { vault: { adapter } } as unknown as App;
 }
 
-function buildStubBackend(): AcpBackend {
+function buildStubBackend(overrides: Partial<AcpBackend> = {}): AcpBackend {
   return {
     id: "opencode",
     displayName: "opencode",
@@ -80,6 +80,7 @@ function buildStubBackend(): AcpBackend {
       args: [],
       env: {},
     }),
+    ...overrides,
   };
 }
 
@@ -145,6 +146,33 @@ describe("AcpBackendProcess", () => {
     } as unknown as Parameters<typeof client.sessionUpdate>[0];
     await expect(client.sessionUpdate(strayUpdate)).resolves.toBeUndefined();
     expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  it("drops updates rejected by the backend before routing them to the session", async () => {
+    const shouldRouteSessionUpdate = jest.fn(() => false);
+    const backend = new AcpBackendProcess(
+      buildApp(),
+      buildStubBackend({ shouldRouteSessionUpdate }),
+      "1.0.0",
+      buildStubDescriptor()
+    );
+    await backend.start();
+
+    const handler = jest.fn();
+    backend.registerSessionHandler("session-known", handler);
+    const client = getVaultClient(backend);
+    const update = {
+      sessionId: "session-known",
+      update: {
+        sessionUpdate: "agent_message_chunk",
+        content: { type: "text", text: "hidden" },
+      },
+    } as unknown as Parameters<typeof client.sessionUpdate>[0];
+
+    await client.sessionUpdate(update);
+
+    expect(shouldRouteSessionUpdate).toHaveBeenCalledWith(update.update);
+    expect(handler).not.toHaveBeenCalled();
   });
 
   it("scopes todowrite id tracking per session — a registered id does not bleed across sessions", async () => {

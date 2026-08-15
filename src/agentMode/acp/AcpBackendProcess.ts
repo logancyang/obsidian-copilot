@@ -648,6 +648,8 @@ export class AcpBackendProcess implements BackendProcess {
   private routeSessionUpdate(acpSessionId: AcpSessionId, update: SessionNotification): void {
     const sessionId = sessionIdFromAcp(acpSessionId);
 
+    if (this.backend.shouldRouteSessionUpdate?.(update.update) === false) return;
+
     // If there's an active loadSession collector for this session, feed it
     // user/agent message chunks and skip normal routing.
     // A replay in progress claims the conversation frames; everything it does

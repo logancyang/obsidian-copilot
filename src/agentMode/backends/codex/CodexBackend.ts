@@ -4,6 +4,7 @@ import { buildSimpleSpawnDescriptor } from "@/agentMode/backends/shared/simpleBi
 import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemPrompt";
 import { buildBuiltinSkillEnv } from "@/agentMode/backends/shared/builtinSkillEnv";
 import { mergeCodexConfigEnv } from "./codexConfigEnv";
+import { shouldRouteCodexSessionUpdate } from "./codexSessionUpdateFilter";
 
 /**
  * Spawns the user-provided `codex-acp` binary. The package exposes Codex as
@@ -16,6 +17,7 @@ import { mergeCodexConfigEnv } from "./codexConfigEnv";
 export class CodexBackend implements AcpBackend {
   readonly id = "codex" as const;
   readonly displayName = "Codex";
+  readonly shouldRouteSessionUpdate = shouldRouteCodexSessionUpdate;
 
   constructor(private readonly clientVersion = "") {}
 
