@@ -598,7 +598,11 @@ export default class CopilotPlugin extends Plugin {
         this.startupMigrationItems = [];
         const pendingCredentialRecovery = getSettings()._pendingCredentialRecovery;
         if (
-          shouldClearCredentialRecovery(items, pendingCredentialRecovery?.deviceId, getDeviceId())
+          shouldClearCredentialRecovery(
+            items,
+            pendingCredentialRecovery?.deviceId,
+            getDeviceId(this.app)
+          )
         ) {
           updateSetting("_pendingCredentialRecovery", undefined);
         }
@@ -1185,6 +1189,7 @@ export default class CopilotPlugin extends Plugin {
     // through `this.saveData` would read the absent flat fields as "cleared"
     // and delete this device's `deviceProfiles` segment (GitHub #2539).
     const settings = await loadSettingsWithKeychain(
+      this.app,
       rawData,
       (d) => super.saveData(d),
       (raw) =>
@@ -1198,7 +1203,7 @@ export default class CopilotPlugin extends Plugin {
     // Mirror this device's `agentMode.deviceProfiles` segment into the flat
     // agent fields the rest of the code reads (GitHub #2539). `saveData` below
     // performs the inverse on the way out.
-    setSettings(hydrateDeviceProfile(settings, getDeviceId()));
+    setSettings(hydrateDeviceProfile(settings, getDeviceId(this.app)));
   }
 
   /**
@@ -1213,7 +1218,7 @@ export default class CopilotPlugin extends Plugin {
    * snapshot via `super.saveData` (see `loadSettings`) so it isn't dehydrated.
    */
   async saveData(data: unknown): Promise<void> {
-    return super.saveData(dehydrateDeviceProfile(data as CopilotSettings, getDeviceId()));
+    return super.saveData(dehydrateDeviceProfile(data as CopilotSettings, getDeviceId(this.app)));
   }
 
   mergeActiveModels(

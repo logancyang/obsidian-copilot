@@ -1,3 +1,5 @@
+import { requireNodeModule } from "@/utils/desktopRuntime";
+
 /**
  * Minimal filesystem surface the project-context materializer needs. Kept as an
  * injectable interface so the cache logic stays pure and unit-testable with an
@@ -51,7 +53,7 @@ let atomicTempSeq = 0;
  * paths are resolved only in `conversionsLocation` — and every operation is
  * confined under `root`.
  *
- * `node:fs` / `node:path` are loaded lazily (via `require`) inside the factory,
+ * `node:fs` / `node:path` are loaded lazily (via `requireNodeModule`) inside the factory,
  * not at module top-level. Reason: this file also exports the node-free
  * {@link ContextCacheFs} interface; a top-level `import "node:fs"` would
  * evaluate Node builtins for *any* importer of this module — including
@@ -68,10 +70,8 @@ let atomicTempSeq = 0;
  *  - `list` / `remove` / `clear` tolerate a missing target (`[]` / idempotent).
  */
 export function createNodeContextCacheFs(root: string): NodeContextCacheFs {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports -- desktop cache access is loaded only inside this explicitly constructed Node adapter
-  const fs = require("node:fs") as typeof import("node:fs");
-  // eslint-disable-next-line @typescript-eslint/no-require-imports -- desktop path handling stays behind the same Node adapter boundary
-  const nodePath = require("node:path") as typeof import("node:path");
+  const fs = requireNodeModule<typeof import("node:fs")>("fs");
+  const nodePath = requireNodeModule<typeof import("node:path")>("path");
 
   const rootAbs = nodePath.resolve(root);
 

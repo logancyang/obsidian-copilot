@@ -20,8 +20,8 @@ export function getProjectsFolder(): string {
  * started in that window holds a record from the old tree. Deriving paths from
  * the live root there would rename, write, or mirror into a DIFFERENT tree —
  * destructively so when the new root is a previously-used Copilot root that
- * already holds a project of the same name (re-activating one is supported, and
- * the note-content guard exempts it).
+ * already holds a project of the same name. Re-activating such a root is
+ * supported after the user confirms its existing Markdown exclusion.
  *
  * @param configFilePath - A record's `filePath` (`\<root\>/\<folder\>/project.md`).
  * @returns The project's own folder and the projects root that contains it.

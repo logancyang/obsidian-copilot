@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { openAgentCachedItemPreview } from "@/utils/cacheFileOpener";
 import type { UrlItem, UrlKind } from "@/utils/urlTagUtils";
-import { ArrowUpRight, Globe, Link, PlusCircle, X, Youtube } from "lucide-react";
+import { ArrowUpRight, Globe, Link, PlusCircle, SquarePlay, X } from "lucide-react";
 import { App } from "obsidian";
 import React from "react";
 
@@ -82,7 +82,7 @@ export function LinksSidebarSection({
         onClick={() => onSelect("web")}
       />
       <LinkSubItem
-        Icon={Youtube}
+        Icon={SquarePlay}
         label="YouTube"
         count={youtubeCount}
         active={activeSection === "youtube"}

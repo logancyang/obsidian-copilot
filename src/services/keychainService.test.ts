@@ -35,6 +35,12 @@ jest.mock("@/settings/model", () => {
   };
 });
 
+jest.mock("@/logger", () => ({
+  logInfo: jest.fn(),
+  logWarn: jest.fn(),
+  logError: jest.fn(),
+}));
+
 jest.mock("@/services/settingsSecretTransforms", () => ({
   MODEL_SECRET_FIELDS: ["apiKey"] as const,
   isSensitiveKey: jest.fn((key: string) => {

@@ -2,6 +2,7 @@ import * as chrono from "chrono-node";
 import { DateTime } from "luxon";
 import { z } from "zod";
 import { createLangChainTool } from "./createLangChainTool";
+import { logWarn } from "@/logger";
 
 export interface TimeInfo {
   epoch: number;
@@ -451,7 +452,7 @@ function getTimeRangeMs(timeExpression: string) {
     };
   }
 
-  console.warn(`Unable to parse time expression: ${timeExpression}`);
+  logWarn(`Unable to parse time expression: ${timeExpression}`);
   return undefined;
 }
 

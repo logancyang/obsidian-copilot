@@ -1,8 +1,6 @@
-import * as fs from "node:fs";
-import * as os from "node:os";
-import * as path from "node:path";
 import { logWarn } from "@/logger";
 import type CopilotPlugin from "@/main";
+import { requireNodeModule } from "@/utils/desktopRuntime";
 import {
   getSettings,
   subscribeToSettingsChange,
@@ -97,6 +95,8 @@ const claudeWire: ModelWireCodec = {
  * and real `fs` accessors.
  */
 function claudeResolverEnv(): Omit<Parameters<typeof resolveClaudeBinary>[0], "override"> {
+  const fs = requireNodeModule<typeof import("node:fs")>("fs");
+  const os = requireNodeModule<typeof import("node:os")>("os");
   return {
     homeDir: os.homedir(),
     platform: process.platform,
@@ -199,6 +199,7 @@ export function subscribeClaudeInstallState(listener: () => void): () => void {
  * native separators on macOS/Linux/Windows.
  */
 function isClaudePlanModePlanFilePath(absolutePath: string): boolean {
+  const path = requireNodeModule<typeof import("node:path")>("path");
   if (!path.isAbsolute(absolutePath)) return false;
   if (!absolutePath.endsWith(".md")) return false;
   const dir = path.dirname(absolutePath);

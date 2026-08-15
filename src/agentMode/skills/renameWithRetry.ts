@@ -1,4 +1,4 @@
-import * as fs from "node:fs";
+import { requireNodeModule } from "@/utils/desktopRuntime";
 
 /**
  * Retry-aware `fs.rename`. Windows commonly fails the first attempt when
@@ -15,6 +15,7 @@ import * as fs from "node:fs";
  * @param attempts Total attempts (default 3).
  */
 export async function renameWithRetry(from: string, to: string, attempts = 3): Promise<void> {
+  const fs = requireNodeModule<typeof import("node:fs")>("fs");
   let lastErr: unknown;
   for (let i = 0; i < attempts; i++) {
     try {

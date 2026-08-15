@@ -156,9 +156,7 @@ export default class ChainManager {
           await this.refreshVaultIndex();
         }
       } else {
-        console.error(
-          "createChainWithNewModel: skipping chain-type housekeeping — no chat model set."
-        );
+        logError("createChainWithNewModel: skipping chain-type housekeeping — no chat model set.");
       }
       logInfo(`Setting chat model to configuredModelId=${selectedModelId}`);
     } catch (error) {

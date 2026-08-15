@@ -1,9 +1,8 @@
 import { logWarn } from "@/logger";
-import * as fs from "node:fs";
-import * as path from "node:path";
 import type { ProjectDiscoveryFs } from "./discoverProjectSkills";
 import type { MigrateSkillFs } from "./migrateProjectSkill";
 import { errCode } from "@/utils/errorUtils";
+import { requireNodeModule } from "@/utils/desktopRuntime";
 import type { ReconcileFs } from "./reconcile";
 import type { SymlinksFs } from "./symlinks";
 
@@ -18,6 +17,7 @@ import type { SymlinksFs } from "./symlinks";
  * directory-only (which is exactly what skills need).
  */
 export function createNodeMigrateSkillFs(): MigrateSkillFs {
+  const fs = requireNodeModule<typeof import("node:fs")>("fs");
   return {
     ...createNodeSymlinksFs(),
     async readFile(p) {
@@ -34,6 +34,7 @@ export function createNodeMigrateSkillFs(): MigrateSkillFs {
 }
 
 async function nodeList(p: string, warn = false): Promise<string[]> {
+  const fs = requireNodeModule<typeof import("node:fs")>("fs");
   try {
     return await fs.promises.readdir(p);
   } catch (err) {
@@ -45,6 +46,8 @@ async function nodeList(p: string, warn = false): Promise<string[]> {
 }
 
 async function nodeReadlinkAbs(p: string): Promise<string | null> {
+  const fs = requireNodeModule<typeof import("node:fs")>("fs");
+  const path = requireNodeModule<typeof import("node:path")>("path");
   try {
     const target = await fs.promises.readlink(p);
     return path.isAbsolute(target) ? target : path.resolve(path.dirname(p), target);
@@ -59,6 +62,8 @@ async function nodeReadlinkAbs(p: string): Promise<string | null> {
  * reconcile logic.
  */
 export function createNodeSymlinksFs(): SymlinksFs {
+  const fs = requireNodeModule<typeof import("node:fs")>("fs");
+  const path = requireNodeModule<typeof import("node:path")>("path");
   return {
     async exists(p) {
       try {
@@ -115,6 +120,7 @@ export function createNodeSymlinksFs(): SymlinksFs {
  * links via lstat).
  */
 export function createNodeProjectDiscoveryFs(): ProjectDiscoveryFs {
+  const fs = requireNodeModule<typeof import("node:fs")>("fs");
   return {
     ...createNodeSymlinksFs(),
     list: (p) => nodeList(p),
@@ -129,6 +135,7 @@ export function createNodeProjectDiscoveryFs(): ProjectDiscoveryFs {
  * with shallow listing + readlink resolution used for orphan sweep.
  */
 export function createNodeReconcileFs(): ReconcileFs {
+  const fs = requireNodeModule<typeof import("node:fs")>("fs");
   return {
     ...createNodeSymlinksFs(),
     list: (p) => nodeList(p),

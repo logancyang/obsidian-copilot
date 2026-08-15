@@ -762,8 +762,10 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
 
     const doc = containerRef.current?.doc;
     if (!doc) return;
-    doc.addEventListener("keydown", handleKeyDown);
-    return () => doc.removeEventListener("keydown", handleKeyDown);
+    // Capture edit cancellation before the composer contains Escape at its own boundary.
+    // https://github.com/logancyang/obsidian-copilot-preview/issues/302
+    doc.addEventListener("keydown", handleKeyDown, true);
+    return () => doc.removeEventListener("keydown", handleKeyDown, true);
   }, [editMode, onEditCancel]);
 
   useImperativeHandle(

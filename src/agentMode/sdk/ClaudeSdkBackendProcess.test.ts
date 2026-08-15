@@ -1150,4 +1150,179 @@ describe("ClaudeSdkBackendProcess", () => {
       await expect(invoke("Read", { file_path: "note.md" })).resolves.toEqual({});
     });
   });
+
+  describe("plan usage", () => {
+    it("replays the last known caps to a newly attached session", async () => {
+      // The caps belong to the account, not the conversation. Without this, opening or
+      // switching to another chat showed no caps until that chat had taken its own turn,
+      // which reads as the meters having vanished.
+      const proc = new ClaudeSdkBackendProcess({
+        pathToClaudeCodeExecutable: "/usr/local/bin/claude",
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        app: { vault: {} } as any,
+        clientVersion: "1.2.3",
+        descriptor: fakeDescriptor(),
+      });
+
+      const planUsage = {
+        windows: [{ id: "seven_day", label: "Weekly", percent: 21 }],
+        updatedAt: 1,
+      };
+      // Stand in for a read that already happened on an earlier session.
+      (proc as unknown as { lastPlanUsage: unknown }).lastPlanUsage = planUsage;
+
+      const { sessionId } = await proc.newSession({ cwd: "/vault" });
+      const events: SessionEvent[] = [];
+      proc.registerSessionHandler(sessionId, (e) => events.push(e));
+
+      expect(events).toContainEqual({
+        sessionId,
+        update: { sessionUpdate: "plan_usage_update", planUsage },
+      });
+    });
+
+    it("sends no caps to a new session before any have been read", async () => {
+      const proc = new ClaudeSdkBackendProcess({
+        pathToClaudeCodeExecutable: "/usr/local/bin/claude",
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        app: { vault: {} } as any,
+        clientVersion: "1.2.3",
+        descriptor: fakeDescriptor(),
+      });
+
+      const { sessionId } = await proc.newSession({ cwd: "/vault" });
+      const events: SessionEvent[] = [];
+      proc.registerSessionHandler(sessionId, (e) => events.push(e));
+
+      expect(events.some((e) => e.update.sessionUpdate === "plan_usage_update")).toBe(false);
+    });
+
+    it("does not replay a window whose reset has already passed (https://github.com/logancyang/obsidian-copilot-preview/issues/193)", async () => {
+      // This process outlives many chats. Replaying a snapshot taken before a reset shows
+      // the previous period's percentage as if it described the current one.
+      const proc = new ClaudeSdkBackendProcess({
+        pathToClaudeCodeExecutable: "/usr/local/bin/claude",
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        app: { vault: {} } as any,
+        clientVersion: "1.2.3",
+        descriptor: fakeDescriptor(),
+      });
+
+      (proc as unknown as { lastPlanUsage: unknown }).lastPlanUsage = {
+        windows: [
+          { id: "five_hour", label: "5h", percent: 88, resetsAt: Date.now() - 1_000 },
+          { id: "seven_day", label: "Weekly", percent: 21, resetsAt: Date.now() + 60_000 },
+        ],
+        updatedAt: 1,
+      };
+
+      const { sessionId } = await proc.newSession({ cwd: "/vault" });
+      const events: SessionEvent[] = [];
+      proc.registerSessionHandler(sessionId, (e) => events.push(e));
+
+      const replayed = events.find((e) => e.update.sessionUpdate === "plan_usage_update");
+      expect(replayed?.update).toMatchObject({
+        planUsage: { windows: [{ id: "seven_day" }] },
+      });
+    });
+
+    it("publishes a reading to every live session, not only the one that took the turn", async () => {
+      // The caps describe the account, so they are equally true of every open chat.
+      // Routing them to one leaves the others showing a stale number until they each run
+      // a turn (https://github.com/logancyang/obsidian-copilot-preview/issues/193).
+      const proc = new ClaudeSdkBackendProcess({
+        pathToClaudeCodeExecutable: "/usr/local/bin/claude",
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        app: { vault: {} } as any,
+        clientVersion: "1.2.3",
+        descriptor: fakeDescriptor(),
+      });
+
+      const first = await proc.newSession({ cwd: "/vault" });
+      const second = await proc.newSession({ cwd: "/vault" });
+      const firstEvents: SessionEvent[] = [];
+      const secondEvents: SessionEvent[] = [];
+      proc.registerSessionHandler(first.sessionId, (e) => firstEvents.push(e));
+      proc.registerSessionHandler(second.sessionId, (e) => secondEvents.push(e));
+
+      await (
+        proc as unknown as { refreshPlanUsage: (q: unknown) => Promise<void> }
+      ).refreshPlanUsage({
+        usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET: () =>
+          Promise.resolve({
+            rate_limits_available: true,
+            rate_limits: { seven_day: { utilization: 21 } },
+          }),
+      });
+
+      for (const events of [firstEvents, secondEvents]) {
+        expect(events.filter((e) => e.update.sessionUpdate === "plan_usage_update")).toHaveLength(
+          1
+        );
+      }
+    });
+
+    it("clears the meters when the account turns out not to be metered by plan caps (https://github.com/logancyang/obsidian-copilot-preview/issues/193)", async () => {
+      // Switching an external Claude login from OAuth to an API key mid-session leaves
+      // subscription caps on screen that no longer apply to anything.
+      const proc = new ClaudeSdkBackendProcess({
+        pathToClaudeCodeExecutable: "/usr/local/bin/claude",
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        app: { vault: {} } as any,
+        clientVersion: "1.2.3",
+        descriptor: fakeDescriptor(),
+      });
+      (proc as unknown as { lastPlanUsage: unknown }).lastPlanUsage = {
+        windows: [{ id: "seven_day", label: "Weekly", percent: 21 }],
+        updatedAt: 1,
+      };
+
+      const { sessionId } = await proc.newSession({ cwd: "/vault" });
+      const events: SessionEvent[] = [];
+      proc.registerSessionHandler(sessionId, (e) => events.push(e));
+
+      await (
+        proc as unknown as { refreshPlanUsage: (q: unknown) => Promise<void> }
+      ).refreshPlanUsage({
+        usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET: () =>
+          Promise.resolve({ rate_limits_available: false }),
+      });
+
+      expect(events.at(-1)?.update).toEqual({
+        sessionUpdate: "plan_usage_update",
+        planUsage: null,
+      });
+    });
+
+    it("keeps the last good reading when the usage call fails", async () => {
+      const proc = new ClaudeSdkBackendProcess({
+        pathToClaudeCodeExecutable: "/usr/local/bin/claude",
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        app: { vault: {} } as any,
+        clientVersion: "1.2.3",
+        descriptor: fakeDescriptor(),
+      });
+      const planUsage = {
+        windows: [{ id: "seven_day", label: "Weekly", percent: 21 }],
+        updatedAt: 1,
+      };
+      (proc as unknown as { lastPlanUsage: unknown }).lastPlanUsage = planUsage;
+
+      const { sessionId } = await proc.newSession({ cwd: "/vault" });
+      const events: SessionEvent[] = [];
+      proc.registerSessionHandler(sessionId, (e) => events.push(e));
+      events.length = 0;
+
+      await (
+        proc as unknown as { refreshPlanUsage: (q: unknown) => Promise<void> }
+      ).refreshPlanUsage({
+        usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET: () =>
+          Promise.reject(new Error("transport closed")),
+      });
+
+      // A failed read is the absence of news, never a reason to blank a live meter.
+      expect(events).toHaveLength(0);
+      expect((proc as unknown as { lastPlanUsage: unknown }).lastPlanUsage).toBe(planUsage);
+    });
+  });
 });

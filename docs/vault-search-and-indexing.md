@@ -1,182 +1,59 @@
-# Vault Search and Indexing
+# How Agent Searches Your Vault
 
-Copilot can search your vault to find relevant notes and answer questions grounded in your own content. This guide explains the two types of search, how to manage the index, and how to configure what gets indexed.
+Copilot V4 Agent starts with local file search and can add Miyo when you want meaning-based search across a large collection.
 
----
+## Search available to Agent
 
-## Two Types of Search
+Agent chooses the lightest useful search for the question:
 
-### Lexical Search (Keyword-Based)
+- **File search** finds exact words, filenames, and phrases with the agent's built-in read, grep, and glob tools. It needs no index or setup and normally starts in the current vault or project workspace.
+- **Obsidian-aware search** uses the bundled Obsidian CLI skill when the answer depends on Obsidian's running app or index, such as properties, tags, links, backlinks, tasks, Bases, or open tabs. Ordinary text search still uses file tools. If this capability is unavailable, keep Obsidian open and enable **Settings → General → Command line interface**.
+- **Miyo semantic search** finds related notes by meaning, even when they use different words. It is optional and runs through the `miyo-search` skill in opencode, Claude, and Codex.
 
-Lexical search finds notes that contain the exact words you used. It's fast, requires no setup, and works out of the box.
+Agent may use file search first and reach for Miyo when keyword results are too narrow or slow. To request it directly, ask: "Use Miyo to find notes about ..."
 
-- **Used in**: Vault QA (Basic) mode
-- **How it works**: Looks for your exact keywords in note titles and content
-- **Strengths**: Fast, precise, no embedding API calls needed
-- **Limitations**: Won't find notes that use different words to express the same idea
+## Connect Miyo for semantic search
 
-**RAM Limit**: The lexical search index is held in memory. You can configure the memory limit in **Settings → Copilot → QA → Lexical Search RAM Limit** (default: 100 MB, range: 20–1,000 MB).
+Miyo is most useful for large vaults, fuzzy recall, and questions that span many notes.
 
-**Lexical Boosts**: Copilot can boost search results from notes in the same folder as the current note, or from notes that link to each other. Enable in **Settings → Copilot → QA → Enable Lexical Boosts** (on by default).
+1. Install and open the Miyo desktop app.
+2. Open **Settings → Copilot → Miyo**.
+3. Under **Connection**, click **Connect**.
+4. If prompted with **Register this vault with Miyo**, click **Register & connect**. For a remote Miyo server, open Miyo, add the vault as a folder, and click **Retry**.
+5. Under **Powered by Miyo**, turn on **Semantic search**. This installs the `miyo-search` skill for Agent.
 
-### Semantic Search (Meaning-Based)
+A healthy local setup shows **Connected · local**. An endpoint entered under **Remote Miyo server (advanced)** shows **Connected · remote** instead.
 
-Semantic search finds notes that are conceptually related, even if they don't share exact words.
+### Choose the search scope
 
-- **Used in**: Vault QA and paid Quick Chat — but **disabled by default**. You must explicitly enable it.
-- **How it works**: Converts your notes into numerical vectors (using an embedding model), then finds notes whose vectors are closest to your query
-- **Strengths**: Finds notes by concept and meaning, great for "fuzzy" recall
-- **Cost**: Requires embedding API calls (costs money for paid embedding models)
-- **Enable**: **Settings → Copilot → QA → Enable Semantic Search** — turn this on to activate semantic search
+The **Search scope** control affects Copilot's integrated Miyo retrieval:
 
----
+- **Current vault** searches only this vault. This is the safer default.
+- **Unrestricted** searches every folder Miyo has indexed.
 
-## Index Management
+**Relevant Notes** remains tied to the current vault. The Agent's `miyo-search` skill calls Miyo's document search directly and does not use this scope switch. If Miyo contains several registered folders, keep those registrations intentional and check the note paths Agent cites.
 
-The semantic search index stores the vector embeddings of your notes. Manage it from **Settings → Copilot → QA**.
+## Refresh and troubleshoot Miyo
 
-### Auto-Index Strategy
+- **Unavailable**: open Miyo, return to **Settings → Copilot → Miyo**, and connect again. Check **Remote Miyo server (advanced)** if you use a remote endpoint.
+- **Miyo isn't running**: use **Open Miyo**, then **Retry connection**. Use **Download Miyo** if it is not installed.
+- **New or changed notes are missing**: run **Index (refresh) vault** from the command palette. This asks Miyo to scan the registered folder; indexing can continue in the Miyo app.
+- **Copilot shows an exclusion warning**: click **Resync Miyo**. Copilot does this when Miyo's registered exclusions no longer cover the current Copilot folder. If automatic resync is unavailable, remove and re-add the folder in Miyo. If a registration was rebuilt, re-enable remote read and write access in Miyo if you want it.
+- **You want to remove Miyo's indexed copy**: remove the folder in Miyo. **Clear local Copilot index** manages Copilot's older local index, not Miyo's folder index.
+- **Miyo search still returns nothing**: confirm that Miyo is running, this vault is registered, and **Semantic search** is on. Try a broader meaning-based question; use Agent's normal file search for exact text.
 
-Controls when Copilot automatically updates the index:
+The **Search chat** row is separate from vault search. **Ready · chats indexed** and **Syncing chats…** refer to ChatGPT and Claude chat history configured in Miyo, not to your notes.
 
-| Strategy           | When the index updates                                               |
-| ------------------ | -------------------------------------------------------------------- |
-| **NEVER**          | Manual only — you must trigger indexing yourself                     |
-| **ON STARTUP**     | Updates when Obsidian starts or the plugin reloads                   |
-| **ON MODE SWITCH** | Updates when you switch to Vault QA or **copilot plus** (paid Quick Chat) |
+## Privacy and device boundaries
 
-The default is **ON MODE SWITCH**.
-
-> **Warning**: For large vaults using paid embedding models, frequent indexing can incur significant costs. Consider using NEVER and indexing manually if cost is a concern.
-
-### Refresh Index (Incremental)
-
-**Command palette → Index (refresh) vault**
-
-Updates only notes that have been added, modified, or deleted since the last index. Faster and cheaper than a full reindex.
-
-### Force Reindex
-
-**Command palette → Force reindex vault**
-
-Rebuilds the entire index from scratch. Use this if:
-
-- You changed your embedding model
-- The index seems corrupted or missing results
-- You've made many changes and want a clean state
-
-### Garbage Collection
-
-**Command palette → Garbage collect Copilot index (remove files that no longer exist in vault)**
-
-Removes entries from the index for notes that have been deleted from your vault. Keeps the index clean without a full reindex.
-
-### Clear Index
-
-**Command palette → Clear local Copilot index**
-
-Deletes the entire index. You'll need to reindex before semantic search works again.
-
-### Debug Commands
-
-For troubleshooting:
-
-- **List indexed files** — Shows all notes currently in the index
-- **Inspect index by note paths** — Check which chunks of specific notes are indexed
-- **Count total vault tokens** — Estimates total tokens across your vault
-- **Search semantic index** — Run a direct search query against the index
-
----
-
-## Filtering: What Gets Indexed
-
-Control which notes are included in semantic search.
-
-### Cost Estimation Before Indexing
-
-Before indexing a large vault with a paid embedding model, estimate the cost first:
-
-**Command palette → Count total tokens in your vault**
-
-This shows the total token count across your vault, which you can use to estimate embedding API costs. Embedding costs are generally low, but worth checking for very large vaults.
-
-### Exclusions
-
-**Settings → Copilot → QA → Exclusions**
-
-Comma-separated list of patterns. Notes matching these patterns are excluded. Supports:
-
-- Folder names: `private` — excludes the folder named "private"
-- Folder paths: `Work/Confidential` — excludes that specific subfolder
-- File extensions: `.pdf` — excludes all PDF files
-- Tags: `#private` — excludes all notes tagged `#private`
-- Note titles: `My Secret Note` — excludes that specific note
-
-Example: `private, Work/Confidential, #private` excludes the private folder, a specific work folder, and all notes tagged #private.
-
-> **Note**: Tag matching works with tags in the note's **properties (frontmatter)**, not inline tags within the note body.
-
-Your Copilot folder is always excluded automatically (it holds the plugin's own files — conversations, prompts, memory, skills, and projects). This covers the default `copilot` folder, your current Copilot folder if you changed it in **Settings → Copilot → Basic → Copilot folder location**, and every folder that has previously been your Copilot folder. Past Copilot folders stay excluded permanently, so any files the plugin left behind after a folder change never leak into search results.
-
-### Inclusions
-
-**Settings → Copilot → QA → Inclusions**
-
-Comma-separated list. If set, **only** notes matching these patterns are indexed. Useful for indexing a specific area of your vault.
-
-Leave empty to include everything (except exclusions).
-
----
-
-## Embedding Settings
-
-These settings appear in **Settings → Copilot → QA** when Semantic Search is enabled.
-
-### Requests per Minute
-
-How many embedding API requests to send per minute. Default is 60. Decrease this if you hit rate limit errors from your embedding provider.
-
-Range: 10–60
-
-### Embedding Batch Size
-
-How many text chunks to send per API request. Default is 16. Larger batches are faster but may cause issues with some providers.
-
-### Partitions
-
-The index is split into partitions to handle large vaults. You can control the number of partitions in **Settings → Copilot → QA → Number of Partitions**. If you have a large vault, increase this value to avoid index errors.
-
-> **If you hit a "RangeError: invalid string length" error**: This means your vault is too large for a single partition. Increase the number of partitions in QA settings. A good rule of thumb is that the first partition file (found in `.obsidian/`) should be under ~400 MB.
-
----
-
-## Inline Citations (Experimental)
-
-When enabled, AI responses in Vault QA include footnote-style citations pointing to the source notes used in the answer.
-
-**Enable**: **Settings → Copilot → QA → Enable Inline Citations**
-
-This is an experimental feature. Not all models handle it well.
-
----
-
-## Obsidian Sync
-
-If you use Obsidian Sync, the vector index can be synced across devices. Enable **Settings → Copilot → QA → Enable Index Sync**.
-
-> **Note**: The index can be large (hundreds of MB for big vaults). Keep this in mind for sync limits and mobile data usage.
-
----
-
-## Mobile Considerations
-
-By default, Copilot **disables indexing on mobile** to save battery and data. The setting is in **Settings → Copilot → QA → Disable index on mobile** (on by default).
-
-On mobile, you can still use Vault QA with lexical search, but semantic search won't update automatically.
-
----
+- File search and the Obsidian CLI run on your computer. Any excerpts Agent uses are then sent to the selected model as chat context. With a cloud model, that means its provider receives those excerpts; with a local model, they stay local.
+- By default, Miyo builds and searches its index on your computer with no embedding API key. Search results used by Agent are still passed to the selected model. A remote Miyo endpoint sends indexing and search traffic to the server you configured.
+- Miyo's **Connector** is a separate Relay feature that can let ChatGPT or Claude access registered folders from the cloud. Connecting Miyo to Copilot does not enable that Relay by itself.
+- Copilot excludes its current and previous Copilot folders from Copilot search and Miyo registration. If you choose a folder that already contains Markdown, those notes become permanently excluded from Copilot search; Obsidian's built-in search is unaffected. Read the confirmation and follow any **Resync Miyo** warning.
+- Agent, Agent skills, and local Miyo discovery are desktop features. On mobile, the **Semantic search** skill switch is unavailable and local Miyo cannot be discovered. A remote Miyo server does not make Agent mode available on mobile.
 
 ## Related
 
-- [Agent Mode and Tools](agent-mode-and-tools.md) — How coding agents work with vault and web evidence
-- [Paid Plans and Self-Host](copilot-plus-and-self-host.md) — Miyo-powered local semantic search
+- [Agents in Copilot V4](agent-mode-and-tools.md)
+- [Paid Plans and Self-Host](copilot-plus-and-self-host.md)
+- [Projects](projects.md)

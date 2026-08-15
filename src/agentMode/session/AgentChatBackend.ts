@@ -10,6 +10,7 @@ import type {
   PermissionPrompt,
   PlanDecisionAction,
   PromptContent,
+  PlanUsage,
   SessionUsage,
 } from "./types";
 
@@ -102,6 +103,13 @@ export interface AgentChatBackend {
    * persisted usage). The UI renders this as a context-window indicator.
    */
   getSessionUsage(): SessionUsage | null;
+
+  /**
+   * Latest account-level plan-cap snapshot, or `null` when this backend reports none —
+   * either because it has no usage API, or because plan caps do not apply to how the
+   * user authenticated (an API key rather than a subscription).
+   */
+  getPlanUsage(): PlanUsage | null;
 
   /**
    * True when an ExitPlanMode permission is currently pending. The chat input

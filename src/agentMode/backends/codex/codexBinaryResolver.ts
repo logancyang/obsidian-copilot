@@ -4,8 +4,7 @@
  * Agent Mode's no-shell ACP process path, so this resolver probes native
  * `.exe` locations first and only falls back to the generic PATH detector.
  */
-import * as path from "node:path";
-
+import { requireNodeModule } from "@/utils/desktopRuntime";
 import { nodeToolBinDirCandidates, type NodeToolFs } from "@/utils/nodeToolBinDirs";
 
 export type CodexAcpBinaryResolverFs = NodeToolFs;
@@ -31,14 +30,13 @@ export function resolveCodexAcpBinary(input: CodexAcpBinaryResolverInput): strin
 
 export function codexAcpSearchDirs(input: CodexAcpBinaryResolverInput): string[] {
   const candidates = input.platform === "win32" ? windowsCandidates(input) : unixCandidates(input);
+  const path = requireNodeModule<typeof import("node:path")>("path");
   const pathImpl = input.platform === "win32" ? path.win32 : path.posix;
   return Array.from(new Set(candidates.map((candidate) => pathImpl.dirname(candidate))));
 }
 
-const posix = path.posix;
-const win = path.win32;
-
 function unixCandidates(input: CodexAcpBinaryResolverInput): string[] {
+  const posix = requireNodeModule<typeof import("node:path")>("path").posix;
   const { homeDir } = input;
   const dirs = [
     posix.join(homeDir, ".local", "bin"),
@@ -51,6 +49,7 @@ function unixCandidates(input: CodexAcpBinaryResolverInput): string[] {
 }
 
 function windowsCandidates(input: CodexAcpBinaryResolverInput): string[] {
+  const win = requireNodeModule<typeof import("node:path")>("path").win32;
   const { homeDir, env } = input;
   const localAppData = env.LOCALAPPDATA ?? win.join(homeDir, "AppData", "Local");
   const appData = env.APPDATA ?? win.join(homeDir, "AppData", "Roaming");
