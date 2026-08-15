@@ -1,7 +1,7 @@
 {
   "name": "obsidian-copilot",
   "version": "4.0.0",
-  "description": "Your AI Copilot: Chat with Your Second Brain, Learn Faster, Work Smarter.",
+  "description": "Run AI agents such as Claude Code, Codex, and OpenCode inside your vault. Turn your second brain into a smart assistant that gets knowledge work done.",
   "main": "main.js",
   "scripts": {
     "dev": "run-p dev:*",
