@@ -13,8 +13,6 @@ jest.mock("@/logger", () => ({
 
 const mockLogWarn = logWarn as jest.MockedFunction<typeof logWarn>;
 
-const POPOUT_HINT_KEY = "copilot:relevant-notes-popout-hint-dismissed:v1";
-
 /** Minimal stand-in for Obsidian's vault-scoped device-local storage. */
 function createFakeApp(store = new Map<string, string>()) {
   const app = {
@@ -59,21 +57,13 @@ describe("homeShelfPrefs", () => {
       expect(getHomeShelfTab(app, "shelf-key")).toBe("projects");
     });
 
-    it("migrates a legacy raw-localStorage tab forward and keeps the legacy key", () => {
+    it("ignores the cosmetic legacy tab instead of extending raw storage migration (https://github.com/logancyang/obsidian-copilot-preview/issues/298)", () => {
       window.localStorage.setItem("shelf-key", "projects");
       const { app, store } = createFakeApp();
 
-      expect(getHomeShelfTab(app, "shelf-key")).toBe("projects");
-      expect(store.get("shelf-key")).toBe("projects");
-      // Left in place: other vaults on this device may not have migrated yet.
+      expect(getHomeShelfTab(app, "shelf-key")).toBeNull();
+      expect(store.has("shelf-key")).toBe(false);
       expect(window.localStorage.getItem("shelf-key")).toBe("projects");
-    });
-
-    it("prefers the vault-scoped tab over a differing legacy value", () => {
-      window.localStorage.setItem("shelf-key", "legacy-tab");
-      const { app } = createFakeApp(new Map([["shelf-key", "vault-tab"]]));
-
-      expect(getHomeShelfTab(app, "shelf-key")).toBe("vault-tab");
     });
 
     it("returns null when storage cannot be read", () => {
@@ -107,13 +97,12 @@ describe("homeShelfPrefs", () => {
       expect(isPopOutHintDismissed(app)).toBe(false);
     });
 
-    it("migrates a legacy raw-localStorage dismissal forward and keeps the legacy key", () => {
-      window.localStorage.setItem(POPOUT_HINT_KEY, "true");
+    it("ignores the cosmetic legacy dismissal instead of extending raw storage migration (https://github.com/logancyang/obsidian-copilot-preview/issues/298)", () => {
+      window.localStorage.setItem("copilot:relevant-notes-popout-hint-dismissed:v1", "true");
       const { app, store } = createFakeApp();
 
-      expect(isPopOutHintDismissed(app)).toBe(true);
-      expect(store.get(POPOUT_HINT_KEY)).toBe("true");
-      expect(window.localStorage.getItem(POPOUT_HINT_KEY)).toBe("true");
+      expect(isPopOutHintDismissed(app)).toBe(false);
+      expect(store.size).toBe(0);
     });
 
     it("returns false when storage cannot be read", () => {

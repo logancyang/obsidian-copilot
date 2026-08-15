@@ -23,7 +23,6 @@
  * restricted), the id falls back to the shared `"unknown"` sentinel.
  */
 
-import { readLegacyLocalStorage } from "@/utils/legacyLocalStorage";
 import type { App } from "obsidian";
 
 const DEVICE_ID_STORAGE_KEY = "obsidian-copilot:device-id:v1";
@@ -70,12 +69,14 @@ export function getDeviceId(app: App): string {
       return existing;
     }
 
-    const legacy = readLegacyLocalStorage(DEVICE_ID_STORAGE_KEY);
+    const legacy = window.localStorage.getItem(DEVICE_ID_STORAGE_KEY);
     if (legacy && legacy.length > 0) {
       // One-time forward migration: copy the pre-vault-scoped id so this
-      // vault's `deviceProfiles` segment stays attached. Returned even if the
-      // copy silently fails — the legacy key remains, so the next launch
-      // resolves the same id and retries the copy.
+      // vault's `deviceProfiles`, Miyo receipt, and pending credential recovery
+      // stay attached. Returned even if the copy silently fails — the legacy
+      // key remains, so the next launch resolves the same id and retries the
+      // copy. Remove after 2026-08-21 to clear the scorecard warning.
+      // https://github.com/logancyang/obsidian-copilot-preview/issues/298
       app.saveLocalStorage(DEVICE_ID_STORAGE_KEY, legacy);
       cachedDeviceId = legacy;
       return legacy;

@@ -70,7 +70,7 @@ describe("deviceId", () => {
       expect(getDeviceId(app)).toBe("preset-device-id");
     });
 
-    it("migrates a legacy raw-localStorage id forward and keeps the legacy key", async () => {
+    it("preserves the legacy device identity during the temporary migration window (https://github.com/logancyang/obsidian-copilot-preview/issues/298)", async () => {
       window.localStorage.setItem(STORAGE_KEY, "legacy-device-id");
       const getDeviceId = await loadFreshGetDeviceId();
       const { app, store } = createFakeApp();
@@ -90,7 +90,7 @@ describe("deviceId", () => {
       expect(store.get(STORAGE_KEY)).toBe("vault-device-id");
     });
 
-    it("returns the legacy id even when the forward copy is silently dropped", async () => {
+    it("keeps the legacy identity when its forward copy is silently dropped (https://github.com/logancyang/obsidian-copilot-preview/issues/298)", async () => {
       window.localStorage.setItem(STORAGE_KEY, "legacy-device-id");
       const getDeviceId = await loadFreshGetDeviceId();
 

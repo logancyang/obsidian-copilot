@@ -4,38 +4,31 @@
  * (which never sync). Mirrors the storage idiom in `deviceId.ts`: every access
  * is wrapped in try/catch, reads return a safe default on failure, and writes
  * swallow errors so a broken-storage device (disabled / restricted) never
- * crashes the UI — it just loses persistence. On first read each value is
- * seeded from the legacy raw `localStorage` key older releases wrote; the
- * legacy key is left in place for vaults that have not migrated yet.
+ * crashes the UI — it just loses persistence.
  *
  * These are intentionally device-local: which shelf tab you last viewed and
  * whether you dismissed the pop-out hint are per-device UI state, not content
  * that should ride a synced `data.json` to your other devices.
+ *
+ * Legacy raw values intentionally reset instead of being migrated: these are
+ * cosmetic preferences, so preserving them does not justify extending the raw
+ * storage migration needed for device identity.
+ * https://github.com/logancyang/obsidian-copilot-preview/issues/298
  */
 
 import { logWarn } from "@/logger";
-import { readLegacyLocalStorage } from "@/utils/legacyLocalStorage";
 import type { App } from "obsidian";
 
 export const HOME_SHELF_TAB_STORAGE_KEY = "copilot:home-shelf-tab:v1";
 const POPOUT_HINT_DISMISSED_KEY = "copilot:relevant-notes-popout-hint-dismissed:v1";
 
 /**
- * Read a vault-scoped preference, migrating the legacy raw-localStorage value
- * forward on first read. Returns `null` when unset or storage is unusable.
+ * Read a vault-scoped preference, or return `null` when unset or storage is unusable.
  */
-function loadPrefWithLegacyFallback(app: App, key: string): string | null {
+function loadPref(app: App, key: string): string | null {
   try {
     const value = app.loadLocalStorage(key);
-    if (typeof value === "string" && value.length > 0) {
-      return value;
-    }
-    const legacy = readLegacyLocalStorage(key);
-    if (legacy && legacy.length > 0) {
-      app.saveLocalStorage(key, legacy);
-      return legacy;
-    }
-    return null;
+    return typeof value === "string" && value.length > 0 ? value : null;
   } catch {
     return null;
   }
@@ -43,7 +36,7 @@ function loadPrefWithLegacyFallback(app: App, key: string): string | null {
 
 /** Read the last-selected shelf tab id, or `null` when unset or storage is unusable. */
 export function getHomeShelfTab(app: App, storageKey: string): string | null {
-  return loadPrefWithLegacyFallback(app, storageKey);
+  return loadPref(app, storageKey);
 }
 
 /** Persist the selected shelf tab id; no-op if storage is unusable. */
@@ -57,7 +50,7 @@ export function setHomeShelfTab(app: App, storageKey: string, id: string): void 
 
 /** Whether the user dismissed the Relevant Notes pop-out hint; defaults to false. */
 export function isPopOutHintDismissed(app: App): boolean {
-  return loadPrefWithLegacyFallback(app, POPOUT_HINT_DISMISSED_KEY) === "true";
+  return loadPref(app, POPOUT_HINT_DISMISSED_KEY) === "true";
 }
 
 /** Mark the Relevant Notes pop-out hint dismissed; no-op if storage is unusable. */
