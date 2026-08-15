@@ -1,8 +1,4 @@
-import { execFile as execFileCb } from "node:child_process";
-import * as fs from "node:fs";
-import { promisify } from "node:util";
-
-const execFile = promisify(execFileCb);
+import { requireNodeModule } from "@/utils/desktopRuntime";
 
 export type OpencodePlatform = "darwin" | "linux" | "windows";
 export type OpencodeArch = "x64" | "arm64" | "arm";
@@ -62,6 +58,11 @@ export function mapNodeArch(nodeArch: string): OpencodeArch | undefined {
  */
 export async function detectMusl(): Promise<boolean> {
   if (process.platform !== "linux") return false;
+  const fs = requireNodeModule<typeof import("node:fs")>("fs");
+  const { execFile: execFileCb } =
+    requireNodeModule<typeof import("node:child_process")>("child_process");
+  const { promisify } = requireNodeModule<typeof import("node:util")>("util");
+  const execFile = promisify(execFileCb);
   try {
     await fs.promises.access("/etc/alpine-release");
     return true;
@@ -83,6 +84,11 @@ export async function detectMusl(): Promise<boolean> {
  */
 export async function detectAvx2(): Promise<boolean> {
   if (process.arch !== "x64") return false;
+  const fs = requireNodeModule<typeof import("node:fs")>("fs");
+  const { execFile: execFileCb } =
+    requireNodeModule<typeof import("node:child_process")>("child_process");
+  const { promisify } = requireNodeModule<typeof import("node:util")>("util");
+  const execFile = promisify(execFileCb);
   try {
     if (process.platform === "darwin") {
       const { stdout } = await execFile("sysctl", ["-n", "hw.optional.avx2_0"]);

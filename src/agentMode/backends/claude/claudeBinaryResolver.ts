@@ -10,9 +10,8 @@
  * Pure leaf: callers inject `homeDir`, `platform`, `env`, and `fs` so tests
  * don't touch real disk.
  */
-import * as path from "node:path";
-
 import { WELL_KNOWN_BIN_DIRS } from "@/utils/binaryPath";
+import { requireNodeModule } from "@/utils/desktopRuntime";
 import { nodeToolBinDirCandidates, type NodeToolFs } from "@/utils/nodeToolBinDirs";
 
 export type ClaudeBinaryResolverFs = NodeToolFs;
@@ -46,6 +45,7 @@ export function resolveClaudeBinary(input: ClaudeBinaryResolverInput): string | 
 
 export function claudeBinarySearchDirs(input: ClaudeBinaryResolverInput): string[] {
   const candidates = input.platform === "win32" ? windowsCandidates(input) : unixCandidates(input);
+  const path = requireNodeModule<typeof import("node:path")>("path");
   const pathImpl = input.platform === "win32" ? path.win32 : path.posix;
   return Array.from(
     new Set(
@@ -56,10 +56,8 @@ export function claudeBinarySearchDirs(input: ClaudeBinaryResolverInput): string
   );
 }
 
-const posix = path.posix;
-const win = path.win32;
-
 function unixCandidates(input: ClaudeBinaryResolverInput): Array<string | null> {
+  const posix = requireNodeModule<typeof import("node:path")>("path").posix;
   const { homeDir, env } = input;
   // Every bin dir a Node version manager / npm-global install might use, plus
   // the well-known system prefixes — then `claude` under each.
@@ -93,6 +91,7 @@ function unixCandidates(input: ClaudeBinaryResolverInput): Array<string | null> 
 }
 
 function windowsCandidates(input: ClaudeBinaryResolverInput): Array<string | null> {
+  const win = requireNodeModule<typeof import("node:path")>("path").win32;
   const { homeDir, env } = input;
   const localAppData = env.LOCALAPPDATA ?? win.join(homeDir, "AppData", "Local");
   const programFiles = env.ProgramFiles ?? "C:\\Program Files";

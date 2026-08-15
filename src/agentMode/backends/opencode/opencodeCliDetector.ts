@@ -1,6 +1,5 @@
 import { detectBinary } from "@/utils/detectBinary";
-import * as fs from "node:fs";
-import * as os from "node:os";
+import { requireNodeModule } from "@/utils/desktopRuntime";
 import { resolveOpencodeBinary } from "./opencodeBinaryResolver";
 
 /**
@@ -18,6 +17,8 @@ import { resolveOpencodeBinary } from "./opencodeBinaryResolver";
  * needs this detect inside its single-flight boundary.
  */
 export async function detectOpencodeCliPath(): Promise<string | null> {
+  const fs = requireNodeModule<typeof import("node:fs")>("fs");
+  const os = requireNodeModule<typeof import("node:os")>("os");
   const fromResolver = resolveOpencodeBinary({
     override: undefined,
     homeDir: os.homedir(),
