@@ -393,28 +393,6 @@ export default [
     },
   },
 
-  // Agent Mode: backends spawn subprocesses (ACP) and the in-process Claude
-  // SDK uses node:async_hooks. The plugin runs in Electron renderer where
-  // these modules are available; the desktop-only Agent Mode is also gated by
-  // `Platform.isMobile` at runtime in main.ts. The Symposium handoff consumer
-  // is likewise desktop-only, but remains in the host publishing layer.
-  // openVaultPath lazy-requires node:fs behind a desktop vault-base guard,
-  // mirroring opencodeLog. Modules converted to call-time
-  // `requireNodeModule()` guards (see src/utils/desktopRuntime.ts) need no
-  // exemption.
-  {
-    files: [
-      "src/agentMode/**",
-      "src/utils/issueReport.ts",
-      "src/utils/opencodeLog.ts",
-      "src/utils/openVaultPath.ts",
-      "src/symposium/symposiumAgentHandoff.ts",
-    ],
-    rules: {
-      "import/no-nodejs-modules": "off",
-    },
-  },
-
   // Element types (order matters — first match wins; files before folders):
   //   registry     src/agentMode/backends/registry.ts (file)
   //   barrel       src/agentMode/index.ts (file)
