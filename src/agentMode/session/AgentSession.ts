@@ -28,6 +28,7 @@ import {
   PromptOutput,
   SessionEvent,
   SessionId,
+  PlanUsage,
   SessionUsage,
   StopReason,
   ToolCallContent,
@@ -458,6 +459,13 @@ export class AgentSession {
   // `usage_update` (or a persisted snapshot seeded on resume). Session-scoped:
   // not tied to any turn placeholder.
   private currentUsage: SessionUsage | null = null;
+
+  /**
+   * Latest account-level plan-cap snapshot. Unlike {@link currentUsage} this is not a
+   * property of the session — the caps keep counting elsewhere — so it is live-only and
+   * never persisted: a stale percentage read off disk would be worse than none.
+   */
+  private currentPlanUsage: PlanUsage | null = null;
   // Monotonic counter for `currentPlan.id` so the React tree can detect a
   // *new* plan-mode review (vs. an in-place revision that bumps `revision`).
   private planSeq = 0;
@@ -1459,6 +1467,11 @@ export class AgentSession {
     return this.currentUsage;
   }
 
+  /** Latest plan-cap snapshot, or `null` when the backend has reported none. */
+  getPlanUsage(): PlanUsage | null {
+    return this.currentPlanUsage;
+  }
+
   /**
    * Seed the usage snapshot from persisted frontmatter on resume, so a reopened
    * chat shows its last-known usage immediately instead of blank-until-next-turn.
@@ -1767,6 +1780,11 @@ export class AgentSession {
     }
     if (update.sessionUpdate === "usage_update") {
       this.applyUsageUpdate(update.usage);
+      return;
+    }
+    if (update.sessionUpdate === "plan_usage_update") {
+      this.currentPlanUsage = update.planUsage;
+      this.notifyMessages();
       return;
     }
 
