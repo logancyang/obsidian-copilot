@@ -768,6 +768,15 @@ export interface BackendProcess {
    * sessions; ACP backends governed by the shared prompter omit it.
    */
   setReadOnlySessionPredicate?(fn: (sessionId: SessionId) => boolean): void;
+  /**
+   * Optional: the context window of a model, in tokens, when the backend knows it from
+   * a catalog of its own rather than the session stream. A reopened chat's persisted
+   * usage can predate the window being known — hosted models never carry one on the
+   * wire — and its ring must not wait for the next turn, so the session asks here at
+   * seed time. Missing means the stream is the only window source. Resolves rather
+   * than throws; null means the backend does not know this model's window.
+   */
+  readContextWindow?(wireModelId: string | null | undefined): Promise<number | null>;
   registerSessionHandler(sessionId: SessionId, handler: SessionUpdateHandler): () => void;
   newSession(params: OpenSessionInput): Promise<OpenSessionOutput>;
   prompt(params: PromptInput): Promise<PromptOutput>;

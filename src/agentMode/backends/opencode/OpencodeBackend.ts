@@ -11,7 +11,9 @@ import { composeDenyList, getManagedSkills, SkillManager } from "@/agentMode/ski
 import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemPrompt";
 import { buildBuiltinSkillEnv } from "@/agentMode/backends/shared/builtinSkillEnv";
 import { OpencodeBackendDescriptor } from "./descriptor";
-import { mapProviderToOpencodeId } from "./opencodeModelResolve";
+import { copilotPlusModelId, mapProviderToOpencodeId } from "./opencodeModelResolve";
+import type { PlanUsageReading } from "@/agentMode/session/planUsage";
+import { CopilotPlusUsageReader } from "@/agentMode/backends/shared/copilotPlusUsage";
 
 /**
  * Maps Copilot's `ChatModelProviders` to OpenCode's provider id. Used for the
@@ -79,8 +81,34 @@ export class OpencodeBackend implements AcpBackend {
 
   readonly #deps: OpencodeModelDeps;
 
+  /**
+   * Copilot Plus caps and model windows. Held per backend instance so its catalog cache
+   * dies with the process that owns it, and shared with any other backend serving the
+   * same hosted models.
+   */
+  readonly #copilotPlus = new CopilotPlusUsageReader();
+
   constructor(deps: OpencodeModelDeps) {
     this.#deps = deps;
+  }
+
+  /** Copilot Plus account caps, read from the models host that enforces them. */
+  async readPlanUsage(): Promise<PlanUsageReading> {
+    return this.#copilotPlus.readPlanUsage();
+  }
+
+  /**
+   * Selection is the whole test: only a session on a `copilot-plus/` model is metered
+   * by these caps. A user on their own key reaches this backend too, and must see no
+   * cap meters (https://github.com/logancyang/obsidian-copilot-preview/issues/193).
+   */
+  planUsageAppliesTo(wireModelId: string | null | undefined): boolean {
+    return copilotPlusModelId(wireModelId) !== null;
+  }
+
+  /** Copilot Plus models carry no window on the wire; the published catalog has it. */
+  async readContextWindow(wireModelId: string | null | undefined): Promise<number | null> {
+    return this.#copilotPlus.readContextWindow(copilotPlusModelId(wireModelId));
   }
 
   async buildSpawnDescriptor(ctx: { vaultBasePath: string }): Promise<AcpSpawnDescriptor> {

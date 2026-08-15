@@ -631,6 +631,7 @@ export class AgentSession {
       sessionId: this.backendSessionId,
       modelId,
     });
+    this.dropUsageWindowOnModelChange(next);
     this.currentState = next;
     this.notifyModelChanged();
   }
@@ -716,6 +717,8 @@ export class AgentSession {
       configId,
       value,
     });
+    // A config option can be the model itself (opencode ≥ 1.15.13).
+    this.dropUsageWindowOnModelChange(next);
     this.currentState = next;
     this.notifyModelChanged();
     this.clearCurrentPlanIfModeLeft();
@@ -1481,6 +1484,44 @@ export class AgentSession {
     if (!usage) return;
     this.currentUsage = usage;
     this.notifyMessages();
+    // A persisted snapshot can predate the model's window being known — hosted models
+    // never carry one on the wire, and older chats were saved before windows were
+    // filled in at all — so without this a reopened chat shows a bare count until its
+    // next turn (https://github.com/logancyang/obsidian-copilot-preview/issues/193).
+    if (usage.contextWindow === undefined) void this.fillSeededContextWindow(usage);
+  }
+
+  /**
+   * Ask the backend's catalog for the seeded snapshot's missing window and fill it in
+   * place. Quietly does nothing when the backend has no catalog, does not know the
+   * model, or the snapshot was superseded while the answer was in flight — a live
+   * update or a model switch is fresher than the seed by definition.
+   */
+  private async fillSeededContextWindow(seeded: SessionUsage): Promise<void> {
+    if (!this.backend.readContextWindow) return;
+    // A chat with no resumable backend session is seeded into a freshly created one,
+    // BEFORE its `newSession` has resolved — so at call time the model is not known
+    // yet. Wait for startup to settle rather than silently skipping, or exactly those
+    // older chats would stay count-only until their next turn
+    // (https://github.com/logancyang/obsidian-copilot-preview/issues/193).
+    try {
+      await this.ready;
+    } catch {
+      return;
+    }
+    const wireModelId = this.currentState?.model?.current.baseModelId ?? null;
+    if (!wireModelId) return;
+    let contextWindow: number | null = null;
+    try {
+      contextWindow = await this.backend.readContextWindow(wireModelId);
+    } catch {
+      return;
+    }
+    if (!contextWindow) return;
+    if (this.currentUsage !== seeded) return;
+    if (this.currentState?.model?.current.baseModelId !== wireModelId) return;
+    this.currentUsage = { ...seeded, contextWindow };
+    this.notifyMessages();
   }
 
   /**
@@ -1496,6 +1537,25 @@ export class AgentSession {
       return;
     }
     this.currentUsage = usage;
+    this.notifyMessages();
+  }
+
+  /**
+   * Drop the held context window when the session's model changes, keeping the count.
+   *
+   * The window belongs to the model that reported it. Without this, switching to a
+   * model that reports no window would leave the old model's window in place forever:
+   * {@link applyUsageUpdate} ignores windowless snapshots while a windowed one is held,
+   * so no later update could correct the meter. With the window dropped, the next
+   * snapshot applies, and the ring re-forms once the new model's window is learned
+   * (https://github.com/logancyang/obsidian-copilot-preview/issues/193).
+   */
+  private dropUsageWindowOnModelChange(next: BackendState | null): void {
+    const before = this.currentState?.model?.current.baseModelId;
+    const after = next?.model?.current.baseModelId;
+    if (!before || !after || before === after) return;
+    if (this.currentUsage?.contextWindow === undefined) return;
+    this.currentUsage = { ...this.currentUsage, contextWindow: undefined };
     this.notifyMessages();
   }
 
@@ -1764,6 +1824,7 @@ export class AgentSession {
       return;
     }
     if (update.sessionUpdate === "state_changed") {
+      this.dropUsageWindowOnModelChange(update.state);
       this.currentState = update.state;
       this.notifyModelChanged();
       this.clearCurrentPlanIfModeLeft();

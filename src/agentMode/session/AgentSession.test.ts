@@ -508,6 +508,160 @@ describe("AgentSession session usage", () => {
     });
   });
 
+  it("fills a seeded snapshot's missing window from the backend catalog (https://github.com/logancyang/obsidian-copilot-preview/issues/193)", async () => {
+    // A reopened chat's persisted usage can predate the window being known — hosted
+    // models never carry one on the wire — and its ring must not wait for a turn.
+    const mock = makeMockBackend();
+    const readContextWindow = jest.fn(async () => 1_048_576);
+    (mock.asBackend as { readContextWindow?: unknown }).readContextWindow = readContextWindow;
+    const session = makeSession(mock);
+    mock.emit({
+      sessionId: "acp-1",
+      update: {
+        sessionUpdate: "state_changed",
+        state: {
+          model: {
+            current: { baseModelId: "copilot-plus/gemini-3-pro", effort: null },
+            apply: { kind: "setModel" },
+            availableModels: [],
+          },
+          mode: null,
+        },
+      },
+    });
+
+    session.seedSessionUsage({ usedTokens: 27_514, updatedAt: 1 });
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+
+    expect(readContextWindow).toHaveBeenCalledWith("copilot-plus/gemini-3-pro");
+    expect(session.getSessionUsage()).toEqual({
+      usedTokens: 27_514,
+      updatedAt: 1,
+      contextWindow: 1_048_576,
+    });
+  });
+
+  it("fills the window for a chat seeded into a still-starting session (https://github.com/logancyang/obsidian-copilot-preview/issues/193)", async () => {
+    // A chat with no resumable backend session is seeded into a freshly created one
+    // before newSession resolves, when the model is not yet known. The lookup must
+    // wait for readiness instead of silently skipping.
+    const mock = makeMockBackend();
+    const readContextWindow = jest.fn(async () => 1_048_576);
+    (mock.asBackend as { readContextWindow?: unknown }).readContextWindow = readContextWindow;
+    mock.newSession.mockResolvedValueOnce({
+      sessionId: "acp-1",
+      state: {
+        model: {
+          current: { baseModelId: "copilot-plus/gemini-3-pro", effort: null },
+          apply: { kind: "setModel" },
+          availableModels: [],
+        },
+        mode: null,
+      },
+    });
+    const session = AgentSession.start({
+      backend: mock.asBackend,
+      cwd: "/vault",
+      internalId: "internal-1",
+      backendId: "opencode",
+    });
+
+    // Seeded immediately, the way AgentSessionManager does — before `ready` settles.
+    session.seedSessionUsage({ usedTokens: 27_514, updatedAt: 1 });
+    await session.ready;
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+
+    expect(session.getSessionUsage()).toEqual({
+      usedTokens: 27_514,
+      updatedAt: 1,
+      contextWindow: 1_048_576,
+    });
+  });
+
+  it("leaves a live snapshot alone when the seed's window answer arrives late", async () => {
+    let release!: (window: number) => void;
+    const mock = makeMockBackend();
+    (mock.asBackend as { readContextWindow?: unknown }).readContextWindow = jest.fn(
+      () => new Promise((resolve) => (release = resolve))
+    );
+    const session = makeSession(mock);
+    mock.emit({
+      sessionId: "acp-1",
+      update: {
+        sessionUpdate: "state_changed",
+        state: {
+          model: {
+            current: { baseModelId: "copilot-plus/gemini-3-pro", effort: null },
+            apply: { kind: "setModel" },
+            availableModels: [],
+          },
+          mode: null,
+        },
+      },
+    });
+    session.seedSessionUsage({ usedTokens: 27_514, updatedAt: 1 });
+    // Let the readiness await settle so the catalog read is actually in flight.
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+
+    // A live update lands while the catalog answer is still in flight.
+    mock.emit({
+      sessionId: "acp-1",
+      update: {
+        sessionUpdate: "usage_update",
+        usage: { usedTokens: 31_000, contextWindow: 200_000, updatedAt: 2 },
+      },
+    });
+    release(1_048_576);
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+
+    expect(session.getSessionUsage()).toEqual({
+      usedTokens: 31_000,
+      contextWindow: 200_000,
+      updatedAt: 2,
+    });
+  });
+
+  it("drops the held context window when the model changes, so the next snapshot applies (https://github.com/logancyang/obsidian-copilot-preview/issues/193)", () => {
+    // The window belongs to the model that reported it. Kept across a switch to a
+    // model that reports none, it would pair the old window with new counts forever —
+    // the windowless-snapshot guard above would reject every later update.
+    const stateOn = (baseModelId: string): BackendState => ({
+      model: {
+        current: { baseModelId, effort: null },
+        apply: { kind: "setModel" },
+        availableModels: [],
+      },
+      mode: null,
+    });
+    const mock = makeMockBackend();
+    const session = makeSession(mock);
+    mock.emit({
+      sessionId: "acp-1",
+      update: { sessionUpdate: "state_changed", state: stateOn("copilot-plus/gemini-3-pro") },
+    });
+    mock.emit({
+      sessionId: "acp-1",
+      update: {
+        sessionUpdate: "usage_update",
+        usage: { usedTokens: 5000, contextWindow: 1_048_576, updatedAt: 1 },
+      },
+    });
+
+    mock.emit({
+      sessionId: "acp-1",
+      update: { sessionUpdate: "state_changed", state: stateOn("ollama/llama") },
+    });
+
+    expect(session.getSessionUsage()).toEqual({ usedTokens: 5000, updatedAt: 1 });
+
+    // And the new model's windowless snapshots are no longer rejected.
+    mock.emit({
+      sessionId: "acp-1",
+      update: { sessionUpdate: "usage_update", usage: { usedTokens: 800, updatedAt: 2 } },
+    });
+    expect(session.getSessionUsage()).toEqual({ usedTokens: 800, updatedAt: 2 });
+  });
+
   it("lets a fuller snapshot's contextWindow replace an earlier one", () => {
     const mock = makeMockBackend();
     const session = makeSession(mock);
