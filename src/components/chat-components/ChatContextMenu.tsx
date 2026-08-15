@@ -1,4 +1,4 @@
-import { AlertCircle, CheckCircle, CircleDashed, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { TFile, TFolder } from "obsidian";
 import React, { useRef, useState } from "react";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
@@ -13,11 +13,9 @@ import {
   ContextSelectedTextBadge,
 } from "@/components/chat-components/ContextBadges";
 import { SelectedTextContext, WebTabContext } from "@/types/message";
-import { ChainType } from "@/chainType";
 import { Separator } from "@/components/ui/separator";
 import { useChainType, useIndexingProgress } from "@/aiParams";
 import { useApp } from "@/context";
-import { useProjectContextStatus } from "@/hooks/useProjectContextStatus";
 import { isPlusChain, openFileInWorkspace } from "@/utils";
 import { mergeWebTabContexts } from "@/utils/urlNormalization";
 import { AtMentionTypeahead } from "./AtMentionTypeahead";
@@ -36,7 +34,6 @@ interface ChatContextMenuProps {
   contextWebTabs: WebTabContext[];
   selectedTextContexts?: SelectedTextContext[];
   onRemoveContext: (category: string, data: string) => void;
-  showProgressCard: () => void;
   showIndexingCard?: () => void;
   onTypeaheadSelect: (
     category: string,
@@ -45,10 +42,9 @@ interface ChatContextMenuProps {
   lexicalEditorRef?: React.RefObject<{ focus: () => void }>;
   hideAddContextButton?: boolean;
   /**
-   * True in Agent Mode. Suppresses the legacy CAG project-status icon (Agent
-   * Mode mounts its own status trigger outside this row) and collapses the row
-   * entirely when there are no badges — Agent Mode has no "@ Add context"
-   * button here, so an empty row would just push the editor down (#205).
+   * True in Agent Mode. Collapses the row entirely when there are no badges —
+   * Agent Mode has no "@ Add context" button here, so an empty row would just
+   * push the editor down (#205).
    */
   isAgentMode?: boolean;
 }
@@ -64,7 +60,6 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
   contextWebTabs,
   selectedTextContexts = EMPTY_SELECTED_TEXT_CONTEXTS,
   onRemoveContext,
-  showProgressCard,
   showIndexingCard,
   onTypeaheadSelect,
   lexicalEditorRef,
@@ -73,7 +68,6 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
 }) => {
   const app = useApp();
   const [currentChain] = useChainType();
-  const contextStatus = useProjectContextStatus();
   const [indexingState] = useIndexingProgress();
   const [showTypeahead, setShowTypeahead] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -138,20 +132,6 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
   if (isAgentMode && !hasContext) {
     return null;
   }
-
-  // Get contextStatus from the shared hook
-  const getContextStatusIcon = () => {
-    switch (contextStatus) {
-      case "success":
-        return <CheckCircle className="tw-size-4 tw-text-success" />;
-      case "loading":
-        return <Loader2 className="tw-size-4 tw-animate-spin tw-text-loading" />;
-      case "error":
-        return <AlertCircle className="tw-size-4 tw-text-error" />;
-      case "initial":
-        return <CircleDashed className="tw-size-4 tw-text-faint" />;
-    }
-  };
 
   return (
     <div className="tw-flex tw-w-full tw-items-start tw-gap-1">
@@ -231,23 +211,7 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
         ))}
       </div>
 
-      {!isAgentMode && currentChain === ChainType.PROJECT_CHAIN && (
-        <>
-          <Separator orientation="vertical" />
-          <div className="">
-            <Button
-              variant="ghost2"
-              size="fit"
-              className="tw-text-muted"
-              onClick={() => showProgressCard()}
-            >
-              {getContextStatusIcon()}
-            </Button>
-          </div>
-        </>
-      )}
-
-      {currentChain !== ChainType.PROJECT_CHAIN && indexingState.isActive && showIndexingCard && (
+      {indexingState.isActive && showIndexingCard && (
         <>
           <Separator orientation="vertical" />
           <Button variant="ghost2" size="fit" className="tw-text-muted" onClick={showIndexingCard}>

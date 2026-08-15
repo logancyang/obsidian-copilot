@@ -4,7 +4,6 @@ import {
   DOMConversionMap,
   DOMConversionOutput,
   DOMExportOutput,
-  EditorConfig,
   LexicalEditor,
   LexicalNode,
   NodeKey,
@@ -50,12 +49,6 @@ export class URLPillNode extends BasePillNode {
     return "data-lexical-url-pill";
   }
 
-  createDOM(_config: EditorConfig, editor: LexicalEditor): HTMLElement {
-    const span = getEditorDocument(editor).createElement("span");
-    span.className = "url-pill-wrapper";
-    return span;
-  }
-
   static importDOM(): DOMConversionMap | null {
     return {
       span: (node: HTMLElement) => {
@@ -87,13 +80,13 @@ export class URLPillNode extends BasePillNode {
   }
 
   exportDOM(editor: LexicalEditor): DOMExportOutput {
-    const element = getEditorDocument(editor).createElement("span");
-    element.setAttribute("data-lexical-url-pill", "true");
-    element.setAttribute("data-url", this.__url);
+    const element = getEditorDocument(editor).win.createSpan({
+      text: this.__url,
+      attr: { "data-lexical-url-pill": "true", "data-url": this.__url },
+    });
     if (this.__title) {
       element.setAttribute("data-title", this.__title);
     }
-    element.textContent = this.__url;
     return { element };
   }
 

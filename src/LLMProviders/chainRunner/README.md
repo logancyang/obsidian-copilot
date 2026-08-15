@@ -17,7 +17,6 @@ chainRunner/
 ├── LLMChainRunner.ts                  # Basic LLM interaction (no tools)
 ├── VaultQAChainRunner.ts              # Vault-only Q&A with retrieval
 ├── CopilotPlusChainRunner.ts          # Legacy tool calling system
-├── ProjectChainRunner.ts              # Project-aware extension of Plus
 ├── AutonomousAgentChainRunner.ts   # Native tool calling with ReAct agent loop
 ├── index.ts                           # Main exports
 └── utils/

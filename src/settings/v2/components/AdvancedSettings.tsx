@@ -27,6 +27,7 @@ import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { Notice } from "obsidian";
 import React, { useCallback, useEffect, useState } from "react";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
+import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
 const DESKTOP_UNAVAILABLE_FRAME_LOG_PATH = "(Agent Mode frame logs are desktop-only)";
 
@@ -200,7 +201,7 @@ export const AdvancedSettings: React.FC = () => {
             <Button
               variant="destructive"
               size="sm"
-              onClick={handleForgetAllSecrets}
+              onClick={safeAsyncHandler(handleForgetAllSecrets)}
               disabled={forgetting || !keychainAvailable}
               title={
                 keychainAvailable
@@ -280,7 +281,7 @@ export const AdvancedSettings: React.FC = () => {
             <Button
               variant="secondary"
               size="sm"
-              onClick={async () => {
+              onClick={safeAsyncHandler(async () => {
                 if (!isDesktopRuntime()) {
                   new Notice("Agent Mode frame logs are available on desktop only.");
                   return;
@@ -292,14 +293,14 @@ export const AdvancedSettings: React.FC = () => {
                 } catch {
                   new Notice("Failed to open Agent Mode frame log.");
                 }
-              }}
+              })}
             >
               Open
             </Button>
             <Button
               variant="secondary"
               size="sm"
-              onClick={async () => {
+              onClick={safeAsyncHandler(async () => {
                 if (!isDesktopRuntime()) {
                   new Notice("Agent Mode frame logs are available on desktop only.");
                   return;
@@ -312,7 +313,7 @@ export const AdvancedSettings: React.FC = () => {
                 } catch {
                   new Notice("Failed to clear Agent Mode frame log.");
                 }
-              }}
+              })}
             >
               Clear
             </Button>

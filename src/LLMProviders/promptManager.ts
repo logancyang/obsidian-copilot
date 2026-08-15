@@ -6,7 +6,6 @@ import {
   MessagesPlaceholder,
   SystemMessagePromptTemplate,
 } from "@langchain/core/prompts";
-import { getCurrentProject, isProjectMode, subscribeToProjectChange } from "@/aiParams";
 
 export default class PromptManager {
   private static instance: PromptManager;
@@ -21,11 +20,6 @@ export default class PromptManager {
       this.initChatPrompt();
       this.initQAPrompt();
     });
-
-    subscribeToProjectChange(() => {
-      this.initChatPrompt();
-      this.initQAPrompt();
-    });
   }
 
   static getInstance(): PromptManager {
@@ -36,15 +30,8 @@ export default class PromptManager {
   }
 
   private initChatPrompt(): void {
-    let systemPrompt = getSystemPrompt();
-
-    const currentProject = getCurrentProject();
-    if (currentProject && isProjectMode()) {
-      systemPrompt = currentProject.systemPrompt;
-    }
-
     // Escape curly braces in the system message
-    const escapedSystemMessage = this.escapeTemplateString(systemPrompt);
+    const escapedSystemMessage = this.escapeTemplateString(getSystemPrompt());
 
     this.chatPrompt = ChatPromptTemplate.fromMessages([
       SystemMessagePromptTemplate.fromTemplate(escapedSystemMessage),

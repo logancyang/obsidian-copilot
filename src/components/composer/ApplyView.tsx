@@ -11,6 +11,7 @@ import { SettingSwitch } from "@/components/ui/setting-switch";
 import { getChangeBlocks } from "@/composerUtils";
 import { ApplyViewResult } from "@/types";
 import { ensureFolderExists } from "@/utils";
+import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
 /** Represents a row in the diff view with original and modified content */
 interface DiffRow {
@@ -566,11 +567,11 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
   return (
     <div className="tw-relative tw-flex tw-h-full tw-flex-col">
       <div className="tw-fixed tw-bottom-4 tw-left-1/2 tw-z-[9999] tw-flex tw-gap-2 tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-secondary tw-p-2 tw-shadow-lg">
-        <Button variant="destructive" size="sm" onClick={handleReject}>
+        <Button variant="destructive" size="sm" onClick={safeAsyncHandler(handleReject)}>
           <XIcon className="tw-size-4" />
           Reject
         </Button>
-        <Button variant="success" size="sm" onClick={handleAccept}>
+        <Button variant="success" size="sm" onClick={safeAsyncHandler(handleAccept)}>
           <Check className="tw-size-4" />
           Accept
         </Button>

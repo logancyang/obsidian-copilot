@@ -1,6 +1,5 @@
 import { ProjectConfig } from "@/aiParams";
 import { removeGeneratedInstructionFiles } from "@/instructions/agentsFile";
-import { ProjectContextCache } from "@/cache/projectContextCache";
 import { logError, logInfo, logWarn } from "@/logger";
 import {
   COPILOT_PROJECT_CREATED,
@@ -605,14 +604,8 @@ export class ProjectFileManager {
         logWarn(`[Projects] Failed to clean up empty project folder: ${folderPath}`, cleanupError);
       }
 
-      // Reason: await cache clear to prevent same-ID recreation from having its
-      // fresh cache wiped by a stale async cleanup. Consistent with folder-switch path.
-      await ProjectContextCache.getInstance()
-        .clearForProject(existing.project)
-        .catch((err) => logError("[Projects] Failed to clear context cache on delete", err));
-
-      // Reason: the vault-level cache above leaves the off-vault failure-marker
-      // bucket (markers/<md5(projectId)>) behind. Clearing it stops a project
+      // Reason: clear the off-vault failure-marker bucket
+      // (markers/<md5(projectId)>). Clearing it stops a project
       // recreated under the same id from inheriting stale negative-cache state.
       // Desktop-gated + dynamically imported so node-backed cache modules never
       // load on mobile; best-effort so a cleanup failure can't strand the delete.

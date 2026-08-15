@@ -10,6 +10,7 @@ import { closePlanPreview, openPlanPreview } from "@/agentMode/ui/PlanPreviewVie
 import { Check, ClipboardList, FileText, Send, X as XIcon } from "lucide-react";
 import { App } from "obsidian";
 import React, { useEffect, useState } from "react";
+import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
 const FEEDBACK_PLACEHOLDER = "Give feedback to redirect the plan…";
 
@@ -98,7 +99,7 @@ export const PlanProposalCard: React.FC<PlanProposalCardProps> = ({ plan, app, c
       </div>
 
       <div className="tw-flex tw-flex-wrap tw-items-center tw-justify-end tw-gap-2 tw-border-t tw-border-solid tw-border-border tw-px-3 tw-py-2">
-        <Button variant="secondary" size="sm" onClick={handleOpen}>
+        <Button variant="secondary" size="sm" onClick={safeAsyncHandler(handleOpen)}>
           <FileText className="tw-size-4" />
           Open
         </Button>
@@ -108,12 +109,17 @@ export const PlanProposalCard: React.FC<PlanProposalCardProps> = ({ plan, app, c
               variant="destructive"
               size="sm"
               disabled={busy}
-              onClick={() => decide("reject")}
+              onClick={safeAsyncHandler(() => decide("reject"))}
             >
               <XIcon className="tw-size-4" />
               Reject
             </Button>
-            <Button variant="success" size="sm" disabled={busy} onClick={() => decide("approve")}>
+            <Button
+              variant="success"
+              size="sm"
+              disabled={busy}
+              onClick={safeAsyncHandler(() => decide("approve"))}
+            >
               <Check className="tw-size-4" />
               Approve
             </Button>

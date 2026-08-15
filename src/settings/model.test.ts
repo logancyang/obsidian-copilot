@@ -1,3 +1,4 @@
+import { ChainType } from "@/chainType";
 import {
   COPILOT_FOLDER_ROOT,
   DEFAULT_QA_EXCLUSIONS_SETTING,
@@ -710,6 +711,24 @@ describe("model", () => {
       const sanitized = sanitizeClaudeSlice("dontAsk");
 
       expect(sanitized.agentMode.backends.claude?.autoModePermission).toBeUndefined();
+    });
+
+    it("coerces a retired `project` defaultChainType so chain construction never sees it (https://github.com/logancyang/obsidian-copilot-preview/issues/310)", () => {
+      const out = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        defaultChainType: "project",
+      } as unknown as CopilotSettings);
+
+      expect(out.defaultChainType).toBe(DEFAULT_SETTINGS.defaultChainType);
+    });
+
+    it("keeps a defaultChainType the runner still supports", () => {
+      const out = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        defaultChainType: ChainType.COPILOT_PLUS_CHAIN,
+      });
+
+      expect(out.defaultChainType).toBe(ChainType.COPILOT_PLUS_CHAIN);
     });
 
     it("defaults to the historical root when empty", () => {

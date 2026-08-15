@@ -78,17 +78,13 @@ export const AgentProjectRowActions = memo(
     className,
   }: AgentProjectRowActionsProps): React.ReactElement => {
     const handleEdit = () => {
-      // Agent edit reuses the full project modal MINUS the model card + CAG
-      // processing status (agentMode). No `plugin` → no CAG retry affordances.
       new AddProjectModal(
         app,
         async (next) => {
           const updated = await ProjectFileManager.getInstance(app).updateProject(project.id, next);
           onEdited?.(updated.project);
         },
-        project,
-        undefined,
-        true
+        project
       ).open();
     };
 

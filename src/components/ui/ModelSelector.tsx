@@ -164,7 +164,7 @@ export function ModelSelector({
               <DropdownMenuItem
                 disabled={itemDisabled}
                 title={disabledReason ?? undefined}
-                onSelect={async (event) => {
+                onSelect={(event) => {
                   if (itemDisabled) {
                     event.preventDefault();
                     return;

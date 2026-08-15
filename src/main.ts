@@ -3,13 +3,8 @@ import type { AgentSessionManager } from "@/agentMode";
 // platform, and the barrel pulls Node-only modules that crash mobile.
 import { isNativeChatId, parseNativeChatId } from "@/utils/nativeChatId";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
-import ProjectManager from "@/LLMProviders/projectManager";
-import {
-  CustomModel,
-  getCurrentProject,
-  setSelectedTextContexts,
-  getSelectedTextContexts,
-} from "@/aiParams";
+import ChainOwner from "@/LLMProviders/chainOwner";
+import { CustomModel, setSelectedTextContexts, getSelectedTextContexts } from "@/aiParams";
 import { NoteSelectedTextContext, SelectedTextContext } from "@/types/message";
 import { registerCommands } from "@/commands";
 import CopilotView from "@/components/CopilotView";
@@ -83,7 +78,6 @@ import { dehydrateDeviceProfile, hydrateDeviceProfile } from "@/settings/deviceP
 import { getDeviceId } from "@/utils/deviceId";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { installRendererEventsShim } from "@/utils/rendererEventsShim";
-import { ProjectContextCache } from "@/cache/projectContextCache";
 import { ContextProcessor } from "@/contextProcessor";
 import { CustomCommandManager } from "@/commands/customCommandManager";
 import { ChatManagerChatUIState } from "@/state/ChatUIState";
@@ -141,7 +135,7 @@ import {
 
 export default class CopilotPlugin extends Plugin {
   // Plugin components
-  projectManager: ProjectManager;
+  chainOwner: ChainOwner;
   brevilabsClient: BrevilabsClient;
   userMessageHistory: string[] = [];
   vectorStoreManager: VectorStoreManager;
@@ -269,9 +263,8 @@ export default class CopilotPlugin extends Plugin {
     // Initialize built-in tools with app access
     initializeBuiltinTools(this.app);
 
-    // Seed the ProjectContextCache and ContextProcessor singletons with `app`
-    // before anything reaches for them via the no-arg getInstance().
-    ProjectContextCache.getInstance(this.app);
+    // Seed the ContextProcessor singleton with `app` before anything reaches
+    // for it via the no-arg getInstance().
     ContextProcessor.getInstance(this.app);
     CustomCommandManager.getInstance(this.app);
     logFileManager.setApp(this.app);
@@ -298,8 +291,8 @@ export default class CopilotPlugin extends Plugin {
       )
     );
 
-    // Initialize ProjectManager
-    this.projectManager = ProjectManager.getInstance(this.app, this);
+    // Initialize the owner of the shared Quick Chat chain
+    this.chainOwner = ChainOwner.getInstance(this.app, this.modelManagement);
 
     // Initialize Agent Mode coordinator (desktop only — ACP needs subprocess
     // support). Gate on `isDesktopRuntime()`, not `Platform.isDesktopApp`:
@@ -346,7 +339,7 @@ export default class CopilotPlugin extends Plugin {
 
     // Initialize ChatUIState with new architecture
     const messageRepo = new MessageRepository();
-    const chainManager = this.projectManager.getCurrentChainManager();
+    const chainManager = this.chainOwner.getCurrentChainManager();
     const chatManager = new ChatManager(messageRepo, chainManager, this.fileParserManager, this);
     this.chatUIState = new ChatManagerChatUIState(chatManager);
 
@@ -630,7 +623,18 @@ export default class CopilotPlugin extends Plugin {
     }
   }
 
-  async onunload() {
+  onunload(): void {
+    // Obsidian never awaits onunload, so the async tail of teardown is
+    // fire-and-forget by nature; declaring onunload void makes that explicit.
+    // teardown() is invoked synchronously, so everything above its first
+    // `await` still runs before this call returns, and a failure partway
+    // through is logged instead of becoming an unhandled rejection.
+    this.teardown().catch((error) => {
+      logError("Copilot: plugin teardown failed during unload:", error);
+    });
+  }
+
+  private async teardown(): Promise<void> {
     // End the Miyo mutation lifecycle HERE, as the first statement: everything
     // above the first `await` runs before the next `onload()` can possibly
     // start, so this carries none of the late-continuation risk that keeps
@@ -641,11 +645,11 @@ export default class CopilotPlugin extends Plugin {
     resetMiyoMutations();
 
     // Best-effort flush of pending keychain/data.json writes.
-    // Reason: onunload() is void in Obsidian's type system, but awaiting here
-    // is no worse than fire-and-forget, and consistent with the log flush below.
-    // (The KeychainService singleton and the persistence module's own state
-    // reset at the START of the next onload — see the comment there for the
-    // late-write race that motivated it.)
+    // Reason: Obsidian does not await teardown, but awaiting here keeps the
+    // remaining steps ordered after the flush, consistent with the log flush
+    // below. (The KeychainService singleton and the persistence module's own
+    // state reset at the START of the next onload — see the comment there for
+    // the late-write race that motivated it.)
     await flushPersistence();
 
     // Clear all persistent selection highlights before unload
@@ -654,10 +658,6 @@ export default class CopilotPlugin extends Plugin {
 
     // Cleanup chat selection highlight controller
     this.chatSelectionHighlightController?.cleanup();
-
-    if (this.projectManager) {
-      this.projectManager.onunload();
-    }
 
     this.agentModelDiscoveryUnsubscriber?.();
     await this.agentSessionManager?.shutdown();
@@ -1265,11 +1265,9 @@ export default class CopilotPlugin extends Plugin {
     const folderFiles = await listMarkdownFiles(this.app, getEffectiveConversationsFolder());
     if (folderFiles.length === 0) return [];
 
-    const currentProject = getCurrentProject();
-
     // Reason: pass all files to filterChatHistoryFiles which checks frontmatter projectId.
     // A prefix prefilter would miss renamed or legacy files that still have correct frontmatter.
-    return filterChatHistoryFiles(this.app, folderFiles, currentProject?.id);
+    return filterChatHistoryFiles(this.app, folderFiles);
   }
 
   async getChatHistoryItems(): Promise<ChatHistoryItem[]> {
@@ -1514,7 +1512,7 @@ export default class CopilotPlugin extends Plugin {
     if (getSettings().enableRecentConversations) {
       try {
         // Get the current chat model from the chain manager
-        const chainManager = this.projectManager.getCurrentChainManager();
+        const chainManager = this.chainOwner.getCurrentChainManager();
         const chatModel = chainManager.chatModelManager.getChatModel();
         this.userMemoryManager.addRecentConversation(this.chatUIState.getMessages(), chatModel);
       } catch (error) {
