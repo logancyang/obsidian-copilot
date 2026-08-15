@@ -1,22 +1,57 @@
-import { AIMessage, BaseMessage, HumanMessage, SystemMessage } from "@langchain/core/messages";
+import {
+  AIMessage,
+  AIMessageChunk,
+  BaseMessage,
+  HumanMessage,
+  SystemMessage,
+} from "@langchain/core/messages";
 import OpenAI from "openai";
 import { ChatOpenRouter } from "@/LLMProviders/ChatOpenRouter";
 
 jest.mock("@/logger");
 
-/** Access the private message converter without spinning up a real stream. */
-function convertMessages(messages: unknown[]): OpenAI.ChatCompletionMessageParam[] {
-  const model = new ChatOpenRouter({
+function createModel(): ChatOpenRouter {
+  return new ChatOpenRouter({
     modelName: "test-model",
     apiKey: "test-key",
     // The jest environment has no global fetch; the stub keeps client construction inert.
     configuration: { fetch: jest.fn() as unknown as typeof fetch },
   });
+}
+
+/** Access the private message converter without spinning up a real stream. */
+function convertMessages(messages: unknown[]): OpenAI.ChatCompletionMessageParam[] {
   return (
-    model as unknown as {
+    createModel() as unknown as {
       toOpenRouterMessages: (msgs: BaseMessage[]) => OpenAI.ChatCompletionMessageParam[];
     }
   ).toOpenRouterMessages(messages as BaseMessage[]);
+}
+
+/**
+ * Reproduce a streamed assistant turn: run each raw OpenRouter delta through the
+ * private chunk builder and aggregate the chunks the way callers of `stream()` do.
+ */
+function aggregateStreamedDeltas(deltas: Array<Record<string, unknown>>): AIMessageChunk {
+  const model = createModel() as unknown as {
+    buildMessageChunk: (config: {
+      rawChunk: { id: string };
+      delta: Record<string, unknown>;
+      content: string;
+      finishReason: null;
+    }) => AIMessageChunk;
+  };
+
+  return deltas
+    .map((delta) =>
+      model.buildMessageChunk({
+        rawChunk: { id: "chatcmpl-test" },
+        delta,
+        content: "",
+        finishReason: null,
+      })
+    )
+    .reduce((aggregated, chunk) => aggregated.concat(chunk));
 }
 
 describe("ChatOpenRouter", () => {
@@ -79,22 +114,31 @@ describe("ChatOpenRouter", () => {
         ]);
       });
 
-      it("passes through raw OpenAI-format tool_calls from additional_kwargs", () => {
-        const rawToolCalls = [
+      it("serializes an AIMessageChunk aggregated from streamed tool call fragments", () => {
+        const aggregated = aggregateStreamedDeltas([
           {
-            id: "call_2",
-            type: "function" as const,
-            function: { name: "webSearch", arguments: '{"q":"x"}' },
+            tool_calls: [
+              { index: 0, id: "call_2", function: { name: "webSearch", arguments: '{"q":' } },
+            ],
           },
-        ];
-        const message = new AIMessage({
-          content: "",
-          additional_kwargs: { tool_calls: rawToolCalls },
-        });
+          { tool_calls: [{ index: 0, function: { arguments: '"x"}' } }] },
+        ]);
 
-        const result = convertMessages([message]);
+        const result = convertMessages([aggregated]);
 
-        expect(result).toEqual([{ role: "assistant", content: "", tool_calls: rawToolCalls }]);
+        expect(result).toEqual([
+          {
+            role: "assistant",
+            content: "",
+            tool_calls: [
+              {
+                id: "call_2",
+                type: "function",
+                function: { name: "webSearch", arguments: JSON.stringify({ q: "x" }) },
+              },
+            ],
+          },
+        ]);
       });
 
       it("emits a plain assistant message when an AIMessage has no tool calls", () => {
