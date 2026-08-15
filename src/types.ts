@@ -45,6 +45,23 @@ declare module "obsidian" {
 
   interface App {
     secretStorage?: SecretStorage;
+
+    // Reason: `loadLocalStorage` / `saveLocalStorage` are public since obsidian
+    // 1.8.7 (guaranteed at runtime by `minAppVersion`), but the pinned `.d.ts`
+    // (^1.2.5) predates them. Declared here instead of bumping the dev
+    // dependency, mirroring `SecretStorage` above. Obsidian prefixes the key
+    // with the vault's app id, so values are per-vault-per-device, and JSON
+    // round-trips the value.
+    /**
+     * Retrieve a vault-scoped value from device-local storage. Returns `null`
+     * when the key is absent or its stored value cannot be parsed.
+     */
+    loadLocalStorage(key: string): unknown;
+    /**
+     * Save a vault-scoped value to device-local storage. Falsy data removes
+     * the key. Write failures are swallowed by Obsidian, not thrown.
+     */
+    saveLocalStorage(key: string, data: unknown): void;
   }
 }
 
