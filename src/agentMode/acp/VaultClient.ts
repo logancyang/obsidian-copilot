@@ -12,7 +12,7 @@ import type {
 import { RequestError } from "@agentclientprotocol/sdk";
 import { logInfo, logWarn } from "@/logger";
 import { App, FileSystemAdapter, normalizePath } from "obsidian";
-import * as path from "node:path";
+import { requireNodeModule } from "@/utils/desktopRuntime";
 
 export interface PermissionPrompter {
   (req: RequestPermissionRequest): Promise<RequestPermissionResponse>;
@@ -65,6 +65,7 @@ export class VaultClient implements Client {
   }
 
   async writeTextFile(params: WriteTextFileRequest): Promise<WriteTextFileResponse> {
+    const path = requireNodeModule<typeof import("node:path")>("path");
     const rel = this.resolveVaultRelative(params.path);
     const adapter = this.app.vault.adapter;
     const dir = path.posix.dirname(rel);
@@ -82,6 +83,7 @@ export class VaultClient implements Client {
    * `RequestError.invalidParams` if the path escapes the vault.
    */
   private resolveVaultRelative(p: string): string {
+    const path = requireNodeModule<typeof import("node:path")>("path");
     const adapter = this.app.vault.adapter;
     if (!(adapter instanceof FileSystemAdapter)) {
       throw RequestError.invalidParams(

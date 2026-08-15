@@ -1,6 +1,5 @@
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
-import * as path from "node:path";
 import type { AgentSessionIndexStorage } from "./AgentSessionIndex";
+import { requireNodeModule } from "@/utils/desktopRuntime";
 
 /**
  * `AgentSessionIndexStorage` backed by Node's filesystem, for storing the
@@ -12,6 +11,9 @@ import type { AgentSessionIndexStorage } from "./AgentSessionIndex";
  * sync conflicts on other devices. Desktop-only, matching Agent Mode.
  */
 export function createNodeFileStorage(): AgentSessionIndexStorage {
+  const { mkdir, readFile, stat, writeFile } =
+    requireNodeModule<typeof import("node:fs/promises")>("fs/promises");
+  const path = requireNodeModule<typeof import("node:path")>("path");
   return {
     exists: async (p) => {
       try {

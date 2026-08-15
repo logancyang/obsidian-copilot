@@ -3,6 +3,7 @@ import type { ConfiguredModel, Provider, ProviderOrigin, ProviderType } from "@/
 import { ChatModelProviders } from "@/constants";
 import {
   COPILOT_PLUS_OPENCODE_PROVIDER_ID,
+  copilotPlusModelId,
   isOpencodeZenWireId,
   mapProviderToOpencodeId,
   opencodeEnabledModelEntries,
@@ -266,6 +267,22 @@ describe("opencodeModelResolve", () => {
       // `ChatModelProviders.COPILOT_PLUS`, because this module sits behind the
       // desktop-only Agent Mode barrel. Drift would silently stop it matching.
       expect(COPILOT_PLUS_OPENCODE_PROVIDER_ID).toBe(ChatModelProviders.COPILOT_PLUS);
+    });
+  });
+
+  describe("copilotPlusModelId", () => {
+    it("strips opencode's Copilot Plus prefix down to the bare model id", () => {
+      expect(copilotPlusModelId("copilot-plus/gemini-3-pro")).toBe("gemini-3-pro");
+    });
+
+    it.each([
+      ["a BYOK model on the user's own key", "google/gemini-3-pro"],
+      ["an agent-hosted model", "opencode/grok-code"],
+      ["a bare id with no provider prefix", "gemini-3-pro"],
+      ["null", null],
+      ["undefined", undefined],
+    ])("answers null for %s — Copilot Plus caps must not apply to it", (_label, wireId) => {
+      expect(copilotPlusModelId(wireId)).toBeNull();
     });
   });
 

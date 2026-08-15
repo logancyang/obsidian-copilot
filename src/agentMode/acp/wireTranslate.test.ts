@@ -15,6 +15,20 @@ const VALID_TODOS = [
 ];
 
 const testAcpNotificationToEvents = () => {
+  it("drops a user message chunk instead of reporting it as a titleless session update", () => {
+    // A backend may echo the prompt on every live turn. Translating it would reach
+    // the unknown-discriminant fallback, which reports a titleless session
+    // update — and a backend whose titles are trusted then clears the label.
+    const events = acpNotificationToEvents(
+      notification({
+        sessionUpdate: "user_message_chunk",
+        content: { type: "text", text: "hi" },
+      })
+    );
+
+    expect(events).toEqual([]);
+  });
+
   it("appends a plan event after a todowrite tool_call carrying rawInput.todos", () => {
     const events = acpNotificationToEvents(
       notification({

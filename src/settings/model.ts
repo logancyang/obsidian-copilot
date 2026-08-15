@@ -1202,7 +1202,7 @@ export function validateSkillsFolder(
  * when supplied, overlap with the active Obsidian configuration directory.
  * Persisted settings intentionally omit `configDir` so changing a vault's
  * configuration directory cannot silently relocate existing Copilot data.
- * New settings values pass `configDir` before Apply. Vault-content checks that
+ * New settings values pass `configDir` before Apply. Vault-content scans that
  * need App/Vault access live in `copilotRootChange`, not here.
  *
  * Unlike {@link validateSkillsFolder}, absolute and drive-letter paths are

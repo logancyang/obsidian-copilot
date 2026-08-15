@@ -2,7 +2,7 @@
 // backward compatibility where needed; new features should not depend on this module.
 import EmbeddingsManager from "@/LLMProviders/embeddingManager";
 import { CustomError } from "@/error";
-import { logError, logInfo } from "@/logger";
+import { logError, logInfo, logWarn } from "@/logger";
 import { getSettings, subscribeToSettingsChange } from "@/settings/model";
 import { areEmbeddingModelsSame } from "@/utils";
 import { Embeddings } from "@langchain/core/embeddings";
@@ -230,7 +230,7 @@ export class DBOperations {
 
   public getDb(): CopilotOrama | undefined {
     if (!this.oramaDb) {
-      console.warn("Database not initialized. Some features may be limited.");
+      logWarn("Database not initialized. Some features may be limited.");
     }
     return this.oramaDb;
   }

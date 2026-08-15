@@ -95,13 +95,14 @@ function seedSkills(skills: Skill[]): void {
 function makeProvider(
   providerId: string,
   origin: ProviderOrigin,
-  overrides: Partial<Pick<Provider, "providerType" | "baseUrl" | "displayName">> = {}
+  overrides: Partial<Pick<Provider, "providerType" | "baseUrl" | "displayName" | "enableCors">> = {}
 ): Provider {
   return {
     providerId,
     providerType: overrides.providerType ?? "anthropic",
     displayName: overrides.displayName ?? providerId,
     baseUrl: overrides.baseUrl,
+    enableCors: overrides.enableCors,
     origin,
     addedAt: 0,
   };
@@ -406,6 +407,29 @@ describe("buildOpencodeConfig — provider/model injection", () => {
     expect(cfg.provider["p-custom"].options?.apiKey).toBe("secret-key");
   });
 
+  it("does not forward the Quick Chat CORS choice to OpenCode Agent (https://github.com/logancyang/obsidian-copilot-preview/issues/313)", async () => {
+    const provider = makeProvider(
+      "p-custom",
+      { kind: "byok" },
+      {
+        providerType: "openai-compatible",
+        baseUrl: "https://my-endpoint/v1",
+        displayName: "Custom",
+        enableCors: true,
+      }
+    );
+    const deps = makeDeps({
+      resolved: [okEntry(provider, makeModel("p-custom", "gpt-5.5"))],
+      keys: { "p-custom": "secret-key" },
+    });
+    const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
+      provider: Record<string, { options?: Record<string, unknown> }>;
+    };
+
+    expect(cfg.provider["p-custom"]).not.toHaveProperty("enableCors");
+    expect(cfg.provider["p-custom"].options).not.toHaveProperty("enableCors");
+  });
+
   it("skips an OpenAI-compatible BYOK provider with no baseUrl", async () => {
     const provider = makeOpenAICompatibleProvider("p-nobase", undefined);
     const deps = makeDeps({
@@ -548,13 +572,14 @@ describe("buildOpencodeConfig — provider/model injection", () => {
       resolved: [okEntry(provider, makeModel("p-plus", "copilot-plus-flash"))],
       keys: { "p-plus": "plus-token-123" },
     });
+    deps.clientVersion = "4.0.0-preview-260802";
     const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
       provider: Record<
         string,
         {
           npm?: string;
           name?: string;
-          options?: { baseURL?: string; apiKey?: string };
+          options?: { baseURL?: string; apiKey?: string; headers?: Record<string, string> };
           models?: Record<string, unknown>;
         }
       >;
@@ -564,6 +589,9 @@ describe("buildOpencodeConfig — provider/model injection", () => {
     expect(cp.name).toBe("Copilot Plus");
     expect(cp.options?.baseURL).toBe("https://models.brevilabs.com/v1");
     expect(cp.options?.apiKey).toBe("plus-token-123");
+    expect(cp.options?.headers).toEqual({
+      "X-Client-Version": "4.0.0-preview-260802",
+    });
     expect(cp.models).toEqual({ "copilot-plus-flash": {} });
   });
 });
@@ -868,6 +896,26 @@ describe("OpencodeBackend.buildSpawnDescriptor", () => {
     const cfg = JSON.parse(desc.env.OPENCODE_CONFIG_CONTENT as string);
     expect(cfg.provider.anthropic.options).toEqual({ apiKey: "anth-xyz" });
     expect(cfg.provider.anthropic.models).toEqual({ "claude-sonnet-4-6": {} });
+  });
+
+  it("passes the plugin version to built-in Copilot Plus skills", async () => {
+    setSettings({ isPaidUser: true, plusLicenseKey: "plus-token", userId: "user-1" });
+    updateSetting("agentMode", {
+      byok: {},
+      activeBackend: "opencode",
+      debugFullFrames: false,
+      welcomeDismissed: false,
+      skills: { folder: "copilot/skills" },
+      backends: { opencode: { binaryPath: "/path/to/opencode" } },
+    });
+    const backend = new OpencodeBackend({
+      ...NO_MODELS_DEPS,
+      clientVersion: "4.0.0-preview-260802",
+    });
+
+    const desc = await backend.buildSpawnDescriptor({ vaultBasePath: "/vault/abs" });
+
+    expect(desc.env.COPILOT_CLIENT_VERSION).toBe("4.0.0-preview-260802");
   });
 
   it("threads the injected getCacheRoot into the spawned external_directory allow", async () => {

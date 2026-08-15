@@ -3,7 +3,6 @@ import {
   applyCopilotRootChange,
   copilotRootContainsNotes,
   findCopilotRootFileConflict,
-  isKnownCopilotRoot,
 } from "@/settings/copilotRootChange";
 import { mockTFile, mockTFolder } from "@/__tests__/mockObsidian";
 import { getSettings, settingsAtom, settingsStore, type CopilotSettings } from "@/settings/model";
@@ -81,10 +80,10 @@ describe("copilotRootChange", () => {
     });
 
     it("catches a differently-cased folder where the filesystem is case-insensitive", () => {
-      // This guard has to agree with the exclusion matcher, which folds case on
+      // This scan has to agree with the exclusion matcher, which folds case on
       // these platforms. Comparing exact-case would clear `Notes`, and the real
       // `notes/` — the user's own notes — would then be excluded from search:
-      // exactly what the guard exists to prevent.
+      // exactly what the warning must disclose.
       const platform = obsidian.Platform as { isMacOS: boolean };
       const previous = platform.isMacOS;
       platform.isMacOS = true;
@@ -142,43 +141,6 @@ describe("copilotRootChange", () => {
     it("returns null for an empty candidate root", () => {
       const app = appWithEntries({});
       expect(findCopilotRootFileConflict(app, "")).toBeNull();
-    });
-  });
-
-  describe("isKnownCopilotRoot()", () => {
-    it("returns true for a root recorded in the history", () => {
-      expect(isKnownCopilotRoot("ai", ["copilot", "ai"])).toBe(true);
-    });
-
-    it("matches a root against the history in canonical form despite trailing slashes", () => {
-      expect(isKnownCopilotRoot("ai/", ["copilot", "ai"])).toBe(true);
-    });
-
-    it("does not treat a differently-cased folder as a recorded root", () => {
-      // Identity stays exact-case even on filesystems where coverage folds: this
-      // gates the EXEMPTION from the note-content guard, so folding here would
-      // accept a genuinely different `notes/` as the `Notes` root once used and
-      // activate Copilot over the user's own notes. See the note on the function.
-      const platform = obsidian.Platform as { isMacOS: boolean };
-      const previous = platform.isMacOS;
-      platform.isMacOS = true;
-      try {
-        expect(isKnownCopilotRoot("TeamAI", ["teamai"])).toBe(false);
-      } finally {
-        platform.isMacOS = previous;
-      }
-    });
-
-    it("returns false for a root absent from the history", () => {
-      expect(isKnownCopilotRoot("new-root", ["copilot", "ai"])).toBe(false);
-    });
-
-    it("returns false for an empty candidate root", () => {
-      expect(isKnownCopilotRoot("", ["copilot", "ai"])).toBe(false);
-    });
-
-    it("returns false against an empty history", () => {
-      expect(isKnownCopilotRoot("ai", [])).toBe(false);
     });
   });
 

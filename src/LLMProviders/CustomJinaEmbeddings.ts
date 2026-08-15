@@ -25,6 +25,8 @@ export interface JinaEmbeddingsParams extends EmbeddingsParams {
   dimensions?: number;
   /** Whether to L2-normalize the embedding vectors. */
   normalized?: boolean;
+  /** Additional headers to send with each embeddings request. */
+  headers?: Record<string, string>;
 }
 
 type JinaMultiModelInput =
@@ -73,6 +75,7 @@ export class CustomJinaEmbeddings extends Embeddings implements JinaEmbeddingsPa
   dimensions = 1024;
   apiKey: string;
   normalized = true;
+  headers: Record<string, string> = {};
 
   /**
    * Creates a Jina embeddings client using local configuration or Jina environment variables.
@@ -99,6 +102,7 @@ export class CustomJinaEmbeddings extends Embeddings implements JinaEmbeddingsPa
     this.batchSize = fieldsWithDefaults?.batchSize ?? this.batchSize;
     this.stripNewLines = fieldsWithDefaults?.stripNewLines ?? this.stripNewLines;
     this.normalized = fieldsWithDefaults?.normalized ?? this.normalized;
+    this.headers = fieldsWithDefaults?.headers ?? this.headers;
   }
 
   /**
@@ -174,6 +178,7 @@ export class CustomJinaEmbeddings extends Embeddings implements JinaEmbeddingsPa
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${this.apiKey}`,
+        ...this.headers,
       },
       body: JSON.stringify(body),
     });

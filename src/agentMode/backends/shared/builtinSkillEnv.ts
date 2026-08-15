@@ -1,4 +1,3 @@
-import * as os from "node:os";
 import { BREVILABS_API_BASE_URL } from "@/constants";
 import { getSettings } from "@/settings/model";
 import { getMiyoCustomUrl } from "@/miyo/miyoUtils";
@@ -8,6 +7,7 @@ import {
   COPILOT_OBSIDIAN_CLI_ENV,
   resolveObsidianCliPath,
 } from "@/agentMode/backends/shared/obsidianCliPath";
+import { requireNodeModule } from "@/utils/desktopRuntime";
 
 /** Env var the bundled `miyo` CLI reads to target a non-default Miyo service. */
 const MIYO_URL_ENV = "MIYO_URL";
@@ -41,6 +41,7 @@ export async function buildBuiltinSkillEnv(
   clientVersion = "",
   workspaceRootAbs = ""
 ): Promise<Readonly<Record<string, string>>> {
+  const os = requireNodeModule<typeof import("node:os")>("os");
   const settings = getSettings();
   const env: Record<string, string> = {};
 

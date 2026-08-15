@@ -1,5 +1,6 @@
 import { AI_SENDER, USER_SENDER } from "@/constants";
 import { formatDateTime } from "@/utils";
+import { stripUserMessageWrapper } from "@/agentMode/session/promptEnvelope";
 import type { AgentChatMessage } from "@/agentMode/session/types";
 
 /**
@@ -96,17 +97,6 @@ function joinTextBlocks(content: ContentBlock[]): string {
     .map((b) => b.text)
     .join("\n\n")
     .trim();
-}
-
-/**
- * Unwrap the plugin's `<user-message>…</user-message>` envelope so the stored
- * prompt (which prepends a `<copilot-context>` block when notes are attached)
- * displays as just what the user typed. Returns the input unchanged when no
- * wrapper is present (prompts sent without attached context aren't wrapped).
- */
-function stripUserMessageWrapper(content: string): string {
-  const match = content.match(/<user-message>\n?([\s\S]*?)\n?<\/user-message>/);
-  return match ? match[1] : content;
 }
 
 function toTimestamp(raw: unknown): AgentChatMessage["timestamp"] {

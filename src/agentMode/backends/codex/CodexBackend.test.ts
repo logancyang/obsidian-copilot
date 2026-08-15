@@ -95,6 +95,16 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
     expect(value).not.toContain("copilot/skills/<name>/SKILL.md");
   });
 
+  it("passes the plugin version to built-in Copilot Plus skills", async () => {
+    setSettings({ isPaidUser: true, plusLicenseKey: "plus-token", userId: "user-1" });
+
+    const desc = await new CodexBackend("4.0.0-preview-260802").buildSpawnDescriptor({
+      vaultBasePath: "/vault",
+    });
+
+    expect(desc.env.COPILOT_CLIENT_VERSION).toBe("4.0.0-preview-260802");
+  });
+
   it("encodes the shared product prompt into both paths, byte for byte", async () => {
     const desc = await new CodexBackend().buildSpawnDescriptor({ vaultBasePath: "/vault" });
     const shared = buildAgentSystemPrompt();

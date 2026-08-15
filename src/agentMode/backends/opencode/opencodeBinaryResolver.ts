@@ -9,9 +9,8 @@
  * never emit `.cmd` / `.bat` / `.ps1` shims — ACP spawns over stdio without
  * `shell: true`, so those break stream-json.
  */
-import * as path from "node:path";
-
 import { WELL_KNOWN_BIN_DIRS } from "@/utils/binaryPath";
+import { requireNodeModule } from "@/utils/desktopRuntime";
 import { nodeToolBinDirCandidates, type NodeToolFs } from "@/utils/nodeToolBinDirs";
 
 export type OpencodeBinaryResolverFs = NodeToolFs;
@@ -43,10 +42,8 @@ export function resolveOpencodeBinary(input: OpencodeBinaryResolverInput): strin
   return null;
 }
 
-const posix = path.posix;
-const win = path.win32;
-
 function unixCandidates(input: OpencodeBinaryResolverInput): Array<string | null> {
+  const posix = requireNodeModule<typeof import("node:path")>("path").posix;
   const { homeDir } = input;
   // Native installer (`curl -fsSL https://opencode.ai/install | bash`) lands at
   // ~/.opencode/bin/opencode; `bun install -g` lands at ~/.bun/bin. Probe these
@@ -61,6 +58,7 @@ function unixCandidates(input: OpencodeBinaryResolverInput): Array<string | null
 }
 
 function windowsCandidates(input: OpencodeBinaryResolverInput): Array<string | null> {
+  const win = requireNodeModule<typeof import("node:path")>("path").win32;
   const { homeDir, env } = input;
   const localAppData = env.LOCALAPPDATA ?? win.join(homeDir, "AppData", "Local");
   const programFiles = env.ProgramFiles ?? "C:\\Program Files";

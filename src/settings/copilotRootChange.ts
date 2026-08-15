@@ -40,51 +40,13 @@ function buildRootPatch(
 }
 
 /**
- * Whether `folder` is a root Copilot has used before, per the recorded history.
- *
- * Reason: a previously-active root still holds the Copilot Markdown it wrote
- * (chats, memory, prompts) because a root switch never moves files, and that
- * root stays permanently QA-excluded via `copilotRootHistory`. Re-activating it
- * therefore introduces no new "ordinary notes silently hidden" risk, so the
- * caller uses this to skip the {@link copilotRootContainsNotes} guard that would
- * otherwise reject the switch on its own leftover data. Comparison is done on
- * the same canonical form the history and QA matcher use.
- *
- * @param folder - Candidate root, vault-root-relative.
- * @param history - Recorded `copilotRootHistory` from settings.
- */
-/**
- * DESIGN NOTE — this comparison is exact-case while
- * {@link copilotRootContainsNotes} folds case on Windows/macOS. The asymmetry is
- * deliberate: that one answers COVERAGE (fail-closed — over-excluding is safe),
- * this one answers IDENTITY and gates an EXEMPTION from the note-content guard,
- * where the same heuristic inverts. On a case-sensitive macOS volume, folding
- * here would accept a genuinely different `notes/` as "the `Notes` root I used
- * before" and skip the guard, activating a Copilot root over the user's real
- * notes.
- * Cost of leaving it exact-case: re-activating a historical root under a
- * different spelling (history holds `teamai`, the user types `TeamAI`) is
- * refused by the content guard instead of exempted. Recoverable — the original
- * spelling works — and it fails closed.
- * The real fix is a filesystem-aware root identity (resolve the candidate to the
- * actual directory and compare that), which this repo has no facility for and
- * which touches already-persisted history. Deferred.
- * If a future review flags the mismatch, point them at this note.
- */
-export function isKnownCopilotRoot(folder: string, history: readonly string[]): boolean {
-  const [normalizedFolder] = normalizeRootFolders([folder]);
-  if (!normalizedFolder) return false;
-  return normalizeRootFolders(history).includes(normalizedFolder);
-}
-
-/**
  * App-aware helpers for changing the single configurable Copilot root folder.
  *
  * Syntax validation lives in {@link validateCopilotFolder} (pure, in `model`).
  * This module adds the two pieces that need runtime state:
- *   1. vault-content validation — reject a root that already holds ordinary
- *      notes, because activating it would permanently exclude those notes from
- *      QA search (the root and its history are always system-excluded);
+ *   1. vault-content detection — warn when a root already holds Markdown,
+ *      because activating it permanently excludes those files from Copilot
+ *      search (the root and its history are always system-excluded);
  *   2. the atomic root switch plus an immediate best-effort garbage-collection
  *      pass so index docs newly excluded by the change are dropped without
  *      waiting for the next full index.
@@ -96,7 +58,7 @@ export function isKnownCopilotRoot(folder: string, history: readonly string[]): 
  * Reason: once a folder becomes the Copilot root it is system-excluded from QA
  * indexing wholesale, so pointing the root at a folder that already holds the
  * user's notes would silently drop them from search. The Apply layer calls this
- * to reject that case before committing.
+ * to show an explicit warning before committing.
  *
  * @param app - Active Obsidian app, threaded in (never the global `app`).
  * @param folder - Candidate root, vault-root-relative.
@@ -107,8 +69,8 @@ export function copilotRootContainsNotes(app: App, folder: string): boolean {
   if (root.length === 0) return false;
   // Compared exactly as the exclusion boundary will compare it: that matcher
   // folds case on case-insensitive filesystems, so an exact-case check here
-  // would clear `Notes` while the vault holds `notes/` — and the very notes this
-  // guard exists to protect would then be excluded from search.
+  // would clear `Notes` while the vault holds `notes/` — and omit the warning
+  // for the very notes that will be excluded from search.
   return app.vault.getMarkdownFiles().some((file) => matchSystemRoots(file.path, [root]));
 }
 
@@ -117,7 +79,7 @@ export function copilotRootContainsNotes(app: App, folder: string): boolean {
  * or null when every existing prefix is a folder (or nothing exists yet).
  *
  * Reason: a root like `ai.txt`, or `team/ai` where `team` is a file, passes the
- * syntax and Markdown-content checks, persists successfully, and then every
+ * syntax and Markdown-content scan, persists successfully, and then every
  * folder creation under it fails forever (the sub-folder pre-create only logs,
  * so the first visible failure is a chat save much later). The Apply layer's
  * caller uses this to reject the change up front with the conflicting path.
@@ -153,8 +115,8 @@ export function findCopilotRootFileConflict(app: App, folder: string): string | 
  * the new `copilotFolder` are written as one snapshot, so a persisted snapshot
  * can never show the new root without a history entry that keeps the previous
  * root excluded from QA. Callers must have already run
- * {@link validateCopilotFolder} and the content check; the guard here is
- * defensive and simply refuses to activate an invalid value.
+ * {@link validateCopilotFolder} and shown any content warning; the guard here
+ * is defensive and simply refuses to activate an invalid value.
  *
  * DESIGN NOTE — activation is persist-before-activate.
  * The new root must not reach runtime folder resolvers (`getEffective*Folder`)
@@ -177,16 +139,16 @@ export function findCopilotRootFileConflict(app: App, folder: string): string | 
  *     needed, and the caller keeps the old root and surfaces the failure.
  * (d) If a future review flags this again, point them at this note.
  *
- * DESIGN NOTE — content-check TOCTOU (accepted, not fixed here).
- * The vault-content guard ({@link copilotRootContainsNotes}) runs in the UI
+ * DESIGN NOTE — content-warning TOCTOU (accepted, not fixed here).
+ * The vault-content scan ({@link copilotRootContainsNotes}) runs in the UI
  * before the confirm modal; this Apply layer deliberately does NOT re-run it
  * before activating.
- * (a) Trigger: within the few-second window between the UI content check passing
+ * (a) Trigger: within the few-second window between the UI content scan
  *     and the user confirming, Obsidian Sync or another plugin creates notes
  *     under the target root.
- * (b) Consequence: those newly-arrived notes get excluded from QA wholesale when
- *     the root activates. It is fully reversible — pointing the root elsewhere
- *     restores them; no data is lost.
+ * (b) Consequence: those newly-arrived notes were not mentioned by the warning
+ *     before the root activates and excludes them from QA wholesale. It is fully
+ *     reversible — pointing the root elsewhere restores them; no data is lost.
  * (c) Why not fixed: `app` is now in scope, but a re-scan would only narrow, not
  *     close, the window — vault contents can still change during the async
  *     persist. Fully closing it would require coordinating with every vault

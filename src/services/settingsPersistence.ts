@@ -17,7 +17,7 @@ import type { StartupMigrationItem } from "@/services/startupMigration";
 import { CURRENT_SETTINGS_VERSION } from "@/settings/migrations/version";
 import { type CopilotSettings, sanitizeSettings } from "@/settings/model";
 import { getDeviceId } from "@/utils/deviceId";
-import { Notice } from "obsidian";
+import { type App, Notice } from "obsidian";
 
 let writeQueue: Promise<void> = Promise.resolve();
 let lastPersistedSettings: CopilotSettings | undefined;
@@ -116,11 +116,12 @@ export async function flushPersistence(): Promise<void> {
 }
 
 function credentialMigrationFromRecovery(
+  app: App,
   recovery: CopilotSettings["_pendingCredentialRecovery"]
 ): StartupMigrationItem | null {
   if (
     !recovery ||
-    recovery.deviceId !== getDeviceId() ||
+    recovery.deviceId !== getDeviceId(app) ||
     typeof recovery.path !== "string" ||
     typeof recovery.encrypted !== "boolean"
   ) {
@@ -150,6 +151,8 @@ function credentialMigrationFromRecovery(
  * hydration starts from that stripped baseline, so missing or unavailable
  * Keychain entries remain empty instead of falling back to disk values.
  *
+ * @param app - Active Obsidian app; owns the device-local store the device id
+ *   lives in.
  * @param rawData - Untrusted data returned by Obsidian's loadData().
  * @param saveData - Plugin-bound writer used to remove disk secrets and persist the vault ID.
  * @param backupLegacyCredentials - Copies data.json before its credentials are
@@ -159,6 +162,7 @@ function credentialMigrationFromRecovery(
  *   collecting migration results into a single summary.
  */
 export async function loadSettingsWithKeychain(
+  app: App,
   rawData: unknown,
   saveData: (data: CopilotSettings) => Promise<void>,
   backupLegacyCredentials: (rawData: unknown) => Promise<LegacyBackupResult>,
@@ -174,6 +178,7 @@ export async function loadSettingsWithKeychain(
   keychain.setVaultId(vaultId);
   const diskSettings = buildDiskSettings(rawData, vaultId, isFreshInstall);
   let credentialMigration = credentialMigrationFromRecovery(
+    app,
     diskSettings._pendingCredentialRecovery
   );
 
@@ -222,11 +227,12 @@ export async function loadSettingsWithKeychain(
         // ciphertext verbatim as the key. Those users need fresh keys, so the
         // "copy them across" instruction would send them in circles.
         diskSettings._pendingCredentialRecovery = {
-          deviceId: getDeviceId(),
+          deviceId: getDeviceId(app),
           path: backup.path,
           encrypted: backup.encrypted,
         };
         credentialMigration = credentialMigrationFromRecovery(
+          app,
           diskSettings._pendingCredentialRecovery
         );
         showFallbackNotice(
