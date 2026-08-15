@@ -18,6 +18,10 @@ export default [
   {
     files: sourceFiles,
     rules: {
+      // Reproduces the scorecard's deprecation findings locally, so a dependency
+      // bump cannot reintroduce them unnoticed. Promote to "error" once the
+      // remaining families outside this gate's scope are cleared.
+      "@typescript-eslint/no-deprecated": "warn",
       "@typescript-eslint/no-misused-promises": ["warn", { checksVoidReturn: true }],
       "no-restricted-globals": [
         "warn",
