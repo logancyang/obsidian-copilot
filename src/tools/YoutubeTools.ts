@@ -5,6 +5,7 @@ import { getSettings } from "@/settings/model";
 import { extractAllYoutubeUrls } from "@/utils";
 import { z } from "zod";
 import { createLangChainTool } from "./createLangChainTool";
+import { logError } from "@/logger";
 
 // Maximum input length to prevent potential DoS attacks
 const MAX_USER_MESSAGE_LENGTH = 50000; // Maximum number of characters
@@ -78,7 +79,7 @@ const youtubeTranscriptionTool = createLangChainTool({
             elapsed_time_ms: response.elapsed_time_ms,
           };
         } catch (error) {
-          console.error(`Error transcribing YouTube video ${url}:`, error);
+          logError(`Error transcribing YouTube video ${url}:`, error);
           return {
             url,
             success: false,

@@ -1,6 +1,6 @@
 // DEPRECATED: Legacy partitioned Orama store. v3 uses JSONL snapshots + MemoryIndexManager.
 import { CustomError } from "@/error";
-import { logInfo } from "@/logger";
+import { logError, logInfo, logWarn } from "@/logger";
 import type { CopilotOrama, CopilotOramaSchema } from "@/search/dbOperations";
 import { getSettings } from "@/settings/model";
 import { create, load, RawData, save } from "@orama/orama";
@@ -90,7 +90,7 @@ export class ChunkedStorage {
     if (getSettings().debug) {
       logInfo(`Total documents distributed: ${totalDistributed}`);
       if (totalDistributed !== documents.length) {
-        console.error(
+        logError(
           `Document count mismatch! Original: ${documents.length}, Distributed: ${totalDistributed}`
         );
       }
@@ -238,7 +238,7 @@ export class ChunkedStorage {
         logInfo("Saved all partitions");
       }
     } catch (error) {
-      console.error(`Error saving database:`, error);
+      logError(`Error saving database:`, error);
       throw new CustomError(`Failed to save database: ${(error as Error).message}`);
     }
   }
@@ -321,7 +321,7 @@ export class ChunkedStorage {
           orderedDocs[nextDocId.toString()] = doc;
           nextDocId++;
         } else if (getSettings().debug) {
-          console.warn(`Document ${internalId} not found in any chunk`);
+          logWarn(`Document ${internalId} not found in any chunk`);
         }
       }
 
@@ -347,7 +347,7 @@ export class ChunkedStorage {
       load(newDb, mergedData as RawData);
       return newDb;
     } catch (error) {
-      console.error(`Error loading database:`, error);
+      logError(`Error loading database:`, error);
       throw new CustomError(`Failed to load database: ${(error as Error).message}`);
     }
   }
@@ -370,7 +370,7 @@ export class ChunkedStorage {
         }
       }
     } catch (error) {
-      console.error(`Error clearing storage:`, error);
+      logError(`Error clearing storage:`, error);
       throw new CustomError(`Failed to clear storage: ${(error as Error).message}`);
     }
   }

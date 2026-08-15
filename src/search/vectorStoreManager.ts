@@ -2,7 +2,7 @@
 // for legacy Orama-based flows and should not be referenced by new code.
 import { updateIndexingProgressState } from "@/aiParams";
 import { CustomError } from "@/error";
-import { logInfo, logWarn } from "@/logger";
+import { logError, logInfo, logWarn } from "@/logger";
 import EmbeddingsManager from "@/LLMProviders/embeddingManager";
 import { getSearchBackend } from "@/miyo/miyoUtils";
 import { CopilotSettings, getSettings, subscribeToSettingsChange } from "@/settings/model";
@@ -118,12 +118,12 @@ export default class VectorStoreManager {
             "Failed to initialize vector store. Please make sure you have a valid API key " +
               "for your embedding model and restart the plugin."
           );
-          console.error("Failed to initialize vector store:", error);
+          logError("Failed to initialize vector store:", error);
           break;
         }
       }
     } catch (error) {
-      console.error("Failed to initialize vector store:", error);
+      logError("Failed to initialize vector store:", error);
     }
   }
 

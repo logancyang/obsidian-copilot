@@ -1,4 +1,4 @@
-import { logError } from "@/logger";
+import { logError, logWarn } from "@/logger";
 import { safeFetch } from "@/utils";
 import { arrayBufferToBase64 } from "@/utils/base64";
 import { Notice, TFile, Vault } from "obsidian";
@@ -82,7 +82,7 @@ export class ImageProcessor {
           } else {
             // HEAD succeeded, but Content-Type is not image/*
             // Trust the explicit Content-Type over heuristics
-            console.warn(
+            logWarn(
               `HEAD request succeeded for ${url} but Content-Type (${contentType}) is not image/*.`
             );
             return false; // Return false immediately
@@ -91,10 +91,7 @@ export class ImageProcessor {
         } catch (headError) {
           // HEAD request might fail (e.g., CORS, network issue, server doesn't support HEAD, 404)
           // Log as warning, as this is handled by falling back to heuristics.
-          console.warn(
-            `HEAD request failed for URL: ${url}. Proceeding to heuristic check.`,
-            headError
-          );
+          logWarn(`HEAD request failed for URL: ${url}. Proceeding to heuristic check.`, headError);
           // Proceed to heuristic check ONLY if HEAD failed
           const searchParams = urlObj.searchParams;
           const imageIndicators = [
@@ -293,7 +290,7 @@ export class ImageProcessor {
       if (file instanceof TFile) {
         return await this.handleVaultImage(file, vault);
       } else {
-        console.warn(`Could not find attachment file in vault: ${filePath}`);
+        logWarn(`Could not find attachment file in vault: ${filePath}`);
         return null;
       }
     }
