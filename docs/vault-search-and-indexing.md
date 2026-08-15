@@ -116,7 +116,9 @@ Example: `private, Work/Confidential, #private` excludes the private folder, a s
 
 > **Note**: Tag matching works with tags in the note's **properties (frontmatter)**, not inline tags within the note body.
 
-Your Copilot folder is always excluded automatically (it holds the plugin's own files — conversations, prompts, memory, skills, and projects). This covers the default `copilot` folder, your current Copilot folder if you changed it in **Settings → Copilot → Basic → Copilot folder location**, and every folder that has previously been your Copilot folder. Past Copilot folders stay excluded permanently, so any files the plugin left behind after a folder change never leak into search results.
+Your Copilot folder is always excluded automatically (it holds the plugin's own files — conversations, prompts, memory, skills, and projects). This covers the default `copilot` folder, your current Copilot folder if you changed it in **Settings → Copilot → Basic → Copilot folder location**, and every folder that has previously been your Copilot folder. Past Copilot folders stay excluded permanently, so any files the plugin left behind after a folder change never leak into Copilot search results.
+
+You can select a Copilot folder that already contains Markdown. Copilot shows a confirmation warning because every Markdown file under that folder — including regular notes — will be excluded from Copilot search. This exclusion does not affect Obsidian's built-in search.
 
 ### Inclusions
 
