@@ -40,6 +40,12 @@ import type {
 import { wrapStreamsForDebug } from "./debugTap";
 import { AcpBackend } from "./types";
 import {
+  consumeReplayUpdate,
+  createReplayTranscriptState,
+  finishReplayTranscript,
+  type ReplayTranscriptState,
+} from "./replayTranscript";
+import {
   acpNotificationToEvents,
   acpPermissionRequestToPrompt,
   acpStateToBackendState,
@@ -149,6 +155,18 @@ export class AcpBackendProcess implements BackendProcess {
   // cumulative figure. Keyed by session like the other per-session maps; pruned
   // on session teardown + shutdown.
   private readonly sawLiveUsage = new Set<SessionId>();
+  // Replay accumulators, one per in-flight `loadSession`. A `session/update`
+  // for a session with an active accumulator is fed to it instead of being
+  // routed, which is what keeps the replay burst clear of `pendingUpdates` and
+  // its PENDING_UPDATE_LIMIT — a real transcript easily exceeds 32 frames.
+  //
+  // DESIGN NOTE — deliberately unbounded. A replay is bounded by the
+  // conversation the user is reopening, and the Claude adapter already reads a
+  // whole session jsonl into memory the same way (`readPersistedTranscript`).
+  // Capping it would truncate exactly the long histories this exists to
+  // restore, and no measurement suggests the size is a problem. If a future
+  // review flags this again, point them at this note.
+  private readonly loadSessionCollectors = new Map<SessionId, ReplayTranscriptState>();
 
   constructor(
     private readonly app: App,
@@ -191,6 +209,7 @@ export class AcpBackendProcess implements BackendProcess {
       this.sessionWireState.clear();
       this.todoToolCallIdsBySession.clear();
       this.sawLiveUsage.clear();
+      this.loadSessionCollectors.clear();
       this.permissionPrompter = null;
       this.capabilities.clear();
       for (const fn of this.exitListeners) {
@@ -517,26 +536,55 @@ export class AcpBackendProcess implements BackendProcess {
   }
 
   async loadSession(params: LoadSessionInput): Promise<LoadSessionOutput> {
-    const wireResp = await this.dispatchCapability(
-      "session/load",
-      (c) =>
-        c.loadSession({
-          sessionId: sessionIdToAcp(params.sessionId),
-          cwd: params.cwd,
-          mcpServers: [],
-          ...this.additionalDirectoriesField(params.additionalDirectories),
-        }),
-      { mustBeAdvertised: true }
-    );
-    this.recordWireState(sessionIdToAcp(params.sessionId), {
-      models: wireResp.models ?? null,
-      modes: wireResp.modes ?? null,
-      configOptions: wireResp.configOptions ?? null,
-    });
-    return {
-      sessionId: params.sessionId,
-      state: this.computeState(sessionIdToAcp(params.sessionId)),
-    };
+    const sessionId = params.sessionId;
+    // Installed before the request goes out: the agent replays the conversation
+    // while it is in flight, so a collector added afterwards would miss it.
+    const collector = createReplayTranscriptState();
+    this.loadSessionCollectors.set(sessionId, collector);
+
+    try {
+      const wireResp = await this.dispatchCapability(
+        "session/load",
+        (c) =>
+          c.loadSession({
+            sessionId: sessionIdToAcp(sessionId),
+            cwd: params.cwd,
+            mcpServers: [],
+            ...this.additionalDirectoriesField(params.additionalDirectories),
+          }),
+        { mustBeAdvertised: true }
+      );
+      this.recordWireState(sessionIdToAcp(sessionId), {
+        models: wireResp.models ?? null,
+        modes: wireResp.modes ?? null,
+        configOptions: wireResp.configOptions ?? null,
+      });
+      return {
+        sessionId,
+        state: this.computeState(sessionIdToAcp(sessionId)),
+        transcript: finishReplayTranscript(collector),
+      };
+    } finally {
+      // Only retire OUR accumulator: `loadSession` is public and has more than
+      // one caller (history resume and the model preloader), so a concurrent
+      // load for the same session would otherwise have its accumulator deleted
+      // here and its frames folded into ours. Mirrors the same guard in
+      // `registerSessionHandler`.
+      //
+      // DESIGN NOTE — this guard does not make two *overlapping* loads of the
+      // same session safe, and deliberately so. ACP notifications carry only a
+      // session id, no request id, so overlapping replays of one session are
+      // unsplittable at this layer and would need single-flighting here. No
+      // caller can produce that overlap: history resume already single-flights
+      // per (backend, session) in `AgentSessionManager.tryResumeSessionFromHistory`,
+      // and the preloader only ever loads its own probe session, on a process it
+      // owns until that load has resolved. Single-flighting again here would be
+      // a second copy of a guard the one reachable caller already has. If a
+      // future review flags this again, point them at this note.
+      if (this.loadSessionCollectors.get(sessionId) === collector) {
+        this.loadSessionCollectors.delete(sessionId);
+      }
+    }
   }
 
   async shutdown(): Promise<void> {
@@ -545,6 +593,7 @@ export class AcpBackendProcess implements BackendProcess {
     this.pendingUpdates.clear();
     this.sessionWireState.clear();
     this.todoToolCallIdsBySession.clear();
+    this.loadSessionCollectors.clear();
     this.sawLiveUsage.clear();
     this.permissionPrompter = null;
     this.capabilities.clear();
@@ -598,6 +647,23 @@ export class AcpBackendProcess implements BackendProcess {
 
   private routeSessionUpdate(acpSessionId: AcpSessionId, update: SessionNotification): void {
     const sessionId = sessionIdFromAcp(acpSessionId);
+
+    // If there's an active loadSession collector for this session, feed it
+    // user/agent message chunks and skip normal routing.
+    // A replay in progress claims the conversation frames; everything it does
+    // not claim (mode, config, usage, title) still belongs to the session and
+    // falls through to normal routing below.
+    //
+    // DESIGN NOTE — the `session/load` response is the replay barrier. ACP
+    // requires the agent to finish replaying before it answers, so a
+    // conversation frame arriving afterwards is a backend violation and is
+    // dropped by the normal path rather than reopening a retired accumulator.
+    // Holding one open past the response would mean mutating a transcript the
+    // session has already rendered. If a future review flags this again, point
+    // them at this note.
+    const collector = this.loadSessionCollectors.get(sessionId);
+    if (collector && consumeReplayUpdate(collector, update.update)) return;
+
     // Mirror per-dimension wire updates into our cache so subsequent
     // setSession* calls (and the next `state_changed` event) reflect reality.
     const wire = this.sessionWireState.get(sessionId);

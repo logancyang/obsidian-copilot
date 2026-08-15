@@ -24,7 +24,12 @@ interface StoredAgentMessage {
   id: string;
   displayText: string;
   sender: string;
-  timestamp: FormattedDateTime;
+  /**
+   * Null when the source could not say when the message was sent — a replayed
+   * ACP transcript carries no times, and a saved chat can hold "Unknown time".
+   * A message created live always has one; see `addMessage`.
+   */
+  timestamp: FormattedDateTime | null;
   isVisible: boolean;
   isErrorMessage?: boolean;
   parts?: AgentMessagePart[];
@@ -511,7 +516,11 @@ export class AgentMessageStore {
         id: msg.id || this.generateId(),
         displayText: msg.message,
         sender: msg.sender,
-        timestamp: msg.timestamp || formatDateTime(new Date()),
+        // Kept as-is, including null: a loaded message states when it was
+        // actually sent or says nothing. Stamping the load time here would
+        // date every restored message to the moment the chat was reopened,
+        // and autosave would then write that time back over the original.
+        timestamp: msg.timestamp,
         context: msg.context,
         isVisible: msg.isVisible !== false,
         isErrorMessage: msg.isErrorMessage,

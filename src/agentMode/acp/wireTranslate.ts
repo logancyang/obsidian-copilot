@@ -270,7 +270,15 @@ function toolCallDeltaFromAcp(
  * One wire notification can yield more than one session event: a `todowrite`
  * tool call additionally synthesizes the standard `plan` update (see
  * {@link todoToolPlanFromAcp}), so the trail's PlanPill and the todo snapshot
- * stay backend-agnostic. The base translation always comes first.
+ * stay backend-agnostic. When a base translation exists it comes first.
+ *
+ * It can also yield none. `user_message_chunk` is the agent echoing back the
+ * prompt it was given, not something the session has to react to — the message
+ * is already on screen, put there when it was sent. It is dropped here rather
+ * than translated into a domain update no consumer reads, and dropping it early
+ * also keeps it away from the unknown-discriminant fallback below, which reports
+ * a titleless session update and would clear the label on a backend whose titles
+ * are trusted.
  *
  * `todoToolCallIds` is one session's id set, owned by the caller
  * (AcpBackendProcess keys it per session — see `todoToolCallIdsFor`): the first
@@ -283,6 +291,7 @@ export function acpNotificationToEvents(
   n: SessionNotification,
   todoToolCallIds?: Set<string>
 ): SessionEvent[] {
+  if (n.update.sessionUpdate === "user_message_chunk") return [];
   const sessionId = sessionIdFromAcp(n.sessionId);
   const events: SessionEvent[] = [{ sessionId, update: acpUpdateToSessionUpdate(n.update) }];
   const todoPlan = todoToolPlanFromAcp(n.update, todoToolCallIds);
