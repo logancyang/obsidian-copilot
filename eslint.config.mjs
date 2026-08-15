@@ -401,8 +401,7 @@ export default [
   // openVaultPath lazy-requires node:fs behind a desktop vault-base guard,
   // mirroring opencodeLog. Modules converted to call-time
   // `requireNodeModule()` guards (see src/utils/desktopRuntime.ts) need no
-  // exemption; the goal is to shrink this list to empty as remaining
-  // subsystems convert (logancyang/obsidian-copilot-preview#299).
+  // exemption.
   {
     files: [
       "src/agentMode/**",
