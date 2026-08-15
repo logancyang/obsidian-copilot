@@ -1,224 +1,129 @@
-# Paid Plans and Self-Host
+# Copilot Plus and Self-Host
 
-Copilot's paid plans unlock features beyond the free, API-key-based experience. **Plus** is one paid plan tier; it is not a separate Copilot product. **Self-Host Mode** is an additional option for eligible Lifetime and legacy Believer or Supporter license holders who want to run their own infrastructure.
+Copilot V4 does not require a Copilot subscription when you bring your own
+model access. Paid access can include Copilot-hosted models and services.
+Self-Host Mode is a separate option for licenses that include it; it helps you
+choose and identify your own infrastructure, but it is not a network firewall.
 
----
+## What stays free
 
-## Paid Copilot Plans
+You can use these without a Copilot license:
 
-### What Does a Paid Plan Include?
+- **Agent with opencode** and a provider key or local model added under
+  **Settings → Copilot → BYOK**.
+- **Agent with Claude or Codex** when you already have the corresponding CLI
+  and account or subscription.
+- **Quick Chat** with a model you add under **BYOK**.
+- Normal single-agent Agent chats, projects that use Markdown context, custom skills,
+  custom commands, and the shared cross-agent skills manager.
+- **Miyo** for local semantic search and local PDF or EPUB processing.
 
-A paid Copilot plan can enable:
+Your model provider, Claude account, or Codex account may still charge for its
+own usage. A ChatGPT or Claude subscription is different from an API key: use
+the Agent setup for a CLI subscription, and **BYOK** for API access.
 
-- **Paid Quick Chat tools** — An autonomous tool loop for search, memory, and file work
-- **Multi-agent work in Agent Mode** — Mention several agents with `@` to delegate parts of a task
-- **Relay-backed Agent Mode skills** — Web search and fetch, PDF reading, YouTube transcripts, and X posts
-- **File editing tools** — Write to File and Replace in File for AI-driven note editing
-- **Web search** — Search the internet from chat
-- **YouTube transcription** — Fetch video transcripts and use them as context
-- **Memory system** — Persistent memory across conversations
-- **Included models** — A set of chat models that need no API key of your own, from fast everyday ones to top-tier reasoners ([the full list](#models-included-with-your-license))
-- **URL processing** — Fetch and summarize web pages as context
-- **Licensed embedding models** — High-quality embeddings selected under semantic search
+## What paid access adds
 
-### Activate a Copilot License
+Enter your key under **Settings → Copilot → Basic → Copilot License**, then
+select **Apply**. Available features depend on the plan shown in settings.
 
-1. Get a license key from your dashboard at **https://www.obsidiancopilot.com/en/dashboard**
-2. Go to **Settings → Copilot → Basic → Copilot License**
-3. Enter your license key
-4. Features unlock automatically
+Paid access can include Copilot-hosted models and cloud-backed tools.
+Multi-agent requires active Plus access; check your dashboard for the current
+entitlement.
 
-A welcome dialog then offers to make **copilot-plus-flash** your default model.
-Choosing **Apply Now** sets it as the default for chat and for each agent that
-can run Copilot models — OpenCode today; Claude Code and Codex keep their own
-models and are left alone. Choosing **Apply Later** changes nothing: the Copilot
-models are already available in every picker either way, and you can set a
-default yourself under **Settings → Basic → Agents**, per agent and for Quick Chat.
+Depending on your license, paid access can add:
 
-Applying it never changes your embedding model or rebuilds your vault index.
-Semantic search is configured separately — see
-[Vault search and indexing](vault-search-and-indexing.md).
+- **Copilot-hosted models** in Quick Chat and opencode. No separate model
+  provider key is needed. The current model lists in **Basic → Agents → Quick
+  Chat** and **Basic → Agents → opencode** are the source of truth.
+- The **copilot plus** Quick Chat mode, with cloud tools and supported
+  attachments according to your license.
+- Cloud-backed Agent skills for web search and fetch, PDF reading, YouTube
+  transcripts, and X posts. Copilot shares these skills with opencode, Claude,
+  and Codex through the same Skills system.
+- Hosted preparation of supported project files, web pages, and YouTube
+  transcripts.
+- **Multi-agent answers** with active Plus access. Mention more than one installed
+  agent with `@` to run a read-only research or review task in parallel.
 
-### Agent Mode with a Copilot License
+The model lineup and service limits can change, so this guide does not keep a
+fixed list or quota. See the dashboard and the model pickers for current access.
 
-You do not need a Copilot license to run one OpenCode, Claude, or Codex session in Agent Mode. The selected agent still needs its own account or model access.
+## Where your data goes
 
-A paid plan can add multi-agent mentions and relay-backed skills for web research, documents, YouTube, and X. When a relay skill is unavailable, the agent can fall back to a native tool when it has one. Copilot-hosted models currently appear under OpenCode; Claude and Codex continue to use models from their own subscriptions.
+The route you choose determines who receives the conversation:
 
-The badge at the top of the license section names your plan once the key is
-working — **Plus**, **Lite**, or **Lifetime** for a Believer or Supporter
-purchase. It reads **Inactive** whenever the stored key grants nothing: a
-subscription that ended, a key that was revoked or mistyped, or a plan whose
-included access has run out. The plans link in that section is where you renew
-or upgrade.
+- With a **Copilot-hosted model**, Brevilabs's backend and its vetted enterprise
+  model providers process the full request.
+- With a **cloud BYOK provider**, the configured provider receives the prompt.
+- With a **local or self-hosted BYOK endpoint**, Copilot sends the prompt to
+  that endpoint.
+- With a **model reported by opencode**, opencode routes the request to its
+  backing provider. Free opencode Zen models show a warning because that
+  provider may log or train on prompts.
+- With **Claude or Codex**, their CLI and account handle model traffic under
+  that provider's terms.
+- When you invoke a hosted skill, Brevilabs receives the input needed for it,
+  such as a search query, URL, or document. A Copilot-hosted embedding model
+  receives the note text being indexed.
 
----
+Copilot does not upload your whole vault simply because Agent is open. However,
+an agent can read a file and include its contents or tool results in the model
+conversation, so use a local model when that material must stay on your
+machine.
 
-## Models included with your license
+The [privacy policy](https://www.obsidiancopilot.com/en/privacy) says hosted
+request content is processed transiently, not retained, and not used for
+training.
 
-Your license comes with a set of models Copilot runs for you. None of them need
-an API key of your own.
-
-Three are switched on the moment your license activates, chosen to cover the
-range: the fastest one, the strongest reasoner, and a frontier open model.
-
-| Model                  | What it's for                                                        |
-| ---------------------- | -------------------------------------------------------------------- |
-| **Copilot Plus Flash** | The default. Fastest responses and the most quota. Accepts images.   |
-| **DeepSeek V4 Pro**    | The hardest reasoning and agentic tasks.                             |
-| **GLM-5.2**            | A long-horizon frontier open model that rivals the best closed ones. |
-
-The rest are included too, switched off until you want them:
-
-| Model                      | What it's for                                                    |
-| -------------------------- | ---------------------------------------------------------------- |
-| **DeepSeek V4 Flash 0731** | The newest DeepSeek V4 Flash snapshot: fast, cheap, and capable. |
-| **Kimi K2.7 Code**         | Coding tasks. Accepts images.                                    |
-| **Kimi K2.6**              | Long-running reasoning tasks.                                    |
-| **MiMo V2.5**              | Cost-effective and capable for everyday use.                     |
-| **MiniMax M2.7**           | Lightweight tasks, compact and efficient.                        |
-
-Turn any of them on under **Settings → Basic → Agents**, in the list for the
-place you want it: **Quick Chat** for the chat model picker, or an agent's own
-list for Agent Mode.
-
-### Where they show up
-
-In **Quick Chat**, they appear in the model picker alongside any models you
-added yourself.
-
-In **Agent Mode**, the picker groups models by agent, and these appear inside
-each agent that can run them — **OpenCode** today. **Claude Code** and **Codex**
-bring their own models from their own subscriptions, so your Copilot models do
-not appear under those two.
-
-**Copilot Plus Flash** becomes the default for chat and for every agent that can
-run it if you accept the offer in the welcome dialog when your license
-activates — see [Activate a Copilot License](#activate-a-copilot-license) above.
-
-### Before you have a license
-
-The three models a license switches on still appear in both pickers, greyed out
-and marked with a lock. Hovering the lock reads "Copilot license required".
-They are there so you can see what a license adds; they cannot be selected, and
-they leave your own models exactly where they were. Activate a license and the
-locks come off the same rows.
-
----
-
-## Memory System
-
-The memory system lets Copilot remember things across conversations, so you don't have to repeat yourself.
-
-### Recent Conversations
-
-Copilot can reference your recent conversation history to provide more contextually relevant responses. This is separate from the current chat window — it's a summary of what you've been working on.
-
-- **Enable**: **Settings → Copilot → Plus → Reference Recent Conversation** (on by default)
-- **How many**: **Settings → Copilot → Plus → Max Recent Conversations** — default 30, range 10–50
-- All history is stored locally in your vault (no data leaves your machine for this feature)
-
-### Saved Memories
-
-You can ask Copilot to explicitly remember specific facts about you:
-
-```
-@memory remember that I'm preparing for JLPT N3 and prefer bullet-point summaries
-```
-
-Copilot saves this to a memory file in your vault and references it in future conversations.
-
-- **Enable**: **Settings → Copilot → Plus → Reference Saved Memories** (on by default)
-- **Memory folder**: memories are stored in the `memory/` sub-folder of your Copilot folder — default `copilot/memory`. It follows the Copilot folder location (**Settings → Copilot → Basic → Copilot folder location**).
-- **Update memory tool**: The AI can add, update, or remove memories when you ask
-
----
-
-## Document Processor
-
-When Copilot processes PDFs and other non-markdown files through paid Quick Chat, it converts them to markdown for the AI to read.
-
-You can optionally save the converted markdown to a folder in your vault:
-
-- **Setting**: **Settings → Copilot → Plus → Store converted markdown at**
-- Leave empty to skip saving (conversion still happens, it just isn't persisted)
-
----
+Provider keys and the Copilot license key are stored in this device's Obsidian
+Keychain, not in the vault's `data.json`.
 
 ## Self-Host Mode
 
-### What Is Self-Host Mode?
+Open **Settings → Copilot → Self-Host** and turn on **Enable Self-Host Mode**.
+The toggle unlocks only when your signed license entitlement includes
+Self-Host; the settings tab labels it a **Lifetime license** feature.
 
-Self-Host Mode lets you replace Copilot's hosted backend services with your own infrastructure, running them locally or on your own server.
+When enabled, you can:
 
-**Requires**: An eligible Lifetime, legacy Believer, or Supporter license (not available on monthly subscriptions).
+- Choose **Firecrawl** or **Perplexity Sonar** under **Web Search Provider** and
+  supply your own key.
+- Add a **Supadata API Key** for YouTube transcripts.
+- Add local or self-hosted LLM and embedding endpoints under **BYOK**.
+- See cloud agents and models flagged and listed after local or self-hosted
+  options.
 
-### What Self-Host Mode Enables
+Self-Host Mode does **not** make every route local. Claude, Codex,
+Copilot-hosted models, and cloud BYOK providers remain selectable and still
+send data to their services. Firecrawl, Perplexity, and Supadata are also
+external services. The warnings help you see these routes; they do not block
+them.
 
-- Use local or custom LLM servers
-- Custom web search via Firecrawl or Perplexity Sonar
-- Local YouTube transcript extraction via Supadata
-- Miyo desktop app for local PDF parsing, semantic search, and more
+You do not need Self-Host Mode to use a local BYOK model or Miyo.
 
-### Enabling Self-Host Mode
+## Miyo and document processing
 
-1. Go to **Settings → Copilot → Plus**
-2. Under **Self-Host Mode**, toggle **Enable Self-Host Mode**
-3. Copilot checks your plan. The toggle stays locked if your plan doesn't include Self-Host Mode.
-4. Toggle **Enable Miyo** to use the Miyo desktop app for local search, PDF parsing, and context.
-5. _(Optional)_ Set **Custom Miyo Server URL** only if Miyo is running on a remote machine. Leave blank to use automatic local service discovery.
+Miyo is configured separately under **Settings → Copilot → Miyo**. Connect the
+desktop app to add local semantic search and choose its scope.
 
-**Working offline**: Self-Host Mode keeps working without an internet connection for a while after your last online check, and renews itself automatically whenever you're online. How long that offline period lasts currently varies, so reconnect when you can rather than relying on a fixed window.
+Under **Document Processor**:
 
-### Web Search in Self-Host Mode
+- **Plus** sends supported documents to Copilot's hosted document service.
+- **Miyo** processes PDFs and EPUBs through Miyo. If Miyo is unavailable,
+  Copilot stops with an error instead of silently falling back to the cloud.
+- Other document formats still use the Plus service.
 
-Choose your web search provider:
-
-- **Firecrawl** — A web crawling and scraping API. Get a key at firecrawl.dev. Enter it in **Settings → Copilot → Plus → Firecrawl API Key**.
-- **Perplexity Sonar** — An AI-powered search API. Get a key at perplexity.ai. Enter it in **Settings → Copilot → Plus → Perplexity API Key**.
-
-### YouTube Transcription in Self-Host Mode
-
-Use your own Supadata API key for YouTube transcript extraction:
-
-- Get a key at supadata.ai
-- Enter it in **Settings → Copilot → Plus → Supadata API Key**
-
----
-
-## Miyo Desktop App
-
-Miyo is a companion desktop app from the same developer that enhances Copilot with local, offline capabilities:
-
-### What Miyo Provides
-
-- **Local semantic search** — Fast vector search without embedding API calls
-- **PDF parsing** — Converts PDFs to markdown locally (no cloud OCR)
-- **Context hub** — Manages your indexed documents locally
-- **Custom server URL** — Run Miyo on any machine (local or server)
-
-### Setting Up Miyo
-
-1. Download and install the Miyo desktop app
-2. Start the Miyo server
-3. In Copilot, go to **Settings → Copilot → Plus → Enable Miyo Search**
-4. Miyo automatically connects to the local server (or use a custom URL in **Miyo Server URL**)
-5. Index your vault — Copilot will use Miyo to generate and store embeddings locally
-
-### Custom Miyo Server URL
-
-If Miyo is running on a different machine (e.g., a home server), enter its address:
-
-```
-http://192.168.1.10:8742
-```
-
-Leave empty to use automatic local discovery.
-
----
+A remote Miyo server sends content to the server address you configured rather
+than keeping it on the current computer. Binary files, web URLs, and YouTube
+URLs saved as **Agent project context** use Copilot's hosted project service
+regardless of the **Document Processor** choice. For a project that must make no
+Brevilabs requests, keep those sources out of saved context. Use Markdown
+context plus local tools or Miyo, and use a local model if prompts must also
+remain on-device.
 
 ## Related
 
-- [Agent Mode and Tools](agent-mode-and-tools.md) — Use OpenCode, Claude, or Codex in the dedicated desktop view
-- [Vault Search and Indexing](vault-search-and-indexing.md) — How Miyo enhances semantic search
-- [Getting Started](getting-started.md) — First-time setup
+- [Agents in Copilot V4](agent-mode-and-tools.md) — Set up opencode, Claude, or Codex
+- [LLM Providers](llm-providers.md) — Choose between hosted, BYOK, local, and CLI models
+- [Projects](projects.md) — Understand project context and file processing

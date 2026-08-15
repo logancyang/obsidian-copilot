@@ -1,339 +1,121 @@
-# Troubleshooting and FAQ
+# Troubleshooting Copilot V4
 
-This guide covers common errors, provider-specific issues, performance problems, and frequently asked questions.
+Start in **Settings → Copilot → Basic → Agents** and check the status beside the agent you want to use.
 
----
+## Agent setup
 
-## First Steps for Any Issue
+### opencode shows “Not set up” or “Error”
 
-Before diving into specific fixes, try these steps first:
+1. Open **Basic → Agents → opencode**.
+2. Choose **Download opencode**. If it fails, choose **Try again** and read the displayed error.
+3. If opencode is already installed, choose **I already have it**. If detection misses it, open **Configure → My own binary**, enter its absolute path, and choose **Apply**.
 
-1. **Check you're on the latest version** of Copilot in Community Plugins
-2. **Disable other plugins** temporarily to rule out conflicts
-3. **Enable Debug Mode** in Settings → Copilot → Advanced → Debug Mode
-4. **Open the developer console**: `Cmd+Option+I` on Mac, `Ctrl+Shift+I` on Windows
+Use **Configure → Managed by Copilot** to reinstall or uninstall it. Setup is complete at **Ready**.
 
----
+### Claude shows “Update required,” cannot be found, or is signed out
 
-## Common Errors
+Copilot requires Claude Code 2.1.206 or newer.
 
-### "API key not set" or "No API key configured"
+- **Update required:** update Claude Code, then run **Configure Claude → Auto-detect**. For a custom path, update that installation or choose **Clear**.
+- **Not found:** run the displayed install command, then choose **Auto-detect**, or enter the absolute path to `claude`.
+- **Signed out:** choose **Sign in**. If **Open sign-in page** appears, use it to finish authentication.
 
-**Cause**: The model you selected doesn't have a valid API key for its provider.
+Copilot uses your Claude Code login; there is no API key to paste here.
 
-**Fix**:
+### Codex is installed, but Copilot cannot find it
 
-1. Go to **Settings → Copilot → Basic → Set Keys**
-2. Enter the API key for the provider your model uses
-3. If you're unsure which provider a model uses, check **Settings → Copilot → Model** — each model shows its provider
+Copilot connects through `codex-acp`, not the `codex` executable alone.
 
-### Rate Limit Errors
+1. Open **Basic → Agents → Codex → Configure**.
+2. Run the displayed install command. On macOS and Linux: `npm install -g @agentclientprotocol/codex-acp`.
+3. Choose **Auto-detect**, or enter the absolute path to `codex-acp` and choose **Apply**.
+4. Run `codex login` in a terminal if Codex is not authenticated.
 
-**Cause**: You've sent too many requests to the API in a short time.
+See [Getting Started](getting-started.md) for the complete setup flow and [Windows Setup for Agent](agent-mode-windows-setup.md) for Windows-specific commands.
 
-**Fix**:
+## Models, licenses, and API keys
 
-- Wait a minute and try again
-- If this happens frequently during indexing, reduce **Embedding Requests per Minute** in QA settings (try 10–20)
-- Consider upgrading your API plan with the provider
+### The picker says “No models — enable in Basic → Agents → Quick Chat”
 
-### Connection Errors / Timeout
+Open **Basic → Agents → Quick Chat**, enable a model, and choose a **Default model**. If none are configured, first add a provider under **Settings → Copilot → BYOK**.
 
-**Cause**: Network issue, provider outage, or the request took too long.
+- **Add API key:** edit that provider under **BYOK**.
+- **Not offered by agent:** the active agent no longer advertises that saved model. Select one it currently offers.
+- A locked Copilot-hosted model requires an active license under **Basic → Copilot License**. **Invalid license key** means that key was not accepted.
 
-**Fix**:
+Claude and Codex models come from their CLI accounts; BYOK serves opencode and Quick Chat. See [Models](models-and-parameters.md) and [Providers](llm-providers.md).
 
-- Check your internet connection
-- Try again after a few seconds
-- Check the provider's status page for outages
-- If using a local model (Ollama/LM Studio), make sure the local server is running
+### Keys disappeared, or “API Key Storage” says “Unavailable”
 
-### "Copilot index does not exist"
+V4 stores secrets in the Obsidian Keychain.
 
-**Cause**: You're trying to use Vault QA or semantic search but the vault hasn't been indexed yet.
+- **Unavailable:** update Obsidian to 1.11.4 or newer.
+- **No API keys found in this device's Obsidian Keychain:** re-enter them. Keys are per device and do not follow a synced vault.
+- To remove every stored secret, use **Advanced → API Key Storage → Delete All Keys**.
 
-**Fix**:
+Do not delete `data.json`: it contains the vault's Keychain namespace. Use the in-app reset; it does not delete Keychain entries.
 
-1. Make sure you have an embedding model configured with a valid API key (**Settings → Copilot → QA → Embedding Model**)
-2. Run **Command palette → Index (refresh) vault**
-3. Wait for indexing to complete
+## Agent chat is waiting or behaving unexpectedly
 
-### "RangeError: invalid string length"
+### Nothing happens after you send
 
-**Cause**: Your vault is too large for a single index partition.
+Look for **Permission required** or **Question from agent**. Review the inputs or diff, then choose an offered option. Another session tab may show an attention indicator.
 
-**Fix**: Increase the number of partitions in **Settings → Copilot → QA → Partitions**. A good target is keeping the first index file under ~400 MB (check the `.obsidian/` folder for `copilot-index` files and their sizes).
+Permission choices depend on the active agent. **Stop** cancels the current turn, including unanswered requests. Review every persistent permission carefully.
 
-### Response Gets Cut Off
+### You cannot switch agents in the current session
 
-**Cause**: The AI's response hit the Max Tokens limit.
+An Agent session keeps its original backend after work begins. Create an empty session to choose another. Use **Recent Chats** for earlier sessions.
 
-**Fix**: Increase **Max Tokens** in Settings → Copilot → Model (or the per-session gear icon). Default is 6,000 tokens.
+### A project message says “Waiting for context”
 
-### Notes Not Found in Search
+The message is queued while Copilot prepares saved sources. Fix or remove any source that cannot load. After changing saved context or instructions, start **New Chat**.
 
-Even after indexing, relevant notes aren't being returned? Try:
+See [Agent Projects](projects.md) for what is saved with a project.
 
-1. Switch to **copilot plus** (paid Quick Chat) and use `@vault` for more powerful search
-2. Try the **multilingual embedding model** for non-English notes
-3. Review your QA inclusions/exclusions to confirm the notes aren't filtered out
-4. Run **List all indexed files** (debug command) to verify the notes are indexed
-5. Run **Force reindex vault** for a clean rebuild
+### A skill or skill command is missing
 
-### "Non-markdown files require a Copilot license"
+In **Settings → Copilot → Skills**, confirm the skill has a valid `SKILL.md` and is enabled for your agent. Toggle the agent off and on to recreate its link.
 
-**Cause**: You tried to use a PDF, image, or other non-markdown file as context in a free mode.
+On Windows, **Windows needs Developer Mode for multi-agent fanout** means you must enable **Settings → Privacy & security → For developers → Developer Mode** (or run Obsidian as administrator), then toggle again. The same repair works when vault sync replaces a link.
 
-**Fix**: In Quick Chat, switch to **copilot plus** (paid Quick Chat) or convert the file to markdown manually. In Agent Mode, document support depends on the active agent, its skills, and the selected document processor.
+Learn more in [Agents in Copilot V4](agent-mode-and-tools.md#skills-shared-across-agents).
 
----
+## Miyo is unavailable or search is not running
 
-## Provider-Specific Issues
+Open **Settings → Copilot → Miyo**.
 
-### Ollama
+- **Miyo isn't running:** open Miyo, then choose **Retry connection**.
+- **Register this vault with Miyo:** choose **Register & connect** on the same computer. For a remote connection or mobile device, register the vault in Miyo first, then retry.
+- **Not set up — add chat sources in Miyo:** this belongs to the separate **Search chat** row and does not block Agent vault search. Configure chat sources only if you want ChatGPT or Claude history search.
+- If excluded folders no longer match the Copilot folder, choose **Resync Miyo**. For a remote connection, remove and re-add the vault in Miyo.
 
-**Problem**: "Connection refused" or model not responding
+Connection alone does not enable Agent search. Under **Powered by Miyo**, turn on **Semantic search**. Copilot installs `miyo-search` already enabled for opencode, Claude, and Codex. If Copilot reports a same-name collision, rename or remove the existing skill and try again.
 
-**Fix**:
+## Quick Ask does not open or has no model
 
-- Make sure Ollama is running: open a terminal and run `ollama serve`
-- Verify the model is downloaded: `ollama list`
-- Check that the port in Copilot settings matches (default: 11434)
-- On some systems, Ollama uses `http://127.0.0.1:11434` instead of `http://localhost:11434` — try both
+- **Quick Ask is not available in source mode:** switch the note to Live Preview and try again.
+- **No active editor found:** open a Markdown note in an editor pane.
+- **No active model configured:** configure and select a default under **Basic → Agents → Quick Chat**.
+- **Error generating response. Please try again:** retry once; if it continues, collect a log as described below.
 
-### Azure OpenAI
+See [Copilot Commands and Quick Ask](custom-commands.md#quick-ask) for selection and note-context behavior.
 
-**Problem**: Authentication errors or model not found
+## Logs and bug reports
 
-**Fix**:
-Azure OpenAI requires all four fields to be filled in correctly:
+For Agent problems, use **Report an Issue**. Copilot prepares a screenshot and recent device-local activity logs, then opens a prefilled GitHub issue. Attach the files yourself.
 
-1. API Key
-2. Instance Name (your Azure resource name, e.g., `my-azure-openai`)
-3. Deployment Name (the name you gave your model deployment)
-4. API Version (e.g., `2024-02-01`)
+For Quick Chat, enable **Advanced → Debug Mode**, reproduce the problem, then choose **Create Log File**. Agent logs can also be opened or cleared under **Advanced → Agent Mode activity log file**.
 
-Any missing or incorrect field will cause errors.
+Logs and screenshots can contain prompts, note contents, paths, and tool inputs. Review them before attaching anything to a public issue.
 
-### Amazon Bedrock
+## What works on mobile?
 
-**Problem**: "Model not found" or access denied
-
-**Fix**:
-
-- Always use **cross-region inference profile IDs**, not bare model IDs:
-  - ✅ `us.anthropic.claude-sonnet-4-5-20250929-v1:0`
-  - ❌ `anthropic.claude-sonnet-4-5-20250929-v1:0`
-- Make sure your IAM credentials have Bedrock access permissions
-- Confirm the model is available in your region
-
-### GitHub Copilot
-
-**Problem**: "Token expired" or authentication fails
-
-**Fix**:
-
-- Go to **Settings → Copilot → Basic → Set Keys**
-- Click **Connect GitHub Copilot** to re-authenticate via OAuth
-- Make sure your GitHub Copilot subscription is active
-
-### Google Gemini
-
-**Problem**: "QUOTA_EXCEEDED" or slow responses
-
-**Fix**:
-
-- Check your quota at https://console.cloud.google.com
-- Try switching to the Flash model (faster, higher quota)
-- Consider using Google via OpenRouter instead for a unified quota
-
-### DeepSeek
-
-**Problem**: Response cuts off or streaming errors
-
-**Fix**:
-
-- DeepSeek reasoning models (deepseek-reasoner) can produce very long outputs; try increasing Max Tokens
-- If you see streaming errors, check the DeepSeek status page
-- Try switching between deepseek-chat and deepseek-reasoner
-
----
-
-## Performance Issues
-
-### Slow Indexing
-
-**Cause**: Large vault with many notes, or low rate limit setting.
-
-**Fix**:
-
-- Check **Embedding Requests per Minute** — higher values speed up indexing but may cause rate limits
-- Use exclusions to skip folders you don't need indexed (e.g., large archive folders)
-- Use the incremental **Index (refresh) vault** command instead of Force Reindex when possible
-- Consider Miyo (self-host) for local indexing without API rate limits
-
-### High Memory Usage
-
-**Cause**: Large lexical search index or many indexed files.
-
-**Fix**:
-
-- Reduce **Lexical Search RAM Limit** in QA settings (default 100 MB, range 20–1000 MB)
-- Add more folders to exclusions to reduce the index size
-- On mobile, disable indexing altogether
-
-### UI Lag
-
-**Cause**: Rendering many chat messages or a very long conversation.
-
-**Fix**:
-
-- Start a new chat — long conversations can slow down rendering
-- Auto-compact will trigger automatically at 128,000 tokens to keep conversations manageable
-- Lower your auto-compact threshold if you're hitting performance issues early
-
----
-
-## Settings Issues
-
-### Reset Settings to Default
-
-If your settings get into a bad state, you can reset:
-
-1. Go to **Settings → Copilot** → find the reset option.
-
-⚠️ Resetting clears your non-secret settings, but it does **not** erase keys from the Obsidian Keychain. To erase them, use **Settings → Copilot → Advanced → API Key Storage → Delete All Keys**. Back up your keys first.
-
-Do not delete `.obsidian/plugins/copilot/data.json` as a substitute for the in-app reset. That file contains the vault's Keychain namespace; deleting it can make existing credentials unreachable and require you to re-enter them.
-
-### API Key Storage
-
-Copilot v4 stores API keys, license keys, and authentication tokens only in the **Obsidian Keychain**. These credentials are not stored in `data.json`.
-
-If your vault still had credentials in `data.json` when you upgraded, Copilot copied that file to `data-v3-credentials-backup-<id>.json` in the same plugin folder before clearing it. The single startup upgrade summary shows the exact path alongside any other migration results. Copilot never reads, decrypts, or imports that backup; it exists purely so your keys are not lost.
-
-Open it, paste each key into the matching field in Settings, and delete the file once they all work.
-
-Values that begin with `enc_` were encrypted by an older Copilot version and cannot be read back. Get fresh keys from those providers and enter the new ones instead.
-
-The Obsidian Keychain is per device. If you sync your vault to another device, you may need to re-enter API keys there.
-
-### Debug Mode and Logs
-
-For reporting bugs:
-
-1. **Enable Debug Mode**: **Settings → Copilot → Advanced → Debug Mode**
-2. **Create a log file**: **Settings → Copilot → Advanced → Create Log File**
-3. The log file opens in your vault — attach it to your bug report
-
----
-
-## Frequently Asked Questions
-
-### Is my data private? Does Copilot send my notes to the cloud?
-
-Copilot itself doesn't store your notes on any server. However, when you send a message, the content (including any context from your notes) is sent to the AI provider you've configured (OpenAI, Anthropic, etc.) via their API. Each provider has its own privacy policy. Your notes are not sent anywhere until you actively use the chat.
-
-The memory system stores data in your vault locally. Chat history is saved as markdown files in your vault. Nothing is stored on Copilot's servers unless you use licensed cloud features.
-
-**For maximum privacy**: Google Gemini's paid API (the basis for copilot-plus-flash) does not use API request data to train its models. For complete local privacy, consider using Ollama or LM Studio with a local model — nothing leaves your machine. Self-host mode is available now for eligible lifetime license holders — see [Paid Plans and Self-Host](copilot-plus-and-self-host.md) for details.
-
-### Can I reference a specific note in chat?
-
-Yes — use `[[Note Title]]` syntax directly in your message. Copilot adds that note's content as context in the background. You can also use @-mentions. See [Context and Mentions](context-and-mentions.md) for the full list of ways to add context.
-
-### How do I make Copilot always reply in English?
-
-For Agent Mode, go to **Settings → Copilot → Basic → Custom instructions** and add "Always
-respond in English." to the **Custom vault instructions** box. For Chat mode, create a prompt file in the
-`system-prompts/` sub-folder of your Copilot folder and pick it per conversation from the chat
-settings gear. See [Instructions and System Prompts](system-prompts.md).
-
-### Can Copilot understand images in my notes?
-
-Yes, but only with models that have **Vision** capability (shown by a vision icon in the model list). Make sure:
-
-1. You're using a vision-capable model
-2. **Settings → Copilot → Basic → Pass markdown images to AI** is enabled
-
-### Why can't Copilot read my PDF?
-
-- Large PDFs (over 10 MB) should be converted to markdown first
-- In paid Quick Chat, use **+ Add context** to attach a PDF — it will be converted automatically
-- In Agent Mode, use an agent or document skill that supports PDF, or choose Miyo as the local document processor
-- For reusable document collections, add the sources to a project
-
-### Can I use Copilot offline?
-
-With local models (Ollama or LM Studio), yes — once a model is downloaded, it runs fully offline. Cloud providers (OpenAI, Anthropic, etc.) require an internet connection.
-
-Lexical vault search works offline. Semantic search requires an embedding model, which may also need an internet connection unless you're using a local embedding provider or Miyo.
-
-### What's the difference between Chat mode and Vault QA mode?
-
-- **Chat** — General conversation. The AI only has access to your current note and anything you explicitly mention.
-- **Vault QA** — Specifically designed for asking questions about your vault. Copilot automatically searches your notes for relevant content and includes it as context.
-
-For most question-and-answer tasks over your vault, use **Vault QA** or paid Quick Chat.
-
-### Can I use multiple providers at the same time?
-
-Yes. You can have API keys configured for multiple providers simultaneously and switch between models from different providers at any time. You can even set a different model for quick commands vs. regular chat.
-
-### Where are my saved chats stored?
-
-Chat conversations are saved as markdown files in your vault, in the `copilot-conversations/` sub-folder of your Copilot folder (by default `copilot/copilot-conversations/`). To change where new chats are saved, change the root in **Settings → Copilot → Basic → Copilot folder location** — every Copilot sub-folder derives from it. Changing the root affects only new chats; conversations you have already saved stay in the old folder unless you move them yourself.
-
-### How do I clear the Copilot cache?
-
-Use **Command palette → Clear Copilot cache**. This clears cached responses and processed files. It does not affect your chat history or the vault index.
-
-### What is the `copilot/` folder in my vault?
-
-The `copilot/` folder is your Copilot folder — the default root the plugin uses to store its own files:
-
-- `copilot-conversations/` — Saved chat histories
-- `copilot-custom-prompts/` — Your custom commands
-- `system-prompts/` — Your custom system prompts
-- `memory/` — Saved AI memories (if enabled)
-- `skills/` — Agent skills
-- `projects/` — Project files
-
-You can rename this root in **Settings → Copilot → Basic → Copilot folder location**; all of the sub-folders above derive from it. The Copilot folder is automatically excluded from Copilot search to avoid cluttering results. If you change the root, the old folder is not moved for you and stays excluded from Copilot search permanently — any folder that has ever been your Copilot folder is kept out of Copilot search results even after you switch away from it.
-
-You can select a folder that already contains Markdown files. Copilot will ask you to confirm because every Markdown file under that folder — including regular notes — will be excluded from Copilot search. This does not affect Obsidian's built-in search. Canceling the confirmation leaves your current Copilot folder unchanged.
-
-### How do I switch modes?
-
-Click the mode selector at the top of Quick Chat. Available modes:
-
-- Chat
-- Vault QA (Basic)
-- **copilot plus** (paid Quick Chat; requires a license)
-- Projects
-
-Agent Mode is a separate desktop view, not an item in this selector. Click the **Agent** ribbon icon or run **Open Copilot Agent Chat Window**, then choose OpenCode, Claude, or Codex.
-
-### The AI keeps forgetting what we talked about earlier
-
-This usually means the conversation has grown too long and older turns are being trimmed from context. Options:
-
-- Lower **Conversation Turns in Context** in Model settings
-- Let auto-compact handle it (it summarizes old turns automatically)
-- Start a new chat and reference the previous chat file
-
----
-
-## Getting More Help
-
-- **GitHub Issues**: Report bugs at https://github.com/logancyang/obsidian-copilot/issues
-- **Discord**: Join the Copilot Discord community for help from other users
-- **Log file**: Create a log file (**Settings → Copilot → Advanced → Create Log File**) and include it in bug reports
-
----
+Agent—including opencode, Claude, Codex, Agent projects, and agent skill execution—is desktop-only. On mobile, use Quick Chat. Agent settings display **Agent settings are available on desktop.** Miyo on mobile requires a remote Miyo connection and manual vault registration in Miyo.
 
 ## Related
 
-- [Getting Started](getting-started.md) — First-time setup
-- [LLM Providers](llm-providers.md) — Provider-specific setup details
-- [Vault Search and Indexing](vault-search-and-indexing.md) — Index management
+- [Getting Started](getting-started.md)
+- [Agents in Copilot V4](agent-mode-and-tools.md)
+- [Context and Mentions](context-and-mentions.md)
+- [Copilot Plus and Self-Host](copilot-plus-and-self-host.md)
