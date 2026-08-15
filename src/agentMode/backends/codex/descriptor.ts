@@ -1,6 +1,5 @@
-import * as fs from "node:fs";
-import * as os from "node:os";
 import type CopilotPlugin from "@/main";
+import { requireNodeModule } from "@/utils/desktopRuntime";
 import {
   subscribeToSettingsChange,
   updateAgentModeBackendFields,
@@ -41,6 +40,8 @@ export function updateCodexFields(partial: Partial<CodexBackendSettings>): void 
 }
 
 function codexAcpResolverEnv(): Parameters<typeof resolveCodexAcpBinary>[0] {
+  const fs = requireNodeModule<typeof import("node:fs")>("fs");
+  const os = requireNodeModule<typeof import("node:os")>("os");
   return {
     homeDir: os.homedir(),
     platform: process.platform,

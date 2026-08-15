@@ -1,12 +1,11 @@
 import { type App, Platform } from "obsidian";
-import os from "node:os";
-import * as path from "node:path";
 import type CopilotPlugin from "@/main";
 import { logError } from "@/logger";
 import { getSettings, subscribeToSettingsChange, type CopilotSettings } from "@/settings/model";
 import { deriveSkillsFolder, getEffectiveSkillsFolder } from "@/settings/copilotFolder";
 import { subscribeToSystemPromptChange } from "@/system-prompts/state";
 import { copilotAppDataDir, getVaultId } from "@/utils/appPaths";
+import { requireNodeModule } from "@/utils/desktopRuntime";
 import { buildAgentSystemPrompt } from "./backends/shared/agentSystemPrompt";
 import { backendRegistry, listBackendDescriptors } from "./backends/registry";
 import type { BackendId } from "./session/types";
@@ -166,6 +165,8 @@ function backendEnvOverridesKey(settings: CopilotSettings, backendId: BackendId)
  * the existing manager and call this again.
  */
 export function createAgentSessionManager(app: App, plugin: CopilotPlugin): AgentSessionManager {
+  const os = requireNodeModule<typeof import("node:os")>("os");
+  const path = requireNodeModule<typeof import("node:path")>("path");
   const skillManager = SkillManager.initialize(app, collectAgentSkillsDirsProjectRel());
   const preloader = new AgentModelPreloader(app, plugin, (id) => backendRegistry[id]);
   const persistenceManager = new AgentChatPersistenceManager(app);

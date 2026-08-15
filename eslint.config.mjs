@@ -4,6 +4,65 @@ import reactHooks from "eslint-plugin-react-hooks";
 import tailwind from "eslint-plugin-tailwindcss";
 import boundaries from "eslint-plugin-boundaries";
 import globals from "globals";
+import { isBuiltin } from "node:module";
+
+const NODE_IMPORT_GUIDANCE =
+  "Use requireNodeModule() from '@/utils/desktopRuntime' for runtime access; use an import(\"node:...\") type query when only a type is needed.";
+
+const noDirectNodeImportsRule = {
+  meta: {
+    type: "problem",
+    schema: [],
+    messages: {
+      directNodeImport: `Do not access Node.js built-in module "{{moduleName}}" directly. ${NODE_IMPORT_GUIDANCE}`,
+    },
+  },
+  create(context) {
+    const reportIfBuiltin = (node, moduleName) => {
+      if (typeof moduleName === "string" && isBuiltin(moduleName)) {
+        context.report({
+          node,
+          messageId: "directNodeImport",
+          data: { moduleName },
+        });
+      }
+    };
+
+    return {
+      ImportDeclaration(node) {
+        reportIfBuiltin(node, node.source.value);
+      },
+      ExportNamedDeclaration(node) {
+        if (node.source) {
+          reportIfBuiltin(node, node.source.value);
+        }
+      },
+      ExportAllDeclaration(node) {
+        reportIfBuiltin(node, node.source.value);
+      },
+      ImportExpression(node) {
+        if (node.source.type === "Literal") {
+          reportIfBuiltin(node, node.source.value);
+        }
+      },
+      CallExpression(node) {
+        if (
+          node.callee.type === "Identifier" &&
+          node.callee.name === "require" &&
+          node.arguments[0]?.type === "Literal"
+        ) {
+          reportIfBuiltin(node, node.arguments[0].value);
+        }
+      },
+    };
+  },
+};
+
+const copilotLintPlugin = {
+  rules: {
+    "no-direct-node-imports": noDirectNodeImportsRule,
+  },
+};
 
 const restrictedSourceImports = [
   {
@@ -188,6 +247,17 @@ export default [
             "Use isDesktopRuntime() from @/utils/desktopRuntime instead. Platform.isDesktopApp stays true under app.emulateMobile(true) (Node stubbed to null), so desktop-only/Node code still runs there and crashes.",
         },
       ],
+    },
+  },
+
+  // Runtime Node access in plugin source must cross the shared desktop guard.
+  // Tests may import Node directly because they execute under Jest, not Obsidian.
+  {
+    files: ["src/**/*.{ts,tsx}"],
+    ignores: ["src/**/*.test.{ts,tsx}", "src/**/__mocks__/**", "src/integration_tests/**"],
+    plugins: { copilot: copilotLintPlugin },
+    rules: {
+      "copilot/no-direct-node-imports": "error",
     },
   },
 
@@ -390,34 +460,6 @@ export default [
     files: ["**/*.cjs", "scripts/patchRendererUnsafeUnref.js"],
     rules: {
       "@typescript-eslint/no-require-imports": "off",
-    },
-  },
-
-  // Agent Mode: backends spawn subprocesses (ACP) and the in-process Claude
-  // SDK uses node:async_hooks. The plugin runs in Electron renderer where
-  // these modules are available; the desktop-only Agent Mode is also gated by
-  // `Platform.isMobile` at runtime in main.ts.
-  // detectBinary / binaryPath / nodeToolBinDirs / rendererEventsShim are
-  // sibling utilities pulled in by agent-mode wiring and share the same
-  // Electron-renderer assumptions. The Symposium handoff consumer is likewise
-  // desktop-only, but remains in the host publishing layer. openVaultPath
-  // lazy-requires node:fs behind a desktop vault-base guard, mirroring
-  // opencodeLog.
-  {
-    files: [
-      "src/agentMode/**",
-      "src/utils/appPaths.ts",
-      "src/utils/detectBinary.ts",
-      "src/utils/binaryPath.ts",
-      "src/utils/nodeToolBinDirs.ts",
-      "src/utils/rendererEventsShim.ts",
-      "src/utils/issueReport.ts",
-      "src/utils/opencodeLog.ts",
-      "src/utils/openVaultPath.ts",
-      "src/symposium/symposiumAgentHandoff.ts",
-    ],
-    rules: {
-      "import/no-nodejs-modules": "off",
     },
   },
 

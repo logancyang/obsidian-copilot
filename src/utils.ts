@@ -1,6 +1,6 @@
 // Reason: `buffer` is the npm polyfill (browser-compatible), bundled by esbuild
 // so the same Buffer code path works on desktop (Electron) and mobile (WebView).
-import { Buffer } from "buffer";
+import { Buffer } from "buffer/";
 
 import { ChainType } from "@/chainType";
 import {
@@ -822,7 +822,7 @@ export async function safeFetch(
       // Reason: Buffer (from the `buffer` polyfill imported above) is the
       // cross-platform path — bare global Buffer is undefined in mobile WebView.
       const buf = Buffer.from(base64, "base64");
-      return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
+      return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
     },
     blob: () => {
       throw new Error("not implemented");

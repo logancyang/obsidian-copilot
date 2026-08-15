@@ -16,9 +16,26 @@ const reviewSourceExtensions = new Set([".cjs", ".js", ".jsx", ".mjs", ".ts", ".
 // Negative examples must not be real source files because the authenticated
 // community reviewer scans them without the repository's local ignore rules.
 const invalidSourceFixture = `import "node:fs";
+export { promisify } from "node:util";
+const path = require("path");
+void path;
+async function loadOs() {
+  return import("node:os");
+}
+void loadOs;
 
 // eslint-disable-next-line no-console
 console.log(fetch("https://example.com"));
+`;
+const validNodeBoundaryFixture = `import { Buffer } from "buffer/";
+import { requireNodeModule } from "@/utils/desktopRuntime";
+
+type Stats = import("node:fs").Stats;
+
+export function encodeSize(stats: Stats): string {
+  const path = requireNodeModule<typeof import("node:path")>("path");
+  return Buffer.from(path.basename(String(stats.size))).toString("base64");
+}
 `;
 const invalidStyleWarningFixture = `.review-fixture:has(button) {
   display: block !important;
@@ -114,10 +131,29 @@ async function main() {
   assert(invalidSourceResult.errorCount > 0, "ESLint accepted its invalid source fixture");
   expectEslintRules(invalidSourceResult, [
     "obsidianmd/no-nodejs-modules",
+    "copilot/no-direct-node-imports",
     "no-restricted-globals",
     "eslint-comments/require-description",
     "eslint-comments/no-restricted-disable",
   ]);
+  assert(
+    ["node:fs", "node:util", "path", "node:os"].every((moduleName) =>
+      invalidSourceResult.messages.some(
+        (message) =>
+          message.ruleId === "copilot/no-direct-node-imports" &&
+          message.message.includes(`"${moduleName}"`) &&
+          message.message.includes("requireNodeModule()")
+      )
+    ),
+    "direct Node access guidance did not cover imports, re-exports, and require() calls"
+  );
+  const validNodeBoundaryResult = await lintSourceFixture(validNodeBoundaryFixture, "src/utils.ts");
+  assert(
+    validNodeBoundaryResult.messages.every(
+      (message) => message.ruleId !== "copilot/no-direct-node-imports"
+    ),
+    "browser polyfills or guarded/type-only Node access were rejected"
+  );
   const invalidLicenseResult = await lintSourceFixture(invalidLicenseFixture, "LICENSE");
   assert(
     invalidLicenseResult.errorCount === 0,

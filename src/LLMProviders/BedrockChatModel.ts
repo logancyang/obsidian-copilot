@@ -1,6 +1,6 @@
 // Reason: `buffer` is the npm polyfill (browser-compatible), bundled by esbuild
 // so the same Buffer code path works on desktop (Electron) and mobile (WebView).
-import { Buffer } from "buffer";
+import { Buffer } from "buffer/";
 
 import {
   BaseChatModel,

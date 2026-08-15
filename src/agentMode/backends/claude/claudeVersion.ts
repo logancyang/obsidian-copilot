@@ -1,8 +1,6 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { compareSemver } from "@/utils/semver";
+import { requireNodeModule } from "@/utils/desktopRuntime";
 
-const execFileAsync = promisify(execFile);
 const VERSION_TIMEOUT_MS = 10_000;
 
 export const CLAUDE_MIN_VERSION = "2.1.206";
@@ -12,6 +10,16 @@ export type ClaudeVersionRunner = (
   args: string[],
   options: { env: NodeJS.ProcessEnv; timeout: number }
 ) => Promise<{ stdout: string }>;
+
+async function runClaudeVersion(
+  claudePath: string,
+  args: string[],
+  options: { env: NodeJS.ProcessEnv; timeout: number }
+): Promise<{ stdout: string }> {
+  const { execFile } = requireNodeModule<typeof import("node:child_process")>("child_process");
+  const { promisify } = requireNodeModule<typeof import("node:util")>("util");
+  return promisify(execFile)(claudePath, args, options);
+}
 
 /**
  * The resolver's npm-package fallbacks (`cli.js` / `cli-wrapper.cjs`) are Node
@@ -57,7 +65,7 @@ export type ClaudeVersionCompatibility =
 export async function probeClaudeVersion(
   claudePath: string,
   env: NodeJS.ProcessEnv,
-  run: ClaudeVersionRunner = execFileAsync
+  run: ClaudeVersionRunner = runClaudeVersion
 ): Promise<ClaudeVersionCompatibility> {
   const invocation = buildVersionInvocation(claudePath, env);
   let stdout: string;
@@ -98,7 +106,7 @@ export async function probeClaudeVersion(
 export async function assertClaudeVersionSupported(
   claudePath: string,
   env: NodeJS.ProcessEnv,
-  run: ClaudeVersionRunner = execFileAsync
+  run: ClaudeVersionRunner = runClaudeVersion
 ): Promise<void> {
   const compatibility = await probeClaudeVersion(claudePath, env, run);
   if (compatibility.kind === "incompatible") throw new Error(compatibility.message);

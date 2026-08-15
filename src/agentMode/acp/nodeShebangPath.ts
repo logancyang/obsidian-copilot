@@ -1,6 +1,5 @@
-import * as path from "node:path";
-
 import { detectionSearchDirs, mergePath } from "@/utils/binaryPath";
+import { requireNodeModule } from "@/utils/desktopRuntime";
 
 /**
  * macOS GUI apps (Obsidian) inherit a minimal PATH that omits Homebrew and
@@ -19,5 +18,6 @@ export function augmentPathForNodeShebang(
   binaryPath: string,
   inherited: string | undefined
 ): string {
+  const path = requireNodeModule<typeof import("node:path")>("path");
   return mergePath([path.dirname(binaryPath), ...detectionSearchDirs()], inherited);
 }

@@ -8,6 +8,8 @@
  * directory may not exist, in which case the caller proceeds without the log.
  */
 
+import { requireNodeModule } from "./desktopRuntime";
+
 export interface OpencodeLogRuntime {
   join: (...parts: string[]) => string;
   readdir: (dir: string) => Promise<string[]>;
@@ -62,10 +64,8 @@ export async function findLatestOpencodeLog(
 }
 
 function getNodeOpencodeLogRuntime(): OpencodeLogRuntime {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports -- Opencode log access is contained in this desktop runtime adapter
-  const fs = require("node:fs/promises") as typeof import("node:fs/promises");
-  // eslint-disable-next-line @typescript-eslint/no-require-imports -- Opencode log paths stay inside the same desktop runtime adapter
-  const path = require("node:path") as typeof import("node:path");
+  const fs = requireNodeModule<typeof import("node:fs/promises")>("fs/promises");
+  const path = requireNodeModule<typeof import("node:path")>("path");
   return {
     join: (...parts: string[]) => path.join(...parts),
     readdir: (dir: string) => fs.readdir(dir),

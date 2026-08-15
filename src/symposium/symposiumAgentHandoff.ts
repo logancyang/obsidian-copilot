@@ -1,13 +1,9 @@
-import { lstat, mkdtemp, readFile, rm, unlink, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import * as path from "node:path";
-import { pathToFileURL } from "node:url";
-
 import { SYMPOSIUM_AGENT_HANDOFF_DIR, SYMPOSIUM_MAX_HTML_BYTES } from "@/symposium/constants";
 import {
   SymposiumDocumentUnsafeError,
   validateSymposiumReviewHtml,
 } from "@/symposium/symposiumDocument";
+import { requireNodeModule } from "@/utils/desktopRuntime";
 
 /** Signals that a filesystem-backed agent handoff cannot be consumed safely. */
 class SymposiumAgentHandoffError extends Error {
@@ -61,6 +57,8 @@ function getDirectHandoffName(stagedHtmlPath: string): string {
 }
 
 async function getHandoffRoot(vaultRootAbs: string): Promise<string> {
+  const { lstat } = requireNodeModule<typeof import("node:fs/promises")>("fs/promises");
+  const path = requireNodeModule<typeof import("node:path")>("path");
   const symposiumRoot = path.resolve(vaultRootAbs, ".symposium");
   const handoffRoot = path.join(symposiumRoot, "handoffs");
   try {
@@ -86,6 +84,7 @@ function decodeUtf8(bytes: Uint8Array): string {
 }
 
 async function removeHandoff(stagedPath: string): Promise<void> {
+  const { unlink } = requireNodeModule<typeof import("node:fs/promises")>("fs/promises");
   try {
     await unlink(stagedPath);
   } catch (error) {
@@ -148,6 +147,11 @@ seal();
 }
 
 async function createLocalPreview(html: string): Promise<SymposiumAgentHandoff> {
+  const { lstat, mkdtemp, readFile, rm, writeFile } =
+    requireNodeModule<typeof import("node:fs/promises")>("fs/promises");
+  const { tmpdir } = requireNodeModule<typeof import("node:os")>("os");
+  const path = requireNodeModule<typeof import("node:path")>("path");
+  const { pathToFileURL } = requireNodeModule<typeof import("node:url")>("url");
   const previewRoot = await mkdtemp(path.join(tmpdir(), PREVIEW_FOLDER_PREFIX));
   const previewPath = path.join(previewRoot, PREVIEW_FILE_NAME);
   const browserPreview = createBrowserPreview(html);
@@ -189,6 +193,8 @@ export async function consumeSymposiumAgentHandoff(
   vaultRootAbs: string,
   stagedHtmlPath: string
 ): Promise<SymposiumAgentHandoff> {
+  const { lstat, readFile } = requireNodeModule<typeof import("node:fs/promises")>("fs/promises");
+  const path = requireNodeModule<typeof import("node:path")>("path");
   const fileName = getDirectHandoffName(stagedHtmlPath);
   const handoffRoot = await getHandoffRoot(vaultRootAbs);
   const stagedPath = path.join(handoffRoot, fileName);
