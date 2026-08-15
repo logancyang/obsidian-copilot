@@ -907,26 +907,6 @@ body.is-mobile
   padding-bottom: var(--size-4-1) !important;
 }
 
-/* Editor mode for mobile - new version (with bottom navbar visible): reserve
-   navbar space. `copilot-has-mobile-navbar` is maintained by the plugin
-   (attachMobileNavbarBodyClass) whenever a `.mobile-navbar` element exists —
-   an explicit class instead of anchoring a `:has` probe on body, which the
-   browser would re-evaluate on any DOM mutation, including every streamed
-   chat token. */
-body.is-mobile.copilot-has-mobile-navbar:not(.is-hidden-nav)
-  .workspace-tab-container
-  :is(
-    .workspace-leaf-content[data-type="copilot-chat-view"],
-    .workspace-leaf-content[data-type="copilot-agent-chat-view"],
-    .workspace-leaf-content[data-type="copilot-component-gallery"]
-  )
-  .view-content {
-  padding-bottom: calc(
-    var(--navbar-height, 50px) + max(var(--safe-area-inset-bottom, 0px), var(--size-4-3)) +
-      var(--size-4-1)
-  ) !important;
-}
-
 /* Hide drawer header and tab-options when keyboard is open in Copilot's drawer */
 body.is-mobile .workspace-drawer.copilot-keyboard-open .workspace-drawer-header,
 body.is-mobile .workspace-drawer.copilot-keyboard-open .workspace-drawer-tab-options {

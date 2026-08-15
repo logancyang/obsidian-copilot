@@ -110,7 +110,6 @@ import {
   type StartupMigrationItem,
   type StartupMigrationTask,
 } from "@/services/startupMigration";
-import { attachMobileNavbarBodyClass } from "@/components/chat-components/attachMobileNavbarBodyClass";
 import { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import {
   extractChatLastAccessedAtMs,
@@ -453,10 +452,6 @@ export default class CopilotPlugin extends Plugin {
         new Notice("Copilot could not finish startup migration. Reload Obsidian to retry.");
       });
     });
-
-    // Reserve mobile-navbar space via an explicit body class (mobile no-ops on
-    // desktop); the stylesheet keys off it instead of body:has(.mobile-navbar).
-    this.register(attachMobileNavbarBodyClass(this.app));
 
     // Initialize automatic selection handler
     this.initSelectionHandler();
