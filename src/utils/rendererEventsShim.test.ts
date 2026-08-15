@@ -1,15 +1,17 @@
-jest.mock("obsidian", () => ({ Platform: { isMobile: false } }));
+jest.mock("obsidian", () => ({ Platform: { isDesktopApp: true, isMobile: false } }));
 
 import { EventEmitter } from "node:events";
 import { installRendererEventsShim } from "./rendererEventsShim";
 
-const obsidian: { Platform: { isMobile: boolean } } = jest.requireMock("obsidian");
+const obsidian: { Platform: { isDesktopApp: boolean; isMobile: boolean } } =
+  jest.requireMock("obsidian");
 
 describe("installRendererEventsShim", () => {
   let original: typeof EventEmitter.setMaxListeners;
 
   beforeEach(() => {
     original = EventEmitter.setMaxListeners;
+    obsidian.Platform.isDesktopApp = true;
     obsidian.Platform.isMobile = false;
   });
 
@@ -28,6 +30,24 @@ describe("installRendererEventsShim", () => {
   it("has no load-time side effect — patching only happens when called", () => {
     // Importing the module above must not have patched anything on its own.
     expect(EventEmitter.setMaxListeners).toBe(original);
+  });
+
+  it("evaluates without requiring node:events — safe in the mobile module graph", () => {
+    // On mobile the events module resolves to undefined, so any require at
+    // module-evaluation time would crash the whole plugin at load.
+    const throwingIds = ["events", "node:events"];
+    try {
+      jest.isolateModules(() => {
+        for (const id of throwingIds) {
+          jest.doMock(id, () => {
+            throw new Error(`eager require of ${id}`);
+          });
+        }
+        expect(() => void jest.requireActual("./rendererEventsShim")).not.toThrow();
+      });
+    } finally {
+      for (const id of throwingIds) jest.dontMock(id);
+    }
   });
 
   it("on desktop, swallows setMaxListeners misuse with AbortSignal-shaped targets", () => {
