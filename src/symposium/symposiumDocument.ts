@@ -258,8 +258,10 @@ export async function buildSymposiumDocument(
   ownerDocument: Document
 ): Promise<SymposiumDocument> {
   const markdown = await app.vault.read(file);
-  const article = ownerDocument.createElement("article");
-  article.className = "markdown-preview-view markdown-rendered symposium-document";
+  const article = ownerDocument.win.createEl(
+    "article",
+    "markdown-preview-view markdown-rendered symposium-document"
+  );
 
   const render = (MarkdownRenderer as unknown as { render: ModernRender }).render;
   await render(app, markdown, article, file.path, component);
@@ -295,12 +297,12 @@ function normalizeMath(root: HTMLElement): void {
 
 function normalizeTaskCheckboxes(root: HTMLElement): void {
   root.querySelectorAll<HTMLInputElement>("input.task-list-item-checkbox").forEach((checkbox) => {
-    const marker = root.doc.createElement("span");
     const checked = checkbox.checked || checkbox.hasAttribute("checked");
-    marker.className = "symposium-task-marker";
-    marker.setAttribute("role", "img");
-    marker.setAttribute("aria-label", checked ? "Completed task" : "Open task");
-    marker.textContent = checked ? "☑" : "☐";
+    const marker = root.doc.win.createSpan({
+      cls: "symposium-task-marker",
+      text: checked ? "☑" : "☐",
+      attr: { role: "img", "aria-label": checked ? "Completed task" : "Open task" },
+    });
     checkbox.replaceWith(marker);
   });
 }
@@ -311,10 +313,9 @@ function removeUnsupportedContent(root: HTMLElement): void {
 
 function normalizeInternalLinks(root: HTMLElement): void {
   root.querySelectorAll<HTMLAnchorElement>("a.internal-link").forEach((link) => {
-    const replacement = root.doc.createElement("span");
-    replacement.className = [...link.classList]
-      .filter((name) => name !== "is-unresolved")
-      .join(" ");
+    const replacement = root.doc.win.createSpan(
+      [...link.classList].filter((name) => name !== "is-unresolved").join(" ")
+    );
     if (!replacement.classList.contains("internal-link")) {
       replacement.classList.add("internal-link");
     }
@@ -550,9 +551,10 @@ function asciiAt(bytes: Uint8Array, offset: number, expected: string): boolean {
 }
 
 function replaceMissingImage(image: HTMLImageElement, source: string): HTMLElement {
-  const replacement = image.doc.createElement("span");
-  replacement.className = "symposium-missing-asset";
-  replacement.textContent = `[Missing image: ${image.alt || source || "unknown"}]`;
+  const replacement = image.doc.win.createSpan({
+    cls: "symposium-missing-asset",
+    text: `[Missing image: ${image.alt || source || "unknown"}]`,
+  });
   image.replaceWith(replacement);
   return replacement;
 }
@@ -638,8 +640,7 @@ function decodeUrlComponent(value: string): string {
 }
 
 function serializeDocument(ownerDocument: Document, title: string, article: HTMLElement): string {
-  const titleElement = ownerDocument.createElement("title");
-  titleElement.textContent = title;
+  const titleElement = ownerDocument.win.createEl("title", { text: title });
   return [
     "<!doctype html>",
     '<html lang="en">',

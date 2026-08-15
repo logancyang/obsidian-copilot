@@ -334,6 +334,50 @@ describe("ChatSingleMessage", () => {
     expect(messageSegment?.querySelector('a[href="#fn-2"]')?.textContent).toBe("2");
   });
 
+  it("turns an inline citation marker into a link that keeps the source anchor's Obsidian metadata", async () => {
+    renderMarkdownMock.mockImplementation(
+      async (_app: unknown, _markdown: string, el: HTMLElement) => {
+        el.append(
+          ...new DOMParser().parseFromString(
+            `
+        <p>A claim <span class="copilot-citation-ref">[1]</span></p>
+        <div class="copilot-sources">
+          <div class="copilot-sources__item">
+            <span class="copilot-sources__index">[1]</span>
+            <span class="copilot-sources__text">
+              <a class="internal-link" data-href="Some Note">Some Note</a>
+            </span>
+          </div>
+        </div>
+      `,
+            "text/html"
+          ).body.children
+        );
+      }
+    );
+
+    const { container } = render(
+      <TooltipProvider>
+        <ChatSingleMessage
+          message={baseMessage}
+          app={createAppStub()}
+          isStreaming={false}
+          onDelete={() => {}}
+        />
+      </TooltipProvider>
+    );
+
+    await waitFor(() => expect(container.querySelector(".copilot-citation-group")).not.toBeNull());
+
+    const group = container.querySelector(".copilot-citation-group");
+    expect(group?.textContent).toBe("[1]");
+    const link = group?.querySelector("a.copilot-citation-link");
+    expect(link?.textContent).toBe("1");
+    expect(link?.getAttribute("aria-label")).toBe("Source 1");
+    expect(link?.getAttribute("data-href")).toBe("Some Note");
+    expect(container.querySelector(".copilot-citation-ref")).toBeNull();
+  });
+
   it("marks rendered text segments with markdown-rendered for native reading-view styling", async () => {
     const { container } = render(
       <TooltipProvider>

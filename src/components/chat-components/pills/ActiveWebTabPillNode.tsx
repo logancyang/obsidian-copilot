@@ -3,7 +3,6 @@ import {
   DOMConversionMap,
   DOMConversionOutput,
   DOMExportOutput,
-  EditorConfig,
   LexicalEditor,
   LexicalNode,
   NodeKey,
@@ -45,12 +44,6 @@ export class ActiveWebTabPillNode extends BasePillNode {
     return "data-lexical-active-web-tab-pill";
   }
 
-  createDOM(_config: EditorConfig, editor: LexicalEditor): HTMLElement {
-    const span = getEditorDocument(editor).createElement("span");
-    span.className = "active-web-tab-pill-wrapper";
-    return span;
-  }
-
   static importDOM(): DOMConversionMap | null {
     return {
       span: (node: HTMLElement) => {
@@ -78,9 +71,10 @@ export class ActiveWebTabPillNode extends BasePillNode {
   }
 
   exportDOM(editor: LexicalEditor): DOMExportOutput {
-    const element = getEditorDocument(editor).createElement("span");
-    element.setAttribute("data-lexical-active-web-tab-pill", "true");
-    element.textContent = ACTIVE_WEB_TAB_MARKER;
+    const element = getEditorDocument(editor).win.createSpan({
+      text: ACTIVE_WEB_TAB_MARKER,
+      attr: { "data-lexical-active-web-tab-pill": "true" },
+    });
     return { element };
   }
 

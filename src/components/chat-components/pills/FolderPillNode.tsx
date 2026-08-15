@@ -95,10 +95,10 @@ export class FolderPillNode extends BasePillNode {
    * Override to export DOM with curly braces
    */
   exportDOM(editor: LexicalEditor): DOMExportOutput {
-    const element = getEditorDocument(editor).createElement("span");
-    element.setAttribute(this.getDataAttribute(), "");
-    element.setAttribute("data-pill-value", this.__value);
-    element.textContent = `{${this.getFolderPath()}}`;
+    const element = getEditorDocument(editor).win.createSpan({
+      text: `{${this.getFolderPath()}}`,
+      attr: { [this.getDataAttribute()]: "", "data-pill-value": this.__value },
+    });
     return { element };
   }
 
