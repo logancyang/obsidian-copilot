@@ -85,9 +85,9 @@ import type {
   BackendId,
   BackendModelCatalog,
   BackendProcess,
-  BackendState,
   CopilotMode,
   EffortOption,
+  LoadSessionOutput,
   ModeApplySpec,
   ModelSelection,
   PermissionDecision,
@@ -519,8 +519,7 @@ export class AgentSessionManager {
 
   /**
    * Watch project config edits so a changed context source (URLs / inclusions /
-   * etc.) invalidates the project's materialized context — mirroring chat mode's
-   * {@link ProjectManager.setupProjectListChangeMonitor}. Seeds the prior-records
+   * etc.) invalidates the project's materialized context. Seeds the prior-records
    * snapshot up front so the first notification diffs against the real baseline.
    */
   private setupProjectRecordChangeMonitor(): void {
@@ -1949,8 +1948,8 @@ export class AgentSessionManager {
   }
 
   /**
-   * Record a successful enter of `projectId` as its most-recent use, mirroring
-   * chat-mode {@link ProjectManager.switchProject}. Skips {@link GLOBAL_SCOPE}
+   * Record a successful enter of `projectId` as its most-recent use. Skips
+   * {@link GLOBAL_SCOPE}
    * (the implicit workspace `exitProject` returns to) and any scope that is no
    * longer current — the spawn-path caller touches after an `await`, so a
    * concurrent `enterProject` may have moved the active scope on in the meantime.
@@ -2840,9 +2839,9 @@ export class AgentSessionManager {
    * fallback — silently opening an empty chat would misread as data loss, so
    * the failure surfaces to the caller instead.
    *
-   * The transcript is not rebuilt from the backend store (the resume path
-   * restores agent-side context only), so the chat may open visually empty
-   * while the agent still remembers the conversation on the next turn.
+   * The visible transcript comes back with the resume itself: ACP backends
+   * replay it during `loadSession`, and Claude is hydrated from its on-disk
+   * store by {@link hydrateResumedTranscript}.
    */
   async loadNativeSessionFromHistory(
     backendId: BackendId,
@@ -2895,8 +2894,8 @@ export class AgentSessionManager {
     }
     // Rebuild the visible transcript for backends that resume without
     // replaying it (Claude SDK reads its on-disk session jsonl). ACP backends
-    // replay through `loadSession`, so they don't implement this and the
-    // session already has its messages. Best-effort: an empty result leaves
+    // already loaded theirs from the replay above, so the store is non-empty
+    // and this is a no-op for them. Best-effort: an empty result leaves
     // the resumed-but-blank session as-is rather than failing the open.
     await this.hydrateResumedTranscript(session, backendId, sessionId);
     // Reapply with the recorded source: a user rename stays sticky, but an
@@ -3036,7 +3035,7 @@ export class AgentSessionManager {
       this.finishPendingCreate();
       return null;
     }
-    let resumeResult: { sessionId: SessionId; state: BackendState } | null = null;
+    let resumeResult: LoadSessionOutput | null = null;
     try {
       resumeResult = await backend.loadSession({
         sessionId,
@@ -3104,6 +3103,14 @@ export class AgentSessionManager {
           }
         : {}),
     });
+
+    // ACP backends rebuild the visible transcript from the frames the agent
+    // replays during `loadSession`; `resumeSession` (Claude) returns none and
+    // is hydrated from its own store further down instead.
+    if (resumeResult.transcript?.length) {
+      session.loadDisplayMessages(resumeResult.transcript);
+    }
+
     if (descriptor.applyInitialSessionConfig) {
       try {
         await descriptor.applyInitialSessionConfig(session, getSettings());

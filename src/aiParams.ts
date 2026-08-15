@@ -34,36 +34,18 @@ const chainTypeAtom = atom(
   }
 );
 
-const currentProjectAtom = atom<ProjectConfig | null>(null);
-const projectLoadingAtom = atom<boolean>(false);
-
 export interface FailedItem {
   path: string;
   type: "md" | "web" | "youtube" | "nonMd";
   error?: string;
   timestamp?: number;
   /**
-   * Agent project context only: the source's refresh failed but a previous
-   * snapshot is still in use, so it's stale-but-usable rather than missing.
-   * Lets the status icon stay "ready" (green) while the popover flags the
-   * staleness. Undefined for the legacy CAG failure tracker.
+   * The source's refresh failed but a previous snapshot is still in use, so
+   * it's stale-but-usable rather than missing. Lets the status icon stay
+   * "ready" (green) while the popover flags the staleness.
    */
   usedStaleSnapshot?: boolean;
 }
-
-interface ProjectContextLoadState {
-  success: Array<string>;
-  failed: Array<FailedItem>;
-  processingFiles: Array<string>;
-  total: Array<string>;
-}
-
-export const projectContextLoadAtom = atom<ProjectContextLoadState>({
-  success: [],
-  failed: [],
-  processingFiles: [],
-  total: [],
-});
 
 /** Done-of-total progress for one materialization step (prefetch / parse). */
 export interface ContextLoadStepCount {
@@ -93,8 +75,8 @@ export interface AgentProjectContextLoadState {
    */
   failedSources?: FailedItem[];
   /**
-   * Sources the full materialization run is fetching/parsing RIGHT NOW, mirroring
-   * the legacy CAG `processingFiles` set. Published incrementally as each source
+   * Sources the full materialization run is fetching/parsing RIGHT NOW.
+   * Published incrementally as each source
    * starts and settles, so the popover renders a true queue: URLs (fetched in
    * parallel) appear together while files (parsed sequentially) appear one at a
    * time, and each flips to its real outcome the instant it settles — never
@@ -158,8 +140,9 @@ export interface ProjectConfig {
   name: string;
   description?: string;
   systemPrompt: string;
-  // Old CAG Project Chain model selector. Agent Mode does NOT read this (it uses
-  // agentMode.activeBackend + the backend's default model); kept for CAG runtime + YAML compat.
+  // Not read at runtime: Agent Mode picks its model from agentMode.activeBackend
+  // plus that backend's default. Retained so the `project.md` frontmatter written
+  // by earlier versions round-trips instead of being dropped on rewrite.
   projectModelKey: string;
   modelConfigs: {
     temperature?: number;
@@ -235,7 +218,6 @@ export interface CustomModel {
   // OpenRouter specific fields
   enablePromptCaching?: boolean;
 
-  projectEnabled?: boolean;
   plusExclusive?: boolean;
   believerExclusive?: boolean;
   capabilities?: ModelCapability[];
@@ -296,36 +278,6 @@ export function useChainType() {
   });
 }
 
-export function setCurrentProject(project: ProjectConfig | null) {
-  settingsStore.set(currentProjectAtom, project);
-}
-
-export function getCurrentProject(): ProjectConfig | null {
-  return settingsStore.get(currentProjectAtom);
-}
-
-export function subscribeToProjectChange(
-  callback: (project: ProjectConfig | null) => void
-): () => void {
-  return settingsStore.sub(currentProjectAtom, () => {
-    callback(settingsStore.get(currentProjectAtom));
-  });
-}
-
-export function setProjectLoading(loading: boolean) {
-  settingsStore.set(projectLoadingAtom, loading);
-}
-
-export function useProjectLoading() {
-  return useAtom(projectLoadingAtom, {
-    store: settingsStore,
-  });
-}
-
-export function isProjectMode() {
-  return getChainType() === ChainType.PROJECT_CHAIN;
-}
-
 export function setSelectedTextContexts(contexts: SelectedTextContext[]) {
   settingsStore.set(selectedTextContextsAtom, contexts);
 }
@@ -346,35 +298,6 @@ export function clearSelectedTextContexts() {
 
 export function useSelectedTextContexts() {
   return useAtom(selectedTextContextsAtom, {
-    store: settingsStore,
-  });
-}
-
-/**
- * Sets the project context load state in the atom.
- */
-export function setProjectContextLoadState(state: ProjectContextLoadState) {
-  settingsStore.set(projectContextLoadAtom, state);
-}
-
-/**
- * Updates a specific field in the project context load state.
- */
-export function updateProjectContextLoadState<K extends keyof ProjectContextLoadState>(
-  key: K,
-  valueFn: (prev: ProjectContextLoadState[K]) => ProjectContextLoadState[K]
-) {
-  settingsStore.set(projectContextLoadAtom, (prev) => ({
-    ...prev,
-    [key]: valueFn(prev[key]),
-  }));
-}
-
-/**
- * Hook to get the project context load state from the atom.
- */
-export function useProjectContextLoad() {
-  return useAtom(projectContextLoadAtom, {
     store: settingsStore,
   });
 }

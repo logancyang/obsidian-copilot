@@ -44,12 +44,6 @@ jest.mock("@/utils", () => ({
   ensureFolderExists: jest.fn(async () => {}),
 }));
 
-jest.mock("@/cache/projectContextCache", () => ({
-  ProjectContextCache: {
-    getInstance: jest.fn(() => ({ clearForProject: jest.fn(async () => {}) })),
-  },
-}));
-
 jest.mock("@/utils/recentUsageManager", () => ({
   RecentUsageManager: jest.fn().mockImplementation(() => ({
     touch: jest.fn(),

@@ -1,79 +1,56 @@
-# Projects
+# Agent Projects
 
-Projects are focused AI workspaces with their own instructions, reusable context, and isolated chat history. Use them to separate work by client, topic, or area of responsibility.
+Projects give Copilot Agent a focused workspace for ongoing work. Each project keeps its own instructions, reusable context, and chats, so work for a client, codebase, or research topic stays together.
 
-Projects are an alpha feature and may change.
+Projects work with opencode, Claude, and Codex. They use whichever agent, model, and operating mode you currently selected; a project does not pin a separate model or temperature.
 
-Projects can work with 50+ file types, including PDFs, Office documents, images, and source code. Copilot prepares supported binary project files with its hosted document service before the agent runs; this requires a Copilot license.
+## Create a project
 
----
+1. Click the **Agent** ribbon icon, or run **Open Copilot Agent Chat Window**.
+2. On Agent Home, open **Projects** and select **New project**.
+3. Enter a project name and select **Create**.
 
-## Projects in Agent Mode
+Copilot opens the new project immediately. Creation only asks for a name; use **Edit project** later to add a description, instructions, or context.
 
-Open the dedicated Agent Mode view from the ribbon or run **Open Copilot Agent Chat Window**. Agent Home shows your projects; choose one or select **New Project**.
+Each project gets a folder under `<Copilot folder>/projects/` (by default, `copilot/projects/`). `project.md` stores the project settings and context list. `AGENTS.md` stores the instructions you write for the agent.
 
-An Agent Mode project contains:
+## Add project instructions
 
-- a name and optional description;
-- context sources that are prepared when the project opens;
-- project-specific instructions in `AGENTS.md`; and
-- chat history isolated from other projects and non-project chats.
+Open the project info button beside the project name and select **AGENTS.md**. You can also choose **Edit project** from the project list and edit **Project instructions**. Both edit the same file.
 
-Agent Mode uses the currently selected agent, model, and operating mode. It does not store a separate project model, temperature, or max-token override.
+Vault-wide instructions still apply. Project instructions are more specific and win when the two conflict. Copilot makes the same project `AGENTS.md` available to opencode, Claude, and Codex, so you do not need separate instructions for each agent.
 
-### Project instructions
+Useful project instructions include the goal, important folders, preferred output format, and any files the agent should not change. Keep stable rules here; put one-off requests in chat.
 
-Open the project info popover and select **AGENTS.md**, or edit **Project instructions** in the project dialog. Both surfaces edit the same file.
+## Add reusable context
 
-Vault-wide instructions apply first, followed by the project's `AGENTS.md`, so the project can add more specific rules. Copilot also keeps Claude's sibling `CLAUDE.md` pointed at `AGENTS.md`, letting Claude, Codex, and OpenCode share the same project instructions.
+For a new project, **Context** appears below the composer. Once the project has chats, it becomes a **Context** tab beside **Recent Chats**.
 
-Older projects remain compatible. If an old project has a Project System Prompt but no `AGENTS.md`, Copilot moves those instructions into `AGENTS.md` when the project is opened or its next session starts. User-authored files are not replaced.
+You can:
 
-`project.md` remains the project's metadata and context record; it is not renamed into the instruction file.
+- drag a vault file or folder into **Context**;
+- select **URL** to add a web page or YouTube video; or
+- select **Manage** or **Manage Context** to add **Links**, **Tags**, **Properties**, **Folders**, or **Files**, and to manage **Ignore Files**.
 
-### Context sources
+Tags match tags stored in note properties. Properties can target notes by a frontmatter property, such as `Topics: Physics`.
 
-Projects can prepare these sources for each conversation:
+When a project chat starts, Copilot prepares its saved context. If preparation is still running when you send a message, the message waits and starts automatically when the context is ready. Existing project chats keep the instructions and context captured when they started. Start a new chat to use your changes.
 
-- **Tag**, such as `#research` — matching notes, expanded when the context is prepared.
-- **Folder**, such as `daily/` — Markdown notes in that folder and its subfolders.
-- **Note link**, such as `[[Project Brief]]` — one specific note.
-- **Extension**, such as `*.py` — files with that extension.
-- **Property**, such as `[Topics:Physics]` or `[Subject:]` — notes whose frontmatter value matches, or notes that declare the property.
-- **Web URL** — page content fetched through Copilot's hosted service; requires a Copilot license.
-- **YouTube URL** — the transcript fetched through Copilot's hosted service; requires a Copilot license.
+Markdown, text, and source-code files can be read directly by the active agent. Web pages, YouTube transcripts, and binary files such as PDFs, Office documents, EPUBs, spreadsheets, and common images are converted through Copilot's hosted service and require an active Copilot license.
 
-You can also exclude notes and folders from prepared context. Exclusions are not access controls: an agent's native tools can still read an excluded file inside an included folder. Do not include a folder that contains confidential files the agent must not access.
+> [!warning] Private files
+> Hosted project conversion bypasses the **Document Processor** setting. For a project that must make no Brevilabs requests, keep binary files, web URLs, and YouTube URLs out of saved project context. Use Markdown context plus local tools or Miyo, and a local model if prompts must also remain on-device.
 
-Large source sets take longer to prepare. If you send a message while context is still loading, Agent Mode queues it and runs it when the context is ready.
+**Ignore Files** controls prepared context, not the agent's file permissions. An agent may still find an ignored file through its native tools if that file is inside a folder the agent can access.
 
-PDFs, EPUBs, and other supported binary files included through a project source are converted by Copilot's hosted document service before the agent runs. This project-context path requires a Copilot license and does not use the **Document Processor** setting, so choosing Miyo does not keep those project files local. For local-only handling, do not include those files in project context; ask the active agent to read them with its own local tools or skills instead.
+## Switch and manage projects
 
-### Switch or manage projects
+Return to Agent Home and open **Projects** to switch projects. Inside a project, **Recent Chats** and **Chat History** show only that project's conversations. Return to Agent Home for the global **Recent Chats** list across projects.
 
-Use the project picker in Agent Mode to switch projects. The active history and prepared context change with the project.
-
-From the picker you can edit or delete a project and sort the list by recent use or alphabetically. Deleting a project entry does not delete conversation notes that were already saved in your vault.
-
-Set the order under **Settings → Copilot → Basic → Project list sort strategy**.
-
----
-
-## Projects in Quick Chat
-
-The older Quick Chat project experience is still available:
-
-1. Open **Copilot Chat Window**.
-2. Choose **Projects (alpha)** from the mode selector.
-3. Select **New Project**.
-
-Quick Chat projects keep their legacy model, temperature, max-token, and Project System Prompt settings. Those controls do not configure the agent used by Agent Mode.
-
----
+Hover over a project in the list to **Reveal in vault**, **Edit project**, or **Delete** it. Use **Leave project** beside the project name to return to Agent Home. Deleting a project removes its Copilot project configuration; your vault notes and saved conversation notes stay in the vault.
 
 ## Related
 
-- [Agent Mode and Tools](agent-mode-and-tools.md) — Set up an agent and choose permissions
-- [Instructions and System Prompts](system-prompts.md) — Vault and project instructions
-- [Context and Mentions](context-and-mentions.md) — Add context outside a project
-- [Quick Chat Interface](chat-interface.md) — Use the legacy Projects chat mode
+- [Agents in Copilot V4](agent-mode-and-tools.md) — Set up opencode, Claude, or Codex
+- [Instructions and System Prompts](system-prompts.md) — Configure vault-wide instructions
+- [Context and Mentions](context-and-mentions.md) — Add one-time context to a chat

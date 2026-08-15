@@ -2,11 +2,11 @@
  * Pure utility functions for converting between ProjectConfig's newline-separated
  * URL strings and the UrlItem[] model used by UrlTagInput.
  *
- * Reason: The UrlTagInput component works with structured UrlItem objects,
- * but ProjectConfig stores URLs as newline-separated strings in two separate
- * fields (webUrls / youtubeUrls). This module bridges those two representations
- * with stable round-trip guarantees so saving unchanged URLs won't trigger
- * unnecessary cache invalidation in projectManager.
+ * Reason: the URL editors work with structured UrlItem objects, but
+ * ProjectConfig stores URLs as newline-separated strings in two separate fields
+ * (webUrls / youtubeUrls). This module bridges those two representations with
+ * stable round-trip guarantees so saving unchanged URLs won't trigger
+ * unnecessary context re-materialization.
  */
 
 import { getYouTubeVideoId } from "@/utils/youtubeUrl";

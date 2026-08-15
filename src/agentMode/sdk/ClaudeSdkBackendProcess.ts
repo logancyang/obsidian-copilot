@@ -22,13 +22,13 @@ import {
   type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 import { App } from "obsidian";
-import { access, readFile } from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
 import { v4 as uuidv4 } from "uuid";
 import { translateBackendState } from "@/agentMode/session/translateBackendState";
 import { parseClaudeTranscript } from "./claudeSessionTranscript";
+import { readClaudePlanUsage } from "./claudePlanUsage";
+import { withoutExpiredWindows } from "@/agentMode/session/planUsage";
 import type {
+  PlanUsage,
   AgentChatMessage,
   BackendConfigOption,
   BackendDescriptor,
@@ -56,6 +56,7 @@ import type {
 } from "@/agentMode/session/types";
 import type { ProjectScopeId } from "@/agentMode/session/scope";
 import { AuthRequiredError, MethodUnsupportedError } from "@/agentMode/session/errors";
+import { requireNodeModule } from "@/utils/desktopRuntime";
 import { createClaudeTaskPlanState, type ClaudeTaskPlanState } from "./claudeTodoPlan";
 import { ClaudeBackgroundTaskStateMachine } from "./claudeTaskProtocol";
 import { createTranslatorState, mapStopReason, translateSdkMessage } from "./sdkMessageTranslator";
@@ -240,6 +241,15 @@ const STATIC_SDK_MODES: RawModeState = {
 export class ClaudeSdkBackendProcess implements BackendProcess {
   private readonly sessionHandlers = new Map<SessionId, SessionUpdateHandler>();
   private readonly pendingUpdates = new Map<SessionId, SessionEvent[]>();
+
+  /**
+   * Last plan-cap snapshot read from any session on this process.
+   *
+   * The caps belong to the account, not to a conversation, so one session's reading is
+   * true for every other. Held here and replayed on attach, a new or switched chat shows
+   * the caps immediately instead of blanking until its own first turn.
+   */
+  private lastPlanUsage: PlanUsage | null = null;
   private static readonly PENDING_UPDATE_LIMIT = 32;
   private readonly sessions = new Map<SessionId, SessionState>();
   private permissionPrompter: ((req: PermissionPrompt) => Promise<PermissionDecision>) | null =
@@ -312,6 +322,19 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
         } catch (e) {
           logWarn(`[AgentMode] replay of buffered SDK event threw for ${sessionId}`, e);
         }
+      }
+    }
+    // Expired windows are dropped rather than replayed: this process outlives many
+    // chats, and a snapshot taken before a reset describes a period that has ended.
+    this.lastPlanUsage = this.lastPlanUsage && withoutExpiredWindows(this.lastPlanUsage);
+    if (this.lastPlanUsage) {
+      try {
+        handler({
+          sessionId,
+          update: { sessionUpdate: "plan_usage_update", planUsage: this.lastPlanUsage },
+        });
+      } catch (e) {
+        logWarn(`[AgentMode] replay of plan usage threw for ${sessionId}`, e);
       }
     }
     return () => {
@@ -488,9 +511,21 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     let stopReason: StopReason = "end_turn";
     let resultErrorMessage: string | null = null;
     try {
+      let planUsageRequested = false;
       for await (const sdkMsg of stream) {
         if (this.shuttingDown) break;
         logSdkInbound(describeSdkMessage(sdkMsg), sdkMsg, params.sessionId);
+        // Ask for the plan caps on the very first message of the turn, whatever it is.
+        // The usage API is a control request on the query, so it only answers while the
+        // query is open — and the window is narrower than it looks. With partial
+        // streaming on, `assistant` lands about ten milliseconds before `result`, at
+        // which point the query is already closing and the read is rejected with "Query
+        // closed before response received". The first message (a `system` init) leaves
+        // more than a second of headroom.
+        if (!planUsageRequested) {
+          planUsageRequested = true;
+          void this.refreshPlanUsage(q);
+        }
         const events = translateSdkMessage(sdkMsg, params.sessionId, translatorState);
         for (const e of events) this.dispatchEvent(e);
         if (sdkMsg.type === "result") {
@@ -656,6 +691,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     cwd: string;
   }): Promise<AgentChatMessage[]> {
     try {
+      const { readFile } = requireNodeModule<typeof import("node:fs/promises")>("fs/promises");
       const file = await this.claudeTranscriptPath(params.sessionId, params.cwd);
       const text = await readFile(file, "utf8");
       return parseClaudeTranscript(text);
@@ -673,6 +709,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
    */
   async sessionExistsLocally(params: { sessionId: SessionId; cwd: string }): Promise<boolean> {
     try {
+      const { access } = requireNodeModule<typeof import("node:fs/promises")>("fs/promises");
       await access(await this.claudeTranscriptPath(params.sessionId, params.cwd));
       return true;
     } catch {
@@ -688,6 +725,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
    * non-alphanumeric character replaced by `-`, matching the CLI's encoding.
    */
   private async claudeTranscriptPath(sessionId: string, cwd: string): Promise<string> {
+    const path = requireNodeModule<typeof import("node:path")>("path");
     const configDir = (await this.resolveClaudeConfigDir()).trim();
     const projectDir = cwd.replace(/[^a-zA-Z0-9]/g, "-");
     return path.join(configDir, "projects", projectDir, `${sessionId}.jsonl`);
@@ -708,6 +746,8 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
    */
   private async resolveClaudeConfigDir(): Promise<string> {
     if (this.resolvedConfigDir !== null) return this.resolvedConfigDir;
+    const os = requireNodeModule<typeof import("node:os")>("os");
+    const path = requireNodeModule<typeof import("node:path")>("path");
     const envOverrides = this.opts.getEnvOverrides?.() ?? {};
     const managedEnv = (await this.opts.getManagedEnv?.()) ?? {};
     this.resolvedConfigDir =
@@ -876,6 +916,32 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       sessionId,
       update: { sessionUpdate: "state_changed", state },
     });
+  }
+
+  /**
+   * Ask the live query for the account's plan-cap utilization and publish what it says.
+   *
+   * A read that failed changes nothing — we learned nothing about the account, so the
+   * last good snapshot stands rather than blanking a meter the user is reading. A read
+   * that succeeded and reported no caps is different: it means this session is not
+   * metered by plan limits (an API-key, Bedrock, or Vertex login), so any caps on screen
+   * describe an account the user is no longer on and are cleared
+   * (https://github.com/logancyang/obsidian-copilot-preview/issues/193).
+   *
+   * The answer goes to every live session, not to the one that prompted the read: the
+   * caps belong to the account, so they are equally true of every open chat, and routing
+   * them to one would leave the others showing a stale number until they each ran a turn.
+   */
+  private async refreshPlanUsage(query: unknown): Promise<void> {
+    const reading = await readClaudePlanUsage(query);
+    if (this.shuttingDown || reading.kind === "unavailable") return;
+    this.lastPlanUsage = reading.kind === "usage" ? reading.planUsage : null;
+    for (const sessionId of this.sessionHandlers.keys()) {
+      this.dispatchEvent({
+        sessionId,
+        update: { sessionUpdate: "plan_usage_update", planUsage: this.lastPlanUsage },
+      });
+    }
   }
 
   private dispatchEvent(event: SessionEvent): void {

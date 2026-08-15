@@ -1,6 +1,6 @@
 // Reason: `buffer` is the npm polyfill (browser-compatible), bundled by esbuild
 // so the same Buffer code path works on desktop (Electron) and mobile (WebView).
-import { Buffer } from "buffer";
+import { Buffer } from "buffer/";
 
 import { ChainType } from "@/chainType";
 import {
@@ -412,13 +412,13 @@ export function isAllowedFileForNoteContext(file: TFile | null): boolean {
 }
 
 /**
- * Checks if a chain type is a Plus mode chain (Copilot Plus or Project Chain).
+ * Checks if a chain type is a Plus mode chain.
  * Plus mode chains have access to premium features like PDF processing and URL processing.
  * @param chainType The chain type to check
  * @returns true if this is a Plus mode chain, false otherwise
  */
 export function isPlusChain(chainType: ChainType): boolean {
-  return chainType === ChainType.COPILOT_PLUS_CHAIN || chainType === ChainType.PROJECT_CHAIN;
+  return chainType === ChainType.COPILOT_PLUS_CHAIN;
 }
 
 /**
@@ -521,7 +521,7 @@ function resolveNoteFilesFromTitles(noteTitles: string[], vault: Vault): TFile[]
         } else {
           // Multiple files with same title - this shouldn't happen
           // as we should be using full paths for duplicate titles
-          console.warn(
+          logWarn(
             `Found multiple files with title "${noteTitle}". Expected a full path for duplicate titles.`
           );
         }
@@ -822,7 +822,7 @@ export async function safeFetch(
       // Reason: Buffer (from the `buffer` polyfill imported above) is the
       // cross-platform path — bare global Buffer is undefined in mobile WebView.
       const buf = Buffer.from(base64, "base64");
-      return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
+      return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
     },
     blob: () => {
       throw new Error("not implemented");

@@ -181,6 +181,28 @@ describe("planByokMigration — grouping, keys, base URLs", () => {
     );
     expect(byCatalog(plan, "openai")?.extras).toEqual({ openAIOrgId: "org-123" });
   });
+
+  it("preserves different legacy CORS choices as separate providers (https://github.com/logancyang/obsidian-copilot-preview/issues/313)", () => {
+    const plan = planByokMigration(
+      settingsWith([
+        model({
+          name: "streaming-model",
+          provider: ChatModelProviders.OPENAI_FORMAT,
+          baseUrl: "https://work.example.com/v1",
+          enableCors: false,
+        }),
+        model({
+          name: "cors-model",
+          provider: ChatModelProviders.OPENAI_FORMAT,
+          baseUrl: "https://work.example.com/v1",
+          enableCors: true,
+        }),
+      ])
+    );
+
+    expect(plan).toHaveLength(2);
+    expect(plan.map((descriptor) => descriptor.enableCors).sort()).toEqual([false, true]);
+  });
 });
 
 describe("planByokMigration — scope filters", () => {
@@ -381,7 +403,7 @@ describe("executeByokMigration", () => {
     expect(setupProvider).toHaveBeenCalledTimes(2);
   });
 
-  it("skips a descriptor that duplicates an existing BYOK provider", async () => {
+  it("does not retrofit CORS onto an already-migrated matching provider (https://github.com/logancyang/obsidian-copilot-preview/issues/313)", async () => {
     const existing = byokProvider({
       providerType: "anthropic",
       baseUrl: "https://api.anthropic.com",
@@ -392,7 +414,11 @@ describe("executeByokMigration", () => {
       api,
       settingsWith(
         [
-          model({ name: "claude", provider: ChatModelProviders.ANTHROPIC }),
+          model({
+            name: "claude",
+            provider: ChatModelProviders.ANTHROPIC,
+            enableCors: true,
+          }),
           model({ name: "gpt-4o", provider: ChatModelProviders.OPENAI }),
         ],
         { anthropicApiKey: "k", openAIApiKey: "k" }

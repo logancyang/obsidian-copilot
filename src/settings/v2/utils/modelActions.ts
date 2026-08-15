@@ -1,7 +1,7 @@
 import { CustomModel } from "@/aiParams";
 import { ChatModelProviders, SettingKeyProviders } from "@/constants";
 import { GitHubCopilotProvider } from "@/LLMProviders/githubCopilot/GitHubCopilotProvider";
-import ProjectManager from "@/LLMProviders/projectManager";
+import ChainOwner from "@/LLMProviders/chainOwner";
 import { logError } from "@/logger";
 import { parseModelsResponse, StandardModel } from "@/settings/providerModels";
 import { err2String, getProviderInfo, safeFetch } from "@/utils";
@@ -119,7 +119,7 @@ export async function verifyAndAddModel(
 
   if (!skipVerification) {
     try {
-      await ProjectManager.instance.getCurrentChainManager().chatModelManager.ping(customModel);
+      await ChainOwner.instance.getCurrentChainManager().chatModelManager.ping(customModel);
     } catch (error) {
       verificationFailed = true;
       verificationError = err2String(error);

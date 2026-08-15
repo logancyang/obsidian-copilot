@@ -1,6 +1,7 @@
 import { dismissPopOutHint, isPopOutHintDismissed } from "@/agentMode/ui/homeShelfPrefs";
 import { RelevantNotes } from "@/components/chat-components/RelevantNotes";
 import { Button } from "@/components/ui/button";
+import { useApp } from "@/context";
 import { cn } from "@/lib/utils";
 import { ExternalLink, X } from "lucide-react";
 import React, { useState } from "react";
@@ -19,10 +20,11 @@ interface RelevantNotesShelfPanelProps {
  * the surrounding agent view already provides AppContext + EventTargetContext.
  */
 export function RelevantNotesShelfPanel({ onPopOut, onAddToChat }: RelevantNotesShelfPanelProps) {
-  const [hintDismissed, setHintDismissed] = useState(() => isPopOutHintDismissed());
+  const app = useApp();
+  const [hintDismissed, setHintDismissed] = useState(() => isPopOutHintDismissed(app));
 
   const handleDismiss = () => {
-    dismissPopOutHint();
+    dismissPopOutHint(app);
     setHintDismissed(true);
   };
 

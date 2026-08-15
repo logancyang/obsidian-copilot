@@ -57,6 +57,7 @@ jest.mock("@/modelManagement/state/atoms", () => {
         providerType: "openai-compatible",
         displayName: "Custom",
         baseUrl: "https://proxy.example/v1",
+        enableCors: true,
         origin: { kind: "byok" },
         addedAt: 0,
       },
@@ -76,6 +77,12 @@ jest.mock("@/modelManagement/state/atoms", () => {
         configuredModelId: "cm2",
         providerId: "p1",
         info: { id: "claude-opus", displayName: "Claude Opus 4.5" },
+        configuredAt: 0,
+      },
+      {
+        configuredModelId: "cm-custom",
+        providerId: "p-custom",
+        info: { id: "work-model", displayName: "Work model" },
         configuredAt: 0,
       },
     ]),
@@ -272,6 +279,22 @@ describe("ConfigureProviderForm (new mode)", () => {
     );
   });
 
+  it("saves an explicit Quick Chat CORS choice for a new provider (https://github.com/logancyang/obsidian-copilot-preview/issues/313)", async () => {
+    mockVerifyCredentials.mockResolvedValue({ ok: true, checkedAt: 1 });
+    render(
+      <ConfigureProviderForm state={{ mode: "new", source: customSource }} onClose={jest.fn()} />
+    );
+
+    fireEvent.change(screen.getByTestId("api-key"), { target: { value: "work-key" } });
+    manualAddId("work-model");
+    fireEvent.click(screen.getByRole("switch", { name: "Enable CORS" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(mockSetupProvider).toHaveBeenCalledWith(expect.objectContaining({ enableCors: true }))
+    );
+  });
+
   it("re-fetches the model list after a successful API key test", async () => {
     mockVerifyCredentials.mockResolvedValue({ ok: true, checkedAt: 1 });
     mockListProviderModels
@@ -426,6 +449,24 @@ describe("ConfigureProviderForm (edit mode)", () => {
       "openai-compatible",
       "https://proxy.example/v1",
       expect.objectContaining({ apiKey: "saved-secret" })
+    );
+  });
+
+  it("loads and updates the saved Quick Chat CORS choice (https://github.com/logancyang/obsidian-copilot-preview/issues/313)", async () => {
+    render(
+      <ConfigureProviderForm state={{ mode: "edit", providerId: "p-custom" }} onClose={jest.fn()} />
+    );
+
+    const corsSwitch = await screen.findByRole("switch", { name: "Enable CORS" });
+    expect(corsSwitch.getAttribute("aria-checked")).toBe("true");
+    fireEvent.click(corsSwitch);
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(mockUpdate).toHaveBeenCalledWith(
+        "p-custom",
+        expect.objectContaining({ enableCors: false })
+      )
     );
   });
 

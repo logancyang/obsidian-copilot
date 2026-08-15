@@ -532,12 +532,15 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   // the choice also survives a full remount / reload. null = nothing picked yet
   // → the shelf resolves to its first selectable tab.
   const [globalShelfTab, setGlobalShelfTabState] = useState<string | null>(() =>
-    getHomeShelfTab(HOME_SHELF_TAB_STORAGE_KEY)
+    getHomeShelfTab(app, HOME_SHELF_TAB_STORAGE_KEY)
   );
-  const setGlobalShelfTab = useCallback((id: string) => {
-    setGlobalShelfTabState(id);
-    setHomeShelfTab(HOME_SHELF_TAB_STORAGE_KEY, id);
-  }, []);
+  const setGlobalShelfTab = useCallback(
+    (id: string) => {
+      setGlobalShelfTabState(id);
+      setHomeShelfTab(app, HOME_SHELF_TAB_STORAGE_KEY, id);
+    },
+    [app]
+  );
 
   // Chip-shelf sections for the landing. Each body renders lazily (only the open
   // section is mounted), so these render closures are cheap to recreate.
@@ -704,8 +707,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
           .updateProject(activeProjectId, updated)
           .catch((err) => logError("[AgentMode] save context changes failed", err));
       },
-      activeProject,
-      { enableLinks: true }
+      activeProject
     ).open();
   };
 

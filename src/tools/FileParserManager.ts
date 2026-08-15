@@ -1,7 +1,5 @@
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
-import { ProjectConfig } from "@/aiParams";
 import { PDFCache } from "@/cache/pdfCache";
-import { ProjectContextCache } from "@/cache/projectContextCache";
 import { logError, logInfo, logWarn } from "@/logger";
 import { MiyoClient } from "@/miyo/MiyoClient";
 import { getMiyoCustomUrl, resolveDocProcessorBackend } from "@/miyo/miyoUtils";
@@ -201,14 +199,7 @@ class CanvasParser implements FileParser {
   }
 }
 
-/**
- * All file extensions supported by Docs4LLMParser.
- * Extracted as a module-level constant so FileParserManager.getProjectSupportedExtensions()
- * can read the list statically without constructing a full Docs4LLMParser instance.
- *
- * Reason: The static method needs these extensions at UI layer (before any real API client exists),
- * so we can't safely construct Docs4LLMParser just to read a property.
- */
+/** All file extensions registered by Docs4LLMParser. */
 const DOCS4LLM_SUPPORTED_EXTENSIONS: readonly string[] = [
   // Base types
   "pdf",
@@ -315,59 +306,28 @@ const DOCS4LLM_SUPPORTED_EXTENSIONS: readonly string[] = [
   "webm",
 ];
 
+/**
+ * Converts non-markdown documents to text for chat context. Only formats Miyo
+ * handles locally ({@link MIYO_LOCAL_EXTENSIONS}) can be converted here; every
+ * other registered extension reports that no document processor is available,
+ * so the caller surfaces a real failure instead of silently attaching nothing.
+ */
 export class Docs4LLMParser implements FileParser {
-  // Reason: Reference the shared constant so getProjectSupportedExtensions() stays in sync
-  // with the actual parser registrations without duplicating the list.
+  // Reason: keep the registration list on the shared constant so the extensions
+  // this parser claims stay in one place.
   supportedExtensions = [...DOCS4LLM_SUPPORTED_EXTENSIONS];
-  private brevilabsClient: BrevilabsClient;
-  private projectContextCache: ProjectContextCache;
   private selfHostDocParser: SelfHostDocParser;
-  private currentProject: ProjectConfig | null;
-  private static lastRateLimitNoticeTime: number = 0;
 
-  public static resetRateLimitNoticeTimer(): void {
-    Docs4LLMParser.lastRateLimitNoticeTime = 0;
-  }
-
-  constructor(brevilabsClient: BrevilabsClient, project: ProjectConfig | null = null) {
-    this.brevilabsClient = brevilabsClient;
-    this.projectContextCache = ProjectContextCache.getInstance();
+  constructor() {
     this.selfHostDocParser = new SelfHostDocParser();
-    this.currentProject = project;
   }
 
   async parseFile(file: TFile, vault: Vault): Promise<string> {
-    const projectName = this.currentProject?.name ?? "no project";
     try {
-      logInfo(
-        `[Docs4LLMParser] Project ${projectName}: Parsing ${file.extension} file: ${file.path}`
-      );
+      logInfo(`[Docs4LLMParser] Parsing ${file.extension} file: ${file.path}`);
 
-      // Project-scoped cache reuse — only in project mode. Normal chat has no
-      // project cache, so this is skipped there.
-      if (this.currentProject) {
-        const cachedContent = await this.projectContextCache.getOrReuseFileContext(
-          this.currentProject,
-          file.path
-        );
-        if (cachedContent) {
-          logInfo(
-            `[Docs4LLMParser] Project ${projectName}: Using cached content for: ${file.path}`
-          );
-          // Ensure output file exists even on cache hit (user may have just enabled the setting)
-          await saveConvertedDocOutput(file, cachedContent, vault);
-          return cachedContent;
-        }
-        logInfo(
-          `[Docs4LLMParser] Project ${projectName}: Cache miss for: ${file.path}. Proceeding to API call.`
-        );
-      }
-
-      // For local formats (PDF/EPUB), try Miyo first when self-host mode is
-      // active. Resolve at the parse boundary so an unconclusive (unknown/stale)
-      // status gets one health check before routing. This runs BEFORE the cloud
-      // path's project requirement, so an EPUB parses locally in normal chat too
-      // (PDFs use PDFParser there; EPUB only ever reaches this parser).
+      // For local formats (PDF/EPUB), resolve at the parse boundary so an
+      // inconclusive (unknown/stale) status gets one health check before routing.
       const backend = isMiyoLocalExtension(file) ? await resolveDocProcessorBackend() : "plus";
 
       // Explicit local Miyo choice, but Miyo can't be confirmed: fail closed.
@@ -382,18 +342,8 @@ export class Docs4LLMParser implements FileParser {
       if (backend === "miyo") {
         const miyoResult = await this.selfHostDocParser.parseDoc(file, vault);
         if (miyoResult && "content" in miyoResult) {
-          // Cache the result only when we have a project to key it against.
-          if (this.currentProject) {
-            await this.projectContextCache.setFileContext(
-              this.currentProject,
-              file.path,
-              miyoResult.content
-            );
-          }
           await saveConvertedDocOutput(file, miyoResult.content, vault);
-          logInfo(
-            `[Docs4LLMParser] Project ${projectName}: Parsed document via Miyo: ${file.path}`
-          );
+          logInfo(`[Docs4LLMParser] Parsed document via Miyo: ${file.path}`);
           return miyoResult.content;
         }
         if (miyoResult && "error" in miyoResult) {
@@ -403,73 +353,11 @@ export class Docs4LLMParser implements FileParser {
         }
       }
 
-      // Cloud path (docs4llm) is project-scoped: its cache reuse and batch
-      // materialization key off the project. Normal chat only reaches here for
-      // non-local formats (or a Plus-selected doc), preserving the pre-existing
-      // project requirement for the cloud route.
-      if (!this.currentProject) {
-        logError("[Docs4LLMParser] No project context for parsing file: ", file.path);
-        throw new Error("No project context provided for file parsing");
-      }
-
-      const binaryContent = await vault.readBinary(file);
-
-      logInfo(`[Docs4LLMParser] Project ${projectName}: Calling docs4llm API for: ${file.path}`);
-      const docs4llmResponse = await this.brevilabsClient.docs4llm(binaryContent, file.extension);
-
-      if (!docs4llmResponse || !docs4llmResponse.response) {
-        throw new Error("Empty response from docs4llm API");
-      }
-
-      // Extract markdown content from response
-      let content = "";
-      if (typeof docs4llmResponse.response === "string") {
-        content = docs4llmResponse.response;
-      } else if (Array.isArray(docs4llmResponse.response)) {
-        // Handle array of documents from docs4llm
-        const markdownParts: string[] = [];
-        for (const rawDoc of docs4llmResponse.response) {
-          const doc = rawDoc as { content?: { md?: string; text?: string } } | null | undefined;
-          if (doc?.content) {
-            // Prioritize markdown content, then fallback to text content
-            if (doc.content.md) {
-              markdownParts.push(doc.content.md);
-            } else if (doc.content.text) {
-              markdownParts.push(doc.content.text);
-            }
-          }
-        }
-        content = markdownParts.join("\n\n");
-      } else if (typeof docs4llmResponse.response === "object") {
-        // Handle single object response (backward compatibility)
-        const resp = docs4llmResponse.response as Record<string, unknown>;
-        if (resp.md) {
-          content = resp.md as string;
-        } else if (resp.text) {
-          content = resp.text as string;
-        } else if (resp.content) {
-          content = resp.content as string;
-        } else {
-          // If no markdown/text/content field, stringify the entire response
-          content = JSON.stringify(docs4llmResponse.response, null, 2);
-        }
-      } else {
-        content = JSON.stringify(docs4llmResponse.response);
-      }
-
-      // Cache the converted content
-      await this.projectContextCache.setFileContext(this.currentProject, file.path, content);
-      await saveConvertedDocOutput(file, content, vault);
-
-      logInfo(
-        `[Docs4LLMParser] Project ${projectName}: Successfully processed and cached: ${file.path}`
+      throw new Error(
+        `No document processor available for ${file.basename}. Enable Miyo to convert this file type locally.`
       );
-      return content;
     } catch (error) {
-      logError(
-        `[Docs4LLMParser] Project ${projectName}: Error processing file ${file.path}:`,
-        error
-      );
+      logError(`[Docs4LLMParser] Error processing file ${file.path}:`, error);
 
       // Check if this is a rate limit error and show user-friendly notice
       if (isRateLimitError(error)) {
@@ -493,15 +381,12 @@ export class Docs4LLMParser implements FileParser {
     const retryTime = extractRetryTime(error);
 
     new Notice(
-      `⚠️ Rate limit exceeded for document processing. Please try again in ${retryTime}. Having fewer non-markdown files in the project will help.`,
+      `⚠️ Rate limit exceeded for document processing. Please try again in ${retryTime}.`,
       10000 // Show notice for 10 seconds
     );
   }
 
-  async clearCache(): Promise<void> {
-    // This method is no longer needed as cache clearing is handled at the project level
-    logInfo("Cache clearing is now handled at the project level");
-  }
+  private static lastRateLimitNoticeTime: number = 0;
 }
 
 // Future parsers can be added like this:
@@ -518,51 +403,12 @@ class DocxParser implements FileParser {
 export class FileParserManager {
   private parsers: Map<string, FileParser> = new Map();
 
-  /**
-   * Returns the set of file extensions supported in project mode (isProjectMode=true).
-   *
-   * Reason: The UI status panel needs to distinguish between "pending" (will be processed)
-   * and "unsupported" (will never be processed) for non-markdown files. This method
-   * exposes the exact extension set used when constructing a project-mode FileParserManager,
-   * without requiring a full instantiation with real BrevilabsClient/Vault dependencies.
-   *
-   * Project mode registers: MarkdownParser + Docs4LLMParser + CanvasParser
-   * (PDFParser is skipped because Docs4LLMParser already handles PDFs in project mode)
-   */
-  public static getProjectSupportedExtensions(): Set<string> {
-    const extensions = new Set<string>();
-
-    // MarkdownParser: ["md"]
-    extensions.add("md");
-
-    // Docs4LLMParser: all document/image/spreadsheet/audio types (read from shared constant)
-    for (const ext of DOCS4LLM_SUPPORTED_EXTENSIONS) {
-      extensions.add(ext);
-    }
-
-    // CanvasParser: ["canvas"]
-    extensions.add("canvas");
-
-    return extensions;
-  }
-
-  constructor(
-    brevilabsClient: BrevilabsClient,
-    _vault: Vault,
-    isProjectMode: boolean = false,
-    project: ProjectConfig | null = null
-  ) {
-    // Register parsers
+  constructor(brevilabsClient: BrevilabsClient, _vault: Vault) {
     this.registerParser(new MarkdownParser());
-
-    // In project mode, use Docs4LLMParser for all supported files including PDFs
-    this.registerParser(new Docs4LLMParser(brevilabsClient, project));
-
-    // Only register PDFParser when not in project mode
-    if (!isProjectMode) {
-      this.registerParser(new PDFParser(brevilabsClient));
-    }
-
+    this.registerParser(new Docs4LLMParser());
+    // Registered after Docs4LLMParser so PDFs route to the dedicated PDF parser,
+    // which claims the same extension.
+    this.registerParser(new PDFParser(brevilabsClient));
     this.registerParser(new CanvasParser());
   }
 

@@ -1,5 +1,4 @@
-import * as fs from "node:fs";
-import * as path from "node:path";
+import { requireNodeModule } from "@/utils/desktopRuntime";
 
 export const COPILOT_OBSIDIAN_CLI_ENV = "COPILOT_OBSIDIAN_CLI";
 
@@ -19,6 +18,7 @@ interface ObsidianCliPathInput {
  */
 export function resolveObsidianCliPath(input: ObsidianCliPathInput): string | null {
   if (!input.resourcesPath) return null;
+  const path = requireNodeModule<typeof import("node:path")>("path");
   const pathApi = input.platform === "win32" ? path.win32 : path.posix;
   const installDir = pathApi.dirname(input.resourcesPath);
   const candidates =
@@ -36,6 +36,7 @@ export function resolveObsidianCliPath(input: ObsidianCliPathInput): string | nu
     input.isExecutable ??
     ((candidate: string): boolean => {
       try {
+        const fs = requireNodeModule<typeof import("node:fs")>("fs");
         fs.accessSync(candidate, fs.constants.X_OK);
         return true;
       } catch {

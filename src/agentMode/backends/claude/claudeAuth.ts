@@ -9,13 +9,11 @@
  * listener, and persisting credentials to the OS keychain. We never read or
  * write the token ourselves; we only invoke the CLI and re-read its status.
  */
-import { execFile, spawn } from "node:child_process";
-import { type Readable } from "node:stream";
-import { promisify } from "node:util";
 import { logInfo, logWarn } from "@/logger";
 import { err2String } from "@/utils";
+import { requireNodeModule } from "@/utils/desktopRuntime";
 
-const execFileAsync = promisify(execFile);
+type Readable = import("node:stream").Readable;
 
 /** `claude auth status` is a quick local read; cap it so a wedged CLI can't hang the UI. */
 const STATUS_TIMEOUT_MS = 10_000;
@@ -71,6 +69,9 @@ export async function getClaudeAuthStatus(
   claudePath: string,
   env: NodeJS.ProcessEnv
 ): Promise<ClaudeAuthStatus> {
+  const { execFile } = requireNodeModule<typeof import("node:child_process")>("child_process");
+  const { promisify } = requireNodeModule<typeof import("node:util")>("util");
+  const execFileAsync = promisify(execFile);
   try {
     const { stdout } = await execFileAsync(claudePath, ["auth", "status", "--json"], {
       timeout: STATUS_TIMEOUT_MS,
@@ -113,6 +114,7 @@ export function signInToClaude(
   env: NodeJS.ProcessEnv,
   handlers: SignInHandlers = {}
 ): ClaudeSignInController {
+  const { spawn } = requireNodeModule<typeof import("node:child_process")>("child_process");
   logInfo("[AgentMode] spawning claude auth login");
   const child = spawn(claudePath, ["auth", "login", "--claudeai"], {
     env,

@@ -16,7 +16,10 @@
  * Pure leaf: callers inject `homeDir`, `platform`, `env`, and `fs` so tests
  * don't touch real disk.
  */
-import * as path from "node:path";
+import { requireNodeModule } from "@/utils/desktopRuntime";
+
+type PathModule = typeof import("node:path");
+type PlatformPath = PathModule["posix"];
 
 export interface NodeToolFs {
   existsSync: (p: string) => boolean;
@@ -42,7 +45,11 @@ export interface NodeToolBinDirsInput {
  * registered.
  */
 export function nodeToolBinDirCandidates(input: NodeToolBinDirsInput): string[] {
-  const candidates = input.platform === "win32" ? windowsCandidates(input) : unixCandidates(input);
+  const path = requireNodeModule<PathModule>("path");
+  const candidates =
+    input.platform === "win32"
+      ? windowsCandidates(input, path.win32)
+      : unixCandidates(input, path.posix);
   const seen = new Set<string>();
   const out: string[] = [];
   for (const dir of candidates) {
@@ -69,9 +76,8 @@ function dirExists(fs: NodeToolFs, dir: string): boolean {
   }
 }
 
-function unixCandidates(input: NodeToolBinDirsInput): Array<string | null> {
+function unixCandidates(input: NodeToolBinDirsInput, p: PlatformPath): Array<string | null> {
   const { homeDir, env, fs, platform } = input;
-  const p = path.posix;
   const dirs: Array<string | null> = [];
 
   // nvm — NVM_BIN (set only inside an interactive shell) plus the default and
@@ -80,7 +86,7 @@ function unixCandidates(input: NodeToolBinDirsInput): Array<string | null> {
   dirs.push(env.NVM_BIN ?? null);
   const nvmDir = env.NVM_DIR ?? p.join(homeDir, ".nvm");
   const nvmVersions = p.join(nvmDir, "versions", "node");
-  const nvmDefault = resolveNvmDefaultBin(nvmDir, nvmVersions, fs);
+  const nvmDefault = resolveNvmDefaultBin(nvmDir, nvmVersions, fs, p);
   if (nvmDefault) dirs.push(nvmDefault);
   dirs.push(...enumerateVersionBins(fs, nvmVersions, ["bin"], p));
 
@@ -122,9 +128,8 @@ function unixCandidates(input: NodeToolBinDirsInput): Array<string | null> {
   return dirs;
 }
 
-function windowsCandidates(input: NodeToolBinDirsInput): Array<string | null> {
+function windowsCandidates(input: NodeToolBinDirsInput, p: PlatformPath): Array<string | null> {
   const { homeDir, env } = input;
-  const p = path.win32;
   const dirs: Array<string | null> = [];
 
   // npm global (`npm i -g` drops shims here) — the most common GUI-app gap.
@@ -149,7 +154,7 @@ function fnmBaseDirs(
   homeDir: string,
   env: NodeJS.ProcessEnv,
   platform: NodeJS.Platform,
-  p: path.PlatformPath
+  p: PlatformPath
 ): string[] {
   if (env.FNM_DIR) return [env.FNM_DIR];
   if (platform === "darwin") {
@@ -170,7 +175,7 @@ function enumerateVersionBins(
   fs: NodeToolFs,
   versionsDir: string,
   subPath: string[],
-  p: path.PlatformPath
+  p: PlatformPath
 ): string[] {
   let entries: string[];
   try {
@@ -192,16 +197,21 @@ const NVM_LATEST_ALIASES = new Set(["node", "stable"]);
  * pointer to the user's chosen default. Aliases can chain (`default → lts/* →
  * lts/hydrogen → vX.Y.Z`); unresolvable ones yield null.
  */
-function resolveNvmDefaultBin(nvmDir: string, versionsDir: string, fs: NodeToolFs): string | null {
+function resolveNvmDefaultBin(
+  nvmDir: string,
+  versionsDir: string,
+  fs: NodeToolFs,
+  p: PlatformPath
+): string | null {
   let alias: string;
   try {
-    alias = fs.readFileSync(path.posix.join(nvmDir, "alias", "default"), "utf8").trim();
+    alias = fs.readFileSync(p.join(nvmDir, "alias", "default"), "utf8").trim();
   } catch {
     return null;
   }
   if (!alias) return null;
 
-  const resolved = resolveNvmAlias(nvmDir, alias, fs, 0);
+  const resolved = resolveNvmAlias(nvmDir, alias, fs, p, 0);
   if (!resolved) return null;
 
   let entries: string[];
@@ -215,24 +225,23 @@ function resolveNvmDefaultBin(nvmDir: string, versionsDir: string, fs: NodeToolF
   }
 
   const matched = matchNvmVersion(entries, resolved);
-  return matched ? path.posix.join(versionsDir, matched, "bin") : null;
+  return matched ? p.join(versionsDir, matched, "bin") : null;
 }
 
 function resolveNvmAlias(
   nvmDir: string,
   alias: string,
   fs: NodeToolFs,
+  p: PlatformPath,
   depth: number
 ): string | null {
   if (depth > 5) return null;
   if (/^\d/.test(alias) || alias.startsWith("v")) return alias;
   if (NVM_LATEST_ALIASES.has(alias)) return alias;
   try {
-    const target = fs
-      .readFileSync(path.posix.join(nvmDir, "alias", ...alias.split("/")), "utf8")
-      .trim();
+    const target = fs.readFileSync(p.join(nvmDir, "alias", ...alias.split("/")), "utf8").trim();
     if (!target) return null;
-    return resolveNvmAlias(nvmDir, target, fs, depth + 1);
+    return resolveNvmAlias(nvmDir, target, fs, p, depth + 1);
   } catch {
     return null;
   }

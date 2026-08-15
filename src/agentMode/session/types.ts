@@ -3,6 +3,9 @@ import type { ModelCapability } from "@/constants";
 import type { FormattedDateTime, MessageContext } from "@/types/message";
 // `import type` keeps the cycle with `fanoutTypes` compile-time only.
 import type { FanoutTurn } from "@/agentMode/session/fanout/fanoutTypes";
+import type { PlanUsage } from "@/agentMode/session/planUsage";
+
+export type { PlanUsage, UsageWindow } from "@/agentMode/session/planUsage";
 import type { ProjectScopeId } from "./scope";
 
 export type {
@@ -521,7 +524,9 @@ export type SessionUpdate =
   | { sessionUpdate: "current_mode_update"; currentModeId: string }
   | { sessionUpdate: "config_option_update"; configOptions: BackendConfigOption[] }
   | { sessionUpdate: "state_changed"; state: BackendState }
-  | { sessionUpdate: "usage_update"; usage: SessionUsage };
+  | { sessionUpdate: "usage_update"; usage: SessionUsage }
+  // `null` clears the meters: the backend asked and was told this account has no caps.
+  | { sessionUpdate: "plan_usage_update"; planUsage: PlanUsage | null };
 
 /**
  * Backend-agnostic token-usage snapshot for a session. Every coding-agent
@@ -683,7 +688,16 @@ export interface LoadSessionInput {
   additionalDirectories?: string[];
 }
 
-export type LoadSessionOutput = OpenSessionOutput;
+export interface LoadSessionOutput extends OpenSessionOutput {
+  /**
+   * Replayed transcript from the backend, reconstructed during `loadSession`.
+   * ACP backends replay the full conversation via `session/update` notifications;
+   * this collector assembles user + assistant text-only messages (no tool calls,
+   * no thoughts) to match the Claude / markdown loader convention. Absent when
+   * the session had no prior turns or the backend yielded no replay frames.
+   */
+  transcript?: AgentChatMessage[];
+}
 
 export interface PromptInput {
   sessionId: SessionId;
@@ -754,6 +768,15 @@ export interface BackendProcess {
    * sessions; ACP backends governed by the shared prompter omit it.
    */
   setReadOnlySessionPredicate?(fn: (sessionId: SessionId) => boolean): void;
+  /**
+   * Optional: the context window of a model, in tokens, when the backend knows it from
+   * a catalog of its own rather than the session stream. A reopened chat's persisted
+   * usage can predate the window being known — hosted models never carry one on the
+   * wire — and its ring must not wait for the next turn, so the session asks here at
+   * seed time. Missing means the stream is the only window source. Resolves rather
+   * than throws; null means the backend does not know this model's window.
+   */
+  readContextWindow?(wireModelId: string | null | undefined): Promise<number | null>;
   registerSessionHandler(sessionId: SessionId, handler: SessionUpdateHandler): () => void;
   newSession(params: OpenSessionInput): Promise<OpenSessionOutput>;
   prompt(params: PromptInput): Promise<PromptOutput>;

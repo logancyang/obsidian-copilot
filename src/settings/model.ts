@@ -4,7 +4,7 @@ import { atom, createStore, useAtomValue } from "jotai";
 import { v4 as uuidv4 } from "uuid";
 
 import type { CopilotMode, ModelSelection } from "@/agentMode";
-import { type ChainType } from "@/chainType";
+import { ChainType } from "@/chainType";
 import type { BackendConfig, BackendType, ConfiguredModel, Provider } from "@/modelManagement";
 import { type SortStrategy, isSortStrategy } from "@/utils/recentUsageManager";
 import {
@@ -134,7 +134,6 @@ export interface CopilotSettings {
   promptUsageTimestamps: Record<string, number>;
   promptSortStrategy: string;
   chatHistorySortStrategy: SortStrategy;
-  projectListSortStrategy: SortStrategy;
   /** Projects config root folder in vault (default: "copilot/projects"). */
   projectsFolder: string;
   embeddingRequestsPerMin: number;
@@ -995,12 +994,13 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
     sanitizedSettings.chatHistorySortStrategy = DEFAULT_SETTINGS.chatHistorySortStrategy;
   }
 
-  // Ensure projectListSortStrategy has a valid value (exclude "manual" which is only for custom commands)
-  if (
-    !isSortStrategy(sanitizedSettings.projectListSortStrategy) ||
-    sanitizedSettings.projectListSortStrategy === "manual"
-  ) {
-    sanitizedSettings.projectListSortStrategy = DEFAULT_SETTINGS.projectListSortStrategy;
+  // Fall back when the persisted chain type isn't one this build offers. A vault
+  // last used with Quick Chat's Projects mode still holds "project" here, and
+  // chain construction would throw "Unsupported chain type" on it before the
+  // user could pick anything else.
+  // https://github.com/logancyang/obsidian-copilot-preview/issues/310
+  if (!Object.values(ChainType).includes(sanitizedSettings.defaultChainType)) {
+    sanitizedSettings.defaultChainType = DEFAULT_SETTINGS.defaultChainType;
   }
 
   const userSystemPromptsFolder = (settingsToSanitize.userSystemPromptsFolder || "").trim();
@@ -1202,7 +1202,7 @@ export function validateSkillsFolder(
  * when supplied, overlap with the active Obsidian configuration directory.
  * Persisted settings intentionally omit `configDir` so changing a vault's
  * configuration directory cannot silently relocate existing Copilot data.
- * New settings values pass `configDir` before Apply. Vault-content checks that
+ * New settings values pass `configDir` before Apply. Vault-content scans that
  * need App/Vault access live in `copilotRootChange`, not here.
  *
  * Unlike {@link validateSkillsFolder}, absolute and drive-letter paths are

@@ -60,12 +60,10 @@ jest.mock("@/contexts/PluginContext", () => ({
 const applyCopilotRootChange = jest.fn<Promise<void>, unknown[]>().mockResolvedValue(undefined);
 const copilotRootContainsNotes = jest.fn<boolean, unknown[]>().mockReturnValue(false);
 const findCopilotRootFileConflict = jest.fn<string | null, unknown[]>().mockReturnValue(null);
-const isKnownCopilotRoot = jest.fn<boolean, unknown[]>().mockReturnValue(false);
 jest.mock("@/settings/copilotRootChange", () => ({
   applyCopilotRootChange: (...a: unknown[]) => applyCopilotRootChange(...a),
   copilotRootContainsNotes: (...a: unknown[]) => copilotRootContainsNotes(...a),
   findCopilotRootFileConflict: (...a: unknown[]) => findCopilotRootFileConflict(...a),
-  isKnownCopilotRoot: (...a: unknown[]) => isKnownCopilotRoot(...a),
 }));
 
 // The root-change trigger's read-only probe: the only way a registration that
@@ -84,14 +82,22 @@ jest.mock("@/utils/vaultPath", () => ({ getVaultBase: () => "/abs/vault" }));
 
 // Capture ConfirmModal construction so a test can fire its confirm callback.
 let capturedOnConfirm: (() => void) | null = null;
-const modalCtor = jest.fn((onConfirm: () => void) => {
+let capturedConfirmButtonText = "";
+const modalCtor = jest.fn((onConfirm: () => void, confirmButtonText: string) => {
   capturedOnConfirm = onConfirm;
+  capturedConfirmButtonText = confirmButtonText;
 });
 jest.mock("@/components/modals/ConfirmModal", () => ({
   ConfirmModal: class {
     open = jest.fn();
-    constructor(_app: unknown, onConfirm: () => void) {
-      modalCtor(onConfirm);
+    constructor(
+      _app: unknown,
+      onConfirm: () => void,
+      _content: unknown,
+      _title: string,
+      confirmButtonText: string
+    ) {
+      modalCtor(onConfirm, confirmButtonText);
     }
   },
 }));
@@ -100,10 +106,10 @@ describe("BasicSettings", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     capturedOnConfirm = null;
+    capturedConfirmButtonText = "";
     settingsStore.set(settingsAtom, { ...DEFAULT_SETTINGS, copilotFolder: "copilot" });
     copilotRootContainsNotes.mockReturnValue(false);
     findCopilotRootFileConflict.mockReturnValue(null);
-    isKnownCopilotRoot.mockReturnValue(false);
     shouldSurfaceMiyoResync.mockReturnValue(false);
     verifyMiyoScope.mockResolvedValue("unregistered");
     systemPrompts.mockReturnValue([]);
@@ -193,26 +199,34 @@ describe("BasicSettings", () => {
     expect(applyCopilotRootChange).not.toHaveBeenCalled();
   });
 
-  it("rejects a root that already contains notes without opening the confirm modal", () => {
+  it("opens a warning confirmation for a root that already contains Markdown", () => {
     copilotRootContainsNotes.mockReturnValue(true);
     render(<BasicSettings />);
     fireEvent.change(screen.getByLabelText("Copilot folder"), { target: { value: "existing" } });
     fireEvent.click(screen.getByRole("button", { name: "Apply Copilot folder" }));
-    expect(Notice).toHaveBeenCalledTimes(1);
-    expect(modalCtor).not.toHaveBeenCalled();
+
+    expect(modalCtor).toHaveBeenCalledTimes(1);
+    expect(capturedConfirmButtonText).toBe("Use folder");
     expect(applyCopilotRootChange).not.toHaveBeenCalled();
+
+    capturedOnConfirm?.();
+    expect(applyCopilotRootChange).toHaveBeenCalledWith(expect.anything(), "existing");
   });
 
-  it("opens the confirm modal for a previously-used root even though it holds Copilot notes", () => {
-    // Re-activating a known Copilot root: its Markdown is Copilot's own leftover
-    // data and stays QA-excluded via history, so the note guard is skipped and
-    // the user reaches the confirmation instead of being blocked.
+  it("still warns when the non-empty folder is a previously used Copilot root", () => {
+    settingsStore.set(settingsAtom, {
+      ...DEFAULT_SETTINGS,
+      copilotFolder: "copilot",
+      copilotRootHistory: ["copilot", "old-root"],
+    });
     copilotRootContainsNotes.mockReturnValue(true);
-    isKnownCopilotRoot.mockReturnValue(true);
     render(<BasicSettings />);
     fireEvent.change(screen.getByLabelText("Copilot folder"), { target: { value: "old-root" } });
     fireEvent.click(screen.getByRole("button", { name: "Apply Copilot folder" }));
+
+    expect(copilotRootContainsNotes).toHaveBeenCalledWith(expect.anything(), "old-root");
     expect(modalCtor).toHaveBeenCalledTimes(1);
+    expect(capturedConfirmButtonText).toBe("Use folder");
   });
 
   it("opens the confirm modal for a valid new root and applies the change on confirm", () => {
@@ -220,6 +234,7 @@ describe("BasicSettings", () => {
     fireEvent.change(screen.getByLabelText("Copilot folder"), { target: { value: "ai" } });
     fireEvent.click(screen.getByRole("button", { name: "Apply Copilot folder" }));
     expect(modalCtor).toHaveBeenCalledTimes(1);
+    expect(capturedConfirmButtonText).toBe("Change folder");
     expect(applyCopilotRootChange).not.toHaveBeenCalled();
 
     capturedOnConfirm?.();

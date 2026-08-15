@@ -1,5 +1,4 @@
-import { FailedItem, ProjectConfig, useProjectContextLoad, getCurrentProject } from "@/aiParams";
-import { ContextCache, ProjectContextCache } from "@/cache/projectContextCache";
+import { ProjectConfig } from "@/aiParams";
 import { FolderSearchModal } from "@/components/modals/FolderSearchModal";
 import type { ProcessingItem } from "@/components/project/processingAdapter";
 import {
@@ -8,13 +7,12 @@ import {
   processingSourceKey,
 } from "@/components/project/processingItemStatusView";
 import { useAgentProcessingItems } from "@/components/project/useAgentProcessingItems";
-import { openAgentCachedItemPreview, openCachedProjectFile } from "@/utils/cacheFileOpener";
+import { openAgentCachedItemPreview } from "@/utils/cacheFileOpener";
 import { ProjectFileSelectModal } from "@/components/modals/ProjectFileSelectModal";
 import { PropertySearchModal } from "@/components/modals/PropertySearchModal";
 import { TagSearchModal } from "@/components/modals/TagSearchModal";
 import { getBadgeLabel } from "@/components/project/ProjectContextBadgeList";
 import { TruncatedText } from "@/components/TruncatedText";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -31,15 +29,12 @@ import {
 } from "@/search/searchUtils";
 import { getTagsFromNote } from "@/utils";
 import {
-  AlertCircle,
   ArrowUpRight,
-  CheckCircle,
   FileAudio,
   FileImage,
   FileText,
   FileVideo,
   FolderIcon,
-  Loader2,
   Plus,
   PlusCircle,
   SlidersHorizontal,
@@ -234,75 +229,6 @@ const SectionList: React.FC<SectionListProps> = ({
 // Project Context Load Status Types and Utilities
 // ============================================================================
 
-type ProjectContextItemStatus = "success" | "failed" | "processing" | "notStarted";
-
-interface ProjectContextItemStatusInfo {
-  status: ProjectContextItemStatus;
-  failedItem?: FailedItem;
-}
-
-interface ProjectContextLoadLookup {
-  success: ReadonlySet<string>;
-  failedByPath: ReadonlyMap<string, FailedItem>;
-  processingFiles: ReadonlySet<string>;
-  total: ReadonlySet<string>;
-  /** Files that have been cached (from ProjectContextCache) */
-  cachedFiles: ReadonlySet<string>;
-  /** Whether we're viewing the currently loaded project */
-  isCurrentProject: boolean;
-}
-
-/**
- * Derives a display status for the given project context item key.
- * - For current project: uses real-time load state (processing > failed > success > notStarted)
- * - For other projects: uses cache state (success if cached, notStarted otherwise)
- */
-function getProjectContextItemStatus(
-  key: string,
-  lookup: ProjectContextLoadLookup
-): ProjectContextItemStatusInfo {
-  // For the currently loaded project, use real-time status
-  if (lookup.isCurrentProject) {
-    if (lookup.processingFiles.has(key)) {
-      return { status: "processing" };
-    }
-
-    const failedItem = lookup.failedByPath.get(key);
-    if (failedItem) {
-      return { status: "failed", failedItem };
-    }
-
-    if (lookup.success.has(key)) {
-      return { status: "success" };
-    }
-    // Current project: if not in any real-time status, it hasn't been processed yet
-    return { status: "notStarted" };
-  }
-
-  // For non-current projects, check if they're cached
-  if (lookup.cachedFiles.has(key)) {
-    return { status: "success" };
-  }
-
-  return { status: "notStarted" };
-}
-
-const STATUS_LABELS: Record<ProjectContextItemStatus, string> = {
-  success: "Processed",
-  failed: "Failed",
-  processing: "Processing",
-  notStarted: "Not started",
-};
-
-/** Status → text color for the CAG badge. (The agent variant renders status via
- * the shared {@link ProcessingStatusIcon}, which owns its own colors.) */
-const STATUS_COLOR: Record<ProjectContextItemStatus, string> = {
-  success: "tw-text-success",
-  failed: "tw-text-error",
-  processing: "tw-text-accent",
-  notStarted: "tw-text-muted",
-};
-
 // ============================================================================
 // ItemCard Component
 // ============================================================================
@@ -310,40 +236,24 @@ const STATUS_COLOR: Record<ProjectContextItemStatus, string> = {
 interface ItemCardProps {
   item: GroupItem;
   viewMode: "list";
-  loadStatus?: ProjectContextItemStatusInfo;
-  /** Agent (Links) variant: per-file conversion status from the agent pipeline,
-   * rendered via the shared {@link ProcessingStatusIcon}. CAG uses `loadStatus`. */
+  /** Per-file conversion status from the agent pipeline, rendered via the
+   * shared {@link ProcessingStatusIcon}. */
   agentProcessingItem?: ProcessingItem;
   onDelete: (e: React.MouseEvent, item: GroupItem) => void;
   /** Optional: callback to open the cached parsed content for this file. */
   onOpenCached?: () => void;
-  /** Agent (Links) variant: show status as a bare icon, no text label — matches
-   * the Links panel's icon-only status. CAG keeps icon + label. */
-  compactStatus?: boolean;
 }
 
-function ItemCard({
-  item,
-  viewMode,
-  loadStatus,
-  agentProcessingItem,
-  onDelete,
-  onOpenCached,
-  compactStatus,
-}: ItemCardProps) {
+function ItemCard({ item, viewMode, agentProcessingItem, onDelete, onOpenCached }: ItemCardProps) {
   const extension = item.id.split(".").pop() || "";
 
   // add or remove
   const IconComponent = item.isIgnored ? Plus : XIcon;
 
-  // Shared "view parsed content" arrow (revealed on row hover for converted items).
-  // "Converted" is the agent item's `ready` state (Links variant) or the CAG
-  // `success` state — each surface feeds the matching status above.
-  const hasConvertedSnapshot = compactStatus
-    ? agentProcessingItem?.status === "ready"
-    : loadStatus?.status === "success";
+  // "View parsed content" arrow, revealed on row hover once the source has a
+  // converted snapshot.
   const previewButton =
-    onOpenCached && hasConvertedSnapshot ? (
+    onOpenCached && agentProcessingItem?.status === "ready" ? (
       <Button
         variant="ghost2"
         size="icon"
@@ -374,45 +284,11 @@ function ItemCard({
       </div>
 
       <div className="tw-ml-auto tw-flex tw-min-w-[24px] tw-items-center tw-justify-end tw-gap-2">
-        {compactStatus ? (
-          // Agent (Links-style): order is [preview][status][delete]; the status is a
-          // bare icon (ready hidden until row hover), error revealed on hover.
-          <>
-            {previewButton}
-            {agentProcessingItem && (
-              <ProcessingStatusIcon item={agentProcessingItem} revealReadyOnHover />
-            )}
-          </>
-        ) : (
-          // CAG (unchanged): icon + text Badge, then the preview arrow.
-          <>
-            {loadStatus && (
-              <Badge
-                variant="outline"
-                className={cn(
-                  "tw-flex tw-items-center tw-gap-1 tw-whitespace-nowrap",
-                  STATUS_COLOR[loadStatus.status]
-                )}
-                title={
-                  loadStatus.status === "failed" && loadStatus.failedItem?.error
-                    ? `Failed: ${loadStatus.failedItem.error}`
-                    : STATUS_LABELS[loadStatus.status]
-                }
-              >
-                {loadStatus.status === "processing" ? (
-                  <Loader2 className="tw-size-3 tw-animate-spin" />
-                ) : loadStatus.status === "success" ? (
-                  <CheckCircle className="tw-size-3" />
-                ) : loadStatus.status === "failed" ? (
-                  <AlertCircle className="tw-size-3" />
-                ) : (
-                  <div className="tw-size-2 tw-rounded-full tw-border tw-border-solid tw-border-border" />
-                )}
-                <span className="tw-hidden md:tw-inline">{STATUS_LABELS[loadStatus.status]}</span>
-              </Badge>
-            )}
-            {previewButton}
-          </>
+        {/* Order is [preview][status][delete]; the status is a bare icon (ready
+            hidden until row hover), error revealed on hover. */}
+        {previewButton}
+        {agentProcessingItem && (
+          <ProcessingStatusIcon item={agentProcessingItem} revealReadyOnHover />
         )}
         <IconComponent
           className="tw-hidden tw-size-4 tw-shrink-0 tw-text-muted hover:tw-text-warning group-hover:tw-block group-hover:tw-flex-none"
@@ -502,7 +378,6 @@ interface ContextManageProps {
   app: App;
   /** Agent Mode: show the Links (Web/YouTube) section and persist URL edits.
    * Off for CAG callers, leaving this modal's file-only behavior unchanged. */
-  enableLinks?: boolean;
   /** Portal target for the Links +URL popover — the modal's own `contentEl`, so
    * the popover (layer 30) stacks above this modal (layer 50). */
   popoverContainer?: HTMLElement | null;
@@ -545,82 +420,17 @@ function ContextManage({
   onSave,
   onCancel,
   app,
-  enableLinks = false,
   popoverContainer,
 }: ContextManageProps) {
   const isMobile = Platform.isMobile;
-  const [contextLoadState] = useProjectContextLoad();
   const contextUrls = useContextUrls(initialProject);
-  const [projectCache, setProjectCache] = useState<ContextCache | null>(null);
-
-  // Load project cache on mount. Skipped for the Agent (Links) variant: the
-  // agent pipeline never writes the CAG ProjectContextCache, and its file rows
-  // no longer consume `projectCache` (see the ItemCard loadStatus/onOpenCached
-  // gating), so the read would only burn a disk hit and a re-render.
-  useEffect(() => {
-    if (enableLinks) return;
-    let isMounted = true;
-    const loadCache = async () => {
-      const cache = await ProjectContextCache.getInstance().get(initialProject);
-      if (isMounted) {
-        setProjectCache(cache);
-      }
-    };
-    void loadCache();
-    return () => {
-      isMounted = false;
-    };
-  }, [initialProject, enableLinks]);
-
-  // Check if viewing the currently loaded project
-  const isCurrentProject = useMemo(() => {
-    const currentProject = getCurrentProject();
-    return currentProject?.id === initialProject.id;
-  }, [initialProject.id]);
-
-  // Build set of cached files from project cache
-  const cachedFiles = useMemo(() => {
-    if (!projectCache?.fileContexts) {
-      return new Set<string>();
-    }
-    // Files with valid cacheKey are considered cached/processed
-    return new Set(
-      Object.entries(projectCache.fileContexts)
-        .filter(([, entry]) => entry?.cacheKey)
-        .map(([filePath]) => filePath)
-    );
-  }, [projectCache]);
-
-  // Memoize lookup structures for O(1) status queries
-  const contextLoadLookup = useMemo<ProjectContextLoadLookup>(() => {
-    return {
-      success: new Set(contextLoadState.success),
-      failedByPath: new Map(contextLoadState.failed.map((item) => [item.path, item])),
-      processingFiles: new Set(contextLoadState.processingFiles),
-      total: new Set(contextLoadState.total),
-      cachedFiles,
-      isCurrentProject,
-    };
-  }, [
-    contextLoadState.success,
-    contextLoadState.failed,
-    contextLoadState.processingFiles,
-    contextLoadState.total,
-    cachedFiles,
-    isCurrentProject,
-  ]);
-
-  // Agent (Links) variant ONLY: one shared conversion-status lookup keyed by
-  // `processingSourceKey`, covering both URL rows and File Context rows so they
-  // render the same {@link ProcessingStatusIcon}. Gated to `enableLinks` so the
-  // CAG path skips the off-vault/fs read and gets a stable empty result (the
-  // hook still subscribes to the agent atom, which is harmless — its value is
-  // unused when disabled).
+  // One shared conversion-status lookup keyed by `processingSourceKey`,
+  // covering both URL rows and File Context rows so they render the same
+  // {@link ProcessingStatusIcon}.
   const { items: agentProcessingItems } = useAgentProcessingItems(
     app,
     initialProject,
-    initialProject.contextSource,
-    { enabled: enableLinks }
+    initialProject.contextSource
   );
   const agentProcessingByKey = useMemo(
     () => buildProcessingItemLookup(agentProcessingItems),
@@ -770,36 +580,17 @@ function ContextManage({
     activeSection === "links" || activeSection === "web" || activeSection === "youtube";
 
   // A file row's status + snapshot-preview, resolved in ONE place so the JSX
-  // doesn't branch on `enableLinks` per prop. Agent reads the shared agent
-  // pipeline (status icon + off-vault snapshot); CAG reads its ProjectContextCache
-  // (badge + in-vault parsed content). Ignored rows get neither.
+  // doesn't branch per prop. Ignored rows get neither.
   const getFileRowStatusProps = useCallback(
-    (
-      item: GroupItem
-    ): Pick<ItemCardProps, "agentProcessingItem" | "loadStatus" | "onOpenCached"> => {
+    (item: GroupItem): Pick<ItemCardProps, "agentProcessingItem" | "onOpenCached"> => {
       if (item.isIgnored || activeSection === "ignoreFiles") return {};
-      if (enableLinks) {
-        const agentItem = agentProcessingByKey.get(processingSourceKey("file", item.id));
-        return {
-          agentProcessingItem: agentItem,
-          onOpenCached: agentItem
-            ? () => void openAgentCachedItemPreview(app, agentItem)
-            : undefined,
-        };
-      }
-      const isMarkdown = item.id.split(".").pop()?.toLowerCase() === "md";
+      const agentItem = agentProcessingByKey.get(processingSourceKey("file", item.id));
       return {
-        loadStatus: getProjectContextItemStatus(item.id, contextLoadLookup),
-        // Markdown isn't converted, so it has no parsed snapshot to open.
-        onOpenCached: isMarkdown
-          ? undefined
-          : () => {
-              const name = item.name || item.id.split("/").pop() || item.id;
-              void openCachedProjectFile(app, projectCache, item.id, name);
-            },
+        agentProcessingItem: agentItem,
+        onOpenCached: agentItem ? () => void openAgentCachedItemPreview(app, agentItem) : undefined,
       };
     },
-    [enableLinks, activeSection, agentProcessingByKey, contextLoadLookup, app, projectCache]
+    [activeSection, agentProcessingByKey, app]
   );
 
   //  groupList convert to inclusions format
@@ -1096,16 +887,11 @@ function ContextManage({
             ]
           : [];
 
-      // Agent (Links) variant only: list Web and YouTube as their own cards so
-      // the overview surfaces every context type the same way (one card per
-      // non-empty group, exactly like folders). Leads the grid to mirror the
-      // sidebar, where Links sits first.
-      const webCount = enableLinks
-        ? contextUrls.urlItems.filter((u) => u.type === "web").length
-        : 0;
-      const youtubeCount = enableLinks
-        ? contextUrls.urlItems.filter((u) => u.type === "youtube").length
-        : 0;
+      // List Web and YouTube as their own cards so the overview surfaces every
+      // context type the same way (one card per non-empty group, exactly like
+      // folders). Leads the grid to mirror the sidebar, where Links sits first.
+      const webCount = contextUrls.urlItems.filter((u) => u.type === "web").length;
+      const youtubeCount = contextUrls.urlItems.filter((u) => u.type === "youtube").length;
       const linkItems = [
         ...(webCount > 0 ? [{ id: "web:all", name: "Web", type: "web", count: webCount }] : []),
         ...(youtubeCount > 0
@@ -1138,7 +924,6 @@ function ContextManage({
     groupList.properties,
     ignoreItems.files,
     sortItems,
-    enableLinks,
     contextUrls.urlItems,
   ]);
 
@@ -1489,9 +1274,8 @@ function ContextManage({
         exclusions: exclude,
         // Agent Mode only: persist URL edits back. CAG callers don't enable
         // Links, so their save payload is byte-for-byte unchanged.
-        ...(enableLinks
-          ? { webUrls: contextUrls.webUrls, youtubeUrls: contextUrls.youtubeUrls }
-          : {}),
+        webUrls: contextUrls.webUrls,
+        youtubeUrls: contextUrls.youtubeUrls,
       },
     });
   };
@@ -1509,24 +1293,18 @@ function ContextManage({
 
             <ScrollArea className="tw-max-h-[500px] tw-flex-1">
               <div className="tw-space-y-6 tw-p-4">
-                {/* Links first: URLs are the most-used source in agent projects,
-                    so the section leads the navigation when links are enabled. */}
-                {enableLinks && (
-                  <>
-                    <LinksSidebarSection
-                      activeSection={activeSection}
-                      webCount={contextUrls.urlItems.filter((u) => u.type === "web").length}
-                      youtubeCount={contextUrls.urlItems.filter((u) => u.type === "youtube").length}
-                      onSelect={(s) => setActiveState(s)}
-                      existingUrls={contextUrls.urlItems.map((u) => u.url)}
-                      onAddUrls={(items) =>
-                        contextUrls.addFromText(items.map((i) => i.url).join("\n"))
-                      }
-                      popoverContainer={popoverContainer}
-                    />
-                    <Separator />
-                  </>
-                )}
+                {/* Links first: URLs are the most-used source in projects, so
+                    the section leads the navigation. */}
+                <LinksSidebarSection
+                  activeSection={activeSection}
+                  webCount={contextUrls.urlItems.filter((u) => u.type === "web").length}
+                  youtubeCount={contextUrls.urlItems.filter((u) => u.type === "youtube").length}
+                  onSelect={(s) => setActiveState(s)}
+                  existingUrls={contextUrls.urlItems.map((u) => u.url)}
+                  onAddUrls={(items) => contextUrls.addFromText(items.map((i) => i.url).join("\n"))}
+                  popoverContainer={popoverContainer}
+                />
+                <Separator />
 
                 {/* Tags Section */}
                 <SectionList
@@ -1542,7 +1320,7 @@ function ContextManage({
                   onAddClick={groupHandlers.add.tag}
                   onDeleteItem={(e, item) => groupHandlers.delete.tag(e, item)}
                   tooltip="must be in note property"
-                  onSectionClick={enableLinks ? () => setActiveState("tags", null) : undefined}
+                  onSectionClick={() => setActiveState("tags", null)}
                 />
 
                 <Separator />
@@ -1563,9 +1341,7 @@ function ContextManage({
                   onAddClick={groupHandlers.add.property}
                   onDeleteItem={(e, item) => groupHandlers.delete.property(e, item)}
                   tooltip="Include notes by a frontmatter property, e.g. Topics: Physics"
-                  onSectionClick={
-                    enableLinks ? () => setActiveState("properties", null) : undefined
-                  }
+                  onSectionClick={() => setActiveState("properties", null)}
                 />
 
                 <Separator />
@@ -1582,7 +1358,7 @@ function ContextManage({
                   onItemClick={groupHandlers.click.folder}
                   onAddClick={groupHandlers.add.folder}
                   onDeleteItem={(e, item) => groupHandlers.delete.folder(e, item)}
-                  onSectionClick={enableLinks ? () => setActiveState("folders", null) : undefined}
+                  onSectionClick={() => setActiveState("folders", null)}
                 />
 
                 <Separator />
@@ -1710,7 +1486,6 @@ function ContextManage({
                               key={item.id}
                               item={item}
                               viewMode="list"
-                              compactStatus={enableLinks}
                               onDelete={
                                 activeSection === "ignoreFiles" || item.isIgnored
                                   ? handleDeleteIgnoreItem
@@ -1755,8 +1530,7 @@ export class ContextManageModal extends Modal {
   constructor(
     app: App,
     private onSave: (project: ProjectConfig) => void,
-    private initialProject: ProjectConfig,
-    private options: { enableLinks?: boolean } = {}
+    private initialProject: ProjectConfig
   ) {
     super(app);
   }
@@ -1782,7 +1556,6 @@ export class ContextManageModal extends Modal {
         onSave={handleSave}
         onCancel={handleCancel}
         app={this.app}
-        enableLinks={this.options.enableLinks}
         popoverContainer={contentEl}
       />
     );

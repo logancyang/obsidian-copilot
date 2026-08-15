@@ -7,7 +7,7 @@ import {
   ModelCapability,
   ProviderInfo,
 } from "@/constants";
-import { logError, logInfo } from "@/logger";
+import { logError, logInfo, logWarn } from "@/logger";
 import { isPaidEnabled } from "@/plusUtils";
 import {
   CopilotSettings,
@@ -39,6 +39,7 @@ import { Notice } from "obsidian";
 import { ChatOpenRouter } from "./ChatOpenRouter";
 import { ChatLMStudio } from "./ChatLMStudio";
 import { BedrockChatModel, type BedrockChatModelFields } from "./BedrockChatModel";
+import { BrevilabsClient } from "./brevilabsClient";
 import { GitHubCopilotChatModel } from "@/LLMProviders/githubCopilot/GitHubCopilotChatModel";
 import { GitHubCopilotResponsesModel } from "@/LLMProviders/githubCopilot/GitHubCopilotResponsesModel";
 import type { SafetySetting } from "@google/generative-ai";
@@ -428,7 +429,6 @@ export default class ChatModelManager {
         configuration: {
           baseURL: customModel.baseUrl,
           fetch: customModel.enableCors ? safeFetch : undefined,
-          defaultHeaders: { "dangerously-allow-browser": "true" },
         },
         ...this.getOpenAISpecialConfig(
           modelName,
@@ -465,6 +465,7 @@ export default class ChatModelManager {
         configuration: {
           baseURL: BREVILABS_MODELS_BASE_URL,
           fetch: safeFetch,
+          defaultHeaders: BrevilabsClient.getInstance().getPluginVersionHeaders(),
         },
         // Reasoning is opt-in: forward the user's per-model effort pick only for
         // REASONING-capable models, and gate enableReasoning on an EXPLICIT effort.
@@ -735,7 +736,7 @@ export default class ChatModelManager {
     allModels.forEach((model) => {
       if (model.enabled) {
         if (!Object.values(ChatModelProviders).includes(model.provider as ChatModelProviders)) {
-          console.warn(`Unknown provider: ${model.provider} for model: ${model.name}`);
+          logWarn(`Unknown provider: ${model.provider} for model: ${model.name}`);
           return;
         }
 
@@ -781,7 +782,7 @@ export default class ChatModelManager {
       model.provider as ChatModelProviders
     ] as unknown as ChatConstructorType;
     if (!constructor) {
-      console.warn(`Unknown provider: ${model.provider} for model: ${model.name}`);
+      logWarn(`Unknown provider: ${model.provider} for model: ${model.name}`);
       throw new Error(`Unknown provider: ${model.provider} for model: ${model.name}`);
     }
     return constructor;

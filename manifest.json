@@ -4,7 +4,7 @@
   "version": "4.0.0",
   "minAppVersion": "1.11.4",
   "isDesktopOnly": false,
-  "description": "Your AI Copilot: Chat with Your Second Brain, Learn Faster, Work Smarter.",
+  "description": "Run AI agents such as Claude Code, Codex, and OpenCode inside your vault. Turn your second brain into a smart assistant that gets knowledge work done.",
   "author": "Logan Yang",
   "authorUrl": "https://twitter.com/logancyang",
   "fundingUrl": {

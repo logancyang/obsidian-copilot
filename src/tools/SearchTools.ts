@@ -2,7 +2,7 @@ import { getStandaloneQuestion } from "@/chainUtils";
 import { TEXT_WEIGHT } from "@/constants";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import { hasSelfHostSearchKey, selfHostWebSearch } from "@/LLMProviders/selfHostServices";
-import { logInfo } from "@/logger";
+import { logError, logInfo } from "@/logger";
 import { getSearchBackend } from "@/miyo/miyoUtils";
 import { isSelfHostModeValid } from "@/plusUtils";
 import { RetrieverFactory } from "@/search/RetrieverFactory";
@@ -607,7 +607,7 @@ const webSearchTool = createLangChainTool({
 
       return formattedResults;
     } catch (error) {
-      console.error(`Error processing web search query ${query}:`, error);
+      logError(`Error processing web search query ${query}:`, error);
       return { error: `Web search failed: ${error}` };
     }
   },

@@ -9,6 +9,7 @@ import { App, FileSystemAdapter } from "obsidian";
 jest.mock("@/logger", () => ({ logInfo: jest.fn(), logWarn: jest.fn(), logError: jest.fn() }));
 jest.mock("@/utils/openWithSystemDefault", () => ({ openWithSystemDefault: jest.fn() }));
 jest.mock("obsidian", () => ({
+  Platform: { isDesktopApp: true, isMobile: false },
   FileSystemAdapter: class FileSystemAdapter {
     private readonly base: string;
     constructor(base = "/vault") {

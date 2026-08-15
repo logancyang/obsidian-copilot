@@ -54,6 +54,8 @@ export interface SetupProviderInput {
   displayName: string;
   /** Overrides the provider definition's `defaultBaseUrl`. */
   baseUrl?: string;
+  /** Whether Quick Chat should trade streaming for Obsidian's CORS-free request path. */
+  enableCors?: boolean;
   /** Stored in the keychain. */
   apiKey?: string;
   /** Per-providerType payload (Azure deployment, Bedrock region,
@@ -108,6 +110,7 @@ export class ByokSetupApi {
       providerType: input.providerType,
       displayName: input.displayName,
       baseUrl: input.baseUrl,
+      enableCors: input.enableCors,
       // Persist the explicit requires-key flag (default hosted = needs a key)
       // so the runtime never re-infers it from the endpoint.
       requiresApiKey: input.requiresApiKey ?? true,

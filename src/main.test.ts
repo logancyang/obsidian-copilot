@@ -10,7 +10,6 @@ jest.mock("obsidian", () => {
     PluginSettingTab: class PluginSettingTab {},
   };
 });
-jest.mock("@/LLMProviders/projectManager", () => ({ __esModule: true, default: class {} }));
 jest.mock("@/LLMProviders/chatModelManager", () => ({
   __esModule: true,
   default: { getInstance: jest.fn() },
@@ -70,7 +69,6 @@ function createPluginUnderTest(calls: string[]) {
   Object.assign(plugin, {
     app: { workspace: { getLeavesOfType: jest.fn(() => []) } },
     chatSelectionHighlightController: { cleanup: jest.fn(() => calls.push("highlight")) },
-    projectManager: { onunload: jest.fn(() => calls.push("projectManager")) },
     agentModelDiscoveryUnsubscriber: jest.fn(() => calls.push("modelDiscovery")),
     agentSessionManager: {
       shutdown: jest.fn(async () => {
@@ -140,7 +138,6 @@ describe("main", () => {
         expect(calls).toEqual([
           "persistence",
           "highlight",
-          "projectManager",
           "modelDiscovery",
           "sessions",
           "customCommands",
@@ -158,7 +155,6 @@ describe("main", () => {
         const plugin = createPluginUnderTest(calls);
         Object.assign(plugin, {
           chatSelectionHighlightController: undefined,
-          projectManager: undefined,
           agentModelDiscoveryUnsubscriber: undefined,
           agentSessionManager: undefined,
           customCommandRegister: undefined,

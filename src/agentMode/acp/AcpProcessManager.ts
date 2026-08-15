@@ -1,6 +1,13 @@
 import { logError, logInfo, logWarn } from "@/logger";
-import { ChildProcessByStdio, spawn } from "node:child_process";
-import { Readable, Writable } from "node:stream";
+import { requireNodeModule } from "@/utils/desktopRuntime";
+
+type ChildProcessByStdio = import("node:child_process").ChildProcessByStdio<
+  Writable,
+  Readable,
+  Readable
+>;
+type Readable = import("node:stream").Readable;
+type Writable = import("node:stream").Writable;
 
 const SIGTERM_GRACE_MS = 3_000;
 
@@ -25,7 +32,7 @@ export interface AcpProcessManagerOptions {
  * graceful SIGTERM→SIGKILL teardown.
  */
 export class AcpProcessManager {
-  private child: ChildProcessByStdio<Writable, Readable, Readable> | null = null;
+  private child: ChildProcessByStdio | null = null;
   private exitListeners = new Set<(code: number | null, signal: NodeJS.Signals | null) => void>();
   private hasExited = false;
   private exitCode: number | null = null;
@@ -42,6 +49,8 @@ export class AcpProcessManager {
       throw new Error("AcpProcessManager already started");
     }
     const tag = this.opts.logTag ?? "acp";
+    const { spawn } = requireNodeModule<typeof import("node:child_process")>("child_process");
+    const { Readable, Writable } = requireNodeModule<typeof import("node:stream")>("stream");
     logInfo(`[AgentMode] spawning ${this.opts.command} ${this.opts.args.join(" ")} (tag=${tag})`);
     const child = spawn(this.opts.command, this.opts.args, {
       env: this.opts.env,

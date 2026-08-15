@@ -4,7 +4,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { logError, logInfo } from "@/logger";
 import { captureViewScreenshot } from "@/utils/captureViewScreenshot";
-import { isDesktopRuntime } from "@/utils/desktopRuntime";
+import { isDesktopRuntime, requireNodeModule } from "@/utils/desktopRuntime";
 import { assembleReportBundle, type ReportEnvInfo } from "@/utils/issueReport";
 import { findLatestOpencodeLog } from "@/utils/opencodeLog";
 import { createPluginRoot } from "@/utils/react/createPluginRoot";
@@ -52,10 +52,8 @@ function getElectronShell(): ElectronShell | null {
 
 function reportsRootDir(): string | null {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports -- report paths use Node only inside this optional desktop runtime probe
-    const os = require("node:os") as typeof import("node:os");
-    // eslint-disable-next-line @typescript-eslint/no-require-imports -- report paths use Node only inside this optional desktop runtime probe
-    const path = require("node:path") as typeof import("node:path");
+    const os = requireNodeModule<typeof import("node:os")>("os");
+    const path = requireNodeModule<typeof import("node:path")>("path");
     return path.join(os.tmpdir(), "obsidian-copilot", "reports");
   } catch {
     return null;
@@ -258,8 +256,7 @@ export class ReportIssueModal extends Modal {
 
 async function resolveOpencodeLogPath(): Promise<string | null> {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports -- Opencode log discovery is a desktop-only best-effort path
-    const os = require("node:os") as typeof import("node:os");
+    const os = requireNodeModule<typeof import("node:os")>("os");
     // Resolve the log dir from the same env OpencodeBackend spawns opencode with:
     // user env overrides (e.g. XDG_DATA_HOME / HOME) relocate opencode's data dir,
     // so the log lives wherever the merged env points, not the ambient one.
