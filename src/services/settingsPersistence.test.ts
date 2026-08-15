@@ -17,6 +17,8 @@ function makeSettings(overrides: Partial<CopilotSettings> = {}): CopilotSettings
 
 const backedUp = jest.fn().mockResolvedValue({ status: "not-needed" });
 const DEVICE_ID = "device-a";
+// The device id lookup is mocked, so the app is never dereferenced.
+const APP = {} as import("obsidian").App;
 
 async function loadModule(overrides: Record<string, unknown> = {}) {
   jest.resetModules();
@@ -143,6 +145,7 @@ describe("settingsPersistence", () => {
       const saveData = jest.fn().mockResolvedValue(undefined);
 
       const loaded = await module.loadSettingsWithKeychain(
+        APP,
         {
           _keychainVaultId: "1234abcd",
           _keychainOnly: false,
@@ -173,6 +176,7 @@ describe("settingsPersistence", () => {
       keychain.isAvailable.mockReturnValue(false);
 
       const loaded = await module.loadSettingsWithKeychain(
+        APP,
         { _keychainVaultId: "1234abcd", openAIApiKey: "plaintext-disk-key" },
         jest.fn().mockResolvedValue(undefined),
         backedUp
@@ -186,7 +190,7 @@ describe("settingsPersistence", () => {
       const { module, keychain } = await loadModule();
       const saveData = jest.fn().mockResolvedValue(undefined);
 
-      await module.loadSettingsWithKeychain(null, saveData, backedUp);
+      await module.loadSettingsWithKeychain(APP, null, saveData, backedUp);
 
       expect(keychain.setVaultId).toHaveBeenCalledWith("abcd1234");
       expect(saveData).toHaveBeenCalledWith({
@@ -199,6 +203,7 @@ describe("settingsPersistence", () => {
       const saveData = jest.fn().mockResolvedValue(undefined);
 
       await module.loadSettingsWithKeychain(
+        APP,
         { _keychainVaultId: "1234abcd", openAIApiKey: "plaintext-disk-key" },
         saveData,
         jest.fn().mockResolvedValue({ status: "failed", error: new Error("read-only") })
@@ -212,6 +217,7 @@ describe("settingsPersistence", () => {
       const saveData = jest.fn().mockResolvedValue(undefined);
 
       await module.loadSettingsWithKeychain(
+        APP,
         { _keychainVaultId: "1234abcd", openAIApiKey: "plaintext-disk-key" },
         saveData,
         jest.fn().mockResolvedValue({
@@ -230,6 +236,7 @@ describe("settingsPersistence", () => {
       const saveData = jest.fn().mockResolvedValue(undefined);
 
       const result = await module.loadSettingsWithKeychain(
+        APP,
         { _keychainVaultId: "1234abcd", openAIApiKey: "plaintext-disk-key" },
         saveData,
         jest.fn().mockResolvedValue({
@@ -264,6 +271,7 @@ describe("settingsPersistence", () => {
       const onMigration = jest.fn();
 
       await module.loadSettingsWithKeychain(
+        APP,
         {
           _keychainVaultId: "1234abcd",
           _pendingCredentialRecovery: {
@@ -292,6 +300,7 @@ describe("settingsPersistence", () => {
       };
 
       const result = await module.loadSettingsWithKeychain(
+        APP,
         { _keychainVaultId: "1234abcd", _pendingCredentialRecovery: recovery },
         jest.fn().mockResolvedValue(undefined),
         jest.fn().mockResolvedValue({ status: "not-needed" }),
@@ -308,6 +317,7 @@ describe("settingsPersistence", () => {
       const onMigration = jest.fn();
 
       await module.loadSettingsWithKeychain(
+        APP,
         { _keychainVaultId: "1234abcd", openAIApiKey: "plaintext-disk-key" },
         jest.fn().mockResolvedValue(undefined),
         jest.fn().mockResolvedValue({
@@ -333,6 +343,7 @@ describe("settingsPersistence", () => {
         }),
       });
       await module.loadSettingsWithKeychain(
+        APP,
         { _keychainVaultId: "1234abcd", openAIApiKey: "plaintext-disk-key" },
         jest.fn().mockResolvedValue(undefined),
         jest.fn().mockResolvedValue({ status: "failed", error: new Error("read-only") })
@@ -352,6 +363,7 @@ describe("settingsPersistence", () => {
     it("rejects a durable transaction while the hold is active", async () => {
       const { module } = await loadModule();
       await module.loadSettingsWithKeychain(
+        APP,
         { _keychainVaultId: "1234abcd", openAIApiKey: "plaintext-disk-key" },
         jest.fn().mockResolvedValue(undefined),
         jest.fn().mockResolvedValue({ status: "failed", error: new Error("read-only") })
@@ -370,6 +382,7 @@ describe("settingsPersistence", () => {
     it("resumes writing once a dedicated flow has stripped data.json", async () => {
       const { module } = await loadModule();
       await module.loadSettingsWithKeychain(
+        APP,
         { _keychainVaultId: "1234abcd", openAIApiKey: "plaintext-disk-key" },
         jest.fn().mockResolvedValue(undefined),
         jest.fn().mockResolvedValue({ status: "failed", error: new Error("read-only") })

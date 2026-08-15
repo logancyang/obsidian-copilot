@@ -1,51 +1,81 @@
-# AGENTS.md Examples Worth Studying
+# `AGENTS.md` Examples for Copilot V4
 
-A shortlist of popular personal `AGENTS.md` files to use as references when writing your own. This is a personal-first list — global/user-level files, public "agent operating systems," and configurations that expose the author's real preferences — plus a specific sub-set aimed at personal knowledge base (PKM) / "second brain" management, since that's a distinct and increasingly common use of AGENTS.md. A few entries are product repositories, but they are still useful because they turn their creator's operating model into a reusable agent protocol.
+`AGENTS.md` holds instructions that Agent should keep following. Write shared vault rules once at the vault root; Copilot makes them available to **opencode**, **Claude**, and **Codex**. An Agent project can add a second `AGENTS.md` in its project folder, and those more specific rules win when the two files conflict.
 
-**Popularity signal:** GitHub stars/forks and X likes are capture-time snapshots from 2026-08-08 UTC, not a quality score. Stars and X likes aren't directly comparable to each other, and a gist's stars aren't directly comparable to a repo's stars either — treat the "Popularity Signal" column as a rough indicator per row, not a strict cross-category ranking. A few small PKM examples are included despite low star counts because they show unusually crisp, on-point policy for this specific use case.
+Start small. A useful file describes how _your_ vault works, not everything an AI might ever need to know.
 
-**Rule of thumb:** borrow clauses and structure, not an entire file. Paths, tool names, work identities, and escalation rules are only good when they are true for your environment.
+## Starter `AGENTS.md` for an Obsidian vault
 
-| #   | Example                                                                                                                                         | Category       | What Is Worth Borrowing                                                                                                                                                                                                                                                                                                                                                                    | Popularity Signal                                                                                                           |
-| --- | ----------------------------------------------------------------------------------------------------------------------------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
-| 1   | [Garry Tan - gstack `AGENTS.md`](https://raw.githubusercontent.com/garrytan/gstack/main/AGENTS.md)                                              | General        | Treats AGENTS.md as a router into composable roles and skills: CEO/design/engineering/QA/release reviews, browser workflows, memory, and safety scopes. The key idea is to keep recurring workflows in skills instead of bloating the global file.                                                                                                                                         | 126,820 GitHub stars.                                                                                                       |
-| 2   | [Garry Tan - GBrain `AGENTS.md`](https://raw.githubusercontent.com/garrytan/gbrain/master/AGENTS.md)                                            | General        | A protocol file rather than a giant prompt: explicit read order, a mandatory user decision for a material cost choice, a trust boundary between local and remote callers, privacy guidance, and a concrete verification path. Study this when agents need to operate a persistent personal knowledge system safely.                                                                        | 27,967 GitHub stars.                                                                                                        |
-| 3   | [AgriciDaniel - `claude-obsidian`](https://github.com/AgriciDaniel/claude-obsidian/blob/main/AGENTS.md)                                         | PKM            | The most popular concrete build-out of Karpathy's LLM Wiki pattern: a self-organizing AI "second brain" for Obsidian + Claude Code.                                                                                                                                                                                                                                                        | 10,562 GitHub stars, 1,222 forks. Created 2026-04-07.                                                                       |
-| 4   | [Peter Steinberger - `agent-scripts/AGENTS.MD`](https://raw.githubusercontent.com/steipete/agent-scripts/main/AGENTS.MD)                        | General        | A remarkably concrete staff-agent profile: communication voice, what "ship" means, skills as workflow owners, privacy/external-disclosure boundaries, review/CI rules, and identity-aware Git operations. Great reference for turning unwritten operator norms into explicit clauses.                                                                                                      | 6,513 GitHub stars.                                                                                                         |
-| 5   | [Andrej Karpathy - "LLM Wiki" gist](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)                                          | PKM            | The originating pattern, not a repo: a three-layer architecture — raw sources, an LLM-maintained wiki of interlinked markdown pages, and a schema/config file (`CLAUDE.md` for Claude Code, `AGENTS.md` for Codex) that defines merge/update/retirement rules and turns a generic coding agent into a disciplined wiki maintainer. Explicitly framed as an alternative to traditional RAG. | 5,000+ stars and 5,000+ forks on the gist (not directly comparable to repo stars).                                          |
-| 6   | [Jessie Frazelle - `.codex/AGENTS.md`](https://raw.githubusercontent.com/jessfraz/dotfiles/main/.codex/AGENTS.md)                               | General        | The maximalist personal operating manual: outcome-first mindset, scoped autonomy, tool routing, adversarial review, test philosophy, language-specific rules, and a real handoff standard. Borrow the sectioning and clarity, not the machine-specific details.                                                                                                                            | 3,559 GitHub stars.                                                                                                         |
-| 7   | [Ar9av - `obsidian-wiki`](https://github.com/Ar9av/obsidian-wiki/blob/main/AGENTS.md)                                                           | PKM            | A skill-routing framework: AGENTS.md maps 37+ distinct user intents (`wiki-setup`, `wiki-ingest`, `wiki-query`, `wiki-narrate`, `wiki-lint`, multi-vault routing, etc.) to execution skill modules for building and maintaining an Obsidian-based personal knowledge base. Good reference for turning a PKM AGENTS.md into a real dispatcher instead of one long prompt.                   | 3,148 GitHub stars, 320 forks.                                                                                              |
-| 8   | [tairov - `awesome-agents.md`, "Obsidian Ops Team"](https://github.com/tairov/awesome-agents.md)                                                | PKM (adjacent) | Not a dedicated PKM project — a curated agent list that happens to contain seven specialized vault-management agents (Connection Agent, Content Curator, Metadata Agent, MOC Agent, Review Agent, Tag Agent, Vault Optimizer). Useful as a template for splitting PKM responsibilities across narrow agents rather than one monolithic file.                                               | ~3.1k GitHub stars for the whole list (the Obsidian section is a small part of a much broader, general-purpose collection). |
-| 9   | [Dicklesworthstone - Agentic Coding Flywheel](https://raw.githubusercontent.com/Dicklesworthstone/agentic_coding_flywheel_setup/main/AGENTS.md) | General        | The strongest safety-first counterexample: explicit user override, no deletion without written permission, a ban on dangerous commands, reversible alternatives, and documented confirmation. Intentionally forceful, but worth reading for how to specify a real safety boundary rather than a vague preference.                                                                          | 1,582 GitHub stars.                                                                                                         |
-| 10  | [Daniel Mulroy - Pi agent workspace](https://raw.githubusercontent.com/dmmulroy/.dotfiles/main/home/.pi/AGENTS.md)                              | General        | A strong "map, don't narrate" pattern: a concise system diagram, a where-to-look table, conventions, anti-patterns, and sensitive-information boundaries. Ideal for making a personal agent environment navigable without stuffing implementation detail into every prompt.                                                                                                                | 815 GitHub stars.                                                                                                           |
-| 11  | [Denys Dovhan - global agent instructions](https://raw.githubusercontent.com/denysdovhan/dotfiles/master/home/.config/agents/AGENTS.md)         | General        | The best example of an AGENTS.md expressing a human interface preference, not just code style. It asks for concrete next actions, visible progress, capped lists, explicit estimates, focus protection, and a matter-of-fact error tone to accommodate ADHD.                                                                                                                               | 480 GitHub stars.                                                                                                           |
-| 12  | [Vaibhav (VB) Srivastav - compact personal AGENTS.md](https://x.com/reach_vb/status/2085832585025098101)                                        | General        | A nine-bullet executive constitution: be concise and candid, use authoritative sources, preserve constraints, finish and verify work, use skills deliberately, and ask only when a decision is materially ambiguous or risky. A strong model for a short global core.                                                                                                                      | 433 X likes on the shared post (different metric than GitHub stars).                                                        |
+Copy this to the root of your vault, then change it to match your habits:
 
-## Patterns That Repeat Across the Strongest Files
+```markdown
+# Vault instructions
 
-1. **Outcome and evidence first.** The useful files define what "done" looks like and require real validation rather than a plausible narrative.
-2. **Encode authorization boundaries precisely.** "Ask before risky external actions" is much more useful than "be careful."
-3. **Use the file as a router.** Put stable defaults and navigation in AGENTS.md; put long workflows, tool recipes, and specialized expertise in skills or linked documents.
-4. **Make it recognizably yours.** The file should encode how you actually want to work, not generic "best practices."
-5. **PKM files add a fourth layer: a wiki schema.** Karpathy's gist and `claude-obsidian` define merge/update/retirement rules for a persistent knowledge base — the same "protocol, not prompt" idea as GBrain, applied specifically to note-taking rather than code.
+## Working style
 
-## A Good Starting Shape for a Personal AGENTS.md
+- Lead with the result, then explain only what helps me act on it.
+- If a request is ambiguous in a way that changes the outcome, ask before proceeding.
+- Use available skills for repeatable workflows instead of improvising the process.
 
-Instead of copying any one file, assemble six compact layers:
+## Notes
 
-1. **Communication:** outcome first, desired level of detail, language, formatting, and how to surface uncertainty.
-2. **Autonomy:** what is authorized by an explicit request, what needs approval, and how to resolve ordinary ambiguity.
-3. **Evidence:** when to use primary/current sources, how to label unverified conclusions, and what verification is expected.
-4. **Safety:** secrets, destructive actions, production/external writes, identity boundaries, and protected files.
-5. **Quality loop:** minimal-scope changes, test/review expectations, and an honest final handoff.
-6. **Routing:** where skills, project instructions, and personal memory live — plus the local-over-global precedence rule.
+- Treat this vault as a knowledge base, not a software repository.
+- Read a note before making claims about its contents.
+- Preserve existing frontmatter, wikilinks, embeds, and formatting unless I ask for changes.
+- Use `[[Note Title]]` for links between notes.
+- Make the smallest change that completes the request.
 
-For a first pass, aim for 20-50 durable rules rather than a giant document. Add a rule only after it prevents a recurring failure or captures a real preference; prune rules that merely restate generic advice.
+## Safety and completion
 
-## Suggested Reading Order
+- Ask before deleting notes, moving many files, or publishing anything outside the vault.
+- Never place passwords, API keys, or private note content in external services without permission.
+- When finished, name the notes you changed and mention anything you could not verify.
+```
 
-- **Want a compact personal core:** Vaibhav.
-- **Want a full personal agent operating system:** Jessie Frazelle and Peter Steinberger.
-- **Want a serious safety/evidence boundary:** GBrain and Dicklesworthstone.
-- **Want skills and durable agent context to scale:** GStack and Daniel Mulroy.
-- **Want a PKM/second-brain agent specifically:** Karpathy's LLM Wiki gist first (the pattern), then `claude-obsidian` and `obsidian-wiki` (concrete implementations).
+Start a new Agent chat after editing `AGENTS.md` so every backend reads the latest version.
+
+## Patterns worth adding
+
+Add only patterns that describe real, recurring preferences:
+
+- **Organization:** where meeting notes, sources, drafts, and finished work belong.
+- **Naming:** date formats, title conventions, tags, and required properties.
+- **Evidence:** when the agent must read source notes, search the vault, or verify current facts.
+- **Boundaries:** which edits are routine and which actions require confirmation.
+- **Definition of done:** checks to run and what the final handoff should report.
+- **Routing:** which repeatable jobs belong to a [Skill](agent-mode-and-tools.md#skills-shared-across-agents).
+
+For a project, keep the override short. For example:
+
+```markdown
+# Project instructions
+
+- Write deliverables to `outputs/`.
+- Use a concise, client-ready tone.
+- Cite the project sources used for factual claims.
+- Do not modify source notes unless I ask.
+```
+
+## External examples worth studying
+
+- [Andrej Karpathy's LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) — borrow its separation of raw sources, maintained knowledge, and update rules.
+- [GBrain `AGENTS.md`](https://raw.githubusercontent.com/garrytan/gbrain/master/AGENTS.md) — study its read order, privacy boundary, and explicit user decisions.
+- [gstack `AGENTS.md`](https://raw.githubusercontent.com/garrytan/gstack/main/AGENTS.md) — notice how the file routes substantial workflows into skills instead of containing every procedure.
+- [`claude-obsidian` `AGENTS.md`](https://github.com/AgriciDaniel/claude-obsidian/blob/main/AGENTS.md) — a concrete example of conventions for an AI-maintained Obsidian knowledge base.
+- [Daniel Mulroy's Pi workspace](https://raw.githubusercontent.com/dmmulroy/.dotfiles/main/home/.pi/AGENTS.md) — borrow its compact map of where to look, what to avoid, and how to handle sensitive information.
+
+## What not to copy blindly
+
+- Another person's folder paths, tool names, account identity, or publishing workflow.
+- Broad permission or deletion rules you would not want applied to your own vault.
+- Long step-by-step procedures that should be a skill.
+- Coding, test, and release rules when the scope is ordinary note work.
+- Secrets or private information. Agents can read `AGENTS.md`; treat it as normal vault content.
+
+Review the file occasionally. Keep rules that prevent a recurring mistake or express a real preference, and remove generic advice that does not change the agent's behavior.
+
+## Related
+
+- [Instructions in Copilot V4](system-prompts.md)
+- [Agents in Copilot V4](agent-mode-and-tools.md)
+- [Projects](projects.md)

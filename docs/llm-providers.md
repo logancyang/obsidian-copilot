@@ -1,192 +1,123 @@
 # LLM Providers
 
-Copilot includes 16 built-in AI providers, and you can add an unlimited number of additional models as long as they are OpenAI-compatible. You can use cloud-based services that require API keys, or run models locally on your own machine. This guide explains how to set up each provider.
+Copilot V4 can get models from a Copilot license, your own provider key, or an
+agent you already use. These options are separate: adding a key does not change
+the models supplied by Claude Code or Codex.
 
----
+## Choose a Model Source
 
-## How to Set API Keys
+| Model source                        | Quick Chat | Agent                                      |
+| ----------------------------------- | ---------- | ------------------------------------------ |
+| **Copilot-hosted models**           | Yes        | opencode                                   |
+| **Your API key or endpoint (BYOK)** | Yes        | opencode, when the provider is shown there |
+| **Models reported by opencode**     | No         | opencode                                   |
+| **Claude Code account**             | No         | Claude                                     |
+| **Codex account**                   | No         | Codex                                      |
 
-1. Go to **Settings → Copilot → Models (BYOK)**
-2. Add a provider
-3. Enter the provider API key and select the models you want to configure
-4. Click Save
-5. Enable models for chat under **Basic → Agents → Quick Chat models**
+Models reported by opencode are routed to their backing provider. Free
+opencode Zen models show a warning because that provider may log or train on
+prompts; review its terms before sending sensitive content.
 
-You can configure multiple providers simultaneously and switch between them by changing the default model.
+## Copilot-Hosted Models
 
-Copilot stores provider credentials in this device's Obsidian Keychain. Synced vault settings do not transfer credentials to another device, so enter the required keys separately on each device.
+An eligible Copilot license can include a curated set of hosted models. You do
+not need an API key from an AI provider. Enter your license under **Settings →
+Copilot → Basic → Copilot License**, then click **Apply**.
 
----
+Licensed models can appear in both places:
 
-## Cloud Providers
+- **Basic → Agents → Quick Chat** for regular Copilot chat.
+- **Basic → Agents → opencode** for Agent.
 
-### OpenRouter (Default)
+They do not appear under Claude or Codex, because those agents use their own
+accounts and models. The available Copilot lineup changes over time, so use the
+model lists in settings as the source of truth.
 
-OpenRouter is a gateway that provides access to hundreds of models from many providers through a single API key.
+Copilot-hosted models are cloud services, not local models. Brevilabs's backend
+and its vetted enterprise model providers process the full request. Copilot's
+privacy policy says request content is processed transiently, not retained, and
+not used for training. See the
+[privacy policy](https://www.obsidiancopilot.com/en/privacy) for details.
 
-- **Get a key**: https://openrouter.ai/keys
-- **Default model**: OpenRouter Gemini 2.5 Flash
-- **Why use it**: One key, many models. Good starting point.
-- **Setting key**: `openRouterAiApiKey`
+## Bring Your Own Key (BYOK)
 
-### OpenAI
+BYOK lets you connect Copilot directly to an AI provider, a compatible gateway,
+or a model server on your computer. For cloud providers, usage and billing stay
+with that provider.
 
-Direct access to GPT-4.1, GPT-5, and other OpenAI models.
+1. Open **Settings → Copilot → BYOK**.
+2. Click **Add a provider**.
+3. Choose a provider, **Ollama**, **LM Studio**, or **Add a custom provider**.
+4. Enter the **API key** and **Base URL** when required.
+5. Select or enter at least one model, optionally click **Test**, then click
+   **Save**.
 
-- **Get a key**: https://platform.openai.com/api-keys
-- **Models include**: GPT-5.4, GPT-5 mini, GPT-5 nano, GPT-4.1, GPT-4.1 mini, GPT-4.1 nano, o4-mini (reasoning)
-- **Setting key**: `openAIApiKey`
+The provider list and model catalog are loaded in the app, so this guide does
+not keep a fixed provider or model count. If the endpoint cannot list its
+models, you can enter a model ID yourself.
 
-### Anthropic
+New chat models are enabled for Quick Chat and opencode by default. You can
+curate each list independently:
 
-Access to Claude models (Opus, Sonnet, etc.).
+- **Basic → Agents → Quick Chat** controls **Quick Chat models** and its
+  **Default model**.
+- **Basic → Agents → opencode** controls the models opencode can use and its
+  **Default model**.
 
-- **Get a key**: https://console.anthropic.com/settings/keys
-- **Models include**: claude-opus-4-6, claude-sonnet-4-5
-- **Setting key**: `anthropicApiKey`
+For enabled, routable models, Copilot passes the saved key and any custom
+endpoint override to opencode when it starts. A model that opencode cannot route
+is left out of the opencode list, but may still work in Quick Chat.
 
-### Google Gemini
+### Local and Custom Endpoints
 
-Access to Google's Gemini family of models.
+Inside **BYOK → Add a provider**, choose **Ollama** or **LM Studio** from the
+**Self Host** group to use their local OpenAI-compatible servers. This does not
+require a Self-Host license. Their API key is optional, and Copilot fills in the
+usual local URL:
 
-- **Get a key**: https://makersuite.google.com/app/apikey
-- **Models include**: gemini-2.5-pro, gemini-2.5-flash, gemini-3.5-flash, gemini-3.1-pro-preview
-- **Setting key**: `googleApiKey`
+- Ollama: `http://localhost:11434/v1`
+- LM Studio: `http://localhost:1234/v1`
 
-### XAI / Grok
+Start the local server before testing the provider. For another compatible
+service or proxy, choose **Add a custom provider** and supply its API key, base
+URL, and model ID.
 
-Access to Grok models from xAI.
+If **Test** succeeds but Quick Chat cannot send a message, edit the provider
+and turn on **Enable CORS**. Responses then appear after completion instead of
+streaming token by token. For LM Studio, you can enable CORS in LM Studio to
+keep streaming instead.
 
-- **Get a key**: https://console.x.ai
-- **Models include**: grok-4-1-fast
-- **Setting key**: `xaiApiKey`
+## Claude Code and Codex Accounts
 
-### Groq
+Claude and Codex are Agent backends, not BYOK providers:
 
-Groq provides very fast inference for open-source models.
+- **Claude** inherits authentication and models from the Claude Code CLI. Its
+  usage follows your Claude Code account or CLI environment.
+- **Codex** inherits authentication and models from the Codex CLI through the
+  Codex ACP adapter. Its usage follows your OpenAI account or ChatGPT plan.
 
-- **Get a key**: https://console.groq.com/keys
-- **Models include**: llama3-8b-8192 (and others)
-- **Setting key**: `groqApiKey`
+Copilot discovers the models reported by each agent and lets you enable them
+under **Basic → Agents → Claude** or **Basic → Agents → Codex**. Those models
+stay inside their respective agents; they do not become Quick Chat or opencode
+models.
 
-### Mistral
+An OpenAI API key is different from a ChatGPT subscription, just as an
+Anthropic API key is different from a Claude Code subscription. Use **BYOK** for
+API access and the matching agent setup for subscription access.
 
-Access to Mistral AI's models.
+## Where Keys Are Stored
 
-- **Get a key**: https://console.mistral.ai/api-keys
-- **Models include**: mistral-tiny-latest (and others)
-- **Setting key**: `mistralApiKey`
+Copilot stores provider API keys and the Copilot license key in this device's
+**Obsidian Keychain**, not in the vault's `data.json`. The Keychain is
+device-specific, so syncing a vault does not copy its credentials to another
+computer.
 
-### DeepSeek
-
-Access to DeepSeek's chat and reasoning models.
-
-- **Get a key**: https://platform.deepseek.com/api-keys
-- **Models include**: deepseek-chat, deepseek-reasoner
-- **Setting key**: `deepseekApiKey`
-
-### Cohere
-
-Access to Cohere's Command models.
-
-- **Get a key**: https://dashboard.cohere.ai/api-keys
-- **Models include**: command-r
-- **Setting key**: `cohereApiKey`
-
-### SiliconFlow
-
-A Chinese AI cloud platform with access to DeepSeek and Qwen models.
-
-- **Get a key**: https://cloud.siliconflow.com/me/account/ak
-- **Models include**: DeepSeek-V3, DeepSeek-R1 (via SiliconFlow)
-- **Setting key**: `siliconflowApiKey`
-
-### Azure OpenAI
-
-Access to OpenAI models deployed on Microsoft Azure. Requires four fields to be configured:
-
-| Setting         | Description                |
-| --------------- | -------------------------- |
-| API Key         | Your Azure OpenAI key      |
-| Instance Name   | Your Azure resource name   |
-| Deployment Name | Your model deployment name |
-| API Version     | e.g., `2024-02-01`         |
-
-- **Note**: Unlike other providers, Azure OpenAI uses your own Azure deployment
-- **Embedding**: Can also use Azure for embeddings (separate deployment name required)
-
-### Amazon Bedrock
-
-Access to models hosted on AWS Bedrock.
-
-- **Get credentials**: https://console.aws.amazon.com/iam/home#/security_credentials
-- **Required fields**: Access Key ID (API key), Region
-- **Setting key**: `amazonBedrockApiKey`
-
-**Important**: Always use cross-region inference profile IDs, not bare model IDs. For example:
-
-- Use: `us.anthropic.claude-sonnet-4-5-20250929-v1:0`
-- Not: `anthropic.claude-sonnet-4-5-20250929-v1:0`
-
-Cross-region profiles (with the `us.`, `eu.`, `apac.`, or `global.` prefix) are more reliable and available across regions.
-
-### GitHub Copilot
-
-Use your existing GitHub Copilot subscription to access AI models.
-
-- **OAuth flow**: Click **Connect GitHub Copilot** in the API key dialog
-- **No separate API key needed** — authenticates via GitHub OAuth
-- **Requires**: Active GitHub Copilot subscription
-
----
-
-## Local Model Providers
-
-Local providers run models on your own computer. No API key or internet connection needed once set up.
-
-### Ollama
-
-Runs open-source models locally on your machine.
-
-- **Default port**: 11434
-- **URL**: `http://localhost:11434/v1/`
-- **Setup**: Install Ollama (ollama.ai), pull a model, then add it in Copilot's Model settings
-- **No API key required**
-
-### LM Studio
-
-A desktop app for running local models with a GUI.
-
-- **Default port**: 1234
-- **URL**: `http://localhost:1234/v1`
-- **Setup**: Install LM Studio, load a model, go to the Developer tab, enable CORS for streaming, click "Start Server", then add the model in Copilot. If server-side CORS is unavailable, turn on **Enable CORS** in the Copilot provider settings instead.
-- **No API key required**
-
-### 3rd Party (OpenAI-Format)
-
-For any API that follows the OpenAI API format. Useful for custom deployments, proxies, or other local inference servers (vLLM, LiteLLM, etc.).
-
-- **Requires**: Base URL and optionally an API key
-- **Use when**: Your provider isn't in the list but speaks OpenAI-format
-
-> **CORS compatibility**: If the connection test succeeds but Quick Chat cannot send a message, edit the provider and turn on **Enable CORS**. This uses Obsidian's CORS-free network path, which waits for the complete response instead of streaming it token by token.
-
----
-
-## Provider-Specific Gotchas
-
-| Provider       | Common Issue                        | Fix                                                                                    |
-| -------------- | ----------------------------------- | -------------------------------------------------------------------------------------- |
-| Azure OpenAI   | Missing one of four required fields | Check all four settings: key, instance name, deployment name, API version              |
-| Amazon Bedrock | Rate limit or model not found       | Use cross-region inference profile IDs with `us.`, `eu.`, `apac.`, or `global.` prefix |
-| GitHub Copilot | Token expired                       | Re-authenticate via the OAuth button in API key dialog                                 |
-| Ollama         | Connection refused                  | Make sure Ollama is running (`ollama serve`) and the port is correct                   |
-| Google Gemini  | Quota exceeded                      | Use a different model or check your quota at console.cloud.google.com                  |
-| DeepSeek       | Streaming errors                    | Try disabling streaming in the per-session settings if you encounter issues            |
-
----
+To remove stored credentials, open **Settings → Copilot → Advanced → API Key
+Storage** and click **Delete All Keys**.
 
 ## Related
 
-- [Models](models-and-parameters.md) — Enable, disable, and configure models
-- [Getting Started](getting-started.md) — First-time setup
+- [Getting Started](getting-started.md) — Set up your first chat or agent
+- [Agents in Copilot V4](agent-mode-and-tools.md) — Install opencode, Claude, or Codex
+- [Models](models-and-parameters.md) — Enable models and choose defaults
+- [Paid Plans and Self-Host](copilot-plus-and-self-host.md) — Licensing and included models

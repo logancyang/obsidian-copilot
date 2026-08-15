@@ -1,69 +1,84 @@
-# Models
+# Models in Copilot V4
 
-This guide explains which chat models Copilot ships with, how to add your own,
-and how to choose the one new chats start on.
+Copilot keeps a separate model list for each experience. A model can be
+available in Copilot without appearing in every picker: you choose where it is
+enabled, then choose the default for new chats.
 
----
+## Where Models Come From
 
-## Chat Models
+| Model source                            | Where you can use it                                              |
+| --------------------------------------- | ----------------------------------------------------------------- |
+| Copilot-hosted models from your license | Quick Chat and **opencode**                                       |
+| Your API key or endpoint (BYOK)         | Quick Chat and **opencode**, when opencode supports that provider |
+| Models reported by opencode             | **opencode** only                                                 |
+| Models reported by Claude Code          | **Claude** only                                                   |
+| Models reported by Codex                | **Codex** only                                                    |
 
-### Built-In Models
+The available lineups can change, so the lists in Copilot are the source of
+truth. See [LLM Providers](llm-providers.md) to activate a Copilot license, add
+a BYOK provider, or connect an agent account.
 
-Copilot ships with a starter set of models for every provider it supports, so a
-provider's models are ready to enable the moment you add its API key. Which
-models those are changes with each release as providers ship new ones, so the
-live list lives in the app rather than here: **Settings → Copilot → Models
-(BYOK)** shows what is available for each provider you have added, and **Import
-models from provider** fetches anything newer than the shipped set.
+## Enable Models and Choose Defaults
 
-Providers covered out of the box: OpenAI, Anthropic, Google, xAI, DeepSeek,
-OpenRouter, and SiliconFlow — each needs your own API key. The Copilot models
-need no key of your own; see
-[Models included with your license](copilot-plus-and-self-host.md#models-included-with-your-license).
+Open **Settings → Copilot → Basic → Agents**.
 
-### Model Capability Badges
+1. Set **Default backend** to the agent you want when a new Agent session opens.
+2. Select **opencode**, **Claude**, **Codex**, or **Quick Chat**.
+3. Turn on the models you want shown in that experience's model picker.
+4. Choose **Default model**. For an agent, **Agent default** leaves the choice
+   to that agent.
+5. If the selected agent model supports it, choose **Default effort**. The
+   available effort levels come from the agent and model, so they vary.
 
-Models may show capability badges:
+The four lists are independent:
 
-- **Reasoning** — Extended internal thinking before responding; better for complex tasks
-- **Vision** — Can process images (e.g., screenshots, diagrams embedded in notes)
-- **Web Search** — Can access the internet directly (model-native feature)
+- **opencode** can combine Copilot-hosted models, compatible BYOK models, and
+  models reported by opencode.
+- **Claude** and **Codex** show only models reported by their installed tools.
+  Their CLI accounts own access and billing; BYOK models are not added to these
+  lists.
+- **Quick Chat models** contains Copilot-hosted and BYOK chat models. Agent-owned
+  models do not appear here.
 
-### Managing Models
+New BYOK chat models start enabled for both Quick Chat and opencode. You can
+turn either copy off without affecting the other. Models newly reported by an
+agent may also appear switched off until you enable them.
 
-Go to **Settings → Copilot → Models (BYOK)** to add or edit providers and choose the models
-available from each provider. Then go to **Settings → Copilot → Basic → Agents → Quick Chat
-models** to
-control which configured models appear in chat model selectors.
+## Choose a Model While Chatting
 
-### Adding Custom Models
+In **Agent**, the model picker is grouped by agent. Before the first message in
+an empty session, choosing a model from another installed agent switches that
+session to the other agent. After the conversation has started, the picker
+stays with the current agent.
 
-If your provider offers a model that isn't in the built-in list, you can add it manually:
+A model or effort picked beside the message box applies to that chat; it does
+not replace the saved **Default model** or **Default effort**. Saved agent
+defaults are used for new chats and multi-agent answers. Changes to an explicit
+default apply to open chats on their next turn; choosing **Agent default**
+leaves open chats unchanged.
 
-1. Go to **Settings → Copilot → Models (BYOK)**
-2. Add a provider or custom OpenAI-compatible endpoint
-3. Enter the API key and base URL when required
-4. Select or enter the models exposed by that provider
-5. Save
+In **Quick Chat**, the picker shows only enabled **Quick Chat models**. Its
+**Default model** is the model new Quick Chat conversations start with.
 
-### Importing Models from Provider
+## Model, Effort, and Mode
 
-You can automatically import the full list of available models from a provider:
+| Experience     | Choices available now                                                                                                                                                                                                                      |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **opencode**   | Model; effort when the model reports it; **Default** or **Auto** mode. Plan is not available.                                                                                                                                              |
+| **Claude**     | Model; effort when supported; **Default**, **Plan**, and **Auto** modes. **Auto mode permissions** controls what Auto may approve. **Show extended thinking** controls whether reasoning blocks are displayed; it is separate from effort. |
+| **Codex**      | Model; effort when reported; whichever of **Default**, **Plan**, and **Auto** the installed adapter supports.                                                                                                                              |
+| **Quick Chat** | Model only. Agent effort and operating modes do not apply.                                                                                                                                                                                 |
 
-1. Go to **Settings → Copilot → Models (BYOK)**
-2. Add or edit a provider
-3. Copilot will fetch the provider's model list so you can select models to configure
+**Default** uses the agent's normal approval behavior, **Plan** prepares a plan
+before editing, and **Auto** uses the selected agent's automatic permission
+behavior.
 
-## Default Model Selection
-
-Your **default model** is the one Copilot uses when you open a new chat. Set it in:
-**Settings → Copilot → Basic → Agents → Quick Chat → Default model**
-
-The dropdown contains models enabled under **Quick Chat models**, in that same panel.
-
----
+Copilot V4 does not currently expose per-model temperature, max tokens, top-p,
+or similar tuning in these model lists. In Quick Chat, **Chat Settings** controls
+the session system prompt; it does not add Agent effort or mode controls.
 
 ## Related
 
-- [LLM Providers](llm-providers.md) — Set up API keys for your provider
-- [Paid Plans and Self-Host](copilot-plus-and-self-host.md) — The models included with a license
+- [LLM Providers](llm-providers.md) — Set up Copilot-hosted, BYOK, Claude, and Codex access
+- [Agents in Copilot V4](agent-mode-and-tools.md) — Install agents and understand permissions
+- [Paid Plans and Self-Host](copilot-plus-and-self-host.md) — License features and hosted models

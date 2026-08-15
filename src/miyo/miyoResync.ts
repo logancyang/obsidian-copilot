@@ -290,12 +290,13 @@ function withLookupTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
  * nothing about the record the receipt actually describes.
  */
 function receiptMatchesIdentity(
+  app: App,
   receipt: MiyoSyncReceipt,
   settings: { miyoServerUrl?: string },
   folderName: string
 ): boolean {
   return (
-    receipt.device === getDeviceId() &&
+    receipt.device === getDeviceId(app) &&
     receipt.url === (settings.miyoServerUrl || "").trim() &&
     receipt.folder === folderName
   );
@@ -500,7 +501,7 @@ async function runVerify(app: App, lifecycle: number): Promise<MiyoScopeVerifica
         // it would sync out and destroy whatever evidence it holds elsewhere.
         return "unregistered";
       }
-      if (receiptMatchesIdentity(receipt, settings, folderName)) {
+      if (receiptMatchesIdentity(app, receipt, settings, folderName)) {
         commitReceipt(lifecycle, "");
         return "unregistered";
       }
@@ -509,7 +510,7 @@ async function runVerify(app: App, lifecycle: number): Promise<MiyoScopeVerifica
       // A read-only probe settles it: still registered → keep the receipt as
       // the cleanup lead and surface the prompt; confirmed gone (the user
       // cleaned it up in Miyo) → consume the receipt so the banner can end.
-      if (receipt.device === getDeviceId() && receipt.url === getMiyoCustomUrl(settings)) {
+      if (receipt.device === getDeviceId(app) && receipt.url === getMiyoCustomUrl(settings)) {
         const oldName = await withLookupTimeout(
           client.checkFolderRegistration(receipt.folder, customUrl),
           "previous-name check"
@@ -650,7 +651,7 @@ async function runResync(app: App, lifecycle: number): Promise<MiyoResyncOutcome
       const staleReceipt = parseMiyoSyncReceipt(settings.miyoSyncedExclusions);
       if (
         staleReceipt &&
-        staleReceipt.device === getDeviceId() &&
+        staleReceipt.device === getDeviceId(app) &&
         staleReceipt.url === getMiyoCustomUrl(settings)
       ) {
         if (staleReceipt.folder !== folderName) {

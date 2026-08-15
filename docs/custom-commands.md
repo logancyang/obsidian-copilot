@@ -1,160 +1,87 @@
-# Custom Commands
+# Copilot Commands and Quick Ask
 
-Custom commands are preset AI prompts you define once and reuse on any note or selected text. They're stored as markdown files in your vault and can be triggered from the right-click context menu, the command palette, or as slash commands in chat.
+Copilot commands are prompts you save once and reuse. They are best for repeatable jobs such as fixing grammar, summarizing a note, or rewriting selected text.
 
----
+For a fast question or rewrite while you are editing, use **Quick Ask** instead.
 
-## Overview
+## Commands or skills?
 
-A custom command is like a template prompt. You write an instruction (with optional variables) and save it. From then on, you can apply it to any note or selected text with a single click.
+Commands and skills can appear when you type `/`, but only Agent resolves slash invocations. Outside Agent, run saved commands from the editor or command palette. They serve different purposes:
 
-**Examples of what you might create:**
+| Use                 | Best for                                                                     | Managed in                       |
+| ------------------- | ---------------------------------------------------------------------------- | -------------------------------- |
+| **Copilot command** | A short, repeatable prompt with optional note variables                      | **Settings → Copilot → Command** |
+| **Skill**           | A reusable agent workflow that can include instructions and supporting files | **Settings → Copilot → Skills**  |
 
-- "Summarize this note in bullet points"
-- "Extract all action items as a task list"
-- "Rewrite this in a more formal tone"
-- "Translate to Spanish"
-- "Create a Fleeting Note from this"
+Skills can be shared with opencode, Claude, and Codex. Commands stay inside Copilot and also work from the editor and Obsidian command palette. If a command and skill have the same name, the skill takes the slash-menu spot.
 
----
+## Create a command
 
-## Creating a Custom Command
+1. Open **Settings → Copilot → Command**.
+2. Click **Add Cmd**.
+3. Enter a **Name** and **Prompt**.
+4. Optionally choose **Model (Optional)**, **Show in context menu**, and **Show in slash menu**.
+5. Click **Save**.
 
-### From Settings
+Choose **Inherit from chat model** when the command should use your current Quick Chat model. A command-specific model applies to editor and command-palette runs; a slash run in Agent uses the current Agent session.
 
-1. Go to **Settings → Copilot → Command**
-2. Click **Add new command**
-3. Fill in the fields:
-   - **Name** — What the command is called (also becomes its ID)
-   - **Prompt** — The instruction to send to the AI
-   - **Show in context menu** — Whether it appears when right-clicking text in a note
-   - **Model** — Optional: use a specific model for this command (defaults to the current chat model)
-4. Save
+Use **Generate Default** for a starter set. You can edit, duplicate, delete, or drag commands to reorder them. **Custom Prompts Sort Strategy** controls their order in the slash menu.
 
-### From the Command Palette
+### Add note context to a prompt
 
-You can also create a command on the fly:
+With **Custom Prompt Templating** enabled, these variables add vault context:
 
-1. Open the command palette (`Ctrl/Cmd+P`)
-2. Run **Add new custom command**
-3. A form will open to fill in the command details
+| Variable           | Adds                                                       |
+| ------------------ | ---------------------------------------------------------- |
+| `{}`               | Selected text, or the active note when nothing is selected |
+| `{activeNote}`     | The active note                                            |
+| `{[[Note Title]]}` | A specific note                                            |
+| `{Folder/Path}`    | Notes in a folder path                                     |
+| `{#tag1, #tag2}`   | Notes with any listed property tag                         |
 
----
+For example:
 
-## Prompt Template Variables
-
-Inside your prompt, you can use variables that get replaced with real content when the command runs:
-
-| Variable                  | What it inserts                               |
-| ------------------------- | --------------------------------------------- |
-| `{}` or `{selected_text}` | The text currently selected in the editor     |
-| `{activeNote}`            | The full content of the currently active note |
-| `{[[Note Title]]}`        | The content of a specific note by title       |
-| `{FolderPath}`            | All notes within a specific folder            |
-| `{#tag1, #tag2}`          | All notes with any of the specified tags      |
-
-> **Important**: Tags in `{#tag1, #tag2}` must be in the note's **properties (frontmatter)**, not inline tags within the note body.
-
-**Example — quiz generator using two variables:**
-
-```
-Come up with multiple choice questions using {activeNote}, and follow
-the format of {[[Quiz Template]]} to start a quiz session.
-
-Ask one question at a time, stop and wait for the user.
-After the user answers, provide the correct answer and explanation.
-Repeat until the user says STOP.
+```text
+Rewrite {} as a concise project update. Match the style of {[[Writing Guide]]}.
 ```
 
-**Example — comparison using specific notes:**
+Tags must be in note properties, not only written inline in the note body. When you run a command from Agent, the agent resolves note, folder, and tag references with its vault tools.
 
-```
-Compare my notes on {[[Product Roadmap]]} and {[[Competitor Analysis]]} and identify gaps.
-```
+## Run a command
 
-**Example — acting on selected text:**
+- **From the editor:** select text if needed, then right-click and choose **Copilot → _command name_**. The command must have **Show in context menu** enabled.
+- **From the command palette:** run **Apply custom command**, then choose any command. Each saved command is also registered by name in the palette.
+- **From Agent:** type `/`, choose a command, add any extra instruction, and send. Choosing an item inserts it without sending, so you can review it first.
 
-```
-Rewrite this in a more formal tone: {selected_text}
-```
-
-Variable substitution must be enabled in **Settings → Copilot → Command → Enable custom prompt templating** (on by default).
-
----
-
-## Using Commands
-
-### From the Right-Click Context Menu
-
-If a command has **Show in context menu** enabled:
-
-1. Select some text in a note (optional)
-2. Right-click to open the context menu
-3. Hover over **Copilot** → select your command
-4. The AI processes your selection or note and shows the result
-
-### From the Command Palette
-
-1. Select text or open the note you want to work with
-2. Open the command palette (`Ctrl/Cmd+P`)
-3. Run **Apply custom command**
-4. Pick your command from the list
-
-### As a Slash Command in Chat
-
-Inside the chat input, type `/` followed by the command name to run it:
-
-```
-/summarize
-```
-
-The command runs in the context of your current chat session and active note.
-
-> **Note**: The `@composer` mention (for AI note editing) requires an active Copilot license. In free modes, `@composer` will not be available.
-
----
-
-## Managing Commands
-
-Go to **Settings → Copilot → Command** to manage all your custom commands:
-
-- **Edit** — Click the edit icon next to any command
-- **Reorder** — Drag commands to change their order (affects the context menu and command list)
-- **Duplicate** — Copy an existing command as a starting point
-- **Delete** — Remove a command permanently
-- **Generate Default** — Add Copilot's recommended starter commands when you want them
-- **Sort strategy** — Choose how commands are sorted: manually, by recent use, or alphabetically
-
-### Custom Prompts Folder
-
-Commands are stored as markdown files in your vault, in the `copilot-custom-prompts/` sub-folder of your Copilot folder (by default `copilot/copilot-custom-prompts/`). This location is derived from your Copilot folder — change the root in **Settings → Copilot → Basic → Copilot folder location** to change where new commands are saved. There is no separate custom-prompts folder setting anymore.
-
----
-
-## Quick Command
-
-**Quick Command** opens a modal where you can run a one-off AI prompt on your selected text without creating a permanent command.
-
-- **Trigger**: Command palette → **Trigger quick command**
-- **Assign a hotkey**: Settings → Hotkeys → search "Trigger quick command"
-- **Behavior**: Opens a prompt input, lets you choose a model and whether to include the note context, then runs the prompt on your selection
-
----
+Editor and command-palette runs open a result panel. You can refine the result, copy it, insert it at the cursor, or replace the original selection.
 
 ## Quick Ask
 
-**Quick Ask** is a floating inline panel that appears at the cursor position in your editor. It's designed for quick, in-context AI queries while you're writing.
+**Quick Ask** is the fastest inline flow for a question, explanation, or rewrite.
 
-- **Trigger**: Command palette → **Quick Ask** (or assign a hotkey, recommended: `Ctrl/Cmd+K`)
-- **Not available in Source Mode** — Works in Live Preview and Reading view
-- **How it works**: A small input appears right where your cursor is. Type your question, press Enter, and the response appears inline.
+1. Select text, or place the cursor where you are working.
+2. Run **Quick Ask** from the command palette, or choose **Copilot → Quick Ask** from the editor menu. You can assign a hotkey under **Obsidian Settings → Hotkeys**.
+3. Ask your question. Use the model picker if needed, and enable **Note** to include the full active note.
+4. Use **Copy to clipboard**, **Insert at cursor**, or **Replace selection** on the answer. You can continue with follow-up questions in the same panel.
 
-Quick Ask is great for things like "rephrase this sentence," "what does this term mean?", or "suggest three alternatives."
+Quick Ask uses a Quick Chat model configured through Copilot Plus or BYOK, not the model inside an Agent session. Its model and **Note** choices are remembered and shared with **Trigger quick command**.
 
----
+Quick Ask is unavailable in Source mode. **Replace selection** appears only when text was selected and stays available only while Copilot can safely identify the original text in the same note and editor pane.
+
+## Quick Command
+
+Run **Trigger quick command** when you want a one-off instruction for selected text without saving a command. A selection is required. The panel uses the same model and **Note** preference as Quick Ask and offers the same copy, insert, and replace actions.
+
+Quick Command is also unavailable in Source mode.
+
+## Where commands are stored
+
+Each command is a Markdown file in `<Copilot folder>/copilot-custom-prompts/`. The filename is the command name, and Copilot keeps file changes and the **Command** settings tab in sync. Change the root under **Settings → Copilot → Basic → Copilot folder location**.
+
+When upgrading from older command settings, Copilot migrates supported commands to these files. If a name cannot be migrated, Copilot keeps it under the `unsupported/` subfolder and shows a startup notice.
 
 ## Related
 
-- [Chat Interface](chat-interface.md) — Using slash commands in chat
-- [Context and Mentions](context-and-mentions.md) — How context is passed to commands
-- [Agent Mode and Tools](agent-mode-and-tools.md) — Use custom commands and agent skills in the dedicated desktop view
+- [Agents in Copilot V4](agent-mode-and-tools.md)
+- [Context and Mentions](context-and-mentions.md)
+- [Getting Started](getting-started.md)

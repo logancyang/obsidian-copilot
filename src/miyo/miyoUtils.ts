@@ -424,7 +424,7 @@ export function isCurrentVaultMiyoPath(app: App, miyoPath: string): boolean {
  */
 export function buildMiyoSyncReceipt(app: App, settings: CopilotSettings): string {
   return JSON.stringify({
-    device: getDeviceId(),
+    device: getDeviceId(app),
     url: getMiyoCustomUrl(settings),
     folder: getMiyoFolderName(app),
     roots: [...getSystemExcludedFolders(settings)].sort(),
