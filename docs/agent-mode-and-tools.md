@@ -1,171 +1,106 @@
-# Agent Mode and Tools
+# Agents in Copilot V4
 
-Agent Mode is Copilot's dedicated desktop workspace for tasks that need more than a single chat response. It connects Obsidian to a supported coding agent, which can inspect your vault, use its own tools and skills, and make changes with the permissions you choose.
+Copilot V4 puts an AI agent inside Obsidian. It can read and search your notes, run tools, and edit files while you follow its work in chat.
 
-A single-agent chat does **not** require a Copilot license. You need one supported agent and whatever account or model access that agent requires. A [paid Copilot plan](copilot-plus-and-self-host.md#agent-mode-with-a-copilot-license) can add multi-agent work and relay-backed skills.
+Choose the agent that matches the access you already have:
 
-Agent Mode is available in the desktop app, not on mobile.
+- **opencode** — recommended. Use Copilot-hosted, BYOK, or local models. Copilot can install opencode for you.
+- **Claude** — link an existing Claude Code installation and Anthropic account.
+- **Codex** — link Codex through its `codex-acp` adapter and use the Codex CLI's existing login.
 
----
+One-agent chat works without a Copilot license when you bring your own model access. Paid access can include Copilot-hosted models and cloud-backed tools. Multi-agent requires active Plus access; check your dashboard for the current entitlement.
 
-## Open Agent Mode
+## Get started
 
-- Click the **Agent** icon in the left ribbon.
-- Or run **Open Copilot Agent Chat Window** from the command palette.
+Open **Settings → Copilot → Basic → Agents**. Configure an agent below, then choose the **Default backend** for new sessions.
 
-Agent Mode is a separate view from [Quick Chat](chat-interface.md). The Chat, Vault QA, paid Quick Chat, and Projects workflows continue to work independently.
+### opencode (recommended)
 
-On first use, Agent Mode asks you to select and configure an agent:
+In the **opencode** tab:
 
-- **OpenCode** — recommended. Copilot can download and manage OpenCode for you, or use an existing installation.
-- **Claude** — uses Claude Code and your Anthropic sign-in.
-- **Codex** — uses Codex and your OpenAI sign-in.
+1. Click **Download opencode** to let Copilot install and manage it.
+2. If opencode is already installed, click **I already have it**. If detection fails, **Configure** appears; open it, choose **My own binary**, then auto-detect again or apply an absolute path.
+3. Choose a **Default model** and enable any other models you want in the picker.
 
-For an **Installed** agent, select it and choose **Start chat**. For an unconfigured agent or one marked **Update required** or **Error**, select it and choose **Configure** to open setup with recovery guidance. Your default changes only when you start a chat.
+Give opencode model access in either of these ways:
 
-After the chat starts, use the picker beside the message box to change the agent or model. Your draft message and attachments stay in place when you switch. **New Chat** starts with an empty message box.
+- **Copilot-hosted models:** add your license under **Basic → Copilot License**. Eligible models then appear without another API key.
+- **Your key or local model:** open **Settings → Copilot → BYOK**, click **Add a provider**, and configure its models. Keys are stored in the Obsidian Keychain. opencode supports configured cloud providers and OpenAI-compatible endpoints such as Ollama or LM Studio.
 
-### Configure OpenCode
+### Claude Code
 
-Open **Settings → Copilot → Basic → Agents → OpenCode**.
+Open **Basic → Agents → Claude → Configure**, then click **Auto-detect** or enter the absolute path to `claude`. Click **Sign in** if needed.
 
-- Choose **Download OpenCode** to let Copilot install and update an official release.
-- Choose **I already have it** to find an installation on your computer or enter its path.
+Copilot requires Claude Code 2.1.206 or newer and uses the CLI's existing login. Claude models come from Claude Code, not the BYOK tab.
 
-Looking at a different source in the setup dialog does not switch the active binary. The switch happens only when you install the managed copy or apply your own binary path.
+### Codex
 
-### Configure Claude or Codex
+Codex needs the Codex CLI and its ACP adapter:
 
-Install the corresponding command-line agent, sign in, then open **Settings → Copilot → Basic → Agents** and configure its binary. Windows users can follow [Windows Setup for Agent Mode](agent-mode-windows-setup.md).
+1. Install Codex and run `codex login`.
+2. Open **Basic → Agents → Codex → Configure**.
+3. Install `codex-acp` with the command shown there.
+4. Click **Auto-detect**, or enter its absolute path and click **Apply**.
 
-Claude Agent Mode requires Claude Code 2.1.206 or newer. Copilot marks an older installation as incompatible and links back to the setup dialog.
+Copilot uses the Codex CLI login. Codex models come from your Codex account, not the BYOK tab.
 
----
+### Open Agent chat
 
-## Choose an Operating Mode
+Click the **Agent** ribbon icon or run **Open Copilot Agent Chat Window** from the command palette. If no ready default exists, **Select your agent** appears. Configure an agent; when it becomes ready, Copilot may open it automatically. If the chooser remains, select its **Installed** row and click **Start chat**.
 
-The mode picker beside the message box controls what the active agent may do:
+## Work in Agent chat
 
-- **Default** — works in your vault and asks before sensitive actions.
-- **Plan** — reads and reasons without changing your vault.
-- **Auto** — works with the automatic permissions configured for that agent. Some actions can still require approval.
+- Click **+** for another session. Each tab keeps its own conversation, draft, attachments, and queued follow-ups. Right-click a tab to rename or close it.
+- Use **New Chat** to reset the current tab. Use **Recent Chats** on Agent Home, or **Chat History** during a conversation, to resume saved work.
+- Before the first message, you can switch an empty session to another installed agent without losing the draft. After chat history exists, that session stays with its agent.
+- Add the active note, selected text, other notes, the active Copilot web tab, or supported images. You can also mention a note with `[[Note title]]`.
 
-Available modes vary by agent. Copilot remembers the last mode used with each agent.
+Type `/` to insert an enabled skill or [custom command](custom-commands.md). For a small question without opening Agent chat, use [Quick Ask](custom-commands.md#quick-ask).
 
-For Claude, configure **Auto mode permissions** under **Settings → Copilot → Basic → Agents → Claude**:
+## Projects
 
-- **Auto** — Claude approves routine work and asks about risky actions.
-- **Accept edits** — file edits are approved automatically; other actions still ask.
-- **Bypass permissions** — skips permission checks. Use only in a vault and environment you fully trust.
+In Agent chat, open **Projects** and choose **New project** for work that needs a stable scope. A project keeps its own chats, context, files, and `AGENTS.md` instructions. Vault instructions still apply; the project file can add more specific rules.
 
-When Agent Mode asks for permission, the request remains in the chat until you answer, cancel the turn, or close the session.
+If project context is still being prepared, Copilot queues your message until it is ready. See [Projects](projects.md) for setup details.
 
-### Sign in to Claude
+## Permissions and safe use
 
-The Claude setup dialog can sign you in before a chat starts. After confirming or auto-detecting the Claude Code binary, click **Sign in** to open Claude's browser login. If the CLI cannot open the browser itself, click **Open sign-in page** while sign-in is running to use the fallback URL.
+The mode picker shows only modes supported by the current agent:
 
-### Set a default model and effort
+- **Default** asks before sensitive work. For example, opencode asks before shell commands and file edits.
+- **Plan** is read-only planning and appears only when supported.
+- **Auto** reduces or removes prompts. Use it only for agents and requests you trust.
 
-Under **Settings → Copilot → Basic → Agents**, each enabled agent can use a default model and effort for new chats. **Default effort** stays selected when you switch models. If a model does not offer effort levels, the control is disabled and shows **Not supported**.
+Claude's **Auto mode permissions** setting controls whether Auto judges risk, accepts edits, or bypasses all checks. opencode supports Default and Auto, but not Plan. Codex modes depend on its adapter.
 
-## Sample Prompts in the Message Box
+When approval is needed, an inline **Permission required** card shows the diff or tool inputs. Choose one of the one-time or persistent allow/deny options offered by the agent. Cancelling the turn cancels unanswered requests.
 
-When you open a new agent chat and the message box is empty, Copilot types out sample prompts there one at a time — each appears character by character, pauses so you can read it, clears itself, and gives way to the next. They are examples of what the agent can do with your vault, not something being sent.
+The vault or project is a working directory, not a security sandbox. Auto or bypass modes may reach other files and services available to your account. Prefer Default for unfamiliar work and review persistent permissions carefully.
 
-- Press **Tab** while a suggestion is on screen to drop the whole prompt into the message box. Nothing is sent: edit it first, or press Enter to send it as-is.
-- Start typing at any point and the suggestions disappear. Clear the box again and they come back.
-- Once the conversation has started, the suggestions stop for that chat.
+## Multi-agent answers
 
-If you've turned on reduced motion in your operating system, the prompts still rotate but appear and disappear whole instead of typing out.
+With active Plus access, type `@` and mention installed agents in one prompt. Copilot sends the same question and context to them in parallel, then the current agent summarizes their answers.
 
-## Turn Duration
+This flow is for read-only research and review. Temporary agents may read, search, and use safe retrieval skills, but Copilot blocks vault writes and unknown tools. Use a normal single-agent turn to change files.
 
-While an agent turn is running, the activity trail shows **Worked for** with a live elapsed-time counter and the animated Copilot icon. The counter measures the full wall-clock time from sending the prompt until the turn finishes, including tool use and any time spent waiting for a permission or answer.
+## Skills shared across agents
 
-While a reasoning step is active, its brain row shows an animated ellipsis rather than a second timer. When that step finishes, the row changes to **Thought for** with its frozen duration.
+Skills are reusable instruction packets built around a `SKILL.md` file. To share one:
 
-When the turn finishes, the time freezes and the Copilot icon becomes static. The completed duration moves to the leading edge of the same footer row as the response controls. When a duration is unavailable, the message timestamp appears in that position instead; only one of the two is shown. The duration remains visible until you send the next prompt, when that completed response falls back to its timestamp and the new turn owns the live counter. Leading zero units are omitted, so durations appear as `18s`, `2m 18s`, or `1h 2m 18s`.
+1. Open **Settings → Copilot → Skills**.
+2. Toggle its agent icons for opencode, Claude, or Codex.
+3. Type `/` in Agent chat, or describe the task and let the agent choose an enabled skill.
 
-> The **Autonomous Agent Max Iterations**, **Tool Settings**, diff preview, and auto-accept controls under **Settings → Copilot → Plus** belong to the legacy paid Quick Chat tool loop. They do not limit or configure a dedicated Agent Mode session.
+Shared skills live under `<Copilot folder>/skills/`. Copilot links them into `.opencode/skills/`, `.claude/skills/`, or `.agents/skills/`. It also discovers skills already in those native folders and can migrate duplicate copies into the shared folder.
 
----
+Built-in skills cover Obsidian Markdown, Bases, Canvas, and the Obsidian CLI. An active paid license adds cloud-backed skills for web research, PDF reading, YouTube transcripts, and X posts.
 
-## Add Context
-
-Agent Mode can receive:
-
-- the active note;
-- notes you select or mention;
-- selected text;
-- the active Copilot web tab;
-- images when the chosen model supports vision; and
-- project context when you open an [Agent Mode project](projects.md).
-
-Use the context controls above the message box, drag in an image, or mention a note with `[[Note Title]]`. Type `/` to use custom commands and available skills.
-
-The `@vault`, `@websearch`, `@composer`, and `@memory` tool mentions are controls for paid Quick Chat. In Agent Mode, the selected agent decides when to use its native tools and installed skills.
-
----
-
-## Skills and Tools
-
-Claude, Codex, and OpenCode bring their own tools for reading files, searching, running commands, and editing. Copilot also seeds skills that teach them how to work safely with Obsidian.
-
-Manage skills under **Settings → Copilot → Skills**. Each skill can be enabled or disabled per agent, and Copilot preserves those choices when it updates a built-in skill.
-
-### Built-in Obsidian skills
-
-- **Obsidian Markdown** — wikilinks, embeds, block references, callouts, properties, tags, and comments.
-- **Obsidian Bases** — `.base` files, filters, formulas, views, summaries, quoting, and dates.
-- **JSON Canvas** — `.canvas` nodes, edges, groups, layouts, colors, IDs, and links.
-- **Obsidian CLI** — the current workspace, open tabs, daily notes, properties, tasks, backlinks, Bases queries, templates, link-aware moves, commands, and plugin debugging.
-
-The Obsidian CLI skill requires a compatible Obsidian installation and a running desktop app. If the CLI is unavailable, the agent falls back to normal file operations where possible. The agent will not reload Obsidian or disable, uninstall, or reload the Copilot plugin while it is hosting the session.
-
-### Web and document skills
-
-Agents choose between vault and web evidence based on your request. They normally search your vault for questions about your notes and the web for current or external information. Copilot never intentionally adds text from your vault to a web query unless your request requires researching that text.
-
-A Copilot license can unlock relay-backed skills for web search and fetch, PDF reading, YouTube transcripts, and X posts. Without a license, the agent can use its native alternatives when available.
-
-For PDF files, **Settings → Copilot → Miyo → Document Processor** also applies to Agent Mode:
-
-- **Plus** (the plan-tier option shown in settings) uses the hosted PDF reader, with another available reader as a fallback.
-- **Miyo** parses PDF and EPUB files locally. It requires the Miyo app on the same computer as Obsidian; a remote Miyo server is not enough for Agent Mode document parsing.
-
-With Plus selected, EPUB support depends on the active agent's own tools; Copilot does not provide a hosted EPUB reader in Agent Mode.
-
-When Miyo is selected, Copilot removes the cloud PDF skill so the document is not sent to that parser accidentally. Changing the processor restarts running agents so the new choice takes effect.
-
-### Publish to Symposium
-
-Ask the agent to publish an existing Markdown note as a web page. It prepares a self-contained HTML page, and Copilot validates it and opens a sandboxed preview. Nothing is published until you confirm in Obsidian.
-
-After a successful publish, Copilot stores the public link in the note's `symposium` property and records the receipt in `.symposium/publish-history.md`. Ask the agent to update or withdraw the same page, or run **Publish file to Symposium** yourself. See [Getting Started](getting-started.md#publish-a-note-to-symposium) for the manual workflow.
-
----
-
-## Follow the Agent's Work
-
-While the agent is running, Agent Mode shows activity such as reading files, searching, running commands, thinking, and compacting context. Consecutive background actions collapse into a summary row; open it to inspect the details. Agent messages, plans, questions, and delegated agents remain separate.
-
-The **Worked for** timer covers the full turn, including tool use and time waiting for your answer. Finished reasoning rows show **Thought for** with their own duration.
-
-In the current Claude integration, delegated local agents and shell commands run synchronously. Workflow and remote-isolated background agents are temporarily unavailable. If Claude reports that its usage is exhausted, wait for its reset time or switch agents.
-
----
-
-## Report a Problem
-
-Open **Settings → Copilot → Advanced → Agent Mode debugging** and choose **Report an Issue**. Copilot saves a screenshot of the Agent Mode pane and a recent activity log, opens their folder, and opens a prefilled GitHub issue. The files are not uploaded automatically.
-
-Review the files before attaching them: the activity log can contain prompts, note content, and tool inputs or outputs. OpenCode's own shared log is optional and off by default because it can include activity from unrelated OpenCode sessions.
-
----
+On Windows, creating skill links may require **Developer Mode** or administrator access. If sync replaces a link, toggle that agent off and on to recreate it.
 
 ## Related
 
-- [Getting Started](getting-started.md) — Install Copilot and start your first chat
-- [Context and Mentions](context-and-mentions.md) — Control what information Copilot receives
-- [Projects](projects.md) — Give Agent Mode reusable project context and instructions
-- [Paid Plans and Self-Host](copilot-plus-and-self-host.md) — Licensing, models, and relay-backed features
+- [Getting Started](getting-started.md)
+- [Projects](projects.md)
+- [Custom Commands](custom-commands.md)
+- [Paid Plans and Self-Host](copilot-plus-and-self-host.md)
+- [Windows Setup for Agent](agent-mode-windows-setup.md)
