@@ -259,6 +259,8 @@ export enum ChatModels {
   OPENROUTER_GROK_4_3 = "x-ai/grok-4.3",
   SILICONFLOW_DEEPSEEK_V3 = "deepseek-ai/DeepSeek-V3",
   SILICONFLOW_DEEPSEEK_R1 = "deepseek-ai/DeepSeek-R1",
+  MINIMAX_M2_7 = "MiniMax-M2.7",
+  MINIMAX_M2_5 = "MiniMax-M2.5",
 }
 
 // Model Providers
@@ -279,6 +281,7 @@ export enum ChatModelProviders {
   DEEPSEEK = "deepseek",
   COHEREAI = "cohereai",
   SILICONFLOW = "siliconflow",
+  MINIMAX = "minimax",
   GITHUB_COPILOT = "github-copilot",
 }
 
@@ -497,6 +500,18 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     isBuiltIn: false,
     baseUrl: "https://api.siliconflow.com/v1",
     capabilities: [ModelCapability.REASONING],
+  },
+  {
+    name: ChatModels.MINIMAX_M2_7,
+    provider: ChatModelProviders.MINIMAX,
+    enabled: false,
+    isBuiltIn: true,
+  },
+  {
+    name: ChatModels.MINIMAX_M2_5,
+    provider: ChatModelProviders.MINIMAX,
+    enabled: false,
+    isBuiltIn: true,
   },
 ];
 
@@ -790,6 +805,14 @@ export const ProviderInfo: Record<Provider, ProviderMetadata> = {
     keyManagementURL: "",
     listModelURL: "",
   },
+  [ChatModelProviders.MINIMAX]: {
+    label: "MiniMax",
+    host: "https://api.minimax.io/v1",
+    curlBaseURL: "https://api.minimax.io/v1",
+    keyManagementURL: "https://platform.minimaxi.com/user-center/basic-information/interface-key",
+    listModelURL: "https://api.minimax.io/v1/models",
+    testModel: ChatModels.MINIMAX_M2_7,
+  },
   [ChatModelProviders.GITHUB_COPILOT]: {
     label: "GitHub Copilot",
     host: "https://api.githubcopilot.com",
@@ -814,6 +837,7 @@ export const ProviderSettingsKeyMap: Record<SettingKeyProviders, keyof CopilotSe
   deepseek: "deepseekApiKey",
   "amazon-bedrock": "amazonBedrockApiKey",
   siliconflow: "siliconflowApiKey",
+  minimax: "minimaxApiKey",
   "github-copilot": "githubCopilotToken",
 };
 
@@ -991,6 +1015,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   amazonBedrockApiKey: "",
   amazonBedrockRegion: "",
   siliconflowApiKey: "",
+  minimaxApiKey: "",
   // GitHub Copilot OAuth tokens
   githubCopilotAccessToken: "",
   githubCopilotToken: "",
