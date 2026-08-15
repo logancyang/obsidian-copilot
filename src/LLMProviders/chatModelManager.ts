@@ -15,13 +15,7 @@ import {
   getSettings,
   subscribeToSettingsChange,
 } from "@/settings/model";
-import {
-  err2String,
-  findCustomModel,
-  getModelInfo,
-  ModelInfo,
-  safeFetch,
-} from "@/utils";
+import { err2String, findCustomModel, getModelInfo, ModelInfo, safeFetch } from "@/utils";
 import { googleHostBaseUrl, groqHostBaseUrl } from "@/utils/providerBaseUrl";
 import { ChatAnthropic } from "@langchain/anthropic";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";

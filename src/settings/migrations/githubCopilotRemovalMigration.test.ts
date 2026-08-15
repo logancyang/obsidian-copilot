@@ -1,8 +1,11 @@
 /**
- * Unit tests for the GitHub Copilot removal migration. `planGitHubCopilotRemoval`
- * is pure, so most coverage builds an in-the-wild settings object and asserts the
- * resulting patch. `executeGitHubCopilotRemoval` is exercised against a mocked
- * settings store and keychain so the side effects are observable in isolation.
+ * Unit tests for the GitHub Copilot removal migration.
+ * https://github.com/logancyang/obsidian-copilot-preview/issues/316
+ *
+ * `planGitHubCopilotRemoval` is pure, so most coverage builds an in-the-wild
+ * settings object and asserts the resulting patch. `executeGitHubCopilotRemoval`
+ * is exercised against a mocked settings store and keychain so the side effects
+ * are observable in isolation.
  */
 
 import type { CustomModel, ProjectConfig } from "@/aiParams";
@@ -138,6 +141,21 @@ describe("githubCopilotRemovalMigration", () => {
       expect(patch).toEqual({ defaultModelKey: "" });
     });
 
+    it("clears the quick command selection to undefined so quick ask inherits the chat default again (https://github.com/logancyang/obsidian-copilot-preview/issues/316)", () => {
+      const patch = planGitHubCopilotRemoval(
+        settingsWith({ quickCommandModelKey: "gpt-4o|github-copilot" })
+      );
+
+      expect(patch).toEqual({ quickCommandModelKey: undefined });
+      expect(patch).toHaveProperty("quickCommandModelKey");
+    });
+
+    it("leaves a quick command selection that points at a surviving model alone", () => {
+      expect(
+        planGitHubCopilotRemoval(settingsWith({ quickCommandModelKey: "gpt-4o|openai" }))
+      ).toBeNull();
+    });
+
     it("clears only the project selections that pointed at a GitHub Copilot model", () => {
       const patch = planGitHubCopilotRemoval(
         settingsWith({
@@ -164,7 +182,7 @@ describe("githubCopilotRemovalMigration", () => {
       expect(planGitHubCopilotRemoval(bare)).toBeNull();
     });
 
-    it("does not treat a provider whose name merely contains the removed one as removed", () => {
+    it("does not treat a provider whose name merely contains the removed one as removed (https://github.com/logancyang/obsidian-copilot-preview/issues/316)", () => {
       expect(
         planGitHubCopilotRemoval(
           settingsWith({
@@ -211,7 +229,7 @@ describe("githubCopilotRemovalMigration", () => {
       expect(secrets.deleteSecret).not.toHaveBeenCalled();
     });
 
-    it("does not fail the migration when the keychain is locked", () => {
+    it("does not fail the migration when the keychain is locked (https://github.com/logancyang/obsidian-copilot-preview/issues/316)", () => {
       keychain({
         deleteSecret: jest.fn(() => {
           throw new Error("keychain locked");
@@ -221,7 +239,7 @@ describe("githubCopilotRemovalMigration", () => {
       expect(() => executeGitHubCopilotRemoval(settingsWith())).not.toThrow();
     });
 
-    it("does not fail the migration when the keychain service is not initialized", () => {
+    it("does not fail the migration when the keychain service is not initialized (https://github.com/logancyang/obsidian-copilot-preview/issues/316)", () => {
       mockGetInstance.mockImplementation(() => {
         throw new Error("KeychainService must be initialized with app on first call");
       });

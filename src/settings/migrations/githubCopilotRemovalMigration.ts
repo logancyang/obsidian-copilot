@@ -1,6 +1,7 @@
 /**
  * One-time migration (settings v9): erase the retired GitHub Copilot chat
  * provider from a vault that used it.
+ * https://github.com/logancyang/obsidian-copilot-preview/issues/316
  *
  * Copilot no longer ships a `github-copilot` chat adapter, so a saved model
  * naming that provider can never be instantiated again: it would sit
@@ -44,10 +45,18 @@ function referencesRemovedProvider(modelKey: string | undefined): boolean {
  * every selection pointing at one, or `null` when the vault never had any (so
  * the caller can skip a redundant write — referential stability, see AGENTS.md).
  *
- * Cleared selections become `""` rather than some substitute model: an empty
- * selection is the "nothing chosen yet" state both the chat runtime and the
- * settings picker already handle, and it lets the user pick a replacement
- * instead of being silently moved onto a model they never chose.
+ * Clearing a selection does not change which model a chat lands on:
+ * `findChatBackendEntry` already falls back to the first enabled entry for any
+ * selection it cannot resolve, which is what the stale `…|github-copilot` key
+ * hit. What it changes is that nothing stays stored naming a provider that has
+ * no constructor — so the value the user later picks is the only one on disk.
+ *
+ * Each field is cleared to its own "no stored choice" value: `""` for
+ * `defaultModelKey` and `projectModelKey`, `undefined` for
+ * `quickCommandModelKey`. Quick Ask and the quick-command modals read that
+ * field as `quickCommandModelKey ?? defaultModelKey`, so only `undefined`
+ * restores "inherit the chat default"; `""` would read as a deliberate choice
+ * and pin them away from it.
  */
 export function planGitHubCopilotRemoval(
   settings: CopilotSettings
@@ -59,6 +68,9 @@ export function planGitHubCopilotRemoval(
   if (keptModels.length !== models.length) patch.activeModels = keptModels;
 
   if (referencesRemovedProvider(settings.defaultModelKey)) patch.defaultModelKey = "";
+
+  if (referencesRemovedProvider(settings.quickCommandModelKey))
+    patch.quickCommandModelKey = undefined;
 
   const projects = settings.projectList ?? [];
   if (projects.some((project) => referencesRemovedProvider(project.projectModelKey))) {
