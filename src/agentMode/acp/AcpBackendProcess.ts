@@ -648,6 +648,8 @@ export class AcpBackendProcess implements BackendProcess {
   private routeSessionUpdate(acpSessionId: AcpSessionId, update: SessionNotification): void {
     const sessionId = sessionIdFromAcp(acpSessionId);
 
+    // Backends need an escape hatch for vendor-owned notices that should never enter chat history.
+    // https://github.com/logancyang/obsidian-copilot-preview/issues/315
     if (this.backend.shouldRouteSessionUpdate?.(update.update) === false) return;
 
     // If there's an active loadSession collector for this session, feed it

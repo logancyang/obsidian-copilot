@@ -8,27 +8,36 @@ function textUpdate(text: string): AcpSessionUpdate {
   };
 }
 
+const PERCENTAGE_WARNING =
+  "Warning: Skill descriptions were shortened to fit the 2% skills context budget. " +
+  "Codex can still see every skill, but some descriptions are shorter. " +
+  "Disable unused skills or plugins to leave more room for the rest.";
+const PERCENTAGE_FREE_WARNING =
+  "Warning: Skill descriptions were shortened to fit the skills context budget. " +
+  "Codex can still see every skill, but some descriptions are shorter.";
+
 describe("codexSessionUpdateFilter", () => {
   describe("shouldRouteCodexSessionUpdate()", () => {
-    it("drops the percentage and percentage-free skills-budget warnings", () => {
-      expect(
-        shouldRouteCodexSessionUpdate(
-          textUpdate(
-            "Warning: Skill descriptions were shortened to fit the 2% skills context budget. " +
-              "Codex can still see every skill, but some descriptions are shorter. " +
-              "Disable unused skills or plugins to leave more room for the rest.\n\n"
+    it(
+      "drops the percentage and percentage-free skills-budget warnings for " +
+        "https://github.com/logancyang/obsidian-copilot-preview/issues/315",
+      () => {
+        expect(shouldRouteCodexSessionUpdate(textUpdate(`${PERCENTAGE_WARNING}\n\n`))).toBe(false);
+        expect(shouldRouteCodexSessionUpdate(textUpdate(PERCENTAGE_FREE_WARNING))).toBe(false);
+      }
+    );
+
+    it(
+      "keeps answer text appended to a skills-budget warning for " +
+        "https://github.com/logancyang/obsidian-copilot-preview/issues/315",
+      () => {
+        expect(
+          shouldRouteCodexSessionUpdate(
+            textUpdate(`${PERCENTAGE_WARNING}\n\nHere is the answer you requested.`)
           )
-        )
-      ).toBe(false);
-      expect(
-        shouldRouteCodexSessionUpdate(
-          textUpdate(
-            "Warning: Skill descriptions were shortened to fit the skills context budget. " +
-              "Codex can still see every skill, but some descriptions are shorter."
-          )
-        )
-      ).toBe(false);
-    });
+        ).toBe(true);
+      }
+    );
 
     it("keeps unrelated warnings and ordinary answers that mention the budget", () => {
       expect(shouldRouteCodexSessionUpdate(textUpdate("Warning: Codex login expired.\n\n"))).toBe(

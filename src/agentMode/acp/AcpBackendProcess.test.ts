@@ -148,7 +148,7 @@ describe("AcpBackendProcess", () => {
     expect(handler).toHaveBeenCalledTimes(1);
   });
 
-  it("drops updates rejected by the backend before routing them to the session", async () => {
+  it("drops backend-rejected updates for https://github.com/logancyang/obsidian-copilot-preview/issues/315", async () => {
     const shouldRouteSessionUpdate = jest.fn(() => false);
     const backend = new AcpBackendProcess(
       buildApp(),
