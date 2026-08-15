@@ -3,6 +3,8 @@ import { AcpBackend, AcpSpawnDescriptor } from "@/agentMode/acp/types";
 import { buildSimpleSpawnDescriptor } from "@/agentMode/backends/shared/simpleBinaryBackend";
 import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemPrompt";
 import { buildBuiltinSkillEnv } from "@/agentMode/backends/shared/builtinSkillEnv";
+import type { PlanUsageReading } from "@/agentMode/session/planUsage";
+import { defaultCodexHome, readCodexPlanUsage } from "./codexPlanUsage";
 import { mergeCodexConfigEnv } from "./codexConfigEnv";
 
 /**
@@ -16,6 +18,13 @@ import { mergeCodexConfigEnv } from "./codexConfigEnv";
 export class CodexBackend implements AcpBackend {
   readonly id = "codex" as const;
   readonly displayName = "Codex";
+
+  /**
+   * Where the spawned Codex keeps its state, taken from the env we actually gave it so a
+   * user who redirects `CODEX_HOME` has their caps read from the same place Codex writes
+   * them. Null until the first spawn, because until then there is no Codex to read from.
+   */
+  private codexHome: string | null = null;
 
   constructor(private readonly clientVersion = "") {}
 
@@ -63,7 +72,17 @@ export class CodexBackend implements AcpBackend {
     ];
     // Deliberately no `project_doc_fallback_filenames=["project.md"]`: project.md is metadata,
     // while Codex discovers the canonical AGENTS.md instructions from the session cwd.
+    this.codexHome = descriptor.env.CODEX_HOME ?? defaultCodexHome();
     return descriptor;
+  }
+
+  /**
+   * Codex's caps, read back from the rollout it writes for every turn. See
+   * `codexPlanUsage.ts` for why that file is the only structured source a client has.
+   * Before the first spawn there is no Codex to read from, so there is no news yet.
+   */
+  async readPlanUsage(): Promise<PlanUsageReading> {
+    return this.codexHome === null ? { kind: "unavailable" } : readCodexPlanUsage(this.codexHome);
   }
 }
 
