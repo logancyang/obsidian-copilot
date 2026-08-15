@@ -202,7 +202,7 @@ async function main() {
   });
   assert(packageFindings.length >= 3, "invalid manifest/license fixture was accepted");
   const runtimeDependencyResult = await lintRuntimeDependencies({
-    dependencies: { dotenv: "^17.4.2" },
+    dependencies: { axios: "^1.0.0" },
   });
   assert(
     runtimeDependencyResult.errorCount === 0,
@@ -210,7 +210,7 @@ async function main() {
   );
   expectEslintRules(runtimeDependencyResult, ["depend/ban-dependencies"]);
   const developmentDependencyResult = await lintRuntimeDependencies({
-    devDependencies: { dotenv: "^17.4.2" },
+    devDependencies: { axios: "^1.0.0" },
   });
   assert(
     developmentDependencyResult.messages.every(

@@ -586,9 +586,6 @@ export default [
         "error",
         {
           presets: ["native", "microutilities", "preferred"],
-          // dotenv is used only by integration tests to load .env.test;
-          // the native --env-file flag doesn't work in jest.
-          allowed: ["dotenv"],
         },
       ],
     },
