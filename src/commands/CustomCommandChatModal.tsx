@@ -28,6 +28,7 @@ import {
   type StreamingChatTurnContext,
 } from "@/hooks/use-streaming-chat-session";
 import { ABORT_REASON } from "@/constants";
+import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
 // ============================================================================
 // Behavior Config - Replaces mode-based branching
@@ -426,12 +427,12 @@ function CustomCommandChatModalContent({
       onEditableContentChange={setEditedText}
       followUpValue={followUpValue}
       onFollowUpChange={setFollowUpValue}
-      onFollowUpSubmit={handleFollowUpSubmit}
+      onFollowUpSubmit={safeAsyncHandler(handleFollowUpSubmit)}
       selectedModel={chatPicker.value}
       onSelectModel={chatPicker.onChange}
       models={chatPicker.models}
       onStop={handleStop}
-      onCopy={handleCopy}
+      onCopy={safeAsyncHandler(handleCopy)}
       onInsert={handleInsert}
       onReplace={handleReplace}
       initialPosition={initialPosition}
@@ -636,9 +637,7 @@ export class CustomCommandChatModal {
     const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
 
     const doc = this.resolveDocument(activeView);
-    this.container = doc.createElement("div");
-    this.container.className = "copilot-menu-command-modal-container";
-    doc.body.appendChild(this.container);
+    this.container = doc.body.createDiv("copilot-menu-command-modal-container");
 
     this.root = createPluginRoot(this.container, this.app);
 

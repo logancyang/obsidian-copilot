@@ -15,6 +15,7 @@ import { useSettingsValue } from "@/settings/model";
 import { deriveSystemPromptsFolder } from "@/settings/copilotFolder";
 import { SystemPromptSyntaxInstruction } from "@/components/SystemPromptSyntaxInstruction";
 import { logError } from "@/logger";
+import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
 {
   /* TODO(emt-lin): May be used in the future */
@@ -269,7 +270,7 @@ export class SystemPromptAddModal extends Modal {
     this.root.render(
       <SystemPromptAddModalContent
         prompts={this.prompts}
-        onConfirm={handleConfirm}
+        onConfirm={safeAsyncHandler(handleConfirm)}
         onCancel={() => this.close()}
         contentEl={contentEl}
       />

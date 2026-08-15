@@ -12,6 +12,7 @@ import {
 } from "@/agentMode/backends/opencode/OpencodeBinaryManager";
 import type { OpencodeBinaryManager } from "@/agentMode/backends/opencode/OpencodeBinaryManager";
 import { detectOpencodeCliPath } from "@/agentMode/backends/opencode/descriptor";
+import { CONFIG_MODAL_CLASS } from "@/agentMode/backends/shared/ui/ConfigDialogShell";
 import { ReactModal } from "@/components/modals/ReactModal";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { formatBinaryPathForDisplay } from "@/utils/binaryPath";
@@ -271,7 +272,8 @@ export class OpencodeInstallModal extends ReactModal {
     private readonly manager: OpencodeBinaryManager,
     private readonly hostInfo: { platform: string; arch: string }
   ) {
-    super(app, "Configure opencode");
+    // No native title: ConfigDialogShell draws its own heading beside the badge.
+    super(app, undefined, CONFIG_MODAL_CLASS);
   }
 
   protected renderContent(close: () => void): React.ReactElement {

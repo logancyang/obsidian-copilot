@@ -4,7 +4,6 @@ import {
   DOMConversionMap,
   DOMConversionOutput,
   DOMExportOutput,
-  EditorConfig,
   LexicalEditor,
   LexicalNode,
   NodeKey,
@@ -64,12 +63,6 @@ export class WebTabPillNode extends BasePillNode {
     return "data-lexical-web-tab-pill";
   }
 
-  createDOM(_config: EditorConfig, editor: LexicalEditor): HTMLElement {
-    const span = getEditorDocument(editor).createElement("span");
-    span.className = "web-tab-pill-wrapper";
-    return span;
-  }
-
   static importDOM(): DOMConversionMap | null {
     return {
       span: (node: HTMLElement) => {
@@ -101,16 +94,16 @@ export class WebTabPillNode extends BasePillNode {
   }
 
   exportDOM(editor: LexicalEditor): DOMExportOutput {
-    const element = getEditorDocument(editor).createElement("span");
-    element.setAttribute("data-lexical-web-tab-pill", "true");
-    element.setAttribute("data-url", this.__url);
+    const element = getEditorDocument(editor).win.createSpan({
+      text: formatWebTabPillTextContent(this.__url, this.__title),
+      attr: { "data-lexical-web-tab-pill": "true", "data-url": this.__url },
+    });
     if (this.__title) {
       element.setAttribute("data-title", this.__title);
     }
     if (this.__faviconUrl) {
       element.setAttribute("data-favicon-url", this.__faviconUrl);
     }
-    element.textContent = formatWebTabPillTextContent(this.__url, this.__title);
     return { element };
   }
 

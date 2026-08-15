@@ -49,6 +49,7 @@ import { CheckCircle2, Loader2, XCircle } from "lucide-react";
 import { App, Notice } from "obsidian";
 import React, { useEffect, useMemo, useState } from "react";
 import { useModelCandidatePool } from "./useModelCandidatePool";
+import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
 /**
  * Default API endpoints for SDK-native catalog providers that `models.dev`
@@ -492,7 +493,7 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
               }}
               placeholder={state.mode === "edit" ? "No API key set" : "Paste your API key"}
             />
-            <Button variant="secondary" onClick={handleTest} disabled={testing}>
+            <Button variant="secondary" onClick={safeAsyncHandler(handleTest)} disabled={testing}>
               {testing ? <Loader2 className="tw-size-4 tw-animate-spin" /> : "Test"}
             </Button>
             {state.mode === "edit" && apiKey.length > 0 && (
@@ -551,7 +552,11 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
           <Button variant="secondary" onClick={onClose} disabled={saving}>
             Cancel
           </Button>
-          <Button variant="default" onClick={handleSaveNew} disabled={!canSave || saving}>
+          <Button
+            variant="default"
+            onClick={safeAsyncHandler(handleSaveNew)}
+            disabled={!canSave || saving}
+          >
             {saving ? <Loader2 className="tw-size-4 tw-animate-spin" /> : "Save"}
           </Button>
         </div>
@@ -564,7 +569,11 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
             <Button variant="secondary" onClick={onClose} disabled={saving}>
               Cancel
             </Button>
-            <Button variant="default" onClick={handleSaveEdit} disabled={!canSave || saving}>
+            <Button
+              variant="default"
+              onClick={safeAsyncHandler(handleSaveEdit)}
+              disabled={!canSave || saving}
+            >
               {saving ? <Loader2 className="tw-size-4 tw-animate-spin" /> : "Save"}
             </Button>
           </div>

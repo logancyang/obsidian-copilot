@@ -5,6 +5,7 @@ import { detectionSearchDirs } from "@/utils/binaryPath";
 import { detectBinary } from "@/utils/detectBinary";
 import { Notice } from "obsidian";
 import React from "react";
+import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
 interface Props {
   binaryName: string;
@@ -143,15 +144,30 @@ export const BinaryPathSetting: React.FC<Props> = ({
           onChange={(e) => setPathInput(e.target.value)}
           className="tw-flex-1"
         />
-        <Button variant="secondary" size="default" onClick={autoDetect} disabled={busy}>
+        <Button
+          variant="secondary"
+          size="default"
+          onClick={safeAsyncHandler(autoDetect)}
+          disabled={busy}
+        >
           Auto-detect
         </Button>
         {showClear ? (
-          <Button variant="destructive" size="default" onClick={clear} disabled={busy}>
+          <Button
+            variant="destructive"
+            size="default"
+            onClick={safeAsyncHandler(clear)}
+            disabled={busy}
+          >
             Clear
           </Button>
         ) : showApply ? (
-          <Button variant="default" size="default" onClick={apply} disabled={busy}>
+          <Button
+            variant="default"
+            size="default"
+            onClick={safeAsyncHandler(apply)}
+            disabled={busy}
+          >
             Apply
           </Button>
         ) : null}

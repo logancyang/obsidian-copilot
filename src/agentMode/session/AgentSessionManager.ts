@@ -519,8 +519,7 @@ export class AgentSessionManager {
 
   /**
    * Watch project config edits so a changed context source (URLs / inclusions /
-   * etc.) invalidates the project's materialized context — mirroring chat mode's
-   * {@link ProjectManager.setupProjectListChangeMonitor}. Seeds the prior-records
+   * etc.) invalidates the project's materialized context. Seeds the prior-records
    * snapshot up front so the first notification diffs against the real baseline.
    */
   private setupProjectRecordChangeMonitor(): void {
@@ -1949,8 +1948,8 @@ export class AgentSessionManager {
   }
 
   /**
-   * Record a successful enter of `projectId` as its most-recent use, mirroring
-   * chat-mode {@link ProjectManager.switchProject}. Skips {@link GLOBAL_SCOPE}
+   * Record a successful enter of `projectId` as its most-recent use. Skips
+   * {@link GLOBAL_SCOPE}
    * (the implicit workspace `exitProject` returns to) and any scope that is no
    * longer current — the spawn-path caller touches after an `await`, so a
    * concurrent `enterProject` may have moved the active scope on in the meantime.

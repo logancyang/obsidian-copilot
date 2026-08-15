@@ -14,6 +14,7 @@ import { err2String, getProviderLabel } from "@/utils";
 import { Loader2 } from "lucide-react";
 import { Notice } from "obsidian";
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
 interface ModelImporterProps {
   provider: SettingKeyProviders;
@@ -219,7 +220,7 @@ export function ModelImporter({
           </div>
           <div className="tw-w-[72px]">
             <Button
-              onClick={handleAddModel}
+              onClick={safeAsyncHandler(handleAddModel)}
               disabled={!selectedModel || verifying}
               variant="secondary"
               size="sm"

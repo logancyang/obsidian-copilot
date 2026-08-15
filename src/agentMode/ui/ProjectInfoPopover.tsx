@@ -328,8 +328,6 @@ export const ProjectInfoPopover = memo(
 
     const handleEdit = () => {
       setOpen(false);
-      // Same agent-flavored edit the old overflow menu opened: full project
-      // modal minus the model card + CAG processing status.
       new AddProjectModal(
         app,
         async (next) => {
@@ -349,9 +347,7 @@ export const ProjectInfoPopover = memo(
             throw e;
           }
         },
-        project,
-        undefined,
-        true
+        project
       ).open();
     };
 

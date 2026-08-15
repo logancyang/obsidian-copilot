@@ -1,5 +1,6 @@
 import { CodexConfigView } from "@/agentMode/backends/codex/ui/CodexConfigView";
 import { binaryPathInstallState } from "@/agentMode/backends/shared/simpleBinaryBackend";
+import { CONFIG_MODAL_CLASS } from "@/agentMode/backends/shared/ui/ConfigDialogShell";
 import { ReactModal } from "@/components/modals/ReactModal";
 import { useSettingsValue } from "@/settings/model";
 import { validateExecutableFile } from "@/utils/detectBinary";
@@ -49,7 +50,8 @@ const CodexConfigContainer: React.FC<{ onClose: () => void }> = ({ onClose }) =>
 /** Configure dialog for the Codex backend. Opened via `descriptor.openInstallUI`. */
 export class CodexInstallModal extends ReactModal {
   constructor(app: App) {
-    super(app, "Configure Codex");
+    // No native title: ConfigDialogShell draws its own heading beside the badge.
+    super(app, undefined, CONFIG_MODAL_CLASS);
   }
 
   protected renderContent(close: () => void): React.ReactElement {

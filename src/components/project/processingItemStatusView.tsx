@@ -10,9 +10,7 @@ import React from "react";
  *
  * Every agent surface (the composer status popover, the Manage modal's Links
  * panel, and its File Context list) routes through here so the status semantics
- * never drift across them. The legacy CAG status (`ProjectContextItemStatus` in
- * the Manage modal) is deliberately NOT folded in: it reads a different cache
- * (`ProjectContextCache`) with different semantics, so it stays separate.
+ * never drift across them.
  */
 
 /** Canonical lookup key for a processing item: `<cacheKind>:<id>`. Keying on the

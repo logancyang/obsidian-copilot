@@ -153,7 +153,7 @@ Nothing is deleted from disk. Prompt files stay where they are. The per-chat pro
 
 In their place, one notice, shown on both tabs and only when the user has saved prompts, pointing at the folder that still holds them.
 
-**Why v3 Chat is not unified here.** v3 Chat's projects mode is being removed shortly, and Pi replaces that whole surface under the v4 agent architecture. Teaching v3 Chat to read `AGENTS.md` would be work on a surface that is about to disappear. The consequence is accepted and named: after the project text moves, a v3 chat project stops seeing it.
+**Why v3 Chat is not unified here.** v3 Chat's projects mode is gone, and Pi replaces that whole surface under the v4 agent architecture. Teaching v3 Chat to read `AGENTS.md` would be work on a surface that no longer has projects at all.
 
 ## How instructions actually reach each backend
 
@@ -240,7 +240,7 @@ Tradeoff, stated plainly: working directory and git status become slightly less 
 | Vault `AGENTS.md` starts blank                     | The selected Chat prompt is a moving target; freezing it is a surprise, not a migration      | Seeding from `getEffectiveUserPrompt()` on first session start                                           |
 | Project prompt text is moved and the field cleared | That text was never visible as a file, so stranding it reads as data loss                    | Copying without clearing, which leaves two sources of truth again                                        |
 | `excludeDynamicSections` on the Claude preset      | Documented SDK seam for exactly this problem, one option                                     | Leaving Claude's prefix churning on cwd and date                                                         |
-| v3 Chat left alone                                 | Its projects mode is being removed and Pi replaces it                                        | Building a v3 fallback that reads `AGENTS.md`                                                            |
+| v3 Chat left alone                                 | Its projects mode is gone and Pi replaces it                                                 | Building a v3 fallback that reads `AGENTS.md`                                                            |
 | Advanced prompt controls removed                   | The global picker fed a behavior Agent Mode no longer reads; the folder box was already dead | Keeping them with clearer labels                                                                         |
 
 ### One decision that reversed during implementation

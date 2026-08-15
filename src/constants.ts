@@ -303,7 +303,6 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     isBuiltIn: true,
     core: true,
     plusExclusive: true,
-    projectEnabled: false,
     capabilities: [ModelCapability.VISION],
   },
   {
@@ -312,7 +311,6 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     enabled: true,
     isBuiltIn: true,
     core: true,
-    projectEnabled: true,
     capabilities: [ModelCapability.VISION],
   },
   {
@@ -320,7 +318,6 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     provider: ChatModelProviders.OPENROUTERAI,
     enabled: true,
     isBuiltIn: true,
-    projectEnabled: true,
     capabilities: [ModelCapability.VISION, ModelCapability.REASONING],
   },
   {
@@ -351,7 +348,6 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     provider: ChatModelProviders.GOOGLE,
     enabled: true,
     isBuiltIn: true,
-    projectEnabled: true,
     capabilities: [ModelCapability.VISION, ModelCapability.REASONING],
   },
   {
@@ -359,7 +355,6 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     provider: ChatModelProviders.GOOGLE,
     enabled: true,
     isBuiltIn: true,
-    projectEnabled: true,
     capabilities: [ModelCapability.VISION],
   },
   {
@@ -367,7 +362,6 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     provider: ChatModelProviders.GOOGLE,
     enabled: true,
     isBuiltIn: true,
-    projectEnabled: true,
     capabilities: [ModelCapability.VISION],
   },
   // Disabled models
@@ -384,7 +378,6 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     enabled: false,
     isBuiltIn: true,
     core: false,
-    projectEnabled: true,
     capabilities: [ModelCapability.VISION],
   },
   {
@@ -393,7 +386,6 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     enabled: false,
     isBuiltIn: true,
     core: false,
-    projectEnabled: true,
     capabilities: [ModelCapability.VISION],
   },
   {
@@ -402,7 +394,6 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     enabled: false,
     isBuiltIn: true,
     core: false,
-    projectEnabled: true,
     capabilities: [ModelCapability.VISION],
   },
   {
@@ -411,7 +402,6 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     enabled: false,
     isBuiltIn: true,
     core: false,
-    projectEnabled: true,
     capabilities: [ModelCapability.VISION],
   },
   {
@@ -420,7 +410,6 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     enabled: false,
     isBuiltIn: true,
     core: false,
-    projectEnabled: true,
     capabilities: [ModelCapability.VISION],
   },
   {
@@ -429,7 +418,6 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     enabled: false,
     isBuiltIn: true,
     core: false,
-    projectEnabled: true,
     capabilities: [ModelCapability.VISION],
   },
   {
@@ -438,7 +426,6 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     enabled: false,
     isBuiltIn: true,
     core: false,
-    projectEnabled: true,
     capabilities: [ModelCapability.VISION],
   },
   {
@@ -467,7 +454,6 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     provider: ChatModelProviders.GOOGLE,
     enabled: false,
     isBuiltIn: true,
-    projectEnabled: true,
     capabilities: [ModelCapability.VISION],
   },
   {
@@ -1042,7 +1028,6 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   promptUsageTimestamps: {},
   promptSortStrategy: PromptSortStrategy.TIMESTAMP,
   chatHistorySortStrategy: "recent",
-  projectListSortStrategy: "recent",
   projectsFolder: DEFAULT_PROJECTS_FOLDER,
   defaultConversationNoteName: "{$topic}@{$date}_{$time}",
   /** @deprecated */

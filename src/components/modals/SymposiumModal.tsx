@@ -5,6 +5,7 @@ import type { SymposiumAction, SymposiumDocument, SymposiumReceipt } from "@/sym
 import { App, Modal } from "obsidian";
 import React, { useState } from "react";
 import type { Root } from "react-dom/client";
+import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
 export interface SymposiumSuccessResult {
   kind: "success";
@@ -105,7 +106,7 @@ function SymposiumReceiptView({ receipt, actions }: SymposiumReceiptViewProps) {
       <div className="tw-flex tw-items-center tw-justify-end tw-gap-2">
         {copyMessage && <span className="tw-text-small tw-text-muted">{copyMessage}</span>}
         {actions}
-        <Button variant="secondary" onClick={copyUrl}>
+        <Button variant="secondary" onClick={safeAsyncHandler(copyUrl)}>
           Copy
         </Button>
         <Button onClick={openUrl}>Open</Button>
