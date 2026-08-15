@@ -15,8 +15,8 @@ jest.mock("@/logger", () => ({
 
 // Override only homedir so tests can redirect the OS-local install root into a
 // temp dir; tmpdir() and everything else stay real.
-jest.mock("node:os", () => {
-  const actual = jest.requireActual("node:os");
+jest.mock("os", () => {
+  const actual = jest.requireActual("os");
   return { ...actual, homedir: jest.fn(() => actual.homedir()) };
 });
 
@@ -60,7 +60,7 @@ jest.mock("./opencodeCliDetector", () => ({
 import { OPENCODE_MIN_ACP_VERSION, OPENCODE_PINNED_VERSION } from "./ui/opencodeVersion";
 import { copilotAppDataDir } from "@/utils/appPaths";
 import * as fs from "node:fs";
-import * as os from "node:os";
+import * as os from "os";
 import * as path from "node:path";
 import {
   computeInstallState,

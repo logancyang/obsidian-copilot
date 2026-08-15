@@ -4,22 +4,35 @@ import { compareSemver } from "@/utils/semver";
 import { logError, logInfo, logWarn } from "@/logger";
 import type CopilotPlugin from "@/main";
 import { getSettings, setSettings, type OpencodeBackendSettings } from "@/settings/model";
-import { execFile, spawn } from "node:child_process";
-import { randomBytes } from "node:crypto";
-import * as fs from "node:fs";
-import * as https from "node:https";
-import { IncomingMessage } from "node:http";
 import { FileSystemAdapter, requestUrl } from "obsidian";
-import * as os from "node:os";
-import * as path from "node:path";
-import { promisify } from "node:util";
 import { renameWithRetry } from "@/agentMode/skills/renameWithRetry";
 import { copilotAppDataDir } from "@/utils/appPaths";
+import { requireNodeModule } from "@/utils/desktopRuntime";
 import { detectOpencodeCliPath } from "./opencodeCliDetector";
 import { expectedBinaryName, resolveOpencodeTarget } from "./platformResolver";
 import type { InstallState as BackendInstallState } from "@/agentMode/session/types";
 
-const execFileAsync = promisify(execFile);
+type IncomingMessage = import("node:http").IncomingMessage;
+type Dirent = import("node:fs").Dirent;
+
+function nodeFs(): typeof import("node:fs") {
+  return requireNodeModule<typeof import("node:fs")>("fs");
+}
+
+function nodePath(): typeof import("node:path") {
+  return requireNodeModule<typeof import("node:path")>("path");
+}
+
+async function execFileAsync(
+  file: string,
+  args: string[],
+  options: Pick<import("node:child_process").ExecFileOptions, "timeout" | "windowsHide">
+): Promise<{ stdout: string | Buffer }> {
+  const { execFile } = requireNodeModule<typeof import("node:child_process")>("child_process");
+  const { promisify } = requireNodeModule<typeof import("node:util")>("util");
+  const { stdout } = await promisify(execFile)(file, args, options);
+  return { stdout };
+}
 const DOWNLOAD_INACTIVITY_TIMEOUT_MS = 30_000;
 // Generous: first-run on Windows (Defender real-time scan) and macOS
 // (Gatekeeper translocation) can add a few seconds before the binary responds.
@@ -157,7 +170,7 @@ export function pickMatchingAsset(release: GithubRelease, candidates: string[]):
  */
 export function computeInstallState(
   opencode: OpencodeBackendSettings | undefined,
-  fileExists: (path: string) => boolean = (p) => fs.existsSync(p)
+  fileExists: (path: string) => boolean = (p) => nodeFs().existsSync(p)
 ): InstallState {
   const s = opencode ?? {};
   if (s.binaryPath && s.binaryVersion && fileExists(s.binaryPath)) {
@@ -241,7 +254,7 @@ function clearOpencodeBinary(): void {
  * scope while staying per-user.
  */
 export function opencodeManagedDataDir(homeDir: string): string {
-  return path.join(copilotAppDataDir(homeDir), "opencode");
+  return nodePath().join(copilotAppDataDir(homeDir), "opencode");
 }
 
 /**
@@ -258,7 +271,7 @@ export function legacyVaultDataDir(
   configDir: string,
   pluginId: string
 ): string {
-  return path.join(vaultBasePath, configDir, "plugins", pluginId, "data", "opencode");
+  return nodePath().join(vaultBasePath, configDir, "plugins", pluginId, "data", "opencode");
 }
 
 /**
@@ -456,13 +469,13 @@ export class OpencodeBinaryManager {
     if (!(adapter instanceof FileSystemAdapter)) {
       throw new Error("Agent Mode requires desktop Obsidian (FileSystemAdapter).");
     }
-    const home = os.homedir();
+    const home = requireNodeModule<typeof import("node:os")>("os").homedir();
     // Guard against a missing/garbage home dir (empty string, or the filesystem
     // root) before we build an install path under it: `os.homedir()` can return
     // "" in broken/sandboxed environments, and installing into `/.obsidian-copilot`
     // would be wrong and almost certainly unwritable. Fail with an actionable
     // message instead of a confusing downstream spawn error.
-    if (!home || !path.isAbsolute(home) || path.parse(home).root === home) {
+    if (!home || !nodePath().isAbsolute(home) || nodePath().parse(home).root === home) {
       throw new Error(
         "Could not resolve your home directory to install the opencode runtime. " +
           "Agent Mode installs it under ~/.obsidian-copilot; check that your account has a valid home directory."
@@ -507,7 +520,7 @@ export class OpencodeBinaryManager {
   ): Promise<{ version: string; path: string }> {
     const version = opts.version ?? OPENCODE_PINNED_VERSION;
     const dataDir = this.getDataDir();
-    const versionDir = path.join(dataDir, version);
+    const versionDir = nodePath().join(dataDir, version);
 
     opts.onProgress?.({ phase: "resolve", message: "Resolving platform asset…" });
     const { target, candidates } = await resolveOpencodeTarget();
@@ -519,10 +532,10 @@ export class OpencodeBinaryManager {
     const asset = pickMatchingAsset(release, candidates);
 
     const binName = expectedBinaryName(target.platform);
-    const finalBinPath = path.join(versionDir, "bin", binName);
+    const finalBinPath = nodePath().join(versionDir, "bin", binName);
 
     // Idempotency: if the existing manifest matches and the binary is in place, no-op.
-    const existing = await readManifest(path.join(versionDir, "install-manifest.json"));
+    const existing = await readManifest(nodePath().join(versionDir, "install-manifest.json"));
     if (existing && existing.assetName === asset.name && (await fileExists(finalBinPath))) {
       logInfo(`[AgentMode] opencode ${version} already installed at ${finalBinPath}`);
       // Skip the write when settings already match — avoids spuriously waking
@@ -548,45 +561,46 @@ export class OpencodeBinaryManager {
     // fails here with an actionable message naming the path, rather than later
     // mid-extraction.
     try {
-      await fs.promises.mkdir(dataDir, { recursive: true });
+      await nodeFs().promises.mkdir(dataDir, { recursive: true });
     } catch (e) {
       throw new Error(
         `Could not create the opencode install directory at ${dataDir}: ` +
           `${e instanceof Error ? e.message : String(e)}. Check that it is writable.`
       );
     }
-    const tmpDir = path.join(dataDir, `.tmp-${version}-${randomBytes(4).toString("hex")}`);
-    await fs.promises.mkdir(tmpDir, { recursive: true });
+    const randomBytes = requireNodeModule<typeof import("node:crypto")>("crypto").randomBytes;
+    const tmpDir = nodePath().join(dataDir, `.tmp-${version}-${randomBytes(4).toString("hex")}`);
+    await nodeFs().promises.mkdir(tmpDir, { recursive: true });
 
     try {
-      const archivePath = path.join(tmpDir, asset.name);
+      const archivePath = nodePath().join(tmpDir, asset.name);
       await downloadToFile(asset.browser_download_url, archivePath, asset.size, opts);
       this.throwIfAborted(opts.signal);
 
       opts.onProgress?.({ phase: "extract", message: "Extracting archive…" });
-      const extractDir = path.join(tmpDir, "extract");
-      await fs.promises.mkdir(extractDir, { recursive: true });
+      const extractDir = nodePath().join(tmpDir, "extract");
+      await nodeFs().promises.mkdir(extractDir, { recursive: true });
       await extractArchive(archivePath, extractDir);
       this.throwIfAborted(opts.signal);
 
       const extractedBin = await locateFile(extractDir, binName);
       if (target.platform !== "windows") {
-        await fs.promises.chmod(extractedBin, 0o755);
+        await nodeFs().promises.chmod(extractedBin, 0o755);
       }
 
       // Stage the final layout under tmpDir, then atomically rename into place.
-      const stageDir = path.join(tmpDir, "stage");
-      const stageBinDir = path.join(stageDir, "bin");
-      await fs.promises.mkdir(stageBinDir, { recursive: true });
-      await fs.promises.rename(extractedBin, path.join(stageBinDir, binName));
+      const stageDir = nodePath().join(tmpDir, "stage");
+      const stageBinDir = nodePath().join(stageDir, "bin");
+      await nodeFs().promises.mkdir(stageBinDir, { recursive: true });
+      await nodeFs().promises.rename(extractedBin, nodePath().join(stageBinDir, binName));
 
       const manifest: InstallManifest = {
         version,
         assetName: asset.name,
         installedAt: new Date().toISOString(),
       };
-      await fs.promises.writeFile(
-        path.join(stageDir, "install-manifest.json"),
+      await nodeFs().promises.writeFile(
+        nodePath().join(stageDir, "install-manifest.json"),
         JSON.stringify(manifest, null, 2)
       );
 
@@ -664,7 +678,7 @@ export class OpencodeBinaryManager {
         prev.binaryVersion &&
         prev.binaryVersion !== result.version
       ) {
-        const oldDir = path.join(this.getDataDir(), prev.binaryVersion);
+        const oldDir = nodePath().join(this.getDataDir(), prev.binaryVersion);
         await removeDir(oldDir).catch((e) =>
           logWarn(`[AgentMode] failed to remove old opencode ${oldDir}: ${e}`)
         );
@@ -800,13 +814,15 @@ export class OpencodeBinaryManager {
       clearOpencodeBinary();
       return;
     }
-    const stat = await fs.promises.stat(p).catch(() => null);
+    const stat = await nodeFs()
+      .promises.stat(p)
+      .catch(() => null);
     if (!stat || !stat.isFile()) {
       throw new Error(`No file at ${p}`);
     }
     if (process.platform !== "win32") {
       try {
-        await fs.promises.access(p, fs.constants.X_OK);
+        await nodeFs().promises.access(p, nodeFs().constants.X_OK);
       } catch {
         throw new Error(`${p} is not executable. chmod +x and try again.`);
       }
@@ -857,7 +873,7 @@ export function parseVersionFromStdout(stdout: string): string | undefined {
 
 async function fileExists(p: string): Promise<boolean> {
   try {
-    await fs.promises.access(p);
+    await nodeFs().promises.access(p);
     return true;
   } catch {
     return false;
@@ -866,7 +882,7 @@ async function fileExists(p: string): Promise<boolean> {
 
 async function readManifest(p: string): Promise<InstallManifest | null> {
   try {
-    const raw = await fs.promises.readFile(p, "utf-8");
+    const raw = await nodeFs().promises.readFile(p, "utf-8");
     return JSON.parse(raw) as InstallManifest;
   } catch {
     return null;
@@ -874,25 +890,25 @@ async function readManifest(p: string): Promise<InstallManifest | null> {
 }
 
 async function removeDir(p: string): Promise<void> {
-  await fs.promises.rm(p, { recursive: true, force: true });
+  await nodeFs().promises.rm(p, { recursive: true, force: true });
 }
 
 /** Recursively sum the byte size of all files under `dir`; 0 if it's absent. */
 async function dirSize(dir: string): Promise<number> {
-  let entries: fs.Dirent[];
+  let entries: Dirent[];
   try {
-    entries = await fs.promises.readdir(dir, { withFileTypes: true });
+    entries = await nodeFs().promises.readdir(dir, { withFileTypes: true });
   } catch {
     return 0;
   }
   let total = 0;
   for (const e of entries) {
-    const full = path.join(dir, e.name);
+    const full = nodePath().join(dir, e.name);
     if (e.isDirectory()) {
       total += await dirSize(full);
     } else if (e.isFile()) {
-      total += await fs.promises
-        .stat(full)
+      total += await nodeFs()
+        .promises.stat(full)
         .then((s) => s.size)
         .catch(() => 0);
     }
@@ -910,6 +926,7 @@ function httpsGetWithRedirects(
   signal: AbortSignal | undefined,
   maxRedirects = 5
 ): Promise<IncomingMessage> {
+  const https = requireNodeModule<typeof import("node:https")>("https");
   return new Promise((resolve, reject) => {
     const request = (currentUrl: string, redirectsLeft: number): void => {
       let onAbort: (() => void) | null = null;
@@ -972,7 +989,7 @@ async function downloadToFile(
   expectedSize: number | undefined,
   opts: InstallPipelineOptions
 ): Promise<void> {
-  const assetName = path.basename(dest);
+  const assetName = nodePath().basename(dest);
   const res = await httpsGetWithRedirects(url, opts.signal);
   const total =
     expectedSize ??
@@ -981,7 +998,7 @@ async function downloadToFile(
   let received = 0;
   let stalled = false;
   let inactivityTimer: number | null = null;
-  const out = fs.createWriteStream(dest);
+  const out = nodeFs().createWriteStream(dest);
   await new Promise<void>((resolve, reject) => {
     const clearInactivity = (): void => {
       if (inactivityTimer) {
@@ -1032,6 +1049,7 @@ async function downloadToFile(
  * re-implementing extraction in JS.
  */
 async function extractArchive(archivePath: string, destDir: string): Promise<void> {
+  const { spawn } = requireNodeModule<typeof import("node:child_process")>("child_process");
   // Cross-platform: macOS and Linux ship `tar`; Windows 10 1803+ ships `tar.exe`
   // built in (`bsdtar`), which handles .zip / .tar.gz / .tar.xz transparently.
   await new Promise<void>((resolve, reject) => {
@@ -1066,9 +1084,9 @@ async function locateFile(root: string, name: string): Promise<string> {
   const queue: string[] = [root];
   while (queue.length > 0) {
     const dir = queue.shift() as string;
-    const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+    const entries = await nodeFs().promises.readdir(dir, { withFileTypes: true });
     for (const e of entries) {
-      const full = path.join(dir, e.name);
+      const full = nodePath().join(dir, e.name);
       if (e.isDirectory()) queue.push(full);
       else if (e.isFile() && e.name === name) return full;
     }

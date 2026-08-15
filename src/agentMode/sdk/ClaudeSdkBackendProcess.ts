@@ -22,9 +22,6 @@ import {
   type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 import { App } from "obsidian";
-import { access, readFile } from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
 import { v4 as uuidv4 } from "uuid";
 import { translateBackendState } from "@/agentMode/session/translateBackendState";
 import { parseClaudeTranscript } from "./claudeSessionTranscript";
@@ -56,6 +53,7 @@ import type {
 } from "@/agentMode/session/types";
 import type { ProjectScopeId } from "@/agentMode/session/scope";
 import { AuthRequiredError, MethodUnsupportedError } from "@/agentMode/session/errors";
+import { requireNodeModule } from "@/utils/desktopRuntime";
 import { createClaudeTaskPlanState, type ClaudeTaskPlanState } from "./claudeTodoPlan";
 import { ClaudeBackgroundTaskStateMachine } from "./claudeTaskProtocol";
 import { createTranslatorState, mapStopReason, translateSdkMessage } from "./sdkMessageTranslator";
@@ -656,6 +654,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     cwd: string;
   }): Promise<AgentChatMessage[]> {
     try {
+      const { readFile } = requireNodeModule<typeof import("node:fs/promises")>("fs/promises");
       const file = await this.claudeTranscriptPath(params.sessionId, params.cwd);
       const text = await readFile(file, "utf8");
       return parseClaudeTranscript(text);
@@ -673,6 +672,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
    */
   async sessionExistsLocally(params: { sessionId: SessionId; cwd: string }): Promise<boolean> {
     try {
+      const { access } = requireNodeModule<typeof import("node:fs/promises")>("fs/promises");
       await access(await this.claudeTranscriptPath(params.sessionId, params.cwd));
       return true;
     } catch {
@@ -688,6 +688,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
    * non-alphanumeric character replaced by `-`, matching the CLI's encoding.
    */
   private async claudeTranscriptPath(sessionId: string, cwd: string): Promise<string> {
+    const path = requireNodeModule<typeof import("node:path")>("path");
     const configDir = (await this.resolveClaudeConfigDir()).trim();
     const projectDir = cwd.replace(/[^a-zA-Z0-9]/g, "-");
     return path.join(configDir, "projects", projectDir, `${sessionId}.jsonl`);
@@ -708,6 +709,8 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
    */
   private async resolveClaudeConfigDir(): Promise<string> {
     if (this.resolvedConfigDir !== null) return this.resolvedConfigDir;
+    const os = requireNodeModule<typeof import("node:os")>("os");
+    const path = requireNodeModule<typeof import("node:path")>("path");
     const envOverrides = this.opts.getEnvOverrides?.() ?? {};
     const managedEnv = (await this.opts.getManagedEnv?.()) ?? {};
     this.resolvedConfigDir =

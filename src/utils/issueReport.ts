@@ -14,6 +14,7 @@
  */
 
 import { redactLogText } from "./redactLog";
+import { requireNodeModule } from "./desktopRuntime";
 
 /**
  * End-user reports go to the PUBLIC repo. The private `obsidian-copilot-preview`
@@ -187,10 +188,8 @@ export function buildReportIssueUrl(input: ReportInput, attachedFiles: string[])
 }
 
 function getNodeReportRuntime(): ReportRuntime {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports -- report bundle writing is invoked only by the desktop report flow
-  const fs = require("node:fs/promises") as typeof import("node:fs/promises");
-  // eslint-disable-next-line @typescript-eslint/no-require-imports -- report bundle paths stay inside the same desktop-only runtime adapter
-  const path = require("node:path") as typeof import("node:path");
+  const fs = requireNodeModule<typeof import("node:fs/promises")>("fs/promises");
+  const path = requireNodeModule<typeof import("node:path")>("path");
   return {
     join: (...parts: string[]) => path.join(...parts),
     mkdir: async (p, opts) => {
