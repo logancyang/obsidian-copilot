@@ -5,6 +5,36 @@ import tailwind from "eslint-plugin-tailwindcss";
 import boundaries from "eslint-plugin-boundaries";
 import globals from "globals";
 
+const restrictedSourceImports = [
+  {
+    selector:
+      "ImportDeclaration[source.value=/^\\.\\.($|\\u002f)/], ImportExpression[source.value=/^\\.\\.($|\\u002f)/]",
+    message:
+      "Parent-relative imports (`../foo`) are banned. Use the `@/` path alias (e.g. `@/components/Foo`) instead.",
+  },
+  {
+    selector:
+      "ImportDeclaration[source.value='react-dom/client'] ImportSpecifier[imported.name='createRoot']",
+    message:
+      "Use createPluginRoot from '@/utils/react/createPluginRoot' instead. It wraps the root in <AppContext.Provider> so descendants can rely on useApp() unconditionally (see PR #2466).",
+  },
+];
+
+const restrictedConsoleCalls = [
+  {
+    selector: "CallExpression[callee.object.name='console'][callee.property.name='log']",
+    message: "Use logInfo() from '@/logger' instead of console.log().",
+  },
+  {
+    selector: "CallExpression[callee.object.name='console'][callee.property.name='warn']",
+    message: "Use logWarn() from '@/logger' instead of console.warn().",
+  },
+  {
+    selector: "CallExpression[callee.object.name='console'][callee.property.name='error']",
+    message: "Use logError() from '@/logger' instead of console.error().",
+  },
+];
+
 export default [
   {
     ignores: [
@@ -84,6 +114,19 @@ export default [
     rules: {
       // Carry-over from legacy .eslintrc
       "no-prototype-builtins": "off",
+      // Use project-specific console-call messages below while preserving the
+      // Obsidian config's custom message for the Function constructor.
+      "obsidianmd/rule-custom-message": [
+        "error",
+        {
+          "no-new-func": {
+            messages: {
+              "The Function constructor is eval":
+                "Using the `Function` constructor is dangerous because it executes arbitrary code, similar to `eval()`",
+            },
+          },
+        },
+      ],
       "tailwindcss/classnames-order": "error",
       "tailwindcss/enforces-negative-arbitrary-values": "error",
       "tailwindcss/enforces-shorthand": "error",
@@ -169,21 +212,25 @@ export default [
     files: ["src/**/*.{ts,tsx}"],
     ignores: ["src/utils/react/createPluginRoot.tsx"],
     rules: {
-      "no-restricted-syntax": [
-        "error",
-        {
-          selector:
-            "ImportDeclaration[source.value=/^\\.\\.($|\\u002f)/], ImportExpression[source.value=/^\\.\\.($|\\u002f)/]",
-          message:
-            "Parent-relative imports (`../foo`) are banned. Use the `@/` path alias (e.g. `@/components/Foo`) instead.",
-        },
-        {
-          selector:
-            "ImportDeclaration[source.value='react-dom/client'] ImportSpecifier[imported.name='createRoot']",
-          message:
-            "Use createPluginRoot from '@/utils/react/createPluginRoot' instead. It wraps the root in <AppContext.Provider> so descendants can rely on useApp() unconditionally (see PR #2466).",
-        },
-      ],
+      "no-restricted-syntax": ["error", ...restrictedSourceImports, ...restrictedConsoleCalls],
+    },
+  },
+
+  // createPluginRoot owns the otherwise-restricted React root import, but it
+  // still belongs to the production logging boundary.
+  {
+    files: ["src/utils/react/createPluginRoot.tsx"],
+    rules: {
+      "no-restricted-syntax": ["error", ...restrictedConsoleCalls],
+    },
+  },
+
+  // Test output is intentionally written to the console. Keep the production
+  // import restrictions without applying the logging boundary to test files.
+  {
+    files: ["src/**/*.test.{js,jsx,ts,tsx}", "src/integration_tests/**"],
+    rules: {
+      "no-restricted-syntax": ["error", ...restrictedSourceImports],
     },
   },
 
@@ -588,15 +635,6 @@ export default [
           presets: ["native", "microutilities", "preferred"],
         },
       ],
-    },
-  },
-
-  // logger.ts is the central logging utility and must call console.* directly.
-  // scripts/** are CLI tools that print to stdout.
-  {
-    files: ["src/logger.ts", "scripts/**"],
-    rules: {
-      "obsidianmd/rule-custom-message": "off",
     },
   },
 
