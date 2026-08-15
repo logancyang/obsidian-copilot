@@ -3,13 +3,8 @@ import type { AgentSessionManager } from "@/agentMode";
 // platform, and the barrel pulls Node-only modules that crash mobile.
 import { isNativeChatId, parseNativeChatId } from "@/utils/nativeChatId";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
-import ProjectManager from "@/LLMProviders/projectManager";
-import {
-  CustomModel,
-  getCurrentProject,
-  setSelectedTextContexts,
-  getSelectedTextContexts,
-} from "@/aiParams";
+import ChainOwner from "@/LLMProviders/chainOwner";
+import { CustomModel, setSelectedTextContexts, getSelectedTextContexts } from "@/aiParams";
 import { NoteSelectedTextContext, SelectedTextContext } from "@/types/message";
 import { registerCommands } from "@/commands";
 import CopilotView from "@/components/CopilotView";
@@ -83,7 +78,6 @@ import { dehydrateDeviceProfile, hydrateDeviceProfile } from "@/settings/deviceP
 import { getDeviceId } from "@/utils/deviceId";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { installRendererEventsShim } from "@/utils/rendererEventsShim";
-import { ProjectContextCache } from "@/cache/projectContextCache";
 import { ContextProcessor } from "@/contextProcessor";
 import { CustomCommandManager } from "@/commands/customCommandManager";
 import { ChatManagerChatUIState } from "@/state/ChatUIState";
@@ -141,7 +135,7 @@ import {
 
 export default class CopilotPlugin extends Plugin {
   // Plugin components
-  projectManager: ProjectManager;
+  chainOwner: ChainOwner;
   brevilabsClient: BrevilabsClient;
   userMessageHistory: string[] = [];
   vectorStoreManager: VectorStoreManager;
@@ -269,9 +263,8 @@ export default class CopilotPlugin extends Plugin {
     // Initialize built-in tools with app access
     initializeBuiltinTools(this.app);
 
-    // Seed the ProjectContextCache and ContextProcessor singletons with `app`
-    // before anything reaches for them via the no-arg getInstance().
-    ProjectContextCache.getInstance(this.app);
+    // Seed the ContextProcessor singleton with `app` before anything reaches
+    // for it via the no-arg getInstance().
     ContextProcessor.getInstance(this.app);
     CustomCommandManager.getInstance(this.app);
     logFileManager.setApp(this.app);
@@ -298,8 +291,8 @@ export default class CopilotPlugin extends Plugin {
       )
     );
 
-    // Initialize ProjectManager
-    this.projectManager = ProjectManager.getInstance(this.app, this);
+    // Initialize the owner of the shared Quick Chat chain
+    this.chainOwner = ChainOwner.getInstance(this.app, this.modelManagement);
 
     // Initialize Agent Mode coordinator (desktop only — ACP needs subprocess
     // support). Gate on `isDesktopRuntime()`, not `Platform.isDesktopApp`:
@@ -346,7 +339,7 @@ export default class CopilotPlugin extends Plugin {
 
     // Initialize ChatUIState with new architecture
     const messageRepo = new MessageRepository();
-    const chainManager = this.projectManager.getCurrentChainManager();
+    const chainManager = this.chainOwner.getCurrentChainManager();
     const chatManager = new ChatManager(messageRepo, chainManager, this.fileParserManager, this);
     this.chatUIState = new ChatManagerChatUIState(chatManager);
 
@@ -654,10 +647,6 @@ export default class CopilotPlugin extends Plugin {
 
     // Cleanup chat selection highlight controller
     this.chatSelectionHighlightController?.cleanup();
-
-    if (this.projectManager) {
-      this.projectManager.onunload();
-    }
 
     this.agentModelDiscoveryUnsubscriber?.();
     await this.agentSessionManager?.shutdown();
@@ -1265,11 +1254,9 @@ export default class CopilotPlugin extends Plugin {
     const folderFiles = await listMarkdownFiles(this.app, getEffectiveConversationsFolder());
     if (folderFiles.length === 0) return [];
 
-    const currentProject = getCurrentProject();
-
     // Reason: pass all files to filterChatHistoryFiles which checks frontmatter projectId.
     // A prefix prefilter would miss renamed or legacy files that still have correct frontmatter.
-    return filterChatHistoryFiles(this.app, folderFiles, currentProject?.id);
+    return filterChatHistoryFiles(this.app, folderFiles);
   }
 
   async getChatHistoryItems(): Promise<ChatHistoryItem[]> {
@@ -1514,7 +1501,7 @@ export default class CopilotPlugin extends Plugin {
     if (getSettings().enableRecentConversations) {
       try {
         // Get the current chat model from the chain manager
-        const chainManager = this.projectManager.getCurrentChainManager();
+        const chainManager = this.chainOwner.getCurrentChainManager();
         const chatModel = chainManager.chatModelManager.getChatModel();
         this.userMemoryManager.addRecentConversation(this.chatUIState.getMessages(), chatModel);
       } catch (error) {

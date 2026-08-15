@@ -167,23 +167,14 @@ The memory system behaves differently depending on which chat mode is active:
   - Cannot save new memories during conversations
   - Users must manually add memories outside of chat
 
-### Project Mode
-
-- **Memory Retrieval**: ❌ Currently disabled (memory not enabled for project mode)
-- **Memory Saving**: ❌ Not available
-- **Behavior**:
-  - Project-specific context only
-  - No cross-conversation memory persistence
-  - Note: Future enhancement could add project-scoped memory
-
 ### Key Differences Summary
 
-| Feature          | Agent Mode    | Plus Mode          | Basic Chat    | Project Mode |
-| ---------------- | ------------- | ------------------ | ------------- | ------------ |
-| Memory Retrieval | ✅ Dynamic    | ✅ Dynamic         | ✅ Dynamic    | ❌ Disabled  |
-| Memory Saving    | ✅ XML Tools  | ✅ Intent Analysis | ❌ None       | ❌ None      |
-| Tool Decision    | AI Reasoning  | Pre-analysis       | N/A           | N/A          |
-| Memory Context   | System Prompt | System Prompt      | System Prompt | None         |
-| User Control     | AI-driven     | Intent-driven      | Manual only   | None         |
+| Feature          | Agent Mode    | Plus Mode          | Basic Chat    |
+| ---------------- | ------------- | ------------------ | ------------- |
+| Memory Retrieval | ✅ Dynamic    | ✅ Dynamic         | ✅ Dynamic    |
+| Memory Saving    | ✅ XML Tools  | ✅ Intent Analysis | ❌ None       |
+| Tool Decision    | AI Reasoning  | Pre-analysis       | N/A           |
+| Memory Context   | System Prompt | System Prompt      | System Prompt |
+| User Control     | AI-driven     | Intent-driven      | Manual only   |
 
 This design ensures that memory capabilities scale appropriately with the sophistication of each chat mode, while maintaining consistent memory retrieval across modes that support it.

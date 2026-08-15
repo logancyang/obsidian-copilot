@@ -24,7 +24,7 @@ export class CopilotSettingTab extends PluginSettingTab {
       if (chatView && getSettings().enableRecentConversations) {
         try {
           // Get the current chat model from the chain manager
-          const chainManager = this.plugin.projectManager.getCurrentChainManager();
+          const chainManager = this.plugin.chainOwner.getCurrentChainManager();
           const chatModel = chainManager.chatModelManager.getChatModel();
           this.plugin.userMemoryManager.addRecentConversation(
             this.plugin.chatUIState.getMessages(),

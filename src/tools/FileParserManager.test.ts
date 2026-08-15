@@ -4,9 +4,8 @@
  * The routing decision lives in `resolveDocProcessorBackend` (field === "miyo",
  * Miyo in use, and available). These tests assert how the two document parsers
  * compose that decision with their (deliberately asymmetric) error shapes:
- *   - Docs4LLMParser (project/batch mode) THROWS on a Miyo parse failure so the
- *     batch runner marks that file failed/retriable — and never falls back to
- *     cloud (privacy).
+ *   - Docs4LLMParser THROWS on a Miyo parse failure so the caller marks that
+ *     file failed/retriable — and never falls back to cloud (privacy).
  *   - PDFParser (single-doc mode) RETURNS an error string on a Miyo parse
  *     failure — also never falling back to cloud.
  * An explicit "miyo" field always fails closed when Miyo can't be used — whether
@@ -42,17 +41,6 @@ jest.mock("@/miyo/MiyoClient", () => ({
   })),
 }));
 
-const mockGetOrReuseFileContext = jest.fn();
-const mockSetFileContext = jest.fn();
-jest.mock("@/cache/projectContextCache", () => ({
-  ProjectContextCache: {
-    getInstance: () => ({
-      getOrReuseFileContext: mockGetOrReuseFileContext,
-      setFileContext: mockSetFileContext,
-    }),
-  },
-}));
-
 const mockPdfCacheGet = jest.fn();
 const mockPdfCacheSet = jest.fn();
 jest.mock("@/cache/pdfCache", () => ({
@@ -76,7 +64,6 @@ jest.mock("@/settings/model", () => ({
   getSettings: () => mockGetSettings(),
 }));
 
-import type { ProjectConfig } from "@/aiParams";
 import type { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import { isMiyoAvailableForCapability } from "@/miyo/miyoStatusStore";
 import type { CopilotSettings } from "@/settings/model";
@@ -105,15 +92,8 @@ const docx = (name: string): TFile =>
 const vault = { getName: () => "MyVault", readBinary: jest.fn(async () => new ArrayBuffer(8)) };
 const asVault = vault as unknown as Vault;
 
-const project = { id: "p1", name: "Proj" } as ProjectConfig;
-
-/** docs4llm cloud client stub; returns a plain markdown string. */
-const cloudClient = (docs4llm: jest.Mock): BrevilabsClient =>
-  ({ docs4llm }) as unknown as BrevilabsClient;
-
 beforeEach(() => {
   jest.clearAllMocks();
-  mockGetOrReuseFileContext.mockResolvedValue(null); // cache miss by default
   mockPdfCacheGet.mockResolvedValue(null);
   mockResolveBaseUrl.mockResolvedValue("http://localhost:8742");
   mockSnapshot.mockReturnValue({ documentProcessor: "available" }); // conclusive by default
@@ -131,14 +111,13 @@ describe("Docs4LLMParser — batch × partial failure (Miyo available)", () => {
       .mockRejectedValueOnce(new Error("connection reset"));
 
     const docs4llm = jest.fn();
-    const parser = new Docs4LLMParser(cloudClient(docs4llm), project);
+    const parser = new Docs4LLMParser();
 
     await expect(parser.parseFile(pdf("a"), asVault)).resolves.toBe("extracted one");
     // Privacy: the failing file throws instead of falling back to cloud.
     await expect(parser.parseFile(pdf("b"), asVault)).rejects.toThrow(/Miyo failed to parse b/);
 
     expect(docs4llm).not.toHaveBeenCalled();
-    expect(mockSetFileContext).toHaveBeenCalledWith(project, "docs/a.pdf", "extracted one");
   });
 });
 
@@ -148,7 +127,7 @@ describe("Docs4LLMParser — fail closed (field miyo in use, Miyo unavailable)",
     mockAvailable.mockReturnValue(false); // Miyo not reachable
     const docs4llm = jest.fn().mockResolvedValue({ response: "cloud markdown" });
 
-    const parser = new Docs4LLMParser(cloudClient(docs4llm), project);
+    const parser = new Docs4LLMParser();
 
     await expect(parser.parseFile(pdf("a"), asVault)).rejects.toThrow(/Miyo.*is unavailable/);
     expect(mockParseDoc).not.toHaveBeenCalled();
@@ -227,7 +206,7 @@ describe("parse-boundary status refresh (field miyo, status unconclusive)", () =
     mockAvailable.mockReturnValue(false);
     const docs4llm = jest.fn();
 
-    const parser = new Docs4LLMParser(cloudClient(docs4llm), project);
+    const parser = new Docs4LLMParser();
 
     await expect(parser.parseFile(pdf("solo"), asVault)).rejects.toThrow(/Miyo.*is unavailable/);
     expect(docs4llm).not.toHaveBeenCalled(); // never uploaded to cloud
@@ -306,7 +285,7 @@ describe("Docs4LLMParser — EPUB routes locally like PDF", () => {
     mockParseDoc.mockResolvedValue({ text: "epub text" });
     const docs4llm = jest.fn();
 
-    const parser = new Docs4LLMParser(cloudClient(docs4llm), project);
+    const parser = new Docs4LLMParser();
     const result = await parser.parseFile(epub("book"), asVault);
 
     expect(result).toBe("epub text");
@@ -323,38 +302,34 @@ describe("Docs4LLMParser — EPUB routes locally like PDF", () => {
     mockAvailable.mockReturnValue(false);
     const docs4llm = jest.fn().mockResolvedValue({ response: "cloud epub" });
 
-    const parser = new Docs4LLMParser(cloudClient(docs4llm), project);
+    const parser = new Docs4LLMParser();
 
     await expect(parser.parseFile(epub("book"), asVault)).rejects.toThrow(/Miyo.*is unavailable/);
     expect(mockParseDoc).not.toHaveBeenCalled();
     expect(docs4llm).not.toHaveBeenCalled();
   });
 
-  it("still routes a non-{pdf,epub} format to Plus even when Miyo is available", async () => {
+  it("reports no processor for a non-{pdf,epub} format even when Miyo is available", async () => {
     mockGetSettings.mockReturnValue(settings({ docProcessorBackend: "miyo" }));
     mockAvailable.mockReturnValue(true);
-    const docs4llm = jest.fn().mockResolvedValue({ response: "cloud docx" });
 
-    const parser = new Docs4LLMParser(cloudClient(docs4llm), project);
-    const result = await parser.parseFile(docx("report"), asVault);
+    const parser = new Docs4LLMParser();
 
-    expect(result).toBe("cloud docx");
-    expect(mockParseDoc).not.toHaveBeenCalled(); // never tried Miyo for docx
-    expect(docs4llm).toHaveBeenCalledTimes(1);
+    await expect(parser.parseFile(docx("report"), asVault)).rejects.toThrow(
+      /No document processor available/
+    );
+    expect(mockParseDoc).not.toHaveBeenCalled(); // Miyo only handles pdf/epub
   });
 });
 
-// Normal chat builds Docs4LLMParser with project=null. EPUB has no PDFParser-style
-// non-project fallback, so it must route through Miyo BEFORE the cloud path's
-// project requirement — otherwise "add an EPUB in ordinary chat" throws.
-describe("Docs4LLMParser — normal chat (no project)", () => {
-  it("parses an EPUB via Miyo without a project, never throwing 'No project context'", async () => {
+describe("Docs4LLMParser — Quick Chat", () => {
+  it("parses an EPUB via Miyo", async () => {
     mockGetSettings.mockReturnValue(settings({ docProcessorBackend: "miyo" }));
     mockAvailable.mockReturnValue(true);
     mockParseDoc.mockResolvedValue({ text: "epub text" });
     const docs4llm = jest.fn();
 
-    const parser = new Docs4LLMParser(cloudClient(docs4llm), null);
+    const parser = new Docs4LLMParser();
     const result = await parser.parseFile(epub("book"), asVault);
 
     expect(result).toBe("epub text");
@@ -364,28 +339,26 @@ describe("Docs4LLMParser — normal chat (no project)", () => {
       "books/book.epub"
     );
     expect(docs4llm).not.toHaveBeenCalled();
-    // No project → nothing to key a project cache write against.
-    expect(mockSetFileContext).not.toHaveBeenCalled();
   });
 
-  it("fails closed for an EPUB when Miyo is unavailable, even without a project", async () => {
+  it("fails closed for an EPUB when Miyo is unavailable", async () => {
     mockGetSettings.mockReturnValue(settings({ docProcessorBackend: "miyo" }));
     mockAvailable.mockReturnValue(false);
     const docs4llm = jest.fn().mockResolvedValue({ response: "cloud epub" });
 
-    const parser = new Docs4LLMParser(cloudClient(docs4llm), null);
+    const parser = new Docs4LLMParser();
 
     await expect(parser.parseFile(epub("book"), asVault)).rejects.toThrow(/Miyo.*is unavailable/);
     expect(docs4llm).not.toHaveBeenCalled();
   });
 
-  it("still requires a project for the cloud path (non-local format)", async () => {
+  it("reports no processor for a non-local format when the backend is Plus", async () => {
     mockGetSettings.mockReturnValue(settings({ docProcessorBackend: "plus" }));
-    const docs4llm = jest.fn();
 
-    const parser = new Docs4LLMParser(cloudClient(docs4llm), null);
+    const parser = new Docs4LLMParser();
 
-    await expect(parser.parseFile(docx("report"), asVault)).rejects.toThrow(/No project context/);
-    expect(docs4llm).not.toHaveBeenCalled();
+    await expect(parser.parseFile(docx("report"), asVault)).rejects.toThrow(
+      /No document processor available/
+    );
   });
 });

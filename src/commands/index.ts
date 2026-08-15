@@ -1,6 +1,5 @@
 import { logFileManager } from "@/logFileManager";
 import { FileCache } from "@/cache/fileCache";
-import { ProjectContextCache } from "@/cache/projectContextCache";
 import { logError } from "@/logger";
 import {
   clearRecordedPromptPayload,
@@ -106,7 +105,7 @@ export function registerCommands(plugin: CopilotPlugin, publish: PublishFile) {
   addEditorCommand(plugin, COMMAND_IDS.COUNT_WORD_AND_TOKENS_SELECTION, async (editor: Editor) => {
     const selectedText = editor.getSelection();
     const wordCount = selectedText.split(" ").length;
-    const tokenCount = await plugin.projectManager
+    const tokenCount = await plugin.chainOwner
       .getCurrentChainManager()
       .chatModelManager.countTokens(selectedText);
     new Notice(`Selected text contains ${wordCount} words and ${tokenCount} tokens.`);
@@ -115,7 +114,7 @@ export function registerCommands(plugin: CopilotPlugin, publish: PublishFile) {
   addCommand(plugin, COMMAND_IDS.COUNT_TOTAL_VAULT_TOKENS, async () => {
     try {
       const allContent = await getAllQAMarkdownContent(plugin.app);
-      const totalTokens = await plugin.projectManager
+      const totalTokens = await plugin.chainOwner
         .getCurrentChainManager()
         .chatModelManager.countTokens(allContent);
       new Notice(`Total tokens in your vault: ${totalTokens}`);
@@ -512,9 +511,6 @@ export function registerCommands(plugin: CopilotPlugin, publish: PublishFile) {
   addCommand(plugin, COMMAND_IDS.CLEAR_COPILOT_CACHE, async () => {
     try {
       await plugin.fileParserManager.clearPDFCache(plugin.app.vault);
-
-      // Clear project context cache
-      await ProjectContextCache.getInstance().clearAllCache();
 
       // Clear file content cache (get FileCache instance and clear it)
       const fileCache = FileCache.getInstance<string>();

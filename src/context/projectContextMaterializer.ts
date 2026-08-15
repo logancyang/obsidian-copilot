@@ -178,20 +178,18 @@ const inFlightMaterializations = new Map<string, InFlightMaterialization>();
  * two projects maps to the SAME mutex — so two projects cold-converting one URL
  * converge to a single fetch: the first acquires the lock, reads meta (miss),
  * fetches, atomically writes, releases; the second waits, acquires, re-reads the
- * now-present meta, and cheap-skips without re-fetching or overwriting. Mirrors
- * CAG's `ProjectContextCache.getOrCreateProjectMutex`.
+ * now-present meta, and cheap-skips without re-fetching or overwriting.
  *
  * The map is bounded by the count of distinct cached sources in a vault (small),
- * so it is never pruned — matching CAG, which likewise retains its mutexes.
+ * so it is never pruned.
  */
 const sourceArtifactMutexes = new Map<string, Mutex>();
 
 /**
- * Get-or-create the mutex for a snapshot file name. No creation lock is needed
- * (unlike CAG's belt-and-suspenders `mutexCreationMutex`): there is no `await`
- * between the `get` and the `set`, so in JS's single-threaded model two
- * concurrent callers run this synchronously to completion and observe the same
- * instance. # Reason: a creation mutex would only matter if creation could yield.
+ * Get-or-create the mutex for a snapshot file name. No creation lock is needed:
+ * there is no `await` between the `get` and the `set`, so in JS's single-threaded
+ * model two concurrent callers run this synchronously to completion and observe
+ * the same instance. A creation mutex would only matter if creation could yield.
  */
 function getSourceArtifactMutex(key: string): Mutex {
   let mutex = sourceArtifactMutexes.get(key);

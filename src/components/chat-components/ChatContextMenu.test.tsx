@@ -27,9 +27,6 @@ jest.mock("@/aiParams", () => ({
   useIndexingProgress: () => [{ isActive: false }],
 }));
 
-jest.mock("@/hooks/useProjectContextStatus", () => ({
-  useProjectContextStatus: () => "initial",
-}));
 /* eslint-enable @eslint-react/hooks-extra/no-unnecessary-use-prefix */
 
 jest.mock("@/utils/desktopRuntime", () => ({

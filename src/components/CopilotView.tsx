@@ -12,7 +12,7 @@ import * as React from "react";
 
 export default class CopilotView extends ItemView {
   private get chainManager(): ChainManager {
-    return this.plugin.projectManager.getCurrentChainManager();
+    return this.plugin.chainOwner.getCurrentChainManager();
   }
 
   private fileParserManager: FileParserManager;

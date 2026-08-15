@@ -17,7 +17,6 @@ interface ChatControlsProps {
   contextFolders: string[];
   contextWebTabs: WebTabContext[];
   selectedTextContexts?: SelectedTextContext[];
-  showProgressCard: () => void;
   showIndexingCard?: () => void;
   lexicalEditorRef?: React.RefObject<{ focus: () => void }>;
 
@@ -39,7 +38,6 @@ export const ContextControl: React.FC<ChatControlsProps> = ({
   contextFolders,
   contextWebTabs,
   selectedTextContexts,
-  showProgressCard,
   showIndexingCard,
   lexicalEditorRef,
   onAddToContext,
@@ -74,7 +72,6 @@ export const ContextControl: React.FC<ChatControlsProps> = ({
       contextFolders={contextFolders}
       contextWebTabs={contextWebTabs}
       selectedTextContexts={selectedTextContexts}
-      showProgressCard={showProgressCard}
       showIndexingCard={showIndexingCard}
       onTypeaheadSelect={handleTypeaheadSelect}
       lexicalEditorRef={lexicalEditorRef}

@@ -1,10 +1,7 @@
 import {
   clearSelectedTextContexts,
-  getCurrentProject,
   getSelectedTextContexts,
-  ProjectConfig,
   removeSelectedTextContext,
-  subscribeToProjectChange,
   useChainType,
   updateIndexingProgressState,
   useIndexingProgress,
@@ -12,19 +9,15 @@ import {
   useSelectedTextContexts,
 } from "@/aiParams";
 import { resetSessionSystemPromptSettings } from "@/system-prompts";
-import { ChainType } from "@/chainType";
-import { useProjectContextStatus } from "@/hooks/useProjectContextStatus";
 import { logInfo, logError } from "@/logger";
 import type { WebTabContext } from "@/types/message";
 
-import { ChatControls, reloadCurrentProject } from "@/components/chat-components/ChatControls";
+import { ChatControls } from "@/components/chat-components/ChatControls";
 import ChatInput from "@/components/chat-components/ChatModeInput";
 import ChatMessages from "@/components/chat-components/ChatMessages";
 import { useChatModelPicker } from "@/components/chat-components/useChatModelPicker";
 import { NewVersionBanner } from "@/components/chat-components/NewVersionBanner";
-import { ProjectList } from "@/components/chat-components/ProjectList";
 import IndexingProgressCard from "@/components/IndexingProgressCard";
-import ProgressCard from "@/components/project/progress-card";
 import {
   ABORT_REASON,
   AI_SENDER,
@@ -42,9 +35,6 @@ import ChainManager from "@/LLMProviders/chainManager";
 import { clearRecordedPromptPayload } from "@/LLMProviders/chainRunner/utils/promptPayloadRecorder";
 import { logFileManager } from "@/logFileManager";
 import CopilotPlugin from "@/main";
-import { useIsPaidUser } from "@/plusUtils";
-import { ProjectFileManager } from "@/projects/ProjectFileManager";
-import { useProjects } from "@/projects/state";
 import { getModelKeyFromModel, useSettingsValue } from "@/settings/model";
 import { ChatManagerChatUIState } from "@/state/ChatUIState";
 import { FileParserManager } from "@/tools/FileParserManager";
@@ -53,21 +43,10 @@ import { err2String, isPlusChain, modelSupportsVision } from "@/utils";
 import { arrayBufferToBase64 } from "@/utils/base64";
 import { appendUniqueFiles } from "@/utils/fileListUtils";
 import { Notice, TFile } from "obsidian";
-import { ContextManageModal } from "@/components/modals/project/context-manage-modal";
-import React, {
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from "react";
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import { useActiveWebTabState } from "@/components/chat-components/hooks/useActiveWebTabState";
-
-type ChatMode = "default" | "project";
 
 interface ChatProps {
   chainManager: ChainManager;
@@ -75,7 +54,6 @@ interface ChatProps {
   updateUserMessageHistory: (newMessage: string) => void;
   fileParserManager: FileParserManager;
   plugin: CopilotPlugin;
-  mode?: ChatMode;
   chatUIState: ChatManagerChatUIState;
 }
 
@@ -90,19 +68,14 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
   chatInput,
 }) => {
   const settings = useSettingsValue();
-  const projects = useProjects();
   const eventTarget = useContext(EventTargetContext);
 
   const { messages: chatHistory, addMessage: rawAddMessage } = useChatManager(chatUIState);
   const [currentModelKey, setCurrentModelKey] = useModelKey();
   const [currentChain] = useChainType();
-  const currentProject = useSyncExternalStore(subscribeToProjectChange, getCurrentProject);
   // Non-agent chat picker sourced from the model-management "chat" backend.
   const chatModelPicker = useChatModelPicker({
-    value:
-      currentChain === ChainType.PROJECT_CHAIN
-        ? currentProject?.projectModelKey || currentModelKey
-        : currentModelKey,
+    value: currentModelKey,
     onChange: setCurrentModelKey,
   });
   const [currentAiMessage, setCurrentAiMessage] = useState("");
@@ -135,16 +108,14 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
   const [loadingMessage, setLoadingMessage] = useState(LOADING_MESSAGES.DEFAULT);
   const [contextNotes, setContextNotes] = useState<TFile[]>([]);
   const [includeActiveNote, setIncludeActiveNote] = useState(
-    settings.autoAddActiveContentToContext === true && currentChain !== ChainType.PROJECT_CHAIN
+    settings.autoAddActiveContentToContext === true
   );
   const [includeActiveWebTab, setIncludeActiveWebTab] = useState(
-    settings.autoAddActiveContentToContext === true && currentChain !== ChainType.PROJECT_CHAIN
+    settings.autoAddActiveContentToContext === true
   );
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
-  const [showChatUI, setShowChatUI] = useState(false);
   const [chatHistoryItems, setChatHistoryItems] = useState<ChatHistoryItem[]>([]);
   // null: keep default behavior; true: show; false: hide
-  const [progressCardVisible, setProgressCardVisible] = useState<boolean | null>(null);
   const [indexingCardVisible, setIndexingCardVisible] = useState<boolean | null>(null);
   const [indexingState] = useIndexingProgress();
 
@@ -183,33 +154,12 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
   const effectiveIncludeActiveWebTab = includeActiveWebTab && !hasAnySelection;
 
   const { activeWebTabForMentions: currentActiveWebTab } = useActiveWebTabState();
-  const projectContextStatus = useProjectContextStatus();
-
-  // Calculate whether to show ProgressCard based on status and user preference
-  const shouldShowProgressCard = () => {
-    if (selectedChain !== ChainType.PROJECT_CHAIN) return false;
-
-    // If user has explicitly set visibility, respect that choice
-    if (progressCardVisible !== null) {
-      return progressCardVisible;
-    }
-
-    // Default behavior: show for loading/error, hide for success
-    return projectContextStatus === "loading" || projectContextStatus === "error";
-  };
-
-  const [prevProjectContextStatus, setPrevProjectContextStatus] = useState(projectContextStatus);
-  if (prevProjectContextStatus !== projectContextStatus) {
-    setPrevProjectContextStatus(projectContextStatus);
-    setProgressCardVisible(null);
-  }
 
   /**
    * Whether to show the indexing progress card.
-   * Hidden in project mode (project card takes priority) and when user explicitly closed it.
+   * Hidden when the user explicitly closed it.
    */
   const shouldShowIndexingCard = () => {
-    if (selectedChain === ChainType.PROJECT_CHAIN) return false;
     if (indexingCardVisible === false) return false;
     // Show when indexing is active or just completed (before auto-close)
     return indexingState.isActive || indexingState.completionStatus !== "none";
@@ -263,9 +213,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     return null;
   }, [chatHistory]);
 
-  const [previousMode, setPreviousMode] = useState<ChainType | null>(null);
-  const [selectedChain, setSelectedChain] = useChainType();
-  const isPaidUser = useIsPaidUser();
+  const [selectedChain] = useChainType();
 
   const appContext = useContext(AppContext);
   const app = plugin.app || appContext;
@@ -613,36 +561,6 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     }
   }, [onSaveChat, handleSaveAsNote]);
 
-  const handleAddProject = useCallback(
-    async (project: ProjectConfig) => {
-      const manager = ProjectFileManager.getInstance(plugin.app);
-      await manager.createProject(project);
-      new Notice(`${project.name} added successfully`);
-
-      // Reason: reload is best-effort — the project is already saved, so a reload failure
-      // must not surface as a "save failed" error to the modal (which would cause retries
-      // and duplicate-id errors). reloadCurrentProject() handles its own error notices.
-      const currentProject = getCurrentProject();
-      if (currentProject?.id === project.id) {
-        void reloadCurrentProject(plugin.app);
-      }
-    },
-    [plugin.app]
-  );
-
-  const handleEditProject = useCallback(
-    async (originP: ProjectConfig, updateP: ProjectConfig) => {
-      const manager = ProjectFileManager.getInstance(plugin.app);
-      await manager.updateProject(originP.id, updateP);
-      new Notice(`${originP.name} updated successfully`);
-      // Reason: no explicit reload needed here — ProjectManager's project-record subscriber
-      // already reacts to the cache update from updateProject() and triggers
-      // setCurrentProject + loadProjectContext + createChainWithNewModel.
-      // Doing it here too would duplicate expensive work (URL fetches, chain recreation).
-    },
-    [plugin.app]
-  );
-
   const handleRemoveSelectedText = useCallback(
     (id: string) => {
       // Get fresh state to avoid stale closure issues (fixes race condition on rapid removals)
@@ -756,14 +674,8 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     plugin.chatSelectionHighlightController.clearForNewChat();
     // Suppress web selection to prevent it from reappearing in new chat
     plugin.suppressCurrentWebSelection(webSelectionUrl);
-    // Respect the autoAddActiveContentToContext setting for all non-project chains
-    if (selectedChain === ChainType.PROJECT_CHAIN) {
-      setIncludeActiveNote(false);
-      setIncludeActiveWebTab(false);
-    } else {
-      setIncludeActiveNote(settings.autoAddActiveContentToContext);
-      setIncludeActiveWebTab(settings.autoAddActiveContentToContext);
-    }
+    setIncludeActiveNote(settings.autoAddActiveContentToContext);
+    setIncludeActiveWebTab(settings.autoAddActiveContentToContext);
   }, [
     handleStopGenerating,
     chainManager.chatModelManager,
@@ -771,7 +683,6 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     settings.autosaveChat,
     settings.enableRecentConversations,
     settings.autoAddActiveContentToContext,
-    selectedChain,
     handleSaveAsNote,
     safeSet,
     plugin,
@@ -870,13 +781,8 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
       chain: selectedChain,
     });
     if (settings.autoAddActiveContentToContext !== undefined) {
-      if (selectedChain === ChainType.PROJECT_CHAIN) {
-        setIncludeActiveNote(false);
-        setIncludeActiveWebTab(false);
-      } else {
-        setIncludeActiveNote(settings.autoAddActiveContentToContext);
-        setIncludeActiveWebTab(settings.autoAddActiveContentToContext);
-      }
+      setIncludeActiveNote(settings.autoAddActiveContentToContext);
+      setIncludeActiveWebTab(settings.autoAddActiveContentToContext);
     }
   }
 
@@ -898,31 +804,9 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
           onEdit={handleEdit}
           onDelete={handleDelete}
           onReplaceChat={setInputMessage}
-          showHelperComponents={selectedChain !== ChainType.PROJECT_CHAIN}
+          showHelperComponents
         />
-        {shouldShowProgressCard() ? (
-          <div className="tw-inset-0 tw-z-modal tw-flex tw-items-center tw-justify-center tw-rounded-xl">
-            <ProgressCard
-              plugin={plugin}
-              setHiddenCard={() => {
-                setProgressCardVisible(false);
-              }}
-              onEditContext={() => {
-                const currentProject = getCurrentProject();
-                if (currentProject) {
-                  // Open the context management modal for editing the project
-                  new ContextManageModal(
-                    app,
-                    (updatedProject) => {
-                      void handleEditProject(currentProject, updatedProject);
-                    },
-                    currentProject
-                  ).open();
-                }
-              }}
-            />
-          </div>
-        ) : shouldShowIndexingCard() ? (
+        {shouldShowIndexingCard() ? (
           <div className="tw-inset-0 tw-z-modal tw-flex tw-items-center tw-justify-center tw-rounded-xl">
             <IndexingProgressCard
               onClose={handleIndexingCardClose}
@@ -937,13 +821,6 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
               onNewChat={() => void handleNewChat()}
               onSaveAsNote={() => handleSaveAsNote()}
               onLoadHistory={() => void handleLoadChatHistory()}
-              onModeChange={(newMode) => {
-                setPreviousMode(selectedChain);
-                // Hide chat UI when switching to project mode
-                if (newMode === ChainType.PROJECT_CHAIN) {
-                  setShowChatUI(false);
-                }
-              }}
               chatHistory={chatHistoryItems}
               onUpdateChatTitle={handleUpdateChatTitle}
               onDeleteChat={handleDeleteChat}
@@ -968,13 +845,9 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
               selectedImages={selectedImages}
               onAddImage={handleAddImage}
               setSelectedImages={setSelectedImages}
-              disableModelSwitch={selectedChain === ChainType.PROJECT_CHAIN}
               modelPickerOverride={chatModelPicker}
               selectedTextContexts={selectedTextContexts}
               onRemoveSelectedText={handleRemoveSelectedText}
-              showProgressCard={() => {
-                setProgressCardVisible(true);
-              }}
               showIndexingCard={() => {
                 setIndexingCardVisible(true);
               }}
@@ -998,37 +871,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
               <span>Drop files here...</span>
             </div>
           )}
-          {selectedChain === ChainType.PROJECT_CHAIN && (
-            <div className={`${selectedChain === ChainType.PROJECT_CHAIN ? "tw-z-modal" : ""}`}>
-              <ProjectList
-                projects={projects}
-                defaultOpen={true}
-                app={app}
-                plugin={plugin}
-                hasMessages={false}
-                onProjectAdded={handleAddProject}
-                onEditProject={handleEditProject}
-                onClose={() => {
-                  if (previousMode) {
-                    setSelectedChain(previousMode);
-                    setPreviousMode(null);
-                  } else {
-                    // default back to chat or plus mode
-                    setSelectedChain(
-                      isPaidUser ? ChainType.COPILOT_PLUS_CHAIN : ChainType.LLM_CHAIN
-                    );
-                  }
-                }}
-                showChatUI={(v) => setShowChatUI(v)}
-                onProjectClose={() => {
-                  setProgressCardVisible(null);
-                }}
-              />
-            </div>
-          )}
-          {(selectedChain !== ChainType.PROJECT_CHAIN ||
-            (selectedChain === ChainType.PROJECT_CHAIN && showChatUI)) &&
-            renderChatComponents()}
+          {renderChatComponents()}
         </div>
       </div>
     </div>

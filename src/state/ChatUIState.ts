@@ -10,7 +10,7 @@ export type ChatMessageContent = NonNullable<ChatMessage["content"]>;
 
 /**
  * Public surface used by `<Chat />`, `useChatManager`, and CopilotView for
- * legacy chains (LLM_CHAIN, VAULT_QA_CHAIN, COPILOT_PLUS_CHAIN, PROJECT_CHAIN).
+ * legacy chains (LLM_CHAIN, VAULT_QA_CHAIN, COPILOT_PLUS_CHAIN).
  * Single implementation: `ChatManagerChatUIState`. Agent Mode uses the
  * narrower `AgentChatBackend` (in `src/LLMProviders/agentMode/`) instead and
  * never flows through this type.
@@ -50,7 +50,6 @@ export interface ChatUIState {
   replaceMessages(messages: ChatMessage[]): Promise<void>;
   getDebugInfo(): unknown;
   loadMessages(messages: ChatMessage[]): Promise<void>;
-  handleProjectSwitch(): Promise<void>;
   saveChat(modelKey: string): Promise<void>;
   loadChatHistory(file: TFile): Promise<void>;
 }
@@ -286,14 +285,6 @@ export class ChatManagerChatUIState implements ChatUIState {
    */
   async loadMessages(messages: ChatMessage[]): Promise<void> {
     await this.chatManager.loadMessages(messages);
-    this.notifyListeners();
-  }
-
-  /**
-   * Handle project switch
-   */
-  async handleProjectSwitch(): Promise<void> {
-    await this.chatManager.handleProjectSwitch();
     this.notifyListeners();
   }
 

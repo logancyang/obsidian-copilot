@@ -65,8 +65,7 @@ import { recordPromptPayload } from "./utils/promptPayloadRecorder";
 import { unescapeXml } from "./utils/xmlParsing";
 import { StructuredTool } from "@langchain/core/tools";
 import { AIMessage, AIMessageChunk } from "@langchain/core/messages";
-import ProjectManager from "@/LLMProviders/projectManager";
-import { isProjectMode } from "@/aiParams";
+import ChainOwner from "@/LLMProviders/chainOwner";
 
 type ToolCallWithExecutor = {
   tool: StructuredTool;
@@ -288,7 +287,7 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
     if (message.includes("@websearch") || message.includes("@web")) {
       const hasWebSearch = toolCalls.some((tc) => tc.tool.name === "webSearch");
       if (!hasWebSearch) {
-        const memory = ProjectManager.instance.getCurrentChainManager().memoryManager.getMemory();
+        const memory = ChainOwner.instance.getCurrentChainManager().memoryManager.getMemory();
         const memoryVariables = await memory.loadMemoryVariables({});
         const chatHistory = extractChatHistory(memoryVariables);
 
@@ -868,12 +867,8 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
           logInfo("[CopilotPlus] Executed getTimeRangeMs, result:", timeRange);
         }
 
-        // Filter tool calls: skip getFileTree in project mode, skip getTimeRangeMs if already executed
+        // Filter tool calls: skip getTimeRangeMs if already executed
         const filteredToolCalls = planningResult.toolCalls.filter((tc) => {
-          if (tc.tool.name === "getFileTree" && isProjectMode()) {
-            logInfo("Skipping getFileTree in project mode");
-            return false;
-          }
           if (tc.tool.name === "getTimeRangeMs" && timeRange) {
             logInfo("Skipping getTimeRangeMs - already executed during planning");
             return false;
