@@ -683,7 +683,16 @@ export interface LoadSessionInput {
   additionalDirectories?: string[];
 }
 
-export type LoadSessionOutput = OpenSessionOutput;
+export interface LoadSessionOutput extends OpenSessionOutput {
+  /**
+   * Replayed transcript from the backend, reconstructed during `loadSession`.
+   * ACP backends replay the full conversation via `session/update` notifications;
+   * this collector assembles user + assistant text-only messages (no tool calls,
+   * no thoughts) to match the Claude / markdown loader convention. Absent when
+   * the session had no prior turns or the backend yielded no replay frames.
+   */
+  transcript?: AgentChatMessage[];
+}
 
 export interface PromptInput {
   sessionId: SessionId;

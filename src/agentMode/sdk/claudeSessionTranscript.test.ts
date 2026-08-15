@@ -94,6 +94,24 @@ describe("parseClaudeTranscript", () => {
     expect(parseClaudeTranscript(jsonl)[0].message).toBe("describe the image");
   });
 
+  it("unwraps the <user-message> envelope when a note follows it in another block", () => {
+    // An image this backend cannot send is replaced with a text note, so the
+    // envelope is no longer the last thing in the joined prompt.
+    const wrapped =
+      "<copilot-context>\nNotes:\n- a.md\n</copilot-context>\n\n<user-message>\ndescribe this\n</user-message>";
+    const jsonl = line({
+      type: "user",
+      message: {
+        role: "user",
+        content: [
+          { type: "text", text: wrapped },
+          { type: "text", text: "[Unsupported image attachment omitted: image/heic]" },
+        ],
+      },
+    });
+    expect(parseClaudeTranscript(jsonl)[0].message).toBe("describe this");
+  });
+
   it("unwraps the <user-message> envelope, dropping the context block", () => {
     const wrapped =
       "<copilot-context>\nNotes:\n- a.md\n</copilot-context>\n\n<user-message>\nsummarize a.md\n</user-message>";
