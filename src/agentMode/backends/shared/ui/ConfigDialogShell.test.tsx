@@ -1,12 +1,7 @@
 import type { InstallState } from "@/agentMode/session/types";
 import { render, screen } from "@testing-library/react";
 import React from "react";
-import {
-  CONFIG_MODAL_CLASS,
-  ConfigDialogShell,
-  ConfigSection,
-  ConfigWarningStrip,
-} from "./ConfigDialogShell";
+import { ConfigDialogShell, ConfigSection, ConfigWarningStrip } from "./ConfigDialogShell";
 
 const OUTDATED: InstallState = {
   kind: "incompatible",
@@ -94,42 +89,14 @@ describe("ConfigDialogShell", () => {
 
       // Padding on the container instead of the bands would inset every
       // divider, leaving a gap at both ends of each hairline. The host modal's
-      // own padding is stripped via the class the shell toggles on it.
+      // own padding is stripped by CONFIG_MODAL_CLASS, which the host passes as
+      // ReactModal's modalClass.
       const shell = container.firstElementChild as HTMLElement;
       expect(shell.className).not.toMatch(/tw-p[xl]?-/);
       const footer = shell.lastElementChild as HTMLElement;
       expect(footer.className).toContain("copilot-divider-t");
       expect(footer.className).toContain("tw-bg-secondary");
       expect(footer.textContent).toBe("Done");
-    });
-
-    it("marks its hosting .modal for the duration of the mount", () => {
-      const modal = document.createElement("div");
-      modal.className = "modal";
-      document.body.appendChild(modal);
-
-      const { unmount } = render(
-        <ConfigDialogShell title="Configure Claude" state={{ kind: "absent" }} onClose={jest.fn()}>
-          <p>body</p>
-        </ConfigDialogShell>,
-        { container: modal }
-      );
-      expect(modal.classList.contains(CONFIG_MODAL_CLASS)).toBe(true);
-
-      unmount();
-      expect(modal.classList.contains(CONFIG_MODAL_CLASS)).toBe(false);
-      modal.remove();
-    });
-
-    it("renders cleanly outside any .modal host without marking anything", () => {
-      render(
-        <ConfigDialogShell title="Configure Claude" state={{ kind: "absent" }} onClose={jest.fn()}>
-          <p>body</p>
-        </ConfigDialogShell>
-      );
-
-      expect(screen.getByRole("heading", { name: "Configure Claude" })).toBeTruthy();
-      expect(document.querySelector(`.${CONFIG_MODAL_CLASS}`)).toBeNull();
     });
   });
 

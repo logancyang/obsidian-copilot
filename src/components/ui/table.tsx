@@ -62,9 +62,6 @@ const TableHead = React.forwardRef<
   <th
     ref={ref}
     className={cn(
-      // Cells that host a checkbox pass `tw-pr-0` themselves — an explicit
-      // class instead of the shadcn `:has([role=checkbox])` variant, which the
-      // Obsidian review flags for its broad style-invalidation cost.
       "tw-h-10 tw-px-2 tw-text-left tw-align-middle tw-font-medium tw-text-muted [&>[role=checkbox]]:tw-translate-y-[2px]",
       className
     )}
@@ -79,11 +76,7 @@ const TableCell = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <td
     ref={ref}
-    className={cn(
-      // Same contract as TableHead: checkbox-hosting cells pass `tw-pr-0`.
-      "tw-p-2 tw-align-middle [&>[role=checkbox]]:tw-translate-y-[2px]",
-      className
-    )}
+    className={cn("tw-p-2 tw-align-middle [&>[role=checkbox]]:tw-translate-y-[2px]", className)}
     {...props}
   />
 ));
