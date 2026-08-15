@@ -70,7 +70,6 @@
     "@types/turndown": "^5.0.6",
     "@types/uuid": "^10.0.0",
     "@typescript-eslint/parser": "8.59.3",
-    "electron": "^43.4.0",
     "esbuild": "^0.25.0",
     "esbuild-plugin-svg": "^0.1.0",
     "eslint": "^9.18.0",
