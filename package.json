@@ -1,7 +1,7 @@
 {
   "name": "obsidian-copilot",
   "version": "4.0.0",
-  "description": "Run Claude Code, Codex, and OpenCode as AI agents inside your vault for chat, semantic search, and LLM wiki workflows. Turn your second brain into a smart assistant that gets knowledge work done.",
+  "description": "Run AI agents such as Claude Code, Codex, and OpenCode inside your vault for chat, semantic search, and LLM wiki workflows. Turn your second brain into a smart assistant that gets knowledge work done.",
   "main": "main.js",
   "scripts": {
     "dev": "run-p dev:*",
