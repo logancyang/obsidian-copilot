@@ -11,11 +11,11 @@ describe("chatHistoryUtils", () => {
     it("should process BaseMessage objects correctly", () => {
       const rawHistory = [
         {
-          getType: () => "human",
+          type: "human",
           content: "Hello",
         },
         {
-          getType: () => "ai",
+          type: "ai",
           content: "Hi there!",
         },
       ];
@@ -36,11 +36,11 @@ describe("chatHistoryUtils", () => {
 
       const rawHistory = [
         {
-          getType: () => "human",
+          type: "human",
           content: multimodalContent,
         },
         {
-          getType: () => "ai",
+          type: "ai",
           content: "This is an image of a cat.",
         },
       ];
@@ -56,11 +56,11 @@ describe("chatHistoryUtils", () => {
     it("should skip system messages", () => {
       const rawHistory = [
         {
-          getType: () => "system",
+          type: "system",
           content: "You are a helpful assistant",
         },
         {
-          getType: () => "human",
+          type: "human",
           content: "Hello",
         },
       ];
@@ -105,7 +105,7 @@ describe("chatHistoryUtils", () => {
         null,
         undefined,
         {
-          getType: () => "human",
+          type: "human",
           content: "Hello",
         },
         {},
@@ -120,7 +120,7 @@ describe("chatHistoryUtils", () => {
     it("should handle messages with unknown types", () => {
       const rawHistory = [
         {
-          getType: () => "unknown",
+          type: "unknown",
           content: "Some content",
         },
         {
@@ -139,11 +139,11 @@ describe("chatHistoryUtils", () => {
     it("should add processed messages to target array", () => {
       const rawHistory = [
         {
-          getType: () => "human",
+          type: "human",
           content: "Hello",
         },
         {
-          getType: () => "ai",
+          type: "ai",
           content: "Hi there!",
         },
       ];
@@ -160,7 +160,7 @@ describe("chatHistoryUtils", () => {
     it("should append to existing messages", () => {
       const rawHistory = [
         {
-          getType: () => "human",
+          type: "human",
           content: "Hello",
         },
       ];

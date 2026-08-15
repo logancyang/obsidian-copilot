@@ -43,7 +43,7 @@ const createChainContext = (history: unknown[] = []): ChainManager => {
 describe("promptDebugService", () => {
   it("builds prompt debug report with annotated sections", async () => {
     const adapter = createAdapter();
-    const chainManager = createChainContext([{ getType: () => "human", content: "hello" }]);
+    const chainManager = createChainContext([{ type: "human", content: "hello" }]);
 
     const report: PromptDebugReport = await generatePromptDebugReportForAgent({
       chainManager,

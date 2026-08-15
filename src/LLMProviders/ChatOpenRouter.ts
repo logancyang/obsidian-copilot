@@ -207,9 +207,6 @@ export class ChatOpenRouter extends ChatOpenAI {
         text: typeof messageChunk.content === "string" ? messageChunk.content : "",
         generationInfo: {
           finish_reason: choice.finish_reason,
-          // Reason: system_fingerprint is marked deprecated by some scorecards but is still
-          // returned by OpenAI-style streaming APIs and is useful for telemetry.
-          system_fingerprint: rawChunk["system_fingerprint"],
           model: rawChunk.model,
         },
       });
@@ -238,8 +235,7 @@ export class ChatOpenRouter extends ChatOpenAI {
   private toOpenRouterMessages(messages: BaseMessage[]): OpenRouterMessageParam[] {
     return messages.map((msg) => {
       const msgRecord = msg as unknown as Record<string, unknown>;
-      const role =
-        typeof msg.getType === "function" ? msg.getType() : ((msgRecord.role as string) ?? "user");
+      const role = BaseMessage.isInstance(msg) ? msg.type : ((msgRecord.role as string) ?? "user");
       const mappedRole =
         role === "human"
           ? "user"
@@ -488,14 +484,6 @@ export class ChatOpenRouter extends ChatOpenAI {
 
     if (rawChunk.model) {
       metadata.model = rawChunk.model;
-    }
-
-    // Reason: system_fingerprint is marked deprecated by some scorecards but is still
-    // returned by OpenAI-style streaming APIs and is useful for telemetry. Use bracket
-    // access to bypass JSDoc deprecation warnings.
-    const fingerprint = rawChunk["system_fingerprint"];
-    if (fingerprint) {
-      metadata.system_fingerprint = fingerprint;
     }
 
     if (rawChunk.usage) {

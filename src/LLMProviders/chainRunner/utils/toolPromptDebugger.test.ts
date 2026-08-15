@@ -20,11 +20,11 @@ describe("toolPromptDebugger", () => {
 
     const rawHistory = [
       {
-        getType: () => "human",
+        type: "human",
         content: "Previous user question",
       },
       {
-        getType: () => "ai",
+        type: "ai",
         content: "Assistant reply",
       },
     ];

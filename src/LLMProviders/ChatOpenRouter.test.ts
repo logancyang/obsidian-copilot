@@ -36,7 +36,7 @@ describe("ChatOpenRouter", () => {
         ]);
       });
 
-      it("infers roles for plain-object messages without getType", () => {
+      it("infers roles for plain-object messages that are not BaseMessages", () => {
         const result = convertMessages([
           { role: "assistant", content: "prior answer" },
           { content: "no role provided" },
