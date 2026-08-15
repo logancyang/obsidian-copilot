@@ -429,7 +429,6 @@ export default class ChatModelManager {
         configuration: {
           baseURL: customModel.baseUrl,
           fetch: customModel.enableCors ? safeFetch : undefined,
-          defaultHeaders: { "dangerously-allow-browser": "true" },
         },
         ...this.getOpenAISpecialConfig(
           modelName,
