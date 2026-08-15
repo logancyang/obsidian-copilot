@@ -253,7 +253,9 @@ export class ChatOpenRouter extends ChatOpenAI {
 
       // First-class tool_calls on AIMessage (used by the autonomous agent when
       // reconstructing assistant turns) must be serialized to the OpenAI wire format,
-      // otherwise the following "tool" role messages would violate the protocol.
+      // otherwise the following "tool" role messages would violate the protocol and the
+      // provider rejects the turn.
+      // https://github.com/logancyang/obsidian-copilot-preview/issues/300
       if (AIMessage.isInstance(msg) && msg.tool_calls && msg.tool_calls.length > 0) {
         return {
           role: "assistant",

@@ -89,7 +89,7 @@ describe("ChatOpenRouter", () => {
         expect(result).toEqual([{ role: "tool", content: "42", tool_call_id: "call_abc" }]);
       });
 
-      it("serializes first-class AIMessage tool_calls to the OpenAI wire format", () => {
+      it("serializes first-class AIMessage tool_calls to the OpenAI wire format so a rebuilt assistant turn stays paired with its tool results (https://github.com/logancyang/obsidian-copilot-preview/issues/300)", () => {
         const message = new AIMessage({
           content: "",
           tool_calls: [
