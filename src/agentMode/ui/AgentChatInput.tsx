@@ -50,6 +50,7 @@ import { Clock, X } from "lucide-react";
 import { App, Notice, TFile } from "obsidian";
 import React, { memo, useCallback, useContext, useEffect, useMemo, useRef } from "react";
 import { v4 as uuidv4 } from "uuid";
+import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
 interface AgentChatInputProps {
   backend: AgentChatBackend;
@@ -576,10 +577,10 @@ export const AgentChatInput = memo(function AgentChatInput({
           placeholderPrompts={isLanding ? AGENT_PROMPT_SUGGESTIONS : undefined}
           inputMessage={inputMessage}
           setInputMessage={setInputMessage}
-          handleSendMessage={(meta) => handleSendMessage(meta?.webTabs)}
+          handleSendMessage={safeAsyncHandler((meta) => handleSendMessage(meta?.webTabs))}
           isGenerating={loading}
-          onStopGenerating={handleStopGenerating}
-          onEscape={loading ? handleStopGenerating : undefined}
+          onStopGenerating={safeAsyncHandler(handleStopGenerating)}
+          onEscape={loading ? safeAsyncHandler(handleStopGenerating) : undefined}
           onShiftTab={modePickerOverride ? onCycleMode : undefined}
           app={app}
           contextNotes={contextNotes}

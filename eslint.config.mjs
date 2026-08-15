@@ -654,13 +654,15 @@ export default [
       "@typescript-eslint/no-empty-function": "off",
       "@typescript-eslint/ban-ts-comment": "off",
       "@typescript-eslint/no-unused-vars": ["error", { args: "none" }],
-      // checksVoidReturn relaxed for:
-      //   - attributes: async event handlers in JSX (onClick={async () => ...}) are
-      //     the standard React pattern; React already handles them correctly.
-      //   - inheritedMethods: Obsidian's Plugin.onload/onunload are commonly async.
+      // An async handler passed to a void-returning JSX attribute drops its
+      // rejection: React never sees the promise, so a failure mid-handler leaves
+      // the control looking inert and writes nothing to the Copilot log. Wrap
+      // such handlers in `safeAsyncHandler` instead of relaxing this check.
+      // checksVoidReturn relaxed for inheritedMethods only: Obsidian awaits
+      // `Plugin.onload`, so declaring it async is correct there.
       "@typescript-eslint/no-misused-promises": [
         "error",
-        { checksVoidReturn: { attributes: false, inheritedMethods: false } },
+        { checksVoidReturn: { inheritedMethods: false } },
       ],
       "@typescript-eslint/no-floating-promises": "error",
       "@typescript-eslint/no-unsafe-return": "error",

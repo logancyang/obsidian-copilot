@@ -25,6 +25,7 @@ import {
   X,
 } from "lucide-react";
 import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
 /** Stable noop for rows that aren't being renamed (they never invoke onSaveEdit). */
 const NOOP_SAVE = (): void => {};
@@ -415,6 +416,12 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
     [onOpenSourceFile]
   );
 
+  // Stable across renders because `safeAsyncHandler` keeps one wrapper per
+  // handler identity — RecentChatRow's memo, which the surrounding props go out
+  // of their way to preserve, would otherwise break on every keystroke of the
+  // search and rename fields.
+  const handleOpen = safeAsyncHandler(onLoadChat);
+
   // Stable references so the memoized rows aren't all re-rendered on every
   // section render (an inline arrow here would defeat RecentChatRow's memo).
   const handleCancelEdit = useCallback(() => setEditingId(null), []);
@@ -485,7 +492,7 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
                   // every keystroke.
                   editingTitle={editingId === item.id ? editingTitle : ""}
                   confirmingDelete={confirmDeleteId === item.id}
-                  onOpen={onLoadChat}
+                  onOpen={handleOpen}
                   onStartEdit={handleStartEdit}
                   onEditingTitleChange={setEditingTitle}
                   // Only the editing row needs the live save handler (it changes

@@ -14,6 +14,7 @@ import {
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import { ExternalLink, Loader2 } from "lucide-react";
 import React, { useState } from "react";
+import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
 /**
  * B3 placeholder: mock Plus usage data until the real API is available.
@@ -125,7 +126,7 @@ export function PlusSettings() {
         />
         <Button
           disabled={isChecking}
-          onClick={async () => {
+          onClick={safeAsyncHandler(async () => {
             updateSetting("plusLicenseKey", localLicenseKey);
             setIsChecking(true);
             const result = await checkIsPaidUser(app, { trigger: "manual" });
@@ -136,7 +137,7 @@ export function PlusSettings() {
               setError(null);
               new CopilotPlusWelcomeModal(app).open();
             }
-          }}
+          })}
           className="tw-min-w-10 tw-text-xs md:tw-text-sm"
         >
           {isChecking ? <Loader2 className="tw-size-2 tw-animate-spin md:tw-size-4" /> : "Apply"}

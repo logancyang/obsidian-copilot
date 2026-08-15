@@ -11,6 +11,7 @@ import { logError } from "@/logger";
 import { useSettingsValue } from "@/settings/model";
 import { sortByStrategy } from "@/utils/recentUsageManager";
 import { Platform } from "obsidian";
+import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
 /** Number of chat history items loaded per page. */
 const PAGE_SIZE = 50;
@@ -347,12 +348,14 @@ export function ChatHistoryPopover({
                             editingTitle={editingTitle}
                             onEditingTitleChange={setEditingTitle}
                             onStartEdit={handleStartEdit}
-                            onSaveEdit={handleSaveEdit}
+                            onSaveEdit={safeAsyncHandler(handleSaveEdit)}
                             onCancelEdit={handleCancelEdit}
-                            onDelete={handleDelete}
+                            onDelete={safeAsyncHandler(handleDelete)}
                             onCancelDelete={handleCancelDelete}
-                            onLoadChat={handleLoadChat}
-                            onOpenSourceFile={onOpenSourceFile}
+                            onLoadChat={safeAsyncHandler(handleLoadChat)}
+                            onOpenSourceFile={
+                              onOpenSourceFile ? safeAsyncHandler(onOpenSourceFile) : undefined
+                            }
                             isMobile={isMobile}
                             confirmDeleteId={confirmDeleteId}
                             getIcon={getIcon}

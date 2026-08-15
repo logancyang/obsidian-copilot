@@ -26,6 +26,7 @@ import React, { useRef, useState } from "react";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { useApp } from "@/context";
 import { logError } from "@/logger";
+import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
 /** One provider plus the configured models that belong to it. */
 export interface ByokTableGroup {
@@ -260,9 +261,9 @@ const ProviderCard: React.FC<ProviderCardProps> = ({
                 <ModelRow
                   key={model.configuredModelId}
                   model={model}
-                  onRemove={() =>
+                  onRemove={safeAsyncHandler(() =>
                     handleRemoveModel(model.configuredModelId, model.info.displayName)
-                  }
+                  )}
                 />
               ))}
             </div>
