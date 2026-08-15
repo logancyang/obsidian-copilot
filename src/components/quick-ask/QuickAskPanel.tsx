@@ -191,6 +191,11 @@ export function QuickAskPanel({
     [messages]
   );
 
+  // Built once per handler rather than inside the message map: each rendered
+  // message is memoized on shallow prop equality, so an inline wrapper would
+  // rerender the whole conversation on every input change and streamed token.
+  const handleCopySafely = useMemo(() => safeAsyncHandler(handleCopy), [handleCopy]);
+
   const handleInsert = useCallback(
     (messageId: string) => {
       const message = messages.find((m) => m.id === messageId);
@@ -306,7 +311,7 @@ export function QuickAskPanel({
               message={msg}
               isStreaming={isStreaming && msg.id === lastMessageId && msg.role === "assistant"}
               isLastAssistantMessage={msg.role === "assistant" && idx === lastAssistantIdx}
-              onCopy={safeAsyncHandler(handleCopy)}
+              onCopy={handleCopySafely}
               onInsert={handleInsert}
               onReplace={handleReplace}
               hasSelection={hasSelection}
