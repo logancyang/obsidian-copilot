@@ -3,7 +3,6 @@ import {
   DOMConversionMap,
   DOMConversionOutput,
   DOMExportOutput,
-  EditorConfig,
   LexicalEditor,
   LexicalNode,
   NodeKey,
@@ -44,12 +43,6 @@ export class ActiveNotePillNode extends BasePillNode {
     return "data-lexical-active-note-pill";
   }
 
-  createDOM(_config: EditorConfig, editor: LexicalEditor): HTMLElement {
-    const span = getEditorDocument(editor).createElement("span");
-    span.className = "active-note-pill-wrapper";
-    return span;
-  }
-
   static importDOM(): DOMConversionMap | null {
     return {
       span: (node: HTMLElement) => {
@@ -77,9 +70,10 @@ export class ActiveNotePillNode extends BasePillNode {
   }
 
   exportDOM(editor: LexicalEditor): DOMExportOutput {
-    const element = getEditorDocument(editor).createElement("span");
-    element.setAttribute("data-lexical-active-note-pill", "true");
-    element.textContent = "{activeNote}";
+    const element = getEditorDocument(editor).win.createSpan({
+      text: "{activeNote}",
+      attr: { "data-lexical-active-note-pill": "true" },
+    });
     return { element };
   }
 

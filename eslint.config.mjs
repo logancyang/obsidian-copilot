@@ -633,6 +633,11 @@ export default [
       "@typescript-eslint/no-floating-promises": "error",
       "@typescript-eslint/no-unsafe-return": "error",
       "@typescript-eslint/unbound-method": "error",
+      // The community directory surfaces native DOM construction as a warning on
+      // the plugin's listing. Source is clean of it, so block regressions here
+      // rather than letting them accumulate back into the listing. Type-aware, so
+      // it can only live in this block.
+      "obsidianmd/prefer-create-el": "error",
       // TypeScript handles undefined-identifier detection (and does so cross-realm
       // correctly); per typescript-eslint's own guidance, disable no-undef on TS.
       "no-undef": "off",
@@ -690,6 +695,16 @@ export default [
     files: ["**/*.test.{ts,tsx}"],
     rules: {
       "@typescript-eslint/unbound-method": "off",
+    },
+  },
+
+  // Tests build fixture DOM against jsdom, which has no Obsidian helpers, so the
+  // native API is the right call there. Same "placed last" reason as above: the
+  // TS-only block promotes this rule to an error for shipped source.
+  {
+    files: ["**/*.test.{ts,tsx}"],
+    rules: {
+      "obsidianmd/prefer-create-el": "off",
     },
   },
 ];
