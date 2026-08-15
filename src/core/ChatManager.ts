@@ -5,13 +5,12 @@ import {
   getSystemPromptWithMemory,
 } from "@/system-prompts/systemPromptBuilder";
 import { ChainType } from "@/chainType";
-import { getChainType, getCurrentProject } from "@/aiParams";
+import { getChainType } from "@/aiParams";
 import { logError, logInfo, logWarn } from "@/logger";
 import { ChatMessage, MessageContext } from "@/types/message";
 import { processPrompt, type ProcessedPromptResult } from "@/commands/customCommandUtils";
 import { FileParserManager } from "@/tools/FileParserManager";
 import ChainManager from "@/LLMProviders/chainManager";
-import ProjectManager from "@/LLMProviders/projectManager";
 import { updateChatMemory } from "@/chatUtils";
 import CopilotPlugin from "@/main";
 import { ContextManager } from "./ContextManager";
@@ -31,9 +30,6 @@ import { buildWebTabsWithActiveSnapshot } from "@/services/webViewerService/acti
  */
 export class ChatManager {
   private contextManager: ContextManager;
-  private projectMessageRepos: Map<string, MessageRepository> = new Map();
-  private defaultProjectKey = "defaultProjectKey";
-  private lastKnownProjectId: string | null = null;
   private persistenceManager: ChatPersistenceManager;
   private onMessageCreatedCallback?: (messageId: string) => void;
 
@@ -44,45 +40,7 @@ export class ChatManager {
     private plugin: CopilotPlugin
   ) {
     this.contextManager = ContextManager.getInstance();
-    // Initialize default project repository
-    this.projectMessageRepos.set(this.defaultProjectKey, messageRepo);
-    // Initialize persistence manager with default repository
     this.persistenceManager = new ChatPersistenceManager(plugin.app, messageRepo, chainManager);
-  }
-
-  /**
-   * Get the current project's message repository
-   * Automatically detects project changes and handles repository switching
-   */
-  private getCurrentMessageRepo(): MessageRepository {
-    const currentProjectId = this.plugin.projectManager.getCurrentProjectId();
-    const projectKey = currentProjectId ?? this.defaultProjectKey;
-
-    // Detect if project has changed
-    if (this.lastKnownProjectId !== currentProjectId) {
-      logInfo(
-        `[ChatManager] Project changed from ${this.lastKnownProjectId} to ${currentProjectId}`
-      );
-      this.lastKnownProjectId = currentProjectId;
-    }
-
-    // Create a new repository for this project if it doesn't exist
-    if (!this.projectMessageRepos.has(projectKey)) {
-      logInfo(`[ChatManager] Creating new message repository for project: ${projectKey}`);
-      const newRepo = new MessageRepository();
-      this.projectMessageRepos.set(projectKey, newRepo);
-    }
-
-    const currentRepo = this.projectMessageRepos.get(projectKey)!;
-
-    // Update persistence manager to use current repository
-    this.persistenceManager = new ChatPersistenceManager(
-      this.plugin.app,
-      currentRepo,
-      this.chainManager
-    );
-
-    return currentRepo;
   }
 
   /**
@@ -269,46 +227,6 @@ export class ChatManager {
       processedBasePromptWithMemory = nextProcessedBasePromptWithMemory;
     }
 
-    // Special case: Add project context for project chain
-    if (chainType === ChainType.PROJECT_CHAIN) {
-      const project = getCurrentProject();
-      if (project) {
-        const context = await ProjectManager.instance.getProjectContext(project.id);
-
-        // Process project system prompt templates too
-        const projectPromptResult = await this.processSystemPromptTemplates(
-          project.systemPrompt,
-          vault,
-          activeNote
-        );
-        allIncludedFiles.push(...projectPromptResult.includedFiles);
-
-        let result = `${processedBasePromptWithMemory}\n\n<project_system_prompt>\n${projectPromptResult.processedPrompt}\n</project_system_prompt>`;
-
-        // Only add project_context block if context exists
-        if (context) {
-          // TODO: Remove this temporary hard cap once proper token budget enforcement
-          // is implemented (see designdocs/todo/TOKEN_BUDGET_ENFORCEMENT.md Phase 1).
-          // Hard cap to prevent total payload from exceeding model context windows.
-          // 600k tokens ≈ 2.4M chars leaves room for L2+L3+L4+L5 within ~1M total.
-          const MAX_PROJECT_CONTEXT_CHARS = 600_000 * 4;
-          let projectContext = context;
-          if (context.length > MAX_PROJECT_CONTEXT_CHARS) {
-            projectContext = context.substring(0, MAX_PROJECT_CONTEXT_CHARS);
-            logWarn(
-              `Project context truncated from ${Math.round(context.length / 4000)}k to ${Math.round(MAX_PROJECT_CONTEXT_CHARS / 4000)}k estimated tokens to stay within token budget`
-            );
-          }
-          result += `\n\n<project_context>\n${projectContext}\n</project_context>`;
-        }
-
-        return {
-          processedPrompt: result,
-          includedFiles: allIncludedFiles,
-        };
-      }
-    }
-
     return {
       processedPrompt: processedBasePromptWithMemory,
       includedFiles: allIncludedFiles,
@@ -356,7 +274,7 @@ export class ChatManager {
       );
 
       // Create the message with initial content
-      const currentRepo = this.getCurrentMessageRepo();
+      const currentRepo = this.messageRepo;
       const messageId = currentRepo.addMessage(
         displayText,
         displayText, // Will be updated with processed content
@@ -426,7 +344,7 @@ export class ChatManager {
       logInfo(`[ChatManager] Editing message ${messageId}: "${newText}"`);
 
       // Edit the message text only - context remains unchanged (see design note above)
-      const currentRepo = this.getCurrentMessageRepo();
+      const currentRepo = this.messageRepo;
       const editSuccess = currentRepo.editMessage(messageId, newText);
       if (!editSuccess) {
         return false;
@@ -473,7 +391,7 @@ export class ChatManager {
       logInfo(`[ChatManager] Regenerating message ${messageId}`);
 
       // Find the message to regenerate
-      const currentRepo = this.getCurrentMessageRepo();
+      const currentRepo = this.messageRepo;
       const message = currentRepo.getMessage(messageId);
       if (!message) {
         logInfo(`[ChatManager] Message not found: ${messageId}`);
@@ -567,7 +485,7 @@ export class ChatManager {
     try {
       logInfo(`[ChatManager] Deleting message ${messageId}`);
 
-      const currentRepo = this.getCurrentMessageRepo();
+      const currentRepo = this.messageRepo;
       const deleteSuccess = currentRepo.deleteMessage(messageId);
       if (!deleteSuccess) {
         return false;
@@ -588,7 +506,7 @@ export class ChatManager {
    * Add a message
    */
   addMessage(message: ChatMessage): string {
-    const currentRepo = this.getCurrentMessageRepo();
+    const currentRepo = this.messageRepo;
     const messageId = currentRepo.addMessage(message);
     return messageId;
   }
@@ -597,7 +515,7 @@ export class ChatManager {
    * Clear all messages
    */
   clearMessages(): void {
-    const currentRepo = this.getCurrentMessageRepo();
+    const currentRepo = this.messageRepo;
     currentRepo.clear();
     // Clear chain memory directly (fire-and-forget; errors are logged but do not block UI)
     void this.chainManager.memoryManager
@@ -610,7 +528,7 @@ export class ChatManager {
    * Truncate messages after a specific message ID
    */
   async truncateAfterMessageId(messageId: string): Promise<void> {
-    const currentRepo = this.getCurrentMessageRepo();
+    const currentRepo = this.messageRepo;
     currentRepo.truncateAfterMessageId(messageId);
 
     // Update chain memory after truncation
@@ -623,7 +541,7 @@ export class ChatManager {
    * Get display messages for UI
    */
   getDisplayMessages(): ChatMessage[] {
-    const currentRepo = this.getCurrentMessageRepo();
+    const currentRepo = this.messageRepo;
     return currentRepo.getDisplayMessages();
   }
 
@@ -631,7 +549,7 @@ export class ChatManager {
    * Get LLM messages for AI communication
    */
   getLLMMessages(): ChatMessage[] {
-    const currentRepo = this.getCurrentMessageRepo();
+    const currentRepo = this.messageRepo;
     return currentRepo.getLLMMessages();
   }
 
@@ -639,7 +557,7 @@ export class ChatManager {
    * Get a specific message by ID (display version)
    */
   getMessage(id: string): ChatMessage | undefined {
-    const currentRepo = this.getCurrentMessageRepo();
+    const currentRepo = this.messageRepo;
     return currentRepo.getMessage(id);
   }
 
@@ -647,7 +565,7 @@ export class ChatManager {
    * Get a specific message for LLM processing
    */
   getLLMMessage(id: string): ChatMessage | undefined {
-    const currentRepo = this.getCurrentMessageRepo();
+    const currentRepo = this.messageRepo;
     return currentRepo.getLLMMessage(id);
   }
 
@@ -656,7 +574,7 @@ export class ChatManager {
    */
   private async updateChainMemory(): Promise<void> {
     try {
-      const currentRepo = this.getCurrentMessageRepo();
+      const currentRepo = this.messageRepo;
       const llmMessages = currentRepo.getLLMMessages();
       await updateChatMemory(llmMessages, this.chainManager.memoryManager);
       logInfo(`[ChatManager] Updated chain memory with ${llmMessages.length} messages`);
@@ -669,7 +587,7 @@ export class ChatManager {
    * Load messages from saved chat
    */
   async loadMessages(messages: ChatMessage[]): Promise<void> {
-    const currentRepo = this.getCurrentMessageRepo();
+    const currentRepo = this.messageRepo;
     currentRepo.clear();
     messages.forEach((msg) => {
       currentRepo.addMessage(msg);
@@ -692,32 +610,7 @@ export class ChatManager {
    * Get debug information
    */
   getDebugInfo() {
-    const currentRepo = this.getCurrentMessageRepo();
-    return {
-      ...currentRepo.getDebugInfo(),
-      currentProject: this.plugin.projectManager.getCurrentProjectId(),
-      totalProjects: this.projectMessageRepos.size,
-    };
-  }
-
-  /**
-   * Force a project switch refresh
-   * This ensures the UI gets the correct messages when switching projects
-   */
-  async handleProjectSwitch(): Promise<void> {
-    const currentProjectId = this.plugin.projectManager.getCurrentProjectId();
-    logInfo(`[ChatManager] Handling project switch to: ${currentProjectId}`);
-
-    // Force detection of project change
-    this.lastKnownProjectId = null; // Reset to force change detection
-    const currentRepo = this.getCurrentMessageRepo();
-
-    // Sync chain memory with the new project's messages
-    await this.updateChainMemory();
-
-    logInfo(
-      `[ChatManager] Project switch complete. Messages: ${currentRepo.getDisplayMessages().length}`
-    );
+    return this.messageRepo.getDebugInfo();
   }
 
   /**
@@ -741,7 +634,7 @@ export class ChatManager {
     const messages = await this.persistenceManager.loadChat(file);
 
     // Add messages to the current repository
-    const currentRepo = this.getCurrentMessageRepo();
+    const currentRepo = this.messageRepo;
     for (const message of messages) {
       currentRepo.addMessage(message);
     }

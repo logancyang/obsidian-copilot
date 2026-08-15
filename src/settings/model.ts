@@ -134,7 +134,6 @@ export interface CopilotSettings {
   promptUsageTimestamps: Record<string, number>;
   promptSortStrategy: string;
   chatHistorySortStrategy: SortStrategy;
-  projectListSortStrategy: SortStrategy;
   /** Projects config root folder in vault (default: "copilot/projects"). */
   projectsFolder: string;
   embeddingRequestsPerMin: number;
@@ -993,14 +992,6 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
     sanitizedSettings.chatHistorySortStrategy === "manual"
   ) {
     sanitizedSettings.chatHistorySortStrategy = DEFAULT_SETTINGS.chatHistorySortStrategy;
-  }
-
-  // Ensure projectListSortStrategy has a valid value (exclude "manual" which is only for custom commands)
-  if (
-    !isSortStrategy(sanitizedSettings.projectListSortStrategy) ||
-    sanitizedSettings.projectListSortStrategy === "manual"
-  ) {
-    sanitizedSettings.projectListSortStrategy = DEFAULT_SETTINGS.projectListSortStrategy;
   }
 
   const userSystemPromptsFolder = (settingsToSanitize.userSystemPromptsFolder || "").trim();

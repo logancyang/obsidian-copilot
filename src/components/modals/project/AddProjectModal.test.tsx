@@ -45,16 +45,6 @@ jest.mock("@/utils", () => ({
   // jsdom's crypto has no randomUUID; a new project mints its id at mount.
   randomUUID: () => "new-project-id",
 }));
-jest.mock("@/hooks/useChatBackendModelOptions", () => ({
-  useChatBackendModelOptions: () => ({ options: [], resolveSelectionId: (id: string) => id }),
-}));
-jest.mock("@/components/project/useProjectProcessingData", () => ({
-  useProjectProcessingData: () => ({
-    processingData: null,
-    projectCache: null,
-    isCurrentProject: false,
-  }),
-}));
 /* eslint-enable @eslint-react/hooks-extra/no-unnecessary-use-prefix */
 
 import {
@@ -84,7 +74,6 @@ function renderModal(overrides: Partial<AddProjectModalContentProps> = {}) {
       initialProject={PROJECT}
       onSave={onSave}
       onCancel={jest.fn()}
-      agentMode
       {...overrides}
     />
   );

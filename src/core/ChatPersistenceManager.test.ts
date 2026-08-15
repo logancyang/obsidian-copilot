@@ -35,9 +35,7 @@ jest.mock("@/settings/model", () => ({
 jest.mock("@/settings/copilotFolder", () => ({
   getEffectiveConversationsFolder: jest.fn(() => "test-folder"),
 }));
-jest.mock("@/aiParams", () => ({
-  getCurrentProject: jest.fn().mockReturnValue(null),
-}));
+jest.mock("@/aiParams", () => ({}));
 jest.mock("@/utils", () => ({
   extractTextFromChunk: jest.fn((content: unknown): string => {
     if (typeof content === "string") {
@@ -698,47 +696,6 @@ Nature's quiet song`);
       expect(byteLength).toBeLessThanOrEqual(100);
     });
 
-    it("should handle filenames with project prefix within byte limit", async () => {
-      const longMessage =
-        "This is a very long message that should be truncated when combined with a project prefix";
-
-      const messages: ChatMessage[] = [
-        {
-          id: "1",
-          message: longMessage,
-          sender: USER_SENDER,
-          timestamp: {
-            epoch: 1695513480000,
-            display: "2024/09/23 22:18:00",
-            fileName: "2024_09_23_221800",
-          },
-          isVisible: true,
-        },
-      ];
-
-      // Mock getCurrentProject to return a project
-      const getCurrentProject = jest.requireMock("@/aiParams").getCurrentProject as jest.Mock;
-      getCurrentProject.mockReturnValue({ id: "project-123", name: "Test Project" });
-
-      mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
-      mockApp.vault.getAbstractFileByPath.mockReturnValue(true);
-
-      await persistenceManager.saveChat("gpt-4");
-
-      const createdPath = mockApp.vault.create.mock.calls[0][0] as string;
-      const basename = createdPath.split("/").pop() || "";
-      const encoder = new TextEncoder();
-      const byteLength = encoder.encode(basename).length;
-
-      // Verify the filename is within safe limits (100 bytes)
-      expect(byteLength).toBeLessThanOrEqual(100);
-      // Verify the project prefix is included
-      expect(basename).toContain("project-123__");
-
-      // Reset mock
-      getCurrentProject.mockReturnValue(null);
-    });
-
     it("should fallback to minimal filename when ENAMETOOLONG error occurs", async () => {
       // Real-world scenario from user log: very long Cyrillic message that triggers ENAMETOOLONG
       const cyrillicMessage =
@@ -805,62 +762,6 @@ Nature's quiet song`);
       expect(jest.mocked(Notice)).toHaveBeenCalledWith(
         expect.stringContaining("chat-1729873880000.md")
       );
-    });
-
-    it("should include project prefix in fallback filename for project chats", async () => {
-      const cyrillicMessage =
-        "1) используй словарь уже установленных терминов Словарь перевода Songs of Syx";
-
-      const messages: ChatMessage[] = [
-        {
-          id: "1",
-          message: cyrillicMessage,
-          sender: USER_SENDER,
-          timestamp: {
-            epoch: 1729873880000,
-            display: "2025/10/25 16:11:20",
-            fileName: "20251025_161120",
-          },
-          isVisible: true,
-        },
-      ];
-
-      // Mock getCurrentProject to return a project
-      const getCurrentProject = jest.requireMock("@/aiParams").getCurrentProject as jest.Mock;
-      getCurrentProject.mockReturnValue({ id: "songs-of-syx", name: "Songs of Syx Translation" });
-
-      mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
-      mockApp.vault.getAbstractFileByPath.mockReturnValue(true);
-
-      // Mock the vault.create to throw ENAMETOOLONG on first call, succeed on second
-      let createCallCount = 0;
-      mockApp.vault.create.mockImplementation((path: string) => {
-        createCallCount++;
-        if (createCallCount === 1) {
-          const error = new Error("ENAMETOOLONG: name too long");
-          return Promise.reject(error);
-        } else {
-          return Promise.resolve(
-            mockTFile({
-              path,
-              basename: path.split("/").pop(),
-            })
-          );
-        }
-      });
-
-      await persistenceManager.saveChat("gpt-4");
-
-      // Second call should have project prefix in fallback filename
-      const secondCallPath = mockApp.vault.create.mock.calls[1][0] as string;
-      expect(secondCallPath).toBe("test-folder/songs-of-syx__chat-1729873880000.md");
-
-      // Verify basename starts with project prefix (so getChatHistoryFiles will find it)
-      const basename = secondCallPath.split("/").pop() || "";
-      expect(basename).toMatch(/^songs-of-syx__/);
-
-      // Reset mock
-      getCurrentProject.mockReturnValue(null);
     });
 
     it("should handle repeated saves with fallback filename (conflict handling)", async () => {
@@ -1808,7 +1709,7 @@ tags:
       const file = mockTFile({ path: "old-root/copilot-conversations/chat.md" });
       mockApp.metadataCache.getFileCache.mockReturnValue({ frontmatter: { epoch: 1695513480000 } });
 
-      await persistenceManager.renameFileToMatchTopic(null, file, "New Topic");
+      await persistenceManager.renameFileToMatchTopic(file, "New Topic");
 
       const newPath = mockApp.fileManager.renameFile.mock.calls[0][1] as string;
       expect(newPath.startsWith("old-root/copilot-conversations/")).toBe(true);
@@ -1823,7 +1724,7 @@ tags:
       const file = mockTFile({ path: "chat.md" });
       mockApp.metadataCache.getFileCache.mockReturnValue({ frontmatter: { epoch: 1695513480000 } });
 
-      await persistenceManager.renameFileToMatchTopic(null, file, "New Topic");
+      await persistenceManager.renameFileToMatchTopic(file, "New Topic");
 
       const newPath = mockApp.fileManager.renameFile.mock.calls[0][1] as string;
       expect(newPath.startsWith("/")).toBe(false);

@@ -90,10 +90,6 @@ export const InlineMessageEditor: React.FC<InlineMessageEditorProps> = ({
     // Handle selected text removal if needed
   }, []);
 
-  const showProgressCard = useCallback(() => {
-    // Not used in edit mode
-  }, []);
-
   // Prepare initial context for ChatInput
   const initialChatInputContext = {
     notes: contextNotes,
@@ -123,7 +119,6 @@ export const InlineMessageEditor: React.FC<InlineMessageEditorProps> = ({
       disableModelSwitch={false}
       selectedTextContexts={initialContext?.selectedTextContexts}
       onRemoveSelectedText={handleRemoveSelectedText}
-      showProgressCard={showProgressCard}
       editMode={true}
       onEditSave={handleEditSave}
       onEditCancel={handleEditCancel}

@@ -167,8 +167,7 @@ export default function AgentContextSection({
           .updateProject(projectId, updated)
           .catch((err) => logWarn("[project-context] failed to save context changes", err));
       },
-      project,
-      { enableLinks: true }
+      project
     );
     modal.open();
   }, [app, project, projectId]);

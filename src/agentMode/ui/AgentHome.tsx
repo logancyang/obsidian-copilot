@@ -696,8 +696,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
           .updateProject(activeProjectId, updated)
           .catch((err) => logError("[AgentMode] save context changes failed", err));
       },
-      activeProject,
-      { enableLinks: true }
+      activeProject
     ).open();
   };
 

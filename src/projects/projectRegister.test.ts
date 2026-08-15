@@ -38,18 +38,6 @@ jest.mock("@/projects/state", () => ({
   upsertCachedProjectRecord: jest.fn(),
 }));
 
-jest.mock("@/aiParams", () => ({
-  getCurrentProject: jest.fn(() => null),
-}));
-
-const mockClearForProject = jest.fn().mockResolvedValue(undefined);
-
-jest.mock("@/cache/projectContextCache", () => ({
-  ProjectContextCache: {
-    getInstance: jest.fn(() => ({ clearForProject: mockClearForProject })),
-  },
-}));
-
 jest.mock("@/settings/model", () => ({
   getSettings: jest.fn(() => ({ copilotFolder: "copilot" })),
   subscribeToSettingsChange: jest.fn().mockReturnValue(() => {}),
@@ -65,16 +53,11 @@ describe("projectRegister", () => {
     let settingsChangeHandler: (prev: CopilotSettings, next: CopilotSettings) => void;
     let fetchProjects: jest.Mock;
     let updateCachedProjectRecords: jest.Mock;
-    let getCachedProjectRecords: jest.Mock;
     let register: ProjectRegister;
 
     beforeEach(() => {
       jest.clearAllMocks();
       jest.useFakeTimers();
-
-      // Reason: mockReset drops any queued *Once implementations from a prior
-      // test; mockClear alone would leak them into the next one.
-      mockClearForProject.mockReset().mockResolvedValue(undefined);
 
       const { ProjectFileManager } = jest.requireMock<{
         ProjectFileManager: { getInstance: () => { fetchProjects: jest.Mock } };
@@ -82,11 +65,9 @@ describe("projectRegister", () => {
       fetchProjects = ProjectFileManager.getInstance().fetchProjects;
       fetchProjects.mockReset().mockResolvedValue([]);
 
-      ({ updateCachedProjectRecords, getCachedProjectRecords } = jest.requireMock<{
+      ({ updateCachedProjectRecords } = jest.requireMock<{
         updateCachedProjectRecords: jest.Mock;
-        getCachedProjectRecords: jest.Mock;
       }>("@/projects/state"));
-      getCachedProjectRecords.mockReturnValue([]);
 
       const mockVault = { on: jest.fn(), off: jest.fn() } as unknown as Vault;
       register = new ProjectRegister({ vault: mockVault } as unknown as App);
@@ -104,23 +85,27 @@ describe("projectRegister", () => {
     });
 
     /**
-     * Start a reload and park it inside the per-project context-cache clears,
-     * mirroring a slow vault: the handler has passed its post-fetch check but
-     * has not yet committed. Returns the release for that clear.
+     * Start a reload and park it inside its project fetch, mirroring a slow
+     * vault: the handler is awaiting results and has not yet committed.
+     * Returns settle callbacks for that fetch.
      */
-    function startReloadStalledInCacheClear(from: string, to: string): () => void {
-      getCachedProjectRecords.mockReturnValue([{ project: { id: "stale" } }]);
-      let release!: () => void;
-      mockClearForProject.mockImplementationOnce(
-        () =>
-          new Promise<void>((resolve) => {
-            release = resolve;
-          })
+    function startReloadStalledInFetch(
+      from: string,
+      to: string
+    ): { resolve: (records: unknown[]) => void; reject: (error: Error) => void } {
+      let settle!: { resolve: (records: unknown[]) => void; reject: (error: Error) => void };
+      fetchProjects.mockReturnValueOnce(
+        new Promise<unknown[]>((resolve, reject) => {
+          settle = { resolve, reject };
+        })
       );
       settingsChangeHandler(settingsWithRoot(from), settingsWithRoot(to));
-      // Reason: `release` is only assigned once the debounce fires and the
-      // handler actually reaches the clear, which is after this returns.
-      return () => release();
+      return {
+        // Reason: `settle` is only assigned once the debounce fires and the
+        // handler actually calls fetchProjects, which is after this returns.
+        resolve: (records) => settle.resolve(records),
+        reject: (error) => settle.reject(error),
+      };
     }
 
     describe("handleSettingsChange()", () => {
@@ -143,39 +128,34 @@ describe("projectRegister", () => {
         expect(fetchProjects).not.toHaveBeenCalled();
       });
 
-      it("discards a reload that resumes from its cache clears after a newer one committed", async () => {
-        const staleRecords = [{ project: { id: "intermediate" } }];
+      it("discards a slow reload that resolves after a newer one committed", async () => {
         const freshRecords = [{ project: { id: "final" } }];
-        fetchProjects.mockResolvedValueOnce(staleRecords).mockResolvedValueOnce(freshRecords);
-
-        const releaseStaleClear = startReloadStalledInCacheClear("a", "b");
+        const stale = startReloadStalledInFetch("a", "b");
         await jest.advanceTimersByTimeAsync(1000);
 
+        fetchProjects.mockResolvedValueOnce(freshRecords);
         settingsChangeHandler(settingsWithRoot("b"), settingsWithRoot("c"));
         await jest.advanceTimersByTimeAsync(1000);
         expect(updateCachedProjectRecords).toHaveBeenCalledTimes(1);
         expect(updateCachedProjectRecords).toHaveBeenCalledWith(freshRecords);
 
-        releaseStaleClear();
+        stale.resolve([{ project: { id: "intermediate" } }]);
         await jest.advanceTimersByTimeAsync(0);
 
         expect(updateCachedProjectRecords).toHaveBeenCalledTimes(1);
       });
 
-      it("keeps the newer records when an earlier failed reload resumes from its cache clears", async () => {
+      it("keeps the newer records when an earlier reload fails after a newer one committed", async () => {
         const freshRecords = [{ project: { id: "final" } }];
-        fetchProjects
-          .mockRejectedValueOnce(new Error("fetch failed"))
-          .mockResolvedValueOnce(freshRecords);
-
-        const releaseFailedClear = startReloadStalledInCacheClear("a", "b");
+        const stale = startReloadStalledInFetch("a", "b");
         await jest.advanceTimersByTimeAsync(1000);
 
+        fetchProjects.mockResolvedValueOnce(freshRecords);
         settingsChangeHandler(settingsWithRoot("b"), settingsWithRoot("c"));
         await jest.advanceTimersByTimeAsync(1000);
         expect(updateCachedProjectRecords).toHaveBeenCalledWith(freshRecords);
 
-        releaseFailedClear();
+        stale.reject(new Error("fetch failed"));
         await jest.advanceTimersByTimeAsync(0);
 
         expect(updateCachedProjectRecords).not.toHaveBeenCalledWith([]);

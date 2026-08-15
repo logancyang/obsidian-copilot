@@ -1,4 +1,4 @@
-import { getChainType, getCurrentProject, getModelKey, SetChainOptions } from "@/aiParams";
+import { getChainType, getModelKey, SetChainOptions } from "@/aiParams";
 import { ChainType } from "@/chainType";
 import { USER_SENDER } from "@/constants";
 import {
@@ -6,7 +6,6 @@ import {
   ChainRunner,
   CopilotPlusChainRunner,
   LLMChainRunner,
-  ProjectChainRunner,
   VaultQAChainRunner,
 } from "@/LLMProviders/chainRunner/index";
 import { logError, logInfo } from "@/logger";
@@ -106,19 +105,12 @@ export default class ChainManager {
     neededReInitChatMode: boolean = true
   ): Promise<void> {
     // The selection is a `configuredModelId` in the chat backend (no longer a
-    // legacy "name|provider" key). Project mode keeps its own per-project
-    // selection; everything else uses the session/global selection.
+    // legacy "name|provider" key).
     let selectedModelId: string | undefined;
     const chainType = getChainType();
-    const currentProject = getCurrentProject();
-
-    if (chainType === ChainType.PROJECT_CHAIN && !currentProject) {
-      return;
-    }
 
     try {
-      const preferredId =
-        chainType === ChainType.PROJECT_CHAIN ? currentProject?.projectModelKey : getModelKey();
+      const preferredId = getModelKey();
 
       if (neededReInitChatMode) {
         const resolution = await resolveChatBackendModel(
@@ -133,13 +125,7 @@ export default class ChainManager {
         }
         selectedModelId = resolution.configuredModelId;
 
-        // Project temperature / maxTokens overrides still apply on top of the
-        // bridged model.
-        const mergedModel = {
-          ...resolution.customModel,
-          ...currentProject?.modelConfigs,
-        };
-        await this.chatModelManager.setChatModelFromBridged(mergedModel);
+        await this.chatModelManager.setChatModelFromBridged(resolution.customModel);
         this.pendingModelError = null;
       }
 
@@ -147,7 +133,7 @@ export default class ChainManager {
       // the atom is owned by the UI dropdowns. The
       // captured local `chainType` may already be stale by the time we reach
       // here (we just awaited `setChatModel(...)`), and writing it back used
-      // to create a self-sustaining `setChainType` → ProjectManager
+      // to create a self-sustaining `setChainType` → ChainOwner
       // subscriber → `createChainWithNewModel` loop that froze Obsidian on
       // apply-Plus-key.
       if (this.chatModelManager.validateChatModel(this.chatModelManager.getChatModel())) {
@@ -181,8 +167,6 @@ export default class ChainManager {
           return new AutonomousAgentChainRunner(this);
         }
         return new CopilotPlusChainRunner(this);
-      case ChainType.PROJECT_CHAIN:
-        return new ProjectChainRunner(this);
       default:
         throw new Error(`Unsupported chain type: ${String(chainType)}`);
     }
