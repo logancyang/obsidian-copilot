@@ -3,6 +3,9 @@ import type { ModelCapability } from "@/constants";
 import type { FormattedDateTime, MessageContext } from "@/types/message";
 // `import type` keeps the cycle with `fanoutTypes` compile-time only.
 import type { FanoutTurn } from "@/agentMode/session/fanout/fanoutTypes";
+import type { PlanUsage } from "@/agentMode/session/planUsage";
+
+export type { PlanUsage, UsageWindow } from "@/agentMode/session/planUsage";
 import type { ProjectScopeId } from "./scope";
 
 export type {
@@ -521,7 +524,9 @@ export type SessionUpdate =
   | { sessionUpdate: "current_mode_update"; currentModeId: string }
   | { sessionUpdate: "config_option_update"; configOptions: BackendConfigOption[] }
   | { sessionUpdate: "state_changed"; state: BackendState }
-  | { sessionUpdate: "usage_update"; usage: SessionUsage };
+  | { sessionUpdate: "usage_update"; usage: SessionUsage }
+  // `null` clears the meters: the backend asked and was told this account has no caps.
+  | { sessionUpdate: "plan_usage_update"; planUsage: PlanUsage | null };
 
 /**
  * Backend-agnostic token-usage snapshot for a session. Every coding-agent
