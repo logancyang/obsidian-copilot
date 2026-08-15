@@ -1,3 +1,33 @@
+// Node.js built-in modules to leave external: they exist in the Electron
+// renderer both bundles run in, so esbuild must not try to resolve them from
+// disk. `@anthropic-ai/claude-agent-sdk` and its transitive deps mix the
+// prefixed and bare spellings, so both have to be covered, but the two sides
+// cannot be covered the same way:
+//
+// - `node:` specifiers can only ever be builtins, so one wildcard covers every
+//   present and future one. `node:module` is the exception the wildcard cannot
+//   express — `nodeModuleShim` below claims it first, because the renderer has
+//   no ESM `createRequire`.
+// - Bare specifiers are ambiguous: `events`, `process`, `punycode`, and friends
+//   are also real npm packages, and externalizing one would shadow a dependency
+//   that legitimately resolves to `node_modules`. So bare spellings stay an
+//   explicit list of the ones the module graph actually reaches.
+export const nodeBuiltinExternals = [
+  "node:*",
+  "async_hooks",
+  "child_process",
+  "crypto",
+  "events",
+  "fs",
+  "fs/promises",
+  "os",
+  "path",
+  "process",
+  "readline",
+  "url",
+  "util",
+];
+
 // Plugin to provide a shim for node:module in browser/Electron renderer context
 const nodeModuleShim = {
   name: "node-module-shim",

@@ -29,6 +29,13 @@ jobs:
       - name: Obsidian community review gate
         run: npm run review:obsidian
       - run: npm run lint
+      # Type-checks the project and bundles the plugin. Otherwise both run only
+      # when a release PR merges, so a break would sit on master until someone
+      # cut a release.
+      - run: npm run build
+      # Builds the component gallery's whole story graph, so a story that cannot
+      # bundle fails the PR instead of reaching master unnoticed.
+      - run: npm run gallery:build
       - run: npm run test:mobile-load
       - run: npm test
       - name: Run Integration tests
