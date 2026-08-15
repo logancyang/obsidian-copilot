@@ -1,5 +1,11 @@
 import { SEND_SHORTCUT } from "@/constants";
-import { checkShortcutMatch, isImeCompositionEvent } from "./KeyboardPlugin";
+import { ContentEditable } from "@lexical/react/LexicalContentEditable";
+import { LexicalComposer } from "@lexical/react/LexicalComposer";
+import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
+import { fireEvent, render } from "@testing-library/react";
+import { COMMAND_PRIORITY_HIGH, KEY_ESCAPE_COMMAND, type LexicalEditor } from "lexical";
+import React from "react";
+import { KeyboardPlugin, checkShortcutMatch, isImeCompositionEvent } from "./KeyboardPlugin";
 
 /**
  * Helper function to create a mock KeyboardEvent with specified fields
@@ -19,10 +25,121 @@ function createMockKeyboardEvent(fields: {
     ctrlKey: fields.ctrlKey || false,
     altKey: fields.altKey || false,
     isComposing: fields.isComposing || false,
-  } as KeyboardEvent;
+    preventDefault: jest.fn(),
+    stopPropagation: jest.fn(),
+  } as unknown as KeyboardEvent;
+}
+
+let editor: LexicalEditor;
+
+function EditorCapture(): null {
+  [editor] = useLexicalComposerContext();
+  return null;
+}
+
+interface RenderedKeyboardPlugin {
+  input: HTMLElement;
+  boundary: HTMLElement;
+}
+
+function renderKeyboardPlugin(onEscape?: () => void): RenderedKeyboardPlugin {
+  const result = render(
+    React.createElement(
+      LexicalComposer,
+      {
+        initialConfig: {
+          namespace: "keyboard-plugin-test",
+          onError: (error: Error) => {
+            throw error;
+          },
+        },
+      },
+      React.createElement(ContentEditable, { "aria-label": "Chat input" }),
+      React.createElement(EditorCapture),
+      React.createElement(KeyboardPlugin, {
+        onSubmit: jest.fn(),
+        sendShortcut: SEND_SHORTCUT.ENTER,
+        onEscape,
+      })
+    )
+  );
+  return {
+    input: result.getByRole("textbox", { name: "Chat input" }),
+    boundary: result.container,
+  };
+}
+
+function dispatchEscape(target: HTMLElement, init: KeyboardEventInit = {}): KeyboardEvent {
+  const event = new KeyboardEvent("keydown", {
+    key: "Escape",
+    code: "Escape",
+    bubbles: true,
+    cancelable: true,
+    ...init,
+  });
+  fireEvent(target, event);
+  return event;
 }
 
 describe("KeyboardPlugin", () => {
+  describe("KeyboardPlugin()", () => {
+    it("should contain IME-owned Escape without blocking native composition cancellation (https://github.com/logancyang/obsidian-copilot-preview/issues/302)", () => {
+      const onEscape = jest.fn();
+      const boundaryHandler = jest.fn();
+      const { input, boundary } = renderKeyboardPlugin(onEscape);
+      boundary.addEventListener("keydown", boundaryHandler);
+      input.focus();
+      fireEvent.compositionStart(input);
+
+      const event = dispatchEscape(input, { isComposing: true });
+
+      expect(boundaryHandler).not.toHaveBeenCalled();
+      expect(document.activeElement).toBe(input);
+      expect(event.defaultPrevented).toBe(false);
+      expect(onEscape).not.toHaveBeenCalled();
+      fireEvent.compositionEnd(input);
+    });
+
+    it("should contain plain Escape when no chat action is configured (https://github.com/logancyang/obsidian-copilot-preview/issues/302)", () => {
+      const boundaryHandler = jest.fn();
+      const { input, boundary } = renderKeyboardPlugin();
+      boundary.addEventListener("keydown", boundaryHandler);
+      input.focus();
+
+      const event = dispatchEscape(input);
+
+      expect(boundaryHandler).not.toHaveBeenCalled();
+      expect(document.activeElement).toBe(input);
+      expect(event.defaultPrevented).toBe(false);
+    });
+
+    it("should contain plain Escape before a higher-priority chat action handles it (https://github.com/logancyang/obsidian-copilot-preview/issues/302)", () => {
+      const typeaheadEscapeHandler = jest.fn(() => true);
+      const boundaryHandler = jest.fn();
+      const { input, boundary } = renderKeyboardPlugin();
+      editor.registerCommand(KEY_ESCAPE_COMMAND, typeaheadEscapeHandler, COMMAND_PRIORITY_HIGH);
+      boundary.addEventListener("keydown", boundaryHandler);
+
+      const event = dispatchEscape(input);
+
+      expect(boundaryHandler).not.toHaveBeenCalled();
+      expect(typeaheadEscapeHandler).toHaveBeenCalledWith(event, editor);
+    });
+
+    it("should contain plain Escape and invoke its configured chat action (https://github.com/logancyang/obsidian-copilot-preview/issues/302)", () => {
+      const onEscape = jest.fn();
+      const boundaryHandler = jest.fn();
+      const { input, boundary } = renderKeyboardPlugin(onEscape);
+      boundary.addEventListener("keydown", boundaryHandler);
+
+      const event = dispatchEscape(input);
+
+      expect(boundaryHandler).not.toHaveBeenCalled();
+      expect(event.defaultPrevented).toBe(true);
+      expect(onEscape).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe("checkShortcutMatch()", () => {
     describe("ENTER shortcut", () => {
       it("should match plain Enter key", () => {
@@ -123,7 +240,7 @@ describe("KeyboardPlugin", () => {
       expect(isImeCompositionEvent(event)).toBe(true);
     });
 
-    it("should detect IME-consumed keys reported as key 'Process' even when isComposing is false", () => {
+    it("should keep chat shortcuts inactive for IME-consumed Process keys (https://github.com/logancyang/obsidian-copilot-preview/issues/302)", () => {
       const event = createMockKeyboardEvent({ key: "Process", isComposing: false });
       expect(isImeCompositionEvent(event)).toBe(true);
     });
