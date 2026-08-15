@@ -77,6 +77,11 @@ export interface Provider {
   /** Overrides what the wizard pre-filled from catalog / template. */
   baseUrl?: string;
   /**
+   * Quick Chat transport choice. When enabled, requests use Obsidian's
+   * CORS-free buffered path, so responses cannot stream token by token.
+   */
+  enableCors?: boolean;
+  /**
    * Obsidian keychain entry id. `null` for providers that don't take an
    * API key (Ollama, LMStudio, some agent-owned providers).
    */

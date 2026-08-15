@@ -297,8 +297,9 @@ function mapConnector(relay: MiyoHealthResponse["relay"]): CapabilityStatus {
 }
 
 /**
- * chat_sync absent → unknown; any platform syncing → syncing;
- * configured && active → available; otherwise unavailable.
+ * chat_sync absent → unknown; any platform syncing → syncing; configured →
+ * available; otherwise unavailable. `active` tracks syncing/connecting work,
+ * so it is normally false once chat history is ready.
  */
 function mapChatSync(chatSync: MiyoHealthResponse["chat_sync"]): CapabilityStatus {
   if (!chatSync) {
@@ -307,7 +308,7 @@ function mapChatSync(chatSync: MiyoHealthResponse["chat_sync"]): CapabilityStatu
   if (hasSyncingPlatform(chatSync.platforms)) {
     return "syncing";
   }
-  return chatSync.configured === true && chatSync.active === true ? "available" : "unavailable";
+  return chatSync.configured === true ? "available" : "unavailable";
 }
 
 function hasSyncingPlatform(
