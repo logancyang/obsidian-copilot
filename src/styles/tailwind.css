@@ -139,7 +139,7 @@ If your plugin does not need CSS, delete this file.
 .note-badge {
   font-size: 10px;
   padding: 0 4px;
-  background: rgba(0, 0, 0, 0.2);
+  background: rgb(0 0 0 / 20%);
   border-radius: 3px;
 }
 
@@ -633,7 +633,7 @@ If your plugin does not need CSS, delete this file.
 
 .edit-textarea:focus {
   outline: none;
-  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+  box-shadow: 0 0 0 2px rgb(0 123 255 / 25%);
 }
 
 .copilot-notice-container {
@@ -729,7 +729,7 @@ If your plugin does not need CSS, delete this file.
     background: var(--background-primary-alt);
     border-radius: 8px;
     padding: 0 16px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 2px 4px rgb(0 0 0 / 10%);
   }
 
   .model-card-header {
@@ -791,7 +791,7 @@ If your plugin does not need CSS, delete this file.
   .model-select-content,
   .chain-select-content {
     background: var(--background-primary);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 2px 8px rgb(0 0 0 / 20%);
   }
 
   .model-select-content [role="menuitem"],
@@ -817,7 +817,7 @@ If your plugin does not need CSS, delete this file.
   background: var(--background-primary-alt);
   border-radius: 8px;
   padding: 0 16px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 4px rgb(0 0 0 / 10%);
   transition: all 0.3s ease;
   position: relative;
   border-left: 4px solid transparent;
