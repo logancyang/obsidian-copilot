@@ -1,4 +1,11 @@
+import * as obsidianModule from "obsidian";
+
 import { BedrockChatModel } from "./BedrockChatModel";
+
+/** The obsidian mock's seam for stubbing `requestUrl` per test. */
+const { __setRequestUrlImpl: setRequestUrlImpl } = obsidianModule as unknown as {
+  __setRequestUrlImpl: (impl: unknown) => void;
+};
 
 type ProcessStreamResult = {
   deltaChunks: Array<{
@@ -755,9 +762,23 @@ describe("BedrockChatModel inference-profile error rewriting", () => {
       text: () => Promise.resolve(body),
     }) as unknown as Response;
 
+  /**
+   * Stubs the buffered transport `_generate` uses so the assertions exercise the
+   * error-rewriting branch without touching the network.
+   */
+  const stubRequestUrlError = (status: number, body: string): void => {
+    setRequestUrlImpl(jest.fn().mockResolvedValue({ status, text: body, headers: {} }));
+  };
+
+  afterEach(() => {
+    setRequestUrlImpl(
+      jest.fn().mockResolvedValue({ status: 200, text: "", json: undefined, headers: {} })
+    );
+  });
+
   it("rewrites 400 inference-profile error in non-streaming path to actionable message", async () => {
-    const fetchMock = jest.fn().mockResolvedValue(makeErrorResponse(400, awsInferenceProfileError));
-    const model = createModelWithFetch(fetchMock, { noStream: true });
+    stubRequestUrlError(400, awsInferenceProfileError);
+    const model = createModelWithFetch(jest.fn(), { noStream: true });
 
     const messages = [{ content: "hi", getType: () => "human", type: "human" }];
     await expect(model._generate(messages as never, {})).rejects.toThrow(
@@ -775,8 +796,8 @@ describe("BedrockChatModel inference-profile error rewriting", () => {
   });
 
   it("includes the bare model ID in the rewritten message", async () => {
-    const fetchMock = jest.fn().mockResolvedValue(makeErrorResponse(400, awsInferenceProfileError));
-    const model = createModelWithFetch(fetchMock, { noStream: true });
+    stubRequestUrlError(400, awsInferenceProfileError);
+    const model = createModelWithFetch(jest.fn(), { noStream: true });
 
     const messages = [{ content: "hi", getType: () => "human", type: "human" }];
     await expect(model._generate(messages as never, {})).rejects.toThrow(
@@ -785,9 +806,8 @@ describe("BedrockChatModel inference-profile error rewriting", () => {
   });
 
   it("does not rewrite a 400 error that is unrelated to inference profiles", async () => {
-    const genericBody = JSON.stringify({ message: "ValidationException: bad request" });
-    const fetchMock = jest.fn().mockResolvedValue(makeErrorResponse(400, genericBody));
-    const model = createModelWithFetch(fetchMock, { noStream: true });
+    stubRequestUrlError(400, JSON.stringify({ message: "ValidationException: bad request" }));
+    const model = createModelWithFetch(jest.fn(), { noStream: true });
 
     const messages = [{ content: "hi", getType: () => "human", type: "human" }];
     await expect(model._generate(messages as never, {})).rejects.toThrow(
@@ -796,9 +816,8 @@ describe("BedrockChatModel inference-profile error rewriting", () => {
   });
 
   it("does not rewrite non-400 errors", async () => {
-    const body = JSON.stringify({ message: "Internal Server Error" });
-    const fetchMock = jest.fn().mockResolvedValue(makeErrorResponse(500, body));
-    const model = createModelWithFetch(fetchMock, { noStream: true });
+    stubRequestUrlError(500, JSON.stringify({ message: "Internal Server Error" }));
+    const model = createModelWithFetch(jest.fn(), { noStream: true });
 
     const messages = [{ content: "hi", getType: () => "human", type: "human" }];
     await expect(model._generate(messages as never, {})).rejects.toThrow(
@@ -807,12 +826,14 @@ describe("BedrockChatModel inference-profile error rewriting", () => {
   });
 
   it("rewrites the error even when AWS uses a curly apostrophe in 'isn’t supported'", async () => {
-    const curlyApostropheBody = JSON.stringify({
-      message:
-        "Invocation of model ID anthropic.claude-sonnet-4-5 with on-demand throughput isn’t supported. Retry your request with the ID or ARN of an inference profile that contains this model.",
-    });
-    const fetchMock = jest.fn().mockResolvedValue(makeErrorResponse(400, curlyApostropheBody));
-    const model = createModelWithFetch(fetchMock, { noStream: true });
+    stubRequestUrlError(
+      400,
+      JSON.stringify({
+        message:
+          "Invocation of model ID anthropic.claude-sonnet-4-5 with on-demand throughput isn’t supported. Retry your request with the ID or ARN of an inference profile that contains this model.",
+      })
+    );
+    const model = createModelWithFetch(jest.fn(), { noStream: true });
 
     const messages = [{ content: "hi", getType: () => "human", type: "human" }];
     await expect(model._generate(messages as never, {})).rejects.toThrow(
@@ -821,12 +842,14 @@ describe("BedrockChatModel inference-profile error rewriting", () => {
   });
 
   it("uses the provider segment from the bare model ID in the prefix guidance", async () => {
-    const nonAnthropicBody = JSON.stringify({
-      message:
-        "Invocation of model ID meta.llama4-maverick-17b with on-demand throughput isn't supported. Retry your request with the ID or ARN of an inference profile that contains this model.",
-    });
-    const fetchMock = jest.fn().mockResolvedValue(makeErrorResponse(400, nonAnthropicBody));
-    const model = createModelWithFetch(fetchMock, { noStream: true });
+    stubRequestUrlError(
+      400,
+      JSON.stringify({
+        message:
+          "Invocation of model ID meta.llama4-maverick-17b with on-demand throughput isn't supported. Retry your request with the ID or ARN of an inference profile that contains this model.",
+      })
+    );
+    const model = createModelWithFetch(jest.fn(), { noStream: true });
 
     const messages = [{ content: "hi", getType: () => "human", type: "human" }];
     await expect(model._generate(messages as never, {})).rejects.toThrow(/global\.meta\.<id>/);

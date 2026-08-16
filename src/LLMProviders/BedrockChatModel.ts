@@ -16,6 +16,7 @@ import type { ChatGeneration, ChatResult } from "@langchain/core/outputs";
 import type { StructuredToolInterface } from "@langchain/core/tools";
 import { isInteropZodSchema } from "@langchain/core/utils/types";
 import { toJsonSchema } from "@langchain/core/utils/json_schema";
+import { requestUrl } from "obsidian";
 
 type FetchImplementation = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
@@ -84,7 +85,7 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
   private readonly apiKey: string;
   private readonly endpoint: string;
   private readonly streamEndpoint?: string;
-  private readonly fetchImpl: FetchImplementation;
+  private readonly fetchImpl?: FetchImplementation;
   private readonly defaultMaxTokens?: number;
   private readonly defaultTemperature?: number;
   private readonly defaultTopP?: number;
@@ -124,13 +125,11 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
 
     super(baseParams);
 
-    // scorecard: streaming requires fetch — cannot use requestUrl
-    const globalFetch = typeof fetch !== "undefined" ? fetch.bind(window) : undefined;
-
-    this.fetchImpl = fetchImplementation ?? globalFetch;
-    if (!this.fetchImpl) {
-      throw new Error("No fetch implementation available for Amazon Bedrock requests.");
-    }
+    // scorecard: only _streamResponseChunks uses this — it reads the response body
+    // incrementally, which requestUrl cannot do because it buffers the whole response.
+    // Non-streaming calls go through requestUrl in _generate. When no implementation
+    // is available, _streamResponseChunks degrades to the buffered _generate path.
+    this.fetchImpl = fetchImplementation ?? window.fetch?.bind(window);
 
     if ((baseParams as { streaming?: boolean }).streaming && !streamEndpoint) {
       logWarn(
@@ -218,22 +217,23 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
   ): Promise<ChatResult> {
     const requestBody = this.buildRequestBody(messages, options);
 
-    const response = await this.fetchImpl(this.endpoint, {
+    const response = await requestUrl({
+      url: this.endpoint,
       method: "POST",
+      contentType: "application/json",
       headers: {
         Authorization: `Bearer ${this.apiKey}`,
-        "Content-Type": "application/json",
         Accept: "application/json",
       },
       body: JSON.stringify(requestBody),
+      throw: false,
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(rewriteBedrockErrorMessage(response.status, errorText));
+    if (response.status >= 400) {
+      throw new Error(rewriteBedrockErrorMessage(response.status, response.text));
     }
 
-    const data = (await response.json()) as Record<string, unknown>;
+    const data = response.json as Record<string, unknown>;
     const text = this.extractText(data);
     const toolCalls = this.extractToolCalls(data);
 
@@ -274,7 +274,7 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
     options: BedrockChatModelCallOptions = {},
     runManager?: CallbackManagerForLLMRun
   ): AsyncGenerator<ChatGenerationChunk> {
-    if (!this.streamEndpoint) {
+    if (!this.streamEndpoint || !this.fetchImpl) {
       const result = await this._generate(messages, options, runManager);
       const text = result.generations[0]?.text ?? "";
       if (!text) {

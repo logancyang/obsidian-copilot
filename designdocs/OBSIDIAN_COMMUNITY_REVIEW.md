@@ -57,10 +57,10 @@ Warnings remain for cases where automatic cleanup could change behavior or UI, i
 
 `requestUrl` supports neither streaming responses nor AbortSignal, so the following call sites must keep `fetch` and carry a `// scorecard:` comment. Any remaining scorecard `fetch` warning must match this list:
 
-- `src/LLMProviders/BedrockChatModel.ts` — Bedrock SSE streaming.
+- `src/LLMProviders/BedrockChatModel.ts` — `window.fetch` in `_streamResponseChunks` only. The Bedrock stream arrives as binary Amazon EventStream frames that the parser reads incrementally off a rolling byte buffer, so a buffered body cannot substitute: `safeFetch` rebuilds its body by UTF-8 encoding `response.text`, which corrupts the frame length preludes and CRCs. `_generate` uses `requestUrl`.
 - `src/LLMProviders/ChatLMStudio.ts` — `window.fetch` fallback wrapped for LM Studio body sanitization in a streaming ChatOpenAI.
 
-Non-streaming JSON requests (for example the Jina and custom OpenAI embedding adapters) route through `safeFetchNoThrow`, which uses `requestUrl`.
+Non-streaming JSON requests (for example the Jina and custom OpenAI embedding adapters, and the Bedrock `invoke` endpoint) route through `requestUrl`, directly or via `safeFetchNoThrow`.
 
 Provider smoke tests for Jina and Bedrock streaming/non-streaming are needed only when their adapters or network boundaries change.
 
