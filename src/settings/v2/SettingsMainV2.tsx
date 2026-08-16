@@ -22,8 +22,11 @@ import { SelfHostSettings } from "./components/SelfHostSettings";
 // (see designdocs/SETTINGS_REDESIGN_V4.md and SETTINGS_V4_PR_PLAN.md); the
 // underlying fields are NOT dropped and stay runtime-honored for existing
 // vaults:
-//   - enableSemanticSearchV3 — now driven implicitly by the Miyo connect flow
-//     (MiyoSettings), not a manual toggle.
+//   - enableSemanticSearchV3 — the Miyo connect flow (MiyoSettings) drives it
+//     implicitly. The Advanced tab surfaces it as "Legacy vault index"
+//     (LegacyVaultIndexSetting), the off switch a vault not using Miyo needs to
+//     stop indexing; it reads as the legacy index because that is all the flag
+//     still controls once Miyo owns semantic search.
 //   - qaInclusions/qaExclusions — still consumed (Miyo registration snapshot);
 //     their edit UI is deferred per issue #195 ("defer include/exclude").
 //   - embeddingModelKey / maxSourceChunks / enableInlineCitations / indexing

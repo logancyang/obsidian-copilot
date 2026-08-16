@@ -44,6 +44,20 @@ The **Search scope** control affects Copilot's integrated Miyo retrieval:
 
 The **Search chat** row is separate from vault search. **Ready · chats indexed** and **Syncing chats…** refer to ChatGPT and Claude chat history configured in Miyo, not to your notes.
 
+## Turn off the legacy vault index
+
+Vaults upgraded from an earlier version may still run Copilot's own embedding index, the one that predates Miyo. It builds when you switch chat modes and updates as you edit notes, which is noticeable on a large vault.
+
+**Settings → Copilot → Advanced → Legacy vault index** turns it off. Confirm the prompt, and:
+
+- No new indexing starts. A run already under way stops at its next batch, and the progress card in chat reports it as cancelled. To stop one the moment you see it, use the stop button on that card.
+- Search falls back to keyword matching.
+- The index already on disk is kept, but no longer read or updated. Run **Clear local Copilot index** from the command palette to remove it. A **Force reindex** that was already running is the exception: it clears the index as it starts, so stopping one part-way leaves only what it had rebuilt.
+
+Turning the switch back on does not build an index by itself. Run **Index (refresh) vault** from the command palette when you want one.
+
+If you have connected Miyo, this switch is greyed out. Miyo owns semantic search for the vault, and connecting or disconnecting it on the **Miyo** tab is what sets this.
+
 ## Privacy and device boundaries
 
 - File search and the Obsidian CLI run on your computer. Any excerpts Agent uses are then sent to the selected model as chat context. With a cloud model, that means its provider receives those excerpts; with a local model, they stay local.

@@ -146,8 +146,8 @@ export class IndexOperations {
         return 0;
       }
 
-      // Check if user cancelled during chunk preparation
-      if (this.state.isIndexingCancelled || getIndexingProgressState().isCancelled) {
+      // Check if the user stopped indexing during chunk preparation
+      if (this.shouldStopIndexing()) {
         updateIndexingProgressState({ isActive: false, completionStatus: "cancelled" });
         return 0;
       }
@@ -161,7 +161,7 @@ export class IndexOperations {
       // Process chunks in dynamic batches so runtime config updates (pause/resume) apply immediately.
       let i = 0;
       while (i < allChunks.length) {
-        if (this.state.isIndexingCancelled || getIndexingProgressState().isCancelled) break;
+        if (this.shouldStopIndexing()) break;
         await this.handlePause();
 
         const batch = allChunks.slice(i, i + this.embeddingBatchSize);
@@ -457,6 +457,21 @@ export class IndexOperations {
     });
   }
 
+  /**
+   * Whether a run in flight must stop: the user cancelled it, or turned the vault index off from
+   * Advanced settings while it was running. The setting is re-read on each check rather than
+   * latched at entry, so a run started before the switch was flipped ends at the next batch
+   * instead of embedding the rest of the vault
+   * (https://github.com/logancyang/obsidian-copilot-preview/issues/319).
+   */
+  private shouldStopIndexing(): boolean {
+    return (
+      this.state.isIndexingCancelled ||
+      getIndexingProgressState().isCancelled ||
+      !getSettings().enableSemanticSearchV3
+    );
+  }
+
   private async handlePause(): Promise<void> {
     // Sync pause state from atom (UI may have toggled it)
     const atomState = getIndexingProgressState();
@@ -464,7 +479,7 @@ export class IndexOperations {
     this.state.isIndexingCancelled = atomState.isCancelled;
 
     if (this.state.isIndexingPaused) {
-      while (this.state.isIndexingPaused && !this.state.isIndexingCancelled) {
+      while (this.state.isIndexingPaused && !this.shouldStopIndexing()) {
         await new Promise((resolve) => window.setTimeout(resolve, 100));
         // Re-read atom state each iteration
         const current = getIndexingProgressState();
@@ -473,7 +488,7 @@ export class IndexOperations {
       }
 
       // After we exit the pause loop (meaning we've resumed), re-evaluate files
-      if (!this.state.isIndexingCancelled) {
+      if (!this.shouldStopIndexing()) {
         this.refreshRuntimeIndexingConfig();
         const files = await this.getFilesToIndex();
         if (files.length === 0) {
@@ -565,7 +580,7 @@ export class IndexOperations {
     // Flush any pending throttled count so the final value is displayed
     flushIndexingCount();
 
-    if (this.state.isIndexingCancelled || getIndexingProgressState().isCancelled) {
+    if (this.shouldStopIndexing()) {
       updateIndexingProgressState({
         isActive: false,
         completionStatus: "cancelled",
