@@ -1,0 +1,8 @@
+# Tailwind writes these from dev/gallery/styles.source.css and src/styles/tailwind.css
+# whenever the gallery is built. They carry the `!`-prefixed utilities authored in
+# TSX, so linting them with the authored-source config reports generated output as
+# review findings. Paths are fully qualified: a bare `styles.css` would also skip the
+# packaged bundle at the repository root, which is scanned on purpose with
+# stylelint.packaged.config.mjs.
+dev/gallery/styles.css
+dev/gallery/styles.source.css

@@ -44,7 +44,17 @@ const invalidStyleWarningFixture = `.review-fixture:has(button) {
 `;
 const invalidStyleErrorFixture = `.review-fixture {
   background-image: url("https://example.com/review-fixture.png");
+}
+`;
+// Each !important fixture carries that violation alone. Bundling it with another
+// error-severity rule would let the assertion pass on the rule name appearing in
+// warning output, so a silent demotion back to warning would go unnoticed.
+const invalidImportantDeclarationFixture = `.review-fixture {
   display: block !important;
+}
+`;
+const invalidImportantAtRuleFixture = `.review-fixture {
+  @apply tw-block !important;
 }
 `;
 const invalidLicenseFixture = "Copyright (C) 2020-2025 by Dynalist Inc.\n";
@@ -232,8 +242,34 @@ async function main() {
       "--config",
       "stylelint.config.mjs",
     ],
-    ["function-url-scheme-disallowed-list", "declaration-no-important"],
+    ["function-url-scheme-disallowed-list"],
     invalidStyleErrorFixture
+  );
+  expectRejected(
+    process.execPath,
+    [
+      resolve(repositoryRoot, "node_modules/stylelint/bin/stylelint.mjs"),
+      "--stdin",
+      "--stdin-filename",
+      "src/review-fixtures/invalid-important.css",
+      "--config",
+      "stylelint.config.mjs",
+    ],
+    ["declaration-no-important"],
+    invalidImportantDeclarationFixture
+  );
+  expectRejected(
+    process.execPath,
+    [
+      resolve(repositoryRoot, "node_modules/stylelint/bin/stylelint.mjs"),
+      "--stdin",
+      "--stdin-filename",
+      "src/review-fixtures/invalid-important-at-rule.css",
+      "--config",
+      "stylelint.config.mjs",
+    ],
+    ["copilot/no-important-at-rule"],
+    invalidImportantAtRuleFixture
   );
   const invalidManifestAccepted = await validateSelectedManifest(
     resolve(repositoryRoot, "manifest-beta.json"),
