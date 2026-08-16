@@ -1,3 +1,7 @@
+// Reason: `buffer` is the npm polyfill (browser-compatible), bundled by esbuild
+// so the same Buffer code path works on desktop (Electron) and mobile (WebView).
+import { Buffer } from "buffer/";
+
 import { ENTITLEMENT_PUBLIC_KEYS } from "./publicKeys";
 import type { EntitlementClaims } from "./types";
 
@@ -21,16 +25,20 @@ interface JwsHeader {
   kid?: string;
 }
 
-/** Decode a base64url segment to bytes. */
+/**
+ * Decode a base64url segment to bytes.
+ *
+ * Uses the `buffer` polyfill rather than `atob`, whose Node typing the Obsidian
+ * community review flags as deprecated. Its "base64" decoder accepts the
+ * base64url alphabet and omitted padding, so JWS segments need no rewriting.
+ * Characters outside the alphabet yield partial bytes rather than throwing;
+ * such a segment still fails JSON parsing or ES256 verification, so a malformed
+ * token is rejected either way.
+ *
+ * https://github.com/logancyang/obsidian-copilot-preview/issues/304
+ */
 function base64UrlToBytes(segment: string): Uint8Array {
-  const normalized = segment.replace(/-/g, "+").replace(/_/g, "/");
-  const padded = normalized + "=".repeat((4 - (normalized.length % 4)) % 4);
-  const binary = atob(padded);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes;
+  return new Uint8Array(Buffer.from(segment, "base64"));
 }
 
 function parseJsonSegment<T>(segment: string): T | null {

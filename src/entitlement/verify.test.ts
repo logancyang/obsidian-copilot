@@ -133,4 +133,40 @@ describe("verifyEntitlement", () => {
     expect(await verify("not-a-jwt", { publicKeys })).toBeNull();
     expect(await verify("only.two", { publicKeys })).toBeNull();
   });
+
+  it("rejects segments containing characters outside the base64url alphabet", async () => {
+    const token = await signToken(keyPair.privateKey, plusClaims());
+    const [header, payload, signature] = token.split(".");
+    // The decoder skips these characters instead of throwing, so each segment
+    // must still be rejected downstream by JSON parsing or ES256 verification.
+    expect(await verify(`!!!!.${payload}.${signature}`, { publicKeys })).toBeNull();
+    expect(await verify(`${header}.!!!!.${signature}`, { publicKeys })).toBeNull();
+    expect(await verify(`${header}.${payload}.!!!!`, { publicKeys })).toBeNull();
+  });
+
+  it("verifies a token whose segments use the base64url-only '-' and '_' characters", async () => {
+    // U+07FF encodes to base64 indices 62 and 63, which base64url spells "-" and
+    // "_". A decoder handling only the standard alphabet drops both, corrupting
+    // the bytes and silently rejecting a valid license.
+    const userId = `${USER_ID}\u07ff\u07ff`;
+    const token = await signToken(keyPair.privateKey, plusClaims({ user_id: userId }));
+    const payloadSegment = token.split(".")[1];
+    expect(payloadSegment).toContain("-");
+    expect(payloadSegment).toContain("_");
+    expect((await verify(token, { publicKeys }))?.user_id).toBe(userId);
+  });
+
+  it("verifies tokens whose unpadded segments cover every base64 remainder length", async () => {
+    // base64url segments carry no padding, so each byte length mod 3 produces a
+    // different implied-padding case; a decoder mishandling one would reject
+    // otherwise-valid licenses.
+    const remainders = new Set<number>();
+    for (const filler of ["", "x", "xx"]) {
+      const token = await signToken(keyPair.privateKey, plusClaims({ user_id: USER_ID + filler }));
+      expect(await verify(token, { publicKeys })).not.toBeNull();
+      remainders.add(token.split(".")[1].length % 4);
+    }
+    // Guard the premise: the three fillers must land on distinct remainders.
+    expect(remainders.size).toBe(3);
+  });
 });
