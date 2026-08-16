@@ -523,6 +523,72 @@ describe("BedrockChatModel streaming decode", () => {
     });
   });
 
+  describe("temperature handling for Opus 4.7+", () => {
+    // Opus 4.7+ rejects any `temperature` with a 400
+    // ("`temperature` is deprecated for this model."), so it must be omitted
+    // when thinking is disabled. Other models keep receiving the user's value.
+    const userMessage = { role: "user", content: "test", getType: () => "human" };
+
+    it("omits temperature for opus-4-7 when thinking is disabled", () => {
+      const model = createModel(false, "anthropic.claude-opus-4-7-20260115-v1:0");
+      const requestBody = asInternal(model).buildRequestBody([userMessage], { temperature: 0.1 });
+
+      expect(requestBody.temperature).toBeUndefined();
+    });
+
+    it("omits temperature for opus-4-8 when thinking is disabled", () => {
+      const model = createModel(false, "anthropic.claude-opus-4-8");
+      const requestBody = asInternal(model).buildRequestBody([userMessage], { temperature: 0.1 });
+
+      expect(requestBody.temperature).toBeUndefined();
+    });
+
+    it("omits temperature for opus-4-7 cross-region inference profiles", () => {
+      const model = createModel(false, "global.anthropic.claude-opus-4-7-20260115-v1:0");
+      const requestBody = asInternal(model).buildRequestBody([userMessage], { temperature: 0.7 });
+
+      expect(requestBody.temperature).toBeUndefined();
+    });
+
+    it("still sends temperature for opus-4-6 and earlier", () => {
+      const model = createModel(false, "anthropic.claude-opus-4-6-20250115-v1:0");
+      const requestBody = asInternal(model).buildRequestBody([userMessage], { temperature: 0.1 });
+
+      expect(requestBody.temperature).toBe(0.1);
+    });
+
+    it("still sends temperature for sonnet-4-5 and haiku", () => {
+      const sonnet = createModel(false, "anthropic.claude-sonnet-4-5-20250929-v1:0");
+      expect(
+        asInternal(sonnet).buildRequestBody([userMessage], { temperature: 0.3 }).temperature
+      ).toBe(0.3);
+
+      const haiku = createModel(false, "anthropic.claude-haiku-4-5-20251001-v1:0");
+      expect(
+        asInternal(haiku).buildRequestBody([userMessage], { temperature: 0.3 }).temperature
+      ).toBe(0.3);
+    });
+
+    it("still sends temperature for dated Opus 4.0 snapshot IDs", () => {
+      // anthropic.claude-opus-4-20250514-v1:0 is the dated snapshot of Opus 4.0,
+      // not 4.20250514, so it must not be treated as 4.7+.
+      const opus40 = createModel(false, "anthropic.claude-opus-4-20250514-v1:0");
+      const requestBody = asInternal(opus40).buildRequestBody([userMessage], { temperature: 0.1 });
+
+      expect(requestBody.temperature).toBe(0.1);
+    });
+
+    it("forces temperature to 1 for opus-4-8 when thinking is enabled", () => {
+      // Thinking mode still pins temperature to 1, which Opus 4.7+ accepts
+      // alongside adaptive thinking; only the thinking-disabled path omits it.
+      const model = createModel(true, "anthropic.claude-opus-4-8");
+      const requestBody = asInternal(model).buildRequestBody([userMessage], { temperature: 0.1 });
+
+      expect(requestBody.temperature).toBe(1);
+      expect(requestBody.thinking).toEqual({ type: "adaptive", display: "summarized" });
+    });
+  });
+
   describe("vision support", () => {
     describe("convertImageContent", () => {
       it("converts valid data URL to Claude image format", () => {

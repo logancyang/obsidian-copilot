@@ -1311,6 +1311,26 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
     }
   }
 
+  /**
+   * Whether this model is Claude Opus 4.7 or newer.
+   *
+   * Opus 4.7+ changed behavior in two ways that the request body must respect:
+   * 1. extended thinking requires `{ type: "adaptive" }` instead of
+   *    `{ type: "enabled", budget_tokens }`, and
+   * 2. the `temperature` parameter is no longer supported — sending any
+   *    `temperature` (even the default) makes Bedrock reject the request with
+   *    `400 \`temperature\` is deprecated for this model.`
+   *
+   * Unanchored match because Bedrock IDs include provider/profile prefixes
+   * (e.g. "global.anthropic.claude-opus-4-7-20260115-v1:0"). The minor version
+   * is constrained to 1-2 digits followed by a delimiter so dated snapshot IDs
+   * like "claude-opus-4-20250514-v1:0" aren't misread as Opus 4.20250514.
+   */
+  private isOpus47OrNewer(): boolean {
+    const opusMinorMatch = this.modelName.match(/claude-opus-4-(\d{1,2})(?:[-.]|$)/);
+    return opusMinorMatch ? parseInt(opusMinorMatch[1], 10) >= 7 : false;
+  }
+
   private buildRequestBody(
     messages: BaseMessage[],
     options?: BedrockChatModelCallOptions
@@ -1473,12 +1493,8 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
     // Only enable if user has explicitly enabled REASONING capability for this model
     if (this.enableThinking) {
       // claude-opus-4-7+ rejects { type: "enabled", budget_tokens } with a 400 and requires
-      // { type: "adaptive" }. Unanchored match because Bedrock IDs include provider/profile
-      // prefixes (e.g. "global.anthropic.claude-opus-4-7-20260115-v1:0"). Constrain the minor
-      // to 1-2 digits followed by a delimiter so dated snapshot IDs like
-      // "claude-opus-4-20250514-v1:0" aren't misread as Opus 4.20250514.
-      const opusMinorMatch = this.modelName.match(/claude-opus-4-(\d{1,2})(?:[-.]|$)/);
-      const usesAdaptiveThinking = opusMinorMatch ? parseInt(opusMinorMatch[1], 10) >= 7 : false;
+      // { type: "adaptive" }.
+      const usesAdaptiveThinking = this.isOpus47OrNewer();
       // Opus 4.7+ defaults thinking.display to "omitted" so thinking summaries
       // never reach the UI; force "summarized" for the adaptive branch. Pre-4.7
       // models default to "summarized" server-side.
@@ -1489,11 +1505,11 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
       // https://docs.claude.com/en/docs/build-with-claude/extended-thinking#important-considerations-when-using-extended-thinking
       payload.temperature = 1;
       logInfo("[BedrockChatModel] Enabled thinking mode for Claude model with temperature=1");
-    } else {
-      // Only set temperature if thinking is NOT enabled
-      if (resolvedTemperature !== undefined) {
-        payload.temperature = resolvedTemperature;
-      }
+    } else if (resolvedTemperature !== undefined && !this.isOpus47OrNewer()) {
+      // Only set temperature when thinking is NOT enabled.
+      // Opus 4.7+ rejects any `temperature` with a 400
+      // ("`temperature` is deprecated for this model."), so omit it for those models.
+      payload.temperature = resolvedTemperature;
     }
 
     if (resolvedTopP !== undefined) {
