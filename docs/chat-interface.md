@@ -4,6 +4,8 @@ Quick Chat is Copilot V4's lightweight conversation view. Use it for a short que
 
 For multi-step work, native agent tools, reusable skills, permissioned file changes, or Agent project context, use **Agent** instead. On desktop, click **Open Copilot Agent Chat** in the ribbon or run **Open Copilot Agent Chat Window** from the command palette. See [Agents in Copilot V4](agent-mode-and-tools.md).
 
+Quick Chat's V3 chat window will be deprecated soon. On desktop, use **Agent with opencode** for bring-your-own-key models. The small, always-visible link above the message box opens Agent for you.
+
 ## Open Quick Chat
 
 Run **Open Copilot Chat Window** from the command palette. On mobile, the Copilot ribbon button opens Quick Chat because Agent requires desktop Obsidian.
