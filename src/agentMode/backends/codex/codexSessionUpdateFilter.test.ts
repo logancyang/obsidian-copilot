@@ -39,16 +39,20 @@ describe("codexSessionUpdateFilter", () => {
       }
     );
 
-    it("keeps unrelated warnings and ordinary answers that mention the budget", () => {
-      expect(shouldRouteCodexSessionUpdate(textUpdate("Warning: Codex login expired.\n\n"))).toBe(
-        true
-      );
-      expect(
-        shouldRouteCodexSessionUpdate(
-          textUpdate("I investigated the skills context budget and found the cause.")
-        )
-      ).toBe(true);
-    });
+    it(
+      "keeps unrelated warnings and ordinary answers that mention the budget for " +
+        "https://github.com/logancyang/obsidian-copilot-preview/issues/315",
+      () => {
+        expect(shouldRouteCodexSessionUpdate(textUpdate("Warning: Codex login expired.\n\n"))).toBe(
+          true
+        );
+        expect(
+          shouldRouteCodexSessionUpdate(
+            textUpdate("I investigated the skills context budget and found the cause.")
+          )
+        ).toBe(true);
+      }
+    );
 
     it(
       "keeps non-message and non-text updates for " +
