@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { CircleAlert } from "lucide-react";
 import React from "react";
 
@@ -7,8 +8,12 @@ export interface LegacyChatDeprecationHintProps {
   onOpenAgent: () => void;
 }
 
-/** Directs legacy V3 Chat users to supported models in Agent. */
+/** Directs desktop V3 Chat users to supported models in Agent. */
 export function LegacyChatDeprecationHint({ onOpenAgent }: LegacyChatDeprecationHintProps) {
+  // Agent is unavailable on real and emulated mobile, so migration guidance must stay desktop-only.
+  // https://github.com/logancyang/obsidian-copilot-preview/issues/323
+  if (!isDesktopRuntime()) return null;
+
   return (
     <div className="tw-flex tw-min-w-0 tw-px-1">
       <Button
