@@ -39,11 +39,12 @@ export function encodeSize(stats: Stats): string {
 }
 `;
 const invalidStyleWarningFixture = `.review-fixture:has(button) {
-  display: block !important;
+  display: block;
 }
 `;
 const invalidStyleErrorFixture = `.review-fixture {
   background-image: url("https://example.com/review-fixture.png");
+  display: block !important;
 }
 `;
 const invalidLicenseFixture = "Copyright (C) 2020-2025 by Dynalist Inc.\n";
@@ -205,7 +206,7 @@ async function main() {
       "--max-warnings",
       "0",
     ],
-    ["declaration-no-important", "selector-pseudo-class-disallowed-list"],
+    ["selector-pseudo-class-disallowed-list"],
     invalidStyleWarningFixture
   );
   expectReported(
@@ -218,7 +219,7 @@ async function main() {
       "--config",
       "stylelint.config.mjs",
     ],
-    ["declaration-no-important", "selector-pseudo-class-disallowed-list"],
+    ["selector-pseudo-class-disallowed-list"],
     invalidStyleWarningFixture
   );
   expectRejected(
@@ -231,7 +232,7 @@ async function main() {
       "--config",
       "stylelint.config.mjs",
     ],
-    ["function-url-scheme-disallowed-list"],
+    ["function-url-scheme-disallowed-list", "declaration-no-important"],
     invalidStyleErrorFixture
   );
   const invalidManifestAccepted = await validateSelectedManifest(
