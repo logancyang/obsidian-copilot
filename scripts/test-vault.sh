@@ -154,6 +154,53 @@ else
   fi
 fi
 
+# The component gallery plugin ships a near-complete copy of the production
+# stylesheet (scripts/prepare-gallery-css.mjs concatenates src/styles/tailwind.css
+# into its source), and Obsidian injects every enabled plugin's styles.css
+# document-wide. Both copies then compete at equal specificity in shared views, so
+# a gallery copy built from an older src/styles/tailwind.css silently outranks the
+# CSS deployed above and the plugin renders pre-change behavior.
+GALLERY_MANIFEST="$WORKTREE_ROOT/dev/gallery/manifest.json"
+GALLERY_ID=""
+if [[ -f "$GALLERY_MANIFEST" ]]; then
+  if ! GALLERY_ID="$(node -e '
+    const id = require("./dev/gallery/manifest.json").id;
+    if (typeof id !== "string" || id.length === 0) process.exit(1);
+    process.stdout.write(id);
+  ')" || [[ ! "$GALLERY_ID" =~ ^[a-z0-9-]+$ ]]; then
+    echo "warning: no valid plugin id in $GALLERY_MANIFEST; skipping the gallery refresh." >&2
+    GALLERY_ID=""
+  fi
+fi
+
+if [[ -n "$GALLERY_ID" ]]; then
+  GALLERY_PLUGIN_DIR="$VAULT_PATH/.obsidian/plugins/$GALLERY_ID"
+  if [[ -e "$GALLERY_PLUGIN_DIR" || -L "$GALLERY_PLUGIN_DIR" ]]; then
+    # gallery-vault.sh symlinks its whole source directory into the vault, so the
+    # live stylesheet belongs to whichever worktree deployed it last. Only that
+    # worktree can refresh it.
+    GALLERY_SOURCE_REAL="$(cd "$WORKTREE_ROOT/dev/gallery" && pwd -P)"
+    GALLERY_DEPLOYED_REAL="$(cd "$GALLERY_PLUGIN_DIR" 2>/dev/null && pwd -P || true)"
+    if [[ "$GALLERY_DEPLOYED_REAL" == "$GALLERY_SOURCE_REAL" ]]; then
+      # Obsidian injects styles.css when a plugin is enabled, so rewriting the
+      # symlinked file in place does not re-inject it. gallery:vault rebuilds and
+      # reloads, which is what makes the new stylesheet take effect.
+      echo "==> Redeploying the gallery plugin so both stylesheets match"
+      npm run gallery:vault
+    else
+      cat >&2 <<EOF
+warning: the vault's gallery plugin comes from somewhere else, so nothing built
+here can refresh it. Its stale copy of the production stylesheet can outrank the
+CSS just deployed, making these changes look like they had no effect.
+  deployed: ${GALLERY_DEPLOYED_REAL:-unresolved ($GALLERY_PLUGIN_DIR)}
+  here:     $GALLERY_SOURCE_REAL
+Run \`npm run gallery:vault\` from that worktree, or disable the $GALLERY_ID
+plugin while testing this one.
+EOF
+    fi
+  fi
+fi
+
 echo
 echo "Done."
 echo "  worktree: $WORKTREE_ROOT"
