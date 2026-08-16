@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { Sparkles } from "lucide-react";
+import { CircleAlert } from "lucide-react";
 import React from "react";
 
 export interface LegacyChatDeprecationHintProps {
@@ -10,7 +10,7 @@ export interface LegacyChatDeprecationHintProps {
 /** Directs legacy V3 Chat users to the supported BYOK path in Agent. */
 export function LegacyChatDeprecationHint({ onOpenAgent }: LegacyChatDeprecationHintProps) {
   return (
-    <div className="tw-flex tw-min-w-0 tw-px-2 tw-pb-1">
+    <div className="tw-flex tw-min-w-0 tw-px-1">
       <Button
         variant="ghost2"
         size="fit"
@@ -21,7 +21,7 @@ export function LegacyChatDeprecationHint({ onOpenAgent }: LegacyChatDeprecation
         title="Open Agent"
         onClick={onOpenAgent}
       >
-        <Sparkles className="tw-size-3 tw-shrink-0" aria-hidden="true" />
+        <CircleAlert className="tw-size-3 tw-shrink-0" aria-hidden="true" />
         <span className="tw-truncate">V3 Chat will be deprecated soon. Use opencode for BYOK.</span>
       </Button>
     </div>

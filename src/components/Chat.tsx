@@ -830,8 +830,10 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
               onOpenSourceFile={handleOpenSourceFile}
               latestTokenCount={latestTokenCount}
             />
-            <LegacyChatDeprecationHint onOpenAgent={() => void plugin.activateAgentView()} />
             <ChatInput
+              footerContent={
+                <LegacyChatDeprecationHint onOpenAgent={() => void plugin.activateAgentView()} />
+              }
               inputMessage={inputMessage}
               setInputMessage={setInputMessage}
               handleSendMessage={safeAsyncHandler(handleSendMessage)}
