@@ -24,11 +24,16 @@ printf 'clean styles\n' >"$FIXTURE_ROOT/styles.css"
 printf 'tracked\n' >"$FIXTURE_ROOT/source.txt"
 printf 'main.js\nstyles.css\n' >"$FIXTURE_ROOT/.gitignore"
 
+NPM_CALL_LOG="$TEST_ROOT/npm-calls.log"
 cat >"$FAKE_BIN/npm" <<'EOF'
+#!/usr/bin/env bash
+echo "$*" >>"$NPM_CALL_LOG"
+exit 0
+EOF
+cat >"$FAKE_BIN/obsidian" <<'EOF'
 #!/usr/bin/env bash
 exit 0
 EOF
-cp "$FAKE_BIN/npm" "$FAKE_BIN/obsidian"
 chmod +x "$FAKE_BIN/npm" "$FAKE_BIN/obsidian"
 
 git -C "$FIXTURE_ROOT" init -q
@@ -38,11 +43,14 @@ git -C "$FIXTURE_ROOT" config commit.gpgsign false
 git -C "$FIXTURE_ROOT" add .gitignore manifest.json scripts/test-vault.sh source.txt
 git -C "$FIXTURE_ROOT" commit -qm "fixture"
 
+DEPLOY_STDERR="$TEST_ROOT/deploy-stderr.log"
 run_deploy() {
+  : >"$NPM_CALL_LOG"
   PATH="$FAKE_BIN:$PATH" \
     COPILOT_TEST_VAULT_PATH="$VAULT_ROOT" \
     OBSIDIAN_BIN="$FAKE_BIN/obsidian" \
-    bash "$FIXTURE_ROOT/scripts/test-vault.sh" >/dev/null
+    NPM_CALL_LOG="$NPM_CALL_LOG" \
+    bash "$FIXTURE_ROOT/scripts/test-vault.sh" >/dev/null 2>"$DEPLOY_STDERR"
 }
 
 assert_manifest() {
@@ -110,5 +118,47 @@ printf 'dirty\n' >>"$FIXTURE_ROOT/source.txt"
 printf 'dirty bundle\n' >"$FIXTURE_ROOT/main.js"
 run_deploy
 assert_manifest dirty
+
+GALLERY_ID="copilot-component-gallery"
+GALLERY_PLUGIN_DIR="$VAULT_ROOT/.obsidian/plugins/$GALLERY_ID"
+mkdir -p "$FIXTURE_ROOT/dev/gallery"
+cat >"$FIXTURE_ROOT/dev/gallery/manifest.json" <<EOF
+{
+  "id": "$GALLERY_ID",
+  "name": "Gallery",
+  "version": "0.0.1"
+}
+EOF
+
+run_deploy
+if grep -q "gallery:vault" "$NPM_CALL_LOG"; then
+  echo "rebuilt the gallery when the vault has no gallery plugin installed" >&2
+  exit 1
+fi
+if grep -qi "gallery" "$DEPLOY_STDERR"; then
+  echo "warned about the gallery when the vault has no gallery plugin installed" >&2
+  exit 1
+fi
+
+ln -s "$FIXTURE_ROOT/dev/gallery" "$GALLERY_PLUGIN_DIR"
+run_deploy
+if ! grep -q "run gallery:vault" "$NPM_CALL_LOG"; then
+  echo "did not rebuild the gallery deployed from this worktree" >&2
+  exit 1
+fi
+
+FOREIGN_GALLERY="$TEST_ROOT/other-worktree/dev/gallery"
+mkdir -p "$FOREIGN_GALLERY"
+rm "$GALLERY_PLUGIN_DIR"
+ln -s "$FOREIGN_GALLERY" "$GALLERY_PLUGIN_DIR"
+run_deploy
+if grep -q "gallery:vault" "$NPM_CALL_LOG"; then
+  echo "rebuilt the gallery for a deployment owned by another worktree" >&2
+  exit 1
+fi
+if ! grep -q "comes from somewhere else" "$DEPLOY_STDERR"; then
+  echo "did not warn that the deployed gallery belongs to another worktree" >&2
+  exit 1
+fi
 
 echo "test-vault deployment tests passed"
