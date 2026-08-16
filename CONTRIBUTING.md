@@ -164,7 +164,7 @@ The most basic ones are model changes and mode changes.
   - In Plus mode make sure you trigger this query with `@vault` or cmd/ctrl + shift + enter. And then check "Show Sources" button for the expected docs.
 - To debug any failed QA query, we need to understand if it failed at 1. indexing 2. retrieval 3. generation.
   - First use "list all indexed files" command to check if the docs are indexed correctly.
-  - Then check the console log for "retrieved chunks" from the hybrid retriever.
+  - Then check the console log for "retrieved chunks" from the hybrid retriever. Debug logs go to `console.debug`, so tick "Verbose" in the console's level filter to see them; the same lines are also in the rolling log file.
   - If correctly retrieved, it means the Chat Model is too weak to process the context effectively. Use a stronger Chat Model
 
 ### Plus mode
