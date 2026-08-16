@@ -1,12 +1,4 @@
-import type { AcpSessionUpdate } from "@/agentMode/acp/types";
-import { shouldRouteCodexSessionUpdate } from "./codexSessionUpdateFilter";
-
-function textUpdate(text: string): AcpSessionUpdate {
-  return {
-    sessionUpdate: "agent_message_chunk",
-    content: { type: "text", text },
-  };
-}
+import { shouldRouteCodexAgentMessageText } from "./codexSessionUpdateFilter";
 
 const PERCENTAGE_WARNING =
   "Warning: Skill descriptions were shortened to fit the 2% skills context budget. " +
@@ -17,13 +9,13 @@ const PERCENTAGE_FREE_WARNING =
   "Codex can still see every skill, but some descriptions are shorter.";
 
 describe("codexSessionUpdateFilter", () => {
-  describe("shouldRouteCodexSessionUpdate()", () => {
+  describe("shouldRouteCodexAgentMessageText()", () => {
     it(
       "drops the percentage and percentage-free skills-budget warnings for " +
         "https://github.com/logancyang/obsidian-copilot-preview/issues/315",
       () => {
-        expect(shouldRouteCodexSessionUpdate(textUpdate(`${PERCENTAGE_WARNING}\n\n`))).toBe(false);
-        expect(shouldRouteCodexSessionUpdate(textUpdate(PERCENTAGE_FREE_WARNING))).toBe(false);
+        expect(shouldRouteCodexAgentMessageText(`${PERCENTAGE_WARNING}\n\n`)).toBe(false);
+        expect(shouldRouteCodexAgentMessageText(PERCENTAGE_FREE_WARNING)).toBe(false);
       }
     );
 
@@ -32,8 +24,8 @@ describe("codexSessionUpdateFilter", () => {
         "https://github.com/logancyang/obsidian-copilot-preview/issues/315",
       () => {
         expect(
-          shouldRouteCodexSessionUpdate(
-            textUpdate(`${PERCENTAGE_WARNING}\n\nHere is the answer you requested.`)
+          shouldRouteCodexAgentMessageText(
+            `${PERCENTAGE_WARNING}\n\nHere is the answer you requested.`
           )
         ).toBe(true);
       }
@@ -43,32 +35,11 @@ describe("codexSessionUpdateFilter", () => {
       "keeps unrelated warnings and ordinary answers that mention the budget for " +
         "https://github.com/logancyang/obsidian-copilot-preview/issues/315",
       () => {
-        expect(shouldRouteCodexSessionUpdate(textUpdate("Warning: Codex login expired.\n\n"))).toBe(
-          true
-        );
+        expect(shouldRouteCodexAgentMessageText("Warning: Codex login expired.\n\n")).toBe(true);
         expect(
-          shouldRouteCodexSessionUpdate(
-            textUpdate("I investigated the skills context budget and found the cause.")
+          shouldRouteCodexAgentMessageText(
+            "I investigated the skills context budget and found the cause."
           )
-        ).toBe(true);
-      }
-    );
-
-    it(
-      "keeps non-message and non-text updates for " +
-        "https://github.com/logancyang/obsidian-copilot-preview/issues/315",
-      () => {
-        expect(
-          shouldRouteCodexSessionUpdate({
-            sessionUpdate: "agent_thought_chunk",
-            content: { type: "text", text: "Warning: Skill descriptions were shortened to fit " },
-          })
-        ).toBe(true);
-        expect(
-          shouldRouteCodexSessionUpdate({
-            sessionUpdate: "agent_message_chunk",
-            content: { type: "image", mimeType: "image/png", data: "aGk=" },
-          })
         ).toBe(true);
       }
     );

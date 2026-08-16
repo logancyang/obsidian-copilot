@@ -803,9 +803,15 @@ export class AcpBackendProcess implements BackendProcess {
   private routeSessionUpdate(acpSessionId: AcpSessionId, update: SessionNotification): void {
     const sessionId = sessionIdFromAcp(acpSessionId);
 
-    // Backends need an escape hatch for vendor-owned notices that should never enter chat history.
+    // ACP owns wire discrimination; backends can reject only vendor-owned agent-message text.
     // https://github.com/logancyang/obsidian-copilot-preview/issues/315
-    if (this.backend.shouldRouteSessionUpdate?.(update.update) === false) return;
+    if (
+      update.update.sessionUpdate === "agent_message_chunk" &&
+      update.update.content.type === "text" &&
+      this.backend.shouldRouteAgentMessageText?.(update.update.content.text) === false
+    ) {
+      return;
+    }
 
     // If there's an active loadSession collector for this session, feed it
     // user/agent message chunks and skip normal routing.

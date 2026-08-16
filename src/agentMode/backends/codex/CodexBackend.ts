@@ -6,7 +6,7 @@ import { buildBuiltinSkillEnv } from "@/agentMode/backends/shared/builtinSkillEn
 import type { PlanUsageReading } from "@/agentMode/session/planUsage";
 import { defaultCodexHome, readCodexPlanUsage } from "./codexPlanUsage";
 import { mergeCodexConfigEnv } from "./codexConfigEnv";
-import { shouldRouteCodexSessionUpdate } from "./codexSessionUpdateFilter";
+import { shouldRouteCodexAgentMessageText } from "./codexSessionUpdateFilter";
 
 /**
  * Spawns the user-provided `codex-acp` binary. The package exposes Codex as
@@ -19,7 +19,7 @@ import { shouldRouteCodexSessionUpdate } from "./codexSessionUpdateFilter";
 export class CodexBackend implements AcpBackend {
   readonly id = "codex" as const;
   readonly displayName = "Codex";
-  readonly shouldRouteSessionUpdate = shouldRouteCodexSessionUpdate;
+  readonly shouldRouteAgentMessageText = shouldRouteCodexAgentMessageText;
 
   /**
    * Where the spawned Codex keeps its state, taken from the env we actually gave it so a

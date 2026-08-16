@@ -1,8 +1,5 @@
-import type { SessionNotification } from "@agentclientprotocol/sdk";
 import type { BackendId } from "@/agentMode/session/types";
 import type { PlanUsageReading } from "@/agentMode/session/planUsage";
-
-export type AcpSessionUpdate = SessionNotification["update"];
 
 /**
  * Spawn descriptor for an ACP-speaking agent backend. Backends produce these
@@ -28,8 +25,8 @@ export interface AcpBackend {
   readonly displayName: string;
   /** Build the spawn descriptor (BYOK keys decrypted, env composed). */
   buildSpawnDescriptor(ctx: { vaultBasePath: string }): Promise<AcpSpawnDescriptor>;
-  /** Return false to keep a backend-owned wire update out of the session. */
-  readonly shouldRouteSessionUpdate?: (update: AcpSessionUpdate) => boolean;
+  /** Return false to keep backend-owned agent-message text out of the session. */
+  readonly shouldRouteAgentMessageText?: (text: string) => boolean;
   /**
    * Read the account's plan-cap utilization, for backends that have somewhere to read it
    * from. Optional because ACP has no session update for caps: a backend that reports

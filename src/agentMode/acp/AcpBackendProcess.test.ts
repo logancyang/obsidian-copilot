@@ -149,11 +149,11 @@ describe("AcpBackendProcess", () => {
     expect(handler).toHaveBeenCalledTimes(1);
   });
 
-  it("drops backend-rejected updates for https://github.com/logancyang/obsidian-copilot-preview/issues/315", async () => {
-    const shouldRouteSessionUpdate = jest.fn(() => false);
+  it("calls the backend predicate only for agent-message text and drops rejected text for https://github.com/logancyang/obsidian-copilot-preview/issues/315", async () => {
+    const shouldRouteAgentMessageText = jest.fn(() => false);
     const backend = new AcpBackendProcess(
       buildApp(),
-      buildStubBackend({ shouldRouteSessionUpdate }),
+      buildStubBackend({ shouldRouteAgentMessageText }),
       "1.0.0",
       buildStubDescriptor()
     );
@@ -162,7 +162,7 @@ describe("AcpBackendProcess", () => {
     const handler = jest.fn();
     backend.registerSessionHandler("session-known", handler);
     const client = getVaultClient(backend);
-    const update = {
+    const rejectedUpdate = {
       sessionId: "session-known",
       update: {
         sessionUpdate: "agent_message_chunk",
@@ -170,10 +170,28 @@ describe("AcpBackendProcess", () => {
       },
     } as unknown as Parameters<typeof client.sessionUpdate>[0];
 
-    await client.sessionUpdate(update);
+    await client.sessionUpdate(rejectedUpdate);
 
-    expect(shouldRouteSessionUpdate).toHaveBeenCalledWith(update.update);
-    expect(handler).not.toHaveBeenCalled();
+    const thoughtUpdate = {
+      sessionId: "session-known",
+      update: {
+        sessionUpdate: "agent_thought_chunk",
+        content: { type: "text", text: "visible thought" },
+      },
+    } as unknown as Parameters<typeof client.sessionUpdate>[0];
+    const imageUpdate = {
+      sessionId: "session-known",
+      update: {
+        sessionUpdate: "agent_message_chunk",
+        content: { type: "image", mimeType: "image/png", data: "aGk=" },
+      },
+    } as unknown as Parameters<typeof client.sessionUpdate>[0];
+    await client.sessionUpdate(thoughtUpdate);
+    await client.sessionUpdate(imageUpdate);
+
+    expect(shouldRouteAgentMessageText).toHaveBeenCalledTimes(1);
+    expect(shouldRouteAgentMessageText).toHaveBeenCalledWith("hidden");
+    expect(handler).toHaveBeenCalledTimes(2);
   });
 
   it("scopes todowrite id tracking per session — a registered id does not bleed across sessions", async () => {
