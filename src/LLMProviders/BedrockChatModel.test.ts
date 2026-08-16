@@ -770,12 +770,6 @@ describe("BedrockChatModel inference-profile error rewriting", () => {
     setRequestUrlImpl(jest.fn().mockResolvedValue({ status, text: body, headers: {} }));
   };
 
-  afterEach(() => {
-    setRequestUrlImpl(
-      jest.fn().mockResolvedValue({ status: 200, text: "", json: undefined, headers: {} })
-    );
-  });
-
   it("rewrites 400 inference-profile error in non-streaming path to actionable message", async () => {
     stubRequestUrlError(400, awsInferenceProfileError);
     const model = createModelWithFetch(jest.fn(), { noStream: true });
