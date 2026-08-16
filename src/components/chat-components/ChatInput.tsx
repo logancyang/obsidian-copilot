@@ -60,6 +60,8 @@ export interface ChatInputProps {
    * consolidate into a config object, not more props.
    */
   topRightAccessory?: React.ReactNode;
+  /** Optional row rendered inside the composer immediately above its controls. */
+  footerContent?: React.ReactNode;
   /** Overrides the default composer placeholder copy. */
   placeholder?: string;
   /** Forwarded to the editor's placeholder slot — see {@link LexicalEditor}. */
@@ -219,6 +221,7 @@ export interface ChatInputHandle {
 const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput(
   {
     topRightAccessory,
+    footerContent,
     placeholder = DEFAULT_PLACEHOLDER,
     placeholderPrompts,
     inputMessage,
@@ -867,6 +870,8 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
           <div className="-tw-ml-4 tw-w-6 tw-shrink-0 tw-self-start">{topRightAccessory}</div>
         )}
       </div>
+
+      {footerContent}
 
       <div className="tw-flex tw-h-7 tw-justify-between tw-gap-1 tw-px-1">
         <div className="tw-flex tw-min-w-0 tw-flex-1 tw-items-center tw-gap-1">
