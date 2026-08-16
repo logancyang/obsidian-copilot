@@ -32,22 +32,12 @@ function joinPath(...parts: string[]): string {
  * OS-native paths and are therefore desktop-only — Agent Mode (their only
  * consumer) is gated behind the desktop runtime boundary.
  *
- * ### Why this is a separate stack from CAG's `ProjectContextCache`
+ * ### Why this cache lives off-vault
  *
- * The two solve different problems and cannot share storage:
- * - CAG's cache is **in-vault** (`.copilot/project-context-cache`, via the
- *   vault adapter), synced, and exists to inline converted text back into the
- *   chat model's prompt as RAG context.
- * - This cache is **off-vault** and exists to hand **absolute file paths** to
- *   three external agent subprocesses (claude/codex/opencode) that read the
- *   files themselves — so it must live somewhere they can reach, dedupe by
- *   source identity across projects, and survive without vault sync.
- *
- * What the two genuinely could share is not the store but three lower layers:
- * source-identity keying, acquisition (the brevilabs conversion call), and
- * staleness. Folding those into one reusable layer is the right future move;
- * sharing the `ProjectContextCache` singleton is not (its in-vault, RAG-shaped
- * storage doesn't fit the absolute-path/off-vault/cross-project-dedup needs here).
+ * It exists to hand **absolute file paths** to three external agent subprocesses
+ * (claude/codex/opencode) that read the files themselves — so it must live
+ * somewhere they can reach, dedupe by source identity across projects, and
+ * survive without vault sync.
  */
 export function cacheRoot(app: App): string {
   const os = requireNodeModule<typeof import("node:os")>("os");

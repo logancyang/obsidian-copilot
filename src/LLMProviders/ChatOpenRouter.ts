@@ -1,5 +1,5 @@
 import { BaseChatModelParams } from "@langchain/core/language_models/chat_models";
-import { AIMessageChunk, BaseMessage } from "@langchain/core/messages";
+import { AIMessage, AIMessageChunk, BaseMessage } from "@langchain/core/messages";
 import type { UsageMetadata } from "@langchain/core/messages";
 import { ChatGenerationChunk } from "@langchain/core/outputs";
 import { ChatOpenAI } from "@langchain/openai";
@@ -207,9 +207,6 @@ export class ChatOpenRouter extends ChatOpenAI {
         text: typeof messageChunk.content === "string" ? messageChunk.content : "",
         generationInfo: {
           finish_reason: choice.finish_reason,
-          // Reason: system_fingerprint is marked deprecated by some scorecards but is still
-          // returned by OpenAI-style streaming APIs and is useful for telemetry.
-          system_fingerprint: rawChunk["system_fingerprint"],
           model: rawChunk.model,
         },
       });
@@ -238,10 +235,7 @@ export class ChatOpenRouter extends ChatOpenAI {
   private toOpenRouterMessages(messages: BaseMessage[]): OpenRouterMessageParam[] {
     return messages.map((msg) => {
       const msgRecord = msg as unknown as Record<string, unknown>;
-      const role =
-        typeof msg._getType === "function"
-          ? msg._getType()
-          : ((msgRecord.role as string) ?? "user");
+      const role = BaseMessage.isInstance(msg) ? msg.type : ((msgRecord.role as string) ?? "user");
       const mappedRole =
         role === "human"
           ? "user"
@@ -257,20 +251,23 @@ export class ChatOpenRouter extends ChatOpenAI {
         } as OpenRouterMessageParam;
       }
 
-      if (msg.additional_kwargs?.function_call) {
+      // First-class tool_calls on AIMessage (used by the autonomous agent when
+      // reconstructing assistant turns) must be serialized to the OpenAI wire format,
+      // otherwise the following "tool" role messages would violate the protocol and the
+      // provider rejects the turn.
+      // https://github.com/logancyang/obsidian-copilot-preview/issues/300
+      if (AIMessage.isInstance(msg) && msg.tool_calls && msg.tool_calls.length > 0) {
         return {
-          role: mappedRole,
+          role: "assistant",
           content: msg.content,
-          function_call: msg.additional_kwargs.function_call,
-        } as OpenRouterMessageParam;
-      }
-
-      // Handle modern tool_calls format (used by autonomous agent)
-      if (msg.additional_kwargs?.tool_calls) {
-        return {
-          role: mappedRole,
-          content: msg.content,
-          tool_calls: msg.additional_kwargs.tool_calls,
+          tool_calls: msg.tool_calls.map((toolCall) => ({
+            id: toolCall.id ?? "",
+            type: "function" as const,
+            function: {
+              name: toolCall.name,
+              arguments: JSON.stringify(toolCall.args ?? {}),
+            },
+          })),
         } as OpenRouterMessageParam;
       }
 
@@ -299,14 +296,6 @@ export class ChatOpenRouter extends ChatOpenAI {
     const toolCallChunks = this.extractToolCallChunks(delta.tool_calls);
 
     const additionalKwargs: Record<string, unknown> = {};
-
-    if (delta.function_call) {
-      additionalKwargs.function_call = delta.function_call;
-    }
-
-    if (Array.isArray(delta.tool_calls)) {
-      additionalKwargs.tool_calls = delta.tool_calls;
-    }
 
     const deltaPayload: Record<string, unknown> = {};
     if (reasoningText) {
@@ -484,14 +473,6 @@ export class ChatOpenRouter extends ChatOpenAI {
 
     if (rawChunk.model) {
       metadata.model = rawChunk.model;
-    }
-
-    // Reason: system_fingerprint is marked deprecated by some scorecards but is still
-    // returned by OpenAI-style streaming APIs and is useful for telemetry. Use bracket
-    // access to bypass JSDoc deprecation warnings.
-    const fingerprint = rawChunk["system_fingerprint"];
-    if (fingerprint) {
-      metadata.system_fingerprint = fingerprint;
     }
 
     if (rawChunk.usage) {

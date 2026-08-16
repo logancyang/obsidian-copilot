@@ -79,19 +79,15 @@ export async function readChatPathProjectId(
 }
 
 /**
- * Filter chat history files by project ownership.
- * In project mode: returns files belonging to the given project (by frontmatter or legacy prefix).
- * In non-project mode: returns files without a projectId, excluding legacy project chats.
+ * Filter chat history files down to the unscoped (non-project) chats that the
+ * Quick Chat history list shows. Project-scoped chats belong to Agent Mode's
+ * own history list, so they are excluded here by frontmatter or by filename
+ * prefix for the older chats written before the frontmatter existed.
  *
  * @param app - Obsidian app instance
  * @param files - Pre-filtered candidate files
- * @param currentProjectId - Current project ID, or undefined for non-project mode
  */
-export async function filterChatHistoryFiles(
-  app: App,
-  files: TFile[],
-  currentProjectId?: string
-): Promise<TFile[]> {
+export async function filterChatHistoryFiles(app: App, files: TFile[]): Promise<TFile[]> {
   const results = await Promise.all(
     files.map(async (file) => ({
       file,
@@ -100,21 +96,7 @@ export async function filterChatHistoryFiles(
   );
 
   return results
-    .filter(({ file, projectId }) => {
-      if (currentProjectId) {
-        if (projectId === currentProjectId) return true;
-        // Reason: legacy files may lack projectId frontmatter; only include them
-        // if the basename matches this project's prefix to avoid leaking unrelated chats.
-        if (projectId === undefined) {
-          const sanitizedPrefix = `${sanitizeVaultPathSegment(currentProjectId)}__`;
-          const rawPrefix = `${currentProjectId}__`;
-          return file.basename.startsWith(sanitizedPrefix) || file.basename.startsWith(rawPrefix);
-        }
-        return false;
-      }
-      // Reason: exclude files with projectId OR known project prefix in filename
-      return !projectId && !hasKnownProjectPrefix(file.basename);
-    })
+    .filter(({ file, projectId }) => !projectId && !hasKnownProjectPrefix(file.basename))
     .map(({ file }) => file);
 }
 

@@ -12,7 +12,19 @@ export type Layout = "padded" | "centered" | "fullscreen";
  * component at other widths with the toolbar, or sweep them all via `audit()`.
  */
 export interface GalleryParameters {
-  gallery?: { host?: Host; layout?: Layout; coverage?: boolean };
+  gallery?: {
+    host?: Host;
+    layout?: Layout;
+    coverage?: boolean;
+    /**
+     * Class for the `modal` host's frame, mirroring the `modalClass` the
+     * component's production `ReactModal` passes. Components whose layout
+     * depends on a frame-level rule (a full-bleed dialog stripping the frame's
+     * padding, say) need it here too, or the story renders in a frame the real
+     * one never has.
+     */
+    modalClass?: string;
+  };
 }
 
 /** Strict subset of CSF3 ComponentAnnotations. */

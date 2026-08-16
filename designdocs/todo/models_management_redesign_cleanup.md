@@ -59,21 +59,6 @@ to its `models.dev` catalog id where resolvable). After this lands, the
 synthetic-catalog fallback in `ConfigureProviderDialog` becomes a safety net
 for genuinely catalog-less providers rather than a routine path.
 
-## GitHub Copilot auth — runtime cleanup pending
-
-The orphaned auth UI (`GitHubCopilotAuth.tsx`) was deleted with the
-redesign, but the GitHub Copilot provider runtime is still present and
-woven through several modules:
-
-- `src/LLMProviders/githubCopilot/` (provider + chat/responses models)
-- `src/constants.ts`, `src/settings/providerModels.ts`, `src/settings/model.ts`
-- `src/settings/v2/utils/modelActions.ts`, `src/LLMProviders/chatModelManager.ts`
-- `src/utils.ts`, encryption paths
-
-TODO: fully remove GitHub Copilot auth support (provider runtime + all the
-references above). Deferred from the redesign PR because it's a broad,
-high-blast-radius removal unrelated to the settings UI.
-
 ## Local services (Ollama / LM Studio) discovery UI removed
 
 `LocalServicesSection.tsx` was deleted with the redesign (it was only

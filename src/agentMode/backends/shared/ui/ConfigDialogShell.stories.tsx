@@ -1,4 +1,5 @@
 import {
+  CONFIG_MODAL_CLASS,
   ConfigDialogShell,
   ConfigSection,
   ConfigWarningStrip,
@@ -61,7 +62,7 @@ const meta = {
     children: BODY,
     onClose: () => undefined,
   },
-  parameters: { gallery: { host: "modal", layout: "padded" } },
+  parameters: { gallery: { host: "modal", layout: "padded", modalClass: CONFIG_MODAL_CLASS } },
 } satisfies Meta<ConfigDialogShellProps>;
 export default meta;
 

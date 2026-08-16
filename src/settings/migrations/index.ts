@@ -17,6 +17,7 @@ import type { ModelManagementApi } from "@/modelManagement";
 import { getSettings, normalizeRootFolders, setSettings } from "@/settings/model";
 
 import { executeByokMigration } from "./byokMigration";
+import { executeGitHubCopilotRemoval } from "./githubCopilotRemovalMigration";
 import { planRequiresApiKeyBackfill } from "./requiresApiKeyMigration";
 import { CURRENT_SETTINGS_VERSION } from "./version";
 
@@ -88,6 +89,14 @@ export async function runSettingsMigrations(api: ModelManagementApi): Promise<vo
     // so they must get the flag too. WS-D still only prompts users who actually
     // customized a folder, so a default user is never shown the modal.
     setSettings({ upgradedToV8FromLegacy: true });
+  }
+
+  // v9: drop everything the retired GitHub Copilot chat provider owned —
+  // its saved models, any selection still pointing at one, and its OAuth
+  // tokens in the keychain. Reads the settings freshly so it sees whatever
+  // the earlier migrations in this run left behind.
+  if (fromVersion < 9) {
+    executeGitHubCopilotRemoval(getSettings());
   }
 
   // Bump unconditionally after the migrations so a per-provider failure can't

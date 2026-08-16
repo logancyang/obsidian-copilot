@@ -142,7 +142,7 @@ export function deleteCachedProjectRecordByFilePath(filePath: string): void {
 }
 
 /**
- * Subscribe to project records changes (for non-React code like projectManager).
+ * Subscribe to project records changes (for non-React code).
  * Returns an unsubscribe function.
  * @param callback - Called with the new records array whenever it changes
  * @returns Unsubscribe function

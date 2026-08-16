@@ -2,6 +2,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { extname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ESLint } from "eslint";
+import reviewConfig from "../eslint.review.config.mjs";
 import {
   collectPackageFindings,
   getManifestFilename,
@@ -49,6 +50,33 @@ const invalidLicenseFixture = "Copyright (C) 2020-2025 by Dynalist Inc.\n";
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
+}
+
+/**
+ * Prove the review config keeps an untyped target out of type-aware rule scope.
+ *
+ * ESLint aborts the entire run when a rule cannot load, so a type-aware rule
+ * that reaches a file carrying no type information silences the whole gate
+ * rather than failing it. Force such a rule on ahead of the repository's own
+ * config blocks and confirm those blocks still switch it off.
+ *
+ * @param {string} filePath - Repository-relative untyped review target.
+ */
+async function expectOutsideTypeAwareScope(filePath) {
+  const eslint = new ESLint({
+    cwd: repositoryRoot,
+    // The forced rule must sit ahead of the repository's blocks, which rules
+    // out overrideConfig (applied last) and the config file (loaded first).
+    overrideConfigFile: true,
+    baseConfig: [{ rules: { "obsidianmd/no-plugin-as-component": "error" } }, ...reviewConfig],
+  });
+  try {
+    await eslint.lintText("{}", { filePath: resolve(repositoryRoot, filePath) });
+  } catch (error) {
+    throw new Error(
+      `${filePath} is in type-aware ESLint scope, which aborts the whole review gate: ${error.message}`
+    );
+  }
 }
 
 function listTrackedReviewSources() {
@@ -126,6 +154,10 @@ async function main() {
     ignoredSources.length === 0,
     `Tracked files under Obsidian review source roots are hidden by the base ESLint config:\n${ignoredSources.join("\n")}\nMove non-source fixtures outside the review roots instead of ignoring them.`
   );
+
+  for (const target of ["manifest.json", "package.json", "LICENSE"]) {
+    await expectOutsideTypeAwareScope(target);
+  }
 
   const invalidSourceResult = await lintSourceFixture(invalidSourceFixture, "src/utils.ts");
   assert(invalidSourceResult.errorCount > 0, "ESLint accepted its invalid source fixture");

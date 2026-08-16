@@ -13,9 +13,9 @@ credential is an OAuth token tied to a paid subscription rather than a long-live
 The opportunity: our **agent backends** (`opencode`, `claude-code`, `codex`) are external CLIs we
 spawn and talk to over ACP (Agent Client Protocol). **opencode already natively supports GitHub
 Copilot** (and other OAuth/subscription providers) via its built-in `github-copilot` plugin. So we
-do not need to re-implement Copilot's device flow + token exchange in-process (the old
-`src/LLMProviders/githubCopilot/*` runtime, whose UI was already deleted and which the cleanup TODO
-marks for removal). Instead we **let the external CLI own the credential** and surface a thin auth UI.
+do not need to re-implement Copilot's device flow + token exchange in-process (Copilot shipped such
+a runtime once and has since removed it). Instead we **let the external CLI own the credential** and
+surface a thin auth UI.
 
 ## Decisions
 
@@ -137,8 +137,7 @@ The enabled list is **host-side curation**; opencode is told only the active sel
    the subscription card UI + device-code surfacing. End-to-end auth works.
 3. **Enrollment** — implement `AgentSetupApi` so authed Copilot models persist into the model-mgmt
    registry and surface in the opencode picker via `enabledModels`.
-4. **Generalize** — wire claude-code/codex status into the same card; remove the legacy in-process
-   `src/LLMProviders/githubCopilot/*` runtime per the cleanup TODO.
+4. **Generalize** — wire claude-code/codex status into the same card.
 
 ---
 
@@ -151,8 +150,6 @@ The enabled list is **host-side curation**; opencode is told only the active sel
   opencode auth impl + login subprocess + card.
 - `src/modelManagement/setup/AgentSetupApi.ts` — implement enrollment (currently throws).
 - `src/modelManagement/ui/` — subscription card surface in the backend tab.
-- (Phase 4 cleanup) `src/LLMProviders/githubCopilot/*`, `src/settings/model.ts:72-75`,
-  `src/constants.ts`, `src/settings/v2/utils/modelActions.ts` — remove legacy Copilot runtime.
 
 ## Verification
 

@@ -2,7 +2,7 @@
 
 Detailed coding conventions for this repo. The cross-cutting principles in
 `AGENTS.md` (generalizable solutions, referential stability, comment-the-why,
-no `console.log`) always apply; this guide carries the full detail behind the
+no direct `console` calls) always apply; this guide carries the full detail behind the
 language, comment, styling, and code-structure rules.
 
 ## TypeScript

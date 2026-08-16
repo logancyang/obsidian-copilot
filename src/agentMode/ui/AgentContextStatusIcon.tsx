@@ -18,6 +18,7 @@ import { AlertCircle, CheckCircle, CircleDashed, Loader2 } from "lucide-react";
 import { App } from "obsidian";
 import * as React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
 interface AgentContextStatusIconProps {
   app: App;
@@ -419,7 +420,7 @@ export default function AgentContextStatusIcon({
             app={app}
             project={project}
             hasConfiguredContextSource={hasConfiguredContextSource}
-            onRetryItem={handleRetryItem}
+            onRetryItem={safeAsyncHandler(handleRetryItem)}
             onRetryAll={handleRetryAll}
             onEditContext={() => {
               handleOpenChange(false);

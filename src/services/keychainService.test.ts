@@ -174,7 +174,7 @@ beforeEach(() => {
 
 describe("keychainService", () => {
   describe("isSecretKey()", () => {
-    it.each(["openAIApiKey", "googleApiKey", "githubCopilotToken", "plusLicenseKey", "myPassword"])(
+    it.each(["openAIApiKey", "googleApiKey", "sessionToken", "plusLicenseKey", "myPassword"])(
       "returns true for %s",
       (key) => {
         expect(isSecretKey(key)).toBe(true);
@@ -211,6 +211,32 @@ describe("keychainService", () => {
 
         expect(id).toHaveLength(8);
         expect(/^[0-9a-f]{8}$/.test(id)).toBe(true);
+      });
+    });
+
+    describe("deleteSecret()", () => {
+      it("removes the vault-namespaced entry for a settings key", () => {
+        const secretStorage = makeSecretStorage();
+        const service = KeychainService.getInstance(makeApp({ secretStorage }));
+
+        service.deleteSecret("githubCopilotToken");
+
+        expect(secretStorage.deleteSecret).toHaveBeenCalledWith(
+          `copilot-v${service.getVaultId()}-github-copilot-token`
+        );
+      });
+
+      it("falls back to an empty-value tombstone on builds without deleteSecret", () => {
+        const secretStorage = makeSecretStorage();
+        (secretStorage as unknown as { deleteSecret: unknown }).deleteSecret = undefined;
+        const service = KeychainService.getInstance(makeApp({ secretStorage }));
+
+        service.deleteSecret("githubCopilotToken");
+
+        expect(secretStorage.setSecret).toHaveBeenCalledWith(
+          `copilot-v${service.getVaultId()}-github-copilot-token`,
+          ""
+        );
       });
     });
 

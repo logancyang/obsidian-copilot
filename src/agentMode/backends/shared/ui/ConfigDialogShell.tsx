@@ -19,6 +19,13 @@ interface ConfigDialogShellProps {
 }
 
 /**
+ * Class the hosting modal must carry for the shell to lay out correctly. Pass it
+ * as `ReactModal`'s `modalClass`; stylesheet rules key off it to zero the frame's
+ * padding, collapse the native header, and hide the native title.
+ */
+export const CONFIG_MODAL_CLASS = "copilot-config-modal";
+
+/**
  * Presentational layout shared by every agent's Configure dialog so the header,
  * sections, and footer stay visually consistent across the three (intentionally
  * bespoke) bodies. Rendered inside a per-agent `ReactModal` subclass — it is not
@@ -26,9 +33,8 @@ interface ConfigDialogShellProps {
  * Obsidian's native title element empty.
  *
  * Every band owns its own padding so the dividers between them run edge to edge.
- * The `copilot-config-dialog` marker class is what makes that hold: a stylesheet
- * rule keys off it to zero the padding the hosting modal would otherwise
- * contribute, which would inset every divider by a theme-dependent amount.
+ * That only holds inside a host marked with {@link CONFIG_MODAL_CLASS}; without
+ * it the frame's own padding insets every divider by a theme-dependent amount.
  */
 export const ConfigDialogShell: React.FC<ConfigDialogShellProps> = ({
   title,
@@ -38,7 +44,7 @@ export const ConfigDialogShell: React.FC<ConfigDialogShellProps> = ({
   footer,
   onClose,
 }) => (
-  <div className="copilot-config-dialog tw-flex tw-flex-col">
+  <div className="tw-flex tw-flex-col">
     <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-2 tw-px-4 tw-pb-3 tw-pt-4">
       <h3 className="tw-m-0 tw-text-ui-medium tw-font-semibold tw-leading-tight tw-text-normal">
         {title}

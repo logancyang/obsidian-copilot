@@ -1,4 +1,4 @@
-import { logInfo, logWarn, logMarkdownBlock, logTable } from "@/logger";
+import { logInfo, logWarn, logMarkdownBlock } from "@/logger";
 import { sanitizeContentForCitations } from "@/LLMProviders/chainRunner/utils/citationUtils";
 
 /**
@@ -478,11 +478,9 @@ export function logSearchResultsDebugTable(searchResults: SearchDoc[]): void {
   });
 
   const total = rows.length;
-  // Log as a proper dev console table first (best visual fidelity in DevTools)
   logInfo(`Search Results (debug table): ${total} rows; in-context ${includedCount}/${total}`);
-  logTable(rows, ["path", "in", "mtime", "score", "explanation"]);
 
-  // Also write a Markdown table to the rolling log file so it renders in Obsidian
+  // The rows go to the rolling log file as a Markdown table so they render in Obsidian.
   // Escape pipe characters in explanation/path to prevent column breaks
   const esc = (s: string) => String(s || "").replace(/\|/g, "\\|");
   const mdHeader = `| PATH | IN | MTIME | SCORE | EXPLANATION |`;

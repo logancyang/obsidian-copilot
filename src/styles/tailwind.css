@@ -28,12 +28,12 @@ If your plugin does not need CSS, delete this file.
 
 /* Agent Configure dialogs draw their own full-bleed bands (header, sections,
    footer), so the hosting modal must contribute no padding of its own —
-   otherwise every band's divider stops short of both edges. Keying off the
-   body rather than a class the modal has to remember means every host that
-   renders the shell opts in, the component gallery included. Themes disagree
-   about which element carries the padding, hence both targets. */
-.modal:has(.copilot-config-dialog),
-.modal:has(.copilot-config-dialog) .modal-content {
+   otherwise every band's divider stops short of both edges. ConfigDialogShell
+   toggles `copilot-config-modal` on its closest `.modal` host in an effect, so
+   every host that renders the shell opts in, the component gallery included.
+   Themes disagree about which element carries the padding, hence both targets. */
+.modal.copilot-config-modal,
+.modal.copilot-config-modal .modal-content {
   padding: 0;
 }
 
@@ -41,11 +41,11 @@ If your plugin does not need CSS, delete this file.
    host that sets a title anyway must not stack a second heading above the
    shell's own. Suppressing it here rather than per host keeps every future
    caller correct by default. */
-.modal:has(.copilot-config-dialog) .modal-header {
+.modal.copilot-config-modal .modal-header {
   margin-bottom: 0;
 }
 
-.modal:has(.copilot-config-dialog) .modal-title {
+.modal.copilot-config-modal .modal-title {
   display: none;
 }
 
@@ -890,70 +890,6 @@ If your plugin does not need CSS, delete this file.
   opacity: 1;
 }
 
-/* Maybe ob's error removed the hierarchy, so add hierarchy to the modal box on mobile for now */
-.is-phone .modal .modal-close-button {
-  z-index: var(--layer-modal);
-}
-
-/* Editor mode for mobile - legacy (no bottom navbar): minimal padding */
-body.is-mobile
-  .workspace-tab-container
-  :is(
-    .workspace-leaf-content[data-type="copilot-chat-view"],
-    .workspace-leaf-content[data-type="copilot-agent-chat-view"],
-    .workspace-leaf-content[data-type="copilot-component-gallery"]
-  )
-  .view-content {
-  padding-bottom: var(--size-4-1) !important;
-}
-
-/* Editor mode for mobile - new version (with bottom navbar visible): reserve navbar space */
-@supports selector(body:has(*)) {
-  body.is-mobile:has(.mobile-navbar):not(.is-hidden-nav)
-    .workspace-tab-container
-    :is(
-      .workspace-leaf-content[data-type="copilot-chat-view"],
-      .workspace-leaf-content[data-type="copilot-agent-chat-view"],
-      .workspace-leaf-content[data-type="copilot-component-gallery"]
-    )
-    .view-content {
-    padding-bottom: calc(
-      var(--navbar-height, 50px) + max(var(--safe-area-inset-bottom, 0px), var(--size-4-3)) +
-        var(--size-4-1)
-    ) !important;
-  }
-}
-
-/* ApplyView for mobile - new version (with bottom navbar visible): reserve navbar space */
-@supports selector(body:has(*)) {
-  body.is-mobile:has(.mobile-navbar):not(.is-hidden-nav)
-    .workspace-tab-container
-    .workspace-leaf-content[data-type="obsidian-copilot-apply-view"]
-    .view-content {
-    padding-bottom: calc(
-      var(--navbar-height, 50px) + max(var(--safe-area-inset-bottom, 0px), var(--size-4-3)) +
-        var(--size-4-1) + var(--size-4-4)
-    ) !important;
-  }
-
-  /* Lift the fixed Accept/Reject button bar above the navbar */
-  body.is-mobile:has(.mobile-navbar):not(.is-hidden-nav)
-    .workspace-tab-container
-    .workspace-leaf-content[data-type="obsidian-copilot-apply-view"]
-    .tw-fixed.tw-bottom-4 {
-    bottom: calc(
-      var(--navbar-height, 50px) + max(var(--safe-area-inset-bottom, 0px), var(--size-4-3)) +
-        var(--size-4-1)
-    ) !important;
-  }
-}
-
-/* Hide drawer header and tab-options when keyboard is open in Copilot's drawer */
-body.is-mobile .workspace-drawer.copilot-keyboard-open .workspace-drawer-header,
-body.is-mobile .workspace-drawer.copilot-keyboard-open .workspace-drawer-tab-options {
-  display: none !important;
-}
-
 /* Collapsible sources styling */
 .copilot-sources {
   margin-top: var(--size-4-1);
@@ -1065,11 +1001,6 @@ body.is-mobile .workspace-drawer.copilot-keyboard-open .workspace-drawer-tab-opt
 }
 .copilot-citation-link:hover {
   text-decoration: underline;
-}
-
-/* fix the width of the popover on mobile */
-body.is-mobile div[data-radix-popper-content-wrapper] {
-  min-width: fit-content !important;
 }
 
 /* Copilot Cross Spinner Animation

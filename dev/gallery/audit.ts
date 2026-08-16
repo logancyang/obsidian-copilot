@@ -226,9 +226,8 @@ function hasVisibleUnsupportedColor(value: string): boolean {
  */
 export function resolveObsidianColorTokens(doc: Document): ReadonlySet<string> {
   const colors = new Set<string>();
-  const probe = doc.createElement("span");
+  const probe = doc.body.createSpan();
   probe.hidden = true;
-  doc.body.append(probe);
 
   for (const source of [doc.documentElement, doc.body]) {
     const styles = source.win.getComputedStyle(source);

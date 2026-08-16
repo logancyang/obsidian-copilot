@@ -5,7 +5,6 @@ import { Buffer } from "buffer/";
 import { ChainType } from "@/chainType";
 import {
   ALLOWED_NOTE_CONTEXT_EXTENSIONS,
-  ChatModelProviders,
   ModelCapability,
   NOMIC_EMBED_TEXT,
   Provider,
@@ -412,13 +411,13 @@ export function isAllowedFileForNoteContext(file: TFile | null): boolean {
 }
 
 /**
- * Checks if a chain type is a Plus mode chain (Copilot Plus or Project Chain).
+ * Checks if a chain type is a Plus mode chain.
  * Plus mode chains have access to premium features like PDF processing and URL processing.
  * @param chainType The chain type to check
  * @returns true if this is a Plus mode chain, false otherwise
  */
 export function isPlusChain(chainType: ChainType): boolean {
-  return chainType === ChainType.COPILOT_PLUS_CHAIN || chainType === ChainType.PROJECT_CHAIN;
+  return chainType === ChainType.COPILOT_PLUS_CHAIN;
 }
 
 /**
@@ -1113,39 +1112,6 @@ function isGPT5Model(model: BaseChatModel | string): boolean {
   const m = model as unknown as Record<string, unknown>;
   const modelName: string = (m.modelName as string) || (m.model as string) || "";
   return modelName.startsWith("gpt-5");
-}
-
-/**
- * Checks whether a model belongs to the Codex family.
- * Codex model identifiers consistently include the "codex" token.
- * @param model - Model instance or model name string.
- * @returns True when the model name indicates a Codex model.
- */
-function isCodexModel(model: BaseChatModel | string): boolean {
-  const m = model as unknown as Record<string, unknown>;
-  const modelName: string =
-    typeof model === "string" ? model : (m.modelName as string) || (m.model as string) || "";
-  return modelName.toLowerCase().includes("codex");
-}
-
-/**
- * Determines whether a GitHub Copilot model should use the Responses API.
- * Copilot Codex models reject `/chat/completions` and must be sent to `/responses`.
- * @param model - Minimal model configuration used for routing.
- * @returns True when the model should be routed to `/responses`.
- */
-export function shouldUseGitHubCopilotResponsesApi(
-  model: Pick<CustomModel, "provider" | "name" | "useResponsesApi">
-): boolean {
-  if ((model.provider as ChatModelProviders) !== ChatModelProviders.GITHUB_COPILOT) {
-    return false;
-  }
-
-  if (model.useResponsesApi === true) {
-    return true;
-  }
-
-  return isCodexModel(model.name);
 }
 
 /**

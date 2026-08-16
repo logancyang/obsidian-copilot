@@ -64,6 +64,38 @@ const copilotLintPlugin = {
   },
 };
 
+// obsidianmd ships its rules as warnings, and a warning stream nobody gates on
+// is how 30 `prefer-create-el` violations reached the plugin's community listing
+// unnoticed. Promote every rule the codebase already satisfies to an error so
+// the next one fails `npm run lint` in CI on the PR that introduces it. Rules
+// listed here keep the recommended severity because they have a known backlog or
+// a deliberate override; each needs its own reason, not a blanket exemption.
+const OBSIDIANMD_UNRATCHETED = new Set([
+  // Declarative settings migration, tracked by logancyang/obsidian-copilot-preview#297.
+  "settings-tab/prefer-setting-definitions",
+  // Turned off below; promoting here would resurrect them.
+  "ui/sentence-case",
+  "platform",
+  // Configured below with a project-specific message payload.
+  "rule-custom-message",
+]);
+
+// Only raise the severity of rules the recommended config already turns on.
+// Rules it leaves off are its own judgement call; adopting one is a separate
+// decision with its own cleanup, not something this ratchet should smuggle in.
+const OBSIDIANMD_RATCHET = Object.fromEntries(
+  Object.entries(
+    (Array.isArray(obsidianmd.configs.recommended)
+      ? obsidianmd.configs.recommended
+      : [obsidianmd.configs.recommended]
+    ).reduce((rules, block) => Object.assign(rules, block.rules), {})
+  )
+    .filter(([id]) => id.startsWith("obsidianmd/"))
+    .filter(([, severity]) => severity !== "off" && severity !== 0)
+    .filter(([id]) => !OBSIDIANMD_UNRATCHETED.has(id.slice("obsidianmd/".length)))
+    .map(([id]) => [id, "error"])
+);
+
 const restrictedSourceImports = [
   {
     selector:
@@ -91,6 +123,10 @@ const restrictedConsoleCalls = [
   {
     selector: "CallExpression[callee.object.name='console'][callee.property.name='error']",
     message: "Use logError() from '@/logger' instead of console.error().",
+  },
+  {
+    selector: "CallExpression[callee.object.name='console'][callee.property.name='debug']",
+    message: "Use logInfo() from '@/logger' instead of console.debug().",
   },
 ];
 
@@ -622,17 +658,20 @@ export default [
       "@typescript-eslint/no-empty-function": "off",
       "@typescript-eslint/ban-ts-comment": "off",
       "@typescript-eslint/no-unused-vars": ["error", { args: "none" }],
-      // checksVoidReturn relaxed for:
-      //   - attributes: async event handlers in JSX (onClick={async () => ...}) are
-      //     the standard React pattern; React already handles them correctly.
-      //   - inheritedMethods: Obsidian's Plugin.onload/onunload are commonly async.
+      // An async handler passed to a void-returning JSX attribute drops its
+      // rejection: React never sees the promise, so a failure mid-handler leaves
+      // the control looking inert and writes nothing to the Copilot log. Wrap
+      // such handlers in `safeAsyncHandler` instead of relaxing this check.
+      // checksVoidReturn relaxed for inheritedMethods only: Obsidian awaits
+      // `Plugin.onload`, so declaring it async is correct there.
       "@typescript-eslint/no-misused-promises": [
         "error",
-        { checksVoidReturn: { attributes: false, inheritedMethods: false } },
+        { checksVoidReturn: { inheritedMethods: false } },
       ],
       "@typescript-eslint/no-floating-promises": "error",
       "@typescript-eslint/no-unsafe-return": "error",
       "@typescript-eslint/unbound-method": "error",
+      ...OBSIDIANMD_RATCHET,
       // TypeScript handles undefined-identifier detection (and does so cross-realm
       // correctly); per typescript-eslint's own guidance, disable no-undef on TS.
       "no-undef": "off",
@@ -653,13 +692,15 @@ export default [
     },
   },
 
-  // Non-TS files aren't in tsconfig.json — disable type-aware rules that
-  // obsidianmd's recommended config enables globally. Most typed obsidianmd
-  // rules are already gated to **/*.ts(x); only no-plugin-as-component leaks
-  // out via recommendedPluginRulesConfig, and @typescript-eslint/no-deprecated
-  // is enabled globally.
+  // Type-aware rules need the type information only the `**/*.ts(x)` block
+  // above requests via parserOptions.project. Scope them off by excluding
+  // TypeScript rather than by listing non-TS extensions: which files
+  // eslint-plugin-obsidianmd applies no-plugin-as-component to differs by
+  // version, and a type-aware rule reaching an untyped target such as
+  // manifest.json cannot load, which makes ESLint abort the whole run instead
+  // of reporting findings. scripts/review-obsidian-fixtures.mjs guards this.
   {
-    files: ["**/*.js", "**/*.mjs", "**/*.cjs", "**/*.jsx", "**/package.json"],
+    ignores: ["**/*.ts", "**/*.tsx"],
     rules: {
       "@typescript-eslint/no-deprecated": "off",
       "obsidianmd/no-plugin-as-component": "off",
@@ -690,6 +731,19 @@ export default [
     files: ["**/*.test.{ts,tsx}"],
     rules: {
       "@typescript-eslint/unbound-method": "off",
+    },
+  },
+
+  // Tests run under Jest against jsdom, not inside Obsidian on a phone: they
+  // build fixture DOM with the native API because the Obsidian helpers do not
+  // exist there, and they import Node built-ins directly because Node is the
+  // runtime. Both rules stay errors for shipped source; this block is placed
+  // last so it overrides the ratchet in the TS-only block above.
+  {
+    files: ["**/*.test.{ts,tsx}"],
+    rules: {
+      "obsidianmd/prefer-create-el": "off",
+      "obsidianmd/no-nodejs-modules": "off",
     },
   },
 ];

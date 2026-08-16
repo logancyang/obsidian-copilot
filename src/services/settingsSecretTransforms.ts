@@ -165,6 +165,12 @@ export function cleanupLegacyFields(settings: CopilotSettings): CopilotSettings 
   delete out._migrationModalDismissed;
   delete out._diskSecretsCleared;
   delete out._keychainOnly;
+  // Copilot no longer supports GitHub Copilot as a chat provider. Strip its
+  // OAuth fields on every load/save so a sync from a device still running an
+  // older build cannot reintroduce them after the v9 migration.
+  delete out.githubCopilotAccessToken;
+  delete out.githubCopilotToken;
+  delete out.githubCopilotTokenExpiresAt;
   // Copilot no longer manages MCP servers. Remove the retired nested config on
   // every load/save so headers and environment values cannot remain in data.json.
   if (out.agentMode && typeof out.agentMode === "object" && !Array.isArray(out.agentMode)) {

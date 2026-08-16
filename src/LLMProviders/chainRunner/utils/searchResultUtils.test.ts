@@ -1,3 +1,13 @@
+const mockLogInfo = jest.fn<void, unknown[]>();
+const mockLogWarn = jest.fn<void, unknown[]>();
+const mockLogMarkdownBlock = jest.fn<void, [string[]]>();
+
+jest.mock("@/logger", () => ({
+  logInfo: (...args: unknown[]) => mockLogInfo(...args),
+  logWarn: (...args: unknown[]) => mockLogWarn(...args),
+  logMarkdownBlock: (lines: string[]) => mockLogMarkdownBlock(lines),
+}));
+
 import {
   formatSearchResultsForLLM,
   formatSearchResultStringForLLM,
@@ -5,6 +15,7 @@ import {
   formatMetadataOnlyDocuments,
   isFilterOnlyResults,
   isTimeDominantResults,
+  logSearchResultsDebugTable,
 } from "./searchResultUtils";
 
 describe("searchResultUtils", () => {
@@ -445,6 +456,38 @@ describe("searchResultUtils", () => {
 
     it("should return false when source is undefined", () => {
       expect(isTimeDominantResults([{}])).toBe(false);
+    });
+  });
+
+  describe("logSearchResultsDebugTable()", () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
+    it("writes every result to the rolling log file as a Markdown table row", () => {
+      logSearchResultsDebugTable([
+        { path: "notes/alpha.md", score: 0.5, includeInContext: true },
+        { path: "notes/beta.md", score: 0.25, includeInContext: false },
+      ]);
+
+      expect(mockLogInfo).toHaveBeenCalledWith(
+        "Search Results (debug table): 2 rows; in-context 1/2"
+      );
+      const lines = mockLogMarkdownBlock.mock.calls[0][0];
+      expect(lines).toContain("| PATH | IN | MTIME | SCORE | EXPLANATION |");
+      expect(lines.some((line) => line.includes("notes/alpha.md") && line.includes("0.5000"))).toBe(
+        true
+      );
+      expect(lines.some((line) => line.includes("notes/beta.md") && line.includes("0.2500"))).toBe(
+        true
+      );
+    });
+
+    it("reports no results without writing a table", () => {
+      logSearchResultsDebugTable([]);
+
+      expect(mockLogInfo).toHaveBeenCalledWith("Search Results: (none)");
+      expect(mockLogMarkdownBlock).not.toHaveBeenCalled();
     });
   });
 });

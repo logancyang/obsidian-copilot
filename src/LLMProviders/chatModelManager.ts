@@ -15,15 +15,7 @@ import {
   getSettings,
   subscribeToSettingsChange,
 } from "@/settings/model";
-import {
-  err2String,
-  findCustomModel,
-  getModelInfo,
-  ModelInfo,
-  safeFetch,
-  safeFetchNoThrow,
-  shouldUseGitHubCopilotResponsesApi,
-} from "@/utils";
+import { err2String, findCustomModel, getModelInfo, ModelInfo, safeFetch } from "@/utils";
 import { googleHostBaseUrl, groqHostBaseUrl } from "@/utils/providerBaseUrl";
 import { ChatAnthropic } from "@langchain/anthropic";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
@@ -40,8 +32,6 @@ import { ChatOpenRouter } from "./ChatOpenRouter";
 import { ChatLMStudio } from "./ChatLMStudio";
 import { BedrockChatModel, type BedrockChatModelFields } from "./BedrockChatModel";
 import { BrevilabsClient } from "./brevilabsClient";
-import { GitHubCopilotChatModel } from "@/LLMProviders/githubCopilot/GitHubCopilotChatModel";
-import { GitHubCopilotResponsesModel } from "@/LLMProviders/githubCopilot/GitHubCopilotResponsesModel";
 import type { SafetySetting } from "@google/generative-ai";
 
 const GOOGLE_SAFETY_SETTINGS_BLOCK_NONE: SafetySetting[] = [
@@ -88,7 +78,6 @@ const CHAT_PROVIDER_CONSTRUCTORS = {
   [ChatModelProviders.MISTRAL]: ChatOpenAI,
   [ChatModelProviders.DEEPSEEK]: ChatDeepSeek,
   [ChatModelProviders.AMAZON_BEDROCK]: BedrockChatModel,
-  [ChatModelProviders.GITHUB_COPILOT]: GitHubCopilotChatModel,
 } as const;
 
 type ChatProviderConstructMap = typeof CHAT_PROVIDER_CONSTRUCTORS;
@@ -155,8 +144,6 @@ export default class ChatModelManager {
     [ChatModelProviders.DEEPSEEK]: () => getSettings().deepseekApiKey,
     [ChatModelProviders.AMAZON_BEDROCK]: () => getSettings().amazonBedrockApiKey,
     [ChatModelProviders.SILICONFLOW]: () => getSettings().siliconflowApiKey,
-    [ChatModelProviders.GITHUB_COPILOT]: () =>
-      getSettings().githubCopilotToken || getSettings().githubCopilotAccessToken,
   } as const;
 
   private constructor() {
@@ -507,16 +494,6 @@ export default class ChatModelManager {
         },
       },
       [ChatModelProviders.AMAZON_BEDROCK]: {} as BedrockChatModelFields,
-      [ChatModelProviders.GITHUB_COPILOT]: {
-        modelName: modelName,
-        // Use safeFetchNoThrow for CORS bypass on mobile platforms.
-        // This doesn't throw on HTTP errors so 401 retry logic works correctly.
-        // WARNING: AbortSignal/timeout will NOT work when enableCors is true
-        // because Obsidian's requestUrl doesn't support cancellation.
-        // Reason: fetchImplementation is passed to the authed fetch wrapper inside
-        // GitHubCopilotChatModel, which injects Copilot token and headers per request.
-        fetchImplementation: customModel.enableCors ? safeFetchNoThrow : undefined,
-      },
     };
 
     let selectedProviderConfig =
@@ -985,18 +962,12 @@ export default class ChatModelManager {
 
     // For GPT-5 models, automatically use Responses API for proper verbosity support
     const constructorConfig: Record<string, unknown> = { ...modelConfig };
-    const useCopilotResponses = shouldUseGitHubCopilotResponsesApi(model);
     if (
       modelInfo.isGPT5 &&
       (vendor === ChatModelProviders.OPENAI || vendor === ChatModelProviders.OPENAI_FORMAT)
     ) {
       constructorConfig.useResponsesApi = true;
       logInfo(`Enabling Responses API for GPT-5 model: ${model.name} (${vendor})`);
-    }
-
-    if (useCopilotResponses) {
-      constructorConfig.useResponsesApi = true;
-      logInfo(`Enabling Responses API for GitHub Copilot model: ${model.name}`);
     }
 
     // For LM Studio, use ChatLMStudio by default for Responses API compatibility.
@@ -1008,10 +979,6 @@ export default class ChatModelManager {
       const lmStudioInstance = new ChatLMStudio(constructorConfig);
       logInfo(`[ChatModelManager] Using Responses API for LM Studio model: ${model.name}`);
       return lmStudioInstance;
-    }
-
-    if (useCopilotResponses) {
-      return new GitHubCopilotResponsesModel(constructorConfig);
     }
 
     return new AIConstructor(constructorConfig);
@@ -1077,7 +1044,6 @@ export default class ChatModelManager {
         ...pingConfig,
         ...tokenConfig,
       };
-      const useCopilotResponses = shouldUseGitHubCopilotResponsesApi(model);
 
       if (
         modelInfo.isGPT5 &&
@@ -1087,19 +1053,13 @@ export default class ChatModelManager {
         constructorConfig.useResponsesApi = true;
       }
 
-      if (useCopilotResponses) {
-        constructorConfig.useResponsesApi = true;
-      }
-
       // For LM Studio with Responses API, ping via ChatLMStudio so the
       // connectivity check hits the same /v1/responses endpoint used in chats.
       const testModel =
         (model.provider as ChatModelProviders) === ChatModelProviders.LM_STUDIO &&
         model.useResponsesApi !== false
           ? new ChatLMStudio(constructorConfig)
-          : useCopilotResponses
-            ? new GitHubCopilotResponsesModel(constructorConfig)
-            : new (this.getProviderConstructor(modelToTest))(constructorConfig);
+          : new (this.getProviderConstructor(modelToTest))(constructorConfig);
       await testModel.invoke([{ role: "user", content: "hello" }], {
         timeout: 8000,
       });

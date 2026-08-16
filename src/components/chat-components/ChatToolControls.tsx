@@ -48,7 +48,7 @@ const ChatToolControls: React.FC<ChatToolControlsProps> = ({
   currentChain,
 }) => {
   const isCopilotPlus = isPlusChain(currentChain);
-  const showAutonomousAgent = isCopilotPlus && currentChain !== ChainType.PROJECT_CHAIN;
+  const showAutonomousAgent = isCopilotPlus;
 
   const handleAutonomousAgentToggle = () => {
     const newValue = !autonomousAgentToggle;

@@ -24,6 +24,7 @@ import { QuickAskInput } from "./QuickAskInput";
 import type { QuickAskPanelProps } from "./types";
 import type { ReplaceInvalidReason } from "@/editor/replaceGuard";
 import { Button } from "@/components/ui/button";
+import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
 /**
  * QuickAskPanel - Floating panel for Quick Ask interactions.
@@ -305,7 +306,7 @@ export function QuickAskPanel({
               message={msg}
               isStreaming={isStreaming && msg.id === lastMessageId && msg.role === "assistant"}
               isLastAssistantMessage={msg.role === "assistant" && idx === lastAssistantIdx}
-              onCopy={handleCopy}
+              onCopy={safeAsyncHandler(handleCopy)}
               onInsert={handleInsert}
               onReplace={handleReplace}
               hasSelection={hasSelection}
@@ -327,7 +328,7 @@ export function QuickAskPanel({
         <QuickAskInput
           value={inputText}
           onChange={setInputText}
-          onSubmit={handleSubmit}
+          onSubmit={safeAsyncHandler(handleSubmit)}
           sendShortcut={settings.defaultSendShortcut}
           placeholder={isStreaming ? "Generating..." : "Ask a question... "}
           currentActiveFile={currentActiveFile}
@@ -385,7 +386,7 @@ export function QuickAskPanel({
             <Button
               variant="default"
               size="icon"
-              onClick={handleSubmit}
+              onClick={safeAsyncHandler(handleSubmit)}
               disabled={!inputText.trim()}
               title="Send message"
             >

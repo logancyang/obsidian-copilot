@@ -1,6 +1,9 @@
 import React from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { GlobalRecentChatsSection } from "@/agentMode/ui/GlobalRecentChatsSection";
+import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
+
+type SectionItems = React.ComponentProps<typeof GlobalRecentChatsSection>["items"];
 
 // jsdom lacks Obsidian's portal document and the observer used to page the open
 // View-all popover, so supply inert browser equivalents for that interaction.
@@ -177,6 +180,36 @@ describe("GlobalRecentChatsSection", () => {
       });
       expect(screen.getAllByText(/^Chat search-/)).toHaveLength(7);
       expect(screen.queryByText("View all chats")).toBeNull();
+    });
+
+    it("refreshes once when the parent re-renders with the items that refresh produced", () => {
+      // The mount refresh is keyed to `onLoadHistory`, and a completed load
+      // stores a fresh items array that re-renders the parent. A parent that
+      // hands over a newly allocated wrapper each render therefore re-arms this
+      // effect with the result of its own load and loops until the tab
+      // unmounts. AgentHome wraps inline, so the identity has to come from
+      // `safeAsyncHandler` itself.
+      // `loadHistory` stands in for AgentHome's `useCallback`-stable loader; the
+      // wrapper around it is built during render, as AgentHome builds it.
+      const loadHistory = jest.fn(async () => {});
+      const Parent = ({ items }: { items: SectionItems }) => (
+        <GlobalRecentChatsSection
+          items={items}
+          onLoadChat={noop}
+          onUpdateTitle={noop}
+          onDeleteChat={noop}
+          onOpenSourceFile={noop}
+          onLoadHistory={safeAsyncHandler(loadHistory)}
+        />
+      );
+
+      const { rerender } = render(<Parent items={[]} />);
+      expect(loadHistory).toHaveBeenCalledTimes(1);
+
+      rerender(<Parent items={[makeItem("loaded-1")]} />);
+      rerender(<Parent items={[makeItem("loaded-1"), makeItem("loaded-2")]} />);
+
+      expect(loadHistory).toHaveBeenCalledTimes(1);
     });
   });
 });

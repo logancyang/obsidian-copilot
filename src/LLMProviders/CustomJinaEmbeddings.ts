@@ -4,6 +4,7 @@
  * Source: https://github.com/langchain-ai/langchainjs-community/blob/886df5749a926f59e6fdf38a3465c62ec9e7ce32/libs/community/src/embeddings/jina.ts
  */
 
+import { safeFetchNoThrow } from "@/utils";
 import { Embeddings, type EmbeddingsParams } from "@langchain/core/embeddings";
 import { chunkArray } from "@langchain/core/utils/chunk_array";
 import { getEnvironmentVariable } from "@langchain/core/utils/env";
@@ -173,7 +174,7 @@ export class CustomJinaEmbeddings extends Embeddings implements JinaEmbeddingsPa
    * Sends a single embeddings request and returns vectors in response order.
    */
   private async embeddingWithRetry(body: EmbeddingCreateParams): Promise<number[][]> {
-    const response = await fetch(this.baseUrl, {
+    const response = await safeFetchNoThrow(this.baseUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

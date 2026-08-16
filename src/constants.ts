@@ -279,7 +279,6 @@ export enum ChatModelProviders {
   DEEPSEEK = "deepseek",
   COHEREAI = "cohereai",
   SILICONFLOW = "siliconflow",
-  GITHUB_COPILOT = "github-copilot",
 }
 
 export enum ModelCapability {
@@ -303,7 +302,6 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     isBuiltIn: true,
     core: true,
     plusExclusive: true,
-    projectEnabled: false,
     capabilities: [ModelCapability.VISION],
   },
   {
@@ -312,7 +310,6 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     enabled: true,
     isBuiltIn: true,
     core: true,
-    projectEnabled: true,
     capabilities: [ModelCapability.VISION],
   },
   {
@@ -320,7 +317,6 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     provider: ChatModelProviders.OPENROUTERAI,
     enabled: true,
     isBuiltIn: true,
-    projectEnabled: true,
     capabilities: [ModelCapability.VISION, ModelCapability.REASONING],
   },
   {
@@ -351,7 +347,6 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     provider: ChatModelProviders.GOOGLE,
     enabled: true,
     isBuiltIn: true,
-    projectEnabled: true,
     capabilities: [ModelCapability.VISION, ModelCapability.REASONING],
   },
   {
@@ -359,7 +354,6 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     provider: ChatModelProviders.GOOGLE,
     enabled: true,
     isBuiltIn: true,
-    projectEnabled: true,
     capabilities: [ModelCapability.VISION],
   },
   {
@@ -367,7 +361,6 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     provider: ChatModelProviders.GOOGLE,
     enabled: true,
     isBuiltIn: true,
-    projectEnabled: true,
     capabilities: [ModelCapability.VISION],
   },
   // Disabled models
@@ -384,7 +377,6 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     enabled: false,
     isBuiltIn: true,
     core: false,
-    projectEnabled: true,
     capabilities: [ModelCapability.VISION],
   },
   {
@@ -393,7 +385,6 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     enabled: false,
     isBuiltIn: true,
     core: false,
-    projectEnabled: true,
     capabilities: [ModelCapability.VISION],
   },
   {
@@ -402,7 +393,6 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     enabled: false,
     isBuiltIn: true,
     core: false,
-    projectEnabled: true,
     capabilities: [ModelCapability.VISION],
   },
   {
@@ -411,7 +401,6 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     enabled: false,
     isBuiltIn: true,
     core: false,
-    projectEnabled: true,
     capabilities: [ModelCapability.VISION],
   },
   {
@@ -420,7 +409,6 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     enabled: false,
     isBuiltIn: true,
     core: false,
-    projectEnabled: true,
     capabilities: [ModelCapability.VISION],
   },
   {
@@ -429,7 +417,6 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     enabled: false,
     isBuiltIn: true,
     core: false,
-    projectEnabled: true,
     capabilities: [ModelCapability.VISION],
   },
   {
@@ -438,7 +425,6 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     enabled: false,
     isBuiltIn: true,
     core: false,
-    projectEnabled: true,
     capabilities: [ModelCapability.VISION],
   },
   {
@@ -467,7 +453,6 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     provider: ChatModelProviders.GOOGLE,
     enabled: false,
     isBuiltIn: true,
-    projectEnabled: true,
     capabilities: [ModelCapability.VISION],
   },
   {
@@ -790,13 +775,6 @@ export const ProviderInfo: Record<Provider, ProviderMetadata> = {
     keyManagementURL: "",
     listModelURL: "",
   },
-  [ChatModelProviders.GITHUB_COPILOT]: {
-    label: "GitHub Copilot",
-    host: "https://api.githubcopilot.com",
-    curlBaseURL: "https://api.githubcopilot.com",
-    keyManagementURL: "https://github.com/settings/apps/authorizations",
-    listModelURL: "",
-  },
 };
 
 // Map provider to its settings key for API key
@@ -814,7 +792,6 @@ export const ProviderSettingsKeyMap: Record<SettingKeyProviders, keyof CopilotSe
   deepseek: "deepseekApiKey",
   "amazon-bedrock": "amazonBedrockApiKey",
   siliconflow: "siliconflowApiKey",
-  "github-copilot": "githubCopilotToken",
 };
 
 export enum VAULT_VECTOR_STORE_STRATEGY {
@@ -991,10 +968,6 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   amazonBedrockApiKey: "",
   amazonBedrockRegion: "",
   siliconflowApiKey: "",
-  // GitHub Copilot OAuth tokens
-  githubCopilotAccessToken: "",
-  githubCopilotToken: "",
-  githubCopilotTokenExpiresAt: 0,
   defaultChainType: ChainType.LLM_CHAIN,
   defaultModelKey: ChatModels.OPENROUTER_GEMINI_2_5_FLASH + "|" + ChatModelProviders.OPENROUTERAI,
   embeddingModelKey:
@@ -1042,7 +1015,6 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   promptUsageTimestamps: {},
   promptSortStrategy: PromptSortStrategy.TIMESTAMP,
   chatHistorySortStrategy: "recent",
-  projectListSortStrategy: "recent",
   projectsFolder: DEFAULT_PROJECTS_FOLDER,
   defaultConversationNoteName: "{$topic}@{$date}_{$time}",
   /** @deprecated */

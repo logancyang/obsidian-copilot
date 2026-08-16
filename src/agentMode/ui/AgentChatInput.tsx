@@ -50,6 +50,7 @@ import { Clock, X } from "lucide-react";
 import { App, Notice, TFile } from "obsidian";
 import React, { memo, useCallback, useContext, useEffect, useMemo, useRef } from "react";
 import { v4 as uuidv4 } from "uuid";
+import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
 interface AgentChatInputProps {
   backend: AgentChatBackend;
@@ -106,12 +107,6 @@ interface AgentChatInputProps {
    */
   isLanding?: boolean;
 }
-
-// Stable no-op handler for required ChatInput props that don't apply to
-// Agent Mode (project progress card). Optional props with no Agent Mode
-// surface (e.g. showIndexingCard) are omitted instead, so their `&& prop`
-// render guards stay effective.
-const NOOP = () => {};
 
 const dedupeBy = <T,>(items: Iterable<T>, key: (item: T) => string): T[] => {
   const seen = new Set<string>();
@@ -582,10 +577,10 @@ export const AgentChatInput = memo(function AgentChatInput({
           placeholderPrompts={isLanding ? AGENT_PROMPT_SUGGESTIONS : undefined}
           inputMessage={inputMessage}
           setInputMessage={setInputMessage}
-          handleSendMessage={(meta) => handleSendMessage(meta?.webTabs)}
+          handleSendMessage={safeAsyncHandler((meta) => handleSendMessage(meta?.webTabs))}
           isGenerating={loading}
-          onStopGenerating={handleStopGenerating}
-          onEscape={loading ? handleStopGenerating : undefined}
+          onStopGenerating={safeAsyncHandler(handleStopGenerating)}
+          onEscape={loading ? safeAsyncHandler(handleStopGenerating) : undefined}
           onShiftTab={modePickerOverride ? onCycleMode : undefined}
           app={app}
           contextNotes={contextNotes}
@@ -606,11 +601,9 @@ export const AgentChatInput = memo(function AgentChatInput({
           agentBrands={agentBrands}
           cloudAgentIds={getCloudAgentIds()}
           onMentionedAgentsChange={handleMentionedAgentsChange}
-          showProgressCard={NOOP}
           // showIndexingCard is deliberately NOT passed: the vault-indexing
-          // chip is not an Agent Mode surface (a NOOP here used to defeat
-          // ChatContextMenu's `&& showIndexingCard` guard and leak a chip
-          // whose click did nothing).
+          // chip is not an Agent Mode surface, and omitting it keeps
+          // ChatContextMenu's `&& showIndexingCard` render guard effective.
           // No placeholder swap while context is loading, on purpose: loads
           // often clear in ~hundreds of ms, so any transient placeholder (text
           // or color) flickers in and out and reads as a glitch. The status

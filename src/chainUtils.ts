@@ -1,4 +1,4 @@
-import ProjectManager from "@/LLMProviders/projectManager";
+import ChainOwner from "@/LLMProviders/chainOwner";
 import {
   ChatHistoryEntry,
   extractTextFromChunk,
@@ -30,7 +30,7 @@ export async function getStandaloneQuestion(
   // Wrap the model call with token warning suppression
   return await withSuppressedTokenWarnings(async () => {
     // Use temperature=0 for deterministic question condensation
-    const chatModel = await ProjectManager.instance
+    const chatModel = await ChainOwner.instance
       .getCurrentChainManager()
       .chatModelManager.getChatModelWithTemperature(0);
 

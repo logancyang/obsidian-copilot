@@ -4,7 +4,6 @@ import {
   DOMConversionMap,
   DOMConversionOutput,
   DOMExportOutput,
-  EditorConfig,
   LexicalEditor,
   LexicalNode,
   NodeKey,
@@ -44,12 +43,6 @@ export class NotePillNode extends BasePillNode {
     return "data-lexical-note-pill";
   }
 
-  createDOM(_config: EditorConfig, editor: LexicalEditor): HTMLElement {
-    const span = getEditorDocument(editor).createElement("span");
-    span.className = "note-pill-wrapper";
-    return span;
-  }
-
   static importDOM(): DOMConversionMap | null {
     return {
       span: (node: HTMLElement) => {
@@ -80,17 +73,20 @@ export class NotePillNode extends BasePillNode {
   }
 
   exportDOM(editor: LexicalEditor): DOMExportOutput {
-    const element = getEditorDocument(editor).createElement("span");
-    element.setAttribute("data-lexical-note-pill", "true");
-    element.setAttribute("data-note-title", this.__noteTitle);
-    element.setAttribute("data-note-path", this.__notePath);
     const lowerPath = this.__notePath.toLowerCase();
     const displayName = lowerPath.endsWith(".pdf")
       ? `${this.__noteTitle}.pdf`
       : lowerPath.endsWith(".canvas")
         ? `${this.__noteTitle}.canvas`
         : this.__noteTitle;
-    element.textContent = `[[${displayName}]]`;
+    const element = getEditorDocument(editor).win.createSpan({
+      text: `[[${displayName}]]`,
+      attr: {
+        "data-lexical-note-pill": "true",
+        "data-note-title": this.__noteTitle,
+        "data-note-path": this.__notePath,
+      },
+    });
     return { element };
   }
 

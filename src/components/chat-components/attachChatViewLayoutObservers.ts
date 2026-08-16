@@ -1,20 +1,18 @@
 import { Platform } from "obsidian";
 
 /**
- * Mobile-keyboard + drawer-hide observers shared by chat views (regular and
- * agent). Pure DOM/lifecycle utilities — no chat-specific state.
+ * Drawer-hide observer shared by chat views (regular and agent). A pure
+ * DOM/lifecycle utility — no chat-specific state.
  *
- * On mobile, when the soft keyboard opens we want to hide drawer chrome
- * (header/tab options) by toggling a class on the surrounding workspace
- * drawer; and when the drawer is hidden by Obsidian (e.g. user pressed back),
- * any open Radix popover anchored inside this view needs to close so it
- * doesn't jump to (0,0).
+ * When Obsidian hides the drawer on mobile (e.g. the user pressed back), any
+ * open Radix popover anchored inside this view has to close, or it re-anchors
+ * to a detached element and jumps to (0,0).
  *
  * Returns:
  *  - `dispose`: call from the view's `onClose` to unbind everything.
  *  - `rebindDrawerObserver`: the view can be moved between drawers without
  *    `onOpen` firing again; call this from a `layout-change` handler so the
- *    drawer-hide observer always watches the correct drawer.
+ *    observer always watches the correct drawer.
  */
 export function attachChatViewLayoutObservers(containerEl: HTMLElement): {
   dispose: () => void;
@@ -24,30 +22,7 @@ export function attachChatViewLayoutObservers(containerEl: HTMLElement): {
     return { dispose: () => {}, rebindDrawerObserver: () => {} };
   }
 
-  let lastDrawerEl: HTMLElement | null = null;
   let drawerHideObserver: MutationObserver | null = null;
-
-  const syncKeyboardClass = () => {
-    const drawer = containerEl.closest<HTMLElement>(".workspace-drawer");
-    if (lastDrawerEl && lastDrawerEl !== drawer) {
-      lastDrawerEl.classList.remove("copilot-keyboard-open");
-    }
-    lastDrawerEl = drawer;
-    if (!drawer) return;
-
-    const isCopilotActive = !!containerEl.closest(".workspace-drawer-active-tab-content");
-    const kbHeight = parseFloat(
-      containerEl.doc.documentElement.style.getPropertyValue("--keyboard-height") || "0"
-    );
-    drawer.classList.toggle("copilot-keyboard-open", isCopilotActive && kbHeight > 0);
-  };
-
-  const keyboardObserver = new MutationObserver(syncKeyboardClass);
-  keyboardObserver.observe(containerEl.doc.documentElement, {
-    attributes: true,
-    attributeFilter: ["style"],
-  });
-  syncKeyboardClass();
 
   const rebindDrawerObserver = () => {
     drawerHideObserver?.disconnect();
@@ -69,10 +44,7 @@ export function attachChatViewLayoutObservers(containerEl: HTMLElement): {
   rebindDrawerObserver();
 
   const dispose = () => {
-    keyboardObserver.disconnect();
     drawerHideObserver?.disconnect();
-    lastDrawerEl?.classList.remove("copilot-keyboard-open");
-    lastDrawerEl = null;
   };
 
   return { dispose, rebindDrawerObserver };

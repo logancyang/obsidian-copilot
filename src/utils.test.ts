@@ -12,7 +12,6 @@ import {
   getUtf8ByteLength,
   insertAtCursor,
   isFolderMatch,
-  shouldUseGitHubCopilotResponsesApi,
   processVariableNameForNotePath,
   removeThinkTags,
   stringToFormattedDateTime,
@@ -21,7 +20,6 @@ import {
   withTimeout,
 } from "./utils";
 import { TimeoutError } from "./error";
-import { ChatModelProviders } from "./constants";
 
 // Mock Obsidian's TFile class
 jest.mock("obsidian", () => {
@@ -647,45 +645,6 @@ I need to consider:
     const input = "Main content here<think>Final thoughts</think>";
     const expected = "Main content here";
     expect(removeThinkTags(input)).toBe(expected);
-  });
-});
-
-describe("shouldUseGitHubCopilotResponsesApi", () => {
-  it("should enable responses API for GitHub Copilot codex models", () => {
-    expect(
-      shouldUseGitHubCopilotResponsesApi({
-        provider: ChatModelProviders.GITHUB_COPILOT,
-        name: "gpt-5.3-codex",
-      })
-    ).toBe(true);
-  });
-
-  it("should not enable responses API for non-codex GitHub Copilot models by default", () => {
-    expect(
-      shouldUseGitHubCopilotResponsesApi({
-        provider: ChatModelProviders.GITHUB_COPILOT,
-        name: "gpt-4.1",
-      })
-    ).toBe(false);
-  });
-
-  it("should ignore codex names for non-Copilot providers", () => {
-    expect(
-      shouldUseGitHubCopilotResponsesApi({
-        provider: ChatModelProviders.OPENAI,
-        name: "gpt-5.3-codex",
-      })
-    ).toBe(false);
-  });
-
-  it("should allow explicit responses API opt-in for GitHub Copilot models", () => {
-    expect(
-      shouldUseGitHubCopilotResponsesApi({
-        provider: ChatModelProviders.GITHUB_COPILOT,
-        name: "custom-model",
-        useResponsesApi: true,
-      })
-    ).toBe(true);
   });
 });
 
