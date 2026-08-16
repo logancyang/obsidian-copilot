@@ -1,5 +1,75 @@
 # Release Notes
 
+# Copilot for Obsidian - Release v4.0.1 🛠️
+
+The first patch since the V4 launch, squashing the bugs reported in 4.0.0's first week and adding plan usage caps to the agent meter, alongside a large Obsidian community-review compliance pass.
+
+- 📊 **Plan usage caps in the agent meter** — Claude Code, Codex, and Copilot Plus sessions now show how much of your plan window you've used and when it resets, right in the usage meter tooltip. (@logancyang)
+- 🦙 **Local Ollama Quick Chat is back** — A CORS header bug was blocking every direct Ollama request in Quick Chat; that's fixed, and the **Enable CORS** switch is restored for other OpenAI-compatible endpoints that need it. (@logancyang, @zeroliu)
+- 🕘 **Reopened agent chats show their history again** — Opening an opencode or Codex chat from Chat History showed an empty landing page even though the conversation had survived; the transcript now rebuilds properly. (@Emt-lin)
+- ⌨️ **Escape plays nice with CJK input methods** — Dismissing an IME candidate window while typing in the chat composer no longer throws focus into the note editor. (@zeroliu)
+- 📁 **Reuse a folder that already has notes as your Copilot folder** — Applying a folder with existing Markdown now shows a clear warning instead of blocking the change outright. (@logancyang)
+- 🧹 **More V3 leftovers cleared out** — the legacy vault index gets its off switch back, Quick Chat drops its old Projects mode (Agent Mode owns Projects now) and the defunct GitHub Copilot provider, and V3 Chat now points users toward opencode. (@zeroliu, @logancyang)
+- 🛡️ **A big Obsidian community-review compliance pass** — LangChain upgraded to 1.x with deprecated APIs migrated off, console logging routed through the project logger, `!important` and `:has()` removed from the stylesheet, DOM built through Obsidian's `createEl` helpers, Node imports guarded for mobile, device-local state moved off `localStorage`, and dependency advisories resolved. (@zeroliu)
+- 🤫 **Quieter, more accurate status messages** — Miyo chat search now reports ready instead of "Not set up" when sync is idle, and Codex's internal skills-budget notice no longer shows up as a chat warning. (@logancyang)
+
+⚠️ **Bundle size note:** `main.js` grew ~92 KB this cycle to 5.08 MB, now just over Obsidian's 5 MB Sync Standard threshold. A bundle-reduction pass is planned for a future release.
+
+More details in the changelog:
+
+### Improvements
+
+- #2808 Show only the working Buy Me a Coffee button @logancyang
+- #2809 Correct v4 Agent Mode and paid-plan documentation @logancyang
+- #2811 Send license-check triggers from Copilot @zeroliu
+- #2815 Replace the deprecated lucide Youtube icon with SquarePlay @zeroliu
+- #2817 Remove dotenv to clear the scorecard dependency warning @zeroliu
+- #2818 Resolve npm audit advisories with semver-compatible lockfile bumps @zeroliu
+- #2820 Route production console logging through the project logger @zeroliu
+- #2821 Remove every !important from the plugin stylesheet @zeroliu
+- #2823 Upgrade LangChain to latest 1.x and migrate off deprecated message APIs @zeroliu
+- #2824 Persist device-local state through Obsidian's vault-scoped storage API @zeroliu
+- #2825 Upgrade diff and remove the unused Electron package @zeroliu
+- #2827 Remove :has() selectors and the mobile CSS overrides they anchored @zeroliu
+- #2829 Guard eager Node imports for mobile compatibility @zeroliu
+- #2832 Send plugin versions with Copilot Plus requests @zeroliu
+- #2833 Add AGENTS.md examples to the documentation @logancyang
+- #2842 Allow non-empty Copilot folders with a warning @logancyang
+- #2851 Update the plugin description for V4 discovery @zeroliu
+- #2852 Show Claude Code plan usage caps @logancyang
+- #2853 Show Copilot Plus plan usage caps @logancyang
+- #2855 Recenter documentation on the Copilot V4 Agent experience @logancyang
+- #2856 Show Codex plan usage caps @logancyang
+- #2859 Guard remaining Node imports for mobile compatibility @zeroliu
+- #2861 Remove GitHub Copilot as a Quick Chat provider @zeroliu
+- #2862 Build DOM through Obsidian's createEl helpers @zeroliu
+- #2863 Drop deprecated OpenRouter tool_calls kwargs @zeroliu
+- #2865 Remove Quick Chat's legacy Projects mode @zeroliu
+- #2867 Scope type-aware ESLint rules by excluding TypeScript @zeroliu
+- #2870 Route logger console output through allow-listed console methods @zeroliu
+- #2872 Guide V3 Chat users to opencode @logancyang
+- #2874 Refresh the deployed gallery stylesheet during test:vault @zeroliu
+
+### Bug Fixes
+
+- #2816 Keep Escape inside the chat composer without blocking IME @zeroliu
+- #2822 Route Jina embeddings through requestUrl to fix CORS failures @zeroliu
+- #2826 Log rejections from async UI handlers and make plugin unload synchronous @zeroliu
+- #2835 Report idle Miyo chat search as ready @logancyang
+- #2839 Rebuild an ACP chat's transcript when it is reopened from history @Emt-lin
+- #2849 Restore Quick Chat CORS compatibility control @zeroliu
+- #2854 Restore local Ollama Quick Chat @logancyang
+- #2857 Hide Codex skills-budget warning @logancyang
+- #2864 Restore an off switch for the legacy vault index @zeroliu
+- #2868 Restore the gallery build so component stories can be verified @zeroliu
+
+## Troubleshoot
+
+- If models are missing, navigate to Copilot settings -> Models tab and click "Refresh Built-in Models".
+- Please report any issue you see in the member channel!
+
+---
+
 # Copilot v4.0.0 — The Official V4 Release 🎉
 
 Copilot has been rewritten end to end. Instead of a single built-in assistant, frontier agents — **Claude Code**, **Codex**, and **opencode** — now run natively inside Obsidian: they plan, search your vault by meaning, use tools, and write results back to your notes in fluent Obsidian — wikilinks, canvases, Markdown.
@@ -1709,7 +1779,6 @@ Improved QA in this release! Significant upgrades to Vault QA mode coming soon.
 # Release v2.6.7
 
 - #665 Messages now have timestamps! Saved conversations have timestamps too.
-
   - A saved conversation uses its first message's timestamp
   - The loading conversations modal now sorts the chat history in descending order.
     <img width="718" alt="SCR-20240923-ppqq" src="https://github.com/user-attachments/assets/5b93662c-fa92-47da-912e-db550d1ce91c">
@@ -1989,7 +2058,6 @@ Bug fixes
 
 - Add the new OpenAI models announced today
 - 2 new embedding models small and large. Small is better than ada v2 but 1/5 the cost! Large is slightly more expensive than the old ada v2 but has much better quality.
-
   - Now you can set them in the QA settings section
     <img width="467" alt="SCR-20240125-pqya" src="https://github.com/logancyang/obsidian-copilot/assets/4860545/6a349236-35c4-45d4-98dc-3952ad080915">
 
@@ -2051,9 +2119,7 @@ Bug fixes
 <img width="719" alt="Screenshot 2024-01-07 at 7 22 34 PM" src="https://github.com/logancyang/obsidian-copilot/assets/4860545/7dd42902-2cfd-4267-9ef0-2cf45072c42e">
 
 - Add Gemini Pro model
-
   - I find that this model hallucinates quite a lot if you have a high temperature. Set the temperature close to 0 for better results.
-
     - Temperature 0.7:
       <img width="554" alt="Screenshot 2024-01-07 at 7 19 27 PM" src="https://github.com/logancyang/obsidian-copilot/assets/4860545/9a89951a-e793-4eeb-bf3d-10b0c6e8c96c">
       <img width="727" alt="Screenshot 2024-01-07 at 7 19 38 PM" src="https://github.com/logancyang/obsidian-copilot/assets/4860545/e414ab91-027e-4de7-9be7-a30f4402ab7e">
