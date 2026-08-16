@@ -5,7 +5,8 @@ import {
 import { fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 
-const COPY = "V3 Chat will be deprecated soon. Use opencode for BYOK.";
+const COPY =
+  "V3 Chat will be deprecated soon. Use Agent with opencode for BYOK and Copilot-hosted models.";
 
 describe("LegacyChatDeprecationHint", () => {
   describe("LegacyChatDeprecationHint()", () => {
