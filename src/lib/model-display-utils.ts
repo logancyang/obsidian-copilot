@@ -25,8 +25,6 @@ export type ModelApiKeySettings = Pick<
   | "deepseekApiKey"
   | "amazonBedrockApiKey"
   | "siliconflowApiKey"
-  | "githubCopilotToken"
-  | "githubCopilotAccessToken"
 >;
 
 const PROVIDERS_WITHOUT_API_KEYS: ReadonlySet<Provider> = new Set([
@@ -34,7 +32,6 @@ const PROVIDERS_WITHOUT_API_KEYS: ReadonlySet<Provider> = new Set([
   ChatModelProviders.OLLAMA,
   ChatModelProviders.LM_STUDIO,
   ChatModelProviders.AZURE_OPENAI,
-  ChatModelProviders.GITHUB_COPILOT,
   EmbeddingModelProviders.COPILOT_PLUS,
   EmbeddingModelProviders.COPILOT_PLUS_JINA,
 ]);
@@ -68,20 +65,6 @@ export function checkModelApiKey(
       };
     }
 
-    return { hasApiKey: true };
-  }
-
-  if (provider === ChatModelProviders.GITHUB_COPILOT) {
-    const hasAuth = Boolean(
-      model.apiKey || settings.githubCopilotToken || settings.githubCopilotAccessToken
-    );
-    if (!hasAuth) {
-      return {
-        hasApiKey: false,
-        errorNotice:
-          "GitHub Copilot is not authenticated. Please connect it in Settings > Copilot > BYOK.",
-      };
-    }
     return { hasApiKey: true };
   }
 

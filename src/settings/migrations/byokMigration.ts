@@ -17,8 +17,7 @@
  *    local/openai-format providers, an explicit base URL) and its ENABLED
  *    models — built-in and custom.
  *  - Azure / Bedrock migrate to Simple Chat only (OpenCode can't route them).
- *  - Skip embeddings, disabled models, and copilot-plus / github-copilot
- *    (owned by Plus sign-in and agent setup).
+ *  - Skip embeddings, disabled models, and copilot-plus (owned by Plus sign-in).
  *  - Non-destructive: legacy keys and `activeModels` are left untouched.
  */
 
@@ -64,9 +63,9 @@ interface LegacyProviderMapping {
 
 /**
  * Legacy `CustomModel.provider` → new-format mapping. Providers absent here
- * (copilot-plus, github-copilot, anything unrecognized) are skipped. The
- * top-level API-key field is derived from `ProviderSettingsKeyMap`, not
- * duplicated here.
+ * (copilot-plus, anything unrecognized, and providers Copilot no longer ships)
+ * are skipped. The top-level API-key field is derived from
+ * `ProviderSettingsKeyMap`, not duplicated here.
  */
 const LEGACY_PROVIDER_MAP: Partial<Record<string, LegacyProviderMapping>> = {
   [ChatModelProviders.ANTHROPIC]: {
@@ -200,7 +199,7 @@ interface ResolvedCandidate {
  */
 function resolveCandidate(model: CustomModel, settings: CopilotSettings): ResolvedCandidate | null {
   const mapping = LEGACY_PROVIDER_MAP[model.provider];
-  if (!mapping) return null; // unknown / copilot-plus / github-copilot
+  if (!mapping) return null; // unknown / copilot-plus / retired provider
   if (!model.enabled) return null; // disabled models skipped per scope
   if (model.isEmbeddingModel ?? EMBEDDING_ID.test(model.name)) return null; // embeddings skipped
 

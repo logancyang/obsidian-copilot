@@ -23,6 +23,10 @@ jest.mock("@/logger", () => ({
 // never calls it, so an empty mock is enough to keep this suite isolated.
 jest.mock("@/miyo/miyoStatusStore", () => ({ isMiyoAvailableForCapability: jest.fn() }));
 
+jest.mock("@/services/keychainService", () => ({
+  KeychainService: { getInstance: jest.fn(() => ({ isAvailable: () => false })) },
+}));
+
 jest.mock("@/settings/model", () => {
   const actual = jest.requireActual<typeof import("@/settings/model")>("@/settings/model");
   return { ...actual, getSettings: jest.fn(), setSettings: jest.fn() };
@@ -316,6 +320,33 @@ describe("runSettingsMigrations()", () => {
     await runSettingsMigrations(api);
 
     expect(mockSetSettings).toHaveBeenCalledWith({ upgradedToV8FromLegacy: true });
+  });
+
+  it("v9: drops GitHub Copilot models and selections for a v8 vault", async () => {
+    mockGetSettings.mockReturnValue(
+      settings({ settingsVersion: 8, defaultModelKey: "gpt-4o|github-copilot" }, [
+        { name: "gpt-4o", provider: "github-copilot", enabled: true, isBuiltIn: false },
+      ])
+    );
+    const { api } = makeApi();
+
+    await runSettingsMigrations(api);
+
+    expect(mockSetSettings).toHaveBeenCalledWith({ activeModels: [], defaultModelKey: "" });
+  });
+
+  it("v9: leaves models and selections alone for a vault already at the current version", async () => {
+    mockGetSettings.mockReturnValue(
+      settings({
+        settingsVersion: CURRENT_SETTINGS_VERSION,
+        defaultModelKey: "gpt-4o|github-copilot",
+      })
+    );
+    const { api } = makeApi();
+
+    await runSettingsMigrations(api);
+
+    expect(mockSetSettings).not.toHaveBeenCalled();
   });
 
   it("v8: does not flag a vault already at the current version", async () => {

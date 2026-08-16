@@ -52,7 +52,7 @@ npm audit --omit=dev --audit-level=critical
 
 Warnings remain for cases where automatic cleanup could change behavior or UI, including desktop Node imports, streaming `fetch`, async React callbacks, Obsidian DOM helpers, declarative settings search, `!important`, `:has()`, and manifest copy. Do not suppress them. Fix one warning family at a time with behavior-specific tests.
 
-Provider smoke tests for Jina, Bedrock streaming/non-streaming, and legacy GitHub Copilot models are needed only when their adapters or network boundaries change.
+Provider smoke tests for Jina and Bedrock streaming/non-streaming are needed only when their adapters or network boundaries change.
 
 ## Maintenance checklist
 

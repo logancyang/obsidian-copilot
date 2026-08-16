@@ -236,7 +236,7 @@ describe("planByokMigration — scope filters", () => {
     expect(plan).toEqual([]);
   });
 
-  it("skips copilot-plus and github-copilot", () => {
+  it("skips copilot-plus and models left behind by a removed provider", () => {
     const plan = planByokMigration(
       settingsWith(
         [
@@ -245,9 +245,9 @@ describe("planByokMigration — scope filters", () => {
             provider: ChatModelProviders.COPILOT_PLUS,
             isBuiltIn: true,
           }),
-          model({ name: "gpt-5", provider: ChatModelProviders.GITHUB_COPILOT }),
+          model({ name: "gpt-5", provider: "github-copilot" }),
         ],
-        { plusLicenseKey: "lic", githubCopilotToken: "tok" }
+        { plusLicenseKey: "lic" }
       )
     );
     expect(plan).toEqual([]);
