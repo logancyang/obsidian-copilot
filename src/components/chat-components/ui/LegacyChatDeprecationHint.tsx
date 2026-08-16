@@ -23,7 +23,7 @@ export function LegacyChatDeprecationHint({ onOpenAgent }: LegacyChatDeprecation
       >
         <CircleAlert className="tw-size-3 tw-shrink-0" aria-hidden="true" />
         <span className="tw-truncate">
-          V3 Chat will be deprecated soon. Use opencode for BYOK and Copilot-hosted models.
+          V3 Chat is retiring soon. Use opencode for BYOK and Copilot-hosted models.
         </span>
       </Button>
     </div>
