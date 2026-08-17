@@ -16,7 +16,7 @@ import type { ChatGeneration, ChatResult } from "@langchain/core/outputs";
 import type { StructuredToolInterface } from "@langchain/core/tools";
 import { isInteropZodSchema } from "@langchain/core/utils/types";
 import { toJsonSchema } from "@langchain/core/utils/json_schema";
-import { requestUrl } from "obsidian";
+import { safeFetchNoThrow } from "@/utils";
 
 type FetchImplementation = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
@@ -217,23 +217,22 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
   ): Promise<ChatResult> {
     const requestBody = this.buildRequestBody(messages, options);
 
-    const response = await requestUrl({
-      url: this.endpoint,
+    const response = await safeFetchNoThrow(this.endpoint, {
       method: "POST",
-      contentType: "application/json",
       headers: {
         Authorization: `Bearer ${this.apiKey}`,
+        "Content-Type": "application/json",
         Accept: "application/json",
       },
       body: JSON.stringify(requestBody),
-      throw: false,
     });
 
-    if (response.status >= 400) {
-      throw new Error(rewriteBedrockErrorMessage(response.status, response.text));
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(rewriteBedrockErrorMessage(response.status, errorText));
     }
 
-    const data = response.json as Record<string, unknown>;
+    const data = (await response.json()) as Record<string, unknown>;
     const text = this.extractText(data);
     const toolCalls = this.extractToolCalls(data);
 
