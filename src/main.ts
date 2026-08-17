@@ -36,6 +36,7 @@ import { logError, logInfo, logWarn } from "@/logger";
 import { logFileManager } from "@/logFileManager";
 import {
   createModelManagement,
+  plusSyncNeeded,
   syncCopilotPlusProvider,
   type ModelManagementApi,
 } from "@/modelManagement";
@@ -241,10 +242,7 @@ export default class CopilotPlugin extends Plugin {
           new Notice("Copilot failed to save settings. Check logs and try again.");
         }
         // Sign-in / sign-out (isPaidUser flip) or key rotation while signed in.
-        if (
-          prev?.isPaidUser !== next.isPaidUser ||
-          (next.isPaidUser && prev?.plusLicenseKey !== next.plusLicenseKey)
-        ) {
+        if (plusSyncNeeded(prev, next)) {
           syncPlus(next.isPaidUser, next.plusLicenseKey);
         }
       })();

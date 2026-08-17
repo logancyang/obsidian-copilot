@@ -766,6 +766,28 @@ describe("plusUtils", () => {
 
       expect(await checkIsPaidUser(undefined, { trigger: "manual" })).toBe(false);
     });
+
+    it("leaves the retained paid state untouched when validation is unreachable after reset (https://github.com/logancyang/obsidian-copilot-preview/issues/259)", async () => {
+      // The post-reset shape: reset kept isPaidUser and the license key but
+      // dropped the entitlement token. An unreachable server means "unknown",
+      // not "unentitled" — writing the paid flag here would read as sign-out
+      // to the settings subscriber (`plusSyncNeeded`) and tear down the
+      // preserved Plus provider and its keychain entry.
+      mockGetSettings.mockReturnValue(
+        buildSettings({
+          plusLicenseKey: "key",
+          isPaidUser: true,
+          isPlusUser: false,
+          entitlementToken: "",
+        })
+      );
+      mockValidateLicenseKey.mockRejectedValue(new Error("net::ERR_INTERNET_DISCONNECTED"));
+
+      expect(await checkIsPaidUser(undefined, { trigger: "manual" })).toBe(false);
+      expect(mockValidateLicenseKey).toHaveBeenCalled();
+      expect(mockSetSettings).not.toHaveBeenCalled();
+      expect(mockUpdateSetting).not.toHaveBeenCalled();
+    });
   });
 
   describe("useLicenseState()", () => {

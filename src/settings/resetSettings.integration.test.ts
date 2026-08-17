@@ -5,337 +5,201 @@
  * hands back.
  *
  * These cases live outside `model.test.ts` because of a test-lifecycle
- * constraint that file cannot meet: each case re-imports `@/settings/model`
- * and `@/services/settingsPersistence` under a fresh module registry with a
- * fake keychain installed, so reset, save, and hydrate run against one
- * coherent store. `model.test.ts` drives the already-imported singleton and so
- * can only observe the in-memory half.
+ * constraint that file cannot meet: they drive the REAL `KeychainService`
+ * (map-backed `app.secretStorage`) and the real persistence module, whose
+ * module-level state (`lastPersistedSettings`, the write queue) must be reset
+ * per case via `resetPersistenceState()`. `model.test.ts` observes only the
+ * in-memory half of reset.
  */
 
+import type { App } from "obsidian";
+
 import { BUILTIN_CHAT_MODELS, DEFAULT_SETTINGS } from "@/constants";
-import { isSensitiveKey } from "@/services/settingsSecretTransforms";
+import { KeychainService } from "@/services/keychainService";
+import {
+  loadSettingsWithKeychain,
+  persistSettings,
+  resetPersistenceState,
+} from "@/services/settingsPersistence";
 import type { CustomModel } from "@/aiParams";
-import type { CopilotSettings } from "@/settings/model";
 import type { Provider } from "@/modelManagement";
+import type { CopilotSettings } from "@/settings/model";
+import { getSettings, resetSettings, settingsAtom, settingsStore } from "@/settings/model";
+
+jest.mock("@/logger", () => ({
+  logInfo: jest.fn(),
+  logWarn: jest.fn(),
+  logError: jest.fn(),
+}));
 
 // Polyfill structuredClone for jsdom
 if (typeof window.structuredClone === "undefined") {
   window.structuredClone = <T>(val: T): T => JSON.parse(JSON.stringify(val)) as T;
 }
 
-/**
- * Fake keychain id for a model row, mirroring the real service's
- * `name|provider` identity scheme closely enough for these tests.
- */
-function modelKeychainId(model: Record<string, unknown>): string {
-  return `kc-model-${String(model.name)}-${String(model.provider)}`;
-}
-
 /** These tests seed post-v4 settings, so the legacy backup never applies. */
 const noLegacyBackup = async () => ({ status: "not-needed" }) as const;
 
-function makeSettings(overrides: Partial<CopilotSettings> = {}): CopilotSettings {
+const VAULT_ID = "a1b2c3d4";
+const BYOK_POINTER = `copilot-v${VAULT_ID}-provider-byok_openai`;
+const PLUS_POINTER = `copilot-v${VAULT_ID}-provider-plus_1`;
+
+let secrets: Map<string, string>;
+let app: App;
+
+function makeApp(): App {
   return {
-    ...DEFAULT_SETTINGS,
-    ...overrides,
-  };
+    secretStorage: {
+      setSecret: (id: string, value: string) => {
+        secrets.set(id, value);
+      },
+      getSecret: (id: string) => (secrets.has(id) ? secrets.get(id)! : null),
+      listSecrets: () => Array.from(secrets.keys()),
+      deleteSecret: (id: string) => {
+        secrets.delete(id);
+      },
+    },
+    // No base path: the service takes the explicit `setVaultId` below.
+    vault: { adapter: {} },
+  } as unknown as App;
 }
 
-function makeModel(overrides: Partial<CustomModel> = {}): CustomModel {
-  const base: CustomModel = {
-    name: "gpt-4",
-    provider: "openai",
-    enabled: true,
-  };
-  // Only add properties from overrides that are not undefined
-  Object.entries(overrides).forEach(([key, value]) => {
-    if (value !== undefined) {
-      (base as unknown as Record<string, unknown>)[key] = value;
-    }
-  });
-  return base;
-}
-
-function makeProvider(overrides: Partial<Provider> = {}): Provider {
+function makeProvider(overrides: Partial<Provider>): Provider {
   return {
     providerId: "byok_openai",
     providerType: "openai-compatible",
     displayName: "My OpenAI",
     origin: { kind: "byok" },
-    addedAt: Date.now(),
-    configuredModels: [],
+    addedAt: 0,
+    requiresApiKey: true,
     ...overrides,
-  } as Provider;
-}
-
-/** Load a fresh module instance with isolated mocks. */
-async function loadModule(overrides?: {
-  keychainStore?: Map<string, string>;
-  getDecryptedKey?: (value: string) => Promise<string>;
-}) {
-  jest.resetModules();
-
-  const keychainStore = overrides?.keychainStore ?? new Map<string, string>();
-
-  const keychain = {
-    isAvailable: jest.fn().mockReturnValue(true),
-    getVaultId: jest.fn().mockReturnValue("vault1234"),
-    setVaultId: jest.fn(),
-    hydrateFromKeychain: jest.fn(async (settings: CopilotSettings) => {
-      // Simulate keychain hydration: read secrets from keychainStore
-      const hydrated = structuredClone(settings);
-      const hydratedRecord = hydrated as unknown as Record<string, unknown>;
-
-      // Hydrate top-level secrets
-      for (const key of Object.keys(hydratedRecord)) {
-        if (!isSensitiveKey(key)) continue;
-        const keychainId = `kc-${key}`;
-        const secret = keychainStore.get(keychainId);
-        if (secret) {
-          hydratedRecord[key] = secret;
-        }
-      }
-
-      // Hydrate model secrets
-      for (const listKey of ["activeModels", "activeEmbeddingModels"] as const) {
-        const models = hydratedRecord[listKey];
-        if (!Array.isArray(models)) continue;
-        for (const model of models) {
-          if (!model || typeof model !== "object") continue;
-          const modelRecord = model as Record<string, unknown>;
-          const keychainId = modelKeychainId(modelRecord);
-          const secret = keychainStore.get(keychainId);
-          if (secret) {
-            modelRecord.apiKey = secret;
-          }
-        }
-      }
-
-      // Hydrate provider secrets
-      const providers = hydratedRecord.providers;
-      if (providers && typeof providers === "object") {
-        for (const provider of Object.values(providers)) {
-          if (!provider || typeof provider !== "object") continue;
-          const providerRecord = provider as Record<string, unknown>;
-          const keychainId = providerRecord.apiKeyKeychainId;
-          if (typeof keychainId === "string" && keychainId.startsWith("kc-")) {
-            const secret = keychainStore.get(keychainId);
-            if (secret) providerRecord.apiKey = secret;
-          }
-        }
-      }
-
-      return { settings: hydrated, hadFailures: false };
-    }),
-    persistSecrets: jest.fn((settings: CopilotSettings) => {
-      // Simulate keychain persistence: write secrets to keychainStore
-      const secretEntries: Array<[string, string]> = [];
-      const keychainIdsToDelete: string[] = [];
-      const settingsRecord = settings as unknown as Record<string, unknown>;
-
-      // Persist top-level secrets
-      for (const key of Object.keys(settingsRecord)) {
-        if (!isSensitiveKey(key)) continue;
-        const value = settingsRecord[key];
-        if (typeof value === "string" && value.length > 0 && !value.startsWith("kc-")) {
-          const keychainId = `kc-${key}`;
-          keychainStore.set(keychainId, value);
-          secretEntries.push([keychainId, value]);
-        }
-      }
-
-      // Persist model secrets
-      for (const listKey of ["activeModels", "activeEmbeddingModels"] as const) {
-        const models = settingsRecord[listKey];
-        if (!Array.isArray(models)) continue;
-        for (const model of models) {
-          if (!model || typeof model !== "object") continue;
-          const modelRecord = model as Record<string, unknown>;
-          const apiKey = modelRecord.apiKey;
-          if (typeof apiKey === "string" && apiKey.length > 0 && !apiKey.startsWith("kc-")) {
-            const keychainId = modelKeychainId(modelRecord);
-            keychainStore.set(keychainId, apiKey);
-            secretEntries.push([keychainId, apiKey]);
-          }
-        }
-      }
-
-      // Persist provider secrets
-      const providers = settingsRecord.providers;
-      if (providers && typeof providers === "object") {
-        for (const provider of Object.values(providers)) {
-          if (!provider || typeof provider !== "object") continue;
-          const providerRecord = provider as Record<string, unknown>;
-          const apiKey = providerRecord.apiKey;
-          const keychainId = providerRecord.apiKeyKeychainId;
-          if (typeof apiKey === "string" && apiKey.length > 0 && typeof keychainId === "string") {
-            keychainStore.set(keychainId, apiKey);
-            secretEntries.push([keychainId, apiKey]);
-          }
-        }
-      }
-
-      return { secretEntries, keychainIdsToDelete };
-    }),
-    setSecretById: jest.fn(),
-    deleteSecretById: jest.fn(),
-    getSecret: jest.fn().mockReturnValue(null),
-    getModelSecret: jest.fn().mockReturnValue(null),
   };
-
-  jest.doMock("@/services/keychainService", () => ({
-    KeychainService: { getInstance: jest.fn(() => keychain) },
-    // Production `isSecretKey` is `isSensitiveKey` widened by an exception
-    // list that is currently empty, so the shared heuristic is a faithful fake.
-    isSecretKey: jest.fn((key: string) => isSensitiveKey(key)),
-  }));
-
-  jest.doMock("@/logger", () => ({ logWarn: jest.fn(), logError: jest.fn() }));
-
-  // Reason: do NOT mock getSettings/setSettings. `resetSettings()` calls
-  // `getSettings()` as a module-internal reference, so a `jest.doMock` on the
-  // export table would leave the internal call reading the real jotai store —
-  // reset would see the built-in model list instead of the test's setup. Drive
-  // the real store instead, which is also what production does.
-  const settingsModel = await import("@/settings/model");
-  const persistenceModule = await import("@/services/settingsPersistence");
-
-  /** Seed the real settings store, the way production `setSettings` would. */
-  const seedSettings = (overrides: Partial<CopilotSettings> = {}): CopilotSettings => {
-    settingsModel.settingsStore.set(settingsModel.settingsAtom, makeSettings(overrides));
-    return settingsModel.getSettings();
-  };
-
-  return { settingsModel, persistenceModule, keychain, keychainStore, seedSettings };
 }
-
-afterEach(() => {
-  jest.restoreAllMocks();
-});
 
 describe("model", () => {
   describe("resetSettings()", () => {
-    it("keeps top-level, per-model, provider credentials, and configured models reachable after a reload", async () => {
-      const keychainStore = new Map<string, string>();
-      const { settingsModel, persistenceModule, keychain, seedSettings } = await loadModule({
-        keychainStore,
-      });
+    beforeEach(() => {
+      secrets = new Map();
+      app = makeApp();
+      resetPersistenceState();
+      KeychainService.resetInstance();
+      KeychainService.getInstance(app).setVaultId(VAULT_ID);
+    });
 
-      // Reason: must be valid 8-hex or the loader silently ignores it and falls
-      // back to the mock's "vault1234" — masking whether the persisted
-      // namespace actually round-trips.
-      seedSettings({
-        _keychainVaultId: "a1b2c3d4",
+    it("keeps every credential — top-level, builtin/custom model, BYOK and signed-in Plus provider — reachable through reset, persistence, and a fresh hydration cycle (https://github.com/logancyang/obsidian-copilot-preview/issues/259)", async () => {
+      const builtin = BUILTIN_CHAT_MODELS[0];
+      const builtinRow: CustomModel = {
+        name: builtin.name,
+        provider: builtin.provider,
+        apiKey: "sk-builtin-override",
+        baseUrl: "https://proxy.example.test/v1",
+        enabled: false,
+        temperature: 0.9,
+      };
+      const customRow: CustomModel = {
+        name: "custom-gpt",
+        provider: "openai",
+        apiKey: "sk-model-key",
+        baseUrl: "http://localhost:9999/v1",
+        enabled: true,
+      };
+      // Provider secrets are written by `ProviderRegistry.setApiKey`, outside
+      // the persist path — seed this device's entries directly.
+      secrets.set(BYOK_POINTER, "sk-provider-key");
+      secrets.set(PLUS_POINTER, "lic-12345");
+
+      settingsStore.set(settingsAtom, {
+        ...DEFAULT_SETTINGS,
+        _keychainVaultId: VAULT_ID,
         openAIApiKey: "sk-top-level",
+        azureOpenAIApiInstanceName: "my-instance",
+        isPaidUser: true,
+        plusLicenseKey: "lic-12345",
+        entitlementToken: "test-stale-entitlement-token",
+        showSuggestedPrompts: false,
+        activeModels: [builtinRow, customRow],
         providers: {
-          byok_openai: makeProvider({
-            providerId: "byok_openai",
-            apiKeyKeychainId: "kc-provider-openai",
+          byok_openai: makeProvider({ apiKeyKeychainId: BYOK_POINTER }),
+          plus_1: makeProvider({
+            providerId: "plus_1",
+            displayName: "Copilot",
+            origin: { kind: "copilot-plus" },
+            requiresApiKey: false,
+            apiKeyKeychainId: PLUS_POINTER,
           }),
         },
-        activeModels: [
-          makeModel({ name: "custom-gpt", provider: "openai", apiKey: "sk-model-key" }),
-        ],
         configuredModels: [
           {
             configuredModelId: "cm-1",
             providerId: "byok_openai",
             info: { id: "gpt-4", displayName: "GPT-4" },
-            configuredAt: Date.now(),
+            configuredAt: 0,
           },
         ],
       });
-      // The provider secret lives only in the keychain — the row holds a pointer.
-      keychainStore.set("kc-provider-openai", "sk-provider-key");
 
-      settingsModel.resetSettings();
+      // Baseline persist: the real service moves the seeded plaintext secrets
+      // into the keychain, as a running session would have before reset.
+      await persistSettings(getSettings(), async () => {});
 
-      const afterReset = settingsModel.getSettings();
-      expect(afterReset.providers.byok_openai?.apiKeyKeychainId).toBe("kc-provider-openai");
-      expect(afterReset.activeModels.find((m) => m.name === "custom-gpt")).toBeDefined();
-      expect(afterReset.configuredModels.length).toBe(1);
-      expect(afterReset.configuredModels[0].configuredModelId).toBe("cm-1");
+      resetSettings();
 
       let savedToDisk: CopilotSettings | undefined;
-      await persistenceModule.persistSettings(afterReset, async (data) => {
+      await persistSettings(getSettings(), async (data) => {
         savedToDisk = structuredClone(data);
       });
 
-      // The keychain namespace survives reset: `setSettings` merges rather
-      // than replaces, and neither DEFAULT_SETTINGS nor the preserved slices
-      // carry the key, so the pre-reset value flows through to disk untouched.
-      expect(savedToDisk?._keychainVaultId).toBe("a1b2c3d4");
-      // data.json must never carry the plaintext in keychain-only mode.
+      // data.json never carries plaintext in keychain-only mode, and the
+      // keychain namespace plus the provider pointer survive the reset write.
       expect(savedToDisk?.openAIApiKey).toBe("");
       expect(savedToDisk?.activeModels.find((m) => m.name === "custom-gpt")?.apiKey).toBe("");
+      expect(savedToDisk?._keychainVaultId).toBe(VAULT_ID);
+      expect(savedToDisk?.providers.byok_openai?.apiKeyKeychainId).toBe(BYOK_POINTER);
 
-      const reloaded = await persistenceModule.loadSettingsWithKeychain(
+      // Fresh service instance = the next launch on this device.
+      KeychainService.resetInstance();
+      KeychainService.getInstance(app);
+      const reloaded = await loadSettingsWithKeychain(
+        app,
         savedToDisk,
         async () => {},
         noLegacyBackup
       );
 
-      // Reload adopted the persisted namespace, not the getVaultId() fallback
-      // ("vault1234") — proving preserved keys stay addressable under their
-      // original vault id.
-      expect(keychain.setVaultId).toHaveBeenCalledWith("a1b2c3d4");
+      // Reload adopted the persisted namespace, not a re-derived one.
+      expect(KeychainService.getInstance(app).getVaultId()).toBe(VAULT_ID);
+
+      // Top-level credential and its vendor routing survive; preferences reset.
       expect(reloaded.openAIApiKey).toBe("sk-top-level");
-      expect(reloaded.activeModels.find((m) => m.name === "custom-gpt")?.apiKey).toBe(
-        "sk-model-key"
-      );
-      expect(reloaded.providers.byok_openai?.apiKeyKeychainId).toBe("kc-provider-openai");
-      expect(keychainStore.get("kc-provider-openai")).toBe("sk-provider-key");
-      expect(reloaded.configuredModels.length).toBe(1);
-      expect(reloaded.configuredModels[0].configuredModelId).toBe("cm-1");
-    });
+      expect(reloaded.azureOpenAIApiInstanceName).toBe("my-instance");
+      expect(reloaded.showSuggestedPrompts).toBe(DEFAULT_SETTINGS.showSuggestedPrompts);
 
-    it("keeps a builtin model's key and endpoint through persistence and reload", async () => {
-      const keychainStore = new Map<string, string>();
-      const { settingsModel, persistenceModule, seedSettings } = await loadModule({
-        keychainStore,
-      });
+      // Builtin row: key + endpoint kept, preferences back to defaults.
+      const reloadedBuiltin = reloaded.activeModels.find((m) => m.name === builtin.name);
+      expect(reloadedBuiltin?.apiKey).toBe("sk-builtin-override");
+      expect(reloadedBuiltin?.baseUrl).toBe("https://proxy.example.test/v1");
+      expect(reloadedBuiltin?.enabled).toBe(true);
+      expect(reloadedBuiltin?.temperature).toBeUndefined();
 
-      const builtin = BUILTIN_CHAT_MODELS[0];
-      seedSettings({
-        _keychainVaultId: "a1b2c3d4",
-        activeModels: [
-          makeModel({
-            name: builtin.name,
-            provider: builtin.provider,
-            apiKey: "sk-builtin-override",
-            baseUrl: "https://proxy.example.test/v1",
-            enabled: false,
-            temperature: 0.9,
-          }),
-        ],
-      });
+      // Custom row survives whole.
+      const reloadedCustom = reloaded.activeModels.find((m) => m.name === "custom-gpt");
+      expect(reloadedCustom?.apiKey).toBe("sk-model-key");
+      expect(reloadedCustom?.baseUrl).toBe("http://localhost:9999/v1");
 
-      settingsModel.resetSettings();
+      // BYOK provider row, its keychain entry, and its configured model stay
+      // reachable.
+      expect(reloaded.providers.byok_openai?.apiKeyKeychainId).toBe(BYOK_POINTER);
+      expect(secrets.get(BYOK_POINTER)).toBe("sk-provider-key");
+      expect(reloaded.configuredModels.map((m) => m.configuredModelId)).toEqual(["cm-1"]);
 
-      const afterReset = settingsModel.getSettings();
-      const resetRow = afterReset.activeModels.find(
-        (m) => m.name === builtin.name && m.provider === builtin.provider
-      );
-      expect(resetRow?.apiKey).toBe("sk-builtin-override");
-      expect(resetRow?.baseUrl).toBe("https://proxy.example.test/v1");
-      expect(resetRow?.temperature).toBe(builtin.temperature);
-
-      let savedToDisk: CopilotSettings | undefined;
-      await persistenceModule.persistSettings(afterReset, async (data) => {
-        savedToDisk = structuredClone(data);
-      });
-
-      const reloaded = await persistenceModule.loadSettingsWithKeychain(
-        savedToDisk,
-        async () => {},
-        noLegacyBackup
-      );
-
-      const reloadedRow = reloaded.activeModels.find(
-        (m) => m.name === builtin.name && m.provider === builtin.provider
-      );
-      expect(reloadedRow?.apiKey).toBe("sk-builtin-override");
-      expect(reloadedRow?.baseUrl).toBe("https://proxy.example.test/v1");
+      // Signed-in Plus: paid state and the provider row survive so the
+      // settings subscriber never reads reset as sign-out; the entitlement
+      // token still resets (its identity binding is invalidated).
+      expect(reloaded.isPaidUser).toBe(true);
+      expect(reloaded.plusLicenseKey).toBe("lic-12345");
+      expect(reloaded.providers.plus_1?.apiKeyKeychainId).toBe(PLUS_POINTER);
+      expect(secrets.get(PLUS_POINTER)).toBe("lic-12345");
+      expect(reloaded.entitlementToken).toBe(DEFAULT_SETTINGS.entitlementToken);
     });
   });
 });

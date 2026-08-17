@@ -1074,8 +1074,8 @@ describe("model", () => {
     it("preserves the top-level vendor config a retained key needs to reach its service", () => {
       // Reason: these are not secrets, so the secret-key heuristic misses them,
       // but a key without them is unusable — Azure composes its request URL
-      // from the instance/deployment/version trio, Bedrock signs for a region,
-      // and a zeroed Copilot expiry forces a refresh that fails while offline.
+      // from the instance/deployment/version trio, and Bedrock signs for a
+      // region.
       const vendorConfig = {
         openAIOrgId: "org-123",
         azureOpenAIApiInstanceName: "my-instance",
@@ -1083,7 +1083,6 @@ describe("model", () => {
         azureOpenAIApiVersion: "2025-01-01-preview",
         azureOpenAIApiEmbeddingDeploymentName: "embed-deploy",
         amazonBedrockRegion: "eu-west-1",
-        githubCopilotTokenExpiresAt: 1893456000000,
       };
       settingsStore.set(settingsAtom, { ...DEFAULT_SETTINGS, ...vendorConfig });
 
@@ -1100,13 +1099,36 @@ describe("model", () => {
       settingsStore.set(settingsAtom, {
         ...DEFAULT_SETTINGS,
         plusLicenseKey: "lic-12345",
-        entitlementToken: "eyJhbGciOiJFUzI1NiJ9.stale",
+        entitlementToken: "test-stale-entitlement-token",
       });
 
       resetSettings();
 
       const after = settingsStore.get(settingsAtom);
       expect(after.plusLicenseKey).toBe("lic-12345");
+      expect(after.entitlementToken).toBe(DEFAULT_SETTINGS.entitlementToken);
+    });
+
+    it("keeps a signed-in user's paid state so reset never reads as sign-out (https://github.com/logancyang/obsidian-copilot-preview/issues/259)", () => {
+      // Reason: the settings subscriber treats an `isPaidUser` flip as
+      // sign-out and tears down the Plus provider, its models, and its
+      // keychain entry — destroying exactly what reset preserves. The strict
+      // `isPlusUser` flag still resets: its proof (the entitlement token) is
+      // dropped, and the next validation re-derives it.
+      settingsStore.set(settingsAtom, {
+        ...DEFAULT_SETTINGS,
+        isPaidUser: true,
+        isPlusUser: true,
+        plusLicenseKey: "lic-12345",
+        entitlementToken: "test-stale-entitlement-token",
+      });
+
+      resetSettings();
+
+      const after = settingsStore.get(settingsAtom);
+      expect(after.isPaidUser).toBe(true);
+      expect(after.plusLicenseKey).toBe("lic-12345");
+      expect(after.isPlusUser).toBe(DEFAULT_SETTINGS.isPlusUser);
       expect(after.entitlementToken).toBe(DEFAULT_SETTINGS.entitlementToken);
     });
 

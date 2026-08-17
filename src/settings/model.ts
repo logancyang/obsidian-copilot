@@ -657,16 +657,14 @@ const TOP_LEVEL_CREDENTIAL_COMPANION_FIELDS = [
   "azureOpenAIApiVersion",
   "azureOpenAIApiEmbeddingDeploymentName",
   "amazonBedrockRegion",
-  "githubCopilotTokenExpiresAt",
 ] as const satisfies readonly (keyof CopilotSettings)[];
 
 /**
  * The top-level counterpart of {@link MODEL_CREDENTIAL_BUNDLE_FIELDS}.
  *
  * Kept separate from the model list rather than merged into one array because
- * the two address different objects with different field names, types, and
- * lifetimes — `githubCopilotTokenExpiresAt` is a number that only exists at
- * top level, `enableCors` only exists per row.
+ * the two address different objects with different field names — the Azure
+ * deployment trio only exists at top level, `enableCors` only exists per row.
  */
 const TOP_LEVEL_CREDENTIAL_BUNDLE_FIELDS: readonly string[] = [
   ...TOP_LEVEL_SECRET_FIELDS.filter((field) => field !== SESSION_PROOF_FIELD),
@@ -679,7 +677,7 @@ const TOP_LEVEL_CREDENTIAL_BUNDLE_FIELDS: readonly string[] = [
  * Reason: the bundles are almost entirely strings, and the string check is what
  * stops a corrupted or cross-version value (say `amazonBedrockRegion: {}` from
  * a hand-edited `data.json`) from surviving reset and then throwing at its
- * consumer. Only two fields are legitimately non-string, so they are named here
+ * consumer. Only `enableCors` is legitimately non-string, so it is named here
  * rather than widening the check for everything.
  *
  * @param field - Bundle field being considered, which decides the expected type.
@@ -687,9 +685,6 @@ const TOP_LEVEL_CREDENTIAL_BUNDLE_FIELDS: readonly string[] = [
  */
 function carriesConfiguration(field: string, value: unknown): boolean {
   if (field === "enableCors") return typeof value === "boolean";
-  if (field === "githubCopilotTokenExpiresAt") {
-    return typeof value === "number" && Number.isFinite(value);
-  }
   return typeof value === "string" && value.length > 0;
 }
 
@@ -859,6 +854,16 @@ export function resetSettings(): void {
   const defaultSettingsWithBuiltIns = {
     ...DEFAULT_SETTINGS,
     ...preservedTopLevelSecrets,
+    // Reason: reset is not a sign-out event. Flipping `isPaidUser` to the
+    // default `false` reads as sign-out to the settings subscriber, whose
+    // Plus reconcile tears down the preserved Plus provider, its models, and
+    // its keychain entry (`plusSyncNeeded` → `unregisterPlusProvider`). Keep
+    // the last server-confirmed paid state until the preserved license is
+    // revalidated. The strict `isPlusUser` flag is NOT kept: reset drops the
+    // signed entitlement token, and the strict gate must never trust a bare
+    // boolean without that proof — the next validation re-derives it.
+    // https://github.com/logancyang/obsidian-copilot-preview/issues/259
+    isPaidUser: current.isPaidUser,
     activeModels: preserveModelCredentials(
       BUILTIN_CHAT_MODELS.map((model) => ({ ...model, enabled: true })),
       current.activeModels ?? []
