@@ -964,7 +964,7 @@ describe("model", () => {
       expect(new Set(after.copilotRootHistory)).toEqual(new Set(["copilot", "ai", "team-ai"]));
     });
 
-    it("preserves providers with keychain credentials", () => {
+    it("preserves providers with keychain credentials (https://github.com/logancyang/obsidian-copilot-preview/issues/259)", () => {
       settingsStore.set(settingsAtom, {
         ...DEFAULT_SETTINGS,
         providers: {
@@ -1032,7 +1032,7 @@ describe("model", () => {
       }
     );
 
-    it("preserves every custom model, including rows that carry no key", () => {
+    it("preserves every custom model, including rows that carry no key (https://github.com/logancyang/obsidian-copilot-preview/issues/259)", () => {
       // Reason: the keychain is the sole secret store, so an empty in-memory
       // apiKey may just mean this session's keychain read failed. Dropping the
       // row would strand the entry with no identity left to reattach it to.
@@ -1080,7 +1080,7 @@ describe("model", () => {
       expect(after.googleApiKey).toBe(DEFAULT_SETTINGS.googleApiKey);
     });
 
-    it("preserves the top-level vendor config a retained key needs to reach its service", () => {
+    it("preserves the top-level vendor config a retained key needs to reach its service (https://github.com/logancyang/obsidian-copilot-preview/issues/259)", () => {
       // Reason: these are not secrets, so the secret-key heuristic misses them,
       // but a key without them is unusable — Azure composes its request URL
       // from the instance/deployment/version trio, and Bedrock signs for a
@@ -1100,7 +1100,7 @@ describe("model", () => {
       expect(settingsStore.get(settingsAtom)).toMatchObject(vendorConfig);
     });
 
-    it("drops the entitlement token, whose identity binding reset invalidates", () => {
+    it("drops the entitlement token, whose identity binding reset invalidates (https://github.com/logancyang/obsidian-copilot-preview/issues/259)", () => {
       // Reason: `verifyEntitlement` checks the token against `settings.userId`,
       // and reset replaces that with a fresh uuid — a carried-over token could
       // never verify again. `plusLicenseKey` is the credential worth keeping;
@@ -1146,7 +1146,7 @@ describe("model", () => {
       expect(after.entitlementToken).toBe(DEFAULT_SETTINGS.entitlementToken);
     });
 
-    it("drops a bundle value whose type its consumer cannot handle", () => {
+    it("drops a bundle value whose type its consumer cannot handle (https://github.com/logancyang/obsidian-copilot-preview/issues/259)", () => {
       // Reason: a hand-edited or cross-version `data.json` can hold a non-string
       // where a string is expected. Carrying it through reset would move the
       // failure to the consumer — chatModelManager calls `.trim()` on the region.
@@ -1163,7 +1163,7 @@ describe("model", () => {
       expect(after.amazonBedrockRegion).toBe(DEFAULT_SETTINGS.amazonBedrockRegion);
     });
 
-    it("preserves the Azure routing fields on a builtin embedding row alongside its key", () => {
+    it("preserves the Azure routing fields on a builtin embedding row alongside its key (https://github.com/logancyang/obsidian-copilot-preview/issues/259)", () => {
       // Reason: Azure is the one builtin row whose request URL is assembled
       // from per-row fields (embeddingManager reads instance + embedding
       // deployment + version). Keeping only the key would leave it pointed at
@@ -1220,7 +1220,7 @@ describe("model", () => {
       expect(restored!.apiKey).toBe(BUILTIN_CHAT_MODELS[0].apiKey);
     });
 
-    it("preserves configured models belonging to preserved providers", () => {
+    it("preserves configured models belonging to preserved providers (https://github.com/logancyang/obsidian-copilot-preview/issues/259)", () => {
       const providerId1 = "prov-with-key";
       const providerId2 = "prov-no-key";
       settingsStore.set(settingsAtom, {

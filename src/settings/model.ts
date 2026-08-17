@@ -619,6 +619,7 @@ export function getSettings(): Readonly<CopilotSettings> {
  * embedding row. Azure's *chat* deployment and `bedrockRegion` are absent
  * because no builtin row uses those providers; custom rows survive whole and
  * never consult this list.
+ * https://github.com/logancyang/obsidian-copilot-preview/issues/259
  */
 const MODEL_CREDENTIAL_BUNDLE_FIELDS = [
   ...MODEL_SECRET_FIELDS,
@@ -638,6 +639,7 @@ const MODEL_CREDENTIAL_BUNDLE_FIELDS = [
  * in-process entitlement looking live while the Plus provider is unregistered.
  * `plusLicenseKey` is the real credential and is preserved; the next license
  * check re-issues this token.
+ * https://github.com/logancyang/obsidian-copilot-preview/issues/259
  */
 const SESSION_PROOF_FIELD = "entitlementToken";
 
@@ -738,6 +740,7 @@ function preserveModelCredentials(
   // read failed". Dropping the row on that signal would strand the keychain
   // entry with no `name|provider` identity left to reattach it to. Reset is not
   // a cleanup tool, so it errs toward keeping rows.
+  // https://github.com/logancyang/obsidian-copilot-preview/issues/259
   const customModels = currentModels.filter(
     (model) => !defaultKeys.has(getModelKeyFromModel(model))
   );
@@ -755,6 +758,7 @@ function preserveModelCredentials(
  * credential. Whole rows survive because `baseUrl` / `extras` / `providerType`
  * are what make the key usable; keyless rows (Ollama, LMStudio) carry nothing
  * and are reset away.
+ * https://github.com/logancyang/obsidian-copilot-preview/issues/259
  *
  * @param providers - The pre-reset provider rows.
  */
