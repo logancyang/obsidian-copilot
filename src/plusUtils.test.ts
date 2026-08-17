@@ -779,6 +779,7 @@ describe("plusUtils", () => {
           isPaidUser: true,
           isPlusUser: false,
           entitlementToken: "",
+          entitlementExpiresAt: FUTURE_EXP_SECONDS * 1000,
         })
       );
       mockValidateLicenseKey.mockRejectedValue(new Error("net::ERR_INTERNET_DISCONNECTED"));
@@ -830,6 +831,26 @@ describe("plusUtils", () => {
       // stops naming a plan whose entitlement has already closed.
       await verifySessionClaims({ plan: "plus", tier: "plus", exp: PAST_EXP_SECONDS });
       mockGetSettings.mockReturnValue(tokenBackedSettings({ plusLicenseKey: "key" }));
+
+      const { result } = renderHook(() => useLicenseState());
+
+      expect(result.current).toEqual({ status: "inactive" });
+    });
+
+    it("reports inactive once the retained post-reset expiry has passed (https://github.com/logancyang/obsidian-copilot-preview/issues/259)", () => {
+      // The post-reset shape: reset kept isPaidUser and the original expiry
+      // but dropped the token, so no signed claims exist. The retained expiry
+      // is what keeps this display time-bounded — without it a reset user
+      // offline would read Active forever.
+      mockGetSettings.mockReturnValue(
+        buildSettings({
+          plusLicenseKey: "key",
+          isPaidUser: true,
+          isPlusUser: false,
+          entitlementToken: "",
+          entitlementExpiresAt: PAST_EXP_SECONDS * 1000,
+        })
+      );
 
       const { result } = renderHook(() => useLicenseState());
 

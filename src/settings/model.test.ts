@@ -994,34 +994,43 @@ describe("model", () => {
       expect(after.providers.byok_anthropic).toBeUndefined();
     });
 
-    it("preserves a builtin model's key and endpoint while resetting its preferences", () => {
-      // Reason: the endpoint has to survive alongside the key. Resetting only
-      // baseUrl would leave a proxy credential pointed at the provider's
-      // default host, sending the user's key somewhere they never configured.
-      const customGpt4: CustomModel = {
-        ...BUILTIN_CHAT_MODELS[0],
-        enabled: false,
-        apiKey: "sk-saved",
-        baseUrl: "https://proxy.example.test/v1",
-        temperature: 0.9,
-      };
-      settingsStore.set(settingsAtom, {
-        ...DEFAULT_SETTINGS,
-        activeModels: [customGpt4],
-      });
+    it.each([false, true])(
+      "preserves a builtin model's credential routing, including enableCors=%s, while resetting its preferences (https://github.com/logancyang/obsidian-copilot-preview/issues/259)",
+      (enableCors) => {
+        // Reason: the endpoint has to survive alongside the key. Resetting only
+        // baseUrl would leave a proxy credential pointed at the provider's
+        // default host, sending the user's key somewhere they never configured.
+        // `enableCors` is the one boolean in the bundle — `false` surviving is
+        // exactly what its dedicated `carriesConfiguration` branch exists for.
+        const customGpt4: CustomModel = {
+          ...BUILTIN_CHAT_MODELS[0],
+          enabled: false,
+          apiKey: "sk-saved",
+          baseUrl: "https://proxy.example.test/v1",
+          openAIOrgId: "org-model",
+          enableCors,
+          temperature: 0.9,
+        };
+        settingsStore.set(settingsAtom, {
+          ...DEFAULT_SETTINGS,
+          activeModels: [customGpt4],
+        });
 
-      resetSettings();
+        resetSettings();
 
-      const after = settingsStore.get(settingsAtom);
-      const restored = after.activeModels.find(
-        (m) => getModelKeyFromModel(m) === getModelKeyFromModel(BUILTIN_CHAT_MODELS[0])
-      );
-      expect(restored).toBeDefined();
-      expect(restored!.apiKey).toBe("sk-saved");
-      expect(restored!.baseUrl).toBe("https://proxy.example.test/v1");
-      expect(restored!.enabled).toBe(BUILTIN_CHAT_MODELS[0].enabled);
-      expect(restored!.temperature).toBe(BUILTIN_CHAT_MODELS[0].temperature);
-    });
+        const after = settingsStore.get(settingsAtom);
+        const restored = after.activeModels.find(
+          (m) => getModelKeyFromModel(m) === getModelKeyFromModel(BUILTIN_CHAT_MODELS[0])
+        );
+        expect(restored).toBeDefined();
+        expect(restored!.apiKey).toBe("sk-saved");
+        expect(restored!.baseUrl).toBe("https://proxy.example.test/v1");
+        expect(restored!.openAIOrgId).toBe("org-model");
+        expect(restored!.enableCors).toBe(enableCors);
+        expect(restored!.enabled).toBe(BUILTIN_CHAT_MODELS[0].enabled);
+        expect(restored!.temperature).toBe(BUILTIN_CHAT_MODELS[0].temperature);
+      }
+    );
 
     it("preserves every custom model, including rows that carry no key", () => {
       // Reason: the keychain is the sole secret store, so an empty in-memory
@@ -1121,12 +1130,17 @@ describe("model", () => {
         isPlusUser: true,
         plusLicenseKey: "lic-12345",
         entitlementToken: "test-stale-entitlement-token",
+        entitlementExpiresAt: 4_000_000_000_000,
       });
 
       resetSettings();
 
       const after = settingsStore.get(settingsAtom);
       expect(after.isPaidUser).toBe(true);
+      // The expiry travels with the paid flag: it is tighten-only, and
+      // zeroing it would leave the license UI showing Active forever while
+      // offline.
+      expect(after.entitlementExpiresAt).toBe(4_000_000_000_000);
       expect(after.plusLicenseKey).toBe("lic-12345");
       expect(after.isPlusUser).toBe(DEFAULT_SETTINGS.isPlusUser);
       expect(after.entitlementToken).toBe(DEFAULT_SETTINGS.entitlementToken);

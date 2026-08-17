@@ -679,6 +679,7 @@ const TOP_LEVEL_CREDENTIAL_BUNDLE_FIELDS: readonly string[] = [
  * a hand-edited `data.json`) from surviving reset and then throwing at its
  * consumer. Only `enableCors` is legitimately non-string, so it is named here
  * rather than widening the check for everything.
+ * https://github.com/logancyang/obsidian-copilot-preview/issues/259
  *
  * @param field - Bundle field being considered, which decides the expected type.
  * @param value - The pre-reset value.
@@ -858,12 +859,17 @@ export function resetSettings(): void {
     // default `false` reads as sign-out to the settings subscriber, whose
     // Plus reconcile tears down the preserved Plus provider, its models, and
     // its keychain entry (`plusSyncNeeded` → `unregisterPlusProvider`). Keep
-    // the last server-confirmed paid state until the preserved license is
-    // revalidated. The strict `isPlusUser` flag is NOT kept: reset drops the
-    // signed entitlement token, and the strict gate must never trust a bare
-    // boolean without that proof — the next validation re-derives it.
+    // the last server-confirmed paid state AND its original expiry bound until
+    // the preserved license is revalidated — the expiry is tighten-only data
+    // (`isEntitlementExpired`), so keeping it can only close the license UI
+    // earlier, never hold it open; zeroing it would leave a tokenless
+    // paid-Active display with no time bound while offline. The strict
+    // `isPlusUser` flag is NOT kept: reset drops the signed entitlement
+    // token, and the strict gate must never trust a bare boolean without
+    // that proof — the next validation re-derives it.
     // https://github.com/logancyang/obsidian-copilot-preview/issues/259
     isPaidUser: current.isPaidUser,
+    entitlementExpiresAt: current.entitlementExpiresAt,
     activeModels: preserveModelCredentials(
       BUILTIN_CHAT_MODELS.map((model) => ({ ...model, enabled: true })),
       current.activeModels ?? []
