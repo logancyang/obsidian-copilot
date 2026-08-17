@@ -127,8 +127,8 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
 
     // scorecard: only _streamResponseChunks uses this — it reads the response body
     // incrementally, which requestUrl cannot do because it buffers the whole response.
-    // Non-streaming calls go through requestUrl in _generate. When no implementation
-    // is available, _streamResponseChunks degrades to the buffered _generate path.
+    // _generate goes through safeFetchNoThrow instead. When no implementation is
+    // available, _streamResponseChunks degrades to the buffered _generate path.
     this.fetchImpl = fetchImplementation ?? window.fetch?.bind(window);
 
     if ((baseParams as { streaming?: boolean }).streaming && !streamEndpoint) {
