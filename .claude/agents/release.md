@@ -58,7 +58,6 @@ Before doing any version bumping, validate the repo is releasable. Stop and surf
    ```
 
    Confirm that:
-
    - `isDesktopOnly` is declared (currently `false`; do not silently change this).
    - `minAppVersion` matches the Obsidian APIs the code actually uses. If a commit since the last release introduced a call that needs a newer minimum, the `minAppVersion` bump belongs in its own dedicated PR with its own review window, not bundled inside this release PR. Stop and tell the user.
 
@@ -226,6 +225,12 @@ EOF
 ### Step 8: Report Back
 
 Share the PR URL with the user and summarize what was included in the release.
+
+Remind the user that after this PR merges and the workflow publishes the
+release, `/brevilabs-release-sweep` closes out the Brevilabs board: it closes
+each issue the release carried with a comment naming the version and moves its
+card from `Wait for release` to `Done`. Merging the release PR is a human
+move, so the sweep runs in a later session — it cannot run from this one.
 
 ## Important Rules
 
