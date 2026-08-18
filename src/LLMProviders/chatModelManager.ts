@@ -15,7 +15,7 @@ import {
   getSettings,
   subscribeToSettingsChange,
 } from "@/settings/model";
-import { err2String, findCustomModel, getModelInfo, ModelInfo, safeFetch } from "@/utils";
+import { findCustomModel, getModelInfo, ModelInfo, safeFetch } from "@/utils";
 import { googleHostBaseUrl, groqHostBaseUrl } from "@/utils/providerBaseUrl";
 import { ChatAnthropic } from "@langchain/anthropic";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
@@ -27,7 +27,6 @@ import { ChatOllama } from "@langchain/ollama";
 import { ChatOpenAI } from "@langchain/openai";
 import { ChatXAI } from "@langchain/xai";
 import { MissingApiKeyError, MissingPlusLicenseError } from "@/error";
-import { Notice } from "obsidian";
 import { ChatOpenRouter } from "./ChatOpenRouter";
 import { ChatLMStudio } from "./ChatLMStudio";
 import { BedrockChatModel, type BedrockChatModelFields } from "./BedrockChatModel";
@@ -1022,70 +1021,6 @@ export default class ChatModelManager {
       ChatModelManager.activeModel = null;
       ChatModelManager.activeModelSource = null;
       logInfo("Failed to reinitialize model due to missing API key");
-    }
-  }
-
-  async ping(model: CustomModel): Promise<boolean> {
-    const tryPing = async (enableCors: boolean) => {
-      const modelToTest = { ...model, enableCors };
-      const modelConfig = await this.getModelConfig(modelToTest);
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the catch binding documents the ignored lookup failure
-      const { streaming, maxTokens, maxCompletionTokens, ...pingConfig } = modelConfig;
-
-      // Check model capabilities to determine appropriate maxTokens
-      const modelInfo = getModelInfo(model.name);
-
-      // For thinking-enabled models, maxTokens must be greater than thinking.budget_tokens (2048)
-      // For other models, use minimal tokens for a fast ping
-      const pingMaxTokens = modelInfo.isThinkingEnabled ? 4096 : 30;
-      const tokenConfig = { maxTokens: pingMaxTokens };
-
-      const constructorConfig: Record<string, unknown> = {
-        ...pingConfig,
-        ...tokenConfig,
-      };
-
-      if (
-        modelInfo.isGPT5 &&
-        ((model.provider as ChatModelProviders) === ChatModelProviders.OPENAI ||
-          (model.provider as ChatModelProviders) === ChatModelProviders.OPENAI_FORMAT)
-      ) {
-        constructorConfig.useResponsesApi = true;
-      }
-
-      // For LM Studio with Responses API, ping via ChatLMStudio so the
-      // connectivity check hits the same /v1/responses endpoint used in chats.
-      const testModel =
-        (model.provider as ChatModelProviders) === ChatModelProviders.LM_STUDIO &&
-        model.useResponsesApi !== false
-          ? new ChatLMStudio(constructorConfig)
-          : new (this.getProviderConstructor(modelToTest))(constructorConfig);
-      await testModel.invoke([{ role: "user", content: "hello" }], {
-        timeout: 8000,
-      });
-    };
-
-    try {
-      // First try without CORS
-      await tryPing(false);
-      return true;
-    } catch (firstError) {
-      logInfo("First ping attempt failed, retrying with CORS enabled.");
-      try {
-        // Second try with CORS
-        await tryPing(true);
-        new Notice(
-          "Connection successful, but requires CORS to be enabled. Please enable CORS for this model once you add it above."
-        );
-        return true;
-      } catch (error) {
-        const msg =
-          "\nwithout CORS Error: " +
-          err2String(firstError) +
-          "\nwith CORS Error: " +
-          err2String(error);
-        throw new Error(msg);
-      }
     }
   }
 

@@ -7,9 +7,6 @@ import {
   ALLOWED_NOTE_CONTEXT_EXTENSIONS,
   ModelCapability,
   NOMIC_EMBED_TEXT,
-  Provider,
-  ProviderInfo,
-  ProviderMetadata,
   TEXT_READABLE_EXTENSIONS,
 } from "@/constants";
 import { logInfo, logWarn } from "@/logger";
@@ -889,14 +886,6 @@ export function findCustomModel(modelKey: string, activeModels: CustomModel[]): 
 // callers that hard-block on missing vision must treat undefined as "unknown", not "no".
 export function modelSupportsVision(model: CustomModel): boolean {
   return !!model.capabilities?.includes(ModelCapability.VISION);
-}
-
-export function getProviderInfo(provider: string): ProviderMetadata {
-  const info = ProviderInfo[provider as Provider];
-  return {
-    ...info,
-    label: info.label || provider,
-  };
 }
 
 /**
