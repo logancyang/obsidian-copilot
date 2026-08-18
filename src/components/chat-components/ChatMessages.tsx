@@ -1,5 +1,6 @@
 import { BottomLoadingIndicator } from "@/components/chat-components/BottomLoadingIndicator";
 import ChatSingleMessage from "@/components/chat-components/ChatSingleMessage";
+import { ScrollToBottomButton } from "@/components/chat-components/ScrollToBottomButton";
 import { USER_SENDER } from "@/constants";
 import { useChatScrolling } from "@/hooks/useChatScrolling";
 import { ChatMessage } from "@/types/message";
@@ -45,7 +46,13 @@ const ChatMessages = memo(
     onDelete,
   }: ChatMessagesProps) => {
     // Chat scrolling behavior
-    const { containerMinHeight, scrollContainerCallbackRef, getMessageKey } = useChatScrolling({
+    const {
+      containerMinHeight,
+      scrollContainerCallbackRef,
+      getMessageKey,
+      isAtBottom,
+      scrollToBottom,
+    } = useChatScrolling({
       chatHistory,
     });
 
@@ -61,7 +68,7 @@ const ChatMessages = memo(
     }
 
     return (
-      <div className="tw-flex tw-h-full tw-flex-1 tw-flex-col tw-overflow-hidden">
+      <div className="tw-relative tw-flex tw-h-full tw-flex-1 tw-flex-col tw-overflow-hidden">
         <div
           ref={scrollContainerCallbackRef}
           data-testid="chat-messages"
@@ -127,6 +134,9 @@ const ChatMessages = memo(
             </div>
           ) : null}
         </div>
+        {/* Jump-back affordance for long chats; see
+            https://github.com/logancyang/obsidian-copilot-preview/issues/329 */}
+        {!isAtBottom && <ScrollToBottomButton onClick={() => scrollToBottom()} />}
       </div>
     );
   }
