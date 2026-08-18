@@ -10,14 +10,26 @@ interface UseChatScrollingReturn {
   containerMinHeight: number;
   scrollContainerCallbackRef: (node: HTMLDivElement | null) => void;
   getMessageKey: (message: ChatMessage, index: number) => string;
+  /** True while the viewport rests within a small threshold of the newest message. */
+  isAtBottom: boolean;
+  /** Scrolls the message list to its end. */
+  scrollToBottom: (behavior?: "smooth" | "instant") => void;
 }
+
+// Tolerance below which the viewport still counts as "at the bottom", so
+// sub-pixel rounding and momentum-scroll overshoot don't flicker the
+// scroll-to-bottom affordance (same threshold as QuickAskPanel's pin logic).
+const AT_BOTTOM_THRESHOLD_PX = 24;
 
 export const useChatScrolling = ({
   chatHistory,
 }: UseChatScrollingOptions): UseChatScrollingReturn => {
   const [containerMinHeight, setContainerMinHeight] = useState(0);
+  const [isAtBottom, setIsAtBottom] = useState(true);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
+  const scrollListenerCleanupRef = useRef<(() => void) | null>(null);
+  const pendingScrollFrameRef = useRef<{ win: Window; id: number } | null>(null);
 
   const lastUserMessageIndex = useMemo(() => {
     for (let index = chatHistory.length - 1; index >= 0; index--) {
@@ -68,6 +80,37 @@ export const useChatScrolling = ({
     return minHeight;
   }, [chatHistory, getMessageKey, lastUserMessageIndex]);
 
+  // Recompute whether the viewport is resting at the newest message. React
+  // bails out of re-rendering when the boolean hasn't changed.
+  const updateIsAtBottom = useCallback(() => {
+    const node = scrollContainerRef.current;
+    if (!node) return;
+    setIsAtBottom(node.scrollHeight - node.scrollTop - node.clientHeight <= AT_BOTTOM_THRESHOLD_PX);
+  }, []);
+
+  // Coalesce scroll events into one at-bottom check per animation frame.
+  // Obsidian popouts render in their own window, so the frame must come from
+  // the container's owner window, not the main window's scheduler.
+  const scheduleIsAtBottomCheck = useCallback(() => {
+    const node = scrollContainerRef.current;
+    if (!node || pendingScrollFrameRef.current) return;
+    const win = node.win ?? window;
+    const id = win.requestAnimationFrame(() => {
+      pendingScrollFrameRef.current = null;
+      updateIsAtBottom();
+    });
+    pendingScrollFrameRef.current = { win, id };
+  }, [updateIsAtBottom]);
+
+  const detachScrollTracking = useCallback(() => {
+    scrollListenerCleanupRef.current?.();
+    scrollListenerCleanupRef.current = null;
+    if (pendingScrollFrameRef.current) {
+      pendingScrollFrameRef.current.win.cancelAnimationFrame(pendingScrollFrameRef.current.id);
+      pendingScrollFrameRef.current = null;
+    }
+  }, []);
+
   // Memoized callback ref that gets called only when the DOM element actually changes
   const scrollContainerCallbackRef = useCallback(
     (node: HTMLDivElement | null) => {
@@ -81,6 +124,7 @@ export const useChatScrolling = ({
         resizeObserverRef.current.disconnect();
         resizeObserverRef.current = null;
       }
+      detachScrollTracking();
 
       // Update the ref
       scrollContainerRef.current = node;
@@ -118,9 +162,22 @@ export const useChatScrolling = ({
         }
 
         resizeObserverRef.current = resizeObserver;
+
+        node.addEventListener("scroll", scheduleIsAtBottomCheck, { passive: true });
+        scrollListenerCleanupRef.current = () =>
+          node.removeEventListener("scroll", scheduleIsAtBottomCheck);
+        updateIsAtBottom();
       }
     },
-    [calculateDynamicMinHeight, chatHistory, getMessageKey, lastUserMessageIndex]
+    [
+      calculateDynamicMinHeight,
+      chatHistory,
+      detachScrollTracking,
+      getMessageKey,
+      lastUserMessageIndex,
+      scheduleIsAtBottomCheck,
+      updateIsAtBottom,
+    ]
   );
 
   // Recalculate min-height when chat history changes (new messages)
@@ -131,14 +188,24 @@ export const useChatScrolling = ({
     }
   }, [chatHistory, calculateDynamicMinHeight]);
 
-  // Cleanup ResizeObserver on unmount
+  // Streaming appends grow scrollHeight without firing scroll events, so the
+  // at-bottom flag would go stale mid-generation and the scroll-to-bottom
+  // affordance would never appear. Re-check after every render; the setState
+  // inside bails out unless the boolean actually flips.
+  // https://github.com/logancyang/obsidian-copilot-preview/issues/329
+  useEffect(() => {
+    updateIsAtBottom();
+  });
+
+  // Cleanup ResizeObserver and scroll tracking on unmount
   useEffect(() => {
     return () => {
+      detachScrollTracking();
       if (resizeObserverRef.current) {
         resizeObserverRef.current.disconnect();
       }
     };
-  }, []);
+  }, [detachScrollTracking]);
 
   // Scroll to bottom function
   const scrollToBottom = useCallback((behavior: "smooth" | "instant" = "smooth") => {
@@ -189,5 +256,7 @@ export const useChatScrolling = ({
     containerMinHeight,
     scrollContainerCallbackRef,
     getMessageKey,
+    isAtBottom,
+    scrollToBottom,
   };
 };

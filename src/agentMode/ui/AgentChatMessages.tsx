@@ -5,6 +5,7 @@ import { PlanProposalCard } from "@/agentMode/ui/PlanProposalCard";
 import { ToolPermissionCard } from "@/agentMode/ui/ToolPermissionCard";
 import { AgentTurnDurationIndicator } from "@/agentMode/ui/AgentTurnDurationIndicator";
 import ChatSingleMessage from "@/components/chat-components/ChatSingleMessage";
+import { ScrollToBottomButton } from "@/components/chat-components/ScrollToBottomButton";
 import { USER_SENDER } from "@/constants";
 import { useChatScrolling } from "@/hooks/useChatScrolling";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
@@ -68,7 +69,13 @@ const AgentChatMessages = memo(
   }: AgentChatMessagesProps) => {
     const visible = useMemo(() => messages.filter((m) => m.isVisible), [messages]);
     const adapted = useMemo(() => visible.map(toChatMessageView), [visible]);
-    const { containerMinHeight, scrollContainerCallbackRef, getMessageKey } = useChatScrolling({
+    const {
+      containerMinHeight,
+      scrollContainerCallbackRef,
+      getMessageKey,
+      isAtBottom,
+      scrollToBottom,
+    } = useChatScrolling({
       chatHistory: adapted,
     });
 
@@ -110,7 +117,7 @@ const AgentChatMessages = memo(
     }
 
     return (
-      <div className="tw-flex tw-h-full tw-flex-1 tw-flex-col tw-overflow-hidden">
+      <div className="tw-relative tw-flex tw-h-full tw-flex-1 tw-flex-col tw-overflow-hidden">
         <div
           ref={scrollContainerCallbackRef}
           data-testid="chat-messages"
@@ -219,6 +226,9 @@ const AgentChatMessages = memo(
           {inlineToolPermissionCards}
           {inlineAskUserQuestionCards}
         </div>
+        {/* Jump-back affordance for long chats; see
+            https://github.com/logancyang/obsidian-copilot-preview/issues/329 */}
+        {!isAtBottom && <ScrollToBottomButton onClick={() => scrollToBottom()} />}
       </div>
     );
   }
