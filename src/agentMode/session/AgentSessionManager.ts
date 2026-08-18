@@ -2793,7 +2793,20 @@ export class AgentSessionManager {
 
     session.loadDisplayMessages(loaded.messages);
     session.seedSessionUsage(loaded.usage);
-    if (loaded.label) session.setLabel(loaded.label);
+    if (loaded.label) {
+      // Frontmatter records the label but not who set it, and a plain setLabel()
+      // stamps it a user rename — which applyAgentLabel and pollSessionTitle
+      // both refuse to touch, freezing a summarizing backend's title after a
+      // reopen. The device-local index does record the source, so read it there.
+      // Downgrade only on positive evidence: unlike the index's own
+      // "absent ≙ agent-sourced" default, a note synced from another device has
+      // no local entry at all, and its title may be a rename we must not clobber.
+      // https://github.com/logancyang/obsidian-copilot-preview/issues/90002
+      const indexed = loaded.sessionId
+        ? await this.opts.sessionIndex?.getEntry(loaded.backendId, loaded.sessionId)
+        : null;
+      session.restoreLabel(loaded.label, indexed?.titleSource === "agent" ? "agent" : "user");
+    }
     this.getSessionState(session.internalId).path = file.path;
     if (loaded.sessionId) {
       // Keep the native twin's recency in step with the markdown side so the

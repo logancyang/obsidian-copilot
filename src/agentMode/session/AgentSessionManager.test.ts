@@ -30,12 +30,14 @@ import {
 import type { ProjectFileRecord } from "@/projects/type";
 import { getProjectContextSignature } from "@/projects/projectContextSignature";
 import { MethodUnsupportedError } from "@/agentMode/session/errors";
+import type { LoadedAgentChat } from "./AgentChatPersistenceManager";
 import type {
   BackendDescriptor,
   BackendId,
   BackendModelCatalog,
   BackendState,
   InstallState,
+  SessionUpdateHandler,
 } from "./types";
 
 const mockEnsureMaterialized = ensureProjectContextMaterialized as jest.Mock;
@@ -2038,6 +2040,8 @@ describe("AgentSessionManager chat history aggregation", () => {
     backendId?: BackendId;
     createBackendProcess?: jest.Mock;
     applyInitialSessionConfig?: BackendDescriptor["applyInitialSessionConfig"];
+    /** What `loadFile` hands back for any saved note opened from history. */
+    loadedChat?: Partial<LoadedAgentChat>;
   }) {
     const frontmatterByPath = opts?.files ?? {};
     const hiddenByPath = opts?.hiddenFiles ?? {};
@@ -2079,13 +2083,21 @@ describe("AgentSessionManager chat history aggregation", () => {
         getEffectiveLastUsedAt: (_path: string, fallback: number) => fallback,
       }),
     };
+    const backendId = opts?.backendId ?? "opencode";
     const persistence = {
       getAgentChatHistoryFiles: jest.fn(async () => tfiles),
       updateTopic: jest.fn(async () => undefined),
       deleteFile: jest.fn(async () => undefined),
+      loadFile: jest.fn(
+        async (): Promise<LoadedAgentChat> => ({
+          messages: [],
+          backendId,
+          projectId: GLOBAL_SCOPE,
+          ...opts?.loadedChat,
+        })
+      ),
     };
     const index = new AgentSessionIndex(makeIndexStorage(), "plugins/copilot/index.json");
-    const backendId = opts?.backendId ?? "opencode";
     const descriptor = {
       ...buildDescriptor(),
       id: backendId,
@@ -2303,6 +2315,84 @@ describe("AgentSessionManager chat history aggregation", () => {
     await manager.updateChatTitle(buildNativeChatId("codex", liveId), "Codex renamed");
     expect((await index.getEntry("codex", liveId))?.title).toBe("Codex renamed");
     expect(live.setLabel).not.toHaveBeenCalled();
+  });
+
+  describe("loadSessionFromHistory()", () => {
+    /**
+     * Open a saved note whose frontmatter carries `label` + `sessionId`, with
+     * the device-local index optionally attributing that title. Returns the
+     * resumed session plus an `emit` that pushes backend updates into it, so a
+     * test can check whether a later agent title still lands.
+     */
+    async function resumeSavedChat(titleSource?: "user" | "agent") {
+      let handler: SessionUpdateHandler | null = null;
+      const proc = {
+        ...makeMockBackendProcess(),
+        registerSessionHandler: jest.fn((_id: string, h: SessionUpdateHandler) => {
+          handler = h;
+          return () => {
+            handler = null;
+          };
+        }),
+        loadSession: jest.fn(async ({ sessionId }: { sessionId: string }) => ({
+          sessionId,
+          state: { model: null, mode: null },
+        })),
+      };
+      const { manager, index } = buildHistoryHarness({
+        loadedChat: { label: "Saved title", sessionId: "s1" },
+        createBackendProcess: jest.fn(() => proc),
+      });
+      if (titleSource) {
+        await index.recordSession({
+          backendId: "opencode",
+          sessionId: "s1",
+          title: "Saved title",
+          titleSource,
+          createdAtMs: 1_000,
+          lastAccessedAtMs: 1_000,
+        });
+      }
+      const session = await manager.loadSessionFromHistory(new MockTFile("chats/agent__a.md"));
+      return {
+        session,
+        emit: (title: string) =>
+          handler?.({
+            sessionId: "s1",
+            update: { sessionUpdate: "session_info_update", title },
+          }),
+      };
+    }
+
+    it("lets a summarizing backend retitle a chat it auto-titled once the chat is reopened (https://github.com/logancyang/obsidian-copilot-preview/issues/90002)", async () => {
+      const { session, emit } = await resumeSavedChat("agent");
+
+      expect(session.getLabel()).toBe("Saved title");
+      expect(session.getLabelSource()).toBe("agent");
+
+      emit("Refreshed by the agent");
+      expect(session.getLabel()).toBe("Refreshed by the agent");
+    });
+
+    it("keeps a reopened chat's user rename against a later agent title", async () => {
+      const { session, emit } = await resumeSavedChat("user");
+
+      expect(session.getLabel()).toBe("Saved title");
+      expect(session.getLabelSource()).toBe("user");
+
+      emit("Agent title");
+      expect(session.getLabel()).toBe("Saved title");
+    });
+
+    it("treats a saved title the index cannot attribute as a user rename", async () => {
+      const { session, emit } = await resumeSavedChat();
+
+      expect(session.getLabel()).toBe("Saved title");
+      expect(session.getLabelSource()).toBe("user");
+
+      emit("Agent title");
+      expect(session.getLabel()).toBe("Saved title");
+    });
   });
 
   describe("loadNativeSessionFromHistory()", () => {
