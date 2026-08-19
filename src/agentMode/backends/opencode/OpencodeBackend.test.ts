@@ -625,6 +625,28 @@ describe("buildOpencodeConfig — provider/model injection", () => {
     });
     expect(cp.models).toEqual({ "copilot-plus-flash": {} });
   });
+
+  it("skips Copilot Plus when its provisioned relay token is unavailable (https://github.com/logancyang/obsidian-copilot/issues/2895)", async () => {
+    const provider = makeProvider(
+      "p-plus",
+      { kind: "copilot-plus" },
+      {
+        providerType: "openai-compatible",
+        baseUrl: "https://models.brevilabs.com/v1",
+        requiresApiKey: false,
+      }
+    );
+    const deps = makeDeps({
+      resolved: [okEntry(provider, makeModel("p-plus", "copilot-plus-flash"))],
+      keys: { "p-plus": null },
+    });
+
+    const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
+      provider: Record<string, unknown>;
+    };
+
+    expect(cfg.provider).toEqual({});
+  });
 });
 
 describe("buildOpencodeConfig — agent/prompt/mode/skills blocks (preserved)", () => {

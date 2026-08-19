@@ -227,10 +227,11 @@ export async function buildOpencodeConfig(
     let providerConfig = provider[mapping.id];
     if (!providerConfig) {
       const apiKey = await providerRegistry.getApiKey(entry.provider.providerId);
-      // Authentication is an explicit provider contract. Hostname shape cannot
-      // tell whether a local proxy requires auth or a remote gateway is keyless.
+      // Copilot Plus provisions its relay token instead of asking for a BYOK key,
+      // but every relay request still requires that token. For BYOK providers,
+      // authentication is the explicit persisted contract, not hostname shape.
       // https://github.com/logancyang/obsidian-copilot/issues/2895
-      if (!apiKey && providerRequiresApiKey(entry.provider)) {
+      if (!apiKey && (origin.kind === "copilot-plus" || providerRequiresApiKey(entry.provider))) {
         logInfo(
           `[AgentMode] skipping ${mapping.id}/${entry.configuredModel.info.id}: no API key in keychain`
         );
