@@ -196,6 +196,7 @@ export default class ChatModelManager {
     const { isThinkingEnabled, usesAdaptiveThinking } = modelInfo;
     const resolvedTemperature = this.getTemperatureForModel(modelInfo, customModel, settings);
     const maxTokens = customModel.maxTokens ?? settings.maxTokens;
+    const openAIFormatIsKeyless = customModel.requiresApiKey === false;
 
     // Base config - temperature will be handled by provider-specific methods
     const baseConfig: Omit<ModelConfig, "maxTokens" | "maxCompletionTokens"> = {
@@ -406,15 +407,21 @@ export default class ChatModelManager {
       },
       [ChatModelProviders.OPENAI_FORMAT]: {
         modelName: modelName,
-        apiKey: await this.resolveApiKey(
-          customModel.apiKey,
-          settings.openAIApiKey,
-          allowLegacyCredentialFallback
-        ),
+        apiKey: openAIFormatIsKeyless
+          ? undefined
+          : await this.resolveApiKey(
+              customModel.apiKey,
+              settings.openAIApiKey,
+              allowLegacyCredentialFallback
+            ),
         streamUsage: customModel.streamUsage ?? false,
         configuration: {
           baseURL: customModel.baseUrl,
           fetch: customModel.enableCors ? safeFetch : undefined,
+          // The OpenAI SDK accepts an explicit null to omit its default auth
+          // header while still constructing a client for a keyless endpoint.
+          // https://github.com/logancyang/obsidian-copilot/issues/2895
+          defaultHeaders: openAIFormatIsKeyless ? { Authorization: null } : undefined,
         },
         ...this.getOpenAISpecialConfig(
           modelName,
@@ -737,6 +744,13 @@ export default class ChatModelManager {
     model: CustomModel,
     allowLegacyCredentialFallback: boolean = true
   ): boolean {
+    if (
+      model.requiresApiKey === false &&
+      (model.provider as ChatModelProviders) === ChatModelProviders.OPENAI_FORMAT
+    ) {
+      return true;
+    }
+
     if ((model.provider as ChatModelProviders) === ChatModelProviders.AMAZON_BEDROCK) {
       const settings = getSettings();
       const apiKey =

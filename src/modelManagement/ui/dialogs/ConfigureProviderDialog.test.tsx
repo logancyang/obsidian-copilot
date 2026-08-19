@@ -103,6 +103,7 @@ jest.mock("@/modelManagement/providers/adapters/listProviderModels", () => ({
 }));
 
 import type { ProviderDefinition } from "@/modelManagement/types/runtime";
+import { CUSTOM_OPENAI_DEFINITION } from "@/modelManagement/catalog/builtinDefinitions";
 import { ConfigureProviderForm } from "./ConfigureProviderDialog";
 
 beforeEach(() => {
@@ -139,14 +140,6 @@ const ollamaSource: ProviderDefinition = {
   modelInputHint: "e.g. llama3.2",
 };
 
-const customSource: ProviderDefinition = {
-  id: "custom-openai-compatible",
-  displayName: "Custom OpenAI-compatible",
-  providerType: "openai-compatible",
-  requiresApiKey: true,
-  modelInputHint: "e.g. gpt-5.5",
-};
-
 const anthropicCatalogMetadata = {
   id: "anthropic",
   displayName: "Anthropic",
@@ -175,6 +168,22 @@ function rowCheckbox(id: string): HTMLElement {
 }
 
 describe("ConfigureProviderForm (new mode)", () => {
+  it.each([
+    ["Anthropic", anthropicSource],
+    ["OpenAI", openaiSource],
+    ["Ollama", ollamaSource],
+    ["custom OpenAI-compatible", CUSTOM_OPENAI_DEFINITION],
+  ] as const)(
+    "renders manual Model ID and discovery search together for %s (https://github.com/logancyang/obsidian-copilot/issues/2894)",
+    (_provider, source) => {
+      render(<ConfigureProviderForm state={{ mode: "new", source }} onClose={jest.fn()} />);
+      const modelsSection = screen.getByText("Models").parentElement;
+      expect(modelsSection).not.toBeNull();
+      expect(within(modelsSection!).getByTestId("model-checklist-manual-input")).toBeTruthy();
+      expect(within(modelsSection!).getByPlaceholderText("Search available models…")).toBeTruthy();
+    }
+  );
+
   it("skips the mount fetch when the source requires an API key and the field is empty", () => {
     render(
       <ConfigureProviderForm state={{ mode: "new", source: anthropicSource }} onClose={jest.fn()} />
@@ -196,6 +205,30 @@ describe("ConfigureProviderForm (new mode)", () => {
     // Discovered ids appear as unchecked candidates; user opts in.
     await waitFor(() => expect(screen.getByTestId("model-row-llama3.2")).toBeTruthy());
     expect(rowCheckbox("llama3.2").getAttribute("aria-checked")).toBe("false");
+  });
+
+  it("waits for Test before discovering models from a typed custom URL (https://github.com/logancyang/obsidian-copilot/issues/2895)", async () => {
+    mockVerifyCredentials.mockResolvedValue({ ok: true, checkedAt: 1 });
+    render(
+      <ConfigureProviderForm
+        state={{ mode: "new", source: CUSTOM_OPENAI_DEFINITION }}
+        onClose={jest.fn()}
+      />
+    );
+    const baseUrlInput = screen.getByText("Base URL").parentElement?.querySelector("input");
+    expect(baseUrlInput).not.toBeNull();
+
+    fireEvent.change(baseUrlInput!, { target: { value: "h" } });
+    fireEvent.change(baseUrlInput!, { target: { value: "https://work.example.com/v1" } });
+    expect(mockListProviderModels).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Test" }));
+    await waitFor(() => expect(mockListProviderModels).toHaveBeenCalledTimes(1));
+    expect(mockListProviderModels).toHaveBeenCalledWith(
+      "openai-compatible",
+      "https://work.example.com/v1",
+      expect.objectContaining({ apiKey: null })
+    );
   });
 
   it("uses the source default URL as the input placeholder", () => {
@@ -282,10 +315,16 @@ describe("ConfigureProviderForm (new mode)", () => {
   it("saves an explicit Quick Chat CORS choice for a new provider (https://github.com/logancyang/obsidian-copilot-preview/issues/313)", async () => {
     mockVerifyCredentials.mockResolvedValue({ ok: true, checkedAt: 1 });
     render(
-      <ConfigureProviderForm state={{ mode: "new", source: customSource }} onClose={jest.fn()} />
+      <ConfigureProviderForm
+        state={{ mode: "new", source: CUSTOM_OPENAI_DEFINITION }}
+        onClose={jest.fn()}
+      />
     );
 
     fireEvent.change(screen.getByTestId("api-key"), { target: { value: "work-key" } });
+    const baseUrlInput = screen.getByText("Base URL").parentElement?.querySelector("input");
+    expect(baseUrlInput).not.toBeNull();
+    fireEvent.change(baseUrlInput!, { target: { value: "https://work.example.com/v1" } });
     manualAddId("work-model");
     fireEvent.click(screen.getByRole("switch", { name: "Enable CORS" }));
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -346,6 +385,47 @@ describe("ConfigureProviderForm (new mode)", () => {
     await waitFor(() => expect(mockListProviderModels).toHaveBeenCalled());
     // No error chrome rendered.
     expect(screen.queryByText(/Listing not supported/i)).toBeNull();
+  });
+
+  it("saves a keyless custom endpoint (https://github.com/logancyang/obsidian-copilot/issues/2895)", async () => {
+    const onClose = jest.fn();
+    render(
+      <ConfigureProviderForm
+        state={{ mode: "new", source: CUSTOM_OPENAI_DEFINITION }}
+        onClose={onClose}
+      />
+    );
+    const baseUrlInput = screen.getByText("Base URL").parentElement?.querySelector("input");
+    expect(baseUrlInput).not.toBeNull();
+    fireEvent.change(baseUrlInput!, {
+      target: { value: "http://127.0.0.1:8000/v1" },
+    });
+    manualAddId("qwen3.8-27b");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(mockSetupProvider).toHaveBeenCalledTimes(1));
+    expect(mockSetupProvider).toHaveBeenCalledWith(
+      expect.objectContaining({
+        apiKey: undefined,
+        requiresApiKey: false,
+        models: [expect.objectContaining({ id: "qwen3.8-27b" })],
+      })
+    );
+    expect(mockVerifyCredentials).not.toHaveBeenCalled();
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+  });
+
+  it("requires a Base URL before saving a custom endpoint (https://github.com/logancyang/obsidian-copilot/issues/2895)", () => {
+    render(
+      <ConfigureProviderForm
+        state={{ mode: "new", source: CUSTOM_OPENAI_DEFINITION }}
+        onClose={jest.fn()}
+      />
+    );
+    manualAddId("qwen3.8-27b");
+
+    expect(screen.getByRole("button", { name: "Save" }).hasAttribute("disabled")).toBe(true);
+    expect(mockSetupProvider).not.toHaveBeenCalled();
   });
 });
 
@@ -583,12 +663,13 @@ describe("ConfigureProviderForm (hydration gate)", () => {
   });
 });
 
-// Use the customSource definition somewhere so it isn't flagged as unused;
-// covers the dialog's behavior for a catalog-less custom source.
 describe("ConfigureProviderForm (custom-openai source)", () => {
   it("shows the default 'Add a model id' / source-supplied hint in the manual input", () => {
     render(
-      <ConfigureProviderForm state={{ mode: "new", source: customSource }} onClose={jest.fn()} />
+      <ConfigureProviderForm
+        state={{ mode: "new", source: CUSTOM_OPENAI_DEFINITION }}
+        onClose={jest.fn()}
+      />
     );
     expect(screen.getByPlaceholderText("e.g. gpt-5.5")).toBeTruthy();
   });

@@ -79,8 +79,10 @@ usual local URL:
 - LM Studio: `http://localhost:1234/v1`
 
 Start the local server before testing the provider. For another compatible
-service or proxy, choose **Add a custom provider** and supply its API key, base
-URL, and model ID.
+service or proxy, choose **Add a custom provider** and enter its base URL and
+model ID. The API key is optional; add one when the endpoint requires
+authentication. Model discovery uses the endpoint's `/v1/models` response, but
+you can always enter an exact model ID before searching the discovered list.
 
 If **Test** succeeds but Quick Chat cannot send a message, edit the provider
 and turn on **Enable CORS**. Responses then appear after completion instead of

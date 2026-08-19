@@ -27,7 +27,6 @@ import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
-import { SearchBar } from "@/components/ui/SearchBar";
 import { useApp } from "@/context";
 import { logError } from "@/logger";
 import type { ModelManagementApi } from "@/modelManagement/createModelManagement";
@@ -441,11 +440,21 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
   // untested key falls through to the save-time auto-verify in the handlers.
   const verificationBlocksSave = isConclusiveVerificationFailure(verification?.code);
 
+  // A non-catalog OpenAI-compatible provider has no native routing default, so
+  // persisting it without a Base URL creates a model that no backend can call.
+  // https://github.com/logancyang/obsidian-copilot/issues/2895
+  const missingCustomBaseUrl =
+    providerType === "openai-compatible" && !catalogProviderId && !effectiveBaseUrl;
+
   // The candidate pool only fills with models the endpoint listed (which
   // requires working credentials) or ones the user explicitly typed, so a
   // non-empty selection already implies a usable setup. On top of that, gate
-  // on a present + non-conclusively-invalid key.
-  const canSave = pool.selectedWireIds.size > 0 && !missingRequiredKey && !verificationBlocksSave;
+  // on a routable endpoint and a present + non-conclusively-invalid key.
+  const canSave =
+    pool.selectedWireIds.size > 0 &&
+    !missingCustomBaseUrl &&
+    !missingRequiredKey &&
+    !verificationBlocksSave;
 
   const testFailed = verification?.ok === false;
 
@@ -531,7 +540,6 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
 
         <div className="tw-flex tw-flex-col tw-gap-2">
           <div className="tw-text-sm tw-font-medium tw-text-normal">Models</div>
-          <SearchBar value={modelQuery} onChange={setModelQuery} placeholder="Search models..." />
           <ModelChecklist
             availableModels={pool.availableModels}
             selected={pool.selectedWireIds}
@@ -540,6 +548,7 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
             onRemoveId={pool.removeId}
             customIds={pool.customIds}
             query={modelQuery}
+            onQueryChange={setModelQuery}
             modelInputHint={modelInputHint}
             fetching={pool.fetching}
             fetchError={pool.fetchError}
@@ -685,7 +694,7 @@ export class ConfigureProviderModal extends ReactModal {
   }
 
   onOpen(): void {
-    this.modalEl.addClasses(["tw-flex", "tw-h-[70vh]", "tw-flex-col"]);
+    this.modalEl.addClasses(["tw-flex", "tw-max-h-[85vh]", "tw-flex-col"]);
     this.contentEl.addClasses([
       "tw-flex",
       "tw-min-h-0",

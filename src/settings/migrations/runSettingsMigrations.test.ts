@@ -144,6 +144,36 @@ it("skips a future version", async () => {
   expect(mockSetSettings).not.toHaveBeenCalled();
 });
 
+it("v10: makes auth optional for an existing custom OpenAI-compatible provider (https://github.com/logancyang/obsidian-copilot/issues/2895)", async () => {
+  mockGetSettings.mockReturnValue(
+    settings({
+      settingsVersion: 9,
+      providers: {
+        custom: {
+          providerId: "custom",
+          providerType: "openai-compatible",
+          displayName: "Custom OpenAI-compatible",
+          origin: { kind: "byok" },
+          requiresApiKey: true,
+          apiKeyKeychainId: "keychain-custom",
+          addedAt: 0,
+        },
+      },
+    })
+  );
+  const { api } = makeApi();
+
+  await runSettingsMigrations(api);
+
+  const providerWrite = mockSetSettings.mock.calls.find((call) => "providers" in call[0])?.[0] as
+    | { providers: Record<string, { requiresApiKey?: boolean; apiKeyKeychainId?: string | null }> }
+    | undefined;
+  expect(providerWrite?.providers.custom).toEqual(
+    expect.objectContaining({ requiresApiKey: false, apiKeyKeychainId: "keychain-custom" })
+  );
+  expect(mockSetSettings).toHaveBeenCalledWith({ settingsVersion: CURRENT_SETTINGS_VERSION });
+});
+
 it("v6: seeds plus for a v5 vault with neither Miyo nor self-host", async () => {
   mockGetSettings.mockReturnValue(settings({ settingsVersion: 5 }));
   const { api, setupProvider } = makeApi();

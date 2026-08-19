@@ -9,6 +9,8 @@ function renderList(overrides: Partial<React.ComponentProps<typeof ModelChecklis
     selected: new Set<string>(),
     onToggle: jest.fn(),
     onAddId: jest.fn(),
+    query: "",
+    onQueryChange: jest.fn(),
     ...overrides,
   };
   render(<ModelChecklist {...props} />);
@@ -65,6 +67,8 @@ describe("ModelChecklist", () => {
         selected={new Set<string>()}
         onToggle={jest.fn()}
         onAddId={jest.fn()}
+        query=""
+        onQueryChange={jest.fn()}
       />
     );
     // Vision is the norm (not badged) and reasoning is hidden — a vision-capable
@@ -84,6 +88,13 @@ describe("ModelChecklist", () => {
     renderList({ availableModels: [PLAIN], onToggle });
     fireEvent.click(screen.getByRole("checkbox"));
     expect(onToggle).toHaveBeenCalledWith("gpt-5", true);
+  });
+
+  it("keeps manual entry above model search when discovery is unavailable (https://github.com/logancyang/obsidian-copilot/issues/2894)", () => {
+    renderList({ fetchError: "Endpoint did not return a model list." });
+    const inputs = screen.getAllByRole("textbox");
+    expect(inputs[0]).toBe(screen.getByTestId("model-checklist-manual-input"));
+    expect(inputs[1].getAttribute("placeholder")).toBe("Search available models…");
   });
 
   it("emits onAddId on Enter and clears the input", () => {
@@ -160,6 +171,15 @@ describe("ModelChecklist", () => {
     expect(screen.queryByTestId("model-row-gemini-2.0-flash")).toBeTruthy();
     expect(screen.queryByTestId(`model-row-${RICH.id}`)).toBeNull();
     expect(screen.queryByTestId("model-row-gpt-5")).toBeNull();
+  });
+
+  it("emits search query changes", () => {
+    const onQueryChange = jest.fn();
+    renderList({ onQueryChange });
+    fireEvent.change(screen.getByPlaceholderText("Search available models…"), {
+      target: { value: "qwen" },
+    });
+    expect(onQueryChange).toHaveBeenCalledWith("qwen");
   });
 
   it("sorts checked models to the top", () => {

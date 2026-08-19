@@ -95,7 +95,9 @@ function seedSkills(skills: Skill[]): void {
 function makeProvider(
   providerId: string,
   origin: ProviderOrigin,
-  overrides: Partial<Pick<Provider, "providerType" | "baseUrl" | "displayName" | "enableCors">> = {}
+  overrides: Partial<
+    Pick<Provider, "providerType" | "baseUrl" | "displayName" | "enableCors" | "requiresApiKey">
+  > = {}
 ): Provider {
   return {
     providerId,
@@ -103,6 +105,7 @@ function makeProvider(
     displayName: overrides.displayName ?? providerId,
     baseUrl: overrides.baseUrl,
     enableCors: overrides.enableCors,
+    requiresApiKey: overrides.requiresApiKey ?? true,
     origin,
     addedAt: 0,
   };
@@ -112,12 +115,13 @@ function makeProvider(
 function makeOpenAICompatibleProvider(
   providerId: string,
   baseUrl: string | undefined,
-  displayName = providerId
+  displayName = providerId,
+  requiresApiKey = true
 ): Provider {
   return makeProvider(
     providerId,
     { kind: "byok" },
-    { providerType: "openai-compatible" as ProviderType, baseUrl, displayName }
+    { providerType: "openai-compatible" as ProviderType, baseUrl, displayName, requiresApiKey }
   );
 }
 
@@ -369,7 +373,8 @@ describe("buildOpencodeConfig — provider/model injection", () => {
     const provider = makeOpenAICompatibleProvider(
       "p-ollama",
       "http://localhost:11434/v1",
-      "Ollama"
+      "Ollama",
+      false
     );
     const deps = makeDeps({
       resolved: [okEntry(provider, makeModel("p-ollama", "llama3.2"))],
@@ -441,9 +446,7 @@ describe("buildOpencodeConfig — provider/model injection", () => {
     expect(cfg.provider).toEqual({});
   });
 
-  it("drops a key-less OpenAI-compatible BYOK provider on a public host", async () => {
-    // Key tolerance keys off the baseUrl host, not catalog membership: a public
-    // endpoint with no key is dropped (its template requires one).
+  it("drops a key-less OpenAI-compatible BYOK provider when its persisted contract requires a key", async () => {
     const provider = makeOpenAICompatibleProvider("p-public", "https://my-proxy.example.com/v1");
     const deps = makeDeps({
       resolved: [okEntry(provider, makeModel("p-public", "gpt-5.5"))],
@@ -455,6 +458,46 @@ describe("buildOpencodeConfig — provider/model injection", () => {
     expect(cfg.provider).toEqual({});
   });
 
+  it("keeps a keyless custom provider on a public host when its persisted contract allows it (https://github.com/logancyang/obsidian-copilot/issues/2895)", async () => {
+    const provider = makeOpenAICompatibleProvider(
+      "p-public-keyless",
+      "https://trusted-gateway.example.com/v1",
+      "Trusted gateway",
+      false
+    );
+    const deps = makeDeps({
+      resolved: [okEntry(provider, makeModel("p-public-keyless", "qwen3.8-27b"))],
+      keys: { "p-public-keyless": null },
+    });
+    const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
+      provider: Record<string, { options?: { baseURL?: string; apiKey?: string } }>;
+    };
+
+    expect(cfg.provider["p-public-keyless"].options).toEqual({
+      baseURL: "https://trusted-gateway.example.com/v1",
+    });
+  });
+
+  it("skips an optional-auth provider when its stored key can no longer be resolved (https://github.com/logancyang/obsidian-copilot/issues/2895)", async () => {
+    const provider = {
+      ...makeOpenAICompatibleProvider(
+        "p-missing-stored-key",
+        "https://trusted-gateway.example.com/v1",
+        "Trusted gateway",
+        false
+      ),
+      apiKeyKeychainId: "keychain-p-missing-stored-key",
+    };
+    const deps = makeDeps({
+      resolved: [okEntry(provider, makeModel("p-missing-stored-key", "qwen3.8-27b"))],
+      keys: { "p-missing-stored-key": null },
+    });
+
+    const cfg = await buildOpencodeConfig(getSettings(), deps);
+
+    expect(cfg.provider).toEqual({});
+  });
+
   it("keeps a key-less self-hosted provider even when it carries a catalog id", async () => {
     // Guards the catalog-growth scenario: if a local runner like Ollama ever
     // gains a models.dev entry, its localhost baseUrl still tolerates a missing
@@ -462,7 +505,11 @@ describe("buildOpencodeConfig — provider/model injection", () => {
     const provider = makeProvider(
       "p-ollama-catalog",
       { kind: "byok", catalogProviderId: "ollama" },
-      { providerType: "openai-compatible", baseUrl: "http://localhost:11434/v1" }
+      {
+        providerType: "openai-compatible",
+        baseUrl: "http://localhost:11434/v1",
+        requiresApiKey: false,
+      }
     );
     const deps = makeDeps({
       resolved: [okEntry(provider, makeModel("p-ollama-catalog", "llama3.2"))],
@@ -480,7 +527,11 @@ describe("buildOpencodeConfig — provider/model injection", () => {
     const provider = makeProvider(
       "p-ollama-catalog",
       { kind: "byok", catalogProviderId: "ollama" },
-      { providerType: "openai-compatible", baseUrl: "http://localhost:11434/v1" }
+      {
+        providerType: "openai-compatible",
+        baseUrl: "http://localhost:11434/v1",
+        requiresApiKey: false,
+      }
     );
     const deps = makeDeps({
       resolved: [okEntry(provider, makeModel("p-ollama-catalog", "llama3.2"))],
@@ -593,6 +644,28 @@ describe("buildOpencodeConfig — provider/model injection", () => {
       "X-Client-Version": "4.0.0-preview-260802",
     });
     expect(cp.models).toEqual({ "copilot-plus-flash": {} });
+  });
+
+  it("skips Copilot Plus when its provisioned relay token is unavailable (https://github.com/logancyang/obsidian-copilot/issues/2895)", async () => {
+    const provider = makeProvider(
+      "p-plus",
+      { kind: "copilot-plus" },
+      {
+        providerType: "openai-compatible",
+        baseUrl: "https://models.brevilabs.com/v1",
+        requiresApiKey: false,
+      }
+    );
+    const deps = makeDeps({
+      resolved: [okEntry(provider, makeModel("p-plus", "copilot-plus-flash"))],
+      keys: { "p-plus": null },
+    });
+
+    const cfg = (await buildOpencodeConfig(getSettings(), deps)) as {
+      provider: Record<string, unknown>;
+    };
+
+    expect(cfg.provider).toEqual({});
   });
 });
 

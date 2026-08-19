@@ -18,5 +18,6 @@
  *   8   → seed `copilotFolder` root so derived sub-folder accessors resolve.
  *   9   → drop models, selections, and tokens of the retired GitHub Copilot
  *         chat provider.
+ *   10  → make auth optional on existing custom OpenAI-compatible BYOK rows.
  */
-export const CURRENT_SETTINGS_VERSION = 9;
+export const CURRENT_SETTINGS_VERSION = 10;

@@ -2,7 +2,7 @@ import { ChatModelProviders } from "@/constants";
 import { logInfo, logWarn } from "@/logger";
 import { getSettings } from "@/settings/model";
 import type { CopilotSettings } from "@/settings/model";
-import { isSelfHostedProvider } from "@/modelManagement";
+import { providerNeedsResolvedApiKey } from "@/modelManagement";
 import { isCatalogProviderDefaultEndpoint } from "@/utils/providerBaseUrl";
 import type { BackendConfigRegistry, ProviderRegistry } from "@/modelManagement";
 import { AcpBackend, AcpSpawnDescriptor } from "@/agentMode/acp/types";
@@ -223,17 +223,14 @@ export async function buildOpencodeConfig(
     const origin = entry.provider.origin;
     const catalogProviderId = origin.kind === "byok" ? origin.catalogProviderId : undefined;
     const hasCatalogIdentity = !!catalogProviderId;
-    // Whether a missing key should drop the provider is a separate question:
-    // self-hosted endpoints commonly run key-less. Detect that from the baseUrl
-    // host so it stays correct even if a local runner gains a catalog id.
-    const isSelfHosted = isSelfHostedProvider(entry.provider);
 
     let providerConfig = provider[mapping.id];
     if (!providerConfig) {
       const apiKey = await providerRegistry.getApiKey(entry.provider.providerId);
-      // Catalog BYOK / Plus providers are useless without a key; self-hosted
-      // endpoints commonly run key-less, so don't drop them for a missing key.
-      if (!apiKey && !isSelfHosted) {
+      // Runtime auth follows the persisted provider contract and keychain state,
+      // not hostname shape. A dangling keychain pointer must fail closed.
+      // https://github.com/logancyang/obsidian-copilot/issues/2895
+      if (!apiKey && providerNeedsResolvedApiKey(entry.provider)) {
         logInfo(
           `[AgentMode] skipping ${mapping.id}/${entry.configuredModel.info.id}: no API key in keychain`
         );

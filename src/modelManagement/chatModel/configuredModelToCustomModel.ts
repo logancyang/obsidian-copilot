@@ -15,7 +15,7 @@
 import { CustomModel } from "@/aiParams";
 import { ChatModelProviders, ModelCapability, ProviderInfo } from "@/constants";
 import { logWarn } from "@/logger";
-import { providerRequiresApiKey } from "@/modelManagement/providers/providerRequiresApiKey";
+import { providerNeedsResolvedApiKey } from "@/modelManagement/providers/providerRequiresApiKey";
 import type { ConfiguredModel, Provider } from "@/modelManagement/types/persisted";
 
 /**
@@ -122,15 +122,7 @@ export function configuredModelToCustomModel(params: {
   const extras = provider.extras ?? {};
 
   const trimmedKey = apiKey && apiKey.length > 0 ? apiKey : undefined;
-  // Keyless providers (Ollama, LM Studio, unauthenticated proxies) still need a
-  // non-empty placeholder so the OpenAI-format client constructs — the legacy
-  // path used the same "default-key" sentinel. When a key IS required but
-  // missing, leave it undefined so credential validation fails loudly.
-  const resolvedApiKey =
-    trimmedKey ??
-    (provider.origin.kind === "copilot-plus" || providerRequiresApiKey(provider)
-      ? undefined
-      : "default-key");
+  const requiresApiKey = providerNeedsResolvedApiKey(provider) || !!trimmedKey;
 
   const capabilities: ModelCapability[] = [];
   if (info.reasoning) capabilities.push(ModelCapability.REASONING);
@@ -143,7 +135,8 @@ export function configuredModelToCustomModel(params: {
     displayName: info.displayName,
     enabled: true,
     baseUrl: provider.baseUrl,
-    apiKey: resolvedApiKey,
+    apiKey: trimmedKey,
+    requiresApiKey,
     // https://github.com/logancyang/obsidian-copilot-preview/issues/313:
     // verification can pass through requestUrl while Quick Chat fails through
     // native fetch. Preserve the user's explicit compatibility-versus-streaming

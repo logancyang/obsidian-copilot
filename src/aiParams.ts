@@ -197,6 +197,8 @@ export interface CustomModel {
   provider: string;
   baseUrl?: string;
   apiKey?: string;
+  /** Runtime auth contract for bridged models; undefined preserves legacy behavior. */
+  requiresApiKey?: boolean;
   enabled: boolean;
   isEmbeddingModel?: boolean;
   isBuiltIn?: boolean;

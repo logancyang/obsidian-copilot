@@ -16,3 +16,21 @@ import type { Provider } from "@/modelManagement/types/persisted";
 export function providerRequiresApiKey(provider: Provider): boolean {
   return provider.requiresApiKey ?? true;
 }
+
+/**
+ * Returns whether a runtime must resolve a credential before using this provider.
+ * Optional-auth providers become authenticated once they own a keychain pointer;
+ * a dangling pointer must fail closed instead of silently changing request semantics.
+ *
+ * @param provider - Persisted provider whose runtime credential contract is being evaluated.
+ */
+export function providerNeedsResolvedApiKey(provider: Provider): boolean {
+  // Copilot Plus provisions a relay token instead of a user-entered BYOK key,
+  // but every relay request still requires it.
+  // https://github.com/logancyang/obsidian-copilot/issues/2895
+  return (
+    provider.origin.kind === "copilot-plus" ||
+    providerRequiresApiKey(provider) ||
+    !!provider.apiKeyKeychainId
+  );
+}

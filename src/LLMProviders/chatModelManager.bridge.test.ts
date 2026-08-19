@@ -100,6 +100,27 @@ describe("chatModelManager", () => {
         expect(clientConfig.defaultHeaders?.["dangerously-allow-browser"]).toBeUndefined();
       });
 
+      it("omits Authorization for a keyless bridged OpenAI-compatible model (https://github.com/logancyang/obsidian-copilot/issues/2895)", async () => {
+        const model = await ChatModelManager.getInstance().createModelInstanceFromBridged(
+          bridgedModel({
+            provider: ChatModelProviders.OPENAI_FORMAT,
+            baseUrl: "http://127.0.0.1:8000/v1",
+            requiresApiKey: false,
+          })
+        );
+        const clientConfig = (
+          model as unknown as {
+            clientConfig: {
+              apiKey?: string;
+              defaultHeaders?: Record<string, string | null>;
+            };
+          }
+        ).clientConfig;
+
+        expect(clientConfig.apiKey).toBeUndefined();
+        expect(clientConfig.defaultHeaders?.Authorization).toBeNull();
+      });
+
       it("strips a versioned Google base URL because the client appends /v1beta itself", async () => {
         const GoogleMock = jest.requireMock("@langchain/google-genai").ChatGoogleGenerativeAI as {
           configs: Array<{ baseUrl?: string }>;
