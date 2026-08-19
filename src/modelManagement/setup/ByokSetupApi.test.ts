@@ -5,7 +5,7 @@
  * same fake `app.secretStorage` shim used in `ProviderRegistry.test.ts`.
  */
 
-import { resetSettings } from "@/settings/model";
+import { resetSettings, setSettings } from "@/settings/model";
 import { KeychainService } from "@/services/keychainService";
 
 import { BackendConfigRegistry } from "@/modelManagement/backends/BackendConfigRegistry";
@@ -61,6 +61,9 @@ describe("ByokSetupApi.addModels", () => {
 
   beforeEach(() => {
     resetSettings();
+    // Reset intentionally preserves provider rows that own a keychain pointer,
+    // so clear them explicitly to get the blank slate these tests assume.
+    setSettings({ providers: {}, configuredModels: [] });
     KeychainService.resetInstance();
     const app = makeFakeApp();
     KeychainService.getInstance(app);
@@ -130,6 +133,9 @@ describe("ByokSetupApi.setupProvider", () => {
 
   beforeEach(() => {
     resetSettings();
+    // Reset intentionally preserves provider rows that own a keychain pointer,
+    // so clear them explicitly to get the blank slate these tests assume.
+    setSettings({ providers: {}, configuredModels: [] });
     KeychainService.resetInstance();
     const app = makeFakeApp();
     KeychainService.getInstance(app);

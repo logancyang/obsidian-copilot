@@ -13,6 +13,7 @@ import { BREVILABS_MODELS_BASE_URL, ChatModels } from "@/constants";
 import { logError } from "@/logger";
 import type { ModelManagementApi } from "@/modelManagement/createModelManagement";
 import type { ModelInfo } from "@/modelManagement/types/catalog";
+import type { CopilotSettings } from "@/settings/model";
 
 /**
  * The Copilot Plus models the brevilabs relay exposes. Hardcoded — there's no
@@ -112,6 +113,31 @@ export const COPILOT_PLUS_DEFAULT_ENABLED_MODELS: readonly string[] = Object.fre
   ChatModels.COPILOT_PLUS_DEEPSEEK_V4_PRO,
   ChatModels.COPILOT_PLUS_GLM_5_2,
 ]);
+
+/**
+ * Whether a settings change requires re-reconciling the Plus provider:
+ * a sign-in / sign-out (`isPaidUser` flip) or a key rotation while signed in.
+ *
+ * This is the settings subscriber's trigger, extracted so the one settings
+ * write that must NOT read as sign-out is testable: Reset Settings preserves
+ * `isPaidUser` alongside the license key, and this predicate staying false is
+ * what keeps the destructive `unregisterPlusProvider` cascade (provider row,
+ * configured models, backend refs, provider keychain entry) from firing on a
+ * signed-in user's reset.
+ * https://github.com/logancyang/obsidian-copilot-preview/issues/259
+ *
+ * @param prev - Settings before the change.
+ * @param next - Settings after the change.
+ */
+export function plusSyncNeeded(
+  prev: Pick<CopilotSettings, "isPaidUser" | "plusLicenseKey">,
+  next: Pick<CopilotSettings, "isPaidUser" | "plusLicenseKey">
+): boolean {
+  return (
+    prev.isPaidUser !== next.isPaidUser ||
+    (!!next.isPaidUser && prev.plusLicenseKey !== next.plusLicenseKey)
+  );
+}
 
 /**
  * Register or unregister the Plus provider to match Plus state. Best-effort:

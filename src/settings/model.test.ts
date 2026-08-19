@@ -5,6 +5,8 @@ import {
   DEFAULT_SYSTEM_PROMPT,
   DEFAULT_SETTINGS,
   SEND_SHORTCUT,
+  BUILTIN_CHAT_MODELS,
+  BUILTIN_EMBEDDING_MODELS,
 } from "@/constants";
 import {
   normalizeRootFolders,
@@ -16,7 +18,9 @@ import {
   settingsStore,
   validateCopilotFolder,
   CopilotSettings,
+  getModelKeyFromModel,
 } from "@/settings/model";
+import { CustomModel } from "@/aiParams";
 import { getEffectiveUserPrompt, getSystemPrompt } from "@/system-prompts/systemPromptBuilder";
 import * as systemPromptsState from "@/system-prompts/state";
 import * as settingsModel from "@/settings/model";
@@ -958,6 +962,336 @@ describe("model", () => {
       expect(after.copilotFolder).toBe(DEFAULT_SETTINGS.copilotFolder);
       // Legacy + historical + pre-reset active root all survive the reset.
       expect(new Set(after.copilotRootHistory)).toEqual(new Set(["copilot", "ai", "team-ai"]));
+    });
+
+    it("preserves providers with keychain credentials (https://github.com/logancyang/obsidian-copilot-preview/issues/259)", () => {
+      settingsStore.set(settingsAtom, {
+        ...DEFAULT_SETTINGS,
+        providers: {
+          byok_openai: {
+            providerId: "byok_openai",
+            providerType: "openai-compatible",
+            displayName: "My OpenAI",
+            apiKeyKeychainId: "keychain-id-123",
+            origin: { kind: "byok" },
+            addedAt: Date.now(),
+          },
+          byok_anthropic: {
+            providerId: "byok_anthropic",
+            providerType: "anthropic",
+            displayName: "No Key",
+            origin: { kind: "byok" },
+            addedAt: Date.now(),
+          },
+        },
+      });
+
+      resetSettings();
+
+      const after = settingsStore.get(settingsAtom);
+      expect(after.providers.byok_openai).toBeDefined();
+      expect(after.providers.byok_openai.apiKeyKeychainId).toBe("keychain-id-123");
+      expect(after.providers.byok_anthropic).toBeUndefined();
+    });
+
+    it.each([false, true])(
+      "preserves a builtin model's credential routing, including enableCors=%s, while resetting its preferences (https://github.com/logancyang/obsidian-copilot-preview/issues/259)",
+      (enableCors) => {
+        // Reason: the endpoint has to survive alongside the key. Resetting only
+        // baseUrl would leave a proxy credential pointed at the provider's
+        // default host, sending the user's key somewhere they never configured.
+        // `enableCors` is the one boolean in the bundle — `false` surviving is
+        // exactly what its dedicated `carriesConfiguration` branch exists for.
+        const customGpt4: CustomModel = {
+          ...BUILTIN_CHAT_MODELS[0],
+          enabled: false,
+          apiKey: "sk-saved",
+          baseUrl: "https://proxy.example.test/v1",
+          openAIOrgId: "org-model",
+          enableCors,
+          temperature: 0.9,
+        };
+        settingsStore.set(settingsAtom, {
+          ...DEFAULT_SETTINGS,
+          activeModels: [customGpt4],
+        });
+
+        resetSettings();
+
+        const after = settingsStore.get(settingsAtom);
+        const restored = after.activeModels.find(
+          (m) => getModelKeyFromModel(m) === getModelKeyFromModel(BUILTIN_CHAT_MODELS[0])
+        );
+        expect(restored).toBeDefined();
+        expect(restored!.apiKey).toBe("sk-saved");
+        expect(restored!.baseUrl).toBe("https://proxy.example.test/v1");
+        expect(restored!.openAIOrgId).toBe("org-model");
+        expect(restored!.enableCors).toBe(enableCors);
+        expect(restored!.enabled).toBe(BUILTIN_CHAT_MODELS[0].enabled);
+        expect(restored!.temperature).toBe(BUILTIN_CHAT_MODELS[0].temperature);
+      }
+    );
+
+    it("preserves every custom model, including rows that carry no key (https://github.com/logancyang/obsidian-copilot-preview/issues/259)", () => {
+      // Reason: the keychain is the sole secret store, so an empty in-memory
+      // apiKey may just mean this session's keychain read failed. Dropping the
+      // row would strand the entry with no identity left to reattach it to.
+      const withKey: CustomModel = {
+        name: "my-llama",
+        provider: "openai",
+        enabled: true,
+        apiKey: "sk-custom",
+        baseUrl: "http://localhost:1234",
+      };
+      const withoutKey: CustomModel = {
+        name: "ollama-llama",
+        provider: "ollama",
+        enabled: true,
+      };
+      settingsStore.set(settingsAtom, {
+        ...DEFAULT_SETTINGS,
+        activeModels: [withKey, withoutKey],
+      });
+
+      resetSettings();
+
+      const after = settingsStore.get(settingsAtom);
+      const myLlama = after.activeModels.find((m) => m.name === "my-llama");
+      expect(myLlama?.apiKey).toBe("sk-custom");
+      expect(myLlama?.baseUrl).toBe("http://localhost:1234");
+      expect(after.activeModels.find((m) => m.name === "ollama-llama")).toBeDefined();
+    });
+
+    it("filters out null/undefined top-level secrets", () => {
+      settingsStore.set(settingsAtom, {
+        ...DEFAULT_SETTINGS,
+        openAIApiKey: "valid-key",
+        plusLicenseKey: "lic-12345",
+        anthropicApiKey: null as unknown as string,
+        googleApiKey: undefined as unknown as string,
+      });
+
+      resetSettings();
+
+      const after = settingsStore.get(settingsAtom);
+      expect(after.openAIApiKey).toBe("valid-key");
+      expect(after.plusLicenseKey).toBe("lic-12345");
+      expect(after.anthropicApiKey).toBe(DEFAULT_SETTINGS.anthropicApiKey);
+      expect(after.googleApiKey).toBe(DEFAULT_SETTINGS.googleApiKey);
+    });
+
+    it("preserves the top-level vendor config a retained key needs to reach its service (https://github.com/logancyang/obsidian-copilot-preview/issues/259)", () => {
+      // Reason: these are not secrets, so the secret-key heuristic misses them,
+      // but a key without them is unusable — Azure composes its request URL
+      // from the instance/deployment/version trio, and Bedrock signs for a
+      // region.
+      const vendorConfig = {
+        openAIOrgId: "org-123",
+        azureOpenAIApiInstanceName: "my-instance",
+        azureOpenAIApiDeploymentName: "chat-deploy",
+        azureOpenAIApiVersion: "2025-01-01-preview",
+        azureOpenAIApiEmbeddingDeploymentName: "embed-deploy",
+        amazonBedrockRegion: "eu-west-1",
+      };
+      settingsStore.set(settingsAtom, { ...DEFAULT_SETTINGS, ...vendorConfig });
+
+      resetSettings();
+
+      expect(settingsStore.get(settingsAtom)).toMatchObject(vendorConfig);
+    });
+
+    it("drops the entitlement token, whose identity binding reset invalidates (https://github.com/logancyang/obsidian-copilot-preview/issues/259)", () => {
+      // Reason: `verifyEntitlement` checks the token against `settings.userId`,
+      // and reset replaces that with a fresh uuid — a carried-over token could
+      // never verify again. `plusLicenseKey` is the credential worth keeping;
+      // the next license check re-issues the token from it.
+      settingsStore.set(settingsAtom, {
+        ...DEFAULT_SETTINGS,
+        plusLicenseKey: "lic-12345",
+        entitlementToken: "test-stale-entitlement-token",
+      });
+
+      resetSettings();
+
+      const after = settingsStore.get(settingsAtom);
+      expect(after.plusLicenseKey).toBe("lic-12345");
+      expect(after.entitlementToken).toBe(DEFAULT_SETTINGS.entitlementToken);
+    });
+
+    it("keeps a signed-in user's paid state so reset never reads as sign-out (https://github.com/logancyang/obsidian-copilot-preview/issues/259)", () => {
+      // Reason: the settings subscriber treats an `isPaidUser` flip as
+      // sign-out and tears down the Plus provider, its models, and its
+      // keychain entry — destroying exactly what reset preserves. The strict
+      // `isPlusUser` flag still resets: its proof (the entitlement token) is
+      // dropped, and the next validation re-derives it.
+      settingsStore.set(settingsAtom, {
+        ...DEFAULT_SETTINGS,
+        isPaidUser: true,
+        isPlusUser: true,
+        plusLicenseKey: "lic-12345",
+        entitlementToken: "test-stale-entitlement-token",
+        entitlementExpiresAt: 4_000_000_000_000,
+      });
+
+      resetSettings();
+
+      const after = settingsStore.get(settingsAtom);
+      expect(after.isPaidUser).toBe(true);
+      // The expiry travels with the paid flag: it is tighten-only, and
+      // zeroing it would leave the license UI showing Active forever while
+      // offline.
+      expect(after.entitlementExpiresAt).toBe(4_000_000_000_000);
+      expect(after.plusLicenseKey).toBe("lic-12345");
+      expect(after.isPlusUser).toBe(DEFAULT_SETTINGS.isPlusUser);
+      expect(after.entitlementToken).toBe(DEFAULT_SETTINGS.entitlementToken);
+    });
+
+    it("drops a bundle value whose type its consumer cannot handle (https://github.com/logancyang/obsidian-copilot-preview/issues/259)", () => {
+      // Reason: a hand-edited or cross-version `data.json` can hold a non-string
+      // where a string is expected. Carrying it through reset would move the
+      // failure to the consumer — chatModelManager calls `.trim()` on the region.
+      settingsStore.set(settingsAtom, {
+        ...DEFAULT_SETTINGS,
+        amazonBedrockApiKey: "bedrock-key",
+        amazonBedrockRegion: {} as unknown as string,
+      });
+
+      resetSettings();
+
+      const after = settingsStore.get(settingsAtom);
+      expect(after.amazonBedrockApiKey).toBe("bedrock-key");
+      expect(after.amazonBedrockRegion).toBe(DEFAULT_SETTINGS.amazonBedrockRegion);
+    });
+
+    it("preserves the Azure routing fields on a builtin embedding row alongside its key (https://github.com/logancyang/obsidian-copilot-preview/issues/259)", () => {
+      // Reason: Azure is the one builtin row whose request URL is assembled
+      // from per-row fields (embeddingManager reads instance + embedding
+      // deployment + version). Keeping only the key would leave it pointed at
+      // an address that cannot be built.
+      const azureDefault = BUILTIN_EMBEDDING_MODELS.find((m) => m.provider === "azure openai");
+      expect(azureDefault).toBeDefined();
+      settingsStore.set(settingsAtom, {
+        ...DEFAULT_SETTINGS,
+        activeEmbeddingModels: [
+          {
+            ...azureDefault!,
+            apiKey: "az-key",
+            azureOpenAIApiInstanceName: "my-instance",
+            azureOpenAIApiEmbeddingDeploymentName: "embed-deploy",
+            azureOpenAIApiVersion: "2025-01-01-preview",
+            enabled: false,
+          },
+        ],
+      });
+
+      resetSettings();
+
+      const restored = settingsStore
+        .get(settingsAtom)
+        .activeEmbeddingModels.find(
+          (m) => getModelKeyFromModel(m) === getModelKeyFromModel(azureDefault!)
+        );
+      expect(restored).toMatchObject({
+        apiKey: "az-key",
+        azureOpenAIApiInstanceName: "my-instance",
+        azureOpenAIApiEmbeddingDeploymentName: "embed-deploy",
+        azureOpenAIApiVersion: "2025-01-01-preview",
+      });
+      expect(restored!.enabled).toBe(azureDefault!.enabled);
+    });
+
+    it("filters out null/undefined model secrets", () => {
+      const modelWithNull: CustomModel = {
+        ...BUILTIN_CHAT_MODELS[0],
+        apiKey: null as unknown as string,
+      };
+      settingsStore.set(settingsAtom, {
+        ...DEFAULT_SETTINGS,
+        activeModels: [modelWithNull],
+      });
+
+      resetSettings();
+
+      const after = settingsStore.get(settingsAtom);
+      const restored = after.activeModels.find(
+        (m) => getModelKeyFromModel(m) === getModelKeyFromModel(BUILTIN_CHAT_MODELS[0])
+      );
+      expect(restored).toBeDefined();
+      expect(restored!.apiKey).toBe(BUILTIN_CHAT_MODELS[0].apiKey);
+    });
+
+    it("preserves configured models belonging to preserved providers (https://github.com/logancyang/obsidian-copilot-preview/issues/259)", () => {
+      const providerId1 = "prov-with-key";
+      const providerId2 = "prov-no-key";
+      settingsStore.set(settingsAtom, {
+        ...DEFAULT_SETTINGS,
+        providers: {
+          [providerId1]: {
+            providerId: providerId1,
+            providerType: "openai-compatible",
+            displayName: "Provider With Key",
+            apiKeyKeychainId: "kc-123",
+            origin: { kind: "byok" },
+            addedAt: Date.now(),
+          },
+          [providerId2]: {
+            providerId: providerId2,
+            providerType: "openai-compatible",
+            displayName: "Provider No Key (Ollama)",
+            origin: { kind: "byok" },
+            addedAt: Date.now(),
+          },
+        },
+        configuredModels: [
+          {
+            configuredModelId: "model-1",
+            providerId: providerId1,
+            info: { id: "gpt-4", displayName: "GPT-4" },
+            configuredAt: Date.now(),
+          },
+          {
+            configuredModelId: "model-2",
+            providerId: providerId2,
+            info: { id: "llama3", displayName: "Llama 3" },
+            configuredAt: Date.now(),
+          },
+        ],
+      });
+
+      resetSettings();
+
+      const after = settingsStore.get(settingsAtom);
+      expect(after.providers[providerId1]).toBeDefined();
+      expect(after.providers[providerId2]).toBeUndefined();
+      expect(after.configuredModels.length).toBe(1);
+      expect(after.configuredModels[0].configuredModelId).toBe("model-1");
+      expect(after.configuredModels[0].providerId).toBe(providerId1);
+    });
+
+    it("clears backends regardless of preserved providers", () => {
+      settingsStore.set(settingsAtom, {
+        ...DEFAULT_SETTINGS,
+        providers: {
+          prov1: {
+            providerId: "prov1",
+            providerType: "openai-compatible",
+            displayName: "Provider",
+            apiKeyKeychainId: "kc-123",
+            origin: { kind: "byok" },
+            addedAt: Date.now(),
+          },
+        },
+        backends: {
+          chat: { enabledModels: ["model-1", "model-2"] },
+          opencode: { enabledModels: ["model-3"] },
+        },
+      });
+
+      resetSettings();
+
+      const after = settingsStore.get(settingsAtom);
+      expect(after.providers.prov1).toBeDefined();
+      expect(after.backends).toEqual(DEFAULT_SETTINGS.backends);
     });
   });
 });

@@ -766,6 +766,29 @@ describe("plusUtils", () => {
 
       expect(await checkIsPaidUser(undefined, { trigger: "manual" })).toBe(false);
     });
+
+    it("leaves the retained paid state untouched when validation is unreachable after reset (https://github.com/logancyang/obsidian-copilot-preview/issues/259)", async () => {
+      // The post-reset shape: reset kept isPaidUser and the license key but
+      // dropped the entitlement token. An unreachable server means "unknown",
+      // not "unentitled" — writing the paid flag here would read as sign-out
+      // to the settings subscriber (`plusSyncNeeded`) and tear down the
+      // preserved Plus provider and its keychain entry.
+      mockGetSettings.mockReturnValue(
+        buildSettings({
+          plusLicenseKey: "key",
+          isPaidUser: true,
+          isPlusUser: false,
+          entitlementToken: "",
+          entitlementExpiresAt: FUTURE_EXP_SECONDS * 1000,
+        })
+      );
+      mockValidateLicenseKey.mockRejectedValue(new Error("net::ERR_INTERNET_DISCONNECTED"));
+
+      expect(await checkIsPaidUser(undefined, { trigger: "manual" })).toBe(false);
+      expect(mockValidateLicenseKey).toHaveBeenCalled();
+      expect(mockSetSettings).not.toHaveBeenCalled();
+      expect(mockUpdateSetting).not.toHaveBeenCalled();
+    });
   });
 
   describe("useLicenseState()", () => {
@@ -808,6 +831,26 @@ describe("plusUtils", () => {
       // stops naming a plan whose entitlement has already closed.
       await verifySessionClaims({ plan: "plus", tier: "plus", exp: PAST_EXP_SECONDS });
       mockGetSettings.mockReturnValue(tokenBackedSettings({ plusLicenseKey: "key" }));
+
+      const { result } = renderHook(() => useLicenseState());
+
+      expect(result.current).toEqual({ status: "inactive" });
+    });
+
+    it("reports inactive once the retained post-reset expiry has passed (https://github.com/logancyang/obsidian-copilot-preview/issues/259)", () => {
+      // The post-reset shape: reset kept isPaidUser and the original expiry
+      // but dropped the token, so no signed claims exist. The retained expiry
+      // is what keeps this display time-bounded — without it a reset user
+      // offline would read Active forever.
+      mockGetSettings.mockReturnValue(
+        buildSettings({
+          plusLicenseKey: "key",
+          isPaidUser: true,
+          isPlusUser: false,
+          entitlementToken: "",
+          entitlementExpiresAt: PAST_EXP_SECONDS * 1000,
+        })
+      );
 
       const { result } = renderHook(() => useLicenseState());
 

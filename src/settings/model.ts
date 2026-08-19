@@ -6,6 +6,7 @@ import { v4 as uuidv4 } from "uuid";
 import type { CopilotMode, ModelSelection } from "@/agentMode";
 import { ChainType } from "@/chainType";
 import type { BackendConfig, BackendType, ConfiguredModel, Provider } from "@/modelManagement";
+import { MODEL_SECRET_FIELDS, TOP_LEVEL_SECRET_FIELDS } from "@/services/settingsSecretTransforms";
 import { type SortStrategy, isSortStrategy } from "@/utils/recentUsageManager";
 import {
   AGENT_MAX_ITERATIONS_LIMIT,
@@ -605,7 +606,215 @@ export function getSettings(): Readonly<CopilotSettings> {
 }
 
 /**
- * Resets the settings to the default values.
+ * A builtin model row's credential bundle: the key, plus the non-secret fields
+ * without which that key cannot reach its service.
+ *
+ * Reason: none of the added fields is a secret, so they are deliberately kept
+ * out of `MODEL_SECRET_FIELDS`, which also drives persist-time secret
+ * stripping — listing them there would blank routing config on every save.
+ * They belong here because a key without its routing is worse than no key at
+ * all: `baseUrl` decides which host receives it (a reset endpoint sends a proxy
+ * key to the provider's default host), and the Azure trio is what
+ * `embeddingManager` composes into the request URL for the builtin Azure
+ * embedding row. Azure's *chat* deployment and `bedrockRegion` are absent
+ * because no builtin row uses those providers; custom rows survive whole and
+ * never consult this list.
+ * https://github.com/logancyang/obsidian-copilot-preview/issues/259
+ */
+const MODEL_CREDENTIAL_BUNDLE_FIELDS = [
+  ...MODEL_SECRET_FIELDS,
+  "baseUrl",
+  "enableCors",
+  "openAIOrgId",
+  "azureOpenAIApiInstanceName",
+  "azureOpenAIApiVersion",
+  "azureOpenAIApiEmbeddingDeploymentName",
+] as const satisfies readonly (keyof CustomModel)[];
+
+/**
+ * A session proof rather than a credential, despite matching the secret-key
+ * heuristic. `verifyEntitlement` checks it against `settings.userId`, which
+ * reset replaces with a fresh `uuidv4()`, so a carried-over token could never
+ * verify again — it would only survive as dead state that keeps the
+ * in-process entitlement looking live while the Plus provider is unregistered.
+ * `plusLicenseKey` is the real credential and is preserved; the next license
+ * check re-issues this token.
+ * https://github.com/logancyang/obsidian-copilot-preview/issues/259
+ */
+const SESSION_PROOF_FIELD = "entitlementToken";
+
+/**
+ * Non-secret top-level fields a preserved credential needs in order to reach
+ * its service: the vendor config a model row falls back to when it does not
+ * carry its own.
+ *
+ * Typed against `CopilotSettings` so a mistyped name fails the build. The
+ * secret half cannot be typed this way because it is derived at runtime from
+ * `DEFAULT_SETTINGS`, which is exactly why the hand-written half is.
+ */
+const TOP_LEVEL_CREDENTIAL_COMPANION_FIELDS = [
+  "openAIOrgId",
+  "azureOpenAIApiInstanceName",
+  "azureOpenAIApiDeploymentName",
+  "azureOpenAIApiVersion",
+  "azureOpenAIApiEmbeddingDeploymentName",
+  "amazonBedrockRegion",
+] as const satisfies readonly (keyof CopilotSettings)[];
+
+/**
+ * The top-level counterpart of {@link MODEL_CREDENTIAL_BUNDLE_FIELDS}.
+ *
+ * Kept separate from the model list rather than merged into one array because
+ * the two address different objects with different field names — the Azure
+ * deployment trio only exists at top level, `enableCors` only exists per row.
+ */
+const TOP_LEVEL_CREDENTIAL_BUNDLE_FIELDS: readonly string[] = [
+  ...TOP_LEVEL_SECRET_FIELDS.filter((field) => field !== SESSION_PROOF_FIELD),
+  ...TOP_LEVEL_CREDENTIAL_COMPANION_FIELDS,
+];
+
+/**
+ * Whether a pre-reset value is usable configuration worth carrying over.
+ *
+ * Reason: the bundles are almost entirely strings, and the string check is what
+ * stops a corrupted or cross-version value (say `amazonBedrockRegion: {}` from
+ * a hand-edited `data.json`) from surviving reset and then throwing at its
+ * consumer. Only `enableCors` is legitimately non-string, so it is named here
+ * rather than widening the check for everything.
+ * https://github.com/logancyang/obsidian-copilot-preview/issues/259
+ *
+ * @param field - Bundle field being considered, which decides the expected type.
+ * @param value - The pre-reset value.
+ */
+function carriesConfiguration(field: string, value: unknown): boolean {
+  if (field === "enableCors") return typeof value === "boolean";
+  return typeof value === "string" && value.length > 0;
+}
+
+/**
+ * Overlay a preserved credential bundle onto a default model row.
+ *
+ * Reason: a builtin model's identity and parameters belong to the shipped
+ * default, but its credential belongs to the user — and a credential is only
+ * usable against the service it was issued for. This narrow allowlist resets
+ * preferences such as enabled state and temperature while keeping the retained
+ * key pointed where the user aimed it.
+ *
+ * @param defaultModel - The freshly built default row that owns the identity.
+ * @param source - The pre-reset row supplying the credential bundle.
+ */
+function withPreservedModelCredential(defaultModel: CustomModel, source: CustomModel): CustomModel {
+  const merged = { ...defaultModel } as unknown as Record<string, unknown>;
+  const sourceRecord = source as unknown as Record<string, unknown>;
+  for (const field of MODEL_CREDENTIAL_BUNDLE_FIELDS) {
+    const value = sourceRecord[field];
+    if (carriesConfiguration(field, value)) {
+      merged[field] = value;
+    }
+  }
+  return merged as unknown as CustomModel;
+}
+
+/**
+ * Rebuild one model list for reset: builtin rows return to their defaults but
+ * keep their credential and its endpoint, and every custom row survives intact.
+ *
+ * @param defaultModels - Builtin rows as a fresh install would have them.
+ * @param currentModels - The pre-reset rows to harvest credentials from.
+ */
+function preserveModelCredentials(
+  defaultModels: CustomModel[],
+  currentModels: CustomModel[]
+): CustomModel[] {
+  const currentByKey = new Map(currentModels.map((model) => [getModelKeyFromModel(model), model]));
+  const defaultKeys = new Set(defaultModels.map((model) => getModelKeyFromModel(model)));
+
+  const restoredBuiltIns = defaultModels.map((defaultModel) => {
+    const previous = currentByKey.get(getModelKeyFromModel(defaultModel));
+    return previous ? withPreservedModelCredential(defaultModel, previous) : defaultModel;
+  });
+
+  // Reason: every custom row is kept, including apparently keyless ones. The
+  // keychain is the sole secret store, so an empty in-memory `apiKey` is
+  // ambiguous — it means either "no credential" or "this session's keychain
+  // read failed". Dropping the row on that signal would strand the keychain
+  // entry with no `name|provider` identity left to reattach it to. Reset is not
+  // a cleanup tool, so it errs toward keeping rows.
+  // https://github.com/logancyang/obsidian-copilot-preview/issues/259
+  const customModels = currentModels.filter(
+    (model) => !defaultKeys.has(getModelKeyFromModel(model))
+  );
+
+  return [...restoredBuiltIns, ...customModels];
+}
+
+/**
+ * Keep only the provider rows that own a credential, so reset does not orphan
+ * the keychain entries those rows point at.
+ *
+ * Selection is by pointer truthiness rather than `requiresApiKey`: Plus sign-in
+ * creates its provider with `requiresApiKey: false` and then stores the license
+ * key via `setApiKey`, so filtering on that flag would silently drop a real
+ * credential. Whole rows survive because `baseUrl` / `extras` / `providerType`
+ * are what make the key usable; keyless rows (Ollama, LMStudio) carry nothing
+ * and are reset away.
+ * https://github.com/logancyang/obsidian-copilot-preview/issues/259
+ *
+ * @param providers - The pre-reset provider rows.
+ */
+function preserveProvidersWithCredentials(
+  providers: Record<string, Provider> | undefined
+): Record<string, Provider> {
+  const preserved = Object.entries(providers ?? {}).filter(
+    ([, provider]) => !!provider?.apiKeyKeychainId
+  );
+  return preserved.length > 0 ? Object.fromEntries(preserved) : EMPTY_PROVIDERS;
+}
+
+/**
+ * Keep only the configured models belonging to providers that were preserved.
+ *
+ * Reason: a `ConfiguredModel` doesn't directly carry a credential, but its
+ * existence depends on the parent provider's credential. When a provider is
+ * preserved, its models must be too — otherwise the user sees "API key set"
+ * but "No models added", and their model configuration is lost. When a provider
+ * is dropped (e.g. Ollama with no key), its models go with it.
+ *
+ * @param configuredModels - The pre-reset configured model rows.
+ * @param preservedProviderIds - Set of provider IDs that survived the reset.
+ */
+function preserveConfiguredModelsForProviders(
+  configuredModels: ConfiguredModel[] | undefined,
+  preservedProviderIds: Set<string>
+): ConfiguredModel[] {
+  if (!Array.isArray(configuredModels) || configuredModels.length === 0) {
+    return EMPTY_CONFIGURED_MODELS;
+  }
+  const preserved = configuredModels.filter((model) => preservedProviderIds.has(model.providerId));
+  return preserved.length > 0 ? preserved : EMPTY_CONFIGURED_MODELS;
+}
+
+/**
+ * Resets the settings to the default values while preserving credentials.
+ *
+ * Reset restores every non-credential setting to its default, but deliberately
+ * carries forward the user's API keys: the top-level secret fields, the
+ * credential and endpoint on builtin model rows, custom model rows that carry a
+ * credential, and the provider rows that own a keychain pointer. Configured
+ * models belonging to preserved providers are also kept — dropping them would
+ * orphan the user's model configuration while the provider's credential
+ * survives.
+ *
+ * Reset is not a way to erase secrets — "Delete All Keys" (Advanced Settings →
+ * API Key Storage, backed by `KeychainService.forgetAllSecrets`) is the
+ * dedicated path for that, and it also clears the OS keychain, which reset
+ * never touches.
+ *
+ * `backends` is cleared: it holds per-backend model enrollment (references to
+ * `configuredModelId`), which is a user preference rather than structure needed
+ * to address a keychain entry. Preserved models stay visible in settings, but
+ * each backend's picker reads `enabledModels` as authoritative and shows
+ * nothing until the user re-enables them there.
  *
  * DESIGN NOTE — does NOT clear secrets from the Obsidian Keychain. Reset only
  * rewrites `data.json` to defaults while leaving its Obsidian Keychain
@@ -615,9 +824,21 @@ export function getSettings(): Readonly<CopilotSettings> {
  * the keychain service and its callbacks through `SettingsMainV2`, and is
  * intentionally left out of the synchronous reset path.
  * If a future review flags this again, point them at this note.
+ *
+ * Preserving the rows above is what makes that note safe: the keychain entries
+ * this function deliberately leaves behind stay reachable, instead of becoming
+ * orphans no surviving pointer names.
+ *
+ * DESIGN NOTE — `_keychainVaultId` needs no entry in the preserved lists.
+ * `setSettings` merges (`{ ...prev, ...partial }`), and neither
+ * `DEFAULT_SETTINGS` nor the preserved slices carry that key, so the
+ * pre-reset keychain namespace flows through reset untouched; the
+ * reset → persist → reload integration test asserts it survives to disk.
+ * If a future review flags this again, point them at this note.
  */
 export function resetSettings(): void {
   const current = getSettings();
+  const currentRecord = current as unknown as Record<string, unknown>;
   // Reset is a deterministic path, not best-effort: preserve the root-exclusion
   // history and fold in the pre-reset active root before it is replaced by the
   // default. Otherwise a reset would drop every historical root and leave that
@@ -626,10 +847,46 @@ export function resetSettings(): void {
     ...(Array.isArray(current.copilotRootHistory) ? current.copilotRootHistory : []),
     current.copilotFolder,
   ]);
+  const preservedTopLevelSecrets: Record<string, unknown> = {};
+  for (const field of TOP_LEVEL_CREDENTIAL_BUNDLE_FIELDS) {
+    const value = currentRecord[field];
+    if (carriesConfiguration(field, value)) {
+      preservedTopLevelSecrets[field] = value;
+    }
+  }
+  const preservedProviders = preserveProvidersWithCredentials(current.providers);
+  const preservedProviderIds = new Set(Object.keys(preservedProviders));
   const defaultSettingsWithBuiltIns = {
     ...DEFAULT_SETTINGS,
-    activeModels: BUILTIN_CHAT_MODELS.map((model) => ({ ...model, enabled: true })),
-    activeEmbeddingModels: BUILTIN_EMBEDDING_MODELS.map((model) => ({ ...model, enabled: true })),
+    ...preservedTopLevelSecrets,
+    // Reason: reset is not a sign-out event. Flipping `isPaidUser` to the
+    // default `false` reads as sign-out to the settings subscriber, whose
+    // Plus reconcile tears down the preserved Plus provider, its models, and
+    // its keychain entry (`plusSyncNeeded` → `unregisterPlusProvider`). Keep
+    // the last server-confirmed paid state AND its original expiry bound until
+    // the preserved license is revalidated — the expiry is tighten-only data
+    // (`isEntitlementExpired`), so keeping it can only close the license UI
+    // earlier, never hold it open; zeroing it would leave a tokenless
+    // paid-Active display with no time bound while offline. The strict
+    // `isPlusUser` flag is NOT kept: reset drops the signed entitlement
+    // token, and the strict gate must never trust a bare boolean without
+    // that proof — the next validation re-derives it.
+    // https://github.com/logancyang/obsidian-copilot-preview/issues/259
+    isPaidUser: current.isPaidUser,
+    entitlementExpiresAt: current.entitlementExpiresAt,
+    activeModels: preserveModelCredentials(
+      BUILTIN_CHAT_MODELS.map((model) => ({ ...model, enabled: true })),
+      current.activeModels ?? []
+    ),
+    activeEmbeddingModels: preserveModelCredentials(
+      BUILTIN_EMBEDDING_MODELS.map((model) => ({ ...model, enabled: true })),
+      current.activeEmbeddingModels ?? []
+    ),
+    providers: preservedProviders,
+    configuredModels: preserveConfiguredModelsForProviders(
+      current.configuredModels,
+      preservedProviderIds
+    ),
     copilotRootHistory: preservedRootHistory,
   };
   setSettings(defaultSettingsWithBuiltIns);

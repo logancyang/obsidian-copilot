@@ -3,6 +3,7 @@ import type { RegisterPlusProviderInput } from "@/modelManagement/setup/CopilotP
 import {
   COPILOT_PLUS_DEFAULT_ENABLED_MODELS,
   COPILOT_PLUS_MODELS,
+  plusSyncNeeded,
   syncCopilotPlusProvider,
 } from "@/modelManagement/setup/copilotPlusSync";
 
@@ -41,6 +42,33 @@ describe("copilotPlusSync", () => {
       "deepseek-v4-pro",
       "glm-5.2",
     ]);
+  });
+
+  describe("plusSyncNeeded()", () => {
+    const signedIn = { isPaidUser: true, plusLicenseKey: "lic-1" };
+
+    it("stays false when a signed-in user's Reset Settings preserves the paid state (https://github.com/logancyang/obsidian-copilot-preview/issues/259)", () => {
+      // The reset write changes almost every field, but preserves both values
+      // this predicate reads — so the destructive unregister cascade (provider
+      // row, configured models, backend refs, provider keychain entry) must
+      // not fire.
+      expect(plusSyncNeeded(signedIn, { ...signedIn })).toBe(false);
+    });
+
+    it("fires on a genuine sign-out or sign-in (isPaidUser flip)", () => {
+      expect(plusSyncNeeded(signedIn, { isPaidUser: false, plusLicenseKey: "lic-1" })).toBe(true);
+      expect(plusSyncNeeded({ isPaidUser: false, plusLicenseKey: "" }, signedIn)).toBe(true);
+    });
+
+    it("fires on a key rotation while signed in, but not while signed out", () => {
+      expect(plusSyncNeeded(signedIn, { isPaidUser: true, plusLicenseKey: "lic-2" })).toBe(true);
+      expect(
+        plusSyncNeeded(
+          { isPaidUser: false, plusLicenseKey: "lic-1" },
+          { isPaidUser: false, plusLicenseKey: "lic-2" }
+        )
+      ).toBe(false);
+    });
   });
 
   describe("syncCopilotPlusProvider()", () => {
