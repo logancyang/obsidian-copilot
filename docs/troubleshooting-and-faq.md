@@ -107,13 +107,13 @@ The dialog walks through three pages:
 
 1. **Describe it and tick what to include.** The screenshot of the Agent Chat pane is on by default when a pane is open to photograph; the Agent Chat activity log and the regular chat log are pre-selected when their logging is already on.
 2. **Pack, review, then upload.** Copilot briefly hides the dialog to photograph the pane behind it and packs everything into one `copilot-report-….zip`, listing what actually made it in — anything unavailable, empty, or too large to include whole is shown as skipped, failed, or truncated. **Upload & open issue** is a separate click: nothing leaves your machine until you press it. If the upload fails, the zip is still on disk, with **Show in folder** and **Open issue anyway** to attach it by hand.
-3. **Submit.** Copilot opens a prefilled GitHub issue with the uploaded report's link already in the body. Nothing is filed until you press Submit in your browser.
+3. **Submit.** Copilot opens a prefilled GitHub issue with the report ID already in the body, and shows the ID again with a copy button alongside when the report expires. The ID is a reference maintainers look the report up by — not a link, and nothing on the issue can download the bundle. You can also paste it into Discord when asking for support there. Nothing is filed until you press Submit in your browser.
 
 The staging folder stays next to the zip on your computer. To take something out, edit the files there and press **Rebuild zip** before uploading — the zip is packed before you see it, so editing that folder alone does not change what would be sent.
 
 To collect the chat log by hand instead, run **Copilot: Create log file** from the command palette; it saves and opens the log as a note in your vault. Agent Chat logs can be opened or cleared under **Advanced → Debugging & support → Agent Mode activity log**.
 
-Logs and screenshots can contain prompts, note contents, paths, and tool inputs. Usernames, email addresses, and recognizable API keys are stripped from text attachments on a best-effort pass; the screenshot is not redacted at all. Review what you are sending.
+Logs and screenshots can contain prompts, note contents, paths, and tool inputs. Usernames, email addresses, and recognizable API keys are stripped from text attachments on a best-effort pass; the screenshot is not redacted at all. Review what you are sending. The uploaded bundle stays private and is deleted after 60 days; the staging folder and zip on your own machine are yours and are not part of that deletion.
 
 ## What works on mobile?
 
