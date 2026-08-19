@@ -22,17 +22,31 @@ const CHAT_HISTORY: ChatMessage[] = [
 ];
 
 let resizeCallback: ResizeObserverCallback;
+let observedTargets = new Map<Element, ResizeObserverCallback>();
 const observe = jest.fn();
 const disconnect = jest.fn();
 
+/**
+ * jsdom has no ResizeObserver. This stand-in keeps the callback per observed
+ * target so a test can resize one element, and records observe/disconnect
+ * calls so a test can assert which elements the hook watches.
+ */
 class MockResizeObserver {
+  private readonly callback: ResizeObserverCallback;
+
   constructor(callback: ResizeObserverCallback) {
+    this.callback = callback;
     resizeCallback = callback;
   }
 
-  observe = observe;
+  observe = (target: Element) => {
+    observedTargets.set(target, this.callback);
+    observe(target);
+  };
+
   unobserve = jest.fn();
-  disconnect = disconnect;
+
+  disconnect = () => disconnect();
 }
 
 function Harness({ userMessageHeight }: { userMessageHeight: number }) {
@@ -97,6 +111,11 @@ function createScrollContainer(metrics: ScrollMetrics): HTMLDivElement {
       metrics.scrollTop = options.top;
     }
   }) as never;
+  container.scrollBy = jest.fn((options?: ScrollToOptions | number) => {
+    if (typeof options === "object" && typeof options?.top === "number") {
+      metrics.scrollTop += options.top;
+    }
+  }) as never;
   return container;
 }
 
@@ -112,11 +131,18 @@ describe("useChatScrolling", () => {
     queue.forEach((callback) => callback(0));
   }
 
+  // Maps each observed element to its observer's callback, so tests can fire
+  // resizes for a specific target (container vs content) the way the browser
+  // would.
+
+  function fireResizeObserverFor(target: Element) {
+    observedTargets.get(target)?.([], { disconnect: jest.fn() } as unknown as ResizeObserver);
+  }
+
   beforeEach(() => {
     observe.mockClear();
     disconnect.mockClear();
-    // jsdom lacks ResizeObserver; MockResizeObserver also exposes the callback
-    // so a test can drive a resize directly.
+    observedTargets = new Map();
     Object.defineProperty(window, "ResizeObserver", {
       configurable: true,
       value: MockResizeObserver,
@@ -135,11 +161,13 @@ describe("useChatScrolling", () => {
 
   function renderAttachedHook(metrics: ScrollMetrics) {
     const container = createScrollContainer(metrics);
+    const content = document.createElement("div");
     const rendered = renderHook(() => useChatScrolling({ chatHistory: [] }));
     act(() => {
       rendered.result.current.scrollContainerCallbackRef(container);
+      rendered.result.current.contentCallbackRef(content);
     });
-    return { container, rendered };
+    return { container, content, rendered };
   }
 
   function dispatchScroll(container: HTMLDivElement) {
@@ -212,17 +240,30 @@ describe("useChatScrolling", () => {
       expect(rendered.result.current.isAtBottom).toBe(false);
     });
 
-    it("refreshes isAtBottom on re-render when streamed content grows without a scroll event (https://github.com/logancyang/obsidian-copilot-preview/issues/329)", () => {
+    it("refreshes isAtBottom when the observed content grows without a scroll event, e.g. streaming or image loads (https://github.com/logancyang/obsidian-copilot-preview/issues/329)", () => {
       const metrics = { scrollHeight: 1000, clientHeight: 400, scrollTop: 600 };
-      const { rendered } = renderAttachedHook(metrics);
+      const { content, rendered } = renderAttachedHook(metrics);
       expect(rendered.result.current.isAtBottom).toBe(true);
 
       metrics.scrollHeight = 2000;
       act(() => {
-        rendered.rerender();
+        fireResizeObserverFor(content);
       });
 
       expect(rendered.result.current.isAtBottom).toBe(false);
+    });
+
+    it("refreshes isAtBottom when a pane resize changes the viewport height without touching content (https://github.com/logancyang/obsidian-copilot-preview/issues/329)", () => {
+      const metrics = { scrollHeight: 1000, clientHeight: 400, scrollTop: 100 };
+      const { container, rendered } = renderAttachedHook(metrics);
+      expect(rendered.result.current.isAtBottom).toBe(false);
+
+      metrics.clientHeight = 950;
+      act(() => {
+        fireResizeObserverFor(container);
+      });
+
+      expect(rendered.result.current.isAtBottom).toBe(true);
     });
 
     it("scrollToBottom scrolls the container to its full scroll height", () => {
@@ -234,6 +275,18 @@ describe("useChatScrolling", () => {
       });
 
       expect(container.scrollTo).toHaveBeenLastCalledWith({ top: 1000, behavior: "smooth" });
+    });
+
+    it("scrollBy moves the container by the forwarded wheel delta without animation", () => {
+      const metrics = { scrollHeight: 1000, clientHeight: 400, scrollTop: 100 };
+      const { container, rendered } = renderAttachedHook(metrics);
+
+      act(() => {
+        rendered.result.current.scrollBy(120);
+      });
+
+      expect(container.scrollBy).toHaveBeenCalledWith({ top: 120, behavior: "instant" });
+      expect(metrics.scrollTop).toBe(220);
     });
   });
 });

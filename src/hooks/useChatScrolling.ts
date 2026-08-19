@@ -9,11 +9,24 @@ interface UseChatScrollingOptions {
 interface UseChatScrollingReturn {
   containerMinHeight: number;
   scrollContainerCallbackRef: (node: HTMLDivElement | null) => void;
+  /**
+   * Attach to the wrapper around the message content inside the scroll
+   * container. Content growth (streaming, image loads) changes this element's
+   * height without firing scroll events, so the hook observes it to keep
+   * `isAtBottom` truthful.
+   */
+  contentCallbackRef: (node: HTMLDivElement | null) => void;
   getMessageKey: (message: ChatMessage, index: number) => string;
   /** True while the viewport rests within a small threshold of the newest message. */
   isAtBottom: boolean;
   /** Scrolls the message list to its end. */
   scrollToBottom: (behavior?: "smooth" | "instant") => void;
+  /**
+   * Scrolls the message list by a wheel delta. Lets overlays floating above
+   * the list (the scroll-to-bottom button) forward wheel events so hovering
+   * them doesn't trap scrolling.
+   */
+  scrollBy: (deltaY: number) => void;
 }
 
 // Tolerance below which the viewport still counts as "at the bottom", so
@@ -28,6 +41,8 @@ export const useChatScrolling = ({
   const [isAtBottom, setIsAtBottom] = useState(true);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const contentResizeObserverRef = useRef<ResizeObserver | null>(null);
   const scrollListenerCleanupRef = useRef<(() => void) | null>(null);
   const pendingScrollFrameRef = useRef<{ win: Window; id: number } | null>(null);
 
@@ -141,6 +156,9 @@ export const useChatScrolling = ({
             const newCalculatedMinHeight = calculateDynamicMinHeight();
             setContainerMinHeight(newCalculatedMinHeight);
           }
+          // Pane resizes change clientHeight, which shifts the bottom-distance
+          // math even when the content height is unchanged.
+          updateIsAtBottom();
         });
 
         // Observe the messages container for size changes
@@ -188,21 +206,43 @@ export const useChatScrolling = ({
     }
   }, [chatHistory, calculateDynamicMinHeight]);
 
-  // Streaming appends grow scrollHeight without firing scroll events, so the
-  // at-bottom flag would go stale mid-generation and the scroll-to-bottom
-  // affordance would never appear. Re-check after every render; the setState
-  // inside bails out unless the boolean actually flips.
+  // Content growth (streaming appends, image/diagram loads) changes the
+  // content element's height without firing scroll events, so the at-bottom
+  // flag would go stale mid-generation and the scroll-to-bottom affordance
+  // would never appear. Observing the content wrapper covers both React and
+  // non-React growth; the container's own observer can't see it because a
+  // fixed-height scroller keeps the same border-box while scrollHeight grows.
   // https://github.com/logancyang/obsidian-copilot-preview/issues/329
-  useEffect(() => {
-    updateIsAtBottom();
-  });
+  const contentCallbackRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      if (node === contentRef.current) {
+        return;
+      }
+      if (contentResizeObserverRef.current) {
+        contentResizeObserverRef.current.disconnect();
+        contentResizeObserverRef.current = null;
+      }
+      contentRef.current = node;
+      if (node) {
+        const observer = new ResizeObserver(() => {
+          updateIsAtBottom();
+        });
+        observer.observe(node);
+        contentResizeObserverRef.current = observer;
+      }
+    },
+    [updateIsAtBottom]
+  );
 
-  // Cleanup ResizeObserver and scroll tracking on unmount
+  // Cleanup ResizeObservers and scroll tracking on unmount
   useEffect(() => {
     return () => {
       detachScrollTracking();
       if (resizeObserverRef.current) {
         resizeObserverRef.current.disconnect();
+      }
+      if (contentResizeObserverRef.current) {
+        contentResizeObserverRef.current.disconnect();
       }
     };
   }, [detachScrollTracking]);
@@ -215,6 +255,12 @@ export const useChatScrolling = ({
         behavior,
       });
     }
+  }, []);
+
+  // "instant" bypasses the container's scroll-smooth so wheel steps don't
+  // animate-lag behind the user's hand.
+  const scrollBy = useCallback((deltaY: number) => {
+    scrollContainerRef.current?.scrollBy({ top: deltaY, behavior: "instant" });
   }, []);
 
   // Scroll to bottom when component mounts (instant to avoid initial animation)
@@ -255,8 +301,10 @@ export const useChatScrolling = ({
   return {
     containerMinHeight,
     scrollContainerCallbackRef,
+    contentCallbackRef,
     getMessageKey,
     isAtBottom,
     scrollToBottom,
+    scrollBy,
   };
 };
