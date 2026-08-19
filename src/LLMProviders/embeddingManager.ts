@@ -283,7 +283,7 @@ export default class EmbeddingManager {
       },
       [EmbeddingModelProviders.OPENAI_FORMAT]: {
         modelName,
-        openAIApiKey: customModel.apiKey || "",
+        openAIApiKey: customModel.apiKey || "default-key",
         batchSize: getSettings().embeddingBatchSize,
         configuration: {
           baseURL: customModel.baseUrl,

@@ -127,3 +127,16 @@ if (typeof window.activeDocument === "undefined") {
 if (typeof window.activeWindow === "undefined") {
   window.activeWindow = window;
 }
+
+// Polyfill Obsidian's `Array.prototype.contains` augmentation (an alias of
+// `includes`). It is defined non-enumerably so `for...in` over arrays is
+// unaffected, matching how the runtime installs it.
+if (typeof Array.prototype.contains !== "function") {
+  Object.defineProperty(Array.prototype, "contains", {
+    value: function (target) {
+      return this.includes(target);
+    },
+    writable: true,
+    configurable: true,
+  });
+}
