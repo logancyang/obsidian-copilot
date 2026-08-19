@@ -207,6 +207,30 @@ describe("ConfigureProviderForm (new mode)", () => {
     expect(rowCheckbox("llama3.2").getAttribute("aria-checked")).toBe("false");
   });
 
+  it("waits for Test before discovering models from a typed custom URL (https://github.com/logancyang/obsidian-copilot/issues/2895)", async () => {
+    mockVerifyCredentials.mockResolvedValue({ ok: true, checkedAt: 1 });
+    render(
+      <ConfigureProviderForm
+        state={{ mode: "new", source: CUSTOM_OPENAI_DEFINITION }}
+        onClose={jest.fn()}
+      />
+    );
+    const baseUrlInput = screen.getByText("Base URL").parentElement?.querySelector("input");
+    expect(baseUrlInput).not.toBeNull();
+
+    fireEvent.change(baseUrlInput!, { target: { value: "h" } });
+    fireEvent.change(baseUrlInput!, { target: { value: "https://work.example.com/v1" } });
+    expect(mockListProviderModels).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Test" }));
+    await waitFor(() => expect(mockListProviderModels).toHaveBeenCalledTimes(1));
+    expect(mockListProviderModels).toHaveBeenCalledWith(
+      "openai-compatible",
+      "https://work.example.com/v1",
+      expect.objectContaining({ apiKey: null })
+    );
+  });
+
   it("uses the source default URL as the input placeholder", () => {
     render(
       <ConfigureProviderForm state={{ mode: "new", source: anthropicSource }} onClose={jest.fn()} />
