@@ -508,7 +508,10 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     });
 
     const translatorState = createTranslatorState(session.claudeTaskPlan, session.backgroundTasks);
-    let stopReason: StopReason = "end_turn";
+    // Only a result that owns this turn sets the outcome. A stream that ends
+    // without one — shutdown, or nothing but background-task chatter — left the
+    // prompt unanswered, so it must not report a successful turn.
+    let stopReason: StopReason = "cancelled";
     let resultErrorMessage: string | null = null;
     try {
       let planUsageRequested = false;
@@ -528,7 +531,12 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
         }
         const events = translateSdkMessage(sdkMsg, params.sessionId, translatorState);
         for (const e of events) this.dispatchEvent(e);
-        if (sdkMsg.type === "result") {
+        // On a resumed session a queued background-task notification can arrive
+        // before Claude answers the new prompt, and the SDK closes it with its
+        // own `result`. Ending the turn there drops the user's prompt entirely:
+        // the answer is never consumed and the request records as interrupted.
+        // https://github.com/logancyang/obsidian-copilot-preview/issues/246
+        if (sdkMsg.type === "result" && sdkMsg.origin?.kind !== "task-notification") {
           stopReason = mapStopReason(sdkMsg);
           if (sdkMsg.subtype === "success" && sdkMsg.is_error && sdkMsg.result.trim()) {
             resultErrorMessage = sdkMsg.result;

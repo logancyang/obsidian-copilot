@@ -1,4 +1,9 @@
-import type { HookCallback, ModelInfo, SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import type {
+  HookCallback,
+  ModelInfo,
+  SDKMessage,
+  SDKMessageOrigin,
+} from "@anthropic-ai/claude-agent-sdk";
 import type { BackendDescriptor, SessionEvent } from "@/agentMode/session/types";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
@@ -116,9 +121,10 @@ function streamEvent(event: object): SDKMessage {
   } as SDKMessage;
 }
 
-function resultMessage(): SDKMessage {
+function resultMessage(origin?: SDKMessageOrigin): SDKMessage {
   return {
     type: "result",
+    ...(origin ? { origin } : {}),
     subtype: "success",
     duration_ms: 1,
     duration_api_ms: 1,
@@ -422,6 +428,64 @@ describe("ClaudeSdkBackendProcess", () => {
           content: [{ type: "content", content: { type: "text", text: "late report" } }],
         },
       });
+    });
+
+    it("answers the user prompt when a stale task notification closes its own result first (https://github.com/logancyang/obsidian-copilot-preview/issues/246)", async () => {
+      queryMock.mockImplementation(() =>
+        makeQuery([
+          {
+            type: "system",
+            subtype: "task_notification",
+            task_id: "b0510bkam",
+            status: "stopped",
+            summary: "No completion record was found for this background shell command.",
+          } as unknown as SDKMessage,
+          resultMessage({ kind: "task-notification" }),
+          streamEvent({
+            type: "content_block_delta",
+            index: 0,
+            delta: { type: "text_delta", text: "the answer" },
+          }),
+          resultMessage(),
+        ])
+      );
+
+      const proc = new ClaudeSdkBackendProcess({
+        pathToClaudeCodeExecutable: "/usr/local/bin/claude",
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        app: { vault: {} } as any,
+        clientVersion: "1.2.3",
+        descriptor: fakeDescriptor(),
+      });
+
+      const { sessionId } = await proc.newSession({ cwd: "/vault" });
+      const events: SessionEvent[] = [];
+      proc.registerSessionHandler(sessionId, (e) => events.push(e));
+
+      const resp = await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
+
+      expect(resp.stopReason).toBe("end_turn");
+      const chunks = events.filter((e) => e.update.sessionUpdate === "agent_message_chunk");
+      expect(chunks).toHaveLength(1);
+    });
+
+    it("reports a cancelled turn when the only result belongs to a task notification (https://github.com/logancyang/obsidian-copilot-preview/issues/246)", async () => {
+      queryMock.mockImplementation(() => makeQuery([resultMessage({ kind: "task-notification" })]));
+
+      const proc = new ClaudeSdkBackendProcess({
+        pathToClaudeCodeExecutable: "/usr/local/bin/claude",
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        app: { vault: {} } as any,
+        clientVersion: "1.2.3",
+        descriptor: fakeDescriptor(),
+      });
+
+      const { sessionId } = await proc.newSession({ cwd: "/vault" });
+      proc.registerSessionHandler(sessionId, () => {});
+
+      const resp = await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
+
+      expect(resp.stopReason).toBe("cancelled");
     });
 
     it("forwards the composed system prompt via systemPrompt append on the claude_code preset", async () => {
