@@ -192,7 +192,11 @@ export default class ChatModelManager {
     const modelInfo = getModelInfo(modelName);
     const { isThinkingEnabled, usesAdaptiveThinking } = modelInfo;
     const resolvedTemperature = this.getTemperatureForModel(modelInfo, customModel, settings);
-    const maxTokens = customModel.maxTokens ?? settings.maxTokens;
+    // Copilot sets no output limit. This stays undefined unless the model
+    // carries one of its own, and an undefined limit is left out of the
+    // request, so the provider writes whatever the context window allows.
+    // https://github.com/logancyang/obsidian-copilot-preview/issues/312
+    const maxTokens = customModel.maxTokens;
     const openAIFormatIsKeyless = customModel.requiresApiKey === false;
 
     // Base config - temperature will be handled by provider-specific methods
@@ -223,12 +227,7 @@ export default class ChatModelManager {
           fetch: customModel.enableCors ? safeFetch : undefined,
           organization: customModel.openAIOrgId || settings.openAIOrgId,
         },
-        ...this.getOpenAISpecialConfig(
-          modelName,
-          customModel.maxTokens ?? settings.maxTokens,
-          customModel.temperature ?? settings.temperature,
-          customModel
-        ),
+        ...this.getOpenAISpecialConfig(modelName, maxTokens, customModel),
       },
       [ChatModelProviders.ANTHROPIC]: {
         anthropicApiKey: await this.resolveApiKey(
@@ -289,12 +288,7 @@ export default class ChatModelManager {
             },
             fetch: customModel.enableCors ? safeFetch : undefined,
           },
-          ...this.getOpenAISpecialConfig(
-            modelName,
-            customModel.maxTokens ?? settings.maxTokens,
-            customModel.temperature ?? settings.temperature,
-            customModel
-          ),
+          ...this.getOpenAISpecialConfig(modelName, maxTokens, customModel),
         };
       })(),
       [ChatModelProviders.COHEREAI]: {
@@ -420,12 +414,7 @@ export default class ChatModelManager {
           // https://github.com/logancyang/obsidian-copilot/issues/2895
           defaultHeaders: openAIFormatIsKeyless ? { Authorization: null } : undefined,
         },
-        ...this.getOpenAISpecialConfig(
-          modelName,
-          customModel.maxTokens ?? settings.maxTokens,
-          customModel.temperature ?? settings.temperature,
-          customModel
-        ),
+        ...this.getOpenAISpecialConfig(modelName, maxTokens, customModel),
       },
       [ChatModelProviders.SILICONFLOW]: {
         modelName: modelName,
@@ -438,12 +427,7 @@ export default class ChatModelManager {
           baseURL: customModel.baseUrl || ProviderInfo[ChatModelProviders.SILICONFLOW].host,
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
-        ...this.getOpenAISpecialConfig(
-          modelName,
-          customModel.maxTokens ?? settings.maxTokens,
-          customModel.temperature ?? settings.temperature,
-          customModel
-        ),
+        ...this.getOpenAISpecialConfig(modelName, maxTokens, customModel),
       },
       [ChatModelProviders.COPILOT_PLUS]: {
         modelName: modelName,
@@ -507,16 +491,11 @@ export default class ChatModelManager {
       customModel
     );
 
-    // LangChain 0.6.6 handles token configuration for special models internally
-    const tokenConfig = {
-      maxTokens,
-    };
-
     const finalConfig = {
       ...baseConfig,
       ...selectedProviderConfig,
       ...providerSpecificParams,
-      ...tokenConfig,
+      ...(maxTokens === undefined ? {} : { maxTokens }),
     };
 
     return finalConfig as ModelConfig;
@@ -539,8 +518,7 @@ export default class ChatModelManager {
    */
   private getOpenAISpecialConfig(
     modelName: string,
-    maxTokens: number,
-    _temperature: number | undefined,
+    maxTokens: number | undefined,
     customModel?: CustomModel
   ): Record<string, unknown> {
     const settings = getSettings();
@@ -552,8 +530,8 @@ export default class ChatModelManager {
     );
 
     const config: Record<string, unknown> = {
-      maxTokens,
       temperature: resolvedTemperature,
+      ...(maxTokens === undefined ? {} : { maxTokens }),
     };
 
     // Add reasoning parameters for O-series and GPT-5 models

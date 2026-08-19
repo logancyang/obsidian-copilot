@@ -90,7 +90,7 @@ export abstract class BaseChainRunner implements ChainRunner {
       const displayMessage =
         fullAIResponse ||
         (responseMetadata?.wasTruncated
-          ? "_[The response was truncated before any content could be generated. Try increasing the max tokens limit.]_"
+          ? "_[The model stopped at its maximum response length before generating any content.]_"
           : "");
 
       const messageToAdd = {

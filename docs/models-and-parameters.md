@@ -73,9 +73,14 @@ In **Quick Chat**, the picker shows only enabled **Quick Chat models**. Its
 before editing, and **Auto** uses the selected agent's automatic permission
 behavior.
 
-Copilot V4 does not currently expose per-model temperature, max tokens, top-p,
-or similar tuning in these model lists. In Quick Chat, **Chat Settings** controls
-the session system prompt; it does not add Agent effort or mode controls.
+Copilot V4 does not expose per-model temperature, top-p, or similar tuning in
+these model lists, and it does not cap how long an answer may be. The length of
+an answer is left to the model, which writes until it is finished or until it
+runs out of room in its context window. Claude models are the one exception,
+because Anthropic's API requires a limit on every request: Copilot asks for
+20,000 tokens, roughly 15,000 words, which is far longer than a chat answer
+runs. In Quick Chat, **Chat Settings** controls the session system prompt; it
+does not add Agent effort or mode controls.
 
 ## Related
 

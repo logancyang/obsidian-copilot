@@ -290,6 +290,30 @@ describe("ChatSingleMessage", () => {
     (window as unknown as Record<string, unknown>).activeDocument = window.document;
   });
 
+  it("renders a truncated response as an ordinary message, with no card offering a setting to raise (https://github.com/logancyang/obsidian-copilot-preview/issues/312)", async () => {
+    const { container } = render(
+      <TooltipProvider>
+        <ChatSingleMessage
+          message={{
+            ...baseMessage,
+            message: "The coastline is famously hard to",
+            responseMetadata: { wasTruncated: true, tokenUsage: { outputTokens: 20000 } },
+          }}
+          app={createAppStub()}
+          isStreaming={false}
+          onDelete={() => {}}
+        />
+      </TooltipProvider>
+    );
+
+    await waitFor(() => expect(renderMarkdownMock).toHaveBeenCalled());
+
+    expect(container.querySelector(".message-segment")).toBeTruthy();
+    expect(container.textContent).not.toContain("Response Truncated");
+    expect(container.textContent).not.toContain("Open Model Settings");
+    expect(container.textContent).not.toContain("Token Limit");
+  });
+
   it("normalizes rendered footnotes for assistant messages", async () => {
     renderMarkdownMock.mockImplementation(
       async (_app: unknown, _markdown: string, el: HTMLElement) => {

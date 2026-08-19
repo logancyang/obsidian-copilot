@@ -211,8 +211,31 @@ export enum Verbosity {
   HIGH = "high",
 }
 
+/**
+ * Output length to request from Anthropic, the one provider that will not
+ * accept "no limit".
+ *
+ * Every other provider lets the parameter be left out and then writes whatever
+ * fits the context window, which is the better answer. Anthropic's client
+ * substitutes its own per-model default instead, and for a model id it does not
+ * recognize that default is 4,096.
+ *
+ * 20,000 tokens is about 15,000 words, longer than a chat answer runs. Two
+ * ceilings rule out a larger number.
+ *
+ * The Anthropic SDK rejects a non-streaming request it estimates will take over
+ * ten minutes, and it throws before sending anything. Its estimate is
+ * `60min * maxTokens / 128_000`, which puts the limit at 21,333 tokens.
+ *
+ * A provider also rejects a request whose prompt and requested output together
+ * exceed the context window, so this value has to leave room for a long
+ * conversation.
+ *
+ * https://github.com/logancyang/obsidian-copilot-preview/issues/312
+ */
+export const DEFAULT_MAX_OUTPUT_TOKENS = 20_000;
+
 export const DEFAULT_MODEL_SETTING = {
-  MAX_TOKENS: 6000,
   TEMPERATURE: 0.1,
   REASONING_EFFORT: ReasoningEffort.LOW,
   VERBOSITY: Verbosity.MEDIUM,
@@ -945,7 +968,6 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   embeddingModelKey:
     EmbeddingModels.OPENROUTER_OPENAI_EMBEDDING_SMALL + "|" + EmbeddingModelProviders.OPENROUTERAI,
   temperature: DEFAULT_MODEL_SETTING.TEMPERATURE,
-  maxTokens: DEFAULT_MODEL_SETTING.MAX_TOKENS,
   contextTurns: 15,
   userSystemPrompt: "",
   openAIProxyBaseUrl: "",

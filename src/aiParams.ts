@@ -144,6 +144,9 @@ export interface ProjectConfig {
   // plus that backend's default. Retained so the `project.md` frontmatter written
   // by earlier versions round-trips instead of being dropped on rewrite.
   projectModelKey: string;
+  // Not read at runtime either, for the same reason as `projectModelKey`: the
+  // dialog stopped surfacing these and no request consults them. Kept so the
+  // frontmatter written by earlier versions round-trips.
   modelConfigs: {
     temperature?: number;
     maxTokens?: number;

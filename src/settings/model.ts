@@ -74,7 +74,6 @@ export interface CopilotSettings {
   defaultModelKey: string;
   embeddingModelKey: string;
   temperature: number;
-  maxTokens: number;
   contextTurns: number;
   lastDismissedVersion: string | null;
   // DEPRECATED: Do not use this directly, migrated to file-based system prompts
@@ -962,6 +961,10 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   // https://github.com/logancyang/obsidian-copilot/issues/2928
   delete sanitizedSettingsRecord.amazonBedrockApiKey;
   delete sanitizedSettingsRecord.amazonBedrockRegion;
+  // Copilot no longer limits how long an answer may be, so a stored limit
+  // would only cut off answers the model was willing to finish.
+  // https://github.com/logancyang/obsidian-copilot-preview/issues/312
+  delete sanitizedSettingsRecord.maxTokens;
 
   // Migration: Rename self-hosted search settings to self-host mode (v3.2.0+)
   if (
@@ -992,9 +995,6 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   // Stuff in settings are string even when the interface has number type!
   const temperature = Number(settingsToSanitize.temperature);
   sanitizedSettings.temperature = isNaN(temperature) ? DEFAULT_SETTINGS.temperature : temperature;
-
-  const maxTokens = Number(settingsToSanitize.maxTokens);
-  sanitizedSettings.maxTokens = isNaN(maxTokens) ? DEFAULT_SETTINGS.maxTokens : maxTokens;
 
   const contextTurns = Number(settingsToSanitize.contextTurns);
   sanitizedSettings.contextTurns = isNaN(contextTurns)

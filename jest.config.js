@@ -17,6 +17,10 @@ module.exports = {
     // can't parse; point at the CJS build it ships under dist/commonjs/ (same
     // reason as yaml above).
     "^@orama/orama$": "<rootDir>/node_modules/@orama/orama/dist/commonjs/index.js",
+    // @anthropic-ai/sdk publishes its lib/ entry points through an "exports"
+    // wildcard that Jest's resolver does not expand, so @langchain/anthropic's
+    // require of one fails to resolve. Point at the CJS build directly.
+    "^@anthropic-ai/sdk/lib/(.*)$": "<rootDir>/node_modules/@anthropic-ai/sdk/lib/$1.js",
     "^@agentclientprotocol/sdk$": "<rootDir>/__mocks__/@agentclientprotocol/sdk.js",
     "^@anthropic-ai/claude-agent-sdk$": "<rootDir>/__mocks__/@anthropic-ai/claude-agent-sdk.js",
     // react-resizable-panels is ESM-only with no CJS build to point at; stub it.

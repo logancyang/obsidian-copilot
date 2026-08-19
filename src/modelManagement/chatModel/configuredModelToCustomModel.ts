@@ -13,7 +13,12 @@
  */
 
 import { CustomModel } from "@/aiParams";
-import { ChatModelProviders, ModelCapability, ProviderInfo } from "@/constants";
+import {
+  ChatModelProviders,
+  DEFAULT_MAX_OUTPUT_TOKENS,
+  ModelCapability,
+  ProviderInfo,
+} from "@/constants";
 import { logWarn } from "@/logger";
 import { providerNeedsResolvedApiKey } from "@/modelManagement/providers/providerRequiresApiKey";
 import type { ConfiguredModel, Provider } from "@/modelManagement/types/persisted";
@@ -103,11 +108,26 @@ function extraString(extras: Record<string, unknown>, key: string): string | und
 /**
  * Build the `CustomModel` for a resolved chat-backend selection.
  *
- * Per-model tuning (temperature / maxTokens / reasoning effort) is left unset:
- * `ChatModelManager.getModelConfig` falls back to the global settings defaults,
- * and reasoning/thinking behavior is derived from the wire model id
- * (`getModelInfo`). Re-homing per-model overrides onto `ConfiguredModel` is a
- * follow-up.
+ * Per-model tuning (temperature, maxTokens, reasoning effort) is left unset.
+ * Temperature falls back to the global setting, and `getModelInfo` derives
+ * reasoning behavior from the wire model id.
+ *
+ * `maxTokens` is set only for Anthropic, the one provider that will not accept
+ * a request without one. Everywhere else it stays unset, because sending a
+ * limit is worse than sending none: a provider rejects a prompt and requested
+ * output that together run past the context window, while an absent limit lets
+ * it write whatever still fits.
+ *
+ * Where a value is needed it is {@link DEFAULT_MAX_OUTPUT_TOKENS}, flat. The
+ * catalog's published ceiling decides nothing, because every Anthropic model it
+ * lists publishes at least 64,000.
+ *
+ * Whether the catalog published a ceiling at all still decides something. Its
+ * absence means a row the catalog never described, and there the Anthropic
+ * client's own per-model default is the better guess.
+ * https://github.com/logancyang/obsidian-copilot-preview/issues/312
+ *
+ * Moving per-model overrides onto `ConfiguredModel` is a follow-up.
  */
 export function configuredModelToCustomModel(params: {
   provider: Provider;
@@ -122,6 +142,12 @@ export function configuredModelToCustomModel(params: {
   const trimmedKey = apiKey && apiKey.length > 0 ? apiKey : undefined;
   const requiresApiKey = providerNeedsResolvedApiKey(provider) || !!trimmedKey;
 
+  const chatProvider = mapProviderTypeToChatModelProvider(provider);
+  const maxTokens =
+    chatProvider === ChatModelProviders.ANTHROPIC && info.limits?.output
+      ? DEFAULT_MAX_OUTPUT_TOKENS
+      : undefined;
+
   const capabilities: ModelCapability[] = [];
   if (info.reasoning) capabilities.push(ModelCapability.REASONING);
   if (info.modalities?.input?.includes("image")) capabilities.push(ModelCapability.VISION);
@@ -129,7 +155,7 @@ export function configuredModelToCustomModel(params: {
   return {
     configuredModelId: configuredModel.configuredModelId,
     name: info.id,
-    provider: mapProviderTypeToChatModelProvider(provider),
+    provider: chatProvider,
     displayName: info.displayName,
     enabled: true,
     baseUrl: provider.baseUrl,
@@ -141,6 +167,7 @@ export function configuredModelToCustomModel(params: {
     // choice when bridging the provider into the legacy chat runtime.
     enableCors: provider.enableCors,
     capabilities,
+    maxTokens,
     openAIOrgId: extraString(extras, "openAIOrgId"),
     azureOpenAIApiInstanceName: extraString(extras, "azureInstanceName"),
     azureOpenAIApiDeploymentName: extraString(extras, "azureDeploymentName"),
