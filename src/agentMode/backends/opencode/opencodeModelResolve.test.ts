@@ -1,5 +1,7 @@
+import type { App } from "obsidian";
 import type { CopilotSettings } from "@/settings/model";
 import type { ConfiguredModel, Provider, ProviderOrigin, ProviderType } from "@/modelManagement";
+import { KeychainService } from "@/services/keychainService";
 import { ChatModelProviders } from "@/constants";
 import {
   COPILOT_PLUS_OPENCODE_PROVIDER_ID,
@@ -114,6 +116,37 @@ describe("opencodeModelResolve", () => {
       requiresApiKey: true,
       apiKeyKeychainId: "kc-1",
       ...overrides,
+    });
+
+    it("resolves credential state through the live keychain when no probe is injected (https://github.com/logancyang/obsidian-copilot-preview/issues/261)", () => {
+      // Exercises the production default probe (KeychainService singleton +
+      // live read) that every other case bypasses via injection — a regression
+      // in that wiring must not stay green behind injected predicates.
+      const secrets = new Map<string, string>();
+      const app = {
+        vault: { adapter: {} },
+        secretStorage: {
+          getSecret: (id: string) => secrets.get(id) ?? null,
+        },
+      } as unknown as App;
+      const settings = makeSettings({
+        enabledModels: ["cm1"],
+        providers: { p1: byokProvider() },
+        configuredModels: [makeModel("cm1", "p1", "qwen/qwen3-max")],
+      });
+
+      KeychainService.resetInstance();
+      KeychainService.getInstance(app);
+      try {
+        // The pointer is set but this device's keychain has no entry for it.
+        expect(opencodeEnabledModelEntries(settings)[0].credentialState).toBe("missing_key");
+
+        secrets.set("kc-1", "sk-live");
+        expect(opencodeEnabledModelEntries(settings)[0].credentialState).toBe("ok");
+      } finally {
+        // Only this case owns the singleton; later cases must not inherit it.
+        KeychainService.resetInstance();
+      }
     });
 
     it("flags a required-key provider with no key as missing_key", () => {
