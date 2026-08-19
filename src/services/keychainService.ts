@@ -573,6 +573,19 @@ export class KeychainService {
 
     // 1. Build stripped settings — before touching any durable store.
     const stripped = stripKeychainFields(current);
+    // Reason: provider key badges are a live local-keychain read, and React
+    // only re-runs that read when the providers slice identity changes
+    // (`providersAtom` → picker entries → memo). The rows' contents are
+    // untouched on purpose — `apiKeyKeychainId` stays, other devices' entries
+    // stay reachable — so a fresh identity is the only re-render signal this
+    // delete emits. Same-content copies are exactly that signal.
+    // https://github.com/logancyang/obsidian-copilot-preview/issues/261
+    // The empty case keeps its frozen canonical slice (AGENTS.md → referential
+    // stability): nothing addresses a keychain entry, so nothing needs the signal.
+    const providerEntries = Object.entries(stripped.providers ?? {});
+    if (providerEntries.length > 0) {
+      stripped.providers = Object.fromEntries(providerEntries.map(([id, row]) => [id, { ...row }]));
+    }
 
     // 2. Write stripped data.json BEFORE clearing Keychain.
     // Reason: a disk-write failure can then abort without also leaving the

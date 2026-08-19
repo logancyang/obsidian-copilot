@@ -3,6 +3,7 @@ import React from "react";
 import { ByokGlobalTable, type ByokTableGroup } from "./ByokGlobalTable";
 import { ModelManagementProvider } from "@/modelManagement/ui/ModelManagementContext";
 import { createModelManagement } from "@/modelManagement/createModelManagement";
+import { KeychainService } from "@/services/keychainService";
 import { AppContext } from "@/context";
 import type { App } from "obsidian";
 
@@ -11,9 +12,29 @@ beforeAll(() => {
   (window as unknown as { activeDocument: Document }).activeDocument = window.document;
 });
 
+// The status badge is a live keychain read (`providerHasApiKey`), so the fake
+// app carries the same `secretStorage` shim `ProviderRegistry.test.ts` uses.
+const secrets = new Map<string, string>();
 const mockApp = {
+  secretStorage: {
+    setSecret: (id: string, value: string) => {
+      secrets.set(id, value);
+    },
+    getSecret: (id: string) => (secrets.has(id) ? secrets.get(id)! : null),
+    listSecrets: () => Array.from(secrets.keys()),
+    deleteSecret: (id: string) => {
+      secrets.delete(id);
+    },
+  },
   vault: { adapter: { exists: jest.fn() } },
 } as unknown as App;
+
+beforeEach(() => {
+  secrets.clear();
+  secrets.set("key1", "sk-fake-key");
+  KeychainService.resetInstance();
+  KeychainService.getInstance(mockApp);
+});
 
 const api = createModelManagement({ app: mockApp });
 
@@ -96,6 +117,23 @@ describe("ByokGlobalTable", () => {
     );
     const badge = screen.getByText("No key");
     expect(badge.className).not.toContain("tw-bg-success");
+  });
+
+  it("shows 'No key' when the pointer is set but the keychain entry is gone (Delete All Keys) (https://github.com/logancyang/obsidian-copilot-preview/issues/261)", () => {
+    secrets.delete("key1");
+    renderWithProvider(
+      <ByokGlobalTable groups={[group]} onConfigure={jest.fn()} onRemove={jest.fn()} />
+    );
+    expect(screen.getByText("No key")).toBeTruthy();
+    expect(screen.queryByText("API key set")).toBeNull();
+  });
+
+  it("treats a tombstoned ('') keychain entry as no key (https://github.com/logancyang/obsidian-copilot-preview/issues/261)", () => {
+    secrets.set("key1", "");
+    renderWithProvider(
+      <ByokGlobalTable groups={[group]} onConfigure={jest.fn()} onRemove={jest.fn()} />
+    );
+    expect(screen.getByText("No key")).toBeTruthy();
   });
 
   it("uses a clearer sub-line than '0 models' when a key-set provider has no models", () => {

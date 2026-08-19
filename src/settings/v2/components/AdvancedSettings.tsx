@@ -19,6 +19,7 @@ import {
   suppressNextPersistOnce,
 } from "@/services/settingsPersistence";
 import { hasPersistedSecrets } from "@/services/settingsSecretTransforms";
+import { providerHasApiKey } from "@/modelManagement";
 import { logError } from "@/logger";
 import {
   type CopilotSettings,
@@ -57,7 +58,17 @@ export const AdvancedSettings: React.FC = () => {
   }, []);
 
   const keychainAvailable = KeychainService.getInstance().isAvailable();
-  const keychainAppearsEmpty = keychainAvailable && !hasPersistedSecrets(settings);
+  // "No API keys" must also count BYOK provider keys, which live only in the
+  // keychain behind each row's `apiKeyKeychainId` pointer — they never appear
+  // in the legacy top-level/model-level fields `hasPersistedSecrets` scans, so
+  // a BYOK-only setup would be misreported as keyless.
+  // https://github.com/logancyang/obsidian-copilot-preview/issues/261
+  const keychainAppearsEmpty =
+    keychainAvailable &&
+    !hasPersistedSecrets(settings) &&
+    !Object.values(settings.providers).some((provider) =>
+      providerHasApiKey(provider, KeychainService.getInstance())
+    );
 
   const handleReportIssue = useCallback(() => {
     // Gate before importing the agentMode barrel: on mobile the barrel pulls in

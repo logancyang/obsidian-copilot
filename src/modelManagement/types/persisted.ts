@@ -84,6 +84,17 @@ export interface Provider {
   /**
    * Obsidian keychain entry id. `null` for providers that don't take an
    * API key (Ollama, LMStudio, some agent-owned providers).
+   *
+   * DESIGN NOTE — address, never evidence. This field syncs with
+   * `data.json`, but the entry it names is device-local, so it CANNOT state
+   * whether a key exists on this device: "Delete All Keys" deliberately
+   * leaves it set (clearing it would strand other devices' still-valid
+   * entries), leaving it permanently dangling here. Any "is a key
+   * configured?" claim must go through `providerHasApiKey` (live local
+   * keychain read); reset may read it as a conservative cross-device
+   * retention marker. If a future review flags a pointer-only presence
+   * check, point them at this note.
+   * https://github.com/logancyang/obsidian-copilot-preview/issues/261
    */
   apiKeyKeychainId?: string | null;
   /**
