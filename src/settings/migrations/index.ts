@@ -18,6 +18,7 @@ import { getSettings, normalizeRootFolders, setSettings } from "@/settings/model
 
 import { executeByokMigration } from "./byokMigration";
 import { executeGitHubCopilotRemoval } from "./githubCopilotRemovalMigration";
+import { planOptionalCustomProviderAuthMigration } from "./optionalCustomProviderAuthMigration";
 import { planRequiresApiKeyBackfill } from "./requiresApiKeyMigration";
 import { CURRENT_SETTINGS_VERSION } from "./version";
 
@@ -97,6 +98,14 @@ export async function runSettingsMigrations(api: ModelManagementApi): Promise<vo
   // the earlier migrations in this run left behind.
   if (fromVersion < 9) {
     executeGitHubCopilotRemoval(getSettings());
+  }
+
+  // v10: the custom OpenAI-compatible template now accepts keyless endpoints.
+  // Existing rows persisted the old required-key default, so update those rows
+  // while preserving any keychain pointer that records authenticated intent.
+  if (fromVersion < 10) {
+    const migrated = planOptionalCustomProviderAuthMigration(getSettings().providers);
+    if (migrated) setSettings({ providers: migrated });
   }
 
   // Bump unconditionally after the migrations so a per-provider failure can't
