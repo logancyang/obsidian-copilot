@@ -1,20 +1,11 @@
+import * as obsidianModule from "obsidian";
+
 import { BedrockChatModel } from "./BedrockChatModel";
 
-type ProcessStreamResult = {
-  deltaChunks: Array<{
-    text?: string;
-    message: {
-      content: unknown;
-      additional_kwargs?: { delta?: { reasoning?: string } };
-    };
-  }>;
-  usage?: Record<string, unknown>;
-  stopReason?: string;
-  hasText: boolean;
-  debugSummaries: string[];
+/** The obsidian mock's seam for stubbing `requestUrl` per test. */
+const { __setRequestUrlImpl: setRequestUrlImpl } = obsidianModule as unknown as {
+  __setRequestUrlImpl: (impl: unknown) => void;
 };
-
-type ContentItem = { type: string; text?: string; thinking?: string };
 
 type ImageContent = {
   type: "image";
@@ -38,15 +29,6 @@ type RequestBody = {
 };
 
 type BedrockInternal = {
-  decodeChunkBytes: (encoded: string) => string[];
-  processStreamEvent: (
-    event: unknown,
-    runManager: unknown,
-    currentUsage: unknown,
-    currentStopReason: unknown
-  ) => Promise<ProcessStreamResult>;
-  buildContentItemsFromDelta: (event: unknown) => ContentItem[] | null;
-  extractStreamText: (event: unknown) => string | null;
   buildRequestBody: (messages: unknown[], options?: unknown) => RequestBody;
   convertImageContent: (imageUrl: string) => ImageContent;
   normaliseMessageContent: (
@@ -56,29 +38,6 @@ type BedrockInternal = {
 
 const asInternal = (m: BedrockChatModel): BedrockInternal => m as unknown as BedrockInternal;
 
-/**
- * Builds a minimal Amazon EventStream message containing the provided UTF-8 payload.
- * This helper keeps CRC fields at zero because the decoder ignores them.
- */
-const buildEventStreamChunk = (payload: string): string => {
-  const encoder = typeof TextEncoder !== "undefined" ? new TextEncoder() : null;
-  const payloadBytes = encoder ? encoder.encode(payload) : Buffer.from(payload, "utf-8");
-  const headersLength = 0;
-  const totalLength = 12 + headersLength + payloadBytes.length + 4;
-
-  const buffer = new Uint8Array(totalLength);
-  const view = new DataView(buffer.buffer);
-
-  view.setUint32(0, totalLength, false);
-  view.setUint32(4, headersLength, false);
-  view.setUint32(8, 0, false); // Prelude CRC (ignored by decoder)
-
-  buffer.set(payloadBytes, 12);
-  view.setUint32(totalLength - 4, 0, false); // Message CRC (ignored by decoder)
-
-  return Buffer.from(buffer).toString("base64");
-};
-
 const createModel = (
   enableThinking = false,
   modelId = "anthropic.claude-3-haiku-20240307-v1:0"
@@ -87,329 +46,11 @@ const createModel = (
     modelId,
     apiKey: "test-key",
     endpoint: `https://example.com/model/${encodeURIComponent(modelId)}/invoke`,
-    streamEndpoint: `https://example.com/model/${encodeURIComponent(modelId)}/invoke-with-response-stream`,
     anthropicVersion: "bedrock-2023-05-31",
     enableThinking,
-    fetchImplementation: jest.fn(),
   });
 
-const createModelWithFetch = (
-  fetchMock: jest.Mock,
-  opts?: { modelId?: string; noStream?: boolean }
-): BedrockChatModel =>
-  new BedrockChatModel({
-    modelId: opts?.modelId ?? "anthropic.claude-sonnet-4-5-20250929-v1:0",
-    apiKey: "test-key",
-    endpoint: "https://example.com/model/anthropic.claude-sonnet-4-5-20250929-v1%3A0/invoke",
-    ...(opts?.noStream
-      ? {}
-      : {
-          streamEndpoint:
-            "https://example.com/model/anthropic.claude-sonnet-4-5-20250929-v1%3A0/invoke-with-response-stream",
-        }),
-    anthropicVersion: "bedrock-2023-05-31",
-    fetchImplementation: fetchMock,
-  });
-
-describe("BedrockChatModel streaming decode", () => {
-  it("decodes simple base64 JSON payloads", () => {
-    const payload = JSON.stringify({
-      type: "content_block_delta",
-      content_block_delta: {
-        index: 0,
-        delta: { text: "Hello there" },
-      },
-    });
-
-    const base64 = Buffer.from(payload, "utf-8").toString("base64");
-
-    const model = createModel();
-    const decoded = asInternal(model).decodeChunkBytes(base64);
-
-    expect(decoded).toEqual([payload]);
-  });
-
-  it("extracts payloads from Amazon EventStream encoded chunks", () => {
-    const payload = JSON.stringify({
-      type: "content_block_delta",
-      content_block_delta: {
-        index: 0,
-        delta: { type: "text_delta", text: "Streaming works!" },
-      },
-    });
-
-    const base64 = buildEventStreamChunk(payload);
-    const model = createModel();
-    const decoded = asInternal(model).decodeChunkBytes(base64);
-
-    expect(decoded).toEqual([payload]);
-  });
-
-  it("produces ChatGenerationChunk entries for decoded deltas", async () => {
-    const payload = JSON.stringify({
-      type: "content_block_delta",
-      content_block_delta: {
-        index: 0,
-        delta: { type: "text_delta", text: "Chunk text" },
-      },
-    });
-
-    const base64 = buildEventStreamChunk(payload);
-    const event = {
-      type: "chunk",
-      chunk: { bytes: base64 },
-    };
-
-    const model = createModel();
-    const processed = await asInternal(model).processStreamEvent(
-      event,
-      undefined,
-      undefined,
-      undefined
-    );
-
-    expect(processed.hasText).toBe(true);
-    expect(processed.deltaChunks).toHaveLength(1);
-    expect(processed.deltaChunks[0]?.text).toBe("Chunk text");
-  });
-
-  describe("thinking content support", () => {
-    it("buildContentItemsFromDelta recognizes thinking delta type", () => {
-      const event = {
-        type: "content_block_delta",
-        content_block_delta: {
-          index: 0,
-          delta: {
-            type: "thinking",
-            thinking: "Let me analyze this problem...",
-          },
-        },
-      };
-
-      const model = createModel();
-      const contentItems = asInternal(model).buildContentItemsFromDelta(event);
-
-      expect(contentItems).toHaveLength(1);
-      expect(contentItems![0]).toEqual({
-        type: "thinking",
-        thinking: "Let me analyze this problem...",
-      });
-    });
-
-    it("buildContentItemsFromDelta recognizes text_delta type", () => {
-      const event = {
-        type: "content_block_delta",
-        content_block_delta: {
-          index: 0,
-          delta: {
-            type: "text_delta",
-            text: "Based on my analysis, the answer is...",
-          },
-        },
-      };
-
-      const model = createModel();
-      const contentItems = asInternal(model).buildContentItemsFromDelta(event);
-
-      expect(contentItems).toHaveLength(1);
-      expect(contentItems![0]).toEqual({
-        type: "text",
-        text: "Based on my analysis, the answer is...",
-      });
-    });
-
-    it("processStreamEvent returns chunks with thinking content array", async () => {
-      const payload = JSON.stringify({
-        type: "content_block_delta",
-        content_block_delta: {
-          index: 0,
-          delta: {
-            type: "thinking",
-            thinking: "Reasoning through this...",
-          },
-        },
-      });
-
-      const base64 = buildEventStreamChunk(payload);
-      const event = {
-        type: "chunk",
-        chunk: { bytes: base64 },
-      };
-
-      const model = createModel();
-      const processed = await asInternal(model).processStreamEvent(
-        event,
-        undefined,
-        undefined,
-        undefined
-      );
-
-      expect(processed.hasText).toBe(true);
-      expect(processed.deltaChunks).toHaveLength(1);
-      const chunk = processed.deltaChunks[0];
-      expect(chunk?.text).toBe("Reasoning through this...");
-
-      // Check that content is an array with thinking type
-      expect(Array.isArray(chunk?.message.content)).toBe(true);
-      const content = chunk?.message.content as unknown[];
-      expect(content).toHaveLength(1);
-      expect(content[0]).toEqual({
-        type: "thinking",
-        thinking: "Reasoning through this...",
-      });
-
-      // Check for OpenRouter compatibility
-      expect(chunk?.message.additional_kwargs).toBeDefined();
-      expect(chunk?.message.additional_kwargs?.delta).toEqual({
-        reasoning: "Reasoning through this...",
-      });
-    });
-
-    it("processStreamEvent returns chunks with text content array", async () => {
-      const payload = JSON.stringify({
-        type: "content_block_delta",
-        content_block_delta: {
-          index: 0,
-          delta: {
-            type: "text_delta",
-            text: "Here is my final answer.",
-          },
-        },
-      });
-
-      const base64 = buildEventStreamChunk(payload);
-      const event = {
-        type: "chunk",
-        chunk: { bytes: base64 },
-      };
-
-      const model = createModel();
-      const processed = await asInternal(model).processStreamEvent(
-        event,
-        undefined,
-        undefined,
-        undefined
-      );
-
-      expect(processed.hasText).toBe(true);
-      expect(processed.deltaChunks).toHaveLength(1);
-      const chunk = processed.deltaChunks[0];
-      expect(chunk?.text).toBe("Here is my final answer.");
-
-      // Check that content is an array with text type
-      expect(Array.isArray(chunk?.message.content)).toBe(true);
-      const content = chunk?.message.content as unknown[];
-      expect(content).toHaveLength(1);
-      expect(content[0]).toEqual({
-        type: "text",
-        text: "Here is my final answer.",
-      });
-
-      // No additional_kwargs.delta for regular text
-      expect(chunk?.message.additional_kwargs?.delta).toBeUndefined();
-    });
-
-    it("handles mixed thinking and text deltas correctly", async () => {
-      const model = createModel();
-
-      // First chunk: thinking
-      const thinkingPayload = JSON.stringify({
-        type: "content_block_delta",
-        content_block_delta: {
-          index: 0,
-          delta: {
-            type: "thinking",
-            thinking: "First, I'll consider...",
-          },
-        },
-      });
-
-      const thinkingBase64 = buildEventStreamChunk(thinkingPayload);
-      const thinkingEvent = {
-        type: "chunk",
-        chunk: { bytes: thinkingBase64 },
-      };
-
-      const thinkingResult = await asInternal(model).processStreamEvent(
-        thinkingEvent,
-        undefined,
-        undefined,
-        undefined
-      );
-
-      expect(thinkingResult.deltaChunks).toHaveLength(1);
-      const thinkingChunk = thinkingResult.deltaChunks[0];
-      expect((thinkingChunk?.message.content as Array<{ type: string }>)[0]?.type).toBe("thinking");
-
-      // Second chunk: text
-      const textPayload = JSON.stringify({
-        type: "content_block_delta",
-        content_block_delta: {
-          index: 0,
-          delta: {
-            type: "text_delta",
-            text: "Therefore, the answer is X.",
-          },
-        },
-      });
-
-      const textBase64 = buildEventStreamChunk(textPayload);
-      const textEvent = {
-        type: "chunk",
-        chunk: { bytes: textBase64 },
-      };
-
-      const textResult = await asInternal(model).processStreamEvent(
-        textEvent,
-        undefined,
-        undefined,
-        undefined
-      );
-
-      expect(textResult.deltaChunks).toHaveLength(1);
-      const textChunk = textResult.deltaChunks[0];
-      expect((textChunk?.message.content as Array<{ type: string }>)[0]?.type).toBe("text");
-    });
-
-    it("extractStreamText can fallback to extract thinking content", () => {
-      const event = {
-        type: "content_block_delta",
-        content_block_delta: {
-          delta: {
-            type: "thinking",
-            thinking: "Fallback thinking extraction",
-          },
-        },
-      };
-
-      const model = createModel();
-      const extracted = asInternal(model).extractStreamText(event);
-
-      expect(extracted).toBe("Fallback thinking extraction");
-    });
-
-    it("handles empty thinking content gracefully", () => {
-      const event = {
-        type: "content_block_delta",
-        content_block_delta: {
-          delta: {
-            type: "thinking",
-            thinking: "",
-          },
-        },
-      };
-
-      const model = createModel();
-      const contentItems = asInternal(model).buildContentItemsFromDelta(event);
-
-      expect(contentItems).toHaveLength(1);
-      expect(contentItems![0]).toEqual({
-        type: "thinking",
-        thinking: "",
-      });
-    });
-  });
-
+describe("BedrockChatModel", () => {
   describe("thinking mode enablement", () => {
     it("includes thinking parameter when enableThinking is true", () => {
       const model = createModel(true);
@@ -740,95 +381,89 @@ describe("BedrockChatModel streaming decode", () => {
       });
     });
   });
-});
 
-describe("BedrockChatModel inference-profile error rewriting", () => {
-  const awsInferenceProfileError = JSON.stringify({
-    message:
-      "Invocation of model ID anthropic.claude-sonnet-4-5 with on-demand throughput isn't supported. Retry your request with the ID or ARN of an inference profile that contains this model.",
-  });
-
-  const makeErrorResponse = (status: number, body: string): Response =>
-    ({
-      ok: false,
-      status,
-      text: () => Promise.resolve(body),
-    }) as unknown as Response;
-
-  it("rewrites 400 inference-profile error in non-streaming path to actionable message", async () => {
-    const fetchMock = jest.fn().mockResolvedValue(makeErrorResponse(400, awsInferenceProfileError));
-    const model = createModelWithFetch(fetchMock, { noStream: true });
-
-    const messages = [{ content: "hi", getType: () => "human", type: "human" }];
-    await expect(model._generate(messages as never, {})).rejects.toThrow(
-      /cross-region inference profile ID/
-    );
-  });
-
-  it("rewrites 400 inference-profile error in streaming path to actionable message", async () => {
-    const fetchMock = jest.fn().mockResolvedValue(makeErrorResponse(400, awsInferenceProfileError));
-    const model = createModelWithFetch(fetchMock);
-
-    const messages = [{ content: "hi", getType: () => "human", type: "human" }];
-    const gen = model._streamResponseChunks(messages as never, {});
-    await expect(gen.next()).rejects.toThrow(/cross-region inference profile ID/);
-  });
-
-  it("includes the bare model ID in the rewritten message", async () => {
-    const fetchMock = jest.fn().mockResolvedValue(makeErrorResponse(400, awsInferenceProfileError));
-    const model = createModelWithFetch(fetchMock, { noStream: true });
-
-    const messages = [{ content: "hi", getType: () => "human", type: "human" }];
-    await expect(model._generate(messages as never, {})).rejects.toThrow(
-      /anthropic\.claude-sonnet-4-5/
-    );
-  });
-
-  it("does not rewrite a 400 error that is unrelated to inference profiles", async () => {
-    const genericBody = JSON.stringify({ message: "ValidationException: bad request" });
-    const fetchMock = jest.fn().mockResolvedValue(makeErrorResponse(400, genericBody));
-    const model = createModelWithFetch(fetchMock, { noStream: true });
-
-    const messages = [{ content: "hi", getType: () => "human", type: "human" }];
-    await expect(model._generate(messages as never, {})).rejects.toThrow(
-      /Amazon Bedrock request failed with status 400/
-    );
-  });
-
-  it("does not rewrite non-400 errors", async () => {
-    const body = JSON.stringify({ message: "Internal Server Error" });
-    const fetchMock = jest.fn().mockResolvedValue(makeErrorResponse(500, body));
-    const model = createModelWithFetch(fetchMock, { noStream: true });
-
-    const messages = [{ content: "hi", getType: () => "human", type: "human" }];
-    await expect(model._generate(messages as never, {})).rejects.toThrow(
-      /Amazon Bedrock request failed with status 500/
-    );
-  });
-
-  it("rewrites the error even when AWS uses a curly apostrophe in 'isn’t supported'", async () => {
-    const curlyApostropheBody = JSON.stringify({
+  describe("_generate()", () => {
+    const awsInferenceProfileError = JSON.stringify({
       message:
-        "Invocation of model ID anthropic.claude-sonnet-4-5 with on-demand throughput isn’t supported. Retry your request with the ID or ARN of an inference profile that contains this model.",
+        "Invocation of model ID anthropic.claude-sonnet-4-5 with on-demand throughput isn't supported. Retry your request with the ID or ARN of an inference profile that contains this model.",
     });
-    const fetchMock = jest.fn().mockResolvedValue(makeErrorResponse(400, curlyApostropheBody));
-    const model = createModelWithFetch(fetchMock, { noStream: true });
 
-    const messages = [{ content: "hi", getType: () => "human", type: "human" }];
-    await expect(model._generate(messages as never, {})).rejects.toThrow(
-      /cross-region inference profile ID/
-    );
-  });
+    /**
+     * Stubs the buffered transport `_generate` uses so the assertions exercise the
+     * error-rewriting branch without touching the network.
+     */
+    const stubRequestUrlError = (status: number, body: string): void => {
+      setRequestUrlImpl(jest.fn().mockResolvedValue({ status, text: body, headers: {} }));
+    };
 
-  it("uses the provider segment from the bare model ID in the prefix guidance", async () => {
-    const nonAnthropicBody = JSON.stringify({
-      message:
-        "Invocation of model ID meta.llama4-maverick-17b with on-demand throughput isn't supported. Retry your request with the ID or ARN of an inference profile that contains this model.",
+    it("rewrites 400 inference-profile error to actionable message", async () => {
+      stubRequestUrlError(400, awsInferenceProfileError);
+      const model = createModel(false, "anthropic.claude-sonnet-4-5-20250929-v1:0");
+
+      const messages = [{ content: "hi", getType: () => "human", type: "human" }];
+      await expect(model._generate(messages as never, {})).rejects.toThrow(
+        /cross-region inference profile ID/
+      );
     });
-    const fetchMock = jest.fn().mockResolvedValue(makeErrorResponse(400, nonAnthropicBody));
-    const model = createModelWithFetch(fetchMock, { noStream: true });
 
-    const messages = [{ content: "hi", getType: () => "human", type: "human" }];
-    await expect(model._generate(messages as never, {})).rejects.toThrow(/global\.meta\.<id>/);
+    it("includes the bare model ID in the rewritten message", async () => {
+      stubRequestUrlError(400, awsInferenceProfileError);
+      const model = createModel(false, "anthropic.claude-sonnet-4-5-20250929-v1:0");
+
+      const messages = [{ content: "hi", getType: () => "human", type: "human" }];
+      await expect(model._generate(messages as never, {})).rejects.toThrow(
+        /anthropic\.claude-sonnet-4-5/
+      );
+    });
+
+    it("does not rewrite a 400 error that is unrelated to inference profiles", async () => {
+      stubRequestUrlError(400, JSON.stringify({ message: "ValidationException: bad request" }));
+      const model = createModel(false, "anthropic.claude-sonnet-4-5-20250929-v1:0");
+
+      const messages = [{ content: "hi", getType: () => "human", type: "human" }];
+      await expect(model._generate(messages as never, {})).rejects.toThrow(
+        /Amazon Bedrock request failed with status 400/
+      );
+    });
+
+    it("does not rewrite non-400 errors", async () => {
+      stubRequestUrlError(500, JSON.stringify({ message: "Internal Server Error" }));
+      const model = createModel(false, "anthropic.claude-sonnet-4-5-20250929-v1:0");
+
+      const messages = [{ content: "hi", getType: () => "human", type: "human" }];
+      await expect(model._generate(messages as never, {})).rejects.toThrow(
+        /Amazon Bedrock request failed with status 500/
+      );
+    });
+
+    it("rewrites the error even when AWS uses a curly apostrophe in 'isn’t supported'", async () => {
+      stubRequestUrlError(
+        400,
+        JSON.stringify({
+          message:
+            "Invocation of model ID anthropic.claude-sonnet-4-5 with on-demand throughput isn’t supported. Retry your request with the ID or ARN of an inference profile that contains this model.",
+        })
+      );
+      const model = createModel(false, "anthropic.claude-sonnet-4-5-20250929-v1:0");
+
+      const messages = [{ content: "hi", getType: () => "human", type: "human" }];
+      await expect(model._generate(messages as never, {})).rejects.toThrow(
+        /cross-region inference profile ID/
+      );
+    });
+
+    it("uses the provider segment from the bare model ID in the prefix guidance", async () => {
+      stubRequestUrlError(
+        400,
+        JSON.stringify({
+          message:
+            "Invocation of model ID meta.llama4-maverick-17b with on-demand throughput isn't supported. Retry your request with the ID or ARN of an inference profile that contains this model.",
+        })
+      );
+      const model = createModel(false, "anthropic.claude-sonnet-4-5-20250929-v1:0");
+
+      const messages = [{ content: "hi", getType: () => "human", type: "human" }];
+      await expect(model._generate(messages as never, {})).rejects.toThrow(/global\.meta\.<id>/);
+    });
   });
 });
