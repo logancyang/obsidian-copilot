@@ -160,7 +160,7 @@ export class AcpProcessManager {
  * anything prefixed to a JSON-RPC envelope makes `JSON.parse` throw, and the
  * SDK's `ndJsonStream` drops such frames silently.
  */
-// eslint-disable-next-line no-control-regex
+// eslint-disable-next-line no-control-regex -- CSI/OSC sequences are defined by \x1b control bytes
 const TERMINAL_ESCAPE_SEQUENCE = /\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g;
 
 /**
