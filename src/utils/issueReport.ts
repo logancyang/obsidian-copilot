@@ -1,9 +1,9 @@
 /**
  * Assembles a self-contained bug-report bundle on disk (note, screenshot, and
  * whichever logs the user opted into), zips it into a single file, and builds
- * the prefilled GitHub issue URLs it can be opened with — one with no link,
- * for when the user attaches the zip by hand, and one built later from an
- * uploaded report's link (`buildLinkedReportIssueUrl`) once it exists.
+ * the prefilled GitHub issue URLs it can be opened with — one with no report
+ * reference, for when the user attaches the zip by hand, and one built later
+ * from an uploaded report's id (`buildLinkedReportIssueUrl`) once it exists.
  *
  * Pure of singletons: the Node runtime is injectable so the assembler is
  * unit-testable without touching the real filesystem.
@@ -32,7 +32,9 @@ import { err2String } from "@/errorFormat";
 import { logWarn } from "@/logger";
 import { formatBytes } from "@/utils/formatBytes";
 import { isMissingFileError } from "@/utils/isMissingFileError";
+import { type ReportUploadAttempt } from "@/utils/reportUpload";
 import { zipSync } from "fflate";
+import { v4 as uuidv4 } from "uuid";
 import { redactLogText } from "./redactLog";
 import { requireNodeModule } from "./desktopRuntime";
 
@@ -51,26 +53,28 @@ const SCREENSHOT_SOURCE_ID = "screenshot";
 const REPORT_NOTE_SOURCE_ID = "report";
 
 /**
- * GitHub rejects issue attachments above 25 MB. Budget the bundle below that so
- * the zip is always uploadable; the activity log alone can reach 50 MB before
- * it rotates, so something has to give and it is the oldest log lines.
+ * Both places a zip can go reject anything above 25 MB — the report endpoint,
+ * and GitHub's issue-attachment limit on the manual fallback path. Budget the
+ * bundle below that so the zip is always sendable; the activity log alone can
+ * reach 50 MB before it rotates, so something has to give and it is the oldest
+ * log lines. The zip is STOREd (uncompressed), so this budget maps 1:1 onto
+ * the packed size — no compression absorbs an overrun.
  */
 const MAX_BUNDLE_BYTES = 24 * 1024 * 1024;
 
 /**
  * Hard ceiling on what the packer will read into the renderer, separate from
  * `MAX_BUNDLE_BYTES` and much looser. The budget shapes a report; this only
- * refuses input that cannot be held. Four times the budget because `zipSync`
- * already costs a second or two at the budget itself (see the note in
- * `zipReportBundle`), so this is where that pause stops being one — and only the
- * staging folder, which the user may edit freely, can reach it.
+ * refuses input that cannot be held in memory at once — and only the staging
+ * folder, which the user may edit freely, can reach it.
  */
 const MAX_PACKABLE_INPUT_BYTES = MAX_BUNDLE_BYTES * 4;
 /**
- * GitHub's real ceiling, checked against the packed zip. Kept separate from
- * `MAX_BUNDLE_BYTES`: that one is the budget sources are trimmed against
- * *before* redaction rewrites and truncation banners change their size, so the
- * finished artifact needs its own measurement against the actual limit.
+ * The shared 25 MB ceiling (report endpoint and GitHub attachment alike),
+ * checked against the packed zip. Kept separate from `MAX_BUNDLE_BYTES`: that
+ * one is the budget sources are trimmed against *before* redaction rewrites
+ * and truncation banners change their size, so the finished artifact needs its
+ * own measurement against the actual limit.
  */
 const GITHUB_ATTACHMENT_LIMIT_BYTES = 25 * 1024 * 1024;
 /**
@@ -165,10 +169,10 @@ export interface AttachmentOutcome {
 }
 
 /**
- * Title and body of the GitHub issue prefill, before any link or truncation is
- * applied. Both URLs — the manual one and the linked one built once upload
- * succeeds — come from this, so they can never drift out of sync with each
- * other or with the `report.md` they were read from.
+ * Title and body of the GitHub issue prefill, before any report-id prefix or
+ * truncation is applied. Both URLs — the manual one and the id-carrying one
+ * built once upload succeeds — come from this, so they can never drift out of
+ * sync with each other or with the `report.md` they were read from.
  */
 export interface ReportIssueDraft {
   title: string;
@@ -305,7 +309,13 @@ export async function zipReportBundle(
   runtime: ReportRuntime = getNodeReportRuntime()
 ): Promise<{
   zipPath: string;
-  bytes: number;
+  /**
+   * The packed bytes and the idempotency key minted with them, as one pair:
+   * retrying an upload re-sends this exact attempt, and only repacking mints a
+   * new one. The zip's size is `uploadAttempt.body.byteLength` — kept off this
+   * shape as a separate field so there is exactly one source of truth for it.
+   */
+  uploadAttempt: ReportUploadAttempt;
   attachments: AttachmentOutcome[];
   issueDraft: ReportIssueDraft;
   manualIssueUrl: string;
@@ -455,12 +465,13 @@ export async function zipReportBundle(
   // `new Worker(URL.createObjectURL(new Blob([...])))`, and this repo has never
   // started a worker at all — `new Worker` appears nowhere — so whether a blob
   // worker survives Obsidian's renderer CSP is unknown, with no precedent here
-  // to reason from. Trading "packing might not work at all" for one or two
-  // seconds of responsiveness is the wrong side of that bet, and the modal's
-  // progress list makes the pause read as work rather than a hang. Note that
-  // `MAX_BUNDLE_BYTES` bounds the input, not the duration. Revisit once desktop
-  // E2E actually exercises a worker in this environment.
-  const zipped = zipSync(entries, { level: 6 });
+  // to reason from. With STORE (below) the sync pack is a bounded memory copy,
+  // not a compression pass, so there is no responsiveness win to buy either.
+  //
+  // `level: 0` (STORE) is the report endpoint's contract, not a preference: it
+  // rejects any entry that is compressed. The size cost is bounded by
+  // `MAX_BUNDLE_BYTES`, which now maps 1:1 onto the packed size.
+  const zipped = zipSync(entries, { level: 0 });
   // Last line of defence, separate from the assembler's budget: redaction can
   // grow text (a short token becomes `<secret>`) and truncation adds a banner,
   // so the packed size is not fully predictable when sources were budgeted.
@@ -475,7 +486,27 @@ export async function zipReportBundle(
     await discardQuietly(zipPath, runtime);
     throw err;
   }
-  return { zipPath, bytes: zipped.length, attachments, issueDraft, manualIssueUrl };
+  // Bytes and idempotency key are minted together, here and nowhere else: the
+  // key names exactly these bytes to the server, so a retry re-sends this pair
+  // and a rebuild lands back here to mint a fresh one.
+  const uploadAttempt: ReportUploadAttempt = {
+    body: exactArrayBuffer(zipped),
+    idempotencyKey: uuidv4(),
+  };
+  return { zipPath, uploadAttempt, attachments, issueDraft, manualIssueUrl };
+}
+
+/**
+ * The `ArrayBuffer` holding exactly `bytes` and nothing else. fflate allocates
+ * its output exact-size today, so this is normally a free `.buffer` read; the
+ * slice branch guards against a future allocator handing back a view into a
+ * larger pooled buffer, whose siblings' bytes must never be uploaded.
+ */
+function exactArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  if (bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength) {
+    return bytes.buffer as ArrayBuffer;
+  }
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
 }
 
 /**
@@ -597,7 +628,9 @@ export function buildReportMarkdown(input: ReportInput, attachments: AttachmentO
     "",
     ...(listed.length > 0 ? listed.map(describeAttachment) : ["- (none captured)"]),
     "",
-    "> These files are bundled in the zip Copilot prepared alongside this report.",
+    // True on both delivery paths: uploaded (the zip is the stored bundle the
+    // report ID identifies) and manual (the user attaches the same zip by hand).
+    "> These files are bundled in the zip Copilot prepared for this report.",
     "",
   ].join("\n");
 }
@@ -618,7 +651,8 @@ const MANUAL_BODY_TRUNCATION_NOTE =
   "\n\n_…report truncated. The full report is `report.md` inside the zip Copilot " +
   "prepared — attach that zip here, or paste the report in._";
 const LINKED_BODY_TRUNCATION_NOTE =
-  "\n\n_…report truncated. The full, untruncated report is in the uploaded zip, linked above._";
+  "\n\n_…report truncated. The full report is `report.md` inside the uploaded bundle " +
+  "the report ID above identifies._";
 
 /**
  * Assemble a GitHub "new issue" URL from a title, body, and a prefix that
@@ -628,7 +662,7 @@ const LINKED_BODY_TRUNCATION_NOTE =
  * byte budget up front would under- or over-shoot.
  *
  * @param prefix Text that goes before `body` and is never truncated — this
- *   is what keeps an uploaded report's link from being the first thing a
+ *   is what keeps an uploaded report's id from being the first thing a
  *   long note pushes out.
  * @param truncationNote Appended to `body` once it has been cut, so the
  *   reader knows the rest is missing and where to find it.
@@ -666,11 +700,15 @@ function buildIssueUrl(
 }
 
 /**
- * Build a prefilled GitHub "new issue" URL whose body opens with the
- * uploaded report's link, placed in a prefix truncation can never reach.
+ * Build a prefilled GitHub "new issue" URL whose body opens with the uploaded
+ * report's id, placed in a prefix truncation can never reach.
+ *
+ * An id and not a link: the issue is public, and a URL that fetched the bundle
+ * would hand the user's logs to everyone who reads the thread. Maintainers
+ * resolve the id against the report store instead; nothing on the issue can.
  */
-export function buildLinkedReportIssueUrl(draft: ReportIssueDraft, shareUrl: string): string {
-  const prefix = `**Copilot's report storage:** ${shareUrl}\n\n`;
+export function buildLinkedReportIssueUrl(draft: ReportIssueDraft, reportId: string): string {
+  const prefix = `**Copilot report ID:** \`${reportId}\`\n\n`;
   return buildIssueUrl(draft.title, prefix, draft.body, LINKED_BODY_TRUNCATION_NOTE);
 }
 

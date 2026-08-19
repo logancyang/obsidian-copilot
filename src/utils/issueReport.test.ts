@@ -14,7 +14,7 @@ import {
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { zipSync } from "fflate";
+import { unzipSync, zipSync } from "fflate";
 
 // Spied, not replaced: the real implementation still runs, so every case that
 // inspects the packed zip keeps working. What this buys is the ability to
@@ -29,6 +29,33 @@ jest.mock("fflate", () => {
 beforeEach(() => {
   (zipSync as jest.Mock).mockClear();
 });
+
+/**
+ * Entry names actually packed in the zip. Names are asserted through a real
+ * unzip rather than a raw byte search: with STORE the entries' *contents* are
+ * plaintext too, so a filename merely mentioned inside report.md's attachment
+ * list would satisfy — or wreck — a substring match on the raw bytes.
+ */
+function zipEntryNames(zip: Uint8Array): string[] {
+  return Object.keys(unzipSync(zip));
+}
+
+/**
+ * Compression method of every central-directory record (signature PK\x01\x02,
+ * method at offset 10, little-endian). Reading the central directory rather
+ * than the first local header is the point: the endpoint rejects the upload
+ * over any single compressed entry, so the guard has to see all of them.
+ */
+function centralDirectoryMethods(zip: Uint8Array): number[] {
+  const view = new DataView(zip.buffer, zip.byteOffset, zip.byteLength);
+  const methods: number[] = [];
+  for (let i = 0; i + 12 <= zip.byteLength; i++) {
+    if (view.getUint32(i, true) === 0x02014b50) {
+      methods.push(view.getUint16(i + 10, true));
+    }
+  }
+  return methods;
+}
 
 const BUNDLE_DIR = "/tmp/reports/copilot-report-20260615-101500-abcd";
 /** Mirrors the assembler's own budget: 24 MiB total, less the report.md reserve. */
@@ -636,17 +663,47 @@ describe("issueReport", () => {
       const { runtime, writes } = makeRuntime();
       const report = await assembleReportBundle({ ...baseInput, screenshotPng: null }, runtime);
 
-      const { zipPath, bytes } = await zipReportBundle(report, runtime);
+      const { zipPath, uploadAttempt } = await zipReportBundle(report, runtime);
 
       expect(zipPath).toBe(`${BUNDLE_DIR}.zip`);
-      expect(bytes).toBeGreaterThan(0);
+      expect(uploadAttempt.body.byteLength).toBeGreaterThan(0);
       const zip = writes.find((w) => w.path === zipPath);
       expect(zip).toBeDefined();
-      // Entry names live in the zip's central directory as plain text.
-      const raw = new TextDecoder().decode(zip?.data ?? new Uint8Array());
-      expect(raw).toContain("report.md");
-      expect(raw).toContain("acp-frames.ndjson.txt");
-      expect(raw).not.toContain("screenshot.png");
+      const names = zipEntryNames(zip?.data ?? new Uint8Array());
+      expect(names).toContain("report.md");
+      expect(names).toContain("acp-frames.ndjson.txt");
+      expect(names).not.toContain("screenshot.png");
+    });
+
+    it("stores every entry uncompressed, which is the upload endpoint's contract", async () => {
+      const { runtime, writes } = makeRuntime();
+      const report = await assembleReportBundle(baseInput, runtime);
+
+      const { zipPath } = await zipReportBundle(report, runtime);
+
+      const zip = writes.find((w) => w.path === zipPath)?.data ?? new Uint8Array();
+      // Every entry, not just the first: the server rejects the whole upload
+      // over a single compressed one. The compression method lives at offset
+      // 10 of each central-directory record (signature PK\x01\x02); 0 = STORE.
+      const methods = centralDirectoryMethods(zip);
+      expect(methods.length).toBeGreaterThan(1);
+      expect(methods.every((m) => m === 0)).toBe(true);
+    });
+
+    it("mints the upload attempt's bytes and idempotency key together, fresh per pack", async () => {
+      const { runtime, writes } = makeRuntime();
+      const report = await assembleReportBundle(baseInput, runtime);
+
+      const first = await zipReportBundle(report, runtime);
+      const second = await zipReportBundle(report, runtime);
+
+      // The body is exactly the zip on disk — nothing beyond the written bytes
+      // may ride along in a pooled buffer.
+      const zip = writes.find((w) => w.path === first.zipPath)?.data ?? new Uint8Array();
+      expect(new Uint8Array(first.uploadAttempt.body)).toEqual(zip);
+      // Each pack is its own attempt: reusing a key across different packs
+      // would make the server answer the new bytes with the old stored bundle.
+      expect(second.uploadAttempt.idempotencyKey).not.toBe(first.uploadAttempt.idempotencyKey);
     });
 
     it("treats an attachment the user deleted from the folder as removed, not as a failure", async () => {
@@ -664,11 +721,9 @@ describe("issueReport", () => {
       expect(shot?.status).toBe("skipped");
       expect(shot?.reason).toBe("Removed from the report folder before the rebuild.");
       expect(shot?.bytes).toBe(0);
-      const raw = new TextDecoder().decode(
-        writes.find((w) => w.path === zipPath)?.data ?? new Uint8Array()
-      );
-      expect(raw).not.toContain("screenshot.png");
-      expect(raw).toContain("report.md");
+      const names = zipEntryNames(writes.find((w) => w.path === zipPath)?.data ?? new Uint8Array());
+      expect(names).not.toContain("screenshot.png");
+      expect(names).toContain("report.md");
     });
 
     it("treats an attachment deleted mid-pack as removed too", async () => {
@@ -703,11 +758,9 @@ describe("issueReport", () => {
       expect(shot?.status).toBe("failed");
       expect(shot?.reason).toContain("EACCES");
       // Still non-fatal: everything readable is packed anyway.
-      const raw = new TextDecoder().decode(
-        writes.find((w) => w.path === zipPath)?.data ?? new Uint8Array()
-      );
-      expect(raw).toContain("report.md");
-      expect(raw).not.toContain("screenshot.png");
+      const names = zipEntryNames(writes.find((w) => w.path === zipPath)?.data ?? new Uint8Array());
+      expect(names).toContain("report.md");
+      expect(names).not.toContain("screenshot.png");
     });
 
     it("reports an attachment that becomes unreadable between the two passes as failed", async () => {
@@ -748,10 +801,10 @@ describe("issueReport", () => {
       const shot = attachments.find((a) => a.name === "screenshot.png");
       expect(shot?.status).toBe("included");
       expect(shot?.bytes).toBeGreaterThan(0);
-      const raw = new TextDecoder().decode(
+      const names = zipEntryNames(
         writes.filter((w) => w.path === zipPath).at(-1)?.data ?? new Uint8Array()
       );
-      expect(raw).toContain("screenshot.png");
+      expect(names).toContain("screenshot.png");
     });
 
     it("leaves an attachment skipped when a rebuild finds it still absent", async () => {
@@ -1123,39 +1176,35 @@ describe("issueReport", () => {
       title: "[Agent Mode] Agent crashed when I clicked run",
       body: buildReportMarkdown(baseInput, []),
     };
-    const shareUrl = "https://copilot-reports.invalid/r/abc123";
+    const reportId = "9f3c1a7b2e4d5f60819a2b3c4d5e6f70";
     /** Mirrors the module's own `MAX_ISSUE_URL_LENGTH`. */
     const MAX_ISSUE_URL_LENGTH = 1800;
 
-    it("puts the link ahead of the body", () => {
-      const url = buildLinkedReportIssueUrl(draft, shareUrl);
+    it("quotes the report id ahead of the body, and never a URL", () => {
+      const url = buildLinkedReportIssueUrl(draft, reportId);
       const body = new URLSearchParams(url.split("?")[1]).get("body") ?? "";
       // Near the very front, inside the fixed prefix — not merely present
       // somewhere in a body that truncation could still reach.
-      expect(body.indexOf(shareUrl)).toBeLessThan(60);
+      expect(body.indexOf(reportId)).toBeLessThan(60);
+      // An id, not a link: the issue is public, and a URL that fetched the
+      // bundle would hand the user's logs to everyone who reads the thread.
+      expect(body).not.toContain("http");
     });
 
-    it("keeps the link intact — not truncated away — on a note long enough to force truncation", () => {
+    it("keeps the id intact — not truncated away — on a note long enough to force truncation", () => {
       const longDraft: ReportIssueDraft = {
         ...draft,
         body: "x".repeat(10000),
       };
-      const url = buildLinkedReportIssueUrl(longDraft, shareUrl);
+      const url = buildLinkedReportIssueUrl(longDraft, reportId);
       const body = new URLSearchParams(url.split("?")[1]).get("body") ?? "";
 
       // The bug this guards: `body.slice(0, keep)` truncates from the end, so
-      // a link appended after the body would be the first thing cut from a
+      // an id appended after the body would be the first thing cut from a
       // long note. Prefixing it is what survives that.
-      expect(body.indexOf(shareUrl)).toBeGreaterThanOrEqual(0);
-      expect(body.indexOf(shareUrl)).toBeLessThan(60);
+      expect(body.indexOf(reportId)).toBeGreaterThanOrEqual(0);
+      expect(body.indexOf(reportId)).toBeLessThan(60);
       expect(url.length).toBeLessThanOrEqual(MAX_ISSUE_URL_LENGTH);
-    });
-
-    it("throws rather than silently exceed the URL cap when the link itself cannot fit", () => {
-      const hugeShareUrl = `https://copilot-reports.invalid/r/${"a".repeat(3000)}`;
-      expect(() => buildLinkedReportIssueUrl(draft, hugeShareUrl)).toThrow(
-        /nothing left to truncate/
-      );
     });
   });
 

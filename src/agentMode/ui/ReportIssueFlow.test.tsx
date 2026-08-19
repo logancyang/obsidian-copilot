@@ -24,14 +24,17 @@ const prepared: PreparedReport = {
   rootDir: "/tmp/reports",
   zipPath: "/tmp/reports/bundle.zip",
   zipName: "copilot-report-20260615-101500-abcd.zip",
-  zipBytes: 4096,
+  uploadAttempt: {
+    body: new ArrayBuffer(4096),
+    idempotencyKey: "5d41c9b2-7e3a-4f8b-9c1d-2a6e8f4b0d37",
+  },
   issueDraft: { title: "[Agent Mode] it exploded", body: "## What went wrong" },
   manualIssueUrl: "https://github.com/logancyang/obsidian-copilot/issues/new?title=manual",
   attachments: [included("report", "report.md"), included("screenshot", "screenshot.png")],
 };
 
 const uploadResult: ReportUploadResult = {
-  shareUrl: "https://copilot-reports.invalid/r/abc123",
+  reportId: "9f3c1a7b2e4d5f60819a2b3c4d5e6f70",
   expiresAt: "2026-08-30T00:00:00.000Z",
 };
 
@@ -95,9 +98,10 @@ describe("ReportIssueFlow", () => {
         expect(screen.getByText(/12\.0 MB on disk/)).toBeTruthy();
         expect(screen.getByText(/Turn it on first\./)).toBeTruthy();
         // Load-bearing disclosure: what happens next has to be said before the
-        // user commits to anything, not discovered on the next page.
-        expect(screen.getByText(/These get uploaded to a public issue/)).toBeTruthy();
-        expect(screen.getByText(/screenshot is not redacted/)).toBeTruthy();
+        // user commits to anything, not discovered on the next page. The copy
+        // is maintainer-approved verbatim, so assert its load-bearing halves.
+        expect(screen.getByText(/screenshots are not automatically redacted/)).toBeTruthy();
+        expect(screen.getByText(/Reports are private and deleted after 60 days/)).toBeTruthy();
       });
 
       it("passes the note and only the checked sources to the assembler", async () => {
@@ -296,11 +300,14 @@ describe("ReportIssueFlow", () => {
         await waitFor(() => expect(screen.getByText("Report uploaded")).toBeTruthy());
         expect(props.upload).toHaveBeenCalledWith(prepared);
         expect(props.openIssuePage).toHaveBeenCalledTimes(1);
-        expect(props.openIssuePage).toHaveBeenCalledWith(linkedIssueUrl);
+        // The id rides along so a host whose browser fails can still surface it.
+        expect(props.openIssuePage).toHaveBeenCalledWith(linkedIssueUrl, uploadResult.reportId);
       });
 
       it("shows the failure, offers retry and the manual fallback, and keeps the zip on disk", async () => {
-        const upload = jest.fn().mockResolvedValue({ ok: false, error: "Network request failed" });
+        const upload = jest
+          .fn()
+          .mockResolvedValue({ ok: false, error: "Network request failed", retryable: true });
         const { props } = renderFlow({ upload });
         submit();
         await waitFor(() => expect(screen.getByText(prepared.zipName)).toBeTruthy());
@@ -309,9 +316,12 @@ describe("ReportIssueFlow", () => {
 
         await waitFor(() => expect(screen.getByText("Could not upload the report")).toBeTruthy());
         expect(screen.getByText(/Network request failed/)).toBeTruthy();
+        // Why Retry is safe is the user's deciding information: the same
+        // attempt is stored at most once, so retrying cannot duplicate it.
+        expect(screen.getByText(/stores it at most once/)).toBeTruthy();
         // The escape hatch has to say what it costs: the issue it opens has no
-        // link, so the user is on the hook for attaching the zip themselves.
-        expect(screen.getByText(/carries no link to the report/)).toBeTruthy();
+        // report ID, so the user is on the hook for attaching the zip themselves.
+        expect(screen.getByText(/carries no report ID/)).toBeTruthy();
         expect(screen.getByText(/attach the zip to it yourself/)).toBeTruthy();
         expect(props.openIssuePage).not.toHaveBeenCalled();
 
@@ -324,13 +334,38 @@ describe("ReportIssueFlow", () => {
         ).toBeNull();
       });
 
+      it("withholds Retry after a definitive rejection, keeping only the paths that can differ", async () => {
+        // A rejection (quota spent, bundle refused) fails identically on the
+        // same bytes while still spending the daily allowance — so the only
+        // buttons left are ones that change something: Rebuild makes a new zip,
+        // and the manual path sidesteps the upload entirely.
+        const upload = jest
+          .fn()
+          .mockResolvedValue({ ok: false, error: "Allowance used up", retryable: false });
+        renderFlow({ upload });
+        submit();
+        await waitFor(() => expect(screen.getByText(prepared.zipName)).toBeTruthy());
+
+        fireEvent.click(uploadButton());
+        await waitFor(() => expect(screen.getByText("Could not upload the report")).toBeTruthy());
+
+        expect(
+          screen.queryByRole("button", { name: /Retry upload|Upload & open issue/ })
+        ).toBeNull();
+        // No retry-safety promise either: with no Retry on offer, "stores it at
+        // most once" would be reassurance about an action the page just removed.
+        expect(screen.queryByText(/stores it at most once/)).toBeNull();
+        expect(screen.getByRole("button", { name: "Open issue anyway" })).toBeTruthy();
+        expect(screen.getByRole("button", { name: "Rebuild zip" })).toBeTruthy();
+      });
+
       it("uploads again on Retry and finishes on the second attempt", async () => {
         // The first failure must leave the flow able to try again, not merely
         // showing a button: the single-flight lock is released in a `finally`,
         // and a lock left held would make Retry silently do nothing.
         const upload = jest
           .fn()
-          .mockResolvedValueOnce({ ok: false, error: "Network request failed" })
+          .mockResolvedValueOnce({ ok: false, error: "Network request failed", retryable: true })
           .mockResolvedValueOnce({ ok: true, result: uploadResult, issueUrl: linkedIssueUrl });
         const { props } = renderFlow({ upload });
         submit();
@@ -342,7 +377,7 @@ describe("ReportIssueFlow", () => {
         fireEvent.click(screen.getByRole("button", { name: "Retry upload" }));
 
         await waitFor(() => expect(upload).toHaveBeenCalledTimes(2));
-        expect(props.openIssuePage).toHaveBeenCalledWith(linkedIssueUrl);
+        expect(props.openIssuePage).toHaveBeenCalledWith(linkedIssueUrl, uploadResult.reportId);
       });
 
       it("replaces the upload control with a spinner on click, so a second click has nothing to hit", async () => {
@@ -390,9 +425,9 @@ describe("ReportIssueFlow", () => {
         });
 
         // The upload cannot be aborted, so dismissing the dialog does not undo
-        // it. The report is on the server; withholding the link would leave the
-        // user with an upload they can neither see nor use.
-        expect(props.openIssuePage).toHaveBeenCalledWith(linkedIssueUrl);
+        // it. The report is on the server; withholding the report ID would
+        // leave the user with an upload they can neither see nor use.
+        expect(props.openIssuePage).toHaveBeenCalledWith(linkedIssueUrl, uploadResult.reportId);
       });
 
       it("stays quiet when the upload fails after the modal closes", async () => {
@@ -416,7 +451,7 @@ describe("ReportIssueFlow", () => {
 
         unmount();
         await act(async () => {
-          rejectUpload({ ok: false, error: "Network request failed" });
+          rejectUpload({ ok: false, error: "Network request failed", retryable: true });
         });
 
         expect(props.openIssuePage).not.toHaveBeenCalled();
@@ -435,7 +470,7 @@ describe("ReportIssueFlow", () => {
         await waitFor(() => expect(screen.getByText(prepared.zipName)).toBeTruthy());
 
         fireEvent.click(uploadButton());
-        await waitFor(() => expect(screen.getByText("Uploading…")).toBeTruthy());
+        await waitFor(() => expect(screen.getByText(/Uploading — this can/)).toBeTruthy());
         // An actual spinner, not just a label: the upload has no progress to
         // report, so motion is the only thing telling the user it is alive.
         expect(container.querySelector(".tw-animate-spin")).not.toBeNull();
@@ -474,7 +509,9 @@ describe("ReportIssueFlow", () => {
       });
 
       it("clears a stale upload failure once a rebuild succeeds", async () => {
-        const upload = jest.fn().mockResolvedValue({ ok: false, error: "Network request failed" });
+        const upload = jest
+          .fn()
+          .mockResolvedValue({ ok: false, error: "Network request failed", retryable: true });
         renderFlow({ upload });
         submit();
         await waitFor(() => expect(screen.getByText(prepared.zipName)).toBeTruthy());
@@ -504,7 +541,10 @@ describe("ReportIssueFlow", () => {
       it("shows the rebuilt zip's size and the refreshed size of every attachment", async () => {
         const rebuildZip = jest.fn().mockResolvedValue({
           ...prepared,
-          zipBytes: 1024,
+          uploadAttempt: {
+            body: new ArrayBuffer(1024),
+            idempotencyKey: "e8b7a6c5-d4f3-4a2b-8c1d-9e0f1a2b3c4d",
+          },
           attachments: [included("report", "report.md", 512)],
         });
         renderFlow({ rebuildZip });
@@ -563,35 +603,16 @@ describe("ReportIssueFlow", () => {
         return result;
       }
 
-      it("shows the uploaded bundle, the link, and the expiry", async () => {
+      it("shows the uploaded bundle, the report ID, and the expiry", async () => {
         await reachDone();
 
         expect(screen.getByText("report.md")).toBeTruthy();
         expect(screen.getByText(prepared.zipName)).toBeTruthy();
-        expect(screen.getByText(uploadResult.shareUrl)).toBeTruthy();
-        expect(screen.getByText(/Link expires/)).toBeTruthy();
+        // The id is quoted for copying, never rendered as a link: there is
+        // nothing to download, and the issue must carry only the id.
+        expect(screen.getByText(uploadResult.reportId)).toBeTruthy();
+        expect(screen.getByText(/Report expires/)).toBeTruthy();
         expect(screen.getByText(/Nothing is filed until you press Submit/)).toBeTruthy();
-      });
-
-      it.each([
-        ["absent", undefined],
-        ["unparseable", "whenever"],
-      ])("says nothing about expiry when the date is %s", async (_label, expiresAt) => {
-        const upload = jest.fn().mockResolvedValue({
-          ok: true,
-          result: { ...uploadResult, expiresAt },
-          issueUrl: linkedIssueUrl,
-        });
-        renderFlow({ upload });
-        submit();
-        await waitFor(() => expect(screen.getByText(prepared.zipName)).toBeTruthy());
-        fireEvent.click(uploadButton());
-        await waitFor(() => expect(screen.getByText("Report uploaded")).toBeTruthy());
-
-        // "Link expires Invalid Date" reads as an answer; saying nothing is the
-        // honest rendering of a retention window the server did not give us.
-        expect(screen.queryByText(/Link expires/)).toBeNull();
-        expect(screen.queryByText(/Invalid Date/)).toBeNull();
       });
 
       it("lets the user reveal the zip and reopen the issue", async () => {
@@ -603,32 +624,7 @@ describe("ReportIssueFlow", () => {
         fireEvent.click(screen.getByRole("button", { name: "Open the issue" }));
         // Once from the automatic open on success, once from this click.
         expect(props.openIssuePage).toHaveBeenCalledTimes(2);
-        expect(props.openIssuePage).toHaveBeenLastCalledWith(linkedIssueUrl);
-      });
-
-      it("tells the user to paste the link when the issue could not be prefilled with it", async () => {
-        const upload = jest.fn().mockResolvedValue({
-          ok: true,
-          result: uploadResult,
-          issueUrl: prepared.manualIssueUrl,
-          linkPrefilled: false,
-        });
-        renderFlow({ upload });
-        submit();
-        await waitFor(() => expect(screen.getByText(prepared.zipName)).toBeTruthy());
-        fireEvent.click(uploadButton());
-
-        // The report did reach the server, so no Retry may be offered — that
-        // would upload a second copy and orphan the first.
-        await waitFor(() =>
-          expect(screen.getByText("Uploaded — paste the link into the issue")).toBeTruthy()
-        );
-        expect(screen.queryByRole("button", { name: "Retry upload" })).toBeNull();
-        // The link still has to be reachable, since it is now the user's job.
-        expect(screen.getByText(uploadResult.shareUrl)).toBeTruthy();
-        // And this branch needs the "not filed yet" warning more than the happy
-        // one does, since it leaves the user with an extra step to forget.
-        expect(screen.getByText(/Nothing is filed until you press Submit/)).toBeTruthy();
+        expect(props.openIssuePage).toHaveBeenLastCalledWith(linkedIssueUrl, uploadResult.reportId);
       });
     });
   });

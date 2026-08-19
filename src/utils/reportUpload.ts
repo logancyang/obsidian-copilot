@@ -1,30 +1,59 @@
 /**
  * The contract between the "Report an issue" flow and whatever stores the
- * packed zip and hands back a link to embed in the GitHub issue. Kept apart
- * from `issueReport.ts` (which owns bundling the zip itself) and from any
- * implementation, so a real backend-backed adapter can replace
- * `reportUpload.mock.ts` without touching this file.
+ * packed zip. Kept apart from `issueReport.ts` (which owns bundling the zip)
+ * and from the adapter that talks to the endpoint, so either side can be
+ * tested against this file alone.
  */
+
+/**
+ * One upload attempt: the exact bytes to send and the idempotency key minted
+ * with them. The two travel as a pair on purpose — the key identifies *these
+ * bytes* to the server, so retrying re-sends the same object and rebuilding
+ * the zip mints a whole new pair. Handing an uploader a path instead would
+ * let the file change under a key that still names the old contents.
+ */
+export interface ReportUploadAttempt {
+  readonly body: ArrayBuffer;
+  readonly idempotencyKey: string;
+}
 
 /** What a successful upload hands back. */
 export interface ReportUploadResult {
-  /** Stable, non-secret reference for the issue body — never a bearer credential. */
-  shareUrl: string;
   /**
-   * When `shareUrl` stops working, shown to the user alongside it.
-   *
-   * Optional because retention is the endpoint's to enforce, not this type's to
-   * assert: requiring the field would only oblige an adapter to supply some
-   * string, which an adapter that ignores retention can do as easily as one
-   * that honours it. An adapter that validates a live contract can narrow it.
+   * Opaque reference the maintainer resolves against the report store — never
+   * a URL, and never generated client-side: only the server's response says
+   * the report was actually stored.
    */
-  expiresAt?: string;
+  reportId: string;
+  /** When the stored report is scheduled for deletion; shown to the user. */
+  expiresAt: string;
 }
 
 /**
- * Upload the zip at `zipPath` and resolve once it is durably stored. No
- * `signal` and no progress callback: Obsidian's `requestUrl` transport
- * supports neither, so an interface that promised them would be a lie a UI
- * could build a Cancel button or a percentage bar around.
+ * Upload failure that says whether re-sending the same attempt can help.
+ *
+ * `retryable: true` means the outcome is unknown (network error, unreadable
+ * response, service unavailable) — re-sending the same attempt is safe because
+ * its idempotency key makes a duplicate store impossible. `retryable: false`
+ * means the server (or a local pre-send check) definitively rejected this
+ * attempt, and sending the identical bytes again can only fail the same way —
+ * while still spending the user's daily upload allowance.
  */
-export type ReportUploader = (zipPath: string) => Promise<ReportUploadResult>;
+export class ReportUploadError extends Error {
+  constructor(
+    message: string,
+    readonly retryable: boolean
+  ) {
+    super(message);
+    this.name = "ReportUploadError";
+  }
+}
+
+/**
+ * Upload one attempt and resolve once it is durably stored. No `signal` and no
+ * progress callback: Obsidian's `requestUrl` transport supports neither, so an
+ * interface that promised them would be a lie a UI could build a Cancel button
+ * or a percentage bar around. Rejects with `ReportUploadError` where the
+ * failure's retryability is known.
+ */
+export type ReportUploader = (attempt: ReportUploadAttempt) => Promise<ReportUploadResult>;

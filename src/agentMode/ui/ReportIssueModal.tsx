@@ -12,7 +12,11 @@ import {
   type ReportEnvInfo,
   type ReportLogRequest,
 } from "@/utils/issueReport";
-import { type ReportUploader, type ReportUploadResult } from "@/utils/reportUpload";
+import {
+  ReportUploadError,
+  type ReportUploader,
+  type ReportUploadResult,
+} from "@/utils/reportUpload";
 import { findLatestOpencodeLog } from "@/utils/opencodeLog";
 import { createPluginRoot } from "@/utils/react/createPluginRoot";
 import { getSettings } from "@/settings/model";
@@ -63,7 +67,7 @@ export interface ReportIssueModalParams {
   activeBackend: string;
   /** Plugin version for the report's environment block. */
   pluginVersion: string;
-  /** Uploads the packed zip and returns a link to embed in the issue. */
+  /** Uploads the packed attempt and returns the report id to embed in the issue. */
   uploader: ReportUploader;
 }
 
@@ -287,19 +291,18 @@ export async function captureBehindOverlay(
 }
 
 /**
- * Upload the packed zip and build the issue URL its link belongs in. A plain
- * function, not a method: it closes over nothing but its arguments, so it can
- * be driven directly in a test the same way `captureBehindOverlay` is, rather
- * than through a full `ReportIssueModal` instance.
+ * Upload the report's packed attempt and build the issue URL its id belongs
+ * in. A plain function, not a method: it closes over nothing but its
+ * arguments, so it can be driven directly in a test the same way
+ * `captureBehindOverlay` is, rather than through a full `ReportIssueModal`
+ * instance.
  *
  * Failures are caught here, not left to reject: the flow renders whichever
  * `UploadOutcome` comes back rather than needing its own try/catch around a
- * call into host code.
- *
- * The two steps are caught separately on purpose. Once the upload resolves the
- * report exists on a server, and no local failure after that point may be
- * reported as "upload failed" — that would offer a Retry which uploads a
- * second copy and orphans the first, with the user holding no link to either.
+ * call into host code. An error that does not classify itself is treated as
+ * retryable — an unknown failure is an *uncertain* outcome, and re-sending the
+ * same attempt is safe because its idempotency key makes a duplicate store
+ * impossible.
  */
 export async function uploadReport(
   uploader: ReportUploader,
@@ -307,25 +310,23 @@ export async function uploadReport(
 ): Promise<UploadOutcome> {
   let result: ReportUploadResult;
   try {
-    result = await uploader(report.zipPath);
+    result = await uploader(report.uploadAttempt);
   } catch (err) {
     logError("[ReportIssue] could not upload the report:", err);
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
-  }
-  try {
     return {
-      ok: true,
-      result,
-      issueUrl: buildLinkedReportIssueUrl(report.issueDraft, result.shareUrl),
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+      retryable: err instanceof ReportUploadError ? err.retryable : true,
     };
-  } catch (err) {
-    // The report is uploaded and the link is real; only the prefilled URL could
-    // not be assembled (`buildLinkedReportIssueUrl` refuses to exceed the
-    // browser's URL ceiling). Hand back the manual issue URL so the flow can
-    // still finish — the user pastes the link, which the done page shows them.
-    logError("[ReportIssue] uploaded, but could not prefill the issue URL:", err);
-    return { ok: true, result, issueUrl: report.manualIssueUrl, linkPrefilled: false };
   }
+  // Unguarded on purpose: with a fixed-width report id in the prefix,
+  // `buildLinkedReportIssueUrl` cannot exceed the URL ceiling it throws over,
+  // so a catch here would be a branch nothing can reach.
+  return {
+    ok: true,
+    result,
+    issueUrl: buildLinkedReportIssueUrl(report.issueDraft, result.reportId),
+  };
 }
 
 /**
@@ -343,18 +344,26 @@ export async function uploadReport(
  * without an Electron bridge — the same reason `uploadReport` is one.
  *
  * @param openExternal The shell's URL opener, or undefined where there is none.
+ * @param reportId Present on the uploaded path. Repeated in the failure Notice
+ *   because it is the one thing the user cannot reconstruct by hand: the note
+ *   and logs are on their machine, but the id exists only in a response this
+ *   Notice may be the last surviving carrier of.
  */
 export function openIssuePageWith(
   openExternal: ((url: string) => Promise<void>) | undefined,
-  url: string
+  url: string,
+  reportId?: string
 ): void {
+  const fallback =
+    "Open the GitHub issue page yourself" +
+    (reportId ? ` and include the report ID ${reportId}.` : ".");
   if (!openExternal) {
-    new Notice("Copilot could not open your browser. Open the GitHub issue page yourself.");
+    new Notice(`Copilot could not open your browser. ${fallback}`);
     return;
   }
   const failed = (err: unknown) => {
     logError("[ReportIssue] could not open the issue page:", err);
-    new Notice("Copilot could not open the issue page. Open the GitHub issue page yourself.");
+    new Notice(`Copilot could not open the issue page. ${fallback}`);
   };
   try {
     void openExternal(url).catch(failed);
@@ -411,7 +420,7 @@ export class ReportIssueModal extends Modal {
         discardReport={(report) => void removeReportPaths([report.rootDir])}
         onCancel={() => this.close()}
         revealFile={(path) => this.revealFile(path)}
-        openIssuePage={(url) => this.openIssuePage(url)}
+        openIssuePage={(url, reportId) => this.openIssuePage(url, reportId)}
         upload={(report) => uploadReport(this.params.uploader, report)}
       />
     );
@@ -476,8 +485,8 @@ export class ReportIssueModal extends Modal {
     }
   }
 
-  private openIssuePage(url: string): void {
-    openIssuePageWith(getElectronShell()?.openExternal, url);
+  private openIssuePage(url: string, reportId?: string): void {
+    openIssuePageWith(getElectronShell()?.openExternal, url, reportId);
   }
 
   private async prepare(
@@ -535,13 +544,16 @@ export class ReportIssueModal extends Modal {
     }
     onStep("zip");
 
-    logInfo(`[ReportIssue] bundle ready at ${packed.zipPath} (${formatBytes(packed.bytes)})`);
+    logInfo(
+      `[ReportIssue] bundle ready at ${packed.zipPath} ` +
+        `(${formatBytes(packed.uploadAttempt.body.byteLength)})`
+    );
     return {
       folderPath: report.folderPath,
       rootDir,
       zipPath: packed.zipPath,
       zipName: basename(packed.zipPath),
-      zipBytes: packed.bytes,
+      uploadAttempt: packed.uploadAttempt,
       issueDraft: packed.issueDraft,
       manualIssueUrl: packed.manualIssueUrl,
       attachments: packed.attachments,
@@ -563,7 +575,10 @@ export class ReportIssueModal extends Modal {
       ...report,
       zipPath: packed.zipPath,
       zipName: basename(packed.zipPath),
-      zipBytes: packed.bytes,
+      // A whole new attempt, not a patched one: the repack minted fresh bytes
+      // *and* a fresh idempotency key together, so the server cannot answer
+      // this upload with the pre-edit bundle stored under the old key.
+      uploadAttempt: packed.uploadAttempt,
       attachments: packed.attachments,
       // Both are read back from the `report.md` that was just packed, so an
       // edit the user made to take something out reaches the issue too.

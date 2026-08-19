@@ -8,7 +8,7 @@ import {
   waitForStableTarget,
 } from "@/agentMode/ui/ReportIssueModal";
 import type { PreparedReport, ReportSourceId } from "@/agentMode/ui/ReportIssueFlow";
-import type { ReportUploader } from "@/utils/reportUpload";
+import { ReportUploadError, type ReportUploader } from "@/utils/reportUpload";
 import { Notice } from "obsidian";
 
 const rm = jest.fn<Promise<void>, [string, unknown?]>();
@@ -408,53 +408,57 @@ describe("ReportIssueModal", () => {
       rootDir: "/tmp/reports",
       zipPath: "/tmp/reports/bundle.zip",
       zipName: "copilot-report-20260615-101500-abcd.zip",
-      zipBytes: 4096,
+      uploadAttempt: {
+        body: new ArrayBuffer(4096),
+        idempotencyKey: "5d41c9b2-7e3a-4f8b-9c1d-2a6e8f4b0d37",
+      },
       issueDraft: { title: "[Agent Mode] it exploded", body: "## What went wrong" },
       manualIssueUrl: "https://github.com/logancyang/obsidian-copilot/issues/new?title=manual",
       attachments: [],
     };
 
-    it("builds the linked issue URL from the uploader's result", async () => {
+    it("sends the packed attempt and builds the linked issue URL from the report id", async () => {
       const uploader: ReportUploader = jest.fn().mockResolvedValue({
-        shareUrl: "https://copilot-reports.invalid/r/abc123",
+        reportId: "9f3c1a7b2e4d5f60819a2b3c4d5e6f70",
+        expiresAt: "2026-10-18T00:00:00.000Z",
       });
 
       const outcome = await uploadReport(uploader, report);
 
-      expect(uploader).toHaveBeenCalledWith(report.zipPath);
+      // The attempt object travels whole: the bytes and the idempotency key
+      // were minted as a pair, and splitting them here would let a retry send
+      // one half with the other half stale.
+      expect(uploader).toHaveBeenCalledWith(report.uploadAttempt);
       expect(outcome.ok).toBe(true);
       if (!outcome.ok) throw new Error("expected success");
       const body = new URLSearchParams(outcome.issueUrl.split("?")[1]).get("body") ?? "";
-      // Prefixed, not appended: a long body must never be able to push the
-      // link out through truncation.
-      expect(body.indexOf("https://copilot-reports.invalid/r/abc123")).toBeLessThan(60);
+      // Prefixed, not appended: a long body must never be able to push the id
+      // out through truncation. And an id, never a URL — the issue is public.
+      expect(body.indexOf("9f3c1a7b2e4d5f60819a2b3c4d5e6f70")).toBeLessThan(60);
+      expect(body).not.toContain("http");
     });
 
-    it("turns a rejected upload into a failure outcome instead of throwing", async () => {
+    it("marks a self-classified rejection as not retryable", async () => {
+      const uploader: ReportUploader = jest
+        .fn()
+        .mockRejectedValue(new ReportUploadError("Allowance used up", false));
+
+      const outcome = await uploadReport(uploader, report);
+
+      expect(outcome).toEqual({ ok: false, error: "Allowance used up", retryable: false });
+    });
+
+    it("treats an unclassified rejection as retryable, since the outcome is unknown", async () => {
+      // Whatever threw did not say the server refused, so the report may or may
+      // not be stored — and re-sending the same attempt is safe either way,
+      // because its idempotency key makes a duplicate store impossible.
       const uploader: ReportUploader = jest
         .fn()
         .mockRejectedValue(new Error("Network request failed"));
 
       const outcome = await uploadReport(uploader, report);
 
-      expect(outcome).toEqual({ ok: false, error: "Network request failed" });
-    });
-
-    it("still reports success when the upload lands but the URL cannot carry the link", async () => {
-      // A `shareUrl` long enough that no body fits under the URL ceiling, so
-      // `buildLinkedReportIssueUrl` throws — after the report is already stored.
-      const shareUrl = `https://copilot-reports.invalid/r/${"a".repeat(3000)}`;
-      const uploader: ReportUploader = jest.fn().mockResolvedValue({ shareUrl });
-
-      const outcome = await uploadReport(uploader, report);
-
-      // Reporting this as a failure would offer a Retry that uploads a second
-      // copy and orphans the first, with the user holding no link to either.
-      expect(outcome.ok).toBe(true);
-      if (!outcome.ok) throw new Error("expected success");
-      expect(outcome.linkPrefilled).toBe(false);
-      expect(outcome.issueUrl).toBe(report.manualIssueUrl);
-      expect(outcome.result.shareUrl).toBe(shareUrl);
+      expect(outcome).toEqual({ ok: false, error: "Network request failed", retryable: true });
     });
   });
 
@@ -479,6 +483,21 @@ describe("ReportIssueModal", () => {
       openIssuePageWith(undefined, url);
 
       expect(Notice).toHaveBeenCalledTimes(1);
+    });
+
+    it("repeats the report id in the failure notice, which may be its last carrier", async () => {
+      // The note and logs are on the user's machine, but the id exists only in
+      // a response whose issue page just failed to open — losing it here means
+      // an uploaded report nobody can name.
+      const openExternal = jest.fn().mockRejectedValue(new Error("no handler"));
+
+      openIssuePageWith(openExternal, url, "9f3c1a7b2e4d5f60819a2b3c4d5e6f70");
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(Notice).toHaveBeenCalledTimes(1);
+      const message = (Notice as unknown as jest.Mock).mock.calls[0][0] as string;
+      expect(message).toContain("9f3c1a7b2e4d5f60819a2b3c4d5e6f70");
     });
 
     it("reports a bridge that rejects its promise", async () => {

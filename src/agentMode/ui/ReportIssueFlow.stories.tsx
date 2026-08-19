@@ -27,7 +27,10 @@ const REPORT: PreparedReport = {
   rootDir: "/tmp/copilot-report-a1b2c3",
   zipPath: "/tmp/copilot-report-a1b2c3/copilot-report-a1b2c3.zip",
   zipName: "copilot-report-a1b2c3.zip",
-  zipBytes: 4_404_019,
+  uploadAttempt: {
+    body: new ArrayBuffer(4_404_019),
+    idempotencyKey: "3f2a1d9e-8b4c-4f6d-9e2a-7c5b3a1d9e8f",
+  },
   issueDraft: { title: "Agent stops mid-turn", body: "It stops after the first tool call." },
   manualIssueUrl: "https://github.com/logancyang/obsidian-copilot/issues/new",
   attachments: [
@@ -69,8 +72,8 @@ const REPORT: PreparedReport = {
 const UPLOADED: UploadOutcome = {
   ok: true,
   result: {
-    shareUrl: "https://reports.example.invalid/r/a1b2c3",
-    expiresAt: "2026-09-06T00:00:00.000Z",
+    reportId: "9f3c1a7b2e4d5f60819a2b3c4d5e6f70",
+    expiresAt: "2026-10-18T00:00:00.000Z",
   },
   issueUrl: "https://github.com/logancyang/obsidian-copilot/issues/new?body=...",
 };
@@ -155,17 +158,50 @@ export const Uploading: StoryObj<ReportIssueFlowProps> = {
   ),
 };
 
-/** Page ② after a failed upload: the zip is still on disk, so retry and manual both stay. */
+/**
+ * Page ② after an upload whose outcome is unknown (network dropped mid-flight):
+ * the zip is still on disk, and retrying the same attempt is safe, so Retry,
+ * Rebuild, and the manual path all stay.
+ */
 export const UploadFailed: StoryObj<ReportIssueFlowProps> = {
   render: () => (
     <AtStep
       steps={[PACK, UPLOAD]}
-      props={{ upload: async () => ({ ok: false, error: "Network error" }) }}
+      props={{
+        upload: async () => ({
+          ok: false,
+          // Reason only, mirroring the production adapter: the actions (and why
+          // Retry is safe) are the callout's own copy, appended by the Flow.
+          error: "Could not reach the report server, so the upload is unconfirmed.",
+          retryable: true,
+        }),
+      }}
     />
   ),
 };
 
-/** Page ③: the link is already in the issue, and nothing is filed until Submit. */
+/**
+ * Page ② after a definitive rejection (e.g. the daily allowance is used up):
+ * no Retry — the identical bytes would fail identically — so only Rebuild,
+ * Show in folder, and the manual path remain.
+ */
+export const UploadRejected: StoryObj<ReportIssueFlowProps> = {
+  render: () => (
+    <AtStep
+      steps={[PACK, UPLOAD]}
+      props={{
+        upload: async () => ({
+          ok: false,
+          // Reason only \u2014 see UploadFailed above.
+          error: "Today's report upload allowance is used up.",
+          retryable: false,
+        }),
+      }}
+    />
+  ),
+};
+
+/** Page ③: the report ID is already in the issue, and nothing is filed until Submit. */
 export const Done: StoryObj<ReportIssueFlowProps> = {
   render: () => <AtStep steps={[PACK, UPLOAD]} />,
 };
