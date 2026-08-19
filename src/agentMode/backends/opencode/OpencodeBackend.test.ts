@@ -478,6 +478,26 @@ describe("buildOpencodeConfig — provider/model injection", () => {
     });
   });
 
+  it("skips an optional-auth provider when its stored key can no longer be resolved (https://github.com/logancyang/obsidian-copilot/issues/2895)", async () => {
+    const provider = {
+      ...makeOpenAICompatibleProvider(
+        "p-missing-stored-key",
+        "https://trusted-gateway.example.com/v1",
+        "Trusted gateway",
+        false
+      ),
+      apiKeyKeychainId: "keychain-p-missing-stored-key",
+    };
+    const deps = makeDeps({
+      resolved: [okEntry(provider, makeModel("p-missing-stored-key", "qwen3.8-27b"))],
+      keys: { "p-missing-stored-key": null },
+    });
+
+    const cfg = await buildOpencodeConfig(getSettings(), deps);
+
+    expect(cfg.provider).toEqual({});
+  });
+
   it("keeps a key-less self-hosted provider even when it carries a catalog id", async () => {
     // Guards the catalog-growth scenario: if a local runner like Ollama ever
     // gains a models.dev entry, its localhost baseUrl still tolerates a missing

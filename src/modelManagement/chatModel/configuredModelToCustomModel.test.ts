@@ -145,13 +145,14 @@ describe("configuredModelToCustomModel", () => {
     expect(streaming.enableCors).toBe(false);
   });
 
-  it("substitutes a placeholder key only for keyless providers", () => {
+  it("carries the runtime auth contract without synthesizing a key (https://github.com/logancyang/obsidian-copilot/issues/2895)", () => {
     const keyless = configuredModelToCustomModel({
       provider: provider({ requiresApiKey: false, baseUrl: "http://localhost:11434/v1" }),
       configuredModel: configuredModel(),
       apiKey: null,
     });
-    expect(keyless.apiKey).toBe("default-key");
+    expect(keyless.apiKey).toBeUndefined();
+    expect(keyless.requiresApiKey).toBe(false);
 
     const requiresKey = configuredModelToCustomModel({
       provider: provider({ requiresApiKey: true }),
@@ -159,6 +160,14 @@ describe("configuredModelToCustomModel", () => {
       apiKey: null,
     });
     expect(requiresKey.apiKey).toBeUndefined();
+    expect(requiresKey.requiresApiKey).toBe(true);
+
+    const missingStoredKey = configuredModelToCustomModel({
+      provider: provider({ requiresApiKey: false, apiKeyKeychainId: "keychain-p1" }),
+      configuredModel: configuredModel(),
+      apiKey: null,
+    });
+    expect(missingStoredKey.requiresApiKey).toBe(true);
   });
 
   it("does not substitute a placeholder key for Copilot Plus", () => {
@@ -168,6 +177,7 @@ describe("configuredModelToCustomModel", () => {
       apiKey: null,
     });
     expect(custom.apiKey).toBeUndefined();
+    expect(custom.requiresApiKey).toBe(true);
   });
 
   it("derives capabilities from the model snapshot", () => {

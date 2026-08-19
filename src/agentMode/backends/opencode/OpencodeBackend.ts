@@ -2,7 +2,7 @@ import { ChatModelProviders } from "@/constants";
 import { logInfo, logWarn } from "@/logger";
 import { getSettings } from "@/settings/model";
 import type { CopilotSettings } from "@/settings/model";
-import { providerRequiresApiKey } from "@/modelManagement";
+import { providerNeedsResolvedApiKey } from "@/modelManagement";
 import { isCatalogProviderDefaultEndpoint } from "@/utils/providerBaseUrl";
 import type { BackendConfigRegistry, ProviderRegistry } from "@/modelManagement";
 import { AcpBackend, AcpSpawnDescriptor } from "@/agentMode/acp/types";
@@ -227,11 +227,10 @@ export async function buildOpencodeConfig(
     let providerConfig = provider[mapping.id];
     if (!providerConfig) {
       const apiKey = await providerRegistry.getApiKey(entry.provider.providerId);
-      // Copilot Plus provisions its relay token instead of asking for a BYOK key,
-      // but every relay request still requires that token. For BYOK providers,
-      // authentication is the explicit persisted contract, not hostname shape.
+      // Runtime auth follows the persisted provider contract and keychain state,
+      // not hostname shape. A dangling keychain pointer must fail closed.
       // https://github.com/logancyang/obsidian-copilot/issues/2895
-      if (!apiKey && (origin.kind === "copilot-plus" || providerRequiresApiKey(entry.provider))) {
+      if (!apiKey && providerNeedsResolvedApiKey(entry.provider)) {
         logInfo(
           `[AgentMode] skipping ${mapping.id}/${entry.configuredModel.info.id}: no API key in keychain`
         );
