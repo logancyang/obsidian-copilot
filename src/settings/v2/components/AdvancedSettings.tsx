@@ -19,7 +19,7 @@ import {
   suppressNextPersistOnce,
 } from "@/services/settingsPersistence";
 import { hasPersistedSecrets } from "@/services/settingsSecretTransforms";
-import { providerHasApiKey } from "@/modelManagement";
+import { providerHasApiKey, useModelManagement } from "@/modelManagement";
 import { logError } from "@/logger";
 import {
   type CopilotSettings,
@@ -38,6 +38,7 @@ const DESKTOP_UNAVAILABLE_FRAME_LOG_PATH = "(Agent Mode frame logs are desktop-o
 
 export const AdvancedSettings: React.FC = () => {
   const app = useApp();
+  const { providerRegistry } = useModelManagement();
   const settings = useSettingsValue();
   const [forgetting, setForgetting] = useState(false);
   const [frameLogPath, setFrameLogPath] = useState(DESKTOP_UNAVAILABLE_FRAME_LOG_PATH);
@@ -159,6 +160,15 @@ export const AdvancedSettings: React.FC = () => {
             refreshLastPersistedSettings(nextSettings as CopilotSettings);
             suppressNextPersistOnce();
             setSettings(nextSettings);
+            // The keychain sweep bypasses ProviderRegistry, but subprocess
+            // backends bake provider keys into spawn-time config and only
+            // restart on registry emissions. Notify from THIS callback, not
+            // after the await: a disk-write failure returns without reaching
+            // here (nothing was deleted — no restart), while a partial
+            // keychain failure runs this before throwing (keys DID change —
+            // restart must still fire).
+            // https://github.com/logancyang/obsidian-copilot-preview/issues/261
+            providerRegistry.notifyCredentialStoreChanged();
           }
         )
       );
@@ -168,7 +178,7 @@ export const AdvancedSettings: React.FC = () => {
     } finally {
       setForgetting(false);
     }
-  }, [app, forgetting]);
+  }, [app, forgetting, providerRegistry]);
 
   return (
     <div className="tw-space-y-4">

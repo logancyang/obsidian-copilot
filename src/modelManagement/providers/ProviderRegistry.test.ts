@@ -288,6 +288,17 @@ describe("ProviderRegistry", () => {
     expect(getSettings().providers[id]).toBeUndefined();
   });
 
+  describe("notifyCredentialStoreChanged()", () => {
+    it("notifies subscribers after an external credential-store mutation (https://github.com/logancyang/obsidian-copilot-preview/issues/261)", () => {
+      const listener = jest.fn();
+      registry.subscribe(listener);
+
+      registry.notifyCredentialStoreChanged();
+
+      expect(listener).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe("subscribe()", () => {
     it("fires on add/update/remove and on every setApiKey (including key rotation)", async () => {
       const listener = jest.fn();

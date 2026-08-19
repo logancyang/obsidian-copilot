@@ -88,6 +88,20 @@ export class ProviderRegistry {
     return () => this.#listeners.delete(listener);
   }
 
+  /**
+   * Notify subscribers after provider credentials were mutated outside this
+   * registry (e.g. the "Delete All Keys" keychain sweep). Subprocess agent
+   * backends bake provider keys into spawn-time config and only restart on
+   * registry emissions, so an external credential wipe must be announced here
+   * or a running backend keeps using the deleted key indefinitely. Call only
+   * after the credential-store operation and its in-memory settings projection
+   * have settled, so restarted consumers read final state.
+   * https://github.com/logancyang/obsidian-copilot-preview/issues/261
+   */
+  notifyCredentialStoreChanged(): void {
+    this.#emit();
+  }
+
   #emit(): void {
     for (const listener of [...this.#listeners]) {
       try {
