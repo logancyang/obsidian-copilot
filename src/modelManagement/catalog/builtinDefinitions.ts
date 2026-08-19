@@ -40,7 +40,9 @@ export const CUSTOM_OPENAI_DEFINITION: ProviderDefinition = {
   id: "custom-openai-compatible",
   displayName: "Custom OpenAI-compatible",
   providerType: "openai-compatible",
-  requiresApiKey: true,
+  // Custom endpoints may intentionally run without authentication.
+  // https://github.com/logancyang/obsidian-copilot/issues/2895
+  requiresApiKey: false,
   modelInputHint: "e.g. gpt-5.5",
 };
 

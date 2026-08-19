@@ -27,7 +27,6 @@ import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
-import { SearchBar } from "@/components/ui/SearchBar";
 import { useApp } from "@/context";
 import { logError } from "@/logger";
 import type { ModelManagementApi } from "@/modelManagement/createModelManagement";
@@ -531,7 +530,6 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
 
         <div className="tw-flex tw-flex-col tw-gap-2">
           <div className="tw-text-sm tw-font-medium tw-text-normal">Models</div>
-          <SearchBar value={modelQuery} onChange={setModelQuery} placeholder="Search models..." />
           <ModelChecklist
             availableModels={pool.availableModels}
             selected={pool.selectedWireIds}
@@ -540,6 +538,7 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
             onRemoveId={pool.removeId}
             customIds={pool.customIds}
             query={modelQuery}
+            onQueryChange={setModelQuery}
             modelInputHint={modelInputHint}
             fetching={pool.fetching}
             fetchError={pool.fetchError}

@@ -14,8 +14,10 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
 import { ModelCapabilityIcons, hasCapabilityIcons } from "@/components/ui/model-display";
+import { SearchBar } from "@/components/ui/SearchBar";
 import { cn } from "@/lib/utils";
 import { capabilitiesFromConfiguredInfo } from "@/modelManagement/chatModel/modelCapabilityFlags";
 import type { ModelInfo } from "@/modelManagement/types/catalog";
@@ -34,7 +36,7 @@ export interface ModelChecklistProps {
   /** Wire ids currently checked. */
   selected: ReadonlySet<string>;
   onToggle: (id: string, next: boolean) => void;
-  /** Manual-add input — always visible. */
+  /** Manual-add input — always visible above endpoint discovery. */
   onAddId: (id: string) => void;
   /** Remove an id from the candidate pool. The X button only renders
    *  for ids the parent marked as custom-added (see `customIds`);
@@ -42,7 +44,8 @@ export interface ModelChecklistProps {
    *  so are non-removable. */
   onRemoveId?: (id: string) => void;
   /** Case-insensitive substring filter over name + id. */
-  query?: string;
+  query: string;
+  onQueryChange: (query: string) => void;
   /** Placeholder for the manual-add input. */
   modelInputHint?: string;
   /** Spinner shown above the list while the dialog auto-fetches. */
@@ -62,6 +65,7 @@ export const ModelChecklist: React.FC<ModelChecklistProps> = ({
   onAddId,
   onRemoveId,
   query,
+  onQueryChange,
   modelInputHint,
   fetching,
   fetchError,
@@ -90,6 +94,31 @@ export const ModelChecklist: React.FC<ModelChecklistProps> = ({
 
   return (
     <div className="tw-flex tw-flex-col tw-gap-2">
+      {/* Manual entry must remain reachable when an endpoint cannot provide /v1/models.
+          https://github.com/logancyang/obsidian-copilot/issues/2894 */}
+      <FormField label="Model ID">
+        <div className="tw-flex tw-gap-2">
+          <Input
+            className="tw-flex-1"
+            value={manualId}
+            onChange={(e) => setManualId(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                handleManualAdd();
+              }
+            }}
+            placeholder={modelInputHint ?? "Enter a model ID"}
+            data-testid="model-checklist-manual-input"
+          />
+          <Button variant="secondary" onClick={handleManualAdd} disabled={!manualId.trim()}>
+            Add
+          </Button>
+        </div>
+      </FormField>
+
+      <SearchBar value={query} onChange={onQueryChange} placeholder="Search available models…" />
+
       {fetching && (
         <div className="tw-flex tw-items-center tw-gap-2 tw-text-xs tw-text-muted">
           <Loader2 className="tw-size-3.5 tw-shrink-0 tw-animate-spin" />
@@ -186,30 +215,11 @@ export const ModelChecklist: React.FC<ModelChecklistProps> = ({
         >
           {fetching
             ? "Loading models…"
-            : query?.trim()
+            : query.trim()
               ? "No models match the current filters."
-              : "No models yet — type an id below or test your credentials to fetch the list."}
+              : "No models discovered — enter a model ID above or test your credentials."}
         </div>
       )}
-
-      <div className="tw-flex tw-gap-2">
-        <Input
-          className="tw-flex-1"
-          value={manualId}
-          onChange={(e) => setManualId(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              handleManualAdd();
-            }
-          }}
-          placeholder={modelInputHint ?? "Add a model id"}
-          data-testid="model-checklist-manual-input"
-        />
-        <Button variant="secondary" onClick={handleManualAdd} disabled={!manualId.trim()}>
-          Add
-        </Button>
-      </div>
     </div>
   );
 };
