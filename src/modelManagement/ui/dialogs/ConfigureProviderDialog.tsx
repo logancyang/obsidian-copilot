@@ -684,7 +684,7 @@ export class ConfigureProviderModal extends ReactModal {
   }
 
   onOpen(): void {
-    this.modalEl.addClasses(["tw-flex", "tw-h-[70vh]", "tw-flex-col"]);
+    this.modalEl.addClasses(["tw-flex", "tw-h-[85vh]", "tw-flex-col"]);
     this.contentEl.addClasses([
       "tw-flex",
       "tw-min-h-0",
