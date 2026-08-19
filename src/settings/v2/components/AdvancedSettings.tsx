@@ -31,7 +31,8 @@ import { Notice } from "obsidian";
 import React, { useCallback, useEffect, useState } from "react";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
-import { mockReportUploader } from "@/utils/reportUpload.mock";
+import { getReportInstallId } from "@/utils/reportInstallId";
+import { createReportUploader } from "@/utils/reportUpload.brevilabs";
 
 const DESKTOP_UNAVAILABLE_FRAME_LOG_PATH = "(Agent Mode frame logs are desktop-only)";
 
@@ -85,10 +86,15 @@ export const AdvancedSettings: React.FC = () => {
       const activeBackend =
         copilotPlugin?.agentSessionManager?.getActiveSession?.()?.backendId ??
         settings.agentMode.activeBackend;
+      // One version for the environment block and the uploader alike. The
+      // "unknown" sentinel is fine to *display* in report.md, and deliberately
+      // handled at the other end of the wire: the adapter refuses to upload
+      // under it, so it can never reach the endpoint (which rejects it).
+      const pluginVersion = copilotPlugin?.manifest?.version ?? "unknown";
       new ReportIssueModal({
         app,
         activeBackend,
-        pluginVersion: copilotPlugin?.manifest?.version ?? "unknown",
+        pluginVersion,
         // Side-effect free, because this runs while the form is still up: it
         // only reports whether there is a pane to photograph, so the modal can
         // grey the option out instead of promising a shot it cannot take.
@@ -110,9 +116,13 @@ export const AdvancedSettings: React.FC = () => {
         dismissSettings: () => {
           (app as unknown as { setting: { close: () => void } }).setting.close();
         },
-        // TODO(report-upload): swap for a real Brevilabs-backed uploader once
-        // its endpoint exists — see designdocs/REPORT_UPLOAD_FLOW.md.
-        uploader: mockReportUploader,
+        // `installId` is a getter, resolved on the upload click rather than
+        // here: its failure mode (unusable localStorage) should surface on the
+        // action that needs it, as a refusal to upload — not break the modal.
+        uploader: createReportUploader({
+          installId: getReportInstallId,
+          clientVersion: pluginVersion,
+        }),
       }).open();
     })();
   }, [app, settings.agentMode.activeBackend]);
@@ -279,7 +289,7 @@ export const AdvancedSettings: React.FC = () => {
         <SettingItem
           type="custom"
           title="Report an issue"
-          description="Walks you through collecting a screenshot and recent logs, packs them into a single zip, uploads it, and opens a prefilled GitHub issue with the link already in it."
+          description="Walks you through collecting a screenshot and recent logs, packs them into a single zip you can review, uploads it privately, and opens a prefilled GitHub issue with the report ID already in it."
         >
           <Button variant="default" size="sm" onClick={handleReportIssue}>
             Report an issue

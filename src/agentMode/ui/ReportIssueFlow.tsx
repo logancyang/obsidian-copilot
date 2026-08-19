@@ -14,7 +14,7 @@ import { CopyButton } from "@/components/chat-components/CopyButton";
 import { cn } from "@/lib/utils";
 import { formatBytes } from "@/utils/formatBytes";
 import { type AttachmentOutcome, type ReportIssueDraft } from "@/utils/issueReport";
-import { type ReportUploadResult } from "@/utils/reportUpload";
+import { type ReportUploadAttempt, type ReportUploadResult } from "@/utils/reportUpload";
 import { AlertTriangle, Check, CircleSlash, FileArchive, Loader2, X } from "lucide-react";
 import React from "react";
 
@@ -45,10 +45,17 @@ export interface PreparedReport {
   rootDir: string;
   zipPath: string;
   zipName: string;
-  zipBytes: number;
+  /**
+   * The packed bytes and the idempotency key minted with them — one pair per
+   * pack, so "Retry upload" re-sends this exact attempt and "Rebuild zip"
+   * replaces the whole report with a new pair. The zip's size is
+   * `uploadAttempt.body.byteLength`; no separate size field, so there is one
+   * source of truth for it.
+   */
+  uploadAttempt: ReportUploadAttempt;
   /** Title/body the linked issue URL is built from once upload succeeds. */
   issueDraft: ReportIssueDraft;
-  /** No-link fallback URL, opened when the user attaches the zip by hand. */
+  /** No-ID fallback URL, opened when the user attaches the zip by hand. */
   manualIssueUrl: string;
   attachments: AttachmentOutcome[];
 }
@@ -56,25 +63,18 @@ export interface PreparedReport {
 /**
  * What `upload` resolves to — the flow renders either outcome, nothing more.
  *
- * `ok: true` means the report reached the server, which is irreversible: the
- * only failure it can still carry is `linkPrefilled: false`, meaning the issue
- * URL could not be built with the link in it and the user has to paste it.
- * A local failure after a successful upload must never come back as `ok: false`,
- * or the UI would offer a Retry that uploads a second copy.
+ * `retryable` on the failure half is what gates the Retry button: re-sending
+ * the same attempt is only offered when the outcome is unknown (the attempt's
+ * idempotency key makes that safe), never for a definitive rejection, which
+ * would fail identically while still spending the daily upload allowance.
  */
-export type UploadOutcome = UploadSuccess | { ok: false; error: string };
+export type UploadOutcome = UploadSuccess | { ok: false; error: string; retryable: boolean };
 
 /** The successful half of `UploadOutcome`, which the done page renders from. */
 export interface UploadSuccess {
   ok: true;
   result: ReportUploadResult;
   issueUrl: string;
-  /**
-   * Whether `issueUrl` carries the link. False when the report uploaded but the
-   * prefilled URL could not be assembled, so the user must paste it themselves.
-   * Absent means true — the ordinary case.
-   */
-  linkPrefilled?: boolean;
 }
 
 export interface ReportIssueFlowProps {
@@ -99,7 +99,12 @@ export interface ReportIssueFlowProps {
   upload: (report: PreparedReport) => Promise<UploadOutcome>;
   onCancel: () => void;
   revealFile: (path: string) => void;
-  openIssuePage: (url: string) => void;
+  /**
+   * Open the issue page in the OS browser. `reportId` rides along on the
+   * uploaded path so a host whose browser fails to open can still surface the
+   * id — the one thing the user cannot reconstruct.
+   */
+  openIssuePage: (url: string, reportId?: string) => void;
 }
 
 /**
@@ -331,10 +336,11 @@ function DetailsStep({
         ))}
       </div>
 
-      <Callout tone="warning" title="These get uploaded to a public issue">
-        Copilot packs the selected items into one zip, uploads it, and puts the link in a public
-        GitHub issue — anyone who opens it can download the zip. Logs go through a best-effort scrub
-        for usernames, emails, and API keys, but the screenshot is not redacted.
+      {/* Verbatim maintainer-approved consent copy — do not reword. */}
+      <Callout tone="warning" title="Before you upload">
+        Copilot redacts common sensitive data from diagnostic text on your device before upload.
+        Review it before sending; screenshots are not automatically redacted. Reports are private
+        and deleted after 60 days.
       </Callout>
 
       <div className="tw-flex tw-justify-end tw-gap-2">
@@ -477,7 +483,7 @@ interface ReviewStepProps {
   /** Replaces the flow's report with the one the rebuilt zip describes. */
   onRebuilt: (report: PreparedReport) => void;
   revealFile: (path: string) => void;
-  openIssuePage: (url: string) => void;
+  openIssuePage: (url: string, reportId?: string) => void;
   upload: (report: PreparedReport) => Promise<UploadOutcome>;
   /** Fired once, after a successful upload — takes the flow to the done page. */
   onUploaded: (success: UploadSuccess) => void;
@@ -487,9 +493,12 @@ interface ReviewStepProps {
 type RebuildState = { status: "idle" | "running" } | { status: "failed"; error: string };
 /**
  * No `succeeded`: this step is unmounted the moment an upload lands, so a
- * success state here would be one nothing could ever render.
+ * success state here would be one nothing could ever render. A failure carries
+ * `retryable` so the buttons can withhold a Retry that could only fail again.
  */
-type UploadState = { status: "idle" | "uploading" } | { status: "failed"; error: string };
+type UploadState =
+  | { status: "idle" | "uploading" }
+  | { status: "failed"; error: string; retryable: boolean };
 
 function ReviewStep({
   report,
@@ -554,18 +563,19 @@ function ReviewStep({
       if (outcome.ok) {
         // The upload cannot be aborted, so it can land after the user dismissed
         // the dialog. The report is on the server either way — dropping the
-        // link because this component is gone would leave them with an upload
+        // result because this component is gone would leave them with an upload
         // they can neither see nor use. Opening the prefilled issue needs no
-        // mounted tree, so it happens regardless.
+        // mounted tree, so it happens regardless, and the report id rides along
+        // so a browser that fails to open can still surface it.
         //
         // The page turn comes first when the flow is still up, and not for
         // style: a host that throws on the way to the browser must not leave
-        // the flow stuck on "Uploading…" with the link unreachable. No success
+        // the flow stuck on "Uploading…" with the id unreachable. No success
         // state is set — `onUploaded` unmounts this step.
         if (mountedRef.current) onUploaded(outcome);
-        openIssuePage(outcome.issueUrl);
+        openIssuePage(outcome.issueUrl, outcome.result.reportId);
       } else if (mountedRef.current) {
-        setUploadState({ status: "failed", error: outcome.error });
+        setUploadState({ status: "failed", error: outcome.error, retryable: outcome.retryable });
       }
     } finally {
       busyRef.current = false;
@@ -587,7 +597,13 @@ function ReviewStep({
                 ...report.attachments.map((attachment) => (
                   <AttachmentRow key={attachment.id} attachment={attachment} />
                 )),
-                zipReady && <ZipRow key="zip" name={report.zipName} bytes={report.zipBytes} />,
+                zipReady && (
+                  <ZipRow
+                    key="zip"
+                    name={report.zipName}
+                    bytes={report.uploadAttempt.body.byteLength}
+                  />
+                ),
               ]
             : PREPARE_STEPS.map((step) => (
                 <PrepareStepRow key={step.id} step={step} done={completed.has(step.id)} />
@@ -603,10 +619,15 @@ function ReviewStep({
       )}
 
       {uploadState.status === "failed" && zipReady && (
+        // The error text names the cause; the actions — and why Retry is safe —
+        // are this page's to say, because only it knows which buttons it shows.
         <Callout tone="error" title="Could not upload the report">
-          {uploadState.error} The zip is still on your machine. Try uploading again, or use{" "}
-          <span className="tw-font-medium">Open issue anyway</span> — that issue carries no link to
-          the report, so you would have to attach the zip to it yourself.
+          {uploadState.error} The zip is still on your machine
+          {uploadState.retryable
+            ? "; retrying sends the same report and stores it at most once. Try again, or use"
+            : " — use"}{" "}
+          <span className="tw-font-medium">Open issue anyway</span> — that issue carries no report
+          ID, so you would have to attach the zip to it yourself.
         </Callout>
       )}
 
@@ -615,9 +636,11 @@ function ReviewStep({
           Edited the files? <span className="tw-font-medium">Rebuild zip</span> repacks them.
         </span>
         {uploading ? (
+          // No Cancel next to this: the transport has no abort, so a Cancel
+          // button would be a promise the upload cannot keep.
           <span className="tw-flex tw-items-center tw-gap-2 tw-text-xs tw-text-muted" role="status">
             <Loader2 className="tw-size-4 tw-animate-spin" aria-hidden="true" />
-            Uploading…
+            Uploading — this can&apos;t be canceled…
           </span>
         ) : (
           <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-2">
@@ -643,13 +666,18 @@ function ReviewStep({
                 Open issue anyway
               </Button>
             )}
-            <Button
-              variant="default"
-              disabled={!canUpload}
-              onClick={() => report && void runUpload(report)}
-            >
-              {uploadState.status === "failed" ? "Retry upload" : "Upload & open issue"}
-            </Button>
+            {/* A definitive rejection gets no Retry: the identical bytes would
+                fail identically while still spending the daily upload
+                allowance. Rebuild resets the state, so a *new* zip can upload. */}
+            {(uploadState.status !== "failed" || uploadState.retryable) && (
+              <Button
+                variant="default"
+                disabled={!canUpload}
+                onClick={() => report && void runUpload(report)}
+              >
+                {uploadState.status === "failed" ? "Retry upload" : "Upload & open issue"}
+              </Button>
+            )}
           </div>
         )}
       </div>
@@ -657,47 +685,21 @@ function ReviewStep({
   );
 }
 
-/**
- * An expiry date the user can read, or null when there is none to show.
- *
- * Guards the parse rather than trusting the string: `expiresAt` crosses a
- * network boundary, and `new Date("whenever").toLocaleDateString()` renders the
- * words "Invalid Date" — which reads as a real answer and is worse than saying
- * nothing about how long the report is kept.
- */
-function formatExpiry(expiresAt: string | undefined): string | null {
-  if (!expiresAt) return null;
-  const parsed = new Date(expiresAt);
-  return Number.isNaN(parsed.getTime()) ? null : parsed.toLocaleDateString();
-}
-
 interface DoneStepProps {
   report: PreparedReport;
   success: UploadSuccess;
   revealFile: (path: string) => void;
-  openIssuePage: (url: string) => void;
+  openIssuePage: (url: string, reportId?: string) => void;
 }
 
 function DoneStep({ report, success, revealFile, openIssuePage }: DoneStepProps) {
   const { result, issueUrl } = success;
-  // Absent means it was prefilled; only an explicit `false` says otherwise.
-  const linkPrefilled = success.linkPrefilled !== false;
   return (
     <div className="tw-flex tw-flex-col tw-gap-4">
-      {linkPrefilled ? (
-        <Callout tone="success" title="Report uploaded">
-          The link is already written into the issue. Nothing is filed until you press Submit in
-          your browser.
-        </Callout>
-      ) : (
-        // The upload itself succeeded — only the prefilled URL was too long to
-        // carry the link. Saying "paste it" is the whole difference between a
-        // report a maintainer can open and one that arrives with no bundle.
-        <Callout tone="warning" title="Uploaded — paste the link into the issue">
-          The report is uploaded, but the issue could not be prefilled with its link. Copy the link
-          below and paste it in. Nothing is filed until you press Submit in your browser.
-        </Callout>
-      )}
+      <Callout tone="success" title="Report uploaded">
+        The report ID is already written into the issue. Nothing is filed until you press Submit in
+        your browser.
+      </Callout>
 
       <div className="tw-flex tw-flex-col tw-gap-2">
         <span className="tw-text-sm tw-font-medium">What was uploaded</span>
@@ -705,32 +707,32 @@ function DoneStep({ report, success, revealFile, openIssuePage }: DoneStepProps)
           {report.attachments.map((attachment) => (
             <AttachmentRow key={attachment.id} attachment={attachment} />
           ))}
-          <ZipRow name={report.zipName} bytes={report.zipBytes} />
+          <ZipRow name={report.zipName} bytes={report.uploadAttempt.body.byteLength} />
         </ul>
       </div>
 
       <div className="tw-flex tw-flex-col tw-gap-2">
-        <span className="tw-text-sm tw-font-medium">
-          {linkPrefilled ? "Link in the issue" : "Link to paste"}
-        </span>
+        <span className="tw-text-sm tw-font-medium">Report ID in the issue</span>
         <div className="tw-flex tw-items-center tw-gap-2 tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-secondary tw-px-3 tw-py-2">
           <code className="tw-min-w-0 tw-flex-1 tw-truncate tw-text-xs tw-text-muted">
-            {result.shareUrl}
+            {result.reportId}
           </code>
-          <CopyButton text={result.shareUrl} />
+          <CopyButton text={result.reportId} />
         </div>
-        {formatExpiry(result.expiresAt) && (
-          <span className="tw-text-xs tw-text-muted">
-            Link expires {formatExpiry(result.expiresAt)}
-          </span>
-        )}
+        {/* "Expires", not "deleted": the deletion is scheduled, not something
+            that has already happened. The adapter guarantees a parseable date.
+            No download promise here — how a maintainer retrieves a report is
+            not this UI's to describe. */}
+        <span className="tw-text-xs tw-text-muted">
+          Report expires {new Date(result.expiresAt).toLocaleDateString()}
+        </span>
       </div>
 
       <div className="tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-2">
         <Button variant="secondary" onClick={() => revealFile(report.zipPath)}>
           Show in folder
         </Button>
-        <Button variant="default" onClick={() => openIssuePage(issueUrl)}>
+        <Button variant="default" onClick={() => openIssuePage(issueUrl, result.reportId)}>
           Open the issue
         </Button>
       </div>
